@@ -135,3 +135,30 @@
 - Uncommon animations
 - WhatsApp button = THE BEST, uncommon animated
 - Auto user info (name/ID/phone) on WhatsApp click
+
+---
+
+## অতিরিক্ত ফিচার (User approved 2026-10-11)
+
+**Activity Log:**
+- কে কখন কি করলো (user delete, balance change, role change) - প্রমাণ থাকবে
+- Admin দেখতে পারবে
+
+**Backup System:**
+- Database backup - কখন, কোথায় (logic-এ)
+
+**Search/Filter:**
+- Admin panel-এ order/user/service খোঁজার system
+
+**Report Export:**
+- PDF format-এ report download
+
+**Maintenance Mode:**
+- Site বন্ধ রাখার option (admin control)
+
+**Password Policy:**
+- Minimum length ও complexity (logic-এ)
+
+**Login Attempt Limit:**
+- ভুল password-এ limit (যেমন: ৫ বার ভুল → block)
+- Admin চাইলে unblock করতে পারবে
