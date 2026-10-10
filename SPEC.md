@@ -199,3 +199,8 @@
 **Chat System:**
 - Order detail page-এ থাকবে (contextual)
 - Complaint, order সম্পর্কে কিছু বলা, review - এগুলোর জন্য
+
+**Service Schedule:**
+- Service কখন খোলা থাকবে (যেমন: সকাল ৯টা - বিকাল ৫টা)
+- Admin নির্ধারণ করবে
+- বন্ধ থাকলে user order করতে পারবে না
