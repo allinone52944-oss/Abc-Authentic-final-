@@ -1,98 +1,137 @@
-# All In One (Abc Authentic) - Complete Specification
-## User-provided 2026-10-11 03:09 +06
-
-### ADMIN PANEL
-
-**Auth System:**
-- ID/Password/Email system with OTP verification
-- Admin can view, should be improved/advanced
-- Admin can change ID/password
-- Users can setup/reset their own user/password
-
-**Admin Self-Protection:**
-- Admin CANNOT delete own account
-- Role change: NOT for all users - keep separate, use when needed
-- Admin CANNOT change own role
-- CAN change others' roles
-
-**User Management:**
-- ✅ Delete user + user data - with reconfirmation
-  - Deleted data includes: User account/profile, All orders (all statuses), Wallet balance & transactions, Payment/recharge requests, Coupons (cashback/promo), Notices, Chat messages, Uploaded documents
-- ✅ Create each user
-- ✅ Registration system control ON/OFF
-
-**Per-User Controls:**
-- ✅ Per-service price control per user
-- ✅ Religion setting
-- ✅ Service access control
-- ✅ Individual notice per user (hover animation push)
-- ✅ User balance control
-
-### DASHBOARD
-- 💯 Clear dashboard (uncommon best method - pleasant, not cluttered, NO scroll - click ➤ to drill in)
-
-### SERVICE MANAGEMENT
-- ✅ Create + Delete + Serial ordering
-- How it displays to user (admin controls)
-- Manual service: documents upload system, what fields to fill
-- Automated/API service: keep it
-- Rest in logic
-
-### ORDERS
-- 🚨 Statuses: New / Pending / Processing / Completed / Delivered / Failed / Cancelled / Refunded
-- Give best in logic
-
-### PAYMENT REQUEST (Customer)
-- ✅ bKash Payment, bKash Personal, Nagad, Rocket (uncommon design)
-- MUST remember two payment acceptance methods
-- SMS auto-match secret (DON'T FORGET!)
-- When request comes: voice notification in best way - ringtone timing in logic, voice must be best/beautiful/pleasant
-- (Auto + Manual)
-
-### CASHBACK COUPON SYSTEM
-- Based on customer usage → specific % cashback coupon redeemable
-- Auto: click "Create" → coupon code set → click Redeem → added to main balance
-- Attractive design for user
-- Percent determined by admin
-
-### PROMO CODE
-- ✅ Admin can issue promo code, user redeems in their option
-- Promo code ONLY usable in wallet
-- Admin selects which service the code applies to
-
-### BANNERS / ADS / POPUPS
-- Few designs - user dashboard banner/ad/popup = best
-- Admin panel: 15-20 ready-made sample designs per banner/ad/popup, best animated
-
-### RELIGION-BASED GREETING
-- User dashboard: Hindu/Muslim/Buddhist/Christian - separate icon/animation each
-- Hindu: Nomoskar etc. in logic
-- Male/Female/Child voice alternates. NOT always - only on login entry.
-
-### SERVICES DISPLAY
-- Services shown separately, beautiful uncommon method
-- Automated vs Manual ➤
-- If many registration services: clicking registration shows all together in logic
-
-### USER WALLET
-- Best uncommon, fresh
-
-### ORDER VIEW
-- Should not need much scroll - if more, go via click. Not cluttered.
-
-### ADMIN NOTIFICATIONS
-- 🚨 Any message → notify in best way mentioning name etc. in logic
-
-### WHATSAPP & CHAT
-- WhatsApp button: show in BEST way to user
-- Chat: just in logic - for complaints, saying something about an order, reviews etc.
-- Chat NOT shown on dashboard
-- Each service's rules shown attractively (popup or uncommon method)
-- User dashboard = best, in logic
+# All In One (Abc Authentic) - সম্পূর্ণ Specification
+## User দিয়েছেন 2026-10-11 03:09 +06
 
 ---
-### DESIGN
+
+## এডমিন প্যানেল
+
+**ID/Password/Email System:**
+- ID, Password, Email system করবে
+- OTP দিয়ে verify করবে
+- Admin দেখবে, আরো উন্নত (advanced) হতে হবে
+- Admin ID/password পরিবর্তন করতে পারবে
+- User-ও নিজের user/password setup/reset করতে পারবে
+
+**Admin Self-Protection:**
+- Admin নিজের account নিজে DELETE করতে পারবে না
+- Role পরিবর্তন: সকল user-এ রাখবে না - আলাদা রাখবে, প্রয়োজনে ব্যবহার করবে
+- Admin নিজের role পরিবর্তন করতে পারবে না
+- অন্যদের role পরিবর্তন করতে পারবে
+
+**User Management:**
+- ✅ User ও User data DELETE করতে পারবে - reconfirm হয়ে
+  - যা যা delete হবে: User account/profile, সব orders (সব status), Wallet balance ও transactions, Payment/recharge requests, Coupons (cashback/promo), Notices, Chat messages, Uploaded documents
+- ✅ প্রতিটা user create করতে পারবে
+- ✅ Registration system control ON/OFF
+
+**Per-User Control:**
+- ✅ প্রতিটা user-এর সেবা/সার্ভিসের মূল্য নির্ধারণ control
+- ✅ ধর্ম নির্ধারণ
+- ✅ সেবা access নির্ধারণ
+- ✅ প্রতিটা user-এ আলাদা notice - hover animation-এ push করবে
+- ✅ User-এর balance control
+
+---
+
+## ড্যাশবোর্ড
+- 💯 Dashboard clear থাকবে
+- Uncommon সেরা পদ্ধতি - দেখতে আনন্দ, হিজিবিজি নয়
+- Scroll ছাড়া - প্রয়োজনে ➤ click করে ভেতরে যাবে
+
+---
+
+## সার্ভিস ম্যানেজমেন্ট
+- ✅ Service create করা যাবে + Delete করা যাবে + Serial নির্ধারণ করা যাবে
+- User-এ কিভাবে দেখাবে (admin control করবে)
+- Manual service create-এ: Documents upload system থাকবে, কি fill করতে হবে তা থাকবে
+- Automated/API service রাখবে
+- বাকিগুলো logic-এ থাকবে
+
+---
+
+## অর্ডার
+- 🚨 Status: নতুন / অপেক্ষমান / প্রসেসিং / সম্পন্ন / ডেলিভার্ড / ব্যর্থ / বাতিল / রিফান্ডেড
+- এগুলো logic-এ সেরাভাবে দিবে
+
+---
+
+## কাস্টমার পেমেন্ট রিকোয়েস্ট
+- ✅ বিকাশ পেমেন্ট, বিকাশ পার্সোনাল, নগদ ও রকেট (uncommon design দিও)
+- অবশ্যই দুই পদ্ধতিতে পেমেন্ট গ্রহণ - মনে রাখবে
+- SMS auto-match secret - ভুলবে না!
+- Request আসলে: voice দিয়ে সেরাভাবে জানিয়ে দিবে
+  - Ringtone সময় logic-এ
+  - Voice সেরা, সুন্দর, মনোরম হতে হবে
+- (Auto + Manual)
+
+---
+
+## ক্যাশব্যাক কুপন সিস্টেম
+- Customer-এর ব্যবহারের ভিত্তিতে নির্দিষ্ট percent-এ cashback coupon redeem করতে পারবে
+- Auto হবে: "তৈরী করুন" click করলে coupon code বসে যাবে, "Redeem" click করলে মূল balance-এ add হবে
+- আকর্ষণীয় design-এ user-এ দেখাবে
+- Percent নির্ধারণ করবে admin
+
+---
+
+## প্রোমো কোড
+- ✅ Admin promo code দিতে পারবে, user তাদের option-এ ব্যবহার করে redeem করবে
+- অর্থাৎ promo code শুধুমাত্র wallet-এই ব্যবহার্য
+- Admin নির্বাচন করে দিতে পারবে কোন service-এ এই code ব্যবহার করতে পারবে
+
+---
+
+## ব্যানার / বিজ্ঞাপন / পপআপ
+- কয়েকটা design-এ: User dashboard-এ banner / advertisement / popup = সেরা
+- Admin panel-এ: Ready-made ১৫-২০ sample design থাকবে
+- প্রতি banner/ad/popup-এর সেরা animated design
+
+---
+
+## ধর্মভিত্তিক গ্রিটিং
+- User dashboard-এ: হিন্দু / মুসলিম / বৌদ্ধ / খ্রিস্টান - আলাদা আলাদা সামান্য icon বা animation
+- হিন্দু: নমস্কার ইত্যাদি logic-এ
+- পুরুষ / মহিলা / শিশু voice পালাবদলে শোনাবে
+- সবসময় না - শুধু যখন login করে প্রবেশ করবে
+
+---
+
+## সেবা ডিসপ্লে
+- সেবাগুলো আলাদা আলাদা দেখাবে - সুন্দর uncommon পদ্ধতিতে
+- Automated আর Manual ➤
+- নিবন্ধন সেবা অনেক হলে: নিবন্ধন click করলে সব সেবা একসাথে - এভাবে logic-এ দিবে
+
+---
+
+## ইউজার ওয়ালেট
+- সেরা uncommon হবে, fresh
+
+---
+
+## অর্ডার পদ্ধতি
+- দেখবে যাতে বেশি scroll করতে না হয়
+- বেশি হলে click-এ যাবে
+- হিজিবিজি যাতে না হয়
+
+---
+
+## এডমিন নোটিফিকেশন
+- 🚨 যেকোনো message আসলেই: সেরাভাবে জানাবে, নাম উল্লেখ করে ইত্যাদি logic-এ
+
+---
+
+## হোয়াটসঅ্যাপ ও চ্যাট
+- WhatsApp button: সেরাভাবে দেখাবে user-এ
+- Chat: শুধু logic-এ - কোনো অভিযোগ, কোনো order-এ কিছু বলতে হলে, review ইত্যাদিতে
+- এটা dashboard-এ show হবে না
+- প্রতিটা service-এ নিয়ম আকর্ষণীয়ভাবে দিবে (popup হোক বা uncommon-এ)
+- User dashboard সেরা হবে, logic-এ
+
+---
+
+## ডিজাইন
 - #9 Coffee (espresso + gold, premium)
 - No-scroll hub
 - Uncommon animations
 - WhatsApp button = THE BEST, uncommon animated
+- Auto user info (name/ID/phone) on WhatsApp click
