@@ -162,3 +162,32 @@
 **Login Attempt Limit:**
 - ভুল password-এ limit (যেমন: ৫ বার ভুল → block)
 - Admin চাইলে unblock করতে পারবে
+
+---
+
+## আরো ফিচার (User approved 2026-10-11)
+
+**User Profile:**
+- নিজের তথ্য edit করতে পারবে (name, phone etc.)
+
+**Order Tracking Timeline:**
+- Order কোথায় আছে - timeline-এ দেখবে
+
+**Transaction History:**
+- Wallet-এর বিস্তারিত transaction list
+
+**Admin Dashboard Statistics:**
+- আজকের order, revenue, নতুন user etc.
+
+**Bulk Action:**
+- একসাথে অনেক order/user select করে action
+
+**Session Timeout:**
+- নির্দিষ্ট সময় পর auto logout (logic-এ)
+
+**Welcome Bonus:**
+- নতুন user-এ bonus (admin control)
+
+**Order Status Animation Page:**
+- Order করার পর user-কে নতুন page-এ নিবে
+- Animation-এ দেখাবে কোন অবস্থায় আছে (received → processing → completed etc.)
