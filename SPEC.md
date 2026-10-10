@@ -191,3 +191,11 @@
 **Order Status Animation Page:**
 - Order করার পর user-কে নতুন page-এ নিবে
 - Animation-এ দেখাবে কোন অবস্থায় আছে (received → processing → completed etc.)
+
+**File Upload:**
+- Limit admin নির্ধারণ করবে (MB, file type)
+- Admin panel থেকে configure করা যাবে
+
+**Chat System:**
+- Order detail page-এ থাকবে (contextual)
+- Complaint, order সম্পর্কে কিছু বলা, review - এগুলোর জন্য
