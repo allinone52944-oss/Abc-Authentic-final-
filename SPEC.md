@@ -138,6 +138,29 @@
 
 ---
 
+## আর্কিটেকচার নিয়ম (স্থায়ী - 2026-10-11)
+
+**NO TEMPORARY WORK:**
+- যা করবে সব PERMANENT হবে
+- /tmp-তে কিছু রাখা যাবে না (reboot-এ মুছে যায়)
+- Config/binary persistent path-এ (/opt, /etc, /var/lib)
+
+**Engine Architecture:**
+- সামনে অনেক ENGINE add হবে (NID, BDRIS, Death Registration etc.)
+- Engine-গুলোর জন্য যা লাগবে সব স্থায়ীভাবে করবে
+- Modular/plugin architecture - নতুন engine সহজে add করা যাবে
+
+**Assets:**
+- Font সহ সব asset local-এ bundle করবে (CDN dependency নয়)
+- Refresh/logout-এ ভাঙবে না
+
+**Data Persistence:**
+- Refresh দিলে data ভাঙবে না (localStorage + server sync)
+- Logout হলেও draft data নষ্ট হবে না
+- Restart-safe সবকিছু
+
+---
+
 ## অতিরিক্ত ফিচার (User approved 2026-10-11)
 
 **Activity Log:**
