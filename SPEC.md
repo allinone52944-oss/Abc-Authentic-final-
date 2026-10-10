@@ -170,6 +170,10 @@
 **User Profile:**
 - নিজের তথ্য edit করতে পারবে (name, phone etc.)
 
+**Registration Fields:**
+- নাম, মোবাইল নম্বর, ইমেইল, পাসওয়ার্ড
+- WhatsApp নম্বর **বাধ্যতামূলক** (mandatory)
+
 **Order Tracking Timeline:**
 - Order কোথায় আছে - timeline-এ দেখবে
 
