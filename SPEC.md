@@ -17,6 +17,7 @@
 
 **User Management:**
 - ✅ Delete user + user data - with reconfirmation
+  - Deleted data includes: User account/profile, All orders (all statuses), Wallet balance & transactions, Payment/recharge requests, Coupons (cashback/promo), Notices, Chat messages, Uploaded documents
 - ✅ Create each user
 - ✅ Registration system control ON/OFF
 
