@@ -25,6 +25,43 @@ function isConfigured() {
   return !!getTransporter();
 }
 
+function emailShell(innerHtml) {
+  return `<!DOCTYPE html><html lang="bn"><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#1a120b;font-family:'Noto Sans Bengali',Arial,sans-serif;">
+<div style="max-width:480px;margin:0 auto;padding:32px 20px;">
+  <div style="background:linear-gradient(135deg,#2b1d14,#3d2b1f);border:1px solid #d4af37;border-radius:16px;padding:32px 28px;text-align:center;box-shadow:0 8px 32px rgba(212,175,55,.15);">
+    <div style="font-size:40px;margin-bottom:8px;">☕</div>
+    <div style="color:#d4af37;font-size:20px;font-weight:bold;letter-spacing:2px;">ALL IN ONE</div>
+    <div style="color:#c9a961;font-size:12px;letter-spacing:4px;margin-bottom:4px;">ABC AUTHENTIC</div>
+    <div style="color:#8a7a5f;font-size:12px;margin-bottom:24px;">বিশ্বাস ও সেবার ঠিকানা</div>
+    ${innerHtml}
+  </div>
+  <p style="text-align:center;color:#5a4f3d;font-size:11px;margin-top:16px;">© All In One (Abc Authentic)</p>
+</div>
+</body></html>`;
+}
+
+function verificationEmailHtml(link, name) {
+  const safeName = String(name || 'প্রিয় গ্রাহক').replace(/[<>&"]/g, '');
+  return emailShell(`
+    <div style="color:#f5ead6;font-size:16px;margin-bottom:8px;">আসসালামু আলাইকুম, ${safeName}!</div>
+    <p style="color:#c9bfa8;font-size:14px;line-height:1.7;">রেজিস্ট্রেশন সম্পন্ন করতে আপনার ইমেইল যাচাই করুন। নিচের বাটনে ক্লিক করুন — লিংকটি <b style="color:#d4af37;">২৪ ঘণ্টা</b> কার্যকর থাকবে।</p>
+    <a href="${link}" style="display:inline-block;background:linear-gradient(135deg,#d4af37,#b8941f);color:#1a120b;font-weight:bold;font-size:16px;padding:14px 36px;border-radius:12px;text-decoration:none;margin:16px 0;">✅ ইমেইল যাচাই করুন</a>
+    <p style="color:#8a7a5f;font-size:12px;line-height:1.6;">বাটনে ক্লিক না হলে এই লিংকটি ব্রাউজারে পেস্ট করুন:<br><span style="color:#c9a961;word-break:break-all;">${link}</span></p>
+    <p style="color:#8a7a5f;font-size:12px;">আপনি রেজিস্টার না করে থাকলে এই ইমেইল উপেক্ষা করুন।</p>
+  `);
+}
+
+function passwordResetEmailHtml(link, name) {
+  const safeName = String(name || 'প্রিয় গ্রাহক').replace(/[<>&"]/g, '');
+  return emailShell(`
+    <div style="color:#f5ead6;font-size:16px;margin-bottom:8px;">আসসালামু আলাইকুম, ${safeName}!</div>
+    <p style="color:#c9bfa8;font-size:14px;line-height:1.7;">পাসওয়ার্ড রিসেটের অনুরোধ পেয়েছি। নতুন পাসওয়ার্ড সেট করতে নিচের বাটনে ক্লিক করুন — লিংকটি <b style="color:#d4af37;">১ ঘণ্টা</b> কার্যকর থাকবে।</p>
+    <a href="${link}" style="display:inline-block;background:linear-gradient(135deg,#d4af37,#b8941f);color:#1a120b;font-weight:bold;font-size:16px;padding:14px 36px;border-radius:12px;text-decoration:none;margin:16px 0;">🔑 পাসওয়ার্ড রিসেট করুন</a>
+    <p style="color:#8a7a5f;font-size:12px;line-height:1.6;">বাটনে ক্লিক না হলে এই লিংকটি ব্রাউজারে পেস্ট করুন:<br><span style="color:#c9a961;word-break:break-all;">${link}</span></p>
+    <p style="color:#8a7a5f;font-size:12px;">আপনি এই অনুরোধ না করে থাকলে এই ইমেইল উপেক্ষা করুন — আপনার পাসওয়ার্ড অপরিবর্তিত থাকবে।</p>
+  `);
+}
 function otpEmailHtml(code, name) {
   const safeName = String(name || 'প্রিয় গ্রাহক').replace(/[<>&"]/g, '');
   return `<!DOCTYPE html><html lang="bn"><head><meta charset="UTF-8"></head>
@@ -77,4 +114,31 @@ async function sendOtpEmail(to, code, name) {
   });
 }
 
-module.exports = { sendMail, sendOtpEmail, isConfigured, otpEmailHtml };
+async function sendVerificationEmail(to, link, name) {
+  return sendMail({
+    to,
+    subject: 'ইমেইল যাচাই করুন - All In One (Abc Authentic)',
+    html: verificationEmailHtml(link, name),
+    text: `ইমেইল যাচাই করতে এই লিংকে যান (২৪ ঘণ্টা কার্যকর): ${link}`,
+  });
+}
+
+async function sendPasswordResetEmail(to, link, name) {
+  return sendMail({
+    to,
+    subject: 'পাসওয়ার্ড রিসেট - All In One (Abc Authentic)',
+    html: passwordResetEmailHtml(link, name),
+    text: `পাসওয়ার্ড রিসেট করতে এই লিংকে যান (১ ঘণ্টা কার্যকর): ${link}`,
+  });
+}
+
+module.exports = {
+  sendMail,
+  sendOtpEmail,
+  sendVerificationEmail,
+  sendPasswordResetEmail,
+  isConfigured,
+  otpEmailHtml,
+  verificationEmailHtml,
+  passwordResetEmailHtml,
+};

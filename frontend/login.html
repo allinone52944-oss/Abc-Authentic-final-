@@ -41,7 +41,11 @@
     </div>
     <div class="err" id="li_err"></div>
     <button class="btn" id="li_btn" onclick="doLogin()">প্রবেশ করুন →</button>
-    <div class="note">পাসওয়ার্ড ভুলে গেলে? <span>লগইন করে প্রোফাইলের ভেতরে রিসেট করুন</span><br>নিরাপদ লগইন • OTP verified</div>
+    <div id="li_resend" class="hidden" style="margin-top:10px;">
+      <button class="mini-btn" id="li_resend_btn" onclick="doResendLogin()">📧 যাচাই ইমেইল আবার পাঠান</button>
+      <div class="err" id="li_resend_err" style="margin-top:6px;"></div>
+    </div>
+    <div class="note"><a href="/forgot-password.html" style="color:var(--gold);">পাসওয়ার্ড ভুলে গেছেন?</a><br>নিরাপদ লগইন • ইমেইল verified</div>
   </div>
 
   <!-- REGISTRATION -->
@@ -103,12 +107,31 @@ const ERRBN = {
   WEAK_PASSWORD: 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে',
   INVALID_NAME: 'সঠিক নাম লিখুন',
   TOO_MANY_ATTEMPTS: 'অনেক চেষ্টা হয়েছে — কিছুক্ষণ পর আবার চেষ্টা করুন',
+  EMAIL_NOT_VERIFIED: 'ইমেইল যাচাই হয়নি — আপনার ইমেইল চেক করে যাচাই করুন',
 };
+
+let _pendingVerifyEmail = '';
+async function doResendLogin() {
+  const err = document.getElementById('li_resend_err');
+  const btn = document.getElementById('li_resend_btn');
+  if (!_pendingVerifyEmail) return;
+  btn.disabled = true;
+  try {
+    const r = await ABC.api('/auth/resend-verification', { method: 'POST', body: { email: _pendingVerifyEmail } });
+    const d = await r.json();
+    err.style.color = r.ok ? '#7ddb7d' : '';
+    err.textContent = r.ok ? '✅ যাচাই ইমেইল পাঠানো হয়েছে'
+      : (d.error === 'TOO_MANY_REQUESTS' ? 'অনেকবার চেষ্টা করেছেন — ১ ঘণ্টা পরে আবার চেষ্টা করুন' : 'ব্যর্থ: ' + d.error);
+  } catch (e) { err.textContent = 'সংযোগ ব্যর্থ'; }
+  finally { btn.disabled = false; }
+}
 
 async function doLogin() {
   const err = document.getElementById('li_err');
   const btn = document.getElementById('li_btn');
   err.textContent = '';
+  document.getElementById('li_resend').classList.add('hidden');
+  _pendingVerifyEmail = '';
   const login = document.getElementById('li_login').value.trim();
   const password = document.getElementById('li_pw').value;
   if (!login || !password) { err.textContent = 'নম্বর ও পাসওয়ার্ড দিন'; return; }
@@ -116,7 +139,14 @@ async function doLogin() {
   try {
     const r = await ABC.api('/auth/login', { method: 'POST', body: { login, password } });
     const d = await r.json();
-    if (!r.ok) { err.textContent = ERRBN[d.error] || ('ত্রুটি: ' + d.error); return; }
+    if (!r.ok) {
+      err.textContent = ERRBN[d.error] || ('ত্রুটি: ' + d.error);
+      if (d.error === 'EMAIL_NOT_VERIFIED') {
+        _pendingVerifyEmail = d.email || (/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(login) ? login : '');
+        if (_pendingVerifyEmail) document.getElementById('li_resend').classList.remove('hidden');
+      }
+      return;
+    }
     ABC.setTokens(d.access_token, d.refresh_token);
     location.href = d.user.role === 'admin' ? '/admin.html' : '/dashboard.html';
   } catch (e) { err.textContent = 'সংযোগ ব্যর্থ — আবার চেষ্টা করুন'; }
@@ -140,31 +170,57 @@ async function doRegister() {
     const r = await ABC.api('/auth/register', { method: 'POST', body });
     const d = await r.json();
     if (!r.ok) { err.textContent = ERRBN[d.error] || ('ত্রুটি: ' + d.error); return; }
-    ABC.setTokens(d.access_token, d.refresh_token);
-    // Phase 3: OTP email verification step
-    showOtpStep(body.email, body.name);
+    // Mandatory email verification: no tokens issued — user must verify first.
+    showVerifyStep(body.email, body.name, d.email_sent);
   } catch (e) { err.textContent = 'সংযোগ ব্যর্থ — আবার চেষ্টা করুন'; }
   finally { btn.disabled = false; btn.textContent = 'রেজিস্টার করুন →'; }
 }
 
-// ---- Phase 3: OTP verification ----
-let _otpEmail = '';
-async function showOtpStep(email, name) {
-  _otpEmail = email;
+// ---- Email verification (link) ----
+let _regEmail = '';
+let _regName = '';
+function showVerifyStep(email, name, emailSent) {
+  _regEmail = email; _regName = name;
   document.getElementById('tab-reg').innerHTML =
     '<div style="text-align:center;padding:10px 0;">' +
     '<div style="font-size:44px;">📧</div>' +
     '<h3 style="color:var(--gold);margin:8px 0;">ইমেইল যাচাই করুন</h3>' +
-    '<p style="color:var(--muted);font-size:14px;">' + escHtml(email) + ' ঠিকানায় একটি OTP পাঠানো হচ্ছে…</p>' +
-    '<div class="field" style="max-width:220px;margin:14px auto;"><label>৬ সংখ্যার OTP</label>' +
+    '<p style="color:var(--muted);font-size:14px;">' + escHtml(email) + ' ঠিকানায় ' +
+    (emailSent ? 'একটি যাচাই লিংক পাঠানো হয়েছে।<br>ইমেইলের লিংকে ক্লিক করুন (২৪ ঘণ্টা কার্যকর)।'
+               : 'যাচাই লিংক পাঠানো যায়নি — নিচে "আবার পাঠান" চাপুন।') + '</p>' +
+    '<div class="err" id="vrf_err" style="margin-top:8px;"></div>' +
+    '<div style="margin-top:10px;"><button class="mini-btn" onclick="doResendVerify()">🔄 আবার পাঠান</button> ' +
+    '<button class="mini-btn" onclick="toggleOtpFallback()">🔢 OTP দিয়ে যাচাই করুন</button></div>' +
+    '<div id="otp_fallback" class="hidden" style="margin-top:14px;">' +
+    '<div class="field" style="max-width:220px;margin:0 auto;"><label>৬ সংখ্যার OTP</label>' +
     '<input type="text" id="otp_code" maxlength="6" placeholder="••••••" style="text-align:center;font-size:24px;letter-spacing:8px;"></div>' +
     '<div class="err" id="otp_err"></div>' +
-    '<button class="btn" id="otp_btn" onclick="doVerifyOtp()">যাচাই করুন ✓</button>' +
-    '<div style="margin-top:10px;"><button class="mini-btn" onclick="doSendOtp(true)">🔄 আবার পাঠান</button> ' +
-    '<button class="mini-btn" onclick="location.href=\'/dashboard.html\'">এড়িয়ে যান →</button></div></div>';
-  doSendOtp(false);
+    '<button class="btn" id="otp_btn" onclick="doVerifyOtp()">যাচাই করুন ✓</button> ' +
+    '<button class="mini-btn" onclick="doSendOtp(true)">📩 OTP পাঠান</button></div>' +
+    '<div style="margin-top:14px;"><a href="/login.html" style="color:var(--gold);font-size:14px;">← লগইন পেজে যান</a></div></div>';
 }
 function escHtml(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function doResendVerify() {
+  const err = document.getElementById('vrf_err');
+  err.style.color = '';
+  try {
+    const r = await ABC.api('/auth/resend-verification', { method: 'POST', body: { email: _regEmail } });
+    const d = await r.json();
+    if (!r.ok) {
+      err.textContent = d.error === 'TOO_MANY_REQUESTS' ? 'অনেকবার চেষ্টা করেছেন — ১ ঘণ্টা পরে আবার চেষ্টা করুন' : 'ব্যর্থ: ' + d.error;
+      return;
+    }
+    err.style.color = '#7ddb7d';
+    err.textContent = '✅ যাচাই লিংক আবার পাঠানো হয়েছে';
+  } catch (e) { err.textContent = 'সংযোগ ব্যর্থ'; }
+}
+function toggleOtpFallback() {
+  const el = document.getElementById('otp_fallback');
+  el.classList.toggle('hidden');
+  if (!el.classList.contains('hidden')) doSendOtp(false);
+}
+// ---- OTP fallback (works even before domain/APP_URL is configured) ----
+let _otpEmail = '';
 async function doSendOtp(manual) {
   const err = document.getElementById('otp_err');
   try {
@@ -194,7 +250,9 @@ async function doVerifyOtp() {
         d.error === 'TOO_MANY_ATTEMPTS' ? 'অনেকবার ভুল হয়েছে — নতুন OTP নিন' : 'যাচাই ব্যর্থ';
       return;
     }
-    location.href = '/dashboard.html';
+    err.style.color = '#7ddb7d';
+    err.textContent = '✅ যাচাই সম্পন্ন! এখন লগইন করুন।';
+    setTimeout(() => { location.href = '/login.html'; }, 1200);
   } catch (e) { err.textContent = 'সংযোগ ব্যর্থ'; }
   finally { btn.disabled = false; }
 }

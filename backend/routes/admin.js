@@ -81,8 +81,8 @@ router.post('/users', async (req, res) => {
 
     const password_hash = await hashPassword(String(password));
     const ins = await db.query(
-      `INSERT INTO users (name, phone, whatsapp, email, password_hash, religion, role, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'active')
+      `INSERT INTO users (name, phone, whatsapp, email, password_hash, religion, role, status, email_verified)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'active',TRUE)
        RETURNING id, name, phone, whatsapp, email, religion, role, balance, status, created_at`,
       [String(name).trim(), String(phone).trim(), String(whatsapp).trim(),
        email ? String(email).trim().toLowerCase() : null,

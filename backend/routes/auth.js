@@ -95,14 +95,14 @@ router.post('/register', async (req, res) => {
 
     const password_hash = await hashPassword(String(password));
     const ins = await db.query(
-      `INSERT INTO users (name, phone, whatsapp, email, password_hash, religion, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+      `INSERT INTO users (name, phone, whatsapp, email, password_hash, religion, status, email_verified)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending', FALSE)
        RETURNING *`,
       [name.trim(), phoneN, whatsapp.trim(), emailN, password_hash, rel]
     );
     const user = ins.rows[0];
 
-    // Welcome bonus (admin-controlled)
+    // Welcome bonus (admin-controlled) — credited now, usable after verification
     try {
       const wb = await getSetting('welcome_bonus');
       if (wb && wb.enabled && Number(wb.amount) > 0) {
@@ -112,12 +112,163 @@ router.post('/register', async (req, res) => {
       }
     } catch (e) { safeLog('[auth] welcome bonus skipped:', e.message); }
 
-    const tokens = await issueTokens(user.id, user.role);
-    const fresh = await db.query('SELECT * FROM users WHERE id = $1', [user.id]);
-    return res.status(201).json({ user: publicUser(fresh.rows[0]), ...tokens });
+    // Mandatory email verification: send link, do NOT issue session tokens yet.
+    let emailSent = false;
+    try {
+      if (isConfigured()) {
+        const token = await createVerificationToken(user.id, 24);
+        const link = `${appBaseUrl()}/verify-email.html?token=${token}`;
+        const sent = await sendVerificationEmail(emailN, link, name.trim());
+        emailSent = !!sent.ok;
+      }
+    } catch (e) { safeLog('[auth] verification email skipped:', e.message); }
+
+    return res.status(201).json({
+      ok: true,
+      verify_email: true,
+      email: emailN,
+      email_sent: emailSent,
+      message: 'VERIFY_EMAIL',
+    });
   } catch (e) {
     safeLog('[auth] register error:', e.message);
     return res.status(500).json({ error: 'REGISTER_FAILED' });
+  }
+});
+
+// ---- GET /api/auth/verify-email?token= -------------------------
+// Clicked from the verification email. Single-use, 24h expiry.
+router.get('/verify-email', async (req, res) => {
+  try {
+    const token = String(req.query.token || '');
+    if (!/^[a-f0-9]{64}$/.test(token)) {
+      return res.status(400).json({ error: 'INVALID_TOKEN' });
+    }
+    const row = await findValidToken('email_verification_tokens', token);
+    if (!row) return res.status(400).json({ error: 'INVALID_OR_EXPIRED' });
+
+    await db.withTransaction(async (client) => {
+      await client.query(
+        'UPDATE email_verification_tokens SET used = TRUE WHERE id = $1',
+        [row.id]
+      );
+      await client.query(
+        `UPDATE users SET email_verified = TRUE,
+         status = CASE WHEN status = 'pending' THEN 'active' ELSE status END
+         WHERE id = $1`,
+        [row.user_id]
+      );
+    });
+    return res.json({ ok: true });
+  } catch (e) {
+    safeLog('[auth] verify-email error:', e.message);
+    return res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// ---- POST /api/auth/resend-verification { email } ---------------
+// Rate-limited: max 3 per email per hour. Never reveals account existence
+// beyond what registration already does (409 ALREADY_REGISTERED).
+router.post('/resend-verification', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!validEmail(email)) return res.status(400).json({ error: 'INVALID_EMAIL' });
+    const em = email.trim().toLowerCase();
+
+    const rl = await db.query(
+      `SELECT COUNT(*) AS c FROM email_verification_tokens evt
+       JOIN users u ON u.id = evt.user_id
+       WHERE LOWER(u.email) = $1 AND evt.created_at > NOW() - INTERVAL '1 hour'`,
+      [em]
+    );
+    if (parseInt(rl.rows[0].c, 10) >= 3) {
+      return res.status(429).json({ error: 'TOO_MANY_REQUESTS' });
+    }
+
+    const u = await db.query(
+      'SELECT id, name, email_verified FROM users WHERE LOWER(email) = $1 LIMIT 1',
+      [em]
+    );
+    const user = u.rows[0];
+    if (user && !user.email_verified && isConfigured()) {
+      try {
+        const token = await createVerificationToken(user.id, 24);
+        const link = `${appBaseUrl()}/verify-email.html?token=${token}`;
+        await sendVerificationEmail(em, link, user.name);
+      } catch (e) { safeLog('[auth] resend verification skipped:', e.message); }
+    }
+    // Always OK: do not reveal whether the email exists / is verified.
+    return res.json({ ok: true });
+  } catch (e) {
+    safeLog('[auth] resend-verification error:', e.message);
+    return res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// ---- POST /api/auth/forgot-password { email } -------------------
+// Sends a 1-hour single-use reset link. Always returns OK (no enumeration).
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!validEmail(email)) return res.status(400).json({ error: 'INVALID_EMAIL' });
+    const em = email.trim().toLowerCase();
+
+    const rl = await db.query(
+      `SELECT COUNT(*) AS c FROM password_reset_tokens prt
+       JOIN users u ON u.id = prt.user_id
+       WHERE LOWER(u.email) = $1 AND prt.created_at > NOW() - INTERVAL '1 hour'`,
+      [em]
+    );
+    if (parseInt(rl.rows[0].c, 10) >= 3) {
+      return res.status(429).json({ error: 'TOO_MANY_REQUESTS' });
+    }
+
+    const u = await db.query(
+      'SELECT id, name FROM users WHERE LOWER(email) = $1 LIMIT 1',
+      [em]
+    );
+    const user = u.rows[0];
+    if (user && isConfigured()) {
+      try {
+        const token = await createPasswordResetToken(user.id);
+        const link = `${appBaseUrl()}/reset-password.html?token=${token}`;
+        await sendPasswordResetEmail(em, link, user.name);
+      } catch (e) { safeLog('[auth] forgot-password email skipped:', e.message); }
+    }
+    return res.json({ ok: true });
+  } catch (e) {
+    safeLog('[auth] forgot-password error:', e.message);
+    return res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// ---- POST /api/auth/reset-password { token, new_password } ------
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, new_password } = req.body || {};
+    if (!/^[a-f0-9]{64}$/.test(String(token || ''))) {
+      return res.status(400).json({ error: 'INVALID_TOKEN' });
+    }
+    if (!new_password || String(new_password).length < 6) {
+      return res.status(400).json({ error: 'WEAK_PASSWORD' });
+    }
+    const row = await findValidToken('password_reset_tokens', String(token));
+    if (!row) return res.status(400).json({ error: 'INVALID_OR_EXPIRED' });
+
+    const hash = await hashPassword(String(new_password));
+    await db.withTransaction(async (client) => {
+      await client.query(
+        'UPDATE password_reset_tokens SET used = TRUE WHERE id = $1',
+        [row.id]
+      );
+      await client.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, row.user_id]);
+      // Logout everywhere: revoke all refresh tokens for this user.
+      await client.query('UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1', [row.user_id]);
+    });
+    return res.json({ ok: true });
+  } catch (e) {
+    safeLog('[auth] reset-password error:', e.message);
+    return res.status(500).json({ error: 'FAILED' });
   }
 });
 
@@ -166,6 +317,11 @@ router.post('/login', async (req, res) => {
 
     const ok = await verifyPassword(String(password), user.password_hash);
     if (!ok) return fail('INVALID_CREDENTIALS', 401);
+
+    // Mandatory email verification: password is correct, but email not verified.
+    if (!user.email_verified) {
+      return res.status(403).json({ error: 'EMAIL_NOT_VERIFIED', email: user.email });
+    }
 
     await db.query(
       'UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = $1',
@@ -272,6 +428,8 @@ router.put('/me', requireAuth, async (req, res) => {
       );
       if (dup.rows.length) return res.status(409).json({ error: 'EMAIL_TAKEN' });
       sets.push(`email = $${i++}`); params.push(String(email).trim().toLowerCase());
+      // New email must be verified before next login.
+      sets.push(`email_verified = $${i++}`); params.push(false);
     }
     if (religion !== undefined) {
       if (!validReligion(religion)) return res.status(400).json({ error: 'INVALID_RELIGION' });
@@ -290,7 +448,21 @@ router.put('/me', requireAuth, async (req, res) => {
       `UPDATE users SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
       params
     );
-    return res.json({ user: publicUser(r.rows[0]) });
+    const updated = r.rows[0];
+    // Email was changed: send a fresh verification link for the new address.
+    // Current session stays valid; next login requires verification.
+    let verifySent = false;
+    if (email !== undefined && isConfigured()) {
+      try {
+        const token = await createVerificationToken(updated.id, 24);
+        const link = `${appBaseUrl()}/verify-email.html?token=${token}`;
+        const sent = await sendVerificationEmail(updated.email, link, updated.name);
+        verifySent = !!sent.ok;
+      } catch (e) { safeLog('[auth] re-verification email skipped:', e.message); }
+    }
+    const out = publicUser(updated);
+    if (email !== undefined) out.verify_email_sent = verifySent;
+    return res.json({ user: out });
   } catch (e) {
     safeLog('[auth] update me error:', e.message);
     return res.status(500).json({ error: 'UPDATE_FAILED' });
@@ -324,10 +496,67 @@ router.post('/change-password', requireAuth, async (req, res) => {
 
 // ---- OTP via email (Phase 3) ----------------------------------
 const crypto = require('crypto');
-const { sendOtpEmail, isConfigured } = require('../utils/mailer');
+const {
+  sendOtpEmail,
+  sendVerificationEmail,
+  sendPasswordResetEmail,
+  isConfigured,
+} = require('../utils/mailer');
 
 function makeOtp() {
   return String(crypto.randomInt(100000, 1000000));
+}
+
+// ---- Email link tokens (mandatory verification + password reset) ----
+// Raw token goes to the user (in the email link); only SHA-256 hash is stored.
+function makeLinkToken() {
+  return crypto.randomBytes(32).toString('hex'); // 64 hex chars
+}
+function hashLinkToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+// Timing-safe comparison of a presented token against stored hashes.
+async function findValidToken(table, token) {
+  const hash = hashLinkToken(token);
+  const r = await db.query(
+    `SELECT * FROM ${table}
+     WHERE token_hash = $1 AND used = FALSE AND expires_at > NOW()
+     LIMIT 1`,
+    [hash]
+  );
+  const row = r.rows[0];
+  if (!row) return null;
+  const a = Buffer.from(row.token_hash, 'utf8');
+  const b = Buffer.from(hash, 'utf8');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  return row;
+}
+
+function appBaseUrl() {
+  const u = (process.env.APP_URL || '').trim().replace(/\/+$/, '');
+  return u || 'https://abc-authentic.store';
+}
+
+async function createVerificationToken(userId, hoursValid) {
+  const token = makeLinkToken();
+  const hash = hashLinkToken(token);
+  await db.query(
+    `INSERT INTO email_verification_tokens (user_id, token_hash, expires_at)
+     VALUES ($1, $2, NOW() + ($3 || ' hours')::interval)`,
+    [userId, hash, String(hoursValid)]
+  );
+  return token;
+}
+
+async function createPasswordResetToken(userId) {
+  const token = makeLinkToken();
+  const hash = hashLinkToken(token);
+  await db.query(
+    `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+     VALUES ($1, $2, NOW() + INTERVAL '1 hour')`,
+    [userId, hash]
+  );
+  return token;
 }
 
 // POST /api/auth/send-otp { email } — 6-digit OTP, 5-min expiry, hashed in DB
@@ -395,7 +624,12 @@ router.post('/verify-otp', async (req, res) => {
     if (otp.attempts >= 5) return res.status(400).json({ error: 'TOO_MANY_ATTEMPTS' });
 
     await db.query('UPDATE otp_codes SET consumed = TRUE WHERE id = $1', [otp.id]);
-    await db.query('UPDATE users SET email_verified = TRUE WHERE LOWER(email) = $1', [em]);
+    await db.query(
+      `UPDATE users SET email_verified = TRUE,
+       status = CASE WHEN status = 'pending' THEN 'active' ELSE status END
+       WHERE LOWER(email) = $1`,
+      [em]
+    );
     return res.json({ ok: true });
   } catch (e) {
     safeLog('[auth] verify-otp error:', e.message);
