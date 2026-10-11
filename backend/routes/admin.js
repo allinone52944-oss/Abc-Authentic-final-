@@ -685,6 +685,20 @@ router.get('/stats', async (req, res) => {
   } catch (e) { safeLog('[admin] stats error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });
 
+// Unmatched SMS count — separate query so a missing 005 migration
+// can never break the main stats endpoint.
+router.get('/stats/sms', async (req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT COUNT(*) FROM incoming_sms
+       WHERE matched_recharge_id IS NULL AND parse_status = 'parsed'`
+    );
+    res.json({ unmatched_sms: parseInt(r.rows[0].count, 10) });
+  } catch (e) {
+    res.json({ unmatched_sms: 0 }); // table may not exist yet
+  }
+});
+
 router.get('/settings', async (req, res) => {
   try {
     const r = await db.query('SELECT key, value FROM settings');

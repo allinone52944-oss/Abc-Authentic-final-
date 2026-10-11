@@ -83,6 +83,18 @@ const VoiceAlert = {
       }
       this._last.recharge = pr;
       this._last.order = no;
+      // Unmatched SMS (separate lightweight endpoint; table may not exist yet)
+      try {
+        const sr = await ABC.api('/admin/stats/sms');
+        if (sr.ok) {
+          const sd = await sr.json();
+          const us = Number(sd.unmatched_sms || 0);
+          if (this._last.sms && us > this._last.sms) {
+            this.speak('নতুন পেমেন্ট SMS এসেছে, ম্যাচ হয়নি। অনুগ্রহ করে চেক করুন।');
+          }
+          this._last.sms = us;
+        }
+      } catch (e) { /* silent */ }
     } catch (e) { /* silent */ }
   },
   toggle() {
@@ -396,6 +408,82 @@ TABS.recharge = async () => {
   }
   content.innerHTML = html;
 };
+/* ---------------- SMS AUTO-MATCH ---------------- */
+TABS.sms = async () => {
+  const f = window._smsFilter || 'no';
+  const r = await ABC.api('/admin/sms?matched=' + f + '&limit=30');
+  const d = await r.json();
+  const pr = await (await ABC.api('/admin/sms/pending-recharges')).json();
+  const pend = pr.pending || [];
+  let html =
+    '<h3 style="color:var(--gold);margin-bottom:12px;">📩 SMS অটো-ম্যাচ</h3>' +
+    '<div style="margin-bottom:12px;">' +
+    '<button class="mini-btn' + (f === 'no' ? ' ok' : '') + '" onclick="window._smsFilter=\'no\';show(\'sms\')">⏳ আনম্যাচড</button> ' +
+    '<button class="mini-btn' + (f === 'yes' ? ' ok' : '') + '" onclick="window._smsFilter=\'yes\';show(\'sms\')">✅ ম্যাচড</button> ' +
+    '<button class="mini-btn' + (f === '' ? ' ok' : '') + '" onclick="window._smsFilter=\'\';show(\'sms\')">📋 সব</button></div>';
+
+  if (!d.sms.length) html += '<div style="color:var(--muted)">কোনো SMS নেই 🎉</div>';
+  for (const s of d.sms) {
+    const matched = !!s.matched_recharge_id;
+    html += '<div class="list-row" style="cursor:default;"><div>' +
+      '<div class="t">৳' + bn(s.amount) + ' <small style="color:var(--dim)">' + esc(s.method || 'unknown') + '</small> ' +
+      (matched
+        ? '<span class="pill" style="background:#1d3b24;color:#7fd68f;">✅ ম্যাচড</span>'
+        : '<span class="pill" style="background:#3b2a1d;color:#e0a75e;">⏳ আনম্যাচড</span>') + '</div>' +
+      '<div class="s">প্রেরক: ' + esc(s.sender || '—') + ' • TrxID: ' + esc(s.trxid || '—') + '<br>' +
+      '<span style="opacity:.75">"' + esc((s.raw_message || '').slice(0, 120)) + '"</span><br>' +
+      new Date(s.created_at).toLocaleString('bn-BD');
+    if (matched) {
+      html += '<br>👤 ' + esc(s.user_name || '') + ' (' + esc(s.user_phone || '') + ') • ৳' + bn(s.tx_amount);
+    }
+    html += '</div></div><div style="text-align:right;min-width:150px;">';
+    if (!matched) {
+      html += '<select id="sms-tx-' + s.id + '" class="mini-btn" style="margin-bottom:6px;max-width:150px;">' +
+        '<option value="">রিচার্জ বেছে নিন…</option>';
+      for (const p of pend) {
+        html += '<option value="' + p.id + '">৳' + bn(p.amount) + ' • ' + esc(p.user_name) + ' • ' + esc(p.trxid || '') + '</option>';
+      }
+      html += '</select><br>' +
+        '<button class="mini-btn ok" onclick="AdmSms.match(\'' + s.id + '\')">🔗 ম্যাচ</button> ' +
+        '<button class="mini-btn danger" onclick="AdmSms.ignore(\'' + s.id + '\')">🙈 ইগনোর</button>';
+    }
+    html += '</div></div>';
+  }
+
+  // Forwarding setup instructions
+  html += '<div class="form-card" style="margin-top:16px;max-width:none;"><h3 style="color:var(--gold);margin:0 0 10px;">📱 SMS ফরওয়ার্ড সেটআপ (Android)</h3>' +
+    '<ol style="color:var(--muted);font-size:14px;line-height:1.9;margin:0;padding-left:20px;">' +
+    '<li>Play Store থেকে <b>SMS Forwarder</b> জাতীয় অ্যাপ ইনস্টল করুন।</li>' +
+    '<li>ফিল্টার: প্রেরক <b>bKash (16247)</b>, <b>Nagad (16167)</b>, <b>Rocket (16216)</b>।</li>' +
+    '<li>Webhook URL বসান:<br><code style="color:var(--gold);word-break:break-all;">' +
+    location.origin + '/api/sms/incoming?secret=আপনার_SMS_WEBHOOK_SECRET</code></li>' +
+    '<li>মেথড: <b>POST</b>, JSON body: <code>{"sender":"{sender}","message":"{message}"}</code></li>' +
+    '<li>টাকা ঢুকলেই SMS এলে অটো-ম্যাচ হবে — TrxID মিললে বা টাকা+নম্বর মিললে ✅</li>' +
+    '</ol></div>';
+
+  content.innerHTML = html;
+};
+
+window.AdmSms = {
+  async match(smsId) {
+    const sel = document.getElementById('sms-tx-' + smsId);
+    if (!sel || !sel.value) { alert('একটি রিচার্জ রিকোয়েস্ট বেছে নিন'); return; }
+    if (!confirm('এই SMS-এর সাথে রিচার্জ ম্যাচ করবেন? টাকা ইউজারের ওয়ালেটে যোগ হবে।')) return;
+    const r = await ABC.api('/admin/sms/' + smsId + '/match', {
+      method: 'POST', body: { transaction_id: sel.value },
+    });
+    const d = await r.json();
+    if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
+    alert('✅ ম্যাচ সফল! টাকা যোগ হয়েছে।');
+    show('sms');
+  },
+  async ignore(smsId) {
+    if (!confirm('এই SMS ইগনোর করবেন?')) return;
+    await ABC.api('/admin/sms/' + smsId + '/ignore', { method: 'POST' });
+    show('sms');
+  },
+};
+
 window.AdmTx = {
   async approve(id) {
     if (!confirm('৳ যোগ করবেন?')) return;

@@ -72,6 +72,11 @@ app.use('/api/auth', authLimiter, authRoutes);
 const adminRoutes = require('./routes/admin');
 app.use('/api/admin', apiLimiter, adminRoutes);
 
+// ---- SMS routes: webhook (token-guarded) + admin SMS (JWT admin) --
+const { webhook: smsWebhook, adminSms } = require('./routes/sms');
+app.use('/api/sms', smsWebhook); // webhook has its own strict rate limiter
+app.use('/api/admin/sms', apiLimiter, adminSms);
+
 // ---- User routes (authenticated users) --
 const userRoutes = require('./routes/user');
 app.use('/api', apiLimiter, userRoutes);
