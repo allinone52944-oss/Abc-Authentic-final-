@@ -5,6 +5,69 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>অর্ডার স্ট্যাটাস - All In One</title>
 <link rel="stylesheet" href="/css/coffee.css">
+<style>
+/* ===== Celebration overlay (order completed) ===== */
+#confettiCanvas {
+  position: fixed; inset: 0; width: 100vw; height: 100vh;
+  pointer-events: none; z-index: 9998; display: none;
+}
+.celebrate-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(29,19,12,.82); backdrop-filter: blur(6px);
+  cursor: pointer; padding: 20px;
+}
+.celebrate-overlay.show { display: flex; }
+.celebrate-card {
+  text-align: center; padding: 40px 48px; max-width: 92vw;
+  background: linear-gradient(160deg, #3d2b1f, #2b1d14);
+  border: 2px solid var(--gold); border-radius: 24px;
+  box-shadow: 0 0 60px rgba(212,175,55,.35), 0 20px 60px rgba(0,0,0,.5);
+  animation: celebratePop .6s cubic-bezier(.2,1.4,.4,1);
+}
+@keyframes celebratePop {
+  0% { transform: scale(.4); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.check-svg { width: 110px; height: 110px; margin: 0 auto 12px; }
+.check-circle {
+  fill: none; stroke: var(--gold); stroke-width: 5;
+  stroke-dasharray: 283; stroke-dashoffset: 283;
+  animation: drawCircle .7s ease forwards, pulseGold 1.6s ease-in-out .7s infinite;
+  filter: drop-shadow(0 0 12px rgba(212,175,55,.7));
+}
+@keyframes drawCircle { to { stroke-dashoffset: 0; } }
+@keyframes pulseGold {
+  0%,100% { filter: drop-shadow(0 0 8px rgba(212,175,55,.5)); }
+  50% { filter: drop-shadow(0 0 22px rgba(212,175,55,.95)); }
+}
+.check-mark {
+  fill: none; stroke: var(--gold); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 60; stroke-dashoffset: 60;
+  animation: drawCheck .45s ease .55s forwards;
+}
+@keyframes drawCheck { to { stroke-dashoffset: 0; } }
+.celebrate-title {
+  font-size: 34px; font-weight: 700; color: var(--gold);
+  animation: bounceIn .7s cubic-bezier(.2,1.6,.4,1) .3s backwards;
+  text-shadow: 0 0 24px rgba(212,175,55,.6);
+  margin-bottom: 8px;
+}
+@keyframes bounceIn {
+  0% { transform: scale(.3) translateY(30px); opacity: 0; }
+  60% { transform: scale(1.12) translateY(-6px); opacity: 1; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+.celebrate-sub { font-size: 18px; color: var(--cream); margin-bottom: 4px; animation: fadeUp .6s ease .55s backwards; }
+.celebrate-en { font-size: 14px; color: var(--muted); margin-bottom: 14px; animation: fadeUp .6s ease .7s backwards; }
+.celebrate-hint { font-size: 12px; color: var(--dim); animation: fadeUp .6s ease .85s backwards; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (max-width: 480px) {
+  .celebrate-card { padding: 28px 24px; }
+  .celebrate-title { font-size: 26px; }
+  .check-svg { width: 84px; height: 84px; }
+}
+</style>
 </head>
 <body class="app">
 <div class="spiral"></div>
@@ -27,6 +90,20 @@
         <div style="margin-top:10px;"><span class="back-link" onclick="location.href='/dashboard.html'">ড্যাশবোর্ডে ফিরুন</span></div>
       </div>
     </div>
+  </div>
+</div>
+<!-- Celebration overlay: confetti + অভিনন্দন + animated checkmark -->
+<canvas id="confettiCanvas"></canvas>
+<div id="celebrateOverlay" class="celebrate-overlay" onclick="dismissCelebration()">
+  <div class="celebrate-card">
+    <svg class="check-svg" viewBox="0 0 100 100">
+      <circle class="check-circle" cx="50" cy="50" r="45"/>
+      <path class="check-mark" d="M32 52 L45 65 L70 38"/>
+    </svg>
+    <div class="celebrate-title">🎉 অভিনন্দন! 🎉</div>
+    <div class="celebrate-sub">আপনার অর্ডার সম্পন্ন হয়েছে</div>
+    <div class="celebrate-en">Your order is completed!</div>
+    <div class="celebrate-hint">বন্ধ করতে ক্লিক করুন</div>
   </div>
 </div>
 <script src="/js/app.js"></script>
@@ -73,8 +150,93 @@ async function loadSupportMsgs(){
   }catch(e){/* optional */}
 }
 function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+/* ===== Celebration: confetti + chime, once per order ===== */
+const CELEBRATE_KEY='celebrated_orders';
+function alreadyCelebrated(id){
+  try{return (JSON.parse(localStorage.getItem(CELEBRATE_KEY)||'[]')).includes(String(id));}catch(e){return false;}
+}
+function markCelebrated(id){
+  try{
+    const a=JSON.parse(localStorage.getItem(CELEBRATE_KEY)||'[]');
+    a.push(String(id));
+    localStorage.setItem(CELEBRATE_KEY,JSON.stringify(a.slice(-50)));
+  }catch(e){}
+}
+function playChime(){
+  try{
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC)return;
+    const ctx=new AC();
+    const notes=[659.25,783.99,1046.50]; // E5 -> G5 -> C6, pleasant arpeggio
+    notes.forEach((f,i)=>{
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.type='sine';o.frequency.value=f;
+      const t=ctx.currentTime+i*0.16;
+      g.gain.setValueAtTime(0.0001,t);
+      g.gain.exponentialRampToValueAtTime(0.25,t+0.03);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+0.5);
+      o.connect(g);g.connect(ctx.destination);
+      o.start(t);o.stop(t+0.55);
+    });
+  }catch(e){/* audio optional */}
+}
+function fireConfetti(){
+  const cv=document.getElementById('confettiCanvas');
+  cv.style.display='block';
+  const ctx=cv.getContext('2d');
+  cv.width=innerWidth;cv.height=innerHeight;
+  const colors=['#d4af37','#8b6914','#f5e6c8','#c9a961','#fff3d6','#a67c2e'];
+  const parts=[];
+  for(let i=0;i<160;i++){
+    parts.push({
+      x:Math.random()*cv.width,
+      y:-20-Math.random()*cv.height*0.3,
+      w:6+Math.random()*7, h:8+Math.random()*10,
+      vy:2.2+Math.random()*3.4, vx:-1.6+Math.random()*3.2,
+      rot:Math.random()*Math.PI*2, vr:-0.12+Math.random()*0.24,
+      c:colors[(Math.random()*colors.length)|0],
+      shape:Math.random()<0.35?'circle':'rect'
+    });
+  }
+  const t0=performance.now(),DUR=3000;
+  let raf;
+  (function tick(t){
+    const el=t-t0;
+    ctx.clearRect(0,0,cv.width,cv.height);
+    const fade=el>DUR-600?Math.max(0,(DUR-el)/600):1;
+    ctx.globalAlpha=fade;
+    for(const p of parts){
+      p.x+=p.vx;p.y+=p.vy;p.rot+=p.vr;p.vy+=0.045;
+      if(p.y>cv.height+30){p.y=-20;p.x=Math.random()*cv.width;}
+      ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillStyle=p.c;
+      if(p.shape==='circle'){ctx.beginPath();ctx.arc(0,0,p.w/2,0,Math.PI*2);ctx.fill();}
+      else{ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);}
+      ctx.restore();
+    }
+    ctx.globalAlpha=1;
+    if(el<DUR)raf=requestAnimationFrame(tick);
+    else{cancelAnimationFrame(raf);ctx.clearRect(0,0,cv.width,cv.height);cv.style.display='none';}
+  })(t0);
+}
+let celebrateTimer=null;
+function celebrateCompletion(){
+  markCelebrated(oid);
+  document.getElementById('celebrateOverlay').classList.add('show');
+  fireConfetti();
+  playChime();
+  clearTimeout(celebrateTimer);
+  celebrateTimer=setTimeout(dismissCelebration,5000);
+}
+function dismissCelebration(){
+  document.getElementById('celebrateOverlay').classList.remove('show');
+  clearTimeout(celebrateTimer);
+}
 function render(o){
   const st=o.status;
+  // Trigger celebration ONCE when reaching completed/delivered
+  if((st==='completed'||st==='delivered')&&!alreadyCelebrated(oid)){
+    setTimeout(celebrateCompletion,600);
+  }
   let label,emoji;
   if(END[st]){[label,emoji]=END[st];}
   else{
