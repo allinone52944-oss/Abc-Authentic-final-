@@ -1,0 +1,26 @@
+BUILDER NOTE — BDRIS Birth Engine (port 3000) — age porun
+==========================================================
+
+1) ETA DETERMINISTIC: same input -> same output. App-e add korle
+   output bodlabe NA, jodi: (a) folder copy as-is rakhen
+   (`npm ci` chaliye node_modules banan — zip-e nei),
+   (b) puppeteer pinned Chrome (154.x) use hoy — same render,
+   (c) single instance (3000 busy hole exit 2 — sob app EKTA
+   instance share korbe, API stateless),
+   (d) BDRIS live data bodlale output bodlabe (engine-er dosh na).
+
+2) SETUP (Windows-only):
+   npm ci (ekbar) -> node server.js  (start.bat double-click-o hoy)
+   Deps: Node.js, Chrome (puppeteer auto-download), net.
+   GEMINI_API_KEY optional — ekhon LOCAL offline solver age try kore
+   (solve_local.py + templates.json vitore), fail -> Gemini -> manual.
+   Oracle env dile Oracle store, nahole file store (auto);
+   Oracle down hole auto file-fallback (health-e degraded:true).
+
+3) FLOW: GET /api/captcha -> POST /api/solve-captcha -> POST /api/verify
+   {sessionId, brn, dob, captcha} -> POST /api/preview|/generate-pdf,
+   /api/engine, /api/records. Full contract: BUILDER.txt + README.txt.
+
+4) TIMEOUT sob bosano (BDRIS 30-60s, Gemini 45s). Crash-proof:
+   EADDRINUSE exit 2, log server.log-e. Fonts embedded — sob PC-te same.
+   QR: official URL thakle official, nahole engine key.

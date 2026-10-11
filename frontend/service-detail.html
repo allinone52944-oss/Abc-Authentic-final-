@@ -50,6 +50,7 @@ async function init(){
     '<div style="color:var(--cream);font-size:14px;margin-bottom:10px;"><b style="color:var(--gold)">প্রয়োজনীয় ডকুমেন্ট:</b><ul style="padding-left:18px;margin-top:6px;">'+docs+'</ul></div>'+
     sched+
     '<button class="btn-secondary" onclick="showRules()">📜 নিয়মাবলী দেখুন</button>'+
+    (s.engine_id==='bdris-certificate'&&s.open?'<button class="btn" onclick="location.href=\'/bdris-certificate.html\'">⚡ এখনই সনদ তৈরি করুন →</button>':'')+
     (s.open?'<button class="btn" onclick="location.href=\'/order-create.html?service='+s.id+'\'">অর্ডার করুন →</button>'
            :'<div class="err" style="margin-top:12px;">এই সেবা এখন বন্ধ আছে</div>');
   window._rules=s.rules_text||'কোনো বিশেষ নিয়ম নেই।';

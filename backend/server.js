@@ -86,6 +86,31 @@ const { adminInvites, publicInvites } = require('./routes/invites');
 app.use('/api/admin/invites', apiLimiter, adminInvites);
 app.use('/api/invite', apiLimiter, publicInvites);
 
+// ---- BDRIS certificate engine (as-is Studio app, auth + strict limit) --
+// The engine folder is a byte-identical copy of BuilderEngine-fixed.zip.
+// Its own Express app is mounted here so the existing engine API endpoints
+// (/api/captcha, /api/verify, /api/preview, /generate-pdf, ...) are used
+// as-is. Auth required: captcha/verify hit the live BDRIS portal.
+const { rateLimit } = require('express-rate-limit');
+const { requireAuth } = require('./auth');
+const bdrisEngineLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'RATE_LIMITED' },
+});
+try {
+  // NOTE: require index.js explicitly — the engine's own package.json
+  // points "main" at its Studio server.js; the adapter is index.js.
+  const bdrisEngine = require('../engines/bdris-certificate/index.js');
+  bdrisEngine.init({});
+  app.use('/api/bdris-engine', requireAuth, bdrisEngineLimiter, bdrisEngine.getApp());
+  safeLog('[engines] mounted bdris-certificate at /api/bdris-engine');
+} catch (e) {
+  safeLog('[engines] bdris-certificate not mounted:', e.message);
+}
+
 // ---- User routes (authenticated users) --
 const userRoutes = require('./routes/user');
 app.use('/api', apiLimiter, userRoutes);
