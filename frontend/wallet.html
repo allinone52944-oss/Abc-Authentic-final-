@@ -32,6 +32,42 @@
   display:flex;gap:8px;margin-top:10px;
 }
 .coupon-strip input{flex:1;}
+/* Daily cashback card */
+.cb-card{
+  background:linear-gradient(135deg,#4a3220,#2b1d14);
+  border:1px solid rgba(212,175,55,0.5);border-radius:18px;
+  padding:20px;margin-top:14px;position:relative;overflow:hidden;
+}
+.cb-card::after{
+  content:'🎁';position:absolute;right:14px;top:8px;font-size:52px;opacity:.25;
+  animation:float 5s ease-in-out infinite;
+}
+.cb-card .cb-title{color:var(--gold);font-size:17px;font-weight:700;}
+.cb-card .cb-amt{color:var(--gold);font-size:34px;font-weight:800;margin:8px 0;
+  text-shadow:0 0 25px rgba(212,175,55,0.5);}
+.cb-card .cb-sub{color:var(--muted);font-size:13px;margin-bottom:12px;}
+.cb-btn{
+  background:linear-gradient(135deg,#d4af37,#b8962e);color:#2b1d14;
+  border:none;border-radius:12px;padding:13px 30px;font-size:15px;font-weight:800;
+  cursor:pointer;transition:transform .2s;box-shadow:0 4px 18px rgba(212,175,55,0.35);
+}
+.cb-btn:hover:not(:disabled){transform:scale(1.04);}
+.cb-btn:disabled{opacity:.55;cursor:default;}
+/* Celebration overlay */
+#cbOverlay{
+  position:fixed;inset:0;z-index:9999;display:none;
+  align-items:center;justify-content:center;flex-direction:column;
+  background:rgba(20,12,7,0.85);backdrop-filter:blur(4px);
+}
+#cbOverlay.show{display:flex;}
+#cbOverlay .big{font-size:64px;animation:pop .6s ease-out;}
+@keyframes pop{0%{transform:scale(0);}70%{transform:scale(1.25);}100%{transform:scale(1);}}
+#cbOverlay .congrats{color:var(--gold);font-size:30px;font-weight:800;margin:14px 0 6px;
+  text-shadow:0 0 30px rgba(212,175,55,0.6);}
+#cbOverlay .won{color:var(--cream);font-size:44px;font-weight:800;}
+#cbOverlay .code{color:var(--muted);font-size:13px;margin-top:10px;letter-spacing:2px;}
+.coin{position:absolute;top:-40px;font-size:26px;animation:coinFall linear forwards;pointer-events:none;}
+@keyframes coinFall{to{transform:translateY(110vh) rotate(720deg);}}
 </style>
 </head>
 <body class="app">
@@ -46,6 +82,13 @@
     <div class="wallet-hero" style="margin-top:12px;">
       <div class="amt" id="bal">৳০</div>
       <div class="lbl">বর্তমান ব্যালেন্স</div>
+    </div>
+
+    <div class="cb-card" id="cbCard" style="display:none;">
+      <div class="cb-title">🎁 ডেইলি ক্যাশব্যাক</div>
+      <div class="cb-amt" id="cbAmt">৳০</div>
+      <div class="cb-sub" id="cbSub"></div>
+      <button class="cb-btn" id="cbBtn" onclick="redeemCashback()">রিডিম করুন 🎉</button>
     </div>
 
     <div class="form-card" style="max-width:640px;">
@@ -77,6 +120,13 @@
       <div id="txList"><div style="color:var(--muted)">লোড হচ্ছে…</div></div>
     </div>
   </div>
+</div>
+<div id="cbOverlay">
+  <div class="big">🎉</div>
+  <div class="congrats">অভিনন্দন!</div>
+  <div class="won" id="cbWon">৳০</div>
+  <div class="code" id="cbCode"></div>
+  <button class="cb-btn" style="margin-top:22px;" onclick="document.getElementById('cbOverlay').classList.remove('show')">দারুণ! ✨</button>
 </div>
 <script src="/js/app.js"></script>
 <script>
@@ -132,6 +182,73 @@ async function redeem(){
   loadWallet();
 }
 init();
+async function loadCashback(){
+  const card=document.getElementById('cbCard'),amt=document.getElementById('cbAmt'),
+        sub=document.getElementById('cbSub'),btn=document.getElementById('cbBtn');
+  try{
+    const r=await ABC.api('/cashback/today');
+    if(!r.ok)return;
+    const d=await r.json();
+    if(!d.enabled||d.percent<=0)return; // feature off
+    card.style.display='block';
+    const bn=n=>(+n).toLocaleString('bn-BD');
+    if(d.already_redeemed){
+      amt.textContent='৳'+bn(d.cashback_amount);
+      sub.textContent='আজকের ক্যাশব্যাক নেওয়া হয়েছে ✅ ('+(d.coupon_code||'')+')';
+      btn.disabled=true;btn.textContent='নেওয়া হয়েছে ✅';
+    }else if(d.recharge_total>0&&d.cashback_amount>0){
+      amt.textContent='৳'+bn(d.cashback_amount);
+      sub.textContent='আজকের রিচার্জ ৳'+bn(d.recharge_total)+' × '+d.percent+'% — একবারই নেওয়া যাবে, রাত ১২টায় শেষ!';
+      btn.disabled=false;btn.textContent='রিডিম করুন 🎉';
+    }else{
+      amt.textContent='৳০';
+      sub.textContent='আজ এখনো রিচার্জ হয়নি — রিচার্জ করুন, ক্যাশব্যাক পান! 💸';
+      btn.disabled=true;btn.textContent='রিচার্জের পর পাবেন';
+    }
+  }catch(e){}
+}
+let cbBusy=false;
+async function redeemCashback(){
+  if(cbBusy)return;cbBusy=true;
+  const btn=document.getElementById('cbBtn');
+  btn.disabled=true;btn.textContent='প্রসেস হচ্ছে… ⏳';
+  try{
+    const r=await ABC.api('/cashback/redeem',{method:'POST'});
+    const d=await r.json();
+    if(!r.ok){
+      btn.textContent={ALREADY_REDEEMED_TODAY:'আজ নেওয়া হয়েছে ✅',NOTHING_TO_REDEEM:'কিছু নেই'}[d.error]||'❌ ব্যর্থ';
+      cbBusy=false;loadCashback();return;
+    }
+    // auto-fill coupon code input (user asked: code ready in coupon field)
+    document.getElementById('couponCode').value=d.coupon_code;
+    celebrate(d.amount,d.coupon_code);
+    loadWallet();loadCashback();
+  }catch(e){btn.textContent='❌ ব্যর্থ';}
+  cbBusy=false;
+}
+function celebrate(amount,code){
+  const ov=document.getElementById('cbOverlay');
+  document.getElementById('cbCode').textContent='কুপন: '+code;
+  ov.classList.add('show');
+  // coin rain
+  for(let i=0;i<40;i++){
+    const c=document.createElement('div');c.className='coin';
+    c.textContent=['🪙','💰','✨'][i%3];
+    c.style.left=Math.random()*100+'vw';
+    c.style.animationDuration=(2+Math.random()*2.5)+'s';
+    c.style.animationDelay=(Math.random()*0.8)+'s';
+    ov.appendChild(c);
+    setTimeout(()=>c.remove(),5500);
+  }
+  // count-up
+  const el=document.getElementById('cbWon');const t0=performance.now(),dur=1500;
+  (function tick(t){
+    const p=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-p,3);
+    el.textContent='৳'+Math.round(amount*e).toLocaleString('bn-BD');
+    if(p<1)requestAnimationFrame(tick);
+  })(t0);
+}
+setTimeout(loadCashback,400);
 </script>
 </body>
 </html>

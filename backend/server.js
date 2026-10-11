@@ -77,6 +77,10 @@ const { webhook: smsWebhook, adminSms } = require('./routes/sms');
 app.use('/api/sms', smsWebhook); // webhook has its own strict rate limiter
 app.use('/api/admin/sms', apiLimiter, adminSms);
 
+// ---- Cashback routes (authenticated users) --
+const cashbackRoutes = require('./routes/cashback');
+app.use('/api/cashback', apiLimiter, cashbackRoutes);
+
 // ---- User routes (authenticated users) --
 const userRoutes = require('./routes/user');
 app.use('/api', apiLimiter, userRoutes);
