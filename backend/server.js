@@ -111,6 +111,33 @@ try {
   safeLog('[engines] bdris-certificate not mounted:', e.message);
 }
 
+// ---- Death verify engine (as-is DRN tool, auth + strict limit) ------
+// The engine folder is an as-is copy of Death-Verify-Engine.zip.
+// death-verify-server.js is a raw Node http server (not Express); the
+// adapter (engines/death-verify/index.js) captures its request handler
+// WITHOUT binding port 3001 and exposes it as middleware, so the
+// existing engine API endpoints are used as-is:
+//   GET  /api/captcha → POST /api/solve-captcha → POST /api/verify
+//   {sessionId, drn, dod DD/MM/YYYY, captcha} → POST /api/preview | /api/pdf
+// Auth required: captcha/verify hit the live BDRIS portal.
+// Python + opencv + ddddocr are optional (offline captcha solver);
+// without them the engine still works with manual captcha entry.
+const deathEngineLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'RATE_LIMITED' },
+});
+try {
+  const deathEngine = require('../engines/death-verify/index.js');
+  deathEngine.init({});
+  app.use('/api/death-engine', requireAuth, deathEngineLimiter, deathEngine.getApp());
+  safeLog('[engines] mounted death-verify at /api/death-engine');
+} catch (e) {
+  safeLog('[engines] death-verify not mounted:', e.message);
+}
+
 // ---- User routes (authenticated users) --
 const userRoutes = require('./routes/user');
 app.use('/api', apiLimiter, userRoutes);

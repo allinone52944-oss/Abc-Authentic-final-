@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#d4af37">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Abc Authentic">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<title>মৃত্যু নিবন্ধন যাচাই - All In One</title>
+<link rel="stylesheet" href="/css/coffee.css">
+<style>
+.steps{display:flex;gap:6px;margin:14px 0 18px;}
+.step{flex:1;text-align:center;font-size:11px;color:var(--muted);position:relative;padding-top:26px;}
+.step .dot{position:absolute;top:0;left:50%;transform:translateX(-50%);width:24px;height:24px;border-radius:50%;border:2px solid var(--muted);display:flex;align-items:center;justify-content:center;font-size:12px;background:var(--espresso);}
+.step.on{color:var(--gold);}
+.step.on .dot{border-color:var(--gold);color:var(--gold);box-shadow:0 0 10px rgba(212,175,55,.4);}
+.step.done .dot{border-color:var(--gold);background:var(--gold);color:#2b1d14;}
+.step.done{color:var(--gold);}
+.wiz{display:none;}
+.wiz.on{display:block;animation:fadeUp .3s ease;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+.captcha-img{display:block;margin:0 auto 12px;max-width:100%;height:64px;border:2px solid var(--gold);border-radius:10px;background:#fff;image-rendering:pixelated;}
+.spin{display:inline-block;width:18px;height:18px;border:3px solid rgba(212,175,55,.3);border-top-color:var(--gold);border-radius:50%;animation:sp 0.8s linear infinite;vertical-align:-4px;margin-right:8px;}
+@keyframes sp{to{transform:rotate(360deg);}}
+.kv{display:flex;justify-content:space-between;padding:9px 4px;border-bottom:1px solid rgba(212,175,55,.15);font-size:14px;}
+.kv b{color:var(--gold);font-weight:600;}
+.kv span{color:var(--cream);text-align:right;max-width:60%;}
+#certFrame{width:100%;height:62vh;border:2px solid var(--gold);border-radius:12px;background:#fff;}
+.err{display:none;background:rgba(255,90,90,.12);border:1px solid #ff7b7b;color:#ffb3b3;padding:10px 12px;border-radius:10px;margin-bottom:12px;font-size:14px;}
+.err.on{display:block;}
+.ok{display:none;background:rgba(90,200,120,.12);border:1px solid #5ac878;color:#b8f0c8;padding:10px 12px;border-radius:10px;margin-bottom:12px;font-size:14px;}
+.ok.on{display:block;}
+.row2{display:flex;gap:10px;}
+.row2 .btn,.row2 .btn-secondary{flex:1;}
+.hint{font-size:12px;color:var(--muted);margin-top:6px;}
+</style>
+</head>
+<body class="app">
+<div class="spiral"></div>
+<div class="app-shell">
+  <div class="app-header">
+    <div class="brand">☕ মৃত্যু নিবন্ধন যাচাই</div>
+    <div class="hdr-actions"><button class="icon-btn" onclick="location.href='/dashboard.html'">🏠</button></div>
+  </div>
+  <div class="page">
+    <span class="back-link" onclick="history.back()">← ফিরে যান</span>
+    <div class="steps" id="steps">
+      <div class="step on" data-s="1"><span class="dot">১</span>তথ্য</div>
+      <div class="step" data-s="2"><span class="dot">২</span>ক্যাপচা</div>
+      <div class="step" data-s="3"><span class="dot">৩</span>যাচাই</div>
+      <div class="step" data-s="4"><span class="dot">৪</span>সনদ</div>
+    </div>
+    <div class="err" id="err"></div>
+    <div class="ok" id="ok"></div>
+
+    <!-- STEP 1: DRN + DOD -->
+    <div class="wiz on" id="w1">
+      <div class="form-card">
+        <div class="field">
+          <label>Death Registration No (১৭ সংখ্যা) *</label>
+          <input id="drn" inputmode="numeric" maxlength="17" placeholder="যেমন: 19681517411127048">
+        </div>
+        <div class="field">
+          <label>মৃত্যু তারিখ *</label>
+          <input id="dod" type="date">
+        </div>
+        <button class="btn" id="b1" onclick="step1()">ক্যাপচা আনুন →</button>
+        <div class="hint">BDRIS পোর্টাল (UDRN) থেকে সরাসরি যাচাই করা হবে।</div>
+      </div>
+    </div>
+
+    <!-- STEP 2: CAPTCHA -->
+    <div class="wiz" id="w2">
+      <div class="form-card" style="text-align:center;">
+        <p style="color:var(--cream);font-size:14px;margin-bottom:10px;">ছবিতে যা লেখা আছে তা লিখুন</p>
+        <img class="captcha-img" id="capImg" alt="captcha">
+        <div class="field" style="text-align:left;">
+          <label>ক্যাপচা উত্তর *</label>
+          <input id="capAns" placeholder="উত্তর লিখুন" autocomplete="off">
+        </div>
+        <div class="row2">
+          <button class="btn-secondary" id="bAuto" onclick="autoSolve()">✨ স্বয়ংক্রিয়</button>
+          <button class="btn-secondary" onclick="step1(true)">🔄 নতুন ছবি</button>
+        </div>
+        <div style="height:10px;"></div>
+        <button class="btn" id="b2" onclick="step2()">যাচাই করুন →</button>
+      </div>
+    </div>
+
+    <!-- STEP 3: RECORD -->
+    <div class="wiz" id="w3">
+      <div class="form-card">
+        <h3 style="color:var(--gold);margin-bottom:10px;">✅ মৃত্যু তথ্য পাওয়া গেছে</h3>
+        <div id="recView"></div>
+        <div style="height:12px;"></div>
+        <button class="btn" id="b3" onclick="step3()">সনদ তৈরি করুন →</button>
+      </div>
+    </div>
+
+    <!-- STEP 4: CERTIFICATE -->
+    <div class="wiz" id="w4">
+      <div class="form-card">
+        <h3 style="color:var(--gold);margin-bottom:10px;">🎉 সনদ প্রস্তুত!</h3>
+        <iframe id="certFrame" title="death certificate preview"></iframe>
+        <div style="height:12px;"></div>
+        <button class="btn" id="b4" onclick="dlPdf()">📥 PDF ডাউনলোড</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="wa-fab" id="waFab">💬</div>
+<script src="/js/app.js"></script>
+<script>
+const API='/death-engine';
+let S={sessionId:null,drn:'',dod:'',record:null};
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function showErr(m){const e=document.getElementById('err');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),6000);}
+function showOk(m){const e=document.getElementById('ok');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),4000);}
+function go(n){
+  document.querySelectorAll('.wiz').forEach(w=>w.classList.remove('on'));
+  document.getElementById('w'+n).classList.add('on');
+  document.querySelectorAll('.step').forEach(s=>{
+    const k=+s.dataset.s;s.classList.toggle('on',k===n);s.classList.toggle('done',k<n);
+    if(k<n)s.querySelector('.dot').textContent='✓';
+  });
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function busy(id,on,txt){
+  const b=document.getElementById(id);if(!b)return;
+  if(on){b.dataset.t=b.innerHTML;b.innerHTML='<span class="spin"></span>'+(txt||'অপেক্ষা করুন…');b.disabled=true;}
+  else{b.innerHTML=b.dataset.t||b.innerHTML;b.disabled=false;}
+}
+function toDDMMYYYY(ymd){
+  const p=String(ymd||'').split('-');
+  if(p.length!==3)return ymd;
+  return p[2]+'/'+p[1]+'/'+p[0];
+}
+async function step1(retry){
+  const drn=document.getElementById('drn').value.trim();
+  const dod=document.getElementById('dod').value;
+  if(!/^\d{17}$/.test(drn)){showErr('Death Registration No ঠিক ১৭ সংখ্যার হতে হবে।');return;}
+  if(!dod){showErr('মৃত্যু তারিখ দিন।');return;}
+  S.drn=drn;S.dod=toDDMMYYYY(dod);
+  busy('b1',true,'ক্যাপচা আনা হচ্ছে…');
+  try{
+    const r=await ABC.api(API+'/api/captcha');
+    const j=await r.json();
+    if(!j.success)throw new Error(j.error||'ক্যাপচা আসেনি');
+    S.sessionId=j.sessionId;
+    document.getElementById('capImg').src=j.image;
+    document.getElementById('capAns').value='';
+    go(2);
+  }catch(e){showErr(e.message||'ক্যাপচা আনতে ব্যর্থ। আবার চেষ্টা করুন।');}
+  busy('b1',false);
+}
+async function autoSolve(){
+  if(!S.sessionId)return;
+  busy('bAuto',true,'চেষ্টা চলছে…');
+  try{
+    const r=await ABC.api(API+'/api/solve-captcha',{method:'POST',body:JSON.stringify({sessionId:S.sessionId})});
+    const j=await r.json();
+    if(j.success&&j.answer){document.getElementById('capAns').value=j.answer;showOk('স্বয়ংক্রিয় সমাধান বসানো হয়েছে ✓');}
+    else throw new Error(j.error||'স্বয়ংক্রিয় সমাধান ব্যর্থ');
+  }catch(e){showErr('নিজে লিখুন: '+(e.message||''));}
+  busy('bAuto',false);
+}
+async function step2(){
+  const ans=document.getElementById('capAns').value.trim();
+  if(!ans){showErr('ক্যাপচা উত্তর লিখুন।');return;}
+  busy('b2',true,'BDRIS যাচাই চলছে… (১৫-৪০ সেকেন্ড লাগতে পারে)');
+  try{
+    const r=await ABC.api(API+'/api/verify',{method:'POST',body:JSON.stringify({sessionId:S.sessionId,drn:S.drn,dod:S.dod,captcha:ans})});
+    const j=await r.json();
+    if(!j.success)throw new Error(j.error||'যাচাই ব্যর্থ');
+    S.record=j.data;
+    const d=j.data;
+    const rows=[
+      ['DRN',d.brn],
+      ['নাম (EN)',d.nameEn],
+      ['নাম (বাংলা)',d.nameBn],
+      ['মৃত্যু তারিখ',d.dod],
+      ['মৃত্যুর স্থান',d.placeOfDeathBn||d.placeOfDeathEn],
+      ['মৃত্যুর কারণ',d.causeOfDeathBn||d.causeOfDeathEn],
+      ['লিঙ্গ',d.sex],
+      ['মাতা',d.motherNameBn||d.motherNameEn],
+      ['পিতা',d.fatherNameBn||d.fatherNameEn],
+      ['নিবন্ধনের তারিখ',d.registrationDate]
+    ];
+    document.getElementById('recView').innerHTML=rows.filter(x=>x[1]).map(x=>'<div class="kv"><b>'+esc(x[0])+'</b><span>'+esc(x[1])+'</span></div>').join('');
+    go(3);showOk('মৃত্যু তথ্য যাচাই সফল ✓');
+  }catch(e){showErr(e.message||'যাচাই ব্যর্থ।');}
+  busy('b2',false);
+}
+async function step3(){
+  busy('b3',true,'সনদ তৈরি হচ্ছে…');
+  try{
+    const r=await ABC.api(API+'/api/preview',{method:'POST',body:JSON.stringify(S.record)});
+    const j=await r.json();
+    if(!j.success)throw new Error('প্রিভিউ ব্যর্থ');
+    document.getElementById('certFrame').srcdoc=j.html;
+    go(4);
+  }catch(e){showErr(e.message||'সনদ তৈরি ব্যর্থ।');}
+  busy('b3',false);
+}
+async function dlPdf(){
+  busy('b4',true,'PDF তৈরি হচ্ছে…');
+  try{
+    const r=await ABC.api(API+'/api/pdf',{method:'POST',body:JSON.stringify(S.record)});
+    if(!r.ok)throw new Error('PDF তৈরি ব্যর্থ');
+    const blob=await r.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='Death_Certificate_'+S.drn+'.pdf';
+    document.body.appendChild(a);a.click();a.remove();
+    showOk('PDF ডাউনলোড শুরু হয়েছে ✓');
+  }catch(e){showErr(e.message||'PDF ব্যর্থ।');}
+  busy('b4',false);
+}
+(async function init(){
+  const me=await ABC.api('/auth/me');
+  if(!me.ok){location.href='/login.html';return;}
+  const u=(await me.json()).user;
+  document.getElementById('waFab').onclick=()=>{window.open('https://wa.me/?text='+encodeURIComponent('আমি '+u.name+' (ফোন: '+u.phone+')। মৃত্যু সনদ সম্পর্কে জানতে চাই।'),'_blank');};
+})();
+</script>
+</body>
+</html>
