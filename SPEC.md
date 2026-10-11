@@ -231,3 +231,42 @@
 - Service কখন খোলা থাকবে (যেমন: সকাল ৯টা - বিকাল ৫টা)
 - Admin নির্ধারণ করবে
 - বন্ধ থাকলে user order করতে পারবে না
+
+---
+
+## সিকিউরিটি (সেরা - 2026-10-11)
+
+**Authentication:**
+- bcrypt password hashing (plain text কখনো না)
+- JWT (short expiry + refresh token)
+- OTP verification
+- Login attempt limit + admin unblock
+
+**Authorization:**
+- Role-based access (admin vs user)
+- প্রতিটা endpoint-এ permission check
+- Admin self-protection (নিজেকে delete/role change না)
+
+**Input Security:**
+- SQL injection প্রতিরোধ (parameterized query)
+- XSS প্রতিরোধ
+- CSRF protection
+- File upload validation (type, size)
+
+**Data Protection:**
+- Sensitive data encrypted
+- HTTPS only
+- Log-এ sensitive data না
+- DB credential .env-এ (code-এ না)
+
+**Money Security:**
+- Transaction integrity (DB transaction)
+- Negative balance অসম্ভব
+- Double-spend প্রতিরোধ
+- Recharge-এ admin approval
+
+**Infrastructure:**
+- API rate limiting
+- IP blocking (abuse-এ)
+- Activity log (audit trail)
+- Regular backup
