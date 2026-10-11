@@ -81,4 +81,56 @@
   };
 
   window.ABC = { api, setTokens, clearTokens, refreshAccess, Drafts };
+
+  // ---- PWA: service worker + install prompt ----
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
+  }
+
+  let deferredPrompt = null;
+  const isStandalone =
+    window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (!isStandalone && !localStorage.getItem('abc_install_dismissed')) showInstallBanner();
+  });
+
+  function showInstallBanner() {
+    if (document.getElementById('abc-install-banner')) return;
+    const bar = document.createElement('div');
+    bar.id = 'abc-install-banner';
+    bar.innerHTML =
+      '<span>📱 <b>Abc Authentic</b> অ্যাপটি ইনস্টল করুন — হোম স্ক্রিনে যোগ করুন</span>' +
+      '<button id="abc-install-go">ইনস্টল</button>' +
+      '<button id="abc-install-x" aria-label="বন্ধ">✕</button>';
+    const css = document.createElement('style');
+    css.textContent =
+      '#abc-install-banner{position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;' +
+      'display:flex;align-items:center;gap:10px;background:#2b1d14;border:1px solid #d4af37;' +
+      'border-radius:14px;padding:12px 14px;color:#f5e6c8;font-size:14px;' +
+      'box-shadow:0 8px 30px rgba(0,0,0,.5);animation:abcSlideUp .4s ease;}' +
+      '#abc-install-banner button{border:none;border-radius:10px;padding:10px 16px;font-weight:bold;cursor:pointer;}' +
+      '#abc-install-go{background:linear-gradient(135deg,#d4af37,#b8941f);color:#2b1d14;white-space:nowrap;}' +
+      '#abc-install-x{background:transparent;color:#c9a961;font-size:16px;padding:8px 10px;}' +
+      '@keyframes abcSlideUp{from{transform:translateY(120%);opacity:0;}to{transform:none;opacity:1;}}';
+    document.head.appendChild(css);
+    document.body.appendChild(bar);
+    document.getElementById('abc-install-go').addEventListener('click', async () => {
+      bar.remove();
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice.catch(() => {});
+      deferredPrompt = null;
+    });
+    document.getElementById('abc-install-x').addEventListener('click', () => {
+      bar.remove();
+      try { localStorage.setItem('abc_install_dismissed', '1'); } catch (e) {}
+    });
+  }
+
+  window.ABC.showInstallBanner = showInstallBanner;
 })();
