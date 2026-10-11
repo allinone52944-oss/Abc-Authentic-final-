@@ -231,6 +231,25 @@ router.post('/orders/:id/chat', async (req, res) => {
   }
 });
 
+// GET /api/orders/:id/messages — admin support messages for own order (Phase 3)
+router.get('/orders/:id/messages', async (req, res) => {
+  try {
+    const own = await db.query('SELECT id FROM orders WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.user.id]);
+    if (!own.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    const rows = await db.query(
+      `SELECT m.id, m.template_key, m.message, m.created_at, u.name AS admin_name
+       FROM order_support_messages m
+       LEFT JOIN users u ON u.id = m.admin_id
+       WHERE m.order_id = $1 ORDER BY m.created_at DESC LIMIT 20`,
+      [req.params.id]);
+    res.json({ messages: rows.rows });
+  } catch (e) {
+    safeLog('[user] support messages error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 // ============================================================
 // WALLET
 // ============================================================

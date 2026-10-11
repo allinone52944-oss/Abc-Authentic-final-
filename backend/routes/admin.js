@@ -307,6 +307,61 @@ router.put('/orders/:id/status', async (req, res) => {
   }
 });
 
+// ---- Order support messages (Phase 3) --------------------------
+// POST /api/admin/orders/:id/support-message { message, template_key? }
+const SUPPORT_TEMPLATES = [
+  { key: 'network',   emoji: '🌐', bn: 'নেটওয়ার্ক সমস্যার কারণে একটু দেরি হচ্ছে, অনুগ্রহ করে অপেক্ষা করুন' },
+  { key: 'processing', emoji: '⏰', bn: 'আপনার অর্ডারটি প্রসেসিং-এ আছে, আরো ৩০ মিনিট সময় লাগতে পারে' },
+  { key: 'verifying',  emoji: '📄', bn: 'ডকুমেন্ট যাচাই চলছে, শীঘ্রই আপডেট পাবেন' },
+  { key: 'done',       emoji: '✅', bn: 'আপনার অর্ডার সম্পন্ন! ডাউনলোড করুন' },
+  { key: 'failed',     emoji: '❌', bn: 'দুঃখিত, এই অর্ডারে সমস্যা হয়েছে। সাপোর্টে যোগাযোগ করুন' },
+  { key: 'paid',       emoji: '💰', bn: 'পেমেন্ট পেয়েছি, অর্ডার প্রসেসিং শুরু হয়েছে' },
+];
+
+router.get('/support-templates', async (req, res) => {
+  res.json({ templates: SUPPORT_TEMPLATES });
+});
+
+router.post('/orders/:id/support-message', async (req, res) => {
+  try {
+    const { message, template_key } = req.body || {};
+    const msg = String(message || '').trim();
+    if (!msg || msg.length > 500) {
+      return res.status(400).json({ error: 'INVALID_MESSAGE' });
+    }
+    const o = await db.query('SELECT id FROM orders WHERE id = $1', [req.params.id]);
+    if (!o.rows.length) return res.status(404).json({ error: 'ORDER_NOT_FOUND' });
+
+    const r = await db.query(
+      `INSERT INTO order_support_messages (order_id, admin_id, template_key, message)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [req.params.id, req.user.id, template_key || null, msg]
+    );
+    await logActivity(req.user.id, 'order.support_message', {
+      order_id: req.params.id, message: msg.slice(0, 100),
+    });
+    res.status(201).json({ message: r.rows[0] });
+  } catch (e) {
+    safeLog('[admin] support message error:', e.message);
+    return res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+router.get('/orders/:id/support-messages', async (req, res) => {
+  try {
+    const rows = await db.query(
+      `SELECT m.*, u.name AS admin_name FROM order_support_messages m
+       LEFT JOIN users u ON u.id = m.admin_id
+       WHERE m.order_id = $1 ORDER BY m.created_at DESC LIMIT 20`,
+      [req.params.id]
+    );
+    res.json({ messages: rows.rows });
+  } catch (e) {
+    safeLog('[admin] support messages list error:', e.message);
+    return res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 // ============================================================
 // SERVICES
 // ============================================================
@@ -532,7 +587,7 @@ router.post('/banners', async (req, res) => {
     const r = await db.query(
       `INSERT INTO banners (type, title, design_id, content, active)
        VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [type, String(title).trim(), Math.min(20, Math.max(1, Number(design_id) || 1)),
+      [type, String(title).trim(), Math.min(30, Math.max(1, Number(design_id) || 1)),
        JSON.stringify(content || {}), active !== false]
     );
     await logActivity(req.user.id, 'banner.create', { banner_id: r.rows[0].id });
@@ -545,7 +600,7 @@ router.put('/banners/:id', async (req, res) => {
     const { title, design_id, content, active } = req.body || {};
     const sets = []; const params = []; let i = 1;
     if (title !== undefined) { sets.push(`title = $${i++}`); params.push(String(title).trim()); }
-    if (design_id !== undefined) { sets.push(`design_id = $${i++}`); params.push(Math.min(20, Math.max(1, Number(design_id) || 1))); }
+    if (design_id !== undefined) { sets.push(`design_id = $${i++}`); params.push(Math.min(30, Math.max(1, Number(design_id) || 1))); }
     if (content !== undefined) { sets.push(`content = $${i++}`); params.push(JSON.stringify(content)); }
     if (active !== undefined) { sets.push(`active = $${i++}`); params.push(!!active); }
     if (!sets.length) return res.status(400).json({ error: 'NOTHING_TO_UPDATE' });
@@ -657,6 +712,123 @@ router.put('/settings', async (req, res) => {
     await logActivity(req.user.id, 'settings.update', { keys: updated });
     res.json({ ok: true, updated });
   } catch (e) { safeLog('[admin] settings update error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+// ============================================================
+// PDF REPORTS (Phase 3) — pdfkit, Coffee theme, Bengali font
+// ============================================================
+const PDFDocument = require('pdfkit');
+const path = require('path');
+
+function reportDoc(title) {
+  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  const fontReg = path.join(__dirname, '..', '..', 'assets', 'fonts', 'NotoSansBengali-Regular.ttf');
+  const fontBold = path.join(__dirname, '..', '..', 'assets', 'fonts', 'NotoSansBengali-Bold.ttf');
+  try {
+    doc.registerFont('bn', fontReg);
+    doc.registerFont('bn-bold', fontBold);
+  } catch (e) { /* fallback to Helvetica */ }
+  // Header
+  doc.fillColor('#2b1d14').fontSize(20);
+  try { doc.font('bn-bold'); } catch (e) {}
+  doc.text('☕ All In One (Abc Authentic)', { align: 'center' });
+  doc.fillColor('#8a7a5f').fontSize(10);
+  try { doc.font('bn'); } catch (e) {}
+  doc.text('বিশ্বাস ও সেবার ঠিকানা', { align: 'center' });
+  doc.moveDown(0.5);
+  doc.fillColor('#d4af37').fontSize(14);
+  try { doc.font('bn-bold'); } catch (e) {}
+  doc.text(title, { align: 'center' });
+  doc.fillColor('#333').fontSize(9);
+  try { doc.font('bn'); } catch (e) {}
+  doc.text('তারিখ: ' + new Date().toLocaleString('bn-BD'), { align: 'center' });
+  doc.moveDown(1);
+  return doc;
+}
+
+function reportTable(doc, headers, rows) {
+  const startX = 40, colW = (doc.page.width - 80) / headers.length;
+  let y = doc.y;
+  doc.fillColor('#fff').rect(startX, y - 4, doc.page.width - 80, 20).fill('#2b1d14');
+  doc.fillColor('#d4af37').fontSize(9);
+  try { doc.font('bn-bold'); } catch (e) {}
+  headers.forEach((h, i) => doc.text(h, startX + i * colW + 4, y, { width: colW - 8 }));
+  y += 22;
+  doc.fillColor('#222').fontSize(8);
+  try { doc.font('bn'); } catch (e) {}
+  for (const row of rows) {
+    if (y > doc.page.height - 60) { doc.addPage(); y = 40; }
+    row.forEach((c, i) => doc.text(String(c), startX + i * colW + 4, y, { width: colW - 8 }));
+    y += 16;
+    doc.strokeColor('#e8dcc0').lineWidth(0.5).moveTo(startX, y - 4).lineTo(doc.page.width - 40, y - 4).stroke();
+  }
+  doc.moveDown(2);
+  doc.fillColor('#8a7a5f').fontSize(8);
+  doc.text('মোট: ' + rows.length.toLocaleString('bn-BD') + ' টি রেকর্ড', { align: 'right' });
+}
+
+// GET /api/admin/reports/orders?from=YYYY-MM-DD&to=YYYY-MM-DD
+router.get('/reports/orders', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const conds = []; const params = []; let i = 1;
+    if (from) { conds.push(`o.created_at >= $${i++}`); params.push(from); }
+    if (to) { conds.push(`o.created_at <= $${i++}::date + INTERVAL '1 day'`); params.push(to); }
+    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+    const rows = await db.query(
+      `SELECT o.id, o.status, o.price, o.created_at, u.name AS user_name, u.phone AS user_phone,
+              COALESCE(s.name_bn, s.name) AS service
+       FROM orders o JOIN users u ON u.id = o.user_id
+       LEFT JOIN services s ON s.id = o.service_id
+       ${where} ORDER BY o.created_at DESC LIMIT 500`, params);
+
+    const doc = reportDoc('অর্ডার রিপোর্ট');
+    reportTable(doc,
+      ['তারিখ', 'ইউজার', 'সেবা', 'দাম', 'স্ট্যাটাস'],
+      rows.rows.map(r => [
+        new Date(r.created_at).toLocaleDateString('bn-BD'),
+        (r.user_name || '') + ' (' + (r.user_phone || '') + ')',
+        r.service || '-', '৳' + Number(r.price).toLocaleString('bn-BD'), r.status,
+      ]));
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="orders-report.pdf"');
+    doc.pipe(res); doc.end();
+    await logActivity(req.user.id, 'report.orders', { from: from || null, to: to || null, count: rows.rows.length });
+  } catch (e) {
+    safeLog('[admin] report orders error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// GET /api/admin/reports/transactions?from=YYYY-MM-DD&to=YYYY-MM-DD
+router.get('/reports/transactions', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const conds = []; const params = []; let i = 1;
+    if (from) { conds.push(`t.created_at >= $${i++}`); params.push(from); }
+    if (to) { conds.push(`t.created_at <= $${i++}::date + INTERVAL '1 day'`); params.push(to); }
+    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+    const rows = await db.query(
+      `SELECT t.type, t.amount, t.method, t.status, t.created_at, u.name AS user_name, u.phone AS user_phone
+       FROM transactions t JOIN users u ON u.id = t.user_id
+       ${where} ORDER BY t.created_at DESC LIMIT 500`, params);
+
+    const doc = reportDoc('লেনদেন রিপোর্ট');
+    reportTable(doc,
+      ['তারিখ', 'ইউজার', 'ধরন', 'টাকা', 'মাধ্যম', 'স্ট্যাটাস'],
+      rows.rows.map(r => [
+        new Date(r.created_at).toLocaleDateString('bn-BD'),
+        (r.user_name || '') + ' (' + (r.user_phone || '') + ')',
+        r.type, '৳' + Number(r.amount).toLocaleString('bn-BD'), r.method || '-', r.status,
+      ]));
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="transactions-report.pdf"');
+    doc.pipe(res); doc.end();
+    await logActivity(req.user.id, 'report.transactions', { from: from || null, to: to || null, count: rows.rows.length });
+  } catch (e) {
+    safeLog('[admin] report transactions error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
 });
 
 module.exports = router;

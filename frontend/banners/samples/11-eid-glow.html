@@ -1,0 +1,11 @@
+<!DOCTYPE html><html lang="bn"><head><meta charset="UTF-8"><style>
+.bn{position:relative;overflow:hidden;background:radial-gradient(circle at 50% 30%,#1e2a4a,#0d0d1a 75%);border:2px solid #d4af37;border-radius:14px;padding:36px 20px;text-align:center;font-family:'Noto Sans Bengali',sans-serif;max-width:720px;margin:0 auto}
+.moon{font-size:56px;animation:glow 3s ease-in-out infinite;display:inline-block}
+@keyframes glow{0%,100%{filter:drop-shadow(0 0 6px #ffe9a8)}50%{filter:drop-shadow(0 0 22px #ffe9a8)}}
+.star{position:absolute;color:#ffe9a8;animation:tw 2s infinite}
+@keyframes tw{0%,100%{opacity:.2}50%{opacity:1}}
+.bn h2{color:#ffe9a8;font-size:26px;margin:10px 0 6px}
+.bn p{color:#c9bfa8;font-size:14px;margin:0}
+</style></head><body style="margin:0;background:transparent">
+<div class="bn"><span class="star" style="top:12%;left:12%">✦</span><span class="star" style="top:20%;right:15%;animation-delay:.7s">✦</span><span class="star" style="top:55%;left:8%;animation-delay:1.2s">✦</span><span class="star" style="top:60%;right:10%;animation-delay:.4s">✦</span><div class="moon">🌙</div><h2>{{text_bn}}</h2><p>{{text_en}}</p></div>
+</body></html>

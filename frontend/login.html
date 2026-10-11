@@ -141,9 +141,62 @@ async function doRegister() {
     const d = await r.json();
     if (!r.ok) { err.textContent = ERRBN[d.error] || ('ত্রুটি: ' + d.error); return; }
     ABC.setTokens(d.access_token, d.refresh_token);
-    location.href = '/dashboard.html';
+    // Phase 3: OTP email verification step
+    showOtpStep(body.email, body.name);
   } catch (e) { err.textContent = 'সংযোগ ব্যর্থ — আবার চেষ্টা করুন'; }
   finally { btn.disabled = false; btn.textContent = 'রেজিস্টার করুন →'; }
+}
+
+// ---- Phase 3: OTP verification ----
+let _otpEmail = '';
+async function showOtpStep(email, name) {
+  _otpEmail = email;
+  document.getElementById('tab-reg').innerHTML =
+    '<div style="text-align:center;padding:10px 0;">' +
+    '<div style="font-size:44px;">📧</div>' +
+    '<h3 style="color:var(--gold);margin:8px 0;">ইমেইল যাচাই করুন</h3>' +
+    '<p style="color:var(--muted);font-size:14px;">' + escHtml(email) + ' ঠিকানায় একটি OTP পাঠানো হচ্ছে…</p>' +
+    '<div class="field" style="max-width:220px;margin:14px auto;"><label>৬ সংখ্যার OTP</label>' +
+    '<input type="text" id="otp_code" maxlength="6" placeholder="••••••" style="text-align:center;font-size:24px;letter-spacing:8px;"></div>' +
+    '<div class="err" id="otp_err"></div>' +
+    '<button class="btn" id="otp_btn" onclick="doVerifyOtp()">যাচাই করুন ✓</button>' +
+    '<div style="margin-top:10px;"><button class="mini-btn" onclick="doSendOtp(true)">🔄 আবার পাঠান</button> ' +
+    '<button class="mini-btn" onclick="location.href=\'/dashboard.html\'">এড়িয়ে যান →</button></div></div>';
+  doSendOtp(false);
+}
+function escHtml(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function doSendOtp(manual) {
+  const err = document.getElementById('otp_err');
+  try {
+    const r = await ABC.api('/auth/send-otp', { method: 'POST', body: { email: _otpEmail } });
+    const d = await r.json();
+    if (!r.ok) {
+      err.textContent = d.error === 'OTP_UNAVAILABLE' ? 'ইমেইল সেবা এখনো চালু হয়নি — এড়িয়ে যান' :
+        d.error === 'TOO_MANY_REQUESTS' ? 'অনেকবার চেষ্টা করেছেন — ১০ মিনিট পরে আবার চেষ্টা করুন' :
+        'OTP পাঠানো ব্যর্থ: ' + d.error;
+      return;
+    }
+    if (manual) err.textContent = '✅ OTP আবার পাঠানো হয়েছে';
+    else err.textContent = '';
+  } catch (e) { err.textContent = 'সংযোগ ব্যর্থ'; }
+}
+async function doVerifyOtp() {
+  const code = document.getElementById('otp_code').value.trim();
+  const err = document.getElementById('otp_err');
+  const btn = document.getElementById('otp_btn');
+  if (!/^\d{6}$/.test(code)) { err.textContent = '৬ সংখ্যার কোড দিন'; return; }
+  btn.disabled = true;
+  try {
+    const r = await ABC.api('/auth/verify-otp', { method: 'POST', body: { email: _otpEmail, code } });
+    const d = await r.json();
+    if (!r.ok) {
+      err.textContent = d.error === 'INVALID_OR_EXPIRED' ? 'ভুল বা মেয়াদোত্তীর্ণ কোড' :
+        d.error === 'TOO_MANY_ATTEMPTS' ? 'অনেকবার ভুল হয়েছে — নতুন OTP নিন' : 'যাচাই ব্যর্থ';
+      return;
+    }
+    location.href = '/dashboard.html';
+  } catch (e) { err.textContent = 'সংযোগ ব্যর্থ'; }
+  finally { btn.disabled = false; }
 }
 
 // Enter key submits

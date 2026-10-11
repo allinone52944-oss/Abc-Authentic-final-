@@ -1,0 +1,8 @@
+<!DOCTYPE html><html lang="bn"><head><meta charset="UTF-8"><style>
+.bn{display:flex;align-items:center;justify-content:center;gap:22px;background:#160d08;border:2px dashed #d4af37;border-radius:14px;padding:26px 20px;font-family:'Noto Sans Bengali',sans-serif;max-width:720px;margin:0 auto}
+.clock{font-size:48px;animation:tick 1s steps(2) infinite}
+@keyframes tick{0%{transform:rotate(-8deg)}100%{transform:rotate(8deg)}}
+.bn h2{color:#ffe9a8;font-size:24px;margin:0 0 4px}.bn p{color:#c9bfa8;font-size:13px;margin:0}
+</style></head><body style="margin:0;background:transparent">
+<div class="bn"><div class="clock">⏳</div><div><h2>{{text_bn}}</h2><p>{{text_en}}</p></div></div>
+</body></html>

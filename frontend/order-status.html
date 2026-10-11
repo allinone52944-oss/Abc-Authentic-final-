@@ -21,6 +21,7 @@
       <p style="color:var(--muted);font-size:14px;" id="stSub">আপনার অর্ডার গ্রহণ করা হয়েছে</p>
       <div class="status-steps" id="steps"></div>
       <div class="timeline" id="timeline"></div>
+      <div id="supMsgs" style="margin-top:16px;"></div>
       <div style="margin-top:24px;">
         <button class="btn" style="max-width:320px;margin:0 auto;" onclick="location.href='/order-detail.html?id='+oid">বিস্তারিত দেখুন →</button>
         <div style="margin-top:10px;"><span class="back-link" onclick="location.href='/dashboard.html'">ড্যাশবোর্ডে ফিরুন</span></div>
@@ -46,12 +47,32 @@ async function init(){
   if(!r.ok){document.getElementById('stTitle').textContent='অর্ডার পাওয়া যায়নি';return;}
   const {order:o}=await r.json();
   render(o);
+  loadSupportMsgs();
   // Poll for updates every 10s (animation follows status)
   setInterval(async()=>{
     const rr=await ABC.api('/orders/'+oid);
     if(rr.ok){const dd=await rr.json();render(dd.order);}
+    loadSupportMsgs();
   },10000);
 }
+const TPL_EMOJI={network:'🌐',processing:'⏰',verifying:'📄',done:'✅',failed:'❌',paid:'💰'};
+async function loadSupportMsgs(){
+  try{
+    const r=await ABC.api('/orders/'+oid+'/messages');
+    if(!r.ok)return;
+    const d=await r.json();
+    const box=document.getElementById('supMsgs');
+    if(!d.messages.length){box.innerHTML='';return;}
+    box.innerHTML='<h3 style="color:var(--gold);font-size:16px;margin:0 0 4px;">💬 সাপোর্ট আপডেট</h3>'+
+      d.messages.map(m=>{
+        const emoji=TPL_EMOJI[m.template_key]||'💬';
+        return '<div class="sup-msg tpl-'+(m.template_key||'x')+'"><span class="sup-emoji">'+emoji+'</span>'+
+        '<span class="sup-text">'+escapeHtml(m.message)+'</span>'+
+        '<div class="sup-time">'+new Date(m.created_at).toLocaleString('bn-BD')+'</div></div>';
+      }).join('');
+  }catch(e){/* optional */}
+}
+function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function render(o){
   const st=o.status;
   let label,emoji;

@@ -1,0 +1,12 @@
+<!DOCTYPE html><html lang="bn"><head><meta charset="UTF-8"><style>
+.bn{background:#14100a;border:2px solid #8a7a5f;border-radius:14px;padding:30px 20px;text-align:center;font-family:'Noto Sans Bengali',sans-serif;max-width:720px;margin:0 auto}
+.gears{font-size:40px}
+.gears span{display:inline-block;animation:spin 4s linear infinite}
+.gears span:last-child{animation:spinR 4s linear infinite;font-size:30px;vertical-align:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes spinR{to{transform:rotate(-360deg)}}
+.bn h2{color:#c9bfa8;font-size:23px;margin:10px 0 6px}
+.bn p{color:#8a7a5f;font-size:13px;margin:0}
+</style></head><body style="margin:0;background:transparent">
+<div class="bn"><div class="gears"><span>⚙️</span><span>⚙️</span></div><h2>🔧 {{text_bn}}</h2><p>{{text_en}}</p></div>
+</body></html>

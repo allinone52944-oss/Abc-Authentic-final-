@@ -476,3 +476,30 @@ table.adm tr:hover td { background: rgba(212,175,55,0.05); }
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .hub-card.wide { grid-column: span 2; }
 }
+
+/* ============ Phase 3: Banners ============ */
+.bn-strip { max-width: 860px; margin: 0 auto 10px; padding: 0 12px; }
+.bn-slide { transition: opacity .3s ease, transform .3s ease; }
+.bn-strip .bn > div, .bn-strip > div > div { max-width: 100% !important; }
+
+/* ============ Phase 3: Support messages (user) ============ */
+.sup-msg { background: linear-gradient(135deg, #2b1d14, #3d2b1f); border: 1px solid #d4af37; border-left: 4px solid #d4af37; border-radius: 12px; padding: 14px 16px; margin: 10px 0; animation: supIn .5s ease; box-shadow: 0 4px 16px rgba(212,175,55,.12); }
+@keyframes supIn { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: none; } }
+.sup-msg .sup-emoji { font-size: 22px; margin-right: 8px; }
+.sup-msg .sup-text { color: #f5ead6; font-size: 14px; line-height: 1.6; }
+.sup-msg .sup-time { color: #8a7a5f; font-size: 11px; margin-top: 6px; }
+.sup-msg.tpl-network { border-left-color: #3498db; }
+.sup-msg.tpl-processing { border-left-color: #f39c12; }
+.sup-msg.tpl-verifying { border-left-color: #9b59b6; }
+.sup-msg.tpl-done { border-left-color: #27ae60; }
+.sup-msg.tpl-failed { border-left-color: #e74c3c; }
+.sup-msg.tpl-paid { border-left-color: #d4af37; }
+
+/* ============ Phase 3: Banner editor ============ */
+.bn-design-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; max-height: 320px; overflow-y: auto; padding: 4px; }
+.bn-design-opt { border: 2px solid #3d2b1f; border-radius: 10px; padding: 8px; cursor: pointer; background: #1a120b; transition: border-color .2s; }
+.bn-design-opt:hover { border-color: #8a7a5f; }
+.bn-design-opt.sel { border-color: #d4af37; box-shadow: 0 0 12px rgba(212,175,55,.3); }
+.bn-design-opt .dname { color: #d4af37; font-size: 13px; font-weight: bold; margin-bottom: 4px; }
+.bn-design-opt .dcat { color: #8a7a5f; font-size: 11px; }
+.bn-preview { border: 2px dashed #d4af37; border-radius: 12px; padding: 12px; margin: 12px 0; min-height: 80px; background: #100a05; }

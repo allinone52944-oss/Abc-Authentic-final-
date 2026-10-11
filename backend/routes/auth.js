@@ -322,4 +322,85 @@ router.post('/change-password', requireAuth, async (req, res) => {
   }
 });
 
+// ---- OTP via email (Phase 3) ----------------------------------
+const crypto = require('crypto');
+const { sendOtpEmail, isConfigured } = require('../utils/mailer');
+
+function makeOtp() {
+  return String(crypto.randomInt(100000, 1000000));
+}
+
+// POST /api/auth/send-otp { email } — 6-digit OTP, 5-min expiry, hashed in DB
+router.post('/send-otp', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!validEmail(email)) return res.status(400).json({ error: 'INVALID_EMAIL' });
+    if (!isConfigured()) return res.status(503).json({ error: 'OTP_UNAVAILABLE' });
+    const em = email.trim().toLowerCase();
+
+    // Rate limit: max 3 OTPs per email per 10 minutes
+    const rl = await db.query(
+      `SELECT COUNT(*) AS c FROM otp_codes WHERE email = $1 AND created_at > NOW() - INTERVAL '10 minutes'`,
+      [em]
+    );
+    if (parseInt(rl.rows[0].c, 10) >= 3) {
+      return res.status(429).json({ error: 'TOO_MANY_REQUESTS' });
+    }
+
+    const code = makeOtp();
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+    await db.query(
+      `INSERT INTO otp_codes (email, code_hash, purpose, expires_at)
+       VALUES ($1, $2, 'verify', NOW() + INTERVAL '5 minutes')`,
+      [em, codeHash]
+    );
+
+    const u = await db.query('SELECT name FROM users WHERE LOWER(email) = $1 LIMIT 1', [em]);
+    const sent = await sendOtpEmail(em, code, u.rows.length ? u.rows[0].name : null);
+    if (!sent.ok) return res.status(502).json({ error: 'EMAIL_FAILED' });
+    return res.json({ ok: true });
+  } catch (e) {
+    safeLog('[auth] send-otp error:', e.message);
+    return res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// POST /api/auth/verify-otp { email, code } — marks email verified
+router.post('/verify-otp', async (req, res) => {
+  try {
+    const { email, code } = req.body || {};
+    if (!validEmail(email) || !/^\d{6}$/.test(String(code || ''))) {
+      return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
+    const em = email.trim().toLowerCase();
+    const codeHash = crypto.createHash('sha256').update(String(code)).digest('hex');
+
+    const r = await db.query(
+      `SELECT id, attempts FROM otp_codes
+       WHERE email = $1 AND code_hash = $2 AND consumed = FALSE AND expires_at > NOW()
+       ORDER BY created_at DESC LIMIT 1`,
+      [em, codeHash]
+    );
+    if (!r.rows.length) {
+      // Count a failed attempt against the latest unconsumed OTP
+      await db.query(
+        `UPDATE otp_codes SET attempts = attempts + 1
+         WHERE id = (SELECT id FROM otp_codes WHERE email = $1 AND consumed = FALSE
+                     ORDER BY created_at DESC LIMIT 1)`,
+        [em]
+      );
+      return res.status(400).json({ error: 'INVALID_OR_EXPIRED' });
+    }
+    const otp = r.rows[0];
+    if (otp.attempts >= 5) return res.status(400).json({ error: 'TOO_MANY_ATTEMPTS' });
+
+    await db.query('UPDATE otp_codes SET consumed = TRUE WHERE id = $1', [otp.id]);
+    await db.query('UPDATE users SET email_verified = TRUE WHERE LOWER(email) = $1', [em]);
+    return res.json({ ok: true });
+  } catch (e) {
+    safeLog('[auth] verify-otp error:', e.message);
+    return res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 module.exports = router;

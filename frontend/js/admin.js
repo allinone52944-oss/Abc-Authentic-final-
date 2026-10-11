@@ -31,6 +31,7 @@ async function init() {
     ABC.clearTokens(); location.href = '/login.html';
   };
   show('stats');
+  VoiceAlert.init();
 }
 
 async function show(tab) {
@@ -38,6 +39,59 @@ async function show(tab) {
   try { await TABS[tab](); }
   catch (e) { content.innerHTML = '<div class="err">লোড ব্যর্থ: ' + esc(e.message) + '</div>'; }
 }
+
+/* ============ Phase 3: Voice alerts (Web Speech API, Bengali) ============ */
+const VoiceAlert = {
+  enabled: localStorage.getItem('abc_voice') !== 'off',
+  _last: { recharge: 0, order: 0 },
+  _voices: [],
+  init() {
+    try {
+      const load = () => { this._voices = speechSynthesis.getVoices(); };
+      load();
+      if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = load;
+    } catch (e) { /* speech not supported */ }
+    // Poll every 30s for new recharge requests & orders
+    setInterval(() => this.check(), 30000);
+    setTimeout(() => this.check(), 8000);
+  },
+  speak(text) {
+    if (!this.enabled) return;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'bn-BD';
+      // Prefer a Bengali voice if available
+      const bn = this._voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('bn'));
+      if (bn) u.voice = bn;
+      u.rate = 0.95; u.pitch = 1.05;
+      speechSynthesis.speak(u);
+    } catch (e) { /* ignore */ }
+  },
+  async check() {
+    if (!this.enabled || !me || me.role !== 'admin') return;
+    try {
+      const r = await ABC.api('/admin/stats');
+      if (!r.ok) return;
+      const s = await r.json();
+      const pr = Number(s.pending_recharge || 0);
+      const no = Number(s.orders_new || 0);
+      if (this._last.recharge && pr > this._last.recharge) {
+        this.speak('নতুন রিচার্জ রিকোয়েস্ট এসেছে। অনুগ্রহ করে চেক করুন।');
+      } else if (this._last.order && no > this._last.order) {
+        this.speak('নতুন অর্ডার এসেছে।');
+      }
+      this._last.recharge = pr;
+      this._last.order = no;
+    } catch (e) { /* silent */ }
+  },
+  toggle() {
+    this.enabled = !this.enabled;
+    localStorage.setItem('abc_voice', this.enabled ? 'on' : 'off');
+    if (this.enabled) this.speak('ভয়েস নোটিফিকেশন চালু হয়েছে।');
+    return this.enabled;
+  },
+};
 
 const TABS = {};
 
@@ -54,8 +108,36 @@ TABS.stats = async () => {
     '</div>' +
     '<div class="form-card" style="max-width:none;"><h2>🚨 দ্রুত কাজ</h2>' +
     '<button class="mini-btn" onclick="document.querySelector(\'[data-t=recharge]\').click()">পেন্ডিং রিচার্জ (' + s.pending_recharge + ')</button> ' +
-    '<button class="mini-btn" onclick="document.querySelector(\'[data-t=orders]\').click()">নতুন অর্ডার (' + s.orders_new + ')</button></div>';
+    '<button class="mini-btn" onclick="document.querySelector(\'[data-t=orders]\').click()">নতুন অর্ডার (' + s.orders_new + ')</button></div>' +
+    '<div class="form-card" style="margin-top:14px;"><h3 style="color:var(--gold);margin:0 0 10px;">📊 PDF রিপোর্ট</h3>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">' +
+    '<div class="field" style="margin:0;"><label>থেকে</label><input type="date" id="rp_from"></div>' +
+    '<div class="field" style="margin:0;"><label>পর্যন্ত</label><input type="date" id="rp_to"></div>' +
+    '<button class="mini-btn ok" onclick="AdmReports.dl(\'orders\')">📥 অর্ডার রিপোর্ট</button>' +
+    '<button class="mini-btn ok" onclick="AdmReports.dl(\'transactions\')">📥 লেনদেন রিপোর্ট</button>' +
+    '</div></div>';
   function stat(n, l) { return '<div class="stat"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>'; }
+};
+
+window.AdmReports = {
+  dl(kind) {
+    const f = document.getElementById('rp_from').value;
+    const t = document.getElementById('rp_to').value;
+    const q = (f ? 'from=' + f : '') + (t ? '&to=' + t : '');
+    const token = localStorage.getItem('abc_access_token') || '';
+    // Use fetch with auth header to download the PDF blob
+    fetch('/api/admin/reports/' + kind + (q ? '?' + q : ''), {
+      headers: { 'Authorization': 'Bearer ' + token },
+    }).then(async (r) => {
+      if (!r.ok) { alert('রিপোর্ট ব্যর্থ'); return; }
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = kind + '-report.pdf';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    }).catch(() => alert('রিপোর্ট ব্যর্থ'));
+  },
 };
 
 /* ---------------- USERS ---------------- */
@@ -169,7 +251,7 @@ TABS.orders = async () => {
       '<td><small>' + new Date(o.created_at).toLocaleString('bn-BD') + '</small></td>' +
       '<td><select onchange="AdmOrders.setStatus(\'' + o.id + '\',this.value)">' +
       Object.keys(STBN).map(s => '<option value="' + s + '"' + (o.status === s ? ' selected' : '') + '>' + STBN[s] + '</option>').join('') +
-      '</select></td></tr>';
+      '</select> <button class="mini-btn" title="সাপোর্ট মেসেজ" onclick="AdmOrders.supportForm(\'' + o.id + '\')">💬</button></td></tr>';
   }
   content.innerHTML = html + '</table></div>';
 };
@@ -185,6 +267,44 @@ window.AdmOrders = {
     const d = await r.json();
     if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
     show('orders');
+  },
+  // ---- Support messages (Phase 3) ----
+  _tpls: [],
+  useTpl(btn) {
+    const t = this._tpls[Number(btn.dataset.tpl)];
+    if (t) document.getElementById('supMsg').value = t.emoji + ' ' + t.bn;
+  },
+  async supportForm(orderId) {
+    const [tR, mR] = await Promise.all([
+      ABC.api('/admin/support-templates'),
+      ABC.api('/admin/orders/' + orderId + '/support-messages'),
+    ]);
+    const t = tR.ok ? await tR.json() : { templates: [] };
+    this._tpls = t.templates || [];
+    const m = mR.ok ? await mR.json() : { messages: [] };
+    const hist = (m.messages || []).map((x) =>
+      '<div class="sup-msg"><span class="sup-text">' + esc(x.message) + '</span>' +
+      '<div class="sup-time">' + new Date(x.created_at).toLocaleString('bn-BD') + '</div></div>'
+    ).join('') || '<p style="color:var(--muted);font-size:13px;">এখনো কোনো মেসেজ পাঠানো হয়নি</p>';
+    modal('💬 সাপোর্ট মেসেজ পাঠান',
+      '<div class="field"><label>রেডিমেড টেমপ্লেট</label><div style="display:flex;flex-wrap:wrap;gap:6px;">' +
+      t.templates.map((x, i) =>
+        '<button class="mini-btn" data-tpl="' + i + '" onclick="AdmOrders.useTpl(this)">' + x.emoji + ' ' + esc(x.bn.slice(0, 28)) + '…</button>'
+      ).join('') + '</div></div>' +
+      fld('কাস্টম মেসেজ', 'text', 'supMsg') +
+      '<button class="btn" onclick="AdmOrders.sendSupport(\'' + orderId + '\')">পাঠান ➤</button>' +
+      '<h4 style="color:var(--gold);margin:14px 0 6px;">পাঠানো মেসেজ</h4>' + hist);
+  },
+  async sendSupport(orderId) {
+    const msg = v('supMsg');
+    if (!msg) { alert('মেসেজ লিখুন'); return; }
+    const r = await ABC.api('/admin/orders/' + orderId + '/support-message', {
+      method: 'POST', body: { message: msg },
+    });
+    const d = await r.json();
+    if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
+    closeModal();
+    alert('✅ মেসেজ পাঠানো হয়েছে!');
   },
 };
 
@@ -338,27 +458,108 @@ TABS.banners = async () => {
   for (const b of d.banners) {
     html += '<tr><td>' + esc(b.type) + '</td><td>' + esc(b.title) + '</td><td>#' + b.design_id + '</td>' +
       '<td>' + (b.active ? '✅' : '❌') + '</td>' +
-      '<td><button class="mini-btn" onclick="AdmBn.toggle(\'' + b.id + '\',' + (!b.active) + ')">' +
+      '<td><button class="mini-btn" onclick="AdmBn.editForm(\'' + b.id + '\')">✏️ এডিট</button>' +
+      '<button class="mini-btn" onclick="AdmBn.toggle(\'' + b.id + '\',' + (!b.active) + ')">' +
       (b.active ? 'বন্ধ' : 'চালু') + '</button>' +
       '<button class="mini-btn danger" onclick="AdmBn.del(\'' + b.id + '\')">ডিলিট</button></td></tr>';
   }
   content.innerHTML = html + '</table></div>' +
-    '<div style="color:var(--muted);font-size:12px;margin-top:8px;">💡 ১৫-২০টি ready-made animated design শীঘ্রই আসছে</div>';
+    '<div style="color:var(--gold);font-size:12px;margin-top:8px;">✨ ২৪টি animated design — সব edit করা যায়</div>';
 };
 window.AdmBn = {
-  createForm() {
+  _catalog: null,
+  _selDesign: 1,
+  async _cat() {
+    if (this._catalog) return this._catalog;
+    const r = await fetch('/banners/catalog.json');
+    this._catalog = await r.json();
+    return this._catalog;
+  },
+  async createForm() {
+    this._selDesign = 1;
+    const cat = await this._cat();
     modal('🖼️ নতুন ব্যানার/বিজ্ঞাপন/পপআপ',
       '<div class="field"><label>ধরন</label><select id="bn_type"><option value="banner">ব্যানার</option><option value="ad">বিজ্ঞাপন</option><option value="popup">পপআপ</option></select></div>' +
-      fld('শিরোনাম', 'text', 'bn_title') +
-      fld('ডিজাইন নং (১-২০)', 'number', 'bn_design') +
-      fld('লেখা (বাংলা)', 'text', 'bn_text') +
+      fld('শিরোনাম (admin)', 'text', 'bn_title') +
+      '<div class="field"><label>ডিজাইন বেছে নিন (' + cat.designs.length + 'টি)</label>' +
+      '<div class="bn-design-grid" id="bnDesignGrid">' +
+      cat.designs.map((d) =>
+        '<div class="bn-design-opt' + (d.id === 1 ? ' sel' : '') + '" data-id="' + d.id + '" onclick="AdmBn.pick(' + d.id + ')">' +
+        '<div class="dname">#' + d.id + ' ' + esc(d.name) + '</div><div class="dcat">' + esc(d.category) + '</div></div>'
+      ).join('') + '</div></div>' +
+      '<div class="field"><label>লাইভ প্রিভিউ</label><div class="bn-preview" id="bnPreview"></div></div>' +
+      fld('লেখা (বাংলা)', 'text', 'bn_text_bn') +
+      fld('লেখা (English)', 'text', 'bn_text_en') +
+      fld('লিংক (optional)', 'text', 'bn_link') +
       '<button class="btn" onclick="AdmBn.create()">তৈরি করুন</button>');
+    this.updatePreview();
+    ['bn_text_bn', 'bn_text_en'].forEach((id) => {
+      document.getElementById(id).addEventListener('input', () => this.updatePreview());
+    });
+  },
+  pick(id) {
+    this._selDesign = id;
+    document.querySelectorAll('.bn-design-opt').forEach((el) => {
+      el.classList.toggle('sel', Number(el.dataset.id) === id);
+    });
+    this.updatePreview();
+  },
+  async updatePreview() {
+    const cat = await this._cat();
+    const d = cat.designs.find((x) => x.id === this._selDesign) || cat.designs[0];
+    const bn = document.getElementById('bn_text_bn');
+    const en = document.getElementById('bn_text_en');
+    const lk = document.getElementById('bn_link');
+    const html = await BannerRender.render({
+      design_id: this._selDesign,
+      content: {
+        text_bn: (bn && bn.value) || d.default_bn,
+        text_en: (en && en.value) || d.default_en,
+        link: (lk && lk.value) || '',
+      },
+    });
+    const pv = document.getElementById('bnPreview');
+    if (pv) pv.innerHTML = html;
   },
   async create() {
     const r = await ABC.api('/admin/banners', { method: 'POST', body: {
       type: document.getElementById('bn_type').value,
-      title: v('bn_title'), design_id: Number(v('bn_design')) || 1,
-      content: { text_bn: v('bn_text') },
+      title: v('bn_title'), design_id: this._selDesign,
+      content: { text_bn: v('bn_text_bn'), text_en: v('bn_text_en'), link: v('bn_link') },
+    }});
+    if (!r.ok) { alert('ব্যর্থ'); return; }
+    closeModal(); show('banners');
+  },
+  async editForm(id) {
+    const r = await ABC.api('/admin/banners');
+    const d = await r.json();
+    const b = (d.banners || []).find((x) => x.id === id);
+    if (!b) { alert('পাওয়া যায়নি'); return; }
+    this._selDesign = b.design_id;
+    const cat = await this._cat();
+    const c = b.content || {};
+    modal('✏️ ব্যানার এডিট করুন',
+      fld('শিরোনাম (admin)', 'text', 'bn_title', b.title) +
+      '<div class="field"><label>ডিজাইন</label><div class="bn-design-grid" id="bnDesignGrid">' +
+      cat.designs.map((x) =>
+        '<div class="bn-design-opt' + (x.id === b.design_id ? ' sel' : '') + '" data-id="' + x.id + '" onclick="AdmBn.pick(' + x.id + ')">' +
+        '<div class="dname">#' + x.id + ' ' + esc(x.name) + '</div><div class="dcat">' + esc(x.category) + '</div></div>'
+      ).join('') + '</div></div>' +
+      '<div class="field"><label>লাইভ প্রিভিউ</label><div class="bn-preview" id="bnPreview"></div></div>' +
+      fld('লেখা (বাংলা)', 'text', 'bn_text_bn', c.text_bn || '') +
+      fld('লেখা (English)', 'text', 'bn_text_en', c.text_en || '') +
+      fld('লিংক', 'text', 'bn_link', c.link || '') +
+      '<div class="field"><label><input type="checkbox" id="bn_active" ' + (b.active ? 'checked' : '') + '> সক্রিয়</label></div>' +
+      '<button class="btn" onclick="AdmBn.save(\'' + id + '\')">সেভ করুন</button>');
+    this.updatePreview();
+    ['bn_text_bn', 'bn_text_en'].forEach((x) => {
+      document.getElementById(x).addEventListener('input', () => this.updatePreview());
+    });
+  },
+  async save(id) {
+    const r = await ABC.api('/admin/banners/' + id, { method: 'PUT', body: {
+      title: v('bn_title'), design_id: this._selDesign, active: document.getElementById('bn_active').checked,
+      content: { text_bn: v('bn_text_bn'), text_en: v('bn_text_en'), link: v('bn_link') },
     }});
     if (!r.ok) { alert('ব্যর্থ'); return; }
     closeModal(); show('banners');
@@ -435,6 +636,9 @@ TABS.settings = async () => {
     '<h2>⚙️ সিস্টেম সেটিংস</h2>' +
     '<div class="list-row" style="cursor:default;"><div><div class="t">রেজিস্ট্রেশন</div><div class="s">বন্ধ থাকলে শুধু লগইন দেখাবে</div></div>' + bool('registration_enabled') + '</div>' +
     '<div class="list-row" style="cursor:default;"><div><div class="t">মেনটেনেন্স মোড</div><div class="s">সাইট সাময়িক বন্ধ</div></div>' + bool('maintenance_mode') + '</div>' +
+    '<div class="list-row" style="cursor:default;"><div><div class="t">🔊 ভয়েস নোটিফিকেশন</div><div class="s">নতুন রিচার্জ/অর্ডারে বাংলা ভয়েস অ্যালার্ট</div></div>' +
+    '<button class="mini-btn ' + (VoiceAlert.enabled ? 'ok' : '') + '" onclick="var on=VoiceAlert.toggle();this.className=\'mini-btn \'+(on?\'ok\':\'\');this.textContent=on?\'✅ চালু\':\'❌ বন্ধ\';">' +
+    (VoiceAlert.enabled ? '✅ চালু' : '❌ বন্ধ') + '</button></div>' +
     '<div class="field" style="margin-top:14px;"><label>স্বাগতম বোনাস (৳, ০ = বন্ধ)</label><input type="number" id="st_wb" value="' + ((s.welcome_bonus && s.welcome_bonus.amount) || 0) + '"></div>' +
     '<div class="field"><label>ক্যাশব্যাক % (০ = বন্ধ)</label><input type="number" id="st_cb" value="' + ((s.cashback && s.cashback.percent) || 0) + '"></div>' +
     '<div class="field"><label>ফাইল আপলোড সীমা (MB)</label><input type="number" id="st_mb" value="' + ((s.file_upload && s.file_upload.max_mb) || 5) + '"></div>' +
@@ -475,5 +679,6 @@ function modal(title, bodyHtml) {
 }
 function closeModal() { const m = document.getElementById('admModal'); if (m) m.remove(); }
 
+window.VoiceAlert = VoiceAlert;
 init();
 })();

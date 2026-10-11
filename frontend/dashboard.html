@@ -23,6 +23,8 @@
     </div>
   </div>
 
+  <div class="bn-strip" id="bnStrip" style="display:none;"></div>
+
   <div class="hub-grid" id="hub">
     <div class="hub-card" onclick="location.href='/wallet.html'">
       <span class="go">➤</span>
@@ -65,7 +67,18 @@
 <div class="wa-fab" id="waFab" title="WhatsApp">💬</div>
 
 <script src="/js/app.js"></script>
+<script src="/banners/render.js"></script>
 <script>
+async function loadBanners() {
+  try {
+    const r = await ABC.api('/banners?type=banner');
+    const d = r.ok ? await r.json() : { banners: [] };
+    const act = (d.banners || []).filter((b) => b.active);
+    if (!act.length) return;
+    document.getElementById('bnStrip').style.display = 'block';
+    BannerRender.carousel(document.getElementById('bnStrip'), act, 6000);
+  } catch (e) { /* banners optional */ }
+}
 const GREETINGS = {
   islam: 'আসসালামু আলাইকুম',
   hindu: 'নমস্কার 🙏',
@@ -120,6 +133,9 @@ async function init() {
     const d = await nR.json();
     document.getElementById('hubNotices').textContent = bnNum(d.notices.length);
   }
+
+  // Banners carousel (Phase 3)
+  loadBanners();
 
   // WhatsApp FAB — auto user info
   document.getElementById('waFab').onclick = () => {
