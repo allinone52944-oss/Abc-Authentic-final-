@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ওয়ালেট - All In One</title>
+<link rel="stylesheet" href="/css/coffee.css">
+<style>
+.wallet-hero{
+  background: linear-gradient(135deg,#3d2b1f,#2b1d14);
+  border:1px solid rgba(212,175,55,0.4);
+  border-radius:22px;padding:28px;text-align:center;
+  position:relative;overflow:hidden;margin-bottom:14px;
+}
+.wallet-hero::before{
+  content:'';position:absolute;width:220px;height:220px;border-radius:50%;
+  background:radial-gradient(circle,rgba(212,175,55,0.35),transparent);
+  top:-70px;right:-70px;animation:float 6s ease-in-out infinite;
+}
+.wallet-hero .amt{color:var(--gold);font-size:44px;font-weight:700;text-shadow:0 0 30px rgba(212,175,55,0.4);}
+.wallet-hero .lbl{color:var(--muted);font-size:13px;letter-spacing:3px;margin-top:4px;}
+.method-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:12px 0;}
+.method{
+  border:1px solid rgba(212,175,55,0.25);border-radius:14px;padding:14px;
+  text-align:center;cursor:pointer;transition:all .25s;background:rgba(0,0,0,0.3);
+}
+.method:hover{border-color:var(--gold);transform:translateY(-2px);}
+.method.sel{border-color:var(--gold);background:rgba(212,175,55,0.12);box-shadow:0 0 20px rgba(212,175,55,0.2);}
+.method .e{font-size:28px;}
+.method .t{color:var(--cream);font-size:13px;margin-top:4px;}
+.coupon-strip{
+  display:flex;gap:8px;margin-top:10px;
+}
+.coupon-strip input{flex:1;}
+</style>
+</head>
+<body class="app">
+<div class="spiral"></div>
+<div class="app-shell">
+  <div class="app-header">
+    <div class="brand">☕ ওয়ালেট</div>
+    <div class="hdr-actions"><button class="icon-btn" onclick="location.href='/dashboard.html'">🏠</button></div>
+  </div>
+  <div class="page">
+    <span class="back-link" onclick="location.href='/dashboard.html'">← ড্যাশবোর্ড</span>
+    <div class="wallet-hero" style="margin-top:12px;">
+      <div class="amt" id="bal">৳০</div>
+      <div class="lbl">বর্তমান ব্যালেন্স</div>
+    </div>
+
+    <div class="form-card" style="max-width:640px;">
+      <h2>💳 রিচার্জ রিকোয়েস্ট</h2>
+      <div class="method-grid" id="methods">
+        <div class="method sel" data-m="bkash_payment"><div class="e">📲</div><div class="t">বিকাশ পেমেন্ট</div></div>
+        <div class="method" data-m="bkash_personal"><div class="e">📱</div><div class="t">বিকাশ পার্সোনাল</div></div>
+        <div class="method" data-m="nagad"><div class="e">🟠</div><div class="t">নগদ</div></div>
+        <div class="method" data-m="rocket"><div class="e">🚀</div><div class="t">রকেট</div></div>
+      </div>
+      <div class="field"><label>টাকার পরিমাণ (৳১০ - ৳১,০০,০০০)</label><input type="number" id="amount" placeholder="500" min="10" max="100000"></div>
+      <div class="field"><label>যে নম্বর থেকে পাঠিয়েছেন</label><input type="text" id="sender" placeholder="01XXXXXXXXX"></div>
+      <div class="field"><label>TrxID</label><input type="text" id="trxid" placeholder="TrxID লিখুন"></div>
+      <div class="err" id="err"></div><div class="okmsg" id="ok"></div>
+      <button class="btn" onclick="submitRecharge()">রিকোয়েস্ট পাঠান →</button>
+    </div>
+
+    <div class="form-card" style="max-width:640px;margin-top:14px;">
+      <h2>🎟️ কুপন রিডিম</h2>
+      <div class="coupon-strip">
+        <input type="text" id="couponCode" placeholder="কুপন কোড" style="padding:13px 16px;background:rgba(0,0,0,0.4);border:1px solid rgba(212,175,55,0.25);border-radius:12px;color:var(--cream);outline:none;">
+        <button class="mini-btn" style="padding:13px 22px;font-size:14px;" onclick="redeem()">রিডিম</button>
+      </div>
+      <div class="err" id="cerr"></div><div class="okmsg" id="cok"></div>
+    </div>
+
+    <div class="form-card" style="max-width:640px;margin-top:14px;">
+      <h2>📜 লেনদেনের হিসাব</h2>
+      <div id="txList"><div style="color:var(--muted)">লোড হচ্ছে…</div></div>
+    </div>
+  </div>
+</div>
+<script src="/js/app.js"></script>
+<script>
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+let method='bkash_payment';
+const TYPBN={recharge:'রিচার্জ',cashback:'ক্যাশব্যাক',promo:'প্রোমো',refund:'রিফান্ড',debit:'খরচ',bonus:'বোনাস'};
+async function init(){
+  const me=await ABC.api('/auth/me');
+  if(!me.ok){location.href='/login.html';return;}
+  document.querySelectorAll('#methods .method').forEach(m=>{
+    m.onclick=()=>{document.querySelectorAll('#methods .method').forEach(x=>x.classList.remove('sel'));m.classList.add('sel');method=m.dataset.m;};
+  });
+  loadWallet();
+}
+async function loadWallet(){
+  const r=await ABC.api('/wallet?limit=10');
+  if(!r.ok)return;
+  const d=await r.json();
+  document.getElementById('bal').textContent='৳'+Number(d.balance).toLocaleString('bn-BD');
+  document.getElementById('txList').innerHTML=d.transactions.map(t=>
+    '<div class="list-row" style="cursor:default;"><div><div class="t">'+(TYPBN[t.type]||t.type)+
+    ' <span class="s" style="color:var(--dim)">'+esc(t.trxid||'')+'</span></div>'+
+    '<div class="s">'+new Date(t.created_at).toLocaleString('bn-BD')+'</div></div>'+
+    '<span class="badge">'+(Number(t.amount)>=0?'+':'')+'৳'+Number(t.amount).toLocaleString('bn-BD')+'</span></div>'
+  ).join('')||'<div style="color:var(--muted)">কোনো লেনদেন নেই</div>';
+}
+async function submitRecharge(){
+  const err=document.getElementById('err'),ok=document.getElementById('ok');
+  err.textContent='';ok.textContent='';
+  const body={method,sender_no:document.getElementById('sender').value.trim(),
+    trxid:document.getElementById('trxid').value.trim(),
+    amount:document.getElementById('amount').value};
+  const r=await ABC.api('/wallet/recharge',{method:'POST',body});
+  const d=await r.json();
+  if(!r.ok){
+    err.textContent={INVALID_AMOUNT:'⚠️ পরিমাণ ৳১০-১০০০০০ হতে হবে',INVALID_SENDER:'⚠️ সঠিক নম্বর দিন',
+      DUP_TRXID:'⚠️ এই TrxID আগেই ব্যবহার হয়েছে',TOO_MANY_PENDING:'⚠️ ৩টি pending রিকোয়েস্ট আছে'}[d.error]||('❌ '+d.error);
+    return;
+  }
+  ok.textContent='✅ রিকোয়েস্ট পাঠানো হয়েছে! এডমিন approve করলে ব্যালেন্স যোগ হবে।';
+  loadWallet();
+}
+async function redeem(){
+  const cerr=document.getElementById('cerr'),cok=document.getElementById('cok');
+  cerr.textContent='';cok.textContent='';
+  const code=document.getElementById('couponCode').value.trim();
+  if(!code){cerr.textContent='⚠️ কোড লিখুন';return;}
+  const r=await ABC.api('/wallet/coupon',{method:'POST',body:{code}});
+  const d=await r.json();
+  if(!r.ok){cerr.textContent='❌ '+(d.error||'ব্যর্থ');return;}
+  cok.textContent='🎉 ৳'+Number(d.credited).toLocaleString('bn-BD')+' যোগ হয়েছে!';
+  document.getElementById('couponCode').value='';
+  loadWallet();
+}
+init();
+</script>
+</body>
+</html>

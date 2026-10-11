@@ -64,8 +64,17 @@ app.get('/api/engines', apiLimiter, (req, res) => {
   res.json(list);
 });
 
-// ---- Auth routes mount point (rate-limited, Phase 2 fills in) --
-app.use('/api/auth', authLimiter);
+// ---- Auth routes (strict rate limit: brute-force protection) --
+const authRoutes = require('./routes/auth');
+app.use('/api/auth', authLimiter, authRoutes);
+
+// ---- Admin routes (auth + admin role required) --
+const adminRoutes = require('./routes/admin');
+app.use('/api/admin', apiLimiter, adminRoutes);
+
+// ---- User routes (authenticated users) --
+const userRoutes = require('./routes/user');
+app.use('/api', apiLimiter, userRoutes);
 
 // ---- Fallback: frontend handles routing ----------------------
 app.get('*', (req, res) => {

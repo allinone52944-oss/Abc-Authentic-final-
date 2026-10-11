@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>অর্ডার করুন - All In One</title>
+<link rel="stylesheet" href="/css/coffee.css">
+</head>
+<body class="app">
+<div class="spiral"></div>
+<div class="app-shell">
+  <div class="app-header">
+    <div class="brand">☕ নতুন অর্ডার</div>
+    <div class="hdr-actions"><button class="icon-btn" onclick="location.href='/dashboard.html'">🏠</button></div>
+  </div>
+  <div class="page">
+    <span class="back-link" onclick="history.back()">← ফিরে যান</span>
+    <div class="form-card" style="margin-top:12px;">
+      <h2 id="svcName">অর্ডার</h2>
+      <div class="pill" id="svcPrice" style="display:inline-block;margin-bottom:14px;">৳০</div>
+      <div id="dynFields"></div>
+      <div class="field">
+        <label>নোট (ঐচ্ছিক)</label>
+        <textarea id="notes" rows="2" placeholder="যেমন: দ্রুত লাগবে"></textarea>
+      </div>
+      <div class="field" id="docWrap" style="display:none;">
+        <label>ডকুমেন্ট আপলোড</label>
+        <div id="docList" style="color:var(--muted);font-size:13px;"></div>
+      </div>
+      <div class="err" id="err"></div>
+      <button class="btn" id="submitBtn">অর্ডার নিশ্চিত করুন →</button>
+    </div>
+  </div>
+</div>
+<script src="/js/app.js"></script>
+<script>
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+const sid=new URLSearchParams(location.search).get('service');
+let svc=null;
+async function init(){
+  const me=await ABC.api('/auth/me');
+  if(!me.ok){location.href='/login.html';return;}
+  const r=await ABC.api('/services/'+sid);
+  if(!r.ok){document.getElementById('err').textContent='সেবা পাওয়া যায়নি';return;}
+  svc=(await r.json()).service;
+  document.getElementById('svcName').textContent=svc.name_bn||svc.name;
+  document.getElementById('svcPrice').textContent='৳'+Number(svc.price).toLocaleString('bn-BD');
+  // Dynamic fields from service definition
+  const fields=svc.fields_required||[];
+  document.getElementById('dynFields').innerHTML=fields.map((f,i)=>
+    '<div class="field"><label>'+esc(f.label||f.name)+(f.required?' *':'')+'</label>'+
+    '<input type="text" data-field="'+esc(f.name)+'" placeholder="'+esc(f.placeholder||'')+'"></div>'
+  ).join('');
+  // Documents
+  const docs=svc.documents_required||[];
+  if(docs.length){
+    document.getElementById('docWrap').style.display='block';
+    document.getElementById('docList').innerHTML=docs.map(d=>'<div>📎 '+esc(d)+'</div>').join('')+
+      '<div style="font-size:12px;margin-top:6px;">(ডকুমেন্ট আপলোড শীঘ্রই আসছে — এখন শুধু তালিকা)</div>';
+  }
+  // Restore draft (survives refresh)
+  const draft=ABC.Drafts.load('order_'+sid);
+  if(draft){
+    document.querySelectorAll('[data-field]').forEach(el=>{
+      if(draft[el.dataset.field])el.value=draft[el.dataset.field];
+    });
+    if(draft.notes)document.getElementById('notes').value=draft.notes;
+  }
+  // Auto-save draft on input
+  document.querySelector('.form-card').addEventListener('input',()=>{
+    const d={notes:document.getElementById('notes').value};
+    document.querySelectorAll('[data-field]').forEach(el=>{d[el.dataset.field]=el.value;});
+    ABC.Drafts.save('order_'+sid,d);
+  });
+  document.getElementById('submitBtn').onclick=submit;
+}
+async function submit(){
+  const err=document.getElementById('err');
+  err.textContent='';
+  const data={};
+  document.querySelectorAll('[data-field]').forEach(el=>{data[el.dataset.field]=el.value.trim();});
+  const btn=document.getElementById('submitBtn');
+  btn.disabled=true;btn.textContent='প্রসেস হচ্ছে…';
+  const r=await ABC.api('/orders',{method:'POST',body:{
+    service_id:sid,data,notes:document.getElementById('notes').value.trim(),
+    documents:(svc.documents_required||[]).map(d=>({type:d,ref:''}))
+  }});
+  const d=await r.json();
+  btn.disabled=false;btn.textContent='অর্ডার নিশ্চিত করুন →';
+  if(!r.ok){
+    err.textContent=d.error==='INSUFFICIENT_BALANCE'?'⚠️ ব্যালেন্স কম! আগে রিচার্জ করুন।':
+      d.error==='MISSING_DOCUMENTS'?'⚠️ ডকুমেন্ট দিন: '+(d.missing||[]).join(', '):
+      d.error==='SERVICE_CLOSED'?'⚠️ সেবা এখন বন্ধ আছে':'❌ '+d.error;
+    return;
+  }
+  ABC.Drafts.clear('order_'+sid);
+  location.href='/order-status.html?id='+d.order.id;
+}
+init();
+</script>
+</body>
+</html>

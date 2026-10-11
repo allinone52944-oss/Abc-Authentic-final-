@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>এডমিন প্যানেল - All In One</title>
+<link rel="stylesheet" href="/css/coffee.css">
+</head>
+<body class="app">
+<div class="spiral"></div>
+<div class="app-shell" style="max-width:1400px;">
+  <div class="app-header">
+    <div class="brand">☕ এডমিন প্যানেল</div>
+    <div class="hdr-actions">
+      <button class="icon-btn" onclick="location.href='/dashboard.html'">🏠</button>
+      <button class="icon-btn" id="logoutBtn">⏻</button>
+    </div>
+  </div>
+  <div class="admin-tabs" id="tabs">
+    <div class="admin-tab active" data-t="stats">📊 ড্যাশবোর্ড</div>
+    <div class="admin-tab" data-t="users">👥 ইউজার</div>
+    <div class="admin-tab" data-t="orders">📦 অর্ডার</div>
+    <div class="admin-tab" data-t="services">🛎️ সেবা</div>
+    <div class="admin-tab" data-t="recharge">💳 রিচার্জ</div>
+    <div class="admin-tab" data-t="coupons">🎟️ কুপন</div>
+    <div class="admin-tab" data-t="banners">🖼️ ব্যানার</div>
+    <div class="admin-tab" data-t="notices">🔔 নোটিশ</div>
+    <div class="admin-tab" data-t="activity">📜 লগ</div>
+    <div class="admin-tab" data-t="settings">⚙️ সেটিংস</div>
+  </div>
+  <div class="page" id="content"><div style="color:var(--muted)">লোড হচ্ছে…</div></div>
+</div>
+<script src="/js/app.js"></script>
+<script src="/js/admin.js"></script>
+</body>
+</html>

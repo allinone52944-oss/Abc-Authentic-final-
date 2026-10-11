@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>অর্ডার বিস্তারিত - All In One</title>
+<link rel="stylesheet" href="/css/coffee.css">
+</head>
+<body class="app">
+<div class="spiral"></div>
+<div class="app-shell">
+  <div class="app-header">
+    <div class="brand">☕ অর্ডার বিস্তারিত</div>
+    <div class="hdr-actions"><button class="icon-btn" onclick="location.href='/dashboard.html'">🏠</button></div>
+  </div>
+  <div class="page">
+    <span class="back-link" onclick="location.href='/orders.html'">← অর্ডার তালিকা</span>
+    <div class="form-card" style="margin-top:12px;" id="detail"><div style="color:var(--muted)">লোড হচ্ছে…</div></div>
+    <div class="form-card" style="margin-top:14px;">
+      <h2>💬 মন্তব্য / অভিযোগ</h2>
+      <div class="chat-box" id="chatBox"><div style="color:var(--dim);font-size:13px;">কোনো বার্তা নেই</div></div>
+      <div class="chat-input">
+        <input type="text" id="chatIn" placeholder="লিখুন…" maxlength="2000">
+        <button onclick="sendChat()">পাঠান</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/js/app.js"></script>
+<script>
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+const STBN={new:'নতুন',pending:'অপেক্ষমান',processing:'প্রসেসিং',completed:'সম্পন্ন',delivered:'ডেলিভার্ড',failed:'ব্যর্থ',cancelled:'বাতিল',refunded:'রিফান্ডেড'};
+const oid=new URLSearchParams(location.search).get('id');
+async function init(){
+  const me=await ABC.api('/auth/me');
+  if(!me.ok){location.href='/login.html';return;}
+  const r=await ABC.api('/orders/'+oid);
+  if(!r.ok){document.getElementById('detail').innerHTML='<div class="err">অর্ডার পাওয়া যায়নি</div>';return;}
+  const {order:o}=await r.json();
+  const data=Object.entries(o.data||{}).map(([k,v])=>'<div class="s" style="color:var(--muted);font-size:13px;">'+esc(k)+': <b style="color:var(--cream)">'+esc(v)+'</b></div>').join('');
+  document.getElementById('detail').innerHTML=
+    '<h2>'+esc(o.service_name_bn||o.service_name)+'</h2>'+
+    '<div style="margin-bottom:10px;"><span class="badge st-'+o.status+'">'+(STBN[o.status]||o.status)+'</span> '+
+    '<span class="pill">৳'+Number(o.price).toLocaleString('bn-BD')+'</span></div>'+
+    '<div class="s" style="color:var(--muted);font-size:13px;">🕘 '+new Date(o.created_at).toLocaleString('bn-BD')+'</div>'+
+    '<div style="margin-top:10px;">'+data+'</div>'+
+    (o.notes?'<div style="color:var(--cream);font-size:14px;margin-top:8px;">📝 '+esc(o.notes)+'</div>':'')+
+    (o.admin_note?'<div style="color:var(--gold);font-size:14px;margin-top:8px;">👨‍💼 এডমিন: '+esc(o.admin_note)+'</div>':'');
+  loadChat();
+  document.getElementById('chatIn').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+}
+async function loadChat(){
+  const r=await ABC.api('/orders/'+oid+'/chat');
+  if(!r.ok)return;
+  const {messages}=await r.json();
+  const box=document.getElementById('chatBox');
+  if(!messages.length){box.innerHTML='<div style="color:var(--dim);font-size:13px;">কোনো বার্তা নেই — অভিযোগ বা প্রশ্ন থাকলে লিখুন</div>';return;}
+  box.innerHTML=messages.map(m=>
+    '<div class="chat-msg '+m.sender+'"><span class="b">'+esc(m.message)+'</span><div class="tm">'+new Date(m.created_at).toLocaleString('bn-BD')+'</div></div>'
+  ).join('');
+  box.scrollTop=box.scrollHeight;
+}
+async function sendChat(){
+  const inp=document.getElementById('chatIn');
+  const msg=inp.value.trim();
+  if(!msg)return;
+  inp.value='';
+  const r=await ABC.api('/orders/'+oid+'/chat',{method:'POST',body:{message:msg}});
+  if(r.ok)loadChat();
+}
+init();
+</script>
+</body>
+</html>

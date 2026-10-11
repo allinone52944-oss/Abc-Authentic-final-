@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ড্যাশবোর্ড - All In One (Abc Authentic)</title>
+<link rel="stylesheet" href="/css/coffee.css">
+</head>
+<body class="app">
+<div class="spiral"></div>
+<div class="gold-orb" style="width:260px;height:260px;top:6%;right:4%;"></div>
+
+<div class="app-shell">
+  <div class="app-header">
+    <div>
+      <div class="brand">☕ ALL IN ONE</div>
+      <div class="greet" id="greet">স্বাগতম</div>
+    </div>
+    <div class="hdr-actions">
+      <div class="pill" id="balancePill">৳০</div>
+      <button class="icon-btn" onclick="location.href='/profile.html'">👤</button>
+      <button class="icon-btn" id="logoutBtn">⏻</button>
+    </div>
+  </div>
+
+  <div class="hub-grid" id="hub">
+    <div class="hub-card" onclick="location.href='/wallet.html'">
+      <span class="go">➤</span>
+      <div class="emoji">💰</div>
+      <h3>ওয়ালেট</h3>
+      <div class="big" id="hubBalance">৳০</div>
+      <div class="sub">রিচার্জ • কুপন • হিসাব</div>
+    </div>
+    <div class="hub-card" onclick="location.href='/orders.html'">
+      <span class="go">➤</span>
+      <div class="emoji">📦</div>
+      <h3>অর্ডার</h3>
+      <div class="big" id="hubOrders">০</div>
+      <div class="sub" id="hubOrdersSub">সক্রিয় অর্ডার</div>
+    </div>
+    <div class="hub-card" onclick="location.href='/services.html'">
+      <span class="go">➤</span>
+      <div class="emoji">🛎️</div>
+      <h3>সেবা</h3>
+      <div class="big" id="hubServices">০</div>
+      <div class="sub">অটোমেটেড • ম্যানুয়াল</div>
+    </div>
+    <div class="hub-card wide" onclick="location.href='/services.html'">
+      <span class="go">➤</span>
+      <div class="emoji">⚡</div>
+      <h3>দ্রুত অর্ডার</h3>
+      <div class="sub" id="quickServices">সেবা লোড হচ্ছে…</div>
+    </div>
+    <div class="hub-card" onclick="showNotices()">
+      <span class="go">➤</span>
+      <div class="emoji">🔔</div>
+      <h3>নোটিশ</h3>
+      <div class="big" id="hubNotices">০</div>
+      <div class="sub">নতুন ঘোষণা</div>
+    </div>
+  </div>
+</div>
+
+<!-- WhatsApp FAB — THE BEST, uncommon animated -->
+<div class="wa-fab" id="waFab" title="WhatsApp">💬</div>
+
+<script src="/js/app.js"></script>
+<script>
+const GREETINGS = {
+  islam: 'আসসালামু আলাইকুম',
+  hindu: 'নমস্কার 🙏',
+  buddhist: 'নমো বুদ্ধায় 🙏',
+  christian: 'প্রভুর শান্তি ✝',
+  other: 'শুভেচ্ছা'
+};
+const bnNum = (n) => Number(n || 0).toLocaleString('bn-BD');
+
+async function init() {
+  const meR = await ABC.api('/auth/me');
+  if (!meR.ok) { location.href = '/login.html'; return; }
+  const { user } = await meR.json();
+  window._user = user;
+
+  // Religion greeting — once per login (session flag)
+  const gk = 'abc_greeted_' + user.id;
+  const greetEl = document.getElementById('greet');
+  if (!sessionStorage.getItem(gk)) {
+    const g = GREETINGS[user.religion] || GREETINGS.other;
+    greetEl.innerHTML = g + ' <small>' + escapeHtml(user.name) + '</small>';
+    greetEl.style.animation = 'cardIn 0.8s';
+    sessionStorage.setItem(gk, '1');
+  } else {
+    greetEl.innerHTML = 'স্বাগতম <small>' + escapeHtml(user.name) + '</small>';
+  }
+
+  document.getElementById('balancePill').textContent = '৳' + bnNum(user.balance);
+  document.getElementById('hubBalance').textContent = '৳' + bnNum(user.balance);
+
+  // Orders summary
+  const oR = await ABC.api('/orders?limit=1');
+  if (oR.ok) {
+    const d = await oR.json();
+    document.getElementById('hubOrders').textContent = bnNum(d.total);
+    const act = d.orders.filter(o => ['new','pending','processing'].includes(o.status)).length;
+    document.getElementById('hubOrdersSub').textContent = 'সক্রিয়: ' + bnNum(act);
+  }
+
+  // Services
+  const sR = await ABC.api('/services');
+  if (sR.ok) {
+    const d = await sR.json();
+    document.getElementById('hubServices').textContent = bnNum(d.services.length);
+    const names = d.services.slice(0, 3).map(s => s.name_bn || s.name).join(' • ');
+    document.getElementById('quickServices').textContent = names || 'কোনো সেবা নেই';
+  }
+
+  // Notices
+  const nR = await ABC.api('/notices');
+  if (nR.ok) {
+    const d = await nR.json();
+    document.getElementById('hubNotices').textContent = bnNum(d.notices.length);
+  }
+
+  // WhatsApp FAB — auto user info
+  document.getElementById('waFab').onclick = () => {
+    const text = 'আসসালামু আলাইকুম! আমি ' + user.name +
+      ' (ID: ' + user.id.slice(0, 8) + ', ফোন: ' + user.phone + ')। সাহায্য দরকার।';
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+  };
+
+  document.getElementById('logoutBtn').onclick = async () => {
+    const rt = localStorage.getItem('abc_refresh_token');
+    await ABC.api('/auth/logout', { method: 'POST', body: { refresh_token: rt } });
+    ABC.clearTokens();
+    location.href = '/login.html';
+  };
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+async function showNotices() {
+  const r = await ABC.api('/notices');
+  const d = r.ok ? await r.json() : { notices: [] };
+  const list = d.notices.map(n =>
+    '<li><b>' + escapeHtml(n.title) + '</b><br>' + escapeHtml(n.message) + '</li>'
+  ).join('') || '<li>কোনো নোটিশ নেই</li>';
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.innerHTML = '<div class="modal"><h3>🔔 নোটিশ</h3><ul style="padding-left:18px;">' +
+    list + '</ul><button class="btn" onclick="this.closest(\'.modal-bg\').remove()">বন্ধ করুন</button></div>';
+  bg.onclick = (e) => { if (e.target === bg) bg.remove(); };
+  document.body.appendChild(bg);
+}
+
+init();
+</script>
+</body>
+</html>

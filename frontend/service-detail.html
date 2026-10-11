@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>সেবার বিস্তারিত - All In One</title>
+<link rel="stylesheet" href="/css/coffee.css">
+</head>
+<body class="app">
+<div class="spiral"></div>
+<div class="app-shell">
+  <div class="app-header">
+    <div class="brand">☕ সেবার বিস্তারিত</div>
+    <div class="hdr-actions"><button class="icon-btn" onclick="location.href='/dashboard.html'">🏠</button></div>
+  </div>
+  <div class="page">
+    <span class="back-link" onclick="location.href='/services.html'">← সেবা সমূহ</span>
+    <div class="form-card" id="detail" style="margin-top:12px;"><div style="color:var(--muted)">লোড হচ্ছে…</div></div>
+  </div>
+</div>
+<div class="wa-fab" id="waFab">💬</div>
+<script src="/js/app.js"></script>
+<script>
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+const id=new URLSearchParams(location.search).get('id');
+async function init(){
+  const me=await ABC.api('/auth/me');
+  if(!me.ok){location.href='/login.html';return;}
+  const u=(await me.json()).user;
+  document.getElementById('waFab').onclick=()=>{
+    window.open('https://wa.me/?text='+encodeURIComponent('আমি '+u.name+' (ফোন: '+u.phone+')। সেবা সম্পর্কে জানতে চাই।'),'_blank');
+  };
+  const r=await ABC.api('/services/'+id);
+  if(!r.ok){document.getElementById('detail').innerHTML='<div class="err">সেবা পাওয়া যায়নি</div>';return;}
+  const {service:s}=await r.json();
+  const docs=(s.documents_required||[]).map(d=>'<li>'+esc(d)+'</li>').join('')||'<li>কোনো ডকুমেন্ট লাগবে না</li>';
+  const sched=s.schedule&&s.schedule.open?('<div class="s" style="color:var(--muted);font-size:13px;margin-top:8px;">🕘 খোলা: '+esc(s.schedule.open)+' - '+esc(s.schedule.close||'')+'</div>'):'';
+  document.getElementById('detail').innerHTML=
+    '<h2>'+esc(s.name_bn||s.name)+'</h2>'+
+    '<div style="margin-bottom:12px;"><span class="badge '+(s.type==='manual'?'manual':'')+'">'+(s.type==='manual'?'ম্যানুয়াল':'অটোমেটেড')+'</span> '+
+    '<span class="pill">৳'+Number(s.price).toLocaleString('bn-BD')+'</span></div>'+
+    '<div style="color:var(--cream);font-size:14px;margin-bottom:10px;"><b style="color:var(--gold)">প্রয়োজনীয় ডকুমেন্ট:</b><ul style="padding-left:18px;margin-top:6px;">'+docs+'</ul></div>'+
+    sched+
+    '<button class="btn-secondary" onclick="showRules()">📜 নিয়মাবলী দেখুন</button>'+
+    (s.open?'<button class="btn" onclick="location.href=\'/order-create.html?service='+s.id+'\'">অর্ডার করুন →</button>'
+           :'<div class="err" style="margin-top:12px;">এই সেবা এখন বন্ধ আছে</div>');
+  window._rules=s.rules_text||'কোনো বিশেষ নিয়ম নেই।';
+}
+function showRules(){
+  const bg=document.createElement('div');
+  bg.className='modal-bg';
+  bg.innerHTML='<div class="modal"><h3>📜 নিয়মাবলী</h3><p>'+esc(window._rules).replace(/\n/g,'<br>')+'</p><button class="btn" onclick="this.closest(\'.modal-bg\').remove()">বুঝেছি</button></div>';
+  bg.onclick=(e)=>{if(e.target===bg)bg.remove();};
+  document.body.appendChild(bg);
+}
+init();
+</script>
+</body>
+</html>

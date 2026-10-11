@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>সেবা - All In One</title>
+<link rel="stylesheet" href="/css/coffee.css">
+</head>
+<body class="app">
+<div class="spiral"></div>
+<div class="app-shell">
+  <div class="app-header">
+    <div class="brand">☕ সেবা সমূহ</div>
+    <div class="hdr-actions">
+      <button class="icon-btn" onclick="location.href='/dashboard.html'">🏠</button>
+    </div>
+  </div>
+  <div class="page">
+    <span class="back-link" onclick="location.href='/dashboard.html'">← ড্যাশবোর্ড</span>
+    <h3 style="color:var(--gold);margin:14px 0 10px;">⚡ অটোমেটেড</h3>
+    <div id="autoList"></div>
+    <h3 style="color:#40e0d0;margin:18px 0 10px;">🔧 ম্যানুয়াল</h3>
+    <div id="manualList"></div>
+  </div>
+</div>
+<div class="wa-fab" id="waFab">💬</div>
+<script src="/js/app.js"></script>
+<script>
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function card(s){
+  const open = s.open ? '' : ' <span class="badge">বন্ধ</span>';
+  return '<div class="list-row" onclick="location.href=\'/service-detail.html?id='+s.id+'\'>'+
+    '<div><div class="t">'+esc(s.name_bn||s.name)+'</div>'+
+    '<div class="s">৳'+Number(s.price).toLocaleString('bn-BD')+(s.open?'':' • এখন বন্ধ')+'</div></div>'+
+    '<span class="badge '+(s.type==='manual'?'manual':'')+'">'+(s.type==='manual'?'ম্যানুয়াল':'অটোমেটেড')+'</span>'+open+'</div>';
+}
+async function init(){
+  const me = await ABC.api('/auth/me');
+  if(!me.ok){location.href='/login.html';return;}
+  const u=(await me.json()).user;
+  document.getElementById('waFab').onclick=()=>{
+    window.open('https://wa.me/?text='+encodeURIComponent('আমি '+u.name+' (ID: '+u.id.slice(0,8)+', ফোন: '+u.phone+')। সেবা সম্পর্কে জানতে চাই।'),'_blank');
+  };
+  const r=await ABC.api('/services');
+  if(!r.ok)return;
+  const {services}=await r.json();
+  const auto=services.filter(s=>s.type==='automated');
+  const manual=services.filter(s=>s.type==='manual');
+  document.getElementById('autoList').innerHTML=auto.map(card).join('')||'<div class="sub" style="color:var(--muted)">কোনো অটোমেটেড সেবা নেই</div>';
+  document.getElementById('manualList').innerHTML=manual.map(card).join('')||'<div class="sub" style="color:var(--muted)">কোনো ম্যানুয়াল সেবা নেই</div>';
+}
+init();
+</script>
+</body>
+</html>

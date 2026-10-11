@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>আমার অর্ডার - All In One</title>
+<link rel="stylesheet" href="/css/coffee.css">
+</head>
+<body class="app">
+<div class="spiral"></div>
+<div class="app-shell">
+  <div class="app-header">
+    <div class="brand">☕ আমার অর্ডার</div>
+    <div class="hdr-actions"><button class="icon-btn" onclick="location.href='/dashboard.html'">🏠</button></div>
+  </div>
+  <div class="page">
+    <span class="back-link" onclick="location.href='/dashboard.html'">← ড্যাশবোর্ড</span>
+    <div style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;" id="filters">
+      <button class="mini-btn" data-st="">সব</button>
+      <button class="mini-btn" data-st="new">নতুন</button>
+      <button class="mini-btn" data-st="pending">অপেক্ষমান</button>
+      <button class="mini-btn" data-st="processing">প্রসেসিং</button>
+      <button class="mini-btn" data-st="completed">সম্পন্ন</button>
+      <button class="mini-btn" data-st="delivered">ডেলিভার্ড</button>
+    </div>
+    <div id="list"></div>
+    <div style="text-align:center;margin-top:12px;">
+      <button class="btn-secondary" id="moreBtn" style="max-width:280px;margin:0 auto;">আরো দেখুন</button>
+    </div>
+  </div>
+</div>
+<script src="/js/app.js"></script>
+<script>
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+const STBN={new:'নতুন',pending:'অপেক্ষমান',processing:'প্রসেসিং',completed:'সম্পন্ন',delivered:'ডেলিভার্ড',failed:'ব্যর্থ',cancelled:'বাতিল',refunded:'রিফান্ডেড'};
+let page=1,status='';
+async function init(){
+  const me=await ABC.api('/auth/me');
+  if(!me.ok){location.href='/login.html';return;}
+  document.querySelectorAll('#filters .mini-btn').forEach(b=>{
+    b.onclick=()=>{status=b.dataset.st;page=1;document.getElementById('list').innerHTML='';load();};
+  });
+  document.getElementById('moreBtn').onclick=()=>{page++;load();};
+  load();
+}
+async function load(){
+  const r=await ABC.api('/orders?limit=10&page='+page+(status?'&status='+status:''));
+  if(!r.ok)return;
+  const d=await r.json();
+  const html=d.orders.map(o=>
+    '<div class="list-row" onclick="location.href=\'/order-detail.html?id='+o.id+'\'">'+
+    '<div><div class="t">'+esc(o.service_name_bn||o.service_name)+'</div>'+
+    '<div class="s">'+new Date(o.created_at).toLocaleString('bn-BD')+' • ৳'+Number(o.price).toLocaleString('bn-BD')+'</div></div>'+
+    '<span class="badge st-'+o.status+'">'+(STBN[o.status]||o.status)+'</span></div>'
+  ).join('');
+  document.getElementById('list').insertAdjacentHTML('beforeend',html);
+  document.getElementById('moreBtn').style.display=(page*10>=d.total)?'none':'block';
+  if(!d.orders.length&&page===1)document.getElementById('list').innerHTML='<div style="color:var(--muted);text-align:center;padding:30px;">কোনো অর্ডার নেই</div>';
+}
+init();
+</script>
+</body>
+</html>

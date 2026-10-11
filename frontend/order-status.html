@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>অর্ডার স্ট্যাটাস - All In One</title>
+<link rel="stylesheet" href="/css/coffee.css">
+</head>
+<body class="app">
+<div class="spiral"></div>
+<div class="gold-orb" style="width:300px;height:300px;top:20%;left:30%;"></div>
+<div class="app-shell">
+  <div class="app-header">
+    <div class="brand">☕ অর্ডার স্ট্যাটাস</div>
+    <div class="hdr-actions"><button class="icon-btn" onclick="location.href='/dashboard.html'">🏠</button></div>
+  </div>
+  <div class="page">
+    <div class="status-stage">
+      <div class="status-orb" id="orb">📦</div>
+      <h2 style="color:var(--gold);" id="stTitle">অর্ডার পৌঁছেছে!</h2>
+      <p style="color:var(--muted);font-size:14px;" id="stSub">আপনার অর্ডার গ্রহণ করা হয়েছে</p>
+      <div class="status-steps" id="steps"></div>
+      <div class="timeline" id="timeline"></div>
+      <div style="margin-top:24px;">
+        <button class="btn" style="max-width:320px;margin:0 auto;" onclick="location.href='/order-detail.html?id='+oid">বিস্তারিত দেখুন →</button>
+        <div style="margin-top:10px;"><span class="back-link" onclick="location.href='/dashboard.html'">ড্যাশবোর্ডে ফিরুন</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/js/app.js"></script>
+<script>
+const oid=new URLSearchParams(location.search).get('id');
+const FLOW=[
+  {k:'new',t:'নতুন',e:'📥'},
+  {k:'pending',t:'অপেক্ষমান',e:'⏳'},
+  {k:'processing',t:'প্রসেসিং',e:'⚙️'},
+  {k:'completed',t:'সম্পন্ন',e:'✅'},
+  {k:'delivered',t:'ডেলিভার্ড',e:'🎉'},
+];
+const END={failed:['ব্যর্থ','❌'],cancelled:['বাতিল','🚫'],refunded:['রিফান্ডেড','💸']};
+async function init(){
+  const me=await ABC.api('/auth/me');
+  if(!me.ok){location.href='/login.html';return;}
+  const r=await ABC.api('/orders/'+oid);
+  if(!r.ok){document.getElementById('stTitle').textContent='অর্ডার পাওয়া যায়নি';return;}
+  const {order:o}=await r.json();
+  render(o);
+  // Poll for updates every 10s (animation follows status)
+  setInterval(async()=>{
+    const rr=await ABC.api('/orders/'+oid);
+    if(rr.ok){const dd=await rr.json();render(dd.order);}
+  },10000);
+}
+function render(o){
+  const st=o.status;
+  let label,emoji;
+  if(END[st]){[label,emoji]=END[st];}
+  else{
+    const f=FLOW.find(x=>x.k===st)||FLOW[0];
+    label=f.t;emoji=f.e;
+  }
+  document.getElementById('orb').textContent=emoji;
+  document.getElementById('stTitle').textContent='অর্ডার: '+label;
+  document.getElementById('stSub').textContent=(o.service_name_bn||o.service_name||'')+' • ৳'+Number(o.price).toLocaleString('bn-BD');
+  const idx=FLOW.findIndex(x=>x.k===st);
+  document.getElementById('steps').innerHTML=FLOW.map((f,i)=>{
+    const cls=END[st]?'':(i<idx?'done':(i===idx?'now':''));
+    return '<span class="step-dot '+cls+'">'+f.e+' '+f.t+'</span>';
+  }).join('');
+  const tl=[
+    {t:'অর্ডার তৈরি',s:new Date(o.created_at).toLocaleString('bn-BD'),on:true},
+    {t:'স্ট্যাটাস: '+label,s:'আপডেট: '+new Date(o.updated_at).toLocaleString('bn-BD'),on:true},
+  ];
+  if(o.admin_note)tl.push({t:'এডমিন নোট',s:o.admin_note,on:true});
+  document.getElementById('timeline').innerHTML=tl.map(x=>
+    '<div class="tl-item '+(x.on?'on':'')+'"><div class="tl-dot"></div><div><div class="tt">'+x.t+'</div><div class="ts">'+x.s+'</div></div></div>'
+  ).join('');
+}
+init();
+</script>
+</body>
+</html>

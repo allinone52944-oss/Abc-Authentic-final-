@@ -33,39 +33,51 @@
   <div id="tab-login">
     <div class="field">
       <label>মোবাইল নম্বর / ইমেইল</label>
-      <input type="text" placeholder="01XXXXXXXXX">
+      <input type="text" id="li_login" placeholder="01XXXXXXXXX">
     </div>
     <div class="field">
       <label>পাসওয়ার্ড</label>
-      <input type="password" placeholder="••••••••">
+      <input type="password" id="li_pw" placeholder="••••••••">
     </div>
-    <button class="btn">প্রবেশ করুন →</button>
-    <div class="note">Forgot password? <span>Profile-এর ভেতরে পাবেন</span><br>নিরাপদ লগইন • OTP verified</div>
+    <div class="err" id="li_err"></div>
+    <button class="btn" id="li_btn" onclick="doLogin()">প্রবেশ করুন →</button>
+    <div class="note">পাসওয়ার্ড ভুলে গেলে? <span>লগইন করে প্রোফাইলের ভেতরে রিসেট করুন</span><br>নিরাপদ লগইন • OTP verified</div>
   </div>
 
   <!-- REGISTRATION -->
   <div id="tab-reg" class="hidden">
     <div class="field">
       <label>নাম *</label>
-      <input type="text" placeholder="আপনার নাম">
+      <input type="text" id="rg_name" placeholder="আপনার নাম">
     </div>
     <div class="field">
       <label>মোবাইল নম্বর *</label>
-      <input type="text" placeholder="01XXXXXXXXX">
+      <input type="text" id="rg_phone" placeholder="01XXXXXXXXX">
     </div>
     <div class="field">
       <label>WhatsApp নম্বর * <span style="color:#ff6b6b;font-size:11px;">বাধ্যতামূলক</span></label>
-      <input type="text" placeholder="01XXXXXXXXX" style="border-color: rgba(212,175,55,0.5);">
+      <input type="text" id="rg_wa" placeholder="01XXXXXXXXX" style="border-color: rgba(212,175,55,0.5);">
     </div>
     <div class="field">
       <label>ইমেইল *</label>
-      <input type="email" placeholder="email@example.com">
+      <input type="email" id="rg_email" placeholder="email@example.com">
+    </div>
+    <div class="field">
+      <label>ধর্ম</label>
+      <select id="rg_religion" style="width:100%;padding:15px 18px;background:rgba(0,0,0,0.4);border:1px solid rgba(212,175,55,0.25);border-radius:12px;color:#f5e6c8;font-size:15px;outline:none;">
+        <option value="islam">ইসলাম</option>
+        <option value="hindu">হিন্দু</option>
+        <option value="buddhist">বৌদ্ধ</option>
+        <option value="christian">খ্রিস্টান</option>
+        <option value="other">অন্যান্য</option>
+      </select>
     </div>
     <div class="field">
       <label>পাসওয়ার্ড *</label>
-      <input type="password" placeholder="••••••••">
+      <input type="password" id="rg_pw" placeholder="••••••••">
     </div>
-    <button class="btn">রেজিস্টার করুন →</button>
+    <div class="err" id="rg_err"></div>
+    <button class="btn" id="rg_btn" onclick="doRegister()">রেজিস্টার করুন →</button>
     <div class="note">OTP দিয়ে verify হবে<br><span>Admin control:</span> OFF থাকলে শুধু Login দেখাবে</div>
   </div>
 </div>
@@ -78,8 +90,79 @@ function showTab(name, el) {
   document.getElementById('tab-login').classList.toggle('hidden', name !== 'login');
   document.getElementById('tab-reg').classList.toggle('hidden', name !== 'reg');
 }
-// Phase 2: forms will POST to /api/auth/login and /api/auth/register
-// with rate limiting + OTP verification on the backend.
+
+const ERRBN = {
+  INVALID_CREDENTIALS: 'ভুল নম্বর/ইমেইল বা পাসওয়ার্ড',
+  ACCOUNT_LOCKED: 'অনেকবার ভুল হয়েছে — কিছুক্ষণ পর চেষ্টা করুন',
+  ACCOUNT_DISABLED: 'অ্যাকাউন্ট বন্ধ আছে — এডমিনের সাথে যোগাযোগ করুন',
+  REGISTRATION_DISABLED: 'রেজিস্ট্রেশন এখন বন্ধ আছে',
+  ALREADY_REGISTERED: 'এই নম্বর/ইমেইল দিয়ে আগেই রেজিস্টার করা হয়েছে',
+  INVALID_PHONE: 'সঠিক মোবাইল নম্বর দিন (01XXXXXXXXX)',
+  INVALID_WHATSAPP: 'সঠিক WhatsApp নম্বর দিন (বাধ্যতামূলক)',
+  INVALID_EMAIL: 'সঠিক ইমেইল দিন',
+  WEAK_PASSWORD: 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে',
+  INVALID_NAME: 'সঠিক নাম লিখুন',
+  TOO_MANY_ATTEMPTS: 'অনেক চেষ্টা হয়েছে — কিছুক্ষণ পর আবার চেষ্টা করুন',
+};
+
+async function doLogin() {
+  const err = document.getElementById('li_err');
+  const btn = document.getElementById('li_btn');
+  err.textContent = '';
+  const login = document.getElementById('li_login').value.trim();
+  const password = document.getElementById('li_pw').value;
+  if (!login || !password) { err.textContent = 'নম্বর ও পাসওয়ার্ড দিন'; return; }
+  btn.disabled = true; btn.textContent = 'যাচাই হচ্ছে…';
+  try {
+    const r = await ABC.api('/auth/login', { method: 'POST', body: { login, password } });
+    const d = await r.json();
+    if (!r.ok) { err.textContent = ERRBN[d.error] || ('ত্রুটি: ' + d.error); return; }
+    ABC.setTokens(d.access_token, d.refresh_token);
+    location.href = d.user.role === 'admin' ? '/admin.html' : '/dashboard.html';
+  } catch (e) { err.textContent = 'সংযোগ ব্যর্থ — আবার চেষ্টা করুন'; }
+  finally { btn.disabled = false; btn.textContent = 'প্রবেশ করুন →'; }
+}
+
+async function doRegister() {
+  const err = document.getElementById('rg_err');
+  const btn = document.getElementById('rg_btn');
+  err.textContent = '';
+  const body = {
+    name: document.getElementById('rg_name').value.trim(),
+    phone: document.getElementById('rg_phone').value.trim(),
+    whatsapp: document.getElementById('rg_wa').value.trim(),
+    email: document.getElementById('rg_email').value.trim(),
+    religion: document.getElementById('rg_religion').value,
+    password: document.getElementById('rg_pw').value,
+  };
+  btn.disabled = true; btn.textContent = 'তৈরি হচ্ছে…';
+  try {
+    const r = await ABC.api('/auth/register', { method: 'POST', body });
+    const d = await r.json();
+    if (!r.ok) { err.textContent = ERRBN[d.error] || ('ত্রুটি: ' + d.error); return; }
+    ABC.setTokens(d.access_token, d.refresh_token);
+    location.href = '/dashboard.html';
+  } catch (e) { err.textContent = 'সংযোগ ব্যর্থ — আবার চেষ্টা করুন'; }
+  finally { btn.disabled = false; btn.textContent = 'রেজিস্টার করুন →'; }
+}
+
+// Enter key submits
+document.getElementById('li_pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('rg_pw').addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });
+
+// If registration is OFF, hide the register tab (admin control)
+(async () => {
+  try {
+    const r = await fetch('/api/public/settings');
+    const s = await r.json();
+    if (s.registration_enabled && s.registration_enabled.enabled === false) {
+      document.querySelectorAll('.tab')[1].style.display = 'none';
+    }
+    if (s.maintenance_mode && s.maintenance_mode.enabled) {
+      document.getElementById('li_err').textContent = '🔧 ' + (s.maintenance_mode.message || 'সাইট এখন মেনটেনেন্সে আছে');
+    }
+  } catch (e) {}
+})();
 </script>
 </body>
 </html>

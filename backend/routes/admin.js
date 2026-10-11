@@ -1,0 +1,662 @@
+// ============================================================
+// All In One (Abc Authentic) - Admin routes (Phase 2)
+// Mounted at /api/admin with requireAuth + requireAdmin.
+// Self-protection: admin CANNOT delete self, CANNOT change own
+// role. All sensitive actions logged to activity_log.
+// ============================================================
+const express = require('express');
+const db = require('../db');
+const { requireAuth, requireAdmin, hashPassword } = require('../auth');
+const { safeLog } = require('../security');
+
+const router = express.Router();
+router.use(requireAuth, requireAdmin);
+
+// ---- activity log helper --------------------------------------
+async function logActivity(adminId, action, details) {
+  try {
+    await db.query(
+      'INSERT INTO activity_log (admin_id, action, details) VALUES ($1, $2, $3)',
+      [adminId, action, JSON.stringify(details || {})]
+    );
+  } catch (e) { safeLog('[admin] log failed:', e.message); }
+}
+
+function pageParams(req) {
+  const page = Math.max(1, parseInt(req.query.page || '1', 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '20', 10) || 20));
+  return { page, limit, offset: (page - 1) * limit };
+}
+
+// ============================================================
+// USERS
+// ============================================================
+
+// GET /api/admin/users?q=&status=&page=
+router.get('/users', async (req, res) => {
+  try {
+    const { page, limit, offset } = pageParams(req);
+    const q = (req.query.q || '').trim();
+    const status = req.query.status;
+    const conds = [];
+    const params = [];
+    let i = 1;
+    if (q) {
+      conds.push(`(name ILIKE $${i} OR phone ILIKE $${i} OR email ILIKE $${i})`);
+      params.push('%' + q + '%'); i++;
+    }
+    if (status && ['active', 'disabled', 'blocked', 'pending'].includes(status)) {
+      conds.push(`status = $${i++}`); params.push(status);
+    }
+    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+    const total = await db.query(`SELECT COUNT(*) FROM users ${where}`, params);
+    const rows = await db.query(
+      `SELECT id, name, phone, whatsapp, email, religion, gender, role,
+              balance, status, login_enabled, email_verified, created_at
+       FROM users ${where} ORDER BY created_at DESC LIMIT $${i} OFFSET $${i + 1}`,
+      [...params, limit, offset]
+    );
+    res.json({ users: rows.rows, total: parseInt(total.rows[0].count, 10), page, limit });
+  } catch (e) {
+    safeLog('[admin] users list error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// POST /api/admin/users (admin creates user)
+router.post('/users', async (req, res) => {
+  try {
+    const { name, phone, whatsapp, email, password, religion, role } = req.body || {};
+    if (!name || !/^01[3-9]\d{8}$/.test(String(phone || '').trim())) {
+      return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
+    if (!/^01[3-9]\d{8}$/.test(String(whatsapp || '').trim())) {
+      return res.status(400).json({ error: 'INVALID_WHATSAPP' });
+    }
+    if (!password || String(password).length < 6) {
+      return res.status(400).json({ error: 'WEAK_PASSWORD' });
+    }
+    const r = await db.query('SELECT id FROM users WHERE phone = $1 LIMIT 1', [String(phone).trim()]);
+    if (r.rows.length) return res.status(409).json({ error: 'PHONE_TAKEN' });
+
+    const password_hash = await hashPassword(String(password));
+    const ins = await db.query(
+      `INSERT INTO users (name, phone, whatsapp, email, password_hash, religion, role, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'active')
+       RETURNING id, name, phone, whatsapp, email, religion, role, balance, status, created_at`,
+      [String(name).trim(), String(phone).trim(), String(whatsapp).trim(),
+       email ? String(email).trim().toLowerCase() : null,
+       password_hash, religion || 'other', role === 'admin' ? 'admin' : 'user']
+    );
+    await logActivity(req.user.id, 'user.create', { user_id: ins.rows[0].id, phone });
+    res.status(201).json({ user: ins.rows[0] });
+  } catch (e) {
+    safeLog('[admin] user create error:', e.message);
+    res.status(500).json({ error: 'CREATE_FAILED' });
+  }
+});
+
+// PUT /api/admin/users/:id
+router.put('/users/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { name, religion, role, status, login_enabled, balance_adjust, admin_note } = req.body || {};
+
+    const cur = await db.query('SELECT * FROM users WHERE id = $1', [id]);
+    if (!cur.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    const target = cur.rows[0];
+    const isSelf = target.id === req.user.id;
+
+    // Self-protection: cannot change own role
+    if (isSelf && role && role !== target.role) {
+      return res.status(403).json({ error: 'ERR_CANNOT_CHANGE_OWN_ROLE' });
+    }
+    // Self-protection: cannot disable own account
+    if (isSelf && (status === 'disabled' || status === 'blocked' || login_enabled === false)) {
+      return res.status(403).json({ error: 'ERR_CANNOT_DISABLE_SELF' });
+    }
+
+    const sets = [];
+    const params = [];
+    let i = 1;
+    const changes = {};
+
+    if (name !== undefined) { sets.push(`name = $${i++}`); params.push(String(name).trim()); changes.name = name; }
+    if (religion !== undefined) { sets.push(`religion = $${i++}`); params.push(religion); changes.religion = religion; }
+    if (role !== undefined && ['admin', 'user'].includes(role)) {
+      sets.push(`role = $${i++}`); params.push(role); changes.role = role;
+    }
+    if (status !== undefined && ['active', 'disabled', 'blocked', 'pending'].includes(status)) {
+      sets.push(`status = $${i++}`); params.push(status); changes.status = status;
+    }
+    if (login_enabled !== undefined) {
+      sets.push(`login_enabled = $${i++}`); params.push(!!login_enabled); changes.login_enabled = !!login_enabled;
+    }
+
+    // Balance adjustment (atomic, logged)
+    if (balance_adjust !== undefined && Number(balance_adjust) !== 0) {
+      const amt = Number(balance_adjust);
+      const w = await db.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
+        id, amt, amt > 0 ? 'bonus' : 'debit', 'admin-adjust-' + Date.now(),
+      ]).catch((e) => ({ error: e }));
+      if (w.error) {
+        return res.status(400).json({ error: w.error.message || 'BALANCE_FAILED' });
+      }
+      changes.balance_adjust = amt;
+    }
+
+    // Per-service price / access overrides
+    if (req.body.service_overrides && typeof req.body.service_overrides === 'object') {
+      for (const [serviceId, ov] of Object.entries(req.body.service_overrides)) {
+        await db.query(
+          `INSERT INTO user_services (user_id, service_id, custom_price, access_enabled)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (user_id, service_id)
+           DO UPDATE SET custom_price = EXCLUDED.custom_price,
+                         access_enabled = EXCLUDED.access_enabled`,
+          [id, serviceId,
+           ov.custom_price === null || ov.custom_price === undefined ? null : Number(ov.custom_price),
+           ov.access_enabled !== false]
+        );
+      }
+      changes.service_overrides = Object.keys(req.body.service_overrides).length;
+    }
+
+    // Per-user notice
+    if (req.body.notice) {
+      await db.query('INSERT INTO notices (user_id, title, message) VALUES ($1, $2, $3)',
+        [id, req.body.notice.title || 'নোটিশ', req.body.notice.message || '']);
+      changes.notice = true;
+    }
+
+    if (sets.length) {
+      params.push(id);
+      await db.query(`UPDATE users SET ${sets.join(', ')} WHERE id = $${i}`, params);
+    }
+
+    await logActivity(req.user.id, 'user.update', { user_id: id, changes });
+    const fresh = await db.query(
+      `SELECT id, name, phone, whatsapp, email, religion, role, balance, status,
+              login_enabled, created_at FROM users WHERE id = $1`, [id]);
+    res.json({ user: fresh.rows[0] });
+  } catch (e) {
+    safeLog('[admin] user update error:', e.message);
+    res.status(500).json({ error: 'UPDATE_FAILED' });
+  }
+});
+
+// POST /api/admin/users/:id/unblock (admin unblocks login-locked user)
+router.post('/users/:id/unblock', async (req, res) => {
+  try {
+    await db.query(
+      'UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = $1',
+      [req.params.id]
+    );
+    await logActivity(req.user.id, 'user.unblock', { user_id: req.params.id });
+    res.json({ ok: true });
+  } catch (e) {
+    safeLog('[admin] unblock error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// DELETE /api/admin/users/:id?confirm=yes — deletes user + ALL data
+router.delete('/users/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (id === req.user.id) {
+      return res.status(403).json({ error: 'ERR_CANNOT_DELETE_SELF' });
+    }
+    if (req.query.confirm !== 'yes') {
+      return res.status(400).json({ error: 'CONFIRM_REQUIRED' });
+    }
+    const cur = await db.query('SELECT id, phone, name FROM users WHERE id = $1', [id]);
+    if (!cur.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+
+    // Count what will be deleted (for the log)
+    const counts = await db.query(
+      `SELECT (SELECT COUNT(*) FROM orders WHERE user_id = $1) AS orders,
+              (SELECT COUNT(*) FROM transactions WHERE user_id = $1) AS transactions,
+              (SELECT COUNT(*) FROM coupons WHERE user_id = $1) AS coupons,
+              (SELECT COUNT(*) FROM notices WHERE user_id = $1) AS notices,
+              (SELECT COUNT(*) FROM chat_messages WHERE user_id = $1) AS chat`,
+      [id]
+    );
+
+    // ON DELETE CASCADE handles: user_services, orders, transactions,
+    // coupons(user_id), notices(user_id), chat_messages, refresh_tokens.
+    // Explicitly clear anything else first.
+    await db.query('DELETE FROM users WHERE id = $1', [id]);
+
+    await logActivity(req.user.id, 'user.delete', {
+      user_id: id, phone: cur.rows[0].phone, name: cur.rows[0].name,
+      deleted: counts.rows[0],
+    });
+    res.json({ ok: true, deleted: counts.rows[0] });
+  } catch (e) {
+    safeLog('[admin] user delete error:', e.message);
+    res.status(500).json({ error: 'DELETE_FAILED' });
+  }
+});
+
+// ============================================================
+// ORDERS
+// ============================================================
+
+// GET /api/admin/orders?status=&q=&page=
+router.get('/orders', async (req, res) => {
+  try {
+    const { page, limit, offset } = pageParams(req);
+    const conds = [];
+    const params = [];
+    let i = 1;
+    if (req.query.status) { conds.push(`o.status = $${i++}`); params.push(req.query.status); }
+    if (req.query.q) {
+      conds.push(`(u.name ILIKE $${i} OR u.phone ILIKE $${i} OR s.name ILIKE $${i})`);
+      params.push('%' + req.query.q.trim() + '%'); i++;
+    }
+    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+    const total = await db.query(
+      `SELECT COUNT(*) FROM orders o JOIN users u ON u.id = o.user_id
+       JOIN services s ON s.id = o.service_id ${where}`, params);
+    const rows = await db.query(
+      `SELECT o.*, u.name AS user_name, u.phone AS user_phone,
+              s.name AS service_name, s.name_bn AS service_name_bn
+       FROM orders o JOIN users u ON u.id = o.user_id
+       JOIN services s ON s.id = o.service_id
+       ${where} ORDER BY o.created_at DESC LIMIT $${i} OFFSET $${i + 1}`,
+      [...params, limit, offset]);
+    res.json({ orders: rows.rows, total: parseInt(total.rows[0].count, 10), page, limit });
+  } catch (e) {
+    safeLog('[admin] orders list error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// PUT /api/admin/orders/:id/status
+const ORDER_STATUSES = ['new', 'pending', 'processing', 'completed', 'delivered', 'failed', 'cancelled', 'refunded'];
+router.put('/orders/:id/status', async (req, res) => {
+  try {
+    const { status, admin_note } = req.body || {};
+    if (!ORDER_STATUSES.includes(status)) {
+      return res.status(400).json({ error: 'INVALID_STATUS' });
+    }
+    const r = await db.query(
+      `UPDATE orders SET status = $1, admin_note = COALESCE($2, admin_note)
+       WHERE id = $3 RETURNING *`,
+      [status, admin_note || null, req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+
+    // Refund: credit the order price back to wallet (idempotent via wallet_apply)
+    if (status === 'refunded') {
+      try {
+        await db.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
+          r.rows[0].user_id, Number(r.rows[0].price), 'refund', 'refund-' + r.rows[0].id,
+        ]);
+      } catch (e) { safeLog('[admin] refund credit skipped:', e.message); }
+    }
+
+    await logActivity(req.user.id, 'order.status', {
+      order_id: req.params.id, status, admin_note: admin_note || null,
+    });
+    res.json({ order: r.rows[0] });
+  } catch (e) {
+    safeLog('[admin] order status error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// ============================================================
+// SERVICES
+// ============================================================
+
+router.get('/services', async (req, res) => {
+  try {
+    const rows = await db.query('SELECT * FROM services ORDER BY serial ASC, created_at ASC');
+    res.json({ services: rows.rows });
+  } catch (e) {
+    safeLog('[admin] services list error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+router.post('/services', async (req, res) => {
+  try {
+    const { name, name_bn, type, price, documents_required, fields_required, schedule, rules_text, engine_id } = req.body || {};
+    if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'INVALID_NAME' });
+    if (!['manual', 'automated'].includes(type)) return res.status(400).json({ error: 'INVALID_TYPE' });
+    const maxSerial = await db.query('SELECT COALESCE(MAX(serial), -1) + 1 AS s FROM services');
+    const r = await db.query(
+      `INSERT INTO services (name, name_bn, type, price, serial, documents_required,
+                             fields_required, schedule, rules_text, engine_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [String(name).trim(), name_bn || null, type, Number(price) || 0,
+       Number(maxSerial.rows[0].s),
+       JSON.stringify(documents_required || []),
+       JSON.stringify(fields_required || []),
+       JSON.stringify(schedule || {}),
+       rules_text || null, engine_id || null]
+    );
+    await logActivity(req.user.id, 'service.create', { service_id: r.rows[0].id, name });
+    res.status(201).json({ service: r.rows[0] });
+  } catch (e) {
+    safeLog('[admin] service create error:', e.message);
+    res.status(500).json({ error: 'CREATE_FAILED' });
+  }
+});
+
+router.put('/services/:id', async (req, res) => {
+  try {
+    const { name, name_bn, type, price, status, documents_required, fields_required, schedule, rules_text, engine_id } = req.body || {};
+    const sets = []; const params = []; let i = 1;
+    const put = (col, val) => { sets.push(`${col} = $${i++}`); params.push(val); };
+    if (name !== undefined) put('name', String(name).trim());
+    if (name_bn !== undefined) put('name_bn', name_bn || null);
+    if (type !== undefined && ['manual', 'automated'].includes(type)) put('type', type);
+    if (price !== undefined) put('price', Number(price) || 0);
+    if (status !== undefined && ['active', 'disabled'].includes(status)) put('status', status);
+    if (documents_required !== undefined) put('documents_required', JSON.stringify(documents_required));
+    if (fields_required !== undefined) put('fields_required', JSON.stringify(fields_required));
+    if (schedule !== undefined) put('schedule', JSON.stringify(schedule));
+    if (rules_text !== undefined) put('rules_text', rules_text || null);
+    if (engine_id !== undefined) put('engine_id', engine_id || null);
+    if (!sets.length) return res.status(400).json({ error: 'NOTHING_TO_UPDATE' });
+    params.push(req.params.id);
+    const r = await db.query(`UPDATE services SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, params);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    await logActivity(req.user.id, 'service.update', { service_id: req.params.id });
+    res.json({ service: r.rows[0] });
+  } catch (e) {
+    safeLog('[admin] service update error:', e.message);
+    res.status(500).json({ error: 'UPDATE_FAILED' });
+  }
+});
+
+router.delete('/services/:id', async (req, res) => {
+  try {
+    if (req.query.confirm !== 'yes') return res.status(400).json({ error: 'CONFIRM_REQUIRED' });
+    const r = await db.query('DELETE FROM services WHERE id = $1 RETURNING id, name', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    await logActivity(req.user.id, 'service.delete', { service_id: req.params.id, name: r.rows[0].name });
+    res.json({ ok: true });
+  } catch (e) {
+    safeLog('[admin] service delete error:', e.message);
+    res.status(500).json({ error: 'DELETE_FAILED' });
+  }
+});
+
+// PUT /api/admin/services/reorder { order: [id1, id2, ...] }
+router.put('/services/reorder', async (req, res) => {
+  try {
+    const { order } = req.body || {};
+    if (!Array.isArray(order)) return res.status(400).json({ error: 'INVALID_ORDER' });
+    await db.withTransaction(async (client) => {
+      for (let idx = 0; idx < order.length; idx++) {
+        await client.query('UPDATE services SET serial = $1 WHERE id = $2', [idx, order[idx]]);
+      }
+    });
+    await logActivity(req.user.id, 'service.reorder', { count: order.length });
+    res.json({ ok: true });
+  } catch (e) {
+    safeLog('[admin] reorder error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// ============================================================
+// TRANSACTIONS (recharge requests: approve / reject)
+// ============================================================
+
+router.get('/transactions', async (req, res) => {
+  try {
+    const { page, limit, offset } = pageParams(req);
+    const conds = [];
+    const params = [];
+    let i = 1;
+    if (req.query.status) { conds.push(`t.status = $${i++}`); params.push(req.query.status); }
+    if (req.query.type) { conds.push(`t.type = $${i++}`); params.push(req.query.type); }
+    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+    const total = await db.query(`SELECT COUNT(*) FROM transactions t ${where}`, params);
+    const rows = await db.query(
+      `SELECT t.*, u.name AS user_name, u.phone AS user_phone
+       FROM transactions t JOIN users u ON u.id = t.user_id
+       ${where} ORDER BY t.created_at DESC LIMIT $${i} OFFSET $${i + 1}`,
+      [...params, limit, offset]);
+    res.json({ transactions: rows.rows, total: parseInt(total.rows[0].count, 10), page, limit });
+  } catch (e) {
+    safeLog('[admin] transactions error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// PUT /api/admin/transactions/:id/approve — atomic wallet credit
+router.put('/transactions/:id/approve', async (req, res) => {
+  try {
+    const r = await db.query('SELECT * FROM transactions WHERE id = $1', [req.params.id]);
+    const tx = r.rows[0];
+    if (!tx) return res.status(404).json({ error: 'NOT_FOUND' });
+    if (tx.status !== 'pending') return res.status(400).json({ error: 'ALREADY_PROCESSED' });
+
+    await db.withTransaction(async (client) => {
+      // Idempotent atomic credit; raises DUPLICATE_TRANSACTION if already applied
+      await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
+        tx.user_id, Number(tx.amount), tx.type, tx.trxid || ('tx-' + tx.id),
+      ]);
+      await client.query(
+        `UPDATE transactions SET status = 'approved', admin_id = $1 WHERE id = $2`,
+        [req.user.id, tx.id]
+      );
+    });
+    await logActivity(req.user.id, 'transaction.approve', { tx_id: tx.id, amount: tx.amount });
+    res.json({ ok: true });
+  } catch (e) {
+    safeLog('[admin] approve error:', e.message);
+    const msg = /DUPLICATE_TRANSACTION|INSUFFICIENT_BALANCE/.test(e.message) ? e.message : 'APPROVE_FAILED';
+    res.status(400).json({ error: msg });
+  }
+});
+
+router.put('/transactions/:id/reject', async (req, res) => {
+  try {
+    const r = await db.query(
+      `UPDATE transactions SET status = 'rejected', admin_id = $1
+       WHERE id = $2 AND status = 'pending' RETURNING *`,
+      [req.user.id, req.params.id]
+    );
+    if (!r.rows.length) return res.status(400).json({ error: 'NOT_PENDING' });
+    await logActivity(req.user.id, 'transaction.reject', { tx_id: req.params.id });
+    res.json({ ok: true });
+  } catch (e) {
+    safeLog('[admin] reject error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// ============================================================
+// COUPONS / BANNERS / NOTICES
+// ============================================================
+
+router.get('/coupons', async (req, res) => {
+  try {
+    const rows = await db.query('SELECT * FROM coupons ORDER BY created_at DESC LIMIT 100');
+    res.json({ coupons: rows.rows });
+  } catch (e) { safeLog('[admin] coupons error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+router.post('/coupons', async (req, res) => {
+  try {
+    const { code, type, percent, amount, service_id, expires_at } = req.body || {};
+    if (!code || !['cashback', 'promo'].includes(type)) {
+      return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
+    const r = await db.query(
+      `INSERT INTO coupons (code, type, percent, amount, service_id, expires_at)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [String(code).trim().toUpperCase(), type, Number(percent) || 0, Number(amount) || 0,
+       service_id || null, expires_at || null]
+    );
+    await logActivity(req.user.id, 'coupon.create', { code });
+    res.status(201).json({ coupon: r.rows[0] });
+  } catch (e) {
+    safeLog('[admin] coupon create error:', e.message);
+    res.status(500).json({ error: e.code === '23505' ? 'CODE_TAKEN' : 'CREATE_FAILED' });
+  }
+});
+
+router.put('/coupons/:id', async (req, res) => {
+  try {
+    const { status } = req.body || {};
+    if (!['active', 'disabled', 'expired'].includes(status)) {
+      return res.status(400).json({ error: 'INVALID_STATUS' });
+    }
+    await db.query('UPDATE coupons SET status = $1 WHERE id = $2', [status, req.params.id]);
+    await logActivity(req.user.id, 'coupon.update', { coupon_id: req.params.id, status });
+    res.json({ ok: true });
+  } catch (e) { safeLog('[admin] coupon update error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+router.get('/banners', async (req, res) => {
+  try {
+    const rows = await db.query('SELECT * FROM banners ORDER BY created_at DESC');
+    res.json({ banners: rows.rows });
+  } catch (e) { safeLog('[admin] banners error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+router.post('/banners', async (req, res) => {
+  try {
+    const { type, title, design_id, content, active } = req.body || {};
+    if (!['banner', 'ad', 'popup'].includes(type) || !title) {
+      return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
+    const r = await db.query(
+      `INSERT INTO banners (type, title, design_id, content, active)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [type, String(title).trim(), Math.min(20, Math.max(1, Number(design_id) || 1)),
+       JSON.stringify(content || {}), active !== false]
+    );
+    await logActivity(req.user.id, 'banner.create', { banner_id: r.rows[0].id });
+    res.status(201).json({ banner: r.rows[0] });
+  } catch (e) { safeLog('[admin] banner create error:', e.message); res.status(500).json({ error: 'CREATE_FAILED' }); }
+});
+
+router.put('/banners/:id', async (req, res) => {
+  try {
+    const { title, design_id, content, active } = req.body || {};
+    const sets = []; const params = []; let i = 1;
+    if (title !== undefined) { sets.push(`title = $${i++}`); params.push(String(title).trim()); }
+    if (design_id !== undefined) { sets.push(`design_id = $${i++}`); params.push(Math.min(20, Math.max(1, Number(design_id) || 1))); }
+    if (content !== undefined) { sets.push(`content = $${i++}`); params.push(JSON.stringify(content)); }
+    if (active !== undefined) { sets.push(`active = $${i++}`); params.push(!!active); }
+    if (!sets.length) return res.status(400).json({ error: 'NOTHING_TO_UPDATE' });
+    params.push(req.params.id);
+    const r = await db.query(`UPDATE banners SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, params);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    res.json({ banner: r.rows[0] });
+  } catch (e) { safeLog('[admin] banner update error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+router.delete('/banners/:id', async (req, res) => {
+  try {
+    await db.query('DELETE FROM banners WHERE id = $1', [req.params.id]);
+    await logActivity(req.user.id, 'banner.delete', { banner_id: req.params.id });
+    res.json({ ok: true });
+  } catch (e) { safeLog('[admin] banner delete error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+router.get('/notices', async (req, res) => {
+  try {
+    const rows = await db.query(
+      `SELECT n.*, u.name AS user_name FROM notices n
+       LEFT JOIN users u ON u.id = n.user_id
+       ORDER BY n.created_at DESC LIMIT 100`);
+    res.json({ notices: rows.rows });
+  } catch (e) { safeLog('[admin] notices error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+router.post('/notices', async (req, res) => {
+  try {
+    const { user_id, title, message } = req.body || {};
+    if (!title || !message) return res.status(400).json({ error: 'INVALID_INPUT' });
+    const r = await db.query(
+      'INSERT INTO notices (user_id, title, message) VALUES ($1,$2,$3) RETURNING *',
+      [user_id || null, String(title).trim(), String(message).trim()]
+    );
+    await logActivity(req.user.id, 'notice.create', { notice_id: r.rows[0].id, user_id: user_id || 'all' });
+    res.status(201).json({ notice: r.rows[0] });
+  } catch (e) { safeLog('[admin] notice create error:', e.message); res.status(500).json({ error: 'CREATE_FAILED' }); }
+});
+
+router.delete('/notices/:id', async (req, res) => {
+  try {
+    await db.query('DELETE FROM notices WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) { safeLog('[admin] notice delete error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+// ============================================================
+// ACTIVITY LOG + STATS + SETTINGS
+// ============================================================
+
+router.get('/activity-log', async (req, res) => {
+  try {
+    const { page, limit, offset } = pageParams(req);
+    const total = await db.query('SELECT COUNT(*) FROM activity_log');
+    const rows = await db.query(
+      `SELECT a.*, u.name AS admin_name FROM activity_log a
+       LEFT JOIN users u ON u.id = a.admin_id
+       ORDER BY a.created_at DESC LIMIT $1 OFFSET $2`, [limit, offset]);
+    res.json({ log: rows.rows, total: parseInt(total.rows[0].count, 10), page, limit });
+  } catch (e) { safeLog('[admin] activity error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+router.get('/stats', async (req, res) => {
+  try {
+    const r = await db.query(`
+      SELECT
+        (SELECT COUNT(*) FROM users WHERE role = 'user') AS users,
+        (SELECT COUNT(*) FROM users WHERE role = 'admin') AS admins,
+        (SELECT COUNT(*) FROM orders) AS orders_total,
+        (SELECT COUNT(*) FROM orders WHERE status = 'new') AS orders_new,
+        (SELECT COUNT(*) FROM orders WHERE status IN ('pending','processing')) AS orders_active,
+        (SELECT COUNT(*) FROM orders WHERE status = 'completed') AS orders_completed,
+        (SELECT COUNT(*) FROM transactions WHERE status = 'pending' AND type = 'recharge') AS pending_recharge,
+        (SELECT COALESCE(SUM(amount),0) FROM transactions
+          WHERE type = 'recharge' AND status = 'approved'
+            AND created_at >= CURRENT_DATE) AS revenue_today,
+        (SELECT COUNT(*) FROM services WHERE status = 'active') AS services_active
+    `);
+    res.json(r.rows[0]);
+  } catch (e) { safeLog('[admin] stats error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+router.get('/settings', async (req, res) => {
+  try {
+    const r = await db.query('SELECT key, value FROM settings');
+    const out = {};
+    for (const row of r.rows) out[row.key] = row.value;
+    res.json(out);
+  } catch (e) { safeLog('[admin] settings error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+router.put('/settings', async (req, res) => {
+  try {
+    const allowed = ['registration_enabled', 'maintenance_mode', 'file_upload',
+                     'login_security', 'cashback', 'welcome_bonus'];
+    const updated = [];
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) {
+        await db.query(
+          `INSERT INTO settings (key, value) VALUES ($1, $2)
+           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+          [key, JSON.stringify(req.body[key])]
+        );
+        updated.push(key);
+      }
+    }
+    await logActivity(req.user.id, 'settings.update', { keys: updated });
+    res.json({ ok: true, updated });
+  } catch (e) { safeLog('[admin] settings update error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+module.exports = router;
