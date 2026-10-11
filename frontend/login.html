@@ -58,6 +58,8 @@
 
   <!-- REGISTRATION -->
   <div id="tab-reg" class="hidden">
+    <div id="invite_badge" class="hidden" style="background:rgba(212,175,55,0.12);border:1px solid rgba(212,175,55,0.5);border-radius:12px;padding:10px 14px;margin-bottom:14px;color:#d4af37;font-size:14px;text-align:center;">🎟️ Invite লিংক দিয়ে রেজিস্টার করছেন</div>
+    <input type="hidden" id="rg_invite" value="">
     <div class="field">
       <label>নাম *</label>
       <input type="text" id="rg_name" placeholder="আপনার নাম">
@@ -108,6 +110,7 @@ const ERRBN = {
   ACCOUNT_LOCKED: 'অনেকবার ভুল হয়েছে — কিছুক্ষণ পর চেষ্টা করুন',
   ACCOUNT_DISABLED: 'অ্যাকাউন্ট বন্ধ আছে — এডমিনের সাথে যোগাযোগ করুন',
   REGISTRATION_DISABLED: 'রেজিস্ট্রেশন এখন বন্ধ আছে',
+  INVITE_INVALID: 'Invite লিংকটি সঠিক নয় বা মেয়াদ শেষ',
   ALREADY_REGISTERED: 'এই নম্বর/ইমেইল দিয়ে আগেই রেজিস্টার করা হয়েছে',
   INVALID_PHONE: 'সঠিক মোবাইল নম্বর দিন (01XXXXXXXXX)',
   INVALID_WHATSAPP: 'সঠিক WhatsApp নম্বর দিন (বাধ্যতামূলক)',
@@ -172,6 +175,7 @@ async function doRegister() {
     email: document.getElementById('rg_email').value.trim(),
     religion: document.getElementById('rg_religion').value,
     password: document.getElementById('rg_pw').value,
+    invite_code: document.getElementById('rg_invite').value.trim() || undefined,
   };
   btn.disabled = true; btn.textContent = 'তৈরি হচ্ছে…';
   try {
@@ -269,6 +273,34 @@ async function doVerifyOtp() {
 document.getElementById('li_pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 document.getElementById('rg_pw').addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });
 
+// Invite link: ?invite=INV-XXXXXXXX — works even when registration is OFF
+let _inviteCode = '';
+function getInviteParam() {
+  try {
+    const m = new URLSearchParams(location.search).get('invite');
+    return (m && /^INV-[A-Za-z0-9]{8}$/i.test(m.trim())) ? m.trim().toUpperCase() : '';
+  } catch (e) { return ''; }
+}
+async function handleInvite() {
+  _inviteCode = getInviteParam();
+  if (!_inviteCode) return;
+  try {
+    const r = await fetch('/api/invite/' + encodeURIComponent(_inviteCode) + '/validate');
+    const d = await r.json();
+    if (d && d.valid) {
+      document.getElementById('rg_invite').value = _inviteCode;
+      document.getElementById('invite_badge').classList.remove('hidden');
+      // Show the registration tab even if admin turned registration OFF
+      document.querySelectorAll('.tab')[1].style.display = '';
+      // Switch to the registration tab for convenience
+      showTab('reg', document.querySelectorAll('.tab')[1]);
+      return;
+    }
+  } catch (e) {}
+  // Invalid/expired invite — keep tab hidden if registration is OFF
+  _inviteCode = '';
+}
+
 // If registration is OFF, hide the register tab (admin control)
 (async () => {
   try {
@@ -281,6 +313,7 @@ document.getElementById('rg_pw').addEventListener('keydown', e => { if (e.key ==
       document.getElementById('li_err').textContent = '🔧 ' + (s.maintenance_mode.message || 'সাইট এখন মেনটেনেন্সে আছে');
     }
   } catch (e) {}
+  await handleInvite();
 })();
 </script>
 </body>

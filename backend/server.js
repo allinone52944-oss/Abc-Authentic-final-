@@ -81,6 +81,11 @@ app.use('/api/admin/sms', apiLimiter, adminSms);
 const cashbackRoutes = require('./routes/cashback');
 app.use('/api/cashback', apiLimiter, cashbackRoutes);
 
+// ---- Invite link routes (admin management + public validate) --
+const { adminInvites, publicInvites } = require('./routes/invites');
+app.use('/api/admin/invites', apiLimiter, adminInvites);
+app.use('/api/invite', apiLimiter, publicInvites);
+
 // ---- User routes (authenticated users) --
 const userRoutes = require('./routes/user');
 app.use('/api', apiLimiter, userRoutes);

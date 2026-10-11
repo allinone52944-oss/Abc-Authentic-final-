@@ -16,6 +16,7 @@ const {
   requireAuth,
 } = require('../auth');
 const { safeLog } = require('../security');
+const { validateInvite, consumeInvite } = require('./invites');
 
 const router = express.Router();
 
@@ -54,12 +55,21 @@ async function issueTokens(userId, role) {
 // ---- POST /api/auth/register ---------------------------------
 router.post('/register', async (req, res) => {
   try {
-    const reg = await getSetting('registration_enabled');
-    if (!reg || reg.enabled === false) {
-      return res.status(403).json({ error: 'REGISTRATION_DISABLED' });
-    }
+    const { name, phone, whatsapp, email, password, religion, invite_code } = req.body || {};
 
-    const { name, phone, whatsapp, email, password, religion } = req.body || {};
+    // Registration gate: ON → normal. OFF → only a valid invite code may proceed.
+    const reg = await getSetting('registration_enabled');
+    const regOn = reg && reg.enabled !== false;
+    let invite = null;
+    if (!regOn) {
+      invite = await validateInvite(invite_code);
+      if (!invite) {
+        return res.status(403).json({ error: 'REGISTRATION_DISABLED' });
+      }
+    } else if (invite_code) {
+      // Registration ON: an invite code is optional but still counts its use.
+      invite = await validateInvite(invite_code);
+    }
 
     // Validation (all fields mandatory per spec; whatsapp MANDATORY)
     if (!name || String(name).trim().length < 2 || String(name).trim().length > 120) {
@@ -101,6 +111,12 @@ router.post('/register', async (req, res) => {
       [name.trim(), phoneN, whatsapp.trim(), emailN, password_hash, rel]
     );
     const user = ins.rows[0];
+
+    // Consume the invite use (atomic; only if a valid invite was used).
+    if (invite) {
+      try { await consumeInvite(invite.code); }
+      catch (e) { safeLog('[auth] invite consume skipped:', e.message); }
+    }
 
     // Welcome bonus (admin-controlled) — credited now, usable after verification
     try {

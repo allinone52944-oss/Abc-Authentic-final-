@@ -537,6 +537,85 @@ window.AdmCp = {
   },
 };
 
+/* ---------------- INVITE LINKS ---------------- */
+TABS.invites = async () => {
+  const r = await ABC.api('/admin/invites');
+  const d = await r.json();
+  const rows = (d.invites || []).map(x => {
+    const used = Number(x.used_count) || 0;
+    const max = x.max_uses == null ? '∞' : bn(x.max_uses);
+    const exp = x.expires_at ? new Date(x.expires_at).toLocaleString('bn-BD') : '—';
+    const st = !x.is_active ? '<span style="color:#ff6b6b;">বন্ধ</span>'
+      : (x.expires_at && new Date(x.expires_at) <= new Date()) ? '<span style="color:#ff6b6b;">মেয়াদ শেষ</span>'
+      : (x.max_uses != null && used >= Number(x.max_uses)) ? '<span style="color:#ffb84d;">পূর্ণ</span>'
+      : '<span style="color:#7ddb7d;">চালু</span>';
+    const link = location.origin + '/login.html?invite=' + encodeURIComponent(x.code);
+    return '<tr><td><b>' + esc(x.code) + '</b><br><small style="color:var(--muted)">' + esc(x.note || '') + '</small></td>' +
+      '<td>' + used + ' / ' + max + '</td><td>' + exp + '</td><td>' + st + '</td>' +
+      '<td style="white-space:nowrap;">' +
+      '<button class="mini-btn" onclick="AdmInv.copyLink(\'' + esc(x.code) + '\')">📋 লিংক কপি</button> ' +
+      (x.is_active
+        ? '<button class="mini-btn danger" onclick="AdmInv.set(\'' + x.id + '\',false)">বন্ধ করুন</button>'
+        : '<button class="mini-btn ok" onclick="AdmInv.set(\'' + x.id + '\',true)">চালু করুন</button>') + ' ' +
+      '<button class="mini-btn danger" onclick="AdmInv.del(\'' + x.id + '\')">🗑️</button></td></tr>';
+  }).join('');
+  content.innerHTML =
+    '<button class="mini-btn ok" onclick="AdmInv.createForm()" style="margin-bottom:12px;">+ নতুন ইনভাইট লিংক</button>' +
+    '<div style="color:var(--muted);font-size:13px;margin-bottom:12px;">রেজিস্ট্রেশন OFF থাকলেও এই লিংক দিয়ে রেজিস্টার করা যাবে।</div>' +
+    '<div style="overflow-x:auto;"><table class="adm"><tr><th>কোড / নোট</th><th>ব্যবহার</th><th>মেয়াদ</th><th>স্ট্যাটাস</th><th>কাজ</th></tr>' +
+    (rows || '<tr><td colspan="5" style="text-align:center;color:var(--muted)">কোনো লিংক নেই</td></tr>') +
+    '</table></div>';
+};
+window.AdmInv = {
+  createForm() {
+    modal('🔗 নতুন ইনভাইট লিংক',
+      fld('সর্বোচ্চ ব্যবহার (খালি = আনলিমিটেড)', 'number', 'iv_max') +
+      fld('মেয়াদ (খালি = মেয়াদহীন)', 'datetime-local', 'iv_exp') +
+      fld('নোট', 'text', 'iv_note') +
+      '<button class="btn" onclick="AdmInv.create()">তৈরি করুন</button>');
+  },
+  async create() {
+    const exp = v('iv_exp');
+    const r = await ABC.api('/admin/invites', { method: 'POST', body: {
+      max_uses: v('iv_max') || null,
+      expires_at: exp ? new Date(exp).toISOString() : null,
+      note: v('iv_note'),
+    }});
+    const d = await r.json();
+    if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
+    closeModal();
+    modal('✅ লিংক তৈরি!',
+      '<div class="field"><label>Invite লিংক</label>' +
+      '<input type="text" id="iv_link_out" readonly value="' + esc(d.link) + '" style="font-size:13px;"></div>' +
+      '<button class="btn" onclick="AdmInv.copyText(document.getElementById(\'iv_link_out\').value)">📋 কপি করুন</button>');
+    show('invites');
+  },
+  copyText(t) {
+    const done = () => alert('✅ কপি হয়েছে!');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(done).catch(() => fallbackCopy(t, done));
+    } else fallbackCopy(t, done);
+  },
+  copyLink(code) {
+    this.copyText(location.origin + '/login.html?invite=' + encodeURIComponent(code));
+  },
+  async set(id, active) {
+    await ABC.api('/admin/invites/' + id, { method: 'PUT', body: { is_active: active } });
+    show('invites');
+  },
+  async del(id) {
+    if (!confirm('এই লিংকটি মুছে ফেলবেন?')) return;
+    await ABC.api('/admin/invites/' + id, { method: 'DELETE' });
+    show('invites');
+  },
+};
+function fallbackCopy(t, done) {
+  const ta = document.createElement('textarea');
+  ta.value = t; document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); done(); } catch (e) { alert('কপি ব্যর্থ — লিংকটি সিলেক্ট করে কপি করুন'); }
+  ta.remove();
+}
+
 /* ---------------- BANNERS ---------------- */
 TABS.banners = async () => {
   const r = await ABC.api('/admin/banners');
