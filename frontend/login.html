@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>All In One (Abc Authentic) - Login</title>
+<link rel="stylesheet" href="/css/coffee.css">
+</head>
+<body>
+<div class="spiral"></div>
+<div class="bg-text" style="top:8%;">স্বপ্ন দেখো • সফল হবে • পরিশ্রমই সাফল্য • নতুন দিন নতুন সুযোগ •</div>
+<div class="bg-text" style="top:85%;animation-delay:-15s;">এগিয়ে যাও • বিশ্বাস রাখো • কঠোর পরিশ্রম • সততাই শক্তি •</div>
+<div class="bean" style="top:15%;left:10%;">☕</div>
+<div class="bean" style="top:70%;left:85%;animation-delay:-6s;">☕</div>
+<div class="bean" style="top:40%;left:5%;animation-delay:-3s;font-size:24px;">✨</div>
+<div class="bean" style="top:60%;left:92%;animation-delay:-9s;font-size:24px;">✨</div>
+<div class="gold-orb" style="width:300px;height:300px;top:10%;left:5%;"></div>
+<div class="gold-orb" style="width:200px;height:200px;bottom:15%;right:8%;animation-delay:-4s;"></div>
+
+<div class="card">
+  <div class="logo">
+    <h1>☕ ALL IN ONE</h1>
+    <p>ABC AUTHENTIC</p>
+    <div style="margin-top:12px;color:#c9a961;font-size:14px;letter-spacing:1px;">বিশ্বাস ও সেবার ঠিকানা</div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('login',this)">লগইন</div>
+    <div class="tab" onclick="showTab('reg',this)">রেজিস্ট্রেশন</div>
+  </div>
+
+  <!-- LOGIN -->
+  <div id="tab-login">
+    <div class="field">
+      <label>মোবাইল নম্বর / ইমেইল</label>
+      <input type="text" placeholder="01XXXXXXXXX">
+    </div>
+    <div class="field">
+      <label>পাসওয়ার্ড</label>
+      <input type="password" placeholder="••••••••">
+    </div>
+    <button class="btn">প্রবেশ করুন →</button>
+    <div class="note">Forgot password? <span>Profile-এর ভেতরে পাবেন</span><br>নিরাপদ লগইন • OTP verified</div>
+  </div>
+
+  <!-- REGISTRATION -->
+  <div id="tab-reg" class="hidden">
+    <div class="field">
+      <label>নাম *</label>
+      <input type="text" placeholder="আপনার নাম">
+    </div>
+    <div class="field">
+      <label>মোবাইল নম্বর *</label>
+      <input type="text" placeholder="01XXXXXXXXX">
+    </div>
+    <div class="field">
+      <label>WhatsApp নম্বর * <span style="color:#ff6b6b;font-size:11px;">বাধ্যতামূলক</span></label>
+      <input type="text" placeholder="01XXXXXXXXX" style="border-color: rgba(212,175,55,0.5);">
+    </div>
+    <div class="field">
+      <label>ইমেইল *</label>
+      <input type="email" placeholder="email@example.com">
+    </div>
+    <div class="field">
+      <label>পাসওয়ার্ড *</label>
+      <input type="password" placeholder="••••••••">
+    </div>
+    <button class="btn">রেজিস্টার করুন →</button>
+    <div class="note">OTP দিয়ে verify হবে<br><span>Admin control:</span> OFF থাকলে শুধু Login দেখাবে</div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+function showTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-login').classList.toggle('hidden', name !== 'login');
+  document.getElementById('tab-reg').classList.toggle('hidden', name !== 'reg');
+}
+// Phase 2: forms will POST to /api/auth/login and /api/auth/register
+// with rate limiting + OTP verification on the backend.
+</script>
+</body>
+</html>
