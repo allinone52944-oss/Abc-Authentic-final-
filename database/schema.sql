@@ -163,13 +163,13 @@ CREATE INDEX IF NOT EXISTS idx_activity_admin  ON activity_log(admin_id);
 CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_log(created_at DESC);
 
 -- ------------------------------------------------------------
--- BANNERS / ADS / POPUPS (15-20 ready designs in admin)
+-- BANNERS / ADS / POPUPS (24 ready designs in admin)
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS banners (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     type       VARCHAR(20) NOT NULL CHECK (type IN ('banner','ad','popup')),
     title      VARCHAR(200) NOT NULL,
-    design_id  INT NOT NULL DEFAULT 1,                 -- 1..20 sample designs
+    design_id  INT NOT NULL DEFAULT 1,                 -- 1..24 sample designs
     content    JSONB NOT NULL DEFAULT '{}',            -- {image, link, text_bn, text_en}
     active     BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
