@@ -26,6 +26,7 @@
     </div>
     <div class="hdr-actions">
       <div class="pill" id="balancePill">৳০</div>
+      <button class="icon-btn" id="greetVoiceBtn" title="ভয়েস গ্রিটিং শুনুন" style="display:none;">🔊</button>
       <button class="icon-btn" onclick="location.href='/profile.html'">👤</button>
       <button class="icon-btn" id="logoutBtn">⏻</button>
     </div>
@@ -87,14 +88,103 @@ async function loadBanners() {
     BannerRender.carousel(document.getElementById('bnStrip'), act, 6000);
   } catch (e) { /* banners optional */ }
 }
-const GREETINGS = {
-  islam: 'আসসালামু আলাইকুম',
-  hindu: 'নমস্কার 🙏',
-  buddhist: 'নমো বুদ্ধায় 🙏',
-  christian: 'প্রভুর শান্তি ✝',
-  other: 'শুভেচ্ছা'
-};
+const GREET_EMOJI = { islam: '🤲', hindu: '🙏', buddhist: '🪷', christian: '✝️', other: '🌸' };
+function timeGreeting() {
+  const h = new Date().getHours();
+  if (h < 11) return 'সুপ্রভাত';
+  if (h < 16) return 'শুভ দুপুর';
+  if (h < 19) return 'শুভ সন্ধ্যা';
+  return 'শুভ রাত্রি';
+}
+// Resolve greeting text+emoji from admin config (voice_greeting.greetings).
+// Empty text for "other" falls back to time-based greeting.
+function resolveGreeting(religion, cfg) {
+  const r = ['islam', 'hindu', 'buddhist', 'christian', 'other'].includes(religion) ? religion : 'other';
+  const g = (cfg && cfg.greetings) || {};
+  let text = String(g[r] || '').trim();
+  if (!text && r === 'other') text = timeGreeting();
+  if (!text) text = 'শুভেচ্ছা';
+  return { text, emoji: GREET_EMOJI[r] };
+}
 const bnNum = (n) => Number(n || 0).toLocaleString('bn-BD');
+
+/* ============ Religion voice greeting (Web Speech API, bn-BD) ============
+   Plays ONCE right after login (one-shot flag set by login.html).
+   Voice rotation: male -> female -> child -> male... (localStorage index).
+   Prefers real gendered Bengali voices; falls back to pitch simulation. */
+const GreetVoice = {
+  _cfg: null,
+  _lastText: '',
+  _lastVoice: 0,
+  userEnabled() {
+    try { return localStorage.getItem('abc_greet_voice') !== 'off'; } catch (e) { return true; }
+  },
+  pickVoice(voices, voiceIdx) {
+    const bn = voices.filter((v) => v.lang && v.lang.toLowerCase().startsWith('bn'));
+    if (voiceIdx === 0) return bn.find((v) => /male/i.test(v.name) && !/female/i.test(v.name)) || null;
+    if (voiceIdx === 1) return bn.find((v) => /female/i.test(v.name)) || null;
+    return null; // child: pitch simulation only
+  },
+  speak(text, voiceIdx, cfg) {
+    if (!('speechSynthesis' in window)) return;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'bn-BD';
+      const voices = speechSynthesis.getVoices();
+      const real = this.pickVoice(voices, voiceIdx);
+      if (real) {
+        u.voice = real; // real gendered Bengali voice: use as-is
+      } else {
+        const bn = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('bn'));
+        if (bn) u.voice = bn;
+        // Pitch simulation: male 0.8 / female 1.2 / child 1.5
+        const sim = [
+          { pitch: 0.8, rate: 1.0 },
+          { pitch: 1.2, rate: 1.0 },
+          { pitch: 1.5, rate: 1.1 },
+        ][voiceIdx] || { pitch: 1, rate: 1 };
+        if (cfg && cfg.rotation === false) { u.pitch = 1; u.rate = 1; }
+        else { u.pitch = sim.pitch; u.rate = sim.rate; }
+      }
+      const btn = document.getElementById('greetVoiceBtn');
+      u.onerror = (e) => {
+        // Autoplay blocked: draw attention to the 🔊 fallback button
+        if (btn && (e.error === 'not-allowed' || e.error === 'interrupted')) {
+          btn.style.display = '';
+          btn.style.animation = 'cardIn 0.6s';
+          btn.style.boxShadow = '0 0 0 3px rgba(212,175,55,.7)';
+          setTimeout(() => { btn.style.boxShadow = ''; }, 4000);
+        }
+      };
+      speechSynthesis.speak(u);
+    } catch (e) { /* speech not supported */ }
+  },
+  replay() {
+    if (this._lastText) this.speak(this._lastText, this._lastVoice, this._cfg);
+  },
+  async maybePlay(user) {
+    // One-shot: consume the login flag immediately (login only, never on refresh)
+    let flag = null;
+    try {
+      flag = JSON.parse(sessionStorage.getItem('abc_greet_on_login') || 'null');
+      sessionStorage.removeItem('abc_greet_on_login');
+    } catch (e) { try { sessionStorage.removeItem('abc_greet_on_login'); } catch (e2) {} }
+    if (!flag || !this.userEnabled()) return;
+    const cfg = window._vgCfg || {};
+    if (cfg.enabled === false) return;
+    this._cfg = cfg;
+    const g = resolveGreeting(user.religion, cfg);
+    const text = g.text + ', ' + user.name + '! All In One-এ স্বাগতম';
+    this._lastText = text;
+    this._lastVoice = (typeof flag.voice === 'number') ? flag.voice : 0;
+    // Show the 🔊 replay/fallback button
+    const btn = document.getElementById('greetVoiceBtn');
+    if (btn) { btn.style.display = ''; btn.onclick = () => this.replay(); }
+    // Small delay so voices finish loading
+    setTimeout(() => this.speak(text, this._lastVoice, cfg), 700);
+  },
+};
 
 async function init() {
   const meR = await ABC.api('/auth/me');
@@ -102,17 +192,26 @@ async function init() {
   const { user } = await meR.json();
   window._user = user;
 
-  // Religion greeting — once per login (session flag)
+  // Voice-greeting config (admin-controlled, public endpoint)
+  try {
+    const ps = await fetch('/api/public/settings');
+    if (ps.ok) { const pj = await ps.json(); window._vgCfg = pj.voice_greeting || {}; }
+  } catch (e) { window._vgCfg = {}; }
+
+  // Religion greeting (visual) — once per tab session, admin texts + emoji
   const gk = 'abc_greeted_' + user.id;
   const greetEl = document.getElementById('greet');
   if (!sessionStorage.getItem(gk)) {
-    const g = GREETINGS[user.religion] || GREETINGS.other;
-    greetEl.innerHTML = g + ' <small>' + escapeHtml(user.name) + '</small>';
+    const g = resolveGreeting(user.religion, window._vgCfg);
+    greetEl.innerHTML = escapeHtml(g.text) + ' ' + g.emoji + ' <small>' + escapeHtml(user.name) + '</small>';
     greetEl.style.animation = 'cardIn 0.8s';
     sessionStorage.setItem(gk, '1');
   } else {
     greetEl.innerHTML = 'স্বাগতম <small>' + escapeHtml(user.name) + '</small>';
   }
+
+  // Religion VOICE greeting — only right after login (one-shot flag)
+  GreetVoice.maybePlay(user);
 
   document.getElementById('balancePill').textContent = '৳' + bnNum(user.balance);
   document.getElementById('hubBalance').textContent = '৳' + bnNum(user.balance);

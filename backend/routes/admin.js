@@ -711,7 +711,7 @@ router.get('/settings', async (req, res) => {
 router.put('/settings', async (req, res) => {
   try {
     const allowed = ['registration_enabled', 'maintenance_mode', 'file_upload',
-                     'login_security', 'cashback', 'welcome_bonus'];
+                     'login_security', 'cashback', 'welcome_bonus', 'voice_greeting'];
     const updated = [];
     for (const key of allowed) {
       if (req.body[key] !== undefined) {

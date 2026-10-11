@@ -159,6 +159,16 @@ async function doLogin() {
       return;
     }
     ABC.setTokens(d.access_token, d.refresh_token);
+    // Religion voice greeting: arm one-shot flag for dashboard (login only).
+    // Voice rotation: male(0) -> female(1) -> child(2) -> male...
+    if (d.user.role !== 'admin') {
+      try {
+        var vi = parseInt(localStorage.getItem('greeting_voice_rotation') || '0', 10);
+        if (isNaN(vi) || vi < 0 || vi > 2) vi = 0;
+        sessionStorage.setItem('abc_greet_on_login', JSON.stringify({ voice: vi }));
+        localStorage.setItem('greeting_voice_rotation', String((vi + 1) % 3));
+      } catch (e) { /* storage unavailable */ }
+    }
     location.href = d.user.role === 'admin' ? '/admin.html' : '/dashboard.html';
   } catch (e) { err.textContent = 'সংযোগ ব্যর্থ — আবার চেষ্টা করুন'; }
   finally { btn.disabled = false; btn.textContent = 'প্রবেশ করুন →'; }

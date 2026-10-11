@@ -42,6 +42,16 @@
       <button class="btn" onclick="save()">সংরক্ষণ করুন</button>
     </div>
     <div class="form-card" style="margin-top:14px;">
+      <h2>🔊 ভয়েস সেটিংস</h2>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <div>
+          <div style="color:var(--cream);font-weight:700;font-size:15px;">ভয়েস গ্রিটিং</div>
+          <div style="color:var(--muted);font-size:12px;margin-top:2px;">লগইনে ধর্মভিত্তিক বাংলা শুভেচ্ছা শুনুন</div>
+        </div>
+        <button class="mini-btn" id="vgToggle" onclick="toggleVoiceGreet()">…</button>
+      </div>
+    </div>
+    <div class="form-card" style="margin-top:14px;">
       <h2>🔑 পাসওয়ার্ড পরিবর্তন</h2>
       <div class="field"><label>বর্তমান পাসওয়ার্ড</label><input type="password" id="cur"></div>
       <div class="field"><label>নতুন পাসওয়ার্ড</label><input type="password" id="nw"></div>
@@ -53,6 +63,19 @@
 </div>
 <script src="/js/app.js"></script>
 <script>
+function voiceGreetOn(){
+  try { return localStorage.getItem('abc_greet_voice') !== 'off'; } catch(e){ return true; }
+}
+function paintVoiceGreetBtn(){
+  const b=document.getElementById('vgToggle');
+  const on=voiceGreetOn();
+  b.className='mini-btn'+(on?' ok':'');
+  b.textContent=on?'✅ চালু':'❌ বন্ধ';
+}
+function toggleVoiceGreet(){
+  try { localStorage.setItem('abc_greet_voice', voiceGreetOn() ? 'off' : 'on'); } catch(e){}
+  paintVoiceGreetBtn();
+}
 async function init(){
   const r=await ABC.api('/auth/me');
   if(!r.ok){location.href='/login.html';return;}
@@ -62,6 +85,7 @@ async function init(){
   document.getElementById('whatsapp').value=user.whatsapp||'';
   document.getElementById('email').value=user.email||'';
   document.getElementById('religion').value=user.religion||'other';
+  paintVoiceGreetBtn();
 }
 async function save(){
   const err=document.getElementById('err'),ok=document.getElementById('ok');

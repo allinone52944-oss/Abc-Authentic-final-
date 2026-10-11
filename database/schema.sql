@@ -204,7 +204,8 @@ INSERT INTO settings (key, value) VALUES
     ('file_upload',          '{"max_mb": 5, "allowed": ["pdf","jpg","jpeg","png"]}'),
     ('login_security',       '{"max_attempts": 5, "lock_minutes": 30}'),
     ('cashback',             '{"enabled": false, "percent": 0}'),
-    ('welcome_bonus',        '{"enabled": false, "amount": 0}')
+    ('welcome_bonus',        '{"enabled": false, "amount": 0}'),
+    ('voice_greeting',       '{"enabled": true, "rotation": true, "greetings": {"islam": "আসসালামু আলাইকুম", "hindu": "নমস্কার", "buddhist": "নমো বুদ্ধায়", "christian": "প্রভুর শান্তি", "other": ""}}')
 ON CONFLICT (key) DO NOTHING;
 
 -- ------------------------------------------------------------

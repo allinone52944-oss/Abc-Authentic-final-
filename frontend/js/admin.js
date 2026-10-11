@@ -806,6 +806,13 @@ TABS.settings = async () => {
     '<div class="list-row" style="cursor:default;"><div><div class="t">🔊 ভয়েস নোটিফিকেশন</div><div class="s">নতুন রিচার্জ/অর্ডারে বাংলা ভয়েস অ্যালার্ট</div></div>' +
     '<button class="mini-btn ' + (VoiceAlert.enabled ? 'ok' : '') + '" onclick="var on=VoiceAlert.toggle();this.className=\'mini-btn \'+(on?\'ok\':\'\');this.textContent=on?\'✅ চালু\':\'❌ বন্ধ\';">' +
     (VoiceAlert.enabled ? '✅ চালু' : '❌ বন্ধ') + '</button></div>' +
+    '<div class="list-row" style="cursor:default;"><div><div class="t">🔊 Religion Voice Greeting</div><div class="s">লগইনে ধর্মভিত্তিক বাংলা ভয়েস শুভেচ্ছা</div></div>' + bool('voice_greeting') + '</div>' +
+    '<div class="list-row" style="cursor:default;"><div><div class="t">🔄 ভয়েস রোটেশন</div><div class="s">পুরুষ → মহিলা → শিশু কণ্ঠে পর্যায়ক্রমে</div></div>' + bool('voice_greeting', 'rotation') + '</div>' +
+    fld('ইসলাম গ্রিটিং', 'text', 'st_vg_islam', (((s.voice_greeting||{}).greetings||{}).islam) || 'আসসালামু আলাইকুম') +
+    fld('হিন্দু গ্রিটিং', 'text', 'st_vg_hindu', (((s.voice_greeting||{}).greetings||{}).hindu) || 'নমস্কার') +
+    fld('বৌদ্ধ গ্রিটিং', 'text', 'st_vg_buddhist', (((s.voice_greeting||{}).greetings||{}).buddhist) || 'নমো বুদ্ধায়') +
+    fld('খ্রিস্টান গ্রিটিং', 'text', 'st_vg_christian', (((s.voice_greeting||{}).greetings||{}).christian) || 'প্রভুর শান্তি') +
+    fld('অন্যান্য গ্রিটিং (খালি = সময়ভিত্তিক)', 'text', 'st_vg_other', (((s.voice_greeting||{}).greetings||{}).other) || '') +
     '<div class="field" style="margin-top:14px;"><label>স্বাগতম বোনাস (৳, ০ = বন্ধ)</label><input type="number" id="st_wb" value="' + ((s.welcome_bonus && s.welcome_bonus.amount) || 0) + '"></div>' +
     '<div class="field"><label>ক্যাশব্যাক % (০ = বন্ধ)</label><input type="number" id="st_cb" value="' + ((s.cashback && s.cashback.percent) || 0) + '"></div>' +
     '<div class="field"><label>ফাইল আপলোড সীমা (MB)</label><input type="number" id="st_mb" value="' + ((s.file_upload && s.file_upload.max_mb) || 5) + '"></div>' +
@@ -821,10 +828,17 @@ window.AdmSt = {
     show('settings');
   },
   async save() {
+    const cur = await (await ABC.api('/admin/settings')).json();
+    const vg = Object.assign({ enabled: true, rotation: true }, cur.voice_greeting || {});
+    vg.greetings = {
+      islam: v('st_vg_islam'), hindu: v('st_vg_hindu'), buddhist: v('st_vg_buddhist'),
+      christian: v('st_vg_christian'), other: v('st_vg_other'),
+    };
     await ABC.api('/admin/settings', { method: 'PUT', body: {
       welcome_bonus: { enabled: Number(v('st_wb')) > 0, amount: Number(v('st_wb')) || 0 },
       cashback: { enabled: Number(v('st_cb')) > 0, percent: Number(v('st_cb')) || 0 },
       file_upload: { max_mb: Number(v('st_mb')) || 5, allowed: ['pdf', 'jpg', 'jpeg', 'png'] },
+      voice_greeting: vg,
     }});
     alert('সংরক্ষণ হয়েছে');
   },
