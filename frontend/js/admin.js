@@ -983,6 +983,11 @@ TABS.settings = async () => {
     '<div class="list-row" style="cursor:default;"><div><div class="t">🔄 ভয়েস রোটেশন</div><div class="s">পুরুষ → মহিলা → শিশু কণ্ঠে পর্যায়ক্রমে</div></div>' + bool('voice_greeting', 'rotation') + '</div>' +
     '<div class="list-row" style="cursor:default;"><div><div class="t">💬 WhatsApp নোটিফিকেশন</div><div class="s">অর্ডার সফল / রিচার্জ সফল হলে গ্রাহকের WhatsApp-এ অটো মেসেজ</div></div>' + bool('whatsapp') + '</div>' +
     fld('WhatsApp বিজনেস নম্বর (ডিসপ্লে)', 'text', 'st_wa_num', ((s.whatsapp || {}).business_number) || '') +
+    fld('Phone Number ID', 'text', 'st_wa_phone_id', ((s.whatsapp || {}).phone_number_id) || '') +
+    '<div class="field"><label>Access Token (password)</label>' +
+    '<input type="password" id="st_wa_token" value="" placeholder="নতুন token বসান (খালি রাখলে আগেরটা থাকবে)" autocomplete="new-password">' +
+    '<div class="s" style="margin-top:4px;">' + (((s.whatsapp || {}).access_token_set) ? '✅ Token সেট আছে' : '❌ Token সেট নেই') + '</div></div>' +
+    '<div class="field"><button class="mini-btn" onclick="AdmWa.test()">🔗 Test Connection</button></div>' +
     ta('📩 অর্ডার সফল মেসেজ (WhatsApp)', 'st_wa_order_msg', ((s.whatsapp || {}).order_completed_msg) || '', 'প্লেসহোল্ডার: {name} {order_number} {service_name}') +
     ta('📩 রিচার্জ সফল মেসেজ (WhatsApp)', 'st_wa_recharge_msg', ((s.whatsapp || {}).recharge_approved_msg) || '', 'প্লেসহোল্ডার: {name} {amount} {balance}') +
     fld('ইসলাম গ্রিটিং', 'text', 'st_vg_islam', (((s.voice_greeting||{}).greetings||{}).islam) || 'আসসালামু আলাইকুম') +
@@ -1012,19 +1017,49 @@ window.AdmSt = {
       christian: v('st_vg_christian'), other: v('st_vg_other'),
     };
     const waCur = Object.assign({ enabled: false, business_number: '' }, cur.whatsapp || {});
-    await ABC.api('/admin/settings', { method: 'PUT', body: {
+    // New token (if any) requires admin password confirmation on the server.
+    const newToken = String(v('st_wa_token') || '').trim();
+    let admin_password = '';
+    if (newToken) {
+      admin_password = prompt('WhatsApp token পরিবর্তন করতে আপনার admin password দিন:') || '';
+      if (!admin_password) { alert('বাতিল হয়েছে — token পরিবর্তন হয়নি'); return; }
+    }
+    const waBody = {
+      enabled: waCur.enabled === true,
+      business_number: String(v('st_wa_num') || '').trim(),
+      phone_number_id: String(v('st_wa_phone_id') || '').trim(),
+      order_completed_msg: vr('st_wa_order_msg') || waCur.order_completed_msg || '',
+      recharge_approved_msg: vr('st_wa_recharge_msg') || waCur.recharge_approved_msg || '',
+    };
+    const putBody = {
       welcome_bonus: { enabled: Number(v('st_wb')) > 0, amount: Number(v('st_wb')) || 0 },
       cashback: { enabled: Number(v('st_cb')) > 0, percent: Number(v('st_cb')) || 0 },
       file_upload: { max_mb: Number(v('st_mb')) || 5, allowed: ['pdf', 'jpg', 'jpeg', 'png'] },
       voice_greeting: vg,
-      whatsapp: {
-        enabled: waCur.enabled === true,
-        business_number: String(v('st_wa_num') || '').trim(),
-        order_completed_msg: vr('st_wa_order_msg') || waCur.order_completed_msg || '',
-        recharge_approved_msg: vr('st_wa_recharge_msg') || waCur.recharge_approved_msg || '',
-      },
-    }});
+      whatsapp: waBody,
+    };
+    if (newToken) {
+      waBody.access_token = newToken;
+      putBody.admin_password = admin_password; // server verifies before storing
+    }
+    const resp = await ABC.api('/admin/settings', { method: 'PUT', body: putBody });
+    const rd = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      alert(rd.error === 'WRONG_PASSWORD' ? '❌ ভুল password — token পরিবর্তন হয়নি' : '❌ সংরক্ষণ ব্যর্থ');
+      return;
+    }
     alert('সংরক্ষণ হয়েছে');
+  },
+};
+
+/* WhatsApp connection test (uses stored token server-side; never exposes it) */
+window.AdmWa = {
+  async test() {
+    try {
+      const r = await ABC.api('/admin/settings/whatsapp/test', { method: 'POST', body: {} });
+      const d = await r.json().catch(() => ({}));
+      alert(d.ok ? ('✅ সংযোগ সফল! নম্বর: ' + (d.number || '')) : ('❌ ব্যর্থ: ' + (d.error || 'FAILED')));
+    } catch (e) { alert('❌ ব্যর্থ: ' + e.message); }
   },
 };
 

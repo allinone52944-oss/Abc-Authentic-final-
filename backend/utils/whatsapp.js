@@ -2,16 +2,22 @@
 // All In One (Abc Authentic) - WhatsApp Cloud API client
 // Sends order/recharge notifications via Meta WhatsApp Cloud API
 // (graph.facebook.com v21.0). Free tier: 1000 msgs/month.
-// Config from env: WHATSAPP_ENABLED, WHATSAPP_PHONE_NUMBER_ID,
-// WHATSAPP_ACCESS_TOKEN. Admin toggle: settings.whatsapp.enabled.
+// Config: env (WHATSAPP_ENABLED, WHATSAPP_PHONE_NUMBER_ID,
+// WHATSAPP_ACCESS_TOKEN) + admin DB settings (settings.whatsapp =
+// { enabled, business_number, phone_number_id, access_token, ... }).
+// DB values (when set/non-empty) take precedence over env, so the
+// admin can configure everything from Settings without VM access.
 // Never throws to callers: returns { ok, error }.
 // Bengali UTF-8 is sent as-is (JSON handles it natively).
+// The access token is NEVER logged or returned in API responses.
 // ============================================================
 const { safeLog } = require('../security');
 
 const API_VERSION = 'v21.0';
 const API_BASE = `https://graph.facebook.com/${API_VERSION}`;
 
+// Sync env-only check (used by CLI test script). For the merged
+// DB+env config use async getConfig(db) / canSend(db).
 function isConfigured() {
   return (
     process.env.WHATSAPP_ENABLED === 'true' &&
@@ -20,25 +26,46 @@ function isConfigured() {
   );
 }
 
-// Admin DB toggle (settings.whatsapp = { enabled, business_number }).
-// Missing setting => allowed (env is the master switch).
-async function adminToggleOn(db) {
+// Read the admin's settings.whatsapp row (missing => {}). Never throws.
+async function readDbWhatsapp(db) {
+  if (!db) return {};
   try {
     const r = await db.query("SELECT value FROM settings WHERE key = 'whatsapp'");
-    if (!r.rows.length) return true;
+    if (!r.rows.length) return {};
     const v = typeof r.rows[0].value === 'string'
       ? JSON.parse(r.rows[0].value)
       : r.rows[0].value;
-    return v.enabled !== false;
+    return (v && typeof v === 'object') ? v : {};
   } catch (e) {
-    safeLog('[whatsapp] toggle check failed, defaulting ON:', e.message);
-    return true;
+    safeLog('[whatsapp] settings read failed:', e.message);
+    return {};
   }
 }
 
+const _nonEmpty = (x) => typeof x === 'string' && x.trim() !== '';
+
+// Unified config: DB values (when set/non-empty) override env.
+// enabled = (env WHATSAPP_ENABLED === 'true' OR DB enabled === true)
+//           AND NOT (DB enabled === false). Admin toggle off in DB
+// always wins (explicit false disables sending).
+async function getConfig(db) {
+  const s = await readDbWhatsapp(db);
+  const phone_number_id = _nonEmpty(s.phone_number_id)
+    ? s.phone_number_id.trim()
+    : (process.env.WHATSAPP_PHONE_NUMBER_ID || '');
+  const access_token = _nonEmpty(s.access_token)
+    ? s.access_token.trim()
+    : (process.env.WHATSAPP_ACCESS_TOKEN || '');
+  const enabledByEnv = process.env.WHATSAPP_ENABLED === 'true';
+  const enabledByDb = s.enabled === true;
+  const explicitlyOff = s.enabled === false;
+  const enabled = (enabledByEnv || enabledByDb) && !explicitlyOff;
+  return { enabled, phone_number_id, access_token };
+}
+
 async function canSend(db) {
-  if (!isConfigured()) return false;
-  return adminToggleOn(db);
+  const cfg = await getConfig(db);
+  return !!(cfg.enabled && cfg.phone_number_id && cfg.access_token);
 }
 
 // 01XXXXXXXXX -> 8801XXXXXXXXX (WhatsApp API needs country code,
@@ -51,7 +78,9 @@ function normalizeBdPhone(phone) {
   return null; // not a usable BD mobile number
 }
 
-async function graphPost(path, body) {
+// Internal: POST with an already-resolved config (avoids double DB read).
+// The token is never logged.
+async function graphPostWith(cfg, path, body) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
@@ -59,7 +88,7 @@ async function graphPost(path, body) {
       method: 'POST',
       signal: controller.signal,
       headers: {
-        'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+        'Authorization': `Bearer ${cfg.access_token}`,
         'Content-Type': 'application/json; charset=utf-8',
       },
       body: JSON.stringify(body),
@@ -80,10 +109,15 @@ async function graphPost(path, body) {
   }
 }
 
-async function sendTextMessage(to, message) {
-  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  const token = process.env.WHATSAPP_ACCESS_TOKEN;
-  if (process.env.WHATSAPP_ENABLED !== 'true' || !phoneId || !token) {
+// Backward-compatible wrapper: db optional (env-only when omitted).
+async function graphPost(path, body, db) {
+  const cfg = await getConfig(db);
+  return graphPostWith(cfg, path, body);
+}
+
+async function sendTextMessage(to, message, db) {
+  const cfg = await getConfig(db);
+  if (!cfg.enabled || !cfg.phone_number_id || !cfg.access_token) {
     safeLog('[whatsapp] not configured, skipping message to', to);
     return { ok: false, error: 'WHATSAPP_NOT_CONFIGURED' };
   }
@@ -94,7 +128,7 @@ async function sendTextMessage(to, message) {
   }
   const text = String(message || '').slice(0, 4000);
   if (!text) return { ok: false, error: 'EMPTY_MESSAGE' };
-  return graphPost(`/${phoneId}/messages`, {
+  return graphPostWith(cfg, `/${cfg.phone_number_id}/messages`, {
     messaging_product: 'whatsapp',
     to: recipient,
     type: 'text',
@@ -102,17 +136,16 @@ async function sendTextMessage(to, message) {
   });
 }
 
-async function sendTemplateMessage(to, templateName, languageCode, components) {
-  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  const token = process.env.WHATSAPP_ACCESS_TOKEN;
-  if (process.env.WHATSAPP_ENABLED !== 'true' || !phoneId || !token) {
+async function sendTemplateMessage(to, templateName, languageCode, components, db) {
+  const cfg = await getConfig(db);
+  if (!cfg.enabled || !cfg.phone_number_id || !cfg.access_token) {
     safeLog('[whatsapp] not configured, skipping template to', to);
     return { ok: false, error: 'WHATSAPP_NOT_CONFIGURED' };
   }
   const recipient = normalizeBdPhone(to);
   if (!recipient) return { ok: false, error: 'INVALID_RECIPIENT' };
   if (!templateName) return { ok: false, error: 'MISSING_TEMPLATE' };
-  return graphPost(`/${phoneId}/messages`, {
+  return graphPostWith(cfg, `/${cfg.phone_number_id}/messages`, {
     messaging_product: 'whatsapp',
     to: recipient,
     type: 'template',
@@ -124,11 +157,50 @@ async function sendTemplateMessage(to, templateName, languageCode, components) {
   });
 }
 
+// Test the configured credentials against the Graph API.
+// Never returns or logs the token. db optional (env-only when omitted).
+async function testConnection(db) {
+  try {
+    const cfg = await getConfig(db);
+    if (!cfg.phone_number_id || !cfg.access_token) {
+      return { ok: false, error: 'WHATSAPP_NOT_CONFIGURED' };
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      const res = await fetch(
+        `${API_BASE}/${encodeURIComponent(cfg.phone_number_id)}?fields=display_phone_number`,
+        {
+          signal: controller.signal,
+          headers: { 'Authorization': `Bearer ${cfg.access_token}` },
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = (data.error && data.error.message) || `HTTP_${res.status}`;
+        safeLog('[whatsapp] test connection failed:', msg);
+        return { ok: false, error: msg };
+      }
+      return { ok: true, number: data.display_phone_number || '' };
+    } catch (e) {
+      const msg = e.name === 'AbortError' ? 'TIMEOUT' : (e.message || 'REQUEST_FAILED');
+      safeLog('[whatsapp] test connection request failed:', msg);
+      return { ok: false, error: msg };
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (e) {
+    safeLog('[whatsapp] testConnection failed:', e.message);
+    return { ok: false, error: 'FAILED' };
+  }
+}
+
 // ---- Editable message templates (admin settings) ----------------
 // Admin can edit these in Settings -> WhatsApp. Placeholders in
 // {braces} are replaced with real values at send time.
-// DB key: settings.whatsapp = { enabled, business_number,
-//   order_completed_msg, recharge_approved_msg }
+// DB key: settings.whatsapp = { enabled, business_number, phone_number_id,
+//   access_token, order_completed_msg, recharge_approved_msg }
+// (access_token is never returned to the client; see routes/admin.js)
 const DEFAULT_TEMPLATES = {
   order_completed_msg:
     '🎉 অভিনন্দন! আপনার অর্ডারটি সফল হয়েছে\n' +
@@ -213,7 +285,7 @@ async function notifyOrderCompleted(db, order) {
       service_name: serviceName,
       status: order.status,
     });
-    const r = await sendTextMessage(user.whatsapp, msg);
+    const r = await sendTextMessage(user.whatsapp, msg, db);
     safeLog('[whatsapp] order notify', order.id, '->', r.ok ? 'sent' : r.error);
     return r;
   } catch (e) {
@@ -236,7 +308,7 @@ async function notifyRechargeApproved(db, tx) {
       amount: Number(tx.amount),
       balance: user.balance,
     });
-    const r = await sendTextMessage(user.whatsapp, msg);
+    const r = await sendTextMessage(user.whatsapp, msg, db);
     safeLog('[whatsapp] recharge notify', tx.id || '', '->', r.ok ? 'sent' : r.error);
     return r;
   } catch (e) {
@@ -247,10 +319,13 @@ async function notifyRechargeApproved(db, tx) {
 
 module.exports = {
   isConfigured,
+  getConfig,
   canSend,
   normalizeBdPhone,
+  graphPost,
   sendTextMessage,
   sendTemplateMessage,
+  testConnection,
   DEFAULT_TEMPLATES,
   getTemplates,
   renderTemplate,

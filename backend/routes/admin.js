@@ -6,7 +6,7 @@
 // ============================================================
 const express = require('express');
 const db = require('../db');
-const { requireAuth, requireAdmin, hashPassword } = require('../auth');
+const { requireAuth, requireAdmin, hashPassword, verifyPassword } = require('../auth');
 const { safeLog } = require('../security');
 const wa = require('../utils/whatsapp');
 
@@ -826,9 +826,66 @@ router.get('/settings', async (req, res) => {
     const r = await db.query('SELECT key, value FROM settings');
     const out = {};
     for (const row of r.rows) out[row.key] = row.value;
+    // Security: never return the WhatsApp access token to the client.
+    // Clients see only whether a token is stored.
+    if (out.whatsapp && typeof out.whatsapp === 'object') {
+      let waVal = out.whatsapp;
+      if (typeof waVal === 'string') {
+        try { waVal = JSON.parse(waVal); } catch (_) { waVal = {}; }
+      }
+      if (waVal && typeof waVal === 'object') {
+        const masked = Object.assign({}, waVal);
+        masked.access_token_set = !!masked.access_token;
+        delete masked.access_token;
+        out.whatsapp = masked;
+      }
+    }
     res.json(out);
   } catch (e) { safeLog('[admin] settings error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });
+
+// Merge an incoming settings.whatsapp object with the stored one.
+// - The access_token is only replaced when a non-empty, non-masked value
+//   is supplied AND the admin's current password (body.admin_password)
+//   verifies against their password hash. Otherwise the stored token is
+//   preserved (it can never be blanked or read via this endpoint).
+// - The access_token_set flag is never persisted.
+async function mergeWhatsappSetting(req, incoming) {
+  const cur = await db.query("SELECT value FROM settings WHERE key = 'whatsapp'");
+  let existing = {};
+  if (cur.rows.length) {
+    const v = cur.rows[0].value;
+    try {
+      existing = (typeof v === 'string') ? JSON.parse(v) : (v || {});
+    } catch (_) { existing = {}; }
+  }
+  const out = Object.assign({}, incoming);
+  delete out.access_token_set; // mask flag is client-only, never stored
+  const incomingToken = typeof out.access_token === 'string' ? out.access_token.trim() : '';
+  const isNewToken = incomingToken !== '' && !incomingToken.startsWith('••••');
+  if (isNewToken) {
+    const pw = req.body && req.body.admin_password;
+    if (!pw) {
+      const err = new Error('WRONG_PASSWORD');
+      err.status = 403;
+      throw err;
+    }
+    const ur = await db.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
+    const hash = ur.rows[0] && ur.rows[0].password_hash;
+    const ok = hash ? await verifyPassword(String(pw), hash) : false;
+    if (!ok) {
+      const err = new Error('WRONG_PASSWORD');
+      err.status = 403;
+      throw err;
+    }
+    out.access_token = incomingToken;
+  } else if (existing.access_token) {
+    out.access_token = existing.access_token; // preserve stored token
+  } else {
+    delete out.access_token;
+  }
+  return out;
+}
 
 router.put('/settings', async (req, res) => {
   try {
@@ -838,10 +895,19 @@ router.put('/settings', async (req, res) => {
     const updated = [];
     for (const key of allowed) {
       if (req.body[key] !== undefined) {
+        let val = req.body[key];
+        if (key === 'whatsapp' && val && typeof val === 'object') {
+          try {
+            val = await mergeWhatsappSetting(req, val);
+          } catch (e) {
+            if (e.status === 403) return res.status(403).json({ error: 'WRONG_PASSWORD' });
+            throw e;
+          }
+        }
         await db.query(
           `INSERT INTO settings (key, value) VALUES ($1, $2)
            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
-          [key, JSON.stringify(req.body[key])]
+          [key, JSON.stringify(val)]
         );
         updated.push(key);
       }
@@ -849,6 +915,18 @@ router.put('/settings', async (req, res) => {
     await logActivity(req.user.id, 'settings.update', { keys: updated });
     res.json({ ok: true, updated });
   } catch (e) { safeLog('[admin] settings update error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+// Test WhatsApp Cloud API credentials (uses stored token, never returns it).
+// No password confirmation needed: nothing sensitive is exposed.
+router.post('/settings/whatsapp/test', async (req, res) => {
+  try {
+    const r = await wa.testConnection(db);
+    res.json(r);
+  } catch (e) {
+    safeLog('[admin] whatsapp test error:', e.message);
+    res.status(500).json({ ok: false, error: 'FAILED' });
+  }
 });
 
 // ============================================================
