@@ -43,18 +43,51 @@ function engineDir() {
   return __dirname;
 }
 
+let _installing = false;
+
 function init() {
-  if (_proc) return;
+  if (_proc || _installing) return;
   const serverJs = path.join(engineDir(), 'server.js');
   if (!fs.existsSync(serverJs)) {
     console.error('[bdris-apply] server.js not found, engine not started');
     return;
   }
-  // Check node_modules
+  // Auto-install node_modules on first run (no manual VM step needed)
   if (!fs.existsSync(path.join(engineDir(), 'node_modules'))) {
-    console.error('[bdris-apply] node_modules missing — run: cd engines/bdris-apply && npm install');
+    console.log('[bdris-apply] node_modules missing — auto-installing (first run, may take a few minutes)...');
+    _installing = true;
+    const npm = spawn('npm', ['install', '--no-audit', '--no-fund'], {
+      cwd: engineDir(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    npm.stdout.on('data', (d) => console.log('[bdris-apply:npm]', String(d).slice(0, 200)));
+    npm.stderr.on('data', (d) => console.error('[bdris-apply:npm]', String(d).slice(0, 200)));
+    npm.on('close', (code) => {
+      _installing = false;
+      if (code === 0) {
+        console.log('[bdris-apply] npm install done — starting engine');
+        // Playwright browser (non-blocking; engine works in mock mode without it)
+        const pw = spawn('npx', ['playwright', 'install', 'chromium', '--only-shell'], {
+          cwd: engineDir(), stdio: 'ignore',
+        });
+        pw.on('close', () => console.log('[bdris-apply] playwright chromium ready (or skipped)'));
+        startEngine();
+      } else {
+        console.error('[bdris-apply] npm install failed with code', code, '— will retry on next init');
+      }
+    });
+    npm.on('error', (e) => {
+      _installing = false;
+      console.error('[bdris-apply] npm spawn failed:', e.message);
+    });
     return;
   }
+  startEngine();
+}
+
+function startEngine() {
+  if (_proc) return;
+  const serverJs = path.join(engineDir(), 'server.js');
   _proc = spawn(process.execPath, [serverJs], {
     cwd: engineDir(),
     env: Object.assign({}, process.env, {
