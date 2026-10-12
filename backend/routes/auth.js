@@ -17,6 +17,7 @@ const {
 } = require('../auth');
 const { safeLog } = require('../security');
 const { validateInvite, consumeInvite } = require('./invites');
+const push = require('../utils/push');
 
 const router = express.Router();
 
@@ -138,6 +139,9 @@ router.post('/register', async (req, res) => {
         emailSent = !!sent.ok;
       }
     } catch (e) { safeLog('[auth] verification email skipped:', e.message); }
+
+    // Web Push: notify admins of new user registration (async, non-blocking)
+    push.notifyNewUser(db, user).catch(() => {});
 
     return res.status(201).json({
       ok: true,

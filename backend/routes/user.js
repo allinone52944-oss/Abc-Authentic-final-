@@ -8,6 +8,7 @@ const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../auth');
 const { safeLog } = require('../security');
+const push = require('../utils/push');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -160,6 +161,9 @@ router.post('/orders', async (req, res) => {
       );
       return ins.rows[0];
     });
+
+    // Web Push: notify admins of new order (async, non-blocking)
+    push.notifyNewOrder(db, order, service.name_bn || service.name, req.user.id).catch(() => {});
 
     res.status(201).json({ order });
   } catch (e) {
@@ -323,6 +327,10 @@ router.post('/wallet/recharge', async (req, res) => {
       `INSERT INTO transactions (user_id, type, amount, method, sender_no, trxid, screenshot, status)
        VALUES ($1, 'recharge', $2, $3, $4, $5, $6, 'pending') RETURNING *`,
       [req.user.id, amt, method, String(sender_no).trim(), String(trxid).trim(), screenshot || null]);
+
+    // Web Push: notify admins of new recharge request (async, non-blocking)
+    push.notifyNewRecharge(db, r.rows[0], req.user.id).catch(() => {});
+
     res.status(201).json({ transaction: r.rows[0] });
   } catch (e) {
     safeLog('[user] recharge error:', e.message);

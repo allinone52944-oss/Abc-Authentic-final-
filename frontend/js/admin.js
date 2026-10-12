@@ -32,6 +32,7 @@ async function init() {
   };
   show('stats');
   VoiceAlert.init();
+  PushNotify.ensure(); // silent re-subscribe if permission already granted
 }
 
 async function show(tab) {
@@ -103,6 +104,72 @@ const VoiceAlert = {
     if (this.enabled) this.speak('ভয়েস নোটিফিকেশন চালু হয়েছে।');
     return this.enabled;
   },
+};
+
+/* ============ Web Push (screen-off sound alerts for admin) ============ */
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+const PushNotify = {
+  LS: 'abc_push',
+  get enabled() { return localStorage.getItem(this.LS) !== 'off'; },
+  supported() { return ('serviceWorker' in navigator) && ('PushManager' in window); },
+  // Ensure an active subscription exists (silent; only when permission already granted)
+  async ensure() {
+    try {
+      if (!this.enabled || !this.supported()) return false;
+      if (Notification.permission !== 'granted') return false;
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        const kr = await ABC.api('/push/vapid-public-key');
+        const kd = await kr.json();
+        if (!kd.publicKey) return false;
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(kd.publicKey),
+        });
+        await ABC.api('/push/subscribe', { method: 'POST', body: sub.toJSON() });
+      }
+      return true;
+    } catch (e) { return false; }
+  },
+  // User-initiated enable: requests permission, then subscribes
+  async enable() {
+    try {
+      if (!this.supported()) { alert('এই ব্রাউজারে Push নোটিফিকেশন সাপোর্ট নেই'); return false; }
+      if (Notification.permission === 'denied') {
+        alert('নোটিফিকেশন ব্লক করা আছে — ব্রাউজার সেটিংস থেকে Allow করুন');
+        return false;
+      }
+      if (Notification.permission === 'default') {
+        const p = await Notification.requestPermission();
+        if (p !== 'granted') { alert('অনুমতি না দিলে Push নোটিফিকেশন আসবে না'); return false; }
+      }
+      localStorage.setItem(this.LS, 'on');
+      const ok = await this.ensure();
+      if (ok) alert('🔔 Push নোটিফিকেশন চালু! স্ক্রিন বন্ধ থাকলেও সাউন্ড আসবে।');
+      return ok;
+    } catch (e) { return false; }
+  },
+  async disable() {
+    localStorage.setItem(this.LS, 'off');
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await ABC.api('/push/unsubscribe', { method: 'POST', body: { endpoint: sub.endpoint } });
+        await sub.unsubscribe();
+      }
+    } catch (e) { /* silent */ }
+    return false;
+  },
+  async toggle() { return this.enabled ? this.disable() : this.enable(); },
 };
 
 const TABS = {};
@@ -909,6 +976,9 @@ TABS.settings = async () => {
     '<div class="list-row" style="cursor:default;"><div><div class="t">🔊 ভয়েস নোটিফিকেশন</div><div class="s">নতুন রিচার্জ/অর্ডারে বাংলা ভয়েস অ্যালার্ট</div></div>' +
     '<button class="mini-btn ' + (VoiceAlert.enabled ? 'ok' : '') + '" onclick="var on=VoiceAlert.toggle();this.className=\'mini-btn \'+(on?\'ok\':\'\');this.textContent=on?\'✅ চালু\':\'❌ বন্ধ\';">' +
     (VoiceAlert.enabled ? '✅ চালু' : '❌ বন্ধ') + '</button></div>' +
+    '<div class="list-row" style="cursor:default;"><div><div class="t">🔔 Push নোটিফিকেশন</div><div class="s">স্ক্রিন বন্ধ থাকলেও সাউন্ড + ভাইব্রেশন অ্যালার্ট</div></div>' +
+    '<button class="mini-btn ' + (PushNotify.enabled ? 'ok' : '') + '" onclick="PushNotify.toggle().then(function(on){this.className=\'mini-btn \'+(on?\'ok\':\'\');this.textContent=on?\'✅ চালু\':\'❌ বন্ধ\';}.bind(this))">' +
+    (PushNotify.enabled ? '✅ চালু' : '❌ বন্ধ') + '</button></div>' +
     '<div class="list-row" style="cursor:default;"><div><div class="t">🔊 Religion Voice Greeting</div><div class="s">লগইনে ধর্মভিত্তিক বাংলা ভয়েস শুভেচ্ছা</div></div>' + bool('voice_greeting') + '</div>' +
     '<div class="list-row" style="cursor:default;"><div><div class="t">🔄 ভয়েস রোটেশন</div><div class="s">পুরুষ → মহিলা → শিশু কণ্ঠে পর্যায়ক্রমে</div></div>' + bool('voice_greeting', 'rotation') + '</div>' +
     '<div class="list-row" style="cursor:default;"><div><div class="t">💬 WhatsApp নোটিফিকেশন</div><div class="s">অর্ডার সফল / রিচার্জ সফল হলে গ্রাহকের WhatsApp-এ অটো মেসেজ</div></div>' + bool('whatsapp') + '</div>' +
@@ -981,5 +1051,6 @@ function modal(title, bodyHtml) {
 function closeModal() { const m = document.getElementById('admModal'); if (m) m.remove(); }
 
 window.VoiceAlert = VoiceAlert;
+window.PushNotify = PushNotify;
 init();
 })();

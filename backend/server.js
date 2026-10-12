@@ -142,6 +142,10 @@ try {
 const userRoutes = require('./routes/user');
 app.use('/api', apiLimiter, userRoutes);
 
+// ---- Web Push routes (subscriptions + VAPID public key) --
+const pushRoutes = require('./routes/push');
+app.use('/api/push', apiLimiter, pushRoutes);
+
 // ---- Fallback: frontend handles routing ----------------------
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'frontend', 'index.html'));

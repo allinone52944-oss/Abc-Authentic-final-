@@ -313,6 +313,17 @@ DROP TRIGGER IF EXISTS trg_service_categories_updated ON service_categories;
 CREATE TRIGGER trg_service_categories_updated BEFORE UPDATE ON service_categories
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+-- 013: Web Push subscriptions (admin sound alerts even with screen off)
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    endpoint   TEXT NOT NULL UNIQUE,
+    p256dh     TEXT NOT NULL,
+    auth       TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);
+
 DROP TRIGGER IF EXISTS trg_orders_updated ON orders;
 CREATE TRIGGER trg_orders_updated BEFORE UPDATE ON orders
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
