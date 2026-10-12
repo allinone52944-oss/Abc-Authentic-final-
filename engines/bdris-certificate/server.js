@@ -600,7 +600,9 @@ function buildCertificateHtml(d, assets) {
     // collapse-proof spaces (replica uses &nbsp; for the double space in dobWords)
     const N = (s) => esc(s).replace(/ {2,}/g, (m) => '&nbsp;'.repeat(m.length));
     const bnL = String(d.permBn == null ? '' : d.permBn).split('\n');
-    const enL = String(d.permEn == null ? '' : d.permEn).split('\n');
+    // Title Case for English address: any input case -> proper case
+    const _tc = (s) => String(s || '').toLowerCase().split(/(\s+)/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+    const enL = _tc(d.permEn).split('\n');
     const brnText = String(d.brn == null ? '' : d.brn);
 
     return `<!DOCTYPE html>
@@ -736,7 +738,7 @@ function buildCertificateHtml(d, assets) {
   <div class="el txt f11" style="left:56.1mm; top:180.8mm; width:40mm; font-family:'SutonnyOMJ'; transform:scaleX(1.018); transform-origin:left bottom; line-height:4.3mm; white-space:normal;">${bnL.map(esc).join('<br>')}</div>
   <div class="el txt f11" style="left:101.55mm; top:179.9mm; font-family:Verdana, sans-serif; transform:scaleX(1.024); transform-origin:left center;">Permanent</div>
   <div class="el txt f11" style="left:128.1mm; top:179.9mm;">:</div>
-  <div class="el txt f11" style="left:131.1mm; top:180.43mm; width:70mm; white-space:normal;"><div style="font-family:Tahoma, sans-serif; letter-spacing:0.96px; transform:scaleX(1.002); transform-origin:left center; line-height:4.27mm;">${esc(enL[0])}</div>${enL.length > 1 ? `<div style="font-family:Tahoma, sans-serif; letter-spacing:1.07px; transform:scaleX(1.002); transform-origin:left center; line-height:4.27mm;">${enL.slice(1).map(esc).join('<br>')}</div>` : ''}</div>
+  <div class="el txt f11" style="left:131.1mm; top:180.43mm; width:51.6mm; max-width:51.6mm; white-space:normal; overflow-wrap:break-word;"><div style="font-family:Tahoma, sans-serif; letter-spacing:0.96px; transform:scaleX(1.002); transform-origin:left center; line-height:4.27mm;">${esc(enL[0])}</div>${enL.length > 1 ? `<div style="font-family:Tahoma, sans-serif; letter-spacing:1.07px; transform:scaleX(1.002); transform-origin:left center; line-height:4.27mm;">${enL.slice(1).map(esc).join('<br>')}</div>` : ''}</div>
   <div class="el txt f11" style="left:101.55mm; top:184.7mm; font-family:Verdana, sans-serif; transform:scaleX(1.047); transform-origin:left center;">Address</div>
 
   <!-- signatures -->
@@ -817,8 +819,10 @@ app.post('/generate-pdf', async (req, res) => {
         await browser.close();
 
         const brnText = String(d.brn || '').trim();
+        // Filename: person's English name with underscores (fallback to BRN)
+        const nameText = String(d.nameEn || '').trim().replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '_') || brnText || 'output';
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=Certificate_${brnText || 'output'}.pdf`);
+        res.setHeader('Content-Disposition', `attachment; filename=${nameText}.pdf`);
         res.send(pdfBuffer);
     } catch (err) {
         console.error('PDF generation error:', err);
