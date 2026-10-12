@@ -56,7 +56,11 @@ function serviceOpen(schedule) {
 router.get('/services', async (req, res) => {
   try {
     const rows = await db.query(
-      `SELECT * FROM services WHERE status = 'active' ORDER BY serial ASC, created_at ASC`);
+      `SELECT s.*, sc.id AS cat_id, sc.name AS cat_name, sc.name_bn AS cat_name_bn,
+              sc.icon AS cat_icon, sc.serial AS cat_serial
+       FROM services s
+       LEFT JOIN service_categories sc ON sc.id = s.category_id AND sc.status = 'active'
+       WHERE s.status = 'active' ORDER BY s.serial ASC, s.created_at ASC`);
     const out = [];
     for (const s of rows.rows) {
       const eff = await effectivePrice(req.user.id, s);
@@ -64,6 +68,12 @@ router.get('/services', async (req, res) => {
       out.push({
         id: s.id, name: s.name, name_bn: s.name_bn, type: s.type,
         price: eff.price, serial: s.serial,
+        // category (null when uncategorized or category disabled -> grouped under অন্যান্য)
+        category_id: s.cat_id || null,
+        category_name: s.cat_name || null,
+        category_name_bn: s.cat_name_bn || null,
+        category_icon: s.cat_icon || null,
+        category_serial: s.cat_serial == null ? null : Number(s.cat_serial),
         documents_required: s.documents_required,
         fields_required: s.fields_required,
         schedule: s.schedule, rules_text: s.rules_text,
@@ -80,7 +90,10 @@ router.get('/services', async (req, res) => {
 router.get('/services/:id', async (req, res) => {
   try {
     const r = await db.query(
-      `SELECT * FROM services WHERE id = $1 AND status = 'active'`, [req.params.id]);
+      `SELECT s.*, sc.id AS cat_id, sc.name AS cat_name, sc.name_bn AS cat_name_bn, sc.icon AS cat_icon
+       FROM services s
+       LEFT JOIN service_categories sc ON sc.id = s.category_id AND sc.status = 'active'
+       WHERE s.id = $1 AND s.status = 'active'`, [req.params.id]);
     if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
     const s = r.rows[0];
     const eff = await effectivePrice(req.user.id, s);
@@ -92,6 +105,10 @@ router.get('/services/:id', async (req, res) => {
         fields_required: s.fields_required, schedule: s.schedule,
         rules_text: s.rules_text, engine_id: s.engine_id,
         open: serviceOpen(s.schedule),
+        category_id: s.cat_id || null,
+        category_name: s.cat_name || null,
+        category_name_bn: s.cat_name_bn || null,
+        category_icon: s.cat_icon || null,
       },
     });
   } catch (e) {

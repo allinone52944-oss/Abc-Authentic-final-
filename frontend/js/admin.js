@@ -321,13 +321,31 @@ window.AdmOrders = {
 };
 
 /* ---------------- SERVICES ---------------- */
+let catCache = null;
+async function loadCats() {
+  try {
+    const r = await ABC.api('/admin/service-categories');
+    catCache = r.ok ? (await r.json()).categories : [];
+  } catch (e) { catCache = []; }
+  return catCache;
+}
+function catOptions(selected) {
+  let h = '<option value="">— ক্যাটাগরি নেই —</option>';
+  (catCache || []).forEach(c => {
+    h += '<option value="' + c.id + '"' + (selected === c.id ? ' selected' : '') + '>' +
+      esc((c.icon || '📁') + ' ' + (c.name_bn || c.name)) + '</option>';
+  });
+  return h;
+}
 TABS.services = async () => {
+  await loadCats();
   const r = await ABC.api('/admin/services');
   const d = await r.json();
   let html = '<button class="mini-btn ok" onclick="AdmSvc.createForm()" style="margin-bottom:12px;">+ নতুন সেবা</button>' +
-    '<div style="overflow-x:auto;"><table class="adm"><tr><th>#</th><th>নাম</th><th>ধরন</th><th>দাম</th><th>স্ট্যাটাস</th><th>কাজ</th></tr>';
+    '<div style="overflow-x:auto;"><table class="adm"><tr><th>#</th><th>নাম</th><th>ক্যাটাগরি</th><th>ধরন</th><th>দাম</th><th>স্ট্যাটাস</th><th>কাজ</th></tr>';
   d.services.forEach((s, i) => {
     html += '<tr><td>' + (i + 1) + '</td><td>' + esc(s.name_bn || s.name) + '<br><small style="color:var(--dim)">' + esc(s.name) + '</small></td>' +
+      '<td>' + esc(s.category_id ? ((s.category_icon || '📁') + ' ' + (s.category_name_bn || s.category_name || '')) : '—') + '</td>' +
       '<td>' + (s.type === 'manual' ? 'ম্যানুয়াল' : 'অটোমেটেড') + '</td><td>৳' + bn(s.price) + '</td>' +
       '<td>' + esc(s.status) + '</td>' +
       '<td><button class="mini-btn" onclick="AdmSvc.edit(\'' + s.id + '\')">এডিট</button>' +
@@ -339,6 +357,7 @@ window.AdmSvc = {
   createForm() {
     modal('🛎️ নতুন সেবা',
       fld('নাম (বাংলা)', 'text', 'sv_bn') + fld('নাম (English)', 'text', 'sv_name') +
+      '<div class="field"><label>ক্যাটাগরি</label><select id="sv_cat">' + catOptions(null) + '</select></div>' +
       '<div class="field"><label>ধরন</label><select id="sv_type"><option value="manual">ম্যানুয়াল</option><option value="automated">অটোমেটেড</option></select></div>' +
       fld('দাম (৳)', 'number', 'sv_price') +
       fld('ডকুমেন্ট (কমা দিয়ে: NID, Photo)', 'text', 'sv_docs') +
@@ -351,6 +370,7 @@ window.AdmSvc = {
       name: v('sv_name') || v('sv_bn'), name_bn: v('sv_bn'),
       type: document.getElementById('sv_type').value,
       price: Number(v('sv_price')) || 0,
+      category_id: document.getElementById('sv_cat').value || null,
       documents_required: docs, rules_text: v('sv_rules'),
     }});
     const d = await r.json();
@@ -364,6 +384,7 @@ window.AdmSvc = {
     modal('✏️ ' + esc(s.name_bn || s.name),
       fld('নাম (বাংলা)', 'text', 'esv_bn', s.name_bn || '') +
       fld('নাম (English)', 'text', 'esv_name', s.name || '') +
+      '<div class="field"><label>ক্যাটাগরি</label><select id="esv_cat">' + catOptions(s.category_id) + '</select></div>' +
       fld('দাম (৳)', 'number', 'esv_price', s.price) +
       '<div class="field"><label>স্ট্যাটাস</label><select id="esv_status">' +
       ['active', 'disabled'].map(x => '<option value="' + x + '"' + (s.status === x ? ' selected' : '') + '>' + x + '</option>').join('') +
@@ -377,6 +398,7 @@ window.AdmSvc = {
     const r = await ABC.api('/admin/services/' + id, { method: 'PUT', body: {
       name: v('esv_name'), name_bn: v('esv_bn'), price: Number(v('esv_price')) || 0,
       status: document.getElementById('esv_status').value,
+      category_id: document.getElementById('esv_cat').value || null,
       documents_required: docs, rules_text: v('esv_rules'),
     }});
     if (!r.ok) { alert('ব্যর্থ'); return; }
@@ -388,6 +410,87 @@ window.AdmSvc = {
     const r = await ABC.api('/admin/services/' + id + '?confirm=yes', { method: 'DELETE' });
     if (!r.ok) { alert('ব্যর্থ'); return; }
     show('services');
+  },
+};
+
+/* ---------------- SERVICE CATEGORIES ---------------- */
+TABS.cats = async () => {
+  const r = await ABC.api('/admin/service-categories');
+  const d = await r.json();
+  const cats = d.categories || [];
+  let html = '<button class="mini-btn ok" onclick="AdmCat.createForm()" style="margin-bottom:12px;">+ নতুন ক্যাটাগরি</button>';
+  if (!cats.length) {
+    html += '<div style="color:var(--muted)">কোনো ক্যাটাগরি নেই — প্রথম ক্যাটাগরি বানান (যেমন: জন্মনিবন্ধন সেবা) 📁</div>';
+  } else {
+    html += '<div style="overflow-x:auto;"><table class="adm"><tr><th>#</th><th>আইকন</th><th>নাম</th><th>সেবা</th><th>স্ট্যাটাস</th><th>ক্রম</th><th>কাজ</th></tr>';
+    cats.forEach((c, i) => {
+      html += '<tr><td>' + (i + 1) + '</td><td style="font-size:22px">' + esc(c.icon || '📁') + '</td>' +
+        '<td>' + esc(c.name_bn || c.name) + '<br><small style="color:var(--dim)">' + esc(c.name) + '</small></td>' +
+        '<td>' + bn(c.service_count) + 'টি</td>' +
+        '<td>' + esc(c.status) + '</td>' +
+        '<td><button class="mini-btn" onclick="AdmCat.move(\'' + c.id + '\',-1)"' + (i === 0 ? ' disabled' : '') + '>↑</button> ' +
+        '<button class="mini-btn" onclick="AdmCat.move(\'' + c.id + '\',1)"' + (i === cats.length - 1 ? ' disabled' : '') + '>↓</button></td>' +
+        '<td><button class="mini-btn" onclick="AdmCat.edit(\'' + c.id + '\')">এডিট</button> ' +
+        '<button class="mini-btn danger" onclick="AdmCat.del(\'' + c.id + '\')">ডিলিট</button></td></tr>';
+    });
+    html += '</table></div>' +
+      '<div style="color:var(--muted);margin-top:10px;font-size:13px;">💡 ক্যাটাগরি ডিলিট করলে ভিতরের সেবাগুলো ডিলিট হবে না — "অন্যান্য"-তে চলে যাবে।</div>';
+  }
+  content.innerHTML = html;
+};
+window.AdmCat = {
+  createForm() {
+    modal('📁 নতুন ক্যাটাগরি',
+      fld('নাম (বাংলা)', 'text', 'ct_bn') + fld('নাম (English)', 'text', 'ct_name') +
+      fld('আইকন (emoji)', 'text', 'ct_icon', '📁') +
+      '<button class="btn" onclick="AdmCat.create()">তৈরি করুন</button>');
+  },
+  async create() {
+    const r = await ABC.api('/admin/service-categories', { method: 'POST', body: {
+      name: v('ct_name') || v('ct_bn'), name_bn: v('ct_bn'), icon: v('ct_icon') || '📁',
+    }});
+    const d = await r.json();
+    if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
+    closeModal(); show('cats');
+  },
+  async edit(id) {
+    const r = await ABC.api('/admin/service-categories');
+    const c = (await r.json()).categories.find(x => x.id === id);
+    if (!c) return;
+    modal('✏️ ' + esc(c.name_bn || c.name),
+      fld('নাম (বাংলা)', 'text', 'ect_bn', c.name_bn || '') +
+      fld('নাম (English)', 'text', 'ect_name', c.name || '') +
+      fld('আইকন (emoji)', 'text', 'ect_icon', c.icon || '📁') +
+      '<div class="field"><label>স্ট্যাটাস</label><select id="ect_status">' +
+      ['active', 'disabled'].map(x => '<option value="' + x + '"' + (c.status === x ? ' selected' : '') + '>' + x + '</option>').join('') +
+      '</select></div>' +
+      '<button class="btn" onclick="AdmCat.save(\'' + id + '\')">সংরক্ষণ</button>');
+  },
+  async save(id) {
+    const r = await ABC.api('/admin/service-categories/' + id, { method: 'PUT', body: {
+      name: v('ect_name'), name_bn: v('ect_bn'), icon: v('ect_icon'),
+      status: document.getElementById('ect_status').value,
+    }});
+    if (!r.ok) { alert('ব্যর্থ'); return; }
+    closeModal(); show('cats');
+  },
+  async del(id) {
+    if (!confirm('ক্যাটাগরি ডিলিট করবেন? ভিতরের সেবাগুলো ডিলিট হবে না, "অন্যান্য"-তে চলে যাবে।')) return;
+    const r = await ABC.api('/admin/service-categories/' + id + '?confirm=yes', { method: 'DELETE' });
+    if (!r.ok) { alert('ব্যর্থ'); return; }
+    show('cats');
+  },
+  async move(id, dir) {
+    const r = await ABC.api('/admin/service-categories');
+    const cats = (await r.json()).categories || [];
+    const i = cats.findIndex(x => x.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= cats.length) return;
+    const order = cats.map(x => x.id);
+    const t = order[i]; order[i] = order[j]; order[j] = t;
+    const rr = await ABC.api('/admin/service-categories/reorder', { method: 'PUT', body: { order } });
+    if (!rr.ok) { alert('ব্যর্থ'); return; }
+    show('cats');
   },
 };
 
@@ -808,6 +911,10 @@ TABS.settings = async () => {
     (VoiceAlert.enabled ? '✅ চালু' : '❌ বন্ধ') + '</button></div>' +
     '<div class="list-row" style="cursor:default;"><div><div class="t">🔊 Religion Voice Greeting</div><div class="s">লগইনে ধর্মভিত্তিক বাংলা ভয়েস শুভেচ্ছা</div></div>' + bool('voice_greeting') + '</div>' +
     '<div class="list-row" style="cursor:default;"><div><div class="t">🔄 ভয়েস রোটেশন</div><div class="s">পুরুষ → মহিলা → শিশু কণ্ঠে পর্যায়ক্রমে</div></div>' + bool('voice_greeting', 'rotation') + '</div>' +
+    '<div class="list-row" style="cursor:default;"><div><div class="t">💬 WhatsApp নোটিফিকেশন</div><div class="s">অর্ডার সফল / রিচার্জ সফল হলে গ্রাহকের WhatsApp-এ অটো মেসেজ</div></div>' + bool('whatsapp') + '</div>' +
+    fld('WhatsApp বিজনেস নম্বর (ডিসপ্লে)', 'text', 'st_wa_num', ((s.whatsapp || {}).business_number) || '') +
+    ta('📩 অর্ডার সফল মেসেজ (WhatsApp)', 'st_wa_order_msg', ((s.whatsapp || {}).order_completed_msg) || '', 'প্লেসহোল্ডার: {name} {order_number} {service_name}') +
+    ta('📩 রিচার্জ সফল মেসেজ (WhatsApp)', 'st_wa_recharge_msg', ((s.whatsapp || {}).recharge_approved_msg) || '', 'প্লেসহোল্ডার: {name} {amount} {balance}') +
     fld('ইসলাম গ্রিটিং', 'text', 'st_vg_islam', (((s.voice_greeting||{}).greetings||{}).islam) || 'আসসালামু আলাইকুম') +
     fld('হিন্দু গ্রিটিং', 'text', 'st_vg_hindu', (((s.voice_greeting||{}).greetings||{}).hindu) || 'নমস্কার') +
     fld('বৌদ্ধ গ্রিটিং', 'text', 'st_vg_buddhist', (((s.voice_greeting||{}).greetings||{}).buddhist) || 'নমো বুদ্ধায়') +
@@ -834,11 +941,18 @@ window.AdmSt = {
       islam: v('st_vg_islam'), hindu: v('st_vg_hindu'), buddhist: v('st_vg_buddhist'),
       christian: v('st_vg_christian'), other: v('st_vg_other'),
     };
+    const waCur = Object.assign({ enabled: false, business_number: '' }, cur.whatsapp || {});
     await ABC.api('/admin/settings', { method: 'PUT', body: {
       welcome_bonus: { enabled: Number(v('st_wb')) > 0, amount: Number(v('st_wb')) || 0 },
       cashback: { enabled: Number(v('st_cb')) > 0, percent: Number(v('st_cb')) || 0 },
       file_upload: { max_mb: Number(v('st_mb')) || 5, allowed: ['pdf', 'jpg', 'jpeg', 'png'] },
       voice_greeting: vg,
+      whatsapp: {
+        enabled: waCur.enabled === true,
+        business_number: String(v('st_wa_num') || '').trim(),
+        order_completed_msg: vr('st_wa_order_msg') || waCur.order_completed_msg || '',
+        recharge_approved_msg: vr('st_wa_recharge_msg') || waCur.recharge_approved_msg || '',
+      },
     }});
     alert('সংরক্ষণ হয়েছে');
   },
@@ -849,7 +963,13 @@ function fld(label, type, id, val) {
   return '<div class="field"><label>' + label + '</label>' +
     '<input type="' + type + '" id="' + id + '" value="' + esc(val || '') + '"></div>';
 }
+function ta(label, id, val, hint) {
+  return '<div class="field"><label>' + label + '</label>' +
+    '<textarea id="' + id + '" rows="4" style="width:100%;resize:vertical;">' + esc(val || '') + '</textarea>' +
+    (hint ? '<div style="color:#888;font-size:12px;margin-top:4px;">' + hint + '</div>' : '') + '</div>';
+}
 function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+function vr(id) { const el = document.getElementById(id); return el ? el.value : ''; }
 function modal(title, bodyHtml) {
   closeModal();
   const bg = document.createElement('div');

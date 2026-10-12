@@ -15,6 +15,7 @@ const db = require('../db');
 const { requireAuth, requireAdmin } = require('../auth');
 const { safeLog } = require('../security');
 const { parseSms } = require('../utils/sms-parser');
+const wa = require('../utils/whatsapp');
 
 const smsLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -174,6 +175,9 @@ webhook.post('/incoming', async (req, res) => {
               sms_id: smsId, tx_id: tx.id, user_id: tx.user_id,
               amount: Number(tx.amount), how: matchInfo.how, trxid: tx.trxid,
             });
+            // WhatsApp: auto-approved recharge -> customer success message
+            // (async, non-blocking, never breaks the webhook response)
+            wa.notifyRechargeApproved(db, tx).catch(() => {});
             return res.json({ ok: true, matched: true, how: matchInfo.how, tx_id: tx.id });
           }
         }
@@ -255,6 +259,9 @@ adminSms.post('/:id/match', async (req, res) => {
       await logActivity(req.user.id, 'sms.manual_match', {
         sms_id: smsId, tx_id: tx.id, user_id: tx.user_id, amount: Number(tx.amount),
       });
+      // WhatsApp: manually matched recharge -> customer success message
+      // (async, non-blocking, never breaks the response)
+      wa.notifyRechargeApproved(db, tx).catch(() => {});
       res.json({ ok: true, tx_id: tx.id });
     } catch (e) {
       try { await client.query('ROLLBACK'); } catch (_) { /* noop */ }

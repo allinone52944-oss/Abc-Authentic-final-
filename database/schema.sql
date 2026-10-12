@@ -39,12 +39,30 @@ CREATE INDEX IF NOT EXISTS idx_users_role   ON users(role);
 CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
 
 -- ------------------------------------------------------------
+-- SERVICE CATEGORIES (admin-created groups, e.g. "জন্মনিবন্ধন সেবা")
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS service_categories (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       VARCHAR(160) NOT NULL,          -- English name
+    name_bn    VARCHAR(160),                   -- Bengali name
+    icon       VARCHAR(20) NOT NULL DEFAULT '📁',
+    serial     INT NOT NULL DEFAULT 0,         -- display order
+    status     VARCHAR(20) NOT NULL DEFAULT 'active'
+               CHECK (status IN ('active','disabled')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_scats_serial ON service_categories(serial);
+CREATE INDEX IF NOT EXISTS idx_scats_status ON service_categories(status);
+
+-- ------------------------------------------------------------
 -- SERVICES
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS services (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name               VARCHAR(160) NOT NULL,           -- English name
     name_bn            VARCHAR(160),                    -- Bengali name
+    category_id        UUID REFERENCES service_categories(id) ON DELETE SET NULL,
     type               VARCHAR(20) NOT NULL DEFAULT 'manual'
                        CHECK (type IN ('manual','automated')),
     price              NUMERIC(12,2) NOT NULL DEFAULT 0,
@@ -62,6 +80,7 @@ CREATE TABLE IF NOT EXISTS services (
 CREATE INDEX IF NOT EXISTS idx_services_serial ON services(serial);
 CREATE INDEX IF NOT EXISTS idx_services_type   ON services(type);
 CREATE INDEX IF NOT EXISTS idx_services_status ON services(status);
+CREATE INDEX IF NOT EXISTS idx_services_category ON services(category_id);
 
 -- ------------------------------------------------------------
 -- USER_SERVICES (per-user price & access override)
@@ -205,7 +224,8 @@ INSERT INTO settings (key, value) VALUES
     ('login_security',       '{"max_attempts": 5, "lock_minutes": 30}'),
     ('cashback',             '{"enabled": false, "percent": 0}'),
     ('welcome_bonus',        '{"enabled": false, "amount": 0}'),
-    ('voice_greeting',       '{"enabled": true, "rotation": true, "greetings": {"islam": "আসসালামু আলাইকুম", "hindu": "নমস্কার", "buddhist": "নমো বুদ্ধায়", "christian": "প্রভুর শান্তি", "other": ""}}')
+    ('voice_greeting',       '{"enabled": true, "rotation": true, "greetings": {"islam": "আসসালামু আলাইকুম", "hindu": "নমস্কার", "buddhist": "নমো বুদ্ধায়", "christian": "প্রভুর শান্তি", "other": ""}}'),
+    ('whatsapp',             '{"enabled": false, "business_number": "", "order_completed_msg": "🎉 অভিনন্দন! আপনার অর্ডারটি সফল হয়েছে\nঅর্ডার #: {order_number}\nসার্ভিস: {service_name}\nধন্যবাদ Abc Authentic-এর সাথে থাকার জন্য!", "recharge_approved_msg": "✅ রিচার্জ সফল!\nপরিমাণ: ৳{amount}\nবর্তমান ব্যালেন্স: ৳{balance}\nধন্যবাদ!"}')
 ON CONFLICT (key) DO NOTHING;
 
 -- ------------------------------------------------------------
@@ -287,6 +307,10 @@ CREATE TRIGGER trg_users_updated BEFORE UPDATE ON users
 
 DROP TRIGGER IF EXISTS trg_services_updated ON services;
 CREATE TRIGGER trg_services_updated BEFORE UPDATE ON services
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_service_categories_updated ON service_categories;
+CREATE TRIGGER trg_service_categories_updated BEFORE UPDATE ON service_categories
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 DROP TRIGGER IF EXISTS trg_orders_updated ON orders;

@@ -13,6 +13,19 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <title>সেবা - All In One</title>
 <link rel="stylesheet" href="/css/coffee.css">
+<style>
+.cat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.cat-card {
+  background: var(--card, #241a12); border: 1px solid rgba(212,175,55,.25);
+  border-radius: 14px; padding: 18px 10px; text-align: center; cursor: pointer;
+  transition: transform .15s, border-color .15s;
+}
+.cat-card:active { transform: scale(.97); }
+.cat-card:hover { border-color: var(--gold); }
+.cat-icon { font-size: 34px; margin-bottom: 8px; }
+.cat-name { color: var(--cream, #f5ead6); font-weight: 700; font-size: 15px; }
+.cat-count { color: var(--muted, #a89880); font-size: 12px; margin-top: 4px; }
+</style>
 </head>
 <body class="app">
 <div class="spiral"></div>
@@ -25,22 +38,50 @@
   </div>
   <div class="page">
     <span class="back-link" onclick="location.href='/dashboard.html'">← ড্যাশবোর্ড</span>
-    <h3 style="color:var(--gold);margin:14px 0 10px;">⚡ অটোমেটেড</h3>
-    <div id="autoList"></div>
-    <h3 style="color:#40e0d0;margin:18px 0 10px;">🔧 ম্যানুয়াল</h3>
-    <div id="manualList"></div>
+    <div id="catView" style="margin-top:14px;"></div>
+    <div id="svcView" style="margin-top:14px;display:none;"></div>
+    <div id="flatView" style="margin-top:6px;display:none;">
+      <h3 style="color:var(--gold);margin:14px 0 10px;">⚡ অটোমেটেড</h3>
+      <div id="autoList"></div>
+      <h3 style="color:#40e0d0;margin:18px 0 10px;">🔧 ম্যানুয়াল</h3>
+      <div id="manualList"></div>
+    </div>
   </div>
 </div>
 <div class="wa-fab" id="waFab" title="WhatsApp"><img src="/icons/abc-logo.png" alt="Abc Authentic"><span class="wa-badge">💬</span></div>
 <script src="/js/app.js"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
 function card(s){
   const open = s.open ? '' : ' <span class="badge">বন্ধ</span>';
   return '<div class="list-row" onclick="location.href=\'/service-detail.html?id='+s.id+'\'>'+
     '<div><div class="t">'+esc(s.name_bn||s.name)+'</div>'+
-    '<div class="s">৳'+Number(s.price).toLocaleString('bn-BD')+(s.open?'':' • এখন বন্ধ')+'</div></div>'+
+    '<div class="s">৳'+bnNum(s.price)+(s.open?'':' • এখন বন্ধ')+'</div></div>'+
     '<span class="badge '+(s.type==='manual'?'manual':'')+'">'+(s.type==='manual'?'ম্যানুয়াল':'অটোমেটেড')+'</span>'+open+'</div>';
+}
+let GROUPS = [];
+function showCats(){
+  document.getElementById('catView').style.display = '';
+  document.getElementById('svcView').style.display = 'none';
+  let h = '<div class="cat-grid">';
+  GROUPS.forEach((g, i) => {
+    h += '<div class="cat-card" onclick="showCat('+i+')">'+
+      '<div class="cat-icon">'+esc(g.icon)+'</div>'+
+      '<div class="cat-name">'+esc(g.name)+'</div>'+
+      '<div class="cat-count">'+bnNum(g.services.length)+'টি সেবা</div></div>';
+  });
+  document.getElementById('catView').innerHTML = h + '</div>';
+}
+function showCat(i){
+  const g = GROUPS[i];
+  if(!g) return;
+  document.getElementById('catView').style.display = 'none';
+  const v = document.getElementById('svcView');
+  v.style.display = '';
+  v.innerHTML = '<span class="back-link" onclick="showCats()">← সব ক্যাটাগরি</span>' +
+    '<h3 style="color:var(--gold);margin:14px 0 10px;">'+esc(g.icon)+' '+esc(g.name)+'</h3>' +
+    (g.services.map(card).join('') || '<div class="sub" style="color:var(--muted)">কোনো সেবা নেই</div>');
 }
 async function init(){
   const me = await ABC.api('/auth/me');
@@ -52,10 +93,34 @@ async function init(){
   const r=await ABC.api('/services');
   if(!r.ok)return;
   const {services}=await r.json();
-  const auto=services.filter(s=>s.type==='automated');
-  const manual=services.filter(s=>s.type==='manual');
-  document.getElementById('autoList').innerHTML=auto.map(card).join('')||'<div class="sub" style="color:var(--muted)">কোনো অটোমেটেড সেবা নেই</div>';
-  document.getElementById('manualList').innerHTML=manual.map(card).join('')||'<div class="sub" style="color:var(--muted)">কোনো ম্যানুয়াল সেবা নেই</div>';
+  const hasCats = services.some(s => s.category_id);
+  if(!hasCats){
+    // Legacy flat view (no categories created yet)
+    document.getElementById('flatView').style.display = '';
+    const auto=services.filter(s=>s.type==='automated');
+    const manual=services.filter(s=>s.type==='manual');
+    document.getElementById('autoList').innerHTML=auto.map(card).join('')||'<div class="sub" style="color:var(--muted)">কোনো অটোমেটেড সেবা নেই</div>';
+    document.getElementById('manualList').innerHTML=manual.map(card).join('')||'<div class="sub" style="color:var(--muted)">কোনো ম্যানুয়াল সেবা নেই</div>';
+    return;
+  }
+  // Group by category (serial order), uncategorized -> অন্যান্য
+  const map = {}; GROUPS = [];
+  const uncat = { id: null, name: 'অন্যান্য', icon: '📦', services: [], ord: 999999 };
+  services.forEach(s => {
+    if (s.category_id) {
+      if (!map[s.category_id]) {
+        map[s.category_id] = { id: s.category_id,
+          name: s.category_name_bn || s.category_name || 'ক্যাটাগরি',
+          icon: s.category_icon || '📁', services: [],
+          ord: (s.category_serial == null ? 999999 : s.category_serial) };
+        GROUPS.push(map[s.category_id]);
+      }
+      map[s.category_id].services.push(s);
+    } else uncat.services.push(s);
+  });
+  if (uncat.services.length) GROUPS.push(uncat);
+  GROUPS.sort((a, b) => a.ord - b.ord);
+  showCats();
 }
 init();
 </script>

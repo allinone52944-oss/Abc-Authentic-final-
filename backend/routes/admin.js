@@ -8,6 +8,7 @@ const express = require('express');
 const db = require('../db');
 const { requireAuth, requireAdmin, hashPassword } = require('../auth');
 const { safeLog } = require('../security');
+const wa = require('../utils/whatsapp');
 
 const router = express.Router();
 router.use(requireAuth, requireAdmin);
@@ -300,6 +301,13 @@ router.put('/orders/:id/status', async (req, res) => {
     await logActivity(req.user.id, 'order.status', {
       order_id: req.params.id, status, admin_note: admin_note || null,
     });
+
+    // WhatsApp: order completed/delivered -> customer success message
+    // (async, non-blocking, never breaks the response)
+    if (status === 'completed' || status === 'delivered') {
+      wa.notifyOrderCompleted(db, r.rows[0]).catch(() => {});
+    }
+
     res.json({ order: r.rows[0] });
   } catch (e) {
     safeLog('[admin] order status error:', e.message);
@@ -368,7 +376,10 @@ router.get('/orders/:id/support-messages', async (req, res) => {
 
 router.get('/services', async (req, res) => {
   try {
-    const rows = await db.query('SELECT * FROM services ORDER BY serial ASC, created_at ASC');
+    const rows = await db.query(
+      `SELECT s.*, sc.name AS category_name, sc.name_bn AS category_name_bn, sc.icon AS category_icon
+       FROM services s LEFT JOIN service_categories sc ON sc.id = s.category_id
+       ORDER BY s.serial ASC, s.created_at ASC`);
     res.json({ services: rows.rows });
   } catch (e) {
     safeLog('[admin] services list error:', e.message);
@@ -378,15 +389,17 @@ router.get('/services', async (req, res) => {
 
 router.post('/services', async (req, res) => {
   try {
-    const { name, name_bn, type, price, documents_required, fields_required, schedule, rules_text, engine_id } = req.body || {};
+    const { name, name_bn, type, price, documents_required, fields_required, schedule, rules_text, engine_id, category_id } = req.body || {};
     if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'INVALID_NAME' });
     if (!['manual', 'automated'].includes(type)) return res.status(400).json({ error: 'INVALID_TYPE' });
+    const catId = await resolveCategoryId(category_id);
+    if (catId === false) return res.status(400).json({ error: 'INVALID_CATEGORY' });
     const maxSerial = await db.query('SELECT COALESCE(MAX(serial), -1) + 1 AS s FROM services');
     const r = await db.query(
-      `INSERT INTO services (name, name_bn, type, price, serial, documents_required,
+      `INSERT INTO services (name, name_bn, category_id, type, price, serial, documents_required,
                              fields_required, schedule, rules_text, engine_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [String(name).trim(), name_bn || null, type, Number(price) || 0,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [String(name).trim(), name_bn || null, catId, type, Number(price) || 0,
        Number(maxSerial.rows[0].s),
        JSON.stringify(documents_required || []),
        JSON.stringify(fields_required || []),
@@ -403,7 +416,7 @@ router.post('/services', async (req, res) => {
 
 router.put('/services/:id', async (req, res) => {
   try {
-    const { name, name_bn, type, price, status, documents_required, fields_required, schedule, rules_text, engine_id } = req.body || {};
+    const { name, name_bn, type, price, status, documents_required, fields_required, schedule, rules_text, engine_id, category_id } = req.body || {};
     const sets = []; const params = []; let i = 1;
     const put = (col, val) => { sets.push(`${col} = $${i++}`); params.push(val); };
     if (name !== undefined) put('name', String(name).trim());
@@ -416,6 +429,11 @@ router.put('/services/:id', async (req, res) => {
     if (schedule !== undefined) put('schedule', JSON.stringify(schedule));
     if (rules_text !== undefined) put('rules_text', rules_text || null);
     if (engine_id !== undefined) put('engine_id', engine_id || null);
+    if (category_id !== undefined) {
+      const catId = await resolveCategoryId(category_id);
+      if (catId === false) return res.status(400).json({ error: 'INVALID_CATEGORY' });
+      put('category_id', catId);
+    }
     if (!sets.length) return res.status(400).json({ error: 'NOTHING_TO_UPDATE' });
     params.push(req.params.id);
     const r = await db.query(`UPDATE services SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, params);
@@ -456,6 +474,103 @@ router.put('/services/reorder', async (req, res) => {
   } catch (e) {
     safeLog('[admin] reorder error:', e.message);
     res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// ============================================================
+// SERVICE CATEGORIES
+// ============================================================
+
+// Returns category id if it exists, null for empty, false for invalid
+async function resolveCategoryId(val) {
+  if (val === undefined || val === null || String(val).trim() === '') return null;
+  const r = await db.query('SELECT id FROM service_categories WHERE id = $1', [String(val).trim()]);
+  return r.rows.length ? r.rows[0].id : false;
+}
+
+router.get('/service-categories', async (req, res) => {
+  try {
+    const rows = await db.query(
+      `SELECT sc.*, (SELECT COUNT(*) FROM services s WHERE s.category_id = sc.id) AS service_count
+       FROM service_categories sc ORDER BY serial ASC, created_at ASC`);
+    res.json({ categories: rows.rows });
+  } catch (e) {
+    safeLog('[admin] service-categories list error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+router.post('/service-categories', async (req, res) => {
+  try {
+    const { name, name_bn, icon } = req.body || {};
+    if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'INVALID_NAME' });
+    const maxSerial = await db.query('SELECT COALESCE(MAX(serial), -1) + 1 AS s FROM service_categories');
+    const r = await db.query(
+      `INSERT INTO service_categories (name, name_bn, icon, serial)
+       VALUES ($1,$2,$3,$4) RETURNING *`,
+      [String(name).trim(), name_bn || null, String(icon || '📁').slice(0, 20),
+       Number(maxSerial.rows[0].s)]
+    );
+    await logActivity(req.user.id, 'service_category.create', { category_id: r.rows[0].id, name });
+    res.status(201).json({ category: r.rows[0] });
+  } catch (e) {
+    safeLog('[admin] service-category create error:', e.message);
+    res.status(500).json({ error: 'CREATE_FAILED' });
+  }
+});
+
+// NOTE: reorder BEFORE :id so "reorder" isn't captured as an id
+router.put('/service-categories/reorder', async (req, res) => {
+  try {
+    const { order } = req.body || {};
+    if (!Array.isArray(order)) return res.status(400).json({ error: 'INVALID_ORDER' });
+    await db.withTransaction(async (client) => {
+      for (let idx = 0; idx < order.length; idx++) {
+        await client.query('UPDATE service_categories SET serial = $1 WHERE id = $2', [idx, order[idx]]);
+      }
+    });
+    await logActivity(req.user.id, 'service_category.reorder', { count: order.length });
+    res.json({ ok: true });
+  } catch (e) {
+    safeLog('[admin] category reorder error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+router.put('/service-categories/:id', async (req, res) => {
+  try {
+    const { name, name_bn, icon, status } = req.body || {};
+    const sets = []; const params = []; let i = 1;
+    const put = (col, val) => { sets.push(`${col} = $${i++}`); params.push(val); };
+    if (name !== undefined) {
+      if (String(name).trim().length < 2) return res.status(400).json({ error: 'INVALID_NAME' });
+      put('name', String(name).trim());
+    }
+    if (name_bn !== undefined) put('name_bn', name_bn || null);
+    if (icon !== undefined) put('icon', String(icon || '📁').slice(0, 20));
+    if (status !== undefined && ['active', 'disabled'].includes(status)) put('status', status);
+    if (!sets.length) return res.status(400).json({ error: 'NOTHING_TO_UPDATE' });
+    params.push(req.params.id);
+    const r = await db.query(`UPDATE service_categories SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, params);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    await logActivity(req.user.id, 'service_category.update', { category_id: req.params.id });
+    res.json({ category: r.rows[0] });
+  } catch (e) {
+    safeLog('[admin] service-category update error:', e.message);
+    res.status(500).json({ error: 'UPDATE_FAILED' });
+  }
+});
+
+router.delete('/service-categories/:id', async (req, res) => {
+  try {
+    if (req.query.confirm !== 'yes') return res.status(400).json({ error: 'CONFIRM_REQUIRED' });
+    const r = await db.query('DELETE FROM service_categories WHERE id = $1 RETURNING id, name', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    await logActivity(req.user.id, 'service_category.delete', { category_id: req.params.id, name: r.rows[0].name });
+    res.json({ ok: true });
+  } catch (e) {
+    safeLog('[admin] service-category delete error:', e.message);
+    res.status(500).json({ error: 'DELETE_FAILED' });
   }
 });
 
@@ -504,6 +619,13 @@ router.put('/transactions/:id/approve', async (req, res) => {
       );
     });
     await logActivity(req.user.id, 'transaction.approve', { tx_id: tx.id, amount: tx.amount });
+
+    // WhatsApp: recharge approved -> customer success message
+    // (async, non-blocking, never breaks the response)
+    if (tx.type === 'recharge') {
+      wa.notifyRechargeApproved(db, tx).catch(() => {});
+    }
+
     res.json({ ok: true });
   } catch (e) {
     safeLog('[admin] approve error:', e.message);
@@ -711,7 +833,8 @@ router.get('/settings', async (req, res) => {
 router.put('/settings', async (req, res) => {
   try {
     const allowed = ['registration_enabled', 'maintenance_mode', 'file_upload',
-                     'login_security', 'cashback', 'welcome_bonus', 'voice_greeting'];
+                     'login_security', 'cashback', 'welcome_bonus', 'voice_greeting',
+                     'whatsapp'];
     const updated = [];
     for (const key of allowed) {
       if (req.body[key] !== undefined) {
