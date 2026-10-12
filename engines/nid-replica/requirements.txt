@@ -1,0 +1,7 @@
+# NID kit engine deps (Windows). Pillow-te Raqm (Bengali shaping) lage —
+# stock wheel-e thake; na thakle engine basic-layout fallback-e cholbe.
+pymupdf>=1.24
+Pillow>=10
+pdf417gen
+ddddocr  # scanned-PDF OCR fallback (Latin/digits; Bangla-te simito)
+# easyocr  # optional: scanned Bangla-er jonno uttom (bn+en); torch lage (~500MB)

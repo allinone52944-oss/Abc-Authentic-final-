@@ -138,6 +138,32 @@ try {
   safeLog('[engines] death-verify not mounted:', e.message);
 }
 
+// ---- NID replica engine (as-is kit, auth + strict limit) -------------
+// The engine folder is an as-is copy of NID-Engine-Fixed.zip (Python kit:
+// extract_input.py → extract_template.py → make_fields.py → build_output.py).
+// The adapter (engines/nid-replica/adapter.js) runs the scripts with a
+// per-job CWD (work/jobs/<uuid>/) so concurrent users are isolated.
+// No engine Python logic is modified.
+//   POST /api/nid-engine/extract (multipart pdf) → { jobId, fields, images }
+//   POST /api/nid-engine/build   ({ jobId, fields }) → application/pdf
+// Python deps (VM): pip3 install pymupdf Pillow pdf417gen
+const nidEngineLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'RATE_LIMITED' },
+});
+try {
+  const nidAdapter = require('../engines/nid-replica/adapter.js');
+  nidAdapter.init({});
+  const nidRoutes = require('./routes/nid');
+  app.use('/api/nid-engine', requireAuth, nidEngineLimiter, nidRoutes);
+  safeLog('[engines] mounted nid-replica at /api/nid-engine');
+} catch (e) {
+  safeLog('[engines] nid-replica not mounted:', e.message);
+}
+
 // ---- User routes (authenticated users) --
 const userRoutes = require('./routes/user');
 app.use('/api', apiLimiter, userRoutes);

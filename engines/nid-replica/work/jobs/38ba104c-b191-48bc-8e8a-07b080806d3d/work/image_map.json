@@ -1,0 +1,57 @@
+{
+ "slot_p0_0": {
+  "kind": "keep",
+  "xref": 9,
+  "bbox": [
+   59.35,
+   62.0,
+   87.35,
+   89.63
+  ],
+  "replace_with": null
+ },
+ "slot_p0_1": {
+  "kind": "photo",
+  "xref": 10,
+  "bbox": [
+   60.85,
+   108.0,
+   105.85,
+   168.0
+  ],
+  "replace_with": "work/images/photo.png"
+ },
+ "slot_p0_2": {
+  "kind": "sign",
+  "xref": 11,
+  "bbox": [
+   63.34,
+   170.0,
+   105.24,
+   190.0
+  ],
+  "replace_with": "work/images/sign.png"
+ },
+ "slot_p0_3": {
+  "kind": "keep",
+  "xref": 12,
+  "bbox": [
+   111.13,
+   103.0,
+   296.36,
+   204.94
+  ],
+  "replace_with": null
+ },
+ "slot_p0_4": {
+  "kind": "authority_sign",
+  "xref": 13,
+  "bbox": [
+   324.41,
+   135.45,
+   382.41,
+   156.95
+  ],
+  "replace_with": null
+ }
+}

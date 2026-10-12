@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#d4af37">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Abc Authentic">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<title>এনআইডি কার্ড রেপ্লিকা - All In One</title>
+<link rel="stylesheet" href="/css/coffee.css">
+<style>
+.steps{display:flex;gap:6px;margin:14px 0 18px;}
+.step{flex:1;text-align:center;font-size:11px;color:var(--muted);position:relative;padding-top:26px;}
+.step .dot{position:absolute;top:0;left:50%;transform:translateX(-50%);width:24px;height:24px;border-radius:50%;border:2px solid var(--muted);display:flex;align-items:center;justify-content:center;font-size:12px;background:var(--espresso);}
+.step.on{color:var(--gold);}
+.step.on .dot{border-color:var(--gold);color:var(--gold);box-shadow:0 0 10px rgba(212,175,55,.4);}
+.step.done .dot{border-color:var(--gold);background:var(--gold);color:#2b1d14;}
+.step.done{color:var(--gold);}
+.wiz{display:none;}
+.wiz.on{display:block;animation:fadeUp .3s ease;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+.spin{display:inline-block;width:18px;height:18px;border:3px solid rgba(212,175,55,.3);border-top-color:var(--gold);border-radius:50%;animation:sp 0.8s linear infinite;vertical-align:-4px;margin-right:8px;}
+@keyframes sp{to{transform:rotate(360deg);}}
+.err{display:none;background:rgba(255,90,90,.12);border:1px solid #ff7b7b;color:#ffb3b3;padding:10px 12px;border-radius:10px;margin-bottom:12px;font-size:14px;}
+.err.on{display:block;}
+.ok{display:none;background:rgba(90,200,120,.12);border:1px solid #5ac878;color:#b8f0c8;padding:10px 12px;border-radius:10px;margin-bottom:12px;font-size:14px;}
+.ok.on{display:block;}
+.row2{display:flex;gap:10px;}
+.row2 .btn,.row2 .btn-secondary{flex:1;}
+.hint{font-size:12px;color:var(--muted);margin-top:6px;}
+.imgprev{display:flex;gap:12px;margin:12px 0;flex-wrap:wrap;}
+.imgprev figure{margin:0;text-align:center;}
+.imgprev img{max-width:130px;max-height:150px;border:2px solid var(--gold);border-radius:10px;background:#fff;}
+.imgprev figcaption{font-size:12px;color:var(--muted);margin-top:4px;}
+#cardFrame{width:100%;height:62vh;border:2px solid var(--gold);border-radius:12px;background:#fff;}
+.drop{border:2px dashed var(--gold);border-radius:12px;padding:28px 14px;text-align:center;color:var(--cream);cursor:pointer;}
+.drop input{display:none;}
+</style>
+</head>
+<body class="app">
+<div class="spiral"></div>
+<div class="app-shell">
+  <div class="app-header">
+    <div class="brand">☕ এনআইডি কার্ড রেপ্লিকা</div>
+    <div class="hdr-actions"><button class="icon-btn" onclick="location.href='/dashboard.html'">🏠</button></div>
+  </div>
+  <div class="page">
+    <span class="back-link" onclick="history.back()">← ফিরে যান</span>
+    <div class="steps" id="steps">
+      <div class="step on" data-s="1"><span class="dot">১</span>আপলোড</div>
+      <div class="step" data-s="2"><span class="dot">২</span>তথ্য বের</div>
+      <div class="step" data-s="3"><span class="dot">৩</span>যাচাই</div>
+      <div class="step" data-s="4"><span class="dot">৪</span>কার্ড</div>
+    </div>
+    <div class="err" id="err"></div>
+    <div class="ok" id="ok"></div>
+
+    <!-- STEP 1: UPLOAD -->
+    <div class="wiz on" id="w1">
+      <div class="form-card">
+        <label class="drop" id="dropZone">
+          <input type="file" id="pdfFile" accept="application/pdf,.pdf">
+          <div style="font-size:40px;">📄</div>
+          <div style="margin-top:8px;">NID ফর্মের PDF বেছে নিন</div>
+          <div class="hint">সর্বোচ্চ ৫ MB — শুধুমাত্র PDF</div>
+        </label>
+        <div style="height:12px;"></div>
+        <button class="btn" id="b1" onclick="doExtract()">তথ্য বের করুন →</button>
+        <div class="hint">আপনার ভোটার নিবন্ধন ফর্মের PDF থেকে নাম, ছবি ও স্বাক্ষর বের করা হবে।</div>
+      </div>
+    </div>
+
+    <!-- STEP 2: EXTRACTING -->
+    <div class="wiz" id="w2">
+      <div class="form-card" style="text-align:center;padding:40px 16px;">
+        <div style="font-size:20px;color:var(--gold);margin-bottom:12px;"><span class="spin"></span>তথ্য বের হচ্ছে…</div>
+        <div class="hint">PDF পড়া হচ্ছে, ছবি বের করা হচ্ছে। একটু অপেক্ষা করুন।</div>
+      </div>
+    </div>
+
+    <!-- STEP 3: REVIEW -->
+    <div class="wiz" id="w3">
+      <div class="form-card">
+        <h3 style="color:var(--gold);margin-bottom:10px;">✅ তথ্য মিলিয়ে নিন</h3>
+        <div class="imgprev" id="imgPrev"></div>
+        <div id="fieldForm"></div>
+        <div style="height:12px;"></div>
+        <button class="btn" id="b3" onclick="doBuild()">কার্ড তৈরি করুন →</button>
+      </div>
+    </div>
+
+    <!-- STEP 4: CARD -->
+    <div class="wiz" id="w4">
+      <div class="form-card">
+        <h3 style="color:var(--gold);margin-bottom:10px;">🎉 কার্ড প্রস্তুত!</h3>
+        <iframe id="cardFrame" title="NID card preview"></iframe>
+        <div style="height:12px;"></div>
+        <div class="row2">
+          <button class="btn-secondary" onclick="go(3)">← তথ্য ঠিক করুন</button>
+          <button class="btn" id="b4" onclick="dlPdf()">📥 PDF ডাউনলোড</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="wa-fab" id="waFab" title="WhatsApp"><img src="/icons/abc-logo.png" alt="Abc Authentic"><span class="wa-badge">💬</span></div>
+<script src="/js/app.js"></script>
+<script>
+const API='/nid-engine';
+let S={jobId:null,fields:{},pdfBlob:null};
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function showErr(m){const e=document.getElementById('err');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),6000);}
+function showOk(m){const e=document.getElementById('ok');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),4000);}
+function busy(id,on,txt){const b=document.getElementById(id);if(!b)return;b.disabled=on;if(on&&txt)b.dataset.t=b.textContent,b.textContent=txt;else if(b.dataset.t){b.textContent=b.dataset.t;delete b.dataset.t;}}
+function go(n){
+  document.querySelectorAll('.wiz').forEach(w=>w.classList.remove('on'));
+  document.getElementById('w'+n).classList.add('on');
+  document.querySelectorAll('.step').forEach(s=>{
+    const k=+s.dataset.s;s.classList.toggle('on',k===n);s.classList.toggle('done',k<n);
+    if(k<n)s.querySelector('.dot').textContent='✓';
+  });
+  window.scrollTo(0,0);
+}
+function authHeaders(){const t=sessionStorage.getItem('abc_access_token');return t?{'Authorization':'Bearer '+t}:{};}
+async function authFetch(url,opts){
+  opts=opts||{};opts.headers=Object.assign({},opts.headers||{},authHeaders());
+  let r=await fetch(url,opts);
+  if(r.status===401&&await ABC.refreshAccess()){opts.headers=Object.assign({},opts.headers,authHeaders());r=await fetch(url,opts);}
+  return r;
+}
+async function doExtract(){
+  const f=document.getElementById('pdfFile').files[0];
+  if(!f){showErr('PDF ফাইল বেছে নিন।');return;}
+  if(f.size>5*1024*1024){showErr('ফাইল ৫ MB-এর বেশি।');return;}
+  busy('b1',true,'আপলোড হচ্ছে…');go(2);
+  try{
+    const fd=new FormData();fd.append('pdf',f,f.name);
+    const r=await authFetch('/api'+API+'/extract',{method:'POST',body:fd});
+    const j=await r.json();
+    if(!r.ok||!j.ok)throw new Error(j.error==='PDF_TOO_LARGE'?'ফাইল অনেক বড়।':j.error==='NOT_A_PDF'?'শুধু PDF দিন।':'তথ্য বের করা যায়নি। আবার চেষ্টা করুন।');
+    S.jobId=j.jobId;S.fields=j.fields||{};
+    // images
+    const ip=document.getElementById('imgPrev');ip.innerHTML='';
+    (j.images||[]).forEach(im=>{
+      const fig=document.createElement('figure');
+      const label=/sign/i.test(im.name)?'স্বাক্ষর':/photo/i.test(im.name)?'ছবি':im.name;
+      fig.innerHTML='<img alt="'+esc(label)+'" src="'+im.dataUrl+'"><figcaption>'+esc(label)+'</figcaption>';
+      ip.appendChild(fig);
+    });
+    // editable fields
+    const ff=document.getElementById('fieldForm');ff.innerHTML='';
+    Object.keys(S.fields).forEach((k,i)=>{
+      const d=document.createElement('div');d.className='field';
+      const id='fld'+i;
+      d.innerHTML='<label>'+esc(k)+'</label><input id="'+id+'" value="'+esc(S.fields[k])+'" data-k="'+esc(k)+'">';
+      ff.appendChild(d);
+    });
+    go(3);showOk('তথ্য পাওয়া গেছে ✓ ভুল থাকলে ঠিক করে দিন');
+  }catch(e){go(1);showErr(e.message||'তথ্য বের করা যায়নি।');}
+  busy('b1',false);
+}
+function collectFields(){
+  const out={};
+  document.querySelectorAll('#fieldForm input').forEach(inp=>{out[inp.dataset.k]=inp.value;});
+  return out;
+}
+async function doBuild(){
+  busy('b3',true,'কার্ড তৈরি হচ্ছে…');
+  try{
+    const r=await ABC.api(API+'/build',{method:'POST',body:{jobId:S.jobId,fields:collectFields()}});
+    if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.error==='JOB_NOT_FOUND'?'সেশন শেষ — আবার আপলোড করুন।':'কার্ড তৈরি ব্যর্থ।');}
+    S.pdfBlob=await r.blob();
+    document.getElementById('cardFrame').src=URL.createObjectURL(S.pdfBlob);
+    go(4);showOk('কার্ড প্রস্তুত ✓');
+  }catch(e){showErr(e.message||'কার্ড তৈরি ব্যর্থ।');}
+  busy('b3',false);
+}
+function dlPdf(){
+  if(!S.pdfBlob){showErr('আগে কার্ড তৈরি করুন।');return;}
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(S.pdfBlob);
+  a.download='NID_Card.pdf';
+  document.body.appendChild(a);a.click();a.remove();
+  showOk('PDF ডাউনলোড শুরু হয়েছে ✓');
+}
+(async function init(){
+  const me=await ABC.api('/auth/me');
+  if(!me.ok){location.href='/login.html';return;}
+  const u=(await me.json()).user;
+  document.getElementById('waFab').onclick=()=>{window.open('https://wa.me/?text='+encodeURIComponent('আমি '+u.name+' (ফোন: '+u.phone+')। এনআইডি কার্ড সম্পর্কে জানতে চাই।'),'_blank');};
+})();
+</script>
+</body>
+</html>

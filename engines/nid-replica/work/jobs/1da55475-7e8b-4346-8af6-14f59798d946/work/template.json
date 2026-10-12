@@ -1,0 +1,500 @@
+{
+ "pages": [
+  {
+   "page": 0,
+   "width": 612.0,
+   "height": 792.0,
+   "texts": [
+    {
+     "text": "এই কাড",
+     "slot": null,
+     "x0": 311.73,
+     "y0": 58.35,
+     "size": 8.5,
+     "color": 0
+    },
+    {
+     "text": "Îিট গণĴজাতĮী বাংলােদশ সরকােরর সłিē। কাডÎিট বËবহারকারী বËতীত অį ",
+     "slot": null,
+     "x0": 334.54,
+     "y0": 58.35,
+     "size": 8.5,
+     "color": 0
+    },
+    {
+     "text": "গণ",
+     "slot": null,
+     "x0": 122.65,
+     "y0": 59.29,
+     "size": 15.0,
+     "color": 0
+    },
+    {
+     "text": "ĴজাতĮী বাংলােদশ সরকার",
+     "slot": null,
+     "x0": 136.48,
+     "y0": 59.29,
+     "size": 15.0,
+     "color": 0
+    },
+    {
+     "text": "Ïকাথাও পাওয়া Ïগেল িনকটŪ ÏপাŨ অিফেস জমা Ïদবার জį অſেরাধ করা হেলা।",
+     "slot": null,
+     "x0": 311.73,
+     "y0": 68.35,
+     "size": 8.5,
+     "color": 0
+    },
+    {
+     "text": "Government of the People's Republic of Bangladesh",
+     "slot": null,
+     "x0": 92.14,
+     "y0": 76.06,
+     "size": 8.6,
+     "color": 30464
+    },
+    {
+     "text": "িঠকানা: বাসা/",
+     "slot": null,
+     "x0": 310.73,
+     "y0": 83.18,
+     "size": 8.8,
+     "color": 0
+    },
+    {
+     "text": "Ïহািŏং: ৬৯, åাম/রাũা: মতুÎজাবাদ, ভােয়লা, ডাকঘর: ভূলতা - ১৪৬২, ",
+     "slot": null,
+     "x0": 346.61,
+     "y0": 83.18,
+     "size": 8.8,
+     "color": 0
+    },
+    {
+     "text": "জাতীয় পিরচয় প",
+     "slot": null,
+     "x0": 194.83,
+     "y0": 85.89,
+     "size": 10.0,
+     "color": 0
+    },
+    {
+     "text": "Ĕ",
+     "slot": null,
+     "x0": 247.08,
+     "y0": 85.89,
+     "size": 10.0,
+     "color": 0
+    },
+    {
+     "text": " / ",
+     "slot": null,
+     "x0": 186.52,
+     "y0": 86.75,
+     "size": 10.0,
+     "color": 0
+    },
+    {
+     "text": "National ID Card",
+     "slot": null,
+     "x0": 131.12,
+     "y0": 88.69,
+     "size": 7.5,
+     "color": 16711680
+    },
+    {
+     "text": "Ƃপগý, নারায়ণগý",
+     "slot": null,
+     "x0": 332.72,
+     "y0": 91.18,
+     "size": 8.8,
+     "color": 0
+    },
+    {
+     "text": "নাম:",
+     "slot": null,
+     "x0": 116.13,
+     "y0": 107.22,
+     "size": 12.4,
+     "color": 0
+    },
+    {
+     "text": "ÏমাহাŇদ আĺুŌাহ",
+     "slot": "নাম:",
+     "x0": 146.14,
+     "y0": 107.22,
+     "x1": 213.67,
+     "y1": 121.2,
+     "size": 12.4,
+     "color": 0
+    },
+    {
+     "text": "রে",
+     "slot": null,
+     "x0": 308.73,
+     "y0": 122.64,
+     "size": 8.7,
+     "color": 0
+    },
+    {
+     "text": "×র Ƈপ ",
+     "slot": null,
+     "x0": 315.03,
+     "y0": 122.64,
+     "size": 8.7,
+     "color": 0
+    },
+    {
+     "text": "জন্মস্থান:",
+     "slot": null,
+     "x0": 403.99,
+     "y0": 123.02,
+     "size": 8.0,
+     "color": 0
+    },
+    {
+     "text": "",
+     "slot": "জন্মস্থান:",
+     "x0": 425.17,
+     "y0": 123.02,
+     "x1": 441.67,
+     "y1": 132.04,
+     "size": 8.0,
+     "color": 0
+    },
+    {
+     "text": "মূ",
+     "slot": null,
+     "x0": 522.12,
+     "y0": 123.52,
+     "size": 8.0,
+     "color": 16777215
+    },
+    {
+     "text": "ęণ: ০১",
+     "slot": null,
+     "x0": 525.9,
+     "y0": 123.52,
+     "size": 8.0,
+     "color": 16777215
+    },
+    {
+     "text": "/Blood Group: ",
+     "slot": null,
+     "x0": 338.52,
+     "y0": 124.71,
+     "size": 7.0,
+     "color": 0
+    },
+    {
+     "text": "O+",
+     "slot": "/Blood Group:",
+     "x0": 383.62,
+     "y0": 124.71,
+     "x1": 393.14,
+     "y1": 131.71,
+     "size": 7.0,
+     "color": 16711680
+    },
+    {
+     "text": "MOHAMMAD ABDULLAH",
+     "slot": "Name:",
+     "x0": 146.14,
+     "y0": 128.58,
+     "x1": 265.67,
+     "y1": 138.88,
+     "size": 10.3,
+     "color": 0
+    },
+    {
+     "text": "Name:",
+     "slot": null,
+     "x0": 116.13,
+     "y0": 129.57,
+     "size": 8.0,
+     "color": 0
+    },
+    {
+     "text": "িপতা:",
+     "slot": null,
+     "x0": 116.13,
+     "y0": 143.26,
+     "size": 10.5,
+     "color": 0
+    },
+    {
+     "text": "Ïমাঃ মাহাবুব",
+     "slot": "পিতা:",
+     "x0": 146.14,
+     "y0": 143.26,
+     "x1": 185.81,
+     "y1": 155.09,
+     "size": 10.5,
+     "color": 0
+    },
+    {
+     "text": "Ĵদানকারী কতৃÎপেÙর ŮাÙর",
+     "slot": null,
+     "x0": 310.73,
+     "y0": 155.26,
+     "size": 10.5,
+     "color": 0
+    },
+    {
+     "text": "প্রদানের তারিখ:",
+     "slot": null,
+     "x0": 440.99,
+     "y0": 156.08,
+     "size": 9.0,
+     "color": 0
+    },
+    {
+     "text": "",
+     "slot": "প্রদানের তারিখ:",
+     "x0": 485.26,
+     "y0": 156.08,
+     "x1": 529.3,
+     "y1": 166.23,
+     "size": 9.0,
+     "color": 0
+    },
+    {
+     "text": "মাতা:",
+     "slot": null,
+     "x0": 116.13,
+     "y0": 159.26,
+     "size": 10.5,
+     "color": 0
+    },
+    {
+     "text": "পাƁল আ×ার",
+     "slot": "মাতা:",
+     "x0": 146.14,
+     "y0": 159.26,
+     "x1": 191.23,
+     "y1": 171.09,
+     "size": 10.5,
+     "color": 0
+    },
+    {
+     "text": "Date of Birth: ",
+     "slot": null,
+     "x0": 115.13,
+     "y0": 175.91,
+     "size": 9.0,
+     "color": 0
+    },
+    {
+     "text": "05 Sep 2004",
+     "slot": "Date of Birth:",
+     "x0": 170.08,
+     "y0": 175.91,
+     "x1": 221.09,
+     "y1": 184.91,
+     "size": 9.0,
+     "color": 16711680
+    },
+    {
+     "text": "ID NO: ",
+     "slot": null,
+     "x0": 115.13,
+     "y0": 189.47,
+     "size": 9.0,
+     "color": 0
+    },
+    {
+     "text": "3332994197",
+     "slot": "ID NO:",
+     "x0": 145.09,
+     "y0": 189.47,
+     "x1": 195.13,
+     "y1": 198.47,
+     "size": 9.0,
+     "color": 16711680
+    }
+   ],
+   "slots": [
+    {
+     "id": "slot_p0_0",
+     "page": 0,
+     "xref": 9,
+     "bbox": [
+      59.35,
+      62.0,
+      87.35,
+      89.63
+     ],
+     "kind": "keep"
+    },
+    {
+     "id": "slot_p0_1",
+     "page": 0,
+     "xref": 10,
+     "bbox": [
+      60.85,
+      108.0,
+      105.85,
+      168.0
+     ],
+     "kind": "photo"
+    },
+    {
+     "id": "slot_p0_2",
+     "page": 0,
+     "xref": 11,
+     "bbox": [
+      63.34,
+      170.0,
+      105.24,
+      190.0
+     ],
+     "kind": "sign"
+    },
+    {
+     "id": "slot_p0_3",
+     "page": 0,
+     "xref": 12,
+     "bbox": [
+      111.13,
+      103.0,
+      296.36,
+      204.94
+     ],
+     "kind": "keep"
+    },
+    {
+     "id": "slot_p0_4",
+     "page": 0,
+     "xref": 13,
+     "bbox": [
+      324.41,
+      135.45,
+      382.41,
+      156.95
+     ],
+     "kind": "authority_sign"
+    }
+   ],
+   "address_slot": {
+    "label": "ঠিকানা:",
+    "x0": 310.73,
+    "y0": 83.18,
+    "wrap_width": 227.67,
+    "size": 8.8,
+    "color": 0,
+    "rect": [
+     308.73,
+     80.68,
+     540.4,
+     103.1
+    ],
+    "line_step": 9.2,
+    "base_vx0": 346.61,
+    "base_y0": 83.18,
+    "base_y1": 93.1
+   }
+  }
+ ],
+ "template_pdf": "/home/hatch/workspace/shebahub-v2/engines/nid-replica/output_template.pdf",
+ "field_specs": {
+  "নাম:": {
+   "font": "fonts/Bangla.ttf",
+   "size": 12.4,
+   "x0": 146.14,
+   "baseline": 674.09,
+   "y_top": 117.91,
+   "stroke_pt": 0.41333,
+   "color": "#000000"
+  },
+  "Name:": {
+   "font": "fonts/ArialMT.ttf",
+   "size": 10.3,
+   "x0": 146.14,
+   "baseline": 655.43,
+   "y_top": 136.57,
+   "stroke_pt": 0.0,
+   "color": "#000000"
+  },
+  "পিতা:": {
+   "font": "fonts/Bangla.ttf",
+   "size": 10.5,
+   "x0": 146.14,
+   "baseline": 639.69,
+   "y_top": 152.31,
+   "stroke_pt": 0.0,
+   "color": "#000000"
+  },
+  "মাতা:": {
+   "font": "fonts/Bangla.ttf",
+   "size": 10.5,
+   "x0": 146.14,
+   "baseline": 623.69,
+   "y_top": 168.31,
+   "stroke_pt": 0.0,
+   "color": "#000000"
+  },
+  "Date of Birth:": {
+   "font": "fonts/ArialMT.ttf",
+   "size": 9.0,
+   "x0": 170.08,
+   "baseline": 609.1,
+   "y_top": 182.9,
+   "stroke_pt": 0.0,
+   "color": "#ff0000"
+  },
+  "ID NO:": {
+   "font": "fonts/ArialMT.ttf",
+   "size": 9.0,
+   "x0": 145.09,
+   "baseline": 595.54,
+   "y_top": 196.46,
+   "stroke_pt": 0.3,
+   "color": "#ff0000"
+  },
+  "/Blood Group:": {
+   "font": "fonts/ArialMT.ttf",
+   "size": 7.0,
+   "x0": 383.62,
+   "baseline": 661.86,
+   "y_top": 130.14,
+   "stroke_pt": 0.23333,
+   "color": "#ff0000"
+  },
+  "জন্মস্থান:": {
+   "font": "fonts/Bangla.ttf",
+   "size": 8.0,
+   "x0": 426.08,
+   "baseline": 662.08,
+   "y_top": 129.92,
+   "stroke_pt": 0.0,
+   "color": "#000000"
+  },
+  "প্রদানের তারিখ:": {
+   "font": "fonts/Bangla.ttf",
+   "size": 9.0,
+   "x0": 490.4,
+   "baseline": 628.16,
+   "y_top": 163.84,
+   "stroke_pt": 0.0,
+   "color": "#000000"
+  }
+ },
+ "address_spec": {
+  "font": "fonts/Bangla.ttf",
+  "size": 8.8,
+  "x0": 332.72,
+  "baseline_line1": 701.23,
+  "baseline_line2": 693.23,
+  "line_step": 8.0,
+  "wrap_width": 207.0,
+  "color": "#000000"
+ },
+ "barcode_spec": {
+  "x0": 310.73,
+  "y0_top": 172.0,
+  "baseline_y": 591.0,
+  "w": 231.65,
+  "h": 29.0,
+  "columns": 8,
+  "security_level": 4
+ }
+}
