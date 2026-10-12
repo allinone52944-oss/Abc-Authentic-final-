@@ -1,0 +1,3127 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>জন্ম নিবন্ধন সহায়ক — অনলাইন আবেদন</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* ☕ কফি থিম (2026-10-13): ডিপ এসপ্রেসো + ক্যারামেল + ক্রিম — মোবাইল ও ডেস্কটপ */
+  --bg:#160f08; --card:#221610; --card2:#2f2015; --paper:#1c130c;
+  --gold:#f0c078; --brand:#c98d4b; --gold-deep:#8a5a28;
+  --grad:linear-gradient(135deg,#f0c078,#c98d4b 55%,#8a5a28);
+  --ink:#f7ead6; --muted:#c0a080; --line:rgba(201,141,75,.28); --line2:rgba(201,141,75,.14);
+  --ok:#7bc98d; --warn:#f0c078; --err:#e08080; --info:#a8c8e0;
+  --r:16px; --rlg:22px;
+}
+*{box-sizing:border-box; margin:0; padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:'Hind Siliguri',system-ui,'Segoe UI',sans-serif;
+  background:var(--bg); color:var(--ink); min-height:100vh; line-height:1.65;
+  background-image:
+    radial-gradient(900px 420px at 85% -80px, rgba(201,141,75,.16), transparent 65%),
+    radial-gradient(700px 380px at -10% 30%, rgba(201,141,75,.08), transparent 60%),
+    radial-gradient(900px 500px at 110% 85%, rgba(138,90,40,.10), transparent 60%);
+  background-attachment:fixed;
+}
+::selection{background:rgba(201,141,75,.35)}
+.wrap{max-width:900px; margin:0 auto; padding:20px 16px 60px}
+a{color:var(--gold)}
+
+/* ── topbar ── */
+.topbar{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; flex-wrap:wrap}
+.brand{display:flex; align-items:center; gap:12px; cursor:pointer; user-select:none}
+.blogo{
+  width:52px; height:52px; border-radius:15px; display:grid; place-items:center;
+  background:var(--grad); color:#241a02; font-size:27px; font-weight:700;
+  box-shadow:0 6px 22px rgba(212,175,55,.35), inset 0 1px 0 rgba(255,255,255,.5);
+}
+.bname{font-size:20px; font-weight:700; letter-spacing:.2px;
+  background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent}
+.btag{font-size:12px; color:var(--muted); margin-top:-3px}
+.hacts{display:flex; gap:9px; flex-wrap:wrap}
+
+/* ── buttons ── */
+.btn{
+  font-family:inherit; font-size:15px; font-weight:600; color:#241a02;
+  background:var(--grad); border:0; border-radius:13px; padding:11px 20px; cursor:pointer;
+  box-shadow:0 5px 18px rgba(212,175,55,.28), inset 0 1px 0 rgba(255,255,255,.45);
+  transition:transform .12s, filter .15s, opacity .15s; position:relative;
+}
+.btn:hover{filter:brightness(1.07); transform:translateY(-1px)}
+.btn:active{transform:translateY(0) scale(.985)}
+.btn:disabled{opacity:.42; cursor:not-allowed; transform:none; filter:grayscale(.3)}
+.btn.ghost{
+  background:rgba(212,175,55,.08); color:var(--gold); border:1px solid var(--line);
+  box-shadow:none;
+}
+.btn.ghost:hover{background:rgba(212,175,55,.15)}
+.btn.small{font-size:13px; padding:8px 14px; border-radius:11px}
+.btn.danger{background:rgba(251,113,133,.12); color:var(--err); border:1px solid rgba(251,113,133,.35); box-shadow:none}
+.btn.danger:hover{background:rgba(251,113,133,.2)}
+.btn.wide{width:100%; padding:14px 20px; font-size:16px}
+
+/* ── card ── */
+.card{
+  background:linear-gradient(180deg, var(--card), var(--paper));
+  border:1px solid var(--line2); border-radius:var(--rlg); padding:26px 24px;
+  box-shadow:0 18px 50px rgba(0,0,0,.45), inset 0 1px 0 rgba(245,214,123,.06);
+  position:relative; overflow:hidden;
+}
+.card::before{
+  content:''; position:absolute; inset:0 0 auto 0; height:3px;
+  background:linear-gradient(90deg, transparent, var(--brand), transparent); opacity:.75;
+}
+
+/* ── banner ── */
+.banner{display:flex; align-items:center; gap:10px; padding:12px 15px; border-radius:var(--r);
+  font-size:14px; margin-bottom:16px; border:1px solid; flex-wrap:wrap}
+.banner .bmsg{flex:1; min-width:180px}
+.banner.ok{background:rgba(52,211,153,.1); border-color:rgba(52,211,153,.4); color:var(--ok)}
+.banner.warn{background:rgba(251,191,36,.1); border-color:rgba(251,191,36,.4); color:var(--warn)}
+.banner.err{background:rgba(251,113,133,.1); border-color:rgba(251,113,133,.4); color:var(--err)}
+.banner.info{background:rgba(125,211,252,.1); border-color:rgba(125,211,252,.4); color:var(--info)}
+
+/* ── stepper ── */
+.stepper{display:flex; gap:8px; margin-bottom:20px; overflow-x:auto; padding-bottom:4px}
+.stp{
+  display:flex; align-items:center; gap:8px; padding:8px 13px; border-radius:11px;
+  border:1px solid var(--line2); background:rgba(10,17,40,.6); color:var(--muted);
+  font-size:13px; white-space:nowrap; flex:1; min-width:0;
+}
+.stp .n{width:22px; height:22px; border-radius:50%; display:grid; place-items:center;
+  background:rgba(212,175,55,.1); color:var(--muted); font-size:12px; font-weight:700; flex:none}
+.stp.active{border-color:var(--brand); color:var(--gold); background:rgba(212,175,55,.1)}
+.stp.active .n{background:var(--grad); color:#241a02}
+.stp.done{border-color:rgba(52,211,153,.4); color:var(--ok)}
+.stp.done .n{background:rgba(52,211,153,.2); color:var(--ok)}
+
+/* ── section headings ── */
+.sec{margin:22px 0 12px; padding-top:4px}
+.sec:first-child{margin-top:0}
+.sub-h{display:flex; align-items:center; gap:9px; font-size:16px; font-weight:700; color:var(--gold); margin-bottom:11px}
+.snum{width:26px; height:26px; border-radius:8px; background:var(--grad); color:#241a02;
+  display:grid; place-items:center; font-size:13px; font-weight:700; flex:none}
+.hint{font-size:12.5px; color:var(--muted); margin:-4px 0 10px}
+
+/* ── fields ── */
+.fld{margin-bottom:13px}
+.fld label, .lbl{display:block; font-size:13.5px; color:var(--muted); margin-bottom:5px}
+.fld label b, .lbl b{color:var(--gold); font-weight:600}
+input[type=text], input[type=tel], input[type=email], input[type=date], input[type=number], input:not([type]), select, textarea{
+  width:100%; font-family:inherit; font-size:15px; color:var(--ink);
+  background:rgba(7,13,31,.85); border:1px solid var(--line); border-radius:11px;
+  padding:10px 13px; outline:none; transition:border-color .15s, box-shadow .15s;
+}
+select{cursor:pointer}
+select option{background:#221610; color:var(--ink)}
+input::placeholder{color:rgba(154,163,199,.5)}
+input:focus, select:focus, textarea:focus{border-color:var(--brand); box-shadow:0 0 0 3px rgba(212,175,55,.15)}
+input.bad, select.bad{border-color:var(--err); box-shadow:0 0 0 3px rgba(251,113,133,.15); animation:shake .3s}
+@keyframes shake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.row2{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+.row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
+
+/* ── radio cards ── */
+.rcard{
+  display:flex; align-items:center; gap:12px; padding:13px 15px; border-radius:var(--r);
+  border:1px solid var(--line); background:rgba(10,17,40,.6); cursor:pointer;
+  transition:border-color .15s, background .15s; margin-bottom:9px;
+}
+.rcard:hover{border-color:var(--brand)}
+.rcard input{display:none}
+.rcard .rdot{width:19px; height:19px; border-radius:50%; border:2px solid var(--muted); flex:none; position:relative; transition:border-color .15s}
+.rcard.sel{border-color:var(--brand); background:rgba(212,175,55,.09)}
+.rcard.sel .rdot{border-color:var(--brand)}
+.rcard.sel .rdot::after{content:''; position:absolute; inset:3px; border-radius:50%; background:var(--grad)}
+.rcard .rt{font-size:14.5px; font-weight:600}
+.rcard .rs{font-size:12px; color:var(--muted)}
+.rcard.rsm{padding:11px 12px; margin-bottom:0}
+.relgrid{display:grid; grid-template-columns:repeat(auto-fill, minmax(112px,1fr)); gap:9px; margin-bottom:14px}
+.relgrid .rcard .rt{font-size:13.5px}
+.chk{display:flex; align-items:flex-start; gap:10px; padding:11px 13px; border-radius:var(--r);
+  border:1px solid var(--line2); background:rgba(10,17,40,.5); cursor:pointer; font-size:14px; margin-bottom:9px}
+.chk input{width:18px; height:18px; accent-color:var(--brand); margin-top:2px; flex:none}
+
+/* ── hero: আপলোড করা ডিজাইনের সাথে matching (glass + spiral + beans) ── */
+.hero{position:relative; overflow:hidden; text-align:center; padding:30px 18px 24px;
+  border-radius:var(--rlg); background:rgba(43,29,20,.78);
+  border:1px solid rgba(212,175,55,.3);
+  box-shadow:0 24px 60px rgba(0,0,0,.45), 0 0 50px rgba(212,175,55,.08);
+  animation:cardIn .7s cubic-bezier(.2,.8,.2,1); margin-bottom:14px;
+  backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px)}
+.hero::before{content:''; position:absolute; width:220%; aspect-ratio:1; left:-60%; top:-130%;
+  background:conic-gradient(from 0deg,#3d2b1f,#2b1d14,#4a3220,#2b1d14,#3d2b1f);
+  animation:spin 45s linear infinite; opacity:.55; pointer-events:none}
+.hero::after{content:''; position:absolute; width:220px; height:220px; border-radius:50%;
+  background:radial-gradient(circle, rgba(212,175,55,.22), transparent);
+  top:-60px; right:-40px; animation:float 7s ease-in-out infinite; pointer-events:none}
+.hero > *{position:relative; z-index:1}
+@keyframes cardIn{from{opacity:0; transform:translateY(30px) scale(.97)} to{opacity:1; transform:none}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-24px)}}
+@keyframes beanFloat{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-34px) rotate(160deg)}}
+.hbean{position:absolute; font-size:28px; opacity:.16; animation:beanFloat 10s ease-in-out infinite;
+  pointer-events:none; z-index:0; filter:sepia(1) saturate(2)}
+.hero .hico{filter:drop-shadow(0 0 16px rgba(212,175,55,.45))}
+.hero .htitle{text-shadow:0 0 26px rgba(212,175,55,.35)}
+.hero .hpill{background:rgba(0,0,0,.3)}
+.hpill{display:inline-block; font-size:12px; color:var(--gold); border:1px solid var(--line);
+  border-radius:99px; padding:5px 14px; margin-bottom:14px; background:rgba(212,175,55,.07)}
+.htitle{font-size:29px; font-weight:700; line-height:1.35}
+.htitle .gold{background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent}
+.hsub{color:var(--muted); font-size:15px; margin:11px auto 0; max-width:540px}
+.hero .hico{font-size:52px; line-height:1.2; margin-bottom:6px}
+
+/* ── mode cards ── */
+.modes{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:22px 0 8px}
+.mode-card{
+  text-align:left; border:1px solid var(--line); border-radius:var(--rlg); padding:20px 18px;
+  background:linear-gradient(180deg, var(--card2), rgba(10,17,40,.7)); cursor:pointer;
+  transition:transform .15s, border-color .15s, box-shadow .15s; font-family:inherit; color:var(--ink);
+}
+.mode-card:hover{transform:translateY(-3px); border-color:var(--brand); box-shadow:0 14px 34px rgba(0,0,0,.4)}
+.mico{width:46px; height:46px; border-radius:13px; display:grid; place-items:center; font-size:23px;
+  background:rgba(212,175,55,.12); border:1px solid var(--line); margin-bottom:12px}
+.mt{font-size:17px; font-weight:700; color:var(--gold); margin-bottom:5px}
+.ms{font-size:13px; color:var(--muted); line-height:1.6}
+.mtag{display:inline-block; font-size:11px; color:#241a02; background:var(--grad); border-radius:99px;
+  padding:2px 10px; font-weight:700; margin-left:7px; vertical-align:middle}
+
+/* ── address wrap + fab ── */
+.addrwrap{border:1px solid var(--line2); border-radius:var(--r); padding:14px 14px 4px; background:rgba(10,17,40,.45); margin-bottom:13px}
+.addrwrap .ah{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px}
+.addrwrap .ah .t{font-size:14.5px; font-weight:700; color:var(--gold)}
+.fab{
+  position:sticky; bottom:14px; float:right; z-index:5;
+  font-family:inherit; font-size:13px; font-weight:600; color:var(--gold);
+  background:rgba(14,23,48,.95); border:1px solid var(--line); border-radius:99px;
+  padding:9px 16px; cursor:pointer; box-shadow:0 8px 24px rgba(0,0,0,.5); backdrop-filter:blur(6px);
+}
+.fab:hover{background:rgba(212,175,55,.14)}
+
+/* ── docs ── */
+.docrow{display:grid; grid-template-columns:46px 1.4fr 1fr auto; gap:9px; align-items:center;
+  border:1px solid var(--line2); border-radius:13px; padding:9px 11px; margin-bottom:9px; background:rgba(10,17,40,.5)}
+.docrow .dthumb{width:46px; height:46px; object-fit:cover; border-radius:9px; border:1px solid var(--line2); cursor:pointer}
+.docrow .dname{font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.docrow .dtype{font-size:13px; padding:8px 10px; border-radius:9px}
+.docrow .dx{background:rgba(251,113,133,.12); color:var(--err); border:1px solid rgba(251,113,133,.3);
+  border-radius:9px; width:34px; height:34px; cursor:pointer; font-size:15px; font-family:inherit}
+.docrow .dx:hover{background:rgba(251,113,133,.22)}
+
+/* ── verify badge ── */
+.vbadge{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; border-radius:99px;
+  padding:3px 11px; border:1px solid; margin:4px 0 2px}
+.vbadge.ok{color:var(--ok); border-color:rgba(52,211,153,.4); background:rgba(52,211,153,.08)}
+.vbadge.warn{color:var(--warn); border-color:rgba(251,191,36,.4); background:rgba(251,191,36,.08)}
+.vbadge.wait{color:var(--muted); border-color:var(--line2); background:rgba(10,17,40,.5)}
+
+/* ── live note ── */
+.livenote{display:none; align-items:center; gap:10px; margin-top:16px; padding:12px 15px;
+  border-radius:var(--r); font-size:14px; border:1px solid var(--line2); background:rgba(10,17,40,.6); color:var(--muted)}
+.livenote.on{display:flex}
+.livenote.ok{color:var(--ok); border-color:rgba(52,211,153,.4)}
+.livenote.warn{color:var(--warn); border-color:rgba(251,191,36,.4)}
+.livenote.err{color:var(--err); border-color:rgba(251,113,133,.4)}
+.livenote.info{color:var(--info); border-color:rgba(125,211,252,.4)}
+
+/* ── failbox ── */
+.failbox{display:none; margin-top:14px; border:1px solid rgba(251,113,133,.4); border-radius:var(--r);
+  background:rgba(251,113,133,.07); padding:13px 15px; font-size:13.5px; color:var(--err)}
+.failbox.on{display:block}
+.failbox ul{margin:6px 0 0 18px}
+
+/* ── progress rows ── */
+.prow{display:flex; align-items:center; gap:12px; padding:13px 15px; border-radius:var(--r);
+  border:1px solid var(--line2); background:rgba(10,17,40,.55); margin-bottom:9px; font-size:14.5px}
+.prow .pdot{width:24px; height:24px; border-radius:50%; display:grid; place-items:center; flex:none;
+  background:rgba(212,175,55,.1); color:var(--muted); font-size:12px}
+.prow.active{border-color:var(--brand); color:var(--gold); background:rgba(212,175,55,.08)}
+.prow.active .pdot{background:var(--grad); color:#241a02}
+.prow.done{border-color:rgba(52,211,153,.35); color:var(--ok)}
+.prow.done .pdot{background:rgba(52,211,153,.18); color:var(--ok)}
+.prow.err{border-color:rgba(251,113,133,.45); color:var(--err)}
+.prow.err .pdot{background:rgba(251,113,133,.18); color:var(--err)}
+.prow .pt{margin-left:auto; font-size:12px; color:var(--muted)}
+
+/* ── otp boxes ── */
+.otpboxes{display:flex; gap:9px; justify-content:center; margin:16px 0; direction:ltr}
+.otpbox{width:48px; height:56px; text-align:center; font-size:23px; font-weight:700; color:var(--gold);
+  background:rgba(7,13,31,.9); border:1px solid var(--line); border-radius:12px; outline:none; font-family:inherit}
+.otpbox:focus{border-color:var(--brand); box-shadow:0 0 0 3px rgba(212,175,55,.18)}
+
+/* ── ack hero ── */
+.ackhero{text-align:center; padding:20px 0 6px}
+.ackhero .lbl{font-size:13.5px; color:var(--muted); letter-spacing:.4px}
+.acknum{
+  font-size:clamp(22px,5.4vw,36px); font-weight:700; letter-spacing:1.5px; margin:10px 0 4px;
+  background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent;
+  word-break:break-all;
+}
+.copyrow2{display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:16px}
+.doneimg{max-width:100%; border-radius:var(--r); border:1px solid var(--line); margin-top:16px}
+
+/* ── drafts / address book cards ── */
+.draft-card{border:1px solid var(--line2); border-radius:var(--r); padding:15px 16px; margin-bottom:11px;
+  background:rgba(10,17,40,.55); display:flex; align-items:center; gap:13px; flex-wrap:wrap}
+.draft-card .di{width:42px; height:42px; border-radius:12px; display:grid; place-items:center; font-size:20px;
+  background:rgba(212,175,55,.1); border:1px solid var(--line2); flex:none}
+.draft-card .dt{font-weight:600; font-size:15px}
+.draft-card .ds{font-size:12.5px; color:var(--muted)}
+.draft-card .da{display:flex; gap:8px; margin-left:auto; flex-wrap:wrap}
+
+/* ── status table (আবেদনের অবস্থা) ── */
+.stbl{width:100%; border-collapse:collapse; font-size:13.5px}
+.stbl th{text-align:left; padding:9px 11px; color:var(--gold); font-weight:600; border-bottom:1px solid var(--line2); white-space:nowrap}
+.stbl td{padding:9px 11px; border-bottom:1px solid rgba(212,175,55,.1); color:var(--ink)}
+.stbl tr:last-child td{border-bottom:none}
+
+/* ── spin ── */
+.spin{width:16px; height:16px; border-radius:50%; border:2.5px solid rgba(212,175,55,.25);
+  border-top-color:var(--gold); animation:sp 0.8s linear infinite; flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+.skeleton{border-radius:9px; background:linear-gradient(90deg, rgba(212,175,55,.06), rgba(212,175,55,.14), rgba(212,175,55,.06));
+  background-size:200% 100%; animation:sk 1.4s infinite}
+@keyframes sk{to{background-position:-200% 0}}
+
+.footer{text-align:center; color:var(--muted); font-size:12.5px; margin-top:26px; line-height:1.9}
+.footer .fl{color:var(--gold)}
+.hidden{display:none !important}
+.mt8{margin-top:8px} .mt14{margin-top:14px} .mt20{margin-top:20px}
+.center{text-align:center} .small{font-size:13px} .muted{color:var(--muted)}
+
+/* ── আবেদন প্রিভিউ (নথির ধাঁচে — জমার আগে মিলিয়ে দেখার পর্দা) ── */
+.pvsheet{border:1px solid var(--line); border-radius:var(--rlg);
+  background:linear-gradient(180deg, rgba(20,31,66,.6), rgba(10,17,40,.82)); padding:18px 16px 8px; margin-bottom:8px}
+.pvhead{text-align:center; padding-bottom:12px; border-bottom:1px solid var(--line2); margin-bottom:4px}
+.pvhead .pvt{font-size:19px; font-weight:700; background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent}
+.pvhead .pvs{font-size:12.5px; color:var(--muted)}
+.pvsec{margin:15px 0 3px; font-size:14.5px; font-weight:700; color:var(--gold); display:flex; align-items:center; gap:8px}
+.pvsec .pvedit{margin-left:auto; font-size:12px; font-weight:600; padding:5px 11px; border-radius:99px}
+.pvrow{display:grid; grid-template-columns:165px 1fr; gap:10px; padding:7px 2px;
+  border-bottom:1px dashed rgba(212,175,55,.14); font-size:14px}
+.pvrow:last-child{border-bottom:none}
+.pvl{color:var(--muted); font-size:13px}
+.pvv{color:var(--ink); overflow-wrap:anywhere}
+
+@media (max-width:760px){
+  .wrap{padding:14px 10px 50px}
+  .card{padding:19px 14px; border-radius:18px}
+  .htitle{font-size:23px}
+  .modes{grid-template-columns:1fr}
+  .row2,.row3{grid-template-columns:1fr 1fr; gap:10px}
+  .hacts{width:100%}
+  .hacts .btn{flex:1}
+  .stp{flex:none; min-width:118px}
+  .otpbox{width:41px; height:50px; font-size:20px}
+  .docrow{grid-template-columns:46px 1fr auto; }
+  .docrow .dtype{grid-column:2 / -1}
+  /* মোবাইল-সহজ: iOS-এর অটো-জুম বন্ধে ইনপুট ১৬px; প্রতিটি বাটন পুরো চওড়া ও বড় */
+  input[type=text], input[type=tel], input[type=email], input[type=date], input[type=number], input:not([type]), select, textarea{font-size:16px}
+  #btnRow .btn{width:100%; padding:13px 18px}
+  .stepper{-webkit-overflow-scrolling:touch}
+  .pvrow{grid-template-columns:112px 1fr; font-size:13.5px}
+  .pvsec{margin:13px 0 2px}
+}
+@media (max-width:380px){
+  .wrap{padding:12px 8px 46px}
+  .otpbox{width:34px; height:44px; font-size:18px; border-radius:10px}
+  .otpboxes{gap:6px}
+  .row2,.row3{grid-template-columns:1fr} /* খুব ছোট ফোনে ১ কলাম — পড়তে সুবিধা */
+}
+.wrap{padding-bottom:calc(60px + env(safe-area-inset-bottom))}
+/* ── dashboard: স্ক্রল ছাড়া এক পর্দা ── */
+.hero.compact{padding:20px 14px 14px}
+.hero.compact .hico{font-size:34px; margin-bottom:2px}
+.hero.compact .hpill{margin-bottom:8px; font-size:11px; padding:4px 12px}
+.hero.compact .htitle{font-size:22px}
+.hero.compact .hsub{font-size:13px; margin-top:6px}
+.guide-det{margin:10px 0; border:1px solid var(--line2); border-radius:14px; background:var(--paper)}
+.guide-det summary{cursor:pointer; padding:10px 14px; font-weight:700; color:var(--gold); list-style:none; display:flex; align-items:center; gap:8px; font-size:14px}
+.guide-det summary::-webkit-details-marker{display:none}
+.guide-det summary::after{content:'▾'; margin-left:auto; color:var(--muted)}
+.guide-det[open] summary::after{content:'▴'}
+.guide-det .gbody{padding:0 8px 8px}
+.dash2{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin:12px 0 8px}
+.mode-card.compact{padding:14px 14px}
+.mode-card.compact .mico{width:38px; height:38px; font-size:19px; margin-bottom:8px; border-radius:11px}
+.mode-card.compact .mt{font-size:15px}
+.mode-card.compact .ms{font-size:12px}
+@media (max-width:760px){
+  /* মোবাইলেও ২টি কার্ড পাশাপাশি — স্ক্রল আরও কমে */
+  .dash2{grid-template-columns:repeat(2,1fr); gap:8px}
+  .mode-card.compact{padding:10px 6px; text-align:center}
+  .mode-card.compact .mico{margin:0 auto 6px; width:34px; height:34px; font-size:17px; border-radius:10px}
+  .mode-card.compact .mt{font-size:12px; margin-bottom:0}
+  .mode-card.compact .mt .mtag{display:block; margin:4px auto 0; width:fit-content}
+  .mode-card.compact .ms{display:none}
+}
+/* ── প্রিভিউ: সব-এক-পেজে (কাগজের ছবি + OTP + খসড়া) ── */
+.pvdocs{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+.pvdoc{width:72px; height:72px; object-fit:cover; border-radius:10px; border:1px solid var(--line); cursor:pointer}
+.pvotp{margin-top:14px; border:1px solid var(--line); border-radius:var(--rlg); padding:16px; background:var(--paper)}
+/* ── success animation ── */
+@keyframes ackPop{0%{transform:scale(.5);opacity:0}60%{transform:scale(1.08);opacity:1}100%{transform:scale(1);opacity:1}}
+.tickpop{font-size:64px; line-height:1.2; animation:ackPop .55s ease-out}
+.ackhero{animation:ackPop .5s ease-out}
+/* ── প্রিভিউ ২-কলাম (computer-এ পাশাপাশি) ── */
+.pvcols{display:grid; grid-template-columns:1fr 1fr; gap:2px 26px}
+.pvcol{min-width:0}
+@media (max-width:760px){ .pvcols{grid-template-columns:1fr} }
+/* ── হোম গাইড: কী কী পদ্ধতিতে আবেদন হবে ── */
+.gsteps{display:flex; flex-direction:column; gap:8px; margin:12px 0 4px}
+.gstep{display:flex; gap:10px; align-items:flex-start; background:var(--paper); border:1px solid var(--line2); border-radius:12px; padding:10px 12px}
+.gstep .n{flex:none; width:26px; height:26px; border-radius:50%; background:var(--grad); color:#2a1a08; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:14px}
+.gstep .t{font-size:14px; line-height:1.6}
+.gstep .t b{color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand" id="brandHome">
+      <div class="blogo">জ</div>
+      <div>
+        <div class="bname">জন্ম নিবন্ধন সহায়ক</div>
+        <div class="btag">অনলাইন জন্ম নিবন্ধন আবেদন — সহজ ও নিরাপদ</div>
+      </div>
+    </div>
+    <div class="hacts">
+      <button class="btn ghost small" id="draftsBtn">🗂️ খসড়া <span id="draftsCnt"></span></button>
+      <button class="btn ghost small" id="addrBtn">📍 ঠিকানা বই</button>
+    </div>
+  </div>
+
+  <main class="card">
+    <div class="banner hidden" id="sysBanner"></div>
+    <div class="stepper hidden" id="stepper"></div>
+    <div id="stepBody"></div>
+    <div class="btnrow" id="btnRow"></div>
+    <div class="livenote" id="liveNote"></div>
+    <div class="failbox" id="failBox"></div>
+  </main>
+
+  <div class="footer">
+    নিরাপদ অনলাইন আবেদন <span class="fl">•</span> আপনার তথ্য সুরক্ষিত থাকে<br>
+    বিডিআরআইএস-এ আবেদন <span class="fl">•</span> কোনো অতিরিক্ত ফি নেই
+  </div>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+/* ═══════════ state & helpers ═══════════ */
+const socket = io({ path: '/api/bdris-apply/socket.io/' });
+const $ = (id) => document.getElementById(id);
+const el = (sel) => document.querySelector(sel);
+const els = (sel) => Array.from(document.querySelectorAll(sel));
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const cleanName = (s) => String(s || '').replace(/\./g, '').trim();
+const hasLetters = (s) => /[A-Za-z\u0980-\u09FF]/.test(String(s || ''));
+
+/* ═══════════ সেশন জাগিয়ে রাখা — ট্যাব খোলা মানে বট প্রস্তুত ═══════════
+   সার্ভার ~২৫ মিনিট নিষ্ক্রিয়তায় ব্রাউজার বন্ধ করে দেয়; ট্যাব খোলা রেখে
+   ফিরে এলে তখন আর কিচ্ছু কাজ করে না (“atke gelo”)। তাই ট্যাব খোলা সকেট
+   থেকে নীরব হার্টবিট — UI-তে কিছুই দেখা যায় না, কিন্তু বট সবসময় জাগা থাকে। */
+setInterval(() => { try { if (socket.connected) socket.emit('KEEPALIVE'); } catch {} }, 4 * 60 * 1000);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && socket.connected) { try { socket.emit('KEEPALIVE'); } catch {} }
+});
+socket.on('disconnect', () => { S.ready = false; S.starting = false; });
+
+const S = {
+  mode: null,        // 'auto' | 'manual'
+  cur: null,         // manual current ui step
+  ready: false, starting: false,
+  verify: { father: null, mother: null },   // null | true | false
+  d: {},             // all collected data
+  draftId: null,
+  view: 'home',      // home|flow|drafts|addr|progress|done
+  chain: null,       // {ops,k,onDone,warns}
+  otpStage: 'review',// review|code|submitting|done
+  docsDone: false,
+  awaitOtpSent: false,
+  phaseA: null,
+  lastAck: null,
+  lastAckId: null,
+  photo: null,       // screenshot dataURL
+  pdf: null,         // {name, base64}
+  ackNo: null
+};
+
+const STEP_LBL = ['ভিত্তি', 'ব্যক্তির পরিচিতি', 'পিতামাতা', 'ঠিকানা', 'ডকুমেন্ট', 'OTP'];
+const RELATIONS = ['নিজ', 'পিতা', 'মাতা', 'পিতামহ', 'পিতামহী', 'মাতামহ', 'মাতামহী', 'অভিভাবক', 'অন্যান্য'];
+const REL_ADULT = ['নিজ', 'অন্যান্য'];
+const REL_MINOR = ['পিতা', 'মাতা', 'পিতামহ', 'পিতামহী', 'মাতামহ', 'মাতামহী', 'অভিভাবক', 'অন্যান্য'];
+// BDRIS বিধি (live-mapped 2026-10-11): ১৮+ বয়সে সাইট নিজ/অন্যান্য দেখায়, কম হলে
+// পিতা/মাতা/...; ২০১৩-পূর্ব জন্মে নিজ দিয়েই OTP যায় (user-confirmed)। চূড়ান্ত বাছাই সার্ভার করে।
+function relationsForAge() {
+  const dob = (S.d && S.d.s1 && S.d.s1.dob) || '';
+  const t = dob ? new Date(dob).getTime() : NaN;
+  if (!isFinite(t)) return RELATIONS;
+  return ((Date.now() - t) / (365.25 * 24 * 3600 * 1000)) >= 18 ? REL_ADULT : REL_MINOR;
+}
+function defaultRelation() { return relationsForAge()[0]; }
+const DOC_TYPES = [
+  { v: '40', t: 'চিকিৎসক কর্তৃক প্রত্যয়ন পত্র / শিক্ষা সনদ' },
+  { v: '41', t: 'পিতা/মাতার NID বা ঠিকানার প্রমাণ' }
+];
+const FB = {
+  thChild: ['১ম', '২য়', '৩য়', '৪র্থ', '৫ম', '৬ষ্ঠ', '৭ম', '৮ম', '৯ম', '১০ম', '১১তম'],
+  gender: ['পুরুষ', 'মহিলা', 'তৃতীয় লিঙ্গ'],
+  nationality: ['বাংলাদেশী', 'অজানা'],
+  country: ['বাংলাদেশ']
+};
+
+function san(s) {
+  let t = String(s == null ? '' : s);
+  t = t.replace(/🤖/g, '').replace(/ব্রাউজার/g, '').replace(/বট/g, '');
+  t = t.replace(/\s{2,}/g, ' ').trim();
+  return t || 'প্রক্রিয়া চলছে…';
+}
+function note(msg, cls = '') {
+  // নীরব মোড: চলমান-কাজের (info) বার্তা দেখানো হয় না — ক্লিকের সাথে সাথে পেছনে কাজ হয়ে
+  // পরের পর্দা আসে, যেন একজনই কাজ করছে। শুধু সফলতা/সতর্কতা/ভুল দেখানো হয়।
+  if (cls !== 'ok' && cls !== 'warn' && cls !== 'err') return;
+  const n = $('liveNote');
+  n.innerHTML = '<span>' + esc(san(msg)) + '</span>';
+  n.className = 'livenote on ' + sanitizeCls(cls);
+}
+function sanitizeCls(c) { return ['ok', 'warn', 'err', 'info'].includes(c) ? c : ''; }
+function noteOff() { $('liveNote').className = 'livenote'; }
+function busy(on, msg) {
+  els('#btnRow .btn').forEach(b => {
+    if (on) { if (!b.disabled) { b.dataset.was = '1'; b.disabled = true; } }
+    else if (b.dataset.was) { b.disabled = false; delete b.dataset.was; }
+  });
+  clearTimeout(S._busyWdog);
+  // নিরাপত্তা-জাল: কোনো কারণে ack হারালেও বাটন ৯০ সেকেন্ডের বেশি নিষ্ক্রিয় বসে থাকবে না
+  if (on) S._busyWdog = setTimeout(() => { busy(false); note('⏳ একটু দেরি হচ্ছে — আবার চেষ্টা করুন', 'warn'); }, 90000);
+  if (on && msg) note(msg, 'info');
+}
+function showFail(list) {
+  const f = $('failBox');
+  if (!list || !list.length) { f.className = 'failbox'; f.innerHTML = ''; return; }
+  f.innerHTML = 'অনুগ্রহ করে নিচের তথ্যগুলো ঠিক করুন:<ul>' +
+    list.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>';
+  f.className = 'failbox on';
+}
+function hideFail() { showFail(null); }
+function showBanner(cls, html, actionFn, label) {
+  const b = $('sysBanner');
+  b.innerHTML = '<span class="bmsg">' + html + '</span>' +
+    (actionFn ? '<button class="btn ghost small" id="bnAct">' + esc(label || 'ঠিক করুন') + '</button>' : '');
+  b.className = 'banner ' + sanitizeCls(cls);
+  if (actionFn) $('bnAct').onclick = actionFn;
+}
+function hideBanner() { $('sysBanner').className = 'banner hidden'; $('sysBanner').innerHTML = ''; }
+function copyText(txt) {
+  const t = String(txt || '');
+  const done = () => note('✔ কপি হয়েছে', 'ok');
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(t).then(done).catch(() => fallback());
+  } else fallback();
+  function fallback() {
+    const ta = document.createElement('textarea');
+    ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch { note('কপি করা যায়নি — নিজে লিখে নিন', 'warn'); }
+    ta.remove();
+  }
+}
+function dlBase64(name, b64, mime) {
+  const a = document.createElement('a');
+  a.href = 'data:' + (mime || 'application/pdf') + ';base64,' + b64;
+  a.download = name || 'bdris-application.pdf';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+function b64Of(dataUrl) { const i = String(dataUrl || '').indexOf(','); return i >= 0 ? dataUrl.slice(i + 1) : ''; }
+
+/* ═══════════ views & stepper ═══════════ */
+function setView(v) {
+  // চেইন কেবল progress স্ক্রিনেই চলে — ইউজার অন্য স্ক্রিনে গেলে বাকি ধাপ আর নিজে থেকে যায় না
+  if (S.chain && v !== 'progress') { S.chain = null; opAbort(); }
+  S.view = v;
+}
+function renderStepper(activeIdx) {
+  const st = $('stepper');
+  if (S.mode !== 'manual' || S.view === 'home' || S.view === 'drafts' || S.view === 'addr' || S.view === 'status') { st.className = 'stepper hidden'; return; }
+  st.className = 'stepper';
+  st.innerHTML = STEP_LBL.map((t, i) => {
+    const cls = i < activeIdx ? 'done' : i === activeIdx ? 'active' : '';
+    return '<div class="stp ' + cls + '"><span class="n">' + (i < activeIdx ? '✓' : (i + 1)) + '</span><span>' + esc(t) + '</span></div>';
+  }).join('');
+}
+function showBody(html) { $('stepBody').innerHTML = html; }
+function setBtns(list) {
+  const r = $('btnRow');
+  r.innerHTML = '';
+  r.style.cssText = 'display:flex; gap:10px; flex-wrap:wrap; margin-top:18px';
+  list.forEach(b => {
+    const btn = document.createElement('button');
+    btn.className = 'btn ' + (b.cls || '');
+    btn.innerHTML = b.html;
+    btn.onclick = b.fn;
+    r.appendChild(btn);
+    if (b.id) btn.id = b.id;
+  });
+}
+function clearBtns() { $('btnRow').innerHTML = ''; }
+
+/* ═══════════ acks / storage helpers ═══════════ */
+function getAcks() { try { return JSON.parse(localStorage.getItem('bdris_acks') || '[]'); } catch { return []; } }
+function addAck(a) {
+  const l = getAcks();
+  l.unshift(a);
+  // পুরোনো এন্ট্রির PDF খোঁচা বাদ — localStorage ফুলে উড়ে না যায় (শুধু শেষ আবেদনের কপি থাকে)
+  l.slice(1).forEach(x => { if (x.pdfB64) { delete x.pdfB64; delete x.pdfName; } });
+  try { localStorage.setItem('bdris_acks', JSON.stringify(l.slice(0, 20))); } catch {}
+}
+function fmtTime(iso) {
+  try { return new Date(iso).toLocaleString('bn-BD', { dateStyle: 'medium', timeStyle: 'short' }); }
+  catch { return String(iso || ''); }
+}
+function updDraftsCnt() {
+  socket.emit('LIST_DRAFTS', (list) => {
+    const n = Array.isArray(list) ? list.length : 0;
+    const c = $('draftsCnt'); if (c) c.textContent = n ? '(' + n + ')' : '';
+  });
+}
+
+/* ═══════════ date of birth helpers (copy-paste friendly, 2026-10-11) ═══════════ */
+function bnDigits(s) {
+  return String(s || '').replace(/[০-৯]/g, (d) => String('০১২৩৪৫৬৭৮৯'.indexOf(d)));
+}
+function dobDisplay(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? m[3] + '/' + m[2] + '/' + m[1] : '';
+}
+function dobParse(raw) {
+  const b = bnDigits(raw).trim();
+  let d, mo, y;
+  const f = b.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  const iso = b.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
+  if (f) { d = +f[1]; mo = +f[2]; y = +f[3]; }
+  else if (iso) { d = +iso[3]; mo = +iso[2]; y = +iso[1]; }
+  else {
+    const digits = b.replace(/\D/g, '');
+    if (digits.length === 8) { d = +digits.slice(0, 2); mo = +digits.slice(2, 4); y = +digits.slice(4); }
+  }
+  if (!d || !mo || !y || y < 1900 || y > 2100 || mo > 12 || d > 31) return '';
+  const dt = new Date(y, mo - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return '';
+  if (dt.getTime() > Date.now()) return '';
+  const two = (x) => String(x).padStart(2, '0');
+  return y + '-' + two(mo) + '-' + two(d);
+}
+function readDobIso(id) {
+  return dobParse($(id) ? $(id).value : '');
+}
+function dobInputNormalize(t) {
+  const b = bnDigits(t.value);
+  if (b !== t.value) t.value = b;
+  const iso = readDobIso(t.id);
+  if (iso) { const disp = dobDisplay(iso); if (disp && t.value !== disp) t.value = disp; }
+}
+// কপি-পেস্ট তারিখ (2026-10-13): যেকোনো লেখা paste করলে তার ভেতর থেকে তারিখ
+// খুঁজে বের করে DD/MM/YYYY-তে বসিয়ে দেয় — যেমন "জন্ম: ১০/০৯/২০০৭" paste
+// করলেও শুধু "10/09/2007" বসবে।
+function dobExtract(raw) {
+  const b = bnDigits(String(raw || ''));
+  const m = b.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/) ||
+            b.match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
+  if (m) return dobParse(m[0]);
+  const digits = b.replace(/\D/g, '');
+  if (digits.length >= 8) return dobParse(digits.slice(0, 8));
+  return '';
+}
+function isDobFieldId(id) {
+  return id === 's1_dob' || id === 'a_dob' || /^(father|mother|af|am)_dob$/.test(id || '');
+}
+document.addEventListener('paste', (e) => {
+  const t = e.target; if (!t || !t.id || !isDobFieldId(t.id)) return;
+  const txt = ((e.clipboardData || window.clipboardData) || {}).getData('text') || '';
+  if (!txt) return;
+  const iso = dobExtract(txt);
+  if (iso) {
+    e.preventDefault();
+    t.value = dobDisplay(iso);
+    t.dispatchEvent(new Event('input', { bubbles: true }));
+    note('✔ তারিখ বসানো হয়েছে: ' + dobDisplay(iso), 'ok');
+  }
+});
+function dobFieldHtml(id, lbl, isoVal, req) {
+  return '<div class="fld"><label>' + esc(lbl) + (req ? ' <b>*</b>' : '') + '</label>' +
+    '<input type="text" inputmode="numeric" id="' + id + '" value="' + esc(dobDisplay(isoVal)) + '" placeholder="DD/MM/YYYY — যেমন: 10/09/2007"></div>';
+}
+
+/* ═══════════ address field helpers (shared) ═══════════ */
+const A_KEYS = [
+  ['division', 'বিভাগ'],
+  ['district', 'জেলা'],
+  ['cityCorpUpazila', 'সিটি কর্পোরেশন / উপজেলা'],
+  ['paurasavaUnion', 'পৌরসভা / ইউনিয়ন'],
+  ['ward', 'ওয়ার্ড'],
+  ['postBn', 'ডাকঘর (বাংলায়)'],
+  ['postEn', 'ডাকঘর (English)'],
+  ['vilBn', 'গ্রাম / পাড়া / মহল্লা'],
+  ['vilEn', 'Village / Area (English)'],
+  ['houseBn', 'বাসা ও সড়ক (বাংলা)'],
+  ['houseEn', 'বাসা ও সড়ক (English)']
+];
+/* স্থায়ী (sp_ → site permAddr*) ও বর্তমান (rp_ → site prsntAddr*) ঠিকানার
+   বিভাগ→জেলা→উপজেলা→ইউনিয়ন/অঞ্চল→ওয়ার্ড live cascade (2026-10-11) */
+function addrSiteSel(prefix, part) {
+  const site = prefix === 'sp' ? 'permAddr' : 'prsntAddr';
+  return '#' + site + part + ', select[name="' + site + part + '"]';
+}
+function addrGeoLevels(prefix) {
+  return [
+    { k: 'division', ui: prefix + '_division', site: addrSiteSel(prefix, 'Div'), childSite: addrSiteSel(prefix, 'Dist'), lbl: 'বিভাগ' },
+    { k: 'district', ui: prefix + '_district', site: addrSiteSel(prefix, 'Dist'), childSite: addrSiteSel(prefix, 'CityCorpCantOrUpazila'), lbl: 'জেলা' },
+    { k: 'cityCorpUpazila', ui: prefix + '_cityCorpUpazila', site: addrSiteSel(prefix, 'CityCorpCantOrUpazila'), childSite: addrSiteSel(prefix, 'PaurasavaOrUnion'), lbl: 'সিটি কর্পোরেশন / উপজেলা' },
+    { k: 'paurasavaUnion', ui: prefix + '_paurasavaUnion', site: addrSiteSel(prefix, 'PaurasavaOrUnion'), altSite: addrSiteSel(prefix, 'WardInCityCorp'), childSite: addrSiteSel(prefix, 'WardInPaurasavaOrUnion'), lbl: 'পৌরসভা / ইউনিয়ন' },
+    { k: 'ward', ui: prefix + '_ward', site: addrSiteSel(prefix, 'WardInPaurasavaOrUnion'), childSite: null, lbl: 'ওয়ার্ড' }
+  ];
+}
+function addrGeoInputs(prefix, d) {
+  d = d || {};
+  const Ls = addrGeoLevels(prefix);
+  const selBox = (L) => '<div class="fld"><label id="' + L.ui + '_lbl">' + esc(L.lbl) + '</label>' +
+    '<select id="' + L.ui + '"><option value="">লোড হচ্ছে…</option></select></div>';
+  const txt = (k, lbl) => '<div class="fld"><label>' + esc(lbl) + '</label>' +
+    '<input type="text" id="' + prefix + '_' + k + '" value="' + esc(d[k] || '') + '"></div>';
+  return Ls.map(selBox).join('') +
+    txt('postBn', 'ডাকঘর (বাংলায়)') + txt('postEn', 'ডাকঘর (English)') +
+    txt('vilBn', 'গ্রাম / পাড়া / মহল্লা') + txt('vilEn', 'Village / Area (English)') +
+    txt('houseBn', 'বাসা ও সড়ক (বাংলা)') + txt('houseEn', 'বাসা ও সড়ক (English)');
+}
+/* অটো ফর্মের জন্য টেক্সট-সংস্করণ (সাইট তখনো প্রথম ধাপে — ড্রপডাউন-তালিকা আনা যায় না;
+   ব্যাকএন্ড নিজেই লেবেল-মিলিয়ে সাইটের সিলেক্টে বসায়, live-proven) */
+function addrTextInputs(prefix, d) {
+  d = d || {};
+  return A_KEYS.map(([k, lbl]) => '<div class="fld"><label>' + esc(lbl) + '</label>' +
+    '<input type="text" id="' + prefix + '_' + k + '" value="' + esc(d[k] || '') + '"></div>').join('');
+}
+function readAddrFields(prefix, prev) {
+  const o = {};
+  A_KEYS.forEach(([k]) => {
+    const e = $(prefix + '_' + k);
+    let v = '';
+    if (e) {
+      v = e.tagName === 'SELECT'
+        ? (e.value && e.selectedOptions && e.selectedOptions[0] ? e.selectedOptions[0].text : '')
+        : String(e.value || '').trim();
+    }
+    // পিছনে-এসে দ্রুত “পরবর্তী” চাপলে cascade এখনো ফেরত আসেনি — খালি DOM পুরনো ভালো মান মুছবে না
+    if (!v && prev && prev[k]) v = String(prev[k] || '');
+    o[k] = v;
+  });
+  return o;
+}
+
+/* ═══════════ home view ═══════════ */
+function renderHome() {
+  setView('home'); renderStepper(-1); hideFail(); hideBanner(); noteOff();
+  clearBtns();
+  const acks = getAcks();
+  const ackHtml = acks.length ? ('<div class="sec"><div class="sub-h"><span class="snum">🕘</span> সাম্প্রতিক আবেদন</div>' +
+    acks.slice(0, 3).map(a => '<div class="draft-card"><div class="di">🎫</div><div><div class="dt">' + esc(a.name || 'আবেদন') + '</div>' +
+      '<div class="ds">নম্বর: ' + esc(a.no) + ' • ' + esc(fmtTime(a.at)) + '</div></div>' +
+      '<div class="da"><button class="btn small" data-copy="' + esc(a.no) + '">📋 নম্বর কপি</button>' +
+      (a.pdfB64 ? '<button class="btn ghost small" data-pdf="' + esc(a.id) + '">⬇️ কপি</button>' : '') + '</div></div>').join('') + '</div>') : '';
+  showBody(
+    '<div class="hero compact">' +
+      '<span class="hbean" style="top:14%;left:7%">☕</span>' +
+      '<span class="hbean" style="top:62%;right:6%;animation-delay:-5s">☕</span>' +
+      '<div class="hico">📜</div>' +
+      '<div class="hpill">বাংলাদেশ জন্ম ও মৃত্যু নিবন্ধন (BDRIS)</div>' +
+      '<h1 class="htitle">ঘরে বসেই <span class="gold">জন্ম নিবন্ধন আবেদন</span></h1>' +
+      '<p class="hsub">নিচের যেকোনো একটি পদ্ধতি বেছে নিন।</p>' +
+    '</div>' +
+    '<details class="guide-det"><summary>💡 কী কী পদ্ধতিতে আবেদন হবে</summary><div class="gbody">' +
+    '<div class="gsteps">' +
+      '<div class="gstep"><div class="n">১</div><div class="t"><b>পদ্ধতি বেছে নিন</b> — ⚡ অটো (এক ফর্মে সব তথ্য) অথবা 🧭 ধাপে ধাপে (৬টি ধাপে দেখে দেখে)।</div></div>' +
+      '<div class="gstep"><div class="n">২</div><div class="t"><b>তথ্য দিন</b> — অটোতে “📋 নমুনা ফরম্যাট” দেখে নিজের তথ্য বসিয়ে “📥 সব ঘর বসান” চাপুন।</div></div>' +
+      '<div class="gstep"><div class="n">৩</div><div class="t"><b>কাগজের ছবি যোগ করুন</b> — ধরন ৪০ ও ৪১-এর কাগজপত্রের ছবি তুলে/বেছে দিন।</div></div>' +
+      '<div class="gstep"><div class="n">৪</div><div class="t"><b>প্রিভিউতে মিলিয়ে নিন</b> — “👁️ প্রিভিউ দেখুন” চাপলে পুরো আবেদন এক পর্দায়; ভুল থাকলে “✏️ ঠিক করুন”।</div></div>' +
+      '<div class="gstep"><div class="n">৫</div><div class="t"><b>OTP বসান — জমা!</b> — মোবাইলে আসা কোডটি বসালেই আবেদন জমা হবে; নম্বর ও আসল PDF পেয়ে যাবেন।</div></div>' +
+    '</div>' +
+    '<p class="hint">🤝 আপনার কাজ মাত্র ২টি — কাগজের ছবি দেওয়া আর OTP কোড বসানো। বাকি সব এখান থেকেই হবে।</p></div></details>' +
+    '<div class="dash2">' +
+      '<button class="mode-card compact" id="mAuto"><div class="mico">⚡</div>' +
+        '<div class="mt">অটো আবেদন <span class="mtag">দ্রুত</span></div>' +
+        '<div class="ms">একটি ফর্মে সব তথ্য — বাকি ধাপ নিজে থেকে এগোবে।</div></button>' +
+      '<button class="mode-card compact" id="mManual"><div class="mico">🧭</div>' +
+        '<div class="mt">ধাপে ধাপে আবেদন</div>' +
+        '<div class="ms">৬টি ধাপে দেখে দেখে, নিজের গতিতে।</div></button>' +
+    '</div>' +
+    ackHtml
+  );
+  $('mAuto').onclick = () => startAuto();
+  $('mManual').onclick = () => startManual();
+  els('[data-copy]').forEach(b => b.onclick = () => copyText(b.dataset.copy));
+  els('[data-pdf]').forEach(b => b.onclick = () => {
+    const rec = getAcks().find(x => x.id === b.dataset.pdf);
+    if (rec && rec.pdfB64) dlBase64(rec.pdfName || 'bdris-copy.pdf', rec.pdfB64);
+    else note('সংরক্ষিত কপি পাওয়া যায়নি', 'warn');
+  });
+}
+
+/* ═══════════ status view (জমা দেওয়া আবেদনের অবস্থা) ═══════════ */
+function statusReset() {
+  S.status = { stage: 'login', userType: 'BANGLADESH', username: '', password: '', mobileEmail: '' };
+}
+function renderStatusLogin() {
+  setView('status'); renderStepper(-1); hideFail(); hideBanner(); noteOff();
+  const st = S.status || (statusReset(), S.status);
+  st.stage = 'login';
+  const isBd = st.userType !== 'MISSION';
+  showBody(
+    '<div class="sec"><div class="sub-h"><span class="snum">📋</span> আবেদনের অবস্থা দেখুন</div>' +
+    '<p class="hint">আপনার BDRIS অ্যাকাউন্টের তথ্য দিন — জমা দেওয়া আবেদনগুলোর সর্বশেষ অবস্থা আনা হবে। লগইনের জন্য কোড আসবে, সেটি পরের ধাপে বসাবেন।</p>' +
+    '<div class="fld"><label>অ্যাকাউন্টের ধরন</label><select id="st_type">' +
+      '<option value="BANGLADESH"' + (isBd ? ' selected' : '') + '>বাংলাদেশ</option>' +
+      '<option value="MISSION"' + (!isBd ? ' selected' : '') + '>বিদেশে (দূতাবাস / মিশন)</option>' +
+    '</select></div>' +
+    '<div class="fld"><label>ব্যবহারকারীর নাম</label><input type="text" id="st_user" value="' + esc(st.username) + '" autocomplete="username"></div>' +
+    '<div class="fld"><label>পাসওয়ার্ড</label><input type="password" id="st_pass" value="' + esc(st.password) + '" autocomplete="current-password"></div>' +
+    '<div class="fld"><label id="st_mlbl"></label><input type="text" id="st_mobile" value="' + esc(st.mobileEmail) + '"></div>' +
+    '<p class="hint">🔒 তথ্য শুধু সরকারি সাইটে লগইনের জন্য ব্যবহৃত হয় — কোথাও জমা হয় না।</p></div>'
+  );
+  const swap = () => {
+    const bd = $('st_type').value !== 'MISSION';
+    $('st_mlbl').textContent = bd ? 'মোবাইল নম্বর (১১ ডিজিট) *' : 'ইমেইল *';
+    $('st_mobile').inputMode = bd ? 'numeric' : 'email';
+    $('st_mobile').placeholder = bd ? '01XXXXXXXXX' : 'you@example.com';
+  };
+  $('st_type').onchange = swap; swap();
+  setBtns([
+    { html: '🔐 লগইন ও কোড পাঠান', fn: () => statusOpen() },
+    { html: '← হোম', cls: 'ghost', fn: () => { socket.emit('STATUS_CLOSE'); renderHome(); } }
+  ]);
+}
+function statusOpen() {
+  const userType = $('st_type') ? $('st_type').value : 'BANGLADESH';
+  const username = ($('st_user') ? $('st_user').value : '').trim();
+  const password = $('st_pass') ? $('st_pass').value : '';
+  const mobileEmail = ($('st_mobile') ? $('st_mobile').value : '').trim();
+  if (!username || !password) { note('⚠️ ব্যবহারকারীর নাম ও পাসওয়ার্ড দুটোই লিখুন', 'warn'); return; }
+  if (userType === 'MISSION') {
+    if (!/^\S+@\S+\.\S+$/.test(mobileEmail)) { note('⚠️ দূতাবাস/মিশন অ্যাকাউন্টের জন্য সঠিক ইমেইল লিখুন', 'warn'); return; }
+  } else if (!/^01\d{9}$/.test(mobileEmail)) { note('⚠️ ১১ ডিজিটের মোবাইল নম্বরটি সঠিকভাবে লিখুন (যেমন 01XXXXXXXXX)', 'warn'); return; }
+  const st = S.status || (statusReset(), S.status);
+  st.userType = userType; st.username = username; st.password = password; st.mobileEmail = mobileEmail;
+  hideFail(); note('⏳ সরকারি সাইটে লগইন করে আপনার কোড পাঠানো হচ্ছে…', 'info');
+  busy(true);
+  socket.emit('STATUS_OPEN', { username, password, mobileEmail, userType });
+}
+function renderStatusOtp() {
+  setView('status'); renderStepper(-1); hideFail(); hideBanner(); noteOff();
+  const st = S.status || (statusReset(), S.status);
+  st.stage = 'otp';
+  const isBd = st.userType !== 'MISSION';
+  const T = st.mobileEmail || '';
+  const tail = T.length >= 4 ? ('••' + T.slice(-4)) : T;
+  showBody(
+    '<div class="sec"><div class="sub-h"><span class="snum">🔐</span> কোড বসান</div>' +
+    '<p class="hint">' + (isBd
+      ? esc(tail) + '-এ শেষ হওয়া <b>মোবাইলে</b>'
+      : 'আপনার <b>ইমেইলে</b> (' + esc(tail) + ')') +
+    ' BDRIS-এর পাঠানো কোডটি এবার নিচে বসান। <b>কোড কারও সাথে শেয়ার করবেন না।</b></p></div>' +
+    '<div class="otpboxes">' + [0,1,2,3,4,5].map(i => '<input class="otpbox" id="sob' + i + '" inputmode="numeric" maxlength="1" autocomplete="one-time-code">').join('') + '</div>'
+  );
+  const boxes = els('.otpbox');
+  const val = () => boxes.map(b => b.value.replace(/\D/g, '')).join('');
+  boxes.forEach((b, i) => {
+    b.oninput = () => {
+      b.value = b.value.replace(/\D/g, '').slice(-1);
+      if (b.value && boxes[i + 1]) boxes[i + 1].focus();
+    };
+    b.onkeydown = (e) => { if (e.key === 'Backspace' && !b.value && boxes[i - 1]) { boxes[i - 1].focus(); boxes[i - 1].value = ''; } };
+    b.onpaste = (e) => {
+      e.preventDefault();
+      const txt = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
+      for (let k = 0; k < boxes.length; k++) boxes[k].value = txt[k] || '';
+      (boxes[Math.min(txt.length, boxes.length - 1)] || boxes[0]).focus();
+    };
+  });
+  if (boxes[0]) boxes[0].focus();
+  setBtns([
+    { html: '✅ অবস্থা দেখুন', fn: () => {
+        const otp = val();
+        if (otp.length < 6) { note('⚠️ আসা ৬ ডিজিটের কোডটি সম্পূর্ণ লিখুন', 'warn'); return; }
+        note('⏳ লগইন হয়ে আবেদনের তালিকা আনা হচ্ছে…', 'info');
+        busy(true);
+        socket.emit('STATUS_OTP', { otp });
+      } },
+    { html: '← লগইনে ফিরুন', cls: 'ghost', fn: () => { socket.emit('STATUS_CLOSE'); renderStatusLogin(); } }
+  ]);
+}
+function renderStatusResult(d) {
+  d = d || {};
+  setView('status'); renderStepper(-1); hideFail(); hideBanner(); noteOff();
+  const st = S.status || (statusReset(), S.status);
+  st.stage = 'result';
+  const lines = [];
+  if (Array.isArray(d.tables)) {
+    d.tables.forEach(t => {
+      (t.rows || []).forEach(r => {
+        const cells = (r || []).map(c => String(c || '').trim()).filter(Boolean);
+        if (cells.length) lines.push(cells.join(' — '));
+      });
+    });
+  }
+  const txt = String(d.text || '').trim();
+  if (!lines.length && txt) txt.split('\n').forEach(x => { const c = x.trim(); if (c) lines.push(c); });
+  const copyAll = 'আবেদনের অবস্থা (' + (d.title || 'BDRIS') + ')\n' + lines.join('\n');
+  let tbl = '';
+  if (Array.isArray(d.tables) && d.tables.length) {
+    tbl = d.tables.map(t => {
+      const head = (t.head && t.head.length) ? '<thead><tr>' + t.head.map(h => '<th>' + esc(h) + '</th>').join('') + '</tr></thead>' : '';
+      const rows = (t.rows || []).map(r => '<tr>' + (r || []).map(c => '<td>' + esc(String(c == null ? '' : c)) + '</td>').join('') + '</tr>').join('');
+      return '<div style="overflow-x:auto; margin-top:8px"><table class="stbl">' + head + '<tbody>' + rows + '</tbody></table></div>';
+    }).join('');
+  }
+  if (!tbl && !txt) tbl = '<div class="draft-card"><div class="di">📭</div><div><div class="dt">কোনো আবেদন পাওয়া যায়নি</div><div class="ds">এই অ্যাকাউন্টে জমা দেওয়া আবেদন নেই অথবা তালিকা এখনো খালি।</div></div></div>';
+  showBody(
+    '<div class="sec"><div class="sub-h"><span class="snum">📋</span> ' + esc(d.title || 'আবেদনের বর্তমান অবস্থা') + '</div>' +
+    '<p class="hint">এটি সরকারি সাইট থেকে এইমাত্র আনা সর্বশেষ অবস্থা।</p>' +
+    tbl +
+    (tbl && txt ? '<details style="margin-top:10px"><summary style="cursor:pointer;color:var(--muted);font-size:13px">পুরো পাতার লেখা দেখুন</summary><pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;margin-top:8px">' + esc(txt) + '</pre></details>' : '') +
+    '</div>'
+  );
+  setBtns([
+    { html: '🔄 আবার আনুন', fn: () => {
+        note('⏳ আবার আনা হচ্ছে…', 'info');
+        busy(true);
+        socket.emit('STATUS_REFRESH');
+      } },
+    { html: '📋 সব লেখা কপি', cls: 'ghost', fn: () => copyText(copyAll) },
+    { html: '← হোম', cls: 'ghost', fn: () => { socket.emit('STATUS_CLOSE'); renderHome(); } }
+  ]);
+}
+
+/* ═══════════ drafts view ═══════════ */
+function renderDrafts() {
+  setView('drafts'); renderStepper(-1); hideFail();
+  showBody(
+    '<div class="sec"><div class="sub-h"><span class="snum">🗂️</span> সংরক্ষিত খসড়া</div>' +
+    '<p class="hint">আগের অসমাপ্ত আবেদন এখানে জমা থাকে — “চালিয়ে যান” চাপলে বাকি ধাপ শেষ করা যাবে।</p></div>' +
+    '<div id="draftList"><div class="draft-card">খসড়া তালিকা আসছে…</div></div>'
+  );
+  setBtns([{ html: '← ফিরে যান', cls: 'ghost', fn: () => renderHome() }]);
+  socket.emit('LIST_DRAFTS', (list) => {
+    const l = $('draftList'); if (!l) return;
+    if (!Array.isArray(list) || !list.length) {
+      l.innerHTML = '<div class="draft-card"><div class="di">📭</div><div><div class="dt">কোনো খসড়া নেই</div>' +
+        '<div class="ds">আবেদন পূরণ করে “খসড়ায় রাখুন” চাপলে এখানে জমা হবে।</div></div></div>';
+      return;
+    }
+    const bnN = (n) => String(n).replace(/\d/g, x => '০১২৩৪৫৬৭৮৯'[+x]);
+    const stepTxt = (d) => { const n = parseInt(d.uiStep, 10) || 0;
+      if (n >= 6) return ' • অবস্থা: শুধু OTP দিয়ে জমা বাকি';
+      if (n >= 1) return ' • ধাপ ' + bnN(n) + ' (' + esc(STEP_LBL[n - 1] || '') + ') পর্যন্ত করা';
+      return ''; };
+    l.innerHTML = list.map(d => '<div class="draft-card"><div class="di">📝</div>' +
+      '<div><div class="dt">' + esc(d.name || 'নাম দেওয়া হয়নি') + '</div>' +
+      '<div class="ds">জন্ম তারিখ: ' + esc(d.dob || '—') + ' • সংরক্ষিত: ' + esc(fmtTime(d.savedAt)) + stepTxt(d) + '</div></div>' +
+      '<div class="da"><button class="btn small" data-open="' + esc(d.draftId) + '">▶ চালিয়ে যান</button>' +
+      '<button class="btn danger small" data-del="' + esc(d.draftId) + '">মুছুন</button></div></div>').join('');
+    l.querySelectorAll('[data-open]').forEach(b => b.onclick = () => openDraft(b.dataset.open));
+    l.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
+      socket.emit('DELETE_DRAFT', b.dataset.del, () => { updDraftsCnt(); renderDrafts(); note('✔ খসড়া মুছে ফেলা হয়েছে', 'ok'); });
+    });
+  });
+}
+function openDraft(draftId) {
+  busy(true, 'খসড়া প্রস্তুত হচ্ছে…');
+  socket.emit('LOAD_DRAFT', draftId, (res) => {
+    busy(false);
+    if (!res || !res.ok || !res.draft) { note('খসড়া খোলা যায়নি — আবার চেষ্টা করুন', 'err'); return; }
+    const dr = res.draft;
+    S.draftId = dr.draftId || draftId;
+    S.mode = dr.mode === 'auto' ? 'auto' : 'manual';
+    const savedDocs = Array.isArray(dr.docs) ? dr.docs : [];
+    S.d = {
+      mode: S.mode, uiStep: parseInt(dr.uiStep, 10) || 0,
+      s0: dr.s0 || {}, s1: dr.s1 || {}, s2: dr.s2 || {}, s2b: dr.s2b || {},
+      relation: dr.relation || '',
+      docs: savedDocs.filter(x => x && x.base64),
+      docsSaved: savedDocs.length,
+      email: dr.email || '', phone: dr.phone || ''
+    };
+    resetSent(); // খসড়া চালু মানে চেইন শুরু থেকেই যাবে — ধাপ-রেকর্ড নতুন
+    renderResume();
+  });
+}
+function renderResume() {
+  setView('drafts'); renderStepper(-1); hideFail();
+  const d = S.d, s1 = d.s1 || {};
+  const nm = [s1.firstNameBn, s1.lastNameBn].filter(Boolean).join(' ') || 'নাম দেওয়া হয়নি';
+  const modeTxt = S.mode === 'auto' ? '⚡ অটো আবেদন' : '🧭 ধাপে ধাপে';
+  const docsKept = (d.docs && d.docs.length) || 0;
+  const docsSaved = d.docsSaved || 0;
+  const docsTxt = docsKept ? docsKept + 'টি কাগজ আগে দেওয়া ছিল'
+    : (docsSaved ? '⚠️ আগে ' + docsSaved + 'টি কাগজ দেওয়া ছিল — ছবিগুলো আবার যোগ করে দিতে হবে' : 'কোনো কাগজ যোগ করা হয়নি');
+  const hintGo = S.mode === 'auto'
+    ? '“চালিয়ে যান” চাপলে বাকি ধাপগুলো আগের মতোই এগোবে — শেষে ওটপি দিলেই জমা হবে।'
+    : '“চালিয়ে যান” চাপলে ঠিক যেখানে ছিলেন সেখানে ফিরবেন — আপনার পরের “পরবর্তী” চাপেই বাকিটা এগোবে।';
+  showBody(
+    '<div class="sec"><div class="sub-h"><span class="snum">▶</span> খসড়া চালু করুন</div></div>' +
+    '<div class="draft-card"><div class="di">📝</div><div>' +
+      '<div class="dt">' + esc(nm) + '</div>' +
+      '<div class="ds">' + modeTxt + ' • জন্ম তারিখ: ' + esc(s1.dob || '—') + '</div>' +
+      '<div class="ds">' + esc(docsTxt) + '</div>' +
+    '</div></div>' +
+    '<p class="hint mt14">' + hintGo + '</p>'
+  );
+  setBtns([
+    { html: '▶ চালিয়ে যান', fn: () => resumeGo() },
+    { html: '🗑️ খসড়া মুছুন', cls: 'danger', fn: () => {
+        socket.emit('DELETE_DRAFT', S.draftId, () => { S.draftId = null; updDraftsCnt(); renderHome(); });
+      } },
+    { html: '← ফিরে যান', cls: 'ghost', fn: () => renderDrafts() }
+  ]);
+}
+function resumeGo() {
+  const n = Math.max(0, parseInt(S.d.uiStep, 10) || 0);
+  ensureReady(() => {
+    if (S.mode === 'auto') { startAuto(true); return; }
+    // লকস্টেপ: খসড়া চালু = শুধু আগের স্ক্রিনে ফেরা — বট নিজে কোনো ধাপ পাঠায় না।
+    // দরকারি ধাপগুলো ইউজারের পরের “পরবর্তী” ক্লিকেই ব্যাকএন্ডের ensureAligned সাজিয়ে নেবে।
+    if (n <= 1) { S.cur = 1; goStep(1); return; }
+    if (n >= 6) { S.cur = 6; S.otpStage = 'review'; goStep(6); return; } // যোগাযোগ/OTP ধাপ — কাগজপত্র তো সাইটে বসেই আছে; আবার আপলোড চাই না
+    const k = Math.min(n - 1, 4); // op4 (ডকুমেন্ট) বাদ — ইউজার আবার দেবেন (base64 খসড়ায় ছিল না)
+    S.cur = k === 4 ? 5 : n;
+    goStep(S.cur);
+  });
+}
+
+/* ═══════════ address book view ═══════════ */
+function renderAddrBook(pickFn, backFn) {
+  S.addrPick = pickFn || null; S.addrBack = backFn || (() => renderHome());
+  setView('addr'); renderStepper(-1); hideFail();
+  showBody(
+    '<div class="sec"><div class="sub-h"><span class="snum">📍</span> ঠিকানা বই</div>' +
+    '<p class="hint">নাম দিয়ে ঠিকানা সেভ করুন — যেকোনো আবেদনে এক ক্লিকে ব্যবহার করুন।</p></div>' +
+    '<div id="addrList"><div class="draft-card">তালিকা আসছে…</div></div>' +
+    '<div class="sec"><div class="sub-h"><span class="snum">➕</span> নতুন ঠিকানা</div></div>' +
+    '<div class="fld"><label>নাম (বাধ্যতামূলক)</label><input id="ab_name" placeholder="যেমন: বাসা, অফিস"></div>' +
+    '<div class="row2">' + addrTextInputs('ab') + '</div>' +
+    '<div class="mt8"><button class="btn" id="abSave">💾 সেভ করুন</button></div>'
+  );
+  setBtns([{ html: '← ফিরে যান', cls: 'ghost', fn: () => S.addrBack() }]);
+  $('abSave').onclick = () => {
+    const nm = $('ab_name').value.trim();
+    if (!nm) { note('নাম দিন', 'err'); $('ab_name').classList.add('bad'); return; }
+    const a = Object.assign({ name: nm }, readAddrFields('ab'));
+    socket.emit('SAVE_ADDRESS', a, (r) => {
+      $('ab_name').classList.remove('bad');
+      if (r && r.ok === false) { note(r.error || 'সেভ হয়নি', 'err'); return; }
+      note('✔ ঠিকানা সেভ হয়েছে', 'ok');
+      ['ab_name'].concat(A_KEYS.map(([k]) => 'ab_' + k)).forEach(id => { const e = $(id); if (e) e.value = ''; });
+      loadAddrList();
+    });
+  };
+  loadAddrList();
+}
+function loadAddrList() {
+  socket.emit('LIST_ADDRESSES', (r) => {
+    const l = $('addrList'); if (!l) return;
+    const list = (r && r.addresses) || [];
+    if (!list.length) {
+      l.innerHTML = '<div class="draft-card"><div class="di">📭</div><div><div class="dt">এখনো কিছু সেভ করা হয়নি</div>' +
+        '<div class="ds">নিচে নাম দিয়ে ঠিকানা সেভ করুন।</div></div></div>';
+      return;
+    }
+    l.innerHTML = list.map(a => '<div class="draft-card"><div class="di">📍</div>' +
+      '<div><div class="dt">' + esc(a.name) + '</div><div class="ds">' +
+        esc([a.division, a.district, a.cityCorpUpazila, a.paurasavaUnion, a.ward].filter(Boolean).join(' • ')) +
+      '</div></div><div class="da">' +
+      (S.addrPick ? '<button class="btn small" data-picka="' + esc(a.id) + '">বসিয়ে দিন</button>' : '') +
+      '<button class="btn danger small" data-dela="' + esc(a.id) + '">মুছুন</button></div></div>').join('');
+    l.querySelectorAll('[data-picka]').forEach(b => b.onclick = () => {
+      const rec = list.find(x => x.id === b.dataset.picka);
+      if (rec && S.addrPick) { const f = S.addrPick; S.addrPick = null; f(rec); }
+    });
+    l.querySelectorAll('[data-dela]').forEach(b => b.onclick = () =>
+      socket.emit('DELETE_ADDRESS', b.dataset.dela, () => loadAddrList()));
+  });
+}
+
+/* ═══════════ mode starters & step router ═══════════ */
+function freshData(mode) {
+  return {
+    mode: mode, uiStep: 0,
+    s0: { addressType: 'BIRTHPLACE', embassy: false },
+    s1: {}, s2: { father: {}, mother: {} }, s2b: {},
+    relation: '', docs: [], email: '', phone: ''
+  };
+}
+function startManual() {
+  S.mode = 'manual';
+  if (!S.d || !S.d.mode || S.d.mode !== 'manual') { S.d = freshData('manual'); resetSent(); }
+  goStep(1);
+}
+function goStep(n) {
+  S.cur = n;
+  renderStepper(n - 1); hideFail(); noteOff(); busy(false);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (n === 1) renderStep1();
+  else if (n === 2) renderStep2();
+  else if (n === 3) renderStep3();
+  else if (n === 4) renderStep4();
+  else if (n === 5) renderStep5();
+  else renderStep6();
+}
+function draftPayload(uiStep) {
+  return {
+    draftId: S.draftId || undefined,
+    mode: S.mode, uiStep: uiStep != null ? uiStep : (S.d.uiStep || 0),
+    s0: S.d.s0 || {}, s1: S.d.s1 || {}, s2: S.d.s2 || {}, s2b: S.d.s2b || {},
+    relation: S.d.relation || '', docs: docsMetaOf(S.d.docs),
+    email: S.d.email || '', phone: S.d.phone || ''
+  };
+}
+/* খসড়ায় ছবিসহ (2026-10-13): ডকুমেন্টের ছবিও খসড়ায় জমা থাকবে —
+   খসড়া চালু করলে ছবি আবার দিতে হবে না */
+function docsMetaOf(docs) {
+  return (docs || []).map(x => ({ name: x.name, mimeType: x.mimeType, docType: x.docType, base64: x.base64 || null }));
+}
+function saveDraft(uiStep, cb) {
+  socket.emit('SAVE_DRAFT', draftPayload(uiStep), (r) => {
+    if (r && r.ok) { S.draftId = r.draftId; updDraftsCnt(); }
+    if (cb) cb(r);
+  });
+}
+/* ধাপ-রেকর্ড (2026-10-11): কোন ধাপ সাইটে সত্যিই গেছে + শেষ পাঠানো তথ্য।
+   ব্যবহারকারী পিছনে গিয়ে তথ্য বদলে আবার “পরবর্তী” চাপলে কেবল সেই এক ধাপই আবার
+   যায় (resendFrom) — ব্যাকএন্ড নিজে সাইটকে সঠিক ধাপে ফিরিয়ে নেয়, বট কখনো
+   নিজে নিজে পুরো চেইন চালায় না (১০০% লকস্টেপ)। */
+function docsMetaSig(payload) {
+  const docs = (payload && payload.docs) || [];
+  return JSON.stringify({ rel: (payload && payload.relation) || '', d: docs.map(x => [x && x.name, x && x.docType]) });
+}
+function stepChanged(op, payload) {
+  const prev = S._sentP && S._sentP[op];
+  if (prev == null) return true; // কখনো পাঠানোই হয়নি — পাঠানো দরকার
+  return prev !== (op === 'SUBMIT_S3_DOCS' ? docsMetaSig(payload) : sigOf(payload));
+}
+function sigOf(payload) { return JSON.stringify(payload || {}, (k, v) => (k === 'ctx' || k === '_opId' ? undefined : v)); }
+function dropSent(op) {
+  if (S._sentP) delete S._sentP[op];
+  S._sentN = Object.keys(S._sentP || {}).reduce((m, k) => Math.max(m, OPS.findIndex(o => o.op === k) + 1), 0);
+  S._inFlight = null;
+}
+function resetSent() { S._sentP = {}; S._sentN = 0; S._inFlight = null; }
+/* ফিরে-এডিট (2026-10-11): ইউজার পিছনে গিয়ে তথ্য বদলে “পরবর্তী” চাপলে কেবল
+   সেই একটি ধাপই আবার সাইটে যায় (ইউজারের সেই এক ক্লিকের কাজ)। এই ধাপের পরে
+   যত ধাপ আগে পাঠানো ছিল তাদের রেকর্ড এখনই বাতিল — সাইট পিছিয়ে গিয়ে আবার
+   রেন্ডার হয় বলে ওগুলো আর ধরা যায় না; ইউজার স্বাভাবিকভাবে হেঁটে গেলে প্রতিটি
+   ধাপ তার নিজের ক্লিকে আবার যাবে (বট কখনো নিজে এগোয় না)। */
+function resendFrom(op) {
+  const oi = OPS.findIndex(o => o.op === op);
+  if (oi < 0) return;
+  OPS.slice(oi + 1).forEach(o => dropSent(o.op));
+  if (op === 'SUBMIT_S3_DOCS') S.d.docsDone = false;
+  const n = OPS[oi].step || (S.cur + 1);
+  S.d.uiStep = n;
+  if (S.draftId) saveDraft(n, () => {});
+  goStep(n);
+  note('✏️ নতুন তথ্যটি সাইটে বসানো হচ্ছে…', 'info');
+  const go = () => {
+    if (S._opBusy || S._waitingAck) { setTimeout(go, 350); return; }
+    emitStep(op, payloadFor(op));
+  };
+  go();
+}
+/* একক-সিরিয়াল অপ-কিউ (2026-10-11): সাইটের ধাপগুলো একটার পর একটা চালাতেই হয়।
+   ম্যানুয়াল মোডে (চেইন ছাড়া) এক ক্লিকে সর্বোচ্চ এক অপ — আগেরটা চলাকালীন নতুন
+   ক্লিক এলে অপটা সারিতে বসে না, বরং ইউজারকে ভদ্রভাবে এক মুহূর্ত অপেক্ষা বলি;
+   অর্থাৎ ইউজার থামলে বটও থামে, ইউজারের আগে কখনো এগোয় না (১০০% লকস্টেপ) */
+/* অপ আটকে গেলে (ack হারিয়ে গেলে) নিজে থেকে ছেড়ে দিই — ইউজার যেন কখনো আটকা না পড়ে।
+   সার্ভার থেকে জীবিত-খবর (BOT_STATUS) এলে সময় রিফ্রেশ হয়, তাই চলন্ত অপ কখনো ভুলে বাতিল হয় না */
+function guardOpBusy() {
+  if (!(S._opBusy || S._waitingAck)) return false;
+  const t0 = S._opStartedAt || 0;
+  if (!t0 || Date.now() - t0 > 75000) { opAbort(); return false; }
+  return true;
+}
+function emitStep(op, payload, onAckExtra) {
+  if (!S.chain && guardOpBusy()) {
+    note('⏳ আগের ধাপটি এখনো সাইটে বসানো হচ্ছে — এক মুহূর্ত পরে আবার চাপুন', 'warn');
+    return false;
+  }
+  // ব্যাকএন্ডের ensureAligned-যন্ত্রকে সব ধাপের তথ্য দিই (সাইট ধাপ হারালে/পিছিয়ে
+  // গেলে নিজে থেকে মেরামত করতে পারে) — রেকর্ড-তুলনায় ctx বাদ যায়
+  payload = Object.assign({}, payload, { ctx: { s0: S.d.s0, s1: S.d.s1, s2: S.d.s2, s2b: S.d.s2b } });
+  (S._opQ = S._opQ || []).push({ op, payload });
+  pumpOpQ();
+  return true;
+}
+function pumpOpQ() {
+  if (S._opBusy || !S._opQ || !S._opQ.length) return;
+  if (!S.ready) {
+    if (S._pumpWait) return;
+    S._pumpWait = true;
+    ensureReady(() => { S._pumpWait = false; pumpOpQ(); });
+    return;
+  }
+  const job = S._opQ.shift();
+  S._opBusy = true;
+  S._waitingAck = job.op;
+  S._opStartedAt = Date.now();
+  // Idempotency: প্রতিটি ক্লিকের নিজস্ব পরিচয় — নেট গ্লিচ/ডাবল-ইভেন্টে সার্ভার
+  // একই opId দুবার পেলে সাইটে আবার পাঠায় না, আগের ack-ই ফেরত দেয়।
+  job.opId = job.op + '#' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  job.payload = Object.assign({}, job.payload, { _opId: job.opId });
+  socket.emit(job.op, job.payload);
+  // ধাপ-রেকর্ড: কোন ধাপে সাইটে ঠিক কী তথ্য গেছে (ফিরে-সম্পাদনার রিপ্লে-বিচারে লাগে)
+  const oi = OPS.findIndex(o => o.op === job.op);
+  if (oi >= 0) {
+    (S._sentP = S._sentP || {})[job.op] = job.op === 'SUBMIT_S3_DOCS' ? docsMetaSig(job.payload) : sigOf(job.payload);
+    S._sentN = Math.max(S._sentN || 0, oi + 1);
+  }
+  S._inFlight = job;
+  S._sentAny = true; // সেশনে অন্তত একটা ধাপ গেছে — fresh READY-র ব্যাখ্যায় দরকার
+  // সাধারণত ২-৪ সেকেন্ডেই শেষ — এর বেশি লাগলে নরম ইঙ্গিত (এর আগে কিছুই দেখাবে না)
+  clearTimeout(S._opSlowT);
+  S._opSlowT = setTimeout(() => {
+    if (S._opBusy && S._waitingAck === job.op && S.view !== 'done') { S._slowShown = true; note('⏳ মিলিয়ে নেওয়া হচ্ছে…', 'info'); }
+  }, 3200);
+}
+function opFinish() {
+  S._opBusy = false;
+  S._waitingAck = null;
+  clearTimeout(S._opSlowT);
+  if (S._slowShown && S.view !== 'done') { S._slowShown = false; noteOff(); }
+  setTimeout(pumpOpQ, 80);
+}
+function opAbort() {
+  S._opQ = []; S._opBusy = false; S._waitingAck = null; S._slowShown = false;
+  clearTimeout(S._opSlowT); S._pumpWait = false;
+}
+/* ম্যানুয়াল মোড: লিখে/ক্লিক করলেই পরের ধাপ — সাইট-সিঙ্ক পিছনে, কিন্তু
+   একসাথে একটাই অপ (লকস্টেপ); আগেরটা চলাকালীন এলে সারিতে না বসিয়ে থামি */
+function advanceAndSend(n, op, payload) {
+  if (!S.chain && guardOpBusy()) {
+    note('⏳ আগের ধাপটি এখনো সাইটে বসানো হচ্ছে — এক মুহূর্ত পরে আবার “পরবর্তী” চাপুন', 'warn');
+    return false;
+  }
+  S.d.uiStep = n;
+  if (op === 'SUBMIT_S3_DOCS') S.d.docsDone = true;
+  if (S.draftId) saveDraft(n, () => {});
+  goStep(n);
+  note('✔ ধাপ সম্পন্ন!', 'ok');
+  return emitStep(op, payload) !== false;
+}
+function isPre2013Client(iso) { return !!iso && String(iso) < '2013-01-01'; }
+
+/* ═══════════ live sync: UI → main server (real site) ═══════════ */
+function bnNormJs(s) {
+  return String(s || '')
+    .replace(/\u09DC/g, '\u09A1\u09BC').replace(/\u09DD/g, '\u09A2\u09BC').replace(/\u09DF/g, '\u09AF\u09BC')
+    .replace(/[\u0981\u200C\u200D]/g, '')
+    .replace(/\s+/g, ' ').trim();
+}
+const LIVE_KEYS = {
+  s1_f_bn: 's1.firstNameBn', s1_l_bn: 's1.lastNameBn',
+  s1_f_en: 's1.firstNameEn', s1_l_en: 's1.lastNameEn',
+  s1_dob: 's1.dob', s1_child: 's1.thChild', s1_gender: 's1.gender', g_country: 's1.country',
+  g_postBn: 's1.postBn', g_postEn: 's1.postEn', g_vilBn: 's1.vilBn', g_vilEn: 's1.vilEn',
+  g_houseBn: 's1.houseBn', g_houseEn: 's1.houseEn',
+  father_brn: 's3.fatherBrn', father_dob: 's3.fatherDob', father_bn: 's3.fatherBn', father_en: 's3.fatherEn', father_nat: 's3.fatherNat',
+  mother_brn: 's3.motherBrn', mother_dob: 's3.motherDob', mother_bn: 's3.motherBn', mother_en: 's3.motherEn', mother_nat: 's3.motherNat',
+  c_phone: 's6.phone', c_email: 's6.email'
+};
+A_KEYS.forEach(([k]) => { LIVE_KEYS['sp_' + k] = 's2b.perm.' + k; LIVE_KEYS['rp_' + k] = 's2b.pres.' + k; });
+const _liveTimers = {};
+function liveSend(key, value) {
+  if (!S.ready || !key) return;
+  clearTimeout(_liveTimers[key]);
+  // অপ চলাকালীন সাইটে হাত দিই না — অপ শেষে (দেরিতে হলেও) নবীনতম মানটাই যায় (লকস্টেপ)
+  const delay = (S._opBusy || (S._opQ && S._opQ.length)) ? 1500 : 350;
+  _liveTimers[key] = setTimeout(() => {
+    if (S.ready) socket.emit('LIVE_FIELD', { key: key, value: value });
+  }, delay);
+}
+function syncS0Live() {
+  const s0 = (S.d && S.d.s0) || {};
+  liveSend('s0', { addressType: s0.addressType || 'BIRTHPLACE', embassy: !!s0.embassy });
+}
+document.addEventListener('input', (e) => {
+  const t = e.target; if (!t || !t.id) return;
+  if (t.id === 's1_dob' || t.id === 'a_dob' || /^(father|mother|af|am)_dob$/.test(t.id)) dobInputNormalize(t);
+  const k = LIVE_KEYS[t.id]; if (k) liveSend(k, t.value);
+}, true);
+document.addEventListener('change', (e) => {
+  const t = e.target; if (!t || !t.id) return;
+  if (t.id === 'sp_same') return liveSend('s2b.perm.same', !!t.checked);
+  if (t.id === 'rp_same') return liveSend('s2b.pres.same', !!t.checked);
+  const k = LIVE_KEYS[t.id]; if (k) liveSend(k, t.value);
+}, true);
+document.addEventListener('click', (e) => {
+  const c = e.target && e.target.closest ? e.target.closest('.rcard[data-rel]') : null;
+  if (c) liveSend('s5.relation', c.getAttribute('data-rel'));
+}, true);
+
+/* ═══════════ step 1: আবেদনের ভিত্তি ═══════════ */
+function renderStep1() {
+  setView('flow');
+  const s0 = S.d.s0 || {};
+  showBody(
+    '<div class="sec"><div class="sub-h"><span class="snum">১</span> আবেদনের ভিত্তি</div>' +
+    '<p class="hint">আবেদনটি কোন ঠিকানার ভিত্তিতে করা হবে তা বেছে নিন।</p></div>' +
+    '<div class="rcard' + (s0.addressType !== 'PERMANENT' ? ' sel' : '') + '" id="rcBirth">' +
+      '<span class="rdot"></span><div><div class="rt">জন্মস্থান</div>' +
+      '<div class="rs">শিশু যেখানে জন্মেছে সেই এলাকার ভিত্তিতে আবেদন</div></div></div>' +
+    '<div class="rcard' + (s0.addressType === 'PERMANENT' ? ' sel' : '') + '" id="rcPerm">' +
+      '<span class="rdot"></span><div><div class="rt">স্থায়ী ঠিকানা</div>' +
+      '<div class="rs">স্থায়ী ঠিকানার ভিত্তিতে আবেদন</div></div></div>' +
+    '<label class="chk"><input type="checkbox" id="s1emb"' + (s0.embassy ? ' checked' : '') + '>' +
+      '<span>বাংলাদেশ দূতাবাসে জন্ম নিবন্ধনের আবেদন (প্রযোজ্য হলে টিক দিন)</span></label>'
+  );
+  const pick = (t) => {
+    S.d.s0.addressType = t;
+    $('rcBirth').classList.toggle('sel', t !== 'PERMANENT');
+    $('rcPerm').classList.toggle('sel', t === 'PERMANENT');
+    syncS0Live();
+  };
+  $('rcBirth').onclick = () => pick('BIRTHPLACE');
+  $('rcPerm').onclick = () => pick('PERMANENT');
+  $('s1emb').onchange = () => { S.d.s0.embassy = $('s1emb').checked; syncS0Live(); };
+  setBtns([
+    { html: 'পরবর্তী →', fn: () => submitStep1() },
+    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => saveDraft(0, () => note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” বাটন থেকে পরে চালু করতে পারবেন', 'ok')) },
+    { html: '← হোম', cls: 'ghost', fn: () => renderHome() }
+  ]);
+}
+function submitStep1() {
+  S.d.s0 = { addressType: S.d.s0.addressType || 'BIRTHPLACE', embassy: !!$('s1emb').checked };
+  if ((S.d.uiStep || 0) >= 2) {
+    // ফিরে এসে কিছু বদলালে কেবল এই এক ধাপই আবার সাইটে বসাই (লকস্টেপ)
+    if (stepChanged('SUBMIT_S0', payloadFor('SUBMIT_S0'))) { resendFrom('SUBMIT_S0'); return; }
+    goStep(2); return;
+  }
+  advanceAndSend(2, 'SUBMIT_S0', S.d.s0);
+}
+
+/* ═══════════ step 2: ব্যক্তির পরিচিতি (live cascade) ═══════════ */
+const GEO_LEVELS = [
+  // দেশও মূল সাইট থেকে আসে (2026-10-13 যাচাই: সাইটে ~১৬০টি দেশ) — hardcoded নয়
+  { k: 'country', ui: 'g_country', site: '#birthPlaceCountry, select[name="birthPlaceCountry"]', childSite: '#birthPlaceDiv, select[name="birthPlaceDiv"]', lbl: 'দেশ' },
+  { k: 'division', ui: 'g_div', site: '#birthPlaceDiv, select[name="birthPlaceDiv"]', childSite: '#birthPlaceDist, select[name="birthPlaceDist"]', lbl: 'বিভাগ' },
+  { k: 'district', ui: 'g_dist', site: '#birthPlaceDist, select[name="birthPlaceDist"]', childSite: '#birthPlaceCityCorpCantOrUpazila, select[name="birthPlaceCityCorpCantOrUpazila"]', lbl: 'জেলা' },
+  { k: 'cityCorpUpazila', ui: 'g_cc', site: '#birthPlaceCityCorpCantOrUpazila, select[name="birthPlaceCityCorpCantOrUpazila"]', childSite: '#birthPlacePaurasavaOrUnion, select[name="birthPlacePaurasavaOrUnion"]', lbl: 'সিটি কর্পোরেশন / উপজেলা' },
+  { k: 'paurasavaUnion', ui: 'g_pu', site: '#birthPlacePaurasavaOrUnion, select[name="birthPlacePaurasavaOrUnion"]', altSite: '#birthPlaceWardInCityCorp, select[name="birthPlaceWardInCityCorp"]', childSite: '#birthPlaceWardInPaurasavaOrUnion, select[name="birthPlaceWardInPaurasavaOrUnion"]', lbl: 'পৌরসভা / ইউনিয়ন' },
+  { k: 'ward', ui: 'g_ward', site: '#birthPlaceWardInPaurasavaOrUnion, select[name="birthPlaceWardInPaurasavaOrUnion"]', childSite: null, lbl: 'ওয়ার্ড' }
+];
+function levelOf(k, Ls) { return (Ls || GEO_LEVELS).find(x => x.k === k); }
+function fetchOpts(selector, tmo) {
+  return new Promise((res) => {
+    let done = false;
+    const t = setTimeout(() => { if (!done) { done = true; res([]); } }, tmo || 9000);
+    socket.emit('GET_DOM_OPTIONS', selector, (r) => {
+      if (!done) { done = true; clearTimeout(t); res(Array.isArray(r) ? r : []); }
+    });
+  });
+}
+function mirrorSelect(sel, label, childSel, value) {
+  return new Promise((res) => {
+    let done = false;
+    const t = setTimeout(() => { if (!done) { done = true; res({ error: 'timeout' }); } }, 14000);
+    socket.emit('SELECT_DOM_OPTION', { selector: sel, label: label, value: value || undefined, childSelector: childSel || undefined }, (r) => {
+      if (!done) { done = true; clearTimeout(t); res(r || { error: 'no callback' }); }
+    });
+  });
+}
+function fillSelOpts(id, opts, wantText) {
+  const node = $(id); if (!node || node.tagName !== 'SELECT') return;
+  node.innerHTML = '<option value="">--- নির্বাচন করুন ---</option>' +
+    opts.map(o => '<option value="' + esc(o.id) + '">' + esc(o.name) + '</option>').join('');
+  if (wantText) setSelByText(id, wantText);
+}
+function setSelByText(id, text) {
+  const node = $(id); if (!node || node.tagName !== 'SELECT') return false;
+  const want = String(text || '').trim(); if (!want) return false;
+  const wN = typeof bnNormJs === 'function' ? bnNormJs(want) : want;
+  const opt = Array.from(node.options).find(o => o.text.trim() === want) ||
+    Array.from(node.options).find(o => typeof bnNormJs === 'function' ? bnNormJs(o.text) === wN : o.text.trim() === wN) ||
+    Array.from(node.options).find(o => o.text.includes(want) || want.includes(o.text.trim()));
+  if (opt) { node.value = opt.value; return true; }
+  return false;
+}
+function degradeToText(id, label, value) {
+  const node = $(id); if (!node || node.tagName === 'INPUT') return;
+  const inp = document.createElement('input');
+  inp.type = 'text'; inp.id = id; inp.placeholder = 'লিখুন: ' + label;
+  inp.value = value || '';
+  node.replaceWith(inp);
+}
+async function geoLoad(k, Ls, data, wantOv) {
+  Ls = Ls || GEO_LEVELS; data = data || (S.d.s1 = S.d.s1 || {});
+  const L = levelOf(k, Ls); if (!L) return;
+  // সাইট পেছনের ধাপ শেষ করছে কি না দেখি — ব্যস্ত থাকলে অপেক্ষা করি, তাড়াহুড়ো করে
+  // ড্রপডাউন ভেঙে (degrade) ফেলি না (পিছনে-এসে দ্রুত কাজ করলেও তালিকা ঠিক আসবে)
+  let opts = []; let fromAlt = false;
+  const t0 = Date.now();
+  while (!opts.length && Date.now() - t0 < 45000) {
+    if (S._opBusy) { await new Promise(r => setTimeout(r, 1500)); continue; }
+    opts = await fetchOpts(L.site, 9000);
+    if (!opts.length && L.altSite) { opts = await fetchOpts(L.altSite, 6000); if (opts.length) fromAlt = true; }
+    if (!opts.length) opts = await fetchOpts(L.site, 5000);
+    if (!opts.length) await new Promise(r => setTimeout(r, 900)); // ফাঁকা ফিরলে ফাঁক দিয়ে আবার
+  }
+  L._alt = fromAlt; // মিরর কোন slot-এ বসবে (সিটি কর্পোরেশনে অঞ্চল WardInCityCorp-এ)
+  if (!$(L.ui)) return;
+  const want = (wantOv != null && wantOv !== '') ? wantOv : (data[k] || '');
+  if (!opts.length) { degradeToText(L.ui, L.lbl, want); return; }
+  fillSelOpts(L.ui, opts, want);
+  const lblEl = $(L.ui + '_lbl');
+  if (lblEl) lblEl.textContent = (k === 'paurasavaUnion' && fromAlt) ? 'অঞ্চল (সিটি কর্পোরেশন)' : L.lbl;
+}
+async function geoMirror(k, Ls) {
+  const L = levelOf(k, Ls); if (!L || !L.childSite) return;
+  const node = $(L.ui); if (!node || node.tagName !== 'SELECT' || !node.value) return;
+  const label = node.selectedOptions[0].text;
+  // চলমান ধাপ শেষ হওয়া পর্যন্ত অপেক্ষা (রিয়েল-টাইম লকস্টেপ — সাইটে হাত তখনই)
+  const t0 = Date.now();
+  while (S._opBusy && Date.now() - t0 < 30000) await new Promise(r => setTimeout(r, 700));
+  // সাইটের নিজের option-value-ও পাঠাই — লেবেল-মেলানো ব্যর্থ হলেও নির্বাচন নিশ্চিত
+  const site = (L._alt && L.altSite) ? L.altSite : L.site;
+  await mirrorSelect(site, label, L.childSite, node.value);
+}
+async function geoChanged(k, Ls, data) {
+  Ls = Ls || GEO_LEVELS; data = data || (S.d.s1 = S.d.s1 || {});
+  const L = levelOf(k, Ls); if (!L) return;
+  const node = $(L.ui);
+  const label = (node && node.tagName === 'SELECT' && node.value) ? node.selectedOptions[0].text :
+    (node ? String(node.value || '').trim() : '');
+  data[k] = label;
+  const idx = Ls.indexOf(L);
+  Ls.slice(idx + 1).forEach(D => {
+    data[D.k] = '';
+    const c = $(D.ui);
+    if (c && c.tagName === 'SELECT') c.innerHTML = '<option value="">--- নির্বাচন করুন ---</option>';
+    else if (c) c.value = '';
+    const lblEl = $(D.ui + '_lbl'); if (lblEl) lblEl.textContent = D.lbl;
+  });
+  if (!label) return;
+  note('⏳ ঠিকানার তালিকা আনা হচ্ছে…', 'info');
+  await geoMirror(k, Ls);
+  const next = Ls[idx + 1];
+  if (next) await geoLoad(next.k, Ls, data);
+  noteOff();
+}
+async function warmFromData() {
+  const data = S.d.s1 = S.d.s1 || {};
+  await geoLoad('country', GEO_LEVELS, data);
+  for (const L of GEO_LEVELS) {
+    const want = data[L.k]; if (!want) return;
+    const node = $(L.ui); if (!node) return;
+    if (node.tagName === 'SELECT') { if (!setSelByText(L.ui, want)) return; }
+    if (!L.childSite) return;
+    await geoMirror(L.k, GEO_LEVELS);
+    const nxt = GEO_LEVELS[GEO_LEVELS.indexOf(L) + 1];
+    if (nxt) await geoLoad(nxt.k, GEO_LEVELS, data);
+  }
+}
+/* স্থায়ী/বর্তমান ঠিকানা — এক চাপে (বা খসড়া থেকে) ক্যাসকেড ভরাট + সাইটে মিরর */
+function addrRec(prefix) {
+  S.d.s2b = S.d.s2b || {};
+  const key = prefix === 'sp' ? 'perm' : 'pres';
+  if (!S.d.s2b[key]) S.d.s2b[key] = {};
+  return S.d.s2b[key];
+}
+async function addrWarm(prefix, rec) {
+  rec = rec || {};
+  const Ls = addrGeoLevels(prefix);
+  const data = addrRec(prefix);
+  await geoLoad(Ls[0].k, Ls, data, rec[Ls[0].k]);
+  for (const L of Ls) {
+    const want = String(rec[L.k] || data[L.k] || '').trim();
+    if (!want) { break; }
+    const node = $(L.ui); if (!node) break;
+    if (node.tagName === 'SELECT') {
+      if (node.options.length <= 1) await geoLoad(L.k, Ls, data, want);
+      if (!setSelByText(L.ui, want)) break;
+    }
+    data[L.k] = want;
+    if (!L.childSite) break;
+    await geoMirror(L.k, Ls);
+    const nxt = Ls[Ls.indexOf(L) + 1];
+    if (nxt) await geoLoad(nxt.k, Ls, data, rec[nxt.k]);
+  }
+}
+function renderStep2() {
+  setView('flow');
+  const s1 = S.d.s1 || {};
+  const selBox = (id, lbl) => '<div class="fld"><label id="' + id + '_lbl">' + esc(lbl) + ' <b>*</b></label>' +
+    '<select id="' + id + '"><option value="">লোড হচ্ছে…</option></select></div>';
+  showBody(
+    '<div class="sec"><div class="sub-h"><span class="snum">২</span> নিবন্ধনাধীন ব্যক্তির পরিচিতি</div>' +
+    '<p class="hint">নাম এক অংশের হলে শেষ অংশ খালি রাখুন — বাকিটা স্বয়ংক্রিয়ভাবে সামলে নেওয়া হবে।</p></div>' +
+    '<div class="row2">' +
+      '<div class="fld"><label>নামের প্রথম অংশ (বাংলা) <b>*</b></label><input type="text" id="s1_f_bn" value="' + esc(s1.firstNameBn || '') + '"></div>' +
+      '<div class="fld"><label>নামের শেষ অংশ (বাংলা)</label><input type="text" id="s1_l_bn" value="' + esc(s1.lastNameBn || '') + '"></div>' +
+      '<div class="fld"><label>First Name (English) <b>*</b></label><input type="text" id="s1_f_en" value="' + esc(s1.firstNameEn || '') + '"></div>' +
+      '<div class="fld"><label>Last Name (English)</label><input type="text" id="s1_l_en" value="' + esc(s1.lastNameEn || '') + '"></div>' +
+      dobFieldHtml('s1_dob', 'জন্ম তারিখ (খ্রিঃ)', s1.dob, true) +
+      '<div class="fld"><label>পিতা ও মাতার কততম সন্তান <b>*</b></label><select id="s1_child">' +
+        FB.thChild.map(t => '<option' + (s1.thChild === t ? ' selected' : '') + '>' + esc(t) + '</option>').join('') + '</select></div>' +
+      '<div class="fld"><label>লিঙ্গ <b>*</b></label><select id="s1_gender">' +
+        FB.gender.map(t => '<option' + (s1.gender === t ? ' selected' : '') + '>' + esc(t) + '</option>').join('') + '</select></div>' +
+    '</div>' +
+    '<h4 class="sub-h"><span class="snum">📍</span> জন্মস্থানের ঠিকানা</h4>' +
+    '<div class="row2">' +
+      selBox('g_country', 'দেশ') +
+      selBox('g_div', 'বিভাগ') + selBox('g_dist', 'জেলা') + selBox('g_cc', 'সিটি কর্পোরেশন / উপজেলা') +
+      selBox('g_pu', 'পৌরসভা / ইউনিয়ন') + selBox('g_ward', 'ওয়ার্ড') +
+      '<div class="fld"><label>ডাকঘর (বাংলায়) <b>*</b></label><input type="text" id="g_postBn" value="' + esc(s1.postBn || '') + '"></div>' +
+      '<div class="fld"><label>ডাকঘর (English) <b>*</b></label><input type="text" id="g_postEn" value="' + esc(s1.postEn || '') + '"></div>' +
+      '<div class="fld"><label>গ্রাম / পাড়া / মহল্লা <b>*</b></label><input type="text" id="g_vilBn" value="' + esc(s1.vilBn || '') + '"></div>' +
+      '<div class="fld"><label>গ্রাম / Area (English) <b>*</b></label><input type="text" id="g_vilEn" value="' + esc(s1.vilEn || '') + '"></div>' +
+      '<div class="fld"><label>বাসা ও সড়ক (বাংলা)</label><input type="text" id="g_houseBn" value="' + esc(s1.houseBn || '') + '"></div>' +
+      '<div class="fld"><label>বাসা ও সড়ক (English)</label><input type="text" id="g_houseEn" value="' + esc(s1.houseEn || '') + '"></div>' +
+    '</div>'
+  );
+  S.d.s1 = S.d.s1 || {};
+  GEO_LEVELS.forEach(L => { const n = $(L.ui); if (n) n.onchange = () => geoChanged(L.k, GEO_LEVELS, S.d.s1); });
+  warmFromData().catch(() => {});
+  setBtns([
+    { html: 'পরবর্তী →', fn: () => submitStep2() },
+    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep2(); saveDraft(2, () => note('✔ খসড়ায় রাখা হয়েছে', 'ok')); } },
+    { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => goStep(1) }
+  ]);
+}
+function collectStep2() {
+  const prev = S.d.s1 || {};
+  const g = {};
+  GEO_LEVELS.forEach(L => {
+    const n = $(L.ui);
+    let v = n ? (n.tagName === 'SELECT' ? (n.value ? n.selectedOptions[0].text : '') : String(n.value || '').trim()) : '';
+    // পিছনে-এসে দ্রুত “পরবর্তী” চাপলে ঠিকানার ড্রপডাউন তখনো সাইট থেকে ফেরত আসেনি —
+    // খালি DOM আগের ভালো মান মুছে না ফেলে (নইলে সাইটে অসম্পূর্ণ তথ্য গিয়ে ধাপ আটকে যায়)
+    if (!v) v = String(prev[L.k] || '');
+    g[L.k] = v;
+  });
+  S.d.s1 = {
+    firstNameBn: ($('s1_f_bn').value || '').trim(),
+    lastNameBn: ($('s1_l_bn').value || '').trim(),
+    firstNameEn: ($('s1_f_en').value || '').trim(),
+    lastNameEn: ($('s1_l_en').value || '').trim(),
+    dob: readDobIso('s1_dob'),
+    thChild: $('s1_child').value || '',
+    gender: $('s1_gender').value || '',
+    country: g.country || 'বাংলাদেশ',
+    division: g.division, district: g.district, cityCorpUpazila: g.cityCorpUpazila,
+    paurasavaUnion: g.paurasavaUnion, ward: g.ward,
+    postBn: $('g_postBn') ? $('g_postBn').value.trim() : '', postEn: $('g_postEn') ? $('g_postEn').value.trim() : '',
+    vilBn: $('g_vilBn') ? $('g_vilBn').value.trim() : '', vilEn: $('g_vilEn') ? $('g_vilEn').value.trim() : '',
+    houseBn: $('g_houseBn') ? $('g_houseBn').value.trim() : '', houseEn: $('g_houseEn') ? $('g_houseEn').value.trim() : ''
+  };
+}
+function submitStep2() {
+  collectStep2();
+  if ((S.d.uiStep || 0) >= 3) {
+    // ফিরে এসে কিছু বদলালে কেবল এই এক ধাপই আবার সাইটে বসাই (লকস্টেপ)
+    if (stepChanged('SUBMIT_S1', payloadFor('SUBMIT_S1'))) { resendFrom('SUBMIT_S1'); return; }
+    goStep(3); return;
+  }
+  const s1 = S.d.s1, bad = [];
+  [['s1_f_bn', 'নামের প্রথম অংশ (বাংলা)'], ['s1_f_en', 'First Name (English)']].forEach(([id, lbl]) => {
+    if (!s1[id === 's1_f_bn' ? 'firstNameBn' : 'firstNameEn']) { bad.push(lbl); $('' + id).classList.add('bad'); }
+  });
+  if (!s1.dob) { bad.push('জন্ম তারিখ (DD/MM/YYYY)'); $('s1_dob').classList.add('bad'); }
+  if (!s1.division) bad.push('বিভাগ');
+  if (!s1.district) bad.push('জেলা');
+  // সাইট যেখানে তালিকা দিয়েছে সেখানে বাছাই বাধ্যতামূলক — live-এ সাইট নিজেই দাবি করে
+  // ("যেকোনো একটি নির্বাচন করুন! [birthPlaceCityCorpCantOrUpazila]"); খালি রাখলে মেইন সার্ভার আটকায়
+  { const cc = $('g_cc'); if (cc && cc.tagName === 'SELECT' && cc.options.length > 1 && !cc.value) bad.push('সিটি কর্পোরেশন / উপজেলা'); }
+  if (!s1.postBn) bad.push('ডাকঘর (বাংলায়)');
+  if (!s1.postEn) bad.push('ডাকঘর (English)');
+  if (!s1.vilBn) bad.push('গ্রাম / পাড়া / মহল্লা');
+  if (!s1.vilEn) bad.push('গ্রাম / Area (English)');
+  if (bad.length) { showFail(bad); note('⚠️ কিছু ঘর পূরণ করুন', 'warn'); return; }
+  hideFail();
+  advanceAndSend(3, 'SUBMIT_S1', Object.assign({ docsAvailable: true }, s1));
+}
+
+/* ═══════════ step 3: পিতামাতা ═══════════ */
+function renderStep3() {
+  setView('flow');
+  const s2 = S.d.s2 || {}; const f = s2.father || {}, m = s2.mother || {};
+  const pre = isPre2013Client(S.d.s1.dob);
+  const vf = S.verify.father, vm = S.verify.mother;
+  const badge = (v) => v === true ? '<span class="vbadge ok">✔ যাচাই সফল</span>' :
+    v === false ? '<span class="vbadge warn">✖ যাচাই হয়নি</span>' :
+    v === 'skipped-pre2013' ? '<span class="vbadge warn">২০১৩-পূর্ব — প্রয়োজন নেই</span>' :
+    '<span class="vbadge wait">যাচাই বাকি</span>';
+  const person = (p, o, v) => (
+    '<div class="addrwrap"><div class="ah"><span class="t">' + (p === 'father' ? 'পিতার তথ্য' : 'মাতার তথ্য') + '</span>' + badge(v) + '</div>' +
+    '<div class="row2">' +
+      '<div class="fld"><label>জন্ম নিবন্ধন নম্বর (BRN) ' + (pre ? '' : '<b>*</b>') + '</label><input type="text" id="' + p + '_brn" value="' + esc(o.brn || '') + '" placeholder="১৭ ডিজিটের নম্বর"></div>' +
+      dobFieldHtml(p + '_dob', 'জন্ম তারিখ (খ্রিঃ)', o.dob, !pre) +
+      '<div class="fld"><label>নাম (বাংলায়) <b>*</b></label><input type="text" id="' + p + '_bn" value="' + esc(o.nameBn || '') + '"></div>' +
+      '<div class="fld"><label>নাম (English) <b>*</b></label><input type="text" id="' + p + '_en" value="' + esc(o.nameEn || '') + '"></div>' +
+      '<div class="fld"><label>জাতীয়তা</label><select id="' + p + '_nat">' +
+        FB.nationality.map(t => '<option' + ((o.nationality || 'বাংলাদেশী') === t ? ' selected' : '') + '>' + esc(t) + '</option>').join('') + '</select></div>' +
+    '</div></div>');
+  showBody(
+    '<div class="sec"><div class="sub-h"><span class="snum">৩</span> পিতামাতার তথ্য</div>' +
+    (pre
+      ? '<p class="hint">২০১৩-এর আগে জন্ম — পিতামাতার জন্ম নিবন্ধন নম্বর না থাকলেও এগোনো যাবে (নাম অবশ্যই লাগবে)।</p>'
+      : '<p class="hint">পিতামাতার ১৭ ডিজিটের জন্ম নিবন্ধন নম্বর ও জন্ম তারিখ দিন — নম্বর মিললে যাচাই হয়ে যাবে।</p>') +
+    '</div>' +
+    person('father', f, vf) + person('mother', m, vm)
+  );
+  setBtns([
+    { html: 'পরবর্তী →', fn: () => submitStep3() },
+    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep3(); saveDraft(3, () => note('✔ খসড়ায় রাখা হয়েছে', 'ok')); } },
+    { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => goStep(2) }
+  ]);
+}
+function readPerson(p) {
+  return {
+    brn: ($(p + '_brn').value || '').trim(),
+    dob: readDobIso(p + '_dob'),
+    nameBn: ($(p + '_bn').value || '').trim(),
+    nameEn: ($(p + '_en').value || '').trim(),
+    nationality: $(p + '_nat').value || 'বাংলাদেশী'
+  };
+}
+function collectStep3() { S.d.s2 = { father: readPerson('father'), mother: readPerson('mother') }; }
+function submitStep3() {
+  collectStep3();
+  if ((S.d.uiStep || 0) >= 4) {
+    // ফিরে এসে কিছু বদলালে কেবল এই এক ধাপই আবার সাইটে বসাই (লকস্টেপ)
+    if (stepChanged('SUBMIT_S2', payloadFor('SUBMIT_S2'))) { resendFrom('SUBMIT_S2'); return; }
+    goStep(4); return;
+  }
+  const pre = isPre2013Client(S.d.s1.dob);
+  const bad = [];
+  [['father', 'পিতা'], ['mother', 'মাতা']].forEach(([p, who]) => {
+    const o = S.d.s2[p];
+    if (!o.nameBn) { bad.push(who + '-এর নাম (বাংলায়)'); $(p + '_bn').classList.add('bad'); }
+    if (!o.nameEn) { bad.push(who + '-এর নাম (English)'); $(p + '_en').classList.add('bad'); }
+    if (!pre && !o.brn) { bad.push(who + '-এর BRN'); $(p + '_brn').classList.add('bad'); }
+    if (!pre && !o.dob) { bad.push(who + '-এর জন্ম তারিখ (DD/MM/YYYY)'); $(p + '_dob').classList.add('bad'); }
+  });
+  if (bad.length) { showFail(bad); note('⚠️ কিছু ঘর পূরণ করুন', 'warn'); return; }
+  hideFail();
+  advanceAndSend(4, 'SUBMIT_S2', Object.assign({}, S.d.s2, { applicantDob: S.d.s1.dob }));
+}
+
+/* ═══════════ step 4: স্থায়ী ও বর্তমান ঠিকানা ═══════════ */
+function collectStep4() {
+  const permCopy = $('sp_same') ? $('sp_same').checked : true;
+  const presCopy = $('rp_same') ? $('rp_same').checked : true;
+  const prev = S.d.s2b || {};
+  S.d.s2b = {
+    permCopy, presCopy,
+    perm: permCopy ? null : readAddrFields('sp', prev.perm || {}),
+    pres: presCopy ? null : readAddrFields('rp', prev.pres || {})
+  };
+  return S.d.s2b;
+}
+function fillPrefixFrom(prefix, rec) {
+  rec = rec || {};
+  Object.assign(addrRec(prefix), rec);
+  A_KEYS.forEach(([k]) => {
+    const e = $(prefix + '_' + k); if (!e) return;
+    if (e.tagName === 'SELECT') { if (rec[k]) setSelByText(prefix + '_' + k, rec[k]); }
+    else e.value = rec[k] || '';
+    e.classList.remove('bad');
+  });
+  // ম্যানুয়াল স্টেপে জিও-ঘরগুলো SELECT — সাইট-মিররসহ পুরো ক্যাসকেড আবার বসাই
+  const d0 = $(prefix + '_division');
+  if (d0 && d0.tagName === 'SELECT') addrWarm(prefix, rec).catch(() => {});
+}
+function fillPrefixFromBirth(prefix) {
+  const s1 = S.d.s1 || {};
+  fillPrefixFrom(prefix, {
+    division: s1.division, district: s1.district, cityCorpUpazila: s1.cityCorpUpazila,
+    paurasavaUnion: s1.paurasavaUnion, ward: s1.ward,
+    postBn: s1.postBn, postEn: s1.postEn,
+    vilBn: s1.vilBn, vilEn: s1.vilEn, houseBn: s1.houseBn, houseEn: s1.houseEn
+  });
+  note('✔ জন্মস্থানের তথ্য বসানো হয়েছে — প্রয়োজনে বদলে নিন', 'ok');
+}
+function renderStep4() {
+  setView('flow');
+  const z = S.d.s2b || {};
+  const permCopy = z.permCopy != null ? !!z.permCopy : false;
+  const presCopy = z.presCopy != null ? !!z.presCopy : false;
+  const secAddr = (prefix, title, extraBtnHtml) => (
+    '<div class="addrwrap"><div class="ah"><span class="t">' + esc(title) + '</span>' + (extraBtnHtml || '') + '</div>' +
+    '<div class="row2">' + addrGeoInputs(prefix, (z[prefix === 'sp' ? 'perm' : 'pres']) || {}) + '</div></div>'
+  );
+  showBody(
+    '<div class="sec"><div class="sub-h"><span class="snum">৪</span> স্থায়ী ও বর্তমান ঠিকানা</div>' +
+    '<p class="hint">ঠিকানা একই হলে টিক দিন — আলাদা হলে ঘরগুলো পূরণ করুন। “ঠিকানা বই” থেকে সংরক্ষিত ঠিকানা এক চাপে বসাতে পারবেন।</p></div>' +
+    '<label class="chk"><input type="checkbox" id="sp_same"' + (permCopy ? ' checked' : '') + '>' +
+      '<span>জন্মস্থানের ঠিকানা ও স্থায়ী ঠিকানা একই</span></label>' +
+    '<div id="permSec"' + (permCopy ? ' style="display:none"' : '') + '>' +
+      secAddr('sp', 'স্থায়ী ঠিকানা',
+        '<button class="btn ghost small" id="spFromBirth" style="margin-left:auto">📍 জন্মস্থান থেকে বসান</button>' +
+        '<button class="btn ghost small" id="spBook" style="margin-left:8px">📚 ঠিকানা বই</button>') +
+    '</div>' +
+    '<label class="chk mt8"><input type="checkbox" id="rp_same"' + (presCopy ? ' checked' : '') + '>' +
+      '<span>স্থায়ী ঠিকানা ও বর্তমান ঠিকানা একই</span></label>' +
+    '<div id="presSec"' + (presCopy ? ' style="display:none"' : '') + '>' +
+      secAddr('rp', 'বর্তমান ঠিকানা',
+        '<button class="btn ghost small" id="rpFromPerm" style="margin-left:auto">📍 স্থায়ী ঠিকানা থেকে বসান</button>' +
+        '<button class="btn ghost small" id="rpBook" style="margin-left:8px">📚 ঠিকানা বই</button>') +
+    '</div>'
+  );
+  const addrWire = (prefix, rec) => {
+    const Ls = addrGeoLevels(prefix);
+    Ls.forEach(L => { const n = $(L.ui); if (n) n.onchange = () => geoChanged(L.k, Ls, addrRec(prefix)); });
+    addrWarm(prefix, rec || {}).catch(() => {});
+  };
+  const toggle = () => {
+    $('permSec').style.display = $('sp_same').checked ? 'none' : '';
+    $('presSec').style.display = $('rp_same').checked ? 'none' : '';
+    if (!$('sp_same').checked && $('sp_division') && $('sp_division').options.length <= 1) addrWarm('sp', z.perm || {}).catch(() => {});
+    if (!$('rp_same').checked && $('rp_division') && $('rp_division').options.length <= 1) addrWarm('rp', z.pres || {}).catch(() => {});
+  };
+  $('sp_same').onchange = toggle;
+  $('rp_same').onchange = toggle;
+  if (!permCopy) addrWire('sp', z.perm || {});
+  if (!presCopy) addrWire('rp', z.pres || {});
+  if ($('spFromBirth')) $('spFromBirth').onclick = () => fillPrefixFromBirth('sp');
+  if ($('spBook')) $('spBook').onclick = () => {
+    collectStep4();
+    renderAddrBook((rec) => { S.d.s2b.perm = Object.assign({}, rec); renderStep4(); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderStep4());
+  };
+  if ($('rpFromPerm')) $('rpFromPerm').onclick = () => {
+    fillPrefixFrom('rp', readAddrFields('sp', (S.d.s2b && S.d.s2b.perm) || {}));
+    note('✔ স্থায়ী ঠিকানা থেকে বসানো হয়েছে — প্রয়োজনে বদলে নিন', 'ok');
+  };
+  if ($('rpBook')) $('rpBook').onclick = () => {
+    collectStep4();
+    renderAddrBook((rec) => { S.d.s2b.pres = Object.assign({}, rec); renderStep4(); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderStep4());
+  };
+  setBtns([
+    { html: 'পরবর্তী →', fn: () => submitStep4() },
+    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep4(); saveDraft(4, () => note('✔ খসড়ায় রাখা হয়েছে', 'ok')); } },
+    { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => goStep(3) }
+  ]);
+}
+function submitStep4() {
+  collectStep4();
+  if ((S.d.uiStep || 0) >= 5) {
+    // ফিরে এসে ঠিকানা বদলালে কেবল এই এক ধাপই আবার সাইটে বসাই (লকস্টেপ)
+    if (stepChanged('SUBMIT_S2B', payloadFor('SUBMIT_S2B'))) { resendFrom('SUBMIT_S2B'); return; }
+    goStep(5); return;
+  }
+  const z = S.d.s2b, bad = [];
+  const need = (o, who) => {
+    [['division', 'বিভাগ'], ['district', 'জেলা'], ['cityCorpUpazila', 'সিটি কর্পোরেশন / উপজেলা'],
+     ['paurasavaUnion', 'পৌরসভা / ইউনিয়ন'], ['postBn', 'ডাকঘর (বাংলায়)'], ['postEn', 'ডাকঘর (English)'],
+     ['vilBn', 'গ্রাম / পাড়া / মহল্লা'], ['vilEn', 'গ্রাম / Area (English)']].forEach(([k, lbl]) => {
+      if (!o[k]) { bad.push(who + ' — ' + lbl); const e = $((who === 'স্থায়ী' ? 'sp_' : 'rp_') + k); if (e) e.classList.add('bad'); }
+    });
+  };
+  if (!z.permCopy && z.perm) need(z.perm, 'স্থায়ী');
+  if (!z.presCopy && z.pres) need(z.pres, 'বর্তমান');
+  if (bad.length) { showFail(bad); note('⚠️ কিছু ঘর পূরণ করুন', 'warn'); return; }
+  hideFail();
+  advanceAndSend(5, 'SUBMIT_S2B', Object.assign({}, z));
+}
+
+/* ═══════════ step 5: ডকুমেন্ট (ধরন ৪০ ও ৪১) ═══════════ */
+function fileToDoc(f) {
+  return new Promise((res) => {
+    const rd = new FileReader();
+    rd.onload = () => res({ name: f.name, mimeType: f.type || 'image/jpeg', base64: b64Of(rd.result), docType: '' });
+    rd.onerror = () => res(null);
+    rd.readAsDataURL(f);
+  });
+}
+function docTypeStatus() {
+  const docs = S.d.docs || [];
+  return { n: docs.length, has40: docs.some(d => d.docType === '40'), has41: docs.some(d => d.docType === '41') };
+}
+function renderDocRows() {
+  const box = $('docRows'); if (!box) return;
+  const docs = S.d.docs || [];
+  if (!docs.length) {
+    box.innerHTML = '<div class="draft-card"><div class="di">🖼️</div><div><div class="dt">এখনো কোনো কাগজ যোগ করা হয়নি</div>' +
+      '<div class="ds">নিচের “ছবি যোগ করুন” চেপে ফোন/কম্পিউটার থেকে ছবি বেছে নিন (JPG/PNG, প্রতিটি ২MB-এর কম)।</div></div></div>';
+  } else {
+    box.innerHTML = docs.map((d, i) => '<div class="docrow">' +
+      (d.base64 ? '<img class="dthumb" data-full="' + i + '" src="data:' + esc(d.mimeType || 'image/jpeg') + ';base64,' + d.base64 + '" alt="">' : '<span class="dthumb" style="display:flex;align-items:center;justify-content:center;font-size:20px">🖼️</span>') +
+      '<span class="dname">' + esc(d.name) + '</span>' +
+      '<select class="dtype" data-i="' + i + '">' + DOC_TYPES.map(t =>
+        '<option value="' + t.v + '"' + (d.docType === t.v ? ' selected' : '') + '>ধরন ' + t.v + ' — ' + esc(t.t) + '</option>').join('') +
+      '</select><button class="btn danger small" data-rm="' + i + '">✕</button></div>').join('');
+    box.querySelectorAll('.dthumb[data-full]').forEach(im => im.onclick = () => {
+      const d = S.d.docs[+im.dataset.full]; if (!d || !d.base64) return;
+      const w = window.open('', '_blank'); if (!w) return;
+      w.document.write('<title>' + esc(d.name || 'কাগজ') + '</title><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="data:' + esc(d.mimeType || 'image/jpeg') + ';base64,' + d.base64 + '" style="max-width:100%;max-height:100vh">
+<!-- Abc Authentic integration shim: wallet charging (does not modify engine logic) -->
+<script>
+(function () {
+  'use strict';
+  const TOKEN_KEY = 'abc_access_token';
+  function getToken() { return sessionStorage.getItem(TOKEN_KEY) || ''; }
+
+  async function charge(kind) {
+    // kind: 'submit' | 'pdf'
+    try {
+      const r = await fetch('/api/bdris-apply/charge/' + kind, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + getToken() },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.status === 402 || d.error === 'INSUFFICIENT_BALANCE') {
+        alert(d.message || 'ব্যালেন্স অপর্যাপ্ত — রিচার্জ করুন');
+        return false;
+      }
+      if (!r.ok || d.ok === false) {
+        alert('চার্জ ব্যর্থ হয়েছে — আবার চেষ্টা করুন');
+        return false;
+      }
+      if (d.charged > 0) {
+        // Small non-blocking notice (engine has its own note() but may not be in scope here)
+        console.log('[bdris-apply] charged ৳' + d.charged);
+      }
+      return true;
+    } catch (e) {
+      alert('নেটওয়ার্ক সমস্যা — আবার চেষ্টা করুন');
+      return false;
+    }
+  }
+
+  // Wrap emitStep (engine's central emit) to charge before final submit.
+  // emitStep is a global function in the engine frontend.
+  function wrapEmitStep() {
+    if (typeof emitStep !== 'function') { setTimeout(wrapEmitStep, 500); return; }
+    const orig = emitStep;
+    window.emitStep = async function (op, payload, onAckExtra) {
+      if (op === 'SUBMIT_S4_OTP') {
+        const ok = await charge('submit');
+        if (!ok) return false;
+      }
+      return orig.call(this, op, payload, onAckExtra);
+    };
+  }
+
+  // Wrap socket.emit for FETCH_ORIGINAL (PDF download charge).
+  function wrapSocketEmit() {
+    if (typeof socket === 'undefined' || !socket.emit) { setTimeout(wrapSocketEmit, 500); return; }
+    const origEmit = socket.emit.bind(socket);
+    socket.emit = function (ev, ...args) {
+      if (ev === 'FETCH_ORIGINAL') {
+        charge('pdf').then((ok) => { if (ok) origEmit(ev, ...args); });
+        return true; // swallow original; re-emit after charge
+      }
+      return origEmit(ev, ...args);
+    };
+  }
+
+  // Show prices in a small banner (non-intrusive)
+  async function showPrices() {
+    try {
+      const r = await fetch('/api/bdris-apply/prices', {
+        headers: { 'Authorization': 'Bearer ' + getToken() },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (d.ok) {
+        const parts = [];
+        if (d.submitPrice > 0) parts.push('আবেদন: ৳' + d.submitPrice);
+        if (d.pdfPrice > 0) parts.push('PDF: ৳' + d.pdfPrice);
+        if (parts.length) {
+          const bar = document.createElement('div');
+          bar.style.cssText = 'background:#2b1d14;color:#d4af37;padding:8px 12px;font-size:13px;text-align:center;';
+          bar.textContent = '💰 চার্জ: ' + parts.join(' | ');
+          document.body.prepend(bar);
+        }
+      }
+    } catch (e) { /* silent */ }
+  }
+
+  wrapEmitStep();
+  wrapSocketEmit();
+  showPrices();
+})();
+</script>
+</body>');
+      w.document.close();
+    });
+    box.querySelectorAll('.dtype').forEach(s => s.onchange = () => { S.d.docs[+s.dataset.i].docType = s.value; renderDocRows(); });
+    box.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { S.d.docs.splice(+b.dataset.rm, 1); renderDocRows(); });
+  }
+  const t = $('docTypes');
+  if (t) {
+    const st = docTypeStatus();
+    t.innerHTML = 'ধরন ৪০ (চিকিৎসক/শিক্ষা সনদ): ' + (st.has40 ? '<span class="vbadge ok">✔ আছে</span>' : '<span class="vbadge warn">✖ বাকি</span>') +
+      ' &nbsp; ধরন ৪১ (পিতা-মাতার NID / ঠিকানার প্রমাণ): ' + (st.has41 ? '<span class="vbadge ok">✔ আছে</span>' : '<span class="vbadge warn">✖ বাকি</span>');
+  }
+}
+function renderStep5() {
+  setView('flow');
+  if (!Array.isArray(S.d.docs)) S.d.docs = [];
+  const relList = relationsForAge();
+  if (!relList.includes(S.d.relation)) S.d.relation = relList[0];
+  const rels = relList.map(r => '<div class="rcard rsm' + (S.d.relation === r ? ' sel' : '') + '" data-rel="' + esc(r) + '">' +
+    '<span class="rdot"></span><div><div class="rt">' + esc(r) + '</div></div></div>').join('');
+  showBody(
+    '<div class="sec"><div class="sub-h"><span class="snum">৫</span> আবেদনকারীর পরিচয় ও ডকুমেন্ট</div>' +
+    '<p class="hint">আবেদনকারী নিবন্ধনাধীন ব্যক্তির কে, তা বেছে নিন। তারপর দুই ধরনের কাগজের ছবি দিন — দুটোই জরুরি।</p></div>' +
+    '<div class="relgrid">' + rels + '</div>' +
+    '<div class="sec"><div class="sub-h"><span class="snum">📎</span> কাগজপত্র</div>' +
+    '<div id="docTypes" class="hint"></div></div>' +
+    '<div id="docRows"></div>' +
+    '<div class="mt8"><button class="btn ghost" id="addDoc">➕ ছবি যোগ করুন</button>' +
+    '<input type="file" id="docFile" accept="image/*" multiple style="display:none"></div>'
+  );
+  renderDocRows();
+  els('.rcard.rsm').forEach(c => c.onclick = () => {
+    S.d.relation = c.dataset.rel;
+    els('.rcard.rsm').forEach(x => x.classList.toggle('sel', x.dataset.rel === S.d.relation));
+  });
+  $('addDoc').onclick = () => $('docFile').click();
+  $('docFile').onchange = async () => {
+    const files = Array.from($('docFile').files || []);
+    $('docFile').value = '';
+    if (!files.length) return;
+    busy(true, '⏳ ছবি যোগ হচ্ছে…');
+    for (const f of files) {
+      if ((S.d.docs || []).length >= 6) { note('সর্বোচ্চ ৬টি কাগজ দেওয়া যাবে', 'warn'); break; }
+      const isImg = /^image\//.test(f.type) || /\.(jpe?g|png)$/i.test(f.name);
+      if (!isImg) { note('শুধু JPG/PNG ছবি চলবে — ' + f.name, 'warn'); continue; }
+      if (f.size > 2 * 1024 * 1024) { note('“' + f.name + '” ২MB-এর বেশি — ছোট করে আবার দিন', 'warn'); continue; }
+      const d = await fileToDoc(f);
+      if (!d) { note('“' + f.name + '” পড়া যায়নি — আবার চেষ্টা করুন', 'warn'); continue; }
+      const st = docTypeStatus();
+      d.docType = !st.has40 ? '40' : (!st.has41 ? '41' : '40');
+      S.d.docs.push(d);
+    }
+    renderDocRows();
+    busy(false); noteOff();
+  };
+  setBtns([
+    { html: 'পরবর্তী →', fn: () => submitStep5() },
+    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => saveDraft(5, () => note('✔ খসড়ায় রাখা হয়েছে — ছবিসহই জমা থাকল', 'ok')) },
+    { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => goStep(4) }
+  ]);
+}
+function submitStep5() {
+  if (!Array.isArray(S.d.docs)) S.d.docs = [];
+  if ((S.d.uiStep || 0) >= 6) {
+    // কাগজ বদলালে কেবল এই এক ধাপই আবার ছবিসহ সাইটে যায় (লকস্টেপ)
+    if (stepChanged('SUBMIT_S3_DOCS', payloadFor('SUBMIT_S3_DOCS'))) { resendFrom('SUBMIT_S3_DOCS'); return; }
+    goStep(6); return;
+  }
+  const st = docTypeStatus(), bad = [];
+  if (!st.n) bad.push('কমপক্ষে ১টি কাগজের ছবি যোগ করুন');
+  if (st.n && !(st.has40 && st.has41)) bad.push('দুই ধরনের কাগজ দরকার — ধরন ৪০ ও ধরন ৪১ দুটোই চিহ্নিত করুন');
+  if (bad.length) { showFail(bad); note('⚠️ কাগজপত্র ঠিক করুন', 'warn'); return; }
+  hideFail();
+  advanceAndSend(6, 'SUBMIT_S3_DOCS', { relation: S.d.relation || defaultRelation(), docs: S.d.docs });
+}
+
+/* ═══════════ step 6: পুরো আবেদন প্রিভিউ + যোগাযোগ + OTP — মেইন সার্ভারের মতো এক পর্দা ═══════════ */
+function renderStep6() {
+  setView('flow'); S.otpStage = 'review';
+  showBody(
+    '<div class="sec"><div class="sub-h"><span class="snum">৬</span> আবেদন প্রিভিউ — জমার আগেই সব দেখে নিন</div>' +
+    '<p class="hint">এটাই আপনার পূর্ণ আবেদন — কাগজপত্রসহ সব তথ্য এখান থেকেই মূল সাইটে যাবে। কোনো অংশে ভুল দেখলে সেই অংশের পাশের “✏️ ঠিক করুন” চাপলেই সরাসরি সেই ধাপে গিয়ে ঠিক করতে পারবেন। সব ঠিক থাকলে নিচের নম্বর মিলিয়ে “📲 কোড পাঠান” চাপুন — মোবাইলে আসা কোডটিই শেষ ধাপ।</p></div>' +
+    pvSheetHtml(true) +
+    '<div class="sec"><div class="sub-h"><span class="snum">📞</span> যোগাযোগ — এই নম্বরেই কোড আসবে</div>' +
+    '<p class="hint">নম্বরটি হাতে রাখুন — কোড এসে গেলে নিচের ঘরে বসাতে পারবেন। চাইলে এখান থেকেই খসড়ায় রেখে পরে ফিরে আসতে পারবেন।</p></div>' +
+    '<div class="row2">' +
+      '<div class="fld"><label>মোবাইল নম্বর <b>*</b></label><input type="text" id="c_phone" value="' + esc(S.d.phone || '') + '" placeholder="01XXXXXXXXX"></div>' +
+      '<div class="fld"><label>ইমেইল</label><input type="text" id="c_email" value="' + esc(S.d.email || '') + '" placeholder="you@example.com"></div>' +
+    '</div>'
+  );
+  bindPvEdits();
+  setBtns([
+    { html: '📲 কোড পাঠান', fn: () => sendOtp() },
+    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep6(); saveDraft(6, () => note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে যেকোনো সময় কোড দিয়ে শেষ করতে পারবেন', 'ok')); } },
+    { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => goStep(5) }
+  ]);
+}
+function collectStep6() {
+  S.d.phone = ($('c_phone') ? $('c_phone').value : '').replace(/[^\d]/g, '');
+  S.d.email = ($('c_email') ? $('c_email').value : '').trim();
+  return { email: S.d.email, phone: S.d.phone };
+}
+
+/* ═══════════ OTP — প্রিভিউ পর্দা থেকেই পাঠানো হয় ═══════════ */
+function sendOtp() {
+  collectStep6();
+  const bad = [];
+  ['c_phone', 'c_email'].forEach(id => { const e = $(id); if (e) e.classList.remove('bad'); });
+  if (!/^01\d{9}$/.test(S.d.phone)) { bad.push('মোবাইল নম্বর (১১ ডিজিট, 01 দিয়ে শুরু)'); const e = $('c_phone'); if (e) e.classList.add('bad'); }
+  if (S.d.email && !/^\S+@\S+\.\S+$/.test(S.d.email)) { bad.push('ইমেইল ঠিক নেই'); const e = $('c_email'); if (e) e.classList.add('bad'); }
+  if (bad.length) { showFail(bad); note('⚠️ যোগাযোগের তথ্য ঠিক করুন', 'warn'); return; }
+  hideFail();
+  if (S.draftId) saveDraft(6, () => {});
+  renderOtpCode();
+  busy(true, '📲 কোড পাঠানো হচ্ছে…'); // ডাবল-চাপ আটকায় (কোড-স্ক্রিনের বাটনগুলো তৈরি হওয়ার পরে)
+  // গার্ড আটকালে (আগের ধাপ তখনো সাইটে যাচ্ছে) সাথে সাথে বাটন ছেড়ে দিই —
+  // নইলে নোটে “আবার চাপুন” লেখা থাকলেও বাটন নিষ্ক্রিয় থেকে চিরতরে আটকে যায়
+  if (emitStep('SUBMIT_S4_PREP', { email: S.d.email, phone: S.d.phone }) === false) busy(false);
+}
+function renderOtpCode() {
+  setView('flow'); S.otpStage = 'code'; renderStepper(5); hideFail();
+  const ph = S.d.phone || '';
+  const tail = ph.length >= 4 ? ph.slice(-4) : ph;
+  showBody(
+    '<div class="sec"><div class="sub-h"><span class="snum">🔐</span> কোড বসান</div>' +
+    '<p class="hint">' + esc(tail) + '-এ শেষ হওয়া নম্বরে কোড পাঠানো হয়েছে। না এলে “আবার কোড পাঠান” চাপুন। <b>কোড কারও সাথে শেয়ার করবেন না।</b></p></div>' +
+    '<div class="otpboxes">' + [0,1,2,3,4,5].map(i => '<input class="otpbox" id="ob' + i + '" inputmode="numeric" maxlength="1" autocomplete="one-time-code">').join('') + '</div>'
+  );
+  const boxes = els('.otpbox');
+  const val = () => boxes.map(b => b.value.replace(/\D/g, '')).join('');
+  boxes.forEach((b, i) => {
+    b.oninput = () => {
+      b.value = b.value.replace(/\D/g, '').slice(-1);
+      if (b.value && boxes[i + 1]) boxes[i + 1].focus();
+    };
+    b.onkeydown = (e) => { if (e.key === 'Backspace' && !b.value && boxes[i - 1]) { boxes[i - 1].focus(); boxes[i - 1].value = ''; } };
+    b.onpaste = (e) => {
+      e.preventDefault();
+      const txt = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
+      for (let k = 0; k < boxes.length; k++) boxes[k].value = txt[k] || '';
+      (boxes[Math.min(txt.length, boxes.length - 1)] || boxes[0]).focus();
+    };
+  });
+  if (boxes[0]) boxes[0].focus();
+  setBtns([
+    { html: '✅ আবেদন জমা দিন', fn: () => {
+        const otp = val();
+        if (otp.length < 6) { note('⚠️ মোবাইলে আসা ৬ ডিজিটের কোডটি সম্পূর্ণ লিখুন', 'warn'); return; }
+        S.otpStage = 'submitting';
+        busy(true, '⏳ আবেদন জমা হচ্ছে… একটু অপেক্ষা করুন');
+        // গার্ড আটকালে সোজা আগের স্ক্রিনে ফিরি — বাটন চিরতরে নিষ্ক্রিয় হয় না
+        if (emitStep('SUBMIT_S4_OTP', { otp }) === false) { S.otpStage = 'code'; busy(false); }
+      } },
+    { html: '📲 আবার কোড পাঠান', cls: 'ghost', fn: () => {
+        // কখনো আটকে না থাকেন — ওয়েটশিটা ওয়ালা ধাপ আবারই চালানো যায়
+        busy(true, '⏳ আবার কোড পাঠানো হচ্ছে…');
+        if (emitStep('SUBMIT_S4_PREP', { email: S.d.email || '', phone: S.d.phone || '' }) === false) busy(false);
+      } },
+    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => saveDraft(6, () => { note('✔ খসড়ায় রাখা হয়েছে — যেকোনো সময় OTP দিয়ে শেষ করতে পারবেন', 'ok'); setTimeout(renderDrafts, 700); }) },
+    { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => goStep(6) }
+  ]);
+}
+
+/* ═══════════ আবেদন প্রিভিউ (মূল BDRIS-এর নিয়ম: জমার আগে সব তথ্য মিলিয়ে আবেদনকারীকে দেখান) ═══════════ */
+function pvJoin(a) { return a.filter(Boolean).join(' › '); }
+function pvAddrTxt(a) {
+  if (!a) return '';
+  const t = pvJoin([a.division, a.district, a.cityCorpUpazila, a.paurasavaUnion, a.ward]);
+  const rest = pvJoin([
+    [a.postBn, a.postEn].filter(Boolean).join(' / '),
+    [a.vilBn, a.vilEn].filter(Boolean).join(' / '),
+    [a.houseBn, a.houseEn].filter(Boolean).join(' / ')
+  ]);
+  return pvJoin([t, rest]);
+}
+function pvSheetHtml(editable) {
+  const s0 = S.d.s0 || {}, s1 = S.d.s1 || {}, s2 = S.d.s2 || {}, z = S.d.s2b || {};
+  const f = s2.father || {}, m = s2.mother || {};
+  const nmBn = [s1.firstNameBn, s1.lastNameBn].filter(Boolean).join(' ') || '—';
+  const nmEn = [s1.firstNameEn, s1.lastNameEn].filter(Boolean).join(' ') || '—';
+  const birth = {
+    division: s1.division, district: s1.district, cityCorpUpazila: s1.cityCorpUpazila,
+    paurasavaUnion: s1.paurasavaUnion, ward: s1.ward,
+    postBn: s1.postBn, postEn: s1.postEn, vilBn: s1.vilBn, vilEn: s1.vilEn,
+    houseBn: s1.houseBn, houseEn: s1.houseEn,
+  };
+  const permTxt = z.permCopy ? (pvAddrTxt(birth) + ' (জন্মস্থানের মতোই)') : pvAddrTxt(z.perm);
+  const presTxt = z.presCopy ? (pvAddrTxt(z.permCopy ? birth : z.perm) + ' (স্থায়ী ঠিকানার মতোই)') : pvAddrTxt(z.pres);
+  const docs = S.d.docs || [];
+  const r = (l, v) => '<div class="pvrow"><div class="pvl">' + esc(l) + '</div><div class="pvv">' + (v ? esc(v) : '—') + '</div></div>';
+  // প্রিভিউ থেকেই সরাসরি ঠিক করা (2026-10-13): প্রতিটি অংশের পাশে “✏️ ঠিক করুন” —
+  // চাপলেই সেই ধাপে ফিরে যাবে; বদলে “পরবর্তী” চাপলে শুধু বদলানো অংশই আবার সাইটে যাবে
+  const sec = (t, step) => '<div class="pvsec">' + esc(t) +
+    ((editable && step) ? '<button class="btn ghost pvedit" data-step="' + step + '">✏️ ঠিক করুন</button>' : '') + '</div>';
+  const pvBody =
+      '<div class="pvhead"><div class="pvt">জন্ম নিবন্ধন আবেদন</div>' +
+      '<div class="pvs">' + esc(nmBn) + (S.d.phone ? ' • ' + esc(S.d.phone) : '') + '</div></div>' +
+      sec('১। আবেদনের ধরন', 1) +
+      r('ভিত্তি', s0.addressType === 'PERMANENT' ? 'স্থায়ী ঠিকানা' : 'জন্মস্থান') +
+      r('দূতাবাস', s0.embassy ? 'হ্যাঁ (দূতাবাস/কনস্যুলেট)' : 'না') +
+      sec('২। আবেদনকারীর তথ্য', 2) +
+      r('নাম (বাংলায়)', nmBn) +
+      r('নাম (English)', nmEn) +
+      r('জন্ম তারিখ', s1.dob || '') +
+      r('লিঙ্গ', s1.gender || '') +
+      r('সন্তান নম্বর', s1.thChild || '') +
+      r('দেশ', s1.country || '') +
+      sec('৩। জন্মস্থান', 2) +
+      r('ঠিকানা', pvAddrTxt(birth)) +
+      sec('৪। স্থায়ী ঠিকানা', 4) +
+      r('ঠিকানা', permTxt) +
+      sec('৫। বর্তমান ঠিকানা', 4) +
+      r('ঠিকানা', presTxt) +
+      sec('৬। পিতা-মাতার তথ্য', 3) +
+      r('পিতা — নাম (বাংলায়)', f.nameBn || '') +
+      r('পিতা — নাম (English)', f.nameEn || '') +
+      r('পিতা — জন্ম নিবন্ধন নম্বর', f.brn || '') +
+      r('পিতা — জন্ম তারিখ', f.dob || '') +
+      r('পিতা — জাতীয়তা', f.nationality || '') +
+      r('মাতা — নাম (বাংলায়)', m.nameBn || '') +
+      r('মাতা — নাম (English)', m.nameEn || '') +
+      r('মাতা — জন্ম নিবন্ধন নম্বর', m.brn || '') +
+      r('মাতা — জন্ম তারিখ', m.dob || '') +
+      r('মাতা — জাতীয়তা', m.nationality || '') +
+      sec('৭। কাগজপত্র', 5) +
+      (docs.length
+        ? docs.map((d) => r('কাগজ — ধরন ' + (d.docType === '41' ? '৪১' : '৪০'), d.name || '')).join('') +
+          (docs.some((d) => d && d.base64)
+            ? '<div class="pvdocs">' + docs.map((d, i) => (d && d.base64)
+              ? '<img class="pvdoc" src="data:' + esc(d.mimeType || 'image/jpeg') + ';base64,' + d.base64 + '" alt="কাগজ ' + (i + 1) + '" title="' + esc(d.name || ('কাগজ ' + (i + 1))) + '">'
+              : '').join('') + '</div>'
+            : '')
+        : r('কাগজপত্র', S.d.docsSaved ? S.d.docsSaved + 'টি কাগজ আগেই মূল সাইটে দেওয়া হয়ে গেছে (ছবি খসড়ায় সংরক্ষিত থাকে না)' : '')) +
+      sec('৮। যোগাযোগ', 8) +
+      r('মোবাইল নম্বর', S.d.phone || '') +
+      r('ইমেইল', S.d.email || '');
+  // পাশাপাশি ২-কলাম (computer-এ): প্রতিটি সেকশন এক কলামে — scroll প্রায় অর্ধেক
+  const pvParts = pvBody.split(/(?=<div class="pvsec">)/);
+  const pvHead = pvParts.shift();
+  return '<div class="pvsheet">' + pvHead +
+    '<div class="pvcols">' + pvParts.map(c => '<div class="pvcol">' + c + '</div>').join('') + '</div></div>';
+}
+/* প্রিভিউর “✏️ ঠিক করুন” বাটন — চাপলেই সেই ধাপে ফিরে যাবে।
+   তথ্য বদলে “পরবর্তী” চাপলে আগের লকস্টেপ-নিয়মেই শুধু বদলানো ধাপ আবার সাইটে যাবে,
+   তারপর ধাপ ধরে আবার প্রিভিউ (ধাপ ৬) পর্যন্ত এগিয়ে আসা যাবে। */
+function bindPvEdits(onEdit) {
+  els('.pvedit').forEach(b => b.onclick = () => {
+    hideFail();
+    const step = parseInt(b.dataset.step, 10) || 1;
+    if (onEdit) onEdit(step); else goStep(step); // ধাপে-ধাপে মোডে ফলব্যাক = সেই ধাপে
+    note('✏️ ঠিক করে নিন — তারপর আবার প্রিভিউ দেখতে পাবেন', 'info');
+  });
+}
+function renderPreview(backFn, editable) {
+  setView('flow'); $('stepper').className = 'stepper hidden'; hideFail(); busy(false); noteOff();
+  S.pvMode = !!editable; // সব-এক-পেজে প্রিভিউ: OTP ও খসড়া এই পেজেই
+  showBody(
+    '<div class="sec"><div class="sub-h"><span class="snum">👁️</span> আবেদন প্রিভিউ — জমার আগে মিলিয়ে নিন</div>' +
+    (editable
+      ? '<p class="hint">নিচের তথ্যগুলোই মূল জন্ম নিবন্ধন সাইটে যাবে। কোনো অংশে ভুল দেখলে সেই অংশের পাশের “✏️ ঠিক করুন” চাপলেই ফর্মে ফিরে ঠিক করতে পারবেন। সব ঠিক থাকলে নিচের “🚀 আবেদন জমা দিন” চাপুন — OTP এই পেজেই বসাবেন।</p></div>'
+      : '<p class="hint">নিচের তথ্যগুলোই মূল জন্ম নিবন্ধন সাইটে যাবে। কিছু ভুল থাকলে “← তথ্য মিলিয়ে ফিরে যান” চেপে ঠিক করে আবার আসুন।</p></div>') +
+    pvSheetHtml(!!editable) +
+    (editable ? '<div id="pvOtpSec"></div>' : '')
+  );
+  if (editable) bindPvEdits(() => { hideFail(); if (backFn) backFn(); });
+  setBtns(
+    (editable ? [
+      { html: '🚀 আবেদন জমা দিন', fn: () => submitAuto() },
+      { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => saveDraft(6, () => { note('✔ খসড়ায় রাখা হয়েছে — পরে প্রিভিউ থেকেই OTP দিয়ে শেষ করতে পারবেন', 'ok'); setTimeout(renderDrafts, 700); }) },
+    ] : []).concat([
+      { html: editable ? '← ফর্মে ফিরে যান' : '← তথ্য মিলিয়ে ফিরে যান', cls: 'ghost', fn: () => { S.pvMode = false; if (backFn) backFn(); else renderHome(); } }
+    ])
+  );
+}
+/* ── প্রিভিউ পেজেই OTP (2026-10-13): “🚀 আবেদন জমা দিন” চাপলে কোড এই পেজেই আসে ── */
+function showPvOtp() {
+  S.pvMode = true; S.otpStage = 'code';
+  const sec = $('pvOtpSec');
+  if (!sec) { renderOtpCode(); return; }
+  const ph = S.d.phone || '';
+  const tail = ph.length >= 4 ? ph.slice(-4) : ph;
+  sec.innerHTML =
+    '<div class="pvotp"><div class="sub-h"><span class="snum">🔐</span> কোড বসান — এই পেজেই</div>' +
+    '<p class="hint"><b>' + esc(ph) + '</b> নম্বরে কোড পাঠানো হয়েছে। ' +
+    '<button class="btn ghost small" id="pvPhEdit">✏️ নম্বর বদলান</button><br>এক নম্বরে OTP না এলে/লিমিট শেষ হলে নম্বর বদলে আবার পাঠাতে পারবেন। <b>কোড কারও সাথে শেয়ার করবেন না।</b></p>' +
+    '<div id="pvPhRow" style="display:none"><div class="fld"><label>মোবাইল নম্বর (OTP যাবে)</label>' +
+    '<input type="text" id="pvPhInp" inputmode="numeric" placeholder="01XXXXXXXXX" value="' + esc(ph) + '"></div>' +
+    '<div class="mt8"><button class="btn small" id="pvPhGo">📲 এই নম্বরে কোড পাঠান</button></div></div>' +
+    '<div class="otpboxes">' + [0, 1, 2, 3, 4, 5].map(i => '<input class="otpbox" id="pvob' + i + '" inputmode="numeric" maxlength="1" autocomplete="one-time-code">').join('') + '</div>' +
+    '<div class="mt8"><button class="btn" id="pvOtpGo">✅ নিশ্চিত করুন — জমা দিন</button> ' +
+    '<button class="btn ghost" id="pvOtpRe">📲 আবার কোড পাঠান</button></div></div>';
+  $('pvPhEdit').onclick = () => { const r = $('pvPhRow'); r.style.display = r.style.display === 'none' ? '' : 'none'; };
+  $('pvPhGo').onclick = () => {
+    const np = bnDigits($('pvPhInp').value).replace(/\D/g, '');
+    if (!/^01\d{9}$/.test(np)) { note('⚠️ সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (01XXXXXXXXX)', 'warn'); return; }
+    S.d.phone = np;
+    const af = $('a_phone'); if (af) af.value = np; // অটো ফর্মের ঘরটাও মিলিয়ে রাখি
+    busy(true, '⏳ নতুন নম্বরে কোড পাঠানো হচ্ছে…');
+    if (emitStep('SUBMIT_S4_PREP', { email: S.d.email || '', phone: np }) === false) busy(false);
+  };
+  const boxes = [0, 1, 2, 3, 4, 5].map(i => $('pvob' + i));
+  const val = () => boxes.map(b => (b.value || '').replace(/\D/g, '')).join('');
+  boxes.forEach((b, i) => {
+    b.oninput = () => {
+      b.value = b.value.replace(/\D/g, '').slice(-1);
+      if (b.value && boxes[i + 1]) boxes[i + 1].focus();
+    };
+    b.onkeydown = (e) => { if (e.key === 'Backspace' && !b.value && boxes[i - 1]) { boxes[i - 1].focus(); boxes[i - 1].value = ''; } };
+    b.onpaste = (e) => {
+      e.preventDefault();
+      const txt = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
+      for (let k = 0; k < boxes.length; k++) boxes[k].value = txt[k] || '';
+      (boxes[Math.min(txt.length, boxes.length - 1)] || boxes[0]).focus();
+    };
+  });
+  if (boxes[0]) boxes[0].focus();
+  $('pvOtpGo').onclick = () => {
+    const otp = val();
+    if (otp.length < 6) { note('⚠️ মোবাইলে আসা ৬ ডিজিটের কোডটি সম্পূর্ণ লিখুন', 'warn'); return; }
+    S.otpStage = 'submitting';
+    busy(true, '⏳ আবেদন জমা হচ্ছে… একটু অপেক্ষা করুন');
+    if (emitStep('SUBMIT_S4_OTP', { otp }) === false) { S.otpStage = 'code'; busy(false); }
+  };
+  $('pvOtpRe').onclick = () => {
+    busy(true, '⏳ আবার কোড পাঠানো হচ্ছে…');
+    if (emitStep('SUBMIT_S4_PREP', { email: S.d.email || '', phone: S.d.phone || '' }) === false) busy(false);
+  };
+  sec.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+/* ═══════════ অটো আবেদন — জমার আগের প্রিভিউ (2026-10-13) ═══════════ */
+function autoPreview() {
+  collectAuto();
+  renderPreview(() => renderAuto(), true);
+}
+
+/* ═══════════ success ═══════════ */
+function showDone(d, restore) {
+  d = d || {};
+  S._done = d; // প্রিভিউ থেকে ফেরার সময় আবার দেখানোর জন্য
+  S.otpStage = 'done'; S.pvMode = false;
+  S.photo = d.screenshot || S.photo || null;
+  S.pdf = d.pdf || S.pdf || null;
+  const s1 = S.d.s1 || {};
+  const nm = [s1.firstNameBn, s1.lastNameBn].filter(Boolean).join(' ') || 'আবেদন';
+  let no = '';
+  const labeled = String(d.ackId || '').match(/আবেদন(?:পত্র)?\s*নম্বর\s*[:：]?\s*(\d{4,20})/);
+  const m = labeled ? null : String(d.ackId || '').match(/\d{17}|\d{7,12}/);
+  if (labeled) no = labeled[1];
+  else if (m) no = m[0];
+  else { const t = String(d.ackId || '').trim(); if (t && t.length <= 60) no = t; }
+  S.ackNo = no || null;
+  const rec = {
+    id: 'ack-' + Date.now().toString(36), no: no || 'সংরক্ষিত নয়', name: nm,
+    at: new Date().toISOString(),
+    pdfB64: (S.pdf && S.pdf.base64) || null, pdfName: (S.pdf && S.pdf.name) || null
+  };
+  if (!restore) {
+    try { addAck(rec); } catch {}
+    if (S.draftId) { socket.emit('DELETE_DRAFT', S.draftId, () => {}); S.draftId = null; }
+    updDraftsCnt();
+  }
+  setView('done'); hideFail(); hideBanner(); noteOff();
+  $('stepper').className = 'stepper hidden';
+  showBody(
+    '<div class="hero"><span class="hbean" style="top:16%;left:8%">☕</span>' +
+      '<span class="hbean" style="top:60%;right:7%;animation-delay:-4s">✨</span>' +
+      '<div class="tickpop">✅</div>' +
+      '<div class="hpill">আবেদন সম্পন্ন</div>' +
+      '<h1 class="htitle"><span class="gold">আবেদন সফলভাবে জমা হয়েছে!</span></h1>' +
+      (no
+        ? '<div class="ackhero"><div class="lbl">আপনার আবেদন নম্বর</div><div class="acknum" id="ackNum">' + esc(no) + '</div></div>'
+        : '<p class="hsub">জমা হয়েছে — তবে নম্বরটি পেজ থেকে পড়া যায়নি। নিচের পেজের ছবিতে নম্বরটি দেখে নিন।</p>') +
+      (d.ackId && String(d.ackId).trim() !== no ? '<p class="hsub">“' + esc(String(d.ackId).trim().slice(0, 200)) + '”</p>' : '') +
+      '<p class="hsub">' + esc(nm) + ' — নম্বরটি এখনই কপি করে রেখে দিন।</p>' +
+      '<p class="hint">📄 PDF তৈরি হতে একটু সময় লাগে — তৈরি হলেই নিজে থেকে নেমে যাবে।</p>' +
+      '<div class="copyrow2">' +
+        (no ? '<button class="btn" id="akCopy">📋 নম্বর কপি</button>' : '') +
+        (d.original ? '<button class="btn" id="akOrig">⬇️ আসল PDF (এখনই নামান)</button>' : '') +
+        (!d.original ? '<button class="btn ghost" id="akOrigPend" disabled>⏳ PDF তৈরি হচ্ছে…</button>' : '') +
+        (S.pdf ? '<button class="btn ghost" id="akPdf">⬇️ PDF কপি নামান</button>' : '') +
+      '</div>' +
+    '</div>' +
+    (S.photo ? '<details class="sec"><summary class="sub-h" style="cursor:pointer"><span class="snum">📸</span> জমা হওয়া পেজের ছবি</summary>' +
+      '<img src="' + S.photo + '" alt="জমা হওয়া পেজ" style="max-width:100%;border-radius:12px;margin-top:10px"></details>' : '') +
+    (!S.pdf ? '<p class="hint">PDF কপি এখানে আসেনি — উপরের ছবিতে নম্বরটি সংরক্ষণ করে রাখুন, চাইলে নিজের অ্যাকাউন্ট থেকেও নামানো যাবে।</p>' : '')
+  );
+  const c = $('akCopy'); if (c) c.onclick = () => copyText(no);
+  const p = $('akPdf'); if (p) p.onclick = () => { dlBase64(S.pdf.name || 'bdris-application.pdf', S.pdf.base64); note('⬇️ PDF কপি নামছে…', 'ok'); };
+  const og = $('akOrig'); if (og) og.onclick = () => { downloadOriginal(d.original, no); };
+  // bot পেছনে PDF তৈরি করে রাখে — পেজ খুলতেই fetch শুরু, ready হলেই auto-download
+  (function bgPdf() {
+    const el = $('akOrigPend'); if (!el || d.original) return;
+    const key = String(no || '').replace(/\D/g, '');
+    if (!key) return;
+    if (ORIG_READY[key]) {
+      el.disabled = false; el.className = 'btn'; el.textContent = '⬇️ আসল PDF (এখনই নামান)';
+      el.onclick = () => downloadOriginal(ORIG_READY[key], key);
+      return;
+    }
+    el.disabled = false; el.style.opacity = '.8';
+    el.textContent = '⏳ PDF তৈরি হচ্ছে… (হয়ে গেলেই নেমে যাবে)';
+    S._origAutoDl = key;
+    socket.emit('FETCH_ORIGINAL', { ack: key });
+    el.onclick = () => { note('⏳ PDF তৈরি হচ্ছে — হয়ে গেলেই নেমে যাবে', 'info'); socket.emit('FETCH_ORIGINAL', { ack: key }); };
+  })();
+  setBtns([
+    { html: '🏠 নতুন আবেদন', fn: () => location.reload() },
+    { html: '👁️ জমা হওয়া আবেদনের প্রিভিউ', cls: 'ghost', fn: () => renderPreview(() => showDone(S._done, true)) },
+    { html: '🗂️ খসড়া দেখুন', cls: 'ghost', fn: () => renderDrafts() }
+  ]);
+}
+
+/* আসল PDF (কার্যালয়ের কপি) — সার্ভার নীরবে অটো-এনে দেয়; প্রস্তুত হলেই
+   বোতাম চালু, কেউ অপেক্ষা করে ক্লিক করলে প্রস্তুত হওয়ামাত্রই নেমে যায় */
+const ORIG_READY = {};
+const ORIG_AUTODLED = {};
+function downloadOriginal(url, no) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'bdris-abedon-' + (no || 'copy') + '.pdf';
+  document.body.appendChild(a); a.click(); a.remove();
+  note('⬇️ আসল PDF নামছে…', 'ok');
+}
+/* ═══════════ অটো আবেদন — এক ফর্মে সব ═══════════ */
+function startAuto(resume) {
+  S.mode = 'auto';
+  if (!S.d || !S.d.mode || S.d.mode !== 'auto') { S.d = freshData('auto'); resetSent(); }
+  renderAuto();
+}
+function autoSel(id, list, want) {
+  return '<select id="' + id + '">' + list.map(t => '<option' + ((want || list[0]) === t ? ' selected' : '') + '>' + esc(t) + '</option>').join('') + '</select>';
+}
+
+/* ═══════════ কপি-পেস্ট ইমপোর্ট — পুরো ফর্ম একবারে (2026-10-11) ═══════════ */
+// ইউজারের চেনা ফরম্যাট (ভিত্তি-হেডার, স্থায়ী ব্লক, জন্মস্থান ব্লক, নামঃ-/Name:-,
+// সন্তান নং/লিঙ্গ, পিতা-মাতা ব্লক, 'স্থায়ী+বর্তমান সেইম' সেপারেটর, মোবাইল) হুবহু পেস্ট করলেই সব ঘর বসে
+function pvClean(v) { return String(v || '').replace(/\s+/g, ' ').replace(/[,;।\s]+$/, '').trim(); }
+function splitAppName(full) {
+  const t = String(full || '').replace(/\s+/g, ' ').trim();
+  if (!t) return ['', ''];
+  const p = t.split(' ');
+  if (p.length === 1) return [t, '']; // এক-নাম — ডাবল হবে না, শেষ অংশ খালি থাকবে
+  const last = p.pop();
+  return [p.join(' '), last];
+}
+function thChildFromText(v) {
+  const t = String(v || '').trim();
+  const direct = FB.thChild.find(x => t.includes(x));
+  if (direct) return direct;
+  const WORDS = [['প্রথম', '১ম'], ['দ্বিতীয়', '২য়'], ['দ্বিতিয়', '২য়'], ['দিতীয়', '২য়'], ['দিতিয়', '২য়'], ['তৃতীয়', '৩য়'], ['তৃতিয়', '৩য়'], ['চতুর্থ', '৪র্থ'], ['পঞ্চম', '৫ম'], ['ষষ্ঠ', '৬ষ্ঠ'], ['ষষ্ঠ', '৬ষ্ঠ'], ['সপ্তম', '৭ম'], ['অষ্টম', '৮ম'], ['নবম', '৯ম'], ['দশম', '১০ম'], ['একাদশ', '১১তম']];
+  for (const [w, x] of WORDS) if (t.includes(w)) return x;
+  const m = bnDigits(t).match(/\d{1,2}/);
+  if (m) { const n = +m[0]; if (n >= 1 && n <= 11) return FB.thChild[n - 1]; }
+  return '';
+}
+function genderFromText(v) {
+  const t = String(v || '').trim();
+  const hit = FB.gender.find(x => t.includes(x));
+  if (hit) return hit;
+  if (/মহিলা|নারী/.test(t)) return 'মহিলা';
+  if (/পুরুষ/.test(t)) return 'পুরুষ';
+  if (/তৃতীয়|হিজড়া|হিজরা/.test(t)) return 'তৃতীয় লিঙ্গ';
+  return '';
+}
+function parsePastedData(raw, d) {
+  d.s0 = d.s0 || {}; d.s1 = d.s1 || {}; d.s2 = d.s2 || {}; d.s2b = d.s2b || {};
+  const s1 = d.s1, z = d.s2b;
+  z.perm = z.perm || {};
+  d.s2.father = d.s2.father || {}; d.s2.mother = d.s2.mother || {};
+  const f = d.s2.father, m = d.s2.mother;
+  const lines = String(raw || '').replace(/\r/g, '').replace(/\u00A0/g, ' ').split('\n');
+  let hasBirthHdr = false, basis = '';
+  for (const L0 of lines) {
+    if (/ভিত্তিতে/.test(L0)) basis = /স্থায়ী|স্তায়ী|স্টায়ী/.test(L0) ? 'PERMANENT' : 'BIRTHPLACE';
+    if (/জন্মস্থান\s*ঠিকানা/.test(L0)) hasBirthHdr = true;
+  }
+  if (basis) d.s0.addressType = basis;
+  // দুই-ব্লক টেমপ্লেটে (জন্মস্থান হেডার আছে) প্রথম ব্লক = স্থায়ী; নইলে ভিত্তি অনুযায়ী
+  let state = hasBirthHdr ? 'perm' : (d.s0.addressType === 'PERMANENT' && basis ? 'perm' : 'birth');
+  let n = 0, miss = 0, permN = 0;
+  for (let L of lines) {
+    L = String(L).trim();
+    if (!L) continue;
+    // '-----------স্থায়ী+বর্তমান সেইম হবে--' সেপারেটর (কখনো সারির শেষে জোড়া লাগা থাকে)
+    const sep = L.match(/-{3,}\s*(?:স্থায়ী|স্তায়ী|স্টায়ী)\s*\+\s*বর্তমান/);
+    if (sep) {
+      z.presCopy = true; n++;
+      L = L.slice(0, sep.index).trim();
+      if (!L) continue;
+    }
+    // ভিত্তি-হেডার: 'আবেদনটি যে ঠিকানার ভিত্তিতে করা হবে তা স্থায়ী ঠিকানা  -  বিভাগঃ ঢাকা'
+    if (/ভিত্তিতে/.test(L)) {
+      const tail = L.slice(L.indexOf('ভিত্তিতে'));
+      const hm = tail.match(/^.*?(?:স্থায়ী\s*ঠিকানা|জন্ম\s*স্থান|স্থায়ী|স্তায়ী|স্টায়ী)\s*[:\-–—]*\s*([\s\S]*)$/);
+      n++;
+      L = (hm ? hm[1] : '').replace(/^[\-–—:ঃ.\s]+/, '').trim();
+      if (!L) continue;
+    }
+    let v;
+    const g = (re) => { const x = L.match(re); return x ? pvClean(x[1]) : null; };
+    // পিতা/মাতা সেকশন-হেডার (নাম একই সারিতে আসে)
+    if ((v = g(/^পিতার?\s*নাম\s*[:ঃ\-–—.\s]*(.*)$/)) !== null) { state = 'father'; if (v) { f.nameBn = v; n++; } continue; }
+    if ((v = g(/^Father['’`]?s?\s*name\s*[:ঃ\-–—.\s]*(.*)$/i)) !== null) { if (v) { f.nameEn = v; n++; } continue; }
+    if ((v = g(/^মাতার?\s*নাম\s*[:ঃ\-–—.\s]*(.*)$/)) !== null) { state = 'mother'; if (v) { m.nameBn = v; n++; } continue; }
+    if ((v = g(/^Mother['’`]?s?\s*name\s*[:ঃ\-–—.\s]*(.*)$/i)) !== null) { if (v) { m.nameEn = v; n++; } continue; }
+    if (/জন্মস্থান\s*ঠিকানা/.test(L)) { state = 'birth'; continue; }
+    if (/^(?:ব্যাক্তির|ব্যক্তির)/.test(L)) continue; // ব্যক্তির NID — সাইটের ফর্মে ঘর নেই, চুপচাপ এড়াই
+    // নাম — সেকশন বুঝে আবেদনকারী/পিতা/মাতা
+    if ((v = g(/^নাম\s*[:ঃ\-–—.\s]+(.+)$/)) !== null) {
+      if (state === 'father') { f.nameBn = v; n++; }
+      else if (state === 'mother') { m.nameBn = v; n++; }
+      else { const sp = splitAppName(v); s1.firstNameBn = sp[0]; s1.lastNameBn = sp[1]; n++; }
+      continue;
+    }
+    if ((v = g(/^Name\s*[:ঃ\-–—.\s]+(.+)$/i)) !== null) {
+      if (state === 'father') { f.nameEn = v; n++; }
+      else if (state === 'mother') { m.nameEn = v; n++; }
+      else { const sp = splitAppName(v); s1.firstNameEn = sp[0]; s1.lastNameEn = sp[1]; n++; }
+      continue;
+    }
+    // জন্ম তারিখ (ফাঁকা লাইন চুপচাপ এড়াই — পিতা-মাতার খালি ঘর সাধারণ ব্যাপার)
+    if ((v = g(/^জন্ম\s*তারিখ\s*[:ঃ\-–—.\s]*(.*)$/)) !== null) {
+      if (!v) continue;
+      const iso = dobParse(v);
+      if (iso) { if (state === 'father') f.dob = iso; else if (state === 'mother') m.dob = iso; else s1.dob = iso; n++; }
+      else miss++;
+      continue;
+    }
+    // সন্তান নং / লিঙ্গ
+    if ((v = g(/^সন্তান\s*নং\s*[:ঃ\-–—.\s]+(.+)$/)) !== null) {
+      const tc = thChildFromText(v);
+      if (tc) { s1.thChild = tc; n++; } else miss++;
+      continue;
+    }
+    if ((v = g(/^লিঙ্গ\s*[:ঃ\-–—.\s]+(.+)$/)) !== null) {
+      const gd = genderFromText(v);
+      if (gd) { s1.gender = gd; n++; } else miss++;
+      continue;
+    }
+    // জন্ম নিবন্ধন নাম্বার — ১৭ ডিজিট হলে BRN; ছোটটা পুরোনো NID (সাইটের BRN ঘরে চলে না, ২০১৩-পূর্বে লাগেও না)
+    if ((v = g(/^জন্ম\s*নিবন্ধন\s*নাম্বার\s*\/\s*এনআইডি\s*[:ঃ\-–—.\s]*(.*)$/)) !== null
+      || (v = g(/^জন্ম\s*নিবন্ধন\s*নাম্বার\s*[:ঃ\-–—.\s]*(.*)$/)) !== null) {
+      const dd = bnDigits(v).replace(/\D/g, '');
+      if ((state === 'father' || state === 'mother') && dd.length === 17) { (state === 'father' ? f : m).brn = dd; n++; }
+      continue;
+    }
+    // মোবাইল → যোগাযোগ ঘরে
+    if (/^মোবাইল\s*নাম/.test(L)) {
+      const dg = bnDigits(L).match(/01\d{9}/);
+      if (dg) { d.phone = dg[0]; n++; }
+      continue;
+    }
+    // ঠিকানা লেবেল — perm ব্লক / জন্মস্থান ব্লক
+    const addrT = state === 'perm' ? z.perm : (state === 'birth' ? s1 : null);
+    if (addrT) {
+      const bump = () => { n++; if (addrT === z.perm) permN++; };
+      if ((v = g(/^বিভাগ\s*[:ঃ\-–—.\s]+(.+)$/)) !== null) { addrT.division = v; bump(); continue; }
+      if ((v = g(/^জেলা\s*[:ঃ\-–—.\s]+(.+)$/)) !== null) { addrT.district = v; bump(); continue; }
+      if ((v = g(/^উপজেলা\s*[:ঃ\-–—.\s]+(.+)$/)) !== null) { addrT.cityCorpUpazila = v; bump(); continue; }
+      if ((v = g(/^অঞ্চল\s*[:ঃ\-–—.\s]*(\S.*)$/)) !== null) { addrT.paurasavaUnion = /^অঞ্চল/.test(v) ? v : ('অঞ্চল - ' + v); bump(); continue; }
+      if ((v = g(/^ইউনিয়ন\s*[:ঃ\-–—.\s]+(.+)$/)) !== null) { addrT.paurasavaUnion = v; bump(); continue; }
+      if ((v = g(/^ওয়ার্ড\s*(?:নং)?\s*[:ঃ\-–—.\s]+(.+)$/)) !== null) { addrT.ward = v; bump(); continue; }
+      if ((v = g(/^ডাকঘর\s*[:ঃ\-–—.\s]+(.+)$/)) !== null) { addrT.postBn = v; bump(); continue; }
+      if ((v = g(/^পোস্ট\s*কোড\s*[:ঃ\-–—.\s]+(.+)$/)) !== null) { addrT.postCode = bnDigits(v).replace(/\D/g, ''); bump(); continue; }
+      if ((v = g(/^Post\s*(?:Office)?\s*[:ঃ\-–—.\s]+(.+)$/i)) !== null) { addrT.postEn = v; bump(); continue; }
+      if ((v = g(/^Code\s*[:ঃ\-–—.\s]+(.+)$/i)) !== null) { addrT.postCode = bnDigits(v).replace(/\D/g, ''); bump(); continue; }
+      if ((v = g(/^গ্রাম\s*[:ঃ\-–—.\s]+(.+)$/)) !== null) { addrT.vilBn = v; bump(); continue; }
+      if ((v = g(/^Village\s*[:ঃ\-–—.\s]+(.+)$/i)) !== null) { addrT.vilEn = v; bump(); continue; }
+      if ((v = g(/^বাসা\s*[:ঃ\-–—.\s]+(.+)$/)) !== null) { addrT.houseBn = v; bump(); continue; }
+      if ((v = g(/^House\s*[:ঃ\-–—.\s]+(.+)$/i)) !== null) { addrT.houseEn = v; bump(); continue; }
+    }
+    if (/[:ঃ]/.test(L)) miss++;
+  }
+  if (permN > 0) z.permCopy = false;
+  return { n: n, miss: miss };
+}
+function applyPaste() {
+  const raw = ($('pasteBox') || {}).value || '';
+  if (!raw.trim()) { note('⚠️ আগে পেস্ট বাক্সে আপনার তথ্য পেস্ট করুন', 'warn'); return; }
+  collectAuto();
+  const r = parsePastedData(raw, S.d);
+  S._pasteRaw = raw;
+  renderAuto();
+  note(r.n ? ('📥 ' + r.n + 'টি তথ্য বসে গেছে — সব ঘর একবার দেখে নিয়ে ছবি যোগ করুন' + (r.miss ? ' (আর ' + r.miss + 'টি লাইন চেনা যায়নি)' : ''))
+    : '⚠️ কিছুই চেনা যায়নি — তথ্যটা একবার মিলিয়ে দেখুন', r.n ? 'ok' : 'warn');
+}
+/* ═══════════ পেস্টের নমুনা ফরম্যাট (2026-10-13) — বোতাম চাপলেই বক্সে বসে ═══════════ */
+// এই ফরম্যাটেই বট তথ্য চিনতে পারে — ইউজার এটা দেখে/কপি করে নিজের তথ্য বসিয়ে দেবেন
+const PASTE_SAMPLE = [
+'আবেদনটি যে ঠিকানার ভিত্তিতে করা হবে তা জন্মস্থান',
+'বিভাগঃ ঢাকা',
+'জেলাঃ ঢাকা',
+'উপজেলাঃ ঢাকা উত্তর সিটি কর্পোরেশন',
+'ওয়ার্ড নং- ১',
+'ডাকঘরঃ ঢাকা',
+'Post: Dhaka',
+'গ্রামঃ মিরপুর',
+'Village: Mirpur',
+'বাসাঃ বাসা ১',
+'House: House 1',
+'---------------------------------------- স্থায়ী+বর্তমান সেইম হবে --',
+'নামঃ- রাজু করিম',
+'Name:- Raju Karim',
+'জন্ম তারিখঃ- 10/05/2015',
+'সন্তান নং- ১ম সন্তান',
+'লিঙ্গঃ- পুরুষ',
+'জন্মস্থান ঠিকানা:-',
+'বিভাগঃ- ঢাকা',
+'জেলাঃ- ঢাকা',
+'উপজেলাঃ- ঢাকা উত্তর সিটি কর্পোরেশন',
+'ইউনিয়নঃ- ওয়ার্ড',
+'ওয়ার্ড নং- ১',
+'ডাকঘরঃ- ঢাকা',
+'Post Office:- Dhaka',
+'গ্রামঃ- মিরপুর',
+'Village:- Mirpur',
+'বাসাঃ- বাসা ১',
+'House:- House 1',
+'পিতার নামঃ- করিম উদ্দিন',
+"Father's name:- Karim Uddin",
+'জন্ম নিবন্ধন নাম্বারঃ 19869012345678901',
+'জন্ম তারিখঃ- 02/03/1986',
+'মাতার নামঃ- রহিমা বেগম',
+"Mother's name:- Rahima Begum",
+'জন্ম নিবন্ধন নাম্বারঃ 19909012345678902',
+'জন্ম তারিখঃ- 11/07/1990',
+'মোবাইল নাম্বারঃ- 01700000000'
+].join('\n');
+
+function renderAuto() {
+  setView('flow'); renderStepper(-1); hideFail();
+  const s0 = S.d.s0 || {}, s1 = S.d.s1 || {}, s2 = S.d.s2 || {}, z = S.d.s2b || {};
+  const f = s2.father || {}, m = s2.mother || {};
+  const permCopy = z.permCopy != null ? !!z.permCopy : false;
+  const presCopy = z.presCopy != null ? !!z.presCopy : false;
+  const fldI = (id, lbl, val, ph, req) => '<div class="fld"><label>' + esc(lbl) + (req ? ' <b>*</b>' : '') + '</label>' +
+    '<input type="text" id="' + id + '" value="' + esc(val || '') + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + '></div>';
+  showBody(
+    '<div class="sec"><div class="sub-h"><span class="snum">⚡</span> অটো আবেদন — এক ফর্মে সব তথ্য</div>' +
+    '<p class="hint">সব ঘর একসাথে পূরণ করে “আবেদন জমা দিন” চাপুন — ধাপগুলো নিজে থেকেই এগিয়ে যাবে। যেকোনো সময় “খসড়ায় রাখুন” চেপে থামতে পারবেন।</p></div>' +
+
+    '<div class="sec"><div class="sub-h"><span class="snum">📋</span> তথ্য পেস্ট করলেই বাকি সব ঘর ভরে যাবে</div>' +
+    '<p class="hint">যে ফরম্যাটে আপনার তথ্য আসে, সেটি হুবহু নিচে পেস্ট করে “📥 সব ঘর বসান” চাপুন — নাম, ঠিকানা, পিতা-মাতা, মোবাইল সব ঘরে বুঝে নেওয়া হবে। পেস্টের পরেও যেকোনো ঘর হাতে বদলাতে পারবেন।</p>' +
+    '<textarea id="pasteBox" rows="6" placeholder="এখানে আপনার পুরো তথ্য পেস্ট করুন…"></textarea>' +
+    '<div class="mt8"><button class="btn" id="pasteBtn">📥 সব ঘর বসান</button> ' +
+    '<button class="btn ghost" id="sampleBtn">📋 নমুনা ফরম্যাট</button></div>' +
+    '<p class="hint">“নমুনা ফরম্যাট” চাপলে নিচে একটা উদাহরণ বসবে — সেটা দেখে/কপি করে নিজের তথ্য বসিয়ে দিন, তারপর “📥 সব ঘর বসান” চাপুন।</p></div>' +
+
+    '<div class="sec"><div class="sub-h"><span class="snum">১</span> আবেদনের ভিত্তি</div></div>' +
+    '<div class="rcard' + (s0.addressType !== 'PERMANENT' ? ' sel' : '') + '" id="aBirth"><span class="rdot"></span><div><div class="rt">জন্মস্থান</div><div class="rs">জন্মস্থানের ভিত্তিতে আবেদন</div></div></div>' +
+    '<div class="rcard' + (s0.addressType === 'PERMANENT' ? ' sel' : '') + '" id="aPerm"><span class="rdot"></span><div><div class="rt">স্থায়ী ঠিকানা</div><div class="rs">স্থায়ী ঠিকানার ভিত্তিতে আবেদন</div></div></div>' +
+    '<label class="chk"><input type="checkbox" id="a_emb"' + (s0.embassy ? ' checked' : '') + '><span>বাংলাদেশ দূতাবাসে জন্ম নিবন্ধনের আবেদন (প্রযোজ্য হলে টিক দিন)</span></label>' +
+
+    '<div class="sec"><div class="sub-h"><span class="snum">২</span> নিবন্ধনাধীন ব্যক্তির পরিচিতি</div></div>' +
+    '<div class="row2">' +
+      fldI('a_f_bn', 'নামের প্রথম অংশ (বাংলা)', s1.firstNameBn, '', true) +
+      fldI('a_l_bn', 'নামের শেষ অংশ (বাংলা)', s1.lastNameBn) +
+      fldI('a_f_en', 'First Name (English)', s1.firstNameEn, '', true) +
+      fldI('a_l_en', 'Last Name (English)', s1.lastNameEn) +
+      dobFieldHtml('a_dob', 'জন্ম তারিখ (খ্রিঃ)', s1.dob, true) +
+      '<div class="fld"><label>পিতা ও মাতার কততম সন্তান <b>*</b></label>' + autoSel('a_child', FB.thChild, s1.thChild) + '</div>' +
+      '<div class="fld"><label>লিঙ্গ <b>*</b></label>' + autoSel('a_gender', FB.gender, s1.gender) + '</div>' +
+      fldI('a_country', 'দেশ', s1.country || 'বাংলাদেশ', 'যেমন: বাংলাদেশ', true) +
+    '</div>' +
+    '<h4 class="sub-h"><span class="snum">📍</span> জন্মস্থানের ঠিকানা</h4>' +
+    '<div class="row2">' +
+      fldI('geo_division', 'বিভাগ', s1.division, 'যেমন: ঢাকা', true) +
+      fldI('geo_district', 'জেলা', s1.district, 'যেমন: ঢাকা', true) +
+      fldI('geo_cityCorpUpazila', 'সিটি কর্পোরেশন / উপজেলা', s1.cityCorpUpazila, 'যেমন: সাভার') +
+      fldI('geo_paurasavaUnion', 'পৌরসভা / ইউনিয়ন', s1.paurasavaUnion, 'যেমন: সাভার ইউনিয়ন') +
+      fldI('geo_ward', 'ওয়ার্ড', s1.ward, 'যেমন: ওয়ার্ড - 1') +
+      fldI('a_postBn', 'ডাকঘর (বাংলায়)', s1.postBn, '', true) +
+      fldI('a_postEn', 'ডাকঘর (English)', s1.postEn, '', true) +
+      fldI('a_vilBn', 'গ্রাম / পাড়া / মহল্লা', s1.vilBn, '', true) +
+      fldI('a_vilEn', 'গ্রাম / Area (English)', s1.vilEn, '', true) +
+      fldI('a_houseBn', 'বাসা ও সড়ক (বাংলা)', s1.houseBn) +
+      fldI('a_houseEn', 'বাসা ও সড়ক (English)', s1.houseEn) +
+    '</div>' +
+
+    '<div class="sec"><div class="sub-h"><span class="snum">৩</span> পিতামাতার তথ্য</div>' +
+    '<p class="hint">২০১৩-এর আগে জন্ম হলে BRN ও তারিখ না দিলেও হবে — নাম অবশ্যই লাগবে।</p></div>' +
+    personAuto('af', 'পিতা', f) + personAuto('am', 'মাতা', m) +
+
+    '<div class="sec"><div class="sub-h"><span class="snum">৪</span> স্থায়ী ও বর্তমান ঠিকানা</div></div>' +
+    '<label class="chk"><input type="checkbox" id="sp_same"' + (permCopy ? ' checked' : '') + '><span>জন্মস্থানের ঠিকানা ও স্থায়ী ঠিকানা একই</span></label>' +
+    '<div id="permSec"' + (permCopy ? ' style="display:none"' : '') + '><div class="addrwrap"><div class="ah"><span class="t">স্থায়ী ঠিকানা</span>' +
+      '<button class="btn ghost small" id="spFromBirth" style="margin-left:auto">📍 জন্মস্থান থেকে বসান</button>' +
+      '<button class="btn ghost small" id="spBook" style="margin-left:8px">📚 ঠিকানা বই</button></div>' +
+      '<div class="row2">' + addrTextInputs('sp', z.perm || {}) + '</div></div></div>' +
+    '<label class="chk mt8"><input type="checkbox" id="rp_same"' + (presCopy ? ' checked' : '') + '><span>স্থায়ী ঠিকানা ও বর্তমান ঠিকানা একই</span></label>' +
+    '<div id="presSec"' + (presCopy ? ' style="display:none"' : '') + '><div class="addrwrap"><div class="ah"><span class="t">বর্তমান ঠিকানা</span>' +
+      '<button class="btn ghost small" id="rpFromPerm" style="margin-left:auto">📍 স্থায়ী ঠিকানা থেকে বসান</button>' +
+      '<button class="btn ghost small" id="rpBook" style="margin-left:8px">📚 ঠিকানা বই</button></div>' +
+      '<div class="row2">' + addrTextInputs('rp', z.pres || {}) + '</div></div></div>' +
+
+    '<div class="sec"><div class="sub-h"><span class="snum">৫</span> আবেদনকারী ও কাগজপত্র</div>' +
+    '<p class="hint">আবেদনকারী কে তা বেছে নিন। তারপর দুই ধরনের কাগজের ছবি দিন (JPG/PNG, প্রতিটি ২MB-এর কম)।</p></div>' +
+    '<div class="relgrid">' + (() => { const rl = relationsForAge(); if (!rl.includes(S.d.relation)) S.d.relation = rl[0]; return rl.map(r => '<div class="rcard rsm' + (S.d.relation === r ? ' sel' : '') + '" data-rel="' + esc(r) + '">' +
+      '<span class="rdot"></span><div><div class="rt">' + esc(r) + '</div></div></div>').join(''); })() + '</div>' +
+    '<div id="docTypes" class="hint"></div>' +
+    '<div id="docRows"></div>' +
+    '<div class="mt8"><button class="btn ghost" id="addDoc">➕ ছবি যোগ করুন</button>' +
+    '<input type="file" id="docFile" accept="image/*" multiple style="display:none"></div>' +
+
+    '<div class="sec"><div class="sub-h"><span class="snum">📞</span> যোগাযোগ (OTP এখানেই আসবে)</div></div>' +
+    '<div class="row2">' +
+      fldI('a_phone', 'মোবাইল নম্বর', S.d.phone, '01XXXXXXXXX', true) +
+      fldI('a_email', 'ইমেইল', S.d.email, 'you@example.com') +
+    '</div>'
+  );
+  const pick = (t) => {
+    S.d.s0 = S.d.s0 || {};
+    S.d.s0.addressType = t;
+    $('aBirth').classList.toggle('sel', t !== 'PERMANENT');
+    $('aPerm').classList.toggle('sel', t === 'PERMANENT');
+  };
+  $('aBirth').onclick = () => pick('BIRTHPLACE');
+  $('aPerm').onclick = () => pick('PERMANENT');
+  const toggle = () => {
+    $('permSec').style.display = $('sp_same').checked ? 'none' : '';
+    $('presSec').style.display = $('rp_same').checked ? 'none' : '';
+  };
+  $('sp_same').onchange = toggle;
+  $('rp_same').onchange = toggle;
+  $('spFromBirth').onclick = () => fillPrefixFromBirth('sp');
+  $('spBook').onclick = () => { collectAuto(); renderAddrBook((rec) => { S.d.s2b.perm = Object.assign({}, rec); renderAuto(); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
+  $('rpFromPerm').onclick = () => { fillPrefixFrom('rp', readAddrFields('sp')); note('✔ স্থায়ী ঠিকানা থেকে বসানো হয়েছে', 'ok'); };
+  $('rpBook').onclick = () => { collectAuto(); renderAddrBook((rec) => { S.d.s2b.pres = Object.assign({}, rec); renderAuto(); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
+  els('.rcard.rsm').forEach(c => c.onclick = () => {
+    S.d.relation = c.dataset.rel;
+    els('.rcard.rsm').forEach(x => x.classList.toggle('sel', x.dataset.rel === S.d.relation));
+  });
+  $('addDoc').onclick = () => $('docFile').click();
+  $('docFile').onchange = async () => {
+    const files = Array.from($('docFile').files || []);
+    $('docFile').value = '';
+    if (!files.length) return;
+    busy(true, '⏳ ছবি যোগ হচ্ছে…');
+    for (const f2 of files) {
+      if ((S.d.docs || []).length >= 6) { note('সর্বোচ্চ ৬টি কাগজ দেওয়া যাবে', 'warn'); break; }
+      const isImg = /^image\//.test(f2.type) || /\.(jpe?g|png)$/i.test(f2.name);
+      if (!isImg) { note('শুধু JPG/PNG ছবি চলবে — ' + f2.name, 'warn'); continue; }
+      if (f2.size > 2 * 1024 * 1024) { note('“' + f2.name + '” ২MB-এর বেশি — ছোট করে আবার দিন', 'warn'); continue; }
+      const d = await fileToDoc(f2);
+      if (!d) { note('“' + f2.name + '” পড়া যায়নি — আবার চেষ্টা করুন', 'warn'); continue; }
+      const st = docTypeStatus();
+      d.docType = !st.has40 ? '40' : (!st.has41 ? '41' : '40');
+      S.d.docs.push(d);
+    }
+    renderDocRows();
+    busy(false); noteOff();
+  };
+  renderDocRows();
+  $('pasteBox').value = S._pasteRaw || '';
+  $('pasteBtn').onclick = () => applyPaste();
+  $('sampleBtn').onclick = () => {
+    const t = $('pasteBox'); if (!t) return;
+    t.value = PASTE_SAMPLE; S._pasteRaw = PASTE_SAMPLE;
+    note('📋 নমুনা ফরম্যাট বসানো হয়েছে — এতে আপনার তথ্য বসিয়ে “📥 সব ঘর বসান” চাপুন', 'info');
+  };
+  const btns = [
+    { html: '🚀 আবেদন জমা দিন', fn: () => submitAuto() },
+    { html: '👁️ প্রিভিউ দেখুন', cls: 'ghost', fn: () => autoPreview() },
+    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectAuto(); saveDraft(0, () => note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে পরে চালু করতে পারবেন', 'ok')); } },
+    { html: '← ফিরে যান', cls: 'ghost', fn: () => renderHome() }
+  ];
+  if (new URLSearchParams(location.search).has('demo')) btns.push({ html: '🧪 ডেমো তথ্য', cls: 'ghost small', fn: () => fillDemo() });
+  setBtns(btns);
+}
+function personAuto(p, lbl, o) {
+  const pre = isPre2013Client((S.d.s1 || {}).dob);
+  const fldI = (id, l, val, ph, req) => '<div class="fld"><label>' + esc(l) + (req ? ' <b>*</b>' : '') + '</label>' +
+    '<input type="text" id="' + id + '" value="' + esc(val || '') + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + '></div>';
+  return '<div class="addrwrap"><div class="ah"><span class="t">' + esc(lbl) + 'র তথ্য</span>' +
+    (pre ? '<span class="vbadge warn">২০১৩-পূর্ব — BRN ছাড়াও হবে</span>' : '') + '</div><div class="row2">' +
+    fldI(p + '_brn', 'জন্ম নিবন্ধন নম্বর (BRN)', o.brn, '১৭ ডিজিটের নম্বর', !pre) +
+    dobFieldHtml(p + '_dob', 'জন্ম তারিখ (খ্রিঃ)', o.dob, !pre) +
+    fldI(p + '_bn', 'নাম (বাংলায়)', o.nameBn, '', true) +
+    fldI(p + '_en', 'নাম (English)', o.nameEn, '', true) +
+    '<div class="fld"><label>জাতীয়তা</label>' + autoSel(p + '_nat', FB.nationality, o.nationality || 'বাংলাদেশী') + '</div>' +
+    '</div></div>';
+}
+function readPersonAuto(p) {
+  return {
+    brn: ($(p + '_brn').value || '').trim(),
+    dob: readDobIso(p + '_dob'),
+    nameBn: ($(p + '_bn').value || '').trim(),
+    nameEn: ($(p + '_en').value || '').trim(),
+    nationality: $(p + '_nat').value || 'বাংলাদেশী'
+  };
+}
+function collectAuto() {
+  S.d = S.d || {};
+  S.d.s0 = { addressType: (S.d.s0 && S.d.s0.addressType) || 'BIRTHPLACE', embassy: !!(($('a_emb') || {}).checked) };
+  S.d.s1 = {
+    firstNameBn: ($('a_f_bn').value || '').trim(), lastNameBn: ($('a_l_bn').value || '').trim(),
+    firstNameEn: ($('a_f_en').value || '').trim(), lastNameEn: ($('a_l_en').value || '').trim(),
+    dob: readDobIso('a_dob'), thChild: $('a_child').value || '', gender: $('a_gender').value || '',
+    country: $('a_country').value || 'বাংলাদেশ',
+    division: ($('geo_division').value || '').trim(), district: ($('geo_district').value || '').trim(),
+    cityCorpUpazila: ($('geo_cityCorpUpazila').value || '').trim(), paurasavaUnion: ($('geo_paurasavaUnion').value || '').trim(),
+    ward: ($('geo_ward').value || '').trim(),
+    postBn: ($('a_postBn').value || '').trim(), postEn: ($('a_postEn').value || '').trim(),
+    vilBn: ($('a_vilBn').value || '').trim(), vilEn: ($('a_vilEn').value || '').trim(),
+    houseBn: ($('a_houseBn').value || '').trim(), houseEn: ($('a_houseEn').value || '').trim()
+  };
+  S.d.s2 = { father: readPersonAuto('af'), mother: readPersonAuto('am') };
+  S.d.s2b = {
+    permCopy: $('sp_same').checked, presCopy: $('rp_same').checked,
+    perm: $('sp_same').checked ? null : readAddrFields('sp'),
+    pres: $('rp_same').checked ? null : readAddrFields('rp')
+  };
+  S.d.phone = ($('a_phone').value || '').replace(/[^\d]/g, '');
+  S.d.email = ($('a_email').value || '').trim();
+  return S.d;
+}
+function validateAuto() {
+  const bad = [];
+  const mark = (id) => { const e = $(id); if (e) e.classList.add('bad'); };
+  const s1 = S.d.s1, s2 = S.d.s2, z = S.d.s2b;
+  if (!s1.firstNameBn) { bad.push('নামের প্রথম অংশ (বাংলা)'); mark('a_f_bn'); }
+  if (!s1.firstNameEn) { bad.push('First Name (English)'); mark('a_f_en'); }
+  if (!s1.dob) { bad.push('জন্ম তারিখ (DD/MM/YYYY)'); mark('a_dob'); }
+  if (!s1.division) { bad.push('বিভাগ'); mark('geo_division'); }
+  if (!s1.district) { bad.push('জেলা'); mark('geo_district'); }
+  // সাইটের নিয়ম: জন্মস্থান-ঠিকানায় সিটি কর্পোরেশন/উপজেলা, পৌরসভা/ইউনিয়ন ও ওয়ার্ড বাধ্যতামূলক
+  if (!s1.cityCorpUpazila) { bad.push('সিটি কর্পোরেশন / উপজেলা'); mark('geo_cityCorpUpazila'); }
+  if (!s1.paurasavaUnion) { bad.push('পৌরসভা / ইউনিয়ন'); mark('geo_paurasavaUnion'); }
+  if (!s1.ward) { bad.push('ওয়ার্ড'); mark('geo_ward'); }
+  if (!s1.postBn) { bad.push('ডাকঘর (বাংলায়)'); mark('a_postBn'); }
+  if (!s1.postEn) { bad.push('ডাকঘর (English)'); mark('a_postEn'); }
+  if (!s1.vilBn) { bad.push('গ্রাম / পাড়া / মহল্লা'); mark('a_vilBn'); }
+  if (!s1.vilEn) { bad.push('গ্রাম / Area (English)'); mark('a_vilEn'); }
+  const pre = isPre2013Client(s1.dob);
+  [['af', 'পিতা'], ['am', 'মাতা']].forEach(([p, who]) => {
+    const o = p === 'af' ? s2.father : s2.mother;
+    if (!o.nameBn) { bad.push(who + '-এর নাম (বাংলায়)'); mark(p + '_bn'); }
+    if (!o.nameEn) { bad.push(who + '-এর নাম (English)'); mark(p + '_en'); }
+    if (!pre && !o.brn) { bad.push(who + '-এর BRN'); mark(p + '_brn'); }
+    if (!pre && !o.dob) { bad.push(who + '-এর জন্ম তারিখ (DD/MM/YYYY)'); mark(p + '_dob'); }
+  });
+  const need = (o, who, pf) => ['division', 'district', 'cityCorpUpazila', 'paurasavaUnion', 'postBn', 'postEn', 'vilBn', 'vilEn'].forEach(k => {
+    if (!o[k]) { bad.push(who + ' — ' + ({ division: 'বিভাগ', district: 'জেলা', cityCorpUpazila: 'উপজেলা', paurasavaUnion: 'ইউনিয়ন', postBn: 'ডাকঘর (বাংলা)', postEn: 'ডাকঘর (English)', vilBn: 'গ্রাম/পাড়া', vilEn: 'গ্রাম (English)' }[k])); mark(pf + '_' + k); }
+  });
+  if (!z.permCopy && z.perm) need(z.perm, 'স্থায়ী ঠিকানা', 'sp');
+  if (!z.presCopy && z.pres) need(z.pres, 'বর্তমান ঠিকানা', 'rp');
+  const st = docTypeStatus();
+  if (!st.n) bad.push('কমপক্ষে ১টি কাগজের ছবি যোগ করুন');
+  else if (!(st.has40 && st.has41)) bad.push('দুই ধরনের কাগজ দরকার — ধরন ৪০ ও ৪১ দুটোই চিহ্নিত করুন');
+  if (!/^01\d{9}$/.test(S.d.phone)) { bad.push('মোবাইল নম্বর (১১ ডিজিট, 01 দিয়ে শুরু)'); mark('a_phone'); }
+  if (S.d.email && !/^\S+@\S+\.\S+$/.test(S.d.email)) { bad.push('ইমেইল ঠিক নেই'); mark('a_email'); }
+  return bad;
+}
+function submitAuto() {
+  collectAuto();
+  const bad = validateAuto();
+  if (bad.length) {
+    showFail(bad); note('⚠️ কিছু ঘর পূরণ করুন', 'warn');
+    const f = el('.bad'); if (f) f.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  hideFail();
+  ensureReady(() => {
+    runChain(OPS, () => { autoPrep(); }, 'আবেদন প্রস্তুত হচ্ছে');
+  });
+}
+function autoPrep() {
+  busy(true, '⏳ ওটিপি পাঠানো হচ্ছে…');
+  emitStep('SUBMIT_S4_PREP', { email: S.d.email || '', phone: S.d.phone || '' });
+}
+function fillDemo() {
+  const set = (id, v) => { const e = $(id); if (e) e.value = v; };
+  const pickR = (id) => { const e = $(id); if (e) e.click(); };
+  pickR('aBirth');
+  set('a_f_bn', 'করিম'); set('a_l_bn', 'মিয়া'); set('a_f_en', 'Karim'); set('a_l_en', 'Mia');
+  set('a_dob', '15/03/2010');
+  const ch = $('a_child'); if (ch) { ch.value = '১ম'; if (!ch.value) ch.selectedIndex = 0; }
+  set('geo_division', 'ঢাকা'); set('geo_district', 'ঢাকা'); set('geo_cityCorpUpazila', 'সাভার');
+  set('geo_paurasavaUnion', 'সাভার ইউনিয়ন'); set('geo_ward', 'ওয়ার্ড - 1');
+  set('a_postBn', 'সাভার'); set('a_postEn', 'Savar'); set('a_vilBn', 'পূর্ব পাড়া'); set('a_vilEn', 'Purbo Para');
+  set('af_bn', 'আব্দুল করিম'); set('af_en', 'Abdul Karim');
+  set('am_bn', 'রহিমা বেগম'); set('am_en', 'Rahima Begum');
+  if ($('sp_same') && !$('sp_same').checked) $('sp_same').click();
+  if ($('rp_same') && !$('rp_same').checked) $('rp_same').click();
+  set('a_phone', '01712345678'); set('a_email', 'test@example.com');
+  showFail(null);
+  note('🧪 ডেমো তথ্য বসানো হয়েছে — ছবি যোগ করে জমা দিলেই হবে', 'info');
+}
+
+/* ═══════════ ধাপ-চেইন ইঞ্জিন (অটো মোড ও খসড়া চালুর জন্য) ═══════════ */
+const OPS = [
+  { label: 'আবেদনের ভিত্তি', op: 'SUBMIT_S0', step: 2 },
+  { label: 'ব্যক্তির পরিচিতি', op: 'SUBMIT_S1', step: 3 },
+  { label: 'পিতামাতার তথ্য', op: 'SUBMIT_S2', step: 4 },
+  { label: 'ঠিকানা', op: 'SUBMIT_S2B', step: 5 },
+  { label: 'ডকুমেন্ট', op: 'SUBMIT_S3_DOCS', step: 6 }
+];
+function payloadFor(op) {
+  if (op === 'SUBMIT_S0') return S.d.s0;
+  if (op === 'SUBMIT_S1') return Object.assign({ docsAvailable: true }, S.d.s1);
+  if (op === 'SUBMIT_S2') return Object.assign({}, S.d.s2, { applicantDob: S.d.s1.dob });
+  if (op === 'SUBMIT_S2B') return Object.assign({}, S.d.s2b);
+  if (op === 'SUBMIT_S3_DOCS') return { relation: S.d.relation || defaultRelation(), docs: S.d.docs || [] };
+  if (op === 'SUBMIT_S4_PREP') return { email: S.d.email || '', phone: S.d.phone || '' };
+  return {};
+}
+function runChain(ops, onDone, title) {
+  S.chain = { ops: ops.slice(), k: 0, onDone: onDone || null, title: title || 'আবেদন প্রস্তুত হচ্ছে' };
+  renderProgress(S.chain.title);
+  chainSend();
+}
+function renderProgress(title) {
+  setView('progress'); renderStepper(-1); hideFail();
+  const c = S.chain; if (!c) return;
+  showBody(
+    '<div class="sec"><div class="sub-h"><span class="snum">⚙️</span> ' + esc(title) + '</div>' +
+    '<p class="hint">প্রতিটি ধাপ শেষ হলে নিচে ✔ আসবে — আপনি শুধু অপেক্ষা করুন। যেকোনো সময় থামিয়ে খসড়ায় রাখতে পারবেন।</p></div>' +
+    '<div>' + c.ops.map((o, i) => '<div class="prow" id="pr' + i + '"><span class="pdot">' + (i < c.k ? '✓' : (i + 1)) + '</span>' +
+      '<span>' + esc(o.label) + '</span><span class="pt"></span></div>').join('') + '</div>'
+  );
+  updProws();
+  setBtns([{ html: '⏸️ খসড়ায় রেখে বেরোন', cls: 'ghost', fn: () => abortChain() }]);
+}
+function updProws() {
+  const c = S.chain; if (!c) return;
+  c.ops.forEach((o, i) => {
+    const p = $('pr' + i); if (!p) return;
+    if (i < c.k) { p.className = 'prow done'; p.querySelector('.pdot').textContent = '✓'; p.querySelector('.pt').textContent = 'সম্পন্ন'; }
+    else if (i === c.k) { p.className = 'prow active'; p.querySelector('.pdot').textContent = String(i + 1); p.querySelector('.pt').textContent = 'চলছে…'; }
+    else { p.className = 'prow'; p.querySelector('.pdot').textContent = String(i + 1); p.querySelector('.pt').textContent = 'অপেক্ষায়'; }
+  });
+}
+function chainSend() {
+  const c = S.chain; if (!c) return;
+  const o = c.ops[c.k]; if (!o) return;
+  updProws();
+  busy(true, '⏳ ' + o.label + ' — একটু অপেক্ষা করুন…');
+  emitStep(o.op, payloadFor(o.op));
+}
+function chainAck(d) {
+  const c = S.chain; if (!c) return;
+  opFinish();
+  const o = c.ops[c.k] || {};
+  const failed = Array.isArray(d.failed) ? d.failed : [];
+  if (d.relationBn) S.d.relation = d.relationBn;
+  if (d.blocked || failed.length) {
+    const p = $('pr' + c.k); if (p) p.className = 'prow err';
+    if (o.op) dropSent(o.op); // ব্যর্থ ধাপ সাইটে যাওয়া গণ্য নয় — রিট্রাই আবার পাঠাবে
+    showFail(failed.map(f => (f.field ? f.field + ' — ' : '') + (f.reason || 'সমস্যা হয়েছে')));
+    note('⚠️ ' + san(d.message || 'কিছু তথ্য মিলছে না — ঠিক করে আবার চেষ্টা করুন'), 'warn');
+    setBtns([
+      { html: '🔁 আবার চেষ্টা করুন', fn: () => { hideFail(); note('⏳ আবার চেষ্টা করা হচ্ছে…', 'info'); chainSend(); } },
+      { html: '⏸️ খসড়ায় রেখে বেরোন', cls: 'ghost', fn: () => abortChain() }
+    ]);
+    return;
+  }
+  hideFail();
+  S.d.uiStep = parseInt(d.step, 10) || S.d.uiStep || (o.step || S.d.uiStep);
+  if (S.draftId) saveDraft(S.d.uiStep, () => {});
+  const p = $('pr' + c.k); if (p) { p.className = 'prow done'; const t = p.querySelector('.pt'); if (t) t.textContent = 'সম্পন্ন'; const dt = p.querySelector('.pdot'); if (dt) dt.textContent = '✓'; }
+  c.k++;
+  if (c.k < c.ops.length) { note('✔ ' + o.label + ' সম্পন্ন', 'ok'); chainSend(); }
+  else {
+    S.chain = null;
+    S._staleAcks = 0;
+    note('✔ সব ধাপ শেষ! এখন ওটিপি দিলেই আবেদন জমা হবে।', 'ok');
+    const f = c.onDone; if (f) f();
+  }
+}
+function abortChain() {
+  S.chain = null;
+  opAbort();
+  S._staleAcks = 0;
+  saveDraft(S.d.uiStep || 0, () => { note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে পরে চালু করুন', 'ok'); setTimeout(renderHome, 500); });
+}
+/* অটো-চেইন শেষ হওয়ার পরের ধাপ: ওটিপি-প্রস্তুতির ack (progress view-তে chain আর থাকে না) */
+function otpPrepAck(d) {
+  busy(false);
+  opFinish();
+  const failed = Array.isArray(d.failed) ? d.failed : [];
+  if (d.relationBn) S.d.relation = d.relationBn;
+  if (d.resumable) {
+    opAbort();
+    note('🔄 নতুন সেশন — তথ্যগুলো আবার বসানো হচ্ছে…', 'info');
+    S.chain = { ops: OPS.slice(), k: 0, onDone: () => autoPrep(), title: 'তথ্য আবার বসানো হচ্ছে' };
+    renderProgress(S.chain.title); chainSend();
+    return;
+  }
+  if (d.blocked || failed.length) {
+    if (failed.length) showFail(failed.map(x => (x.field ? x.field + ' — ' : '') + (x.reason || 'সমস্যা হয়েছে')));
+    note('⚠️ কোড পাঠানো যায়নি — “আবার চেষ্টা করুন” চাপুন', 'warn');
+    setBtns([
+      { html: '🔁 আবার চেষ্টা করুন', fn: () => { hideFail(); note('⏳ আবার চেষ্টা করা হচ্ছে…', 'info'); autoPrep(); } },
+      { html: '⏸️ খসড়ায় রেখে বেরোন', cls: 'ghost', fn: () => abortChain() }
+    ]);
+    return;
+  }
+  hideFail();
+  note('📲 কোড পাঠানো হয়েছে — মোবাইলে এসেছে কি না দেখুন', 'ok');
+  renderOtpCode();
+}
+
+/* ═══════════ session প্রস্তুতি (নাগরিক কখনো আটকাবে না) ═══════════ */
+function ensureReady(cb) {
+  if (S.ready) { cb(); return; }
+  (S._readyQ = S._readyQ || []).push(cb);
+  if (!S.starting) {
+    S.starting = true;
+    note('⏳ সংযোগ প্রস্তুত হচ্ছে… (একটু অপেক্ষা করুন)', 'info');
+    socket.emit('START_BDRIS_SESSION');
+  }
+}
+function sessionLost() {
+  S.ready = false; S.starting = false;
+  busy(false);
+  opAbort();
+  showBanner('warn', '⚠️ সংযোগটি একটু দুর্বল হয়ে গেছে — আপনার তথ্য নিরাপদে আছে। “আবার চেষ্টা করুন” চাপলেই বাকিটা এগিয়ে যাবে।', () => retrySession(), 'আবার চেষ্টা করুন');
+  note('⏸️ সংযোগ প্রস্তুত করা দরকার', 'warn');
+}
+function retrySession() {
+  hideBanner();
+  ensureReady(() => {
+    if (S.chain) {
+      S.chain.k = 0;
+      note('⏳ শুরু থেকে আবার সাজানো হচ্ছে — তথ্য হারায়নি', 'info');
+      renderProgress(S.chain.title);
+      chainSend();
+    } else {
+      note('✅ সংযোগ প্রস্তুত — আবার চেষ্টা করুন', 'ok');
+    }
+  });
+}
+
+/* ═══════════ STEP_CHANGE_ACK রাউটিং ═══════════ */
+function manualStepAck(d) {
+  const op = S._waitingAck;
+  // সেশন-নতুন হওয়ার মেরামতে বাতিল-হওয়া পুরনো ধাপের ack এলে চুপচাপ গিলে ফেলি
+  const staleAck = (S._staleAcks || 0) > 0 && (Date.now() - (S._staleAcksAt || 0)) < 180000;
+  if ((S._staleAcks || 0) > 0) S._staleAcks--;
+  opFinish();
+  // ack এসেই গেছে মানে এই ধাপের কাজ শেষ — বাটন আবার চালু (S4_OTP সাবমিট বাদেঃ
+  // সেটার সাফল্য DONE-ইভেন্টে গিয়ে ধরা পড়ে, ততক্ষণ ডাবল-চাপ আটকে রাখি)
+  if (op !== 'SUBMIT_S4_OTP') busy(false);
+  const failed = Array.isArray(d.failed) ? d.failed : [];
+  if (d.relationBn) S.d.relation = d.relationBn;
+  if (d.resumable) {
+    if (staleAck) { opAbort(); return; } // পুরনো ধাপ — নতুন সেশনে আর দরকার নেই
+    // লকস্টেপ: নতুন সেশন মানেই বট নিজে পুরো চেইন চালাবে না — ইউজারের সেই ক্লিকের ধাপটিই
+    // (এক চাপে) আবার পাঠানোর সুযোগ দিই; ব্যাকএন্ডের ensureAligned আগের ধাপগুলো নিজে সাজায়
+    opAbort();
+    if (op === 'SUBMIT_S4_OTP') { note('🔄 সংযোগ নতুন — আবার কোড পাঠিয়ে জমা দিতে হবে', 'warn'); if (S.otpStage !== 'code') renderOtpCode(); return; }
+    if (op === 'SUBMIT_S4_PREP') {
+      // নতুন সেশনে সাইট ধাপ ১-এ ফিরে গেছে — কাগজপত্র ছাড়া ওটিপি-ধাপে ফেরা যায় না
+      // (ধাপ ৫-এর “পরবর্তী”তেই ব্যাকএন্ড বাকি ধাপগুলো সাইটে নিজে সাজিয়ে দেয়), তাই সেখানেই ফিরিয়ে নিই
+      dropSent('SUBMIT_S3_DOCS'); // পুরনো রেকর্ড বাতিল — একই ছবি আবার দিলেও যেন সাইটে যায়
+      note('🔄 সংযোগ নতুন — কাগজপত্রের ধাপ থেকে আবার এগোনো দরকার', 'warn');
+      showBanner('warn', '⚠️ নতুন সংযোগ হয়েছে — আপনার তথ্য সব হাতেই আছে। কাগজপত্রের ধাপ থেকে আবার এগোলেই বাকিটা নিজে থেকে বসে যাবে।', () => {
+        hideBanner(); goStep(5);
+        note('📎 ২টি কাগজ আবার যোগ করে “পরবর্তী →” চাপুন — বাকি ধাপগুলো সাইটে নিজে থেকেই বসবে', 'info');
+      }, '📎 কাগজপত্রে ফিরুন');
+      return;
+    }
+    const rp = op ? payloadFor(op) : null;
+    if (rp) {
+      note('🔄 সংযোগ নতুন — তথ্য আপনার হাতেই আছে', 'info');
+      showBanner('warn', '⚠️ সংযোগ নতুন করে সাজানো দরকার — এক চাপে আগের ধাপটি আবার বসবে।', () => {
+        hideBanner(); note('⏳ আপনার ধাপটি আবার বসানো হচ্ছে…', 'info'); emitStep(op, rp);
+      }, 'আবার চেষ্টা করুন');
+    }
+    return;
+  }
+  if (d.verifyStatus && typeof d.verifyStatus === 'object') {
+    if ('father' in d.verifyStatus) S.verify.father = d.verifyStatus.father;
+    if ('mother' in d.verifyStatus) S.verify.mother = d.verifyStatus.mother;
+  }
+  if (d.blocked || failed.length) {
+    if (staleAck) { if (op) dropSent(op); return; } // পুরনো ধাপের ব্যর্থতা — মেরামত চলছে, নীরব থাকি
+    if (failed.length) showFail(failed.map(x => (x.field ? x.field + ' — ' : '') + (x.reason || 'সমস্যা হয়েছে')));
+    note('⚠️ ' + san(d.message || 'কিছু মিলছে না — ঠিক করে আবার চেষ্টা করুন'), 'warn');
+    if (op) dropSent(op); // ব্যর্থ ধাপ সাইটে যাওয়া গণ্য নয় — রিট্রাই আবার পাঠাবে
+    opAbort();
+    busy(false); // আটকে গেলে বাটন আবার চালু — নইলে রিট্রাই/খসড়া কিছুই চাপা যায় না
+    // সাইট যোগাযোগ ধাপে নেই (মাঝপথে/চেনা যায়নি) — রিট্রাই করলে আবার একই ফল আসবে;
+    // কাগজপত্রের ধাপ থেকে এগোলেই ensureAligned পুরো পথ সাজিয়ে যোগাযোগে পৌঁছে দেয়
+    if (op === 'SUBMIT_S4_PREP' && failed.some(x => /পেজ পাওয়া যায়নি/.test(x.reason || ''))) {
+      dropSent('SUBMIT_S3_DOCS'); // পুরনো রেকর্ড বাতিল — একই ছবি আবার দিলেও যেন সাইটে যায়
+      showBanner('warn', '⚠️ সাইট এখন যোগাযোগের ধাপে নেই — কাগজপত্রের ধাপ থেকে আবার এগোলেই বাকিটা নিজে থেকে বসে যাবে।', () => {
+        hideBanner(); goStep(5);
+        note('📎 ২টি কাগজ আবার যোগ করে “পরবর্তী →” চাপুন — বাকি ধাপগুলো সাইটে নিজে থেকেই বসবে', 'info');
+      }, '📎 কাগজপত্রে ফিরুন');
+      return;
+    }
+    // পরের ধাপ ইউজার নিজে চাপলে ব্যাকএন্ডের ensureAligned সাইটকে মেরামত করে নেবে —
+    // এখানে কেবল একটি ভদ্র রিট্রাই-ব্যানার দিই (বট নিজে কিছু পাঠায় না)
+    const rp = (op && op !== 'SUBMIT_S4_OTP') ? payloadFor(op) : null;
+    if (rp) {
+      showBanner('warn', '⚠️ একটি ধাপে সমস্যা হয়েছে — ঠিক করা দরকার।', () => {
+        hideBanner(); note('⏳ আবার পাঠানো হচ্ছে…', 'info'); emitStep(op, rp);
+      }, op === 'SUBMIT_S4_PREP' ? 'আবার কোড পাঠান' : 'আবার চেষ্টা করুন');
+    }
+    return;
+  }
+  hideBanner();
+  hideFail();
+  // সফল ack → এই ধাপ সাইটে বসে গেছে: uiStep এগোই। ফলে পেছনে গিয়ে তথ্য না বদলে
+  // “পরবর্তী” চাপলে সাইটে আবার পাঠানো হয় না — শুধু UI এগোয় (ডুপ্লিকেট নয়)।
+  // (stale ack — নতুন সেশনের পুরনো উত্তর — গণনায় ধরা হয় না)
+  if (op && op !== 'SUBMIT_S4_OTP' && !staleAck) {
+    const oi = OPS.findIndex(o => o.op === op);
+    if (oi >= 0) S.d.uiStep = Math.max(S.d.uiStep || 0, OPS[oi].step || 0);
+  }
+  if (op === 'SUBMIT_S4_PREP') {
+    note('📲 কোড পাঠানো হয়েছে — মোবাইলে এসেছে কি না দেখুন', 'ok');
+    if (S.otpStage !== 'code') { if (S.pvMode && S.mode === 'auto') showPvOtp(); else renderOtpCode(); }
+    else busy(false);
+    return;
+  }
+  if (op === 'SUBMIT_S4_OTP') return;
+  // ম্যানুয়াল মোড: UI আগেই এগিয়ে গেছে (অপ্টিমিস্টিক) — এখানে বাড়তি কিছু নেই
+}
+
+/* ═══════════ socket events ═══════════ */
+socket.on('STEP_CHANGE_ACK', (d) => {
+  d = (d && typeof d === 'object') ? d : {};
+  if (S.view === 'progress' && S.chain) { chainAck(d); return; }
+  if (S.view === 'progress' && S._waitingAck === 'SUBMIT_S4_PREP') { otpPrepAck(d); return; }
+  if (S.view === 'flow') { manualStepAck(d); return; }
+  // অন্য ভিউ (done/home/status): ack এসে পৌঁছালে op-অবস্থা অবশ্যই ছেড়ে দিই —
+  // নইলে _opBusy/_waitingAck আটকে থেকে পরের ক্লিকগুলো চিরতরে “এক মুহূর্ত পরে” বলে ফিরে যায়
+  opFinish();
+});
+socket.on('BOT_STATUS', (d) => {
+  d = (d && typeof d === 'object') ? d : {};
+  const st = d.status;
+  // চলন্ত অপের জীবিত-খবর — guardOpBusy-র সময়সীমা রিফ্রেশ করি
+  if (S._opBusy && (st === 'PROGRESS' || st === 'LOADING' || st === 'OTP_WAITING' || st === 'READY')) S._opStartedAt = Date.now();
+  if (st === 'READY') {
+    S.ready = true; S.starting = false;
+    hideBanner();
+    if (d.fresh && S.view === 'flow' && S.d && (S.d.uiStep || 0) > 0) {
+      // cold start: প্রথম ধাপের অপ এখনো পাঠানোই হয়নি (queue-তে বসে সেশনের অপেক্ষা) —
+      // তখন bounce করলে ব্যবহারকারীর ক্লিক বৃথা যায়; queue আগে চলতে দিই
+      const pendingUnsent = (S._opQ || []).length > 0 && !S._sentAny;
+      if (!pendingUnsent) {
+        // সাইটের সেশন সত্যিই নতুন (আগের ধাপগুলো সাইটে হারিয়ে গেছে) — UI ধাপ ১ থেকে সাজাই
+        S.d.uiStep = 0;
+        resetSent(); // সাইট খালি — ধাপ-রেকর্ডও খালি
+        opAbort();
+        note('🔄 সংযোগ নতুন — ধাপ ১ থেকে আবার সাজানো হবে (তথ্য আপনার হাতেই আছে)', 'info');
+        goStep(1);
+      }
+    } else {
+      note('✅ সংযোগ প্রস্তুত!', 'ok');
+    }
+    const q = S._readyQ || []; S._readyQ = [];
+    q.forEach(f => { try { f(); } catch (e) { console.error(e); } });
+    return;
+  }
+  if (st === 'LOADING') { note('⏳ সংযোগ প্রস্তুত হচ্ছে…', 'info'); return; }
+  if (st === 'PROGRESS' || st === 'OTP_WAITING') {
+    const lv = ['ok', 'warn', 'err', 'info'].includes(d.level) ? d.level : 'info';
+    note(san(d.message || 'প্রক্রিয়া চলছে…'), lv);
+    return;
+  }
+  if (st === 'ORIGINAL_PDF') {
+    const ono = String(d.ackId || '').replace(/\D/g, '');
+    const u = d.ok && d.original ? d.original : null;
+    if (ono && u) ORIG_READY[ono] = u;
+    const el = $('akOrigPend');
+    if (u) {
+      if (el) {
+        el.disabled = false; el.className = 'btn'; el.style.opacity = '';
+        el.textContent = '⬇️ আসল PDF (কার্যালয়ের কপি)';
+        el.onclick = () => downloadOriginal(u, ono);
+      }
+      // অটো-ডাউনলোড শুধু কেউ চাইলে: অঙ্ক-মিল অথবা খালি (সর্বশেষ রেকর্ড) চাওয়া হলে
+      const wantDl = S._origAutoDl != null
+        && (String(S._origAutoDl).replace(/\D/g, '') === ono || String(S._origAutoDl).replace(/\D/g, '') === '');
+      if (ono && wantDl) {
+        if (!ORIG_AUTODLED[ono]) { ORIG_AUTODLED[ono] = 1; downloadOriginal(u, ono); }
+      } else {
+        note('✅ আসল PDF (কার্যালয়ের কপি) প্রস্তুত', 'ok');
+      }
+    } else if (el) {
+      el.disabled = false; el.style.opacity = '';
+      el.textContent = '⬇️ আসল PDF আবার আনুন';
+      el.onclick = () => { note('⏳ আসল কপি আনা হচ্ছে…', 'info'); if (ono) socket.emit('FETCH_ORIGINAL', { ack: ono }); };
+    }
+    return;
+  }
+  if (st === 'STATUS_OTP') {
+    busy(false);
+    note(san(d.message || '📲 কোড পাঠানো হয়েছে — মোবাইলে আসা কোডটি বসান।'), 'ok');
+    renderStatusOtp();
+    return;
+  }
+  if (st === 'STATUS_RESULT') { busy(false); renderStatusResult(d); return; }
+  if (st === 'STATUS_ERROR') {
+    busy(false);
+    const smsg = san(d.message || 'সাময়িক সমস্যা — আবার চেষ্টা করুন');
+    if (S.view === 'status' && (S.status || {}).stage === 'otp') {
+      renderStatusOtp();
+      showFail([smsg.replace(/^❌\s*/, '')]);
+    } else if (S.view === 'status') {
+      showBanner('err', smsg, () => { hideBanner(); renderStatusLogin(); }, 'আবার চেষ্টা করুন');
+    } else {
+      note(smsg, 'err');
+    }
+    return;
+  }
+  if (st === 'COMPLETED') {
+    busy(false);
+    opAbort();
+    S.otpStage = 'done';
+    showDone(d);
+    return;
+  }
+  if (st === 'ERROR') {
+    busy(false);
+    const diedOp = S._waitingAck;
+    const msg = String(d.message || 'সাময়িক সমস্যা হয়েছে');
+    if (/চালু হয়নি|সংযোগ নেই/.test(msg)) { sessionLost(); return; }
+    if (diedOp) dropSent(diedOp); // ব্যর্থ ধাপ সাইটে যাওয়া গণ্য নয় — রিট্রাই আবার পাঠাবে
+    opAbort();
+    if (S.otpStage === 'submitting' && /OTP|কোড/i.test(msg)) {
+      S.otpStage = 'code';
+      if (S.pvMode && S.mode === 'auto') showPvOtp(); else renderOtpCode();
+      note(san(msg), 'err');
+      return;
+    }
+    if (S.view === 'progress' && S.chain) {
+      const p = $('pr' + S.chain.k); if (p) p.className = 'prow err';
+      showFail([san(msg)]);
+      setBtns([
+        { html: '🔁 আবার চেষ্টা করুন', fn: () => { hideFail(); note('⏳ আবার চেষ্টা করা হচ্ছে…', 'info'); chainSend(); } },
+        { html: '⏸️ খসড়ায় রেখে বেরোন', cls: 'ghost', fn: () => abortChain() }
+      ]);
+      return;
+    }
+    if (S.view === 'progress' && diedOp === 'SUBMIT_S4_PREP') {
+      showFail([san(msg)]);
+      setBtns([
+        { html: '🔁 আবার চেষ্টা করুন', fn: () => { hideFail(); note('⏳ আবার চেষ্টা করা হচ্ছে…', 'info'); autoPrep(); } },
+        { html: '⏸️ খসড়ায় রেখে বেরোন', cls: 'ghost', fn: () => abortChain() }
+      ]);
+      return;
+    }
+    note(san(msg), 'err');
+    // ম্যানুয়াল মোড: ধাপটি সার্ভারে শেষ হয়নি — এক চাপে আবার পাঠানোর সুযোগ
+    if (S.view === 'flow' && diedOp && diedOp !== 'SUBMIT_S4_OTP' && diedOp !== 'SUBMIT_S4_PREP') {
+      showBanner('err', '⚠️ একটি ধাপ শেষ হয়নি — ঠিক করা দরকার।', () => {
+        hideBanner(); note('⏳ আবার পাঠানো হচ্ছে…', 'info'); emitStep(diedOp, payloadFor(diedOp));
+      }, 'আবার চেষ্টা করুন');
+    }
+    return;
+  }
+  if (st === 'SESSION_TIMEOUT' || st === 'IDLE') {
+    S.ready = false; S.starting = false;
+    if (S.view === 'done') return;
+    sessionLost();
+    return;
+  }
+});
+
+/* ═══════════ init ═══════════ */
+renderHome();
+updDraftsCnt();
+$('draftsBtn').onclick = () => renderDrafts();
+$('addrBtn').onclick = () => renderAddrBook(null, () => renderHome());
+$('brandHome').onclick = () => renderHome();
+</script>
+</body>
+</html>

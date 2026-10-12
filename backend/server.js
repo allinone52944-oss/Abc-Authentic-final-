@@ -164,6 +164,40 @@ try {
   safeLog('[engines] nid-replica not mounted:', e.message);
 }
 
+// ---- BDRIS Apply engine (as-is bot, auth + strict limit) -------------
+// The engine folder is an as-is copy of Bdris-apply-v2-CLEAN-v23.zip
+// (BDRIS Auto-fill Bot v6: Express + Socket.IO + Playwright).
+// The adapter (engines/bdris-apply/index.js) spawns it as a subprocess
+// on 127.0.0.1:3102 and reverse-proxies /api/bdris-apply/* to it
+// (HTTP + WebSocket for Socket.IO). No engine logic is modified.
+// Wallet charging (both admin-configurable):
+//   POST /api/bdris-apply/charge/submit → service price (services table)
+//   POST /api/bdris-apply/charge/pdf    → settings 'bdris_apply.pdf_price'
+// Engine deps (VM): cd engines/bdris-apply && npm install
+//   (playwright downloads ~170MB browser on first run)
+const bdrisApplyLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'RATE_LIMITED' },
+});
+let bdrisApplyAdapter = null;
+try {
+  bdrisApplyAdapter = require('../engines/bdris-apply/index.js');
+  bdrisApplyAdapter.init();
+  const bdrisApplyRoutes = require('./routes/bdris-apply');
+  // Charge endpoints first (Express tries these before the proxy fallback).
+  //   POST /api/bdris-apply/charge/submit, POST /api/bdris-apply/charge/pdf,
+  //   GET  /api/bdris-apply/prices
+  // Everything else falls through to the engine subprocess proxy.
+  app.use('/api/bdris-apply', requireAuth, bdrisApplyLimiter, bdrisApplyRoutes);
+  app.use('/api/bdris-apply', requireAuth, bdrisApplyLimiter, bdrisApplyAdapter.getApp());
+  safeLog('[engines] mounted bdris-apply at /api/bdris-apply');
+} catch (e) {
+  safeLog('[engines] bdris-apply not mounted:', e.message);
+}
+
 // ---- User routes (authenticated users) --
 const userRoutes = require('./routes/user');
 app.use('/api', apiLimiter, userRoutes);
@@ -183,6 +217,13 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'INTERNAL_ERROR' });
 });
 
-app.listen(PORT, () => {
+const _httpServer = app.listen(PORT, () => {
   safeLog(`[abc-authentic] listening on port ${PORT}`);
+});
+// WebSocket upgrade for bdris-apply engine (Socket.IO)
+_httpServer.on('upgrade', (req, socket, head) => {
+  try {
+    if (bdrisApplyAdapter && bdrisApplyAdapter.handleUpgrade(req, socket, head)) return;
+  } catch (e) { /* fall through */ }
+  socket.destroy();
 });

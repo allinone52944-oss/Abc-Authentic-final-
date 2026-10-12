@@ -998,6 +998,7 @@ TABS.settings = async () => {
     '<div class="field" style="margin-top:14px;"><label>স্বাগতম বোনাস (৳, ০ = বন্ধ)</label><input type="number" id="st_wb" value="' + ((s.welcome_bonus && s.welcome_bonus.amount) || 0) + '"></div>' +
     '<div class="field"><label>ক্যাশব্যাক % (০ = বন্ধ)</label><input type="number" id="st_cb" value="' + ((s.cashback && s.cashback.percent) || 0) + '"></div>' +
     '<div class="field"><label>ফাইল আপলোড সীমা (MB)</label><input type="number" id="st_mb" value="' + ((s.file_upload && s.file_upload.max_mb) || 5) + '"></div>' +
+    '<div class="field"><label>BDRIS আবেদন PDF ডাউনলোড চার্জ (৳, ০ = ফ্রি)</label><input type="number" id="st_bdris_pdf" value="' + (Number(s['bdris_apply.pdf_price']) || 0) + '"></div>' +
     '<button class="btn" onclick="AdmSt.save()">সংরক্ষণ</button></div>';
 };
 window.AdmSt = {
@@ -1035,6 +1036,7 @@ window.AdmSt = {
       welcome_bonus: { enabled: Number(v('st_wb')) > 0, amount: Number(v('st_wb')) || 0 },
       cashback: { enabled: Number(v('st_cb')) > 0, percent: Number(v('st_cb')) || 0 },
       file_upload: { max_mb: Number(v('st_mb')) || 5, allowed: ['pdf', 'jpg', 'jpeg', 'png'] },
+      'bdris_apply.pdf_price': Number(v('st_bdris_pdf')) || 0,
       voice_greeting: vg,
       whatsapp: waBody,
     };

@@ -1,0 +1,25 @@
+{
+  "name": "bdris-automation-backend",
+  "version": "1.0.0",
+  "description": "BDRIS জন্ম নিবন্ধন স্বয়ংক্রিয় আবেদন সার্ভার",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "bdris",
+    "automation",
+    "playwright"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "playwright": "^1.63.0",
+    "socket.io": "^4.8.4",
+    "tesseract.js": "^7.0.0"
+  }
+}
