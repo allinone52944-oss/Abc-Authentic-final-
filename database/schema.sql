@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS users (
     balance         NUMERIC(12,2) NOT NULL DEFAULT 0
                     CHECK (balance >= 0),                       -- never negative
     status          VARCHAR(20)  NOT NULL DEFAULT 'active'
-                    CHECK (status IN ('active','disabled','blocked')),
+                    CHECK (status IN ('active','disabled','blocked','pending')),
     login_enabled   BOOLEAN      NOT NULL DEFAULT TRUE,
     failed_attempts INT          NOT NULL DEFAULT 0,
     locked_until    TIMESTAMPTZ,
