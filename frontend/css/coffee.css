@@ -55,11 +55,14 @@ body.auth {
 }
 /* Rotating spiral background - Coffee theme */
 .spiral {
-  position: absolute;
+  position: fixed;
+  top: -25vmax;
+  left: -25vmax;
   width: 150vmax; height: 150vmax;
   background: conic-gradient(from 0deg, #3d2b1f, #2b1d14, #4a3220, #2b1d14, #3d2b1f);
   animation: spin 60s linear infinite;
   opacity: 0.6;
+  pointer-events: none;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .gold-orb {
