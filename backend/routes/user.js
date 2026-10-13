@@ -345,40 +345,55 @@ router.post('/wallet/coupon', async (req, res) => {
     if (!code) return res.status(400).json({ error: 'MISSING_CODE' });
     const codeN = String(code).trim().toUpperCase();
 
-    const c = await db.query(
-      `SELECT * FROM coupons WHERE code = $1 AND status = 'active' LIMIT 1`, [codeN]);
-    const coupon = c.rows[0];
-    if (!coupon) return res.status(404).json({ error: 'INVALID_CODE' });
-    if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
-      return res.status(400).json({ error: 'EXPIRED_CODE' });
-    }
-    if (coupon.user_id && coupon.user_id !== req.user.id) {
-      return res.status(403).json({ error: 'NOT_YOUR_CODE' });
-    }
-
-    const credit = Number(coupon.amount) > 0 ? Number(coupon.amount) : 0;
-    // Cashback percent applies to user's lifetime spend
-    let finalCredit = credit;
-    if (Number(coupon.percent) > 0) {
-      const spent = await db.query(
-        `SELECT COALESCE(SUM(ABS(amount)),0) AS s FROM transactions
-         WHERE user_id = $1 AND type = 'debit' AND status = 'approved'`, [req.user.id]);
-      finalCredit = Math.round(Number(spent.rows[0].s) * Number(coupon.percent) / 100 * 100) / 100;
-    }
-    if (finalCredit <= 0) return res.status(400).json({ error: 'ZERO_VALUE' });
-
     await db.withTransaction(async (client) => {
+      const c = await client.query(
+        `SELECT * FROM coupons WHERE code = $1 AND status = 'active' LIMIT 1 FOR UPDATE`, [codeN]);
+      const coupon = c.rows[0];
+      if (!coupon) {
+        const err = new Error('INVALID_CODE');
+        err.statusCode = 404;
+        throw err;
+      }
+      if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
+        const err = new Error('EXPIRED_CODE');
+        err.statusCode = 400;
+        throw err;
+      }
+      if (coupon.user_id && coupon.user_id !== req.user.id) {
+        const err = new Error('NOT_YOUR_CODE');
+        err.statusCode = 403;
+        throw err;
+      }
+
+      const credit = Number(coupon.amount) > 0 ? Number(coupon.amount) : 0;
+      let finalCredit = credit;
+      if (Number(coupon.percent) > 0) {
+        const spent = await client.query(
+          `SELECT COALESCE(SUM(ABS(amount)),0) AS s FROM transactions
+           WHERE user_id = $1 AND type = 'debit' AND status = 'approved'`, [req.user.id]);
+        finalCredit = Math.round(Number(spent.rows[0].s) * Number(coupon.percent) / 100 * 100) / 100;
+      }
+      if (finalCredit <= 0) {
+        const err = new Error('ZERO_VALUE');
+        err.statusCode = 400;
+        throw err;
+      }
+
       await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
         req.user.id, finalCredit, coupon.type, 'coupon-' + coupon.id,
       ]);
       await client.query(`UPDATE coupons SET status = 'redeemed' WHERE id = $1`, [coupon.id]);
+
+      const bal = await client.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
+      res.json({ ok: true, credited: finalCredit, balance: Number(bal.rows[0].balance) });
     });
-    const bal = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
-    res.json({ ok: true, credited: finalCredit, balance: Number(bal.rows[0].balance) });
   } catch (e) {
     safeLog('[user] coupon redeem error:', e.message);
     if (/DUPLICATE_TRANSACTION/.test(e.message)) {
       return res.status(409).json({ error: 'ALREADY_REDEEMED' });
+    }
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ error: e.message });
     }
     res.status(500).json({ error: 'FAILED' });
   }
