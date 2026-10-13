@@ -158,10 +158,21 @@ async function extractFields(pdfBuffer) {
  * @param {object} fieldsJson  {slotLabel: value}
  * @returns {Promise<{ok:boolean, pdfBuffer?, error?}>}
  */
-async function buildCard(jobId, fieldsJson) {
+async function buildCard(jobId, fieldsJson, images) {
     const dir = resolveJobDir(jobId);
     if (!dir || !fieldsJson || typeof fieldsJson !== 'object' || Array.isArray(fieldsJson)) {
         return { ok: false, error: 'INVALID_REQUEST' };
+    }
+    // Optional: replace extracted images with user-uploaded ones (dataURLs)
+    if (Array.isArray(images)) {
+        const imgDir = path.join(dir, 'work', 'images');
+        for (const im of images.slice(0, 10)) {
+            if (!im || !im.name || !im.dataUrl || typeof im.dataUrl !== 'string') continue;
+            const safeName = path.basename(String(im.name)).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+            const m = im.dataUrl.match(/^data:image\/(png|jpe?g|webp);base64,(.+)$/);
+            if (!m) continue;
+            try { fs.writeFileSync(path.join(imgDir, safeName), Buffer.from(m[2], 'base64')); } catch (e) {}
+        }
     }
     // Sanitize: keys/values must be strings, cap counts and sizes
     const clean = {};

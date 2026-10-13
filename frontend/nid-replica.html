@@ -147,10 +147,11 @@ async function doExtract(){
     S.jobId=j.jobId;S.fields=j.fields||{};
     // images
     const ip=document.getElementById('imgPrev');ip.innerHTML='';
-    (j.images||[]).forEach(im=>{
+    S.images=j.images||[];
+    S.images.forEach((im,idx)=>{
       const fig=document.createElement('figure');
       const label=/sign/i.test(im.name)?'স্বাক্ষর':/photo/i.test(im.name)?'ছবি':im.name;
-      fig.innerHTML='<img alt="'+esc(label)+'" src="'+im.dataUrl+'"><figcaption>'+esc(label)+'</figcaption>';
+      fig.innerHTML='<img alt="'+esc(label)+'" src="'+im.dataUrl+'" id="imgPrev'+idx+'"><figcaption>'+esc(label)+'</figcaption><label class="s" style="cursor:pointer;color:var(--gold);">📷 বদলান<input type="file" accept="image/*" style="display:none" onchange="replaceImg('+idx+',this)"></label>';
       ip.appendChild(fig);
     });
     // editable fields
@@ -170,10 +171,16 @@ function collectFields(){
   document.querySelectorAll('#fieldForm input').forEach(inp=>{out[inp.dataset.k]=inp.value;});
   return out;
 }
+function replaceImg(idx,input){
+  const f=input.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{S.images[idx].dataUrl=r.result; document.getElementById('imgPrev'+idx).src=r.result; showOk('ছবি বদলে গেছে ✓');};
+  r.readAsDataURL(f);
+}
 async function doBuild(){
   busy('b3',true,'কার্ড তৈরি হচ্ছে…');
   try{
-    const r=await ABC.api(API+'/build',{method:'POST',body:{jobId:S.jobId,fields:collectFields()}});
+    const r=await ABC.api(API+'/build',{method:'POST',body:{jobId:S.jobId,fields:collectFields(),images:S.images}});
     if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.error==='JOB_NOT_FOUND'?'সেশন শেষ — আবার আপলোড করুন।':'কার্ড তৈরি ব্যর্থ।');}
     S.pdfBlob=await r.blob();
     document.getElementById('cardFrame').src=URL.createObjectURL(S.pdfBlob);

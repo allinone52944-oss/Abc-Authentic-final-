@@ -44,11 +44,11 @@ router.post('/extract', requireAuth, pdfOnly, multerError, async (req, res) => {
 // POST /api/nid-engine/build — { jobId, fields } → NID card PDF download
 router.post('/build', requireAuth, async (req, res) => {
   try {
-    const { jobId, fields } = req.body || {};
+    const { jobId, fields, images } = req.body || {};
     if (!jobId || !fields || typeof fields !== 'object') {
       return res.status(400).json({ error: 'INVALID_REQUEST' });
     }
-    const r = await nidAdapter.buildCard(jobId, fields);
+    const r = await nidAdapter.buildCard(jobId, fields, images);
     if (!r.ok) {
       const status = r.error === 'JOB_NOT_FOUND' ? 404 : 422;
       return res.status(status).json({ error: r.error });
