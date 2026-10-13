@@ -188,7 +188,16 @@ const GreetVoice = {
 
 async function init() {
   const meR = await ABC.api('/auth/me');
-  if (!meR.ok) { location.href = '/login.html'; return; }
+  if (!meR.ok) {
+    // Only redirect to login on real auth failures (401/403/404).
+    // 429/5xx = transient — show error, don't log the user out.
+    if (meR.status === 401 || meR.status === 403 || meR.status === 404) {
+      location.href = '/login.html'; return;
+    }
+    document.body.innerHTML = '<div style="padding:40px;text-align:center;color:#c9a961">' +
+      'সার্ভার ব্যস্ত আছে (কোড ' + meR.status + ')। <button onclick="location.reload()">পুনরায় চেষ্টা</button></div>';
+    return;
+  }
   const { user } = await meR.json();
   window._user = user;
 
