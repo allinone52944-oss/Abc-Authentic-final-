@@ -899,7 +899,7 @@ router.put('/settings', async (req, res) => {
   try {
     const allowed = ['registration_enabled', 'maintenance_mode', 'file_upload',
                      'login_security', 'cashback', 'welcome_bonus', 'voice_greeting',
-                     'whatsapp', 'bdris_apply.pdf_price'];
+                     'whatsapp', 'bdris_apply.pdf_price', 'recharge_numbers'];
     const updated = [];
     for (const key of allowed) {
       if (req.body[key] !== undefined) {
