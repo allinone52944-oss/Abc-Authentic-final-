@@ -28,15 +28,17 @@ if [ ! -d node_modules ] || [ package.json -nt node_modules/.last-install ]; the
   touch node_modules/.last-install
 fi
 
-# Install BDRIS certificate engine dependencies (as-is, deterministic: npm ci)
-cd "$APP_DIR/engines/bdris-certificate"
-if [ -f package.json ]; then
-  if [ ! -d node_modules ] || [ package-lock.json -nt node_modules/.last-ci ]; then
-    echo "$(date): Installing BDRIS engine dependencies (npm ci)..." >>"$LOG"
-    npm ci --omit=dev >>"$LOG" 2>&1 || echo "$(date): engine npm ci failed" >>"$LOG"
-    touch node_modules/.last-ci 2>/dev/null || true
+# Install engine dependencies for ALL engines (bdris-apply, bdris-certificate, death-verify, nid-replica)
+for ENGINE in bdris-apply bdris-certificate death-verify nid-replica; do
+  cd "$APP_DIR/engines/$ENGINE"
+  if [ -f package.json ]; then
+    if [ ! -d node_modules ] || [ package.json -nt node_modules/.last-install ]; then
+      echo "$(date): Installing $ENGINE dependencies..." >>"$LOG"
+      npm install --production >>"$LOG" 2>&1 || echo "$(date): $ENGINE npm install failed" >>"$LOG"
+      touch node_modules/.last-install 2>/dev/null || true
+    fi
   fi
-fi
+done
 cd "$APP_DIR"
 
 # Run database migrations (only if .env exists)
