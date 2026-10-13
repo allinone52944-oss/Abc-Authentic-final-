@@ -7,7 +7,10 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
-const SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+const SECRET = process.env.JWT_SECRET;
+if (!SECRET) {
+  throw new Error('FATAL: JWT_SECRET env var is required - refusing to start with insecure default');
+}
 const ACCESS_TTL = process.env.JWT_ACCESS_TTL || '15m';
 const REFRESH_TTL_DAYS = parseInt(process.env.JWT_REFRESH_DAYS || '30', 10);
 const BCRYPT_ROUNDS = 12;

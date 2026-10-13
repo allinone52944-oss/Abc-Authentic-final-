@@ -65,7 +65,8 @@ router.post('/charge/submit', requireAuth, async (req, res) => {
     if (price <= 0) {
       return res.json({ ok: true, charged: 0, message: 'ফ্রি সেবা' });
     }
-    const ref = 'bdris-apply-submit-' + Date.now() + '-' + req.user.id;
+    const clientKey = (req.body && req.body.idempotency_key) ? String(req.body.idempotency_key).slice(0, 64) : Date.now();
+    const ref = 'bdris-apply-submit-' + clientKey + '-' + req.user.id;
     const r = await chargeWallet(req.user.id, price, ref);
     safeLog('[bdris-apply] submit charged', price, 'for user', req.user.id);
     res.json({ ok: true, charged: r.charged, newBalance: r.newBalance });
@@ -89,7 +90,8 @@ router.post('/charge/pdf', requireAuth, async (req, res) => {
     if (price <= 0) {
       return res.json({ ok: true, charged: 0, message: 'ফ্রি ডাউনলোড' });
     }
-    const ref = 'bdris-apply-pdf-' + Date.now() + '-' + req.user.id;
+    const clientKey = (req.body && req.body.idempotency_key) ? String(req.body.idempotency_key).slice(0, 64) : Date.now();
+    const ref = 'bdris-apply-pdf-' + clientKey + '-' + req.user.id;
     const r = await chargeWallet(req.user.id, price, ref);
     safeLog('[bdris-apply] pdf charged', price, 'for user', req.user.id);
     res.json({ ok: true, charged: r.charged, newBalance: r.newBalance });
