@@ -314,7 +314,7 @@ router.post('/login', async (req, res) => {
     const fail = async (code, status) => {
       if (user) {
         const sec = await getSetting('login_security');
-        const maxAttempts = Number((sec && sec.max_attempts) || 5);
+        const maxAttempts = Number((sec && sec.max_attempts) || 10);
         const lockMinutes = Number((sec && sec.lock_minutes) || 30);
         const attempts = (user.failed_attempts || 0) + 1;
         if (attempts >= maxAttempts) {

@@ -47,7 +47,7 @@ const clientIpKey = (req) => {
 // Strict: login / register / OTP endpoints (brute-force protection)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: 60,
   keyGenerator: clientIpKey,
   standardHeaders: true,
   legacyHeaders: false,
@@ -57,7 +57,7 @@ const authLimiter = rateLimit({
 // General API limiter
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 120,
+  max: 300,
   keyGenerator: clientIpKey,
   standardHeaders: true,
   legacyHeaders: false,

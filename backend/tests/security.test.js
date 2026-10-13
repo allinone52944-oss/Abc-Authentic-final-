@@ -191,7 +191,7 @@ describe('exported middleware bundle', () => {
     app.use(security.authLimiter);
     app.get('/', (req, res) => res.json({ ok: true }));
     const agent = request(app);
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 60; i++) {
       await agent.get('/').set('CF-Connecting-IP', '1.2.3.4').expect(200);
     }
     await agent.get('/').set('CF-Connecting-IP', '1.2.3.4').expect(429);
