@@ -80,7 +80,11 @@ CREATE TABLE IF NOT EXISTS services (
 CREATE INDEX IF NOT EXISTS idx_services_serial ON services(serial);
 CREATE INDEX IF NOT EXISTS idx_services_type   ON services(type);
 CREATE INDEX IF NOT EXISTS idx_services_status ON services(status);
-CREATE INDEX IF NOT EXISTS idx_services_category ON services(category_id);
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='services' AND column_name='category_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_services_category ON services(category_id);
+  END IF;
+END $$;
 
 -- ------------------------------------------------------------
 -- USER_SERVICES (per-user price & access override)
