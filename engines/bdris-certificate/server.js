@@ -480,7 +480,13 @@ app.post('/api/verify', async (req, res) => {
         }
 
         const tds = extractTdTexts(html);
-        const data = normalizeBdrisData(mapResultData(tds));
+        const mapped = mapResultData(tds);
+        // Fallback: search raw HTML for office location if not in TDs
+        if (!mapped.officeLocationRaw) {
+            const hm = html.match(/location of the register office\s*:?\s*([^<]{3,200})/i);
+            if (hm) mapped.officeLocationRaw = 'Location of the Register office: ' + hm[1].trim();
+        }
+        const data = normalizeBdrisData(mapped);
 
         // 6 fallback pairs provided by user (BIRTH records only)
         const qrFallbackList = [
