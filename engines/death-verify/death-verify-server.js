@@ -889,7 +889,11 @@ async function routeVerify(req, res) {
         const html = await r.text();
 
         // debug copy: structure dekhar jonno
-        try { fs.writeFileSync(path.join(__dirname, '_last-result.html'), html); } catch (_) {}
+        try {
+            const dbgPath = '/tmp/death-debug-' + Date.now() + '.html';
+            fs.writeFileSync(dbgPath, html.slice(0, 50000));
+            console.log('[death-verify] DEBUG html saved to', dbgPath, 'len=', html.length);
+        } catch (_) {}
 
         if (html.includes('Captcha is not valid') || html.includes('Does not match'))
             return json(res, 200, { success: false, error: 'Captcha bhul — notun captcha anun abar cheshta korun.' });
