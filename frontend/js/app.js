@@ -176,10 +176,11 @@
           sheets.push((s.href || 'inline') + ':' + n);
         }
         var probs = [];
-        if (!h) probs.push('NO .app-header in DOM');
+        var isAdmin = location.pathname.indexOf('admin.html') !== -1;
+        if (!h && isAdmin) probs.push('NO .app-header in DOM');
         else if (hr.height === 0) probs.push('header height=0 display=' + getComputedStyle(h).display);
-        if (!t) probs.push('NO #tabs in DOM');
-        else {
+        if (isAdmin && !t) probs.push('NO #tabs in DOM');
+        else if (isAdmin) {
           var tabs = t.querySelectorAll('.admin-tab');
           if (tabs.length !== 13) probs.push('tabs=' + tabs.length + ' (want 13)');
           if (tr.height === 0) probs.push('tabs height=0');
