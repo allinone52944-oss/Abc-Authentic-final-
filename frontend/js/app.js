@@ -87,10 +87,11 @@
     return _refreshPromise;
   }
 
-  async function api(path, opts) {
+  async function api(path, opts, _retry) {
     if (typeof path !== 'string' || !path) {
       throw new TypeError('api(path): path must be a non-empty string');
     }
+    _retry = _retry || 0;
     // Clone opts to avoid mutating caller's object (signal/body)
     opts = Object.assign({}, opts || {});
     opts.headers = Object.assign({}, opts.headers || {});
@@ -101,20 +102,30 @@
     }
     // Timeout: don't hang forever on flaky network (tunnel)
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 20000);
+    const timer = setTimeout(() => ctrl.abort(), 15000);
     opts.signal = ctrl.signal;
     let r;
     try {
       r = await fetch('/api' + path, opts);
     } catch (e) {
       clearTimeout(timer);
-      // Network failure/timeout → synthetic 503 so callers handle uniformly
+      // Network failure/timeout → retry with backoff (tunnel flakiness),
+      // then synthetic 503 so callers handle uniformly
+      if (_retry < 2) {
+        await new Promise(function (res) { setTimeout(res, 1000 * (_retry + 1)); });
+        return api(path, opts, _retry + 1);
+      }
       return new Response(JSON.stringify({ error: 'NETWORK_ERROR' }), {
         status: 503,
         headers: { 'Content-Type': 'application/json' },
       });
     }
     clearTimeout(timer);
+    // Retry on 503/504 (transient server/tunnel issues), not on 4xx
+    if ((r.status === 503 || r.status === 504) && _retry < 2) {
+      await new Promise(function (res) { setTimeout(res, 1000 * (_retry + 1)); });
+      return api(path, opts, _retry + 1);
+    }
     if (r.status === 401 && accessToken) {
       // Try one silent refresh (deduplicated), then retry
       let refreshed = false;
