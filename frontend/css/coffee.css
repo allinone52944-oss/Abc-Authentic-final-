@@ -29,11 +29,14 @@ body {
   font-family: 'Noto Sans Bengali', 'Segoe UI', sans-serif;
   background: #2b1d14;
   min-height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+/* Centered auth pages (login etc.) — scoped, never affects app pages */
+body.auth {
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
-  position: relative;
 }
 /* Rotating spiral background - Coffee theme */
 .spiral {
@@ -205,6 +208,7 @@ body.app {
   height: 100vh;
   display: flex;
   flex-direction: column;
+  width: 100%;
   max-width: 1200px;
   margin: 0 auto;
   padding: 16px 20px;
