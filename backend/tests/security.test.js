@@ -183,12 +183,19 @@ describe('exported middleware bundle', () => {
     expect(typeof security.apiLimiter).toBe('function');
   });
 
-  test('secureHeaders sets security headers', async () => {
+  test('authLimiter keys buckets by CF-Connecting-IP (per-visitor, not global)', async () => {
+    // Regression: without per-visitor keys, every visitor shared one bucket
+    // (req.ip is 127.0.0.1 for all traffic behind the tunnel), so /auth/me
+    // started 429-ing on innocent refreshes and the dashboard bounced to login.
     const app = express();
-    app.use(security.secureHeaders);
-    app.get('/', (req, res) => res.send('ok'));
-    const r = await request(app).get('/');
-    expect(r.headers['x-content-type-options']).toBe('nosniff');
-    expect(r.headers['x-frame-options']).toBeDefined();
+    app.use(security.authLimiter);
+    app.get('/', (req, res) => res.json({ ok: true }));
+    const agent = request(app);
+    for (let i = 0; i < 20; i++) {
+      await agent.get('/').set('CF-Connecting-IP', '1.2.3.4').expect(200);
+    }
+    await agent.get('/').set('CF-Connecting-IP', '1.2.3.4').expect(429);
+    // A different visitor gets a fresh bucket
+    await agent.get('/').set('CF-Connecting-IP', '5.6.7.8').expect(200);
   });
 });

@@ -29,10 +29,20 @@ const secureHeaders = helmet({
 });
 
 // ---- Rate limiters --------------------------------------------
+// Behind Cloudflare Tunnel + nginx, Express sees the same peer IP
+// (127.0.0.1) for every visitor unless trust proxy is configured, which
+// would turn these per-IP limiters into one GLOBAL bucket shared by all
+// users. Cloudflare sets CF-Connecting-IP to the real client IP (it
+// overwrites any client-sent value), so key the limiters on that header
+// to get a true per-visitor bucket. Falls back to req.ip when the header
+// is absent (e.g. non-Cloudflare access).
+const clientIpKey = (req) => req.headers['cf-connecting-ip'] || req.ip;
+
 // Strict: login / register / OTP endpoints (brute-force protection)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
+  keyGenerator: clientIpKey,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'TOO_MANY_ATTEMPTS' },
@@ -42,6 +52,7 @@ const authLimiter = rateLimit({
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 120,
+  keyGenerator: clientIpKey,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'RATE_LIMITED' },
