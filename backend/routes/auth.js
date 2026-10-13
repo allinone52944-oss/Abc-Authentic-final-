@@ -537,6 +537,10 @@ function hashLinkToken(token) {
 }
 // Timing-safe comparison of a presented token against stored hashes.
 async function findValidToken(table, token) {
+  const ALLOWED_TABLES = ['email_verification_tokens', 'password_reset_tokens'];
+  if (!ALLOWED_TABLES.includes(table)) {
+    throw new Error('Invalid token table');
+  }
   const hash = hashLinkToken(token);
   const r = await db.query(
     `SELECT * FROM ${table}
