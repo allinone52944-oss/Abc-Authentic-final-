@@ -56,7 +56,7 @@ function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
 function card(s){
   const open = s.open ? '' : ' <span class="badge">বন্ধ</span>';
-  return '<div class="list-row" onclick="location.href=\'/service-detail.html?id='+s.id+'\'>'+
+  return '<div class="list-row" onclick="location.href=\'/service-detail.html?id='+s.id+'\'">'+
     '<div><div class="t">'+esc(s.name_bn||s.name)+'</div>'+
     '<div class="s">৳'+bnNum(s.price)+(s.open?'':' • এখন বন্ধ')+'</div></div>'+
     '<span class="badge '+(s.type==='manual'?'manual':'')+'">'+(s.type==='manual'?'ম্যানুয়াল':'অটোমেটেড')+'</span>'+open+'</div>';
