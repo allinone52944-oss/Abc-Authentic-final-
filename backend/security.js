@@ -32,11 +32,17 @@ const secureHeaders = helmet({
 // Behind Cloudflare Tunnel + nginx, Express sees the same peer IP
 // (127.0.0.1) for every visitor unless trust proxy is configured, which
 // would turn these per-IP limiters into one GLOBAL bucket shared by all
-// users. Cloudflare sets CF-Connecting-IP to the real client IP (it
-// overwrites any client-sent value), so key the limiters on that header
-// to get a true per-visitor bucket. Falls back to req.ip when the header
-// is absent (e.g. non-Cloudflare access).
-const clientIpKey = (req) => req.headers['cf-connecting-ip'] || req.ip;
+// users. Key the limiters on the real client IP, trying headers in order:
+// 1. CF-Connecting-IP (Cloudflare, unspoofable)
+// 2. X-Forwarded-For first entry (nginx proxy)
+// 3. req.ip fallback (shared — last resort)
+const clientIpKey = (req) => {
+  const cf = req.headers['cf-connecting-ip'];
+  if (cf) return String(cf).trim();
+  const xff = req.headers['x-forwarded-for'];
+  if (xff) return String(xff).split(',')[0].trim();
+  return req.ip;
+};
 
 // Strict: login / register / OTP endpoints (brute-force protection)
 const authLimiter = rateLimit({
