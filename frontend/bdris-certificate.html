@@ -185,11 +185,11 @@ async function step2(){
     S.record=j.data;
     const d=j.data;
     const fields=[
-      ['brn','BRN',d.brn],['nameEn','নাম (EN)',d.nameEn],['nameBn','নাম (বাংলা)',d.nameBn],
+      ['brn','BRN',d.brn],
+      ['nameBn','নাম (বাংলা)',d.nameBn],['nameEn','নাম (EN)',d.nameEn],
       ['dob','জন্ম তারিখ',d.dob],['sex','লিঙ্গ',d.sex],
-      ['motherEn','মাতা (EN)',d.motherEn],['motherBn','মাতা (বাংলা)',d.motherBn],
-      ['fatherEn','পিতা (EN)',d.fatherEn],['fatherBn','পিতা (বাংলা)',d.fatherBn],
-      ['permEn','স্থায়ী ঠিকানা (EN)',d.permEn||d.permanentAddressEn],['permBn','স্থায়ী ঠিকানা (বাংলা)',d.permBn||d.permanentAddressBn],
+      ['fatherNameBn','পিতা (বাংলা)',d.fatherNameBn],['fatherNameEn','পিতা (EN)',d.fatherNameEn],
+      ['motherNameBn','মাতা (বাংলা)',d.motherNameBn],['motherNameEn','মাতা (EN)',d.motherNameEn],
       ['office1','অফিসের নাম',d.office1],['office2','অফিসের ঠিকানা',d.office2]
     ];
     document.getElementById('recView').innerHTML=fields.map(f=>'<div class="field"><label>'+esc(f[1])+'</label><input type="text" id="rec_'+f[0]+'" value="'+esc(f[2]||'')+'"></div>').join('')+'<div class="s" style="color:var(--muted);font-size:12px;margin-top:8px;">✏️ সব তথ্য এডিট করা যাবে</div>';
