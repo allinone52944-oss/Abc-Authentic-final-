@@ -532,6 +532,8 @@ table.adm tr:hover td { background: rgba(212,175,55,0.05); }
   .stat { padding: 12px 8px; }
   .stat .n { font-size: 20px; }
   .hub-card.wide { grid-column: span 2; }
+  .card { padding: 32px 24px; }
+  input, select, textarea { font-size: 16px; }
 }
 
 /* ============ Phase 3: Banners ============ */
