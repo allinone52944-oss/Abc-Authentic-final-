@@ -68,7 +68,7 @@
         </div>
         <div class="field">
           <label>জন্ম তারিখ *</label>
-          <input id="dob" type="date">
+          <input id="dob" type="text" placeholder="dd-mm-yyyy বা yyyy-mm-dd" inputmode="numeric">
         </div>
         <button class="btn" id="b1" onclick="step1()">ক্যাপচা আনুন →</button>
         <div class="hint">BDRIS পোর্টাল থেকে সরাসরি যাচাই করা হবে।</div>
@@ -138,9 +138,18 @@ function busy(id,on,txt){
 }
 async function step1(retry){
   const brn=document.getElementById('brn').value.trim();
-  const dob=document.getElementById('dob').value;
+  let dob=document.getElementById('dob').value.trim();
   if(!/^\d{17}$/.test(brn)){showErr('BRN ঠিক ১৭ সংখ্যার হতে হবে।');return;}
   if(!dob){showErr('জন্ম তারিখ দিন।');return;}
+  // Auto-normalize: ddmmyyyy, dd.mm.yyyy, dd/mm/yyyy, dd-mm-yyyy, yyyy-mm-dd -> dd-mm-yyyy
+  dob=dob.replace(/[.\/]/g,'-');
+  const digitsOnly=dob.replace(/-/g,'');
+  if(/^\d{8}$/.test(digitsOnly)){
+    // 8 digits: ddmmyyyy or yyyymmdd
+    if(parseInt(digitsOnly.slice(0,4))>1900) dob=digitsOnly.slice(6,8)+'-'+digitsOnly.slice(4,6)+'-'+digitsOnly.slice(0,4);
+    else dob=digitsOnly.slice(0,2)+'-'+digitsOnly.slice(2,4)+'-'+digitsOnly.slice(4,8);
+  }
+  document.getElementById('dob').value=dob;
   S.brn=brn;S.dob=dob;
   busy('b1',true,'ক্যাপচা আনা হচ্ছে…');
   try{
