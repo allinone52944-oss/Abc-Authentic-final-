@@ -295,3 +295,66 @@ describe('admin.js full-script smoke test', () => {
     expect(typeof global.window.PushNotify.ensure).toBe('function');
   });
 });
+
+describe('TABS.stats — never renders undefined cards on API failure', () => {
+  // Extract the `TABS.stats = async () => { ... }` assignment from the real
+  // source and run it with stubbed ABC/content/esc/bn.
+  function loadStatsTab() {
+    const idx = ADMIN_SRC.indexOf('TABS.stats = async ()');
+    expect(idx).toBeGreaterThan(-1);
+    const open = ADMIN_SRC.indexOf('{', ADMIN_SRC.indexOf('=>', idx));
+    let depth = 0, end = open;
+    for (let i = open; i < ADMIN_SRC.length; i++) {
+      if (ADMIN_SRC[i] === '{') depth++;
+      else if (ADMIN_SRC[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+    }
+    expect(depth).toBe(0);
+    const assign = ADMIN_SRC.slice(idx, end + 1);
+    const factory = new Function('ABC', 'content', 'esc', 'bn',
+      'const TABS = {};\n' + assign + ';\nreturn TABS.stats;');
+    return factory;
+  }
+  const escStub = (s) => String(s == null ? '' : s);
+  const bnStub = (n) => String(Number(n || 0));
+
+  test('throws (does not render) when /admin/stats returns 429', async () => {
+    const stats = loadStatsTab()( { api: async () => ({ ok: false, status: 429, json: async () => ({ error: 'RATE_LIMITED' }) }) },
+      { innerHTML: 'ORIGINAL' }, escStub, bnStub);
+    await expect(stats()).rejects.toThrow('অনেক রিকোয়েস্ট');
+  });
+
+  test('leaves content untouched on 429 (no undefined cards)', async () => {
+    const content = { innerHTML: 'ORIGINAL' };
+    const stats = loadStatsTab()( { api: async () => ({ ok: false, status: 429, json: async () => ({ error: 'RATE_LIMITED' }) }) },
+      content, escStub, bnStub);
+    await expect(stats()).rejects.toThrow();
+    expect(content.innerHTML).toBe('ORIGINAL');
+  });
+
+  test('renders stat numbers (no "undefined") on success', async () => {
+    const data = { users: 5, admins: 1, orders_total: 10, orders_new: 2, orders_active: 3, orders_completed: 4, pending_recharge: 1, revenue_today: 500 };
+    const content = { innerHTML: '' };
+    const stats = loadStatsTab()( { api: async () => ({ ok: true, status: 200, json: async () => data }) },
+      content, escStub, bnStub);
+    await stats();
+    expect(content.innerHTML).toContain('stat-grid');
+    expect(content.innerHTML).toContain('৳500');
+    expect(content.innerHTML).not.toContain('undefined');
+  });
+});
+
+describe('init() — selective redirect on /auth/me failure (static guard)', () => {
+  test('redirects to login only on 401/403/404, shows retry on 429/5xx', () => {
+    const m = ADMIN_SRC.match(/async function init\(\) \{[\s\S]*?\n\}/);
+    expect(m).not.toBeNull();
+    const src = m[0];
+    // Must NOT blanket-redirect on every !r.ok
+    expect(src).not.toMatch(/if\s*\(!r\.ok\)\s*\{\s*location\.href/);
+    // Must redirect on real auth failures…
+    expect(src).toContain("location.href = '/login.html'");
+    expect(src).toMatch(/r\.status\s*===\s*401/);
+    // …and show a retry UI for transient failures like 429
+    expect(src).toMatch(/429/);
+    expect(src).toContain('পুনরায় চেষ্টা');
+  });
+});

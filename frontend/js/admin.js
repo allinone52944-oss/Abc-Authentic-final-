@@ -17,7 +17,16 @@ function bn(n){return Number(n||0).toLocaleString('bn-BD');}
 async function init() {
   try {
     const r = await ABC.api('/auth/me');
-    if (!r.ok) { location.href = '/login.html'; return; }
+    if (!r.ok) {
+      // 429/5xx = transient server-side problem, NOT a dead session.
+      // Only bounce to login on real auth failures (401/403/404).
+      if (r.status === 401 || r.status === 403 || r.status === 404) {
+        location.href = '/login.html'; return;
+      }
+      const c0 = document.getElementById('content');
+      if (c0) c0.innerHTML = '<div class="err">সার্ভার ব্যস্ত আছে (কোড ' + r.status + ')। <button class="mini-btn" onclick="location.reload()">পুনরায় চেষ্টা</button></div>';
+      return;
+    }
     me = (await r.json()).user;
     if (me.role !== 'admin') { location.href = '/dashboard.html'; return; }
     const tabs = document.querySelectorAll('#tabs .admin-tab');
@@ -188,6 +197,17 @@ const TABS = {};
 /* ---------------- STATS ---------------- */
 TABS.stats = async () => {
   const r = await ABC.api('/admin/stats');
+  if (!r.ok) {
+    // Never render stat cards with undefined data (looks like a "broken"
+    // dashboard). Surface the failure with a retry instead.
+    let why = 'পরিসংখ্যান লোড ব্যর্থ';
+    try {
+      const d = await r.json();
+      if (r.status === 429 || d.error === 'RATE_LIMITED') why += ' — অনেক রিকোয়েস্ট হয়েছে, একটু পরে আবার চেষ্টা করুন';
+      else if (d.error) why += ': ' + d.error;
+    } catch (e) { why += ' (কোড ' + r.status + ')'; }
+    throw new Error(why);
+  }
   const s = await r.json();
   content.innerHTML =
     '<div class="stat-grid">' +
