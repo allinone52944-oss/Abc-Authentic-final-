@@ -22,11 +22,18 @@ async function main() {
         applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
 
-    // 1) Base schema (idempotent)
+    // 1) Base schema (idempotent, in transaction)
     const schemaPath = path.join(__dirname, '..', 'database', 'schema.sql');
     console.log('[migrate] applying base schema...');
-    await client.query(fs.readFileSync(schemaPath, 'utf8'));
-    console.log('[migrate] base schema OK');
+    await client.query('BEGIN');
+    try {
+      await client.query(fs.readFileSync(schemaPath, 'utf8'));
+      await client.query('COMMIT');
+      console.log('[migrate] base schema OK');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    }
 
     // 2) Ordered migrations
     const dir = path.join(__dirname, '..', 'database', 'migrations');
