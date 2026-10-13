@@ -94,12 +94,21 @@ function uploadMiddleware(getLimits) {
   const limits = getLimits ? getLimits() : {};
   const maxMb = Number(limits.max_mb) > 0 ? Number(limits.max_mb) : DEFAULT_MAX_MB;
   const allowed = limits.allowed || DEFAULT_ALLOWED;
+  const MIME_MAP = {
+    pdf: ['application/pdf'],
+    jpg: ['image/jpeg'], jpeg: ['image/jpeg'],
+    png: ['image/png'],
+  };
   return multer({
     storage,
     limits: { fileSize: maxMb * 1024 * 1024, files: 5 },
     fileFilter: (req, file, cb) => {
       const ext = (file.originalname.split('.').pop() || '').toLowerCase();
       if (!allowed.includes(ext)) {
+        return cb(new Error('FILE_TYPE_NOT_ALLOWED'));
+      }
+      const validMimes = MIME_MAP[ext];
+      if (validMimes && !validMimes.includes(file.mimetype)) {
         return cb(new Error('FILE_TYPE_NOT_ALLOWED'));
       }
       cb(null, true);
