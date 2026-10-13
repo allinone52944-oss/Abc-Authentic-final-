@@ -412,10 +412,16 @@ input.bad, select.bad{border-color:var(--err); box-shadow:0 0 0 3px rgba(251,113
     বিডিআরআইএস-এ আবেদন <span class="fl">•</span> কোনো অতিরিক্ত ফি নেই
   </div>
 </div>
-<script src="/socket.io/socket.io.js"></script>
 <script>
 /* ═══════════ state & helpers ═══════════ */
-const socket = io({ path: '/api/bdris-apply/socket.io/' });
+// socket.io backend not deployed yet — stub so the page loads without
+// "Unexpected token '<'" / "io is not defined" fatal errors.
+// Real-time bot features will warn in console until the server is set up.
+const socket = (typeof io !== 'undefined')
+  ? io({ path: '/api/bdris-apply/socket.io/' })
+  : { connected: false,
+      emit: function(){ console.warn('[bdris-apply] socket.io server not available'); },
+      on: function(){}, once: function(){}, off: function(){} };
 const $ = (id) => document.getElementById(id);
 const el = (sel) => document.querySelector(sel);
 const els = (sel) => Array.from(document.querySelectorAll(sel));
