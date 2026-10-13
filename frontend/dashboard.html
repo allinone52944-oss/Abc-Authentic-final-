@@ -217,18 +217,12 @@ async function init() {
   document.getElementById('hubBalance').textContent = '৳' + bnNum(user.balance);
 
   // Orders summary — total + active (new/pending/processing) counts
-  const oR = await ABC.api('/orders?limit=1');
+  // Single call with high limit; count active client-side (accurate for <200 orders)
+  const oR = await ABC.api('/orders?limit=200');
   if (oR.ok) {
     const d = await oR.json();
     document.getElementById('hubOrders').textContent = bnNum(d.total);
-    // Active count: sum totals for new + pending + processing (limit=1, count only)
-    let act = 0;
-    for (const st of ['new', 'pending', 'processing']) {
-      try {
-        const r = await ABC.api('/orders?status=' + st + '&limit=1');
-        if (r.ok) { const jd = await r.json(); act += (jd.total || 0); }
-      } catch (e) {}
-    }
+    const act = (d.orders || []).filter(o => ['new','pending','processing'].includes(o.status)).length;
     document.getElementById('hubOrdersSub').textContent = 'সক্রিয়: ' + bnNum(act);
   }
 

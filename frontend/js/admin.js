@@ -1133,8 +1133,14 @@ function closeModal() { const m = document.getElementById('admModal'); if (m) m.
 window.VoiceAlert = VoiceAlert;
 window.PushNotify = PushNotify;
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => init().catch(() => {}));
+  document.addEventListener('DOMContentLoaded', () => init().catch((e) => {
+    const c = document.getElementById('content');
+    if (c) c.innerHTML = '<div class="err">লোড ব্যর্থ: ' + esc(String((e && e.message) || e)) + '</div>';
+  }));
 } else {
-  init().catch(() => {});
+  init().catch((e) => {
+    const c = document.getElementById('content');
+    if (c) c.innerHTML = '<div class="err">লোড ব্যর্থ: ' + esc(String((e && e.message) || e)) + '</div>';
+  });
 }
 })();
