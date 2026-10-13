@@ -141,6 +141,7 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE INDEX IF NOT EXISTS idx_tx_user   ON transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_tx_trxid  ON transactions(trxid);
 CREATE INDEX IF NOT EXISTS idx_tx_status ON transactions(status);
+CREATE INDEX IF NOT EXISTS idx_tx_user_type_status ON transactions(user_id, type, status);
 
 -- ------------------------------------------------------------
 -- COUPONS (cashback + promo)
