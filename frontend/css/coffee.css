@@ -499,10 +499,10 @@ table.adm tr:hover td { background: rgba(212,175,55,0.05); }
 .mini-btn:hover { background: rgba(212,175,55,0.15); }
 .mini-btn.danger { border-color: #ff7b7b; color: #ff7b7b; }
 .mini-btn.ok { border-color: #4be08a; color: #4be08a; }
-.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; width: 100%; }
 .stat {
   background: rgba(43,29,20,0.85); border: 1px solid rgba(212,175,55,0.25);
-  border-radius: 14px; padding: 16px; text-align: center;
+  border-radius: 14px; padding: 16px; text-align: center; min-width: 0; overflow-wrap: break-word;
 }
 .stat .n { color: var(--gold); font-size: 24px; font-weight: 700; }
 .stat .l { color: var(--muted); font-size: 12px; margin-top: 4px; }
@@ -524,7 +524,9 @@ table.adm tr:hover td { background: rgba(212,175,55,0.05); }
 
 @media (max-width: 720px) {
   .hub-grid { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(3, 1fr); }
-  .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .stat { padding: 12px 8px; }
+  .stat .n { font-size: 20px; }
   .hub-card.wide { grid-column: span 2; }
 }
 
