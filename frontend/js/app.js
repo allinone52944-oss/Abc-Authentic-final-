@@ -75,12 +75,41 @@
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(opts.body);
     }
-    let r = await fetch('/api' + path, opts);
+    // Timeout: don't hang forever on flaky network (tunnel)
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
+    opts.signal = ctrl.signal;
+    let r;
+    try {
+      r = await fetch('/api' + path, opts);
+    } catch (e) {
+      clearTimeout(timer);
+      // Network failure/timeout → synthetic 503 so callers handle uniformly
+      return new Response(JSON.stringify({ error: 'NETWORK_ERROR' }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    clearTimeout(timer);
     if (r.status === 401 && accessToken) {
       // Try one silent refresh, then retry
-      if (await refreshAccess()) {
+      let refreshed = false;
+      try { refreshed = await refreshAccess(); } catch (e) { refreshed = false; }
+      if (refreshed) {
         opts.headers['Authorization'] = 'Bearer ' + accessToken;
-        r = await fetch('/api' + path, opts);
+        const ctrl2 = new AbortController();
+        const timer2 = setTimeout(() => ctrl2.abort(), 20000);
+        opts.signal = ctrl2.signal;
+        try {
+          r = await fetch('/api' + path, opts);
+        } catch (e) {
+          return new Response(JSON.stringify({ error: 'NETWORK_ERROR' }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        } finally {
+          clearTimeout(timer2);
+        }
       } else {
         // Refresh failed - clear stale tokens
         clearTokens();
