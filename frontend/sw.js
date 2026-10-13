@@ -1,113 +1,30 @@
 /* ============================================================
-   All In One (Abc Authentic) - Service Worker
-   - Cache-first for static assets
-   - Network-first for navigation, offline fallback page
-   - API calls always go to network (never cached)
-   - Web Push: admin sound alerts (works with screen off)
+   All In One (Abc Authentic) - Service Worker v6
+   - NO caching (was causing refresh breakage)
+   - Only handles Web Push notifications (admin sound alerts)
+   - Browser HTTP cache handles static assets via Cache-Control
    ============================================================ */
 'use strict';
 
-const CACHE = 'abc-authentic-v5';
-
-const APP_SHELL = [
-  '/',
-  '/index.html',
-  '/login.html',
-  '/dashboard.html',
-  '/services.html',
-  '/service-detail.html',
-  '/order-create.html',
-  '/order-status.html',
-  '/orders.html',
-  '/order-detail.html',
-  '/wallet.html',
-  '/profile.html',
-  '/admin.html',
-  '/forgot-password.html',
-  '/reset-password.html',
-  '/verify-email.html',
-  '/offline.html',
-  '/manifest.json',
-  '/css/coffee.css',
-  '/js/app.js',
-  '/js/admin.js',
-  '/banners/render.js',
-  '/banners/catalog.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
-  '/icons/apple-touch-icon.png',
-];
+const CACHE = 'abc-authentic-v6';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting())
-  );
+  // No pre-caching — skip immediately
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      Promise.all(keys.map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
 
-self.addEventListener('fetch', (event) => {
-  const req = event.request;
-  if (req.method !== 'GET') return;
-  const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return;
+// No fetch handler — let the browser handle all requests normally.
+// (Previous cache-first strategy caused corrupt/stale renders.)
 
-  // API: always network (never cache auth/payment data), with timeout so a
-  // hanging tunnel doesn't freeze the page — frontend handles !ok.
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      Promise.race([
-        fetch(req),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('api-timeout')), 15000)),
-      ]).catch(() => new Response(JSON.stringify({ error: 'NETWORK_TIMEOUT' }), {
-        status: 504,
-        headers: { 'Content-Type': 'application/json' },
-      }))
-    );
-    return;
-  }
-
-  // Navigation: network first with timeout, offline fallback.
-  // Do NOT cache HTML navigations — cached HTML references stale ?v=
-  // asset versions, causing blank/broken renders on refresh.
-  if (req.mode === 'navigate') {
-    event.respondWith(
-      Promise.race([
-        fetch(req),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('nav-timeout')), 8000)),
-      ]).catch(() => caches.match('/offline.html'))
-    );
-    return;
-  }
-
-  // Static assets: cache first, then network (and refresh cache)
-  event.respondWith(
-    caches.match(req).then((cached) => {
-      const net = fetch(req)
-        .then((res) => {
-          if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || net;
-    })
-  );
-});
-
-/* ============================================================
-   Web Push notifications (admin sound alerts, screen-off safe)
-   - push event: show notification with sound + vibration
-   - notificationclick: open/focus the target URL
-   ============================================================ */
+// ---- Web Push notifications (admin sound alerts, screen-off safe) ----
 self.addEventListener('push', (event) => {
   let data = {};
   try {
