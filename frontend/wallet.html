@@ -107,6 +107,13 @@
         <div class="method" data-m="nagad"><div class="e">🟠</div><div class="t">নগদ</div></div>
         <div class="method" data-m="rocket"><div class="e">🚀</div><div class="t">রকেট</div></div>
       </div>
+      <div class="field" id="recvNumWrap" style="display:none;">
+        <label>টাকা পাঠান এই নম্বরে</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <div id="recvNum" style="font-size:20px;font-weight:700;color:var(--gold);letter-spacing:1px;"></div>
+          <button class="mini-btn" onclick="copyRecvNum()">📋 কপি</button>
+        </div>
+      </div>
       <div class="field"><label>টাকার পরিমাণ (৳১০ - ৳১,০০,০০০)</label><input type="number" id="amount" placeholder="500" min="10" max="100000"></div>
       <div class="field"><label>যে নম্বর থেকে পাঠিয়েছেন</label><input type="text" id="sender" placeholder="01XXXXXXXXX"></div>
       <div class="field"><label>TrxID</label><input type="text" id="trxid" placeholder="TrxID লিখুন"></div>
@@ -140,13 +147,34 @@
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 let method='bkash_payment';
+let rechargeNums={};
 const TYPBN={recharge:'রিচার্জ',cashback:'ক্যাশব্যাক',promo:'প্রোমো',refund:'রিফান্ড',debit:'খরচ',bonus:'বোনাস'};
+function updateRecvNum(){
+  const num = rechargeNums[method] || '';
+  const wrap = document.getElementById('recvNumWrap');
+  if (num) {
+    document.getElementById('recvNum').textContent = num;
+    wrap.style.display = '';
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+function copyRecvNum(){
+  const num = document.getElementById('recvNum').textContent;
+  if (num && navigator.clipboard) navigator.clipboard.writeText(num);
+}
 async function init(){
   const me=await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
+  // Load admin's recharge receiving numbers
+  try {
+    const nr = await ABC.api('/recharge-numbers');
+    if (nr.ok) { const nd = await nr.json(); rechargeNums = nd.numbers || {}; }
+  } catch(e) {}
   document.querySelectorAll('#methods .method').forEach(m=>{
-    m.onclick=()=>{document.querySelectorAll('#methods .method').forEach(x=>x.classList.remove('sel'));m.classList.add('sel');method=m.dataset.m;};
+    m.onclick=()=>{document.querySelectorAll('#methods .method').forEach(x=>x.classList.remove('sel'));m.classList.add('sel');method=m.dataset.m;updateRecvNum();};
   });
+  updateRecvNum();
   loadWallet();
 }
 async function loadWallet(){

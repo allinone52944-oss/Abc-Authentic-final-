@@ -420,6 +420,26 @@ router.get('/notices', async (req, res) => {
   }
 });
 
+// GET /api/recharge-numbers — admin's receiving numbers for manual recharge
+// (bKash Payment, bKash Personal, Nagad, Rocket). Set via Admin → Settings.
+router.get('/recharge-numbers', async (req, res) => {
+  try {
+    const r = await db.query("SELECT value FROM settings WHERE key = 'recharge_numbers'");
+    const nums = r.rows.length ? r.rows[0].value : {};
+    res.json({
+      numbers: {
+        bkash_payment: nums.bkash_payment || '',
+        bkash_personal: nums.bkash_personal || '',
+        nagad: nums.nagad || '',
+        rocket: nums.rocket || '',
+      },
+    });
+  } catch (e) {
+    safeLog('[user] recharge-numbers error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 router.get('/banners', async (req, res) => {
   try {
     const type = req.query.type;

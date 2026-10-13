@@ -1030,6 +1030,12 @@ TABS.settings = async () => {
     '<div class="field"><label>ক্যাশব্যাক % (০ = বন্ধ)</label><input type="number" id="st_cb" value="' + ((s.cashback && s.cashback.percent) || 0) + '"></div>' +
     '<div class="field"><label>ফাইল আপলোড সীমা (MB)</label><input type="number" id="st_mb" value="' + ((s.file_upload && s.file_upload.max_mb) || 5) + '"></div>' +
     '<div class="field"><label>BDRIS আবেদন PDF ডাউনলোড চার্জ (৳, ০ = ফ্রি)</label><input type="number" id="st_bdris_pdf" value="' + (Number(s['bdris_apply.pdf_price']) || 0) + '"></div>' +
+    '<h3 style="margin:18px 0 8px;color:var(--gold);">💳 রিচার্জ রিসিভ নম্বর</h3>' +
+    '<div class="s" style="margin-bottom:8px;">গ্রাহক এই নম্বরগুলোতে টাকা পাঠিয়ে রিচার্জ রিকোয়েস্ট করবে</div>' +
+    fld('বিকাশ পেমেন্ট নম্বর', 'text', 'st_rn_bkash_pay', (((s.recharge_numbers || {}).bkash_payment) || '')) +
+    fld('বিকাশ পার্সোনাল নম্বর', 'text', 'st_rn_bkash_per', (((s.recharge_numbers || {}).bkash_personal) || '')) +
+    fld('নগদ নম্বর', 'text', 'st_rn_nagad', (((s.recharge_numbers || {}).nagad) || '')) +
+    fld('রকেট নম্বর', 'text', 'st_rn_rocket', (((s.recharge_numbers || {}).rocket) || '')) +
     '<button class="btn" onclick="AdmSt.save()">সংরক্ষণ</button></div>';
 };
 window.AdmSt = {
@@ -1068,6 +1074,12 @@ window.AdmSt = {
       cashback: { enabled: Number(v('st_cb')) > 0, percent: Number(v('st_cb')) || 0 },
       file_upload: { max_mb: Number(v('st_mb')) || 5, allowed: ['pdf', 'jpg', 'jpeg', 'png'] },
       'bdris_apply.pdf_price': Number(v('st_bdris_pdf')) || 0,
+      recharge_numbers: {
+        bkash_payment: String(v('st_rn_bkash_pay') || '').trim(),
+        bkash_personal: String(v('st_rn_bkash_per') || '').trim(),
+        nagad: String(v('st_rn_nagad') || '').trim(),
+        rocket: String(v('st_rn_rocket') || '').trim(),
+      },
       voice_greeting: vg,
       whatsapp: waBody,
     };
