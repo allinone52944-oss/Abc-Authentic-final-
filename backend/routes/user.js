@@ -344,6 +344,7 @@ router.post('/wallet/coupon', async (req, res) => {
     const { code } = req.body || {};
     if (!code) return res.status(400).json({ error: 'MISSING_CODE' });
     const codeN = String(code).trim().toUpperCase();
+    if (codeN.length > 40) return res.status(400).json({ error: 'CODE_TOO_LONG' });
 
     await db.withTransaction(async (client) => {
       const c = await client.query(
