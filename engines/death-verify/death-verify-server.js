@@ -28,6 +28,9 @@ setInterval(() => {
     for (const [k, s] of sessions) if (now - s.createdAt > SESSION_TTL_MS) sessions.delete(k);
 }, 60000).unref();
 const CHROME_CANDIDATES = [
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/usr/bin/google-chrome',
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
 ];

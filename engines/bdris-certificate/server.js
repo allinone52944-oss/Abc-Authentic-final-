@@ -801,6 +801,7 @@ app.post('/generate-pdf', async (req, res) => {
 
         browser = await puppeteer.launch({
             headless: true,
+            executablePath: '/usr/bin/chromium-browser',
             // same rendering flags as the audited CLI renders (build.cmd)
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu',
                    '--disable-lcd-text', '--force-color-profile=srgb']
