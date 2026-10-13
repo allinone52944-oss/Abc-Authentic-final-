@@ -268,7 +268,7 @@ window.AdmUsers = {
     const r = await ABC.api('/admin/users?limit=100');
     const u = (await r.json()).users.find(x => x.id === id);
     if (!u) return;
-    modal('✏️ ' + esc(u.name),
+    modal('✏️ ' + u.name,
       fld('নাম', 'text', 'eu_name', u.name) +
       '<div class="field"><label>ধর্ম</label><select id="eu_religion">' +
       ['islam', 'hindu', 'buddhist', 'christian', 'other'].map(x =>
@@ -448,7 +448,7 @@ window.AdmSvc = {
     const r = await ABC.api('/admin/services');
     const s = (await r.json()).services.find(x => x.id === id);
     if (!s) return;
-    modal('✏️ ' + esc(s.name_bn || s.name),
+    modal('✏️ ' + (s.name_bn || s.name),
       fld('নাম (বাংলা)', 'text', 'esv_bn', s.name_bn || '') +
       fld('নাম (English)', 'text', 'esv_name', s.name || '') +
       '<div class="field"><label>ক্যাটাগরি</label><select id="esv_cat">' + catOptions(s.category_id) + '</select></div>' +
@@ -524,7 +524,7 @@ window.AdmCat = {
     const r = await ABC.api('/admin/service-categories');
     const c = (await r.json()).categories.find(x => x.id === id);
     if (!c) return;
-    modal('✏️ ' + esc(c.name_bn || c.name),
+    modal('✏️ ' + (c.name_bn || c.name),
       fld('নাম (বাংলা)', 'text', 'ect_bn', c.name_bn || '') +
       fld('নাম (English)', 'text', 'ect_name', c.name || '') +
       fld('আইকন (emoji)', 'text', 'ect_icon', c.icon || '📁') +
@@ -1081,7 +1081,7 @@ function modal(title, bodyHtml) {
   closeModal();
   const bg = document.createElement('div');
   bg.className = 'modal-bg'; bg.id = 'admModal';
-  bg.innerHTML = '<div class="modal"><h3>' + title + '</h3>' + bodyHtml + '</div>';
+  bg.innerHTML = '<div class="modal"><h3>' + esc(title) + '</h3>' + bodyHtml + '</div>';
   bg.onclick = (e) => { if (e.target === bg) closeModal(); };
   document.body.appendChild(bg);
 }
