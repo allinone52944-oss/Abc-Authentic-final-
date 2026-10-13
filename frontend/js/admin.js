@@ -55,10 +55,19 @@ async function init() {
   }
 }
 
+let _showGen = 0;
 async function show(tab) {
+  const gen = ++_showGen;
+  if (!content) return;
   content.innerHTML = '<div style="color:var(--muted)">লোড হচ্ছে…</div>';
-  try { await TABS[tab](); }
-  catch (e) { content.innerHTML = '<div class="err">লোড ব্যর্থ: ' + esc(e.message) + '</div>'; }
+  try {
+    await TABS[tab]();
+    if (gen !== _showGen) return; // Stale: another show() started, don't overwrite
+  } catch (e) {
+    if (gen !== _showGen) return;
+    const msg = String((e && e.message) || e);
+    content.innerHTML = '<div class="err">লোড ব্যর্থ: ' + esc(msg) + '</div>';
+  }
 }
 
 /* ============ Phase 3: Voice alerts (Web Speech API, Bengali) ============ */
@@ -208,16 +217,17 @@ TABS.stats = async () => {
     } catch (e) { why += ' (কোড ' + r.status + ')'; }
     throw new Error(why);
   }
-  const s = await r.json();
+  const s = (await r.json()) || {};
+  const num = (v) => (v == null || isNaN(Number(v)) ? 0 : v);
   content.innerHTML =
     '<div class="stat-grid">' +
-    stat(s.users, 'মোট ইউজার') + stat(s.admins, 'এডমিন') +
-    stat(s.orders_total, 'মোট অর্ডার') + stat(s.orders_new, 'নতুন অর্ডার') +
-    stat(s.orders_active, 'চলমান অর্ডার') + stat(s.orders_completed, 'সম্পন্ন') +
-    stat(s.pending_recharge, 'পেন্ডিং রিচার্জ') + stat('৳' + bn(s.revenue_today), 'আজকের আয়') +
+    stat(num(s.users), 'মোট ইউজার') + stat(num(s.admins), 'এডমিন') +
+    stat(num(s.orders_total), 'মোট অর্ডার') + stat(num(s.orders_new), 'নতুন অর্ডার') +
+    stat(num(s.orders_active), 'চলমান অর্ডার') + stat(num(s.orders_completed), 'সম্পন্ন') +
+    stat(num(s.pending_recharge), 'পেন্ডিং রিচার্জ') + stat('৳' + bn(num(s.revenue_today)), 'আজকের আয়') +
     '</div>' +
     '<div class="form-card" style="max-width:none;"><h2>🚨 দ্রুত কাজ</h2>' +
-    '<button class="mini-btn" onclick="document.querySelector(\'[data-t=recharge]\').click()">পেন্ডিং রিচার্জ (' + s.pending_recharge + ')</button> ' +
+    '<button class="mini-btn" onclick="document.querySelector(\'[data-t=recharge]\').click()">পেন্ডিং রিচার্জ (' + num(s.pending_recharge) + ')</button> ' +
     '<button class="mini-btn" onclick="document.querySelector(\'[data-t=orders]\').click()">নতুন অর্ডার (' + s.orders_new + ')</button></div>' +
     '<div class="form-card" style="margin-top:14px;"><h3 style="color:var(--gold);margin:0 0 10px;">📊 PDF রিপোর্ট</h3>' +
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">' +
