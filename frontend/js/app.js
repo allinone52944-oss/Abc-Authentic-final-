@@ -7,6 +7,28 @@
 (function () {
   'use strict';
 
+  // Visible JS error reporter: if any script throws on load/refresh, show it
+  // on the page so the cause is visible without DevTools.
+  function showFatal(msg) {
+    try {
+      let d = document.getElementById('abc-fatal');
+      if (!d) {
+        d = document.createElement('div');
+        d.id = 'abc-fatal';
+        d.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#3a0d0d;color:#ffb4b4;border:1px solid #a33;padding:10px 12px;border-radius:8px;font-size:13px;white-space:pre-wrap;';
+        (document.body || document.documentElement).appendChild(d);
+      }
+      d.textContent = '⚠️ পেজ ত্রুটি: ' + msg;
+    } catch (e) {}
+  }
+  window.addEventListener('error', function (ev) {
+    showFatal((ev.message || 'অজানা ত্রুটি') + (ev.lineno ? ' (লাইন ' + ev.lineno + ')' : ''));
+  });
+  window.addEventListener('unhandledrejection', function (ev) {
+    var r = ev.reason;
+    showFatal('Promise ব্যর্থ: ' + (r && r.message ? r.message : String(r)));
+  });
+
   const LS_ACCESS = 'abc_access_token';
   const LS_REFRESH = 'abc_refresh_token';
 
