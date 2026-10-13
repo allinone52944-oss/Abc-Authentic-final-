@@ -15,24 +15,35 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;',
 function bn(n){return Number(n||0).toLocaleString('bn-BD');}
 
 async function init() {
-  const r = await ABC.api('/auth/me');
-  if (!r.ok) { location.href = '/login.html'; return; }
-  me = (await r.json()).user;
-  if (me.role !== 'admin') { location.href = '/dashboard.html'; return; }
-  document.querySelectorAll('#tabs .admin-tab').forEach(t => {
-    t.onclick = () => {
-      document.querySelectorAll('#tabs .admin-tab').forEach(x => x.classList.remove('active'));
-      t.classList.add('active');
-      show(t.dataset.t);
-    };
-  });
-  document.getElementById('logoutBtn').onclick = async () => {
-    await ABC.api('/auth/logout', { method: 'POST', body: { refresh_token: localStorage.getItem('abc_refresh_token') } });
-    ABC.clearTokens(); location.href = '/login.html';
-  };
-  show('stats');
-  VoiceAlert.init();
-  PushNotify.ensure(); // silent re-subscribe if permission already granted
+  try {
+    const r = await ABC.api('/auth/me');
+    if (!r.ok) { location.href = '/login.html'; return; }
+    me = (await r.json()).user;
+    if (me.role !== 'admin') { location.href = '/dashboard.html'; return; }
+    const tabs = document.querySelectorAll('#tabs .admin-tab');
+    tabs.forEach(t => {
+      t.onclick = () => {
+        tabs.forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        show(t.dataset.t);
+      };
+    });
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+      logoutBtn.onclick = async () => {
+        try {
+          await ABC.api('/auth/logout', { method: 'POST', body: { refresh_token: localStorage.getItem('abc_refresh_token') } });
+        } catch (e) {}
+        ABC.clearTokens(); location.href = '/login.html';
+      };
+    }
+    show('stats');
+    try { VoiceAlert.init(); } catch (e) {}
+    try { PushNotify.ensure(); } catch (e) {}
+  } catch (e) {
+    const c = document.getElementById('content');
+    if (c) c.innerHTML = '<div class="err">লোড ব্যর্থ: ' + esc(e.message) + ' <button onclick="location.reload()">পুনরায় চেষ্টা</button></div>';
+  }
 }
 
 async function show(tab) {
@@ -1089,5 +1100,9 @@ function closeModal() { const m = document.getElementById('admModal'); if (m) m.
 
 window.VoiceAlert = VoiceAlert;
 window.PushNotify = PushNotify;
-init();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => init().catch(() => {}));
+} else {
+  init().catch(() => {});
+}
 })();
