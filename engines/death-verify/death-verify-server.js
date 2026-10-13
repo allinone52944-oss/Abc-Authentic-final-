@@ -603,7 +603,7 @@ function serveFile(res, file, type) {
 /* ---------------- captcha auto-solve (optional "Auto Calculate") ------------
    Zero npm deps — Gemini REST api direct fetch diye (birth Scrapper-er
    @google/generative-ai package er identical behavior, package chara). */
-const GEMINI_MODELS = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-flash-latest'];
+const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
 async function solveCaptchaWithGemini(captchaB64, mimeType) {
     if (!GEMINI_API_KEY || GEMINI_API_KEY === 'PASTE_YOUR_KEY_HERE')
         throw new Error('GEMINI_API_KEY is not set (start-verify.bat-e key bosan).');

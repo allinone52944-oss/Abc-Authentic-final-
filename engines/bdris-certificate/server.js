@@ -109,7 +109,7 @@ function parseFormPage(html) {
 async function solveCaptchaWithGemini(captchaB64, mimeType) {
     if (!genAI) throw new Error('GEMINI_API_KEY is not set.');
     const imageParts = [{ inlineData: { data: captchaB64, mimeType: mimeType || 'image/png' } }];
-    const modelsToTry = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-flash-latest'];
+    const modelsToTry = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
     const prompt = "Solve the math problem shown in this image. If it's a math problem like '92-48=?', return only the final calculated number (e.g. 44). If it is just a string of random letters and numbers, return those exactly. ONLY return the final answer without any explanation or extra text. Make sure you calculate correctly.";
     let lastErr = null;
     const withTimeout = (p, ms, msg) => Promise.race([
@@ -119,7 +119,7 @@ async function solveCaptchaWithGemini(captchaB64, mimeType) {
         for (const modelName of modelsToTry) {
             try {
                 const model = genAI.getGenerativeModel({ model: modelName });
-                const result = await withTimeout(model.generateContent([prompt, ...imageParts]), 45000, 'Gemini timeout');
+                const result = await withTimeout(model.generateContent([prompt, ...imageParts]), 15000, 'Gemini timeout');
                 return result.response.text().trim();
             } catch (e) {
                 lastErr = e;
