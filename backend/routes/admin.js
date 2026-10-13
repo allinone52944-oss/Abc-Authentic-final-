@@ -843,7 +843,8 @@ router.get('/settings', async (req, res) => {
       }
       if (waVal && typeof waVal === 'object') {
         const masked = Object.assign({}, waVal);
-        masked.access_token_set = !!masked.access_token;
+        masked.access_token_set = !!masked.access_token || !!process.env.WHATSAPP_ACCESS_TOKEN;
+        masked.access_token_env = !!process.env.WHATSAPP_ACCESS_TOKEN && !masked.access_token;
         delete masked.access_token;
         out.whatsapp = masked;
       }

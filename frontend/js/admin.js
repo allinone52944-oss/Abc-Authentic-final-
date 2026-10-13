@@ -1029,7 +1029,7 @@ TABS.settings = async () => {
     fld('Phone Number ID', 'text', 'st_wa_phone_id', ((s.whatsapp || {}).phone_number_id) || '') +
     '<div class="field"><label>Access Token (password)</label>' +
     '<input type="password" id="st_wa_token" value="" placeholder="নতুন token বসান (খালি রাখলে আগেরটা থাকবে)" autocomplete="new-password">' +
-    '<div class="s" style="margin-top:4px;">' + (((s.whatsapp || {}).access_token_set) ? '✅ Token সেট আছে' : '❌ Token সেট নেই') + '</div></div>' +
+    '<div class="s" style="margin-top:4px;">' + (((s.whatsapp || {}).access_token_env) ? '✅ Token সেট আছে (ENV)' : ((s.whatsapp || {}).access_token_set ? '✅ Token সেট আছে' : '❌ Token সেট নেই')) + '</div></div>' +
     '<div class="field"><button class="mini-btn" onclick="AdmWa.test()">🔗 Test Connection</button></div>' +
     ta('📩 অর্ডার সফল মেসেজ (WhatsApp)', 'st_wa_order_msg', ((s.whatsapp || {}).order_completed_msg) || '', 'প্লেসহোল্ডার: {name} {order_number} {service_name}') +
     ta('📩 রিচার্জ সফল মেসেজ (WhatsApp)', 'st_wa_recharge_msg', ((s.whatsapp || {}).recharge_approved_msg) || '', 'প্লেসহোল্ডার: {name} {amount} {balance}') +
