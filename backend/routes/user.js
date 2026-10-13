@@ -149,8 +149,11 @@ router.post('/orders', async (req, res) => {
 
     const order = await db.withTransaction(async (client) => {
       // Debit wallet (raises INSUFFICIENT_BALANCE if not enough)
+      // Idempotency: same key → same ref → wallet_apply dedupes double submits.
+      // Falls back to Date.now() when the client sends no key (old behavior).
+      const clientKey = (req.body && req.body.idempotency_key) ? String(req.body.idempotency_key).slice(0, 64) : Date.now();
       await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
-        req.user.id, -Math.abs(eff.price), 'debit', 'order-' + Date.now() + '-' + req.user.id,
+        req.user.id, -Math.abs(eff.price), 'debit', 'order-' + clientKey + '-' + req.user.id,
       ]);
       const ins = await client.query(
         `INSERT INTO orders (user_id, service_id, status, data, documents, notes, price)

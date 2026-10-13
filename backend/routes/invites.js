@@ -71,10 +71,13 @@ adminInvites.post('/', async (req, res) => {
     const { max_uses, expires_at, note } = req.body || {};
     let maxUses = null;
     if (max_uses != null && max_uses !== '') {
-      maxUses = parseInt(max_uses, 10);
-      if (!Number.isInteger(maxUses) || maxUses < 1 || maxUses > 100000) {
+      // Validate the ORIGINAL input as an integer — parseInt() would silently
+      // truncate fractions ('2.5' → 2), so check with Number() first.
+      const n = Number(max_uses);
+      if (!Number.isInteger(n) || n < 1 || n > 100000) {
         return res.status(400).json({ error: 'INVALID_MAX_USES' });
       }
+      maxUses = n;
     }
     let expAt = null;
     if (expires_at) {

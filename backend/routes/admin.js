@@ -414,12 +414,35 @@ router.post('/services', async (req, res) => {
   }
 });
 
+// PUT /api/admin/services/reorder { order: [id1, id2, ...] }
+// NOTE: must be registered BEFORE '/services/:id', otherwise Express
+// matches 'reorder' as :id and this handler becomes dead code.
+router.put('/services/reorder', async (req, res) => {
+  try {
+    const { order } = req.body || {};
+    if (!Array.isArray(order)) return res.status(400).json({ error: 'INVALID_ORDER' });
+    await db.withTransaction(async (client) => {
+      for (let idx = 0; idx < order.length; idx++) {
+        await client.query('UPDATE services SET serial = $1 WHERE id = $2', [idx, order[idx]]);
+      }
+    });
+    await logActivity(req.user.id, 'service.reorder', { count: order.length });
+    res.json({ ok: true });
+  } catch (e) {
+    safeLog('[admin] reorder error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 router.put('/services/:id', async (req, res) => {
   try {
     const { name, name_bn, type, price, status, documents_required, fields_required, schedule, rules_text, engine_id, category_id } = req.body || {};
     const sets = []; const params = []; let i = 1;
     const put = (col, val) => { sets.push(`${col} = $${i++}`); params.push(val); };
-    if (name !== undefined) put('name', String(name).trim());
+    if (name !== undefined) {
+      if (String(name).trim().length < 2) return res.status(400).json({ error: 'INVALID_NAME' });
+      put('name', String(name).trim());
+    }
     if (name_bn !== undefined) put('name_bn', name_bn || null);
     if (type !== undefined && ['manual', 'automated'].includes(type)) put('type', type);
     if (price !== undefined) put('price', Number(price) || 0);
@@ -456,24 +479,6 @@ router.delete('/services/:id', async (req, res) => {
   } catch (e) {
     safeLog('[admin] service delete error:', e.message);
     res.status(500).json({ error: 'DELETE_FAILED' });
-  }
-});
-
-// PUT /api/admin/services/reorder { order: [id1, id2, ...] }
-router.put('/services/reorder', async (req, res) => {
-  try {
-    const { order } = req.body || {};
-    if (!Array.isArray(order)) return res.status(400).json({ error: 'INVALID_ORDER' });
-    await db.withTransaction(async (client) => {
-      for (let idx = 0; idx < order.length; idx++) {
-        await client.query('UPDATE services SET serial = $1 WHERE id = $2', [idx, order[idx]]);
-      }
-    });
-    await logActivity(req.user.id, 'service.reorder', { count: order.length });
-    res.json({ ok: true });
-  } catch (e) {
-    safeLog('[admin] reorder error:', e.message);
-    res.status(500).json({ error: 'FAILED' });
   }
 });
 
@@ -585,7 +590,8 @@ router.get('/transactions', async (req, res) => {
     const params = [];
     let i = 1;
     const VALID_TX_STATUS = ['pending','approved','rejected'];
-    const VALID_TX_TYPE = ['recharge','debit','credit','refund'];
+    // Must match the transactions.type CHECK in database/schema.sql
+    const VALID_TX_TYPE = ['recharge','cashback','promo','refund','debit','bonus'];
     if (req.query.status && VALID_TX_STATUS.includes(req.query.status)) { conds.push(`t.status = $${i++}`); params.push(req.query.status); }
     if (req.query.type && VALID_TX_TYPE.includes(req.query.type)) { conds.push(`t.type = $${i++}`); params.push(req.query.type); }
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
@@ -1022,9 +1028,10 @@ router.get('/reports/orders', async (req, res) => {
 router.get('/reports/transactions', async (req, res) => {
   try {
     const { from, to } = req.query;
+    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
     const conds = []; const params = []; let i = 1;
-    if (from) { conds.push(`t.created_at >= $${i++}`); params.push(from); }
-    if (to) { conds.push(`t.created_at <= $${i++}::date + INTERVAL '1 day'`); params.push(to); }
+    if (from && DATE_RE.test(from)) { conds.push(`t.created_at >= $${i++}`); params.push(from); }
+    if (to && DATE_RE.test(to)) { conds.push(`t.created_at <= $${i++}::date + INTERVAL '1 day'`); params.push(to); }
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
     const rows = await db.query(
       `SELECT t.type, t.amount, t.method, t.status, t.created_at, u.name AS user_name, u.phone AS user_phone
