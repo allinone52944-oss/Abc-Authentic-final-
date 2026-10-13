@@ -160,60 +160,6 @@
 
   window.ABC = { api, setTokens, clearTokens, refreshAccess, Drafts };
 
-
-  // TEMP DIAGNOSTIC (2026-10-13): detect broken render after refresh
-  window.addEventListener('load', function () {
-    setTimeout(function () {
-      try {
-        var h = document.querySelector('.app-header');
-        var t = document.querySelector('#tabs');
-        var hr = h ? h.getBoundingClientRect() : null;
-        var tr = t ? t.getBoundingClientRect() : null;
-        var sheets = [];
-        for (var i = 0; i < document.styleSheets.length; i++) {
-          var s = document.styleSheets[i], n = -1;
-          try { n = s.cssRules.length; } catch (e) { n = -2; }
-          sheets.push((s.href || 'inline') + ':' + n);
-        }
-        var probs = [];
-        var isAdmin = location.pathname.indexOf('admin.html') !== -1;
-        if (!h && isAdmin) probs.push('NO .app-header in DOM');
-        else if (hr.height === 0) probs.push('header height=0 display=' + getComputedStyle(h).display);
-        if (isAdmin && !t) probs.push('NO #tabs in DOM');
-        else if (isAdmin) {
-          var tabs = t.querySelectorAll('.admin-tab');
-          if (tabs.length !== 13) probs.push('tabs=' + tabs.length + ' (want 13)');
-          if (tr.height === 0) probs.push('tabs height=0');
-        }
-        var c = document.getElementById('content');
-        if (c && c.innerHTML.length < 100) probs.push('content short=' + c.innerHTML.length);
-        if (probs.length) {
-          var d = document.createElement('div');
-          d.id = 'abc-diag';
-          d.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#fff;color:#000;padding:20px;font:14px monospace;white-space:pre-wrap;overflow:auto';
-          d.textContent = 'DIAG-REPORT\nproblems: ' + probs.join(' | ') + '\ncss: ' + sheets.join(' | ') + '\nhtmlLen: ' + document.documentElement.outerHTML.length + '\nurl: ' + location.href;
-          document.body.appendChild(d);
-        }
-      } catch (e) {}
-    }, 4000);
-    // Second check at 25s (after 20s API timeout): report final state
-    setTimeout(function () {
-      try {
-        var c = document.getElementById('content');
-        var txt = c ? c.innerText.slice(0, 120) : 'NO #content';
-        var d = document.getElementById('abc-diag');
-        if (d) d.textContent += '\n\nFINAL@25s content: ' + txt;
-        else {
-          var d2 = document.createElement('div');
-          d2.id = 'abc-diag';
-          d2.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#efe;color:#000;padding:20px;font:14px monospace;white-space:pre-wrap;overflow:auto';
-          d2.textContent = 'DIAG-FINAL@25s\ncontent: ' + txt + '\nurl: ' + location.href;
-          document.body.appendChild(d2);
-        }
-      } catch (e) {}
-    }, 25000);
-  });
-
   // ---- PWA: service worker (v6, push-only, no caching) ----
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
