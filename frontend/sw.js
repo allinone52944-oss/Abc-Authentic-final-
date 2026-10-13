@@ -7,7 +7,7 @@
    ============================================================ */
 'use strict';
 
-const CACHE = 'abc-authentic-v3';
+const CACHE = 'abc-authentic-v4';
 
 const APP_SHELL = [
   '/',
@@ -64,16 +64,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Navigation: network first, offline page fallback
+  // Navigation: network first with timeout, cache fallback, offline page last.
+  // The tunnel can hang requests for 30s+; don't let the page hang.
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
-        .then((res) => {
+      Promise.race([
+        fetch(req).then((res) => {
           const copy = res.clone();
           caches.open(CACHE).then((cache) => cache.put(req, copy));
           return res;
-        })
-        .catch(() => caches.match('/offline.html'))
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('nav-timeout')), 8000)),
+      ]).catch(() => caches.match(req).then((cached) => cached || caches.match('/offline.html')))
     );
     return;
   }
