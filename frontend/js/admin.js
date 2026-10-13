@@ -410,7 +410,7 @@ TABS.services = async () => {
   const d = await r.json();
   let html = '<button class="mini-btn ok" onclick="AdmSvc.createForm()" style="margin-bottom:12px;">+ নতুন সেবা</button>' +
     '<div style="overflow-x:auto;"><table class="adm"><tr><th>#</th><th>নাম</th><th>ক্যাটাগরি</th><th>ধরন</th><th>দাম</th><th>স্ট্যাটাস</th><th>কাজ</th></tr>';
-  d.services.forEach((s, i) => {
+  (d.services || []).forEach((s, i) => {
     html += '<tr><td>' + (i + 1) + '</td><td>' + esc(s.name_bn || s.name) + '<br><small style="color:var(--dim)">' + esc(s.name) + '</small></td>' +
       '<td>' + esc(s.category_id ? ((s.category_icon || '📁') + ' ' + (s.category_name_bn || s.category_name || '')) : '—') + '</td>' +
       '<td>' + (s.type === 'manual' ? 'ম্যানুয়াল' : 'অটোমেটেড') + '</td><td>৳' + bn(s.price) + '</td>' +
@@ -592,8 +592,8 @@ TABS.sms = async () => {
     '<button class="mini-btn' + (f === 'yes' ? ' ok' : '') + '" onclick="window._smsFilter=\'yes\';show(\'sms\')">✅ ম্যাচড</button> ' +
     '<button class="mini-btn' + (f === '' ? ' ok' : '') + '" onclick="window._smsFilter=\'\';show(\'sms\')">📋 সব</button></div>';
 
-  if (!d.sms.length) html += '<div style="color:var(--muted)">কোনো SMS নেই 🎉</div>';
-  for (const s of d.sms) {
+  if (!(d.sms || []).length) html += '<div style="color:var(--muted)">কোনো SMS নেই 🎉</div>';
+  for (const s of (d.sms || [])) {
     const matched = !!s.matched_recharge_id;
     html += '<div class="list-row" style="cursor:default;"><div>' +
       '<div class="t">৳' + bn(s.amount) + ' <small style="color:var(--dim)">' + esc(s.method || 'unknown') + '</small> ' +
