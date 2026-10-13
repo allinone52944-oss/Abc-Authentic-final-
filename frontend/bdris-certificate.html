@@ -97,7 +97,8 @@
     <div class="wiz" id="w3">
       <div class="form-card">
         <h3 style="color:var(--gold);margin-bottom:10px;">✅ তথ্য পাওয়া গেছে</h3>
-        <div id="recView"></div>
+        <div id="recView" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"></div>
+        <style>#recView .field{display:flex;flex-direction:column;}#recView .field label{font-size:12px;color:var(--muted);margin-bottom:4px;}#recView .field input{padding:8px;border:1px solid var(--gold);border-radius:8px;background:rgba(255,255,255,.05);color:inherit;}#recView .full{grid-column:1/-1;}</style>
         <div style="height:12px;"></div>
         <button class="btn" id="b3" onclick="step3()">সনদ তৈরি করুন →</button>
       </div>
@@ -192,7 +193,8 @@ async function step2(){
       ['motherNameBn','মাতা (বাংলা)',d.motherNameBn],['motherNameEn','মাতা (EN)',d.motherNameEn],
       ['office1','অফিসের নাম',d.office1],['office2','অফিসের ঠিকানা',d.office2]
     ];
-    document.getElementById('recView').innerHTML=fields.map(f=>'<div class="field"><label>'+esc(f[1])+'</label><input type="text" id="rec_'+f[0]+'" value="'+esc(f[2]||'')+'"></div>').join('')+'<div class="s" style="color:var(--muted);font-size:12px;margin-top:8px;">✏️ সব তথ্য এডিট করা যাবে</div>';
+    const fullW=['brn','office1','office2'];
+    document.getElementById('recView').innerHTML=fields.map(f=>'<div class="field'+(fullW.includes(f[0])?' full':'')+'"><label>'+esc(f[1])+'</label><input type="text" id="rec_'+f[0]+'" value="'+esc(f[2]||'')+'"></div>').join('')+'<div class="s full" style="color:var(--muted);font-size:12px;">✏️ সব তথ্য এডিট করা যাবে</div>';
     // Save edited values back to S.record on change
     fields.forEach(f=>{const el=document.getElementById('rec_'+f[0]); if(el) el.oninput=()=>{S.record[f[0]]=el.value;};});
     go(3);showOk('তথ্য যাচাই সফল ✓');
