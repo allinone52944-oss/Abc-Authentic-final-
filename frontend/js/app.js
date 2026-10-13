@@ -79,8 +79,20 @@
     }
   }
 
+  // Deduplicate concurrent token refreshes (race condition fix)
+  let _refreshPromise = null;
+  function refreshAccessDedup() {
+    if (_refreshPromise) return _refreshPromise;
+    _refreshPromise = refreshAccess().finally(() => { _refreshPromise = null; });
+    return _refreshPromise;
+  }
+
   async function api(path, opts) {
-    opts = opts || {};
+    if (typeof path !== 'string' || !path) {
+      throw new TypeError('api(path): path must be a non-empty string');
+    }
+    // Clone opts to avoid mutating caller's object (signal/body)
+    opts = Object.assign({}, opts || {});
     opts.headers = Object.assign({}, opts.headers || {});
     if (accessToken) opts.headers['Authorization'] = 'Bearer ' + accessToken;
     if (opts.body && typeof opts.body === 'object') {
@@ -104,9 +116,9 @@
     }
     clearTimeout(timer);
     if (r.status === 401 && accessToken) {
-      // Try one silent refresh, then retry
+      // Try one silent refresh (deduplicated), then retry
       let refreshed = false;
-      try { refreshed = await refreshAccess(); } catch (e) { refreshed = false; }
+      try { refreshed = await refreshAccessDedup(); } catch (e) { refreshed = false; }
       if (refreshed) {
         opts.headers['Authorization'] = 'Bearer ' + accessToken;
         const ctrl2 = new AbortController();
