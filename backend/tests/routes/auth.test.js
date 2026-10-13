@@ -173,8 +173,8 @@ describe('POST /api/auth/login', () => {
     expect(upd).toBeDefined();
   });
 
-  test('5th failed attempt locks the account → 423 ACCOUNT_LOCKED', async () => {
-    const locked = { ...userRow(), failed_attempts: 4 };
+  test('10th failed attempt locks the account → 423 ACCOUNT_LOCKED', async () => {
+    const locked = { ...userRow(), failed_attempts: 9 };
     db.__routeQuery([
       ['SELECT value FROM settings WHERE key', { rows: [] }],
       ['SELECT * FROM users WHERE LOWER(phone)', { rows: [locked] }],

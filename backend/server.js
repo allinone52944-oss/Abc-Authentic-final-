@@ -28,7 +28,18 @@ app.use(xssClean);
 app.use(sameOrigin);
 
 // Serve frontend + bundled assets (fonts local, no CDN dependency)
-app.use(express.static(path.join(__dirname, '..', 'frontend')));
+app.use(express.static(path.join(__dirname, '..', 'frontend'), {
+  setHeaders: (res, filePath) => {
+    // HTML: always revalidate (no stale ?v= references)
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+    // Versioned assets (?v=): cache aggressively (version changes on update)
+    else if (/\.(css|js)$/.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  },
+}));
 app.use('/assets', express.static(path.join(__dirname, '..', 'assets')));
 
 // Load modular engines (NID, BDRIS, ... added later)
