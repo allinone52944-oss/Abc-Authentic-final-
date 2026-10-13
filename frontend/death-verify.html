@@ -68,7 +68,7 @@
         </div>
         <div class="field">
           <label>মৃত্যু তারিখ *</label>
-          <input id="dod" type="date">
+          <input id="dod" type="text" placeholder="dd-mm-yyyy বা yyyy-mm-dd" inputmode="numeric">
         </div>
         <button class="btn" id="b1" onclick="step1()">ক্যাপচা আনুন →</button>
         <div class="hint">BDRIS পোর্টাল (UDRN) থেকে সরাসরি যাচাই করা হবে।</div>
@@ -136,10 +136,14 @@ function busy(id,on,txt){
   if(on){b.dataset.t=b.innerHTML;b.innerHTML='<span class="spin"></span>'+(txt||'অপেক্ষা করুন…');b.disabled=true;}
   else{b.innerHTML=b.dataset.t||b.innerHTML;b.disabled=false;}
 }
-function toDDMMYYYY(ymd){
-  const p=String(ymd||'').split('-');
-  if(p.length!==3)return ymd;
-  return p[2]+'/'+p[1]+'/'+p[0];
+function toDDMMYYYY(v){
+  let s=String(v||'').trim().replace(/[.\/]/g,'-');
+  const d=s.replace(/-/g,'');
+  if(/^\d{8}$/.test(d)){
+    if(parseInt(d.slice(0,4))>1900) s=d.slice(6,8)+'-'+d.slice(4,6)+'-'+d.slice(0,4);
+    else s=d.slice(0,2)+'-'+d.slice(2,4)+'-'+d.slice(4,8);
+  }
+  return s;
 }
 async function step1(retry){
   const drn=document.getElementById('drn').value.trim();
