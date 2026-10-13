@@ -310,7 +310,14 @@ router.post('/login', async (req, res) => {
     );
     const user = r.rows[0];
 
-    // Uniform timing-safe failure (do not reveal which field was wrong)
+    // Timing-safe: always do password verification work, even if user not found,
+    // so response time doesn't reveal whether the account exists.
+    // Use a dummy hash when user is missing.
+    const DUMMY_HASH = '$2b$10$dummyhashdummyhashdummyhashdummyhashdummyhashdumm';
+    const hashToVerify = user ? user.password_hash : DUMMY_HASH;
+    const pwOk = await verifyPassword(String(password), hashToVerify);
+
+    // Uniform failure helper (does not reveal which field was wrong)
     const fail = async (code, status) => {
       if (user) {
         const sec = await getSetting('login_security');
@@ -338,8 +345,7 @@ router.post('/login', async (req, res) => {
       return res.status(423).json({ error: 'ACCOUNT_LOCKED' });
     }
 
-    const ok = await verifyPassword(String(password), user.password_hash);
-    if (!ok) return fail('INVALID_CREDENTIALS', 401);
+    if (!pwOk) return fail('INVALID_CREDENTIALS', 401);
 
     // Mandatory email verification: password is correct, but email not verified.
     if (!user.email_verified) {
