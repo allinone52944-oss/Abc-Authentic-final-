@@ -58,9 +58,18 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  // API: always network (never cache auth/payment data)
+  // API: always network (never cache auth/payment data), with timeout so a
+  // hanging tunnel doesn't freeze the page — frontend handles !ok.
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(fetch(req));
+    event.respondWith(
+      Promise.race([
+        fetch(req),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('api-timeout')), 15000)),
+      ]).catch(() => new Response(JSON.stringify({ error: 'NETWORK_TIMEOUT' }), {
+        status: 504,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+    );
     return;
   }
 
