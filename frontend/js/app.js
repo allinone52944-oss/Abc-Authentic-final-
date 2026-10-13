@@ -196,6 +196,22 @@
         }
       } catch (e) {}
     }, 4000);
+    // Second check at 25s (after 20s API timeout): report final state
+    setTimeout(function () {
+      try {
+        var c = document.getElementById('content');
+        var txt = c ? c.innerText.slice(0, 120) : 'NO #content';
+        var d = document.getElementById('abc-diag');
+        if (d) d.textContent += '\n\nFINAL@25s content: ' + txt;
+        else {
+          var d2 = document.createElement('div');
+          d2.id = 'abc-diag';
+          d2.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#efe;color:#000;padding:20px;font:14px monospace;white-space:pre-wrap;overflow:auto';
+          d2.textContent = 'DIAG-FINAL@25s\ncontent: ' + txt + '\nurl: ' + location.href;
+          document.body.appendChild(d2);
+        }
+      } catch (e) {}
+    }, 25000);
   });
 
   // ---- PWA: service worker (v6, push-only, no caching) ----
