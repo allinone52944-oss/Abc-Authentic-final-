@@ -32,7 +32,7 @@ async function validateInvite(code) {
 
 // Consume one use (row-locked, atomic).
 async function consumeInvite(code) {
-  await db.query(
+  const r = await db.query(
     `UPDATE invite_links SET used_count = used_count + 1
      WHERE code = $1
        AND is_active = TRUE
@@ -40,6 +40,7 @@ async function consumeInvite(code) {
        AND (max_uses IS NULL OR used_count < max_uses)`,
     [code.trim().toUpperCase()]
   );
+  return r.rowCount > 0;
 }
 
 // ---- admin router -------------------------------------------------------

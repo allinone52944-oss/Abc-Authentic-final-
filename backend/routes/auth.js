@@ -115,7 +115,10 @@ router.post('/register', async (req, res) => {
 
     // Consume the invite use (atomic; only if a valid invite was used).
     if (invite) {
-      try { await consumeInvite(invite.code); }
+      try {
+        const consumed = await consumeInvite(invite.code);
+        if (!consumed) safeLog('[auth] invite consume: max_uses reached for', invite.code);
+      }
       catch (e) { safeLog('[auth] invite consume skipped:', e.message); }
     }
 
