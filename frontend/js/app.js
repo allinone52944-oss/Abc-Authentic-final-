@@ -59,6 +59,9 @@
       if (await refreshAccess()) {
         opts.headers['Authorization'] = 'Bearer ' + accessToken;
         r = await fetch('/api' + path, opts);
+      } else {
+        // Refresh failed - clear stale tokens
+        clearTokens();
       }
     }
     return r;
