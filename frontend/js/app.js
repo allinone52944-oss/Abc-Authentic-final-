@@ -53,13 +53,25 @@
     const rt = localStorage.getItem(LS_REFRESH);
     if (!rt) return false;
     try {
-      const r = await fetch('/api/auth/refresh', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: rt }),
-      });
-      if (!r.ok) { clearTokens(); return false; }
-      const d = await r.json();
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15000);
+      let r;
+      try {
+        r = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: rt }),
+          signal: ctrl.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+      // Only clear tokens on 401 (invalid/expired refresh token).
+      // On 429/5xx, the token may still be valid — don't log the user out.
+      if (r.status === 401) { clearTokens(); return false; }
+      if (!r.ok) return false;
+      const d = await r.json().catch(() => null);
+      if (!d || !d.access_token) return false;
       setTokens(d.access_token, d.refresh_token || rt);
       return true;
     } catch (e) {
