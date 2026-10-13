@@ -7,7 +7,7 @@
    ============================================================ */
 'use strict';
 
-const CACHE = 'abc-authentic-v2';
+const CACHE = 'abc-authentic-v3';
 
 const APP_SHELL = [
   '/',
