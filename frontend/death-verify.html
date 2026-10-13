@@ -183,20 +183,20 @@ async function step2(){
     const j=await r.json();
     if(!j.success)throw new Error(j.error||'যাচাই ব্যর্থ');
     S.record=j.data;
+    S.record=j.data;
     const d=j.data;
-    const rows=[
-      ['DRN',d.brn],
-      ['নাম (EN)',d.nameEn],
-      ['নাম (বাংলা)',d.nameBn],
-      ['মৃত্যু তারিখ',d.dod],
-      ['মৃত্যুর স্থান',d.placeOfDeathBn||d.placeOfDeathEn],
-      ['মৃত্যুর কারণ',d.causeOfDeathBn||d.causeOfDeathEn],
-      ['লিঙ্গ',d.sex],
-      ['মাতা',d.motherNameBn||d.motherNameEn],
-      ['পিতা',d.fatherNameBn||d.fatherNameEn],
-      ['নিবন্ধনের তারিখ',d.registrationDate]
+    const fields=[
+      ['brn','DRN',d.brn],['nameEn','নাম (EN)',d.nameEn],['nameBn','নাম (বাংলা)',d.nameBn],
+      ['dod','মৃত্যু তারিখ',d.dod],['sex','লিঙ্গ',d.sex],
+      ['placeOfDeathEn','মৃত্যুর স্থান (EN)',d.placeOfDeathEn],['placeOfDeathBn','মৃত্যুর স্থান (বাংলা)',d.placeOfDeathBn],
+      ['causeOfDeathEn','মৃত্যুর কারণ (EN)',d.causeOfDeathEn],['causeOfDeathBn','মৃত্যুর কারণ (বাংলা)',d.causeOfDeathBn],
+      ['motherNameEn','মাতা (EN)',d.motherNameEn],['motherNameBn','মাতা (বাংলা)',d.motherNameBn],
+      ['fatherNameEn','পিতা (EN)',d.fatherNameEn],['fatherNameBn','পিতা (বাংলা)',d.fatherNameBn],
+      ['registrationDate','নিবন্ধনের তারিখ',d.registrationDate],
+      ['office1','অফিসের নাম',d.office1],['office2','অফিসের ঠিকানা',d.office2]
     ];
-    document.getElementById('recView').innerHTML=rows.filter(x=>x[1]).map(x=>'<div class="kv"><b>'+esc(x[0])+'</b><span>'+esc(x[1])+'</span></div>').join('');
+    document.getElementById('recView').innerHTML=fields.map(f=>'<div class="field"><label>'+esc(f[1])+'</label><input type="text" id="rec_'+f[0]+'" value="'+esc(f[2]||'')+'"></div>').join('')+'<div class="s" style="color:var(--muted);font-size:12px;margin-top:8px;">✏️ সব তথ্য এডিট করা যাবে</div>';
+    fields.forEach(f=>{const el=document.getElementById('rec_'+f[0]); if(el) el.oninput=()=>{S.record[f[0]]=el.value;};});
     go(3);showOk('মৃত্যু তথ্য যাচাই সফল ✓');
   }catch(e){showErr(e.message||'যাচাই ব্যর্থ।');}
   busy('b2',false);
