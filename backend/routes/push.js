@@ -30,7 +30,7 @@ router.post('/subscribe', requireAuth, async (req, res) => {
 // POST /api/push/unsubscribe — remove by endpoint (auth)
 router.post('/unsubscribe', requireAuth, async (req, res) => {
   try {
-    const r = await push.removeSubscription(db, req.body && req.body.endpoint);
+    const r = await push.removeSubscription(db, req.body && req.body.endpoint, req.user.id);
     if (!r.ok) return res.status(400).json({ error: r.error });
     res.json({ ok: true });
   } catch (e) {

@@ -65,11 +65,12 @@ async function saveSubscription(db, userId, sub) {
   }
 }
 
-// Remove a subscription by endpoint. Never throws.
-async function removeSubscription(db, endpoint) {
+// Remove a subscription by endpoint + owner. Never throws.
+async function removeSubscription(db, endpoint, userId) {
   try {
     if (!endpoint) return { ok: false, error: 'MISSING_ENDPOINT' };
-    await db.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [endpoint]);
+    if (!userId) return { ok: false, error: 'MISSING_USER' };
+    await db.query('DELETE FROM push_subscriptions WHERE endpoint = $1 AND user_id = $2', [endpoint, userId]);
     return { ok: true };
   } catch (e) {
     safeLog('[push] removeSubscription failed:', e.message);
