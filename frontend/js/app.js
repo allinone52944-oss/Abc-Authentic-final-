@@ -107,11 +107,12 @@
 
   window.ABC = { api, setTokens, clearTokens, refreshAccess, Drafts };
 
-  // ---- PWA: service worker + install prompt ----
+  // ---- PWA: service worker DISABLED (was causing refresh breakage) ----
+  // Unregister any existing service worker so the browser fetches fresh.
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
-    });
+    navigator.serviceWorker.getRegistrations().then((regs) => {
+      for (const r of regs) r.unregister().catch(() => {});
+    }).catch(() => {});
   }
 
   let deferredPrompt = null;
