@@ -1,18 +1,8 @@
 /* ============================================================
    All In One (Abc Authentic) - Coffee Theme (#9)
    espresso #2b1d14 + gold #d4af37 | premium | no-scroll hub
-   Bundled font: Noto Sans Bengali (local, no CDN)
+   Font: system Bengali fonts (Noto Sans Bengali files not bundled)
    ============================================================ */
-@font-face {
-  font-family: 'Noto Sans Bengali';
-  src: url('/assets/fonts/NotoSansBengali-Regular.ttf') format('truetype');
-  font-weight: 400; font-display: swap;
-}
-@font-face {
-  font-family: 'Noto Sans Bengali';
-  src: url('/assets/fonts/NotoSansBengali-Bold.ttf') format('truetype');
-  font-weight: 700; font-display: swap;
-}
 :root {
   --espresso: #2b1d14;
   --espresso-deep: #1d130c;
