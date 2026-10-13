@@ -91,12 +91,14 @@ const DEFAULT_ALLOWED = ['pdf', 'jpg', 'jpeg', 'png'];
 
 function uploadMiddleware(getLimits) {
   const storage = multer.memoryStorage();
+  const limits = getLimits ? getLimits() : {};
+  const maxMb = Number(limits.max_mb) > 0 ? Number(limits.max_mb) : DEFAULT_MAX_MB;
+  const allowed = limits.allowed || DEFAULT_ALLOWED;
   return multer({
     storage,
-    limits: { fileSize: DEFAULT_MAX_MB * 1024 * 1024, files: 5 },
+    limits: { fileSize: maxMb * 1024 * 1024, files: 5 },
     fileFilter: (req, file, cb) => {
       const ext = (file.originalname.split('.').pop() || '').toLowerCase();
-      const allowed = (getLimits && getLimits().allowed) || DEFAULT_ALLOWED;
       if (!allowed.includes(ext)) {
         return cb(new Error('FILE_TYPE_NOT_ALLOWED'));
       }

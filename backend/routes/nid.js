@@ -13,7 +13,7 @@ const nidAdapter = require('../../engines/nid-replica/adapter');
 const router = express.Router();
 
 // PDF-only upload, 20MB cap (NID form scans can be large)
-const upload = uploadMiddleware(() => ({ allowed: ['pdf'] }));
+const upload = uploadMiddleware(() => ({ allowed: ['pdf'], max_mb: 20 }));
 const pdfOnly = upload.single('pdf');
 
 function multerError(err, req, res, next) {
