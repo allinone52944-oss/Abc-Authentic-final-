@@ -584,8 +584,10 @@ router.get('/transactions', async (req, res) => {
     const conds = [];
     const params = [];
     let i = 1;
-    if (req.query.status) { conds.push(`t.status = $${i++}`); params.push(req.query.status); }
-    if (req.query.type) { conds.push(`t.type = $${i++}`); params.push(req.query.type); }
+    const VALID_TX_STATUS = ['pending','approved','rejected'];
+    const VALID_TX_TYPE = ['recharge','debit','credit','refund'];
+    if (req.query.status && VALID_TX_STATUS.includes(req.query.status)) { conds.push(`t.status = $${i++}`); params.push(req.query.status); }
+    if (req.query.type && VALID_TX_TYPE.includes(req.query.type)) { conds.push(`t.type = $${i++}`); params.push(req.query.type); }
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
     const total = await db.query(`SELECT COUNT(*) FROM transactions t ${where}`, params);
     const rows = await db.query(
@@ -986,9 +988,10 @@ function reportTable(doc, headers, rows) {
 router.get('/reports/orders', async (req, res) => {
   try {
     const { from, to } = req.query;
+    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
     const conds = []; const params = []; let i = 1;
-    if (from) { conds.push(`o.created_at >= $${i++}`); params.push(from); }
-    if (to) { conds.push(`o.created_at <= $${i++}::date + INTERVAL '1 day'`); params.push(to); }
+    if (from && DATE_RE.test(from)) { conds.push(`o.created_at >= $${i++}`); params.push(from); }
+    if (to && DATE_RE.test(to)) { conds.push(`o.created_at <= $${i++}::date + INTERVAL '1 day'`); params.push(to); }
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
     const rows = await db.query(
       `SELECT o.id, o.status, o.price, o.created_at, u.name AS user_name, u.phone AS user_phone,
