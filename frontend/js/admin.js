@@ -606,6 +606,7 @@ window.AdmCat = {
 TABS.recharge = async () => {
   const r = await ABC.api('/admin/transactions?type=recharge&status=pending&limit=30');
   const d = await r.json();
+  if (!r.ok || !d.transactions) { content.innerHTML = '<div style="color:var(--danger)">⚠️ লোড ব্যর্থ! রিফ্রেশ করুন</div>'; return; }
   let html = '<h3 style="color:var(--gold);margin-bottom:12px;">⏳ পেন্ডিং রিচার্জ (' + bn(d.total) + ')</h3>';
   if (!d.transactions.length) html += '<div style="color:var(--muted)">কোনো পেন্ডিং রিকোয়েস্ট নেই 🎉</div>';
   for (const t of d.transactions) {
@@ -957,6 +958,7 @@ window.AdmBn = {
 TABS.notices = async () => {
   const r = await ABC.api('/admin/notices');
   const d = await r.json();
+  if (!r.ok || !d.notices) { content.innerHTML = '<div style="color:var(--danger)">⚠️ লোড ব্যর্থ! রিফ্রেশ করুন</div>'; return; }
   let html = '<button class="mini-btn ok" onclick="AdmNt.createForm()" style="margin-bottom:12px;">+ নতুন নোটিশ</button>';
   for (const n of d.notices) {
     html += '<div class="list-row" style="cursor:default;"><div>' +
