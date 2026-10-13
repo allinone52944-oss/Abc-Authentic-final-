@@ -168,6 +168,15 @@ webhook.post('/incoming', async (req, res) => {
       if (parsed && parseStatus === 'parsed' && parsed.direction !== 'out') {
         matchInfo = await findMatch(client, parsed);
         if (matchInfo) {
+          // Anomaly protection: large amounts require manual review
+          const MAX_AUTO_APPROVE = Number(process.env.SMS_MAX_AUTO_APPROVE || 50000);
+          if (Number(matchInfo.tx.amount) > MAX_AUTO_APPROVE) {
+            await client.query('COMMIT');
+            await logActivity(null, 'sms.large_amount_hold', {
+              sms_id: smsId, tx_id: matchInfo.tx.id, amount: Number(matchInfo.tx.amount),
+            });
+            return res.json({ ok: true, held_for_review: true });
+          }
           const tx = await approveRechargeTx(client, matchInfo.tx.id, smsId);
           if (tx) {
             await client.query('COMMIT');
