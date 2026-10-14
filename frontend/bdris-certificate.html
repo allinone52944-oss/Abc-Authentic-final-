@@ -144,11 +144,15 @@ async function step1(retry){
   if(!dob){showErr('জন্ম তারিখ দিন।');return;}
   // Auto-normalize: ddmmyyyy, dd.mm.yyyy, dd/mm/yyyy, dd-mm-yyyy, yyyy-mm-dd -> dd-mm-yyyy
   dob=dob.replace(/[.\/]/g,'-');
-  const digitsOnly=dob.replace(/-/g,'');
-  if(/^\d{8}$/.test(digitsOnly)){
-    // 8 digits: ddmmyyyy or yyyymmdd
-    if(parseInt(digitsOnly.slice(0,4))>1900) dob=digitsOnly.slice(6,8)+'-'+digitsOnly.slice(4,6)+'-'+digitsOnly.slice(0,4);
-    else dob=digitsOnly.slice(0,2)+'-'+digitsOnly.slice(2,4)+'-'+digitsOnly.slice(4,8);
+  // If already dd-mm-yyyy, keep as-is
+  if(!/^\d{1,2}-\d{1,2}-\d{4}$/.test(dob)){
+    const digitsOnly=dob.replace(/-/g,'');
+    if(/^\d{8}$/.test(digitsOnly)){
+      // 8 digits: ddmmyyyy or yyyymmdd (validate month/day)
+      const y=parseInt(digitsOnly.slice(0,4)), m=parseInt(digitsOnly.slice(4,6)), d=parseInt(digitsOnly.slice(6,8));
+      if(y>=1900 && y<=2100 && m>=1 && m<=12 && d>=1 && d<=31) dob=digitsOnly.slice(6,8)+'-'+digitsOnly.slice(4,6)+'-'+digitsOnly.slice(0,4);
+      else dob=digitsOnly.slice(0,2)+'-'+digitsOnly.slice(2,4)+'-'+digitsOnly.slice(4,8);
+    }
   }
   document.getElementById('dob').value=dob;
   S.brn=brn;S.dob=dob;
