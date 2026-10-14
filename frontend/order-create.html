@@ -59,8 +59,9 @@ async function init(){
     document.getElementById('svcName').textContent='সেবা বেছে নিন';
     document.getElementById('svcPrice').style.display='none';
     document.getElementById('dynFields').innerHTML=svcs.map(s=>
-      '<button class="btn" style="margin:4px 0;width:100%;text-align:left;" onclick="location.href=\'/order-create.html?service='+s.id+'\">'+esc(s.name_bn||s.name)+' — ৳'+Number(s.price).toLocaleString('bn-BD')+'</button>'
+      '<button class="btn svc-pick" data-sid="'+esc(s.id)+'" style="margin:4px 0;width:100%;text-align:left;">'+esc(s.name_bn||s.name)+' — ৳'+Number(s.price).toLocaleString('bn-BD')+'</button>'
     ).join('');
+    document.querySelectorAll('.svc-pick').forEach(b=>{b.onclick=()=>{location.href='/order-create.html?service='+b.dataset.sid;};});
     document.getElementById('submitBtn').style.display='none';
     return;
   }
