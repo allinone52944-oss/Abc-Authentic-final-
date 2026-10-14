@@ -1136,11 +1136,21 @@ function modal(title, bodyHtml) {
   closeModal();
   const bg = document.createElement('div');
   bg.className = 'modal-bg'; bg.id = 'admModal';
-  bg.innerHTML = '<div class="modal"><h3>' + esc(title) + '</h3>' + bodyHtml + '</div>';
+  bg.innerHTML = '<div class="modal"><button class="modal-x" onclick="closeModal()" style="position:absolute;top:8px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:#888;">✕</button><h3>' + esc(title) + '</h3>' + bodyHtml + '</div>';
   bg.onclick = (e) => { if (e.target === bg) closeModal(); };
   document.body.appendChild(bg);
+  // Escape key closes modal
+  bg._escHandler = (e) => { if (e.key === 'Escape') closeModal(); };
+  document.addEventListener('keydown', bg._escHandler);
 }
-function closeModal() { const m = document.getElementById('admModal'); if (m) m.remove(); }
+function closeModal() {
+  const m = document.getElementById('admModal');
+  if (m) {
+    if (m._escHandler) document.removeEventListener('keydown', m._escHandler);
+    m.remove();
+  }
+}
+
 
 window.VoiceAlert = VoiceAlert;
 window.PushNotify = PushNotify;
