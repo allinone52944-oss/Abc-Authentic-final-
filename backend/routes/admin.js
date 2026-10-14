@@ -5,10 +5,33 @@
 // role. All sensitive actions logged to activity_log.
 // ============================================================
 const express = require('express');
+const multer = require('multer');
+const fs = require('fs');
 const db = require('../db');
 const { requireAuth, requireAdmin, hashPassword, verifyPassword } = require('../auth');
 const { safeLog } = require('../security');
 const wa = require('../utils/whatsapp');
+
+const orderDocStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = '/opt/all-in-one-abc-authentic/uploads/orders';
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `delivery-${req.params.id}-${Date.now()}${ext}`);
+  }
+});
+const orderDocUpload = multer({
+  storage: orderDocStorage,
+  limits: { fileSize: 10 * 1024 * 1024, files: 5 },
+  fileFilter: (req, file, cb) => {
+    const ext = (file.originalname.split('.').pop() || '').toLowerCase();
+    if (['pdf','jpg','jpeg','png'].includes(ext)) cb(null, true);
+    else cb(new Error('FILE_TYPE_NOT_ALLOWED'));
+  }
+});
 
 const router = express.Router();
 router.use(requireAuth, requireAdmin);
@@ -328,6 +351,31 @@ const SUPPORT_TEMPLATES = [
 
 router.get('/support-templates', async (req, res) => {
   res.json({ templates: SUPPORT_TEMPLATES });
+});
+
+// Admin upload delivery document
+router.post('/orders/:id/delivery-docs', orderDocUpload.single('file'), async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    if (!req.file) return res.status(400).json({ error: 'NO_FILE' });
+    const ord = await db.query('SELECT * FROM orders WHERE id=$1', [orderId]);
+    if (!ord.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    const order = ord.rows[0];
+    let docs = [];
+    try { docs = JSON.parse(order.documents || '[]'); } catch (_) {}
+    docs.push({
+      type: req.body.doc_type || 'delivery',
+      filename: req.file.filename,
+      originalname: req.file.originalname,
+      path: req.file.path,
+      uploaded_at: new Date().toISOString(),
+      uploaded_by: 'admin'
+    });
+    await db.query('UPDATE orders SET documents=$1 WHERE id=$2', [JSON.stringify(docs), orderId]);
+    res.json({ ok: true, filename: req.file.filename });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.post('/orders/:id/support-message', async (req, res) => {
