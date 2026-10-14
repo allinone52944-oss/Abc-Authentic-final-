@@ -57,7 +57,7 @@
       <div class="big" id="hubServices">০</div>
       <div class="sub">অটোমেটেড • ম্যানুয়াল</div>
     </div>
-    <div class="hub-card wide" onclick="location.href='/services.html'">
+    <div class="hub-card wide" onclick="location.href='/order-create.html'">
       <span class="go">➤</span>
       <div class="emoji">⚡</div>
       <h3>দ্রুত অর্ডার</h3>
@@ -257,7 +257,7 @@ async function init() {
   const nR = await ABC.api('/notices');
   if (nR.ok) {
     const d = await nR.json();
-    document.getElementById('hubNotices').textContent = bnNum(d.notices.length);
+    document.getElementById('hubNotices').textContent = bnNum(d.notices.filter(n => (n.title||'').trim() || (n.message||'').trim()).length);
   }
 
   // Banners carousel (Phase 3)
@@ -287,7 +287,8 @@ function escapeHtml(s) {
 async function showNotices() {
   const r = await ABC.api('/notices');
   const d = r.ok ? await r.json() : { notices: [] };
-  const list = d.notices.map(n =>
+  const valid = d.notices.filter(n => (n.title || '').trim() || (n.message || '').trim());
+  const list = valid.map(n =>
     '<li><b>' + escapeHtml(n.title) + '</b><br>' + escapeHtml(n.message) + '</li>'
   ).join('') || '<li>কোনো নোটিশ নেই</li>';
   const bg = document.createElement('div');
