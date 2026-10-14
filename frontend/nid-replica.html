@@ -40,6 +40,8 @@
 #cardFrame{width:100%;height:62vh;border:2px solid var(--gold);border-radius:12px;background:#fff;}
 #fieldForm{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 #fieldForm .field{margin:0;}
+#fieldForm .field.full{grid-column:1/-1;}
+#fieldForm textarea{width:100%;min-height:60px;padding:8px;border:1px solid var(--gold);border-radius:8px;background:#1a1a1a;color:#fff;font-size:14px;}
 .drop{border:2px dashed var(--gold);border-radius:12px;padding:28px 14px;text-align:center;color:var(--cream);cursor:pointer;}
 .drop input{display:none;}
 </style>
@@ -172,7 +174,13 @@ async function doExtract(){
     orderKeys.forEach((k,i)=>{
       const d=document.createElement('div');d.className='field';
       const id='fld'+i;
-      d.innerHTML='<label>'+esc(k)+'</label><input id="'+id+'" value="'+esc(S.fields[k])+'" data-k="'+esc(k)+'">';
+      const isAddr=/address|ঠিকানা/i.test(k);
+      if(isAddr){
+        d.classList.add('full');
+        d.innerHTML='<label>'+esc(k)+'</label><textarea id="'+id+'" rows="3" data-k="'+esc(k)+'">'+esc(S.fields[k])+'</textarea>';
+      }else{
+        d.innerHTML='<label>'+esc(k)+'</label><input id="'+id+'" value="'+esc(S.fields[k])+'" data-k="'+esc(k)+'">';
+      }
       ff.appendChild(d);
     });
     go(3);showOk('তথ্য পাওয়া গেছে ✓ ভুল থাকলে ঠিক করে দিন');
@@ -181,7 +189,7 @@ async function doExtract(){
 }
 function collectFields(){
   const out={};
-  document.querySelectorAll('#fieldForm input').forEach(inp=>{out[inp.dataset.k]=inp.value;});
+  document.querySelectorAll('#fieldForm input,#fieldForm textarea').forEach(inp=>{out[inp.dataset.k]=inp.value;});
   return out;
 }
 function replaceImg(idx,input){
