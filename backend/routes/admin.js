@@ -707,6 +707,8 @@ router.put('/transactions/:id/reject', async (req, res) => {
     );
     if (!r.rows.length) return res.status(400).json({ error: 'NOT_PENDING' });
     await logActivity(req.user.id, 'transaction.reject', { tx_id: req.params.id });
+    // WhatsApp: recharge rejected -> customer failure message
+    wa.notifyRechargeRejected(db, r.rows[0]).catch(() => {});
     res.json({ ok: true });
   } catch (e) {
     safeLog('[admin] reject error:', e.message);

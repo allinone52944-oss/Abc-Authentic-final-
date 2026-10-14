@@ -360,6 +360,25 @@ async function notifyRechargeApproved(db, tx) {
   }
 }
 
+
+async function notifyRechargeRejected(db, tx) {
+  try {
+    if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
+    const u = await db.query(
+      'SELECT name, whatsapp FROM users WHERE id = $1', [tx.user_id]
+    );
+    const user = u.rows[0];
+    if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
+    const msg = `দুঃখিত ${user.name || ''}, আপনার ৳${tx.amount} রিচার্জ রিকোয়েস্ট বাতিল করা হয়েছে। সঠিক তথ্য দিয়ে আবার চেষ্টা করুন।`;
+    const r = await sendTextMessage(user.whatsapp, msg, db);
+    safeLog('[whatsapp] recharge rejected notify', tx.id, '->', r.ok ? 'sent' : r.error);
+    return r;
+  } catch (e) {
+    safeLog('[whatsapp] notifyRechargeRejected failed:', e.message);
+    return { ok: false, error: 'FAILED' };
+  }
+}
+
 module.exports = {
   isConfigured,
   getConfig,
@@ -378,4 +397,5 @@ module.exports = {
   notifyOrderFailed,
   notifyOrderCancelled,
   notifyRechargeApproved,
+  notifyRechargeRejected,
 };
