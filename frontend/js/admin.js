@@ -707,8 +707,9 @@ TABS.sms = async () => {
     '<ol style="color:var(--muted);font-size:14px;line-height:1.9;margin:0;padding-left:20px;">' +
     '<li>Play Store থেকে <b>SMS Forwarder</b> জাতীয় অ্যাপ ইনস্টল করুন।</li>' +
     '<li>ফিল্টার: প্রেরক <b>bKash (16247)</b>, <b>Nagad (16167)</b>, <b>Rocket (16216)</b>।</li>' +
-    '<li>Webhook URL বসান:<br><code style="color:var(--gold);word-break:break-all;">' +
-    location.origin + '/api/sms/incoming?secret=আপনার_SMS_WEBHOOK_SECRET</code></li>' +
+    '<li>Webhook URL বসান:<br><code id="smsSecretUrl" style="color:var(--gold);word-break:break-all;">' +
+    location.origin + '/api/sms/incoming?secret=আপনার_SMS_WEBHOOK_SECRET</code><br>' +
+    '<button class="mini-btn" onclick="AdmSms.showSecret()">🔑 Secret দেখুন</button></li>' +
     '<li>মেথড: <b>POST</b>, JSON body: <code>{"sender":"{sender}","message":"{message}"}</code></li>' +
     '<li>টাকা ঢুকলেই SMS এলে অটো-ম্যাচ হবে — TrxID মিললে বা টাকা+নম্বর মিললে ✅</li>' +
     '</ol></div>';
@@ -733,6 +734,17 @@ window.AdmSms = {
     if (!confirm('এই SMS ইগনোর করবেন?')) return;
     await ABC.api('/admin/sms/' + smsId + '/ignore', { method: 'POST' });
     show('sms');
+  },
+  async showSecret() {
+    const r = await ABC.api('/admin/sms/secret');
+    const d = await r.json();
+    if (d.ok && d.secret) {
+      const el = document.getElementById('smsSecretUrl');
+      if (el) el.textContent = location.origin + '/api/sms/incoming?secret=' + d.secret;
+      prompt('SMS Webhook Secret (কপি করুন):', d.secret);
+    } else {
+      alert('Secret পাওয়া যায়নি');
+    }
   },
 };
 
