@@ -121,6 +121,7 @@
 const API='/death-engine';
 let S={sessionId:null,drn:'',dod:'',record:null};
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function codOther(sel){const other=document.getElementById(sel.id+'_other');const isOther=(sel.value==='Other'||sel.value==='অন্যান্য');other.style.display=isOther?'block':'none';if(isOther){S.record[sel.id.replace('rec_','')]=other.value;}else{S.record[sel.id.replace('rec_','')]=sel.value;other.value='';}}
 function showErr(m){const e=document.getElementById('err');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),6000);}
 function showOk(m){const e=document.getElementById('ok');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),4000);}
 function go(n){
@@ -208,7 +209,8 @@ async function step2(){
       const lbl='<label>'+esc(f[1])+'</label>';
       if(f[3]==='dropdown'){
         const opts=f[0].includes('Bn')?codOptsBn:codOpts;
-        const sel='<select id="rec_'+f[0]+'">'+opts.map(o=>'<option value="'+esc(o)+'"'+(o===(f[2]||'')?' selected':'')+'>'+esc(o||'-- নির্বাচন করুন --')+'</option>').join('')+'</select>';
+        const otherVal=f[0].includes('Bn')?'অন্যান্য':'Other';
+        const sel='<select id="rec_'+f[0]+'" onchange="codOther(this)">'+opts.map(o=>'<option value="'+esc(o)+'"'+(o===(f[2]||'')?' selected':'')+'>'+esc(o||'-- নির্বাচন করুন --')+'</option>').join('')+'</select><input type="text" id="rec_'+f[0]+'_other" placeholder="ম্যানুয়ালি লিখুন" style="display:none;margin-top:4px;" oninput="S.record[\''+f[0]+'\']=this.value">';
         return '<div class="'+cls+'">'+lbl+sel+'</div>';
       }
       return '<div class="'+cls+'">'+lbl+'<input type="text" id="rec_'+f[0]+'" value="'+esc(f[2]||'')+'"></div>';
