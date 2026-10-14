@@ -203,6 +203,8 @@ try {
   //   GET  /api/bdris-apply/prices
   // Everything else falls through to the engine subprocess proxy.
   app.use('/api/bdris-apply', requireAuth, bdrisApplyLimiter, bdrisApplyRoutes);
+  // Socket.IO needs no auth (page already requires login; engine is internal)
+  app.use('/api/bdris-apply/socket.io', bdrisApplyAdapter.getApp());
   app.use('/api/bdris-apply', requireAuth, bdrisApplyLimiter, bdrisApplyAdapter.getApp());
   safeLog('[engines] mounted bdris-apply at /api/bdris-apply');
 } catch (e) {
