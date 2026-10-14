@@ -588,3 +588,11 @@ table.adm tr:hover td { background: rgba(212,175,55,0.05); }
 .bn-design-opt .dname { color: #d4af37; font-size: 13px; font-weight: bold; margin-bottom: 4px; }
 .bn-design-opt .dcat { color: #8a7a5f; font-size: 11px; }
 .bn-preview { border: 2px dashed #d4af37; border-radius: 12px; padding: 12px; margin: 12px 0; min-height: 80px; background: #100a05; }
+
+/* Mobile banner fix: prevent cutting */
+@media (max-width: 720px) {
+  #bnStrip, .bn-strip { width: 100% !important; max-width: 100% !important; overflow: hidden !important; }
+  .bn-slide { width: 100% !important; max-width: 100% !important; overflow: hidden !important; }
+  .bn-slide > div { width: 100% !important; max-width: 100% !important; overflow: hidden !important; box-sizing: border-box !important; }
+  .bn-slide * { max-width: 100% !important; box-sizing: border-box !important; word-wrap: break-word !important; overflow-wrap: break-word !important; }
+}
