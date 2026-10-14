@@ -223,7 +223,7 @@ async function step3(){
 async function dlPdf(){
   busy('b4',true,'PDF তৈরি হচ্ছে…');
   try{
-    const r=await ABC.api(API+'/generate-pdf',{method:'POST',body:S.record});
+    const r=await ABC.api(API+'/generate-pdf',{method:'POST',body:S.record,timeout:60000});
     if(!r.ok)throw new Error('PDF তৈরি ব্যর্থ');
     const blob=await r.blob();
     const a=document.createElement('a');

@@ -101,8 +101,11 @@
       opts.body = JSON.stringify(opts.body);
     }
     // Timeout: don't hang forever on flaky network (tunnel)
+    // Default 15s, but allow override via opts.timeout (e.g., PDF generation needs 60s)
+    const timeoutMs = opts.timeout || 15000;
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    delete opts.timeout;
     opts.signal = ctrl.signal;
     let r;
     try {
