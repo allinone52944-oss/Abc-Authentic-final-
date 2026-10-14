@@ -386,6 +386,16 @@ router.post('/orders/:id/delivery-docs', orderDocUpload.single('file'), async (r
   }
 });
 
+// GET /api/admin/sms/secret — get SMS webhook secret (admin only)
+router.get('/sms/secret', async (req, res) => {
+  try {
+    const secret = process.env.SMS_WEBHOOK_SECRET || '';
+    res.json({ ok: true, secret });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.post('/orders/:id/support-message', async (req, res) => {
   try {
     const { message, template_key } = req.body || {};
