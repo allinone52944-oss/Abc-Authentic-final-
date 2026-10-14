@@ -118,8 +118,38 @@ const VoiceAlert = {
       const no = Number(s.orders_new || 0);
       if (this._last.recharge && pr > this._last.recharge) {
         this.speak('নতুন রিচার্জ রিকোয়েস্ট এসেছে। অনুগ্রহ করে চেক করুন।');
+        // Speak customer name sweetly via TTS
+        try {
+          const rr = await ABC.api('/admin/recharge/pending');
+          if (rr.ok) {
+            const rd = await rr.json();
+            const latest = (rd.list || rd)[0];
+            if (latest && latest.user_name) {
+              setTimeout(() => {
+                const u = new SpeechSynthesisUtterance('কাস্টমার: ' + latest.user_name);
+                u.lang = 'bn-BD'; u.rate = 0.9; u.pitch = 1.1;
+                speechSynthesis.speak(u);
+              }, 3500);
+            }
+          }
+        } catch (e) {}
       } else if (this._last.order && no > this._last.order) {
         this.speak('নতুন অর্ডার এসেছে।');
+        // Speak customer name sweetly via TTS
+        try {
+          const or = await ABC.api('/admin/orders?status=new&limit=1');
+          if (or.ok) {
+            const od = await or.json();
+            const latest = (od.list || od.orders || [])[0];
+            if (latest && latest.user_name) {
+              setTimeout(() => {
+                const u = new SpeechSynthesisUtterance('কাস্টমার: ' + latest.user_name);
+                u.lang = 'bn-BD'; u.rate = 0.9; u.pitch = 1.1;
+                speechSynthesis.speak(u);
+              }, 3500);
+            }
+          }
+        } catch (e) {}
       }
       this._last.recharge = pr;
       this._last.order = no;
