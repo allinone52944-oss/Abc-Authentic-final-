@@ -550,7 +550,7 @@ table.adm tr:hover td { background: rgba(212,175,55,0.05); }
   .hub-card { padding: 16px 12px; overflow: hidden; word-wrap: break-word; }
   .hub-card .emoji { font-size: 28px; }
   .hub-card h3 { font-size: 14px; word-wrap: break-word; }
-  .hub-card .sub { font-size: 11px; word-wrap: break-word; overflow: hidden; }
+  .hub-card .sub { font-size: 11px; word-wrap: break-word; overflow-wrap: break-word; white-space: normal; line-height: 1.5; }
   .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .stat { padding: 12px 8px; overflow: hidden; }
   .stat .n { font-size: 20px; word-wrap: break-word; }
@@ -562,9 +562,10 @@ table.adm tr:hover td { background: rgba(212,175,55,0.05); }
 }
 
 /* ============ Phase 3: Banners ============ */
-.bn-strip { max-width: 860px; margin: 0 auto 10px; padding: 0 12px; }
+.bn-strip { max-width: 860px; margin: 0 auto 10px; padding: 0 12px; overflow: hidden; }
 .bn-slide { transition: opacity .3s ease, transform .3s ease; }
-.bn-strip .bn > div, .bn-strip > div > div { max-width: 100% !important; }
+.bn-strip .bn > div, .bn-strip > div > div { max-width: 100% !important; overflow: hidden; }
+.bn-strip * { max-width: 100% !important; word-wrap: break-word !important; white-space: normal !important; overflow-wrap: break-word !important; }
 
 /* ============ Phase 3: Support messages (user) ============ */
 .sup-msg { background: linear-gradient(135deg, #2b1d14, #3d2b1f); border: 1px solid #d4af37; border-left: 4px solid #d4af37; border-radius: 12px; padding: 14px 16px; margin: 10px 0; animation: supIn .5s ease; box-shadow: 0 4px 16px rgba(212,175,55,.12); }
