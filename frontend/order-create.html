@@ -64,8 +64,7 @@ async function init(){
   const docs=svc.documents_required||[];
   if(docs.length){
     document.getElementById('docWrap').style.display='block';
-    document.getElementById('docList').innerHTML=docs.map(d=>'<div>📎 '+esc(d)+'</div>').join('')+
-      '<div style="font-size:12px;margin-top:6px;">(ডকুমেন্ট আপলোড শীঘ্রই আসছে — এখন শুধু তালিকা)</div>';
+    document.getElementById('docList').innerHTML=docs.map((d,i)=>'<div class="field"><label>📎 '+esc(d)+' *</label><input type="file" data-doc="'+i+'" data-doctype="'+esc(d)+'" accept=".pdf,.jpg,.jpeg,.png"></div>').join('');
   }
   // Restore draft (survives refresh)
   const draft=ABC.Drafts.load('order_'+sid);
@@ -90,6 +89,7 @@ async function submit(){
   document.querySelectorAll('[data-field]').forEach(el=>{data[el.dataset.field]=el.value.trim();});
   const btn=document.getElementById('submitBtn');
   btn.disabled=true;btn.textContent='প্রসেস হচ্ছে…';
+  // First create order, then upload documents
   const r=await ABC.api('/orders',{method:'POST',body:{
     service_id:sid,data,notes:document.getElementById('notes').value.trim(),
     documents:(svc.documents_required||[]).map(d=>({type:d,ref:''}))
@@ -102,8 +102,24 @@ async function submit(){
       d.error==='SERVICE_CLOSED'?'⚠️ সেবা এখন বন্ধ আছে':'❌ '+d.error;
     return;
   }
+  // Upload documents if any
+  const orderId = d.order.id;
+  const fileInputs = document.querySelectorAll('[data-doc]');
+  for (const inp of fileInputs) {
+    if (inp.files.length) {
+      const fd = new FormData();
+      fd.append('file', inp.files[0]);
+      fd.append('doc_type', inp.dataset.doctype);
+      const token = sessionStorage.getItem('abc_access_token') || '';
+      await fetch('/api/orders/'+orderId+'/documents', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer '+token },
+        body: fd
+      });
+    }
+  }
   ABC.Drafts.clear('order_'+sid);
-  location.href='/order-status.html?id='+d.order.id;
+  location.href='/order-status.html?id='+orderId;
 }
 init();
 </script>

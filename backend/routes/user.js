@@ -7,7 +7,33 @@
 const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../auth');
-const { safeLog } = require('../security');
+const { safeLog, uploadMiddleware } = require('../security');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Order document uploads: disk storage, permanent
+const orderDocStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = '/opt/all-in-one-abc-authentic/uploads/orders';
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const name = `order-${req.params.id}-${Date.now()}${ext}`;
+    cb(null, name);
+  }
+});
+const orderDocUpload = multer({
+  storage: orderDocStorage,
+  limits: { fileSize: 10 * 1024 * 1024, files: 5 },
+  fileFilter: (req, file, cb) => {
+    const ext = (file.originalname.split('.').pop() || '').toLowerCase();
+    if (['pdf','jpg','jpeg','png'].includes(ext)) cb(null, true);
+    else cb(new Error('FILE_TYPE_NOT_ALLOWED'));
+  }
+});
 const push = require('../utils/push');
 
 const router = express.Router();
@@ -277,6 +303,33 @@ router.get('/orders/:id/messages', async (req, res) => {
 // ============================================================
 // WALLET
 // ============================================================
+
+// Upload document for an order (customer uploads required docs)
+router.post('/orders/:id/documents', orderDocUpload.single('file'), async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const docType = req.body.doc_type || 'document';
+    // Verify order belongs to user
+    const ord = await db.query('SELECT * FROM orders WHERE id=$1 AND user_id=$2', [orderId, req.user.id]);
+    if (!ord.rows.length) return res.status(404).json({ error: 'ORDER_NOT_FOUND' });
+    if (!req.file) return res.status(400).json({ error: 'NO_FILE' });
+    const order = ord.rows[0];
+    let docs = [];
+    try { docs = JSON.parse(order.documents || '[]'); } catch (_) {}
+    docs.push({
+      type: docType,
+      filename: req.file.filename,
+      originalname: req.file.originalname,
+      path: req.file.path,
+      uploaded_at: new Date().toISOString(),
+      uploaded_by: 'customer'
+    });
+    await db.query('UPDATE orders SET documents=$1 WHERE id=$2', [JSON.stringify(docs), orderId]);
+    res.json({ ok: true, filename: req.file.filename });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 router.get('/wallet', async (req, res) => {
   try {
