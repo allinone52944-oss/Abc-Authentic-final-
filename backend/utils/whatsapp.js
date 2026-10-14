@@ -214,6 +214,20 @@ const DEFAULT_TEMPLATES = {
     'ধন্যবাদ!',
 };
 
+// Check if a specific notification type is enabled (default: true)
+async function isNotifyEnabled(db, key) {
+  try {
+    const r = await db.query("SELECT value FROM settings WHERE key = 'whatsapp'");
+    if (r.rows.length) {
+      const v = typeof r.rows[0].value === 'string'
+        ? JSON.parse(r.rows[0].value)
+        : r.rows[0].value;
+      if (v.notify && typeof v.notify[key] === 'boolean') return v.notify[key];
+    }
+  } catch (_) {}
+  return true; // default enabled
+}
+
 // Admin-editable templates merged over defaults. Missing/empty
 // template => default (also covers DBs seeded before templates existed).
 async function getTemplates(db) {
@@ -266,6 +280,7 @@ function rechargeApprovedMessage({ name, amount, newBalance }) {
 async function notifyOrderCompleted(db, order) {
   try {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
+    if (!(await isNotifyEnabled(db, 'order_completed'))) return { ok: false, error: 'NOTIFY_OFF' };
     const u = await db.query(
       'SELECT name, whatsapp FROM users WHERE id = $1', [order.user_id]
     );
@@ -297,6 +312,7 @@ async function notifyOrderCompleted(db, order) {
 async function notifyOrderFailed(db, order) {
   try {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
+    if (!(await isNotifyEnabled(db, 'order_failed'))) return { ok: false, error: 'NOTIFY_OFF' };
     const u = await db.query(
       'SELECT name, whatsapp FROM users WHERE id = $1', [order.user_id]
     );
@@ -322,6 +338,7 @@ async function notifyOrderFailed(db, order) {
 async function notifyOrderCancelled(db, order) {
   try {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
+    if (!(await isNotifyEnabled(db, 'order_cancelled'))) return { ok: false, error: 'NOTIFY_OFF' };
     const u = await db.query(
       'SELECT name, whatsapp FROM users WHERE id = $1', [order.user_id]
     );
@@ -340,6 +357,7 @@ async function notifyOrderCancelled(db, order) {
 async function notifyRechargeApproved(db, tx) {
   try {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
+    if (!(await isNotifyEnabled(db, 'recharge_approved'))) return { ok: false, error: 'NOTIFY_OFF' };
     const u = await db.query(
       'SELECT name, whatsapp, balance FROM users WHERE id = $1', [tx.user_id]
     );
@@ -364,6 +382,7 @@ async function notifyRechargeApproved(db, tx) {
 async function notifyRechargeRejected(db, tx) {
   try {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
+    if (!(await isNotifyEnabled(db, 'recharge_rejected'))) return { ok: false, error: 'NOTIFY_OFF' };
     const u = await db.query(
       'SELECT name, whatsapp FROM users WHERE id = $1', [tx.user_id]
     );
