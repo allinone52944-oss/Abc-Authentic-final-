@@ -413,7 +413,8 @@ TABS.orders = async () => {
       '<td><select onchange="AdmOrders.setStatus(\'' + o.id + '\',this.value)">' +
       Object.keys(STBN).map(s => '<option value="' + s + '"' + (o.status === s ? ' selected' : '') + '>' + STBN[s] + '</option>').join('') +
       '</select> <button class="mini-btn" title="সাপোর্ট মেসেজ" onclick="AdmOrders.supportForm(\'' + o.id + '\')">💬</button> ' +
-      '<button class="mini-btn" title="ডেলিভারি ডকুমেন্ট" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎</button></td></tr>';
+      '<button class="mini-btn" title="ডেলিভারি ডকুমেন্ট" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎</button> ' +
+      (o.status==='new' ? '<button class="mini-btn" title="ডিলিট (রিফান্ড সহ)" onclick="AdmOrders.delOrder(\'' + o.id + '\')">🗑️</button>' : '') + '</td></tr>';
   }
   content.innerHTML = html + '</table></div>';
 };
@@ -429,6 +430,13 @@ window.AdmOrders = {
     const d = await r.json();
     if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
     show('orders');
+  },
+  async delOrder(id) {
+    if (!confirm('⚠️ অর্ডার ডিলিট করবেন? টাকা রিফান্ড হবে।')) return;
+    const r = await ABC.api('/admin/orders/' + id, { method: 'DELETE' });
+    const d = await r.json();
+    if (r.ok) { alert('✅ ডিলিট হয়েছে, ৳' + d.refunded + ' রিফান্ড'); show('orders'); }
+    else alert('❌ ব্যর্থ: ' + (d.error || r.status));
   },
   async deliForm(id) {
     const inp = document.createElement('input');

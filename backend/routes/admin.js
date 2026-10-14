@@ -357,6 +357,20 @@ router.put('/orders/:id/status', async (req, res) => {
   }
 });
 
+// DELETE /api/admin/orders/:id - Delete test order (only 'new') with refund
+router.delete('/orders/:id', async (req, res) => {
+  try {
+    const ord = await db.query('SELECT * FROM orders WHERE id=$1', [req.params.id]);
+    if (!ord.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    const order = ord.rows[0];
+    if (order.status !== 'new') return res.status(400).json({ error: 'ONLY_NEW_CAN_DELETE' });
+    await db.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [order.user_id, Number(order.price), 'refund', 'order-delete-' + order.id]);
+    await db.query('DELETE FROM orders WHERE id=$1', [req.params.id]);
+    await logActivity(req.user.id, 'order.delete', { order_id: req.params.id, refunded: order.price });
+    res.json({ ok: true, refunded: order.price });
+  } catch (e) { safeLog('[admin] order delete error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
 // ---- Order support messages (Phase 3) --------------------------
 // POST /api/admin/orders/:id/support-message { message, template_key? }
 const SUPPORT_TEMPLATES = [
