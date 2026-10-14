@@ -528,6 +528,11 @@ app.post('/api/verify', async (req, res) => {
             try { require('fs').writeFileSync(require('path').join(__dirname, 'last-result.html'), html); } catch (_) {}
             return res.json({ success: false, error: 'Could not read the result. Fetch a new captcha and try again. (last-result.html saved)', debug: tds.slice(0, 40) });
         }
+        const missingFields = [];
+        for (const f of ['registrationDate', 'issuanceDate', 'office1', 'office2']) {
+            if (!data[f]) missingFields.push(f);
+        }
+        if (missingFields.length) data.missingFields = missingFields;
         res.json({ success: true, data });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
