@@ -151,6 +151,18 @@ body {
       </div>
       <button class="btn" onclick="doLogin()">প্রবেশ করুন →</button>
       <div class="err" id="lg_err"></div>
+      <div style="text-align:center;margin-top:10px;">
+        <a href="#" onclick="showForgot();return false;" style="color:var(--gold);font-size:13px;">🔑 পাসওয়ার্ড ভুলে গেছেন?</a>
+      </div>
+      <div id="forgotWrap" style="display:none;margin-top:10px;">
+        <div class="field">
+          <label>ইমেইল</label>
+          <input type="email" id="fg_email" placeholder="email@example.com">
+        </div>
+        <button class="btn" onclick="doForgot()">রিসেট লিংক পাঠান →</button>
+        <div class="err" id="fg_err"></div>
+        <div class="okmsg" id="fg_ok"></div>
+      </div>
     </div>
     <div id="tab-reg" style="display:none;">
       <div class="field">
@@ -186,6 +198,25 @@ function showTab(which, el) {
   document.getElementById('tab-reg').style.display = which === 'reg' ? '' : 'none';
 }
 // Login/Register logic will be added here (copy from old file)
+function showForgot(){
+  const w=document.getElementById('forgotWrap');
+  w.style.display=w.style.display==='none'?'':'none';
+}
+async function doForgot(){
+  const email=document.getElementById('fg_email').value.trim();
+  const err=document.getElementById('fg_err');
+  const ok=document.getElementById('fg_ok');
+  err.textContent='';ok.textContent='';
+  if(!email){err.textContent='ইমেইল দিন';return;}
+  try{
+    const r=await fetch('/api/auth/forgot-password',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email})
+    });
+    if(r.ok){ok.textContent='✅ রিসেট লিংক পাঠানো হয়েছে (ইমেইল চেক করুন)';}
+    else{err.textContent='ব্যর্থ হয়েছে';}
+  }catch(e){err.textContent='নেটওয়ার্ক সমস্যা';}
+}
 async function doLogin() {
   const id = document.getElementById('lg_id').value.trim();
   const pw = document.getElementById('lg_pw').value;
