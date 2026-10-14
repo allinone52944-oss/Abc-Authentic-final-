@@ -351,6 +351,7 @@ window.AdmUsers = {
     if (!u) return;
     modal('✏️ ' + u.name,
       fld('নাম', 'text', 'eu_name', u.name) +
+      fld('ইমেইল', 'email', 'eu_email', u.email || '') +
       '<div class="field"><label>ধর্ম</label><select id="eu_religion">' +
       ['islam', 'hindu', 'buddhist', 'christian', 'other'].map(x =>
         '<option value="' + x + '"' + (u.religion === x ? ' selected' : '') + '>' + x + '</option>').join('') +
@@ -368,7 +369,7 @@ window.AdmUsers = {
   },
   async save(id) {
     const body = {
-      name: v('eu_name'), religion: v('eu_religion'), status: v('eu_status'),
+      name: v('eu_name'), email: v('eu_email'), religion: v('eu_religion'), status: v('eu_status'),
       balance_adjust: v('eu_bal') ? Number(v('eu_bal')) : 0,
     };
     const roleEl = document.getElementById('eu_role');

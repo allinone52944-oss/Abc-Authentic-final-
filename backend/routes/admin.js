@@ -124,7 +124,7 @@ router.post('/users', async (req, res) => {
 router.put('/users/:id', async (req, res) => {
   try {
     const id = req.params.id;
-    const { name, religion, role, status, login_enabled, balance_adjust, admin_note } = req.body || {};
+    const { name, email, religion, role, status, login_enabled, balance_adjust, admin_note } = req.body || {};
 
     const cur = await db.query('SELECT * FROM users WHERE id = $1', [id]);
     if (!cur.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -146,6 +146,17 @@ router.put('/users/:id', async (req, res) => {
     const changes = {};
 
     if (name !== undefined) { sets.push(`name = $${i++}`); params.push(String(name).trim()); changes.name = name; }
+    if (email !== undefined) {
+      const em = String(email).trim().toLowerCase();
+      // Check email not used by another user
+      if (em) {
+        const ex = await db.query('SELECT id FROM users WHERE LOWER(email) = $1 AND id != $2', [em, id]);
+        if (ex.rows.length) return res.status(400).json({ error: 'EMAIL_EXISTS' });
+      }
+      sets.push(`email = $${i++}`); params.push(em || null); changes.email = em;
+      // Reset verification when email changes
+      sets.push(`email_verified = $${i++}`); params.push(false);
+    }
     if (religion !== undefined) { sets.push(`religion = $${i++}`); params.push(religion); changes.religion = religion; }
     if (role !== undefined && ['admin', 'user'].includes(role)) {
       sets.push(`role = $${i++}`); params.push(role); changes.role = role;
