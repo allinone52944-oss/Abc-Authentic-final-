@@ -190,14 +190,15 @@ async function step2(){
     S.record=j.data;
     const d=j.data;
     const fields=[
+      ['office1','অফিসের নাম',d.office1],['office2','অফিসের ঠিকানা',d.office2],
       ['brn','BRN',d.brn],
       ['nameBn','নাম (বাংলা)',d.nameBn],['nameEn','নাম (EN)',d.nameEn],
       ['dob','জন্ম তারিখ',d.dob],['sex','লিঙ্গ',d.sex],
       ['fatherNameBn','পিতা (বাংলা)',d.fatherNameBn],['fatherNameEn','পিতা (EN)',d.fatherNameEn],
       ['motherNameBn','মাতা (বাংলা)',d.motherNameBn],['motherNameEn','মাতা (EN)',d.motherNameEn],
-      ['office1','অফিসের নাম',d.office1],['office2','অফিসের ঠিকানা',d.office2]
+      ['permAddr','স্থায়ী ঠিকানা',d.permAddr||'']
     ];
-    const fullW=['brn','office1','office2'];
+    const fullW=['office1','office2','brn','permAddr'];
     document.getElementById('recView').innerHTML=fields.map(f=>'<div class="field'+(fullW.includes(f[0])?' full':'')+'"><label>'+esc(f[1])+'</label><input type="text" id="rec_'+f[0]+'" value="'+esc(f[2]||'')+'"></div>').join('')+'<div class="s full" style="color:var(--muted);font-size:12px;">✏️ সব তথ্য এডিট করা যাবে</div>';
     // Save edited values back to S.record on change
     fields.forEach(f=>{const el=document.getElementById('rec_'+f[0]); if(el) el.oninput=()=>{S.record[f[0]]=el.value;};});
