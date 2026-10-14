@@ -1167,7 +1167,8 @@ window.AdmSt = {
     const resp = await ABC.api('/admin/settings', { method: 'PUT', body: putBody });
     const rd = await resp.json().catch(() => ({}));
     if (!resp.ok) {
-      alert(rd.error === 'WRONG_PASSWORD' ? '❌ ভুল password — token পরিবর্তন হয়নি' : '❌ সংরক্ষণ ব্যর্থ');
+      const msg = rd.error === 'WRONG_PASSWORD' ? '❌ ভুল password — token পরিবর্তন হয়নি' : '❌ সংরক্ষণ ব্যর্থ: ' + (rd.error || ('HTTP ' + resp.status));
+      alert(msg);
       return;
     }
     alert('সংরক্ষণ হয়েছে');
