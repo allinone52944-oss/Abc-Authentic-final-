@@ -297,12 +297,14 @@ function mapResultData(tds) {
     const data = {};
     for (let i = 0; i < tds.length; i++) {
         const text = tds[i];
-        if (text === 'Registration Date' && tds[i + 3]) data.registrationDate = tds[i + 3];
+        if (/registration date/i.test(text)) {
+            for (const off of [3, 1, 2, 4]) { if (tds[i+off] && /\d/.test(tds[i+off])) { data.registrationDate = tds[i+off]; break; } }
+        }
         if (text === 'Registration Office' && tds[i + 3]) data.registrationOffice = tds[i + 3];
         // Some result pages put the office NAME in the table value cell and the
         // "NB: ... Location of the Register office : A, B, C" line in its own cell.
         // Keep that line aside: it becomes office2 when the table value had none.
-        if (text.toLowerCase().includes('location of the register office') && !data.officeLocationRaw) {
+        if (/location of.*register.*office/i.test(text) && !data.officeLocationRaw) {
             data.officeLocationRaw = text;
         }
         // Fallback: try other offsets if i+3 is empty
@@ -314,7 +316,9 @@ function mapResultData(tds) {
                 }
             }
         }
-        if (text === 'Issuance Date' && tds[i + 3]) data.issuanceDate = tds[i + 3];
+        if (/issuance date/i.test(text)) {
+            for (const off of [3, 1, 2, 4]) { if (tds[i+off] && /\d/.test(tds[i+off])) { data.issuanceDate = tds[i+off]; break; } }
+        }
         if (text === 'Date of Birth' && tds[i + 3]) data.dob = tds[i + 3];
         if (text === 'Birth Registration Number' && tds[i + 3]) data.brn = tds[i + 3];
         if (text === 'Sex' && tds[i + 3]) data.sex = tds[i + 3];
