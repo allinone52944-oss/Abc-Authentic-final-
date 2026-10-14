@@ -58,10 +58,14 @@ async function init(){
     if(!svcs.length){document.getElementById('err').textContent='কোনো সেবা নেই';return;}
     document.getElementById('svcName').textContent='সেবা বেছে নিন';
     document.getElementById('svcPrice').style.display='none';
-    document.getElementById('dynFields').innerHTML=svcs.map(s=>
-      '<button class="btn svc-pick" data-sid="'+esc(s.id)+'" style="margin:4px 0;width:100%;text-align:left;">'+esc(s.name_bn||s.name)+' — ৳'+Number(s.price).toLocaleString('bn-BD')+'</button>'
-    ).join('');
-    document.querySelectorAll('.svc-pick').forEach(b=>{b.onclick=()=>{location.href='/order-create.html?service='+b.dataset.sid;};});
+    const engMap={'bdris-certificate':'/bdris-certificate.html','bdris-apply':'/bdris-apply.html','death-verify':'/death-verify.html','nid-replica':'/nid-replica.html'};
+    document.getElementById('dynFields').innerHTML=svcs.map(s=>{
+      const isAuto=s.type==='automated'&&s.engine_id&&engMap[s.engine_id];
+      const url=isAuto?engMap[s.engine_id]:'/order-create.html?service='+s.id;
+      const badge=s.type==='automated'?' ⚡':'';
+      return '<button class="btn svc-pick" data-url="'+esc(url)+'" style="margin:4px 0;width:100%;text-align:left;">'+esc(s.name_bn||s.name)+badge+' — ৳'+Number(s.price).toLocaleString('bn-BD')+'</button>';
+    }).join('');
+    document.querySelectorAll('.svc-pick').forEach(b=>{b.onclick=()=>{location.href=b.dataset.url;};});
     document.getElementById('submitBtn').style.display='none';
     return;
   }
