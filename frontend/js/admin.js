@@ -438,7 +438,7 @@ window.AdmOrders = {
       const fd = new FormData();
       fd.append('file', inp.files[0]);
       fd.append('doc_type', 'delivery');
-      const r = await fetch('/admin/orders/' + id + '/delivery-docs', {
+      const r = await fetch('/api/admin/orders/' + id + '/delivery-docs', {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('abc_access_token') },
         body: fd
