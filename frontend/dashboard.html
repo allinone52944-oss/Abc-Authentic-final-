@@ -85,10 +85,27 @@ async function loadBanners() {
     const r = await ABC.api('/banners?type=banner');
     const d = r.ok ? await r.json() : { banners: [] };
     const act = (d.banners || []).filter((b) => b.active);
-    if (!act.length) return;
-    document.getElementById('bnStrip').style.display = 'block';
-    BannerRender.carousel(document.getElementById('bnStrip'), act, 6000);
+    if (act.length) {
+      document.getElementById('bnStrip').style.display = 'block';
+      BannerRender.carousel(document.getElementById('bnStrip'), act, 6000);
+    }
   } catch (e) { /* banners optional */ }
+  // Load popup banners
+  try {
+    const r = await ABC.api('/banners?type=popup');
+    const d = r.ok ? await r.json() : { banners: [] };
+    const act = (d.banners || []).filter((b) => b.active);
+    if (act.length) {
+      const p = act[0]; // Show first active popup
+      const bg = document.createElement('div');
+      bg.className = 'modal-bg';
+      bg.innerHTML = '<div class="modal" style="text-align:center;">' +
+        '<h3>' + escapeHtml(p.title || '') + '</h3>' +
+        '<p>' + escapeHtml(p.message || p.heading || '') + '</p>' +
+        '<button class="btn" onclick="this.closest(\'.modal-bg\').remove()">বন্ধ করুন</button></div>';
+      document.body.appendChild(bg);
+    }
+  } catch (e) { /* popups optional */ }
 }
 const GREET_EMOJI = { islam: '🤲', hindu: '🙏', buddhist: '🪷', christian: '✝️', other: '🌸' };
 function timeGreeting() {
