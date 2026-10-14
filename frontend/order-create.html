@@ -49,6 +49,21 @@ let svc=null;
 async function init(){
   const me=await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
+  if(!sid){
+    // No service ID: show service picker
+    const r=await ABC.api('/services');
+    if(!r.ok){document.getElementById('err').textContent='সেবা লোড হয়নি';return;}
+    const d=await r.json();
+    const svcs=d.services||[];
+    if(!svcs.length){document.getElementById('err').textContent='কোনো সেবা নেই';return;}
+    document.getElementById('svcName').textContent='সেবা বেছে নিন';
+    document.getElementById('svcPrice').style.display='none';
+    document.getElementById('dynFields').innerHTML=svcs.map(s=>
+      '<button class="btn" style="margin:4px 0;width:100%;text-align:left;" onclick="location.href=\'/order-create.html?service='+s.id+'\">'+esc(s.name_bn||s.name)+' — ৳'+Number(s.price).toLocaleString('bn-BD')+'</button>'
+    ).join('');
+    document.getElementById('submitBtn').style.display='none';
+    return;
+  }
   const r=await ABC.api('/services/'+sid);
   if(!r.ok){document.getElementById('err').textContent='সেবা পাওয়া যায়নি';return;}
   svc=(await r.json()).service;
@@ -87,6 +102,20 @@ async function submit(){
   err.textContent='';
   const data={};
   document.querySelectorAll('[data-field]').forEach(el=>{data[el.dataset.field]=el.value.trim();});
+  // Validation
+  const fields=svc.fields_required||[];
+  for(const f of fields){
+    const v=data[f.name]||'';
+    if(f.required && !v){
+      err.textContent='⚠️ '+(f.label||f.name)+' দিন';
+      return;
+    }
+    // BRN must be 17 digits
+    if(/brn/i.test(f.name) && v && !/^\d{17}$/.test(v)){
+      err.textContent='⚠️ BRN ১৭ সংখ্যার হতে হবে';
+      return;
+    }
+  }
   const btn=document.getElementById('submitBtn');
   btn.disabled=true;btn.textContent='প্রসেস হচ্ছে…';
   // First create order, then upload documents
