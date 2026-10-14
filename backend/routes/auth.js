@@ -53,6 +53,16 @@ async function issueTokens(userId, role) {
   return { access_token, refresh_token: token };
 }
 
+// ---- GET /api/auth/registration-status (public) -----------------
+router.get('/registration-status', async (req, res) => {
+  try {
+    const reg = await getSetting('registration_enabled');
+    res.json({ enabled: reg ? reg.enabled !== false : true });
+  } catch (e) {
+    res.json({ enabled: true });
+  }
+});
+
 // ---- POST /api/auth/register ---------------------------------
 router.post('/register', async (req, res) => {
   try {

@@ -227,6 +227,16 @@ async function doRegister() {
     showTab('login', document.querySelector('.tab'));
   } catch (e) { err.textContent = 'নেটওয়ার্ক সমস্যা'; }
 }
+// Hide registration tab if disabled
+(async()=>{
+  try{
+    const r=await fetch('/api/auth/registration-status');
+    const d=await r.json();
+    if(d.enabled===false){
+      document.querySelectorAll('.tab')[1].style.display='none';
+    }
+  }catch(e){}
+})();
 </script>
 </body>
 </html>
