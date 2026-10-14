@@ -1065,6 +1065,11 @@ TABS.settings = async () => {
     '<div class="list-row" style="cursor:default;"><div><div class="t">🔊 Religion Voice Greeting</div><div class="s">লগইনে ধর্মভিত্তিক বাংলা ভয়েস শুভেচ্ছা</div></div>' + bool('voice_greeting') + '</div>' +
     '<div class="list-row" style="cursor:default;"><div><div class="t">🔄 ভয়েস রোটেশন</div><div class="s">পুরুষ → মহিলা → শিশু কণ্ঠে পর্যায়ক্রমে</div></div>' + bool('voice_greeting', 'rotation') + '</div>' +
     '<div class="list-row" style="cursor:default;"><div><div class="t">💬 WhatsApp নোটিফিকেশন</div><div class="s">অর্ডার সফল / রিচার্জ সফল হলে গ্রাহকের WhatsApp-এ অটো মেসেজ</div></div>' + bool('whatsapp') + '</div>' +
+    '<div class="field"><label><input type="checkbox" id="wa_n_order_completed" ' + ((((s.whatsapp||{}).notify||{}).order_completed !== false) ? 'checked' : '') + '> ✅ অর্ডার সফল মেসেজ পাঠাবে</label></div>' +
+    '<div class="field"><label><input type="checkbox" id="wa_n_order_failed" ' + ((((s.whatsapp||{}).notify||{}).order_failed !== false) ? 'checked' : '') + '> ❌ অর্ডার ব্যর্থ মেসেজ পাঠাবে</label></div>' +
+    '<div class="field"><label><input type="checkbox" id="wa_n_order_cancelled" ' + ((((s.whatsapp||{}).notify||{}).order_cancelled !== false) ? 'checked' : '') + '> 🚫 অর্ডার বাতিল মেসেজ পাঠাবে</label></div>' +
+    '<div class="field"><label><input type="checkbox" id="wa_n_recharge_approved" ' + ((((s.whatsapp||{}).notify||{}).recharge_approved !== false) ? 'checked' : '') + '> 💰 রিচার্জ সফল মেসেজ পাঠাবে</label></div>' +
+    '<div class="field"><label><input type="checkbox" id="wa_n_recharge_rejected" ' + ((((s.whatsapp||{}).notify||{}).recharge_rejected !== false) ? 'checked' : '') + '> ⚠️ রিচার্জ বাতিল মেসেজ পাঠাবে</label></div>' +
     fld('WhatsApp বিজনেস নম্বর (ডিসপ্লে)', 'text', 'st_wa_num', ((s.whatsapp || {}).business_number) || '') +
     fld('Phone Number ID', 'text', 'st_wa_phone_id', ((s.whatsapp || {}).phone_number_id) || '') +
     '<div class="field"><label>Access Token (password)</label>' +
@@ -1120,6 +1125,13 @@ window.AdmSt = {
       phone_number_id: String(v('st_wa_phone_id') || '').trim(),
       order_completed_msg: vr('st_wa_order_msg') || waCur.order_completed_msg || '',
       recharge_approved_msg: vr('st_wa_recharge_msg') || waCur.recharge_approved_msg || '',
+      notify: {
+        order_completed: document.getElementById('wa_n_order_completed').checked,
+        order_failed: document.getElementById('wa_n_order_failed').checked,
+        order_cancelled: document.getElementById('wa_n_order_cancelled').checked,
+        recharge_approved: document.getElementById('wa_n_recharge_approved').checked,
+        recharge_rejected: document.getElementById('wa_n_recharge_rejected').checked,
+      },
     };
     const putBody = {
       welcome_bonus: { enabled: Number(v('st_wb')) > 0, amount: Number(v('st_wb')) || 0 },
