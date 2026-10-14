@@ -294,6 +294,31 @@ async function notifyOrderCompleted(db, order) {
   }
 }
 
+async function notifyOrderFailed(db, order) {
+  try {
+    if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
+    const u = await db.query(
+      'SELECT name, whatsapp FROM users WHERE id = $1', [order.user_id]
+    );
+    const user = u.rows[0];
+    if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
+    let serviceName = '';
+    try {
+      const s = await db.query(
+        'SELECT name FROM services WHERE id = $1', [order.service_id]
+      );
+      serviceName = (s.rows[0] && s.rows[0].name) || '';
+    } catch (_) {}
+    const msg = `দুঃখিত ${user.name || ''}, আপনার অর্ডার #${String(order.id || '').slice(0, 8)} (${serviceName}) ব্যর্থ হয়েছে। অনুগ্রহ করে সাপোর্টে যোগাযোগ করুন।`;
+    const r = await sendTextMessage(user.whatsapp, msg, db);
+    safeLog('[whatsapp] order failed notify', order.id, '->', r.ok ? 'sent' : r.error);
+    return r;
+  } catch (e) {
+    safeLog('[whatsapp] notifyOrderFailed failed:', e.message);
+    return { ok: false, error: 'FAILED' };
+  }
+}
+
 async function notifyRechargeApproved(db, tx) {
   try {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
@@ -332,5 +357,6 @@ module.exports = {
   orderCompletedMessage,
   rechargeApprovedMessage,
   notifyOrderCompleted,
+  notifyOrderFailed,
   notifyRechargeApproved,
 };

@@ -330,6 +330,10 @@ router.put('/orders/:id/status', async (req, res) => {
     if (status === 'completed' || status === 'delivered') {
       wa.notifyOrderCompleted(db, r.rows[0]).catch(() => {});
     }
+    // WhatsApp: order failed -> customer failure message
+    if (status === 'failed') {
+      wa.notifyOrderFailed(db, r.rows[0]).catch(() => {});
+    }
 
     res.json({ order: r.rows[0] });
   } catch (e) {
