@@ -6,6 +6,8 @@
 <title>All In One (Abc Authentic) - Login</title>
 <link rel="stylesheet" href="/css/coffee.css?v=8">
 <style>
+/* Override coffee.css overflow:hidden for login page */
+body { overflow-y: auto !important; overflow-x: hidden; }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
   font-family: 'Hind Siliguri', sans-serif;
@@ -121,6 +123,7 @@ body {
   .brand-panel::before { font-size: 120px; }
   .brand-title { font-size: 24px; }
   .form-panel { padding: 20px; }
+  .field input { font-size: 16px; } /* Prevent iOS auto-zoom */
 }
 </style>
 </head>
