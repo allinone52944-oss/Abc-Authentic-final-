@@ -28,6 +28,7 @@
     <div class="hdr-actions">
       <div class="pill" id="balancePill">৳০</div>
       <button class="icon-btn" id="greetVoiceBtn" title="ভয়েস গ্রিটিং শুনুন" style="display:none;">🔊</button>
+      <button class="icon-btn" id="adminBtn" onclick="location.href='/admin.html'" title="এডমিন প্যানেল" style="display:none;">⚙️</button>
       <button class="icon-btn" onclick="location.href='/profile.html'">👤</button>
       <button class="icon-btn" id="logoutBtn">⏻</button>
     </div>
@@ -209,6 +210,12 @@ async function init() {
   }
   const { user } = await meR.json();
   window._user = user;
+
+  // Show admin button for admin users
+  if (user.role === 'admin') {
+    const ab = document.getElementById('adminBtn');
+    if (ab) ab.style.display = '';
+  }
 
   // Voice-greeting config (admin-controlled, public endpoint)
   try {
