@@ -2,6 +2,15 @@
 <html lang="bn">
 <head>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+// Require login for BDRIS Apply (bot needs auth)
+(function() {
+  const token = sessionStorage.getItem('abc_access_token') || localStorage.getItem('abc_access_token');
+  if (!token) {
+    location.href = '/login.html?next=' + encodeURIComponent(location.pathname);
+  }
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>জন্ম নিবন্ধন সহায়ক — অনলাইন আবেদন</title>
@@ -420,7 +429,10 @@ input.bad, select.bad{border-color:var(--err); box-shadow:0 0 0 3px rgba(251,113
 // "Unexpected token '<'" / "io is not defined" fatal errors.
 // Real-time bot features will warn in console until the server is set up.
 const socket = (typeof io !== 'undefined')
-  ? io({ path: '/api/bdris-apply/socket.io/' })
+  ? io({
+      path: '/api/bdris-apply/socket.io/',
+      auth: { token: sessionStorage.getItem('abc_access_token') || localStorage.getItem('abc_access_token') || '' }
+    })
   : { connected: false,
       emit: function(){ console.warn('[bdris-apply] socket.io server not available'); },
       on: function(){}, once: function(){}, off: function(){} };
