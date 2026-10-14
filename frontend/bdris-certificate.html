@@ -194,8 +194,11 @@ async function step2(){
       ['brn','BRN',d.brn],
       ['nameBn','নাম (বাংলা)',d.nameBn],['nameEn','নাম (EN)',d.nameEn],
       ['dob','জন্ম তারিখ',d.dob],['sex','লিঙ্গ',d.sex],
+      ['regDate','নিবন্ধনের তারিখ',d.registrationDate||d.regDate],['issueDate','ইস্যুর তারিখ',d.issuanceDate||d.issueDate],
       ['fatherNameBn','পিতা (বাংলা)',d.fatherNameBn],['fatherNameEn','পিতা (EN)',d.fatherNameEn],
       ['motherNameBn','মাতা (বাংলা)',d.motherNameBn],['motherNameEn','মাতা (EN)',d.motherNameEn],
+      ['pob','জন্মস্থান',d.placeOfBirthEn||d.pobEn||''],
+      ['vcode','ভেরিফিকেশন কোড',d.verificationCode||''],
       ['permAddr','স্থায়ী ঠিকানা',d.permAddr||'']
     ];
     const fullW=['office1','office2','brn','permAddr'];
