@@ -15,12 +15,16 @@ function getApp() {
   app = express();
   app.use((req, res) => {
     const bodyData = req.body ? JSON.stringify(req.body) : null;
+    const headers = { ...req.headers, host: '127.0.0.1:3000' };
+    delete headers['content-length'];
+    delete headers['transfer-encoding'];
+    if (bodyData) headers['content-length'] = Buffer.byteLength(bodyData);
     const opts = {
       hostname: '127.0.0.1',
       port: 3000,
       path: req.originalUrl.replace(/^\/api\/bdris-engine/, '') || '/',
       method: req.method,
-      headers: { ...req.headers, host: '127.0.0.1:3000', 'content-length': bodyData ? Buffer.byteLength(bodyData) : 0 }
+      headers
     };
     const proxy = http.request(opts, (pres) => {
       res.writeHead(pres.statusCode, pres.headers);
