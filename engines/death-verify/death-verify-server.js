@@ -177,7 +177,7 @@ function mapResultData(html) {
             data.issuanceDate = data.issuanceDate || enV;
         } else if (en.includes('registration office')) {
             data.registrationOffice = data.registrationOffice || enV;
-        } else if (en.includes('location of the register office') && !data.officeLocationRaw) {
+        } else if (/location of.*register.*office/i.test(enL||'') && !data.officeLocationRaw) {
             data.officeLocationRaw = enV;
         }
     }
