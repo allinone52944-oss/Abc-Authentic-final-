@@ -194,7 +194,7 @@ async function step2(){
     const fields=[
       ['office1','অফিসের নাম',d.office1],['office2','অফিসের ঠিকানা',d.office2],
       ['brn','DRN',d.brn],['nameEn','নাম (EN)',d.nameEn],['nameBn','নাম (বাংলা)',d.nameBn],
-      ['dod','মৃত্যু তারিখ',d.dod],['sex','লিঙ্গ',d.sex],
+      ['dod','মৃত্যু তারিখ',d.dod],['sex','লিঙ্গ',d.sex,'dropdown'],
       ['placeOfDeathEn','মৃত্যুর স্থান (EN)',d.placeOfDeathEn],['placeOfDeathBn','মৃত্যুর স্থান (বাংলা)',d.placeOfDeathBn],
       ['causeOfDeathEn','মৃত্যুর কারণ (EN)',d.causeOfDeathEn,'dropdown'],['causeOfDeathBn','মৃত্যুর কারণ (বাংলা)',d.causeOfDeathBn,'dropdown'],
       ['motherNameEn','মাতা (EN)',d.motherNameEn],['motherNameBn','মাতা (বাংলা)',d.motherNameBn],
@@ -205,11 +205,12 @@ async function step2(){
     const fullW=['brn','office1','office2'];
     const codOpts=['','Natural Causes','Disease','Accident','Old Age','Other'];
     const codOptsBn=['','স্বাভাবিক কারণ','রোগ','দুর্ঘটনা','বার্ধক্য','অন্যান্য'];
+    const sexOpts=['','Male','Female'];
     document.getElementById('recView').innerHTML=fields.map(f=>{
       const cls='field'+(fullW.includes(f[0])?' full':'');
       const lbl='<label>'+esc(f[1])+'</label>';
       if(f[3]==='dropdown'){
-        const opts=f[0].includes('Bn')?codOptsBn:codOpts;
+        const opts=f[0]==='sex'?sexOpts:(f[0].includes('Bn')?codOptsBn:codOpts);
         const otherVal=f[0].includes('Bn')?'অন্যান্য':'Other';
         const sel='<select id="rec_'+f[0]+'" onchange="codOther(this)">'+opts.map(o=>'<option value="'+esc(o)+'"'+(o===(f[2]||'')?' selected':'')+'>'+esc(o||'-- নির্বাচন করুন --')+'</option>').join('')+'</select><input type="text" id="rec_'+f[0]+'_other" placeholder="ম্যানুয়ালি লিখুন" style="display:none;margin-top:4px;" oninput="S.record[\''+f[0]+'\']=this.value">';
         return '<div class="'+cls+'">'+lbl+sel+'</div>';
