@@ -412,7 +412,8 @@ TABS.orders = async () => {
       '<td><small>' + new Date(o.created_at).toLocaleString('bn-BD') + '</small></td>' +
       '<td><select onchange="AdmOrders.setStatus(\'' + o.id + '\',this.value)">' +
       Object.keys(STBN).map(s => '<option value="' + s + '"' + (o.status === s ? ' selected' : '') + '>' + STBN[s] + '</option>').join('') +
-      '</select> <button class="mini-btn" title="সাপোর্ট মেসেজ" onclick="AdmOrders.supportForm(\'' + o.id + '\')">💬</button></td></tr>';
+      '</select> <button class="mini-btn" title="সাপোর্ট মেসেজ" onclick="AdmOrders.supportForm(\'' + o.id + '\')">💬</button> ' +
+      '<button class="mini-btn" title="ডেলিভারি ডকুমেন্ট" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎</button></td></tr>';
   }
   content.innerHTML = html + '</table></div>';
 };
@@ -428,6 +429,25 @@ window.AdmOrders = {
     const d = await r.json();
     if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
     show('orders');
+  },
+  async deliForm(id) {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.pdf,.jpg,.jpeg,.png';
+    inp.onchange = async () => {
+      if (!inp.files[0]) return;
+      const fd = new FormData();
+      fd.append('file', inp.files[0]);
+      fd.append('doc_type', 'delivery');
+      const r = await fetch('/admin/orders/' + id + '/delivery-docs', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('abc_access_token') },
+        body: fd
+      });
+      const d = await r.json();
+      if (r.ok) alert('✅ ডকুমেন্ট আপলোড হয়েছে');
+      else alert('❌ ব্যর্থ: ' + (d.error || r.status));
+    };
+    inp.click();
   },
   // ---- Support messages (Phase 3) ----
   _tpls: [],
