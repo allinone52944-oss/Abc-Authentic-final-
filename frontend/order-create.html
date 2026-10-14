@@ -76,10 +76,14 @@ async function init(){
   document.getElementById('svcPrice').textContent='৳'+Number(svc.price).toLocaleString('bn-BD');
   // Dynamic fields from service definition
   const fields=svc.fields_required||[];
-  document.getElementById('dynFields').innerHTML=fields.map((f,i)=>
-    '<div class="field"><label>'+esc(f.label||f.name)+(f.required?' *':'')+'</label>'+
-    '<input type="text" data-field="'+esc(f.name)+'" placeholder="'+esc(f.placeholder||'')+'"></div>'
-  ).join('');
+  document.getElementById('dynFields').innerHTML=fields.map((f,i)=>{
+    const nm=String(f.name||'').toLowerCase(), lb=String(f.label||'').toLowerCase(), ph=String(f.placeholder||'');
+    const isLong=/address|ঠিকানা|description|বিবরণ|note|নোট|details/.test(nm+' '+lb) || ph.length>30;
+    const input=isLong
+      ? '<textarea data-field="'+esc(f.name)+'" rows="3" placeholder="'+esc(ph)+'" style="width:100%;"></textarea>'
+      : '<input type="text" data-field="'+esc(f.name)+'" placeholder="'+esc(ph)+'">';
+    return '<div class="field"><label>'+esc(f.label||f.name)+(f.required?' *':'')+'</label>'+input+'</div>';
+  }).join('');
   // Documents
   const docs=svc.documents_required||[];
   if(docs.length){
