@@ -85,18 +85,28 @@ const VoiceAlert = {
     setInterval(() => this.check(), 30000);
     setTimeout(() => this.check(), 8000);
   },
-  speak(text) {
+  playAudio(file) {
     if (!this.enabled) return;
     try {
-      speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'bn-BD';
-      // Prefer a Bengali voice if available
-      const bn = this._voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('bn'));
-      if (bn) u.voice = bn;
-      u.rate = 0.95; u.pitch = 1.05;
-      speechSynthesis.speak(u);
+      const a = new Audio('/audio/' + file);
+      a.play().catch(() => {});
     } catch (e) { /* ignore */ }
+  },
+  speak(text) {
+    // Map text to human voice audio files
+    if (text.includes('রিচার্জ')) this.playAudio('new-recharge.mp3');
+    else if (text.includes('অর্ডার')) this.playAudio('new-order.mp3');
+    else if (text.includes('মেসেজ') || text.includes('SMS')) this.playAudio('new-message.mp3');
+    else {
+      // Fallback to TTS for unknown
+      if (!this.enabled) return;
+      try {
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'bn-BD';
+        speechSynthesis.speak(u);
+      } catch (e) { /* ignore */ }
+    }
   },
   async check() {
     if (!this.enabled || !me || me.role !== 'admin') return;
