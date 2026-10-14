@@ -192,14 +192,14 @@ async function step2(){
     S.record=j.data;
     const d=j.data;
     const fields=[
+      ['office1','অফিসের নাম',d.office1],['office2','অফিসের ঠিকানা',d.office2],
       ['brn','DRN',d.brn],['nameEn','নাম (EN)',d.nameEn],['nameBn','নাম (বাংলা)',d.nameBn],
       ['dod','মৃত্যু তারিখ',d.dod],['sex','লিঙ্গ',d.sex],
       ['placeOfDeathEn','মৃত্যুর স্থান (EN)',d.placeOfDeathEn],['placeOfDeathBn','মৃত্যুর স্থান (বাংলা)',d.placeOfDeathBn],
       ['causeOfDeathEn','মৃত্যুর কারণ (EN)',d.causeOfDeathEn,'dropdown'],['causeOfDeathBn','মৃত্যুর কারণ (বাংলা)',d.causeOfDeathBn,'dropdown'],
       ['motherNameEn','মাতা (EN)',d.motherNameEn],['motherNameBn','মাতা (বাংলা)',d.motherNameBn],
       ['fatherNameEn','পিতা (EN)',d.fatherNameEn],['fatherNameBn','পিতা (বাংলা)',d.fatherNameBn],
-      ['registrationDate','নিবন্ধনের তারিখ',d.registrationDate],
-      ['office1','অফিসের নাম',d.office1],['office2','অফিসের ঠিকানা',d.office2]
+      ['registrationDate','নিবন্ধনের তারিখ',d.registrationDate]
     ];
     const fullW=['brn','office1','office2'];
     const codOpts=['','Natural Causes','Disease','Accident','Old Age','Other'];
