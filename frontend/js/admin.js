@@ -413,8 +413,7 @@ TABS.orders = async () => {
       '<td><select onchange="AdmOrders.setStatus(\'' + o.id + '\',this.value)">' +
       Object.keys(STBN).map(s => '<option value="' + s + '"' + (o.status === s ? ' selected' : '') + '>' + STBN[s] + '</option>').join('') +
       '</select> <button class="mini-btn" title="সাপোর্ট মেসেজ" onclick="AdmOrders.supportForm(\'' + o.id + '\')">💬</button> ' +
-      '<button class="mini-btn" title="ডেলিভারি ডকুমেন্ট" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎</button> ' +
-      (o.status==='new' ? '<button class="mini-btn" title="ডিলিট (রিফান্ড সহ)" onclick="AdmOrders.delOrder(\'' + o.id + '\')">🗑️</button>' : '') + '</td></tr>';
+      '<button class="mini-btn" title="ডেলিভারি ডকুমেন্ট" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎</button></td></tr>';
   }
   content.innerHTML = html + '</table></div>';
 };
@@ -430,13 +429,6 @@ window.AdmOrders = {
     const d = await r.json();
     if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
     show('orders');
-  },
-  async delOrder(id) {
-    if (!confirm('⚠️ অর্ডার ডিলিট করবেন? টাকা রিফান্ড হবে।')) return;
-    const r = await ABC.api('/admin/orders/' + id, { method: 'DELETE' });
-    const d = await r.json();
-    if (r.ok) { alert('✅ ডিলিট হয়েছে, ৳' + d.refunded + ' রিফান্ড'); show('orders'); }
-    else alert('❌ ব্যর্থ: ' + (d.error || r.status));
   },
   async deliForm(id) {
     const inp = document.createElement('input');
@@ -1134,8 +1126,25 @@ TABS.settings = async () => {
     fld('বিকাশ পার্সোনাল নম্বর', 'text', 'st_rn_bkash_per', (((s.recharge_numbers || {}).bkash_personal) || '')) +
     fld('নগদ নম্বর', 'text', 'st_rn_nagad', (((s.recharge_numbers || {}).nagad) || '')) +
     fld('রকেট নম্বর', 'text', 'st_rn_rocket', (((s.recharge_numbers || {}).rocket) || '')) +
-    '<button class="btn" onclick="AdmSt.save()">সংরক্ষণ</button></div>';
+    '<button class="btn" onclick="AdmSt.save()">সংরক্ষণ</button></div>' +
+    '<div class="form-card" style="margin-top:14px;"><h2>💾 ফাইল স্টোরেজ</h2><div id="stgList"><div style="color:var(--muted)">লোড হচ্ছে…</div></div></div>';
+  loadStorage();
 };
+async function loadStorage(){
+  const r = await ABC.api('/admin/storage');
+  const d = await r.json();
+  const el = document.getElementById('stgList');
+  if (!el) return;
+  if (!r.ok || !d.files.length) { el.innerHTML = '<div style="color:var(--muted)">কোনো ফাইল নেই</div>'; return; }
+  let total = d.files.reduce((s,f)=>s+f.size,0);
+  el.innerHTML = '<div style="margin-bottom:8px;">মোট: ' + (total/1024/1024).toFixed(2) + ' MB (' + d.files.length + ' ফাইল)</div>' +
+    d.files.map(f=>'<div class="list-row"><div><div class="t">'+esc(f.filename)+'</div><div class="s">'+esc(f.user_phone||'—')+' • '+(f.size_kb)+' KB</div></div><button class="mini-btn" onclick="delFile(\''+esc(f.filename)+'\')">🗑️</button></div>').join('');
+}
+async function delFile(fn){
+  if (!confirm('ডিলিট করবেন?')) return;
+  const r = await ABC.api('/admin/storage/' + encodeURIComponent(fn), {method:'DELETE'});
+  if (r.ok) loadStorage(); else alert('ব্যর্থ');
+}
 window.AdmSt = {
   async toggle(key, sub, val) {
     const cur = await (await ABC.api('/admin/settings')).json();

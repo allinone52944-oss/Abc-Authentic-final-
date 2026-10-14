@@ -357,18 +357,44 @@ router.put('/orders/:id/status', async (req, res) => {
   }
 });
 
-// DELETE /api/admin/orders/:id - Delete test order (only 'new') with refund
-router.delete('/orders/:id', async (req, res) => {
+// GET /api/admin/storage - List uploaded files by user
+router.get('/storage', async (req, res) => {
   try {
-    const ord = await db.query('SELECT * FROM orders WHERE id=$1', [req.params.id]);
-    if (!ord.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
-    const order = ord.rows[0];
-    if (order.status !== 'new') return res.status(400).json({ error: 'ONLY_NEW_CAN_DELETE' });
-    await db.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [order.user_id, Number(order.price), 'refund', 'order-delete-' + order.id]);
-    await db.query('DELETE FROM orders WHERE id=$1', [req.params.id]);
-    await logActivity(req.user.id, 'order.delete', { order_id: req.params.id, refunded: order.price });
-    res.json({ ok: true, refunded: order.price });
-  } catch (e) { safeLog('[admin] order delete error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+    const dir = '/opt/all-in-one-abc-authentic/uploads/orders';
+    if (!fs.existsSync(dir)) return res.json({ files: [] });
+    const files = fs.readdirSync(dir);
+    const out = [];
+    for (const f of files) {
+      const fp = path.join(dir, f);
+      const st = fs.statSync(fp);
+      // Parse orderId from filename: delivery-<orderId>-<timestamp>.<ext>
+      const m = f.match(/^delivery-(.+?)-\d+\./);
+      let userPhone = '', orderId = '';
+      if (m) {
+        orderId = m[1];
+        const or = await db.query('SELECT user_id FROM orders WHERE id=$1', [orderId]).catch(() => ({ rows: [] }));
+        if (or.rows.length) {
+          const ur = await db.query('SELECT phone FROM users WHERE id=$1', [or.rows[0].user_id]).catch(() => ({ rows: [] }));
+          if (ur.rows.length) userPhone = ur.rows[0].phone;
+        }
+      }
+      out.push({ filename: f, size: st.size, size_kb: Math.round(st.size / 1024), mtime: st.mtime, user_phone: userPhone, order_id: orderId });
+    }
+    out.sort((a, b) => b.size - a.size);
+    res.json({ files: out });
+  } catch (e) { safeLog('[admin] storage list error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+// DELETE /api/admin/storage/:filename - Delete uploaded file
+router.delete('/storage/:filename', async (req, res) => {
+  try {
+    const fn = path.basename(req.params.filename);
+    const fp = path.join('/opt/all-in-one-abc-authentic/uploads/orders', fn);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'NOT_FOUND' });
+    fs.unlinkSync(fp);
+    await logActivity(req.user.id, 'storage.delete', { filename: fn });
+    res.json({ ok: true });
+  } catch (e) { safeLog('[admin] storage delete error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });
 
 // ---- Order support messages (Phase 3) --------------------------
