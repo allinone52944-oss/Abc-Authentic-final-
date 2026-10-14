@@ -319,6 +319,24 @@ async function notifyOrderFailed(db, order) {
   }
 }
 
+async function notifyOrderCancelled(db, order) {
+  try {
+    if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
+    const u = await db.query(
+      'SELECT name, whatsapp FROM users WHERE id = $1', [order.user_id]
+    );
+    const user = u.rows[0];
+    if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
+    const msg = `প্রিয় ${user.name || ''}, আপনার অর্ডার #${String(order.id || '').slice(0, 8)} বাতিল করা হয়েছে। টাকা wallet-এ ফেরত দেওয়া হয়েছে।`;
+    const r = await sendTextMessage(user.whatsapp, msg, db);
+    safeLog('[whatsapp] order cancelled notify', order.id, '->', r.ok ? 'sent' : r.error);
+    return r;
+  } catch (e) {
+    safeLog('[whatsapp] notifyOrderCancelled failed:', e.message);
+    return { ok: false, error: 'FAILED' };
+  }
+}
+
 async function notifyRechargeApproved(db, tx) {
   try {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
@@ -358,5 +376,6 @@ module.exports = {
   rechargeApprovedMessage,
   notifyOrderCompleted,
   notifyOrderFailed,
+  notifyOrderCancelled,
   notifyRechargeApproved,
 };

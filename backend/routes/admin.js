@@ -334,6 +334,10 @@ router.put('/orders/:id/status', async (req, res) => {
     if (status === 'failed') {
       wa.notifyOrderFailed(db, r.rows[0]).catch(() => {});
     }
+    // WhatsApp: order cancelled -> customer cancellation message
+    if (status === 'cancelled') {
+      wa.notifyOrderCancelled(db, r.rows[0]).catch(() => {});
+    }
 
     res.json({ order: r.rows[0] });
   } catch (e) {
