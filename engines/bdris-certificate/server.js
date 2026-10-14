@@ -474,6 +474,11 @@ app.post('/api/verify', async (req, res) => {
             body
         });
         const html = await r.text();
+        try {
+            const dbgPath = '/tmp/bdris-debug-' + Date.now() + '.html';
+            require('fs').writeFileSync(dbgPath, html.slice(0, 80000));
+            console.log('[bdris-cert] DEBUG html saved to', dbgPath, 'len=', html.length);
+        } catch (_) {}
 
         if (html.includes('No record found') || html.includes('Captcha is not valid') || html.includes('Does not match')) {
             return res.json({ success: false, error: 'Data not found or captcha wrong. Fetch a new captcha and try again.' });
