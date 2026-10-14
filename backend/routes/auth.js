@@ -63,6 +63,21 @@ router.get('/registration-status', async (req, res) => {
   }
 });
 
+// ---- GET /api/auth/voice-greeting (public) -----------------
+router.get('/voice-greeting', async (req, res) => {
+  try {
+    const vg = await getSetting('voice_greeting');
+    if (!vg || vg.enabled === false) return res.json({ enabled: false });
+    res.json({
+      enabled: true,
+      rotation: vg.rotation !== false,
+      greetings: vg.greetings || {}
+    });
+  } catch (e) {
+    res.json({ enabled: false });
+  }
+});
+
 // ---- POST /api/auth/register ---------------------------------
 router.post('/register', async (req, res) => {
   try {
