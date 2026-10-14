@@ -13,6 +13,13 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <title>All In One (Abc Authentic) - Login</title>
 <link rel="stylesheet" href="/css/coffee.css?v=8">
+<style>
+/* Allow vertical scroll on mobile for tall registration form */
+@media (max-width: 720px) {
+  body { overflow-y: auto !important; }
+  .app-shell { min-height: 100vh; overflow-y: auto; }
+}
+</style>
 <!-- cache-bust 2026-10-13: force fresh document load -->
 </head>
 <body class="auth">
@@ -177,7 +184,6 @@ async function doRegister() {
     phone: document.getElementById('rg_phone').value.trim(),
     whatsapp: document.getElementById('rg_wa').value.trim(),
     email: document.getElementById('rg_email').value.trim(),
-    religion: document.getElementById('rg_religion').value,
     password: document.getElementById('rg_pw').value,
     invite_code: document.getElementById('rg_invite').value.trim() || undefined,
   };
