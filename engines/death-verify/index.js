@@ -10,10 +10,8 @@ let app = null;
 function init() {}
 
 function getApp() {
-  if (app) return app;
-  const express = require('express');
-  app = express();
-  app.use((req, res) => {
+  // Return a plain middleware function (no express required)
+  return (req, res) => {
     const bodyData = req.body ? JSON.stringify(req.body) : null;
     const headers = { ...req.headers, host: '127.0.0.1:3001' };
     delete headers['content-length'];
@@ -33,8 +31,7 @@ function getApp() {
     proxy.on('error', () => res.status(503).json({ success: false, error: 'Engine unavailable' }));
     if (bodyData) proxy.write(bodyData);
     proxy.end();
-  });
-  return app;
+  };
 }
 
 function getInfo() { return { engine: 'death-proxy', port: 3001 }; }
