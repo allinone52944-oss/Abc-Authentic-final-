@@ -182,8 +182,17 @@ const GreetVoice = {
     // Show the 🔊 replay/fallback button
     const btn = document.getElementById('greetVoiceBtn');
     if (btn) { btn.style.display = ''; btn.onclick = () => this.replay(); }
-    // Small delay so voices finish loading
-    setTimeout(() => this.speak(text, this._lastVoice, cfg), 700);
+    // Browser autoplay policy: wait for first user interaction
+    const playOnInteract = () => {
+      this.speak(text, this._lastVoice, cfg);
+      ['click','touchstart','keydown'].forEach(ev => document.removeEventListener(ev, playOnInteract));
+      if (btn) btn.style.display = 'none';
+    };
+    ['click','touchstart','keydown'].forEach(ev => document.addEventListener(ev, playOnInteract, { once: true }));
+    // Also try after 700ms (may work if user already interacted)
+    setTimeout(() => {
+      if (document.querySelector(':hover')) playOnInteract();
+    }, 700);
   },
 };
 
