@@ -545,14 +545,20 @@ table.adm tr:hover td { background: rgba(212,175,55,0.05); }
 .modal p, .modal li { color: var(--cream); font-size: 14px; line-height: 1.7; }
 
 @media (max-width: 720px) {
-  body.app { overflow-y: auto; height: auto; min-height: 100vh; }
-  .hub-grid { grid-template-columns: repeat(2, 1fr); grid-auto-flow: dense; }
+  body.app { overflow-y: auto; height: auto; min-height: 100vh; overflow-x: hidden; }
+  .hub-grid { grid-template-columns: repeat(2, 1fr); grid-auto-flow: dense; gap: 10px; padding: 0 10px; }
+  .hub-card { padding: 16px 12px; overflow: hidden; word-wrap: break-word; }
+  .hub-card .emoji { font-size: 28px; }
+  .hub-card h3 { font-size: 14px; word-wrap: break-word; }
+  .hub-card .sub { font-size: 11px; word-wrap: break-word; overflow: hidden; }
   .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-  .stat { padding: 12px 8px; }
-  .stat .n { font-size: 20px; }
+  .stat { padding: 12px 8px; overflow: hidden; }
+  .stat .n { font-size: 20px; word-wrap: break-word; }
   .hub-card.wide { grid-column: span 2; }
-  .card { padding: 32px 24px; }
-  input, select, textarea { font-size: 16px; }
+  .card { padding: 32px 24px; max-width: 100%; overflow: hidden; }
+  input, select, textarea { font-size: 16px; max-width: 100%; }
+  .bn-strip { padding: 0 8px; overflow: hidden; }
+  .bn-strip img { max-width: 100%; height: auto; }
 }
 
 /* ============ Phase 3: Banners ============ */
