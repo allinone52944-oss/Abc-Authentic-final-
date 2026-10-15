@@ -494,7 +494,12 @@ socket.on('connect_error', (err) => {
     showBanner('warn', 'সার্ভারের সাথে সংযোগে সমস্যা হচ্ছে… স্বয়ংক্রিয়ভাবে আবার চেষ্টা চলছে।');
   }
 });
-socket.on('connect', () => { if (_netWarnShown) { _netWarnShown = false; hideBanner(); } });
+socket.on('connect', () => {
+  if (_netWarnShown) { _netWarnShown = false; hideBanner(); }
+  // Permanent (2026-10-15): reconnect-এ READY মিস হলে queue আটকে থাকে —
+  // pending callback থাকলে session আবার চাই
+  if (!S.ready && (S._readyQ || []).length > 0 && !S.starting) { startSession(); }
+});
 // proactive: refresh the token every 12 min (< 15-min TTL) so long
 // sessions (form fill → OTP relay) never expire mid-flow
 setInterval(() => { refreshAccessToken().catch(() => {}); }, 12 * 60 * 1000);
@@ -513,7 +518,7 @@ setInterval(() => { try { if (socket.connected) socket.emit('KEEPALIVE'); } catc
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && socket.connected) { try { socket.emit('KEEPALIVE'); } catch {} }
 });
-socket.on('disconnect', () => { S.ready = false; S.starting = false; });
+socket.on('disconnect', () => { S.ready = false; S.starting = false; clearTimeout(S._startT); });
 
 const S = {
   mode: null,        // 'auto' | 'manual'
@@ -2866,16 +2871,32 @@ function otpPrepAck(d) {
 }
 
 /* ═══════════ session প্রস্তুতি (নাগরিক কখনো আটকাবে না) ═══════════ */
+// Permanent (2026-10-15): S.starting deadlock fix — READY না এলে 30s-এ timeout,
+// reconnect-এ queue থাকলে session আবার চাওয়া হয়।
 function ensureReady(cb) {
-  note('[DEBUG] ensureReady, S.ready=' + S.ready + ' S.starting=' + S.starting, 'warn');
   if (S.ready) { cb(); return; }
   (S._readyQ = S._readyQ || []).push(cb);
-  if (!S.starting) {
-    S.starting = true;
-    note('⏳ সংযোগ প্রস্তুত হচ্ছে… (একটু অপেক্ষা করুন)', 'warn');
-    note('[DEBUG] emitting START_BDRIS_SESSION', 'warn');
-    socket.emit('START_BDRIS_SESSION');
-  }
+  if (!S.starting) { startSession(); }
+}
+function startSession() {
+  S.starting = true;
+  note('⏳ সংযোগ প্রস্তুত হচ্ছে… (একটু অপেক্ষা করুন)', 'warn');
+  socket.emit('START_BDRIS_SESSION');
+  // READY না এলে আটকে থাকবে না — timeout-এ flag ছেড়ে দিই, পরের ensureReady আবার চেষ্টা করবে
+  clearTimeout(S._startT);
+  S._startT = setTimeout(() => {
+    if (!S.ready && S.starting) {
+      S.starting = false;
+      note('⚠️ সংযোগ প্রস্তুত হতে দেরি হচ্ছে — আবার চেষ্টা করুন', 'warn');
+    }
+  }, 30000);
+  if (S._startT.unref) S._startT.unref();
+}
+function onSessionReady() {
+  S.ready = true; S.starting = false;
+  clearTimeout(S._startT);
+  const q = S._readyQ || []; S._readyQ = [];
+  q.forEach((cb) => { try { cb(); } catch (e) {} });
 }
 function sessionLost() {
   S.ready = false; S.starting = false;
@@ -3003,6 +3024,7 @@ socket.on('BOT_STATUS', (d) => {
   if (S._opBusy && (st === 'PROGRESS' || st === 'LOADING' || st === 'OTP_WAITING' || st === 'READY')) S._opStartedAt = Date.now();
   if (st === 'READY') {
     S.ready = true; S.starting = false;
+    clearTimeout(S._startT);
     hideBanner();
     if (d.fresh && S.view === 'flow' && S.d && (S.d.uiStep || 0) > 0) {
       // cold start: প্রথম ধাপের অপ এখনো পাঠানোই হয়নি (queue-তে বসে সেশনের অপেক্ষা) —
