@@ -256,7 +256,11 @@ CREATE OR REPLACE FUNCTION wallet_apply(
     p_user   UUID,
     p_amount NUMERIC,
     p_type   VARCHAR,
-    p_ref    VARCHAR DEFAULT NULL
+    p_ref    VARCHAR DEFAULT NULL,
+    p_existing_tx UUID DEFAULT NULL
+    -- C-4 fix (2026-10-15): p_existing_tx দেওয়া থাকলে (recharge approve-এর মতো
+    -- pending row আগে থেকেই আছে) নতুন row INSERT না করে ওই row-কেই 'approved'
+    -- করা হয় — নইলে প্রতিটা approve-এ ডবল ledger row হতো।
 )
 RETURNS TABLE(new_balance NUMERIC, tx_id UUID) AS $$
 DECLARE
@@ -285,9 +289,19 @@ BEGIN
     UPDATE users SET balance = balance + p_amount WHERE id = p_user
     RETURNING balance INTO v_bal;
 
-    INSERT INTO transactions (user_id, type, amount, trxid, status)
-    VALUES (p_user, p_type, p_amount, p_ref, 'approved')
-    RETURNING id INTO v_tx;
+    IF p_existing_tx IS NOT NULL THEN
+        -- Reuse the existing pending row: flip it to approved (no second row)
+        UPDATE transactions SET status = 'approved'
+        WHERE id = p_existing_tx AND user_id = p_user AND status = 'pending'
+        RETURNING id INTO v_tx;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'TX_NOT_FOUND';
+        END IF;
+    ELSE
+        INSERT INTO transactions (user_id, type, amount, trxid, status)
+        VALUES (p_user, p_type, p_amount, p_ref, 'approved')
+        RETURNING id INTO v_tx;
+    END IF;
 
     new_balance := v_bal;
     tx_id := v_tx;

@@ -5,6 +5,7 @@
 // role. All sensitive actions logged to activity_log.
 // ============================================================
 const express = require('express');
+const crypto = require('crypto');
 const multer = require('multer');
 const fs = require('fs');
 const db = require('../db');
@@ -19,8 +20,11 @@ const orderDocStorage = multer.diskStorage({
     cb(null, dir);
   },
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `delivery-${req.params.id}-${Date.now()}${ext}`);
+    // C-2 fix (2026-10-15): req.params.id ফাইলের নামে বসানো যাবে না (path traversal)।
+    // ফাইলের নাম পুরোপুরি random; order-এর সাথে সম্পর্ক DB-তে (orders.documents) থাকে।
+    const rawExt = path.extname(file.originalname).toLowerCase();
+    const ext = ['.pdf', '.jpg', '.jpeg', '.png'].includes(rawExt) ? rawExt : '.bin';
+    cb(null, `delivery-${Date.now().toString(36)}-${crypto.randomBytes(8).toString('hex')}${ext}`);
   }
 });
 const orderDocUpload = multer({
@@ -734,12 +738,13 @@ router.put('/transactions/:id/approve', async (req, res) => {
     if (tx.status !== 'pending') return res.status(400).json({ error: 'ALREADY_PROCESSED' });
 
     await db.withTransaction(async (client) => {
+      // C-4 fix (2026-10-15): existing pending row reuse করা হয় — ডবল ledger row নয়।
       // Idempotent atomic credit; raises DUPLICATE_TRANSACTION if already applied
-      await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
-        tx.user_id, Number(tx.amount), tx.type, tx.trxid || ('tx-' + tx.id),
+      await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4, $5)', [
+        tx.user_id, Number(tx.amount), tx.type, tx.trxid || ('tx-' + tx.id), tx.id,
       ]);
       await client.query(
-        `UPDATE transactions SET status = 'approved', admin_id = $1 WHERE id = $2`,
+        `UPDATE transactions SET admin_id = $1 WHERE id = $2`,
         [req.user.id, tx.id]
       );
     });

@@ -312,7 +312,8 @@ describe('transactions (security fix: filter allowlist)', () => {
     expect(r.body.ok).toBe(true);
     expect(db.withTransaction).toHaveBeenCalled();
     const w = db.__client.query.mock.calls.find((c) => /wallet_apply/.test(c[0]));
-    expect(w[1]).toEqual(['u1', 100, 'recharge', 'TRX1']);
+    // C-4 fix: 5th param reuses the existing pending row — no double ledger row
+    expect(w[1]).toEqual(['u1', 100, 'recharge', 'TRX1', 't1']);
   });
 
   test('approve: DUPLICATE_TRANSACTION surfaces as 400 with the message', async () => {

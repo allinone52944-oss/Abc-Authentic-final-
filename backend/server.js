@@ -52,11 +52,26 @@ app.get('/api/health', (req, res) => {
 });
 
 // ---- Public settings (registration on/off, maintenance) ----
+// C-3 fix (2026-10-15): আগে সব settings key unmasked ফেরত যেত —
+// whatsapp access_token-ও public ছিল। এখন শুধু নিরাপদ key-এর whitelist,
+// আর object value-তে access_token/secret/password থাকলে সেটা ছেঁটে দেওয়া হয়।
+const PUBLIC_SETTINGS_KEYS = ['registration_enabled', 'maintenance_mode', 'voice_greeting'];
+function sanitizePublicSetting(val) {
+  if (val && typeof val === 'object' && !Array.isArray(val)) {
+    const out = {};
+    for (const [k, v] of Object.entries(val)) {
+      if (/token|secret|password|api[_-]?key/i.test(k)) continue;
+      out[k] = v;
+    }
+    return out;
+  }
+  return val;
+}
 app.get('/api/public/settings', apiLimiter, async (req, res) => {
   try {
-    const r = await db.query('SELECT key, value FROM settings');
+    const r = await db.query('SELECT key, value FROM settings WHERE key = ANY($1)', [PUBLIC_SETTINGS_KEYS]);
     const out = {};
-    for (const row of r.rows) out[row.key] = row.value;
+    for (const row of r.rows) out[row.key] = sanitizePublicSetting(row.value);
     res.json(out);
   } catch (e) {
     safeLog('[api] settings error:', e.message);
@@ -202,7 +217,8 @@ try {
   //   POST /api/bdris-apply/charge/submit, POST /api/bdris-apply/charge/pdf,
   //   GET  /api/bdris-apply/prices
   // Everything else falls through to the engine subprocess proxy.
-  // Socket.IO needs no auth (page already requires login; engine is internal)
+  // Socket.IO auth is enforced by the engine itself (io.use handshake check in
+  // engines/bdris-apply/server.js) — the client sends its JWT in handshake.auth.
   // MUST come before the authenticated routes (Express matches in order)
   app.use('/api/bdris-apply/socket.io', bdrisApplyAdapter.getApp());
   app.use('/api/bdris-apply', requireAuth, bdrisApplyLimiter, bdrisApplyRoutes);

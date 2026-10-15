@@ -5,6 +5,7 @@
 // (atomic, no negative, idempotent).
 // ============================================================
 const express = require('express');
+const crypto = require('crypto');
 const db = require('../db');
 const { requireAuth } = require('../auth');
 const { safeLog, uploadMiddleware } = require('../security');
@@ -20,8 +21,11 @@ const orderDocStorage = multer.diskStorage({
     cb(null, dir);
   },
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const name = `order-${req.params.id}-${Date.now()}${ext}`;
+    // C-2 fix (2026-10-15): req.params.id ফাইলের নামে বসানো যাবে না (path traversal)।
+    // ফাইলের নাম পুরোপুরি random; order-এর সাথে সম্পর্ক DB-তে (orders.documents) থাকে।
+    const rawExt = path.extname(file.originalname).toLowerCase();
+    const ext = ['.pdf', '.jpg', '.jpeg', '.png'].includes(rawExt) ? rawExt : '.bin';
+    const name = `order-${Date.now().toString(36)}-${crypto.randomBytes(8).toString('hex')}${ext}`;
     cb(null, name);
   }
 });

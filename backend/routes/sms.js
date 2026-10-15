@@ -52,11 +52,12 @@ async function approveRechargeTx(client, txId, smsId) {
   const tx = r.rows[0];
   if (!tx) return null;
   // wallet_apply is atomic + idempotent (raises DUPLICATE_TRANSACTION)
-  await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
-    tx.user_id, Number(tx.amount), 'recharge', tx.trxid || ('tx-' + tx.id),
+  // C-4 fix (2026-10-15): existing pending row reuse — ডবল ledger row নয়
+  await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4, $5)', [
+    tx.user_id, Number(tx.amount), 'recharge', tx.trxid || ('tx-' + tx.id), tx.id,
   ]);
   await client.query(
-    `UPDATE transactions SET status = 'approved', admin_id = NULL WHERE id = $1`,
+    `UPDATE transactions SET admin_id = NULL WHERE id = $1`,
     [tx.id]
   );
   if (smsId) {

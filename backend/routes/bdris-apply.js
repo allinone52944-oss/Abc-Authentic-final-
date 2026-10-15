@@ -15,6 +15,7 @@
 // engine subprocess (see engines/bdris-apply/index.js).
 // ============================================================
 const express = require('express');
+const crypto = require('crypto');
 const { requireAuth } = require('../auth');
 const { safeLog } = require('../security');
 const db = require('../db');
@@ -22,6 +23,16 @@ const db = require('../db');
 const router = express.Router();
 
 // ---- helpers -------------------------------------------------
+
+// C-1 fix (2026-10-15): charge receipt token — engine SUBMIT_S4_OTP /
+// FETCH_ORIGINAL handler-এ HMAC দিয়ে যাচাই করে। Stateless, 30 মিনিট মেয়াদ।
+const CHARGE_SECRET = process.env.JWT_SECRET || '';
+function mintChargeToken(userId, kind, ref) {
+  const ts = Date.now();
+  const body = ['v1', String(userId), kind, String(ref), String(ts)].join('.');
+  const mac = crypto.createHmac('sha256', CHARGE_SECRET).update(body).digest('hex');
+  return body + '.' + mac;
+}
 
 // Get the bdris-apply service price (admin sets via Admin → Services).
 async function getSubmitPrice() {
@@ -63,13 +74,13 @@ router.post('/charge/submit', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'SERVICE_NOT_FOUND' });
     }
     if (price <= 0) {
-      return res.json({ ok: true, charged: 0, message: 'ফ্রি সেবা' });
+      return res.json({ ok: true, charged: 0, message: 'ফ্রি সেবা', chargeToken: mintChargeToken(req.user.id, 'submit', 'free') });
     }
     const clientKey = (req.body && req.body.idempotency_key) ? String(req.body.idempotency_key).slice(0, 64) : Date.now();
     const ref = 'bdris-apply-submit-' + clientKey + '-' + req.user.id;
     const r = await chargeWallet(req.user.id, price, ref);
     safeLog('[bdris-apply] submit charged', price, 'for user', req.user.id);
-    res.json({ ok: true, charged: r.charged, newBalance: r.newBalance });
+    res.json({ ok: true, charged: r.charged, newBalance: r.newBalance, chargeToken: mintChargeToken(req.user.id, 'submit', ref) });
   } catch (e) {
     safeLog('[bdris-apply] submit charge error:', e.message);
     if (/INSUFFICIENT_BALANCE/.test(e.message)) {
@@ -88,13 +99,13 @@ router.post('/charge/pdf', requireAuth, async (req, res) => {
   try {
     const price = await getPdfPrice();
     if (price <= 0) {
-      return res.json({ ok: true, charged: 0, message: 'ফ্রি ডাউনলোড' });
+      return res.json({ ok: true, charged: 0, message: 'ফ্রি ডাউনলোড', chargeToken: mintChargeToken(req.user.id, 'pdf', 'free') });
     }
     const clientKey = (req.body && req.body.idempotency_key) ? String(req.body.idempotency_key).slice(0, 64) : Date.now();
     const ref = 'bdris-apply-pdf-' + clientKey + '-' + req.user.id;
     const r = await chargeWallet(req.user.id, price, ref);
     safeLog('[bdris-apply] pdf charged', price, 'for user', req.user.id);
-    res.json({ ok: true, charged: r.charged, newBalance: r.newBalance });
+    res.json({ ok: true, charged: r.charged, newBalance: r.newBalance, chargeToken: mintChargeToken(req.user.id, 'pdf', ref) });
   } catch (e) {
     safeLog('[bdris-apply] pdf charge error:', e.message);
     if (/INSUFFICIENT_BALANCE/.test(e.message)) {

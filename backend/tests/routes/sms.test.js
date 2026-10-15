@@ -114,8 +114,13 @@ describe('POST /api/sms/incoming — auto-match', () => {
     expect(r.body).toMatchObject({ ok: true, matched: true, how: 'trxid', tx_id: 't1' });
     const wallet = db.__client.query.mock.calls.find((c) => /wallet_apply/.test(c[0]));
     expect(wallet).toBeDefined();
-    const upd = db.__client.query.mock.calls.find((c) => /UPDATE transactions SET status = 'approved'/.test(c[0]));
+    // C-4 fix: wallet_apply reuses the existing pending row (5th param = tx id),
+    // so no second ledger row is inserted; only admin_id is touched afterwards.
+    expect(wallet[1]).toEqual(['u1', 500, 'recharge', '9HXK2LQM4N', 't1']);
+    const upd = db.__client.query.mock.calls.find((c) => /UPDATE transactions SET admin_id = NULL/.test(c[0]));
     expect(upd).toBeDefined();
+    const legacyFlip = db.__client.query.mock.calls.find((c) => /UPDATE transactions SET status = 'approved'/.test(c[0]));
+    expect(legacyFlip).toBeUndefined(); // old double-row path must be gone
   });
 
   test('security fix: amount > SMS_MAX_AUTO_APPROVE → held_for_review, NO wallet credit', async () => {

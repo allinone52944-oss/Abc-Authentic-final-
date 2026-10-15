@@ -44,6 +44,51 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { maxHttpBufferSize: 30 * 1024 * 1024 });
 
+// ═══════════ ABC Authentic integration: socket auth (C-1 fix, 2026-10-15) ═══════════
+// JWT_SECRET সেট থাকলে (abc-authentic backend-এর subprocess হিসেবে চললে) প্রতিটা
+// socket-কে handshake-এ valid JWT দিতেই হবে — anonymous socket আর কিছু করতে পারবে না।
+// JWT_SECRET না থাকলে (standalone BDRIS bot হিসেবে) আগের মতোই খোলা থাকে।
+const crypto = require('crypto');
+const ABC_JWT_SECRET = process.env.JWT_SECRET || '';
+function verifyJwtHS256(token) {
+  try {
+    const parts = String(token || '').split('.');
+    if (parts.length !== 3) return null;
+    const sig = crypto.createHmac('sha256', ABC_JWT_SECRET).update(parts[0] + '.' + parts[1]).digest('base64url');
+    if (sig.length !== parts[2].length) return null;
+    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(parts[2]))) return null;
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    if (payload.exp && Date.now() / 1000 > payload.exp + 60) return null; // 60s clock skew
+    return payload;
+  } catch { return null; }
+}
+// Charge receipt: backend /charge/* endpoint দেয় — v1.<userId>.<kind>.<ref>.<ts>.<mac>
+function verifyChargeToken(tok, userId, kind) {
+  try {
+    if (!ABC_JWT_SECRET || !tok) return false;
+    const p = String(tok).split('.');
+    if (p.length !== 6 || p[0] !== 'v1') return false;
+    const [, tUid, tKind, tRef, tTs, tMac] = p;
+    if (tKind !== kind) return false;
+    if (String(tUid) !== String(userId)) return false;
+    const ts = parseInt(tTs, 10);
+    if (!ts || Math.abs(Date.now() - ts) > 30 * 60 * 1000) return false; // 30 min window
+    const mac = crypto.createHmac('sha256', ABC_JWT_SECRET).update(p.slice(0, 5).join('.')).digest('hex');
+    if (mac.length !== tMac.length) return false;
+    return crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(tMac));
+  } catch { return false; }
+}
+io.use((socket, next) => {
+  if (!ABC_JWT_SECRET) { socket.abcUser = null; return next(); } // standalone mode
+  const token = socket.handshake && socket.handshake.auth && socket.handshake.auth.token;
+  const payload = verifyJwtHS256(token);
+  if (!payload) return next(new Error('UNAUTHORIZED'));
+  const uid = payload.id || payload.sub || payload.userId;
+  if (!uid) return next(new Error('UNAUTHORIZED'));
+  socket.abcUser = { id: String(uid), role: payload.role || 'user' };
+  next();
+});
+
 app.use(express.json({ limit: '25mb' }));
 app.use(express.static(path.join(__dirname, '..', 'frontend')));
 
@@ -73,25 +118,33 @@ let appData = {};
 
 const mockReports = [];
 
-// ═══════════ Draft persistence (server-side, backend/drafts/) ═══════════
+// ═══════════ Draft persistence (server-side, drafts/<user>/) ═══════════
 // OTP-এর আগে সম্পূর্ণ আবেদন draft হিসেবে থেকে যাবে — পরে যেকোনো সময়
 // নম্বর দিয়ে OTP নিয়ে সাবমিট করা যাবে। /tmp নয় — স্থায়ী ডিস্কে।
+// C-1 fix (2026-10-15): draft এখন per-user — একজনের draft আরেকজন দেখতে পাবে না।
 const DRAFTS_DIR = path.join(__dirname, 'drafts');
 try { require('fs').mkdirSync(DRAFTS_DIR, { recursive: true }); } catch { /* ignore */ }
-function saveDraft(data) {
+function draftsDirFor(userId) {
+  if (!userId) return DRAFTS_DIR; // standalone mode: legacy shared dir
+  const safe = String(userId).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 64) || 'anon';
+  const d = path.join(DRAFTS_DIR, 'u_' + safe);
+  try { require('fs').mkdirSync(d, { recursive: true }); } catch { /* ignore */ }
+  return d;
+}
+function saveDraft(data, userId) {
   const raw = (data && data.draftId) || ('draft-' + Date.now().toString(36));
   // path traversal বন্ধ — draftId কখনো ফাইলের বাইরে যেতে পারবে না
   const id = String(raw).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 80) || ('draft-' + Date.now().toString(36));
   const rec = Object.assign({}, data, { draftId: id, savedAt: new Date().toISOString() });
-  require('fs').writeFileSync(path.join(DRAFTS_DIR, id + '.json'), JSON.stringify(rec));
+  require('fs').writeFileSync(path.join(draftsDirFor(userId), id + '.json'), JSON.stringify(rec));
   return { draftId: id, savedAt: rec.savedAt };
 }
-function listDrafts() {
+function listDrafts(userId) {
   const fs = require('fs');
   try {
-    return fs.readdirSync(DRAFTS_DIR).filter(f => f.endsWith('.json')).map(f => {
+    return fs.readdirSync(draftsDirFor(userId)).filter(f => f.endsWith('.json')).map(f => {
       try {
-        const r = JSON.parse(fs.readFileSync(path.join(DRAFTS_DIR, f), 'utf8'));
+        const r = JSON.parse(fs.readFileSync(path.join(draftsDirFor(userId), f), 'utf8'));
         return {
           draftId: r.draftId, savedAt: r.savedAt, uiStep: parseInt(r.uiStep, 10) || 0,
           name: [r.s1 && r.s1.firstNameBn, r.s1 && r.s1.lastNameBn].filter(Boolean).join(' ') || '(নাম নেই)',
@@ -101,34 +154,40 @@ function listDrafts() {
     }).filter(Boolean).sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')));
   } catch { return []; }
 }
-function loadDraft(id) {
+function loadDraft(userId, id) {
   const fs = require('fs');
-  const f = path.join(DRAFTS_DIR, String(id).replace(/[^a-zA-Z0-9-]/g, '') + '.json');
+  const f = path.join(draftsDirFor(userId), String(id).replace(/[^a-zA-Z0-9-]/g, '') + '.json');
   return JSON.parse(fs.readFileSync(f, 'utf8'));
 }
-function deleteDraft(id) {
+function deleteDraft(userId, id) {
   const fs = require('fs');
-  const f = path.join(DRAFTS_DIR, String(id).replace(/[^a-zA-Z0-9-]/g, '') + '.json');
+  const f = path.join(draftsDirFor(userId), String(id).replace(/[^a-zA-Z0-9-]/g, '') + '.json');
   fs.unlinkSync(f);
 }
 
 // ── ঠিকানা বই (স্থায়ী): নাম দিয়ে ঠিকানা সেভ, কোনো ট্যাগ নেই ──
-// যেকোনো ঠিকানার ঘরে (জন্ম/স্থায়ী/বর্তমান) ব্যবহারযোগ্য। backend/addresses.json
-const ADDR_FILE = path.join(__dirname, 'addresses.json');
-function loadAddresses() {
-  try { return JSON.parse(require('fs').readFileSync(ADDR_FILE, 'utf8')); }
+// C-1 fix (2026-10-15): per-user — addresses/u_<id>.json
+// যেকোনো ঠিকানার ঘরে (জন্ম/স্থায়ী/বর্তমান) ব্যবহারযোগ্য।
+const ADDR_DIR = __dirname;
+function addrFileFor(userId) {
+  if (!userId) return path.join(ADDR_DIR, 'addresses.json'); // standalone: legacy
+  const safe = String(userId).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 64) || 'anon';
+  return path.join(ADDR_DIR, 'addresses_u_' + safe + '.json');
+}
+function loadAddresses(userId) {
+  try { return JSON.parse(require('fs').readFileSync(addrFileFor(userId), 'utf8')); }
   catch { return []; }
 }
-function saveAddresses(list) {
-  require('fs').writeFileSync(ADDR_FILE, JSON.stringify(list, null, 1));
+function saveAddresses(userId, list) {
+  require('fs').writeFileSync(addrFileFor(userId), JSON.stringify(list, null, 1));
 }
-function upsertAddress(a) {
-  const list = loadAddresses();
+function upsertAddress(userId, a) {
+  const list = loadAddresses(userId);
   const id = a.id || ('addr-' + Date.now().toString(36));
   const rec = Object.assign({}, a, { id });
   const i = list.findIndex(x => x.id === id);
   if (i >= 0) list[i] = rec; else list.push(rec);
-  saveAddresses(list);
+  saveAddresses(userId, list);
   return list;
 }
 
@@ -2597,6 +2656,14 @@ io.on('connection', (socket) => {
   // OTP = SINGLE input#otp (placeholder "OTP"); submit = button "সাবমিট" ("যাচাই" বাটন নেই)
   socket.on('SUBMIT_S4_OTP', deduped('SUBMIT_S4_OTP', async (data = {}) => {
     touchSession();
+    // C-1 fix (2026-10-15): server-side charge enforcement — frontend-এর charge
+    // ছাড়া সরাসরি emit করলেও টাকা না কেটে সাবমিট হবে না।
+    if (ABC_JWT_SECRET) {
+      const uid = (socket.abcUser && socket.abcUser.id) || null;
+      if (!verifyChargeToken(data._chargeToken, uid, 'submit')) {
+        return status(socket, 'ERROR', '❌ পেমেন্ট যাচাই হয়নি — পেজ রিফ্রেশ করে আবার চেষ্টা করুন।');
+      }
+    }
     if (!page) return status(socket, 'ERROR', '❌ সংযোগ নেই — আবার চেষ্টা করুন।');
     const run = (async () => {
       status(socket, 'PROGRESS', '🔄 কোড বসানো হচ্ছে...', 'info');
@@ -2887,6 +2954,14 @@ io.on('connection', (socket) => {
   // ── FETCH_ORIGINAL: হিরোর "আসল PDF" — ক্যাশ → চলমান job → নতুন job (2026-10-11) ──
   socket.on('FETCH_ORIGINAL', async (data = {}) => {
     touchSession();
+    // C-1 fix (2026-10-15): PDF চার্জ server-side-এ যাচাই — টোকেন ছাড়া ডাউনলোড নয়।
+    if (ABC_JWT_SECRET) {
+      const uid = (socket.abcUser && socket.abcUser.id) || null;
+      if (!verifyChargeToken(data._chargeToken, uid, 'pdf')) {
+        socket.emit('BOT_STATUS', { status: 'ORIGINAL_PDF', ackId: '', original: null, ok: false, error: 'CHARGE_REQUIRED' });
+        return;
+      }
+    }
     let ack = String(data.ack || data.ackId || '').replace(/\D/g, '');
     if (!ack) {
       // নম্বর পড়া না গেলেও সর্বশেষ সাবমিট-রেকর্ড থেকেই আনা যায় (নিজের সেশন)
@@ -2994,47 +3069,49 @@ io.on('connection', (socket) => {
   });
 
   // ── DRAFTS (OTP-এর আগে সম্পূর্ণ আবেদন সংরক্ষণ) ──
+  // C-1 fix (2026-10-15): per-user — socket.abcUser.id দিয়ে scope করা
+  const abcUid = () => (socket.abcUser && socket.abcUser.id) || null;
   socket.on('SAVE_DRAFT', (data, callback) => {
     touchSession();
     try {
-      const r = saveDraft(data || {});
+      const r = saveDraft(data || {}, abcUid());
       status(socket, 'PROGRESS', `💾 খসড়া সংরক্ষিত (${r.draftId}) — পরে যেকোনো সময় OTP দিয়ে সাবমিট করা যাবে`, 'ok');
       if (callback) callback({ ok: true, ...r });
     } catch (e) { console.error('saveDraft:', e.message); if (callback) callback({ ok: false, error: 'খসড়া সংরক্ষণ করা যায়নি — আবার চেষ্টা করুন' }); }
   });
   socket.on('LIST_DRAFTS', (callback) => {
     touchSession();
-    if (callback) callback(listDrafts());
+    if (callback) callback(listDrafts(abcUid()));
   });
   socket.on('LOAD_DRAFT', (draftId, callback) => {
     touchSession();
-    try { if (callback) callback({ ok: true, draft: loadDraft(draftId) }); }
+    try { if (callback) callback({ ok: true, draft: loadDraft(abcUid(), draftId) }); }
     catch (e) { if (callback) callback({ ok: false, error: 'খসড়া পাওয়া যায়নি' }); }
   });
   socket.on('DELETE_DRAFT', (draftId, callback) => {
     touchSession();
-    try { deleteDraft(draftId); if (callback) callback({ ok: true }); }
+    try { deleteDraft(abcUid(), draftId); if (callback) callback({ ok: true }); }
     catch (e) { if (callback) callback({ ok: false }); }
   });
 
   // ── ঠিকানা বই ──
   socket.on('LIST_ADDRESSES', (callback) => {
     touchSession();
-    if (callback) callback({ ok: true, addresses: loadAddresses() });
+    if (callback) callback({ ok: true, addresses: loadAddresses(abcUid()) });
   });
   socket.on('SAVE_ADDRESS', (addr, callback) => {
     touchSession();
     try {
       if (!addr || !addr.name) { if (callback) callback({ ok: false, error: 'নাম দিন' }); return; }
-      const list = upsertAddress(addr);
+      const list = upsertAddress(abcUid(), addr);
       if (callback) callback({ ok: true, addresses: list });
     } catch (e) { console.error('saveAddress:', e.message); if (callback) callback({ ok: false, error: 'সেভ করা যায়নি — আবার চেষ্টা করুন' }); }
   });
   socket.on('DELETE_ADDRESS', (id, callback) => {
     touchSession();
     try {
-      saveAddresses(loadAddresses().filter(a => a.id !== id));
-      if (callback) callback({ ok: true, addresses: loadAddresses() });
+      saveAddresses(abcUid(), loadAddresses(abcUid()).filter(a => a.id !== id));
+      if (callback) callback({ ok: true, addresses: loadAddresses(abcUid()) });
     } catch (e) { console.error('delAddress:', e.message); if (callback) callback({ ok: false, error: 'মুছে ফেলা যায়নি — আবার চেষ্টা করুন' }); }
   });
 
