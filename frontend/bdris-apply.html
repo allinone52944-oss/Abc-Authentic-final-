@@ -2704,7 +2704,7 @@ function validateAuto() {
   return bad;
 }
 function submitAuto() {
-  note('[DEBUG] submitAuto called, S.ready=' + S.ready, 'info');
+  note('[DEBUG] submitAuto called, S.ready=' + S.ready, 'warn');
   collectAuto();
   const bad = validateAuto();
   if (bad.length) {
@@ -2855,13 +2855,13 @@ function otpPrepAck(d) {
 
 /* ═══════════ session প্রস্তুতি (নাগরিক কখনো আটকাবে না) ═══════════ */
 function ensureReady(cb) {
-  note('[DEBUG] ensureReady, S.ready=' + S.ready + ' S.starting=' + S.starting, 'info');
+  note('[DEBUG] ensureReady, S.ready=' + S.ready + ' S.starting=' + S.starting, 'warn');
   if (S.ready) { cb(); return; }
   (S._readyQ = S._readyQ || []).push(cb);
   if (!S.starting) {
     S.starting = true;
-    note('⏳ সংযোগ প্রস্তুত হচ্ছে… (একটু অপেক্ষা করুন)', 'info');
-    note('[DEBUG] emitting START_BDRIS_SESSION', 'info');
+    note('⏳ সংযোগ প্রস্তুত হচ্ছে… (একটু অপেক্ষা করুন)', 'warn');
+    note('[DEBUG] emitting START_BDRIS_SESSION', 'warn');
     socket.emit('START_BDRIS_SESSION');
   }
 }
