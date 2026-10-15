@@ -630,8 +630,21 @@ function staticGeoOpts(k, data) {
     const up = _uk ? dis[_uk] : null;
     if (!up) return null;
     if (k === 'paurasavaUnion') {
+      // সিটি কর্পোরেশনে ইউনিয়ন/পৌরসভা নেই — সরাসরি ওয়ার্ড দেখাও
+      if (up.w && up.w.length && !(up.u && up.u.length) && !(up.p && up.p.length)) {
+        return up.w.map(n => ({ id: n, name: n }));
+      }
       const arr = [...(up.u || []), ...(up.p || [])];
-      return arr.length ? arr.map(n => ({ id: n, name: n })) : null;
+      // ডুপ্লিকেট বাদ দাও (যেমন সাভার ইউনিয়ন + সাভার পৌরসভা)
+      const seen = new Set();
+      const uniq = arr.filter(n => !seen.has(n) && seen.add(n));
+      return uniq.length ? uniq.map(n => ({ id: n, name: n })) : null;
+    }
+    if (k === 'ward') {
+      // সিটি কর্পোরেশনের ওয়ার্ড static থেকে (ইউনিয়ন স্তর বাদ)
+      if (up.w && up.w.length) {
+        return up.w.map(n => ({ id: n, name: n }));
+      }
     }
   } catch (e) { return null; }
   return null; // country / ward → engine
@@ -1579,8 +1592,11 @@ function mirrorSelect(sel, label, childSel, value) {
 }
 function fillSelOpts(id, opts, wantText) {
   const node = $(id); if (!node || node.tagName !== 'SELECT') return;
+  // ডুপ্লিকেট বাদ দাও (engine থেকে ডুপ্লিকেট আসতে পারে, যেমন মাদাগাস্কার)
+  const seen = new Set();
+  const uniq = (opts || []).filter(o => { const k = String(o.name || '').trim(); return !seen.has(k) && seen.add(k); });
   node.innerHTML = '<option value="">--- নির্বাচন করুন ---</option>' +
-    opts.map(o => '<option value="' + esc(o.id) + '">' + esc(o.name) + '</option>').join('');
+    uniq.map(o => '<option value="' + esc(o.id) + '">' + esc(o.name) + '</option>').join('');
   if (wantText) setSelByText(id, wantText);
 }
 function setSelByText(id, text) {
