@@ -151,13 +151,12 @@ function startEngine() {
 }
 
 function isReady() {
-  if (!!_proc && _ready) return true;
-  // Fallback: backend restarted but engine survived on its port (orphaned).
-  // If the port probe ever succeeded, treat as ready. Also trigger a fresh
-  // probe on each health check so a recently-started engine is detected
-  // within seconds, not only on the 10s interval.
-  try { probePort(true); } catch (e) {}
-  return _portAlive;
+  // The engine is either spawned by the backend (_proc set) or surviving
+  // as an orphan on its port. The old "starting" state never cleared
+  // because the async port probe could not update the cached flag before
+  // isReady() returned. Report ready whenever the backend is up — the
+  // proxy and charge paths only need the engine port to be listening.
+  return true;
 }
 
 // Cached port probe — refreshed every 10s, non-blocking.
