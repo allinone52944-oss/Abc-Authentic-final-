@@ -2709,7 +2709,8 @@ function submitAuto() {
   if (!S.pvMode) {
     try { collectAuto(); } catch (e) { note('[DEBUG] collectAuto failed: ' + e.message, 'warn'); }
   }
-  const bad = validateAuto();
+  let bad = [];
+  try { bad = validateAuto(); } catch (e) { note('[DEBUG] validateAuto threw: ' + e.message, 'warn'); return; }
   if (bad.length) {
     note('[DEBUG] validation failed: ' + bad.join(', '), 'warn');
     showFail(bad); note('⚠️ কিছু ঘর পূরণ করুন', 'warn');
