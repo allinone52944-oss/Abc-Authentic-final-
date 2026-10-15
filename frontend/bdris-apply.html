@@ -1646,9 +1646,12 @@ async function geoChanged(k, Ls, data) {
   });
   if (!label) return;
   note('⏳ ঠিকানার তালিকা আনা হচ্ছে…', 'info');
-  await geoMirror(k, Ls);
   const next = Ls[idx + 1];
-  if (next) await geoLoad(next.k, Ls, data);
+  /* Static data parallel-এ load করো — engine mirror-এর জন্য অপেক্ষা নয়।
+     (আগে geoMirror 30s wait করত, engine slow হলে পরের dropdown খালি থাকত) */
+  const loadP = next ? geoLoad(next.k, Ls, data) : Promise.resolve();
+  try { await geoMirror(k, Ls); } catch (e) {}
+  await loadP;
   noteOff();
 }
 async function warmFromData() {
