@@ -2,7 +2,10 @@
 // original-fetcher.js — আসল BDRIS PDF আনয়ন, সম্পূর্ণ অটো (live-proven 2026-10-11, probe3c)
 //
 // লাইভ-প্রমাণিত রেসিপি — সাইট বদলালে আগে এখানে দেখুন:
-//   ১) root (bdris.gov.bd) → "আবেদনপত্র প্রিন্ট" লিংক (public পেজ, লগইন লাগে না)
+//   ১) https://bdris.gov.bd/application/print সরাসরি (public পেজ, লগইন লাগে না);
+//      WAF "Please type on browser" block দিলে /br/application হয়ে referer নিয়ে
+//      আবার চেষ্টা (2026-10-15 fix: হোমপেজের লিংক hover-dropdown-এ থাকে বলে
+//      selector wait চলে না — direct URL primary, /br/application fallback)
 //   ২) ফর্ম ভরাও: appType option value-ই এনক্রিপ্টেড `data`; appId/date/nameEn/mobileNo/email
 //   ৩) ক্যাপচা (250×50 data-URL PNG) → লোকাল সলভার (captcha-solve2) → প্রার্থী-তালিকা
 //   ৪) প্রতি প্রার্থী: সাইটের নিজের callAjax('/api/application/print') → ২৯৮-char টোকেন →
@@ -139,10 +142,22 @@ async function runOp(page, op, args) {
 }
 
 async function openPrintForm(page) {
-  await page.goto(SITE, { waitUntil: 'domcontentloaded', timeout: 45000 });
-  await page.waitForSelector('a[href="/application/print"]', { state: 'attached', timeout: 30000 });
-  const link = page.locator('a[href="/application/print"]').first();
-  await link.click().catch(async () => { await link.evaluate((el) => el.click()).catch(() => {}); });
+  // Permanent fix (2026-10-15): "আবেদনপত্র প্রিন্ট" লিংক (a[href="/application/print"])
+  // হোমপেজের hover-dropdown-এ থাকে — DOM-এ আসে না বলে selector wait সবসময় timeout.
+  // Strategy: সরাসরি URL-এ যাওয়ার চেষ্টা; WAF "Please type on browser" block দিলে
+  // /br/application হয়ে session/referer নিয়ে আবার চেষ্টা (দুটোই public, লগইন লাগে না)।
+  const printUrl = SITE + '/application/print';
+  let blocked = false;
+  try {
+    await page.goto(printUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    const bodyText = await page.evaluate(() => document.body ? document.body.innerText.slice(0, 120) : '').catch(() => '');
+    blocked = /please type on browser/i.test(bodyText);
+  } catch (e) { blocked = true; }
+  if (blocked) {
+    await page.goto(SITE + '/br/application', { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForTimeout(1200);
+    await page.goto(printUrl, { waitUntil: 'domcontentloaded', timeout: 45000, referer: SITE + '/br/application' });
+  }
   await page.waitForSelector('#appId', { timeout: 25000 });
   // util.js-এর callAjax আসার আগেই mint চালালে ব্যর্থ হয় — তাই অপেক্ষা
   await page.waitForFunction(() => typeof window.callAjax === 'function', { timeout: 15000 }).catch(() => {});
