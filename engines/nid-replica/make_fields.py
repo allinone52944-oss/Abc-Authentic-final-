@@ -89,12 +89,13 @@ def compose_address(pa, data=None):
     data = data or {}
     parts = []
 
-    # ১. বাসা/হোল্ডিং
+    # ১. বাসা/হোল্ডিং (label সবসময় থাকবে)
     h = bn_digits(clean_bn(pa.get("holding", "")).strip())
-    if h and h != "-":
-        parts.append("বাসা/হোল্ডিং: " + h)
+    if h == "-":
+        h = ""
+    parts.append("বাসা/হোল্ডিং: " + h)
 
-    # ২. গ্রাম/রাস্তা
+    # ২. গ্রাম/রাস্তা (label সবসময় থাকবে)
     #    গ্রাম ও মৌজা একই হলে শুধু গ্রাম; মৌজা ভিন্ন হলে গ্রামের পর কমা দিয়ে মৌজা
     vill_parts = []
     for k in ("village", "additional_village"):
@@ -105,10 +106,9 @@ def compose_address(pa, data=None):
         v = clean_bn(pa.get(k, "")).strip()
         if v and v not in vill_parts and v != "-":
             vill_parts.append(v)
-    if vill_parts:
-        parts.append("গ্রাম/রাস্তা: " + ", ".join(vill_parts))
+    parts.append("গ্রাম/রাস্তা: " + ", ".join(vill_parts))
 
-    # ৩. ডাকঘর ও পোস্টাল কোড
+    # ৩. ডাকঘর ও পোস্টাল কোড (label সবসময় থাকবে)
     po = clean_bn(pa.get("post_office", "")).strip()
     pc = bn_digits(clean_bn(pa.get("postal_code", "")).strip())
     if pc == "-":
@@ -119,6 +119,8 @@ def compose_address(pa, data=None):
         parts.append("ডাকঘর: " + po)
     elif pc:
         parts.append("ডাকঘর: " + pc)
+    else:
+        parts.append("ডাকঘর: ")
 
     # ৪. উপজেলা
     upozila = clean_bn(pa.get("upozila", "")).strip() or clean_bn(data.get("Upozila", "")).strip()
