@@ -630,7 +630,7 @@ function staticGeoOpts(k, data) {
     const up = _uk ? dis[_uk] : null;
     if (!up) return null;
     if (k === 'paurasavaUnion') {
-      const arr = [...(up.u || []), ...(up.p || []), ...(up.w || [])];
+      const arr = [...(up.u || []), ...(up.p || [])];
       return arr.length ? arr.map(n => ({ id: n, name: n })) : null;
     }
   } catch (e) { return null; }
