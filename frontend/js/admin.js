@@ -408,6 +408,7 @@ TABS.orders = async () => {
   const _f = TABS._f || '';
   const r = await ABC.api('/admin/orders?limit=30' + (_f ? '&status=' + _f : ''));
   const d = await r.json();
+  TABS._orders = d.orders;
   let html = '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">' +
     ['new', 'pending', 'processing', 'completed', 'delivered', 'failed', 'cancelled', 'refunded']
       .map(s => '<button class="mini-btn" onclick="AdmOrders.filter(\'' + s + '\')">' + (STBN[s] || s) + '</button>').join('') +
@@ -421,12 +422,42 @@ TABS.orders = async () => {
       '<td><small>' + new Date(o.created_at).toLocaleString('bn-BD') + '</small></td>' +
       '<td><select onchange="AdmOrders.setStatus(\'' + o.id + '\',this.value)">' +
       Object.keys(STBN).map(s => '<option value="' + s + '"' + (o.status === s ? ' selected' : '') + '>' + STBN[s] + '</option>').join('') +
-      '</select> <button class="mini-btn" title="সাপোর্ট মেসেজ" onclick="AdmOrders.supportForm(\'' + o.id + '\')">💬</button> ' +
+      '</select> <button class="mini-btn" title="বিস্তারিত" onclick="AdmOrders.view(\'' + o.id + '\')">👁️</button> ' +
+      '<button class="mini-btn" title="সাপোর্ট মেসেজ" onclick="AdmOrders.supportForm(\'' + o.id + '\')">💬</button> ' +
       '<button class="mini-btn" title="ডেলিভারি ডকুমেন্ট" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎</button></td></tr>';
   }
   content.innerHTML = html + '</table></div>';
 };
 window.AdmOrders = {
+  view(id) {
+    const o = (TABS._orders || []).find(x => x.id === id);
+    if (!o) { alert('অর্ডার পাওয়া যায়নি'); return; }
+    let dataHtml = '';
+    try {
+      const data = typeof o.data === 'string' ? JSON.parse(o.data) : (o.data || {});
+      dataHtml = Object.entries(data).map(([k, v]) =>
+        '<div style="padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;">' +
+        '<span style="color:var(--muted)">' + esc(k) + ':</span> ' +
+        '<b style="color:var(--cream)">' + esc(String(v)) + '</b></div>').join('') || '<div style="color:var(--muted)">কোনো ফর্ম ডেটা নেই</div>';
+    } catch (e) { dataHtml = '<div style="color:var(--muted)">ডেটা পড়া যায়নি</div>'; }
+    let docsHtml = '';
+    try {
+      const docs = typeof o.documents === 'string' ? JSON.parse(o.documents || '[]') : (o.documents || []);
+      docsHtml = docs.length ?
+        docs.map(d => '<div style="padding:6px 0;font-size:13px;">📎 ' + esc(d.originalname || d.filename || '') + '</div>').join('') :
+        '<div style="color:var(--muted);font-size:13px;">কোনো ডকুমেন্ট নেই</div>';
+    } catch (e) { docsHtml = '<div style="color:var(--muted)">ডকুমেন্ট পড়া যায়নি</div>'; }
+    modal('👁️ অর্ডার বিস্তারিত',
+      '<div style="margin-bottom:12px;"><b style="color:var(--gold)">' + esc(o.service_name_bn || o.service_name || '') + '</b><br>' +
+      '<span class="badge st-' + o.status + '">' + (STBN[o.status] || o.status) + '</span> ' +
+      '<span class="pill">৳' + bn(o.price) + '</span><br>' +
+      '<small style="color:var(--muted)">👤 ' + esc(o.user_name || '') + ' (' + esc(o.user_phone || '') + ')<br>🕘 ' + new Date(o.created_at).toLocaleString('bn-BD') + '</small></div>' +
+      '<div style="color:var(--gold);font-weight:700;margin:10px 0 6px;">📝 ফর্ম ডেটা</div>' + dataHtml +
+      '<div style="color:var(--gold);font-weight:700;margin:10px 0 6px;">📎 ডকুমেন্ট</div>' + docsHtml +
+      (o.notes ? '<div style="margin-top:10px;font-size:13px;">📝 নোট: ' + esc(o.notes) + '</div>' : '') +
+      (o.admin_note ? '<div style="margin-top:6px;font-size:13px;color:var(--gold);">👨‍💼 এডমিন: ' + esc(o.admin_note) + '</div>' : '')
+    );
+  },
   async filter(s) {
     const r = await ABC.api('/admin/orders?limit=30' + (s ? '&status=' + s : ''));
     const d = await r.json();
