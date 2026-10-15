@@ -1669,20 +1669,11 @@ async function geoChanged(k, Ls, data) {
   if (!label) return;
   note('⏳ ঠিকানার তালিকা আনা হচ্ছে…', 'info');
   const next = Ls[idx + 1];
-  /* সিটি কর্পোরেশন: engine-এর mirror আগে শেষ হতে হবে, তারপর fetch।
-     (আসল সাইটে ওয়ার্ড/অঞ্চল dropdown mirror-এর পরে populate হয়;
-     parallel-এ fetch করলে খালি আসে) */
-  const isCityCorp = k === 'cityCorpUpazila' && /সিটি কর্পোরেশন/.test(label);
-  if (isCityCorp) {
-    try { await geoMirror(k, Ls); } catch (e) {}
-    if (next) await geoLoad(next.k, Ls, data);
-  } else {
-    /* Static data parallel-এ load করো — engine mirror-এর জন্য অপেক্ষা নয়।
-       (আগে geoMirror 30s wait করত, engine slow হলে পরের dropdown খালি থাকত) */
-    const loadP = next ? geoLoad(next.k, Ls, data) : Promise.resolve();
-    try { await geoMirror(k, Ls); } catch (e) {}
-    await loadP;
-  }
+  /* Mirror আগে, fetch পরে — sequential (race condition fix)।
+     Parallel-এ fetch করলে আসল সাইটে dropdown populate হওয়ার আগেই
+     খালি option আসে। সিটি কর্পোরেশন + ইউনিয়ন→ওয়ার্ড — সব ক্ষেত্রে। */
+  try { await geoMirror(k, Ls); } catch (e) {}
+  if (next) await geoLoad(next.k, Ls, data);
   noteOff();
 }
 async function warmFromData() {
@@ -1698,24 +1689,30 @@ async function warmFromData() {
       }
     } catch (e) {}
   })();
-  await geoLoad('country', GEO_LEVELS, data);
-  await divFillP;
-  for (const L of GEO_LEVELS) {
-    const want = data[L.k]; if (!want) break;
-    const node = $(L.ui); if (!node) break;
-    if (node.tagName === 'SELECT') { if (!setSelByText(L.ui, want)) break; }
-    if (!L.childSite) break;
-    await geoMirror(L.k, GEO_LEVELS);
-    const nxt = GEO_LEVELS[GEO_LEVELS.indexOf(L) + 1];
-    if (nxt) await geoLoad(nxt.k, GEO_LEVELS, data);
-  }
-  // আটকে থাকা "লোড হচ্ছে…" dropdown গুলো placeholder-এ ফেরাও
-  GEO_LEVELS.forEach(L => {
-    const n = $(L.ui);
-    if (n && n.tagName === 'SELECT' && n.options.length === 1 && /লোড হচ্ছে/.test(n.options[0].text)) {
-      n.innerHTML = '<option value="">--- নির্বাচন করুন ---</option>';
+  try {
+    await geoLoad('country', GEO_LEVELS, data);
+    await divFillP;
+    for (const L of GEO_LEVELS) {
+      const want = data[L.k]; if (!want) break;
+      const node = $(L.ui); if (!node) break;
+      if (node.tagName === 'SELECT') { if (!setSelByText(L.ui, want)) break; }
+      if (!L.childSite) break;
+      await geoMirror(L.k, GEO_LEVELS);
+      const nxt = GEO_LEVELS[GEO_LEVELS.indexOf(L) + 1];
+      if (nxt) await geoLoad(nxt.k, GEO_LEVELS, data);
     }
-  });
+  } finally {
+    // আটকে থাকা "লোড হচ্ছে…" dropdown গুলো placeholder-এ ফেরাও
+    // (error হলেও চলবে — back navigation-এ আর চিরতরে আটকাবে না)
+    GEO_LEVELS.forEach(L => {
+      try {
+        const n = $(L.ui);
+        if (n && n.tagName === 'SELECT' && n.options.length === 1 && /লোড হচ্ছে/.test(n.options[0].text)) {
+          n.innerHTML = '<option value="">--- নির্বাচন করুন ---</option>';
+        }
+      } catch (e) {}
+    });
+  }
 }
 /* স্থায়ী/বর্তমান ঠিকানা — এক চাপে (বা খসড়া থেকে) ক্যাসকেড ভরাট + সাইটে মিরর */
 function addrRec(prefix) {
