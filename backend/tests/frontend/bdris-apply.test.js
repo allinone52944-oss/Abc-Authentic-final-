@@ -130,3 +130,50 @@ describe('recent applications delete (2026-10-15)', () => {
     expect(html).toMatch(/🗑️ মুছুন/);
   });
 });
+
+describe('static address geo data (2026-10-15)', () => {
+  const path = require('path');
+  const GEO_PATH = path.join(__dirname, '..', '..', '..', 'frontend', 'bd-geo.json');
+
+  test('bd-geo.json exists with full hierarchy', () => {
+    const geo = JSON.parse(fs.readFileSync(GEO_PATH, 'utf8'));
+    const divs = Object.keys(geo);
+    expect(divs.length).toBe(8);
+    let districts = 0, upazilas = 0, unions = 0;
+    Object.values(geo).forEach(d1 => Object.values(d1).forEach(d2 => {
+      districts++;
+      Object.values(d2).forEach(u => { upazilas++; unions += (u.u || []).length + (u.p || []).length; });
+    }));
+    expect(districts).toBe(64);
+    expect(upazilas).toBeGreaterThan(490);
+    expect(unions).toBeGreaterThan(4500);
+  });
+
+  test('geoLoad tries static data before engine', () => {
+    const m = html.match(/async function geoLoad\(k, Ls, data, wantOv\) \{([\s\S]*?)\n\}/);
+    expect(m).not.toBeNull();
+    expect(m[1]).toMatch(/staticGeoOpts\(k, data\)/);
+    // static hit skips the engine retry loop
+    expect(m[1]).toMatch(/if\s*\(!opts\.length\)\s*\{/);
+  });
+
+  test('engine fallback loop is shortened (not 45s)', () => {
+    const m = html.match(/async function geoLoad\(k, Ls, data, wantOv\) \{([\s\S]*?)\n\}/);
+    expect(m).not.toBeNull();
+    expect(m[1]).not.toMatch(/Date\.now\(\) - t0 < 45000/);
+    expect(m[1]).toMatch(/Date\.now\(\) - t0 < 15000/);
+  });
+
+  test('staticGeoOpts covers division/district/upazila/union levels', () => {
+    expect(html).toMatch(/function staticGeoOpts\(k, data\)/);
+    expect(html).toMatch(/k === 'division'/);
+    expect(html).toMatch(/k === 'district'/);
+    expect(html).toMatch(/k === 'cityCorpUpazila'/);
+    expect(html).toMatch(/k === 'paurasavaUnion'/);
+  });
+
+  test('geo data preloads on page open', () => {
+    expect(html).toMatch(/loadGeoData\(\);/);
+    expect(html).toMatch(/fetch\('bd-geo\.json'/);
+  });
+});

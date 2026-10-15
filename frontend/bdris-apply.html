@@ -564,6 +564,69 @@ const FB = {
   country: ['বাংলাদেশ']
 };
 
+/* ═══════════ স্থির ঠিকানা-তালিকা (permanent fix 2026-10-15) ═══════════
+   বিভাগ→জেলা→উপজেলা→ইউনিয়ন/পৌরসভা static JSON (bd-geo.json, 153KB) থেকে
+   তাৎক্ষণিকভাবে বসে — engine-এর real-site scrape-এর জন্য ৪৫ সেকেন্ড অপেক্ষা
+   করতে হয় না। Draft খুলে ঠিকানা বদলালেও dropdown সাথে সাথে আসে।
+   সাইটে আসল নির্বাচন এখনো engine-এর mirrorSelect-ই করে (label-matching)। */
+let GEO_DATA = null, GEO_PROM = null;
+function loadGeoData() {
+  if (GEO_DATA) return Promise.resolve(GEO_DATA);
+  if (!GEO_PROM) {
+    GEO_PROM = fetch('bd-geo.json', { cache: 'force-cache' })
+      .then(r => (r && r.ok) ? r.json() : null)
+      .then(j => { GEO_DATA = j || null; return GEO_DATA; })
+      .catch(() => null);
+  }
+  return GEO_PROM;
+}
+// পেজ খুলতেই ব্যাকগ্রাউন্ডে preload — ঠিকানার ধাপে গেলে আর অপেক্ষা নেই
+loadGeoData();
+function geoNorm(s) {
+  return String(s || '').replace(/[।]/g, '').replace(/[‌‍]/g, '').replace(/\s+/g, ' ').trim();
+}
+function geoFindKey(obj, want) {
+  if (!obj || !want) return null;
+  if (obj[want] !== undefined) return want;
+  const wN = geoNorm(want);
+  const hit = Object.keys(obj).find(k => geoNorm(k) === wN);
+  if (hit) return hit;
+  return Object.keys(obj).find(k => { const kN = geoNorm(k); return kN.includes(wN) || wN.includes(kN); }) || null;
+}
+/* k-লেভেলের অপশন static data থেকে দাও; না থাকলে null (engine fallback)।
+   data-তে parent লেভেলগুলোর বাংলা লেবেল থাকে (geoChanged/data[k] = label)। */
+function staticGeoOpts(k, data) {
+  if (!GEO_DATA) return null;
+  try {
+    if (k === 'division') {
+      const arr = Object.keys(GEO_DATA);
+      return arr.length ? arr.map(n => ({ id: n, name: n })) : null;
+    }
+    const _dk = geoFindKey(GEO_DATA, data && data.division);
+    const div = _dk ? GEO_DATA[_dk] : null;
+    if (!div) return null;
+    if (k === 'district') {
+      const arr = Object.keys(div);
+      return arr.length ? arr.map(n => ({ id: n, name: n })) : null;
+    }
+    const _sk = geoFindKey(div, data.district);
+    const dis = _sk ? div[_sk] : null;
+    if (!dis) return null;
+    if (k === 'cityCorpUpazila') {
+      const arr = Object.keys(dis);
+      return arr.length ? arr.map(n => ({ id: n, name: n })) : null;
+    }
+    const _uk = geoFindKey(dis, data.cityCorpUpazila);
+    const up = _uk ? dis[_uk] : null;
+    if (!up) return null;
+    if (k === 'paurasavaUnion') {
+      const arr = [...(up.u || []), ...(up.p || [])];
+      return arr.length ? arr.map(n => ({ id: n, name: n })) : null;
+    }
+  } catch (e) { return null; }
+  return null; // country / ward → engine
+}
+
 function san(s) {
   let t = String(s == null ? '' : s);
   t = t.replace(/🤖/g, '').replace(/ব্রাউজার/g, '').replace(/বট/g, '');
@@ -1467,16 +1530,22 @@ function degradeToText(id, label, value) {
 async function geoLoad(k, Ls, data, wantOv) {
   Ls = Ls || GEO_LEVELS; data = data || (S.d.s1 = S.d.s1 || {});
   const L = levelOf(k, Ls); if (!L) return;
-  // সাইট পেছনের ধাপ শেষ করছে কি না দেখি — ব্যস্ত থাকলে অপেক্ষা করি, তাড়াহুড়ো করে
-  // ড্রপডাউন ভেঙে (degrade) ফেলি না (পিছনে-এসে দ্রুত কাজ করলেও তালিকা ঠিক আসবে)
-  let opts = []; let fromAlt = false;
-  const t0 = Date.now();
-  while (!opts.length && Date.now() - t0 < 45000) {
-    if (S._opBusy) { await new Promise(r => setTimeout(r, 1500)); continue; }
-    opts = await fetchOpts(L.site, 9000);
-    if (!opts.length && L.altSite) { opts = await fetchOpts(L.altSite, 6000); if (opts.length) fromAlt = true; }
-    if (!opts.length) opts = await fetchOpts(L.site, 5000);
-    if (!opts.length) await new Promise(r => setTimeout(r, 900)); // ফাঁকা ফিরলে ফাঁক দিয়ে আবার
+  // স্থির তালিকা প্রথমে — থাকলে সাথে সাথে বসে, engine-এর জন্য অপেক্ষা নেই
+  // (draft থেকে ঠিকানা বদলালেও তাৎক্ষণিক)। না থাকলে engine fallback।
+  await loadGeoData();
+  let opts = staticGeoOpts(k, data) || [];
+  let fromAlt = false;
+  if (!opts.length) {
+    // engine fallback (country/ward বা অমিল লেবেল) — static কভারেজ থাকায়
+    // পুরনো ৪৫s লুপ দরকার নেই; ১৫s-এ না এলে দ্রুত text-এ degrade
+    const t0 = Date.now();
+    while (!opts.length && Date.now() - t0 < 15000) {
+      if (S._opBusy) { await new Promise(r => setTimeout(r, 1500)); continue; }
+      opts = await fetchOpts(L.site, 9000);
+      if (!opts.length && L.altSite) { opts = await fetchOpts(L.altSite, 6000); if (opts.length) fromAlt = true; }
+      if (!opts.length) opts = await fetchOpts(L.site, 5000);
+      if (!opts.length) await new Promise(r => setTimeout(r, 900)); // ফাঁকা ফিরলে ফাঁক দিয়ে আবার
+    }
   }
   L._alt = fromAlt; // মিরর কোন slot-এ বসবে (সিটি কর্পোরেশনে অঞ্চল WardInCityCorp-এ)
   if (!$(L.ui)) return;
