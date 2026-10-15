@@ -2705,7 +2705,10 @@ function validateAuto() {
 }
 function submitAuto() {
   note('[DEBUG] submitAuto called, S.ready=' + S.ready, 'warn');
-  collectAuto();
+  // Preview থেকে আসলে S.d আগেই ভরা আছে — collectAuto() form field খুঁজে throw করবে
+  if (!S.pvMode) {
+    try { collectAuto(); } catch (e) { note('[DEBUG] collectAuto failed: ' + e.message, 'warn'); }
+  }
   const bad = validateAuto();
   if (bad.length) {
     showFail(bad); note('⚠️ কিছু ঘর পূরণ করুন', 'warn');
