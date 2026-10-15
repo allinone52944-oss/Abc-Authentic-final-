@@ -65,9 +65,26 @@ describe('POST /api/auth/register — happy path', () => {
       .send({ ...VALID, phone: '01799998888', email: 'x@y.co', invite_code: 'inv-abcdef12' })
       .expect(201);
     expect(r.body.ok).toBe(true);
-    const upd = db.query.mock.calls.find((c) => /UPDATE invite_links/.test(c[0]));
+    // H-3: consume now runs inside withTransaction → goes through the mock client
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    const upd = allCalls.find((c) => /UPDATE invite_links/.test(c[0]));
     expect(upd).toBeDefined();
     expect(upd[1][0]).toBe('INV-ABCDEF12'); // normalized to uppercase
+  });
+
+  test('H-3: exhausted invite → 403 INVITE_EXHAUSTED (no orphan account)', async () => {
+    db.__routeQuery([
+      ...settingsHandlers({ enabled: false }),
+      ['FROM invite_links WHERE code', { rows: [{ code: 'INV-ABCDEF12', is_active: true, expires_at: null, max_uses: 1, used_count: 0 }] }],
+      ['FROM users WHERE phone = $1 OR email', { rows: [] }],
+      ['INSERT INTO users', { rows: [{ id: 'u3', name: VALID.name }] }],
+      ['UPDATE invite_links SET used_count', { rows: [], rowCount: 0 }], // someone else took the last use
+    ]);
+    const r = await request(app())
+      .post('/api/auth/register')
+      .send({ ...VALID, phone: '01799998889', email: 'z@y.co', invite_code: 'INV-ABCDEF12' })
+      .expect(403);
+    expect(r.body.error).toBe('INVITE_EXHAUSTED');
   });
 
   test('registration OFF without invite → 403 REGISTRATION_DISABLED', async () => {

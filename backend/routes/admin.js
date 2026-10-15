@@ -6,36 +6,14 @@
 // ============================================================
 const express = require('express');
 const crypto = require('crypto');
-const multer = require('multer');
 const fs = require('fs');
 const db = require('../db');
 const { requireAuth, requireAdmin, hashPassword, verifyPassword } = require('../auth');
-const { safeLog } = require('../security');
+const { safeLog, orderDocUpload } = require('../security');
 const wa = require('../utils/whatsapp');
 
-const orderDocStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = '/opt/all-in-one-abc-authentic/uploads/orders';
-    fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    // C-2 fix (2026-10-15): req.params.id ফাইলের নামে বসানো যাবে না (path traversal)।
-    // ফাইলের নাম পুরোপুরি random; order-এর সাথে সম্পর্ক DB-তে (orders.documents) থাকে।
-    const rawExt = path.extname(file.originalname).toLowerCase();
-    const ext = ['.pdf', '.jpg', '.jpeg', '.png'].includes(rawExt) ? rawExt : '.bin';
-    cb(null, `delivery-${Date.now().toString(36)}-${crypto.randomBytes(8).toString('hex')}${ext}`);
-  }
-});
-const orderDocUpload = multer({
-  storage: orderDocStorage,
-  limits: { fileSize: 10 * 1024 * 1024, files: 5 },
-  fileFilter: (req, file, cb) => {
-    const ext = (file.originalname.split('.').pop() || '').toLowerCase();
-    if (['pdf','jpg','jpeg','png'].includes(ext)) cb(null, true);
-    else cb(new Error('FILE_TYPE_NOT_ALLOWED'));
-  }
-});
+// Delivery document uploads: settings-driven via orderDocUpload(db, 'delivery') (H-12).
+// Filenames stay random (C-2: never embed req.params.id).
 
 const router = express.Router();
 router.use(requireAuth, requireAdmin);
@@ -143,6 +121,22 @@ router.put('/users/:id', async (req, res) => {
     if (isSelf && (status === 'disabled' || status === 'blocked' || login_enabled === false)) {
       return res.status(403).json({ error: 'ERR_CANNOT_DISABLE_SELF' });
     }
+    // H-9 fix (2026-10-15): last-admin guard — অন্য admin-কে demote/disable/delete
+    // করলে যদি কোনো সক্রিয় admin না থাকে, action block হবে।
+    if (!isSelf && target.role === 'admin') {
+      const removesAdmin = (role === 'user') ||
+        (status === 'disabled' || status === 'blocked') || (login_enabled === false);
+      if (removesAdmin) {
+        const c = await db.query(
+          `SELECT COUNT(*) AS c FROM users
+           WHERE role = 'admin' AND status = 'active' AND login_enabled IS NOT FALSE AND id != $1`,
+          [id]
+        );
+        if (!parseInt(c.rows[0].c, 10)) {
+          return res.status(403).json({ error: 'LAST_ADMIN' });
+        }
+      }
+    }
 
     const sets = [];
     const params = [];
@@ -249,8 +243,20 @@ router.delete('/users/:id', async (req, res) => {
     if (req.query.confirm !== 'yes') {
       return res.status(400).json({ error: 'CONFIRM_REQUIRED' });
     }
-    const cur = await db.query('SELECT id, phone, name FROM users WHERE id = $1', [id]);
+    const cur = await db.query('SELECT id, phone, name, role FROM users WHERE id = $1', [id]);
     if (!cur.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+
+    // H-9 fix (2026-10-15): last-admin guard — শেষ সক্রিয় admin-কে delete করা যাবে না।
+    if (cur.rows[0].role === 'admin') {
+      const c = await db.query(
+        `SELECT COUNT(*) AS c FROM users
+         WHERE role = 'admin' AND status = 'active' AND login_enabled IS NOT FALSE AND id != $1`,
+        [id]
+      );
+      if (!parseInt(c.rows[0].c, 10)) {
+        return res.status(403).json({ error: 'LAST_ADMIN' });
+      }
+    }
 
     // Count what will be deleted (for the log)
     const counts = await db.query(
@@ -314,21 +320,39 @@ router.get('/orders', async (req, res) => {
 
 // PUT /api/admin/orders/:id/status
 const ORDER_STATUSES = ['new', 'pending', 'processing', 'completed', 'delivered', 'failed', 'cancelled', 'refunded'];
+// H-1 fix (2026-10-15): allowed status transitions — any→any no longer permitted.
+// Terminal states: cancelled, refunded. failed → pending allows retry.
+const ORDER_TRANSITIONS = {
+  new: ['pending', 'processing', 'cancelled'],
+  pending: ['processing', 'cancelled', 'failed'],
+  processing: ['completed', 'failed', 'cancelled'],
+  completed: ['delivered', 'refunded'],
+  delivered: ['refunded'],
+  failed: ['pending'],
+  cancelled: [],
+  refunded: [],
+};
 router.put('/orders/:id/status', async (req, res) => {
   try {
     const { status, admin_note } = req.body || {};
     if (!ORDER_STATUSES.includes(status)) {
       return res.status(400).json({ error: 'INVALID_STATUS' });
     }
+    const cur = await db.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+    if (!cur.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    const from = cur.rows[0].status;
+    // Same status: idempotent no-op (no history spam)
+    if (from !== status && !(ORDER_TRANSITIONS[from] || []).includes(status)) {
+      return res.status(400).json({ error: 'INVALID_TRANSITION', from, allowed: ORDER_TRANSITIONS[from] || [] });
+    }
     const r = await db.query(
-      `UPDATE orders SET status = $1, admin_note = COALESCE($2, admin_note)
+      `UPDATE orders SET status = $1, admin_note = COALESCE($2, admin_note), updated_at = NOW()
        WHERE id = $3 RETURNING *`,
       [status, admin_note || null, req.params.id]
     );
-    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
 
     // Refund: credit the order price back to wallet (idempotent via wallet_apply)
-    if (status === 'refunded') {
+    if (status === 'refunded' && from !== 'refunded') {
       try {
         await db.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
           r.rows[0].user_id, Number(r.rows[0].price), 'refund', 'refund-' + r.rows[0].id,
@@ -336,8 +360,19 @@ router.put('/orders/:id/status', async (req, res) => {
       } catch (e) { safeLog('[admin] refund credit skipped:', e.message); }
     }
 
+    // Status history (H-1)
+    if (from !== status) {
+      try {
+        await db.query(
+          `INSERT INTO order_status_history (order_id, from_status, to_status, admin_id, note)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [req.params.id, from, status, req.user.id, admin_note || null]
+        );
+      } catch (e) { safeLog('[admin] status history skipped:', e.message); }
+    }
+
     await logActivity(req.user.id, 'order.status', {
-      order_id: req.params.id, status, admin_note: admin_note || null,
+      order_id: req.params.id, from, status, admin_note: admin_note || null,
     });
 
     // WhatsApp: order completed/delivered -> customer success message
@@ -357,6 +392,22 @@ router.put('/orders/:id/status', async (req, res) => {
     res.json({ order: r.rows[0] });
   } catch (e) {
     safeLog('[admin] order status error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// GET /api/admin/orders/:id/history — status transition timeline (H-1)
+router.get('/orders/:id/history', async (req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT h.*, u.name AS admin_name FROM order_status_history h
+       LEFT JOIN users u ON u.id = h.admin_id
+       WHERE h.order_id = $1 ORDER BY h.created_at ASC`,
+      [req.params.id]
+    );
+    res.json({ history: r.rows });
+  } catch (e) {
+    safeLog('[admin] order history error:', e.message);
     res.status(500).json({ error: 'FAILED' });
   }
 });
@@ -417,7 +468,7 @@ router.get('/support-templates', async (req, res) => {
 });
 
 // Admin upload delivery document
-router.post('/orders/:id/delivery-docs', orderDocUpload.single('file'), async (req, res) => {
+router.post('/orders/:id/delivery-docs', orderDocUpload(db, 'delivery'), async (req, res) => {
   try {
     const orderId = req.params.id;
     if (!req.file) return res.status(400).json({ error: 'NO_FILE' });
@@ -1020,8 +1071,50 @@ async function mergeWhatsappSetting(req, incoming) {
   return out;
 }
 
-router.put('/settings', async (req, res) => {
+// ---- Database backup (H-7 fix, 2026-10-15) ----------------------
+// POST triggers pg_dump in background; GET shows last-backup status + files.
+// For automatic daily backups add the cron line from backend/scripts/backup.js
+// on the server.
+const BACKUP_DIR = process.env.BACKUP_DIR || '/opt/all-in-one-abc-authentic/backups';
+router.post('/backup', async (req, res) => {
   try {
+    const { spawn } = require('child_process');
+    const script = require('path').join(__dirname, '..', 'scripts', 'backup.js');
+    const p = spawn(process.execPath, [script], {
+      detached: true, stdio: 'ignore', env: process.env,
+    });
+    p.unref();
+    await logActivity(req.user.id, 'backup.trigger', {});
+    res.json({ ok: true, started: true });
+  } catch (e) {
+    safeLog('[admin] backup trigger error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+router.get('/backup', async (req, res) => {
+  try {
+    const r = await db.query("SELECT value FROM settings WHERE key = 'backup.last' LIMIT 1");
+    const v = r.rows[0] && r.rows[0].value;
+    const last = v ? (typeof v === 'string' ? JSON.parse(v) : v) : null;
+    let files = [];
+    try {
+      const path = require('path');
+      files = fs.readdirSync(BACKUP_DIR)
+        .filter((f) => f.endsWith('.dump'))
+        .map((f) => {
+          const st = fs.statSync(path.join(BACKUP_DIR, f));
+          return { name: f, bytes: st.size, at: st.mtime.toISOString() };
+        })
+        .sort((a, b) => (a.at < b.at ? 1 : -1));
+    } catch (e) { /* dir may not exist yet */ }
+    res.json({ last, files });
+  } catch (e) {
+    safeLog('[admin] backup status error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+router.put('/settings', async (req, res) => {  try {
     const allowed = ['registration_enabled', 'maintenance_mode', 'file_upload',
                      'login_security', 'cashback', 'welcome_bonus', 'voice_greeting',
                      'whatsapp', 'bdris_apply.pdf_price', 'recharge_numbers'];

@@ -42,9 +42,12 @@ done
 cd "$APP_DIR"
 
 # Run database migrations (only if .env exists)
+# NOTE (2026-10-15): must run backend/migrate.js directly — there is no
+# package.json at repo root, so `npm run migrate` from here silently fails
+# and schema changes would never reach the Oracle DB.
 if [ -f .env ]; then
   echo "$(date): Running migrations..." >>"$LOG"
-  npm run migrate >>"$LOG" 2>&1 || echo "$(date): Migration failed or no DB" >>"$LOG"
+  node backend/migrate.js >>"$LOG" 2>&1 || echo "$(date): Migration failed or no DB" >>"$LOG"
 fi
 
 # Restart service if it exists

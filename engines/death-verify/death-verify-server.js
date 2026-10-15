@@ -1045,6 +1045,11 @@ if (req.method === 'GET' && p === '/api/captcha') return await routeCaptcha(res)
 if (req.method === 'POST' && p === '/api/solve-captcha') return await routeSolveCaptcha(req, res);
 if (req.method === 'POST' && p === '/api/verify') return await routeVerify(req, res);
         if (req.method === 'GET' && p === '/api/birth-debug') {
+            // H-11 fix (2026-10-15): debug endpoint is OFF unless explicitly
+            // enabled — it returns full birth-record PII for any DRN+DOB.
+            if (process.env.ENABLE_DEBUG_ENDPOINTS !== '1') {
+                return json(res, 404, { success: false, error: 'not found' });
+            }
             const drn = String(u.searchParams.get('drn') || '').replace(/\D/g, '');
             const dob = String(u.searchParams.get('dob') || '').trim();
             if (!drn) return json(res, 400, { success: false, error: 'drn query-e din' });

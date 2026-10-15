@@ -109,16 +109,25 @@ describe('users', () => {
     expect(r1.body.error).toBe('ERR_CANNOT_DELETE_SELF');
     const r2 = await withAdmin(request(app()).delete('/api/admin/users/u2')).expect(400);
     expect(r2.body.error).toBe('CONFIRM_REQUIRED');
-    db.__routeQuery([['SELECT id, phone, name FROM users WHERE id', { rows: [] }]]);
+    db.__routeQuery([['SELECT id, phone, name, role FROM users WHERE id', { rows: [] }]]);
     await withAdmin(request(app()).delete('/api/admin/users/u2?confirm=yes')).expect(404);
     db.__reset();
     db.__routeQuery([
-      ['SELECT id, phone, name FROM users WHERE id', { rows: [{ id: 'u2', phone: '0171', name: 'R' }] }],
+      ['SELECT id, phone, name, role FROM users WHERE id', { rows: [{ id: 'u2', phone: '0171', name: 'R', role: 'user' }] }],
       ['SELECT (SELECT COUNT(*) FROM orders', { rows: [{ orders: '1', transactions: '2', coupons: '0', notices: '0', chat: '0' }] }],
     ]);
     const r4 = await withAdmin(request(app()).delete('/api/admin/users/u2?confirm=yes')).expect(200);
     expect(r4.body.ok).toBe(true);
     expect(r4.body.deleted.orders).toBe('1');
+  });
+
+  test('H-9: deleting the last active admin → 403 LAST_ADMIN', async () => {
+    db.__routeQuery([
+      ['SELECT id, phone, name, role FROM users WHERE id', { rows: [{ id: 'u9', phone: '0171', name: 'A', role: 'admin' }] }],
+      ["role = 'admin' AND status = 'active'", { rows: [{ c: '0' }] }],
+    ]);
+    const r = await withAdmin(request(app()).delete('/api/admin/users/u9?confirm=yes')).expect(403);
+    expect(r.body.error).toBe('LAST_ADMIN');
   });
 });
 
@@ -139,19 +148,45 @@ describe('orders', () => {
   });
 
   test('PUT /orders/:id/status: not found → 404', async () => {
-    db.__routeQuery([['UPDATE orders SET status', { rows: [] }]]);
+    db.__routeQuery([['SELECT * FROM orders WHERE id', { rows: [] }]]);
     await withAdmin(request(app()).put('/api/admin/orders/o1/status')).send({ status: 'completed' }).expect(404);
   });
 
   test('PUT /orders/:id/status → completed → 200', async () => {
-    db.__routeQuery([['UPDATE orders SET status', { rows: [{ id: 'o1', user_id: 'u1', status: 'completed' }] }]]);
+    db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o1', user_id: 'u1', status: 'processing' }] }],
+      ['UPDATE orders SET status', { rows: [{ id: 'o1', user_id: 'u1', status: 'completed' }] }],
+    ]);
     const r = await withAdmin(request(app()).put('/api/admin/orders/o1/status'))
       .send({ status: 'completed' }).expect(200);
     expect(r.body.order.status).toBe('completed');
+    // history recorded
+    const h = db.query.mock.calls.find((c) => /order_status_history/.test(c[0]));
+    expect(h).toBeDefined();
+    expect(h[1].slice(0, 3)).toEqual(['o1', 'processing', 'completed']);
+  });
+
+  test('H-1: invalid transition (new → delivered) → 400 INVALID_TRANSITION', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o1', user_id: 'u1', status: 'new' }] }],
+    ]);
+    const r = await withAdmin(request(app()).put('/api/admin/orders/o1/status'))
+      .send({ status: 'delivered' }).expect(400);
+    expect(r.body.error).toBe('INVALID_TRANSITION');
+    expect(r.body.allowed).toEqual(['pending', 'processing', 'cancelled']);
+  });
+
+  test('H-1: refunded is terminal (refunded → new) → 400', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o1', user_id: 'u1', status: 'refunded' }] }],
+    ]);
+    await withAdmin(request(app()).put('/api/admin/orders/o1/status'))
+      .send({ status: 'new' }).expect(400);
   });
 
   test('refunded status credits wallet (idempotent refund ref)', async () => {
     db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o1', user_id: 'u1', price: '200', status: 'completed' }] }],
       ['UPDATE orders SET status', { rows: [{ id: 'o1', user_id: 'u1', price: '200', status: 'refunded' }] }],
     ]);
     await withAdmin(request(app()).put('/api/admin/orders/o1/status')).send({ status: 'refunded' }).expect(200);

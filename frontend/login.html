@@ -191,6 +191,19 @@ body {
   </div>
 </div>
 <script>
+// Maintenance notice (H-5: backend also gates APIs with 503 during maintenance)
+(async () => {
+  try {
+    const r = await fetch('/api/public/settings');
+    const s = await r.json();
+    if (s.maintenance_mode && s.maintenance_mode.enabled) {
+      const bar = document.createElement('div');
+      bar.style.cssText = 'background:#3a2a12;color:#f0c75e;padding:10px 14px;font-size:14px;text-align:center;border-bottom:1px solid #6b4f1d;';
+      bar.textContent = '🔧 ' + (s.maintenance_mode.message || 'সাইট এখন মেনটেনেন্সে আছে');
+      document.body.prepend(bar);
+    }
+  } catch (e) {}
+})();
 function showTab(which, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');

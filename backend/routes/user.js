@@ -8,36 +8,12 @@ const express = require('express');
 const crypto = require('crypto');
 const db = require('../db');
 const { requireAuth } = require('../auth');
-const { safeLog, uploadMiddleware } = require('../security');
-const multer = require('multer');
+const { safeLog, uploadMiddleware, orderDocUpload } = require('../security');
 const path = require('path');
 const fs = require('fs');
 
-// Order document uploads: disk storage, permanent
-const orderDocStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = '/opt/all-in-one-abc-authentic/uploads/orders';
-    fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    // C-2 fix (2026-10-15): req.params.id ফাইলের নামে বসানো যাবে না (path traversal)।
-    // ফাইলের নাম পুরোপুরি random; order-এর সাথে সম্পর্ক DB-তে (orders.documents) থাকে।
-    const rawExt = path.extname(file.originalname).toLowerCase();
-    const ext = ['.pdf', '.jpg', '.jpeg', '.png'].includes(rawExt) ? rawExt : '.bin';
-    const name = `order-${Date.now().toString(36)}-${crypto.randomBytes(8).toString('hex')}${ext}`;
-    cb(null, name);
-  }
-});
-const orderDocUpload = multer({
-  storage: orderDocStorage,
-  limits: { fileSize: 10 * 1024 * 1024, files: 5 },
-  fileFilter: (req, file, cb) => {
-    const ext = (file.originalname.split('.').pop() || '').toLowerCase();
-    if (['pdf','jpg','jpeg','png'].includes(ext)) cb(null, true);
-    else cb(new Error('FILE_TYPE_NOT_ALLOWED'));
-  }
-});
+// Order document uploads: settings-driven via orderDocUpload(db, 'order') (H-12).
+// Filenames stay random (C-2: never embed req.params.id).
 const push = require('../utils/push');
 
 const router = express.Router();
@@ -246,6 +222,23 @@ router.get('/orders/:id', async (req, res) => {
   }
 });
 
+// GET /api/orders/:id/history — status timeline for the order owner (H-1)
+router.get('/orders/:id/history', async (req, res) => {
+  try {
+    const own = await db.query('SELECT id FROM orders WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+    if (!own.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    const r = await db.query(
+      `SELECT from_status, to_status, note, created_at FROM order_status_history
+       WHERE order_id = $1 ORDER BY created_at ASC`,
+      [req.params.id]
+    );
+    res.json({ history: r.rows });
+  } catch (e) {
+    safeLog('[user] order history error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 // ============================================================
 // CHAT (contextual: order complaints / reviews — order page only)
 // ============================================================
@@ -309,7 +302,7 @@ router.get('/orders/:id/messages', async (req, res) => {
 // ============================================================
 
 // Upload document for an order (customer uploads required docs)
-router.post('/orders/:id/documents', orderDocUpload.single('file'), async (req, res) => {
+router.post('/orders/:id/documents', orderDocUpload(db, 'order'), async (req, res) => {
   try {
     const orderId = req.params.id;
     const docType = req.body.doc_type || 'document';
@@ -425,13 +418,35 @@ router.post('/wallet/coupon', async (req, res) => {
         err.statusCode = 403;
         throw err;
       }
+      // H-2 fix (2026-10-15): service_id scoping enforced — service-নির্দিষ্ট
+      // promo শুধু ওই service-এর গ্রাহক redeem করতে পারবে।
+      if (coupon.service_id) {
+        const svc = await client.query(
+          `SELECT COUNT(*) AS c FROM orders
+           WHERE user_id = $1 AND service_id = $2 AND status NOT IN ('cancelled','refunded')`,
+          [req.user.id, coupon.service_id]);
+        if (!parseInt(svc.rows[0].c, 10)) {
+          const err = new Error('SERVICE_MISMATCH');
+          err.statusCode = 403;
+          throw err;
+        }
+      }
 
       const credit = Number(coupon.amount) > 0 ? Number(coupon.amount) : 0;
       let finalCredit = credit;
       if (Number(coupon.percent) > 0) {
-        const spent = await client.query(
-          `SELECT COALESCE(SUM(ABS(amount)),0) AS s FROM transactions
-           WHERE user_id = $1 AND type = 'debit' AND status = 'approved'`, [req.user.id]);
+        let spent;
+        if (coupon.service_id) {
+          // Service-scoped percent: base = ওই service-এ ব্যবহারকারীর মোট খরচ
+          spent = await client.query(
+            `SELECT COALESCE(SUM(price),0) AS s FROM orders
+             WHERE user_id = $1 AND service_id = $2 AND status NOT IN ('cancelled','refunded')`,
+            [req.user.id, coupon.service_id]);
+        } else {
+          spent = await client.query(
+            `SELECT COALESCE(SUM(ABS(amount)),0) AS s FROM transactions
+             WHERE user_id = $1 AND type = 'debit' AND status = 'approved'`, [req.user.id]);
+        }
         finalCredit = Math.round(Number(spent.rows[0].s) * Number(coupon.percent) / 100 * 100) / 100;
       }
       if (finalCredit <= 0) {

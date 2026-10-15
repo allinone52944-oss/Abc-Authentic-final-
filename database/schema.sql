@@ -120,6 +120,18 @@ CREATE INDEX IF NOT EXISTS idx_orders_service ON orders(service_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status  ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at DESC);
 
+-- Order status transition history (H-1 fix, 2026-10-15)
+CREATE TABLE IF NOT EXISTS order_status_history (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id    UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    from_status VARCHAR(20),
+    to_status   VARCHAR(20) NOT NULL,
+    admin_id    UUID REFERENCES users(id) ON DELETE SET NULL,
+    note        TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_osh_order ON order_status_history(order_id, created_at DESC);
+
 -- ------------------------------------------------------------
 -- TRANSACTIONS (wallet: recharge / cashback / promo / refund)
 -- ------------------------------------------------------------
@@ -225,6 +237,7 @@ CREATE TABLE IF NOT EXISTS settings (
 INSERT INTO settings (key, value) VALUES
     ('registration_enabled', '{"enabled": true}'),
     ('maintenance_mode',     '{"enabled": false, "message": ""}'),
+    ('session_timeout',      '{"idle_minutes": 120, "absolute_hours": 168}'),
     ('file_upload',          '{"max_mb": 5, "allowed": ["pdf","jpg","jpeg","png"]}'),
     ('login_security',       '{"max_attempts": 5, "lock_minutes": 30}'),
     ('cashback',             '{"enabled": false, "percent": 0}'),
@@ -242,7 +255,8 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     token_hash VARCHAR(64) NOT NULL UNIQUE,            -- sha256 hex
     expires_at TIMESTAMPTZ NOT NULL,
     revoked    BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_activity TIMESTAMPTZ NOT NULL DEFAULT NOW()   -- H-8: idle-timeout tracking
 );
 CREATE INDEX IF NOT EXISTS idx_rt_user ON refresh_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_rt_hash ON refresh_tokens(token_hash);

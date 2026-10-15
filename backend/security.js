@@ -36,11 +36,28 @@ const secureHeaders = helmet({
 // 1. CF-Connecting-IP (Cloudflare, unspoofable)
 // 2. X-Forwarded-For first entry (nginx proxy)
 // 3. req.ip fallback (shared — last resort)
+// H-6 fix (2026-10-15): those headers are trusted ONLY when the direct TCP
+// peer is loopback/private (i.e. the request really came through the local
+// proxy). A direct public peer + spoofed headers would otherwise get a
+// fresh rate-limit bucket per request.
+function _peerIsLocalProxy(peer) {
+  if (!peer) return false;
+  const p = String(peer);
+  return p === '127.0.0.1' || p === '::1' || p === '::ffff:127.0.0.1' ||
+    /^10\./.test(p) || /^::ffff:10\./.test(p) ||
+    /^192\.168\./.test(p) || /^::ffff:192\.168\./.test(p) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(p) || /^::ffff:172\.(1[6-9]|2\d|3[01])\./.test(p) ||
+    /^fc00:/i.test(p) || /^fe80:/i.test(p);
+}
+const _ipRe = /^[0-9a-fA-F.:]{3,45}$/;
 const clientIpKey = (req) => {
-  const cf = req.headers['cf-connecting-ip'];
-  if (cf) return String(cf).trim();
-  const xff = req.headers['x-forwarded-for'];
-  if (xff) return String(xff).split(',')[0].trim();
+  const peer = (req.socket && req.socket.remoteAddress) || '';
+  if (_peerIsLocalProxy(peer)) {
+    const cf = String(req.headers['cf-connecting-ip'] || '').trim();
+    if (cf && _ipRe.test(cf)) return cf;
+    const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    if (xff && _ipRe.test(xff)) return xff;
+  }
   return req.ip;
 };
 
@@ -149,6 +166,61 @@ function safeLog(...args) {
   console.log(...clean);
 }
 
+// ---- Order-document disk upload, settings-driven (H-12 fix, 2026-10-15) ----
+// Replaces the hardcoded 10MB/ext-only configs: limits now come from the
+// `file_upload` setting (admin-configurable), refreshed every 30s.
+// Filenames stay random (C-2: never embed req.params.id).
+const _orderUploadCfg = { at: 0, maxMb: 10, allowed: ['pdf', 'jpg', 'jpeg', 'png'] };
+const _KNOWN_UP_EXTS = ['pdf', 'jpg', 'jpeg', 'png'];
+async function _refreshOrderUploadCfg(db) {
+  if (Date.now() - _orderUploadCfg.at < 30000) return _orderUploadCfg;
+  try {
+    const r = await db.query("SELECT value FROM settings WHERE key = 'file_upload' LIMIT 1");
+    const v = r.rows[0] && r.rows[0].value;
+    const val = typeof v === 'string' ? JSON.parse(v) : v;
+    if (val && typeof val === 'object') {
+      if (Number(val.max_mb) > 0) _orderUploadCfg.maxMb = Math.min(Number(val.max_mb), 50);
+      if (Array.isArray(val.allowed)) {
+        const a = val.allowed.map((x) => String(x).toLowerCase()).filter((x) => _KNOWN_UP_EXTS.includes(x));
+        if (a.length) _orderUploadCfg.allowed = a;
+      }
+    }
+  } catch (e) { /* keep last good / defaults */ }
+  _orderUploadCfg.at = Date.now();
+  return _orderUploadCfg;
+}
+// kind: 'order' | 'delivery' — filename prefix. Returns a single-file middleware.
+function orderDocUpload(db, kind) {
+  const path = require('path');
+  const fs = require('fs');
+  const crypto = require('crypto');
+  return (req, res, next) => {
+    _refreshOrderUploadCfg(db).then((cfg) => {
+      const storage = multer.diskStorage({
+        destination: (req2, file, cb) => {
+          const dir = '/opt/all-in-one-abc-authentic/uploads/orders';
+          fs.mkdirSync(dir, { recursive: true });
+          cb(null, dir);
+        },
+        filename: (req2, file, cb) => {
+          const rawExt = path.extname(file.originalname).toLowerCase();
+          const ext = cfg.allowed.includes(rawExt.slice(1)) ? rawExt : '.bin';
+          cb(null, `${kind}-${Date.now().toString(36)}-${crypto.randomBytes(8).toString('hex')}${ext}`);
+        },
+      });
+      multer({
+        storage,
+        limits: { fileSize: cfg.maxMb * 1024 * 1024, files: 5 },
+        fileFilter: (req2, file, cb) => {
+          const ext = (file.originalname.split('.').pop() || '').toLowerCase();
+          if (!cfg.allowed.includes(ext)) return cb(new Error('FILE_TYPE_NOT_ALLOWED'));
+          cb(null, true);
+        },
+      }).single('file')(req, res, next);
+    }).catch(next);
+  };
+}
+
 module.exports = {
   secureHeaders,
   authLimiter,
@@ -156,6 +228,7 @@ module.exports = {
   xssClean,
   sameOrigin,
   uploadMiddleware,
+  orderDocUpload,
   safeLog,
   DEFAULT_MAX_MB,
   DEFAULT_ALLOWED,

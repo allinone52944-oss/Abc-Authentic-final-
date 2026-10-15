@@ -16,8 +16,35 @@ const {
   requireAuth,
 } = require('../auth');
 const { safeLog } = require('../security');
-const { validateInvite, consumeInvite } = require('./invites');
+const { validateInvite } = require('./invites');
 const push = require('../utils/push');
+
+// Best-effort activity log (H-8/M-8: auth events are audited too)
+async function logActivity(userId, action, details) {
+  try {
+    await db.query(
+      'INSERT INTO activity_log (admin_id, action, details) VALUES ($1, $2, $3)',
+      [userId, action, JSON.stringify(details || {})]
+    );
+  } catch (e) { safeLog('[auth] log failed:', e.message); }
+}
+
+// H-8: session-timeout config (cached 60s; defaults = 2h idle, 7d absolute)
+let _sessCfg = { at: 0, idleMs: 2 * 60 * 60 * 1000, absMs: 7 * 24 * 60 * 60 * 1000 };
+async function sessionLimits(client) {
+  if (Date.now() - _sessCfg.at < 60000) return _sessCfg;
+  try {
+    const r = await (client || db).query("SELECT value FROM settings WHERE key = 'session_timeout' LIMIT 1");
+    const v = r.rows[0] && r.rows[0].value;
+    const val = typeof v === 'string' ? JSON.parse(v) : v;
+    if (val) {
+      if (Number(val.idle_minutes) > 0) _sessCfg.idleMs = Number(val.idle_minutes) * 60 * 1000;
+      if (Number(val.absolute_hours) > 0) _sessCfg.absMs = Number(val.absolute_hours) * 60 * 60 * 1000;
+    }
+  } catch (e) {}
+  _sessCfg.at = Date.now();
+  return _sessCfg;
+}
 
 const router = express.Router();
 
@@ -130,22 +157,32 @@ router.post('/register', async (req, res) => {
     }
 
     const password_hash = await hashPassword(String(password));
-    const ins = await db.query(
-      `INSERT INTO users (name, phone, whatsapp, email, password_hash, religion, status, email_verified)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending', FALSE)
-       RETURNING *`,
-      [name.trim(), phoneN, whatsapp.trim(), emailN, password_hash, rel]
-    );
-    const user = ins.rows[0];
-
-    // Consume the invite use (atomic; only if a valid invite was used).
-    if (invite) {
-      try {
-        const consumed = await consumeInvite(invite.code);
-        if (!consumed) safeLog('[auth] invite consume: max_uses reached for', invite.code);
+    // H-3 fix (2026-10-15): user INSERT + invite consume একই transaction-এ —
+    // invite শেষ হয়ে গেলে registration-ও rollback হবে (আগে user থেকে যেত)।
+    const user = await db.withTransaction(async (client) => {
+      const ins = await client.query(
+        `INSERT INTO users (name, phone, whatsapp, email, password_hash, religion, status, email_verified)
+         VALUES ($1, $2, $3, $4, $5, $6, 'pending', FALSE)
+         RETURNING *`,
+        [name.trim(), phoneN, whatsapp.trim(), emailN, password_hash, rel]
+      );
+      const u = ins.rows[0];
+      if (invite) {
+        const cr = await client.query(
+          `UPDATE invite_links SET used_count = used_count + 1
+           WHERE code = $1 AND is_active = TRUE
+             AND (expires_at IS NULL OR expires_at > NOW())
+             AND (max_uses IS NULL OR used_count < max_uses)`,
+          [String(invite.code).trim().toUpperCase()]
+        );
+        if (!cr.rowCount) {
+          const err = new Error('INVITE_EXHAUSTED');
+          err.statusCode = 403;
+          throw err;
+        }
       }
-      catch (e) { safeLog('[auth] invite consume skipped:', e.message); }
-    }
+      return u;
+    });
 
     // Welcome bonus (admin-controlled) — credited now, usable after verification
     try {
@@ -180,6 +217,7 @@ router.post('/register', async (req, res) => {
     });
   } catch (e) {
     safeLog('[auth] register error:', e.message);
+    if (e.statusCode) return res.status(e.statusCode).json({ error: e.message });
     return res.status(500).json({ error: 'REGISTER_FAILED' });
   }
 });
@@ -382,6 +420,7 @@ router.post('/login', async (req, res) => {
       [user.id]
     );
     const tokens = await issueTokens(user.id, user.role);
+    logActivity(user.id, 'auth.login', {}).catch(() => {});
     const fresh = await db.query('SELECT * FROM users WHERE id = $1', [user.id]);
     return res.json({ user: publicUser(fresh.rows[0]), ...tokens });
   } catch (e) {
@@ -397,21 +436,38 @@ router.post('/refresh', async (req, res) => {
     if (!refresh_token) return res.status(400).json({ error: 'MISSING_TOKEN' });
 
     const hash = hashRefreshToken(String(refresh_token));
-    const r = await db.query(
-      `SELECT rt.*, u.role, u.status FROM refresh_tokens rt
-       JOIN users u ON u.id = rt.user_id
-       WHERE rt.token_hash = $1 AND rt.revoked = FALSE AND rt.expires_at > NOW()
-       LIMIT 1`,
-      [hash]
-    );
-    const row = r.rows[0];
-    if (!row) return res.status(401).json({ error: 'INVALID_REFRESH' });
-    if (row.status === 'blocked' || row.status === 'disabled') {
-      return res.status(403).json({ error: 'ACCOUNT_DISABLED' });
-    }
-
-    // Rotate: revoke old, mint new (single transaction)
+    // H-4 fix (2026-10-15): everything inside ONE transaction with FOR UPDATE —
+    // concurrent refreshes can't both succeed; reuse of a rotated token = theft
+    // → the whole token chain is revoked.
     const tokens = await db.withTransaction(async (client) => {
+      const r = await client.query(
+        `SELECT rt.*, u.role, u.status FROM refresh_tokens rt
+         JOIN users u ON u.id = rt.user_id
+         WHERE rt.token_hash = $1 AND rt.expires_at > NOW()
+         LIMIT 1 FOR UPDATE`,
+        [hash]
+      );
+      const row = r.rows[0];
+      if (!row) { const e = new Error('INVALID_REFRESH'); e.statusCode = 401; throw e; }
+      if (row.revoked) {
+        await client.query('UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1', [row.user_id]);
+        const e = new Error('TOKEN_REUSED'); e.statusCode = 401; throw e;
+      }
+      if (row.status === 'blocked' || row.status === 'disabled') {
+        const e = new Error('ACCOUNT_DISABLED'); e.statusCode = 403; throw e;
+      }
+      // H-8: idle + absolute session timeouts
+      const lim = await sessionLimits(client);
+      const now = Date.now();
+      if (row.last_activity && now - new Date(row.last_activity).getTime() > lim.idleMs) {
+        await client.query('UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1', [row.user_id]);
+        const e = new Error('SESSION_TIMEOUT'); e.statusCode = 401; throw e;
+      }
+      if (row.created_at && now - new Date(row.created_at).getTime() > lim.absMs) {
+        await client.query('UPDATE refresh_tokens SET revoked = TRUE WHERE id = $1', [row.id]);
+        const e = new Error('SESSION_EXPIRED'); e.statusCode = 401; throw e;
+      }
+      await client.query('UPDATE refresh_tokens SET last_activity = NOW() WHERE id = $1', [row.id]);
       await client.query('UPDATE refresh_tokens SET revoked = TRUE WHERE id = $1', [row.id]);
       const access_token = signAccess({ id: row.user_id, role: row.role });
       const minted = mintRefreshToken();
@@ -425,6 +481,7 @@ router.post('/refresh', async (req, res) => {
     return res.json(tokens);
   } catch (e) {
     safeLog('[auth] refresh error:', e.message);
+    if (e.statusCode) return res.status(e.statusCode).json({ error: e.message });
     return res.status(500).json({ error: 'REFRESH_FAILED' });
   }
 });
@@ -440,6 +497,19 @@ router.post('/logout', async (req, res) => {
     return res.json({ ok: true });
   } catch (e) {
     safeLog('[auth] logout error:', e.message);
+    return res.status(500).json({ error: 'LOGOUT_FAILED' });
+  }
+});
+
+// ---- POST /api/auth/logout-all (H-4 fix, 2026-10-15) -----------
+// Revokes EVERY refresh token of the user — "log out everywhere".
+router.post('/logout-all', requireAuth, async (req, res) => {
+  try {
+    await db.query('UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1 AND revoked = FALSE', [req.user.id]);
+    await logActivity(req.user.id, 'auth.logout_all', {});
+    return res.json({ ok: true });
+  } catch (e) {
+    safeLog('[auth] logout-all error:', e.message);
     return res.status(500).json({ error: 'LOGOUT_FAILED' });
   }
 });

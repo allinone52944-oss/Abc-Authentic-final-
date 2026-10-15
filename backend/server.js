@@ -90,6 +90,32 @@ app.get('/api/engines', apiLimiter, (req, res) => {
   res.json(list);
 });
 
+// ---- Maintenance mode gate (H-5 fix, 2026-10-15) ----------------
+// Server-side enforcement: when maintenance_mode.enabled, all /api calls
+// get 503 except login/refresh/health/admin (admins must be able to log in
+// and turn it off) and /api/public/settings (login page reads the message).
+const MAINTENANCE_ALLOW = new Set([
+  '/api/health', '/api/public/settings',
+  '/api/auth/login', '/api/auth/refresh', '/api/auth/logout', '/api/auth/logout-all',
+]);
+let _maintCache = { at: 0, enabled: false, message: '' };
+async function maintenanceGate(req, res, next) {
+  try {
+    if (req.path.startsWith('/api/admin/') || MAINTENANCE_ALLOW.has(req.path)) return next();
+    if (Date.now() - _maintCache.at > 15000) {
+      const r = await db.query("SELECT value FROM settings WHERE key = 'maintenance_mode' LIMIT 1");
+      const v = r.rows[0] && r.rows[0].value;
+      const val = typeof v === 'string' ? JSON.parse(v) : v;
+      _maintCache = { at: Date.now(), enabled: !!(val && val.enabled), message: (val && val.message) || '' };
+    }
+    if (_maintCache.enabled) {
+      return res.status(503).json({ error: 'MAINTENANCE', message: _maintCache.message || 'সাইট এখন মেনটেনেন্সে আছে' });
+    }
+  } catch (e) { /* fail open — don't brick the site on DB error */ }
+  next();
+}
+app.use('/api/', maintenanceGate);
+
 // ---- Auth routes (strict rate limit: brute-force protection) --
 const authRoutes = require('./routes/auth');
 app.use('/api/auth', authLimiter, authRoutes);
@@ -140,8 +166,8 @@ try {
 // ---- Death verify engine (as-is DRN tool, auth + strict limit) ------
 // The engine folder is an as-is copy of Death-Verify-Engine.zip.
 // death-verify-server.js is a raw Node http server (not Express); the
-// adapter (engines/death-verify/index.js) captures its request handler
-// WITHOUT binding port 3001 and exposes it as middleware, so the
+// adapter (engines/death-verify/index.js) spawns it as a subprocess on
+// 127.0.0.1:3001 and reverse-proxies /api/death-engine/* to it, so the
 // existing engine API endpoints are used as-is:
 //   GET  /api/captcha → POST /api/solve-captcha → POST /api/verify
 //   {sessionId, drn, dod DD/MM/YYYY, captcha} → POST /api/preview | /api/pdf
