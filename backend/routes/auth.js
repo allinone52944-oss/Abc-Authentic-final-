@@ -31,7 +31,7 @@ async function logActivity(userId, action, details) {
 }
 
 // H-8: session-timeout config (cached 60s; defaults = 2h idle, 7d absolute)
-let _sessCfg = { at: 0, idleMs: 2 * 60 * 60 * 1000, absMs: 7 * 24 * 60 * 60 * 1000 };
+let _sessCfg = { at: 0, idleMs: 7 * 24 * 60 * 60 * 1000, absMs: 30 * 24 * 60 * 60 * 1000 };
 async function sessionLimits(client) {
   if (Date.now() - _sessCfg.at < 60000) return _sessCfg;
   try {
