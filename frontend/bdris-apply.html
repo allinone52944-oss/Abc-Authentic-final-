@@ -1691,21 +1691,19 @@ async function warmFromData() {
     } catch (e) {}
   })();
   try {
-    await geoLoad('country', GEO_LEVELS, data);
-    await divFillP;
+    const withTimeout = (p, ms) => Promise.race([p, new Promise(r => setTimeout(r, ms))]);
+    await withTimeout(geoLoad('country', GEO_LEVELS, data), 15000);
+    await withTimeout(divFillP, 15000);
     for (const L of GEO_LEVELS) {
       const want = data[L.k]; if (!want) break;
       const node = $(L.ui); if (!node) break;
       if (node.tagName === 'SELECT') { if (!setSelByText(L.ui, want)) break; }
       if (!L.childSite) break;
-      await geoMirror(L.k, GEO_LEVELS);
+      // geoMirror-এও timeout — hang করলে পুরো loop আটকাবে না
+      await withTimeout(geoMirror(L.k, GEO_LEVELS), 15000);
       const nxt = GEO_LEVELS[GEO_LEVELS.indexOf(L) + 1];
       if (nxt) {
-        // Ward level-এ timeout — engine ধীর হলে আটকে থাকবে না
-        await Promise.race([
-          geoLoad(nxt.k, GEO_LEVELS, data),
-          new Promise(r => setTimeout(r, 12000))
-        ]);
+        await withTimeout(geoLoad(nxt.k, GEO_LEVELS, data), 12000);
       }
     }
   } finally {
