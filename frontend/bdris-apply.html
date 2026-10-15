@@ -645,9 +645,13 @@ function setBtns(list) {
   r.style.cssText = 'display:flex; gap:10px; flex-wrap:wrap; margin-top:18px';
   list.forEach(b => {
     const btn = document.createElement('button');
+    btn.type = 'button';
     btn.className = 'btn ' + (b.cls || '');
     btn.innerHTML = b.html;
-    btn.onclick = b.fn;
+    if (b.fn) {
+      btn.addEventListener('click', b.fn);
+      btn.onclick = b.fn;
+    }
     r.appendChild(btn);
     if (b.id) btn.id = b.id;
   });
