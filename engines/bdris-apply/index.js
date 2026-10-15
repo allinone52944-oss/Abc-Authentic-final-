@@ -151,8 +151,33 @@ function startEngine() {
 }
 
 function isReady() {
-  return !!_proc && _ready;
+  if (!!_proc && _ready) return true;
+  // Fallback: backend restarted but engine survived on its port (orphaned).
+  // Probe the port synchronously-cached to avoid reporting "starting" forever.
+  return _portAlive;
 }
+
+// Cached port probe — refreshed every 10s, non-blocking.
+let _portAlive = false;
+let _portProbeAt = 0;
+function probePort() {
+  const now = Date.now();
+  if (now - _portProbeAt < 10000) return;
+  _portProbeAt = now;
+  const req = http.request({
+    host: ENGINE_HOST, port: ENGINE_PORT, path: '/api/health',
+    method: 'GET', timeout: 3000,
+  }, (res) => {
+    _portAlive = res.statusCode >= 200 && res.statusCode < 500;
+    res.resume();
+  });
+  req.on('error', () => { _portAlive = false; });
+  req.on('timeout', () => { req.destroy(); _portAlive = false; });
+  req.end();
+}
+setInterval(probePort, 10000);
+if (typeof probePort.unref === 'function') { /* keep alive for accuracy */ }
+probePort();
 
 // Simple reverse proxy middleware (HTTP). Strips the mount prefix.
 function proxyMiddleware() {
