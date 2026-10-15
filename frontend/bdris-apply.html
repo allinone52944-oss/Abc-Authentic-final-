@@ -2711,6 +2711,7 @@ function submitAuto() {
   }
   const bad = validateAuto();
   if (bad.length) {
+    note('[DEBUG] validation failed: ' + bad.join(', '), 'warn');
     showFail(bad); note('⚠️ কিছু ঘর পূরণ করুন', 'warn');
     const f = el('.bad'); if (f) f.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
