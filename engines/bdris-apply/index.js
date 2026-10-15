@@ -151,17 +151,19 @@ function startEngine() {
 }
 
 function isReady() {
-  // The engine is either spawned by the backend (_proc set) or surviving
-  // as an orphan on its port. The old "starting" state never cleared
-  // because the async port probe could not update the cached flag before
-  // isReady() returned. Report ready whenever the backend is up — the
-  // proxy and charge paths only need the engine port to be listening.
-  return true;
+  if (!!_proc && _ready) return true;
+  // Orphaned engine: trust the background port probe, but only if it
+  // succeeded recently (30s). A stale/failed probe honestly reports
+  // not-ready instead of a permanent misleading "ready".
+  if (_portOk && Date.now() - _lastProbeOk < 30000) return true;
+  try { probePort(true); } catch (e) {}
+  return _portOk && Date.now() - _lastProbeOk < 30000;
 }
 
-// Cached port probe — refreshed every 10s, non-blocking.
+// Cached port probe — refreshed every 10s in background, non-blocking.
 // Pass force=true to bypass the 10s throttle (used by isReady).
-let _portAlive = false;
+let _portOk = false;
+let _lastProbeOk = 0;
 let _portProbeAt = 0;
 function probePort(force) {
   const now = Date.now();
@@ -171,11 +173,13 @@ function probePort(force) {
     host: ENGINE_HOST, port: ENGINE_PORT, path: '/api/health',
     method: 'GET', timeout: 3000,
   }, (res) => {
-    _portAlive = res.statusCode >= 200 && res.statusCode < 500;
+    const ok = res.statusCode >= 200 && res.statusCode < 500;
+    _portOk = ok;
+    if (ok) _lastProbeOk = Date.now();
     res.resume();
   });
-  req.on('error', () => { _portAlive = false; });
-  req.on('timeout', () => { req.destroy(); _portAlive = false; });
+  req.on('error', () => { _portOk = false; });
+  req.on('timeout', () => { req.destroy(); _portOk = false; });
   req.end();
 }
 setInterval(probePort, 10000);
