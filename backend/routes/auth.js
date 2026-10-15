@@ -30,7 +30,7 @@ async function logActivity(userId, action, details) {
   } catch (e) { safeLog('[auth] log failed:', e.message); }
 }
 
-// H-8: session-timeout config (cached 60s; defaults = 2h idle, 7d absolute)
+// H-8: session-timeout config (cached 60s; defaults = 7d idle, 30d absolute)
 let _sessCfg = { at: 0, idleMs: 7 * 24 * 60 * 60 * 1000, absMs: 30 * 24 * 60 * 60 * 1000 };
 async function sessionLimits(client) {
   if (Date.now() - _sessCfg.at < 60000) return _sessCfg;
