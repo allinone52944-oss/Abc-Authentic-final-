@@ -1699,7 +1699,13 @@ async function warmFromData() {
       if (!L.childSite) break;
       await geoMirror(L.k, GEO_LEVELS);
       const nxt = GEO_LEVELS[GEO_LEVELS.indexOf(L) + 1];
-      if (nxt) await geoLoad(nxt.k, GEO_LEVELS, data);
+      if (nxt) {
+        // Ward level-এ timeout — engine ধীর হলে আটকে থাকবে না
+        await Promise.race([
+          geoLoad(nxt.k, GEO_LEVELS, data),
+          new Promise(r => setTimeout(r, 12000))
+        ]);
+      }
     }
   } finally {
     // আটকে থাকা "লোড হচ্ছে…" dropdown গুলো placeholder-এ ফেরাও
