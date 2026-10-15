@@ -1613,9 +1613,39 @@ function degradeToText(id, label, value) {
   inp.value = value || '';
   node.replaceWith(inp);
 }
+/* ═══════════ Address cascade state machine ═══════════
+   প্রতিটি level-এর explicit state: idle → loading → loaded | empty | error
+   - loading-এ সবসময় timeout থাকে — চিরতরে আটকায় না
+   - warmFromData deterministic rebuild করে — এক level fail হলেও পরেরটা চলে
+   - setGeoState() একমাত্র state transition point */
+const GEO_STATE = {}; // k -> 'idle'|'loading'|'loaded'|'empty'|'error'
+function setGeoState(k, Ls, state) {
+  Ls = Ls || GEO_LEVELS;
+  const L = levelOf(k, Ls); if (!L) return;
+  GEO_STATE[L.ui] = state;
+  const node = $(L.ui);
+  if (!node || node.tagName !== 'SELECT') return;
+  if (state === 'loading') {
+    node.innerHTML = '<option value="">লোড হচ্ছে…</option>';
+  } else if (state === 'idle' || state === 'empty') {
+    if (node.options.length === 0 || /লোড হচ্ছে/.test(node.options[0]?.text || '')) {
+      node.innerHTML = '<option value="">--- নির্বাচন করুন ---</option>';
+    }
+  }
+  // 'loaded' state-এ fillSelOpts ইতিমধ্যে options বসিয়েছে
+  // 'error' state-এ dropdown-এ retry option দেখাও
+  if (state === 'error') {
+    node.innerHTML = '<option value="">⚠️ আবার চেষ্টা করুন</option>';
+  }
+}
+function getGeoState(k, Ls) {
+  const L = levelOf(k, Ls || GEO_LEVELS);
+  return L ? (GEO_STATE[L.ui] || 'idle') : 'idle';
+}
 async function geoLoad(k, Ls, data, wantOv) {
   Ls = Ls || GEO_LEVELS; data = data || (S.d.s1 = S.d.s1 || {});
   const L = levelOf(k, Ls); if (!L) return;
+  setGeoState(k, Ls, 'loading');
   // স্থির তালিকা প্রথমে — থাকলে সাথে সাথে বসে, engine-এর জন্য অপেক্ষা নেই
   // (draft থেকে ঠিকানা বদলালেও তাৎক্ষণিক)। না থাকলে engine fallback।
   await loadGeoData();
@@ -1634,10 +1664,15 @@ async function geoLoad(k, Ls, data, wantOv) {
     }
   }
   L._alt = fromAlt; // মিরর কোন slot-এ বসবে (সিটি কর্পোরেশনে অঞ্চল WardInCityCorp-এ)
-  if (!$(L.ui)) return;
+  if (!$(L.ui)) { setGeoState(k, Ls, 'error'); return; }
   const want = (wantOv != null && wantOv !== '') ? wantOv : (data[k] || '');
-  if (!opts.length) { degradeToText(L.ui, L.lbl, want); return; }
+  if (!opts.length) {
+    setGeoState(k, Ls, 'empty');
+    degradeToText(L.ui, L.lbl, want);
+    return;
+  }
   fillSelOpts(L.ui, opts, want);
+  setGeoState(k, Ls, 'loaded');
   const lblEl = $(L.ui + '_lbl');
   if (lblEl) lblEl.textContent = (k === 'paurasavaUnion' && fromAlt) ? 'ওয়ার্ড/অঞ্চল' : L.lbl;
 }
@@ -1659,12 +1694,11 @@ async function geoChanged(k, Ls, data) {
   const label = (node && node.tagName === 'SELECT' && node.value) ? node.selectedOptions[0].text :
     (node ? String(node.value || '').trim() : '');
   data[k] = label;
+  setGeoState(k, Ls, label ? 'loaded' : 'idle');
   const idx = Ls.indexOf(L);
   Ls.slice(idx + 1).forEach(D => {
     data[D.k] = '';
-    const c = $(D.ui);
-    if (c && c.tagName === 'SELECT') c.innerHTML = '<option value="">--- নির্বাচন করুন ---</option>';
-    else if (c) c.value = '';
+    setGeoState(D.k, Ls, 'idle');
     const lblEl = $(D.ui + '_lbl'); if (lblEl) lblEl.textContent = D.lbl;
   });
   if (!label) return;
@@ -1694,12 +1728,25 @@ async function warmFromData() {
     const withTimeout = (p, ms) => Promise.race([p, new Promise(r => setTimeout(r, ms))]);
     await withTimeout(geoLoad('country', GEO_LEVELS, data), 15000);
     await withTimeout(divFillP, 15000);
+    /* Deterministic rebuild: প্রতিটি level চেষ্টা করো, fail হলে error state-এ
+       রেখে পরের level-এ যাও (আগের break-এ বাকিগুলো চিরতরে আটকে থাকত) */
     for (const L of GEO_LEVELS) {
-      const want = data[L.k]; if (!want) break;
-      const node = $(L.ui); if (!node) break;
-      if (node.tagName === 'SELECT') { if (!setSelByText(L.ui, want)) break; }
+      const want = data[L.k];
+      const node = $(L.ui);
+      if (!node) { setGeoState(L.k, GEO_LEVELS, 'error'); continue; }
+      if (!want) { setGeoState(L.k, GEO_LEVELS, 'idle'); break; }
+      if (node.tagName === 'SELECT') {
+        if (!setSelByText(L.ui, want)) {
+          // Option এখনো আসেনি — level reload করে আবার চেষ্টা
+          await withTimeout(geoLoad(L.k, GEO_LEVELS, data, want), 12000);
+          if (!setSelByText(L.ui, want)) {
+            setGeoState(L.k, GEO_LEVELS, 'error');
+            continue;
+          }
+        }
+        setGeoState(L.k, GEO_LEVELS, 'loaded');
+      }
       if (!L.childSite) break;
-      // geoMirror-এও timeout — hang করলে পুরো loop আটকাবে না
       await withTimeout(geoMirror(L.k, GEO_LEVELS), 15000);
       const nxt = GEO_LEVELS[GEO_LEVELS.indexOf(L) + 1];
       if (nxt) {
