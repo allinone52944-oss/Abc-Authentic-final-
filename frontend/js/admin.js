@@ -302,7 +302,8 @@ window.AdmReports = {
 
 /* ---------------- USERS ---------------- */
 TABS.users = async () => {
-  const r = await ABC.api('/admin/users?limit=30');
+  const _q = TABS._uq || '';
+  const r = await ABC.api('/admin/users?limit=30' + (_q ? '&q=' + encodeURIComponent(_q) : ''));
   const d = await r.json();
   let html = '<div style="display:flex;gap:8px;margin-bottom:12px;">' +
     '<input id="uq" placeholder="নাম/ফোন/ইমেইল খুঁজুন" style="flex:1;padding:10px 14px;background:rgba(0,0,0,0.4);border:1px solid rgba(212,175,55,0.25);border-radius:10px;color:var(--cream);outline:none;">' +
@@ -324,9 +325,7 @@ TABS.users = async () => {
 window.AdmUsers = {
   async search() {
     const q = document.getElementById('uq').value;
-    const r = await ABC.api('/admin/users?limit=30&q=' + encodeURIComponent(q));
-    const d = await r.json();
-    TABS._lastUsers = d.users;
+    TABS._uq = q;
     show('users');
   },
   createForm() {
@@ -406,7 +405,8 @@ window.AdmUsers = {
 
 /* ---------------- ORDERS ---------------- */
 TABS.orders = async () => {
-  const r = await ABC.api('/admin/orders?limit=30');
+  const _f = TABS._f || '';
+  const r = await ABC.api('/admin/orders?limit=30' + (_f ? '&status=' + _f : ''));
   const d = await r.json();
   let html = '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">' +
     ['new', 'pending', 'processing', 'completed', 'delivered', 'failed', 'cancelled', 'refunded']
@@ -1281,6 +1281,7 @@ function closeModal() {
 
 window.VoiceAlert = VoiceAlert;
 window.PushNotify = PushNotify;
+window.closeModal = closeModal;
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => init().catch((e) => {
     const c = document.getElementById('content');
