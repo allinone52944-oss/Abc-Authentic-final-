@@ -181,7 +181,7 @@ function proxyMiddleware() {
       if (!res.headersSent) res.status(502).json({ error: 'ENGINE_UNREACHABLE' });
     });
     proxyReq.on('timeout', () => proxyReq.destroy());
-    proxyReq.setTimeout(30000);
+    proxyReq.setTimeout(120000);
     // Pipe body (for POST/PUT). The main app uses express.json() globally,
     // so req.body is already parsed — re-serialize it.
     if (req.body && typeof req.body === 'object' && Object.keys(req.body).length) {
