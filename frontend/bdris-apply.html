@@ -630,7 +630,11 @@ function staticGeoOpts(k, data) {
     const up = _uk ? dis[_uk] : null;
     if (!up) return null;
     if (k === 'paurasavaUnion') {
-      // সিটি কর্পোরেশনে ইউনিয়ন/পৌরসভা নেই — সরাসরি ওয়ার্ড দেখাও
+      // সিটি কর্পোরেশনে ইউনিয়ন/পৌরসভা নেই — ওয়ার্ড/অঞ্চল দেখাও
+      // (bdris.gov.bd-এর আসল গঠন: "ওয়ার্ড/অঞ্চল *" dropdown)
+      if (up.wz && up.wz.length) {
+        return up.wz.map(n => ({ id: n, name: n }));
+      }
       if (up.w && up.w.length && !(up.u && up.u.length) && !(up.p && up.p.length)) {
         return up.w.map(n => ({ id: n, name: n }));
       }
@@ -1642,7 +1646,19 @@ async function geoLoad(k, Ls, data, wantOv) {
   if (!opts.length) { degradeToText(L.ui, L.lbl, want); return; }
   fillSelOpts(L.ui, opts, want);
   const lblEl = $(L.ui + '_lbl');
-  if (lblEl) lblEl.textContent = (k === 'paurasavaUnion' && fromAlt) ? 'অঞ্চল (সিটি কর্পোরেশন)' : L.lbl;
+  // সিটি কর্পোরেশনে ওয়ার্ড/অঞ্চল — bdris.gov.bd-এর আসল লেবেল
+  let lbl = L.lbl;
+  if (k === 'paurasavaUnion') {
+    try {
+      const _dk2 = geoFindKey(GEO_DATA, data && data.division);
+      const _sk2 = _dk2 ? geoFindKey(GEO_DATA[_dk2], data.district) : null;
+      const _uk2 = _sk2 ? geoFindKey(GEO_DATA[_dk2][_sk2], data.cityCorpUpazila) : null;
+      const _up2 = _uk2 ? GEO_DATA[_dk2][_sk2][_uk2] : null;
+      if (_up2 && _up2.wz && _up2.wz.length) lbl = 'ওয়ার্ড/অঞ্চল';
+      else if (fromAlt) lbl = 'অঞ্চল (সিটি কর্পোরেশন)';
+    } catch (e) {}
+  }
+  if (lblEl) lblEl.textContent = lbl;
 }
 async function geoMirror(k, Ls) {
   const L = levelOf(k, Ls); if (!L || !L.childSite) return;
