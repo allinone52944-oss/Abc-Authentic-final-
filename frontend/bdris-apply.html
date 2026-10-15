@@ -2721,7 +2721,12 @@ function submitAuto() {
   }
   hideFail();
   ensureReady(() => {
-    runChain(OPS, () => { autoPrep(); }, 'আবেদন প্রস্তুত হচ্ছে');
+    // Permanent (2026-10-15): submit-এর আগে খসড়া auto-save — manual "খসড়ায় রাখুন"
+    // না চাপলেও draft থাকবে। Save না হলে (3s timeout) submit আটকাবে না।
+    let saved = false;
+    const proceed = () => { if (!saved) { saved = true; runChain(OPS, () => { autoPrep(); }, 'আবেদন প্রস্তুত হচ্ছে'); } };
+    try { saveDraft(6, proceed); } catch (e) { proceed(); }
+    setTimeout(proceed, 3000);
   });
 }
 function autoPrep() {
