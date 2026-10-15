@@ -59,17 +59,19 @@ fi
 
 # Restart service if it exists.
 # NOTE (2026-10-15): the deploy user needs passwordless sudo for this one
-# command — run ONCE on the server as root:
-#   echo "ocarun ALL=(ALL) NOPASSWD: /bin/systemctl restart abc-authentic.service, /bin/systemctl is-active abc-authentic.service" | sudo tee /etc/sudoers.d/abc-authentic-deploy && sudo chmod 440 /etc/sudoers.d/abc-authentic-deploy
-# (replace "ocarun" with the user that runs deploy.sh)
-# IMPORTANT: sudoers matches arguments literally — invoke EXACTLY as above
-# (/bin/systemctl, full .service name, no --quiet flag).
-if sudo -n /bin/systemctl is-active abc-authentic.service >/dev/null 2>&1; then
-  echo "$(date): Restarting service..." >>"$LOG"
-  if sudo -n /bin/systemctl restart abc-authentic.service >>"$LOG" 2>&1; then
+# command. Sudoers matches the path LITERALLY — use the real path below.
+# Run ONCE on the server as root (replace "ubuntu" with the deploy user):
+#   SYS=$(command -v systemctl); echo "ubuntu ALL=(ALL) NOPASSWD: $SYS restart abc-authentic.service, $SYS is-active abc-authentic.service" | sudo tee /etc/sudoers.d/abc-authentic-deploy && sudo chmod 440 /etc/sudoers.d/abc-authentic-deploy
+# Permanent fix (2026-10-15): resolve systemctl path dynamically — /bin vs
+# /usr/bin mismatch silently broke the sudoers rule before.
+SYSTEMCTL="$(command -v systemctl 2>/dev/null || echo /bin/systemctl)"
+if sudo -n "$SYSTEMCTL" is-active abc-authentic.service >/dev/null 2>&1; then
+  echo "$(date): Restarting service via $SYSTEMCTL..." >>"$LOG"
+  if sudo -n "$SYSTEMCTL" restart abc-authentic.service >>"$LOG" 2>&1; then
     echo "$(date): Service restarted" >>"$LOG"
   else
-    echo "$(date): ERROR: service restart failed (check sudoers rule above)" >>"$LOG"
+    echo "$(date): ERROR: service restart failed — passwordless sudo not working for: $SYSTEMCTL restart abc-authentic.service" >>"$LOG"
+    echo "$(date): HINT: as root run: echo \"ubuntu ALL=(ALL) NOPASSWD: $SYSTEMCTL restart abc-authentic.service, $SYSTEMCTL is-active abc-authentic.service\" | tee /etc/sudoers.d/abc-authentic-deploy && chmod 440 /etc/sudoers.d/abc-authentic-deploy" >>"$LOG"
     exit 1
   fi
 else
