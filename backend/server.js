@@ -65,8 +65,30 @@ const engines = loadEngines();
 app.set('engines', engines);
 
 // ---- Health -------------------------------------------------
-app.get('/api/health', (req, res) => {
-  res.json({ ok: true, service: 'abc-authentic', engines: Object.keys(engines) });
+// Deep check: DB + engines. A shallow "{ok:true}" hides "running but broken".
+app.get('/api/health', async (req, res) => {
+  const out = { ok: true, service: 'abc-authentic', time: new Date().toISOString() };
+  try {
+    await db.query('SELECT 1');
+    out.db = 'up';
+  } catch (e) {
+    out.ok = false;
+    out.db = 'down';
+  }
+  out.engines = {};
+  for (const [name, eng] of Object.entries(engines || {})) {
+    try {
+      const mod = eng && eng.module;
+      out.engines[name] = mod && typeof mod.isReady === 'function'
+        ? (mod.isReady() ? 'ready' : 'starting')
+        : 'loaded';
+    } catch {
+      out.engines[name] = 'error';
+      out.ok = false;
+    }
+  }
+  if (!out.ok) return res.status(503).json(out);
+  res.json(out);
 });
 
 // ---- Public settings (registration on/off, maintenance) ----

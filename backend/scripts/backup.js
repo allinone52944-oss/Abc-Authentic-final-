@@ -13,6 +13,9 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+// Load .env from repo root (cron runs with a bare environment — without this
+// DATABASE_URL is empty and the backup silently never happens).
+try { require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') }); } catch {}
 
 const BACKUP_DIR = process.env.BACKUP_DIR || '/opt/all-in-one-abc-authentic/backups';
 const RETENTION = Math.max(1, parseInt(process.env.BACKUP_RETENTION || '7', 10));

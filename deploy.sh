@@ -47,7 +47,14 @@ cd "$APP_DIR"
 # and schema changes would never reach the Oracle DB.
 if [ -f .env ]; then
   echo "$(date): Running migrations..." >>"$LOG"
-  node backend/migrate.js >>"$LOG" 2>&1 || echo "$(date): Migration failed or no DB" >>"$LOG"
+  if node backend/migrate.js >>"$LOG" 2>&1; then
+    echo "$(date): Migrations OK" >>"$LOG"
+  else
+    # DO NOT restart on migration failure — new code on old schema is worse
+    # than old code still running. The failure is in deploy.log; next deploy retries.
+    echo "$(date): ERROR: Migration failed — NOT restarting service" >>"$LOG"
+    exit 1
+  fi
 fi
 
 # Restart service if it exists.
