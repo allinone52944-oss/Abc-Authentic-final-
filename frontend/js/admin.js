@@ -429,6 +429,20 @@ TABS.orders = async () => {
   content.innerHTML = html + '</table></div>';
 };
 window.AdmOrders = {
+  async dlDoc(orderId, idx) {
+    const d = (TABS._viewDocs || [])[idx];
+    if (!d) return;
+    try {
+      const r = await ABC.api('/orders/' + orderId + '/documents/' + encodeURIComponent(d.filename));
+      if (!r.ok) { alert('ডাউনলোড ব্যর্থ'); return; }
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = d.originalname || d.filename;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+    } catch (e) { alert('ডাউনলোড ব্যর্থ'); }
+  },
   view(id) {
     const o = (TABS._orders || []).find(x => x.id === id);
     if (!o) { alert('অর্ডার পাওয়া যায়নি'); return; }
@@ -444,8 +458,11 @@ window.AdmOrders = {
     try {
       const docs = typeof o.documents === 'string' ? JSON.parse(o.documents || '[]') : (o.documents || []);
       docsHtml = docs.length ?
-        docs.map(d => '<div style="padding:6px 0;font-size:13px;">📎 ' + esc(d.originalname || d.filename || '') + '</div>').join('') :
+        docs.map((d, i) => '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;">' +
+          '<span style="flex:1;">📎 ' + esc(d.originalname || d.filename || '') + '</span>' +
+          '<button class="mini-btn" onclick="AdmOrders.dlDoc(\'' + o.id + '\',' + i + ')">⬇️ ডাউনলোড</button></div>').join('') :
         '<div style="color:var(--muted);font-size:13px;">কোনো ডকুমেন্ট নেই</div>';
+      TABS._viewDocs = docs;
     } catch (e) { docsHtml = '<div style="color:var(--muted)">ডকুমেন্ট পড়া যায়নি</div>'; }
     modal('👁️ অর্ডার বিস্তারিত',
       '<div style="margin-bottom:12px;"><b style="color:var(--gold)">' + esc(o.service_name_bn || o.service_name || '') + '</b><br>' +
