@@ -555,3 +555,16 @@ describe('reports (security fix: date regex validation)', () => {
     expect(r.headers['content-type']).toContain('application/pdf');
   });
 });
+
+describe('recharge/pending (TTS notifier endpoint)', () => {
+  test('returns list of pending recharges with user names', async () => {
+    db.__routeQuery([
+      ["WHERE t.status = 'pending' AND t.type = 'recharge'", { rows: [
+        { id: 'tx1', amount: 100, user_name: 'করিম' },
+      ] }],
+    ]);
+    const r = await withAdmin(request(app()).get('/api/admin/recharge/pending')).expect(200);
+    expect(Array.isArray(r.body.list)).toBe(true);
+    expect(r.body.list[0].user_name).toBe('করিম');
+  });
+});

@@ -834,6 +834,24 @@ router.delete('/service-categories/:id', async (req, res) => {
 // TRANSACTIONS (recharge requests: approve / reject)
 // ============================================================
 
+// GET /api/admin/recharge/pending — latest pending recharges with user names
+// (used by the admin dashboard TTS notifier; 2026-10-15: was calling a
+// non-existent endpoint, so the customer-name announcement silently failed)
+router.get('/recharge/pending', async (req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT t.id, t.amount, t.trxid, t.created_at, u.name AS user_name, u.phone AS user_phone
+       FROM transactions t JOIN users u ON u.id = t.user_id
+       WHERE t.status = 'pending' AND t.type = 'recharge'
+       ORDER BY t.created_at DESC LIMIT 10`
+    );
+    res.json({ list: r.rows });
+  } catch (e) {
+    safeLog('[admin] recharge pending error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 router.get('/transactions', async (req, res) => {
   try {
     const { page, limit, offset } = pageParams(req);
