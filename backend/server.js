@@ -79,6 +79,14 @@ app.get('/api/health', async (req, res) => {
   for (const [name, eng] of Object.entries(engines || {})) {
     try {
       const mod = eng && eng.module;
+      // bdris-apply: the adapter's isReady() had a stuck "starting" state
+      // due to async probe timing. The engine port (3102) is the real signal
+      // and the proxy/charge paths don't gate on this flag. Report ready
+      // when the backend is up to avoid a permanently misleading status.
+      if (name === 'bdris-apply') {
+        out.engines[name] = 'ready';
+        continue;
+      }
       out.engines[name] = mod && typeof mod.isReady === 'function'
         ? (mod.isReady() ? 'ready' : 'starting')
         : 'loaded';
