@@ -593,7 +593,11 @@ function loadGeoData() {
 // পেজ খুলতেই ব্যাকগ্রাউন্ডে preload — ঠিকানার ধাপে গেলে আর অপেক্ষা নেই
 loadGeoData();
 function geoNorm(s) {
-  return String(s || '').replace(/[।]/g, '').replace(/[‌‍]/g, '').replace(/\s+/g, ' ').trim();
+  return String(s || '')
+    .replace(/।/g, '').replace(/[‌‍]/g, '')
+    // য়/য় Unicode অমিল normalize (আশুলিয়া/আশুলিয়া, ওয়ার্ড/ওয়ার্ড)
+    .replace(/\u09DF/g, '\u09AF\u09BC')
+    .replace(/\s+/g, ' ').trim();
 }
 function geoFindKey(obj, want) {
   if (!obj || !want) return null;
@@ -1697,14 +1701,21 @@ async function warmFromData() {
   await geoLoad('country', GEO_LEVELS, data);
   await divFillP;
   for (const L of GEO_LEVELS) {
-    const want = data[L.k]; if (!want) return;
-    const node = $(L.ui); if (!node) return;
-    if (node.tagName === 'SELECT') { if (!setSelByText(L.ui, want)) return; }
-    if (!L.childSite) return;
+    const want = data[L.k]; if (!want) break;
+    const node = $(L.ui); if (!node) break;
+    if (node.tagName === 'SELECT') { if (!setSelByText(L.ui, want)) break; }
+    if (!L.childSite) break;
     await geoMirror(L.k, GEO_LEVELS);
     const nxt = GEO_LEVELS[GEO_LEVELS.indexOf(L) + 1];
     if (nxt) await geoLoad(nxt.k, GEO_LEVELS, data);
   }
+  // আটকে থাকা "লোড হচ্ছে…" dropdown গুলো placeholder-এ ফেরাও
+  GEO_LEVELS.forEach(L => {
+    const n = $(L.ui);
+    if (n && n.tagName === 'SELECT' && n.options.length === 1 && /লোড হচ্ছে/.test(n.options[0].text)) {
+      n.innerHTML = '<option value="">--- নির্বাচন করুন ---</option>';
+    }
+  });
 }
 /* স্থায়ী/বর্তমান ঠিকানা — এক চাপে (বা খসড়া থেকে) ক্যাসকেড ভরাট + সাইটে মিরর */
 function addrRec(prefix) {
