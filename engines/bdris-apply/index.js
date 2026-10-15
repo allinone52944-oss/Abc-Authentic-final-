@@ -153,16 +153,20 @@ function startEngine() {
 function isReady() {
   if (!!_proc && _ready) return true;
   // Fallback: backend restarted but engine survived on its port (orphaned).
-  // Probe the port synchronously-cached to avoid reporting "starting" forever.
+  // If the port probe ever succeeded, treat as ready. Also trigger a fresh
+  // probe on each health check so a recently-started engine is detected
+  // within seconds, not only on the 10s interval.
+  try { probePort(true); } catch (e) {}
   return _portAlive;
 }
 
 // Cached port probe — refreshed every 10s, non-blocking.
+// Pass force=true to bypass the 10s throttle (used by isReady).
 let _portAlive = false;
 let _portProbeAt = 0;
-function probePort() {
+function probePort(force) {
   const now = Date.now();
-  if (now - _portProbeAt < 10000) return;
+  if (!force && now - _portProbeAt < 10000) return;
   _portProbeAt = now;
   const req = http.request({
     host: ENGINE_HOST, port: ENGINE_PORT, path: '/api/health',
