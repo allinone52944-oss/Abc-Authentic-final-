@@ -149,7 +149,7 @@ describe('POST /api/auth/login', () => {
     login_enabled: true, locked_until: null, failed_attempts: 0,
     password_hash: pwHash, name: 'Rahim', phone: '01712345678', email: 'rahim@example.com',
   });
-  beforeAll(async () => { pwHash = await auth.hashPassword('correct-password'); });
+  beforeAll(async () => { pwHash = await auth.hashPassword('correct-password1'); });
   beforeEach(() => {
     db.__routeQuery([
       ['SELECT value FROM settings WHERE key', { rows: [] }],
@@ -161,7 +161,7 @@ describe('POST /api/auth/login', () => {
   test('happy path → 200 with tokens, no password_hash in user', async () => {
     const r = await request(app())
       .post('/api/auth/login')
-      .send({ login: '01712345678', password: 'correct-password' })
+      .send({ login: '01712345678', password: 'correct-password1' })
       .expect(200);
     expect(r.body.access_token).toBeTruthy();
     expect(r.body.refresh_token).toMatch(/^[a-f0-9]{96}$/);
@@ -206,21 +206,21 @@ describe('POST /api/auth/login', () => {
     const locked = { ...userRow(), locked_until: new Date(Date.now() + 600000).toISOString() };
     db.__routeQuery([['SELECT * FROM users WHERE LOWER(phone)', { rows: [locked] }]]);
     const r = await request(app())
-      .post('/api/auth/login').send({ login: '01712345678', password: 'correct-password' }).expect(423);
+      .post('/api/auth/login').send({ login: '01712345678', password: 'correct-password1' }).expect(423);
     expect(r.body.error).toBe('ACCOUNT_LOCKED');
   });
 
   test('blocked user → 403 ACCOUNT_DISABLED', async () => {
     db.__routeQuery([['SELECT * FROM users WHERE LOWER(phone)', { rows: [{ ...userRow(), status: 'blocked' }] }]]);
     const r = await request(app())
-      .post('/api/auth/login').send({ login: '01712345678', password: 'correct-password' }).expect(403);
+      .post('/api/auth/login').send({ login: '01712345678', password: 'correct-password1' }).expect(403);
     expect(r.body.error).toBe('ACCOUNT_DISABLED');
   });
 
   test('email not verified → 403 EMAIL_NOT_VERIFIED', async () => {
     db.__routeQuery([['SELECT * FROM users WHERE LOWER(phone)', { rows: [{ ...userRow(), email_verified: false }] }]]);
     const r = await request(app())
-      .post('/api/auth/login').send({ login: '01712345678', password: 'correct-password' }).expect(403);
+      .post('/api/auth/login').send({ login: '01712345678', password: 'correct-password1' }).expect(403);
     expect(r.body.error).toBe('EMAIL_NOT_VERIFIED');
   });
 });
@@ -320,7 +320,7 @@ describe('PUT /api/auth/me', () => {
 
 describe('POST /api/auth/change-password', () => {
   let pwHash;
-  beforeAll(async () => { pwHash = await auth.hashPassword('old-password'); });
+  beforeAll(async () => { pwHash = await auth.hashPassword('old-password1'); });
   beforeEach(() => {
     db.__routeQuery([['SELECT * FROM users WHERE id', { rows: [{ id: 'u1', password_hash: pwHash }] }]]);
   });
@@ -329,7 +329,7 @@ describe('POST /api/auth/change-password', () => {
   test('happy path → 200 and revokes refresh tokens', async () => {
     const r = await request(app()).post('/api/auth/change-password')
       .set('Authorization', 'Bearer ' + T())
-      .send({ current_password: 'old-password', new_password: 'brand-new-password' })
+      .send({ current_password: 'old-password1', new_password: 'brand-new-password1' })
       .expect(200);
     expect(r.body.ok).toBe(true);
     const upd = db.query.mock.calls.find((c) => /UPDATE users SET password_hash/.test(c[0]));
@@ -340,13 +340,13 @@ describe('POST /api/auth/change-password', () => {
   test('weak new password → 400 WEAK_PASSWORD', async () => {
     const r = await request(app()).post('/api/auth/change-password')
       .set('Authorization', 'Bearer ' + T())
-      .send({ current_password: 'old-password', new_password: '123' }).expect(400);
+      .send({ current_password: 'old-password1', new_password: '123' }).expect(400);
     expect(r.body.error).toBe('WEAK_PASSWORD');
   });
   test('wrong current password → 401 WRONG_CURRENT_PASSWORD', async () => {
     const r = await request(app()).post('/api/auth/change-password')
       .set('Authorization', 'Bearer ' + T())
-      .send({ current_password: 'nope-nope', new_password: 'brand-new-password' }).expect(401);
+      .send({ current_password: 'nope-nope', new_password: 'brand-new-password1' }).expect(401);
     expect(r.body.error).toBe('WRONG_CURRENT_PASSWORD');
   });
 });
@@ -365,12 +365,21 @@ describe('email verification + password reset link tokens', () => {
     const r = await request(app()).get(`/api/auth/verify-email?token=${tok}`).expect(400);
     expect(r.body.error).toBe('INVALID_OR_EXPIRED');
   });
-  test('GET /verify-email: valid → 200 (uses allowlisted table name)', async () => {
+  test('GET /verify-email: valid → 200 {valid:true}, does NOT consume (L-4)', async () => {
     db.__routeQuery([['FROM email_verification_tokens', { rows: [{ id: 't1', user_id: 'u1', token_hash: tokenHash }] }]]);
     const r = await request(app()).get(`/api/auth/verify-email?token=${tok}`).expect(200);
-    expect(r.body.ok).toBe(true);
+    expect(r.body.valid).toBe(true);
     const q = db.query.mock.calls.find((c) => /FROM email_verification_tokens/.test(c[0]));
     expect(q[0]).toContain('email_verification_tokens'); // literal, not interpolated
+    // no UPDATE consumed the token
+    expect(db.query.mock.calls.some((c) => /UPDATE email_verification_tokens/.test(c[0]))).toBe(false);
+  });
+  test('POST /verify-email: valid → 200 consumes the token (L-4)', async () => {
+    db.__routeQuery([['FROM email_verification_tokens', { rows: [{ id: 't1', user_id: 'u1', token_hash: tokenHash }] }]]);
+    const r = await request(app()).post('/api/auth/verify-email').send({ token: tok }).expect(200);
+    expect(r.body.ok).toBe(true);
+    const allQ = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    expect(allQ.some((c) => /UPDATE email_verification_tokens SET used/.test(c[0]))).toBe(true);
   });
   test('POST /reset-password: malformed token → 400 INVALID_TOKEN', async () => {
     const r = await request(app()).post('/api/auth/reset-password')

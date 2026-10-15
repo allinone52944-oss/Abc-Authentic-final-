@@ -16,8 +16,14 @@ const REFRESH_TTL_DAYS = parseInt(process.env.JWT_REFRESH_DAYS || '30', 10);
 const BCRYPT_ROUNDS = 12;
 
 // ---- Password hashing (bcrypt, never plain text) ------------
+// L-2 fix (2026-10-15): min 8 chars + at least one letter and one digit
+// (SPEC asks for complexity, was length-only min 6).
+function checkPasswordStrength(plain) {
+  const s = String(plain || '');
+  return s.length >= 8 && /[A-Za-z]/.test(s) && /\d/.test(s);
+}
 async function hashPassword(plain) {
-  if (!plain || plain.length < 6) throw new Error('WEAK_PASSWORD');
+  if (!checkPasswordStrength(plain)) throw new Error('WEAK_PASSWORD');
   return bcrypt.hash(plain, BCRYPT_ROUNDS);
 }
 
@@ -72,6 +78,7 @@ module.exports = {
   hashRefreshToken,
   requireAuth,
   requireAdmin,
+  checkPasswordStrength,
   // legacy alias (do not use for new code)
   sign: signAccess,
 };

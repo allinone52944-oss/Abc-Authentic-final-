@@ -5,6 +5,12 @@
 // ============================================================
 const { Pool } = require('pg');
 
+// L-6 fix (2026-10-15): fail fast like JWT_SECRET — a missing DATABASE_URL
+// used to surface as cryptic connection errors much later.
+if (!process.env.DATABASE_URL) {
+  throw new Error('FATAL: DATABASE_URL env var is required - refusing to start without a database');
+}
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: 20,

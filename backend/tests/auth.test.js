@@ -35,8 +35,8 @@ describe('hashPassword / verifyPassword', () => {
   });
 
   test('two hashes of the same password differ (salted)', async () => {
-    const a = await auth.hashPassword('same-password');
-    const b = await auth.hashPassword('same-password');
+    const a = await auth.hashPassword('same-password1');
+    const b = await auth.hashPassword('same-password1');
     expect(a).not.toBe(b);
   });
 });

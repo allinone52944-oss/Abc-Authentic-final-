@@ -208,6 +208,15 @@ function orderDocUpload(db, kind) {
   const path = require('path');
   const fs = require('fs');
   const crypto = require('crypto');
+  // L-8: magic-byte sniffing — don't trust the client-supplied extension alone.
+  // Checks the first bytes of the in-memory chunk via multer's fileFilter is
+  // impossible (no data yet), so we verify after write in a wrapper.
+  const MAGIC = {
+    '.pdf': (b) => b.length > 4 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46, // %PDF
+    '.jpg': (b) => b.length > 2 && b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF,
+    '.jpeg': (b) => b.length > 2 && b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF,
+    '.png': (b) => b.length > 7 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47,
+  };
   return (req, res, next) => {
     _refreshOrderUploadCfg(db).then((cfg) => {
       const storage = multer.diskStorage({
@@ -222,7 +231,7 @@ function orderDocUpload(db, kind) {
           cb(null, `${kind}-${Date.now().toString(36)}-${crypto.randomBytes(8).toString('hex')}${ext}`);
         },
       });
-      multer({
+      const up = multer({
         storage,
         limits: { fileSize: cfg.maxMb * 1024 * 1024, files: 5 },
         fileFilter: (req2, file, cb) => {
@@ -230,7 +239,26 @@ function orderDocUpload(db, kind) {
           if (!cfg.allowed.includes(ext)) return cb(new Error('FILE_TYPE_NOT_ALLOWED'));
           cb(null, true);
         },
-      }).single('file')(req, res, next);
+      }).single('file');
+      up(req, res, (err) => {
+        if (err || !req.file) return next(err);
+        // L-8: verify magic bytes match the extension; delete spoofed files.
+        try {
+          const ext = path.extname(req.file.filename).toLowerCase();
+          const check = MAGIC[ext];
+          if (check) {
+            const fd = fs.openSync(req.file.path, 'r');
+            const head = Buffer.alloc(8);
+            fs.readSync(fd, head, 0, 8, 0);
+            fs.closeSync(fd);
+            if (!check(head)) {
+              fs.unlinkSync(req.file.path);
+              return next(new Error('FILE_TYPE_NOT_ALLOWED'));
+            }
+          }
+        } catch (e) { return next(e); }
+        next();
+      });
     }).catch(next);
   };
 }

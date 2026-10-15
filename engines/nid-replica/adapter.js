@@ -104,7 +104,7 @@ function readImages(dir) {
  * @param {Buffer} pdfBuffer
  * @returns {Promise<{ok:boolean, jobId?, fields?, images?, error?}>}
  */
-async function extractFields(pdfBuffer) {
+async function extractFields(pdfBuffer, ownerId) {
     if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer) || pdfBuffer.length < 100) {
         return { ok: false, error: 'INVALID_PDF' };
     }
@@ -121,6 +121,8 @@ async function extractFields(pdfBuffer) {
     try {
         fs.mkdirSync(path.join(dir, 'work'), { recursive: true });
         fs.writeFileSync(path.join(dir, 'input.pdf'), pdfBuffer);
+        // L-7: job ownership — only the creating user may build from this job
+        if (ownerId) fs.writeFileSync(path.join(dir, '.owner'), String(ownerId));
         pruneJobs();
 
         const steps = [
@@ -158,8 +160,14 @@ async function extractFields(pdfBuffer) {
  * @param {object} fieldsJson  {slotLabel: value}
  * @returns {Promise<{ok:boolean, pdfBuffer?, error?}>}
  */
-async function buildCard(jobId, fieldsJson, images) {
+async function buildCard(jobId, fieldsJson, images, ownerId) {
     const dir = resolveJobDir(jobId);
+    // L-7: job ownership check
+    if (ownerId) {
+        let owner = null;
+        try { owner = fs.readFileSync(path.join(dir, '.owner'), 'utf8').trim(); } catch (_) {}
+        if (owner && owner !== String(ownerId)) return { ok: false, error: 'NOT_YOUR_JOB' };
+    }
     if (!dir || !fieldsJson || typeof fieldsJson !== 'object' || Array.isArray(fieldsJson)) {
         return { ok: false, error: 'INVALID_REQUEST' };
     }

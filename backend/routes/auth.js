@@ -14,6 +14,7 @@ const {
   mintRefreshToken,
   hashRefreshToken,
   requireAuth,
+  checkPasswordStrength,
 } = require('../auth');
 const { safeLog } = require('../security');
 const { validateInvite } = require('./invites');
@@ -138,7 +139,7 @@ router.post('/register', async (req, res) => {
     if (!validEmail(email)) {
       return res.status(400).json({ error: 'INVALID_EMAIL' });
     }
-    if (!password || String(password).length < 6) {
+    if (!checkPasswordStrength(password)) {
       return res.status(400).json({ error: 'WEAK_PASSWORD' });
     }
     const rel = religion || 'other';
@@ -224,10 +225,28 @@ router.post('/register', async (req, res) => {
 });
 
 // ---- GET /api/auth/verify-email?token= -------------------------
-// Clicked from the verification email. Single-use, 24h expiry.
+// L-4 fix (2026-10-15): GET only VALIDATES (no state change). The actual
+// verification happens via POST below — state-changing GETs get logged by
+// scanners/prefetchers and would burn single-use tokens.
 router.get('/verify-email', async (req, res) => {
   try {
     const token = String(req.query.token || '');
+    if (!/^[a-f0-9]{64}$/.test(token)) {
+      return res.status(400).json({ error: 'INVALID_TOKEN' });
+    }
+    const row = await findValidToken('email_verification_tokens', token);
+    if (!row) return res.status(400).json({ error: 'INVALID_OR_EXPIRED' });
+    return res.json({ valid: true });
+  } catch (e) {
+    safeLog('[auth] verify-email check error:', e.message);
+    return res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// ---- POST /api/auth/verify-email (consumes the token) ------------
+router.post('/verify-email', async (req, res) => {
+  try {
+    const token = String((req.body && req.body.token) || '');
     if (!/^[a-f0-9]{64}$/.test(token)) {
       return res.status(400).json({ error: 'INVALID_TOKEN' });
     }
@@ -246,6 +265,7 @@ router.get('/verify-email', async (req, res) => {
         [row.user_id]
       );
     });
+    await logActivity(row.user_id, 'auth.email_verified', {});
     return res.json({ ok: true });
   } catch (e) {
     safeLog('[auth] verify-email error:', e.message);
@@ -336,7 +356,7 @@ router.post('/reset-password', async (req, res) => {
     if (!/^[a-f0-9]{64}$/.test(String(token || ''))) {
       return res.status(400).json({ error: 'INVALID_TOKEN' });
     }
-    if (!new_password || String(new_password).length < 6) {
+    if (!checkPasswordStrength(new_password)) {
       return res.status(400).json({ error: 'WEAK_PASSWORD' });
     }
     const row = await findValidToken('password_reset_tokens', String(token));
@@ -598,7 +618,7 @@ router.put('/me', requireAuth, async (req, res) => {
 router.post('/change-password', requireAuth, async (req, res) => {
   try {
     const { current_password, new_password } = req.body || {};
-    if (!current_password || !new_password || String(new_password).length < 6) {
+    if (!current_password || !checkPasswordStrength(new_password)) {
       return res.status(400).json({ error: 'WEAK_PASSWORD' });
     }
     const r = await db.query('SELECT * FROM users WHERE id = $1', [req.user.id]);

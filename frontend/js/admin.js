@@ -759,10 +759,25 @@ window.AdmSms = {
   async showSecret() {
     const r = await ABC.api('/admin/sms/secret');
     const d = await r.json();
-    if (d.ok && d.secret) {
+    if (d.ok && d.configured) {
       const el = document.getElementById('smsSecretUrl');
-      if (el) el.textContent = location.origin + '/api/sms/incoming?secret=' + d.secret;
-      prompt('SMS Webhook Secret (কপি করুন):', d.secret);
+      const maskedUrl = location.origin + '/api/sms/incoming?secret=' + d.secret;
+      if (el) el.textContent = maskedUrl;
+      // L-1: full secret needs password confirmation
+      const pw = prompt('পুরো secret দেখতে আপনার admin পাসওয়ার্ড দিন (বাতিল = শুধু masked):');
+      let secret = d.secret;
+      if (pw) {
+        const rr = await ABC.api('/admin/sms/secret/reveal', { method: 'POST', body: { admin_password: pw } });
+        const dd = await rr.json();
+        if (dd.ok && dd.secret) {
+          secret = dd.secret;
+          if (el) el.textContent = location.origin + '/api/sms/incoming?secret=' + secret;
+        } else {
+          alert('ভুল পাসওয়ার্ড');
+          return;
+        }
+      }
+      prompt('SMS Webhook Secret (কপি করুন):', secret);
     } else {
       alert('Secret পাওয়া যায়নি');
     }

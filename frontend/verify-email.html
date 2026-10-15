@@ -104,7 +104,12 @@ async function doResend() {
     return;
   }
   try {
-    const r = await fetch('/api/auth/verify-email?token=' + token);
+    // L-4: verification consumes via POST (state-changing GET removed)
+    const r = await fetch('/api/auth/verify-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
     if (r.ok) { show('state-ok'); }
     else {
       const d = await r.json().catch(() => ({}));

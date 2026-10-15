@@ -106,7 +106,7 @@ router.post('/users', async (req, res) => {
 router.put('/users/:id', async (req, res) => {
   try {
     const id = req.params.id;
-    const { name, email, religion, role, status, login_enabled, balance_adjust, admin_note } = req.body || {};
+    const { name, phone, email, religion, role, status, login_enabled, balance_adjust, admin_note } = req.body || {};
 
     const cur = await db.query('SELECT * FROM users WHERE id = $1', [id]);
     if (!cur.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -144,6 +144,15 @@ router.put('/users/:id', async (req, res) => {
     const changes = {};
 
     if (name !== undefined) { sets.push(`name = $${i++}`); params.push(String(name).trim()); changes.name = name; }
+    // L-14 fix (2026-10-15): admin can change a user's phone (login ID),
+    // with BD format + uniqueness checks.
+    if (phone !== undefined) {
+      const ph = String(phone).trim();
+      if (!/^01[0-9]{9}$/.test(ph)) return res.status(400).json({ error: 'INVALID_PHONE' });
+      const ex = await db.query('SELECT id FROM users WHERE phone = $1 AND id != $2', [ph, id]);
+      if (ex.rows.length) return res.status(400).json({ error: 'PHONE_EXISTS' });
+      sets.push(`phone = $${i++}`); params.push(ph); changes.phone = ph;
+    }
     if (email !== undefined) {
       const em = String(email).trim().toLowerCase();
       // Check email not used by another user
@@ -181,15 +190,21 @@ router.put('/users/:id', async (req, res) => {
     // Per-service price / access overrides
     if (req.body.service_overrides && typeof req.body.service_overrides === 'object') {
       for (const [serviceId, ov] of Object.entries(req.body.service_overrides)) {
+        // L-15 fix (2026-10-15): custom_price must be null or >= 0
+        let cp = null;
+        if (ov.custom_price !== null && ov.custom_price !== undefined) {
+          cp = Number(ov.custom_price);
+          if (!Number.isFinite(cp) || cp < 0) {
+            return res.status(400).json({ error: 'INVALID_CUSTOM_PRICE' });
+          }
+        }
         await db.query(
           `INSERT INTO user_services (user_id, service_id, custom_price, access_enabled)
            VALUES ($1, $2, $3, $4)
            ON CONFLICT (user_id, service_id)
            DO UPDATE SET custom_price = EXCLUDED.custom_price,
                          access_enabled = EXCLUDED.access_enabled`,
-          [id, serviceId,
-           ov.custom_price === null || ov.custom_price === undefined ? null : Number(ov.custom_price),
-           ov.access_enabled !== false]
+          [id, serviceId, cp, ov.access_enabled !== false]
         );
       }
       changes.service_overrides = Object.keys(req.body.service_overrides).length;
@@ -283,7 +298,7 @@ router.delete('/users/:id', async (req, res) => {
       const dr = await db.query('SELECT documents FROM orders WHERE user_id = $1', [id]);
       for (const row of dr.rows) {
         let docs = [];
-        try { docs = JSON.parse(row.documents || '[]'); } catch (_) {}
+        try { docs = JSON.parse(row.documents || '[]'); } catch (_) { safeLog('[admin] corrupt order documents JSON during user delete'); }
         for (const d of docs) {
           if (d && (d.path || d.filename)) docFiles.push(d.path || d.filename);
         }
@@ -512,7 +527,7 @@ router.post('/orders/:id/delivery-docs', orderDocUpload(db, 'delivery'), async (
     if (!ord.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
     const order = ord.rows[0];
     let docs = [];
-    try { docs = JSON.parse(order.documents || '[]'); } catch (_) {}
+    try { docs = JSON.parse(order.documents || '[]'); } catch (_) { safeLog('[admin] corrupt order documents JSON for order', req.params.id); }
     docs.push({
       type: req.body.doc_type || 'delivery',
       filename: req.file.filename,
@@ -529,12 +544,30 @@ router.post('/orders/:id/delivery-docs', orderDocUpload(db, 'delivery'), async (
 });
 
 // GET /api/admin/sms/secret — get SMS webhook secret (admin only)
+// L-1 fix (2026-10-15): masked by default (last 4 chars). Full reveal needs
+// POST with the admin's current password. Rotation via SMS_WEBHOOK_SECRET env.
 router.get('/sms/secret', async (req, res) => {
   try {
     const secret = process.env.SMS_WEBHOOK_SECRET || '';
-    res.json({ ok: true, secret });
+    const masked = secret.length > 4 ? '••••' + secret.slice(-4) : (secret ? '••••' : '');
+    res.json({ ok: true, secret: masked, configured: !!secret });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+router.post('/sms/secret/reveal', async (req, res) => {
+  try {
+    const pw = req.body && req.body.admin_password;
+    if (!pw) return res.status(403).json({ error: 'WRONG_PASSWORD' });
+    const ur = await db.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
+    if (!ur.rows.length || !(await verifyPassword(String(pw), ur.rows[0].password_hash))) {
+      return res.status(403).json({ error: 'WRONG_PASSWORD' });
+    }
+    await logActivity(req.user.id, 'sms.secret_reveal', {});
+    res.json({ ok: true, secret: process.env.SMS_WEBHOOK_SECRET || '' });
+  } catch (e) {
+    safeLog('[admin] sms secret reveal error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
   }
 });
 
@@ -1026,6 +1059,14 @@ router.get('/stats', async (req, res) => {
         (SELECT COUNT(*) FROM orders WHERE status = 'new') AS orders_new,
         (SELECT COUNT(*) FROM orders WHERE status IN ('pending','processing')) AS orders_active,
         (SELECT COUNT(*) FROM orders WHERE status = 'completed') AS orders_completed,
+        -- L-13 (2026-10-15): today's counts (Asia/Dhaka)
+        (SELECT COUNT(*) FROM orders
+          WHERE created_at >= (CURRENT_DATE AT TIME ZONE 'Asia/Dhaka')::timestamptz
+            AND created_at < ((CURRENT_DATE + 1) AT TIME ZONE 'Asia/Dhaka')::timestamptz) AS orders_today,
+        (SELECT COUNT(*) FROM users
+          WHERE role = 'user'
+            AND created_at >= (CURRENT_DATE AT TIME ZONE 'Asia/Dhaka')::timestamptz
+            AND created_at < ((CURRENT_DATE + 1) AT TIME ZONE 'Asia/Dhaka')::timestamptz) AS users_today,
         (SELECT COUNT(*) FROM transactions WHERE status = 'pending' AND type = 'recharge') AS pending_recharge,
         (SELECT COALESCE(SUM(amount),0) FROM transactions
           WHERE type = 'recharge' AND status = 'approved'

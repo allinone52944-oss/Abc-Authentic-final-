@@ -335,7 +335,7 @@ router.post('/orders/:id/documents', orderDocUpload(db, 'order'), async (req, re
     if (!req.file) return res.status(400).json({ error: 'NO_FILE' });
     const order = ord.rows[0];
     let docs = [];
-    try { docs = JSON.parse(order.documents || '[]'); } catch (_) {}
+    try { docs = JSON.parse(order.documents || '[]'); } catch (_) { safeLog('[user] corrupt order documents JSON for order', orderId); }
     docs.push({
       type: docType,
       filename: req.file.filename,

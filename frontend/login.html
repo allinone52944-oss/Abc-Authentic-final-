@@ -281,37 +281,7 @@ async function doRegister() {
     }
   }catch(e){}
 })();
-// Religion Voice Greeting
-(async()=>{
-  try{
-    const r=await fetch('/api/auth/voice-greeting');
-    const d=await r.json();
-    if(!d.enabled) return;
-    // Check if user disabled in localStorage
-    if(localStorage.getItem('abc_voice_greeting')==='off') return;
-    const greetings=d.greetings||{};
-    // Use generic greeting (time-based if 'other' empty)
-    let text=greetings.other||'';
-    if(!text){
-      const h=new Date().getHours();
-      text=h<12?'সুপ্রভাত':h<17?'শুভ অপরাহ্ন':'শুভ সন্ধ্যা';
-    }
-    // Voice rotation: male->female->child
-    const rotIdx=Number(localStorage.getItem('abc_voice_rot')||'0');
-    const voices=speechSynthesis.getVoices();
-    const utter=new SpeechSynthesisUtterance(text);
-    utter.lang='bn-BD';
-    if(d.rotation && voices.length){
-      // Try to pick different voice based on rotation
-      const v=voices[rotIdx % voices.length];
-      if(v) utter.voice=v;
-      localStorage.setItem('abc_voice_rot', String((rotIdx+1)%3));
-    }
-    // Play on first user interaction (browser autoplay policy)
-    const play=()=>{ try{ speechSynthesis.speak(utter); }catch(e){} document.removeEventListener('click',play); };
-    document.addEventListener('click',play,{once:true});
-  }catch(e){}
-})();
+<!-- L-10 (2026-10-15): pre-login voice greeting removed — SPEC: greeting only on dashboard login entry -->
 </script>
 </body>
 </html>

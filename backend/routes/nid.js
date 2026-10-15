@@ -32,7 +32,7 @@ router.post('/extract', requireAuth, pdfOnly, multerError, async (req, res) => {
     if (!req.file || !req.file.buffer) {
       return res.status(400).json({ error: 'NO_FILE' });
     }
-    const r = await nidAdapter.extractFields(req.file.buffer);
+    const r = await nidAdapter.extractFields(req.file.buffer, req.user.id);
     if (!r.ok) return res.status(422).json({ error: r.error });
     res.json({ ok: true, jobId: r.jobId, fields: r.fields, images: r.images });
   } catch (e) {
@@ -48,9 +48,9 @@ router.post('/build', requireAuth, async (req, res) => {
     if (!jobId || !fields || typeof fields !== 'object') {
       return res.status(400).json({ error: 'INVALID_REQUEST' });
     }
-    const r = await nidAdapter.buildCard(jobId, fields, images);
+    const r = await nidAdapter.buildCard(jobId, fields, images, req.user.id);
     if (!r.ok) {
-      const status = r.error === 'JOB_NOT_FOUND' ? 404 : 422;
+      const status = r.error === 'JOB_NOT_FOUND' ? 404 : r.error === 'NOT_YOUR_JOB' ? 403 : 422;
       return res.status(status).json({ error: r.error });
     }
     res.setHeader('Content-Type', 'application/pdf');

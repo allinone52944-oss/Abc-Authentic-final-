@@ -23,7 +23,24 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(secureHeaders);
-app.use(cors());
+// L-3 fix (2026-10-15): CORS restricted to the app origin(s) instead of wide
+// open. Same-origin browsers are unaffected; extra origins via CORS_ORIGINS
+// env (comma-separated). Bearer-token APIs don't need CORS for the app itself.
+const _corsOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',').map((s) => s.trim()).filter(Boolean);
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // same-origin / non-browser
+    try {
+      const host = new URL(origin).host;
+      if (host === 'abc-authentic.store' || host.endsWith('.abc-authentic.store') ||
+          _corsOrigins.includes(origin) || _corsOrigins.includes(host)) {
+        return cb(null, true);
+      }
+    } catch (e) {}
+    cb(new Error('CORS_BLOCKED'));
+  },
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(xssClean);
 app.use(sameOrigin);
@@ -298,6 +315,20 @@ app.use((err, req, res, next) => {
 
 const _httpServer = app.listen(PORT, () => {
   safeLog(`[abc-authentic] listening on port ${PORT}`);
+  // L-5 fix (2026-10-15): hourly purge of dead refresh tokens
+  // (expired >7d ago, or revoked >7d ago) — they used to accumulate forever.
+  const purgeTokens = async () => {
+    try {
+      const r = await db.query(
+        `DELETE FROM refresh_tokens
+         WHERE expires_at < NOW() - INTERVAL '7 days'
+            OR (revoked = TRUE AND created_at < NOW() - INTERVAL '7 days')`
+      );
+      if (r.rowCount) safeLog(`[abc-authentic] purged ${r.rowCount} dead refresh tokens`);
+    } catch (e) { safeLog('[abc-authentic] token purge skipped:', e.message); }
+  };
+  purgeTokens();
+  setInterval(purgeTokens, 60 * 60 * 1000).unref();
 });
 // WebSocket upgrade for bdris-apply engine (Socket.IO)
 _httpServer.on('upgrade', (req, socket, head) => {
