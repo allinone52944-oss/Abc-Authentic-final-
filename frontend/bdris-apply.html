@@ -587,6 +587,7 @@ function busy(on, msg) {
 }
 function showFail(list) {
   const f = $('failBox');
+  if (!f) return;
   if (!list || !list.length) { f.className = 'failbox'; f.innerHTML = ''; return; }
   f.innerHTML = 'অনুগ্রহ করে নিচের তথ্যগুলো ঠিক করুন:<ul>' +
     list.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>';
