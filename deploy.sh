@@ -50,10 +50,21 @@ if [ -f .env ]; then
   node backend/migrate.js >>"$LOG" 2>&1 || echo "$(date): Migration failed or no DB" >>"$LOG"
 fi
 
-# Restart service if it exists
-if systemctl is-active --quiet abc-authentic 2>/dev/null; then
+# Restart service if it exists.
+# NOTE (2026-10-15): the deploy user needs passwordless sudo for this one
+# command — run ONCE on the server as root:
+#   echo "ocarun ALL=(ALL) NOPASSWD: /bin/systemctl restart abc-authentic.service, /bin/systemctl is-active abc-authentic.service" > /etc/sudoers.d/abc-authentic-deploy
+# (replace "ocarun" with the user that runs deploy.sh)
+if sudo -n systemctl is-active --quiet abc-authentic 2>/dev/null; then
   echo "$(date): Restarting service..." >>"$LOG"
-  systemctl restart abc-authentic >>"$LOG" 2>&1
+  if sudo -n systemctl restart abc-authentic >>"$LOG" 2>&1; then
+    echo "$(date): Service restarted" >>"$LOG"
+  else
+    echo "$(date): ERROR: service restart failed (check sudoers rule above)" >>"$LOG"
+    exit 1
+  fi
+else
+  echo "$(date): Service not active, skipping restart" >>"$LOG"
 fi
 
 echo "$(date): Deploy complete: $REMOTE" >>"$LOG"
