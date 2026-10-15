@@ -124,6 +124,13 @@ CREATE TABLE IF NOT EXISTS orders (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     idempotency_key VARCHAR(128)     -- M-2/M-15: client key; retry returns the same order
 );
+-- Backfill (2026-10-15): databases created before M-2/M-15 have an orders
+-- table WITHOUT this column, and CREATE TABLE IF NOT EXISTS above is a no-op
+-- there — so the unique index below failed with
+-- 'column "idempotency_key" does not exist', which wedged every deploy
+-- (migrate FAILED -> service never restarted). ADD COLUMN IF NOT EXISTS is a
+-- safe no-op on fresh databases.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(128);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_user_idem
   ON orders(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_orders_user    ON orders(user_id);

@@ -95,4 +95,19 @@ describe('schema text guards', () => {
       /CREATE INDEX IF NOT EXISTS idx_tx_user_type_status ON transactions\(user_id,\s*type,\s*status\)/
     );
   });
+
+  test('2026-10-15: orders.idempotency_key backfill precedes its unique index', () => {
+    // Production DBs created before M-2/M-15 lack the column; CREATE TABLE IF
+    // NOT EXISTS is a no-op there, so the index build failed with
+    // 'column "idempotency_key" does not exist' and wedged deploys.
+    const alterIdx = schema.search(
+      /ALTER TABLE orders\s+ADD COLUMN IF NOT EXISTS idempotency_key/i
+    );
+    const indexIdx = schema.search(
+      /CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_user_idem/i
+    );
+    expect(alterIdx).toBeGreaterThan(-1);
+    expect(indexIdx).toBeGreaterThan(-1);
+    expect(alterIdx).toBeLessThan(indexIdx);
+  });
 });
