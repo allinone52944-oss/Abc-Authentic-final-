@@ -1653,6 +1653,7 @@ io.on('connection', (socket) => {
 
   // ── SESSION START ──
   socket.on('START_BDRIS_SESSION', async () => {
+    console.log(`[${ts()}] [START_BDRIS_SESSION] received from ${socket.id}`);
     touchSession();
     if (isLaunching) {
       status(socket, 'LOADING', '⏳ সংযোগ প্রস্তুত হচ্ছে... একটু অপেক্ষা করুন');

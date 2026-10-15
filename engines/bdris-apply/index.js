@@ -118,6 +118,14 @@ function startEngine() {
   _proc.stdout.on('data', (d) => {
     const s = String(d);
     if (/listening|ready|BDRIS/i.test(s)) _ready = true;
+    // Forward engine logs (2026-10-15): previously swallowed, making diagnosis impossible.
+    // Filter out noisy page-console spam, keep important lines.
+    for (const line of s.split('\n')) {
+      const t = line.trim();
+      if (!t) continue;
+      if (/^PAGE-CONSOLE/.test(t) && !/error/i.test(t)) continue;
+      console.log('[bdris-apply:engine]', t.slice(0, 300));
+    }
   });
   _proc.stderr.on('data', (d) => {
     console.error('[bdris-apply:engine]', String(d).slice(0, 500));
