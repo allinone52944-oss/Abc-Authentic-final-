@@ -630,25 +630,13 @@ function staticGeoOpts(k, data) {
     const up = _uk ? dis[_uk] : null;
     if (!up) return null;
     if (k === 'paurasavaUnion') {
-      // সিটি কর্পোরেশনে ইউনিয়ন/পৌরসভা নেই — ওয়ার্ড/অঞ্চল দেখাও
-      // (bdris.gov.bd-এর আসল গঠন: "ওয়ার্ড/অঞ্চল *" dropdown)
-      if (up.wz && up.wz.length) {
-        return up.wz.map(n => ({ id: n, name: n }));
-      }
-      if (up.w && up.w.length && !(up.u && up.u.length) && !(up.p && up.p.length)) {
-        return up.w.map(n => ({ id: n, name: n }));
-      }
+      // সিটি কর্পোরেশনে ইউনিয়ন/পৌরসভা নেই — engine থেকে ওয়ার্ড/অঞ্চল আসবে
+      // (bdris.gov.bd-এর আসল "ওয়ার্ড/অঞ্চল *" dropdown; static hardcode নয়)
       const arr = [...(up.u || []), ...(up.p || [])];
       // ডুপ্লিকেট বাদ দাও (যেমন সাভার ইউনিয়ন + সাভার পৌরসভা)
       const seen = new Set();
       const uniq = arr.filter(n => !seen.has(n) && seen.add(n));
       return uniq.length ? uniq.map(n => ({ id: n, name: n })) : null;
-    }
-    if (k === 'ward') {
-      // সিটি কর্পোরেশনের ওয়ার্ড static থেকে (ইউনিয়ন স্তর বাদ)
-      if (up.w && up.w.length) {
-        return up.w.map(n => ({ id: n, name: n }));
-      }
     }
   } catch (e) { return null; }
   return null; // country / ward → engine
@@ -1646,19 +1634,7 @@ async function geoLoad(k, Ls, data, wantOv) {
   if (!opts.length) { degradeToText(L.ui, L.lbl, want); return; }
   fillSelOpts(L.ui, opts, want);
   const lblEl = $(L.ui + '_lbl');
-  // সিটি কর্পোরেশনে ওয়ার্ড/অঞ্চল — bdris.gov.bd-এর আসল লেবেল
-  let lbl = L.lbl;
-  if (k === 'paurasavaUnion') {
-    try {
-      const _dk2 = geoFindKey(GEO_DATA, data && data.division);
-      const _sk2 = _dk2 ? geoFindKey(GEO_DATA[_dk2], data.district) : null;
-      const _uk2 = _sk2 ? geoFindKey(GEO_DATA[_dk2][_sk2], data.cityCorpUpazila) : null;
-      const _up2 = _uk2 ? GEO_DATA[_dk2][_sk2][_uk2] : null;
-      if (_up2 && _up2.wz && _up2.wz.length) lbl = 'ওয়ার্ড/অঞ্চল';
-      else if (fromAlt) lbl = 'অঞ্চল (সিটি কর্পোরেশন)';
-    } catch (e) {}
-  }
-  if (lblEl) lblEl.textContent = lbl;
+  if (lblEl) lblEl.textContent = (k === 'paurasavaUnion' && fromAlt) ? 'ওয়ার্ড/অঞ্চল' : L.lbl;
 }
 async function geoMirror(k, Ls) {
   const L = levelOf(k, Ls); if (!L || !L.childSite) return;
@@ -1689,11 +1665,20 @@ async function geoChanged(k, Ls, data) {
   if (!label) return;
   note('⏳ ঠিকানার তালিকা আনা হচ্ছে…', 'info');
   const next = Ls[idx + 1];
-  /* Static data parallel-এ load করো — engine mirror-এর জন্য অপেক্ষা নয়।
-     (আগে geoMirror 30s wait করত, engine slow হলে পরের dropdown খালি থাকত) */
-  const loadP = next ? geoLoad(next.k, Ls, data) : Promise.resolve();
-  try { await geoMirror(k, Ls); } catch (e) {}
-  await loadP;
+  /* সিটি কর্পোরেশন: engine-এর mirror আগে শেষ হতে হবে, তারপর fetch।
+     (আসল সাইটে ওয়ার্ড/অঞ্চল dropdown mirror-এর পরে populate হয়;
+     parallel-এ fetch করলে খালি আসে) */
+  const isCityCorp = k === 'cityCorpUpazila' && /সিটি কর্পোরেশন/.test(label);
+  if (isCityCorp) {
+    try { await geoMirror(k, Ls); } catch (e) {}
+    if (next) await geoLoad(next.k, Ls, data);
+  } else {
+    /* Static data parallel-এ load করো — engine mirror-এর জন্য অপেক্ষা নয়।
+       (আগে geoMirror 30s wait করত, engine slow হলে পরের dropdown খালি থাকত) */
+    const loadP = next ? geoLoad(next.k, Ls, data) : Promise.resolve();
+    try { await geoMirror(k, Ls); } catch (e) {}
+    await loadP;
+  }
   noteOff();
 }
 async function warmFromData() {
