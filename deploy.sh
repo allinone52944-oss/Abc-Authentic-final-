@@ -13,12 +13,25 @@ git fetch origin 2>>"$LOG"
 LOCAL=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse origin/main)
 
-if [ "$LOCAL" = "$REMOTE" ]; then
+# Permanent fix (2026-10-15): track last successfully restarted commit.
+# If code was pulled but restart failed, next run sees LOCAL==REMOTE and
+# exits silently — leaving old code running forever. The state file ensures
+# we retry the restart until it succeeds.
+STATE_FILE="$APP_DIR/.deploy-state"
+LAST_RESTARTED=""
+[ -f "$STATE_FILE" ] && LAST_RESTARTED=$(cat "$STATE_FILE" 2>/dev/null || echo "")
+
+if [ "$LOCAL" = "$REMOTE" ] && [ "$LOCAL" = "$LAST_RESTARTED" ]; then
   exit 0
 fi
 
-echo "$(date): New commit $REMOTE, deploying..." >>"$LOG"
-git reset --hard origin/main >>"$LOG" 2>&1
+if [ "$LOCAL" != "$REMOTE" ]; then
+  echo "$(date): New commit $REMOTE, deploying..." >>"$LOG"
+  git reset --hard origin/main >>"$LOG" 2>&1
+  LOCAL="$REMOTE"
+else
+  echo "$(date): Code already at $LOCAL but last restart was $LAST_RESTARTED — retrying restart..." >>"$LOG"
+fi
 
 # Install backend dependencies
 cd "$APP_DIR/backend"
@@ -69,6 +82,7 @@ if sudo -n "$SYSTEMCTL" is-active abc-authentic.service >/dev/null 2>&1; then
   echo "$(date): Restarting service via $SYSTEMCTL..." >>"$LOG"
   if sudo -n "$SYSTEMCTL" restart abc-authentic.service >>"$LOG" 2>&1; then
     echo "$(date): Service restarted" >>"$LOG"
+    echo "$LOCAL" > "$STATE_FILE" 2>/dev/null || true
   else
     echo "$(date): ERROR: service restart failed — passwordless sudo not working for: $SYSTEMCTL restart abc-authentic.service" >>"$LOG"
     echo "$(date): HINT: as root run: echo \"ubuntu ALL=(ALL) NOPASSWD: $SYSTEMCTL restart abc-authentic.service, $SYSTEMCTL is-active abc-authentic.service\" | tee /etc/sudoers.d/abc-authentic-deploy && chmod 440 /etc/sudoers.d/abc-authentic-deploy" >>"$LOG"
@@ -76,6 +90,7 @@ if sudo -n "$SYSTEMCTL" is-active abc-authentic.service >/dev/null 2>&1; then
   fi
 else
   echo "$(date): Service not active, skipping restart" >>"$LOG"
+  echo "$LOCAL" > "$STATE_FILE" 2>/dev/null || true
 fi
 
 echo "$(date): Deploy complete: $REMOTE" >>"$LOG"
