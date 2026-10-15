@@ -1653,15 +1653,19 @@ async function geoChanged(k, Ls, data) {
 }
 async function warmFromData() {
   const data = S.d.s1 = S.d.s1 || {};
+  /* Static fill: division সাথে সাথে load করো (country-এর জন্য অপেক্ষা নয়)।
+     Country engine থেকে আসতে 15s লাগতে পারে — division parallel-এ চলবে। */
+  const divFillP = (async () => {
+    try {
+      await loadGeoData();
+      const divNode = document.getElementById('g_div');
+      if (divNode && divNode.tagName === 'SELECT' && divNode.options.length <= 1) {
+        await geoLoad('division', GEO_LEVELS, data);
+      }
+    } catch (e) {}
+  })();
   await geoLoad('country', GEO_LEVELS, data);
-  /* Static fill: division dropdown populate করো even with no saved value.
-     (আগে data.division খালি থাকলে return হয়ে "লোড হচ্ছে…" আটকে থাকত) */
-  try {
-    const divNode = document.getElementById('g_div');
-    if (divNode && divNode.tagName === 'SELECT' && divNode.options.length <= 1) {
-      await geoLoad('division', GEO_LEVELS, data);
-    }
-  } catch (e) {}
+  await divFillP;
   for (const L of GEO_LEVELS) {
     const want = data[L.k]; if (!want) return;
     const node = $(L.ui); if (!node) return;
