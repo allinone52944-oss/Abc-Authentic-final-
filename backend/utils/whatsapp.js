@@ -401,14 +401,9 @@ async function notifyRechargeRejected(db, tx) {
 module.exports = {
   isConfigured,
   getConfig,
-  canSend,
   normalizeBdPhone,
-  graphPost,
   sendTextMessage,
-  sendTemplateMessage,
   testConnection,
-  DEFAULT_TEMPLATES,
-  getTemplates,
   renderTemplate,
   orderCompletedMessage,
   rechargeApprovedMessage,
@@ -418,3 +413,5 @@ module.exports = {
   notifyRechargeApproved,
   notifyRechargeRejected,
 };
+// M-22 (2026-10-15): removed never-used exports (canSend, graphPost,
+// sendTemplateMessage, DEFAULT_TEMPLATES, getTemplates) — dead API surface.

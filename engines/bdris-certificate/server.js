@@ -478,10 +478,17 @@ app.post('/api/verify', async (req, res) => {
             body
         });
         const html = await r.text();
+        // M-17 fix (2026-10-15): PII-bearing debug dumps only with DEBUG_DUMP=1,
+        // into a 0700 dir (was: world-readable /tmp unconditionally).
         try {
-            const dbgPath = '/tmp/bdris-debug-' + Date.now() + '.html';
-            require('fs').writeFileSync(dbgPath, html.slice(0, 80000));
-            console.log('[bdris-cert] DEBUG html saved to', dbgPath, 'len=', html.length);
+            if (process.env.DEBUG_DUMP === '1') {
+                const fs2 = require('fs');
+                const dd = require('path').join(__dirname, '.debug-dumps');
+                fs2.mkdirSync(dd, { recursive: true, mode: 0o700 });
+                const dbgPath = require('path').join(dd, 'bdris-debug-' + Date.now() + '.html');
+                fs2.writeFileSync(dbgPath, html.slice(0, 80000), { mode: 0o600 });
+                console.log('[bdris-cert] DEBUG html saved to', dbgPath, 'len=', html.length);
+            }
         } catch (_) {}
 
         if (html.includes('No record found') || html.includes('Captcha is not valid') || html.includes('Does not match')) {

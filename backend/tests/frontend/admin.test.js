@@ -42,7 +42,19 @@ function extractFn(src, name) {
 function makeDocument() {
   const created = [];
   const bodyChildren = [];
+  const listeners = {};
   const doc = {
+    // M-19 fix (2026-10-15): the stub was missing addEventListener, which
+    // modal() calls — all 6 modal tests threw TypeError, leaving the XSS
+    // title-escaping (FIX #7) unverified.
+    addEventListener(type, fn) {
+      (listeners[type] = listeners[type] || []).push(fn);
+    },
+    removeEventListener(type, fn) {
+      const a = listeners[type];
+      if (a) { const i = a.indexOf(fn); if (i >= 0) a.splice(i, 1); }
+    },
+    _listeners: listeners,
     createElement() {
       const el = {
         className: '',

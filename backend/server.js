@@ -13,6 +13,7 @@ const {
   secureHeaders,
   authLimiter,
   apiLimiter,
+  getClientIp,
   xssClean,
   sameOrigin,
   safeLog,
@@ -89,6 +90,28 @@ app.get('/api/engines', apiLimiter, (req, res) => {
   }));
   res.json(list);
 });
+
+// ---- IP blocklist (M-9 fix, 2026-10-15) ---------------------------
+// Admin-managed via settings key `ip_blocklist` ({"ips": [...]}).
+// Checked before everything else; /api/health stays open for monitoring.
+let _blockCache = { at: 0, ips: new Set() };
+async function ipBlocklist(req, res, next) {
+  try {
+    if (req.path === '/api/health') return next();
+    if (Date.now() - _blockCache.at > 30000) {
+      const r = await db.query("SELECT value FROM settings WHERE key = 'ip_blocklist' LIMIT 1");
+      const v = r.rows[0] && r.rows[0].value;
+      const val = typeof v === 'string' ? JSON.parse(v) : v;
+      const ips = val && Array.isArray(val.ips) ? val.ips.map((x) => String(x).trim()) : [];
+      _blockCache = { at: Date.now(), ips: new Set(ips) };
+    }
+    if (_blockCache.ips.size && _blockCache.ips.has(getClientIp(req))) {
+      return res.status(403).json({ error: 'IP_BLOCKED' });
+    }
+  } catch (e) { /* fail open on DB error */ }
+  next();
+}
+app.use(ipBlocklist);
 
 // ---- Maintenance mode gate (H-5 fix, 2026-10-15) ----------------
 // Server-side enforcement: when maintenance_mode.enabled, all /api calls

@@ -3,9 +3,9 @@
  * engines/bdris-apply/index.js — Abc Authentic adapter for the
  * BDRIS Apply Engine (BDRIS Auto-fill Bot v6).
  *
- * WRAPPING ONLY — the engine folder is an as-is copy of
- * Bdris-apply-v2-CLEAN-v23.zip contents (server.js + helpers +
- * frontend-index.html). No engine logic is modified here.
+ * WRAPPING ONLY — the engine folder is an as-is copy of the
+ * bdris-apply engine (server.js + helpers + frontend-index.html).
+ * No engine logic is modified here.
  *
  * Integration:
  *  - The engine is a standalone Express + Socket.IO + Playwright app.

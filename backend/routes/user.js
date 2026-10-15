@@ -40,15 +40,21 @@ async function effectivePrice(userId, service) {
 }
 
 // ---- service schedule check -----------------------------------
+// M-11 fix (2026-10-15): evaluated in Asia/Dhaka (was server-local TZ).
+// schedule.days uses JS numbering: 0=Sunday … 6=Saturday.
 function serviceOpen(schedule) {
   if (!schedule || (!schedule.open && !schedule.close)) return true;
   try {
-    const now = new Date();
-    const day = now.getDay(); // 0=Sun
-    if (Array.isArray(schedule.days) && schedule.days.length && !schedule.days.includes(day)) {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Dhaka', weekday: 'short', hour: '2-digit', minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date());
+    const get = (t) => (parts.find((p) => p.type === t) || {}).value;
+    const wd = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[get('weekday')];
+    if (Array.isArray(schedule.days) && schedule.days.length && !schedule.days.includes(wd)) {
       return false;
     }
-    const hhmm = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    const hhmm = get('hour') + ':' + get('minute');
     if (schedule.open && hhmm < schedule.open) return false;
     if (schedule.close && hhmm > schedule.close) return false;
     return true;
@@ -153,20 +159,23 @@ router.post('/orders', async (req, res) => {
       return res.status(400).json({ error: 'MISSING_DOCUMENTS', missing });
     }
 
+    // M-15: client-generated idempotency key (frontend sends crypto.randomUUID()
+    // per form); Date.now() fallback only for very old clients.
+    const clientKey = (req.body && req.body.idempotency_key)
+      ? String(req.body.idempotency_key).slice(0, 64)
+      : String(Date.now());
     const order = await db.withTransaction(async (client) => {
       // Debit wallet (raises INSUFFICIENT_BALANCE if not enough)
       // Idempotency: same key → same ref → wallet_apply dedupes double submits.
-      // Falls back to Date.now() when the client sends no key (old behavior).
-      const clientKey = (req.body && req.body.idempotency_key) ? String(req.body.idempotency_key).slice(0, 64) : Date.now();
       await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
         req.user.id, -Math.abs(eff.price), 'debit', 'order-' + clientKey + '-' + req.user.id,
       ]);
       const ins = await client.query(
-        `INSERT INTO orders (user_id, service_id, status, data, documents, notes, price)
-         VALUES ($1, $2, 'new', $3, $4, $5, $6) RETURNING *`,
+        `INSERT INTO orders (user_id, service_id, status, data, documents, notes, price, idempotency_key)
+         VALUES ($1, $2, 'new', $3, $4, $5, $6, $7) RETURNING *`,
         [req.user.id, service_id,
          JSON.stringify(data || {}), JSON.stringify(docs),
-         notes || null, eff.price]
+         notes || null, eff.price, clientKey]
       );
       return ins.rows[0];
     });
@@ -179,6 +188,18 @@ router.post('/orders', async (req, res) => {
     safeLog('[user] order create error:', e.message);
     if (/INSUFFICIENT_BALANCE/.test(e.message)) {
       return res.status(402).json({ error: 'INSUFFICIENT_BALANCE' });
+    }
+    // M-2: duplicate submit → return the already-created order instead of 500
+    // (the client can never recover the first order from ORDER_FAILED).
+    if (/DUPLICATE_TRANSACTION/.test(e.message)) {
+      try {
+        const ex = await db.query(
+          `SELECT * FROM orders WHERE user_id = $1 AND idempotency_key = $2
+           ORDER BY created_at DESC LIMIT 1`,
+          [req.user.id, String(clientKey)]
+        );
+        if (ex.rows.length) return res.json({ order: ex.rows[0], duplicate: true });
+      } catch (e2) { safeLog('[user] duplicate-order lookup skipped:', e2.message); }
     }
     res.status(500).json({ error: 'ORDER_FAILED' });
   }
@@ -271,6 +292,8 @@ router.post('/orders/:id/chat', async (req, res) => {
       `INSERT INTO chat_messages (order_id, user_id, sender, message)
        VALUES ($1, $2, 'user', $3) RETURNING id, sender, message, created_at`,
       [req.params.id, req.user.id, String(message).trim()]);
+    // M-14: admin push notification on user chat message (with name)
+    push.notifyNewChatMessage(db, req.params.id, req.user.id, String(message).trim()).catch(() => {});
     res.status(201).json({ message: r.rows[0] });
   } catch (e) {
     safeLog('[user] chat send error:', e.message);

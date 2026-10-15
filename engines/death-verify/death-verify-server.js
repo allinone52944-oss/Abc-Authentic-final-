@@ -888,11 +888,16 @@ async function routeVerify(req, res) {
         });
         const html = await r.text();
 
-        // debug copy: structure dekhar jonno
+        // M-17 fix (2026-10-15): PII-bearing debug dumps only with DEBUG_DUMP=1,
+        // into a 0700 dir (was: world-readable /tmp unconditionally).
         try {
-            const dbgPath = '/tmp/death-debug-' + Date.now() + '.html';
-            fs.writeFileSync(dbgPath, html.slice(0, 50000));
-            console.log('[death-verify] DEBUG html saved to', dbgPath, 'len=', html.length);
+            if (process.env.DEBUG_DUMP === '1') {
+                const dd = path.join(__dirname, '.debug-dumps');
+                fs.mkdirSync(dd, { recursive: true, mode: 0o700 });
+                const dbgPath = path.join(dd, 'death-debug-' + Date.now() + '.html');
+                fs.writeFileSync(dbgPath, html.slice(0, 50000), { mode: 0o600 });
+                console.log('[death-verify] DEBUG html saved to', dbgPath, 'len=', html.length);
+            }
         } catch (_) {}
 
         if (html.includes('Captcha is not valid') || html.includes('Does not match'))

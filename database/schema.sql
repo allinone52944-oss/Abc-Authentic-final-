@@ -2,6 +2,13 @@
 -- All In One (Abc Authentic) - Database Schema v1
 -- Database: abc_authentic_new | PostgreSQL
 -- Created: 2026-10-11 | Fresh rebuild, no legacy data
+--
+-- CANONICAL-COPY RULE (M-5, 2026-10-15):
+--   schema.sql is the canonical base for FRESH installs.
+--   database/migrations/*.sql bring EXISTING installs up to date.
+--   When changing the schema, update BOTH: the construct in schema.sql
+--   AND a new numbered migration with the same change. Never edit one
+--   without the other, or fresh and migrated installs will drift apart.
 -- ============================================================
 
 -- Enable UUID generation
@@ -31,6 +38,7 @@ CREATE TABLE IF NOT EXISTS users (
     failed_attempts INT          NOT NULL DEFAULT 0,
     locked_until    TIMESTAMPTZ,
     email_verified  BOOLEAN      NOT NULL DEFAULT FALSE,
+    token_version   INT          NOT NULL DEFAULT 0,   -- M-7: bumped on role change; sessions revoked
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -113,8 +121,11 @@ CREATE TABLE IF NOT EXISTS orders (
     admin_note  TEXT,
     price       NUMERIC(12,2) NOT NULL DEFAULT 0,      -- price at order time
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    idempotency_key VARCHAR(128)     -- M-2/M-15: client key; retry returns the same order
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_user_idem
+  ON orders(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_orders_user    ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_service ON orders(service_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status  ON orders(status);
@@ -154,6 +165,9 @@ CREATE INDEX IF NOT EXISTS idx_tx_user   ON transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_tx_trxid  ON transactions(trxid);
 CREATE INDEX IF NOT EXISTS idx_tx_status ON transactions(status);
 CREATE INDEX IF NOT EXISTS idx_tx_user_type_status ON transactions(user_id, type, status);
+-- M-3/C-4 (2026-10-15): schema-level idempotency — same trxid, same user → one row
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_user_trxid_unique
+  ON transactions(user_id, trxid) WHERE trxid IS NOT NULL;
 
 -- ------------------------------------------------------------
 -- COUPONS (cashback + promo)
@@ -238,6 +252,7 @@ INSERT INTO settings (key, value) VALUES
     ('registration_enabled', '{"enabled": true}'),
     ('maintenance_mode',     '{"enabled": false, "message": ""}'),
     ('session_timeout',      '{"idle_minutes": 120, "absolute_hours": 168}'),
+    ('ip_blocklist',         '{"ips": []}'),
     ('file_upload',          '{"max_mb": 5, "allowed": ["pdf","jpg","jpeg","png"]}'),
     ('login_security',       '{"max_attempts": 5, "lock_minutes": 30}'),
     ('cashback',             '{"enabled": false, "percent": 0}'),
@@ -281,6 +296,12 @@ DECLARE
     v_tx   UUID;
     v_bal  NUMERIC;
 BEGIN
+    -- M-4 fix (2026-10-15): validate p_type early with a clear error instead
+    -- of a raw CHECK-violation from the INSERT.
+    IF p_type NOT IN ('recharge','cashback','promo','refund','debit','bonus') THEN
+        RAISE EXCEPTION 'INVALID_TX_TYPE: %', p_type;
+    END IF;
+
     -- Lock the user row for the whole transaction (prevents double-spend)
     SELECT balance INTO v_bal FROM users WHERE id = p_user FOR UPDATE;
     IF NOT FOUND THEN

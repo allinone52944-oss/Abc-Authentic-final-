@@ -46,16 +46,28 @@ function vapidPublicKey() {
 }
 
 // Save (upsert) a subscription for a user. Never throws.
+// M-6 fix (2026-10-15): endpoint URL validated (https only); the upsert can
+// only refresh a row the SAME user already owns — it can no longer re-assign
+// someone else's endpoint (ON CONFLICT ... WHERE user_id matches).
 async function saveSubscription(db, userId, sub) {
   try {
     if (!sub || !sub.endpoint || !sub.keys || !sub.keys.p256dh || !sub.keys.auth) {
+      return { ok: false, error: 'INVALID_SUBSCRIPTION' };
+    }
+    let url;
+    try { url = new URL(String(sub.endpoint)); } catch (e) { url = null; }
+    if (!url || url.protocol !== 'https:') {
+      return { ok: false, error: 'INVALID_ENDPOINT' };
+    }
+    if (String(sub.keys.p256dh).length > 200 || String(sub.keys.auth).length > 100) {
       return { ok: false, error: 'INVALID_SUBSCRIPTION' };
     }
     await db.query(
       `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (endpoint) DO UPDATE
-       SET user_id = EXCLUDED.user_id, p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth`,
+       SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth
+       WHERE push_subscriptions.user_id = EXCLUDED.user_id`,
       [userId, sub.endpoint, sub.keys.p256dh, sub.keys.auth]
     );
     return { ok: true };
@@ -174,8 +186,7 @@ async function notifyNewRecharge(db, tx, userId) {
   }
 }
 
-async function notifyNewUser(db, user) {
-  try {
+async function notifyNewUser(db, user) {  try {
     return await notifyAdmins(
       db,
       '👤 নতুন ইউজার!',
@@ -184,6 +195,24 @@ async function notifyNewUser(db, user) {
     );
   } catch (e) {
     safeLog('[push] notifyNewUser failed:', e.message);
+    return { ok: false };
+  }
+}
+
+// M-14 fix (2026-10-15): user chat message → admin push notification (with name, per SPEC).
+async function notifyNewChatMessage(db, orderId, userId, message) {
+  try {
+    const uname = await userLabel(db, userId);
+    const shortId = String(orderId || '').slice(0, 8).toUpperCase();
+    const preview = String(message || '').slice(0, 80);
+    return await notifyAdmins(
+      db,
+      '💬 নতুন মেসেজ!',
+      `অর্ডার #${shortId} — ${uname}: ${preview}`,
+      '/admin.html'
+    );
+  } catch (e) {
+    safeLog('[push] notifyNewChatMessage failed:', e.message);
     return { ok: false };
   }
 }
@@ -198,4 +227,5 @@ module.exports = {
   notifyNewOrder,
   notifyNewRecharge,
   notifyNewUser,
+  notifyNewChatMessage,
 };

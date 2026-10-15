@@ -13,11 +13,16 @@ const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 
 // ---- Secure headers ------------------------------------------
+// M-10 fix (2026-10-15): script-src keeps 'unsafe-inline' because the app
+// legitimately uses ~170 inline onclick handlers (admin.js + pages).
+// script-src 'self' alone SILENTLY KILLED every admin-panel button.
+// Primary XSS defense is output escaping (esc() in all renderers), which the
+// audit verified — CSP remains as defense-in-depth for external scripts.
 const secureHeaders = helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"], // coffee theme uses inline styles
       imgSrc: ["'self'", 'data:'],
       fontSrc: ["'self'"],
@@ -50,7 +55,8 @@ function _peerIsLocalProxy(peer) {
     /^fc00:/i.test(p) || /^fe80:/i.test(p);
 }
 const _ipRe = /^[0-9a-fA-F.:]{3,45}$/;
-const clientIpKey = (req) => {
+// Real client IP (proxy-aware, H-6 hardened). Exported for the IP blocklist (M-9).
+const getClientIp = (req) => {
   const peer = (req.socket && req.socket.remoteAddress) || '';
   if (_peerIsLocalProxy(peer)) {
     const cf = String(req.headers['cf-connecting-ip'] || '').trim();
@@ -60,6 +66,7 @@ const clientIpKey = (req) => {
   }
   return req.ip;
 };
+const clientIpKey = (req) => getClientIp(req);
 
 // Strict: login / register / OTP endpoints (brute-force protection)
 const authLimiter = rateLimit({
@@ -81,12 +88,19 @@ const apiLimiter = rateLimit({
   message: { error: 'RATE_LIMITED' },
 });
 
-// ---- XSS: strip <script> and event handlers from strings ------
+// ---- XSS: strip dangerous markup from strings ------------------
+// M-20 fix (2026-10-15): hardened — was script-blocks + quoted on*= only.
+// Now also strips: unquoted event handlers, javascript:/data:/vbscript: URIs,
+// and iframe/object/embed/form/base/meta tags. Defense-in-depth only — the
+// primary XSS defense remains output escaping (esc()) in every renderer.
 function sanitizeValue(v) {
   if (typeof v !== 'string') return v;
   return v
     .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, '');
+    .replace(/<\s*(iframe|object|embed|form|base|meta|link|style)[\s\S]*?>/gi, '')
+    .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, '')          // quoted handlers
+    .replace(/\son\w+\s*=\s*[^\s>]+/gi, '')               // unquoted handlers
+    .replace(/(['"\s=])(javascript|data|vbscript)\s*:/gi, '$1blocked:');
 }
 function xssClean(req, res, next) {
   const clean = (obj) => {
@@ -225,6 +239,7 @@ module.exports = {
   secureHeaders,
   authLimiter,
   apiLimiter,
+  getClientIp,
   xssClean,
   sameOrigin,
   uploadMiddleware,

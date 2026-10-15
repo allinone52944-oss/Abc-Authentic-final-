@@ -207,6 +207,14 @@ router.put('/users/:id', async (req, res) => {
       await db.query(`UPDATE users SET ${sets.join(', ')} WHERE id = $${i}`, params);
     }
 
+    // M-7 fix (2026-10-15): role change → bump token_version + revoke all
+    // refresh tokens, so the old role can't be used via refresh anymore
+    // (access tokens only live 15 min).
+    if (changes.role && changes.role !== target.role) {
+      await db.query('UPDATE users SET token_version = token_version + 1 WHERE id = $1', [id]);
+      await db.query('UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1', [id]);
+    }
+
     await logActivity(req.user.id, 'user.update', { user_id: id, changes });
     const fresh = await db.query(
       `SELECT id, name, phone, whatsapp, email, religion, role, balance, status,
@@ -268,14 +276,42 @@ router.delete('/users/:id', async (req, res) => {
       [id]
     );
 
+    // M-13 fix (2026-10-15): collect uploaded document files BEFORE the DB
+    // cascade deletes the rows — then remove them from disk too.
+    let docFiles = [];
+    try {
+      const dr = await db.query('SELECT documents FROM orders WHERE user_id = $1', [id]);
+      for (const row of dr.rows) {
+        let docs = [];
+        try { docs = JSON.parse(row.documents || '[]'); } catch (_) {}
+        for (const d of docs) {
+          if (d && (d.path || d.filename)) docFiles.push(d.path || d.filename);
+        }
+      }
+    } catch (e) { safeLog('[admin] doc list skipped:', e.message); }
+
     // ON DELETE CASCADE handles: user_services, orders, transactions,
     // coupons(user_id), notices(user_id), chat_messages, refresh_tokens.
     // Explicitly clear anything else first.
     await db.query('DELETE FROM users WHERE id = $1', [id]);
 
+    // Delete the collected files from disk (uploads dir only — safety).
+    let filesDeleted = 0;
+    try {
+      const path = require('path');
+      const UP = '/opt/all-in-one-abc-authentic/uploads/orders';
+      for (const f of docFiles) {
+        const abs = path.resolve(UP, path.basename(String(f)));
+        if (abs.startsWith(UP + path.sep) && fs.existsSync(abs)) {
+          fs.unlinkSync(abs);
+          filesDeleted++;
+        }
+      }
+    } catch (e) { safeLog('[admin] doc file cleanup skipped:', e.message); }
+
     await logActivity(req.user.id, 'user.delete', {
       user_id: id, phone: cur.rows[0].phone, name: cur.rows[0].name,
-      deleted: counts.rows[0],
+      deleted: counts.rows[0], files_deleted: filesDeleted,
     });
     res.json({ ok: true, deleted: counts.rows[0] });
   } catch (e) {
@@ -644,6 +680,16 @@ router.put('/services/:id', async (req, res) => {
 router.delete('/services/:id', async (req, res) => {
   try {
     if (req.query.confirm !== 'yes') return res.status(400).json({ error: 'CONFIRM_REQUIRED' });
+    // M-12 fix (2026-10-15): block with a clear message when orders reference
+    // the service (was: 500 DELETE_FAILED from the FK violation).
+    const used = await db.query('SELECT COUNT(*) AS c FROM orders WHERE service_id = $1', [req.params.id]);
+    if (parseInt(used.rows[0].c, 10) > 0) {
+      return res.status(400).json({
+        error: 'SERVICE_IN_USE',
+        orders: parseInt(used.rows[0].c, 10),
+        message: 'এই সার্ভিসে অর্ডার আছে — আগে সার্ভিসটি নিষ্ক্রিয় (inactive) করুন',
+      });
+    }
     const r = await db.query('DELETE FROM services WHERE id = $1 RETURNING id, name', [req.params.id]);
     if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
     await logActivity(req.user.id, 'service.delete', { service_id: req.params.id, name: r.rows[0].name });
@@ -1117,7 +1163,8 @@ router.get('/backup', async (req, res) => {
 router.put('/settings', async (req, res) => {  try {
     const allowed = ['registration_enabled', 'maintenance_mode', 'file_upload',
                      'login_security', 'cashback', 'welcome_bonus', 'voice_greeting',
-                     'whatsapp', 'bdris_apply.pdf_price', 'recharge_numbers'];
+                     'whatsapp', 'bdris_apply.pdf_price', 'recharge_numbers',
+                     'ip_blocklist', 'session_timeout'];
     const updated = [];
     for (const key of allowed) {
       if (req.body[key] !== undefined) {

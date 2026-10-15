@@ -69,8 +69,9 @@ function publicUser(u) {
   return rest;
 }
 
-async function issueTokens(userId, role) {
-  const access_token = signAccess({ id: userId, role });
+async function issueTokens(userId, role, tokenVersion) {
+  // M-7: tv = users.token_version — bumped on role change
+  const access_token = signAccess({ id: userId, role, tv: Number(tokenVersion) || 0 });
   const { token, hash, expiresAt } = mintRefreshToken();
   await db.query(
     `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
@@ -419,7 +420,7 @@ router.post('/login', async (req, res) => {
       'UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = $1',
       [user.id]
     );
-    const tokens = await issueTokens(user.id, user.role);
+    const tokens = await issueTokens(user.id, user.role, user.token_version);
     logActivity(user.id, 'auth.login', {}).catch(() => {});
     const fresh = await db.query('SELECT * FROM users WHERE id = $1', [user.id]);
     return res.json({ user: publicUser(fresh.rows[0]), ...tokens });
@@ -441,7 +442,7 @@ router.post('/refresh', async (req, res) => {
     // → the whole token chain is revoked.
     const tokens = await db.withTransaction(async (client) => {
       const r = await client.query(
-        `SELECT rt.*, u.role, u.status FROM refresh_tokens rt
+        `SELECT rt.*, u.role, u.status, u.token_version FROM refresh_tokens rt
          JOIN users u ON u.id = rt.user_id
          WHERE rt.token_hash = $1 AND rt.expires_at > NOW()
          LIMIT 1 FOR UPDATE`,
@@ -469,7 +470,7 @@ router.post('/refresh', async (req, res) => {
       }
       await client.query('UPDATE refresh_tokens SET last_activity = NOW() WHERE id = $1', [row.id]);
       await client.query('UPDATE refresh_tokens SET revoked = TRUE WHERE id = $1', [row.id]);
-      const access_token = signAccess({ id: row.user_id, role: row.role });
+      const access_token = signAccess({ id: row.user_id, role: row.role, tv: Number(row.token_version) || 0 });
       const minted = mintRefreshToken();
       await client.query(
         `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)

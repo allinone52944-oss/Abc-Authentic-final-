@@ -101,6 +101,11 @@ const HEADLESS = process.env.HEADLESS !== '0';
 const SLOWMO = parseInt(process.env.SLOWMO || '40', 10);
 const SESSION_TIMEOUT_MS = (parseInt(process.env.SESSION_TIMEOUT_MIN || '25', 10)) * 60 * 1000;
 const MOCK_MODE = process.env.MOCK_BDRIS === '1';
+// M-18 fix (2026-10-15): PII redaction for console logs — phone numbers and
+// OTP-like digit runs are masked outside MOCK mode.
+const redactPII = (s) => String(s == null ? '' : s)
+  .replace(/01[0-9]{9}/g, '01*********')
+  .replace(/\b\d{6}\b/g, '******');
 const STEP_TIMEOUT_MS = 180000;
 
 let browser = null;
@@ -1707,7 +1712,9 @@ io.on('connection', (socket) => {
           if (/otp/i.test(u)) {
             res.text().then((body) => {
               lastOtpNet = { status: st, url: u.split('?')[0].slice(0, 110), body: String(body).replace(/\s+/g, ' ').slice(0, 400), at: Date.now() };
-              console.log('NET[' + st + '] ' + lastOtpNet.url + ' :: ' + lastOtpNet.body.slice(0, 600));
+              // M-18: full OTP response body only in MOCK mode; redacted summary otherwise
+              if (MOCK_MODE) console.log('NET[' + st + '] ' + lastOtpNet.url + ' :: ' + lastOtpNet.body.slice(0, 600));
+              else console.log('NET[' + st + '] ' + lastOtpNet.url + ' :: ' + redactPII(lastOtpNet.body).slice(0, 120));
             }).catch(() => {
               lastOtpNet = { status: st, url: u.split('?')[0].slice(0, 110), body: '(body পড়া যায়নি)', at: Date.now() };
               console.log('NET[' + st + '] ' + lastOtpNet.url + ' (body পড়া যায়নি)');
@@ -2523,7 +2530,7 @@ io.on('connection', (socket) => {
           }
           return { raw, clean };
         }).catch(() => ({ raw: '', clean: '' }));
-        if (normPhone.raw !== normPhone.clean) console.log('S4-PHONE-NORM:', JSON.stringify(normPhone).slice(0, 120));
+        if (normPhone.raw !== normPhone.clean) console.log('S4-PHONE-NORM:', redactPII(JSON.stringify(normPhone)).slice(0, 120));
         if (!/\d{4,}/.test(String(normPhone.clean).replace(/[^\d]/g, ''))) {
           await typeInto(['#phone', 'input[name="phone"]'], String(data.phone).replace(/\D/g, ''),
             socket, 'মোবাইল নম্বর (পুনঃলিখন)', { typeCharByChar: true });
@@ -3144,7 +3151,8 @@ setInterval(() => {
   }
 }, 60000);
 
-server.listen(PORT, () => {
+// M-16 fix (2026-10-15): bind loopback only (was: all interfaces).
+server.listen(PORT, '127.0.0.1', () => {
   console.log('');
   console.log('🚀 ════════════════════════════════════');
   console.log('   BDRIS Automation Server v3 চালু! (real-site mapping)');

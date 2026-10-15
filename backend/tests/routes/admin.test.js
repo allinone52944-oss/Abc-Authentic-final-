@@ -261,8 +261,20 @@ describe('services', () => {
 
   test('DELETE /services/:id requires confirm=yes', async () => {
     await withAdmin(request(app()).delete('/api/admin/services/s1')).expect(400);
-    db.__routeQuery([['DELETE FROM services WHERE id', { rows: [{ id: 's1', name: 'S' }] }]]);
+    db.__routeQuery([
+      ['SELECT COUNT(*) AS c FROM orders WHERE service_id', { rows: [{ c: '0' }] }],
+      ['DELETE FROM services WHERE id', { rows: [{ id: 's1', name: 'S' }] }],
+    ]);
     await withAdmin(request(app()).delete('/api/admin/services/s1?confirm=yes')).expect(200);
+  });
+
+  test('M-12: delete service with orders → 400 SERVICE_IN_USE', async () => {
+    db.__routeQuery([
+      ['SELECT COUNT(*) AS c FROM orders WHERE service_id', { rows: [{ c: '3' }] }],
+    ]);
+    const r = await withAdmin(request(app()).delete('/api/admin/services/s1?confirm=yes')).expect(400);
+    expect(r.body.error).toBe('SERVICE_IN_USE');
+    expect(r.body.orders).toBe(3);
   });
 
   // REGRESSION GUARD (fixed): PUT /services/reorder must be registered BEFORE

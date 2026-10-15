@@ -1,8 +1,5 @@
-// DOCUMENTED BUGS (fix pending) found by the general suite (task #1).
-// Each test below asserts the CORRECT behavior and is marked test.failing:
-// it passes while the bug is present, and Jest will loudly report it as
-// "expected to fail but passed" the moment the fix lands — that's the
-// signal to convert it into a normal passing test.
+// DOCUMENTED BUGS — regression tests for bugs found by the general suite.
+// Each test asserts the CORRECT (fixed) behavior.
 jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
 
 const express = require('express');

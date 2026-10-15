@@ -72,6 +72,8 @@ async function init(){
   const r=await ABC.api('/services/'+sid);
   if(!r.ok){document.getElementById('err').textContent='সেবা পাওয়া যায়নি';return;}
   svc=(await r.json()).service;
+  // M-15: one idempotency key per form load — double-clicks/retries dedupe to one order
+  if(!window._orderIdemKey) window._orderIdemKey = (crypto.randomUUID ? crypto.randomUUID() : 'k'+Date.now()+Math.random().toString(16).slice(2));
   document.getElementById('svcName').textContent=svc.name_bn||svc.name;
   document.getElementById('svcPrice').textContent='৳'+Number(svc.price).toLocaleString('bn-BD');
   // Dynamic fields from service definition
@@ -110,8 +112,7 @@ async function submit(){
   const err=document.getElementById('err');
   err.textContent='';
   const data={};
-  document.querySelectorAll('[data-field]').forEach(el=>{data[el.dataset.field]=el.value.trim();});
-  // Validation
+  document.querySelectorAll('[data-field]').forEach(el=>{data[el.dataset.field]=el.value.trim();});  // Validation
   const fields=svc.fields_required||[];
   for(const f of fields){
     const v=data[f.name]||'';
@@ -130,6 +131,7 @@ async function submit(){
   // First create order, then upload documents
   const r=await ABC.api('/orders',{method:'POST',body:{
     service_id:sid,data,notes:document.getElementById('notes').value.trim(),
+    idempotency_key: window._orderIdemKey,
     documents:(svc.documents_required||[]).map(d=>({type:d,ref:''}))
   }});
   const d=await r.json();
