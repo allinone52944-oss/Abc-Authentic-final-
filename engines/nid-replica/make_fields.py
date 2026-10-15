@@ -81,6 +81,64 @@ def bn_digits(s):
     return (s or "").translate(str.maketrans("0123456789", "০১২৩৪৫৬৭৮৯"))
 
 
+# Common OCR misspellings -> correct (NID PDF font issues)
+_OCR_FIXES = {
+    "ফিরদপুর": "ফরিদপুর",
+    "চরকমলাপুর": "চর কমলাপুর",
+    "ফিরদপুরসদর": "ফরিদপুর সদর",
+}
+
+# Upazila/district normalized lookup (space-dropping fix for unknowns)
+_GEO_NOSPACE = {}
+
+def _load_geo_nospace():
+    """bd-geo.json থেকে নাম -> সঠিক বানান ম্যাপ (space ছাড়া key)।"""
+    global _GEO_NOSPACE
+    if _GEO_NOSPACE:
+        return
+    import json as _json
+    import os as _os
+    base = _os.path.dirname(_os.path.abspath(__file__))
+    for cand in (
+        _os.path.join(base, "..", "..", "frontend", "bd-geo.json"),
+        _os.path.join(base, "bd-geo.json"),
+    ):
+        cand = _os.path.normpath(cand)
+        if _os.path.exists(cand):
+            try:
+                with open(cand, "r", encoding="utf-8") as f:
+                    data = _json.load(f)
+                for div, dists in data.items():
+                    for dist, ups in (dists or {}).items():
+                        _GEO_NOSPACE[dist.replace(" ", "")] = dist
+                        for up in (ups or {}).keys():
+                            if up not in ("u", "p", "m"):
+                                _GEO_NOSPACE[up.replace(" ", "")] = up
+                break
+            except Exception:
+                pass
+
+
+def fix_ocr_spelling(text):
+    """Known OCR ভুল বানান ঠিক করো (লম্বা match আগে) + space-missing unknown।"""
+    if not text:
+        return text
+    for wrong in sorted(_OCR_FIXES, key=len, reverse=True):
+        text = text.replace(wrong, _OCR_FIXES[wrong])
+    # Unknown space-dropping: "ফরিদপুরসদর" -> "ফরিদপুর সদর"
+    _load_geo_nospace()
+    if _GEO_NOSPACE:
+        # পুরো text-এ প্রতিটি word check করো
+        import re as _re
+        def _repl(m):
+            w = m.group(0)
+            key = w.replace(" ", "")
+            return _GEO_NOSPACE.get(key, w)
+        # Bengali word boundaries
+        text = _re.sub(r'[\u0980-\u09FF]+(?: [\u0980-\u09FF]+)*', _repl, text)
+    return text
+
+
 def compose_address(pa, data=None):
     """Present Address টেবিলের অংশ থেকে কার্ডের ঠিকানা বানাও:
     খালি অংশ বাদ যাবে — কোনো "-" চিহ্ন বসবে না।
@@ -144,7 +202,7 @@ def compose_address(pa, data=None):
     if district:
         parts.append(district)
 
-    return bn_digits(", ".join(parts))
+    return fix_ocr_spelling(bn_digits(", ".join(parts)))
 
 
 def main():
