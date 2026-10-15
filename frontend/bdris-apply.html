@@ -425,17 +425,79 @@ input.bad, select.bad{border-color:var(--err); box-shadow:0 0 0 3px rgba(251,113
 </div>
 <script>
 /* ═══════════ state & helpers ═══════════ */
+/* ═══════════ token refresh + socket reconnect (2026-10-15) ═══════════
+   Access token lives 15 min. The old code captured it ONCE at page load,
+   so after 15 min the server rejected CONNECT with UNAUTHORIZED and every
+   emit hung silently (submit/drafts froze). Fix:
+   (1) auth callback reads the CURRENT token on every (re)connect,
+   (2) connect_error triggers one silent refresh + retry,
+   (3) if refresh fails the user sees a VISIBLE banner (no silent hang),
+   (4) proactive refresh every 12 min keeps long sessions alive. */
+const LS_ACCESS_T = 'abc_access_token', LS_REFRESH_T = 'abc_refresh_token';
+function curAccessToken() { try { return sessionStorage.getItem(LS_ACCESS_T) || ''; } catch (e) { return ''; } }
+let _tokRefreshP = null;
+function refreshAccessToken() {
+  if (_tokRefreshP) return _tokRefreshP;
+  _tokRefreshP = (async () => {
+    let rt = ''; try { rt = localStorage.getItem(LS_REFRESH_T) || ''; } catch (e) {}
+    if (!rt) return false;
+    try {
+      const r = await fetch('/api/auth/refresh', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: rt })
+      });
+      if (r.status === 401) {   // refresh token dead → session truly over
+        try { sessionStorage.removeItem(LS_ACCESS_T); localStorage.removeItem(LS_REFRESH_T); } catch (e) {}
+        return false;
+      }
+      if (!r.ok) return false;
+      const d = await r.json().catch(() => null);
+      if (!d || !d.access_token) return false;
+      try {
+        sessionStorage.setItem(LS_ACCESS_T, d.access_token);
+        if (d.refresh_token) localStorage.setItem(LS_REFRESH_T, d.refresh_token);
+      } catch (e) {}
+      return true;
+    } catch (e) { return false; }
+  })().finally(() => { _tokRefreshP = null; });
+  return _tokRefreshP;
+}
 // socket.io backend not deployed yet — stub so the page loads without
 // "Unexpected token '<'" / "io is not defined" fatal errors.
 // Real-time bot features will warn in console until the server is set up.
 const socket = (typeof io !== 'undefined')
   ? io({
       path: '/api/bdris-apply/socket.io/',
-      auth: { token: sessionStorage.getItem('abc_access_token') || localStorage.getItem('abc_access_token') || '' }
+      auth: (cb) => cb({ token: curAccessToken() })
     })
   : { connected: false,
       emit: function(){ console.warn('[bdris-apply] socket.io server not available'); },
       on: function(){}, once: function(){}, off: function(){} };
+let _netWarnShown = false;
+socket.on('connect_error', (err) => {
+  const m = String((err && err.message) || '');
+  if (/unauthori|invalid token|jwt expired/i.test(m)) {
+    // stale access token → one silent refresh, then retry with the fresh token
+    refreshAccessToken().then((ok) => {
+      if (ok) { try { socket.connect(); } catch (e) {} }
+      else showBanner('err',
+        'সেশন শেষ হয়ে গেছে — আবার লগইন করুন, তারপর পেজটি রিলোড করুন।',
+        () => { location.href = '/login.html?next=' + encodeURIComponent(location.pathname); },
+        'লগইন করুন');
+    });
+    return;
+  }
+  // network/server errors: socket.io retries on its own backoff; show a
+  // transient warning so a dead backend is never mistaken for a silent hang
+  if (!socket.connected && !_netWarnShown) {
+    _netWarnShown = true;
+    showBanner('warn', 'সার্ভারের সাথে সংযোগে সমস্যা হচ্ছে… স্বয়ংক্রিয়ভাবে আবার চেষ্টা চলছে।');
+  }
+});
+socket.on('connect', () => { if (_netWarnShown) { _netWarnShown = false; hideBanner(); } });
+// proactive: refresh the token every 12 min (< 15-min TTL) so long
+// sessions (form fill → OTP relay) never expire mid-flow
+setInterval(() => { refreshAccessToken().catch(() => {}); }, 12 * 60 * 1000);
 const $ = (id) => document.getElementById(id);
 const el = (sel) => document.querySelector(sel);
 const els = (sel) => Array.from(document.querySelectorAll(sel));
