@@ -1246,10 +1246,7 @@ function guardOpBusy() {
   return true;
 }
 function emitStep(op, payload, onAckExtra) {
-  if (!S.chain && guardOpBusy()) {
-    note('⏳ আগের ধাপটি এখনো সাইটে বসানো হচ্ছে — এক মুহূর্ত পরে আবার চাপুন', 'warn');
-    return false;
-  }
+  // Permanent (2026-10-15): block নয়, queue — UI instant, engine background-এ sequential
   // ব্যাকএন্ডের ensureAligned-যন্ত্রকে সব ধাপের তথ্য দিই (সাইট ধাপ হারালে/পিছিয়ে
   // গেলে নিজে থেকে মেরামত করতে পারে) — রেকর্ড-তুলনায় ctx বাদ যায়
   payload = Object.assign({}, payload, { ctx: { s0: S.d.s0, s1: S.d.s1, s2: S.d.s2, s2b: S.d.s2b } });
@@ -1302,15 +1299,13 @@ function opAbort() {
 /* ম্যানুয়াল মোড: লিখে/ক্লিক করলেই পরের ধাপ — সাইট-সিঙ্ক পিছনে, কিন্তু
    একসাথে একটাই অপ (লকস্টেপ); আগেরটা চলাকালীন এলে সারিতে না বসিয়ে থামি */
 function advanceAndSend(n, op, payload) {
-  if (!S.chain && guardOpBusy()) {
-    note('⏳ আগের ধাপটি এখনো সাইটে বসানো হচ্ছে — এক মুহূর্ত পরে আবার “পরবর্তী” চাপুন', 'warn');
-    return false;
-  }
+  // Permanent (2026-10-15): UI কখনো block হবে না — ধাপ instantly বদলায়,
+  // engine sync background queue-তে (pumpOpQ) sequential চলে। guardOpBusy-র
+  // "এক মুহূর্ত পরে আবার চাপুন" block সরানো হলো।
   S.d.uiStep = n;
   if (op === 'SUBMIT_S3_DOCS') S.d.docsDone = true;
   if (S.draftId) saveDraft(n, () => {});
   goStep(n);
-  note('✔ ধাপ সম্পন্ন!', 'ok');
   return emitStep(op, payload) !== false;
 }
 function isPre2013Client(iso) { return !!iso && String(iso) < '2013-01-01'; }

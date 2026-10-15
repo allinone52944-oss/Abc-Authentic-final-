@@ -95,3 +95,23 @@ describe('address copy flags (fix #6, 2026-10-15)', () => {
     expect(m[1]).toMatch(/\$\('sp_same'\)\s*\?/);
   });
 });
+
+describe('instant step transitions (fix #7, 2026-10-15)', () => {
+  test('advanceAndSend does not block on guardOpBusy', () => {
+    // Was: "এক মুহূর্ত পরে আবার চাপুন" block — now UI advances instantly,
+    // engine sync queues in background
+    const m = html.match(/function advanceAndSend\(n, op, payload\) \{([\s\S]*?)\n\}/);
+    expect(m).not.toBeNull();
+    // No actual guardOpBusy() CALL (comments may mention the name)
+    expect(m[1]).not.toMatch(/guardOpBusy\(\)/);
+    expect(m[1]).toMatch(/goStep\(n\)/);
+  });
+
+  test('emitStep queues instead of blocking', () => {
+    const m = html.match(/function emitStep\(op, payload, onAckExtra\) \{([\s\S]*?)\n\}/);
+    expect(m).not.toBeNull();
+    expect(m[1]).not.toMatch(/guardOpBusy\(\)/);
+    expect(m[1]).toMatch(/_opQ/);
+    expect(m[1]).toMatch(/pumpOpQ\(\)/);
+  });
+});
