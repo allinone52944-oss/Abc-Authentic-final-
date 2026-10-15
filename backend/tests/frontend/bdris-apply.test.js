@@ -174,7 +174,7 @@ describe('static address geo data (2026-10-15)', () => {
 
   test('geo data preloads on page open', () => {
     expect(html).toMatch(/loadGeoData\(\);/);
-    expect(html).toMatch(/fetch\('bd-geo\.json'/);
+    expect(html).toMatch(/fetch\('bd-geo\.json(\?[^']*)?'/);
   });
 });
 
