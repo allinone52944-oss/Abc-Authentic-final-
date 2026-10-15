@@ -1711,9 +1711,11 @@ async function addrWarm(prefix, rec) {
     }
     data[L.k] = want;
     if (!L.childSite) break;
-    await geoMirror(L.k, Ls);
     const nxt = Ls[Ls.indexOf(L) + 1];
-    if (nxt) await geoLoad(nxt.k, Ls, data, rec[nxt.k]);
+    /* Parallel: static geoLoad engine mirror-এর জন্য অপেক্ষা করে না */
+    const loadP = nxt ? geoLoad(nxt.k, Ls, data, rec[nxt.k]) : Promise.resolve();
+    try { await geoMirror(L.k, Ls); } catch (e) {}
+    await loadP;
   }
 }
 function renderStep2() {
