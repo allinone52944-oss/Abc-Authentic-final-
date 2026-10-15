@@ -104,6 +104,20 @@ describe('users', () => {
     expect(r.body.ok).toBe(true);
   });
 
+  test('POST /users/:id/verify-email → marks verified; 404 when missing', async () => {
+    db.__routeQuery([
+      ['UPDATE users SET email_verified = TRUE', { rows: [{ id: 'u2', email_verified: true }] }],
+    ]);
+    const r = await withAdmin(request(app()).post('/api/admin/users/u2/verify-email')).expect(200);
+    expect(r.body.ok).toBe(true);
+    db.__reset();
+    db.__routeQuery([
+      ['UPDATE users SET email_verified = TRUE', { rows: [] }],
+    ]);
+    await withAdmin(request(app()).post('/api/admin/users/nonexistent/verify-email')).expect(404);
+    db.__reset();
+  });
+
   test('DELETE /users/:id: self → 403; no confirm → 400; missing → 404; happy → 200', async () => {
     const r1 = await withAdmin(request(app()).delete('/api/admin/users/admin1?confirm=yes')).expect(403);
     expect(r1.body.error).toBe('ERR_CANNOT_DELETE_SELF');

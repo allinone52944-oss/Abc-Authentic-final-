@@ -256,6 +256,24 @@ router.post('/users/:id/unblock', async (req, res) => {
   }
 });
 
+// POST /api/admin/users/:id/verify-email — admin manually marks email as verified
+// (for customers registered by phone where email verification is impractical).
+router.post('/users/:id/verify-email', async (req, res) => {
+  try {
+    const r = await db.query(
+      `UPDATE users SET email_verified = TRUE, updated_at = NOW()
+       WHERE id = $1 RETURNING id, email_verified`,
+      [req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    await logActivity(req.user.id, 'user.verify_email', { user_id: req.params.id });
+    res.json({ ok: true });
+  } catch (e) {
+    safeLog('[admin] verify-email error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 // DELETE /api/admin/users/:id?confirm=yes — deletes user + ALL data
 router.delete('/users/:id', async (req, res) => {
   try {

@@ -310,7 +310,8 @@ TABS.users = async () => {
     '<button class="mini-btn ok" onclick="AdmUsers.createForm()">+ নতুন ইউজার</button></div>' +
     '<div style="overflow-x:auto;"><table class="adm"><tr><th>নাম</th><th>ফোন</th><th>ধর্ম</th><th>ব্যালেন্স</th><th>স্ট্যাটাস</th><th>কাজ</th></tr>';
   for (const u of d.users) {
-    html += '<tr><td>' + esc(u.name) + '<br><small style="color:var(--dim)">' + esc(u.id.slice(0, 8)) + '</small></td>' +
+    html += '<tr><td>' + esc(u.name) + '<br><small style="color:var(--dim)">' + esc(u.id.slice(0, 8)) + '</small>' +
+      (u.email_verified === false ? '<br><small style="color:#f59e0b;">⚠️ ইমেইল অযাচাইকৃত</small>' : '') + '</td>' +
       '<td>' + esc(u.phone) + '</td><td>' + esc(u.religion) + '</td>' +
       '<td>৳' + bn(u.balance) + '</td><td>' + esc(u.status) + '</td>' +
       '<td><button class="mini-btn" onclick="AdmUsers.edit(\'' + u.id + '\')">এডিট</button>' +
@@ -365,7 +366,8 @@ window.AdmUsers = {
       fld('ব্যালেন্স যোগ/বাদ (যেমন: 100 বা -50)', 'number', 'eu_bal') +
       fld('নোটিশ পাঠান (ঐচ্ছিক)', 'text', 'eu_notice') +
       '<button class="btn" onclick="AdmUsers.save(\'' + id + '\')">সংরক্ষণ</button> ' +
-      '<button class="btn-secondary" onclick="AdmUsers.unblock(\'' + id + '\')">🔓 আনব্লক</button>');
+      '<button class="btn-secondary" onclick="AdmUsers.unblock(\'' + id + '\')">🔓 আনব্লক</button> ' +
+      (u.email_verified ? '' : '<button class="btn-secondary" onclick="AdmUsers.verifyEmail(\'' + id + '\')">✅ ইমেইল যাচাই</button>'));
   },
   async save(id) {
     const body = {
@@ -384,6 +386,13 @@ window.AdmUsers = {
   async unblock(id) {
     await ABC.api('/admin/users/' + id + '/unblock', { method: 'POST' });
     alert('আনব্লক হয়েছে'); closeModal(); show('users');
+  },
+  async verifyEmail(id) {
+    if (!confirm('এই ইউজারের ইমেইল যাচাইকৃত হিসেবে চিহ্নিত করবেন?')) return;
+    const r = await ABC.api('/admin/users/' + id + '/verify-email', { method: 'POST' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { alert('ব্যর্থ: ' + (d.error || 'UNKNOWN')); return; }
+    alert('✅ ইমেইল যাচাই হয়েছে — এখন লগইন করতে পারবে'); closeModal(); show('users');
   },
   async del(id, name) {
     if (!confirm('⚠️ সত্যিই ডিলিট করবেন?\n\n' + name + '\n\nসব ডাটা মুছে যাবে: অর্ডার, লেনদেন, কুপন, নোটিশ, চ্যাট, ডকুমেন্ট!')) return;

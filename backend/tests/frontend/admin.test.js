@@ -370,3 +370,30 @@ describe('init() — selective redirect on /auth/me failure (static guard)', () 
     expect(src).toContain('পুনরায় চেষ্টা');
   });
 });
+
+/**
+ * Admin panel regression tests — one-click email verification (2026-10-15).
+ * Static tests on frontend/js/admin.js: verify button + handler + status badge.
+ */
+const ADMIN_JS = path.join(__dirname, '..', '..', '..', 'frontend', 'js', 'admin.js');
+let ajs;
+beforeAll(() => { ajs = fs.readFileSync(ADMIN_JS, 'utf8'); });
+
+describe('admin one-click email verify (2026-10-15)', () => {
+  test('edit modal shows verify button for unverified users only', () => {
+    expect(ajs).toMatch(/AdmUsers\.verifyEmail/);
+    expect(ajs).toMatch(/u\.email_verified \? '' : '<button[^>]*>✅ ইমেইল যাচাই<\/button>/);
+  });
+
+  test('verifyEmail calls the backend endpoint with confirm', () => {
+    const m = ajs.match(/async verifyEmail\(id\) \{([\s\S]*?)\n  \},/);
+    expect(m).not.toBeNull();
+    expect(m[1]).toMatch(/\/admin\/users\/' \+ id \+ '\/verify-email/);
+    expect(m[1]).toMatch(/confirm\(/);
+  });
+
+  test('user list flags unverified emails', () => {
+    expect(ajs).toMatch(/ইমেইল অযাচাইকৃত/);
+    expect(ajs).toMatch(/u\.email_verified === false/);
+  });
+});
