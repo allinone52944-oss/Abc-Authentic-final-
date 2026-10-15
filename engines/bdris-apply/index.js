@@ -44,6 +44,22 @@ function engineDir() {
 }
 
 let _installing = false;
+let _restartTimer = null;
+let _watchdog = null;
+let _crashCount = 0;
+
+function scheduleRestart() {
+  // Exponential backoff: 5s, 10s, 20s ... capped at 5 min. Prevents tight crash loops.
+  if (_restartTimer) return;
+  _crashCount += 1;
+  const delay = Math.min(5000 * Math.pow(2, Math.min(_crashCount - 1, 6)), 300000);
+  console.error(`[bdris-apply] scheduling restart in ${Math.round(delay / 1000)}s (crash #${_crashCount})`);
+  _restartTimer = setTimeout(() => {
+    _restartTimer = null;
+    init();
+  }, delay);
+  if (_restartTimer.unref) _restartTimer.unref();
+}
 
 function init() {
   if (_proc || _installing) return;
@@ -65,6 +81,7 @@ function init() {
     npm.on('close', (code) => {
       _installing = false;
       if (code === 0) {
+        _crashCount = 0; // fresh install succeeded — reset backoff
         console.log('[bdris-apply] npm install done — starting engine');
         // Playwright browser (non-blocking; engine works in mock mode without it)
         const pw = spawn('npx', ['playwright', 'install', 'chromium', '--only-shell'], {
@@ -73,12 +90,14 @@ function init() {
         pw.on('close', () => console.log('[bdris-apply] playwright chromium ready (or skipped)'));
         startEngine();
       } else {
-        console.error('[bdris-apply] npm install failed with code', code, '— will retry on next init');
+        console.error('[bdris-apply] npm install failed with code', code, '— will retry via supervisor');
+        scheduleRestart();
       }
     });
     npm.on('error', (e) => {
       _installing = false;
       console.error('[bdris-apply] npm spawn failed:', e.message);
+      scheduleRestart();
     });
     return;
   }
@@ -107,7 +126,18 @@ function startEngine() {
     console.error('[bdris-apply] engine exited with code', code);
     _proc = null;
     _ready = false;
+    // Supervisor: restart crashed engine (2026-10-15 — previously a single
+    // crash left the engine dead until the next full service restart).
+    scheduleRestart();
   });
+  // Watchdog: every 60s, make sure the engine is running (covers cases where
+  // init was never retried, e.g. server.js missing at boot then restored).
+  if (!_watchdog) {
+    _watchdog = setInterval(() => {
+      if (!_proc && !_installing && !_restartTimer) init();
+    }, 60000);
+    if (_watchdog.unref) _watchdog.unref();
+  }
   // Give it a moment; readiness is best-effort (proxy retries anyway)
   setTimeout(() => { _ready = true; }, 8000);
 }
