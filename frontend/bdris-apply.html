@@ -2711,15 +2711,15 @@ function validateAuto() {
   return bad;
 }
 function submitAuto() {
-  note('[DEBUG] submitAuto called, S.ready=' + S.ready, 'warn');
+  console.log('[bdris] submitAuto called, S.ready=' + S.ready);
   // Preview থেকে আসলে S.d আগেই ভরা আছে — collectAuto() form field খুঁজে throw করবে
   if (!S.pvMode) {
-    try { collectAuto(); } catch (e) { note('[DEBUG] collectAuto failed: ' + e.message, 'warn'); }
+    try { collectAuto(); } catch (e) { console.log('[bdris] collectAuto failed: ' + e.message); }
   }
   let bad = [];
-  try { bad = validateAuto(); } catch (e) { note('[DEBUG] validateAuto threw: ' + e.message, 'warn'); return; }
+  try { bad = validateAuto(); } catch (e) { console.log('[bdris] validateAuto threw: ' + e.message); return; }
   if (bad.length) {
-    note('[DEBUG] validation failed: ' + bad.join(', '), 'warn');
+    console.log('[bdris] validation failed: ' + bad.join(', '));
     showFail(bad); note('⚠️ কিছু ঘর পূরণ করুন', 'warn');
     const f = el('.bad'); if (f) f.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
