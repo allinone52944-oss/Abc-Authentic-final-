@@ -2,10 +2,11 @@
 // original-fetcher.js — আসল BDRIS PDF আনয়ন, সম্পূর্ণ অটো (live-proven 2026-10-11, probe3c)
 //
 // লাইভ-প্রমাণিত রেসিপি — সাইট বদলালে আগে এখানে দেখুন:
-//   ১) https://bdris.gov.bd/application/print সরাসরি (public পেজ, লগইন লাগে না);
-//      WAF "Please type on browser" block দিলে /br/application হয়ে referer নিয়ে
-//      আবার চেষ্টা (2026-10-15 fix: হোমপেজের লিংক hover-dropdown-এ থাকে বলে
-//      selector wait চলে না — direct URL primary, /br/application fallback)
+//   ১) https://bdris.gov.bd → "জন্ম নিবন্ধন" nav hover → dropdown-এর
+//      a[href="/application/print"] লিংকে CLICK (public পেজ, লগইন লাগে না;
+//      2026-10-15 fix: page.goto() দিয়ে সরাসরি URL-এ গেলে WAF "Please type on
+//      browser" block দেয় (referer header দিলেও); শুধু in-site link click-ই
+//      block এড়ায় — তাই hover+click-ই স্থায়ী পথ)
 //   ২) ফর্ম ভরাও: appType option value-ই এনক্রিপ্টেড `data`; appId/date/nameEn/mobileNo/email
 //   ৩) ক্যাপচা (250×50 data-URL PNG) → লোকাল সলভার (captcha-solve2) → প্রার্থী-তালিকা
 //   ৪) প্রতি প্রার্থী: সাইটের নিজের callAjax('/api/application/print') → ২৯৮-char টোকেন →
@@ -142,22 +143,20 @@ async function runOp(page, op, args) {
 }
 
 async function openPrintForm(page) {
-  // Permanent fix (2026-10-15): "আবেদনপত্র প্রিন্ট" লিংক (a[href="/application/print"])
-  // হোমপেজের hover-dropdown-এ থাকে — DOM-এ আসে না বলে selector wait সবসময় timeout.
-  // Strategy: সরাসরি URL-এ যাওয়ার চেষ্টা; WAF "Please type on browser" block দিলে
-  // /br/application হয়ে session/referer নিয়ে আবার চেষ্টা (দুটোই public, লগইন লাগে না)।
-  const printUrl = SITE + '/application/print';
-  let blocked = false;
-  try {
-    await page.goto(printUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    const bodyText = await page.evaluate(() => document.body ? document.body.innerText.slice(0, 120) : '').catch(() => '');
-    blocked = /please type on browser/i.test(bodyText);
-  } catch (e) { blocked = true; }
-  if (blocked) {
-    await page.goto(SITE + '/br/application', { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await page.waitForTimeout(1200);
-    await page.goto(printUrl, { waitUntil: 'domcontentloaded', timeout: 45000, referer: SITE + '/br/application' });
-  }
+  // Permanent fix (2026-10-15): BDRIS-এর WAF ("Please type on browser") page.goto()
+  // দিয়ে /application/print-এ ঢুকতে দেয় না — referer header দিলেও না। শুধু সাইটের
+  // ভেতরে আসল link-এ click করলেই (proper in-site navigation) block এড়ানো যায়।
+  // "আবেদনপত্র প্রিন্ট" লিংক (a[href="/application/print"]) "জন্ম নিবন্ধন" nav-এর
+  // hover-dropdown-এ থাকে — hover করে dropdown এনে তারপর click করতে হয়।
+  await page.goto(SITE, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await page.waitForTimeout(1000);
+  // "জন্ম নিবন্ধন" nav item hover → dropdown reveal
+  const navItem = page.locator('.navbar-collapse .dropdown.yamm-fw:nth-child(2)').first();
+  await navItem.hover().catch(() => {});
+  await page.waitForTimeout(800);
+  const printLink = page.locator('a[href="/application/print"]').first();
+  await printLink.waitFor({ state: 'attached', timeout: 15000 });
+  await printLink.click().catch(async () => { await printLink.evaluate((el) => el.click()).catch(() => {}); });
   await page.waitForSelector('#appId', { timeout: 25000 });
   // util.js-এর callAjax আসার আগেই mint চালালে ব্যর্থ হয় — তাই অপেক্ষা
   await page.waitForFunction(() => typeof window.callAjax === 'function', { timeout: 15000 }).catch(() => {});
