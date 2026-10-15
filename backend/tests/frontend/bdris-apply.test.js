@@ -78,3 +78,20 @@ describe('submit handler idempotency (fix #4)', () => {
     expect(html).not.toMatch(/addEventListener\('click',\s*submitAuto\)/);
   });
 });
+
+describe('address copy flags (fix #6, 2026-10-15)', () => {
+  test('collectStep4 defaults copy flags to FALSE when checkbox missing', () => {
+    // Destructive default (true) caused all 3 addresses to merge into 1
+    expect(html).toMatch(/\$\('sp_same'\)\s*\?\s*\$\('sp_same'\)\.checked\s*:\s*false/);
+    expect(html).toMatch(/\$\('rp_same'\)\s*\?\s*\$\('rp_same'\)\.checked\s*:\s*false/);
+    expect(html).not.toMatch(/\$\('sp_same'\)\s*\?\s*\$\('sp_same'\)\.checked\s*:\s*true/);
+  });
+
+  test('auto collectAuto is null-safe on copy checkboxes', () => {
+    // Was: $('sp_same').checked — throws if element missing, leaving s2b empty
+    // which made the engine check all copy boxes
+    const m = html.match(/S\.d\.s2b\s*=\s*\{([\s\S]*?)\n\s*\};\n\s*S\.d\.phone/);
+    expect(m).not.toBeNull();
+    expect(m[1]).toMatch(/\$\('sp_same'\)\s*\?/);
+  });
+});

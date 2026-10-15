@@ -1712,8 +1712,10 @@ function submitStep3() {
 
 /* ═══════════ step 4: স্থায়ী ও বর্তমান ঠিকানা ═══════════ */
 function collectStep4() {
-  const permCopy = $('sp_same') ? $('sp_same').checked : true;
-  const presCopy = $('rp_same') ? $('rp_same').checked : true;
+  // Permanent (2026-10-15): checkbox না পেলে default FALSE — "copy" হলো
+  // destructive action, element missing হলে কখনোই copy ধরা যাবে না।
+  const permCopy = $('sp_same') ? $('sp_same').checked : false;
+  const presCopy = $('rp_same') ? $('rp_same').checked : false;
   const prev = S.d.s2b || {};
   S.d.s2b = {
     permCopy, presCopy,
@@ -2665,9 +2667,11 @@ function collectAuto() {
   };
   S.d.s2 = { father: readPersonAuto('af'), mother: readPersonAuto('am') };
   S.d.s2b = {
-    permCopy: $('sp_same').checked, presCopy: $('rp_same').checked,
-    perm: $('sp_same').checked ? null : readAddrFields('sp'),
-    pres: $('rp_same').checked ? null : readAddrFields('rp')
+    // Permanent (2026-10-15): null-safe — checkbox না পেলে copy=false (destructive default নয়)
+    permCopy: $('sp_same') ? $('sp_same').checked : false,
+    presCopy: $('rp_same') ? $('rp_same').checked : false,
+    perm: ($('sp_same') ? $('sp_same').checked : false) ? null : readAddrFields('sp'),
+    pres: ($('rp_same') ? $('rp_same').checked : false) ? null : readAddrFields('rp')
   };
   S.d.phone = ($('a_phone').value || '').replace(/[^\d]/g, '');
   S.d.email = ($('a_email').value || '').trim();

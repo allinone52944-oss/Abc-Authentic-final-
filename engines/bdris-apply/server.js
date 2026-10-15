@@ -2186,7 +2186,10 @@ io.on('connection', (socket) => {
     {
       status(socket, 'PROGRESS', '🔄 ঠিকানার ধাপ: স্থায়ী ও বর্তমান ঠিকানা...', 'info');
       // স্থায়ী ঠিকানা
-      if (data.perm && !data.permCopy) {
+      // Permanent (2026-10-15): data থাকলে flag উপেক্ষা করে fill করি — ভুল
+      // permCopy=true-তে copy-box চেক করলে ব্যবহারকারীর আলাদা ঠিকানা মুছে যায়।
+      const permHasData = data.perm && (data.perm.division || data.perm.district || data.perm.vilBn);
+      if (permHasData) {
         status(socket, 'PROGRESS', '🔄 স্থায়ী ঠিকানা বসানো হচ্ছে...', 'info');
         await fillAddressSection('permAddr', data.perm, socket, failed);
       } else {
@@ -2199,7 +2202,8 @@ io.on('connection', (socket) => {
         }
       }
       // বর্তমান ঠিকানা
-      if (data.pres && !data.presCopy) {
+      const presHasData = data.pres && (data.pres.division || data.pres.district || data.pres.vilBn);
+      if (presHasData) {
         status(socket, 'PROGRESS', '🔄 বর্তমান ঠিকানা বসানো হচ্ছে...', 'info');
         await fillAddressSection('prsntAddr', data.pres, socket, failed);
       } else {
