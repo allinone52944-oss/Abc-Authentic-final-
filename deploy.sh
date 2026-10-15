@@ -53,11 +53,13 @@ fi
 # Restart service if it exists.
 # NOTE (2026-10-15): the deploy user needs passwordless sudo for this one
 # command — run ONCE on the server as root:
-#   echo "ocarun ALL=(ALL) NOPASSWD: /bin/systemctl restart abc-authentic.service, /bin/systemctl is-active abc-authentic.service" > /etc/sudoers.d/abc-authentic-deploy
+#   echo "ocarun ALL=(ALL) NOPASSWD: /bin/systemctl restart abc-authentic.service, /bin/systemctl is-active abc-authentic.service" | sudo tee /etc/sudoers.d/abc-authentic-deploy && sudo chmod 440 /etc/sudoers.d/abc-authentic-deploy
 # (replace "ocarun" with the user that runs deploy.sh)
-if sudo -n systemctl is-active --quiet abc-authentic 2>/dev/null; then
+# IMPORTANT: sudoers matches arguments literally — invoke EXACTLY as above
+# (/bin/systemctl, full .service name, no --quiet flag).
+if sudo -n /bin/systemctl is-active abc-authentic.service >/dev/null 2>&1; then
   echo "$(date): Restarting service..." >>"$LOG"
-  if sudo -n systemctl restart abc-authentic >>"$LOG" 2>&1; then
+  if sudo -n /bin/systemctl restart abc-authentic.service >>"$LOG" 2>&1; then
     echo "$(date): Service restarted" >>"$LOG"
   else
     echo "$(date): ERROR: service restart failed (check sudoers rule above)" >>"$LOG"
