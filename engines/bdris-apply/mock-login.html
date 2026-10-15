@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<title>BDRIS লগইন (মক)</title>
+<style>
+  body{font-family:'Noto Sans Bengali',sans-serif;max-width:520px;margin:40px auto;padding:0 16px}
+  .fld{margin:10px 0}.fld label{display:block;font-weight:600;margin-bottom:4px}
+  input[type=text],input[type=password]{width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;font-size:15px}
+  .caprow{display:flex;gap:10px;align-items:center;margin:10px 0}
+  img#captcha{border:1px solid #999;border-radius:6px;height:50px}
+  button{padding:10px 18px;border:0;border-radius:8px;background:#1a73e8;color:#fff;font-size:15px;cursor:pointer;margin-top:8px}
+  .invalid-feedback{color:#c00;font-size:13px}
+  .jq-toast-single{display:none;margin:10px 0;padding:10px 12px;border-radius:8px;background:#fdecea;color:#b3261e;border:1px solid #f5c6c3}
+  .jq-toast-single.jq-icon-error{display:block}
+  #otpDiv{display:none;margin-top:12px}
+  #loginBtn{display:none;background:#188038}
+</style>
+</head>
+<body>
+<h2>BDRIS পোর্টালে লগইন</h2>
+<div id="usernamePassDiv">
+  <label><input type="radio" name="userType" value="BANGLADESH" checked> বাংলাদেশ</label>
+  <label><input type="radio" name="userType" value="MISSION"> প্রবাসী (দূতাবাস)</label>
+  <div class="fld"><label>ব্যবহারকারীর নাম *</label><input type="text" id="username" name="username"></div>
+  <div class="fld"><label>পাসওয়ার্ড *</label><input type="password" id="password" name="password"></div>
+  <div class="fld"><label>মোবাইল নম্বর *</label><input type="text" id="mobileEmail" name="mobileEmail" placeholder="01XXXXXXXXX"></div>
+  <div class="caprow">
+    <img id="captcha" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAAAyCAYAAACqNX6+AAAAOklEQVR4nO3BAQEAAACCIP+vbkhAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4G4BUAABIQl1aQAAAABJRU5ErkJggg==" alt="captcha">
+    <div class="fld" style="margin:0;flex:1"><label>ক্যাপচা *</label><input type="text" id="answer" name="answer"></div>
+  </div>
+  <div class="jq-toast-single" id="errToast"></div>
+  <button id="sendOtpBtn" class="sendOtpBtn" type="button">ওটিপি পাঠান</button>
+</div>
+<div id="otpDiv">
+  <p>মোবাইলে পাঠানো কোডটি বসান (মক কোড: <b>123456</b>)</p>
+  <div class="fld"><label>ওটিপি *</label><input type="text" id="otp" name="otp" maxlength="6"></div>
+</div>
+<button id="loginBtn" type="button">লগইন</button>
+<form id="loginForm" style="display:none"><input type="text" name="otp" id="otpHidden"></form>
+
+<script>
+const q = id => document.getElementById(id);
+function toast(msg) { const t = q('errToast'); t.textContent = msg; t.className = 'jq-toast-single jq-icon-error'; }
+function clearToast() { const t = q('errToast'); t.textContent = ''; t.className = 'jq-toast-single'; }
+
+q('sendOtpBtn').addEventListener('click', function () {
+  clearToast();
+  const u = q('username').value.trim(), p = q('password').value, m = q('mobileEmail').value.trim(), a = q('answer').value.trim();
+  if (!u || !p) { toast('ব্যবহারকারীর নাম ও পাসওয়ার্ড দিন'); return; }
+  if (!/^01\d{9}$/.test(m)) { toast('মোবাইল নম্বর ঠিক নেই'); return; }
+  if (a.length < 4) { toast('ক্যাপচা মিলছে না'); return; }
+  if (/^wrong/i.test(u)) { toast('ব্যবহারকারীর নাম বা পাসওয়ার্ড ভুল'); return; }
+  q('usernamePassDiv').style.display = 'none';
+  q('sendOtpBtn').style.display = 'none';
+  q('otpDiv').style.display = 'block';
+  q('loginBtn').style.display = 'inline-block';
+});
+
+function doLogin() {
+  const otp = q('otp').value.trim();
+  if (otp === '123456') {
+    window.location.href = '/br/application/status';
+  } else {
+    alert('কোডটি সঠিক নয়');
+  }
+}
+q('loginBtn').addEventListener('click', doLogin);
+q('loginForm').addEventListener('submit', function (e) { e.preventDefault(); doLogin(); });
+</script>
+</body>
+</html>

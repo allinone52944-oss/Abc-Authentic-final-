@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<title>Mock BDRIS — Real-structure Test Page</title>
+<style>
+  body { font-family: sans-serif; max-width: 700px; margin: 30px auto; padding: 20px; }
+  .mstep { border: 1px solid #999; border-radius: 8px; padding: 18px; margin-bottom: 14px; }
+  .mstep h3 { margin-top: 0; }
+  label { display: block; margin: 8px 0 2px; font-size: 13px; }
+  input[type=text], input:not([type]), select { width: 100%; padding: 7px; margin-bottom: 4px; box-sizing: border-box; }
+  button { padding: 9px 18px; margin-top: 10px; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .hidden { display: none; }
+  .alert-success { background: #d4edda; border: 1px solid #28a745; padding: 16px; border-radius: 8px; color: #155724; }
+  .verify-ok { color: #155724; font-size: 13px; margin-top: 4px; }
+  .verify-err { color: #721c24; font-size: 13px; margin-top: 4px; }
+  .gate-msg { color: #856404; background: #fff3cd; border: 1px solid #ffeeba; padding: 10px; border-radius: 6px; margin-top: 10px; font-size: 13px; }
+  #attachModal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; }
+  #attachModal .box { background: #fff; padding: 24px; border-radius: 10px; max-width: 440px; }
+  #attachModal .box h4 { margin-top: 0; }
+</style>
+</head>
+<body>
+<h2>Mock BDRIS Portal (TEST ONLY — আসল স্ট্রাকচার)</h2>
+
+<!-- ══ ধাপ ০: ভিত্তি ══ -->
+<div class="mstep" id="mstep0">
+  <h3>জন্ম নিবন্ধনের জন্য আবেদন</h3>
+  <label><input type="radio" name="officeAddressType" id="officeBirthplace" value="BIRTHPLACE" checked> জন্মস্থান</label>
+  <label><input type="radio" name="officeAddressType" id="officePermanent" value="PERMANENT"> স্থায়ী ঠিকানা</label>
+  <label><input type="checkbox" id="bdMissionCheckbox" value="yes"> আপনি যদি বাংলাদেশ দূতাবাসে জন্ম নিবন্ধন আবেদন করতে চান, তবে এটি নির্বাচন করুন</label>
+  <br><button onclick="nextStep(0)">পরবর্তী</button>
+</div>
+
+<!-- ══ ধাপ ১: ব্যক্তির পরিচিতি ══ -->
+<div class="mstep hidden" id="mstep1">
+  <h3>নিবন্ধনাধীন ব্যক্তির পরিচিতি</h3>
+  <label>নামের প্রথম অংশ বাংলায় *</label><input id="personFirstNameBn" name="personInfoForBirth.personFirstNameBn" placeholder="নামের প্রথম অংশ বাংলায়">
+  <label>নামের শেষ অংশ বাংলায় *</label><input id="personLastNameBn" name="personInfoForBirth.personLastNameBn" placeholder="নামের শেষ অংশ বাংলায়">
+  <label>নামের প্রথম অংশ ইংরেজিতে *</label><input id="personFirstNameEn" name="personInfoForBirth.personFirstNameEn" placeholder="First Name in English">
+  <label>নামের শেষ অংশ ইংরেজিতে *</label><input id="personLastNameEn" name="personInfoForBirth.personLastNameEn" placeholder="Last Name in English">
+  <label>জন্ম তারিখ (খ্রিঃ) *</label><input id="personBirthDate" name="personInfoForBirth.personBirthDate" placeholder="DD/MM/YYYY">
+  <label>পিতা ও মাতার কততম সন্তান *</label>
+  <select id="thChild" name="personInfoForBirth.thChild"><option value="">---নির্বাচন করুন---</option><option>১</option><option>২</option><option>৩</option></select>
+  <label>লিঙ্গ *</label>
+  <select id="gender" name="personInfoForBirth.gender"><option value="">---নির্বাচন করুন---</option><option>পুরুষ</option><option>মহিলা</option><option>তৃতীয় লিঙ্গ</option></select>
+  <h4>জন্মস্থানের ঠিকানা</h4>
+  <label>দেশ *</label>
+  <select id="birthPlaceCountry" name="birthPlaceCountry"><option value="">দেশ নির্বাচন করুন</option><option>বাংলাদেশ</option><option>ভারত</option></select>
+  <label>বিভাগ *</label><select id="birthPlaceDiv" name="birthPlaceDiv"><option value="">---নির্বাচন করুন---</option></select>
+  <label>জেলা *</label><select id="birthPlaceDist" name="birthPlaceDist"><option value="">---নির্বাচন করুন---</option></select>
+  <label>সিটি কর্পোরেশন,ক্যান্টনমেন্ট/উপজেলা *</label><select id="birthPlaceCityCorpCantOrUpazila" name="birthPlaceCityCorpCantOrUpazila"><option value="">---নির্বাচন করুন---</option></select>
+  <label>পৌরসভা/ইউনিয়ন *</label><select id="birthPlacePaurasavaOrUnion" name="birthPlacePaurasavaOrUnion"><option value="">---নির্বাচন করুন---</option></select>
+  <label>ওয়ার্ড *</label><select id="birthPlaceWardInPaurasavaOrUnion" name="birthPlaceWardInPaurasavaOrUnion"><option value="">---নির্বাচন করুন---</option></select>
+  <label>ডাকঘর (বাংলায়) *</label><input id="birthPlacePostOfc" name="birthPlacePostOfc">
+  <label>ডাকঘর (ইংরেজিতে) *</label><input id="birthPlacePostOfcEn" name="birthPlacePostOfcEn">
+  <label>গ্রাম/পাড়া/মহল্লা *</label><input id="birthPlaceVilAreaTownBn" name="birthPlaceVilAreaTownBn">
+  <label>গ্রাম/পাড়া/মহল্লা (ইংরেজি) *</label><input id="birthPlaceVilAreaTownEn" name="birthPlaceVilAreaTownEn">
+  <label>বাসা ও সড়ক (নাম, নম্বর)</label><input id="birthPlaceHouseRoadBn" name="birthPlaceHouseRoadBn">
+  <label>বাসা ও সড়ক (নাম, নম্বর) (ইংরেজি)</label><input id="birthPlaceHouseRoadEn" name="birthPlaceHouseRoadEn">
+  <br><button onclick="prevStep(1)">পূর্ববর্তী</button>
+  <button id="s1next" onclick="s1next()" disabled>পরবর্তী</button>
+</div>
+
+<!-- ══ ধাপ ২: পিতামাতা ══ -->
+<div class="mstep hidden" id="mstep2">
+  <h3>পিতার তথ্য</h3>
+  <label>পিতার জন্ম নিবন্ধন নম্বর *</label><input id="fatherBrn" name="personInfoForBirth.father.ubrn" placeholder="জন্ম নিবন্ধন নম্বর">
+  <label>জন্ম তারিখ (খ্রিঃ) *</label><input id="fatherBirthDate" name="personInfoForBirth.father.personBirthDate" placeholder="DD/MM/YYYY">
+  <label>পিতার নাম বাংলায় *</label><input id="fatherNameBn" name="personInfoForBirth.father.personNameBn" placeholder="পিতার নাম বাংলায়">
+  <label>পিতার নাম ইংরেজিতে *</label><input id="fatherNameEn" name="personInfoForBirth.father.personNameEn" placeholder="Father's Name in English">
+  <br><button id="verifyFatherBtn" onclick="verifyParent('father')">Verify</button> <span id="fatherVerifyMsg"></span>
+  <label>পিতার জাতীয়তা *</label>
+  <select id="fatherNationality" name="personInfoForBirth.father.personNationality"><option value="">---নির্বাচন করুন---</option><option>অজানা</option><option>বাংলাদেশী</option></select>
+  <h3>মাতার তথ্য</h3>
+  <label>মাতার জন্ম নিবন্ধন নম্বর *</label><input id="motherBrn" name="personInfoForBirth.mother.ubrn" placeholder="জন্ম নিবন্ধন নম্বর">
+  <label>জন্ম তারিখ (খ্রিঃ) *</label><input id="motherBirthDate" name="personInfoForBirth.mother.personBirthDate" placeholder="DD/MM/YYYY">
+  <label>মাতার নাম বাংলায় *</label><input id="motherNameBn" name="personInfoForBirth.mother.personNameBn" placeholder="মাতার নাম বাংলায়">
+  <label>মাতার নাম ইংরেজিতে *</label><input id="motherNameEn" name="personInfoForBirth.mother.personNameEn" placeholder="Mother's Name in English">
+  <br><button id="verifyMotherBtn" onclick="verifyParent('mother')">Verify</button> <span id="motherVerifyMsg"></span>
+  <label>মাতার জাতীয়তা *</label>
+  <select id="motherNationality" name="personInfoForBirth.mother.personNationality"><option value="">---নির্বাচন করুন---</option><option>অজানা</option><option>বাংলাদেশী</option></select>
+  <div id="gateMsg"></div>
+  <br><button onclick="prevStep(2)">পূর্ববর্তী</button>
+  <button onclick="s2next()">পরবর্তী</button>
+</div>
+
+<!-- ══ ধাপ ২খ: ঠিকানা (live-mapped) ══ -->
+<div class="mstep hidden" id="mstep2b">
+  <h3>ঠিকানা</h3>
+  <label><input type="checkbox" name="copyBirthPlaceToPermAddr" id="copyBirthPlaceToPermAddr" value="true"> জন্মস্থানের ঠিকানা ও স্থায়ী ঠিকানা একই</label><br>
+  <label><input type="checkbox" name="copyPermAddrToPrsntAddr" id="copyPermAddrToPrsntAddr" value="true"> স্থায়ী ঠিকানা ও বর্তমান ঠিকানা একই</label><br>
+  <div id="permAddrEcho" style="color:#666;font-size:13px"></div>
+  <h4>স্থায়ী ঠিকানা (সরাসরি)</h4>
+  <div id="permFields"></div>
+  <h4>বর্তমান ঠিকানা (সরাসরি)</h4>
+  <div id="presFields"></div>
+  <br><button onclick="prevStep(3)">পূর্ববর্তী</button>
+  <button onclick="s2bnext()">পরবর্তী</button>
+</div>
+
+<!-- ══ ধাপ ৩: আবেদনকারীর প্রত্যয়ন + ডকুমেন্ট (live-mapped) ══ -->
+<div class="mstep hidden" id="mstep3">
+  <h3>আবেদনকারীর প্রত্যয়ন</h3>
+  <label>আবেদনকারী কে?</label><br>
+  <label><input type="radio" name="relationWithApplicant" value="পিতা" checked> পিতা</label>
+  <label><input type="radio" name="relationWithApplicant" value="মাতা"> মাতা</label>
+  <label><input type="radio" name="relationWithApplicant" value="পিতামহ"> পিতামহ</label>
+  <label><input type="radio" name="relationWithApplicant" value="অভিভাবক"> অভিভাবক</label>
+  <label><input type="radio" name="relationWithApplicant" value="অন্যান্য"> অন্যান্য</label><br>
+  <label>আবেদনকারীর নাম</label><input name="applicantName" id="applicantName" readonly value=""><br>
+  <label><input type="checkbox" name="declaration" id="declaration" value="true"> আমি ঘোষণা করছি যে উপরের তথ্যসমূহ সঠিক</label>
+  <h4>শুধুমাত্র ইমেজ ফাইল (.jpg, .jpeg, .png) আপলোড করা যাবে। (প্রতিটি ফাইলের জন্য সর্বোচ্চ ফাইল সাইজ 2 মেগা বাইট)</h4>
+  <input type="file" name="files" id="filesInput" multiple accept="image/*">
+  <button style="background:#4caf50;color:#fff">+ সংযোজন</button>
+  <button style="background:#ff9800;color:#fff">আপলোড বাতিল</button>
+  <button style="background:#f44336;color:#fff">ডিলিট</button>
+  <div id="fileRows"></div>
+  <div id="docErr" style="color:#c00;font-size:13px"></div>
+  <br><button onclick="show('mstep2b')">পূর্ববর্তী</button>
+  <button onclick="s3next()">পরবর্তী</button>
+</div>
+
+<!-- ══ ধাপ ৪: যোগাযোগ + OTP (live-mapped) ══ -->
+<div class="mstep hidden" id="mstep4">
+  <h3>যোগাযোগ ও OTP</h3>
+  <div class="alert-info">আবেদনপত্রটি সাবমিট করার পূর্বে সকল তথ্য ঠিক আছে কিনা দেখে নিন। একবার সাবমিট হয়ে গেলে এডিট করা যাবে না।</div>
+  <label>ইমেইল *</label><input id="email" name="email" placeholder="example@example.com"><br>
+  <label>ফোন নম্বর *</label><input id="phone" name="phone" type="tel"><br>
+  <button onclick="sendOtp()">ওটিপি পাঠান</button>
+  <div id="otpZone" style="display:none">
+    <label>ওটিপি *</label><input id="otp" name="otp" placeholder="OTP"><br>
+    <button onclick="submitOtp()">সাবমিট</button>
+  </div>
+  <br><button onclick="prevStep(4)">পূর্ববর্তী</button>
+</div>
+
+<div class="mstep hidden" id="mdone">
+  <div class="alert-success">আপনার আবেদন সফলভাবে গৃহীত হয়েছে। আবেদন নম্বর: 20261009123456789</div>
+  <br><a id="pdfLink" href="#" download="bdris-copy.pdf">PDF ডাউনলোড</a>
+</div>
+
+<!-- attachment modal -->
+<div id="attachModal">
+  <div class="box">
+    <h4>অ্যাটাচমেন্ট অ্যাভেইলেবিলিটি চেক</h4>
+    <p>৪৫ দিনের বেশি বয়সী শিশুর জন্য নিচের ডকুমেন্ট প্রয়োজন:<br>• চিকিৎসকের সনদপত্র / টিকা কার্ড<br>• পিতা/মাতার NID বা স্থায়ী ঠিকানার প্রমাণ</p>
+    <button onclick="modalYes()">আমার কাছে এই ডকুমেন্টগুলি আছে</button>
+    <button onclick="modalNo()">আমার কাছে এই ডকুমেন্টগুলি নেই</button>
+    <button onclick="modalClose()">বন্ধ করুন</button>
+  </div>
+</div>
+
+<script>
+// ── cascade data ──
+const GEO = {
+  'ঢাকা': { 'ঢাকা': { 'সাভার': ['সাভার ইউনিয়ন', 'তেঁতুলঝোড়া'], 'ধামরাই': ['ধামরাই ইউনিয়ন'] }, 'গাজীপুর': { 'কালিয়াকৈর': ['কালিয়াকৈর পৌরসভা'] } },
+  'চট্টগ্রাম': { 'চট্টগ্রাম': { 'হাটহাজারী': ['ঘুমারদিঘী', 'ছিপাতলী'] } }
+};
+const WARDS = { 'সাভার ইউনিয়ন': ['ওয়ার্ড - 1', 'ওয়ার্ড - 2'], 'ঘুমারদিঘী': ['ওয়ার্ড - 1'] };
+const VALID_BRNS = { '19851591234567890': true, '19881591234567891': true };
+const verified = { father: false, mother: false };
+
+function fillSel(sel, items, ph) {
+  sel.innerHTML = `<option value="">${ph}</option>` + items.map(t => `<option value="${t}">${t}</option>`).join('');
+}
+const q = id => document.getElementById(id);
+
+fillSel(q('birthPlaceDiv'), Object.keys(GEO), '---নির্বাচন করুন---');
+q('birthPlaceCountry').addEventListener('change', () => validateS1());
+q('birthPlaceDiv').addEventListener('change', e => {
+  fillSel(q('birthPlaceDist'), Object.keys(GEO[e.target.value] || {}), '---নির্বাচন করুন---');
+  ['birthPlaceCityCorpCantOrUpazila', 'birthPlacePaurasavaOrUnion', 'birthPlaceWardInPaurasavaOrUnion'].forEach(id => q(id).innerHTML = '<option value="">---নির্বাচন করুন---</option>');
+  validateS1();
+});
+q('birthPlaceDist').addEventListener('change', e => {
+  const div = q('birthPlaceDiv').value;
+  fillSel(q('birthPlaceCityCorpCantOrUpazila'), Object.keys((GEO[div] || {})[e.target.value] || {}), '---নির্বাচন করুন---');
+  validateS1();
+});
+q('birthPlaceCityCorpCantOrUpazila').addEventListener('change', e => {
+  const div = q('birthPlaceDiv').value, dist = q('birthPlaceDist').value;
+  fillSel(q('birthPlacePaurasavaOrUnion'), (((GEO[div] || {})[dist] || {})[e.target.value] || []), '---নির্বাচন করুন---');
+  validateS1();
+});
+q('birthPlacePaurasavaOrUnion').addEventListener('change', e => {
+  fillSel(q('birthPlaceWardInPaurasavaOrUnion'), WARDS[e.target.value] || [], '---নির্বাচন করুন---');
+  validateS1();
+});
+q('birthPlaceWardInPaurasavaOrUnion').addEventListener('change', () => validateS1());
+document.querySelectorAll('#mstep1 input, #mstep1 select').forEach(el => {
+  el.addEventListener('input', validateS1);
+  el.addEventListener('change', validateS1);
+});
+
+const S1_REQUIRED = ['personFirstNameBn', 'personFirstNameEn',
+  'personBirthDate', 'thChild', 'gender', 'birthPlaceCountry', 'birthPlaceDiv', 'birthPlaceDist',
+  'birthPlaceCityCorpCantOrUpazila', 'birthPlacePaurasavaOrUnion', 'birthPlaceWardInPaurasavaOrUnion',
+  'birthPlacePostOfc', 'birthPlacePostOfcEn', 'birthPlaceVilAreaTownBn', 'birthPlaceVilAreaTownEn'];
+// NOTE (live-verified 2026-10-10): শেষের নাম S1_REQUIRED-এ নেই — live সাইটে বাটন
+// সক্রিয় দেখায়, কিন্তু ক্লিকে লাল error দিয়ে আটকায়। সেই আচরণ s1next()-এ।
+function validateS1() {
+  const ok = S1_REQUIRED.every(id => { const el = q(id); return el && el.value && el.value.trim() !== ''; });
+  q('s1next').disabled = !ok;
+}
+
+function collect(stepId) {
+  const data = {};
+  document.querySelectorAll(`#${stepId} input, #${stepId} select`).forEach(el => {
+    if (el.type === 'file') { data[el.name || 'file'] = el.files.length ? el.files[0].name : ''; return; }
+    if (el.type === 'radio' || el.type === 'checkbox') { if (el.checked) data[el.id || el.name] = el.value; return; }
+    const key = el.name || el.id;
+    if (key) data[key] = el.tagName === 'SELECT'
+      ? (el.selectedOptions[0] ? el.selectedOptions[0].text : '') : el.value;
+  });
+  return data;
+}
+function report(step, data) {
+  fetch('/mock-report', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ step, data }) }).catch(() => {});
+}
+function show(id) {
+  document.querySelectorAll('.mstep').forEach(d => d.classList.add('hidden'));
+  q(id).classList.remove('hidden');
+}
+function nextStep(n) {
+  report('s' + n, collect('mstep' + n));
+  show('mstep' + (n + 1));
+}
+function prevStep(n) { show('mstep' + (n - 1)); }
+
+// ── step 1 next: attachment modal if age > 45 days ──
+// live-verified 2026-10-10: 2013-এর আগে জন্মে parent BRN/Verify বাটন থাকে না
+window.PRE2013 = false;
+function s1next() {
+  // live-আচরণ (2026-10-10 verified): শেষের নাম ফাঁকা থাকলে বাটন সক্রিয় দেখালেও
+  // ক্লিকে লাল "অনুগ্রহ করে ঘরটি পূরণ করুন!" আসে, পরের ধাপে যায় না
+  document.querySelectorAll('.text-danger.s1err').forEach(e => e.remove());
+  let blocked = false;
+  ['personLastNameBn', 'personLastNameEn'].forEach(id => {
+    const el = q(id);
+    if (el && !el.value.trim()) {
+      blocked = true;
+      const s = document.createElement('span');
+      s.className = 'text-danger s1err';
+      s.style.color = 'red';
+      s.textContent = 'অনুগ্রহ করে ঘরটি পূরণ করুন!';
+      el.after(s);
+    }
+  });
+  if (blocked) { report('s1-blocked', collect('mstep1')); return; }
+  const dobStr = q('personBirthDate').value || ''; // DD/MM/YYYY
+  const m = dobStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  let old = false;
+  if (m) {
+    const dob = new Date(`${m[3]}-${m[2]}-${m[1]}`);
+    old = (Date.now() - dob.getTime()) > 45 * 24 * 3600 * 1000;
+    window.PRE2013 = `${m[3]}-${m[2]}-${m[1]}` < '2013-01-01';
+  }
+  if (window.PRE2013) {
+    q('verifyFatherBtn').style.display = 'none';
+    q('verifyMotherBtn').style.display = 'none';
+  } else {
+    q('verifyFatherBtn').style.display = '';
+    q('verifyMotherBtn').style.display = '';
+  }
+  report('s1', collect('mstep1'));
+  if (old) { q('attachModal').style.display = 'flex'; }
+  else show('mstep2');
+}
+function modalYes() { q('attachModal').style.display = 'none'; report('modal', { choice: 'has-docs' }); show('mstep2'); }
+function modalNo() { q('attachModal').style.display = 'none'; report('modal', { choice: 'no-docs' }); }
+function modalClose() { q('attachModal').style.display = 'none'; }
+
+// ── step 2 verify gate ──
+function verifyParent(who) {
+  const brn = q(who + 'Brn').value.trim();
+  const msg = q(who + 'VerifyMsg');
+  msg.className = '';
+  msg.textContent = 'যাচাই হচ্ছে...';
+  setTimeout(() => {
+    if (VALID_BRNS[brn]) {
+      verified[who] = true;
+      msg.className = 'verify-ok'; msg.textContent = '✓ BRN যাচাই সফল';
+    } else {
+      verified[who] = false;
+      msg.className = 'verify-err'; msg.textContent = 'No Birth Record found with this ubrn';
+    }
+    report('verify-' + who, { brn, verified: verified[who] });
+  }, 800);
+}
+function s2next() {
+  report('s2', collect('mstep2'));
+  // pre-2013: BRN gate নেই — শুধু নাম থাকলেই এগোয় (live-verified)
+  const namesOk = q('fatherNameBn').value.trim() && q('motherNameBn').value.trim()
+    && q('fatherNameEn').value.trim() && q('motherNameEn').value.trim();
+  if (window.PRE2013 ? namesOk : (verified.father && verified.mother)) { show('mstep2b'); }
+  else {
+    q('gateMsg').innerHTML = '<div class="gate-msg">Father/Mother birth record not verified — Verify বাটনে BRN যাচাই করুন।</div>';
+    report('gate-blocked', { verified });
+  }
+}
+// ── ঠিকানার ধাপ: checkbox → auto-fill; সরাসরি cascade fields (BDRIS naming mirror) ──
+(function buildAddrFields() {
+  const mk = (prefix, holder) => {
+    const sels = ['Div', 'Dist', 'CityCorpCantOrUpazila', 'PaurasavaOrUnion', 'WardInPaurasavaOrUnion'];
+    const texts = ['PostOfc', 'PostOfcEn', 'VilAreaTownBn', 'VilAreaTownEn', 'HouseRoadBn', 'HouseRoadEn'];
+    let h = '';
+    sels.forEach(s => { h += `<label>${s}</label><select id="${prefix}${s}" name="${prefix}${s}"><option value="">---নির্বাচন করুন---</option></select><br>`; });
+    texts.forEach(t => { h += `<label>${t}</label><input id="${prefix}${t}" name="${prefix}${t}"><br>`; });
+    document.getElementById(holder).innerHTML = h;
+    const OPTS = { Div: ['ঢাকা', 'চট্টগ্রাম'], Dist: ['ঢাকা', 'গাজীপুর'],
+      CityCorpCantOrUpazila: ['সাভার', 'ধামরাই'], PaurasavaOrUnion: ['সাভার ইউনিয়ন', 'ভাকুর্তা'],
+      WardInPaurasavaOrUnion: ['ওয়ার্ড - 1', 'ওয়ার্ড - 2'] };
+    sels.forEach((s, i) => {
+      if (i === 0) q(prefix + s).innerHTML = '<option value="">---নির্বাচন করুন---</option>' +
+        OPTS[s].map(o => `<option value="${o}">${o}</option>`).join('');
+      if (i < sels.length - 1) {
+        q(prefix + s).addEventListener('change', () => {
+          const child = q(prefix + sels[i + 1]);
+          child.innerHTML = '<option value="">---নির্বাচন করুন---</option>' +
+            OPTS[sels[i + 1]].map(o => `<option value="${o}">${o}</option>`).join('');
+        });
+      }
+    });
+  };
+  mk('permAddr', 'permFields');
+  mk('prsntAddr', 'presFields');
+})();
+q('copyBirthPlaceToPermAddr').addEventListener('change', e => {
+  q('permAddrEcho').textContent = e.target.checked ? '✔ স্থায়ী ঠিকানা জন্মস্থান থেকে বসানো হয়েছে' : '';
+});
+function s2bnext() {
+  report('s2b', collect('mstep2b'));
+  show('mstep3');
+}
+// ── প্রত্যয়ন + ডকুমেন্ট: per-file row (File Type 40/41 + Start), দুটোই বাধ্যতামূলক ──
+const uploadedTypes = new Set();
+document.querySelectorAll('input[name="relationWithApplicant"]').forEach(r => {
+  r.addEventListener('change', () => {
+    q('applicantName').value = r.value === 'পিতা' ? 'TEST FATHER' : r.value === 'মাতা' ? 'TEST MOTHER' : r.value;
+  });
+});
+q('applicantName').value = 'TEST FATHER';
+q('filesInput').addEventListener('change', e => {
+  Array.from(e.target.files || []).forEach(f => addFileRow(f));
+  e.target.value = '';
+});
+function addFileRow(f) {
+  const row = document.createElement('div');
+  row.className = 'filerow';
+  row.innerHTML = `<span>File Type:</span>
+    <select class="attchment-type-upload" name="${f.name}">
+      <option value="">---নির্বাচন করুন---</option>
+      <option value="40">চিকিৎসক কর্তৃক প্রত্যয়ন পত্র / শিক্ষা সনদ</option>
+      <option value="41">ঠিকানার প্রমাণ (কর রসিদ/NID/পাসপোর্ট/দলিল)</option>
+    </select>
+    <span>File Sub Type:</span><select class="attachment-sub-type-upload"></select>
+    <span>${f.name}</span>
+    <button class="startBtn">file_upload Start</button>
+    <button>do_not_disturb Cancel</button>
+    <input type="checkbox">`;
+  row.querySelector('.startBtn').onclick = () => {
+    const t = row.querySelector('.attchment-type-upload').value;
+    if (!t) { q('docErr').textContent = 'File Type নির্বাচন করুন'; return; }
+    q('docErr').textContent = '';
+    uploadedTypes.add(t);
+    report('file-uploaded', { file: f.name, fileType: t });
+    row.innerHTML = `<a href="#">${t === '40' ? 'চিকিৎসক কর্তৃক প্রত্যয়ন পত্র' : 'ঠিকানার প্রমাণ'}</a>
+      <button>delete Delete</button><input type="checkbox">`;
+  };
+  q('fileRows').appendChild(row);
+}
+function s3next() {
+  if (!uploadedTypes.has('40') || !uploadedTypes.has('41')) {
+    q('docErr').textContent = 'Error: প্রয়োজনীয় ফাইল আপলোড করা হয়নি';
+    report('s3-blocked', { reason: 'need-both-types', uploaded: Array.from(uploadedTypes) });
+    return;
+  }
+  q('docErr').textContent = '';
+  report('s3', Object.assign(collect('mstep3'), { uploadedTypes: Array.from(uploadedTypes) }));
+  show('mstep4');
+}
+// ── যোগাযোগ + OTP ──
+function sendOtp() {
+  if (!q('email').value || !q('phone').value) { alert('ইমেইল ও ফোন নম্বর দিন'); return; }
+  report('otp-sent', { email: q('email').value, phone: q('phone').value });
+  q('otpZone').style.display = 'block';
+  // আসল সাইটের মতোই দৃশ্যমান প্রমাণ (waitOtpEvidence এটাই খোঁজে)
+  if (!q('otpIntervalText')) {
+    const d = document.createElement('div');
+    d.id = 'otpIntervalText';
+    d.textContent = 'ওটিপি পাঠানো হয়েছে — মেয়াদ ৪:৫৯';
+    q('otpZone').appendChild(d);
+  }
+}
+
+// ── docs / otp ──
+function submitOtp() {
+  report('s4', { phone: q('phone').value, otp: q('otp').value });
+  q('pdfLink').href = 'data:application/pdf;base64,' + btoa('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\ntrailer<</Root 1 0 R>>');
+  show('mdone');
+}
+</script>
+</body>
+</html>
