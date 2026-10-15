@@ -1941,16 +1941,19 @@ function renderStep4() {
         '<button class="btn ghost small" id="rpBook" style="margin-left:8px">📚 ঠিকানা বই</button>') +
     '</div>'
   );
-  const addrWire = (prefix, rec) => {
+  const addrWireOnly = (prefix) => {
     const Ls = addrGeoLevels(prefix);
-    Ls.forEach(L => { const n = $(L.ui); if (n) n.onchange = () => geoChanged(L.k, Ls, addrRec(prefix)); });
+    Ls.forEach(L => { const n = $(L.ui); if (n && !n.dataset.wired) { n.onchange = () => geoChanged(L.k, Ls, addrRec(prefix)); n.dataset.wired = '1'; } });
+  };
+  const addrWire = (prefix, rec) => {
+    addrWireOnly(prefix);
     addrWarm(prefix, rec || {}).catch(() => {});
   };
   const toggle = () => {
     $('permSec').style.display = $('sp_same').checked ? 'none' : '';
     $('presSec').style.display = $('rp_same').checked ? 'none' : '';
-    if (!$('sp_same').checked && $('sp_division') && $('sp_division').options.length <= 1) addrWarm('sp', z.perm || {}).catch(() => {});
-    if (!$('rp_same').checked && $('rp_division') && $('rp_division').options.length <= 1) addrWarm('rp', z.pres || {}).catch(() => {});
+    if (!$('sp_same').checked) { addrWireOnly('sp'); if ($('sp_division') && $('sp_division').options.length <= 1) addrWarm('sp', z.perm || {}).catch(() => {}); }
+    if (!$('rp_same').checked) { addrWireOnly('rp'); if ($('rp_division') && $('rp_division').options.length <= 1) addrWarm('rp', z.pres || {}).catch(() => {}); }
   };
   $('sp_same').onchange = toggle;
   $('rp_same').onchange = toggle;
