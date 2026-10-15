@@ -23,6 +23,22 @@ function fontsCss() {
     return _fontsCss;
 }
 
+// Cached seal/logo base64 (read once, not on every PDF request)
+let _sealBase64 = null;
+function sealBase64() {
+    if (_sealBase64 === null) {
+        _sealBase64 = fs.readFileSync(path.join(__dirname, 'assets', 'seal.jpg')).toString('base64');
+    }
+    return _sealBase64;
+}
+let _logoBase64 = null;
+function logoBase64() {
+    if (_logoBase64 === null) {
+        _logoBase64 = fs.readFileSync(path.join(__dirname, 'assets', 'logo.png')).toString('base64');
+    }
+    return _logoBase64;
+}
+
 // TLS fix: everify.bdris.gov.bd-এর TLS 1.3 handshake কিছু network-এ ভাঙে
 // ("bad ecpoint" error)। তাই এই app-এর সব HTTPS কল TLS 1.2 দিয়ে হবে।
 // (কোডেই বসানো — আলাদা env var/flag লাগবে না।)
@@ -366,6 +382,9 @@ function normalizeBdrisData(data) {
     out.registrationDate = toDDMMYYYY(out.registrationDate);
     out.issuanceDate = toDDMMYYYY(out.issuanceDate);
     out.dob = toDDMMYYYY(out.dob);
+    // Aliases for template (expects regDate/issueDate)
+    out.regDate = out.registrationDate;
+    out.issueDate = out.issuanceDate;
 
     // --- English names/places: Title Case ---
     for (const k of ['nameEn', 'motherNameEn', 'fatherNameEn', 'placeOfBirthEn', 'permanentAddressEn', 'registrationOffice']) {
@@ -776,7 +795,7 @@ function buildCertificateHtml(d, assets) {
   <div class="el txt f11 b" style="left:126.15mm; width:75mm; text-align:center; top:234.6mm; letter-spacing:0px; font-family:Arial, sans-serif;">Registrar</div>
 
   <!-- footer -->
-  <div class="el txt" style="left:1.1mm; width:208.6mm; text-align:center; padding-right:4.4mm; top:260.9mm; font-size:8.32pt; letter-spacing:0.15px;">This certificate is generated from bdris.gov.bd, and to verify this certificate, please scan the above QR Code &amp; Bar Code.</div>
+  <div class="el txt" style="left:1.1mm; width:208.6mm; text-align:center; padding-right:4.4mm; top:260.9mm; font-size:8.32pt; letter-spacing:0.15px; white-space:normal;">This certificate is generated from bdris.gov.bd, and to verify this certificate, please scan the above QR Code &amp; Bar Code.</div>
 
 </div>
 </body>
@@ -785,8 +804,8 @@ function buildCertificateHtml(d, assets) {
 
 
 async function buildAssets(d) {
-    const sealBase64 = fs.readFileSync(path.join(__dirname, 'assets', 'seal.jpg')).toString('base64');
-    const logoBase64 = fs.readFileSync(path.join(__dirname, 'assets', 'logo.png')).toString('base64');
+    const sealB64 = sealBase64();
+    const logoB64 = logoBase64();
     const brnText = String(d.brn || '').trim();
     let qrDataUrl;
     let barcodeDataUrl = '';
@@ -801,8 +820,8 @@ async function buildAssets(d) {
         qrDataUrl = await QRCode.toDataURL(' ', { width: 400, margin: 0, errorCorrectionLevel: 'M' });
     }
     return {
-        seal: `data:image/jpeg;base64,${sealBase64}`,
-        logo: `data:image/png;base64,${logoBase64}`,
+        seal: `data:image/jpeg;base64,${sealB64}`,
+        logo: `data:image/png;base64,${logoB64}`,
         qr: qrDataUrl,
         barcode: barcodeDataUrl,
         code
