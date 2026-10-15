@@ -570,6 +570,7 @@ function note(msg, cls = '') {
   // পরের পর্দা আসে, যেন একজনই কাজ করছে। শুধু সফলতা/সতর্কতা/ভুল দেখানো হয়।
   if (cls !== 'ok' && cls !== 'warn' && cls !== 'err') return;
   const n = $('liveNote');
+  if (!n) return;
   n.innerHTML = '<span>' + esc(san(msg)) + '</span>';
   n.className = 'livenote on ' + sanitizeCls(cls);
 }
