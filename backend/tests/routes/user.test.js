@@ -340,3 +340,25 @@ describe('notices + banners', () => {
     expect(q2[0]).not.toContain('evil');
   });
 });
+
+describe('order document download (2026-10-15)', () => {
+  const docsJson = JSON.stringify([
+    { filename: 'delivery-abc123.pdf', originalname: 'certificate.pdf', uploaded_by: 'admin' },
+    { filename: 'order-xyz789.jpg', originalname: 'nid.jpg', uploaded_by: 'customer' },
+  ]);
+  test('GET /orders/:id/documents/:filename → 404 when order not owned', async () => {
+    db.__routeQuery([['FROM orders WHERE id=$1 AND user_id=$2', { rows: [] }]]);
+    await withUser(request(app()).get('/api/orders/o1/documents/delivery-abc123.pdf')).expect(404);
+    db.__reset();
+  });
+  test('GET /orders/:id/documents/:filename → 404 when filename not in order docs', async () => {
+    db.__routeQuery([['FROM orders WHERE id=$1 AND user_id=$2', { rows: [{ documents: docsJson }] }]]);
+    await withUser(request(app()).get('/api/orders/o1/documents/evil.pdf')).expect(404);
+    db.__reset();
+  });
+  test('GET /orders/:id/documents/:filename → 404 when file missing on disk', async () => {
+    db.__routeQuery([['FROM orders WHERE id=$1 AND user_id=$2', { rows: [{ documents: docsJson }] }]]);
+    await withUser(request(app()).get('/api/orders/o1/documents/delivery-abc123.pdf')).expect(404);
+    db.__reset();
+  });
+});

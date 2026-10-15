@@ -351,6 +351,28 @@ router.post('/orders/:id/documents', orderDocUpload(db, 'order'), async (req, re
   }
 });
 
+// GET /api/orders/:id/documents/:filename — download order document (owner only).
+// Validates: order belongs to user AND filename is in order.documents (no path traversal).
+router.get('/orders/:id/documents/:filename', async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const fn = require('path').basename(req.params.filename);
+    const ord = await db.query('SELECT documents FROM orders WHERE id=$1 AND user_id=$2', [orderId, req.user.id]);
+    if (!ord.rows.length) return res.status(404).json({ error: 'ORDER_NOT_FOUND' });
+    let docs = [];
+    try { docs = JSON.parse(ord.rows[0].documents || '[]'); } catch (_) { /* empty */ }
+    const doc = docs.find(d => d && require('path').basename(d.filename) === fn);
+    if (!doc) return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
+    const fp = require('path').join('/opt/all-in-one-abc-authentic/uploads/orders', fn);
+    const fs = require('fs');
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'FILE_MISSING' });
+    res.download(fp, doc.originalname || fn);
+  } catch (e) {
+    safeLog('[user] order document download error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 router.get('/wallet', async (req, res) => {
   try {
     const u = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);

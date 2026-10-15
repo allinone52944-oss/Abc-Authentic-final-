@@ -47,6 +47,15 @@ async function init(){
   if(!r.ok){document.getElementById('detail').innerHTML='<div class="err">অর্ডার পাওয়া যায়নি</div>';return;}
   const {order:o}=await r.json();
   const data=Object.entries(o.data||{}).map(([k,v])=>'<div class="s" style="color:var(--muted);font-size:13px;">'+esc(k)+': <b style="color:var(--cream)">'+esc(v)+'</b></div>').join('');
+  let docs=[];
+  try{docs=JSON.parse(o.documents||'[]');}catch(_){}
+  const adminDocs=docs.filter(d=>d&&d.uploaded_by==='admin');
+  const docsHtml=adminDocs.length?
+    '<div style="margin-top:16px;"><div style="color:var(--gold);font-weight:700;margin-bottom:8px;">📄 ডেলিভারি ডকুমেন্ট</div>'+
+    adminDocs.map((d,i)=>'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;">'+
+      '<span style="font-size:20px;">📎</span><span style="flex:1;font-size:13px;color:var(--cream);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(d.originalname||d.filename)+'</span>'+
+      '<button class="mini-btn" onclick="dlDoc('+i+')">⬇️ ডাউনলোড</button></div>').join('')+'</div>':'';
+  window._adminDocs=adminDocs;
   document.getElementById('detail').innerHTML=
     '<h2>'+esc(o.service_name_bn||o.service_name)+'</h2>'+
     '<div style="margin-bottom:10px;"><span class="badge st-'+o.status+'">'+(STBN[o.status]||o.status)+'</span> '+
@@ -54,9 +63,23 @@ async function init(){
     '<div class="s" style="color:var(--muted);font-size:13px;">🕘 '+new Date(o.created_at).toLocaleString('bn-BD')+'</div>'+
     '<div style="margin-top:10px;">'+data+'</div>'+
     (o.notes?'<div style="color:var(--cream);font-size:14px;margin-top:8px;">📝 '+esc(o.notes)+'</div>':'')+
-    (o.admin_note?'<div style="color:var(--gold);font-size:14px;margin-top:8px;">👨‍💼 এডমিন: '+esc(o.admin_note)+'</div>':'');
+    (o.admin_note?'<div style="color:var(--gold);font-size:14px;margin-top:8px;">👨‍💼 এডমিন: '+esc(o.admin_note)+'</div>':'')+
+    docsHtml;
   loadChat();
   document.getElementById('chatIn').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+}
+async function dlDoc(i){
+  const d=(window._adminDocs||[])[i]; if(!d)return;
+  try{
+    const r=await ABC.api('/orders/'+oid+'/documents/'+encodeURIComponent(d.filename));
+    if(!r.ok){alert('ডাউনলোড ব্যর্থ');return;}
+    const blob=await r.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=d.originalname||d.filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);
+  }catch(e){alert('ডাউনলোড ব্যর্থ');}
 }
 async function loadChat(){
   const r=await ABC.api('/orders/'+oid+'/chat');
