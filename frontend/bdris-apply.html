@@ -583,7 +583,7 @@ let GEO_DATA = null, GEO_PROM = null;
 function loadGeoData() {
   if (GEO_DATA) return Promise.resolve(GEO_DATA);
   if (!GEO_PROM) {
-    GEO_PROM = fetch('bd-geo.json', { cache: 'force-cache' })
+    GEO_PROM = fetch('bd-geo.json?v=2', { cache: 'force-cache' })
       .then(r => (r && r.ok) ? r.json() : null)
       .then(j => { GEO_DATA = j || null; return GEO_DATA; })
       .catch(() => null);
