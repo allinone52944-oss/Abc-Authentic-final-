@@ -115,3 +115,18 @@ describe('instant step transitions (fix #7, 2026-10-15)', () => {
     expect(m[1]).toMatch(/pumpOpQ\(\)/);
   });
 });
+
+describe('recent applications delete (2026-10-15)', () => {
+  test('delAck removes entry from localStorage by id', () => {
+    const m = html.match(/function delAck\(id\) \{([\s\S]*?)\n\}/);
+    expect(m).not.toBeNull();
+    expect(m[1]).toMatch(/getAcks\(\)\.filter/);
+    expect(m[1]).toMatch(/localStorage\.setItem\('bdris_acks'/);
+  });
+
+  test('ack card has delete button wired to delAck', () => {
+    expect(html).toMatch(/data-ackdel/);
+    expect(html).toMatch(/delAck\(b\.dataset\.ackdel\)/);
+    expect(html).toMatch(/🗑️ মুছুন/);
+  });
+});

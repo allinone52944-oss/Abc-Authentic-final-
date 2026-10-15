@@ -674,6 +674,12 @@ function addAck(a) {
   l.slice(1).forEach(x => { if (x.pdfB64) { delete x.pdfB64; delete x.pdfName; } });
   try { localStorage.setItem('bdris_acks', JSON.stringify(l.slice(0, 20))); } catch {}
 }
+function delAck(id) {
+  try {
+    const l = getAcks().filter(x => String(x.id) !== String(id));
+    localStorage.setItem('bdris_acks', JSON.stringify(l));
+  } catch {}
+}
 function fmtTime(iso) {
   try { return new Date(iso).toLocaleString('bn-BD', { dateStyle: 'medium', timeStyle: 'short' }); }
   catch { return String(iso || ''); }
@@ -826,7 +832,8 @@ function renderHome() {
     acks.slice(0, 3).map(a => '<div class="draft-card"><div class="di">🎫</div><div><div class="dt">' + esc(a.name || 'আবেদন') + '</div>' +
       '<div class="ds">নম্বর: ' + esc(a.no) + ' • ' + esc(fmtTime(a.at)) + '</div></div>' +
       '<div class="da"><button class="btn small" data-copy="' + esc(a.no) + '">📋 নম্বর কপি</button>' +
-      (a.pdfB64 ? '<button class="btn ghost small" data-pdf="' + esc(a.id) + '">⬇️ কপি</button>' : '') + '</div></div>').join('') + '</div>') : '';
+      (a.pdfB64 ? '<button class="btn ghost small" data-pdf="' + esc(a.id) + '">⬇️ কপি</button>' : '') +
+      '<button class="btn danger small" data-ackdel="' + esc(a.id) + '">🗑️ মুছুন</button></div></div>').join('') + '</div>') : '';
   showBody(
     '<div class="hero compact">' +
       '<span class="hbean" style="top:14%;left:7%">☕</span>' +
@@ -862,6 +869,12 @@ function renderHome() {
     const rec = getAcks().find(x => x.id === b.dataset.pdf);
     if (rec && rec.pdfB64) dlBase64(rec.pdfName || 'bdris-copy.pdf', rec.pdfB64);
     else note('সংরক্ষিত কপি পাওয়া যায়নি', 'warn');
+  });
+  els('[data-ackdel]').forEach(b => b.onclick = () => {
+    if (!confirm('এই আবেদনটি সাম্প্রতিক তালিকা থেকে মুছে ফেলবেন?')) return;
+    delAck(b.dataset.ackdel);
+    renderHome();
+    note('✔ সাম্প্রতিক আবেদন মুছে ফেলা হয়েছে', 'ok');
   });
 }
 
