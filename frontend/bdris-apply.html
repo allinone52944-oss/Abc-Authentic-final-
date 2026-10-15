@@ -869,6 +869,61 @@ function addrTextInputs(prefix, d) {
   return A_KEYS.map(([k, lbl]) => '<div class="fld"><label>' + esc(lbl) + '</label>' +
     '<input type="text" id="' + prefix + '_' + k + '" value="' + esc(d[k] || '') + '"></div>').join('');
 }
+/* ═══════════ ঠিকানা বইয়ের dropdown (permanent fix 2026-10-15) ═══════════
+   static bd-geo.json থেকে pure-JS cascade — engine/site লাগে না, তাই
+   ঠিকানা বই খুলতেই বিভাগ→জেলা→উপজেলা→ইউনিয়ন সাথে সাথে আসে।
+   ওয়ার্ড static-এ নেই বলে text input থাকে। */
+function addrBookGeoHtml(d) {
+  d = d || {};
+  const sel = (id, lbl) => '<div class="fld"><label>' + esc(lbl) + '</label>' +
+    '<select id="' + id + '"><option value="">--- নির্বাচন করুন ---</option></select></div>';
+  const txt = (id, lbl) => '<div class="fld"><label>' + esc(lbl) + '</label>' +
+    '<input type="text" id="' + id + '" value="' + esc(d[id.slice(3)] || '') + '"></div>';
+  return sel('ab_division', 'বিভাগ') + sel('ab_district', 'জেলা') +
+    sel('ab_cityCorpUpazila', 'সিটি কর্পোরেশন / উপজেলা') + sel('ab_paurasavaUnion', 'পৌরসভা / ইউনিয়ন') +
+    txt('ab_ward', 'ওয়ার্ড') + txt('ab_postBn', 'ডাকঘর (বাংলায়)') +
+    txt('ab_postEn', 'ডাকঘর (English)') + txt('ab_vilBn', 'গ্রাম / পাড়া / মহল্লা') +
+    txt('ab_vilEn', 'Village / Area (English)') + txt('ab_houseBn', 'বাসা ও সড়ক (বাংলা)') +
+    txt('ab_houseEn', 'বাসা ও সড়ক (English)');
+}
+function addrBookFill(id, names, want) {
+  const node = $(id); if (!node || node.tagName !== 'SELECT') return;
+  node.innerHTML = '<option value="">--- নির্বাচন করুন ---</option>' +
+    (names || []).map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('');
+  if (want) setSelByText(id, want);
+}
+function addrBookWire(d) {
+  d = d || {};
+  const divs = GEO_DATA ? Object.keys(GEO_DATA) : [];
+  addrBookFill('ab_division', divs, d.division);
+  const onDiv = () => {
+    const dv = $('ab_division').value;
+    const dists = (dv && GEO_DATA && GEO_DATA[dv]) ? Object.keys(GEO_DATA[dv]) : [];
+    addrBookFill('ab_district', dists);
+    addrBookFill('ab_cityCorpUpazila', []); addrBookFill('ab_paurasavaUnion', []);
+  };
+  const onDis = () => {
+    const dv = $('ab_division').value, ds = $('ab_district').value;
+    const ups = (dv && ds && GEO_DATA && GEO_DATA[dv] && GEO_DATA[dv][ds]) ? Object.keys(GEO_DATA[dv][ds]) : [];
+    addrBookFill('ab_cityCorpUpazila', ups);
+    addrBookFill('ab_paurasavaUnion', []);
+  };
+  const onUp = () => {
+    const dv = $('ab_division').value, ds = $('ab_district').value, up = $('ab_cityCorpUpazila').value;
+    let arr = [];
+    try {
+      const u = GEO_DATA[dv][ds][up];
+      if (u) arr = [...(u.u || []), ...(u.p || [])];
+    } catch (e) { /* noop */ }
+    addrBookFill('ab_paurasavaUnion', arr);
+  };
+  $('ab_division').onchange = onDiv; $('ab_district').onchange = onDis; $('ab_cityCorpUpazila').onchange = onUp;
+  // saved মান থাকলে cascade চালিয়ে বসাও
+  if (d.division && setSelByText('ab_division', d.division)) { onDiv(); }
+  if (d.district && setSelByText('ab_district', d.district)) { onDis(); }
+  if (d.cityCorpUpazila && setSelByText('ab_cityCorpUpazila', d.cityCorpUpazila)) { onUp(); }
+  if (d.paurasavaUnion) setSelByText('ab_paurasavaUnion', d.paurasavaUnion);
+}
 function readAddrFields(prefix, prev) {
   const o = {};
   A_KEYS.forEach(([k]) => {
@@ -1181,19 +1236,27 @@ function renderAddrBook(pickFn, backFn) {
     '<div id="addrList"><div class="draft-card">তালিকা আসছে…</div></div>' +
     '<div class="sec"><div class="sub-h"><span class="snum">➕</span> নতুন ঠিকানা</div></div>' +
     '<div class="fld"><label>নাম (বাধ্যতামূলক)</label><input id="ab_name" placeholder="যেমন: বাসা, অফিস"></div>' +
-    '<div class="row2">' + addrTextInputs('ab') + '</div>' +
+    '<div class="row2">' + addrBookGeoHtml() + '</div>' +
     '<div class="mt8"><button class="btn" id="abSave">💾 সেভ করুন</button></div>'
   );
   setBtns([{ html: '← ফিরে যান', cls: 'ghost', fn: () => S.addrBack() }]);
+  loadGeoData().then(() => addrBookWire()).catch(() => {});
   $('abSave').onclick = () => {
     const nm = $('ab_name').value.trim();
     if (!nm) { note('নাম দিন', 'err'); $('ab_name').classList.add('bad'); return; }
     const a = Object.assign({ name: nm }, readAddrFields('ab'));
+    const btn = $('abSave'); btn.disabled = true;
+    let done = false;
+    const to = setTimeout(() => {
+      if (!done) { done = true; btn.disabled = false; note('সেভ হচ্ছে না — সংযোগ দেখে আবার চেষ্টা করুন', 'err'); }
+    }, 12000);
     socket.emit('SAVE_ADDRESS', a, (r) => {
+      if (done) return; done = true; clearTimeout(to); btn.disabled = false;
       $('ab_name').classList.remove('bad');
-      if (r && r.ok === false) { note(r.error || 'সেভ হয়নি', 'err'); return; }
+      if (!r || r.ok === false) { note((r && r.error) || 'সেভ হয়নি — আবার চেষ্টা করুন', 'err'); return; }
       note('✔ ঠিকানা সেভ হয়েছে', 'ok');
       ['ab_name'].concat(A_KEYS.map(([k]) => 'ab_' + k)).forEach(id => { const e = $(id); if (e) e.value = ''; });
+      addrBookWire();
       loadAddrList();
     });
   };

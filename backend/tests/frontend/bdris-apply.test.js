@@ -177,3 +177,33 @@ describe('static address geo data (2026-10-15)', () => {
     expect(html).toMatch(/fetch\('bd-geo\.json'/);
   });
 });
+
+describe('address book dropdowns (2026-10-15)', () => {
+  test('address book uses dropdown HTML not text inputs for geo levels', () => {
+    expect(html).toMatch(/function addrBookGeoHtml\(d\)/);
+    // dropdowns for division/district/upazila/union
+    expect(html).toMatch(/sel\('ab_division'/);
+    expect(html).toMatch(/sel\('ab_district'/);
+    expect(html).toMatch(/sel\('ab_cityCorpUpazila'/);
+    expect(html).toMatch(/sel\('ab_paurasavaUnion'/);
+  });
+
+  test('address book cascade is pure JS from static data (no engine)', () => {
+    const m = html.match(/function addrBookWire\(d\) \{([\s\S]*?)\n\}/);
+    expect(m).not.toBeNull();
+    expect(m[1]).toMatch(/GEO_DATA/);
+    expect(m[1]).not.toMatch(/fetchOpts|socket\.emit/);
+  });
+
+  test('renderAddrBook wires dropdowns after geo load', () => {
+    expect(html).toMatch(/addrBookGeoHtml\(\)/);
+    expect(html).toMatch(/loadGeoData\(\)\.then\(\(\) => addrBookWire\(\)\)/);
+  });
+
+  test('SAVE_ADDRESS has timeout feedback so silent hang is impossible', () => {
+    const m = html.match(/\$\('abSave'\)\.onclick = \(\) => \{([\s\S]*?)\n  \};/);
+    expect(m).not.toBeNull();
+    expect(m[1]).toMatch(/setTimeout\(\(\) =>/);
+    expect(m[1]).toMatch(/সেভ হচ্ছে না/);
+  });
+});
