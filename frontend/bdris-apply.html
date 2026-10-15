@@ -2700,6 +2700,7 @@ function validateAuto() {
   return bad;
 }
 function submitAuto() {
+  console.log('[SUBMIT] submitAuto called, S.ready=', S.ready);
   collectAuto();
   const bad = validateAuto();
   if (bad.length) {
@@ -2850,11 +2851,13 @@ function otpPrepAck(d) {
 
 /* ═══════════ session প্রস্তুতি (নাগরিক কখনো আটকাবে না) ═══════════ */
 function ensureReady(cb) {
+  console.log('[SUBMIT] ensureReady called, S.ready=', S.ready, 'S.starting=', S.starting);
   if (S.ready) { cb(); return; }
   (S._readyQ = S._readyQ || []).push(cb);
   if (!S.starting) {
     S.starting = true;
     note('⏳ সংযোগ প্রস্তুত হচ্ছে… (একটু অপেক্ষা করুন)', 'info');
+    console.log('[SUBMIT] emitting START_BDRIS_SESSION');
     socket.emit('START_BDRIS_SESSION');
   }
 }
