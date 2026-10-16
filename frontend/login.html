@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1e40af">
+<meta name="color-scheme" content="light">
 <title>All In One (Abc Authentic) - Login</title>
 <link rel="stylesheet" href="/css/coffee.css?v=9">
 <link rel="stylesheet" href="/css/blue.css?v=3">
@@ -104,6 +105,15 @@ body {
   outline: none;
 }
 .field input:focus { border-color: #d4af37; }
+.field input::placeholder { color: rgba(245,230,200,0.55); }
+/* keep our dark styling when the browser autofills saved credentials */
+.field input:-webkit-autofill,
+.field input:-webkit-autofill:hover,
+.field input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f5e6c8;
+  -webkit-box-shadow: 0 0 0 1000px rgba(0,0,0,0.4) inset;
+  transition: background-color 5000s ease-in-out 0s;
+}
 .btn {
   width: 100%;
   padding: 15px;
