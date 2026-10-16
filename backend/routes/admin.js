@@ -615,6 +615,31 @@ router.delete('/storage/:filename', async (req, res) => {
   } catch (e) { safeLog('[admin] storage delete error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });
 
+// GET /api/admin/storage/:filename/download - Download uploaded file
+router.get('/storage/:filename/download', async (req, res) => {
+  try {
+    const fn = path.basename(req.params.filename);
+    const fp = path.join('/opt/all-in-one-abc-authentic/uploads/orders', fn);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'NOT_FOUND' });
+    res.download(fp, fn);
+  } catch (e) { safeLog('[admin] storage download error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+// DELETE /api/admin/storage - Delete ALL uploaded files
+router.delete('/storage', async (req, res) => {
+  try {
+    const dir = '/opt/all-in-one-abc-authentic/uploads/orders';
+    if (!fs.existsSync(dir)) return res.json({ ok: true, deleted: 0 });
+    const files = fs.readdirSync(dir);
+    let count = 0;
+    files.forEach(f => {
+      try { fs.unlinkSync(path.join(dir, f)); count++; } catch (e) {}
+    });
+    await logActivity(req.user.id, 'storage.delete_all', { count });
+    res.json({ ok: true, deleted: count });
+  } catch (e) { safeLog('[admin] storage delete-all error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
 // ---- Order support messages (Phase 3) --------------------------
 // POST /api/admin/orders/:id/support-message { message, template_key? }
 const SUPPORT_TEMPLATES = [
@@ -1121,15 +1146,17 @@ router.get('/banners', async (req, res) => {
 
 router.post('/banners', async (req, res) => {
   try {
-    const { type, title, design_id, content, active } = req.body || {};
+    const { type, title, design_id, content, active, animation_type, animation_speed } = req.body || {};
     if (!['banner', 'ad', 'popup'].includes(type) || !title) {
       return res.status(400).json({ error: 'INVALID_INPUT' });
     }
+    const animType = ['slide', 'fade', 'ticker', 'bounce', 'none'].includes(animation_type) ? animation_type : 'slide';
+    const animSpeed = Math.min(120, Math.max(5, Number(animation_speed) || 30));
     const r = await db.query(
-      `INSERT INTO banners (type, title, design_id, content, active)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      `INSERT INTO banners (type, title, design_id, content, active, animation_type, animation_speed)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
       [type, String(title).trim(), Math.min(30, Math.max(1, Number(design_id) || 1)),
-       JSON.stringify(content || {}), active !== false]
+       JSON.stringify(content || {}), active !== false, animType, animSpeed]
     );
     await logActivity(req.user.id, 'banner.create', { banner_id: r.rows[0].id });
     res.status(201).json({ banner: r.rows[0] });
@@ -1138,12 +1165,18 @@ router.post('/banners', async (req, res) => {
 
 router.put('/banners/:id', async (req, res) => {
   try {
-    const { title, design_id, content, active } = req.body || {};
+    const { title, design_id, content, active, animation_type, animation_speed } = req.body || {};
     const sets = []; const params = []; let i = 1;
     if (title !== undefined) { sets.push(`title = $${i++}`); params.push(String(title).trim()); }
     if (design_id !== undefined) { sets.push(`design_id = $${i++}`); params.push(Math.min(30, Math.max(1, Number(design_id) || 1))); }
     if (content !== undefined) { sets.push(`content = $${i++}`); params.push(JSON.stringify(content)); }
     if (active !== undefined) { sets.push(`active = $${i++}`); params.push(!!active); }
+    if (animation_type !== undefined && ['slide', 'fade', 'ticker', 'bounce', 'none'].includes(animation_type)) {
+      sets.push(`animation_type = $${i++}`); params.push(animation_type);
+    }
+    if (animation_speed !== undefined) {
+      sets.push(`animation_speed = $${i++}`); params.push(Math.min(120, Math.max(5, Number(animation_speed) || 30)));
+    }
     if (!sets.length) return res.status(400).json({ error: 'NOTHING_TO_UPDATE' });
     params.push(req.params.id);
     const r = await db.query(`UPDATE banners SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, params);
@@ -1523,6 +1556,35 @@ router.get('/reports/transactions', async (req, res) => {
     await logActivity(req.user.id, 'report.transactions', { from: from || null, to: to || null, count: rows.rows.length });
   } catch (e) {
     safeLog('[admin] report transactions error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// GET /api/admin/monitor - System monitoring (user spec 2026-10-16)
+router.get('/monitor', async (req, res) => {
+  try {
+    const [dbOk, ordC, usrC, txC] = await Promise.all([
+      db.query('SELECT 1').then(() => true).catch(() => false),
+      db.query("SELECT COUNT(*) AS c FROM orders WHERE created_at > NOW() - INTERVAL '24 hours'"),
+      db.query("SELECT COUNT(*) AS c FROM users WHERE created_at > NOW() - INTERVAL '24 hours'"),
+      db.query("SELECT COUNT(*) AS c FROM transactions WHERE created_at > NOW() - INTERVAL '24 hours'"),
+    ]);
+    const act = await db.query(
+      'SELECT action, created_at FROM activity_log ORDER BY created_at DESC LIMIT 10'
+    );
+    res.json({
+      ok: true,
+      db: dbOk ? 'up' : 'down',
+      last24h: {
+        orders: Number(ordC.rows[0].c),
+        users: Number(usrC.rows[0].c),
+        transactions: Number(txC.rows[0].c),
+      },
+      recent_activity: act.rows,
+      time: new Date().toISOString(),
+    });
+  } catch (e) {
+    safeLog('[admin] monitor error:', e.message);
     res.status(500).json({ error: 'FAILED' });
   }
 });

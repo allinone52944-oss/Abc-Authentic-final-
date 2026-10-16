@@ -1164,7 +1164,15 @@ TABS.recharge = async () => {
   const r = await ABC.api('/admin/transactions?type=recharge&status=pending&limit=30');
   const d = await r.json();
   if (!r.ok || !d.transactions) { content.innerHTML = '<div style="color:var(--danger)">⚠️ লোড ব্যর্থ! রিফ্রেশ করুন</div>'; return; }
-  let html = '<h3 style="color:var(--gold);margin-bottom:12px;">⏳ পেন্ডিং রিচার্জ (' + bn(d.total) + ')</h3>';
+  // Recharge mode: auto (SMS) + manual (user spec 2026-10-16)
+  const mode = window._rechargeMode || 'both';
+  let html = '<div style="display:flex; gap:8px; margin-bottom:12px; align-items:center; flex-wrap:wrap;">' +
+    '<b style="color:var(--gold);">💰 রিচার্জ মোড:</b>' +
+    '<button class="mini-btn' + (mode === 'auto' ? ' ok' : '') + '" onclick="window._rechargeMode=\'auto\';show(\'recharge\')" title="শুধু SMS অটো-ম্যাচ">🤖 অটো</button>' +
+    '<button class="mini-btn' + (mode === 'manual' ? ' ok' : '') + '" onclick="window._rechargeMode=\'manual\';show(\'recharge\')" title="শুধু ম্যানুয়াল approve">👤 ম্যানুয়াল</button>' +
+    '<button class="mini-btn' + (mode === 'both' ? ' ok' : '') + '" onclick="window._rechargeMode=\'both\';show(\'recharge\')" title="দুটোই চালু">🔀 দুটোই</button>' +
+    '<button class="mini-btn" onclick="show(\'sms\')" style="margin-left:auto;">📩 SMS লগ</button></div>';
+  html += '<h3 style="color:var(--gold);margin-bottom:12px;">⏳ পেন্ডিং রিচার্জ (' + bn(d.total) + ')</h3>';
   if (!d.transactions.length) html += '<div style="color:var(--muted)">কোনো পেন্ডিং রিকোয়েস্ট নেই 🎉</div>';
   for (const t of d.transactions) {
     html += '<div class="list-row" style="cursor:default;"><div>' +
@@ -1316,12 +1324,26 @@ window.AdmCp = {
       fld('কোড', 'text', 'cp_code') +
       '<div class="field"><label>ধরন</label><select id="cp_type"><option value="promo">প্রোমো</option><option value="cashback">ক্যাশব্যাক</option></select></div>' +
       fld('শতাংশ %', 'number', 'cp_pct') + fld('টাকা (ফিক্সড)', 'number', 'cp_amt') +
+      '<div class="field"><label>📅 মেয়াদ (তারিখ)</label><input type="date" id="cp_exp"></div>' +
+      '<div class="field"><label>🛎️ কোন সেবায় (খালি = সব সেবা)</label><select id="cp_svc"><option value="">সব সেবা</option></select></div>' +
       '<button class="btn" onclick="AdmCp.create()">তৈরি করুন</button>');
+    // Load services for dropdown
+    ABC.api('/admin/services').then(r => r.json()).then(d => {
+      const sel = document.getElementById('cp_svc');
+      (d.services || []).forEach(s => {
+        const o = document.createElement('option');
+        o.value = s.id; o.textContent = (s.name_bn || s.name);
+        sel.appendChild(o);
+      });
+    });
   },
   async create() {
+    const exp = document.getElementById('cp_exp').value;
+    const svc = document.getElementById('cp_svc').value;
     const r = await ABC.api('/admin/coupons', { method: 'POST', body: {
       code: v('cp_code'), type: document.getElementById('cp_type').value,
       percent: Number(v('cp_pct')) || 0, amount: Number(v('cp_amt')) || 0,
+      expires_at: exp || null, service_id: svc || null,
     }});
     const d = await r.json();
     if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
@@ -1416,10 +1438,12 @@ function fallbackCopy(t, done) {
 TABS.banners = async () => {
   const r = await ABC.api('/admin/banners');
   const d = await r.json();
+  const animBn = { slide: '➡️ স্লাইড', fade: '🔄 ফেইড', ticker: '📰 টিকার', bounce: '⬆️ বাউন্স', none: '⏸️ স্থির' };
   let html = '<button class="mini-btn ok" onclick="AdmBn.createForm()" style="margin-bottom:12px;">+ নতুন ব্যানার</button>' +
-    '<div style="overflow-x:auto;"><table class="adm"><tr><th>ধরন</th><th>শিরোনাম</th><th>ডিজাইন</th><th>সক্রিয়</th><th>কাজ</th></tr>';
+    '<div style="overflow-x:auto;"><table class="adm"><tr><th>ধরন</th><th>শিরোনাম</th><th>ডিজাইন</th><th>🎬 অ্যানিমেশন</th><th>সক্রিয়</th><th>কাজ</th></tr>';
   for (const b of d.banners) {
     html += '<tr><td>' + esc(b.type) + '</td><td>' + esc(b.title) + '</td><td>#' + b.design_id + '</td>' +
+      '<td><small>' + (animBn[b.animation_type] || b.animation_type || '-') + '<br>⚡' + (b.animation_speed || 30) + '</small></td>' +
       '<td>' + (b.active ? '✅' : '❌') + '</td>' +
       '<td><button class="mini-btn" onclick="AdmBn.editForm(\'' + b.id + '\')">✏️ এডিট</button>' +
       '<button class="mini-btn" onclick="AdmBn.toggle(\'' + b.id + '\',' + (!b.active) + ')">' +
@@ -1444,6 +1468,16 @@ window.AdmBn = {
     modal('🖼️ নতুন ব্যানার/বিজ্ঞাপন/পপআপ',
       '<div class="field"><label>ধরন</label><select id="bn_type"><option value="banner">ব্যানার</option><option value="ad">বিজ্ঞাপন</option><option value="popup">পপআপ</option></select></div>' +
       fld('শিরোনাম (admin)', 'text', 'bn_title') +
+      '<div class="field"><label>🎬 অ্যানিমেশন</label><select id="bn_anim">' +
+      '<option value="slide">➡️ স্লাইড (ticker-মতো)</option>' +
+      '<option value="fade">🔄 ফেইড</option>' +
+      '<option value="ticker">📰 নিউজ টিকার</option>' +
+      '<option value="bounce">⬆️ বাউন্স</option>' +
+      '<option value="none">⏸️ স্থির</option></select></div>' +
+      '<div class="field"><label>⚡ গতি (৫=ধীর, ১২০=দ্রুত)</label>' +
+      '<input type="range" id="bn_speed" min="5" max="120" value="30" style="width:100%;" ' +
+      'oninput="document.getElementById(\'bn_speed_v\').textContent=this.value">' +
+      '<span id="bn_speed_v">30</span></div>' +
       '<div class="field"><label>ডিজাইন বেছে নিন (' + cat.designs.length + 'টি)</label>' +
       '<div class="bn-design-grid" id="bnDesignGrid">' +
       cat.designs.map((d) =>
@@ -1488,6 +1522,8 @@ window.AdmBn = {
     const r = await ABC.api('/admin/banners', { method: 'POST', body: {
       type: document.getElementById('bn_type').value,
       title: v('bn_title'), design_id: this._selDesign,
+      animation_type: document.getElementById('bn_anim').value,
+      animation_speed: Number(document.getElementById('bn_speed').value) || 30,
       content: { text_bn: v('bn_text_bn'), text_en: v('bn_text_en'), link: v('bn_link') },
     }});
     if (!r.ok) { alert('ব্যর্থ'); return; }
@@ -1503,6 +1539,16 @@ window.AdmBn = {
     const c = b.content || {};
     modal('✏️ ব্যানার এডিট করুন',
       fld('শিরোনাম (admin)', 'text', 'bn_title', b.title) +
+      '<div class="field"><label>🎬 অ্যানিমেশন</label><select id="bn_anim">' +
+      '<option value="slide"' + (b.animation_type === 'slide' ? ' selected' : '') + '>➡️ স্লাইড (ticker-মতো)</option>' +
+      '<option value="fade"' + (b.animation_type === 'fade' ? ' selected' : '') + '>🔄 ফেইড</option>' +
+      '<option value="ticker"' + (b.animation_type === 'ticker' ? ' selected' : '') + '>📰 নিউজ টিকার</option>' +
+      '<option value="bounce"' + (b.animation_type === 'bounce' ? ' selected' : '') + '>⬆️ বাউন্স</option>' +
+      '<option value="none"' + (b.animation_type === 'none' ? ' selected' : '') + '>⏸️ স্থির</option></select></div>' +
+      '<div class="field"><label>⚡ গতি (৫=ধীর, ১২০=দ্রুত)</label>' +
+      '<input type="range" id="bn_speed" min="5" max="120" value="' + (b.animation_speed || 30) + '" style="width:100%;" ' +
+      'oninput="document.getElementById(\'bn_speed_v\').textContent=this.value">' +
+      '<span id="bn_speed_v">' + (b.animation_speed || 30) + '</span></div>' +
       '<div class="field"><label>ডিজাইন</label><div class="bn-design-grid" id="bnDesignGrid">' +
       cat.designs.map((x) =>
         '<div class="bn-design-opt' + (x.id === b.design_id ? ' sel' : '') + '" data-id="' + x.id + '" onclick="AdmBn.pick(' + x.id + ')">' +
@@ -1522,6 +1568,8 @@ window.AdmBn = {
   async save(id) {
     const r = await ABC.api('/admin/banners/' + id, { method: 'PUT', body: {
       title: v('bn_title'), design_id: this._selDesign, active: document.getElementById('bn_active').checked,
+      animation_type: document.getElementById('bn_anim').value,
+      animation_speed: Number(document.getElementById('bn_speed').value) || 30,
       content: { text_bn: v('bn_text_bn'), text_en: v('bn_text_en'), link: v('bn_link') },
     }});
     if (!r.ok) { alert('ব্যর্থ'); return; }
@@ -1770,9 +1818,144 @@ function closeModal() {
 }
 
 
-window.VoiceAlert = VoiceAlert;
-window.PushNotify = PushNotify;
-window.closeModal = closeModal;
+/* ---------------- REPORTS (user spec 2026-10-16) ---------------- */
+TABS.reports = async () => {
+  // Use /admin/orders (JSON) not /admin/reports/orders (PDF)
+  const [oR, tR, uR] = await Promise.all([
+    ABC.api('/admin/orders?limit=500'),
+    ABC.api('/admin/transactions?type=recharge&status=approved&limit=500'),
+    ABC.api('/admin/users?limit=1'),
+  ]);
+  const oD = await oR.json(); const tD = await tR.json(); const uD = await uR.json();
+  const orders = oD.orders || [];
+  const txns = tD.transactions || [];
+
+  // Calculate stats
+  const revenue = orders.filter(o => ['completed', 'delivered'].includes(o.status))
+    .reduce((s, o) => s + Number(o.price || 0), 0);
+  const byStatus = {};
+  orders.forEach(o => { byStatus[o.status] = (byStatus[o.status] || 0) + 1; });
+  const walletTotal = txns.reduce((s, t) => s + Number(t.amount || 0), 0);
+
+  let html = '<h3 style="color:var(--gold); margin-bottom:14px;">📊 রিপোর্ট</h3>' +
+    '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:18px;">' +
+    '<div style="background:var(--card); padding:16px; border-radius:12px; text-align:center;">' +
+    '<div style="font-size:12px; color:var(--dim);">💰 মোট রেভিনিউ</div>' +
+    '<div style="font-size:24px; font-weight:700; color:var(--gold);">৳' + bn(revenue) + '</div></div>' +
+    '<div style="background:var(--card); padding:16px; border-radius:12px; text-align:center;">' +
+    '<div style="font-size:12px; color:var(--dim);">💳 মোট রিচার্জ</div>' +
+    '<div style="font-size:24px; font-weight:700; color:#22c55e;">৳' + bn(walletTotal) + '</div></div>' +
+    '<div style="background:var(--card); padding:16px; border-radius:12px; text-align:center;">' +
+    '<div style="font-size:12px; color:var(--dim);">👥 মোট ইউজার</div>' +
+    '<div style="font-size:24px; font-weight:700;">' + bn(uD.total || 0) + '</div></div>' +
+    '<div style="background:var(--card); padding:16px; border-radius:12px; text-align:center;">' +
+    '<div style="font-size:12px; color:var(--dim);">📦 মোট অর্ডার</div>' +
+    '<div style="font-size:24px; font-weight:700;">' + bn(orders.length) + '</div></div></div>';
+
+  html += '<h4 style="color:var(--gold); margin:14px 0 10px;">📦 Status অনুযায়ী অর্ডার</h4>' +
+    '<div style="display:grid; gap:8px;">';
+  Object.entries(byStatus).forEach(([s, c]) => {
+    html += '<div style="display:flex; justify-content:space-between; padding:10px 14px; background:var(--card); border-radius:8px;">' +
+      '<span><span class="badge st-' + s + '">' + (STBN[s] || s) + '</span></span>' +
+      '<b>' + bn(c) + 'টি</b></div>';
+  });
+  html += '</div>';
+  content.innerHTML = html;
+};
+
+/* ---------------- FILE STORAGE TAB (user spec 2026-10-16) ---------------- */
+/* ---------------- MONITOR (user spec 2026-10-16) ---------------- */
+TABS.monitor = async () => {
+  const r = await ABC.api('/admin/monitor');
+  const d = await r.json();
+  if (!r.ok) { content.innerHTML = '<div style="color:var(--danger)">⚠️ লোড ব্যর্থ!</div>'; return; }
+
+  let html = '<h3 style="color:var(--gold); margin-bottom:14px;">🖥️ মনিটর</h3>' +
+    '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:18px;">' +
+    '<div style="background:var(--card); padding:14px; border-radius:12px; text-align:center;">' +
+    '<div style="font-size:12px; color:var(--dim);">🗄️ ডাটাবেজ</div>' +
+    '<div style="font-size:20px; font-weight:700; color:' + (d.db === 'up' ? '#22c55e' : '#ef4444') + ';">' +
+    (d.db === 'up' ? '✅ চালু' : '❌ বন্ধ') + '</div></div>' +
+    '<div style="background:var(--card); padding:14px; border-radius:12px; text-align:center;">' +
+    '<div style="font-size:12px; color:var(--dim);">📦 অর্ডার (২৪ঘ)</div>' +
+    '<div style="font-size:20px; font-weight:700;">' + bn(d.last24h.orders) + '</div></div>' +
+    '<div style="background:var(--card); padding:14px; border-radius:12px; text-align:center;">' +
+    '<div style="font-size:12px; color:var(--dim);">👥 ইউজার (২৪ঘ)</div>' +
+    '<div style="font-size:20px; font-weight:700;">' + bn(d.last24h.users) + '</div></div>' +
+    '<div style="background:var(--card); padding:14px; border-radius:12px; text-align:center;">' +
+    '<div style="font-size:12px; color:var(--dim);">💳 লেনদেন (২৪ঘ)</div>' +
+    '<div style="font-size:20px; font-weight:700;">' + bn(d.last24h.transactions) + '</div></div></div>';
+
+  html += '<h4 style="color:var(--gold); margin:14px 0 10px;">📜 সাম্প্রতিক কার্যক্রম</h4>';
+  if (!(d.recent_activity || []).length) {
+    html += '<div style="color:var(--muted)">কোনো কার্যক্রম নেই</div>';
+  } else {
+    html += '<div style="display:grid; gap:6px;">';
+    d.recent_activity.forEach(a => {
+      html += '<div style="display:flex; justify-content:space-between; padding:8px 12px; background:var(--card); border-radius:8px; font-size:13px;">' +
+        '<span>' + esc(a.action) + '</span>' +
+        '<small style="color:var(--dim);">' + new Date(a.created_at).toLocaleString('bn-BD') + '</small></div>';
+    });
+    html += '</div>';
+  }
+  content.innerHTML = html;
+};
+
+/* ---------------- FILE STORAGE (defined below) ---------------- */
+TABS.storage = async () => {
+  const r = await ABC.api('/admin/storage');
+  const d = await r.json();
+  const files = d.files || [];
+  const total = files.reduce((s, f) => s + (f.size || 0), 0);
+  let html = '<div style="display:flex; gap:8px; margin-bottom:12px; align-items:center; flex-wrap:wrap;">' +
+    '<b style="color:var(--gold);">💾 ফাইল স্টোরেজ</b>' +
+    '<span style="color:var(--dim); font-size:12px;">মোট: ' + (total / 1024 / 1024).toFixed(2) + ' MB (' + bn(files.length) + ' ফাইল)</span>' +
+    (files.length ? '<button class="mini-btn danger" style="margin-left:auto;" onclick="AdmStorage.delAll()">🗑️ সব ডিলিট</button>' : '') +
+    '</div>';
+  if (!files.length) {
+    html += '<div style="color:var(--muted)">কোনো ফাইল নেই</div>';
+  } else {
+    html += '<div style="display:grid; gap:8px;">';
+    files.forEach(f => {
+      html += '<div style="display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--card); border-radius:10px;">' +
+        '<span style="font-size:24px;">📄</span>' +
+        '<div style="flex:1;"><b style="font-size:13px;">' + esc(f.filename) + '</b><br>' +
+        '<small style="color:var(--dim);">👤 ' + esc(f.user_phone || f.user_name || '—') + ' • ' + (f.size_kb || Math.round((f.size || 0) / 1024)) + ' KB</small></div>' +
+        '<button class="mini-btn" onclick="AdmStorage.download(\'' + esc(f.filename) + '\')">⬇️ ডাউনলোড</button>' +
+        '<button class="mini-btn danger" onclick="AdmStorage.del(\'' + esc(f.filename) + '\')">🗑️</button></div>';
+    });
+    html += '</div>';
+  }
+  content.innerHTML = html;
+};
+window.AdmStorage = {
+  async download(fn) {
+    try {
+      const r = await fetch('/api/admin/storage/' + encodeURIComponent(fn) + '/download', {
+        headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('abc_access_token') },
+      });
+      if (!r.ok) { alert('ডাউনলোড ব্যর্থ'); return; }
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fn;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+    } catch (e) { alert('ডাউনলোড ব্যর্থ'); }
+  },
+  async del(fn) {
+    if (!confirm('ডিলিট করবেন?\n' + fn)) return;
+    const r = await ABC.api('/admin/storage/' + encodeURIComponent(fn), { method: 'DELETE' });
+    if (r.ok) show('storage'); else alert('ব্যর্থ');
+  },
+  async delAll() {
+    if (!confirm('⚠️ সব ফাইল ডিলিট করবেন?')) return;
+    if (!confirm('🔴 শেষ কনফার্মেশন!')) return;
+    const r = await ABC.api('/admin/storage', { method: 'DELETE' });
+    if (r.ok) { alert('✅ সব ডিলিট হয়েছে'); show('storage'); }
+    else alert('ব্যর্থ');
+  },
+};
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => init().catch((e) => {
     const c = document.getElementById('content');
