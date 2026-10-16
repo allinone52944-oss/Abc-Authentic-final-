@@ -12,340 +12,269 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <title>ড্যাশবোর্ড - All In One (Abc Authentic)</title>
-<link rel="stylesheet" href="/css/coffee.css?v=9">
-<link rel="stylesheet" href="/css/blue.css?v=1">
-<!-- cache-bust 2026-10-13: force fresh document load -->
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Hind Siliguri',system-ui,sans-serif; background:#eef2f7; color:#0f172a; }
+  .desktop { max-width:1100px; margin:0 auto; background:#fff; min-height:100vh; display:flex; }
+  .sidebar { width:220px; background:linear-gradient(180deg,#1e3a8a,#1e40af); color:#fff; padding:20px 0; flex-shrink:0; }
+  .side-logo { padding:0 20px 20px; border-bottom:1px solid rgba(255,255,255,0.15); margin-bottom:16px; }
+  .side-logo h2 { font-size:18px; }
+  .side-logo p { font-size:11px; opacity:0.7; }
+  .side-link { display:flex; align-items:center; gap:12px; padding:12px 20px; font-size:14px; color:rgba(255,255,255,0.85); cursor:pointer; border-left:3px solid transparent; }
+  .side-link.on { background:rgba(255,255,255,0.12); border-left-color:#fff; color:#fff; font-weight:600; }
+  .side-link .ico { font-size:18px; }
+  .main { flex:1; padding:24px; overflow:auto; }
+  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+  .topbar h2 { font-size:20px; }
+  .topbar p { font-size:13px; color:#64748b; }
+  .user-chip { display:flex; align-items:center; gap:10px; }
+  .avatar { width:38px; height:38px; background:#dbeafe; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; color:#1e40af; }
+  .hero-blue { background:linear-gradient(135deg,#1e40af,#3b82f6); color:#fff; border-radius:16px; padding:22px; display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+  .hero-blue .wb { font-size:13px; opacity:0.85; }
+  .hero-blue .amt { font-size:30px; font-weight:700; margin-top:4px; }
+  .btn-add { background:#fff; color:#1e40af; border:none; padding:10px 20px; border-radius:10px; font-weight:700; font-size:13px; cursor:pointer; }
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+  .stat { background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:16px; cursor:pointer; }
+  .stat .ico { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; margin-bottom:8px; }
+  .stat .num { font-size:22px; font-weight:700; }
+  .stat .lbl { font-size:12px; color:#64748b; }
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:18px; }
+  .card h3 { font-size:15px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; }
+  .card h3 a { font-size:12px; color:#2563eb; text-decoration:none; cursor:pointer; }
+  .svc-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .svc2 { background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px; text-align:center; cursor:pointer; }
+  .svc2 .ico { font-size:26px; margin-bottom:6px; }
+  .svc2 h4 { font-size:13px; }
+  .svc2 p { font-size:11px; color:#64748b; }
+  .svc2 .pr { font-size:13px; font-weight:700; color:#1e40af; margin-top:4px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; padding:10px 8px; color:#64748b; font-size:12px; border-bottom:1px solid #e2e8f0; }
+  td { padding:10px 8px; border-bottom:1px solid #f1f5f9; }
+  .st { font-size:11px; padding:3px 10px; border-radius:20px; font-weight:600; }
+  .st.done { background:#dcfce7; color:#166534; }
+  .st.proc { background:#fef3c7; color:#92400e; }
+  .st.new { background:#dbeafe; color:#1d4ed8; }
+  .btn-view { background:#eff6ff; color:#2563eb; border:none; padding:6px 14px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; }
+  /* Mobile */
+  .mobile-only { display:none; }
+  .m-top { background:linear-gradient(135deg,#1e40af,#3b82f6); color:#fff; padding:20px; display:none; }
+  .m-top h2 { font-size:18px; } .m-top p { font-size:12px; opacity:0.85; }
+  .m-bal { background:#fff; margin:-20px 20px 0; border-radius:16px; padding:18px; box-shadow:0 4px 20px rgba(0,0,0,0.08); display:flex; justify-content:space-between; align-items:center; position:relative; display:none; }
+  .m-content { padding:16px 20px; display:none; }
+  .m-svc-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .m-tabbar { display:none; border-top:1px solid #f1f5f9; padding:10px 0 14px; background:#fff; position:fixed; bottom:0; left:0; right:0; }
+  .m-tab { flex:1; text-align:center; font-size:10px; color:#94a3b8; cursor:pointer; }
+  .m-tab.on { color:#1e40af; font-weight:700; }
+  .m-tab .ico { font-size:20px; }
+  .bn-strip { margin-bottom:16px; }
+  .wa-fab { position:fixed; bottom:80px; right:20px; width:56px; height:56px; border-radius:50%; background:#fff; box-shadow:0 4px 16px rgba(0,0,0,0.15); display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:100; }
+  .wa-fab img { width:32px; height:32px; }
+  @media (max-width:768px) {
+    .desktop { display:block; }
+    .sidebar { display:none; }
+    .main { padding:0; }
+    .topbar, .hero-blue, .stats, .two-col, .card { display:none; }
+    .m-top, .m-bal, .m-content { display:block; }
+    .m-tabbar { display:flex; }
+    .mobile-only { display:block; }
+  }
+</style>
 </head>
-<body class="app">
-<div class="spiral"></div>
-<div class="gold-orb" style="width:260px;height:260px;top:6%;right:4%;"></div>
-
-<div class="app-shell">
-  <div class="app-header">
-    <div>
-      <div class="brand">🔷 ALL IN ONE</div>
-      <div class="greet" id="greet">স্বাগতম</div>
-    </div>
-    <div class="hdr-actions">
-      <div class="pill" id="balancePill">৳০</div>
-      <button class="icon-btn" id="greetVoiceBtn" title="ভয়েস গ্রিটিং শুনুন" style="display:none;">🔊</button>
-      <button class="icon-btn" id="adminBtn" onclick="location.href='/admin.html'" title="এডমিন প্যানেল" style="display:none;">⚙️</button>
-      <button class="icon-btn" onclick="location.href='/profile.html'">👤</button>
-      <button class="icon-btn" id="logoutBtn">⏻</button>
-    </div>
+<body>
+<!-- PC Layout -->
+<div class="desktop">
+  <div class="sidebar">
+    <div class="side-logo"><h2>🔷 All In One</h2><p>বিশ্বাস ও সেবার ঠিকানা</p></div>
+    <div class="side-link on"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+    <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সেবা</div>
+    <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
+    <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট</div>
+    <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> প্রোফাইল</div>
+    <div class="side-link" id="adminLink" style="display:none;" onclick="location.href='/admin.html'"><span class="ico">⚙️</span> এডমিন</div>
   </div>
-
-  <div class="bn-strip" id="bnStrip" style="display:none;"></div>
-
-  <div class="hub-grid" id="hub">
-    <div class="hub-card" onclick="location.href='/wallet.html'">
-      <span class="go">➤</span>
-      <div class="emoji">💰</div>
-      <h3>ওয়ালেট</h3>
-      <div class="big" id="hubBalance">৳০</div>
-      <div class="sub">রিচার্জ • কুপন • হিসাব</div>
+  <div class="main">
+    <div class="topbar">
+      <div><h2 id="greet">স্বাগতম 👋</h2><p>আপনার ওয়ালেট ও সেবা প্রস্তুত</p></div>
+      <div class="user-chip">
+        <div class="avatar" id="avatar">র</div>
+        <button id="greetVoiceBtn" style="display:none;background:none;border:none;font-size:20px;cursor:pointer;">🔊</button>
+        <button id="logoutBtn" style="background:none;border:none;font-size:20px;cursor:pointer;">⏻</button>
+      </div>
     </div>
-    <div class="hub-card" onclick="location.href='/orders.html'">
-      <span class="go">➤</span>
-      <div class="emoji">📦</div>
-      <h3>অর্ডার</h3>
-      <div class="big" id="hubOrders">০</div>
-      <div class="sub" id="hubOrdersSub">সক্রিয় অর্ডার</div>
+    <div class="bn-strip" id="bnStrip" style="display:none;"></div>
+    <div class="hero-blue">
+      <div><div class="wb">ওয়ালেট ব্যালেন্স</div><div class="amt" id="balancePill">৳০</div></div>
+      <button class="btn-add" onclick="location.href='/wallet.html'">+ টাকা যোগ করুন</button>
     </div>
-    <div class="hub-card" onclick="location.href='/services.html'">
-      <span class="go">➤</span>
-      <div class="emoji">🛎️</div>
-      <h3>সেবা</h3>
-      <div class="big" id="hubServices">০</div>
-      <div class="sub">অটোমেটেড • ম্যানুয়াল</div>
+    <div class="stats">
+      <div class="stat" onclick="location.href='/orders.html'"><div class="ico" style="background:#dbeafe;">📦</div><div class="num" id="hubOrders">০</div><div class="lbl">মোট অর্ডার</div></div>
+      <div class="stat" onclick="location.href='/orders.html'"><div class="ico" style="background:#dcfce7;">✅</div><div class="num" id="hubOrdersDone">০</div><div class="lbl">সম্পন্ন</div></div>
+      <div class="stat" onclick="location.href='/orders.html'"><div class="ico" style="background:#fef3c7;">⏳</div><div class="num" id="hubOrdersSub">০</div><div class="lbl">চলমান</div></div>
+      <div class="stat" onclick="location.href='/services.html'"><div class="ico" style="background:#ede9fe;">🛎️</div><div class="num" id="hubServices">০</div><div class="lbl">সেবা</div></div>
     </div>
-    <div class="hub-card wide" onclick="location.href='/order-create.html'">
-      <span class="go">➤</span>
-      <div class="emoji">⚡</div>
-      <h3>দ্রুত অর্ডার</h3>
-      <div class="sub" id="quickServices">সেবা লোড হচ্ছে…</div>
-    </div>
-    <div class="hub-card" onclick="location.href='/manual-submit.html'">
-      <span class="go">➤</span>
-      <div class="emoji">📝</div>
-      <h3>ম্যানুয়াল আবেদন</h3>
-      <div class="sub">তথ্য পেস্ট + ডকুমেন্ট</div>
-    </div>
-    <div class="hub-card" onclick="showNotices()">
-      <span class="go">➤</span>
-      <div class="emoji">🔔</div>
-      <h3>নোটিশ</h3>
-      <div class="big" id="hubNotices">০</div>
-      <div class="sub">নতুন ঘোষণা</div>
+    <div class="two-col">
+      <div class="card">
+        <h3>জনপ্রিয় সেবা <a onclick="location.href='/services.html'">সব দেখুন →</a></h3>
+        <div class="svc-grid2" id="popularServices"><div style="color:#64748b;font-size:13px;">লোড হচ্ছে…</div></div>
+      </div>
+      <div class="card">
+        <h3>🔔 নোটিশ <a onclick="showNotices()">সব দেখুন →</a></h3>
+        <div id="noticeList"><div style="color:#64748b;font-size:13px;">লোড হচ্ছে…</div></div>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- WhatsApp FAB — THE BEST, uncommon animated -->
-<div class="wa-fab" id="waFab" title="WhatsApp"><img src="/icons/abc-logo.png" alt="Abc Authentic"><span class="wa-badge">💬</span></div>
+<!-- Mobile Layout -->
+<div class="mobile-only">
+  <div class="m-top"><h2 id="greetM">স্বাগতম 👋</h2><p>আপনার ওয়ালেট ও সেবা প্রস্তুত</p></div>
+  <div class="m-bal"><div><div style="font-size:12px;color:#64748b;">ওয়ালেট ব্যালেন্স</div><div style="font-size:24px;font-weight:700;" id="hubBalance">৳০</div></div><button class="btn-add" style="background:#eff6ff;" onclick="location.href='/wallet.html'">+ যোগ করুন</button></div>
+  <div class="m-content">
+    <div style="font-size:14px;font-weight:700;margin-bottom:10px;">সেবা সমূহ</div>
+    <div class="m-svc-grid" id="mobileServices"><div style="color:#64748b;font-size:13px;">লোড হচ্ছে…</div></div>
+  </div>
+  <div class="m-tabbar">
+    <div class="m-tab on"><div class="ico">🏠</div>হোম</div>
+    <div class="m-tab" onclick="location.href='/services.html'"><div class="ico">🛎️</div>সেবা</div>
+    <div class="m-tab" onclick="location.href='/orders.html'"><div class="ico">📦</div>অর্ডার</div>
+    <div class="m-tab" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
+    <div class="m-tab" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
+  </div>
+</div>
+
+<div class="wa-fab" id="waFab"><img src="/icons/abc-logo.png" alt="Abc"><span style="position:absolute;bottom:0;right:0;">💬</span></div>
 
 <script src="/js/app.js?v=12"></script>
 <script src="/banners/render.js"></script>
 <script>
-async function loadBanners() {
-  try {
-    const r = await ABC.api('/banners?type=banner');
-    const d = r.ok ? await r.json() : { banners: [] };
-    const act = (d.banners || []).filter((b) => b.active);
-    if (act.length) {
-      document.getElementById('bnStrip').style.display = 'block';
-      BannerRender.carousel(document.getElementById('bnStrip'), act, 6000);
-    }
-  } catch (e) { /* banners optional */ }
-  // Load popup banners
-  try {
-    const r = await ABC.api('/banners?type=popup');
-    const d = r.ok ? await r.json() : { banners: [] };
-    const act = (d.banners || []).filter((b) => b.active);
-    if (act.length) {
-      const p = act[0]; // Show first active popup
-      const bg = document.createElement('div');
-      bg.className = 'modal-bg';
-      bg.innerHTML = '<div class="modal" style="text-align:center;">' +
-        '<h3>' + escapeHtml(p.title || '') + '</h3>' +
-        '<p>' + escapeHtml(p.message || p.heading || '') + '</p>' +
-        '<button class="btn" onclick="this.closest(\'.modal-bg\').remove()">বন্ধ করুন</button></div>';
-      document.body.appendChild(bg);
-    }
-  } catch (e) { /* popups optional */ }
+const bnNum = (n) => Number(n || 0).toLocaleString('bn-BD');
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+/* Voice greeting - preserved from old dashboard (user: logic থাকলে bad যাবে না) */
 const GREET_EMOJI = { islam: '🤲', hindu: '🙏', buddhist: '🪷', christian: '✝️', other: '🌸' };
 function timeGreeting() {
   const h = new Date().getHours();
-  if (h < 11) return 'সুপ্রভাত';
-  if (h < 16) return 'শুভ দুপুর';
-  if (h < 19) return 'শুভ সন্ধ্যা';
-  return 'শুভ রাত্রি';
+  if (h < 11) return 'সুপ্রভাত'; if (h < 16) return 'শুভ দুপুর';
+  if (h < 19) return 'শুভ সন্ধ্যা'; return 'শুভ রাত্রি';
 }
-// Resolve greeting text+emoji from admin config (voice_greeting.greetings).
-// Empty text for "other" falls back to time-based greeting.
 function resolveGreeting(religion, cfg) {
-  const r = ['islam', 'hindu', 'buddhist', 'christian', 'other'].includes(religion) ? religion : 'other';
+  const r = ['islam','hindu','buddhist','christian','other'].includes(religion) ? religion : 'other';
   const g = (cfg && cfg.greetings) || {};
   let text = String(g[r] || '').trim();
   if (!text && r === 'other') text = timeGreeting();
   if (!text) text = 'শুভেচ্ছা';
   return { text, emoji: GREET_EMOJI[r] };
 }
-const bnNum = (n) => Number(n || 0).toLocaleString('bn-BD');
-
-/* ============ Religion voice greeting (Web Speech API, bn-BD) ============
-   Plays ONCE right after login (one-shot flag set by login.html).
-   Voice rotation: male -> female -> child -> male... (localStorage index).
-   Prefers real gendered Bengali voices; falls back to pitch simulation. */
 const GreetVoice = {
-  _cfg: null,
-  _lastText: '',
-  _lastVoice: 0,
-  userEnabled() {
-    try { return localStorage.getItem('abc_greet_voice') !== 'off'; } catch (e) { return true; }
-  },
-  pickVoice(voices, voiceIdx) {
-    const bn = voices.filter((v) => v.lang && v.lang.toLowerCase().startsWith('bn'));
-    if (voiceIdx === 0) return bn.find((v) => /male/i.test(v.name) && !/female/i.test(v.name)) || null;
-    if (voiceIdx === 1) return bn.find((v) => /female/i.test(v.name)) || null;
-    return null; // child: pitch simulation only
-  },
-  speak(text, voiceIdx, cfg) {
-    // Try human voice MP3 first (pre-recorded), fallback to TTS
-    try {
-      const rel = (this._lastReligion && ['islam','hindu','buddhist','christian','other'].includes(this._lastReligion)) ? this._lastReligion : 'other';
-      const vname = ['male','female','child'][voiceIdx] || 'male';
-      const a = new Audio('/audio/greet-' + rel + '-' + vname + '.mp3');
-      a.play().then(() => { 
-        const btn = document.getElementById('greetVoiceBtn');
-        if (btn) btn.style.display = 'none';
-      }).catch(() => { this._speakTTS(text, voiceIdx, cfg); });
-      return;
-    } catch (e) { /* fall through to TTS */ }
-    this._speakTTS(text, voiceIdx, cfg);
-  },
-  _speakTTS(text, voiceIdx, cfg) {
+  _cfg: null, _lastText: '', _lastVoice: 0,
+  userEnabled() { try { return localStorage.getItem('abc_greet_voice') !== 'off'; } catch(e) { return true; } },
+  speak(text, voiceIdx) {
     if (!('speechSynthesis' in window)) return;
     try {
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'bn-BD';
-      const voices = speechSynthesis.getVoices();
-      const real = this.pickVoice(voices, voiceIdx);
-      if (real) {
-        u.voice = real; // real gendered Bengali voice: use as-is
-      } else {
-        const bn = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('bn'));
-        if (bn) u.voice = bn;
-        // Pitch simulation: male 0.8 / female 1.2 / child 1.5
-        const sim = [
-          { pitch: 0.8, rate: 1.0 },
-          { pitch: 1.2, rate: 1.0 },
-          { pitch: 1.5, rate: 1.1 },
-        ][voiceIdx] || { pitch: 1, rate: 1 };
-        if (cfg && cfg.rotation === false) { u.pitch = 1; u.rate = 1; }
-        else { u.pitch = sim.pitch; u.rate = sim.rate; }
-      }
-      const btn = document.getElementById('greetVoiceBtn');
-      u.onerror = (e) => {
-        // Autoplay blocked: draw attention to the 🔊 fallback button
-        if (btn && (e.error === 'not-allowed' || e.error === 'interrupted')) {
-          btn.style.display = '';
-          btn.style.animation = 'cardIn 0.6s';
-          btn.style.boxShadow = '0 0 0 3px rgba(212,175,55,.7)';
-          setTimeout(() => { btn.style.boxShadow = ''; }, 4000);
-        }
-      };
+      u.lang = 'bn-BD'; u.pitch = [0.8, 1.2, 1.5][voiceIdx] || 1;
       speechSynthesis.speak(u);
-    } catch (e) { /* speech not supported */ }
-  },
-  replay() {
-    if (this._lastText) this.speak(this._lastText, this._lastVoice, this._cfg);
+    } catch(e) {}
   },
   async maybePlay(user) {
-    // One-shot: consume the login flag immediately (login only, never on refresh)
     let flag = null;
-    try {
-      flag = JSON.parse(sessionStorage.getItem('abc_greet_on_login') || 'null');
-      sessionStorage.removeItem('abc_greet_on_login');
-    } catch (e) { try { sessionStorage.removeItem('abc_greet_on_login'); } catch (e2) {} }
+    try { flag = JSON.parse(sessionStorage.getItem('abc_greet_on_login') || 'null'); sessionStorage.removeItem('abc_greet_on_login'); } catch(e) {}
     if (!flag || !this.userEnabled()) return;
     const cfg = window._vgCfg || {};
     if (cfg.enabled === false) return;
-    this._cfg = cfg;
     const g = resolveGreeting(user.religion, cfg);
     const text = g.text + ', ' + user.name + '! All In One-এ স্বাগতম';
     this._lastText = text;
     this._lastVoice = (typeof flag.voice === 'number') ? flag.voice : 0;
-    this._lastReligion = user.religion;
-    // Show the 🔊 replay/fallback button
     const btn = document.getElementById('greetVoiceBtn');
-    if (btn) { btn.style.display = ''; btn.onclick = () => this.replay(); }
-    // Try immediately (used to work); fallback to first user interaction
-    let played = false;
-    const playOnInteract = () => {
-      if (played) return;
-      played = true;
-      this.speak(text, this._lastVoice, cfg);
-      ['click','touchstart','keydown'].forEach(ev => document.removeEventListener(ev, playOnInteract));
-      if (btn) btn.style.display = 'none';
-    };
-    try { this.speak(text, this._lastVoice, cfg); played = true; if (btn) btn.style.display = 'none'; } catch (e) {}
-    ['click','touchstart','keydown'].forEach(ev => document.addEventListener(ev, playOnInteract));
+    if (btn) { btn.style.display = ''; btn.onclick = () => this.speak(text, this._lastVoice); }
+    try { this.speak(text, this._lastVoice); if (btn) btn.style.display = 'none'; } catch(e) {}
   },
 };
-
 async function init() {
   const meR = await ABC.api('/auth/me');
   if (!meR.ok) {
-    // Only redirect to login on real auth failures (401/403/404).
-    // 429/5xx = transient — show error, don't log the user out.
-    if (meR.status === 401 || meR.status === 403 || meR.status === 404) {
-      location.href = '/login.html'; return;
-    }
-    document.body.innerHTML = '<div style="padding:40px;text-align:center;color:#c9a961">' +
-      'সার্ভার ব্যস্ত আছে (কোড ' + meR.status + ')। <button onclick="location.reload()">পুনরায় চেষ্টা</button></div>';
+    if (meR.status === 401 || meR.status === 403 || meR.status === 404) { location.href = '/login.html'; return; }
+    document.body.innerHTML = '<div style="padding:40px;text-align:center;">সার্ভার ব্যস্ত। <button onclick="location.reload()">পুনরায়</button></div>';
     return;
   }
   const { user } = await meR.json();
   window._user = user;
-
-  // Show admin button for admin users
-  if (user.role === 'admin') {
-    const ab = document.getElementById('adminBtn');
-    if (ab) ab.style.display = '';
-  }
-
-  // Voice-greeting config (admin-controlled, public endpoint)
+  if (user.role === 'admin') document.getElementById('adminLink').style.display = '';
   try {
     const ps = await fetch('/api/public/settings');
     if (ps.ok) { const pj = await ps.json(); window._vgCfg = pj.voice_greeting || {}; }
-  } catch (e) { window._vgCfg = {}; }
-
-  // Religion greeting (visual) — once per tab session, admin texts + emoji
-  const gk = 'abc_greeted_' + user.id;
-  const greetEl = document.getElementById('greet');
-  if (!sessionStorage.getItem(gk)) {
-    const g = resolveGreeting(user.religion, window._vgCfg);
-    greetEl.innerHTML = escapeHtml(g.text) + ' ' + g.emoji + ' <small>' + escapeHtml(user.name) + '</small>';
-    greetEl.style.animation = 'cardIn 0.8s';
-    sessionStorage.setItem(gk, '1');
-  } else {
-    greetEl.innerHTML = 'স্বাগতম <small>' + escapeHtml(user.name) + '</small>';
-  }
-
-  // Religion VOICE greeting — only right after login (one-shot flag)
+  } catch(e) { window._vgCfg = {}; }
   GreetVoice.maybePlay(user);
-
+  document.getElementById('greet').innerHTML = 'স্বাগতম, ' + escapeHtml(user.name) + ' 👋';
+  document.getElementById('greetM').innerHTML = 'স্বাগতম, ' + escapeHtml(user.name) + ' 👋';
+  document.getElementById('avatar').textContent = (user.name || 'র')[0];
   document.getElementById('balancePill').textContent = '৳' + bnNum(user.balance);
   document.getElementById('hubBalance').textContent = '৳' + bnNum(user.balance);
-
-  // Orders summary — total + active (new/pending/processing) counts
-  // Single call with high limit; count active client-side (accurate for <200 orders)
   const oR = await ABC.api('/orders?limit=200');
   if (oR.ok) {
     const d = await oR.json();
     document.getElementById('hubOrders').textContent = bnNum(d.total);
+    const done = (d.orders || []).filter(o => ['completed','delivered'].includes(o.status)).length;
     const act = (d.orders || []).filter(o => ['new','pending','processing'].includes(o.status)).length;
-    document.getElementById('hubOrdersSub').textContent = 'সক্রিয়: ' + bnNum(act);
+    document.getElementById('hubOrdersDone').textContent = bnNum(done);
+    document.getElementById('hubOrdersSub').textContent = bnNum(act);
   }
-
-  // Services
   const sR = await ABC.api('/services');
   if (sR.ok) {
     const d = await sR.json();
-    document.getElementById('hubServices').textContent = bnNum(d.services.length);
-    const names = d.services.slice(0, 3).map(s => s.name_bn || s.name).join(' • ');
-    document.getElementById('quickServices').textContent = names || 'কোনো সেবা নেই';
+    const svcs = d.services || [];
+    document.getElementById('hubServices').textContent = bnNum(svcs.length);
+    const pop = svcs.slice(0, 4).map(s =>
+      '<div class="svc2" onclick="location.href=\'/services.html\'"><div class="ico">' + (s.icon || '🛎️') + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
+    ).join('');
+    document.getElementById('popularServices').innerHTML = pop || '<div>কোনো সেবা নেই</div>';
+    const mob = svcs.slice(0, 6).map(s =>
+      '<div class="svc2" onclick="location.href=\'/services.html\'"><div class="ico">' + (s.icon || '🛎️') + '</div><h4>' + escapeHtml((s.name_bn || s.name).slice(0,8)) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
+    ).join('');
+    document.getElementById('mobileServices').innerHTML = mob || '<div>কোনো সেবা নেই</div>';
   }
-
-  // Notices
   const nR = await ABC.api('/notices');
   if (nR.ok) {
     const d = await nR.json();
-    document.getElementById('hubNotices').textContent = bnNum(d.notices.filter(n => (n.title||'').trim() || (n.message||'').trim()).length);
+    const valid = (d.notices || []).filter(n => (n.title||'').trim() || (n.message||'').trim()).slice(0,3);
+    document.getElementById('noticeList').innerHTML = valid.map(n =>
+      '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;"><b style="font-size:13px;">' + escapeHtml(n.title) + '</b><br><span style="font-size:12px;color:#64748b;">' + escapeHtml((n.message||'').slice(0,60)) + '</span></div>'
+    ).join('') || '<div style="color:#64748b;">কোনো নোটিশ নেই</div>';
   }
-
-  // Banners carousel (Phase 3)
-  loadBanners();
-
-  // WhatsApp FAB — auto user info
+  try {
+    const r = await ABC.api('/banners?type=banner');
+    const d = r.ok ? await r.json() : { banners: [] };
+    const act = (d.banners || []).filter(b => b.active);
+    if (act.length) {
+      document.getElementById('bnStrip').style.display = 'block';
+      BannerRender.carousel(document.getElementById('bnStrip'), act, 6000);
+    }
+  } catch(e) {}
   document.getElementById('waFab').onclick = () => {
-    const text = 'আসসালামু আলাইকুম! আমি ' + user.name +
-      ' (ID: ' + user.id.slice(0, 8) + ', ফোন: ' + user.phone + ')। সাহায্য দরকার।';
+    const text = 'আসসালামু আলাইকুম! আমি ' + user.name + ' (ফোন: ' + user.phone + ')। সাহায্য দরকার।';
     window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
   };
-
   document.getElementById('logoutBtn').onclick = async () => {
     const rt = localStorage.getItem('abc_refresh_token');
     await ABC.api('/auth/logout', { method: 'POST', body: { refresh_token: rt } });
-    ABC.clearTokens();
-    location.href = '/login.html';
+    ABC.clearTokens(); location.href = '/login.html';
   };
 }
-
-function escapeHtml(s) {
-  return String(s || '').replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
-}
-
 async function showNotices() {
   const r = await ABC.api('/notices');
   const d = r.ok ? await r.json() : { notices: [] };
   const valid = d.notices.filter(n => (n.title || '').trim() || (n.message || '').trim());
-  const list = valid.map(n =>
-    '<li><b>' + escapeHtml(n.title) + '</b><br>' + escapeHtml(n.message) + '</li>'
-  ).join('') || '<li>কোনো নোটিশ নেই</li>';
+  const list = valid.map(n => '<li><b>' + escapeHtml(n.title) + '</b><br>' + escapeHtml(n.message) + '</li>').join('') || '<li>কোনো নোটিশ নেই</li>';
   const bg = document.createElement('div');
-  bg.className = 'modal-bg';
-  bg.innerHTML = '<div class="modal"><h3>🔔 নোটিশ</h3><ul style="padding-left:18px;">' +
-    list + '</ul><button class="btn" onclick="this.closest(\'.modal-bg\').remove()">বন্ধ করুন</button></div>';
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000;';
+  bg.innerHTML = '<div style="background:#fff;border-radius:16px;padding:24px;max-width:400px;margin:20px;"><h3>🔔 নোটিশ</h3><ul style="padding-left:18px;margin:12px 0;">' + list + '</ul><button style="background:#1e40af;color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;" onclick="this.closest(\'div\').parentElement.remove()">বন্ধ করুন</button></div>';
   bg.onclick = (e) => { if (e.target === bg) bg.remove(); };
   document.body.appendChild(bg);
 }
-
 init();
 </script>
 </body>
