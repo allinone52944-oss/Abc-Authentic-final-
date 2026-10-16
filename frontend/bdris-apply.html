@@ -1766,7 +1766,9 @@ async function warmFromData() {
         setGeoState(L.k, GEO_LEVELS, 'loaded');
       }
       if (!L.childSite) break;
-      await withTimeout(geoMirror(L.k, GEO_LEVELS), 15000);
+      /* Back-nav-এ real-site mirror SKIP — user শুধু দেখছে, বদলাচ্ছে না।
+         Mirror (15s) প্রতিটি level-এ যোগ হয়ে 70s+ লাগতো। Static data-ই যথেষ্ট;
+         user বদলালে geoChanged mirror করবে। */
       const nxt = GEO_LEVELS[GEO_LEVELS.indexOf(L) + 1];
       if (nxt) {
         await withTimeout(geoLoad(nxt.k, GEO_LEVELS, data), 12000);
