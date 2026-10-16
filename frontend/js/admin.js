@@ -6,7 +6,8 @@
 (function () {
 'use strict';
 
-const STBN = { new:'নতুন', pending:'অপেক্ষমান', processing:'প্রসেসিং', completed:'সম্পন্ন',
+const STBN = { new:'নতুন', pending:'অপেক্ষমান', waiting:'অপেক্ষমাণ', received:'গৃহীত',
+  processing:'প্রসেসিং', registered:'নিবন্ধিত', completed:'সম্পন্ন',
   delivered:'ডেলিভার্ড', failed:'ব্যর্থ', cancelled:'বাতিল', refunded:'রিফান্ডেড' };
 const content = document.getElementById('content');
 let me = null;
@@ -560,8 +561,8 @@ TABS.orders = async () => {
   const d = await r.json();
   TABS._orders = d.orders;
   let html = '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">' +
-    ['new', 'pending', 'processing', 'completed', 'delivered', 'failed', 'cancelled', 'refunded']
-      .map(s => '<button class="mini-btn" onclick="AdmOrders.filter(\'' + s + '\')">' + (STBN[s] || s) + '</button>').join('') +
+    ['new', 'pending', 'waiting', 'received', 'processing', 'registered', 'completed', 'delivered', 'failed', 'cancelled', 'refunded']
+      .map(s => '<button class="mini-btn' + (_f === s ? ' ok' : '') + '" onclick="AdmOrders.filter(\'' + s + '\')">' + (STBN[s] || s) + '</button>').join('') +
     '<button class="mini-btn" onclick="AdmOrders.filter(\'\')">সব</button></div>' +
     '<div style="overflow-x:auto;"><table class="adm"><tr><th>সেবা</th><th>ইউজার</th><th>দাম</th><th>স্ট্যাটাস</th><th>তারিখ</th><th>কাজ</th></tr>';
   for (const o of d.orders) {
@@ -579,6 +580,11 @@ TABS.orders = async () => {
   content.innerHTML = html + '</table></div>';
 };
 window.AdmOrders = {
+  copyData() {
+    const t = TABS._viewRaw || '';
+    if (!t) { alert('কপি করার মতো ডেটা নেই'); return; }
+    navigator.clipboard.writeText(t).then(() => alert('✅ কপি হয়েছে')).catch(() => alert('কপি ব্যর্থ'));
+  },
   async dlDoc(orderId, idx) {
     const d = (TABS._viewDocs || [])[idx];
     if (!d) return;
@@ -597,12 +603,20 @@ window.AdmOrders = {
     const o = (TABS._orders || []).find(x => x.id === id);
     if (!o) { alert('অর্ডার পাওয়া যায়নি'); return; }
     let dataHtml = '';
+    let rawText = '';
     try {
       const data = typeof o.data === 'string' ? JSON.parse(o.data) : (o.data || {});
-      dataHtml = Object.entries(data).map(([k, v]) =>
-        '<div style="padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;">' +
-        '<span style="color:var(--muted)">' + esc(k) + ':</span> ' +
-        '<b style="color:var(--cream)">' + esc(String(v)) + '</b></div>').join('') || '<div style="color:var(--muted)">কোনো ফর্ম ডেটা নেই</div>';
+      // Auto-format: clean key names, trim values
+      const formatted = Object.entries(data).map(([k, v]) => {
+        const cleanK = String(k).replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+        const cleanV = String(v == null ? '' : v).trim();
+        rawText += cleanK + ': ' + cleanV + '\n';
+        return '<div style="padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;">' +
+          '<span style="color:var(--muted)">' + esc(cleanK) + ':</span> ' +
+          '<b style="color:var(--cream)">' + esc(cleanV) + '</b></div>';
+      }).join('') || '<div style="color:var(--muted)">কোনো ফর্ম ডেটা নেই</div>';
+      dataHtml = formatted;
+      TABS._viewRaw = rawText;
     } catch (e) { dataHtml = '<div style="color:var(--muted)">ডেটা পড়া যায়নি</div>'; }
     let docsHtml = '';
     try {
@@ -617,7 +631,8 @@ window.AdmOrders = {
     modal('👁️ অর্ডার বিস্তারিত',
       '<div style="margin-bottom:12px;"><b style="color:var(--gold)">' + esc(o.service_name_bn || o.service_name || '') + '</b><br>' +
       '<span class="badge st-' + o.status + '">' + (STBN[o.status] || o.status) + '</span> ' +
-      '<span class="pill">৳' + bn(o.price) + '</span><br>' +
+      '<span class="pill">৳' + bn(o.price) + '</span> ' +
+      '<button class="mini-btn" onclick="AdmOrders.copyData()">📋 কপি</button><br>' +
       '<small style="color:var(--muted)">👤 ' + esc(o.user_name || '') + ' (' + esc(o.user_phone || '') + ')<br>🕘 ' + new Date(o.created_at).toLocaleString('bn-BD') + '</small></div>' +
       '<div style="color:var(--gold);font-weight:700;margin:10px 0 6px;">📝 ফর্ম ডেটা</div>' + dataHtml +
       '<div style="color:var(--gold);font-weight:700;margin:10px 0 6px;">📎 ডকুমেন্ট</div>' + docsHtml +
