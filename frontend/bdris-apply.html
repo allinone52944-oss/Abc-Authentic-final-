@@ -846,8 +846,11 @@ document.addEventListener('paste', (e) => {
   }
 });
 function dobFieldHtml(id, lbl, isoVal, req) {
+  /* Text input (not native date) — user pastes all data via copy-paste.
+     dobExtract handles DD/MM/YYYY, YYYY-MM-DD, Bengali digits, extra text. */
+  const disp = isoVal ? dobDisplay(isoVal) : '';
   return '<div class="fld"><label>' + esc(lbl) + (req ? ' <b>*</b>' : '') + '</label>' +
-    '<input type="date" id="' + id + '" value="' + esc(isoVal || '') + '" max="' + new Date().toISOString().slice(0, 10) + '"></div>';
+    '<input type="text" id="' + id + '" value="' + esc(disp) + '" placeholder="দিন/মাস/বছর (যেমন 10/10/2008)" autocomplete="off"></div>';
 }
 
 /* ═══════════ address field helpers (shared) ═══════════ */
