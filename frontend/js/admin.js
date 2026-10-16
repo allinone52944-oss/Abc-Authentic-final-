@@ -653,23 +653,75 @@ window.AdmOrders = {
     show('orders');
   },
   async deliForm(id) {
-    const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = '.pdf,.jpg,.jpeg,.png';
-    inp.onchange = async () => {
-      if (!inp.files[0]) return;
-      const fd = new FormData();
-      fd.append('file', inp.files[0]);
-      fd.append('doc_type', 'delivery');
-      const r = await fetch('/api/admin/orders/' + id + '/delivery-docs', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('abc_access_token') },
-        body: fd
-      });
-      const d = await r.json();
-      if (r.ok) alert('✅ ডকুমেন্ট আপলোড হয়েছে');
-      else alert('❌ ব্যর্থ: ' + (d.error || r.status));
-    };
-    inp.click();
+    const o = (TABS._orders || []).find(x => x.id === id);
+    // Delivery modal: blank page style, editable (user spec 2026-10-16)
+    modal('📎 ডেলিভারি ডকুমেন্ট',
+      '<div style="margin-bottom:12px;"><b>' + esc(o ? (o.service_name_bn || o.service_name) : '') + '</b><br>' +
+      '<small style="color:var(--muted)">👤 ' + esc(o ? (o.user_name || '') : '') + '</small></div>' +
+      '<div id="deliPreview" style="min-height:120px; border:2px dashed var(--line); border-radius:12px; ' +
+      'display:flex; align-items:center; justify-content:center; margin-bottom:12px; padding:20px; text-align:center; color:var(--muted);">' +
+      '📄 ডকুমেন্ট বেছে নিন<br><small>PDF, JPG, PNG</small></div>' +
+      '<input type="file" id="deliFile" accept=".pdf,.jpg,.jpeg,.png" style="display:none;" onchange="AdmOrders.deliPreview(this)">' +
+      '<div style="display:flex; gap:8px;">' +
+      '<button class="btn" style="flex:1;" onclick="document.getElementById(\'deliFile\').click()">📁 ফাইল বেছে নিন</button>' +
+      '<button class="btn" style="flex:1; background:#16a34a;" id="deliUploadBtn" onclick="AdmOrders.deliUpload(\'' + id + '\')" disabled>⬆️ আপলোড</button>' +
+      '</div>' +
+      '<div style="margin-top:10px;"><button class="btn-secondary" onclick="closeModal()">✕ বন্ধ</button></div>'
+    );
+    window._deliFile = null;
+  },
+  deliPreview(inp) {
+    const f = inp.files[0];
+    if (!f) return;
+    window._deliFile = f;
+    const pv = document.getElementById('deliPreview');
+    const btn = document.getElementById('deliUploadBtn');
+    if (f.type.startsWith('image/')) {
+      const url = URL.createObjectURL(f);
+      pv.innerHTML = '<img src="' + url + '" style="max-width:100%; max-height:300px; border-radius:8px;">' +
+        '<br><small>' + esc(f.name) + ' (' + Math.round(f.size / 1024) + ' KB)</small><br>' +
+        '<button class="mini-btn danger" style="margin-top:8px;" onclick="AdmOrders.deliClear()">🗑️ বাদ দিন</button>';
+    } else {
+      pv.innerHTML = '<div style="font-size:48px;">📄</div><b>' + esc(f.name) + '</b><br>' +
+        '<small>' + Math.round(f.size / 1024) + ' KB</small><br>' +
+        '<button class="mini-btn danger" style="margin-top:8px;" onclick="AdmOrders.deliClear()">🗑️ বাদ দিন</button>';
+    }
+    if (btn) btn.disabled = false;
+  },
+  deliClear() {
+    window._deliFile = null;
+    const pv = document.getElementById('deliPreview');
+    const btn = document.getElementById('deliUploadBtn');
+    const inp = document.getElementById('deliFile');
+    if (pv) pv.innerHTML = '📄 ডকুমেন্ট বেছে নিন<br><small>PDF, JPG, PNG</small>';
+    if (btn) btn.disabled = true;
+    if (inp) inp.value = '';
+  },
+  async deliUpload(id) {
+    const f = window._deliFile;
+    if (!f) { alert('ফাইল বেছে নিন'); return; }
+    const fd = new FormData();
+    fd.append('file', f);
+    fd.append('doc_type', 'delivery');
+    const r = await fetch('/api/admin/orders/' + id + '/delivery-docs', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('abc_access_token') },
+      body: fd
+    });
+    const d = await r.json();
+    if (r.ok) {
+      alert('✅ ডকুমেন্ট আপলোড হয়েছে');
+      // Auto-set to delivered if not already
+      const o = (TABS._orders || []).find(x => x.id === id);
+      if (o && o.status !== 'delivered') {
+        if (confirm('Status "ডেলিভার্ড" করবেন?')) {
+          await AdmOrders.setStatus(id, 'delivered');
+        }
+      }
+      closeModal(); show('orders');
+    } else {
+      alert('❌ ব্যর্থ: ' + (d.error || r.status));
+    }
   },
   // ---- Support messages (Phase 3) ----
   _tpls: [],
