@@ -838,8 +838,10 @@ document.addEventListener('paste', (e) => {
   const iso = dobExtract(txt);
   if (iso) {
     e.preventDefault();
-    t.value = dobDisplay(iso);
+    // Native date input-এ ISO (YYYY-MM-DD) বসাও; text input-এ DD/MM/YYYY
+    t.value = (t.type === 'date') ? iso : dobDisplay(iso);
     t.dispatchEvent(new Event('input', { bubbles: true }));
+    t.dispatchEvent(new Event('change', { bubbles: true }));
     note('✔ তারিখ বসানো হয়েছে: ' + dobDisplay(iso), 'ok');
   }
 });
