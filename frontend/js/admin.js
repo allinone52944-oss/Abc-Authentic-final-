@@ -49,6 +49,7 @@ async function init() {
     show('stats');
     try { VoiceAlert.init(); } catch (e) {}
     try { PushNotify.ensure(); } catch (e) {}
+    try { PushNotify.autoPrompt(); } catch (e) {}
   } catch (e) {
     const c = document.getElementById('content');
     if (c) c.innerHTML = '<div class="err">লোড ব্যর্থ: ' + esc(e.message) + ' <button onclick="location.reload()">পুনরায় চেষ্টা</button></div>';
@@ -79,6 +80,19 @@ const VoiceAlert = {
     try {
       const load = () => { this._voices = speechSynthesis.getVoices(); };
       load();
+      // Unlock audio on first user interaction (browser autoplay policy)
+      const unlock = () => {
+        try {
+          const a = new Audio();
+          a.play().catch(() => {});
+          if (window.speechSynthesis) {
+            const u = new SpeechSynthesisUtterance('');
+            speechSynthesis.speak(u);
+          }
+        } catch (e) {}
+        document.removeEventListener('click', unlock);
+      };
+      document.addEventListener('click', unlock, { once: true });
       if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = load;
     } catch (e) { /* speech not supported */ }
     // Poll every 30s for new recharge requests & orders
@@ -239,6 +253,18 @@ const PushNotify = {
     return false;
   },
   async toggle() { return this.enabled ? this.disable() : this.enable(); },
+  // Auto-prompt once if Push is enabled but permission not yet granted/denied
+  async autoPrompt() {
+    try {
+      if (!this.enabled || !this.supported()) return;
+      if (Notification.permission !== 'default') return;
+      if (localStorage.getItem('abc_push_prompted')) return;
+      localStorage.setItem('abc_push_prompted', '1');
+      if (confirm('🔔 Push নোটিফিকেশন চালু করবেন?\n\nনতুন অর্ডার/রিচার্জ এলে সাথে সাথে জানতে পারবেন।')) {
+        await this.enable();
+      }
+    } catch (e) {}
+  },
 };
 
 const TABS = {};
