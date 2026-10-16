@@ -30,11 +30,11 @@ async function init() {
     }
     me = (await r.json()).user;
     if (me.role !== 'admin') { location.href = '/dashboard.html'; return; }
-    const tabs = document.querySelectorAll('#tabs .admin-tab');
+    const tabs = document.querySelectorAll('#tabs .side-link');
     tabs.forEach(t => {
       t.onclick = () => {
-        tabs.forEach(x => x.classList.remove('active'));
-        t.classList.add('active');
+        tabs.forEach(x => x.classList.remove('on'));
+        t.classList.add('on');
         show(t.dataset.t);
       };
     });

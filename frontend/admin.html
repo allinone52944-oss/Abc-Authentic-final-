@@ -2,52 +2,75 @@
 <html lang="bn">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#d4af37">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Abc Authentic">
-<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1e40af">
 <title>এডমিন প্যানেল - All In One</title>
-<link rel="stylesheet" href="/css/coffee.css?v=9">
-<link rel="stylesheet" href="/css/blue.css?v=1">
-<!-- cache-bust 2026-10-13: force fresh document load -->
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Hind Siliguri',system-ui,sans-serif; background:#eef2f7; color:#0f172a; }
+  .desktop { max-width:1400px; margin:0 auto; background:#fff; min-height:100vh; display:flex; }
+  .sidebar { width:230px; background:linear-gradient(180deg,#1e3a8a,#1e40af); color:#fff; padding:20px 0; flex-shrink:0; max-height:100vh; overflow-y:auto; }
+  .side-logo { padding:0 20px 20px; border-bottom:1px solid rgba(255,255,255,0.15); margin-bottom:16px; }
+  .side-logo h2 { font-size:18px; } .side-logo p { font-size:11px; opacity:0.7; }
+  .side-link { display:flex; align-items:center; gap:12px; padding:11px 20px; font-size:13px; color:rgba(255,255,255,0.85); cursor:pointer; border-left:3px solid transparent; }
+  .side-link.on { background:rgba(255,255,255,0.12); border-left-color:#fff; color:#fff; font-weight:600; }
+  .side-link .ico { font-size:16px; }
+  .main { flex:1; padding:24px; overflow:auto; }
+  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+  .topbar h2 { font-size:20px; } .topbar p { font-size:13px; color:#64748b; }
+  /* Admin content styles (compatible with admin.js) */
+  #content { font-size:14px; }
+  #content .card, #content .form-card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:18px; margin-bottom:16px; }
+  #content table { width:100%; border-collapse:collapse; font-size:13px; }
+  #content th { text-align:left; padding:10px 8px; color:#64748b; font-size:12px; border-bottom:1px solid #e2e8f0; }
+  #content td { padding:10px 8px; border-bottom:1px solid #f1f5f9; }
+  #content .btn, #content button.btn { background:linear-gradient(135deg,#1e40af,#3b82f6); color:#fff; border:none; padding:10px 20px; border-radius:10px; font-weight:600; cursor:pointer; }
+  #content .btn-secondary, #content .mini-btn { background:#f1f5f9; color:#334155; border:none; padding:8px 16px; border-radius:8px; cursor:pointer; font-size:13px; margin:2px; }
+  #content .mini-btn.ok { background:#dcfce7; color:#166534; }
+  #content input, #content select, #content textarea { padding:10px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; }
+  #content .field { margin-bottom:12px; }
+  #content .field label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; }
+  #content .badge { font-size:11px; padding:3px 10px; border-radius:20px; font-weight:600; background:#dbeafe; color:#1d4ed8; }
+  #content .err { color:#dc2626; } #content .okmsg { color:#16a34a; }
+  @media (max-width:768px) { .sidebar { display:none; } }
+</style>
 </head>
-<body class="app admin-blue">
-<div class="spiral"></div>
-<div class="app-shell" style="max-width:1400px;">
-  <div class="app-header">
-    <div class="brand">☕ এডমিন প্যানেল</div>
-    <div class="hdr-actions">
-      <button class="icon-btn" onclick="location.href='/dashboard.html'">🏠</button>
-      <button class="icon-btn" id="logoutBtn">⏻</button>
+<body>
+<div class="desktop">
+  <div class="sidebar">
+    <div class="side-logo"><h2>🔷 All In One</h2><p>Admin Panel</p></div>
+    <div id="tabs">
+      <div class="side-link on" data-t="stats"><span class="ico">📊</span> ড্যাশবোর্ড</div>
+      <div class="side-link" data-t="users"><span class="ico">👥</span> ইউজার</div>
+      <div class="side-link" data-t="orders"><span class="ico">📦</span> অর্ডার</div>
+      <div class="side-link" data-t="services"><span class="ico">🛎️</span> সেবা</div>
+      <div class="side-link" data-t="cats"><span class="ico">📁</span> ক্যাটাগরি</div>
+      <div class="side-link" data-t="recharge"><span class="ico">💳</span> রিচার্জ</div>
+      <div class="side-link" data-t="sms"><span class="ico">📩</span> SMS</div>
+      <div class="side-link" data-t="coupons"><span class="ico">🎟️</span> কুপন</div>
+      <div class="side-link" data-t="invites"><span class="ico">🔗</span> ইনভাইট</div>
+      <div class="side-link" data-t="banners"><span class="ico">🖼️</span> ব্যানার</div>
+      <div class="side-link" data-t="notices"><span class="ico">🔔</span> নোটিশ</div>
+      <div class="side-link" data-t="storage"><span class="ico">💾</span> স্টোরেজ</div>
+      <div class="side-link" data-t="reports"><span class="ico">📊</span> রিপোর্ট</div>
+      <div class="side-link" data-t="monitor"><span class="ico">🖥️</span> মনিটর</div>
+      <div class="side-link" data-t="activity"><span class="ico">📜</span> লগ</div>
+      <div class="side-link" data-t="settings"><span class="ico">⚙️</span> সেটিংস</div>
     </div>
   </div>
-  <div class="admin-tabs" id="tabs">
-    <div class="admin-tab active" data-t="stats">📊 ড্যাশবোর্ড</div>
-    <div class="admin-tab" data-t="users">👥 ইউজার</div>
-    <div class="admin-tab" data-t="orders">📦 অর্ডার</div>
-    <div class="admin-tab" data-t="services">🛎️ সেবা</div>
-    <div class="admin-tab" data-t="cats">📁 ক্যাটাগরি</div>
-    <div class="admin-tab" data-t="recharge">💳 রিচার্জ</div>
-    <div class="admin-tab" data-t="sms">📩 SMS</div>
-    <div class="admin-tab" data-t="coupons">🎟️ কুপন</div>
-    <div class="admin-tab" data-t="invites">🔗 ইনভাইট</div>
-    <div class="admin-tab" data-t="banners">🖼️ ব্যানার</div>
-    <div class="admin-tab" data-t="notices">🔔 নোটিশ</div>
-    <div class="admin-tab" data-t="storage">💾 স্টোরেজ</div>
-    <div class="admin-tab" data-t="reports">📊 রিপোর্ট</div>
-    <div class="admin-tab" data-t="monitor">🖥️ মনিটর</div>
-    <div class="admin-tab" data-t="activity">📜 লগ</div>
-    <div class="admin-tab" data-t="settings">⚙️ সেটিংস</div>
+  <div class="main">
+    <div class="topbar">
+      <div><h2>Admin ড্যাশবোর্ড</h2><p>সামগ্রিক অবস্থা এক নজরে</p></div>
+      <div>
+        <button class="btn-secondary" style="background:#f1f5f9;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;" onclick="location.href='/dashboard.html'">🏠</button>
+        <button class="btn-secondary" style="background:#f1f5f9;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;" id="logoutBtn">⏻</button>
+      </div>
+    </div>
+    <div id="content"><div style="color:#64748b;">লোড হচ্ছে…</div></div>
   </div>
-  <div class="page" id="content"><div style="color:var(--muted)">লোড হচ্ছে…</div></div>
 </div>
 <script src="/js/app.js?v=12"></script>
 <script src="/banners/render.js"></script>
-<script src="/js/admin.js?v=31"></script>
+<script src="/js/admin.js?v=32"></script>
 </body>
 </html>
