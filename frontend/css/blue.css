@@ -108,3 +108,28 @@ body.admin-blue .app-header {
   border-color: #3b82f6 !important;
   outline: none !important;
 }
+
+/* ---- AUTH PAGES (forgot/reset/verify): Blue design ---- */
+.auth {
+  background: #eef2f7 !important;
+}
+.auth .card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 10px 40px rgba(30, 64, 175, 0.1) !important;
+}
+.auth .logo {
+  color: #1e40af !important;
+}
+.auth .btn {
+  background: linear-gradient(135deg, #1e40af, #3b82f6) !important;
+  color: #ffffff !important;
+}
+.auth .field input {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+}
+.auth .gold-orb {
+  display: none !important;
+}
