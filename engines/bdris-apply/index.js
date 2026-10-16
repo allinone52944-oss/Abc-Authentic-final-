@@ -140,9 +140,20 @@ function startEngine() {
   });
   // Watchdog: every 60s, make sure the engine is running (covers cases where
   // init was never retried, e.g. server.js missing at boot then restored).
+  // Also: if process exists but port probe has failed for >2min, the process
+  // is hung — kill it and restart fresh (2026-10-16 robustness).
   if (!_watchdog) {
     _watchdog = setInterval(() => {
       if (!_proc && !_installing && !_restartTimer) init();
+      // Hung process detection: _proc exists but no successful probe in 2min
+      if (_proc && _lastProbeOk > 0 && Date.now() - _lastProbeOk > 120000) {
+        console.error('[bdris-apply] watchdog: process hung (no probe OK in 2min), killing');
+        try { _proc.kill('SIGKILL'); } catch (e) {}
+        _proc = null;
+        _ready = false;
+        _crashCount = 0; // fresh start, not a crash loop
+        scheduleRestart();
+      }
     }, 60000);
     if (_watchdog.unref) _watchdog.unref();
   }
@@ -175,7 +186,12 @@ function probePort(force) {
   }, (res) => {
     const ok = res.statusCode >= 200 && res.statusCode < 500;
     _portOk = ok;
-    if (ok) _lastProbeOk = Date.now();
+    if (ok) {
+      _lastProbeOk = Date.now();
+      // Successful probe resets crash count — transient issues shouldn't
+      // cause ever-increasing backoff (2026-10-16 robustness).
+      if (_crashCount > 0) _crashCount = 0;
+    }
     res.resume();
   });
   req.on('error', () => { _portOk = false; });
