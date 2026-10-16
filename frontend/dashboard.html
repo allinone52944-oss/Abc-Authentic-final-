@@ -285,6 +285,9 @@ async function init() {
   const { user } = await meR.json();
   window._user = user;
   if (user.role === 'admin') document.getElementById('adminLink').style.display = '';
+  // Wallet balance (was dropped in rebuild — restore)
+  setText('balancePill', '৳' + bnNum(user.balance || 0));
+  setText('hubBalance', '৳' + bnNum(user.balance || 0));
   // Parallel data load (was 5 sequential awaits). Each section fails
   // independently with its own error UI + retry (no more endless "লোড হচ্ছে…").
   loadCounts(); loadServices(); loadNotices(); loadBanners(); loadSettings();
