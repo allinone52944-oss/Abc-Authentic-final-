@@ -808,6 +808,9 @@ function readDobIso(id) {
   return dobParse($(id) ? $(id).value : '');
 }
 function dobInputNormalize(t) {
+  // Native date picker (type=date) — browser নিজেই validate করে, normalize লাগে না।
+  // DD/MM/YYYY বসালে field clear হয়ে যেত (invalid format for date input)।
+  if (t && t.type === 'date') return;
   const b = bnDigits(t.value);
   if (b !== t.value) t.value = b;
   const iso = readDobIso(t.id);
@@ -1715,7 +1718,12 @@ async function geoChanged(k, Ls, data) {
   if (next) await geoLoad(next.k, Ls, data);
   noteOff();
 }
+let _warmRunning = false;
 async function warmFromData() {
+  // Concurrent run guard — দ্রুত back/forward-এ দুটো instance interfere করতো
+  if (_warmRunning) return;
+  _warmRunning = true;
+  try {
   const data = S.d.s1 = S.d.s1 || {};
   /* Static fill: division সাথে সাথে load করো (country-এর জন্য অপেক্ষা নয়)।
      Country engine থেকে আসতে 15s লাগতে পারে — division parallel-এ চলবে। */
@@ -1768,6 +1776,9 @@ async function warmFromData() {
         }
       } catch (e) {}
     });
+  }
+  } finally {
+    _warmRunning = false;
   }
 }
 /* স্থায়ী/বর্তমান ঠিকানা — এক চাপে (বা খসড়া থেকে) ক্যাসকেড ভরাট + সাইটে মিরর */
