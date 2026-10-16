@@ -151,6 +151,20 @@ const GreetVoice = {
     return null; // child: pitch simulation only
   },
   speak(text, voiceIdx, cfg) {
+    // Try human voice MP3 first (pre-recorded), fallback to TTS
+    try {
+      const rel = (this._lastReligion && ['islam','hindu','buddhist','christian','other'].includes(this._lastReligion)) ? this._lastReligion : 'other';
+      const vname = ['male','female','child'][voiceIdx] || 'male';
+      const a = new Audio('/audio/greet-' + rel + '-' + vname + '.mp3');
+      a.play().then(() => { 
+        const btn = document.getElementById('greetVoiceBtn');
+        if (btn) btn.style.display = 'none';
+      }).catch(() => { this._speakTTS(text, voiceIdx, cfg); });
+      return;
+    } catch (e) { /* fall through to TTS */ }
+    this._speakTTS(text, voiceIdx, cfg);
+  },
+  _speakTTS(text, voiceIdx, cfg) {
     if (!('speechSynthesis' in window)) return;
     try {
       speechSynthesis.cancel();
@@ -203,6 +217,7 @@ const GreetVoice = {
     const text = g.text + ', ' + user.name + '! All In One-এ স্বাগতম';
     this._lastText = text;
     this._lastVoice = (typeof flag.voice === 'number') ? flag.voice : 0;
+    this._lastReligion = user.religion;
     // Show the 🔊 replay/fallback button
     const btn = document.getElementById('greetVoiceBtn');
     if (btn) { btn.style.display = ''; btn.onclick = () => this.replay(); }
