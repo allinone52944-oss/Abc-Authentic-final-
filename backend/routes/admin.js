@@ -274,6 +274,100 @@ router.post('/users/:id/verify-email', async (req, res) => {
   }
 });
 
+// GET /api/admin/users/:id/service-overrides — per-service pricing + access
+router.get('/users/:id/service-overrides', async (req, res) => {
+  try {
+    const r = await db.query(
+      'SELECT service_id, custom_price, access_enabled FROM user_services WHERE user_id = $1',
+      [req.params.id]
+    );
+    const overrides = {};
+    r.rows.forEach(x => { overrides[x.service_id] = x; });
+    res.json({ overrides });
+  } catch (e) {
+    safeLog('[admin] service-overrides error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// PUT /api/admin/users/:id/service-access { service_id, enabled }
+router.put('/users/:id/service-access', async (req, res) => {
+  try {
+    const { service_id, enabled } = req.body || {};
+    if (!service_id) return res.status(400).json({ error: 'MISSING_SERVICE' });
+    await db.query(
+      `INSERT INTO user_services (user_id, service_id, access_enabled)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, service_id)
+       DO UPDATE SET access_enabled = EXCLUDED.access_enabled`,
+      [req.params.id, service_id, enabled !== false]
+    );
+    await logActivity(req.user.id, 'user.service_access', { user_id: req.params.id, service_id, enabled });
+    res.json({ ok: true });
+  } catch (e) {
+    safeLog('[admin] service-access error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// PUT /api/admin/users/:id/service-pricing { service_id, custom_price }
+router.put('/users/:id/service-pricing', async (req, res) => {
+  try {
+    const { service_id, custom_price } = req.body || {};
+    if (!service_id) return res.status(400).json({ error: 'MISSING_SERVICE' });
+    const cp = custom_price === null || custom_price === '' ? null : Number(custom_price);
+    if (cp !== null && (isNaN(cp) || cp < 0)) return res.status(400).json({ error: 'INVALID_PRICE' });
+    await db.query(
+      `INSERT INTO user_services (user_id, service_id, custom_price)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, service_id)
+       DO UPDATE SET custom_price = EXCLUDED.custom_price`,
+      [req.params.id, service_id, cp]
+    );
+    await logActivity(req.user.id, 'user.service_pricing', { user_id: req.params.id, service_id, custom_price: cp });
+    res.json({ ok: true });
+  } catch (e) {
+    safeLog('[admin] service-pricing error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// POST /api/admin/users/:id/reset-password — generates new random password
+router.post('/users/:id/reset-password', async (req, res) => {
+  try {
+    const crypto = require('crypto');
+    const newPw = crypto.randomBytes(4).toString('hex');
+    const bcrypt = require('bcryptjs');
+    const hash = await bcrypt.hash(newPw, 12);
+    await db.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+      [hash, req.params.id]);
+    await logActivity(req.user.id, 'user.reset_password', { user_id: req.params.id });
+    res.json({ ok: true, new_password: newPw });
+  } catch (e) {
+    safeLog('[admin] reset-password error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// GET /api/admin/users/:id/data — user stats summary
+router.get('/users/:id/data', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const [u, o, t] = await Promise.all([
+      db.query('SELECT balance FROM users WHERE id = $1', [id]),
+      db.query('SELECT COUNT(*) AS c FROM orders WHERE user_id = $1', [id]),
+      db.query('SELECT COUNT(*) AS c FROM transactions WHERE user_id = $1', [id]),
+    ]);
+    res.json({
+      balance: u.rows[0] ? Number(u.rows[0].balance) : 0,
+      orders: Number(o.rows[0].c), transactions: Number(t.rows[0].c),
+    });
+  } catch (e) {
+    safeLog('[admin] user-data error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 // DELETE /api/admin/users/:id?confirm=yes — deletes user + ALL data
 router.delete('/users/:id', async (req, res) => {
   try {

@@ -515,6 +515,10 @@ router.post('/logout', async (req, res) => {
       const hash = hashRefreshToken(String(refresh_token));
       await db.query('UPDATE refresh_tokens SET revoked = TRUE WHERE token_hash = $1', [hash]);
     }
+    // Log logout (user spec 2026-10-16: track login/logout)
+    if (req.user && req.user.id) {
+      logActivity(req.user.id, 'auth.logout', {}).catch(() => {});
+    }
     return res.json({ ok: true });
   } catch (e) {
     safeLog('[auth] logout error:', e.message);

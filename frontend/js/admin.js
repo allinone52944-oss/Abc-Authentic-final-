@@ -397,38 +397,140 @@ window.AdmUsers = {
     const r = await ABC.api('/admin/users?limit=100');
     const u = (await r.json()).users.find(x => x.id === id);
     if (!u) return;
-    modal('✏️ ' + u.name,
-      fld('নাম', 'text', 'eu_name', u.name) +
-      fld('ইমেইল', 'email', 'eu_email', u.email || '') +
-      '<div class="field"><label>ধর্ম</label><select id="eu_religion">' +
-      ['islam', 'hindu', 'buddhist', 'christian', 'other'].map(x =>
-        '<option value="' + x + '"' + (u.religion === x ? ' selected' : '') + '>' + x + '</option>').join('') +
-      '</select></div>' +
-      '<div class="field"><label>রোল' + (u.id === me.id ? ' (নিজের রোল বদলানো যাবে না)' : '') + '</label><select id="eu_role" ' + (u.id === me.id ? 'disabled' : '') + '>' +
-      ['user', 'admin'].map(x => '<option value="' + x + '"' + (u.role === x ? ' selected' : '') + '>' + x + '</option>').join('') +
-      '</select></div>' +
-      '<div class="field"><label>স্ট্যাটাস</label><select id="eu_status">' +
-      ['active', 'pending', 'disabled', 'blocked'].map(x => '<option value="' + x + '"' + (u.status === x ? ' selected' : '') + '>' + x + '</option>').join('') +
-      '</select></div>' +
-      fld('ব্যালেন্স যোগ/বাদ (যেমন: 100 বা -50)', 'number', 'eu_bal') +
-      fld('নোটিশ পাঠান (ঐচ্ছিক)', 'text', 'eu_notice') +
-      '<button class="btn" onclick="AdmUsers.save(\'' + id + '\')">সংরক্ষণ</button> ' +
-      '<button class="btn-secondary" onclick="AdmUsers.unblock(\'' + id + '\')">🔓 আনব্লক</button> ' +
-      (u.email_verified ? '' : '<button class="btn-secondary" onclick="AdmUsers.verifyEmail(\'' + id + '\')">✅ ইমেইল যাচাই</button>'));
+    // 4-tab interface (user spec 2026-10-16)
+    const tabs = [
+      { id: 'profile', icon: '📝', label: 'প্রোফাইল' },
+      { id: 'balance', icon: '💰', label: 'ব্যালেন্স' },
+      { id: 'services', icon: '🛎️', label: 'সেবা' },
+      { id: 'security', icon: '🔒', label: 'সিকিউরিটি' },
+    ];
+    const activeTab = window._usrTab || 'profile';
+    let tabBtns = '<div style="display:flex; gap:6px; margin-bottom:16px; border-bottom:2px solid var(--line); padding-bottom:10px;">';
+    tabs.forEach(t => {
+      tabBtns += '<button class="mini-btn' + (activeTab === t.id ? ' ok' : '') + '" ' +
+        'onclick="window._usrTab=\'' + t.id + '\';AdmUsers.edit(\'' + id + '\')">' + t.icon + ' ' + t.label + '</button>';
+    });
+    tabBtns += '</div>';
+
+    let body = '';
+    if (activeTab === 'profile') {
+      body = fld('নাম', 'text', 'eu_name', u.name) +
+        fld('ফোন', 'text', 'eu_phone', u.phone || '') +
+        fld('WhatsApp নম্বর', 'text', 'eu_wa', u.whatsapp || '') +
+        fld('ইমেইল', 'email', 'eu_email', u.email || '') +
+        '<div class="field"><label>ধর্ম</label><select id="eu_religion">' +
+        ['islam', 'hindu', 'buddhist', 'christian', 'other'].map(x =>
+          '<option value="' + x + '"' + (u.religion === x ? ' selected' : '') + '>' + x + '</option>').join('') +
+        '</select></div>' +
+        '<div class="field"><label>স্ট্যাটাস</label><select id="eu_status">' +
+        ['active', 'pending', 'disabled', 'blocked', 'suspended'].map(x => '<option value="' + x + '"' + (u.status === x ? ' selected' : '') + '>' + x + '</option>').join('') +
+        '</select></div>' +
+        '<button class="btn" onclick="AdmUsers.saveProfile(\'' + id + '\')">💾 সংরক্ষণ</button>';
+    } else if (activeTab === 'balance') {
+      body = '<div style="background:var(--bg); padding:16px; border-radius:10px; margin-bottom:14px; text-align:center;">' +
+        '<div style="font-size:12px; color:var(--dim);">বর্তমান ব্যালেন্স</div>' +
+        '<div style="font-size:28px; font-weight:700; color:var(--gold);">৳' + bn(u.balance) + '</div></div>' +
+        fld('টাকা (যোগ করতে +সংখ্যা, বাদ দিতে -সংখ্যা)', 'number', 'eu_bal') +
+        fld('কারণ/নোট', 'text', 'eu_bal_note') +
+        '<div style="display:flex; gap:8px;">' +
+        '<button class="btn" style="flex:1;" onclick="AdmUsers.adjustBalance(\'' + id + '\',1)">➕ যোগ</button>' +
+        '<button class="btn" style="flex:1; background:#dc2626;" onclick="AdmUsers.adjustBalance(\'' + id + '\',-1)">➖ বাদ</button></div>';
+    } else if (activeTab === 'services') {
+      body = '<div id="usrSvcList" style="color:var(--dim);">লোড হচ্ছে...</div>';
+      // Load after modal opens
+      setTimeout(() => AdmUsers.loadUserServices(id), 100);
+    } else if (activeTab === 'security') {
+      body = '<div style="display:grid; gap:10px;">' +
+        '<button class="btn-secondary" onclick="AdmUsers.unblock(\'' + id + '\')">🔓 লিমিট আনব্লক</button>' +
+        (u.email_verified ? '<div style="color:#22c55e;">✅ ইমেইল যাচাইকৃত</div>'
+          : '<button class="btn-secondary" onclick="AdmUsers.verifyEmail(\'' + id + '\')">✅ ইমেইল যাচাই করুন</button>') +
+        '<button class="btn-secondary" onclick="AdmUsers.resetPw(\'' + id + '\')">🔑 পাসওয়ার্ড রিসেট</button>' +
+        '<button class="btn-secondary" onclick="AdmUsers.viewData(\'' + id + '\')">📊 ইউজার ডেটা দেখুন</button>' +
+        '<button class="btn" style="background:#dc2626;" onclick="AdmUsers.del(\'' + id + '\',\'' + esc(u.name) + '\')">🗑️ ইউজার ডিলিট</button>' +
+        '</div>';
+    }
+
+    modal('👤 ' + esc(u.name), tabBtns + body);
   },
-  async save(id) {
+  async saveProfile(id) {
     const body = {
-      name: v('eu_name'), email: v('eu_email'), religion: v('eu_religion'), status: v('eu_status'),
-      balance_adjust: v('eu_bal') ? Number(v('eu_bal')) : 0,
+      name: v('eu_name'), phone: v('eu_phone'), whatsapp: v('eu_wa'),
+      email: v('eu_email'), religion: v('eu_religion'), status: v('eu_status'),
     };
-    const roleEl = document.getElementById('eu_role');
-    if (roleEl && !roleEl.disabled) body.role = roleEl.value;
-    const nt = v('eu_notice');
-    if (nt) body.notice = { title: 'নোটিশ', message: nt };
     const r = await ABC.api('/admin/users/' + id, { method: 'PUT', body });
     const d = await r.json();
     if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
-    closeModal(); show('users');
+    alert('✅ সংরক্ষণ হয়েছে'); closeModal(); show('users');
+  },
+  async adjustBalance(id, dir) {
+    let amt = Number(v('eu_bal')) || 0;
+    if (amt <= 0) { alert('টাকার পরিমাণ দিন'); return; }
+    amt = dir * Math.abs(amt);
+    const note = v('eu_bal_note');
+    const r = await ABC.api('/admin/users/' + id, { method: 'PUT', body: { balance_adjust: amt, balance_note: note } });
+    if (!r.ok) { alert('ব্যর্থ'); return; }
+    alert('✅ ব্যালেন্স ' + (amt > 0 ? 'যোগ' : 'বাদ') + ' হয়েছে'); closeModal(); show('users');
+  },
+  async loadUserServices(userId) {
+    try {
+      const [svcR, ovR] = await Promise.all([
+        ABC.api('/admin/services'), ABC.api('/admin/users/' + userId + '/service-overrides'),
+      ]);
+      const services = (await svcR.json()).services || [];
+      const overrides = (await ovR.json()).overrides || {};
+      let h = '<div style="display:grid; gap:8px; max-height:400px; overflow-y:auto;">';
+      services.forEach(s => {
+        const ov = overrides[s.id] || {};
+        const enabled = ov.access_enabled !== false;
+        const price = ov.custom_price != null ? ov.custom_price : s.price;
+        h += '<div style="display:flex; align-items:center; gap:10px; padding:10px; background:var(--bg); border-radius:8px;">' +
+          '<span style="font-size:18px;">' + esc(s.icon || '📦') + '</span>' +
+          '<div style="flex:1;"><b style="font-size:13px;">' + esc(s.name_bn || s.name) + '</b><br>' +
+          '<small style="color:var(--dim);">ডিফল্ট ৳' + bn(s.price) + '</small></div>' +
+          '<input type="number" id="usv_price_' + s.id + '" value="' + (ov.custom_price != null ? ov.custom_price : '') + '" ' +
+          'placeholder="৳' + s.price + '" style="width:80px; padding:6px; border-radius:6px; border:1px solid var(--line);">' +
+          '<button class="mini-btn' + (enabled ? ' ok' : '') + '" onclick="AdmUsers.toggleSvc(\'' + userId + '\',\'' + s.id + '\',' + enabled + ')">' +
+          (enabled ? '🟢' : '🔴') + '</button></div>';
+      });
+      h += '</div><button class="btn" style="margin-top:12px;" onclick="AdmUsers.saveSvcPrices(\'' + userId + '\')">💾 দাম সংরক্ষণ</button>';
+      const el = document.getElementById('usrSvcList');
+      if (el) el.innerHTML = h;
+      window._usrSvcList = services;
+    } catch (e) {
+      const el = document.getElementById('usrSvcList');
+      if (el) el.innerHTML = '<div style="color:#dc2626;">লোড ব্যর্থ</div>';
+    }
+  },
+  async toggleSvc(userId, serviceId, cur) {
+    const r = await ABC.api('/admin/users/' + userId + '/service-access', {
+      method: 'PUT', body: { service_id: serviceId, enabled: !cur },
+    });
+    if (!r.ok) { alert('ব্যর্থ'); return; }
+    AdmUsers.loadUserServices(userId);
+  },
+  async saveSvcPrices(userId) {
+    const services = window._usrSvcList || [];
+    const updates = [];
+    services.forEach(s => {
+      const el = document.getElementById('usv_price_' + s.id);
+      if (el && el.value !== '') updates.push({ service_id: s.id, custom_price: Number(el.value) });
+    });
+    for (const u of updates) {
+      await ABC.api('/admin/users/' + userId + '/service-pricing', { method: 'PUT', body: u });
+    }
+    alert('✅ দাম সংরক্ষণ হয়েছে');
+  },
+  async resetPw(id) {
+    if (!confirm('পাসওয়ার্ড রিসেট করবেন? নতুন পাসওয়ার্ড ইউজারকে জানাতে হবে।')) return;
+    const r = await ABC.api('/admin/users/' + id + '/reset-password', { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) { alert('ব্যর্থ: ' + (d.error || '')); return; }
+    alert('✅ নতুন পাসওয়ার্ড: ' + d.new_password + '\n\nইউজারকে জানান!');
+  },
+  async viewData(id) {
+    const r = await ABC.api('/admin/users/' + id + '/data');
+    const d = await r.json();
+    alert('অর্ডার: ' + (d.orders || 0) + '\nলেনদেন: ' + (d.transactions || 0) + '\nব্যালেন্স: ৳' + (d.balance || 0));
   },
   async unblock(id) {
     await ABC.api('/admin/users/' + id + '/unblock', { method: 'POST' });
@@ -734,28 +836,122 @@ function catOptions(selected) {
   });
   return h;
 }
+/* ============================================================
+   UNIFIED: Services + Categories (user spec 2026-10-16)
+   - One page: category pills (filter) + "+ ক্যাটাগরি"
+   - Services grouped under each category
+   - Category: inline rename/reorder/delete
+   - Service: price + type + on/off + manual config in one place
+   ============================================================ */
 TABS.services = async () => {
   await loadCats();
   const r = await ABC.api('/admin/services');
   const d = await r.json();
-  let html = '<button class="mini-btn ok" onclick="AdmSvc.createForm()" style="margin-bottom:12px;">+ নতুন সেবা</button>' +
-    '<div style="overflow-x:auto;"><table class="adm"><tr><th>#</th><th>নাম</th><th>ক্যাটাগরি</th><th>ধরন</th><th>দাম</th><th>স্ট্যাটাস</th><th>কাজ</th></tr>';
-  (d.services || []).forEach((s, i) => {
-    html += '<tr><td>' + (i + 1) + '</td><td>' + esc(s.name_bn || s.name) + '<br><small style="color:var(--dim)">' + esc(s.name) + '</small></td>' +
-      '<td>' + esc(s.category_id ? ((s.category_icon || '📁') + ' ' + (s.category_name_bn || s.category_name || '')) : '—') + '</td>' +
-      '<td>' + (s.type === 'manual' ? 'ম্যানুয়াল' : 'অটোমেটেড') + '</td><td>৳' + bn(s.price) + '</td>' +
-      '<td>' + esc(s.status) + '</td>' +
-      '<td><button class="mini-btn" onclick="AdmSvc.edit(\'' + s.id + '\')">এডিট</button>' +
-      '<button class="mini-btn danger" onclick="AdmSvc.del(\'' + s.id + '\')">ডিলিট</button></td></tr>';
+  const services = d.services || [];
+  const cats = TABS._cats || [];
+  const activeFilter = TABS._svcFilter || '';
+
+  // Group services by category
+  const byCat = {};
+  const uncategorized = [];
+  services.forEach(s => {
+    if (s.category_id && cats.find(c => c.id === s.category_id)) {
+      (byCat[s.category_id] = byCat[s.category_id] || []).push(s);
+    } else {
+      uncategorized.push(s);
+    }
   });
-  content.innerHTML = html + '</table></div>';
+
+  // Filter
+  const showCat = (catId) => !activeFilter || activeFilter === catId || (activeFilter === '_uncat' && catId === '_uncat');
+
+  let html = '<div style="margin-bottom:14px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">' +
+    '<button class="mini-btn' + (!activeFilter ? ' ok' : '') + '" onclick="TABS._svcFilter=\'\';show(\'services\')">সব</button>';
+  cats.forEach(c => {
+    html += '<button class="mini-btn' + (activeFilter === c.id ? ' ok' : '') + '" onclick="TABS._svcFilter=\'' + c.id + '\';show(\'services\')">' +
+      esc(c.icon || '📁') + ' ' + esc(c.name_bn || c.name) + '</button>';
+  });
+  if (uncategorized.length) {
+    html += '<button class="mini-btn' + (activeFilter === '_uncat' ? ' ok' : '') + '" onclick="TABS._svcFilter=\'_uncat\';show(\'services\')">📦 অন্যান্য</button>';
+  }
+  html += '<button class="mini-btn ok" onclick="AdmCat.createForm()" style="margin-left:auto;">+ ক্যাটাগরি</button>' +
+    '<button class="mini-btn ok" onclick="AdmSvc.createForm()">+ নতুন সেবা</button></div>';
+
+  // Render each category section
+  const renderCatSection = (cat, list, isUncat) => {
+    if (!showCat(isUncat ? '_uncat' : cat.id)) return '';
+    let h = '<div style="background:var(--card); border-radius:12px; padding:14px; margin-bottom:14px;">';
+    if (!isUncat) {
+      h += '<div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">' +
+        '<span style="font-size:24px;">' + esc(cat.icon || '📁') + '</span>' +
+        '<b style="font-size:15px;">' + esc(cat.name_bn || cat.name) + '</b>' +
+        '<span style="color:var(--dim); font-size:12px;">' + bn(list.length) + 'টি সেবা</span>' +
+        '<span style="margin-left:auto; display:flex; gap:6px;">' +
+        '<button class="mini-btn" onclick="AdmCat.edit(\'' + cat.id + '\')">✏️</button>' +
+        '<button class="mini-btn" onclick="AdmCat.toggle(\'' + cat.id + '\')">' + (cat.status === 'active' ? '🔴 বন্ধ' : '🟢 চালু') + '</button>' +
+        '<button class="mini-btn danger" onclick="AdmCat.del(\'' + cat.id + '\')">🗑️</button>' +
+        '</span></div>';
+    } else {
+      h += '<div style="margin-bottom:12px;"><b>📦 অন্যান্য</b> <span style="color:var(--dim); font-size:12px;">' + bn(list.length) + 'টি</span></div>';
+    }
+    if (!list.length) {
+      h += '<div style="color:var(--dim); font-size:13px;">কোনো সেবা নেই</div>';
+    } else {
+      h += '<div style="display:grid; gap:8px;">';
+      list.forEach(s => {
+        const isManual = s.type === 'manual';
+        h += '<div style="display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--bg); border-radius:10px;">' +
+          '<span style="font-size:20px;">' + esc(s.icon || (isManual ? '📝' : '⚡')) + '</span>' +
+          '<div style="flex:1;"><b>' + esc(s.name_bn || s.name) + '</b><br>' +
+          '<small style="color:var(--dim);">' + (isManual ? '📝 ম্যানুয়াল' : '⚡ অটো') + ' • ৳' + bn(s.price) +
+          (s.engine_id ? ' • 🔌 ' + esc(s.engine_id) : '') + '</small></div>' +
+          '<button class="mini-btn" onclick="AdmSvc.toggleType(\'' + s.id + '\',\'' + s.type + '\')" title="ধরন বদলান">' +
+          (isManual ? '→ অটো' : '→ ম্যানুয়াল') + '</button>' +
+          '<button class="mini-btn" onclick="AdmSvc.toggleStatus(\'' + s.id + '\',\'' + s.status + '\')">' +
+          (s.status === 'active' ? '🟢' : '🔴') + '</button>' +
+          '<button class="mini-btn" onclick="AdmSvc.edit(\'' + s.id + '\')">✏️</button>' +
+          '<button class="mini-btn danger" onclick="AdmSvc.del(\'' + s.id + '\')">🗑️</button>' +
+          '</div>';
+      });
+      h += '</div>';
+    }
+    return h + '</div>';
+  };
+
+  cats.forEach(c => { html += renderCatSection(c, byCat[c.id] || [], false); });
+  if (uncategorized.length) html += renderCatSection(null, uncategorized, true);
+
+  content.innerHTML = html;
 };
 window.AdmSvc = {
+  async toggleType(id, cur) {
+    const next = cur === 'manual' ? 'automated' : 'manual';
+    if (!confirm('ধরন বদলাবেন? (' + (cur === 'manual' ? 'ম্যানুয়াল → অটো' : 'অটো → ম্যানুয়াল') + ')')) return;
+    const r = await ABC.api('/admin/services/' + id, { method: 'PUT', body: { type: next } });
+    if (!r.ok) { alert('ব্যর্থ'); return; }
+    show('services');
+  },
+  async toggleStatus(id, cur) {
+    const next = cur === 'active' ? 'disabled' : 'active';
+    const r = await ABC.api('/admin/services/' + id, { method: 'PUT', body: { status: next } });
+    if (!r.ok) { alert('ব্যর্থ'); return; }
+    show('services');
+  },
   createForm() {
     modal('🛎️ নতুন সেবা',
       fld('নাম (বাংলা)', 'text', 'sv_bn') + fld('নাম (English)', 'text', 'sv_name') +
       '<div class="field"><label>ক্যাটাগরি</label><select id="sv_cat">' + catOptions(null) + '</select></div>' +
-      '<div class="field"><label>ধরন</label><select id="sv_type"><option value="manual">ম্যানুয়াল</option><option value="automated">অটোমেটেড</option></select></div>' +
+      '<div class="field"><label>ধরন</label><select id="sv_type" onchange="document.getElementById(\'sv_manualBox\').style.display=this.value===\'manual\'?\'block\':\'none\';document.getElementById(\'sv_engineBox\').style.display=this.value===\'automated\'?\'block\':\'none\'"><option value="manual">📝 ম্যানুয়াল</option><option value="automated">⚡ অটোমেটেড</option></select></div>' +
+      '<div id="sv_engineBox" style="display:none;"><div class="field"><label>🔌 Engine</label><select id="sv_engine">' +
+      '<option value="">-- বেছে নিন --</option>' +
+      '<option value="birth">Birth Engine (:3000)</option>' +
+      '<option value="death">Death Engine (:3001)</option>' +
+      '<option value="nid">NID Engine</option>' +
+      '<option value="apply">Apply Engine (:3102)</option>' +
+      '</select><small style="color:var(--dim)">Engine-এর ভেতরে হাত দেওয়া হবে না</small></div></div>' +
+      '<div id="sv_manualBox"><div class="field"><label>📋 নির্দেশনা</label><textarea id="sv_instructions" rows="3" placeholder="User-কে কী করতে হবে..."></textarea></div>' +
+      '<div class="field"><label>📄 নমুনা (copy button সহ দেখাবে)</label><textarea id="sv_sample" rows="4" placeholder="নমুনা ফরম্যাট..."></textarea></div>' +
+      fld('📎 ডকুমেন্ট সংখ্যা (১-৬)', 'number', 'sv_doccount', '1') + '</div>' +
       fld('দাম (৳)', 'number', 'sv_price') +
       fld('ডকুমেন্ট (কমা দিয়ে: NID, Photo)', 'text', 'sv_docs') +
       '<div class="field"><label>নিয়মাবলী</label><textarea id="sv_rules" rows="3"></textarea></div>' +
@@ -763,12 +959,17 @@ window.AdmSvc = {
   },
   async create() {
     const docs = v('sv_docs').split(',').map(x => x.trim()).filter(Boolean);
+    const type = document.getElementById('sv_type').value;
     const r = await ABC.api('/admin/services', { method: 'POST', body: {
       name: v('sv_name') || v('sv_bn'), name_bn: v('sv_bn'),
-      type: document.getElementById('sv_type').value,
+      type: type,
       price: Number(v('sv_price')) || 0,
       category_id: document.getElementById('sv_cat').value || null,
       documents_required: docs, rules_text: v('sv_rules'),
+      engine_id: type === 'automated' ? (document.getElementById('sv_engine').value || null) : null,
+      manual_instructions: type === 'manual' ? v('sv_instructions') : null,
+      manual_sample: type === 'manual' ? v('sv_sample') : null,
+      manual_doc_count: type === 'manual' ? (Number(v('sv_doccount')) || 1) : 1,
     }});
     const d = await r.json();
     if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
