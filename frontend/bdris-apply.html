@@ -1608,9 +1608,14 @@ function fillSelOpts(id, opts, wantText) {
 function setSelByText(id, text) {
   const node = $(id); if (!node || node.tagName !== 'SELECT') return false;
   const want = String(text || '').trim(); if (!want) return false;
-  const wN = typeof bnNormJs === 'function' ? bnNormJs(want) : want;
+  // Normalizer: geoNorm (page-এ confirmed) → bnNormJs (fallback) → identity
+  // আশুলিয়া issue: bd-geo.json-এ য় decomposed (U+09AF+U+09BC), typed-এ precomposed (U+09DF)
+  const norm = typeof geoNorm === 'function' ? geoNorm :
+    (typeof bnNormJs === 'function' ? bnNormJs : (s => String(s || '').trim()));
+  const wN = norm(want);
   const opt = Array.from(node.options).find(o => o.text.trim() === want) ||
-    Array.from(node.options).find(o => typeof bnNormJs === 'function' ? bnNormJs(o.text) === wN : o.text.trim() === wN) ||
+    Array.from(node.options).find(o => norm(o.text) === wN) ||
+    Array.from(node.options).find(o => norm(o.text).includes(wN) || wN.includes(norm(o.text.trim()))) ||
     Array.from(node.options).find(o => o.text.includes(want) || want.includes(o.text.trim()));
   if (opt) { node.value = opt.value; return true; }
   return false;
