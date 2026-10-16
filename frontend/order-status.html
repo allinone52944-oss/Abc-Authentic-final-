@@ -4,18 +4,55 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=1">
 <meta name="theme-color" content="#1e40af">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Abc Authentic">
-<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <title>অর্ডার স্ট্যাটাস - All In One</title>
-<link rel="stylesheet" href="/css/coffee.css?v=8">
-<link rel="stylesheet" href="/css/blue.css?v=3">
 <style>
-/* ===== Celebration overlay (order completed) ===== */
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Hind Siliguri',system-ui,sans-serif; background:#eef2f7; color:#0f172a; }
+  .desktop { max-width:1100px; margin:0 auto; background:#fff; min-height:100vh; display:flex; }
+  .sidebar { width:220px; background:linear-gradient(180deg,#1e3a8a,#1e40af); color:#fff; padding:20px 0; flex-shrink:0; }
+  .side-logo { padding:0 20px 20px; border-bottom:1px solid rgba(255,255,255,0.15); margin-bottom:16px; }
+  .side-logo h2 { font-size:18px; } .side-logo p { font-size:11px; opacity:0.7; }
+  .side-link { display:flex; align-items:center; gap:12px; padding:12px 20px; font-size:14px; color:rgba(255,255,255,0.85); cursor:pointer; border-left:3px solid transparent; }
+  .side-link.on { background:rgba(255,255,255,0.12); border-left-color:#fff; color:#fff; font-weight:600; }
+  .side-link .ico { font-size:18px; }
+  .main { flex:1; padding:24px; overflow:auto; }
+  .btn { background:#1e40af; color:#fff; border:none; border-radius:10px; padding:12px 24px; font-size:15px; font-weight:700; cursor:pointer; }
+  .back-link { color:#2563eb; cursor:pointer; font-size:14px; }
+  /* status stage (blue theme) */
+  .status-stage { text-align:center; padding:32px 16px; }
+  .status-orb {
+    width:120px; height:120px; margin:0 auto 20px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:52px;
+    background:radial-gradient(circle at 35% 35%, #93c5fd, #1e40af);
+    border:3px solid #3b82f6; box-shadow:0 8px 24px rgba(30,64,175,.25);
+  }
+  .status-steps { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin:20px 0; }
+  .step-dot { padding:8px 14px; border-radius:999px; font-size:12px; background:#f1f5f9; color:#94a3b8; border:1px solid #e2e8f0; }
+  .step-dot.done { background:#dbeafe; color:#1d4ed8; border-color:#93c5fd; }
+  .step-dot.now { background:linear-gradient(135deg,#3b82f6,#1e40af); color:#fff; font-weight:700; animation:stepPulse 1.6s ease-in-out infinite; }
+  @keyframes stepPulse { 0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,.4);} 50%{box-shadow:0 0 0 8px rgba(59,130,246,0);} }
+  .timeline { max-width:520px; margin:0 auto; text-align:left; }
+  .tl-item { display:flex; gap:12px; margin-bottom:14px; }
+  .tl-dot { width:14px; height:14px; border-radius:50%; margin-top:4px; background:#cbd5e1; flex-shrink:0; }
+  .tl-item.on .tl-dot { background:#2563eb; box-shadow:0 0 12px rgba(37,99,235,.6); }
+  .tl-item .tt { color:#0f172a; font-size:14px; font-weight:600; }
+  .tl-item .ts { color:#64748b; font-size:12px; }
+  /* support messages (blue theme) */
+  .sup-msg { background:#eff6ff; border:1px solid #bfdbfe; border-left:4px solid #2563eb; border-radius:12px; padding:14px 16px; margin:10px 0; animation:supIn .5s ease; }
+  @keyframes supIn { from { opacity:0; transform:translateX(-16px); } to { opacity:1; transform:none; } }
+  .sup-msg .sup-emoji { font-size:22px; margin-right:8px; }
+  .sup-msg .sup-text { color:#1e293b; font-size:14px; line-height:1.6; }
+  .sup-msg .sup-time { color:#94a3b8; font-size:11px; margin-top:6px; }
+  .sup-msg.tpl-network { border-left-color:#3498db; }
+  .sup-msg.tpl-processing { border-left-color:#f39c12; }
+  .sup-msg.tpl-verifying { border-left-color:#9b59b6; }
+  .sup-msg.tpl-done { border-left-color:#27ae60; }
+  .sup-msg.tpl-failed { border-left-color:#e74c3c; }
+  .sup-msg.tpl-paid { border-left-color:#2563eb; }
+/* ===== Celebration overlay (order completed) — kept as-is ===== */
 #confettiCanvas {
   position: fixed; inset: 0; width: 100vw; height: 100vh;
   pointer-events: none; z-index: 9998; display: none;
@@ -23,15 +60,15 @@
 .celebrate-overlay {
   position: fixed; inset: 0; z-index: 9999;
   display: none; align-items: center; justify-content: center;
-  background: rgba(29,19,12,.82); backdrop-filter: blur(6px);
+  background: rgba(15,23,42,.85); backdrop-filter: blur(6px);
   cursor: pointer; padding: 20px;
 }
 .celebrate-overlay.show { display: flex; }
 .celebrate-card {
   text-align: center; padding: 40px 48px; max-width: 92vw;
-  background: linear-gradient(160deg, #3d2b1f, #2b1d14);
-  border: 2px solid var(--gold); border-radius: 24px;
-  box-shadow: 0 0 60px rgba(212,175,55,.35), 0 20px 60px rgba(0,0,0,.5);
+  background: linear-gradient(160deg, #1e3a8a, #172554);
+  border: 2px solid #fbbf24; border-radius: 24px;
+  box-shadow: 0 0 60px rgba(251,191,36,.35), 0 20px 60px rgba(0,0,0,.5);
   animation: celebratePop .6s cubic-bezier(.2,1.4,.4,1);
 }
 @keyframes celebratePop {
@@ -40,26 +77,26 @@
 }
 .check-svg { width: 110px; height: 110px; margin: 0 auto 12px; }
 .check-circle {
-  fill: none; stroke: var(--gold); stroke-width: 5;
+  fill: none; stroke: #fbbf24; stroke-width: 5;
   stroke-dasharray: 283; stroke-dashoffset: 283;
   animation: drawCircle .7s ease forwards, pulseGold 1.6s ease-in-out .7s infinite;
-  filter: drop-shadow(0 0 12px rgba(212,175,55,.7));
+  filter: drop-shadow(0 0 12px rgba(251,191,36,.7));
 }
 @keyframes drawCircle { to { stroke-dashoffset: 0; } }
 @keyframes pulseGold {
-  0%,100% { filter: drop-shadow(0 0 8px rgba(212,175,55,.5)); }
-  50% { filter: drop-shadow(0 0 22px rgba(212,175,55,.95)); }
+  0%,100% { filter: drop-shadow(0 0 8px rgba(251,191,36,.5)); }
+  50% { filter: drop-shadow(0 0 22px rgba(251,191,36,.95)); }
 }
 .check-mark {
-  fill: none; stroke: var(--gold); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round;
+  fill: none; stroke: #fbbf24; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round;
   stroke-dasharray: 60; stroke-dashoffset: 60;
   animation: drawCheck .45s ease .55s forwards;
 }
 @keyframes drawCheck { to { stroke-dashoffset: 0; } }
 .celebrate-title {
-  font-size: 34px; font-weight: 700; color: var(--gold);
+  font-size: 34px; font-weight: 700; color: #fbbf24;
   animation: bounceIn .7s cubic-bezier(.2,1.6,.4,1) .3s backwards;
-  text-shadow: 0 0 24px rgba(212,175,55,.6);
+  text-shadow: 0 0 24px rgba(251,191,36,.6);
   margin-bottom: 8px;
 }
 @keyframes bounceIn {
@@ -67,31 +104,36 @@
   60% { transform: scale(1.12) translateY(-6px); opacity: 1; }
   100% { transform: scale(1) translateY(0); opacity: 1; }
 }
-.celebrate-sub { font-size: 18px; color: var(--cream); margin-bottom: 4px; animation: fadeUp .6s ease .55s backwards; }
-.celebrate-en { font-size: 14px; color: var(--muted); margin-bottom: 14px; animation: fadeUp .6s ease .7s backwards; }
-.celebrate-hint { font-size: 12px; color: var(--dim); animation: fadeUp .6s ease .85s backwards; }
+.celebrate-sub { font-size: 18px; color: #fff; margin-bottom: 4px; animation: fadeUp .6s ease .55s backwards; }
+.celebrate-en { font-size: 14px; color: #94a3b8; margin-bottom: 14px; animation: fadeUp .6s ease .7s backwards; }
+.celebrate-hint { font-size: 12px; color: #64748b; animation: fadeUp .6s ease .85s backwards; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (max-width:768px) {
+  .sidebar { display:none; }
+  .main { padding:16px; }
+}
 @media (max-width: 480px) {
   .celebrate-card { padding: 28px 24px; }
   .celebrate-title { font-size: 26px; }
   .check-svg { width: 84px; height: 84px; }
 }
 </style>
-<!-- cache-bust 2026-10-13: force fresh document load -->
 </head>
-<body class="app">
-<div class="spiral"></div>
-<div class="gold-orb" style="width:300px;height:300px;top:20%;left:30%;"></div>
-<div class="app-shell">
-  <div class="app-header">
-    <div class="brand">☕ অর্ডার স্ট্যাটাস</div>
-    <div class="hdr-actions"><button class="icon-btn" onclick="location.href='/dashboard.html'">🏠</button></div>
+<body>
+<div class="desktop">
+  <div class="sidebar">
+    <div class="side-logo"><h2>🔷 All In One</h2><p>বিশ্বাস ও সেবার ঠিকানা</p></div>
+    <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+    <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সেবা</div>
+    <div class="side-link on"><span class="ico">📦</span> অর্ডার স্ট্যাটাস</div>
+    <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📋</span> আমার অর্ডার</div>
+    <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট</div>
   </div>
-  <div class="page">
+  <div class="main">
     <div class="status-stage">
       <div class="status-orb" id="orb">📦</div>
-      <h2 style="color:var(--gold);" id="stTitle">অর্ডার পৌঁছেছে!</h2>
-      <p style="color:var(--muted);font-size:14px;" id="stSub">আপনার অর্ডার গ্রহণ করা হয়েছে</p>
+      <h2 style="color:#1e40af;" id="stTitle">অর্ডার পৌঁছেছে!</h2>
+      <p style="color:#64748b;font-size:14px;" id="stSub">আপনার অর্ডার গ্রহণ করা হয়েছে</p>
       <div class="status-steps" id="steps"></div>
       <div class="timeline" id="timeline"></div>
       <div id="supMsgs" style="margin-top:16px;"></div>
@@ -116,6 +158,15 @@
     <div class="celebrate-hint">বন্ধ করতে ক্লিক করুন</div>
   </div>
 </div>
+<div class="wa-fab" id="waFab"><img src="/icons/abc-logo.png" alt="Abc"><span style="position:absolute;bottom:0;right:0;">💬</span></div>
+<!-- mobile tabbar -->
+<div class="m-tabbar">
+  <div class="m-tab" onclick="location.href='/dashboard.html'"><div class="ico">🏠</div>হোম</div>
+  <div class="m-tab" onclick="location.href='/services.html'"><div class="ico">🛎️</div>সেবা</div>
+  <div class="m-tab" onclick="location.href='/orders.html'"><div class="ico">📦</div>অর্ডার</div>
+  <div class="m-tab" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
+  <div class="m-tab" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
+</div>
 <script src="/js/app.js?v=12"></script>
 <script>
 const oid=new URLSearchParams(location.search).get('id');
@@ -130,6 +181,10 @@ const END={failed:['ব্যর্থ','❌'],cancelled:['বাতিল','�
 async function init(){
   const me=await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
+  const u=(await me.json()).user||{};
+  document.getElementById('waFab').onclick=()=>{
+    window.open('https://wa.me/?text='+encodeURIComponent('আসসালামু আলাইকুম! আমি '+u.name+' (ফোন: '+u.phone+')। সাহায্য দরকার।'),'_blank');
+  };
   const r=await ABC.api('/orders/'+oid);
   if(!r.ok){document.getElementById('stTitle').textContent='অর্ডার পাওয়া যায়নি';return;}
   const {order:o}=await r.json();
@@ -150,7 +205,7 @@ async function loadSupportMsgs(){
     const d=await r.json();
     const box=document.getElementById('supMsgs');
     if(!d.messages.length){box.innerHTML='';return;}
-    box.innerHTML='<h3 style="color:var(--gold);font-size:16px;margin:0 0 4px;">💬 সাপোর্ট আপডেট</h3>'+
+    box.innerHTML='<h3 style="color:#1e40af;font-size:16px;margin:0 0 4px;">💬 সাপোর্ট আপডেট</h3>'+
       d.messages.map(m=>{
         const emoji=TPL_EMOJI[m.template_key]||'💬';
         return '<div class="sup-msg tpl-'+(m.template_key||'x')+'"><span class="sup-emoji">'+emoji+'</span>'+
@@ -195,7 +250,7 @@ function fireConfetti(){
   cv.style.display='block';
   const ctx=cv.getContext('2d');
   cv.width=innerWidth;cv.height=innerHeight;
-  const colors=['#d4af37','#8b6914','#f5e6c8','#c9a961','#fff3d6','#a67c2e'];
+  const colors=['#3b82f6','#1e40af','#dbeafe','#93c5fd','#ffffff','#fbbf24'];
   const parts=[];
   for(let i=0;i<160;i++){
     parts.push({

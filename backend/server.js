@@ -22,6 +22,9 @@ const {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// gzip responses >1KB (mobile data). Before static so JS/CSS/JSON all compress.
+app.use(require('compression')({ threshold: 1024 }));
+
 app.use(secureHeaders);
 // L-3 fix (2026-10-15): CORS restricted to the app origin(s) instead of wide
 // open. Same-origin browsers are unaffected; extra origins via CORS_ORIGINS
@@ -329,9 +332,12 @@ const { customerManual, adminManual } = require('./routes/manual');
 app.use('/api/manual', apiLimiter, customerManual);
 app.use('/api/admin/manual', apiLimiter, adminManual);
 
-// ---- Fallback: frontend handles routing ----------------------
+// ---- Fallback: branded 404 (API -> JSON, pages -> 404.html) ----
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'NOT_FOUND' });
+});
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'frontend', 'index.html'));
+  res.status(404).sendFile(path.join(__dirname, '..', 'frontend', '404.html'));
 });
 
 // ---- Error handler (never leak internals) --------------------

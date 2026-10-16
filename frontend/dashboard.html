@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=1">
 <meta name="theme-color" content="#1e40af">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -63,20 +65,13 @@
   .m-bal { background:#fff; margin:-20px 20px 0; border-radius:16px; padding:18px; box-shadow:0 4px 20px rgba(0,0,0,0.08); display:flex; justify-content:space-between; align-items:center; position:relative; display:none; }
   .m-content { padding:16px 20px; display:none; }
   .m-svc-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
-  .m-tabbar { display:none; border-top:1px solid #f1f5f9; padding:10px 0 14px; background:#fff; position:fixed; bottom:0; left:0; right:0; }
-  .m-tab { flex:1; text-align:center; font-size:10px; color:#94a3b8; cursor:pointer; }
-  .m-tab.on { color:#1e40af; font-weight:700; }
-  .m-tab .ico { font-size:20px; }
   .bn-strip { margin-bottom:16px; }
-  .wa-fab { position:fixed; bottom:80px; right:20px; width:56px; height:56px; border-radius:50%; background:#fff; box-shadow:0 4px 16px rgba(0,0,0,0.15); display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:100; }
-  .wa-fab img { width:32px; height:32px; }
   @media (max-width:768px) {
     .desktop { display:block; }
     .sidebar { display:none; }
     .main { padding:0; }
     .topbar, .hero-blue, .stats, .two-col, .card { display:none; }
     .m-top, .m-bal, .m-content { display:block; }
-    .m-tabbar { display:flex; }
     .mobile-only { display:block; }
   }
 </style>
@@ -116,11 +111,11 @@
     <div class="two-col">
       <div class="card">
         <h3>জনপ্রিয় সেবা <a onclick="location.href='/services.html'">সব দেখুন →</a></h3>
-        <div class="svc-grid2" id="popularServices"><div style="color:#64748b;font-size:13px;">লোড হচ্ছে…</div></div>
+        <div class="svc-grid2" id="popularServices"><div class="skel" style="height:64px;"></div><div class="skel" style="height:64px;margin-top:8px;"></div></div>
       </div>
       <div class="card">
         <h3>🔔 নোটিশ <a onclick="showNotices()">সব দেখুন →</a></h3>
-        <div id="noticeList"><div style="color:#64748b;font-size:13px;">লোড হচ্ছে…</div></div>
+        <div id="noticeList"><div class="skel" style="height:40px;"></div><div class="skel" style="height:40px;margin-top:8px;"></div></div>
       </div>
     </div>
   </div>
@@ -128,11 +123,12 @@
 
 <!-- Mobile Layout -->
 <div class="mobile-only">
-  <div class="m-top"><h2 id="greetM">স্বাগতম 👋</h2><p>আপনার ওয়ালেট ও সেবা প্রস্তুত</p></div>
+  <div class="m-top"><h2 id="greetM">স্বাগতম 👋</h2><button id="greetVoiceBtnM" style="display:none;background:none;border:none;font-size:22px;cursor:pointer;float:right;margin-top:2px;" title="শুভেচ্ছা শুনুন">🔊</button><p>আপনার ওয়ালেট ও সেবা প্রস্তুত</p></div>
   <div class="m-bal"><div><div style="font-size:12px;color:#64748b;">ওয়ালেট ব্যালেন্স</div><div style="font-size:24px;font-weight:700;" id="hubBalance">৳০</div></div><button class="btn-add" style="background:#eff6ff;" onclick="location.href='/wallet.html'">+ যোগ করুন</button></div>
+  <div id="mNotices" style="display:none;margin:0 16px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:10px 12px;font-size:12px;color:#92400e;"></div>
   <div class="m-content">
     <div style="font-size:14px;font-weight:700;margin-bottom:10px;">সেবা সমূহ</div>
-    <div class="m-svc-grid" id="mobileServices"><div style="color:#64748b;font-size:13px;">লোড হচ্ছে…</div></div>
+    <div class="m-svc-grid" id="mobileServices"><div class="skel" style="height:64px;"></div><div class="skel" style="height:64px;margin-top:8px;"></div></div>
   </div>
   <div class="m-tabbar">
     <div class="m-tab on"><div class="ico">🏠</div>হোম</div>
@@ -146,7 +142,7 @@
 <div class="wa-fab" id="waFab"><img src="/icons/abc-logo.png" alt="Abc"><span style="position:absolute;bottom:0;right:0;">💬</span></div>
 
 <script src="/js/app.js?v=12"></script>
-<script src="/banners/render.js"></script>
+<script src="/banners/render.js?v=2"></script>
 <script>
 const bnNum = (n) => Number(n || 0).toLocaleString('bn-BD');
 function escapeHtml(s) {
@@ -168,30 +164,115 @@ function resolveGreeting(religion, cfg) {
   return { text, emoji: GREET_EMOJI[r] };
 }
 const GreetVoice = {
-  _cfg: null, _lastText: '', _lastVoice: 0,
+  _cfg: null, _lastText: '', _lastVoice: 0, _lastReligion: 'other',
   userEnabled() { try { return localStorage.getItem('abc_greet_voice') !== 'off'; } catch(e) { return true; } },
-  speak(text, voiceIdx) {
+  pickVoice(voices, voiceIdx) {
+    const bn = voices.filter((v) => v.lang && v.lang.toLowerCase().startsWith('bn'));
+    if (voiceIdx === 0) return bn.find((v) => /male/i.test(v.name) && !/female/i.test(v.name)) || null;
+    if (voiceIdx === 1) return bn.find((v) => /female/i.test(v.name)) || null;
+    return null; // child: pitch simulation only
+  },
+  speak(text, voiceIdx, cfg) {
+    // Try human voice MP3 first (pre-recorded), fallback to TTS
+    try {
+      const rel = (this._lastReligion && ['islam','hindu','buddhist','christian','other'].includes(this._lastReligion)) ? this._lastReligion : 'other';
+      const vname = ['male','female','child'][voiceIdx] || 'male';
+      const a = new Audio('/audio/greet-' + rel + '-' + vname + '.mp3');
+      a.play().then(() => {
+        this.hideReplayBtn();
+      }).catch(() => { this._speakTTS(text, voiceIdx, cfg); });
+      return;
+    } catch (e) { /* fall through to TTS */ }
+    this._speakTTS(text, voiceIdx, cfg);
+  },
+  _speakTTS(text, voiceIdx, cfg) {
     if (!('speechSynthesis' in window)) return;
     try {
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'bn-BD'; u.pitch = [0.8, 1.2, 1.5][voiceIdx] || 1;
+      u.lang = 'bn-BD';
+      const voices = speechSynthesis.getVoices();
+      const real = this.pickVoice(voices, voiceIdx);
+      if (real) {
+        u.voice = real; // real gendered Bengali voice: use as-is
+      } else {
+        const bn = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('bn'));
+        if (bn) u.voice = bn;
+        // Pitch simulation: male 0.8 / female 1.2 / child 1.5
+        const sim = [
+          { pitch: 0.8, rate: 1.0 },
+          { pitch: 1.2, rate: 1.0 },
+          { pitch: 1.5, rate: 1.1 },
+        ][voiceIdx] || { pitch: 1, rate: 1 };
+        if (cfg && cfg.rotation === false) { u.pitch = 1; u.rate = 1; }
+        else { u.pitch = sim.pitch; u.rate = sim.rate; }
+      }
+      const self = this;
+      u.onerror = (e) => {
+        // Autoplay blocked: draw attention to the replay buttons
+        if (e.error === 'not-allowed' || e.error === 'interrupted') {
+          self.showReplayBtn(true);
+        }
+      };
       speechSynthesis.speak(u);
-    } catch(e) {}
+    } catch (e) { /* speech not supported */ }
+  },
+  replay() {
+    if (this._lastText) this.speak(this._lastText, this._lastVoice, this._cfg);
+  },
+  showReplayBtn(highlight) {
+    ['greetVoiceBtn', 'greetVoiceBtnM'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) {
+        btn.style.display = '';
+        if (highlight) {
+          btn.style.animation = 'fadeUp 0.6s';
+          btn.style.boxShadow = '0 0 0 3px rgba(30,64,175,.5)';
+          setTimeout(() => { btn.style.boxShadow = ''; }, 4000);
+        }
+      }
+    });
+  },
+  hideReplayBtn() {
+    ['greetVoiceBtn', 'greetVoiceBtnM'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.style.display = 'none';
+    });
   },
   async maybePlay(user) {
+    // One-shot: consume the login flag immediately (login only, never on refresh)
     let flag = null;
-    try { flag = JSON.parse(sessionStorage.getItem('abc_greet_on_login') || 'null'); sessionStorage.removeItem('abc_greet_on_login'); } catch(e) {}
+    try {
+      flag = JSON.parse(sessionStorage.getItem('abc_greet_on_login') || 'null');
+      sessionStorage.removeItem('abc_greet_on_login');
+    } catch (e) { try { sessionStorage.removeItem('abc_greet_on_login'); } catch (e2) {} }
     if (!flag || !this.userEnabled()) return;
     const cfg = window._vgCfg || {};
     if (cfg.enabled === false) return;
+    this._cfg = cfg;
     const g = resolveGreeting(user.religion, cfg);
     const text = g.text + ', ' + user.name + '! All In One-এ স্বাগতম';
     this._lastText = text;
     this._lastVoice = (typeof flag.voice === 'number') ? flag.voice : 0;
-    const btn = document.getElementById('greetVoiceBtn');
-    if (btn) { btn.style.display = ''; btn.onclick = () => this.speak(text, this._lastVoice); }
-    try { this.speak(text, this._lastVoice); if (btn) btn.style.display = 'none'; } catch(e) {}
+    this._lastReligion = user.religion;
+    // Show the replay/fallback buttons (desktop + mobile)
+    this.showReplayBtn(false);
+    const self = this;
+    ['greetVoiceBtn', 'greetVoiceBtnM'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.onclick = () => self.replay();
+    });
+    // Try immediately; on autoplay-block, play on first user interaction
+    let played = false;
+    const playOnInteract = () => {
+      if (played) return;
+      played = true;
+      this.speak(text, this._lastVoice, cfg);
+      ['click','touchstart','keydown'].forEach(ev => document.removeEventListener(ev, playOnInteract));
+      this.hideReplayBtn();
+    };
+    try { this.speak(text, this._lastVoice, cfg); played = true; this.hideReplayBtn(); } catch (e) {}
+    ['click','touchstart','keydown'].forEach(ev => document.addEventListener(ev, playOnInteract));
   },
 };
 async function init() {
@@ -204,47 +285,71 @@ async function init() {
   const { user } = await meR.json();
   window._user = user;
   if (user.role === 'admin') document.getElementById('adminLink').style.display = '';
+  // Parallel data load (was 5 sequential awaits). Each section fails
+  // independently with its own error UI + retry (no more endless "লোড হচ্ছে…").
+  loadCounts(); loadServices(); loadNotices(); loadBanners(); loadSettings();
+}
+function setText(id, t) { const el = document.getElementById(id); if (el) el.textContent = t; }
+function retryBox(fn) {
+  return '<div style="color:#dc2626;font-size:13px;padding:6px 0;">⚠️ লোড ব্যর্থ। ' +
+    '<button onclick="' + fn + '()" style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;border-radius:8px;padding:4px 12px;cursor:pointer;">আবার চেষ্টা</button></div>';
+}
+async function loadCounts() {
   try {
-    const ps = await fetch('/api/public/settings');
-    if (ps.ok) { const pj = await ps.json(); window._vgCfg = pj.voice_greeting || {}; }
-  } catch(e) { window._vgCfg = {}; }
-  GreetVoice.maybePlay(user);
-  document.getElementById('greet').innerHTML = 'স্বাগতম, ' + escapeHtml(user.name) + ' 👋';
-  document.getElementById('greetM').innerHTML = 'স্বাগতম, ' + escapeHtml(user.name) + ' 👋';
-  document.getElementById('avatar').textContent = (user.name || 'র')[0];
-  document.getElementById('balancePill').textContent = '৳' + bnNum(user.balance);
-  document.getElementById('hubBalance').textContent = '৳' + bnNum(user.balance);
-  const oR = await ABC.api('/orders?limit=200');
-  if (oR.ok) {
-    const d = await oR.json();
-    document.getElementById('hubOrders').textContent = bnNum(d.total);
-    const done = (d.orders || []).filter(o => ['completed','delivered'].includes(o.status)).length;
-    const act = (d.orders || []).filter(o => ['new','pending','processing'].includes(o.status)).length;
-    document.getElementById('hubOrdersDone').textContent = bnNum(done);
-    document.getElementById('hubOrdersSub').textContent = bnNum(act);
+    const r = await ABC.api('/order-counts');
+    if (!r.ok) throw new Error('bad');
+    const d = await r.json();
+    setText('hubOrders', bnNum(d.total));
+    setText('hubOrdersDone', bnNum(d.done));
+    setText('hubOrdersSub', bnNum(d.active));
+  } catch (e) {
+    setText('hubOrders', '–'); setText('hubOrdersDone', '–'); setText('hubOrdersSub', '–');
   }
-  const sR = await ABC.api('/services');
-  if (sR.ok) {
-    const d = await sR.json();
+}
+async function loadServices() {
+  const pop = document.getElementById('popularServices');
+  const mob = document.getElementById('mobileServices');
+  try {
+    const r = await ABC.api('/services');
+    if (!r.ok) throw new Error('bad');
+    const d = await r.json();
     const svcs = d.services || [];
-    document.getElementById('hubServices').textContent = bnNum(svcs.length);
-    const pop = svcs.slice(0, 4).map(s =>
+    setText('hubServices', bnNum(svcs.length));
+    pop.innerHTML = svcs.slice(0, 4).map(s =>
       '<div class="svc2" onclick="location.href=\'/services.html\'"><div class="ico">' + (s.icon || '🛎️') + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
-    ).join('');
-    document.getElementById('popularServices').innerHTML = pop || '<div>কোনো সেবা নেই</div>';
-    const mob = svcs.slice(0, 6).map(s =>
+    ).join('') || '<div>কোনো সেবা নেই</div>';
+    mob.innerHTML = svcs.slice(0, 6).map(s =>
       '<div class="svc2" onclick="location.href=\'/services.html\'"><div class="ico">' + (s.icon || '🛎️') + '</div><h4>' + escapeHtml((s.name_bn || s.name).slice(0,8)) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
-    ).join('');
-    document.getElementById('mobileServices').innerHTML = mob || '<div>কোনো সেবা নেই</div>';
+    ).join('') || '<div>কোনো সেবা নেই</div>';
+  } catch (e) {
+    setText('hubServices', '–');
+    pop.innerHTML = retryBox('loadServices');
+    mob.innerHTML = retryBox('loadServices');
   }
-  const nR = await ABC.api('/notices');
-  if (nR.ok) {
-    const d = await nR.json();
+}
+async function loadNotices() {
+  const box = document.getElementById('noticeList');
+  try {
+    const r = await ABC.api('/notices');
+    if (!r.ok) throw new Error('bad');
+    const d = await r.json();
     const valid = (d.notices || []).filter(n => (n.title||'').trim() || (n.message||'').trim()).slice(0,3);
-    document.getElementById('noticeList').innerHTML = valid.map(n =>
+    box.innerHTML = valid.map(n =>
       '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;"><b style="font-size:13px;">' + escapeHtml(n.title) + '</b><br><span style="font-size:12px;color:#64748b;">' + escapeHtml((n.message||'').slice(0,60)) + '</span></div>'
     ).join('') || '<div style="color:#64748b;">কোনো নোটিশ নেই</div>';
+    // mobile strip: first notice only
+    const mn = document.getElementById('mNotices');
+    if (mn) {
+      if (valid.length) {
+        mn.style.display = 'block';
+        mn.innerHTML = '🔔 <b>' + escapeHtml(valid[0].title) + '</b> ' + escapeHtml((valid[0].message||'').slice(0,50));
+      } else { mn.style.display = 'none'; }
+    }
+  } catch (e) {
+    box.innerHTML = retryBox('loadNotices');
   }
+}
+async function loadBanners() {
   try {
     const r = await ABC.api('/banners?type=banner');
     const d = r.ok ? await r.json() : { banners: [] };
@@ -253,9 +358,18 @@ async function init() {
       document.getElementById('bnStrip').style.display = 'block';
       BannerRender.carousel(document.getElementById('bnStrip'), act, 6000);
     }
-  } catch(e) {}
+  } catch (e) { /* banner optional: stay hidden */ }
+}
+async function loadSettings() {
+  try {
+    const ps = await fetch('/api/public/settings');
+    if (ps.ok) { const pj = await ps.json(); window._vgCfg = pj.voice_greeting || {}; }
+  } catch (e) { window._vgCfg = {}; }
+  GreetVoice.maybePlay(window._user);
+}
   document.getElementById('waFab').onclick = () => {
-    const text = 'আসসালামু আলাইকুম! আমি ' + user.name + ' (ফোন: ' + user.phone + ')। সাহায্য দরকার।';
+    const u = window._user || {};
+    const text = 'আসসালামু আলাইকুম! আমি ' + (u.name || '') + ' (ফোন: ' + (u.phone || '') + ')। সাহায্য দরকার।';
     window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
   };
   document.getElementById('logoutBtn').onclick = async () => {
@@ -263,7 +377,6 @@ async function init() {
     await ABC.api('/auth/logout', { method: 'POST', body: { refresh_token: rt } });
     ABC.clearTokens(); location.href = '/login.html';
   };
-}
 async function showNotices() {
   const r = await ABC.api('/notices');
   const d = r.ok ? await r.json() : { notices: [] };

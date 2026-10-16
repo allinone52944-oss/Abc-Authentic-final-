@@ -37,11 +37,11 @@ describe('validateInvite (shared)', () => {
   });
 
   test('normalizes lowercase and returns the row when usable', async () => {
-    const row = { code: 'INV-ABCDEF12', is_active: true, expires_at: null, max_uses: null, used_count: 0 };
+    const row = { code: 'INV-ABCDEF1234567890ABCDEF1234567890', is_active: true, expires_at: null, max_uses: null, used_count: 0 };
     db.__routeQuery([['FROM invite_links WHERE code', { rows: [row] }]]);
-    const inv = await validateInvite('inv-abcdef12');
+    const inv = await validateInvite('inv-abcdef1234567890abcdef1234567890');
     expect(inv).toBe(row);
-    expect(db.query.mock.calls[0][1]).toEqual(['INV-ABCDEF12']);
+    expect(db.query.mock.calls[0][1]).toEqual(['INV-ABCDEF1234567890ABCDEF1234567890']);
   });
 
   test('inactive / expired / max-uses-exhausted → null', async () => {
@@ -52,36 +52,36 @@ describe('validateInvite (shared)', () => {
     ];
     for (const inv of cases) {
       db.__reset();
-      db.__routeQuery([['FROM invite_links WHERE code', { rows: [{ code: 'INV-ABCDEF12', ...inv }] }]]);
-      expect(await validateInvite('INV-ABCDEF12')).toBeNull();
+      db.__routeQuery([['FROM invite_links WHERE code', { rows: [{ code: 'INV-ABCDEF1234567890ABCDEF1234567890', ...inv }] }]]);
+      expect(await validateInvite('INV-ABCDEF1234567890ABCDEF1234567890')).toBeNull();
     }
   });
 
   test('future expiry + remaining uses → valid', async () => {
     const row = {
-      code: 'INV-ABCDEF12', is_active: true,
+      code: 'INV-ABCDEF1234567890ABCDEF1234567890', is_active: true,
       expires_at: new Date(Date.now() + 3600000).toISOString(), max_uses: 5, used_count: 4,
     };
     db.__routeQuery([['FROM invite_links WHERE code', { rows: [row] }]]);
-    expect(await validateInvite('INV-ABCDEF12')).toBe(row);
+    expect(await validateInvite('INV-ABCDEF1234567890ABCDEF1234567890')).toBe(row);
   });
 });
 
 describe('consumeInvite (security fix: rowCount check)', () => {
   test('returns true when a row was consumed', async () => {
     db.__routeQuery([['UPDATE invite_links SET used_count', { rows: [], rowCount: 1 }]]);
-    expect(await consumeInvite('INV-ABCDEF12')).toBe(true);
+    expect(await consumeInvite('INV-ABCDEF1234567890ABCDEF1234567890')).toBe(true);
   });
 
   test('returns false when nothing was consumed (expired / maxed out)', async () => {
     db.__routeQuery([['UPDATE invite_links SET used_count', { rows: [], rowCount: 0 }]]);
-    expect(await consumeInvite('INV-ABCDEF12')).toBe(false);
+    expect(await consumeInvite('INV-ABCDEF1234567890ABCDEF1234567890')).toBe(false);
   });
 
   test('code is normalized to uppercase in the UPDATE', async () => {
     db.__routeQuery([['UPDATE invite_links SET used_count', { rows: [], rowCount: 1 }]]);
-    await consumeInvite('inv-abcdef12');
-    expect(db.query.mock.calls[0][1]).toEqual(['INV-ABCDEF12']);
+    await consumeInvite('inv-abcdef1234567890abcdef1234567890');
+    expect(db.query.mock.calls[0][1]).toEqual(['INV-ABCDEF1234567890ABCDEF1234567890']);
   });
 });
 
@@ -190,9 +190,9 @@ describe('admin invite CRUD', () => {
 describe('GET /api/invite/:code/validate (public)', () => {
   test('valid code → { valid:true }', async () => {
     db.__routeQuery([['FROM invite_links WHERE code', {
-      rows: [{ code: 'INV-ABCDEF12', is_active: true, expires_at: null, max_uses: null, used_count: 0 }],
+      rows: [{ code: 'INV-ABCDEF1234567890ABCDEF1234567890', is_active: true, expires_at: null, max_uses: null, used_count: 0 }],
     }]]);
-    const r = await request(publicApp()).get('/api/invite/INV-ABCDEF12/validate').expect(200);
+    const r = await request(publicApp()).get('/api/invite/INV-ABCDEF1234567890ABCDEF1234567890/validate').expect(200);
     expect(r.body).toEqual({ valid: true });
   });
 
@@ -203,7 +203,7 @@ describe('GET /api/invite/:code/validate (public)', () => {
 
   test('DB error → { valid:false } (never 500)', async () => {
     db.query.mockImplementation(async () => { throw new Error('db down'); });
-    const r = await request(publicApp()).get('/api/invite/INV-ABCDEF12/validate').expect(200);
+    const r = await request(publicApp()).get('/api/invite/INV-ABCDEF1234567890ABCDEF1234567890/validate').expect(200);
     expect(r.body).toEqual({ valid: false });
   });
 });

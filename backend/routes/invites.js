@@ -20,7 +20,7 @@ const { safeLog } = require('../security');
 async function validateInvite(code) {
   if (!code || typeof code !== 'string') return null;
   const c = code.trim().toUpperCase();
-  if (!/^INV-[A-Z0-9]{8}$/.test(c)) return null;
+  if (!/^INV-[A-Z0-9]{32}$/.test(c)) return null;
   const r = await db.query('SELECT * FROM invite_links WHERE code = $1 LIMIT 1', [c]);
   if (!r.rows.length) return null;
   const inv = r.rows[0];
@@ -53,7 +53,8 @@ function appBaseUrl() {
 }
 
 function genCode() {
-  return 'INV-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+  // 128-bit entropy (was 32-bit) — invite links bypass the registration gate
+  return 'INV-' + crypto.randomBytes(16).toString('hex').toUpperCase();
 }
 
 async function logActivity(adminId, action, details) {

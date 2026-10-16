@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=1">
 <meta name="theme-color" content="#1e40af">
 <title>সেবা - All In One</title>
 <style>
@@ -34,9 +36,8 @@
   .ptype { font-size:10px; padding:2px 8px; border-radius:12px; display:inline-block; margin-top:4px; }
   .ptype.auto { background:#dbeafe; color:#1d4ed8; }
   .ptype.manual { background:#fef3c7; color:#92400e; }
+  .ptype.closed { background:#fee2e2; color:#b91c1c; margin-left:4px; }
   .back-link { color:#2563eb; cursor:pointer; font-size:14px; }
-  .wa-fab { position:fixed; bottom:20px; right:20px; width:56px; height:56px; border-radius:50%; background:#fff; box-shadow:0 4px 16px rgba(0,0,0,0.15); display:flex; align-items:center; justify-content:center; cursor:pointer; }
-  .wa-fab img { width:32px; height:32px; }
   @media (max-width:768px) {
     .sidebar { display:none; }
     .cat-grid { grid-template-columns:repeat(2,1fr); }
@@ -61,16 +62,25 @@
   </div>
 </div>
 <div class="wa-fab" id="waFab"><img src="/icons/abc-logo.png" alt="Abc"><span style="position:absolute;bottom:0;right:0;">💬</span></div>
+<!-- mobile tabbar -->
+<div class="m-tabbar">
+  <div class="m-tab" onclick="location.href='/dashboard.html'"><div class="ico">🏠</div>হোম</div>
+  <div class="m-tab on"><div class="ico">🛎️</div>সেবা</div>
+  <div class="m-tab" onclick="location.href='/orders.html'"><div class="ico">📦</div>অর্ডার</div>
+  <div class="m-tab" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
+  <div class="m-tab" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
+</div>
 <script src="/js/app.js?v=12"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
 function card(s){
+  const closed = s.open ? '' : '<span class="ptype closed">বন্ধ</span>';
   return '<div class="svc-card" onclick="location.href=\'/service-detail.html?id='+s.id+'\'">'+
     '<div class="svc-ico">'+esc(s.icon||'🛎️')+'</div>'+
     '<div class="svc-info"><h4>'+esc(s.name_bn||s.name)+'</h4>'+
-    '<span class="ptype '+(s.type==='manual'?'manual':'auto')+'">'+(s.type==='manual'?'manual':'automated')+'</span></div>'+
-    '<div class="svc-pr">৳'+bnNum(s.price)+'</div></div>';
+    '<span class="ptype '+(s.type==='manual'?'manual':'auto')+'">'+(s.type==='manual'?'manual':'automated')+'</span>'+closed+'</div>'+
+    '<div class="svc-pr">৳'+bnNum(s.price)+(s.open?'':'<div style="font-size:10px;color:#b91c1c;">এখন বন্ধ</div>')+'</div></div>';
 }
 let GROUPS = [];
 function showCats(){

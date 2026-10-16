@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=1">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1e40af">
 <title>সেবার বিস্তারিত - All In One</title>
@@ -47,6 +49,14 @@
   </div>
 </div>
 <div class="wa-fab" id="waFab"><img src="/icons/abc-logo.png" alt="Abc"><span style="position:absolute;bottom:0;right:0;">💬</span></div>
+<!-- mobile tabbar -->
+<div class="m-tabbar">
+  <div class="m-tab" onclick="location.href='/dashboard.html'"><div class="ico">🏠</div>হোম</div>
+  <div class="m-tab on"><div class="ico">🛎️</div>সেবা</div>
+  <div class="m-tab" onclick="location.href='/orders.html'"><div class="ico">📦</div>অর্ডার</div>
+  <div class="m-tab" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
+  <div class="m-tab" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
+</div>
 <script src="/js/app.js?v=12"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -62,8 +72,9 @@ async function init(){
   if(!r.ok){document.getElementById('detail').innerHTML='<div style="color:#dc2626;">সেবা পাওয়া যায়নি</div>';return;}
   const {service:s}=await r.json();
   const docs=(s.documents_required||[]).map(d=>'<li>'+esc(d)+'</li>').join('')||'<li>কোনো ডকুমেন্ট লাগবে না</li>';
+  const sched=(s.schedule&&s.schedule.open)?'<div style="color:#64748b;font-size:13px;margin:8px 0;">🕘 খোলা: '+esc(s.schedule.open)+' - '+esc(s.schedule.close||'')+'</div>':'';
   document.getElementById('detail').innerHTML=
-    '<h2>'+esc(s.name_bn||s.name)+'</h2>'+
+    '<h2>'+esc(s.name_bn||s.name)+'</h2>'+sched+
     '<div style="margin-bottom:12px;"><span class="ptype '+(s.type==='manual'?'manual':'auto')+'">'+(s.type==='manual'?'manual':'automated')+'</span> '+
     '<span class="price">৳'+Number(s.price).toLocaleString('bn-BD')+'</span></div>'+
     '<div style="font-size:14px;margin-bottom:10px;"><b>প্রয়োজনীয় ডকুমেন্ট:</b><ul style="padding-left:18px;margin-top:6px;">'+docs+'</ul></div>'+

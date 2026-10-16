@@ -227,6 +227,24 @@ router.get('/orders', async (req, res) => {
   }
 });
 
+// GET /api/order-counts — dashboard stats, server-side counts (no row scan,
+// no limit-cap skew). Semantics match the old client-side counting exactly.
+router.get('/order-counts', async (req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT COUNT(*) AS total,
+              COUNT(*) FILTER (WHERE status IN ('completed','delivered')) AS done,
+              COUNT(*) FILTER (WHERE status IN ('new','pending','processing')) AS active
+       FROM orders WHERE user_id = $1`,
+      [req.user.id]);
+    const c = r.rows[0];
+    res.json({ total: Number(c.total), done: Number(c.done), active: Number(c.active) });
+  } catch (e) {
+    safeLog('[user] order-counts error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 // GET /api/orders/:id — own order + timeline
 router.get('/orders/:id', async (req, res) => {
   try {

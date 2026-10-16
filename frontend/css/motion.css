@@ -1,0 +1,99 @@
+/* ============================================================
+   motion.css v1 — shared premium motion + touch polish
+   All In One (Abc Authentic) — rebuilt blue pages
+   Linked by: dashboard, services, wallet, orders, admin,
+              order-detail, profile, service-detail
+   ============================================================ */
+
+/* ---- touch polish ---- */
+* { -webkit-tap-highlight-color: transparent; }
+button, .btn, .btn-add, .m-tab, .side-link, .svc2, .stat { touch-action: manipulation; }
+
+/* ---- page entry ---- */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+.main, .page, .m-content, #content {
+  animation: fadeUp .35s ease-out;
+}
+
+/* ---- buttons: press feedback ---- */
+.btn, .btn-add, .btn-more, button {
+  transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease, opacity .15s ease;
+}
+.btn:active, .btn-add:active, .btn-more:active, button:active {
+  transform: scale(.96);
+}
+
+/* ---- cards & tiles: hover lift + press ---- */
+.svc2, .stat, .card {
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+@media (hover: hover) {
+  .svc2:hover, .stat:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(30,64,175,.14); }
+  .card:hover { box-shadow: 0 8px 20px rgba(30,64,175,.10); }
+}
+.svc2:active, .stat:active { transform: scale(.98); }
+
+/* ---- sidebar links ---- */
+.side-link {
+  transition: background-color .15s ease, padding-left .15s ease;
+}
+.side-link:active { transform: scale(.98); }
+
+/* ---- skeleton shimmer (loading placeholders) ---- */
+.skel {
+  position: relative; overflow: hidden;
+  background: #e2e8f0; border-radius: 8px;
+  color: transparent !important; pointer-events: none;
+  min-height: 14px;
+}
+.skel::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.75), transparent);
+  animation: shimmer 1.2s infinite;
+}
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+
+/* ---- banner carousel slide (was coffee.css-only; rebuilt pages don't load it) ---- */
+.bn-slide { transition: opacity .3s ease, transform .3s ease; }
+.bn-strip { overflow: hidden; }
+
+/* ---- mobile tabbar: iPhone home-indicator safe area ---- */
+.m-tabbar {
+  display: none;
+  border-top: 1px solid #e2e8f0;
+  padding: 10px 0 14px;
+  padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  background: #fff;
+  position: fixed; bottom: 0; left: 0; right: 0;
+  z-index: 200;
+  box-shadow: 0 -2px 12px rgba(15,23,42,.06);
+}
+.m-tab { flex: 1; text-align: center; font-size: 10px; color: #94a3b8; cursor: pointer; }
+.m-tab.on { color: #1e40af; font-weight: 700; }
+.m-tab .ico { font-size: 20px; line-height: 1.3; }
+@media (max-width: 768px) {
+  .m-tabbar { display: flex; }
+  body { padding-bottom: 76px; } /* room for fixed tabbar */
+}
+.m-tab {
+  transition: transform .12s ease, color .12s ease;
+}
+.m-tab:active { transform: scale(.92); }
+
+/* ---- WhatsApp floating button (shared; was duplicated per page) ---- */
+.wa-fab { position:fixed; bottom:20px; right:20px; width:56px; height:56px; border-radius:50%; background:#fff; box-shadow:0 4px 16px rgba(0,0,0,0.15); display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:100; }
+.wa-fab img { width:32px; height:32px; }
+@media (max-width:768px){ .wa-fab { bottom:84px; right:16px; } }
+
+/* ---- toast / inline error shake ---- */
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); } 75% { transform: translateX(4px); }
+}
+.shake { animation: shake .3s ease; }

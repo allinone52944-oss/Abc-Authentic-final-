@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=1">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1e40af">
 <title>প্রোফাইল - All In One</title>
@@ -68,7 +70,21 @@
       <div class="err" id="perr"></div><div class="okmsg" id="pok"></div>
       <button class="btn" onclick="changePw()">বদলান</button>
     </div>
+    <div class="card">
+      <h3>🚪 লগআউট</h3>
+      <p style="font-size:13px;color:#64748b;margin:0 0 12px;">এই ডিভাইস থেকে নিরাপদে বের হোন।</p>
+      <button class="btn" style="background:#fef2f2;color:#dc2626;" onclick="logout()">লগআউট করুন</button>
+    </div>
   </div>
+</div>
+<div class="wa-fab" id="waFab"><img src="/icons/abc-logo.png" alt="Abc"><span style="position:absolute;bottom:0;right:0;">💬</span></div>
+<!-- mobile tabbar -->
+<div class="m-tabbar">
+  <div class="m-tab" onclick="location.href='/dashboard.html'"><div class="ico">🏠</div>হোম</div>
+  <div class="m-tab" onclick="location.href='/services.html'"><div class="ico">🛎️</div>সেবা</div>
+  <div class="m-tab" onclick="location.href='/orders.html'"><div class="ico">📦</div>অর্ডার</div>
+  <div class="m-tab" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
+  <div class="m-tab on"><div class="ico">👤</div>প্রোফাইল</div>
 </div>
 <script src="/js/app.js?v=12"></script>
 <script>
@@ -86,6 +102,9 @@ async function init(){
   const r=await ABC.api('/auth/me');
   if(!r.ok){location.href='/login.html';return;}
   const {user}=await r.json();
+  document.getElementById('waFab').onclick=()=>{
+    window.open('https://wa.me/?text='+encodeURIComponent('আসসালামু আলাইকুম! আমি '+user.name+' (ফোন: '+user.phone+')। সাহায্য দরকার।'),'_blank');
+  };
   document.getElementById('name').value=user.name||'';
   document.getElementById('phone').value=user.phone||'';
   document.getElementById('whatsapp').value=user.whatsapp||'';
@@ -115,6 +134,13 @@ async function changePw(){
   if(!r.ok){perr.textContent='❌ '+(d.error==='WRONG_CURRENT_PASSWORD'?'বর্তমান পাসওয়ার্ড ভুল':d.error);return;}
   pok.textContent='✅ পাসওয়ার্ড বদলে গেছে!';
   document.getElementById('cur').value='';document.getElementById('nw').value='';
+}
+async function logout(){
+  try{
+    const rt=localStorage.getItem('abc_refresh_token');
+    await ABC.api('/auth/logout',{method:'POST',body:{refresh_token:rt}});
+  }catch(e){}
+  ABC.clearTokens();location.href='/login.html';
 }
 init();
 </script>

@@ -1016,6 +1016,28 @@ router.get('/recharge/pending', async (req, res) => {
   }
 });
 
+// GET /api/admin/reports/summary — server-side aggregates for the Reports tab.
+// Client-side summing of capped (100-row) pages silently undercounts revenue.
+router.get('/reports/summary', async (req, res) => {
+  try {
+    const [rev, rch, byStatus, users] = await Promise.all([
+      db.query(`SELECT COALESCE(SUM(price),0) AS revenue FROM orders WHERE status IN ('completed','delivered')`),
+      db.query(`SELECT COALESCE(SUM(amount),0) AS recharge FROM transactions WHERE type = 'recharge' AND status = 'approved'`),
+      db.query(`SELECT status, COUNT(*) AS c FROM orders GROUP BY status`),
+      db.query(`SELECT COUNT(*) AS c FROM users`),
+    ]);
+    res.json({
+      revenue: Number(rev.rows[0].revenue),
+      recharge: Number(rch.rows[0].recharge),
+      byStatus: Object.fromEntries(byStatus.rows.map(r => [r.status, Number(r.c)])),
+      users: Number(users.rows[0].c),
+    });
+  } catch (e) {
+    safeLog('[admin] reports summary error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 router.get('/transactions', async (req, res) => {
   try {
     const { page, limit, offset } = pageParams(req);

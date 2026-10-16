@@ -4,31 +4,45 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#d4af37">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Abc Authentic">
-<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=1">
+<meta name="theme-color" content="#1e40af">
 <title>এনআইডি কার্ড রেপ্লিকা - All In One</title>
-<link rel="stylesheet" href="/css/coffee.css?v=8">
 <style>
+  :root { --gold:#2563eb; --cream:#0f172a; --muted:#64748b; --dim:#94a3b8; --espresso:#eff6ff; --gold-dark:#1e40af; --line:#e2e8f0; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Hind Siliguri',system-ui,sans-serif; background:#eef2f7; color:#0f172a; }
+  .desktop { max-width:1100px; margin:0 auto; background:#fff; min-height:100vh; display:flex; }
+  .sidebar { width:220px; background:linear-gradient(180deg,#1e3a8a,#1e40af); color:#fff; padding:20px 0; flex-shrink:0; }
+  .side-logo { padding:0 20px 20px; border-bottom:1px solid rgba(255,255,255,0.15); margin-bottom:16px; }
+  .side-logo h2 { font-size:18px; } .side-logo p { font-size:11px; opacity:0.7; }
+  .side-link { display:flex; align-items:center; gap:12px; padding:12px 20px; font-size:14px; color:rgba(255,255,255,0.85); cursor:pointer; border-left:3px solid transparent; }
+  .side-link.on { background:rgba(255,255,255,0.12); border-left-color:#fff; color:#fff; font-weight:600; }
+  .side-link .ico { font-size:18px; }
+  .main { flex:1; padding:24px; overflow:auto; }
+  .topbar { margin-bottom:16px; }
+  .topbar h2 { font-size:20px; } .topbar p { font-size:13px; color:#64748b; }
+  .form-card { background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:20px; margin-bottom:16px; }
+  .btn { background:#1e40af; color:#fff; border:none; border-radius:10px; padding:12px 24px; font-size:15px; font-weight:700; cursor:pointer; }
+  .btn:disabled { opacity:.6; cursor:default; }
+  .btn-secondary { background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; border-radius:10px; padding:12px 24px; font-size:15px; cursor:pointer; }
+  .field label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; }
+  .field input { width:100%; padding:10px 12px; border:1px solid #cbd5e1; border-radius:10px; font-size:14px; font-family:inherit; }
 .steps{display:flex;gap:6px;margin:14px 0 18px;}
 .step{flex:1;text-align:center;font-size:11px;color:var(--muted);position:relative;padding-top:26px;}
-.step .dot{position:absolute;top:0;left:50%;transform:translateX(-50%);width:24px;height:24px;border-radius:50%;border:2px solid var(--muted);display:flex;align-items:center;justify-content:center;font-size:12px;background:var(--espresso);}
+.step .dot{position:absolute;top:0;left:50%;transform:translateX(-50%);width:24px;height:24px;border-radius:50%;border:2px solid var(--muted);display:flex;align-items:center;justify-content:center;font-size:12px;background:#fff;}
 .step.on{color:var(--gold);}
-.step.on .dot{border-color:var(--gold);color:var(--gold);box-shadow:0 0 10px rgba(212,175,55,.4);}
-.step.done .dot{border-color:var(--gold);background:var(--gold);color:#2b1d14;}
+.step.on .dot{border-color:var(--gold);color:var(--gold);box-shadow:0 0 10px rgba(37,99,235,.35);}
+.step.done .dot{border-color:var(--gold);background:var(--gold);color:#fff;}
 .step.done{color:var(--gold);}
 .wiz{display:none;}
 .wiz.on{display:block;animation:fadeUp .3s ease;}
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
-.spin{display:inline-block;width:18px;height:18px;border:3px solid rgba(212,175,55,.3);border-top-color:var(--gold);border-radius:50%;animation:sp 0.8s linear infinite;vertical-align:-4px;margin-right:8px;}
+.spin{display:inline-block;width:18px;height:18px;border:3px solid rgba(37,99,235,.3);border-top-color:var(--gold);border-radius:50%;animation:sp 0.8s linear infinite;vertical-align:-4px;margin-right:8px;}
 @keyframes sp{to{transform:rotate(360deg);}}
-.err{display:none;background:rgba(255,90,90,.12);border:1px solid #ff7b7b;color:#ffb3b3;padding:10px 12px;border-radius:10px;margin-bottom:12px;font-size:14px;}
+.err{display:none;background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;padding:10px 12px;border-radius:10px;margin-bottom:12px;font-size:14px;}
 .err.on{display:block;}
-.ok{display:none;background:rgba(90,200,120,.12);border:1px solid #5ac878;color:#b8f0c8;padding:10px 12px;border-radius:10px;margin-bottom:12px;font-size:14px;}
+.ok{display:none;background:#f0fdf4;border:1px solid #86efac;color:#15803d;padding:10px 12px;border-radius:10px;margin-bottom:12px;font-size:14px;}
 .ok.on{display:block;}
 .row2{display:flex;gap:10px;}
 .row2 .btn,.row2 .btn-secondary{flex:1;}
@@ -41,21 +55,28 @@
 #fieldForm{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 #fieldForm .field{margin:0;}
 #fieldForm .field.full{grid-column:1/-1;}
-#fieldForm textarea{width:100%;min-height:60px;padding:8px;border:1px solid var(--gold);border-radius:8px;background:#1a1a1a;color:#fff;font-size:14px;}
-.drop{border:2px dashed var(--gold);border-radius:12px;padding:28px 14px;text-align:center;color:var(--cream);cursor:pointer;}
+#fieldForm textarea{width:100%;min-height:60px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#0f172a;font-size:14px;font-family:inherit;}
+.drop{border:2px dashed var(--gold);border-radius:12px;padding:28px 14px;text-align:center;color:var(--cream);cursor:pointer;display:block;}
 .drop input{display:none;}
+@media (max-width:768px) {
+  .sidebar { display:none; }
+  .main { padding:16px; }
+  #fieldForm{grid-template-columns:1fr;}
+}
 </style>
-<!-- cache-bust 2026-10-13: force fresh document load -->
 </head>
-<body class="app">
-<div class="spiral"></div>
-<div class="app-shell">
-  <div class="app-header">
-    <div class="brand">☕ এনআইডি কার্ড রেপ্লিকা</div>
-    <div class="hdr-actions"><button class="icon-btn" onclick="location.href='/dashboard.html'">🏠</button></div>
+<body>
+<div class="desktop">
+  <div class="sidebar">
+    <div class="side-logo"><h2>🔷 All In One</h2><p>বিশ্বাস ও সেবার ঠিকানা</p></div>
+    <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+    <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সেবা</div>
+    <div class="side-link on"><span class="ico">🪪</span> এনআইডি রেপ্লিকা</div>
+    <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
+    <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট</div>
   </div>
-  <div class="page">
-    <span class="back-link" onclick="history.back()">← ফিরে যান</span>
+  <div class="main">
+    <div class="topbar"><div><h2>🪪 এনআইডি কার্ড রেপ্লিকা</h2><p>ফর্ম থেকে কার্ড তৈরি করুন</p></div></div>
     <div class="steps" id="steps">
       <div class="step on" data-s="1"><span class="dot">১</span>আপলোড</div>
       <div class="step" data-s="2"><span class="dot">২</span>তথ্য বের</div>
@@ -113,7 +134,15 @@
     </div>
   </div>
 </div>
-<div class="wa-fab" id="waFab" title="WhatsApp"><img src="/icons/abc-logo.png" alt="Abc Authentic"><span class="wa-badge">💬</span></div>
+<div class="wa-fab" id="waFab"><img src="/icons/abc-logo.png" alt="Abc"><span style="position:absolute;bottom:0;right:0;">💬</span></div>
+<!-- mobile tabbar -->
+<div class="m-tabbar">
+  <div class="m-tab" onclick="location.href='/dashboard.html'"><div class="ico">🏠</div>হোম</div>
+  <div class="m-tab" onclick="location.href='/services.html'"><div class="ico">🛎️</div>সেবা</div>
+  <div class="m-tab" onclick="location.href='/orders.html'"><div class="ico">📦</div>অর্ডার</div>
+  <div class="m-tab" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
+  <div class="m-tab" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
+</div>
 <script src="/js/app.js?v=12"></script>
 <script>
 const API='/nid-engine';

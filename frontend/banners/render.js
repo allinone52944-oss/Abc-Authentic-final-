@@ -58,28 +58,66 @@
     return parts.join('\n');
   }
 
-  // Rotating carousel: renders into el, rotates every `ms`
+  // Rotating carousel: renders into el, rotates every `ms`.
+  // Honors each banner's animation_type (slide/fade/ticker/bounce/none)
+  // and animation_speed (5-120 -> transition duration 50-1200ms).
+  function animKeyframes(anim) {
+    switch (anim) {
+      case 'slide':
+      case 'ticker':
+        return {
+          out: [{ opacity: 1, transform: 'translateX(0)' }, { opacity: 0, transform: 'translateX(-48px)' }],
+          inn: [{ opacity: 0, transform: 'translateX(48px)' }, { opacity: 1, transform: 'translateX(0)' }],
+          ease: 'ease-out'
+        };
+      case 'bounce':
+        return {
+          out: [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(.82)' }],
+          inn: [{ opacity: 0, transform: 'scale(.82)' }, { opacity: 1, transform: 'scale(1)' }],
+          ease: 'cubic-bezier(.2,1.6,.4,1)'
+        };
+      case 'fade':
+      default:
+        return {
+          out: [{ opacity: 1, transform: 'translateY(0)' }, { opacity: 0, transform: 'translateY(10px)' }],
+          inn: [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'translateY(0)' }],
+          ease: 'ease-out'
+        };
+    }
+  }
   async function carousel(el, banners, ms) {
     if (!el || !banners || !banners.length) return;
-    const htmls = [];
+    const slides = [];
     for (const b of banners) {
-      try { htmls.push(await render(b)); } catch (e) { /* skip */ }
+      try {
+        slides.push({
+          html: await render(b),
+          anim: b.animation_type || 'fade',
+          speed: Math.min(120, Math.max(5, Number(b.animation_speed) || 30))
+        });
+      } catch (e) { /* skip */ }
     }
-    if (!htmls.length) return;
+    if (!slides.length) return;
     let i = 0;
-    el.innerHTML = '<div class="bn-slide">' + htmls[0] + '</div>';
-    if (htmls.length < 2) return;
+    el.innerHTML = '<div class="bn-slide">' + slides[0].html + '</div>';
+    if (slides.length < 2) return;
+    const canAnimate = typeof Element !== 'undefined' && Element.prototype.animate;
     setInterval(() => {
-      i = (i + 1) % htmls.length;
+      i = (i + 1) % slides.length;
       const slide = el.querySelector('.bn-slide');
       if (!slide) return;
-      slide.style.opacity = '0';
-      slide.style.transform = 'translateY(8px)';
-      setTimeout(() => {
-        slide.innerHTML = htmls[i];
-        slide.style.opacity = '1';
-        slide.style.transform = 'translateY(0)';
-      }, 300);
+      const to = slides[i];
+      if (to.anim === 'none' || !canAnimate) { slide.innerHTML = to.html; return; }
+      const dur = to.speed * 10; // 50ms .. 1200ms
+      const kf = animKeyframes(to.anim);
+      try {
+        const a = slide.animate(kf.out, { duration: dur, easing: 'ease-in', fill: 'forwards' });
+        a.onfinish = () => {
+          if (!slide.isConnected) return;
+          slide.innerHTML = to.html;
+          slide.animate(kf.inn, { duration: dur, easing: kf.ease, fill: 'forwards' });
+        };
+      } catch (e) { slide.innerHTML = to.html; }
     }, ms || 6000);
   }
 

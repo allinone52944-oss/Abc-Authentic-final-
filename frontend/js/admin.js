@@ -77,6 +77,14 @@ const VoiceAlert = {
   enabled: localStorage.getItem('abc_voice') !== 'off',
   _last: { recharge: 0, order: 0, manual: 0 },
   _voices: [],
+  // Notification sound (plays alongside TTS; files were unused before)
+  playSound(file) {
+    if (!this.enabled) return;
+    try {
+      const a = new Audio('/audio/' + file);
+      a.play().catch(() => {});
+    } catch (e) {}
+  },
   init() {
     try {
       const load = () => { this._voices = speechSynthesis.getVoices(); };
@@ -133,6 +141,7 @@ const VoiceAlert = {
       const no = Number(s.orders_new || 0);
       const mn = Number(s.manual_new || 0);
       if (this._last.manual && mn > this._last.manual) {
+        this.playSound('new-message.mp3');
         this.speak('নতুন ম্যানুয়াল আবেদন এসেছে। অনুগ্রহ করে চেক করুন।');
         try {
           const mr = await ABC.api('/admin/manual?status=new');
@@ -153,6 +162,7 @@ const VoiceAlert = {
           if (window.AdmManual) { show('manual'); }
         } catch (e) {}
       } else if (this._last.recharge && pr > this._last.recharge) {
+        this.playSound('new-recharge.mp3');
         this.speak('নতুন রিচার্জ রিকোয়েস্ট এসেছে। অনুগ্রহ করে চেক করুন।');
         // Speak customer name sweetly via TTS
         try {
@@ -170,6 +180,7 @@ const VoiceAlert = {
           }
         } catch (e) {}
       } else if (this._last.order && no > this._last.order) {
+        this.playSound('new-order.mp3');
         this.speak('নতুন অর্ডার এসেছে।');
         // Speak customer name sweetly via TTS
         try {
@@ -351,27 +362,50 @@ window.AdmReports = {
 
 /* ---------------- USERS ---------------- */
 TABS.users = async () => {
+  TABS._upage = 1;
   const _q = TABS._uq || '';
   const r = await ABC.api('/admin/users?limit=30' + (_q ? '&q=' + encodeURIComponent(_q) : ''));
   const d = await r.json();
   let html = '<div style="display:flex;gap:8px;margin-bottom:12px;">' +
-    '<input id="uq" placeholder="নাম/ফোন/ইমেইল খুঁজুন" style="flex:1;padding:10px 14px;background:rgba(0,0,0,0.4);border:1px solid rgba(212,175,55,0.25);border-radius:10px;color:var(--cream);outline:none;">' +
+    '<input id="uq" placeholder="নাম/ফোন/ইমেইল খুঁজুন" style="flex:1;padding:10px 14px;background:rgba(0,0,0,0.4);border:1px solid rgba(212,175,55,0.25);border-radius:10px;color:var(--cream);outline:none;" value="' + esc(_q) + '">' +
     '<button class="mini-btn" onclick="AdmUsers.search()">খুঁজুন</button>' +
     '<button class="mini-btn ok" onclick="AdmUsers.createForm()">+ নতুন ইউজার</button></div>' +
-    '<div style="overflow-x:auto;"><table class="adm"><tr><th>নাম</th><th>ফোন</th><th>ধর্ম</th><th>ব্যালেন্স</th><th>স্ট্যাটাস</th><th>কাজ</th></tr>';
+    '<div style="overflow-x:auto;"><table class="adm" id="uTable"><tr><th>নাম</th><th>ফোন</th><th>ধর্ম</th><th>ব্যালেন্স</th><th>স্ট্যাটাস</th><th>কাজ</th></tr>';
   for (const u of d.users) {
-    html += '<tr><td>' + esc(u.name) + '<br><small style="color:var(--dim)">' + esc(u.id.slice(0, 8)) + '</small>' +
+    html += AdmUsers.row(u);
+  }
+  const shown = (d.users || []).length;
+  html += '</table></div><div style="color:var(--muted);font-size:12px;margin-top:8px;">মোট: ' + bn(d.total) + ' (দেখানো: ' + bn(shown) + ')</div>' +
+    '<div id="uMore">' + (d.total > shown ? '<button class="mini-btn" onclick="AdmUsers.more()">আরো দেখুন ↓</button>' : '') + '</div>';
+  content.innerHTML = html;
+};
+
+window.AdmUsers = {
+  row(u) {
+    const myId = (typeof me !== 'undefined' && me && me.id) || '';
+    return '<tr><td>' + esc(u.name) + '<br><small style="color:var(--dim)">' + esc(u.id.slice(0, 8)) + '</small>' +
       (u.email_verified === false ? '<br><small style="color:#f59e0b;">⚠️ ইমেইল অযাচাইকৃত</small>' : '') + '</td>' +
       '<td>' + esc(u.phone) + '</td><td>' + esc(u.religion) + '</td>' +
       '<td>৳' + bn(u.balance) + '</td><td>' + esc(u.status) + '</td>' +
       '<td><button class="mini-btn" onclick="AdmUsers.edit(\'' + u.id + '\')">এডিট</button>' +
-      (u.id !== me.id ? '<button class="mini-btn danger" onclick="AdmUsers.del(\'' + u.id + '\',\'' + esc(u.name) + '\')">ডিলিট</button>' : '<small style="color:var(--dim)">(নিজে)</small>') +
+      (u.id !== myId ? '<button class="mini-btn danger" onclick="AdmUsers.del(\'' + u.id + '\',\'' + esc(u.name) + '\')">ডিলিট</button>' : '<small style="color:var(--dim)">(নিজে)</small>') +
       '</td></tr>';
-  }
-  content.innerHTML = html + '</table></div><div style="color:var(--muted);font-size:12px;margin-top:8px;">মোট: ' + bn(d.total) + '</div>';
-};
-
-window.AdmUsers = {
+  },
+  async more() {
+    TABS._upage = (TABS._upage || 1) + 1;
+    const _q = TABS._uq || '';
+    const r = await ABC.api('/admin/users?limit=30&page=' + TABS._upage + (_q ? '&q=' + encodeURIComponent(_q) : ''));
+    const d = await r.json();
+    const tbl = document.getElementById('uTable');
+    if (tbl) tbl.insertAdjacentHTML('beforeend', (d.users || []).map(u => AdmUsers.row(u)).join(''));
+    const shown = tbl ? tbl.rows.length - 1 : 0;
+    const moreBox = document.getElementById('uMore');
+    if (moreBox) {
+      moreBox.innerHTML = (d.total > shown)
+        ? '<button class="mini-btn" onclick="AdmUsers.more()">আরো দেখুন ↓ (' + bn(shown) + '/' + bn(d.total) + ')</button>'
+        : '<div style="color:var(--muted);font-size:12px;">সব দেখানো হয়েছে (' + bn(d.total) + ')</div>';
+    }
+  },
   async search() {
     const q = document.getElementById('uq').value;
     TABS._uq = q;
@@ -1293,7 +1327,12 @@ window.AdmTx = {
     if (!confirm('৳ যোগ করবেন?')) return;
     const r = await ABC.api('/admin/transactions/' + id + '/approve', { method: 'PUT' });
     const d = await r.json();
-    if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
+    if (!r.ok) {
+      alert('⚠️ ' + (d.error === 'DUPLICATE_TRANSACTION'
+        ? 'এই রিচার্জটি ইতিমধ্যে approve করা হয়েছে (অন্য admin করেছেন)।'
+        : 'ব্যর্থ: ' + d.error));
+      return;
+    }
     show('recharge');
   },
   async reject(id) {
@@ -1820,22 +1859,15 @@ function closeModal() {
 
 /* ---------------- REPORTS (user spec 2026-10-16) ---------------- */
 TABS.reports = async () => {
-  // Use /admin/orders (JSON) not /admin/reports/orders (PDF)
-  const [oR, tR, uR] = await Promise.all([
-    ABC.api('/admin/orders?limit=500'),
-    ABC.api('/admin/transactions?type=recharge&status=approved&limit=500'),
-    ABC.api('/admin/users?limit=1'),
-  ]);
-  const oD = await oR.json(); const tD = await tR.json(); const uD = await uR.json();
-  const orders = oD.orders || [];
-  const txns = tD.transactions || [];
-
-  // Calculate stats
-  const revenue = orders.filter(o => ['completed', 'delivered'].includes(o.status))
-    .reduce((s, o) => s + Number(o.price || 0), 0);
-  const byStatus = {};
-  orders.forEach(o => { byStatus[o.status] = (byStatus[o.status] || 0) + 1; });
-  const walletTotal = txns.reduce((s, t) => s + Number(t.amount || 0), 0);
+  // Server-side aggregates (was: client-side sum of capped 100-row pages = wrong totals)
+  let sum = { revenue: 0, recharge: 0, byStatus: {}, users: 0 };
+  try {
+    const r = await ABC.api('/admin/reports/summary');
+    if (r.ok) sum = await r.json();
+  } catch (e) { /* show zeros with error note */ }
+  const revenue = sum.revenue || 0;
+  const walletTotal = sum.recharge || 0;
+  const byStatus = sum.byStatus || {};
 
   let html = '<h3 style="color:var(--gold); margin-bottom:14px;">📊 রিপোর্ট</h3>' +
     '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:18px;">' +
@@ -1847,7 +1879,7 @@ TABS.reports = async () => {
     '<div style="font-size:24px; font-weight:700; color:#22c55e;">৳' + bn(walletTotal) + '</div></div>' +
     '<div style="background:var(--card); padding:16px; border-radius:12px; text-align:center;">' +
     '<div style="font-size:12px; color:var(--dim);">👥 মোট ইউজার</div>' +
-    '<div style="font-size:24px; font-weight:700;">' + bn(uD.total || 0) + '</div></div>' +
+    '<div style="font-size:24px; font-weight:700;">' + bn(sum.users || 0) + '</div></div>' +
     '<div style="background:var(--card); padding:16px; border-radius:12px; text-align:center;">' +
     '<div style="font-size:12px; color:var(--dim);">📦 মোট অর্ডার</div>' +
     '<div style="font-size:24px; font-weight:700;">' + bn(orders.length) + '</div></div></div>';

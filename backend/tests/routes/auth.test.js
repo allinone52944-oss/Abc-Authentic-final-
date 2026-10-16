@@ -55,34 +55,34 @@ describe('POST /api/auth/register — happy path', () => {
   test('registration OFF + valid invite → proceeds and consumes invite', async () => {
     db.__routeQuery([
       ...settingsHandlers({ enabled: false }),
-      ['FROM invite_links WHERE code', { rows: [{ code: 'INV-ABCDEF12', is_active: true, expires_at: null, max_uses: 5, used_count: 1 }] }],
+      ['FROM invite_links WHERE code', { rows: [{ code: 'INV-ABCDEF1234567890ABCDEF1234567890', is_active: true, expires_at: null, max_uses: 5, used_count: 1 }] }],
       ['FROM users WHERE phone = $1 OR email', { rows: [] }],
       ['INSERT INTO users', { rows: [{ id: 'u2', name: VALID.name }] }],
       ['UPDATE invite_links SET used_count', { rows: [], rowCount: 1 }],
     ]);
     const r = await request(app())
       .post('/api/auth/register')
-      .send({ ...VALID, phone: '01799998888', email: 'x@y.co', invite_code: 'inv-abcdef12' })
+      .send({ ...VALID, phone: '01799998888', email: 'x@y.co', invite_code: 'inv-abcdef1234567890abcdef1234567890' })
       .expect(201);
     expect(r.body.ok).toBe(true);
     // H-3: consume now runs inside withTransaction → goes through the mock client
     const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
     const upd = allCalls.find((c) => /UPDATE invite_links/.test(c[0]));
     expect(upd).toBeDefined();
-    expect(upd[1][0]).toBe('INV-ABCDEF12'); // normalized to uppercase
+    expect(upd[1][0]).toBe('INV-ABCDEF1234567890ABCDEF1234567890'); // normalized to uppercase
   });
 
   test('H-3: exhausted invite → 403 INVITE_EXHAUSTED (no orphan account)', async () => {
     db.__routeQuery([
       ...settingsHandlers({ enabled: false }),
-      ['FROM invite_links WHERE code', { rows: [{ code: 'INV-ABCDEF12', is_active: true, expires_at: null, max_uses: 1, used_count: 0 }] }],
+      ['FROM invite_links WHERE code', { rows: [{ code: 'INV-ABCDEF1234567890ABCDEF1234567890', is_active: true, expires_at: null, max_uses: 1, used_count: 0 }] }],
       ['FROM users WHERE phone = $1 OR email', { rows: [] }],
       ['INSERT INTO users', { rows: [{ id: 'u3', name: VALID.name }] }],
       ['UPDATE invite_links SET used_count', { rows: [], rowCount: 0 }], // someone else took the last use
     ]);
     const r = await request(app())
       .post('/api/auth/register')
-      .send({ ...VALID, phone: '01799998889', email: 'z@y.co', invite_code: 'INV-ABCDEF12' })
+      .send({ ...VALID, phone: '01799998889', email: 'z@y.co', invite_code: 'INV-ABCDEF1234567890ABCDEF1234567890' })
       .expect(403);
     expect(r.body.error).toBe('INVITE_EXHAUSTED');
   });

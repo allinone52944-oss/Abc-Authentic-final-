@@ -3,10 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=1">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1e40af">
 <title>এডমিন প্যানেল - All In One</title>
 <style>
+  :root {
+    --cream: #fffdf8;  /* light text on dark surfaces */
+    --dim: #64748b;    /* secondary text */
+    --muted: #64748b;  /* secondary text */
+    --gold: #b8860b;   /* accent */
+    --card: #ffffff;
+    --line: #e2e8f0;
+    --danger: #dc2626;
+    --bg: #f1f5f9;
+  }
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family:'Hind Siliguri',system-ui,sans-serif; background:#eef2f7; color:#0f172a; }
   .desktop { max-width:1400px; margin:0 auto; background:#fff; min-height:100vh; display:flex; }
@@ -71,7 +83,13 @@
   </div>
 </div>
 <script src="/js/app.js?v=12"></script>
-<script src="/banners/render.js"></script>
-<script src="/js/admin.js?v=32"></script>
+<script src="/banners/render.js?v=2"></script>
+<script src="/js/admin.js?v=33"></script>
+<script>
+// Register service worker (push notifications only, no caching — see sw.js v6)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
 </body>
 </html>

@@ -4,29 +4,51 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=1">
 <meta name="theme-color" content="#1e40af">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Abc Authentic">
-<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <title>অর্ডার করুন - All In One</title>
-<link rel="stylesheet" href="/css/coffee.css?v=8">
-<link rel="stylesheet" href="/css/blue.css?v=3">
-<!-- cache-bust 2026-10-13: force fresh document load -->
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Hind Siliguri',system-ui,sans-serif; background:#eef2f7; color:#0f172a; }
+  .desktop { max-width:1100px; margin:0 auto; background:#fff; min-height:100vh; display:flex; }
+  .sidebar { width:220px; background:linear-gradient(180deg,#1e3a8a,#1e40af); color:#fff; padding:20px 0; flex-shrink:0; }
+  .side-logo { padding:0 20px 20px; border-bottom:1px solid rgba(255,255,255,0.15); margin-bottom:16px; }
+  .side-logo h2 { font-size:18px; } .side-logo p { font-size:11px; opacity:0.7; }
+  .side-link { display:flex; align-items:center; gap:12px; padding:12px 20px; font-size:14px; color:rgba(255,255,255,0.85); cursor:pointer; border-left:3px solid transparent; }
+  .side-link.on { background:rgba(255,255,255,0.12); border-left-color:#fff; color:#fff; font-weight:600; }
+  .side-link .ico { font-size:18px; }
+  .main { flex:1; padding:24px; overflow:auto; }
+  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+  .topbar h2 { font-size:20px; } .topbar p { font-size:13px; color:#64748b; }
+  .card { background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:20px; margin-bottom:16px; }
+  .card h2 { font-size:18px; margin-bottom:8px; }
+  .pill { background:#dbeafe; color:#1d4ed8; font-weight:700; border-radius:20px; padding:6px 16px; font-size:15px; }
+  .field { margin-bottom:14px; }
+  .field label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; }
+  .field input, .field textarea { width:100%; padding:12px; border:1px solid #cbd5e1; border-radius:10px; font-size:14px; font-family:inherit; }
+  .btn { background:#1e40af; color:#fff; border:none; border-radius:10px; padding:12px 24px; font-size:15px; font-weight:700; cursor:pointer; }
+  .btn:disabled { opacity:.6; cursor:default; }
+  .err { color:#dc2626; font-size:13px; margin:8px 0; }
+  @media (max-width:768px) {
+    .sidebar { display:none; }
+    .main { padding:16px; }
+  }
+</style>
 </head>
-<body class="app">
-<div class="spiral"></div>
-<div class="app-shell">
-  <div class="app-header">
-    <div class="brand">☕ নতুন অর্ডার</div>
-    <div class="hdr-actions"><button class="icon-btn" onclick="location.href='/dashboard.html'">🏠</button></div>
+<body>
+<div class="desktop">
+  <div class="sidebar">
+    <div class="side-logo"><h2>🔷 All In One</h2><p>বিশ্বাস ও সেবার ঠিকানা</p></div>
+    <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+    <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সেবা</div>
+    <div class="side-link on"><span class="ico">🛒</span> নতুন অর্ডার</div>
+    <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
+    <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট</div>
   </div>
-  <div class="page">
-    <span class="back-link" onclick="history.back()">← ফিরে যান</span>
-    <div class="form-card" style="margin-top:12px;">
-      <h2 id="svcName">অর্ডার</h2>
+  <div class="main">
+    <div class="topbar"><div><h2 id="svcName">অর্ডার</h2><p>তথ্য দিয়ে অর্ডার নিশ্চিত করুন</p></div></div>
+    <div class="card">
       <div class="pill" id="svcPrice" style="display:inline-block;margin-bottom:14px;">৳০</div>
       <div id="dynFields"></div>
       <div class="field">
@@ -35,12 +57,21 @@
       </div>
       <div class="field" id="docWrap" style="display:none;">
         <label>ডকুমেন্ট আপলোড</label>
-        <div id="docList" style="color:var(--muted);font-size:13px;"></div>
+        <div id="docList" style="color:#64748b;font-size:13px;"></div>
       </div>
       <div class="err" id="err"></div>
       <button class="btn" id="submitBtn">অর্ডার নিশ্চিত করুন →</button>
     </div>
   </div>
+</div>
+<div class="wa-fab" id="waFab"><img src="/icons/abc-logo.png" alt="Abc"><span style="position:absolute;bottom:0;right:0;">💬</span></div>
+<!-- mobile tabbar -->
+<div class="m-tabbar">
+  <div class="m-tab" onclick="location.href='/dashboard.html'"><div class="ico">🏠</div>হোম</div>
+  <div class="m-tab" onclick="location.href='/services.html'"><div class="ico">🛎️</div>সেবা</div>
+  <div class="m-tab" onclick="location.href='/orders.html'"><div class="ico">📦</div>অর্ডার</div>
+  <div class="m-tab" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
+  <div class="m-tab" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
 </div>
 <script src="/js/app.js?v=12"></script>
 <script>
@@ -50,6 +81,10 @@ let svc=null;
 async function init(){
   const me=await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
+  const u=(await me.json()).user||{};
+  document.getElementById('waFab').onclick=()=>{
+    window.open('https://wa.me/?text='+encodeURIComponent('আসসালামু আলাইকুম! আমি '+u.name+' (ফোন: '+u.phone+')। সাহায্য দরকার।'),'_blank');
+  };
   if(!sid){
     // No service ID: show service picker
     const r=await ABC.api('/services');
@@ -102,7 +137,7 @@ async function init(){
     if(draft.notes)document.getElementById('notes').value=draft.notes;
   }
   // Auto-save draft on input
-  document.querySelector('.form-card').addEventListener('input',()=>{
+  document.querySelector('.card').addEventListener('input',()=>{
     const d={notes:document.getElementById('notes').value};
     document.querySelectorAll('[data-field]').forEach(el=>{d[el.dataset.field]=el.value;});
     ABC.Drafts.save('order_'+sid,d);
