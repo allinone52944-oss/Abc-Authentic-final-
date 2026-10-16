@@ -669,22 +669,25 @@ router.get('/services', async (req, res) => {
 
 router.post('/services', async (req, res) => {
   try {
-    const { name, name_bn, type, price, documents_required, fields_required, schedule, rules_text, engine_id, category_id } = req.body || {};
+    const { name, name_bn, type, price, documents_required, fields_required, schedule, rules_text, engine_id, category_id, manual_instructions, manual_sample, manual_doc_count } = req.body || {};
     if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'INVALID_NAME' });
     if (!['manual', 'automated'].includes(type)) return res.status(400).json({ error: 'INVALID_TYPE' });
     const catId = await resolveCategoryId(category_id);
     if (catId === false) return res.status(400).json({ error: 'INVALID_CATEGORY' });
+    const docCount = Math.min(6, Math.max(1, Number(manual_doc_count) || 1));
     const maxSerial = await db.query('SELECT COALESCE(MAX(serial), -1) + 1 AS s FROM services');
     const r = await db.query(
       `INSERT INTO services (name, name_bn, category_id, type, price, serial, documents_required,
-                             fields_required, schedule, rules_text, engine_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+                             fields_required, schedule, rules_text, engine_id,
+                             manual_instructions, manual_sample, manual_doc_count)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [String(name).trim(), name_bn || null, catId, type, Number(price) || 0,
        Number(maxSerial.rows[0].s),
        JSON.stringify(documents_required || []),
        JSON.stringify(fields_required || []),
        JSON.stringify(schedule || {}),
-       rules_text || null, engine_id || null]
+       rules_text || null, engine_id || null,
+       manual_instructions || null, manual_sample || null, docCount]
     );
     await logActivity(req.user.id, 'service.create', { service_id: r.rows[0].id, name });
     res.status(201).json({ service: r.rows[0] });
@@ -716,7 +719,7 @@ router.put('/services/reorder', async (req, res) => {
 
 router.put('/services/:id', async (req, res) => {
   try {
-    const { name, name_bn, type, price, status, documents_required, fields_required, schedule, rules_text, engine_id, category_id } = req.body || {};
+    const { name, name_bn, type, price, status, documents_required, fields_required, schedule, rules_text, engine_id, category_id, manual_instructions, manual_sample, manual_doc_count } = req.body || {};
     const sets = []; const params = []; let i = 1;
     const put = (col, val) => { sets.push(`${col} = $${i++}`); params.push(val); };
     if (name !== undefined) {
@@ -732,6 +735,9 @@ router.put('/services/:id', async (req, res) => {
     if (schedule !== undefined) put('schedule', JSON.stringify(schedule));
     if (rules_text !== undefined) put('rules_text', rules_text || null);
     if (engine_id !== undefined) put('engine_id', engine_id || null);
+    if (manual_instructions !== undefined) put('manual_instructions', manual_instructions || null);
+    if (manual_sample !== undefined) put('manual_sample', manual_sample || null);
+    if (manual_doc_count !== undefined) put('manual_doc_count', Math.min(6, Math.max(1, Number(manual_doc_count) || 1)));
     if (category_id !== undefined) {
       const catId = await resolveCategoryId(category_id);
       if (catId === false) return res.status(400).json({ error: 'INVALID_CATEGORY' });

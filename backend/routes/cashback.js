@@ -142,4 +142,86 @@ router.post('/redeem', async (req, res) => {
   }
 });
 
+// ============================================================
+// POST /api/cashback/generate — Per-recharge coupon (user spec 2026-10-16)
+// - User recharges → clicks "Coupon Create" → generates coupon
+// - Amount = recharge_amount × admin_percent
+// - Admin sets: percent, expiry days, allowed service_id
+// ============================================================
+router.post('/generate', async (req, res) => {
+  try {
+    const { recharge_id } = req.body || {};
+    if (!recharge_id) return res.status(400).json({ error: 'MISSING_RECHARGE' });
+
+    const out = await db.withTransaction(async (client) => {
+      // Get the recharge (must be approved and belong to user)
+      const rc = await client.query(
+        `SELECT id, amount, user_id FROM transactions
+         WHERE id = $1 AND user_id = $2 AND type = 'recharge' AND status = 'approved' LIMIT 1`,
+        [recharge_id, req.user.id]
+      );
+      if (!rc.rows.length) {
+        const err = new Error('INVALID_RECHARGE');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // Already generated for this recharge? (one coupon per recharge)
+      const exist = await client.query(
+        `SELECT id FROM coupons WHERE recharge_id = $1 LIMIT 1`,
+        [recharge_id]
+      );
+      if (exist.rows.length) {
+        const err = new Error('ALREADY_GENERATED');
+        err.statusCode = 409;
+        throw err;
+      }
+
+      const cfg = await cashbackConfig(client);
+      if (!cfg.enabled || cfg.percent <= 0) {
+        const err = new Error('CASHBACK_DISABLED');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      const rechargeAmount = Number(rc.rows[0].amount);
+      const amount = Math.floor(rechargeAmount * cfg.percent / 100 * 100) / 100;
+      if (amount <= 0) {
+        const err = new Error('NOTHING_TO_GENERATE');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // Expiry from settings (default 30 days)
+      const expiryDays = Number(cfg.expiry_days) || 30;
+      const expiresAt = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000);
+
+      const code = 'CB-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+      const ins = await client.query(
+        `INSERT INTO coupons (code, type, percent, amount, service_id, user_id, expires_at, recharge_id, notes)
+         VALUES ($1, 'cashback', $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [code, cfg.percent, amount, cfg.service_id || null,
+         req.user.id, expiresAt.toISOString(), recharge_id, 'recharge:' + recharge_id]
+      );
+      return ins.rows[0];
+    });
+
+    res.status(201).json({
+      ok: true,
+      coupon: {
+        code: out.code,
+        amount: Number(out.amount),
+        percent: Number(out.percent),
+        expires_at: out.expires_at,
+        service_id: out.service_id,
+      },
+    });
+  } catch (e) {
+    safeLog('[cashback] generate error:', e.message);
+    if (e.statusCode === 409) return res.status(409).json({ error: 'ALREADY_GENERATED' });
+    if (e.statusCode === 400) return res.status(400).json({ error: e.message });
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 module.exports = router;
