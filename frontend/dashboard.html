@@ -2,10 +2,10 @@
 <html lang="bn">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="/manifest.json">
 <link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
-<link rel="stylesheet" href="/css/motion.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=2">
 <meta name="theme-color" content="#1e40af">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -131,17 +131,17 @@
     <div class="m-svc-grid" id="mobileServices"><div class="skel" style="height:64px;"></div><div class="skel" style="height:64px;margin-top:8px;"></div></div>
   </div>
   <div class="m-tabbar">
-    <div class="m-tab on"><div class="ico">🏠</div>হোম</div>
-    <div class="m-tab" onclick="location.href='/services.html'"><div class="ico">🛎️</div>সেবা</div>
-    <div class="m-tab" onclick="location.href='/orders.html'"><div class="ico">📦</div>অর্ডার</div>
-    <div class="m-tab" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
-    <div class="m-tab" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
+    <div class="m-tab on" aria-current="page"><div class="ico">🏠</div>হোম</div>
+    <div class="m-tab" tabindex="0" role="button" onclick="location.href='/services.html'"><div class="ico">🛎️</div>সেবা</div>
+    <div class="m-tab" tabindex="0" role="button" onclick="location.href='/orders.html'"><div class="ico">📦</div>অর্ডার</div>
+    <div class="m-tab" tabindex="0" role="button" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
+    <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
   </div>
 </div>
 
-<div class="wa-fab" id="waFab"><img src="/icons/abc-logo.png" alt="Abc"><span style="position:absolute;bottom:0;right:0;">💬</span></div>
+<button class="wa-fab" id="waFab" aria-label="WhatsApp-এ সাহায্য চান"><img src="/icons/abc-logo.png" alt="Abc"><span style="position:absolute;bottom:0;right:0;">💬</span></button>
 
-<script src="/js/app.js?v=12"></script>
+<script src="/js/app.js?v=13"></script>
 <script src="/banners/render.js?v=2"></script>
 <script>
 const bnNum = (n) => Number(n || 0).toLocaleString('bn-BD');

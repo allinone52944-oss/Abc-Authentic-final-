@@ -87,9 +87,26 @@ button, .btn, .btn-add, .m-tab, .side-link, .svc2, .stat { touch-action: manipul
 .m-tab:active { transform: scale(.92); }
 
 /* ---- WhatsApp floating button (shared; was duplicated per page) ---- */
-.wa-fab { position:fixed; bottom:20px; right:20px; width:56px; height:56px; border-radius:50%; background:#fff; box-shadow:0 4px 16px rgba(0,0,0,0.15); display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:100; }
+.wa-fab { position:fixed; bottom:20px; right:20px; width:56px; height:56px; border-radius:50%; background:#fff; border:none; box-shadow:0 4px 16px rgba(0,0,0,0.15); display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:100; padding:0; }
 .wa-fab img { width:32px; height:32px; }
 @media (max-width:768px){ .wa-fab { bottom:84px; right:16px; } }
+
+/* ---- keyboard focus visibility (a11y) ---- */
+:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
+
+/* ---- reduced motion: respect OS setting ---- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 
 /* ---- toast / inline error shake ---- */
 @keyframes shake {

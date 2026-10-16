@@ -225,4 +225,13 @@
   }
 
   window.ABC.showInstallBanner = showInstallBanner;
+
+  // a11y: keyboard activation for mobile tabbar tabs (divs with click handlers)
+  document.addEventListener('keydown', function (ev) {
+    if ((ev.key === 'Enter' || ev.key === ' ') && ev.target && ev.target.classList &&
+        ev.target.classList.contains('m-tab') && !ev.target.classList.contains('on')) {
+      ev.preventDefault();
+      ev.target.click();
+    }
+  });
 })();

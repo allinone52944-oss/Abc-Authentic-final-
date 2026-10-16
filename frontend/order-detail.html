@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <link rel="manifest" href="/manifest.json">
 <link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
-<link rel="stylesheet" href="/css/motion.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=2">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1e40af">
 <title>অর্ডার বিস্তারিত - All In One</title>
@@ -63,13 +63,13 @@
 </div>
 <!-- mobile tabbar -->
 <div class="m-tabbar">
-  <div class="m-tab" onclick="location.href='/dashboard.html'"><div class="ico">🏠</div>হোম</div>
-  <div class="m-tab" onclick="location.href='/services.html'"><div class="ico">🛎️</div>সেবা</div>
-  <div class="m-tab on"><div class="ico">📦</div>অর্ডার</div>
-  <div class="m-tab" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
-  <div class="m-tab" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/dashboard.html'"><div class="ico">🏠</div>হোম</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/services.html'"><div class="ico">🛎️</div>সেবা</div>
+  <div class="m-tab on" aria-current="page"><div class="ico">📦</div>অর্ডার</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
 </div>
-<script src="/js/app.js?v=12"></script>
+<script src="/js/app.js?v=13"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 const STBN={new:'নতুন',pending:'অপেক্ষমান',processing:'প্রসেসিং',completed:'সম্পন্ন',delivered:'ডেলিভার্ড',failed:'ব্যর্থ',cancelled:'বাতিল',refunded:'রিফান্ডেড'};

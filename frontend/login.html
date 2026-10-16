@@ -145,11 +145,11 @@ body {
     <div id="tab-login">
       <div class="field">
         <label>মোবাইল / ইমেইল</label>
-        <input type="text" id="lg_id" placeholder="01XXXXXXXXX বা ইমেইল">
+        <input type="text" id="lg_id" placeholder="01XXXXXXXXX বা ইমেইল" autocomplete="username">
       </div>
       <div class="field">
         <label>পাসওয়ার্ড</label>
-        <input type="password" id="lg_pw" placeholder="পাসওয়ার্ড">
+        <input type="password" id="lg_pw" placeholder="পাসওয়ার্ড" autocomplete="current-password">
       </div>
       <button class="btn" onclick="doLogin()">প্রবেশ করুন →</button>
       <div class="err" id="lg_err"></div>
@@ -159,7 +159,7 @@ body {
       <div id="forgotWrap" style="display:none;margin-top:10px;">
         <div class="field">
           <label>ইমেইল</label>
-          <input type="email" id="fg_email" placeholder="email@example.com">
+          <input type="email" id="fg_email" placeholder="email@example.com" autocomplete="email">
         </div>
         <button class="btn" onclick="doForgot()">রিসেট লিংক পাঠান →</button>
         <div class="err" id="fg_err"></div>
@@ -169,23 +169,23 @@ body {
     <div id="tab-reg" style="display:none;">
       <div class="field">
         <label>নাম *</label>
-        <input type="text" id="rg_name" placeholder="আপনার নাম">
+        <input type="text" id="rg_name" placeholder="আপনার নাম" autocomplete="name">
       </div>
       <div class="field">
         <label>মোবাইল নম্বর *</label>
-        <input type="text" id="rg_phone" placeholder="01XXXXXXXXX">
+        <input type="text" id="rg_phone" placeholder="01XXXXXXXXX" autocomplete="tel">
       </div>
       <div class="field">
         <label>WhatsApp নম্বর *</label>
-        <input type="text" id="rg_wa" placeholder="01XXXXXXXXX">
+        <input type="text" id="rg_wa" placeholder="01XXXXXXXXX" autocomplete="tel">
       </div>
       <div class="field">
         <label>ইমেইল *</label>
-        <input type="email" id="rg_email" placeholder="email@example.com">
+        <input type="email" id="rg_email" placeholder="email@example.com" autocomplete="email">
       </div>
       <div class="field">
         <label>পাসওয়ার্ড * (min 6)</label>
-        <input type="password" id="rg_pw" placeholder="পাসওয়ার্ড">
+        <input type="password" id="rg_pw" placeholder="পাসওয়ার্ড" autocomplete="new-password">
       </div>
       <button class="btn" onclick="doRegister()">রেজিস্টার করুন →</button>
       <div class="err" id="rg_err"></div>
