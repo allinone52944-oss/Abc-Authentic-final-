@@ -324,6 +324,11 @@ app.use('/api', apiLimiter, userRoutes);
 const pushRoutes = require('./routes/push');
 app.use('/api/push', apiLimiter, pushRoutes);
 
+// ---- Manual service submissions (standalone module) --
+const { customerManual, adminManual } = require('./routes/manual');
+app.use('/api/manual', apiLimiter, customerManual);
+app.use('/api/admin/manual', apiLimiter, adminManual);
+
 // ---- Fallback: frontend handles routing ----------------------
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'frontend', 'index.html'));

@@ -1,0 +1,247 @@
+// ============================================================
+// Manual service submissions (Phase: manual services)
+// Standalone module — does NOT touch orders/engines.
+// Customer: POST /api/manual/submit (text + documents)
+//           GET  /api/manual/mine
+//           GET  /api/manual/template
+// Admin:    GET  /api/admin/manual
+//           GET  /api/admin/manual/:id
+//           PUT  /api/admin/manual/:id  (status / admin_note)
+//           GET  /api/admin/manual/:id/documents/:filename (download)
+// ============================================================
+const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+const multer = require('multer');
+const db = require('../db');
+const { requireAuth, requireAdmin } = require('../auth');
+const { safeLog } = require('../security');
+const parser = require('../utils/manual-parser');
+const push = require('../utils/push');
+
+const UPLOAD_DIR = '/opt/all-in-one-abc-authentic/uploads/manual';
+
+// ---- multer for manual documents (images + pdf) ----------------
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    try { fs.mkdirSync(UPLOAD_DIR, { recursive: true }); } catch (e) {}
+    cb(null, UPLOAD_DIR);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const ok = ['.pdf', '.jpg', '.jpeg', '.png'].includes(ext) ? ext : '.bin';
+    cb(null, 'manual-' + Date.now().toString(36) + '-' + crypto.randomBytes(8).toString('hex') + ok);
+  },
+});
+const uploadDocs = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024, files: 6 },
+  fileFilter: (req, file, cb) => {
+    const ext = (file.originalname.split('.').pop() || '').toLowerCase();
+    if (!['pdf', 'jpg', 'jpeg', 'png'].includes(ext)) return cb(new Error('FILE_TYPE_NOT_ALLOWED'));
+    cb(null, true);
+  },
+}).array('documents', 6);
+
+// Default sample template (used when admin hasn't saved one)
+const DEFAULT_TEMPLATE =
+`নাম (বাংলা):
+Name (English):
+জন্ম তারিখ (Date of Birth):
+মোবাইল নম্বর:
+
+[ ঠিকানার বিবরণ / Address Details ]
+বিভাগ:
+জেলা:
+উপজেলা:
+ইউনিয়ন/ওয়ার্ড:
+গ্রাম:
+ডাকঘর:
+`;
+
+async function getTemplate() {
+  try {
+    const r = await db.query("SELECT value FROM settings WHERE key = 'manual_template'");
+    if (r.rows.length && r.rows[0].value) {
+      const v = r.rows[0].value;
+      if (typeof v === 'string') {
+        try { const j = JSON.parse(v); return typeof j === 'string' ? j : (j.text || DEFAULT_TEMPLATE); }
+        catch (_) { return v; }
+      }
+      if (v && typeof v.text === 'string') return v.text;
+    }
+  } catch (e) { safeLog('[manual] template read failed:', e.message); }
+  return DEFAULT_TEMPLATE;
+}
+
+// ============================================================
+// CUSTOMER router — mounted at /api/manual (requireAuth)
+// ============================================================
+const customerManual = express.Router();
+customerManual.use(requireAuth);
+
+// GET /api/manual/template — sample format for customer to copy
+customerManual.get('/template', async (req, res) => {
+  res.json({ template: await getTemplate() });
+});
+
+// GET /api/manual/mine — customer's own submissions
+customerManual.get('/mine', async (req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT m.id, m.status, m.created_at, m.admin_note,
+              s.name_bn AS service_name_bn, s.name AS service_name,
+              jsonb_array_length(m.documents) AS doc_count
+       FROM manual_submissions m
+       LEFT JOIN services s ON s.id = m.service_id
+       WHERE m.user_id = $1 ORDER BY m.created_at DESC LIMIT 50`,
+      [req.user.id]
+    );
+    res.json({ list: r.rows });
+  } catch (e) { safeLog('[manual] mine error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+// POST /api/manual/submit — text + documents
+customerManual.post('/submit', (req, res) => {
+  uploadDocs(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message || 'UPLOAD_FAILED' });
+    try {
+      const rawText = String(req.body.raw_text || '').trim();
+      if (!rawText) {
+        // cleanup uploaded files on validation failure
+        for (const f of (req.files || [])) { try { fs.unlinkSync(f.path); } catch (_) {} }
+        return res.status(400).json({ error: 'EMPTY_TEXT' });
+      }
+      const serviceId = req.body.service_id || null;
+      const parsed = parser.parseManualText(rawText);
+      const docs = (req.files || []).map(f => ({
+        filename: f.filename,
+        originalname: f.originalname,
+        size: f.size,
+        mimetype: f.mimetype,
+        uploaded_by: 'customer',
+      }));
+      const ins = await db.query(
+        `INSERT INTO manual_submissions (user_id, service_id, raw_text, parsed_data, documents)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id, status, created_at`,
+        [req.user.id, serviceId, rawText, JSON.stringify(parsed), JSON.stringify(docs)]
+      );
+      const sub = ins.rows[0];
+      // Notify admins: Web Push (async, non-blocking)
+      try {
+        const uname = req.user.name || req.user.phone || 'গ্রাহক';
+        await push.notifyAdmins(db, '📝 নতুন ম্যানুয়াল আবেদন!',
+          `${uname} — ম্যানুয়াল সেবার আবেদন পাঠিয়েছেন`, '/admin.html');
+      } catch (e) { safeLog('[manual] push failed:', e.message); }
+      res.json({ ok: true, id: sub.id });
+    } catch (e) {
+      safeLog('[manual] submit error:', e.message);
+      res.status(500).json({ error: 'FAILED' });
+    }
+  });
+});
+
+// ============================================================
+// ADMIN router — mounted at /api/admin/manual (auth + admin)
+// ============================================================
+const adminManual = express.Router();
+adminManual.use(requireAuth, requireAdmin);
+
+// GET /api/admin/manual — list (new first)
+adminManual.get('/', async (req, res) => {
+  try {
+    const status = req.query.status;
+    const conds = [];
+    const params = [];
+    if (status && ['new', 'processing', 'completed', 'rejected'].includes(status)) {
+      conds.push('m.status = $1'); params.push(status);
+    }
+    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+    const r = await db.query(
+      `SELECT m.id, m.status, m.created_at, m.admin_note,
+              u.name AS user_name, u.phone AS user_phone,
+              s.name_bn AS service_name_bn, s.name AS service_name,
+              jsonb_array_length(m.documents) AS doc_count,
+              (m.parsed_data->'flat'->>'নাম (বাংলা)') AS name_bn
+       FROM manual_submissions m
+       JOIN users u ON u.id = m.user_id
+       LEFT JOIN services s ON s.id = m.service_id
+       ${where} ORDER BY m.created_at DESC LIMIT 100`,
+      params
+    );
+    res.json({ list: r.rows });
+  } catch (e) { safeLog('[manual] admin list error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+// GET /api/admin/manual/:id — detail with formatted HTML + clean text
+adminManual.get('/:id', async (req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT m.*, u.name AS user_name, u.phone AS user_phone,
+              s.name_bn AS service_name_bn, s.name AS service_name
+       FROM manual_submissions m
+       JOIN users u ON u.id = m.user_id
+       LEFT JOIN services s ON s.id = m.service_id
+       WHERE m.id = $1`,
+      [req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    const m = r.rows[0];
+    let parsed = m.parsed_data;
+    if (typeof parsed === 'string') { try { parsed = JSON.parse(parsed); } catch (_) { parsed = null; } }
+    if (!parsed || !parsed.sections) parsed = parser.parseManualText(m.raw_text || '');
+    res.json({
+      id: m.id, status: m.status, created_at: m.created_at,
+      admin_note: m.admin_note, user_name: m.user_name, user_phone: m.user_phone,
+      service_name_bn: m.service_name_bn, service_name: m.service_name,
+      documents: m.documents || [],
+      parsed,
+      clean_text: parser.toCleanText(parsed),
+      html: parser.toHTML(parsed),
+    });
+  } catch (e) { safeLog('[manual] admin detail error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+// PUT /api/admin/manual/:id — update status / admin_note
+adminManual.put('/:id', async (req, res) => {
+  try {
+    const { status, admin_note } = req.body || {};
+    const sets = [];
+    const params = [];
+    let i = 1;
+    if (status && ['new', 'processing', 'completed', 'rejected'].includes(status)) {
+      sets.push(`status = $${i++}`); params.push(status);
+    }
+    if (admin_note !== undefined) {
+      sets.push(`admin_note = $${i++}`); params.push(String(admin_note || '').slice(0, 2000));
+    }
+    if (!sets.length) return res.status(400).json({ error: 'NOTHING_TO_UPDATE' });
+    sets.push(`updated_at = NOW()`);
+    params.push(req.params.id);
+    const r = await db.query(
+      `UPDATE manual_submissions SET ${sets.join(', ')} WHERE id = $${i} RETURNING id, status`,
+      params
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    res.json({ ok: true, ...r.rows[0] });
+  } catch (e) { safeLog('[manual] admin update error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+// GET /api/admin/manual/:id/documents/:filename — admin download
+adminManual.get('/:id/documents/:filename', async (req, res) => {
+  try {
+    const fn = path.basename(req.params.filename);
+    const r = await db.query('SELECT documents FROM manual_submissions WHERE id = $1', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    let docs = r.rows[0].documents;
+    if (typeof docs === 'string') { try { docs = JSON.parse(docs); } catch (_) { docs = []; } }
+    const doc = (docs || []).find(d => d && path.basename(d.filename) === fn);
+    if (!doc) return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
+    const fp = path.join(UPLOAD_DIR, fn);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'FILE_MISSING' });
+    res.download(fp, doc.originalname || fn);
+  } catch (e) { safeLog('[manual] download error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+module.exports = { customerManual, adminManual };

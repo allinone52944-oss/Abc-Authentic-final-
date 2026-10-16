@@ -1130,7 +1130,15 @@ router.get('/stats', async (req, res) => {
             AND created_at >= CURRENT_DATE) AS revenue_today,
         (SELECT COUNT(*) FROM services WHERE status = 'active') AS services_active
     `);
-    res.json(r.rows[0]);
+    // Manual submissions count (defensive: table may not exist on old DBs)
+    let manualNew = 0;
+    try {
+      const m = await db.query("SELECT COUNT(*) AS c FROM manual_submissions WHERE status = 'new'");
+      manualNew = Number(m.rows[0].c) || 0;
+    } catch (e) { /* ignore */ }
+    const out = r.rows[0] || {};
+    out.manual_new = manualNew;
+    res.json(out);
   } catch (e) { safeLog('[admin] stats error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });
 
@@ -1262,7 +1270,7 @@ router.put('/settings', async (req, res) => {  try {
     const allowed = ['registration_enabled', 'maintenance_mode', 'file_upload',
                      'login_security', 'cashback', 'welcome_bonus', 'voice_greeting',
                      'whatsapp', 'bdris_apply.pdf_price', 'recharge_numbers',
-                     'ip_blocklist', 'session_timeout'];
+                     'ip_blocklist', 'session_timeout', 'manual_template'];
     const updated = [];
     for (const key of allowed) {
       if (req.body[key] !== undefined) {

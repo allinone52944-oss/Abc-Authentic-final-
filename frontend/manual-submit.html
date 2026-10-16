@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#d4af37">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<title>ম্যানুয়াল আবেদন - All In One</title>
+<link rel="stylesheet" href="/css/coffee.css?v=8">
+</head>
+<body class="app">
+<div class="spiral"></div>
+<div class="app-shell">
+  <div class="app-header">
+    <div class="brand">📝 ম্যানুয়াল আবেদন</div>
+    <div class="hdr-actions"><button class="icon-btn" onclick="location.href='/dashboard.html'">🏠</button></div>
+  </div>
+  <div class="page">
+    <span class="back-link" onclick="history.back()">← ফিরে যান</span>
+
+    <div class="form-card" style="margin-top:12px;">
+      <h2>নমুনা ফরম্যাট</h2>
+      <p style="color:var(--muted);font-size:13px;">নিচের ফরম্যাটটি কপি করে পূরণ করুন, তারপর নিচের বক্সে পেস্ট করুন।</p>
+      <pre id="tplBox" style="background:#1a120b;border:1px solid var(--line);border-radius:8px;padding:12px;font-size:12px;white-space:pre-wrap;color:var(--cream);max-height:220px;overflow:auto;">লোড হচ্ছে…</pre>
+      <button class="btn-secondary" onclick="copyTpl()" style="margin-top:8px;">📋 ফরম্যাট কপি করুন</button>
+    </div>
+
+    <div class="form-card" style="margin-top:12px;">
+      <h2>আপনার তথ্য পেস্ট করুন</h2>
+      <div class="field">
+        <label>তথ্য (নমুনা অনুযায়ী পূরণ করে এখানে পেস্ট করুন)</label>
+        <textarea id="rawText" rows="10" placeholder="এখানে পেস্ট করুন…"></textarea>
+      </div>
+      <div class="field">
+        <label>ডকুমেন্ট (সর্বোচ্চ ৬টি — ছবি/PDF)</label>
+        <input type="file" id="docs" multiple accept=".pdf,.jpg,.jpeg,.png">
+        <div id="fileList" style="color:var(--muted);font-size:13px;margin-top:6px;"></div>
+      </div>
+      <div class="err" id="err"></div>
+      <div class="ok" id="ok" style="display:none;"></div>
+      <button class="btn" id="submitBtn" onclick="doSubmit()">পাঠান →</button>
+    </div>
+
+    <div class="form-card" style="margin-top:12px;">
+      <h2>আমার আবেদনসমূহ</h2>
+      <div id="myList" style="color:var(--muted);font-size:13px;">লোড হচ্ছে…</div>
+    </div>
+  </div>
+</div>
+<script src="/js/app.js?v=12"></script>
+<script>
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+let tplText = '';
+
+async function init(){
+  try {
+    const r = await ABC.api('/manual/template');
+    const d = await r.json();
+    tplText = d.template || '';
+    document.getElementById('tplBox').textContent = tplText;
+  } catch(e){ document.getElementById('tplBox').textContent = 'লোড ব্যর্থ'; }
+  loadMine();
+  document.getElementById('docs').addEventListener('change', function(){
+    const n = this.files.length;
+    document.getElementById('fileList').textContent = n ? n + 'টি ফাইল নির্বাচিত' : '';
+  });
+}
+
+function copyTpl(){
+  if(!tplText) return;
+  navigator.clipboard.writeText(tplText).then(()=>alert('📋 কপি হয়েছে!'))
+    .catch(()=>{ const t=document.createElement('textarea'); t.value=tplText; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); alert('📋 কপি হয়েছে!'); });
+}
+
+async function loadMine(){
+  try {
+    const r = await ABC.api('/manual/mine');
+    const d = await r.json();
+    const list = d.list || [];
+    if(!list.length){ document.getElementById('myList').innerHTML = 'এখনো কোনো আবেদন নেই।'; return; }
+    const stBn = { new:'🆕 নতুন', processing:'⏳ প্রসেসিং', completed:'✅ সম্পন্ন', rejected:'❌ বাতিল' };
+    document.getElementById('myList').innerHTML = list.map(m =>
+      '<div style="padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;">' +
+      '<div>'+esc(m.service_name_bn||m.service_name||'ম্যানুয়াল সেবা')+' — '+(stBn[m.status]||m.status)+'</div>' +
+      '<div style="color:var(--muted);font-size:12px;">'+new Date(m.created_at).toLocaleString('bn-BD') +
+      (m.doc_count ? ' • 📎 '+m.doc_count+'টি ডকুমেন্ট' : '') +
+      (m.admin_note ? '<br>💬 '+esc(m.admin_note) : '') + '</div></div>'
+    ).join('');
+  } catch(e){ document.getElementById('myList').innerHTML = 'লোড ব্যর্থ'; }
+}
+
+async function doSubmit(){
+  const err = document.getElementById('err'), ok = document.getElementById('ok');
+  err.textContent = ''; ok.style.display = 'none';
+  const raw = document.getElementById('rawText').value.trim();
+  if(!raw){ err.textContent = 'তথ্য পেস্ট করুন'; return; }
+  const files = document.getElementById('docs').files;
+  if(files.length > 6){ err.textContent = 'সর্বোচ্চ ৬টি ফাইল'; return; }
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true; btn.textContent = 'পাঠানো হচ্ছে…';
+  try {
+    const fd = new FormData();
+    fd.append('raw_text', raw);
+    for(const f of files) fd.append('documents', f);
+    const token = sessionStorage.getItem('abc_access_token');
+    const r = await fetch('/api/manual/submit', {
+      method: 'POST',
+      headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+      body: fd,
+    });
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok){ err.textContent = 'ব্যর্থ: ' + (d.error || 'UNKNOWN'); return; }
+    ok.style.display = ''; ok.textContent = '✅ আবেদন পাঠানো হয়েছে!';
+    document.getElementById('rawText').value = '';
+    document.getElementById('docs').value = '';
+    document.getElementById('fileList').textContent = '';
+    loadMine();
+  } catch(e){ err.textContent = 'নেটওয়ার্ক সমস্যা'; }
+  finally { btn.disabled = false; btn.textContent = 'পাঠান →'; }
+}
+
+init();
+</script>
+</body>
+</html>

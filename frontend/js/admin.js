@@ -74,7 +74,7 @@ async function show(tab) {
 /* ============ Phase 3: Voice alerts (Web Speech API, Bengali) ============ */
 const VoiceAlert = {
   enabled: localStorage.getItem('abc_voice') !== 'off',
-  _last: { recharge: 0, order: 0 },
+  _last: { recharge: 0, order: 0, manual: 0 },
   _voices: [],
   init() {
     try {
@@ -130,7 +130,28 @@ const VoiceAlert = {
       const s = await r.json();
       const pr = Number(s.pending_recharge || 0);
       const no = Number(s.orders_new || 0);
-      if (this._last.recharge && pr > this._last.recharge) {
+      const mn = Number(s.manual_new || 0);
+      if (this._last.manual && mn > this._last.manual) {
+        this.speak('নতুন ম্যানুয়াল আবেদন এসেছে। অনুগ্রহ করে চেক করুন।');
+        try {
+          const mr = await ABC.api('/admin/manual?status=new');
+          if (mr.ok) {
+            const md = await mr.json();
+            const latest = (md.list || [])[0];
+            if (latest && latest.user_name) {
+              setTimeout(() => {
+                const u = new SpeechSynthesisUtterance('কাস্টমার: ' + latest.user_name);
+                u.lang = 'bn-BD'; u.rate = 0.9; u.pitch = 1.1;
+                speechSynthesis.speak(u);
+              }, 3500);
+            }
+          }
+        } catch (e) {}
+        // On-screen popup for new manual submission
+        try {
+          if (window.AdmManual) { show('manual'); }
+        } catch (e) {}
+      } else if (this._last.recharge && pr > this._last.recharge) {
         this.speak('নতুন রিচার্জ রিকোয়েস্ট এসেছে। অনুগ্রহ করে চেক করুন।');
         // Speak customer name sweetly via TTS
         try {
@@ -167,6 +188,7 @@ const VoiceAlert = {
       }
       this._last.recharge = pr;
       this._last.order = no;
+      this._last.manual = mn;
       // Unmatched SMS (separate lightweight endpoint; table may not exist yet)
       try {
         const sr = await ABC.api('/admin/stats/sms');
@@ -569,6 +591,129 @@ window.AdmOrders = {
     if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
     closeModal();
     alert('✅ মেসেজ পাঠানো হয়েছে!');
+  },
+};
+
+/* ---------------- MANUAL SUBMISSIONS (standalone module) ---------------- */
+const MANUAL_CSS = '<style>' +
+ '.mp-sec{margin-bottom:14px;border:1px solid var(--line);border-radius:10px;overflow:hidden;}' +
+ '.mp-title{background:#2b1d14;color:var(--gold);font-weight:700;padding:8px 12px;font-size:14px;}' +
+ '.mp-table{width:100%;border-collapse:collapse;}' +
+ '.mp-table td{padding:7px 12px;border-top:1px solid var(--line);font-size:13px;vertical-align:top;}' +
+ '.mp-table tr:first-child td{border-top:none;}' +
+ '.mp-key{color:var(--muted);width:42%;}' +
+ '.mp-val{color:var(--cream);}' +
+ '</style>';
+
+TABS.manual = async () => {
+  const f = TABS._mf || '';
+  const r = await ABC.api('/admin/manual' + (f ? '?status=' + f : ''));
+  const d = await r.json();
+  const list = d.list || [];
+  const stBn = { new: '🆕 নতুন', processing: '⏳ প্রসেসিং', completed: '✅ সম্পন্ন', rejected: '❌ বাতিল' };
+  let html = MANUAL_CSS +
+    '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">' +
+    Object.keys(stBn).map(s =>
+      '<button class="mini-btn' + (f === s ? ' ok' : '') + '" onclick="TABS._mf=\'' + s + '\';show(\'manual\')">' + stBn[s] + '</button>').join('') +
+    '<button class="mini-btn' + (!f ? ' ok' : '') + '" onclick="TABS._mf=\'\';show(\'manual\')">সব</button>' +
+    '<button class="mini-btn" onclick="AdmManual.tplForm()" style="margin-left:auto;">📝 নমুনা ফরম্যাট</button></div>';
+  if (!list.length) {
+    html += '<div style="color:var(--muted);">কোনো ম্যানুয়াল আবেদন নেই।</div>';
+  } else {
+    html += '<div style="overflow-x:auto;"><table class="adm"><tr><th>গ্রাহক</th><th>নাম</th><th>ডকুমেন্ট</th><th>স্ট্যাটাস</th><th>তারিখ</th><th>কাজ</th></tr>';
+    for (const m of list) {
+      html += '<tr><td>' + esc(m.user_name) + '<br><small style="color:var(--dim)">' + esc(m.user_phone) + '</small></td>' +
+        '<td>' + esc(m.name_bn || '—') + '</td>' +
+        '<td>📎 ' + (m.doc_count || 0) + '</td>' +
+        '<td><span class="badge st-' + m.status + '">' + (stBn[m.status] || m.status) + '</span></td>' +
+        '<td><small>' + new Date(m.created_at).toLocaleString('bn-BD') + '</small></td>' +
+        '<td><button class="mini-btn" onclick="AdmManual.view(\'' + m.id + '\')">👁️ দেখুন</button></td></tr>';
+    }
+    html += '</table></div>';
+  }
+  content.innerHTML = html;
+};
+
+window.AdmManual = {
+  async view(id) {
+    const r = await ABC.api('/admin/manual/' + id);
+    const d = await r.json();
+    if (!r.ok) { alert('লোড ব্যর্থ'); return; }
+    const stBn = { new: '🆕 নতুন', processing: '⏳ প্রসেসিং', completed: '✅ সম্পন্ন', rejected: '❌ বাতিল' };
+    const docs = (d.documents || []).map((doc, i) =>
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;">' +
+      '<span style="font-size:20px;">📎</span>' +
+      '<span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(doc.originalname || doc.filename) + '</span>' +
+      '<button class="mini-btn" onclick="AdmManual.dlDoc(\'' + d.id + '\',\'' + esc(doc.filename) + '\')">⬇️</button></div>'
+    ).join('');
+    window._manualClean = d.clean_text || '';
+    modal('📝 ম্যানুয়াল আবেদন',
+      '<div style="margin-bottom:10px;font-size:13px;color:var(--muted);">👤 ' + esc(d.user_name) + ' (' + esc(d.user_phone) + ') • ' +
+      new Date(d.created_at).toLocaleString('bn-BD') + ' • ' + (stBn[d.status] || d.status) + '</div>' +
+      MANUAL_CSS + (d.html || '') +
+      (docs ? '<div style="margin-top:12px;"><div style="color:var(--gold);font-weight:700;margin-bottom:8px;">📎 ডকুমেন্ট</div>' + docs + '</div>' : '') +
+      '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">' +
+      '<button class="btn" onclick="AdmManual.copyClean()">📋 কপি করুন</button>' +
+      '<select id="mm_status" style="flex:1;min-width:120px;">' +
+      Object.keys(stBn).map(s => '<option value="' + s + '"' + (d.status === s ? ' selected' : '') + '>' + stBn[s] + '</option>').join('') +
+      '</select>' +
+      '<button class="btn-secondary" onclick="AdmManual.setStatus(\'' + d.id + '\')">সংরক্ষণ</button>' +
+      '</div>' +
+      '<div class="field" style="margin-top:10px;"><label>অ্যাডমিন নোট</label>' +
+      '<textarea id="mm_note" rows="2">' + esc(d.admin_note || '') + '</textarea></div>'
+    );
+  },
+  copyClean() {
+    const t = window._manualClean || '';
+    if (!t) return;
+    const done = () => alert('📋 কপি হয়েছে! অন্যখানে পেস্ট করুন।');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(done).catch(() => fallbackCopy(t, done));
+    } else fallbackCopy(t, done);
+    function fallbackCopy(txt, cb) {
+      const ta = document.createElement('textarea');
+      ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      ta.remove(); cb();
+    }
+  },
+  async setStatus(id) {
+    const status = document.getElementById('mm_status').value;
+    const admin_note = document.getElementById('mm_note').value;
+    const r = await ABC.api('/admin/manual/' + id, { method: 'PUT', body: { status, admin_note } });
+    if (!r.ok) { alert('ব্যর্থ'); return; }
+    alert('✅ সংরক্ষণ হয়েছে'); closeModal(); show('manual');
+  },
+  async dlDoc(id, filename) {
+    try {
+      const r = await ABC.api('/admin/manual/' + id + '/documents/' + encodeURIComponent(filename));
+      if (!r.ok) { alert('ডাউনলোড ব্যর্থ'); return; }
+      const blob = await r.blob();
+      const cd = r.headers.get('content-disposition') || '';
+      const m = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = m ? decodeURIComponent(m[1]) : filename;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+    } catch (e) { alert('ডাউনলোড ব্যর্থ'); }
+  },
+  async tplForm() {
+    const r = await ABC.api('/manual/template');
+    const d = await r.json();
+    modal('📝 নমুনা ফরম্যাট',
+      '<p style="color:var(--muted);font-size:13px;">গ্রাহকরা এই ফরম্যাট দেখে তথ্য পাঠাবে।</p>' +
+      '<div class="field"><label>ফরম্যাট</label><textarea id="mm_tpl" rows="12">' + esc(d.template || '') + '</textarea></div>' +
+      '<button class="btn" onclick="AdmManual.tplSave()">💾 সংরক্ষণ</button>'
+    );
+  },
+  async tplSave() {
+    const t = document.getElementById('mm_tpl').value;
+    const r = await ABC.api('/admin/settings', { method: 'PUT', body: { manual_template: { text: t } } });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { alert('ব্যর্থ: ' + (d.error || 'UNKNOWN')); return; }
+    alert('✅ নমুনা ফরম্যাট সংরক্ষণ হয়েছে'); closeModal();
   },
 };
 
