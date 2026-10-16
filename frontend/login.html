@@ -245,6 +245,15 @@ async function doLogin() {
     const d = await r.json();
     if (!r.ok) { err.textContent = d.error || 'Login ব্যর্থ'; return; }
     sessionStorage.setItem('abc_access_token', d.access_token);
+    // Religion voice greeting: arm one-shot flag for dashboard (non-admin only).
+    try {
+      if (d.user && d.user.role !== 'admin') {
+        var vi = parseInt(localStorage.getItem('greeting_voice_rotation') || '0', 10);
+        if (isNaN(vi) || vi < 0 || vi > 2) vi = 0;
+        sessionStorage.setItem('abc_greet_on_login', JSON.stringify({ voice: vi }));
+        localStorage.setItem('greeting_voice_rotation', String((vi + 1) % 3));
+      }
+    } catch (e) {}
     const next = new URLSearchParams(location.search).get('next') || '/dashboard.html';
     location.href = next;
   } catch (e) { err.textContent = 'নেটওয়ার্ক সমস্যা'; }

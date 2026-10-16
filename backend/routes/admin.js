@@ -561,6 +561,27 @@ router.post('/orders/:id/delivery-docs', orderDocUpload(db, 'delivery'), async (
   }
 });
 
+// GET /api/admin/orders/:id/documents/:filename — admin download (no owner check)
+router.get('/orders/:id/documents/:filename', async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const fn = require('path').basename(req.params.filename);
+    const ord = await db.query('SELECT documents FROM orders WHERE id=$1', [orderId]);
+    if (!ord.rows.length) return res.status(404).json({ error: 'ORDER_NOT_FOUND' });
+    let docs = [];
+    try { docs = JSON.parse(ord.rows[0].documents || '[]'); } catch (_) {}
+    const doc = docs.find(d => d && require('path').basename(d.filename) === fn);
+    if (!doc) return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
+    const fp = require('path').join('/opt/all-in-one-abc-authentic/uploads/orders', fn);
+    const fs = require('fs');
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'FILE_MISSING' });
+    res.download(fp, doc.originalname || fn);
+  } catch (e) {
+    safeLog('[admin] order document download error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 // GET /api/admin/sms/secret — get SMS webhook secret (admin only)
 // L-1 fix (2026-10-15): masked by default (last 4 chars). Full reveal needs
 // POST with the admin's current password. Rotation via SMS_WEBHOOK_SECRET env.

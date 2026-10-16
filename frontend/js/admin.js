@@ -433,7 +433,7 @@ window.AdmOrders = {
     const d = (TABS._viewDocs || [])[idx];
     if (!d) return;
     try {
-      const r = await ABC.api('/orders/' + orderId + '/documents/' + encodeURIComponent(d.filename));
+      const r = await ABC.api('/admin/orders/' + orderId + '/documents/' + encodeURIComponent(d.filename));
       if (!r.ok) { alert('ডাউনলোড ব্যর্থ'); return; }
       const blob = await r.blob();
       const a = document.createElement('a');
@@ -1227,6 +1227,7 @@ window.AdmSt = {
     show('settings');
   },
   async save() {
+    try {
     const cur = await (await ABC.api('/admin/settings')).json();
     const vg = Object.assign({ enabled: true, rotation: true }, cur.voice_greeting || {});
     vg.greetings = {
@@ -1281,6 +1282,9 @@ window.AdmSt = {
       return;
     }
     alert('সংরক্ষণ হয়েছে');
+    } catch (e) {
+      alert('❌ সংরক্ষণ ব্যর্থ: ' + (e.message || 'নেটওয়ার্ক সমস্যা'));
+    }
   },
 };
 
