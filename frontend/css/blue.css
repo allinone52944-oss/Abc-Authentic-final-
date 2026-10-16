@@ -72,3 +72,39 @@ body.admin-blue .brand {
 body.admin-blue .app-header {
   border-bottom: 1px solid rgba(96, 165, 250, 0.2) !important;
 }
+
+/* ---- LOGIN PAGE: Blue design (HTML/JS untouched) ---- */
+.brand-panel {
+  background: linear-gradient(135deg, #1e3a8a, #1e40af) !important;
+}
+.brand-title {
+  color: #ffffff !important;
+}
+.brand-tag {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+.form-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 10px 40px rgba(30, 64, 175, 0.1) !important;
+}
+.tabs .tab {
+  color: #64748b !important;
+}
+.tabs .tab.active {
+  color: #1e40af !important;
+  border-bottom: 2px solid #1e40af !important;
+}
+.form-card .btn {
+  background: linear-gradient(135deg, #1e40af, #3b82f6) !important;
+  color: #ffffff !important;
+}
+.form-card .field input {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+}
+.form-card .field input:focus {
+  border-color: #3b82f6 !important;
+  outline: none !important;
+}
