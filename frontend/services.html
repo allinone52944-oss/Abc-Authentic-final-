@@ -5,62 +5,72 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#1e40af">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Abc Authentic">
-<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <title>সেবা - All In One</title>
-<link rel="stylesheet" href="/css/coffee.css?v=8">
-<link rel="stylesheet" href="/css/blue.css?v=1">
 <style>
-.cat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.cat-card {
-  background: var(--card, #241a12); border: 1px solid rgba(212,175,55,.25);
-  border-radius: 14px; padding: 18px 10px; text-align: center; cursor: pointer;
-  transition: transform .15s, border-color .15s;
-}
-.cat-card:active { transform: scale(.97); }
-.cat-card:hover { border-color: var(--gold); }
-.cat-icon { font-size: 34px; margin-bottom: 8px; }
-.cat-name { color: var(--cream, #f5ead6); font-weight: 700; font-size: 15px; }
-.cat-count { color: var(--muted, #a89880); font-size: 12px; margin-top: 4px; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Hind Siliguri',system-ui,sans-serif; background:#eef2f7; color:#0f172a; }
+  .desktop { max-width:1100px; margin:0 auto; background:#fff; min-height:100vh; display:flex; }
+  .sidebar { width:220px; background:linear-gradient(180deg,#1e3a8a,#1e40af); color:#fff; padding:20px 0; flex-shrink:0; }
+  .side-logo { padding:0 20px 20px; border-bottom:1px solid rgba(255,255,255,0.15); margin-bottom:16px; }
+  .side-logo h2 { font-size:18px; } .side-logo p { font-size:11px; opacity:0.7; }
+  .side-link { display:flex; align-items:center; gap:12px; padding:12px 20px; font-size:14px; color:rgba(255,255,255,0.85); cursor:pointer; border-left:3px solid transparent; }
+  .side-link.on { background:rgba(255,255,255,0.12); border-left-color:#fff; color:#fff; font-weight:600; }
+  .side-link .ico { font-size:18px; }
+  .main { flex:1; padding:24px; overflow:auto; }
+  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+  .topbar h2 { font-size:20px; } .topbar p { font-size:13px; color:#64748b; }
+  .cat-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:20px; }
+  .cat-card { background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:20px 14px; text-align:center; cursor:pointer; }
+  .cat-card:hover { border-color:#3b82f6; }
+  .cat-icon { font-size:36px; margin-bottom:8px; }
+  .cat-name { font-weight:700; font-size:15px; }
+  .cat-count { color:#64748b; font-size:12px; margin-top:4px; }
+  .svc-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+  .svc-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; cursor:pointer; display:flex; gap:12px; align-items:center; }
+  .svc-card:hover { border-color:#3b82f6; }
+  .svc-ico { width:48px; height:48px; border-radius:12px; background:#dbeafe; display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0; }
+  .svc-info { flex:1; } .svc-info h4 { font-size:14px; } .svc-info p { font-size:12px; color:#64748b; }
+  .svc-pr { font-size:16px; font-weight:700; color:#1e40af; }
+  .ptype { font-size:10px; padding:2px 8px; border-radius:12px; display:inline-block; margin-top:4px; }
+  .ptype.auto { background:#dbeafe; color:#1d4ed8; }
+  .ptype.manual { background:#fef3c7; color:#92400e; }
+  .back-link { color:#2563eb; cursor:pointer; font-size:14px; }
+  .wa-fab { position:fixed; bottom:20px; right:20px; width:56px; height:56px; border-radius:50%; background:#fff; box-shadow:0 4px 16px rgba(0,0,0,0.15); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .wa-fab img { width:32px; height:32px; }
+  @media (max-width:768px) {
+    .sidebar { display:none; }
+    .cat-grid { grid-template-columns:repeat(2,1fr); }
+    .svc-grid { grid-template-columns:1fr; }
+  }
 </style>
-<!-- cache-bust 2026-10-13: force fresh document load -->
 </head>
-<body class="app">
-<div class="spiral"></div>
-<div class="app-shell">
-  <div class="app-header">
-    <div class="brand">☕ সেবা সমূহ</div>
-    <div class="hdr-actions">
-      <button class="icon-btn" onclick="location.href='/dashboard.html'">🏠</button>
-    </div>
+<body>
+<div class="desktop">
+  <div class="sidebar">
+    <div class="side-logo"><h2>🔷 All In One</h2><p>বিশ্বাস ও সেবার ঠিকানা</p></div>
+    <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+    <div class="side-link on"><span class="ico">🛎️</span> সেবা</div>
+    <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
+    <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট</div>
+    <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> প্রোফাইল</div>
   </div>
-  <div class="page">
-    <span class="back-link" onclick="location.href='/dashboard.html'">← ড্যাশবোর্ড</span>
-    <div id="catView" style="margin-top:14px;"></div>
-    <div id="svcView" style="margin-top:14px;display:none;"></div>
-    <div id="flatView" style="margin-top:6px;display:none;">
-      <h3 style="color:var(--gold);margin:14px 0 10px;">⚡ অটোমেটেড</h3>
-      <div id="autoList"></div>
-      <h3 style="color:#40e0d0;margin:18px 0 10px;">🔧 ম্যানুয়াল</h3>
-      <div id="manualList"></div>
-    </div>
+  <div class="main">
+    <div class="topbar"><div><h2>🛎️ সেবা সমূহ</h2><p>পছন্দের সেবা বেছে নিন</p></div></div>
+    <div id="catView"></div>
+    <div id="svcView" style="display:none;"></div>
   </div>
 </div>
-<div class="wa-fab" id="waFab" title="WhatsApp"><img src="/icons/abc-logo.png" alt="Abc Authentic"><span class="wa-badge">💬</span></div>
+<div class="wa-fab" id="waFab"><img src="/icons/abc-logo.png" alt="Abc"><span style="position:absolute;bottom:0;right:0;">💬</span></div>
 <script src="/js/app.js?v=12"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
 function card(s){
-  const open = s.open ? '' : ' <span class="badge">বন্ধ</span>';
-  return '<div class="list-row" onclick="location.href=\'/service-detail.html?id='+s.id+'\'">'+
-    '<div><div class="t">'+esc(s.name_bn||s.name)+'</div>'+
-    '<div class="s">৳'+bnNum(s.price)+(s.open?'':' • এখন বন্ধ')+'</div></div>'+
-    '<span class="badge '+(s.type==='manual'?'manual':'')+'">'+(s.type==='manual'?'ম্যানুয়াল':'অটোমেটেড')+'</span>'+open+'</div>';
+  return '<div class="svc-card" onclick="location.href=\'/service-detail.html?id='+s.id+'\'">'+
+    '<div class="svc-ico">'+esc(s.icon||'🛎️')+'</div>'+
+    '<div class="svc-info"><h4>'+esc(s.name_bn||s.name)+'</h4>'+
+    '<span class="ptype '+(s.type==='manual'?'manual':'auto')+'">'+(s.type==='manual'?'manual':'automated')+'</span></div>'+
+    '<div class="svc-pr">৳'+bnNum(s.price)+'</div></div>';
 }
 let GROUPS = [];
 function showCats(){
@@ -76,53 +86,40 @@ function showCats(){
   document.getElementById('catView').innerHTML = h + '</div>';
 }
 function showCat(i){
-  const g = GROUPS[i];
-  if(!g) return;
+  const g = GROUPS[i]; if(!g) return;
   document.getElementById('catView').style.display = 'none';
-  const v = document.getElementById('svcView');
-  v.style.display = '';
+  const v = document.getElementById('svcView'); v.style.display = '';
   v.innerHTML = '<span class="back-link" onclick="showCats()">← সব ক্যাটাগরি</span>' +
-    '<h3 style="color:var(--gold);margin:14px 0 10px;">'+esc(g.icon)+' '+esc(g.name)+'</h3>' +
-    (g.services.map(card).join('') || '<div class="sub" style="color:var(--muted)">কোনো সেবা নেই</div>');
+    '<h3 style="margin:14px 0;">'+esc(g.icon)+' '+esc(g.name)+'</h3><div class="svc-grid">' +
+    (g.services.map(card).join('') || '<div>কোনো সেবা নেই</div>') + '</div>';
 }
 async function init(){
   const me = await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
   const u=(await me.json()).user;
   document.getElementById('waFab').onclick=()=>{
-    window.open('https://wa.me/?text='+encodeURIComponent('আমি '+u.name+' (ID: '+u.id.slice(0,8)+', ফোন: '+u.phone+')। সেবা সম্পর্কে জানতে চাই।'),'_blank');
+    window.open('https://wa.me/?text='+encodeURIComponent('আমি '+u.name+'। সেবা সম্পর্কে জানতে চাই।'),'_blank');
   };
   const r=await ABC.api('/services');
-  if(!r.ok)return;
+  if(!r.ok) return;
   const {services}=await r.json();
-  const hasCats = services.some(s => s.category_id);
-  if(!hasCats){
-    // Legacy flat view (no categories created yet)
-    document.getElementById('flatView').style.display = '';
-    const auto=services.filter(s=>s.type==='automated');
-    const manual=services.filter(s=>s.type==='manual');
-    document.getElementById('autoList').innerHTML=auto.map(card).join('')||'<div class="sub" style="color:var(--muted)">কোনো অটোমেটেড সেবা নেই</div>';
-    document.getElementById('manualList').innerHTML=manual.map(card).join('')||'<div class="sub" style="color:var(--muted)">কোনো ম্যানুয়াল সেবা নেই</div>';
-    return;
-  }
-  // Group by category (serial order), uncategorized -> অন্যান্য
   const map = {}; GROUPS = [];
-  const uncat = { id: null, name: 'অন্যান্য', icon: '📦', services: [], ord: 999999 };
+  const uncat = { id:null, name:'অন্যান্য', icon:'📦', services:[], ord:999999 };
   services.forEach(s => {
     if (s.category_id) {
       if (!map[s.category_id]) {
-        map[s.category_id] = { id: s.category_id,
-          name: s.category_name_bn || s.category_name || 'ক্যাটাগরি',
-          icon: s.category_icon || '📁', services: [],
-          ord: (s.category_serial == null ? 999999 : s.category_serial) };
+        map[s.category_id] = { id:s.category_id, name:s.category_name_bn||s.category_name||'ক্যাটাগরি',
+          icon:s.category_icon||'📁', services:[], ord:(s.category_serial==null?999999:s.category_serial) };
         GROUPS.push(map[s.category_id]);
       }
       map[s.category_id].services.push(s);
     } else uncat.services.push(s);
   });
   if (uncat.services.length) GROUPS.push(uncat);
-  GROUPS.sort((a, b) => a.ord - b.ord);
-  showCats();
+  GROUPS.sort((a,b)=>a.ord-b.ord);
+  if (!GROUPS.length) {
+    document.getElementById('catView').innerHTML = '<div class="svc-grid">'+services.map(card).join('')+'</div>';
+  } else showCats();
 }
 init();
 </script>

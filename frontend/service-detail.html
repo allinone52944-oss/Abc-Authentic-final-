@@ -2,33 +2,50 @@
 <html lang="bn">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<link rel="manifest" href="/manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1e40af">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Abc Authentic">
-<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <title>সেবার বিস্তারিত - All In One</title>
-<link rel="stylesheet" href="/css/coffee.css?v=8">
-<link rel="stylesheet" href="/css/blue.css?v=1">
-<!-- cache-bust 2026-10-13: force fresh document load -->
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Hind Siliguri',system-ui,sans-serif; background:#eef2f7; color:#0f172a; }
+  .desktop { max-width:1100px; margin:0 auto; background:#fff; min-height:100vh; display:flex; }
+  .sidebar { width:220px; background:linear-gradient(180deg,#1e3a8a,#1e40af); color:#fff; padding:20px 0; flex-shrink:0; }
+  .side-logo { padding:0 20px 20px; border-bottom:1px solid rgba(255,255,255,0.15); margin-bottom:16px; }
+  .side-logo h2 { font-size:18px; } .side-logo p { font-size:11px; opacity:0.7; }
+  .side-link { display:flex; align-items:center; gap:12px; padding:12px 20px; font-size:14px; color:rgba(255,255,255,0.85); cursor:pointer; border-left:3px solid transparent; }
+  .side-link.on { background:rgba(255,255,255,0.12); border-left-color:#fff; color:#fff; font-weight:600; }
+  .side-link .ico { font-size:18px; }
+  .main { flex:1; padding:24px; overflow:auto; }
+  .card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:24px; }
+  .card h2 { font-size:20px; margin-bottom:12px; }
+  .ptype { font-size:11px; padding:4px 12px; border-radius:20px; font-weight:600; }
+  .ptype.auto { background:#dbeafe; color:#1d4ed8; }
+  .ptype.manual { background:#fef3c7; color:#92400e; }
+  .price { font-size:24px; font-weight:700; color:#1e40af; }
+  .btn { background:linear-gradient(135deg,#1e40af,#3b82f6); color:#fff; border:none; padding:12px 24px; border-radius:10px; font-weight:700; cursor:pointer; display:block; width:100%; margin-top:12px; font-size:15px; }
+  .btn-sec { background:#f1f5f9; color:#334155; border:none; padding:10px 20px; border-radius:10px; cursor:pointer; margin-top:8px; }
+  .back-link { color:#2563eb; cursor:pointer; font-size:14px; }
+  .wa-fab { position:fixed; bottom:20px; right:20px; width:56px; height:56px; border-radius:50%; background:#fff; box-shadow:0 4px 16px rgba(0,0,0,0.15); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .wa-fab img { width:32px; height:32px; }
+  @media (max-width:768px) { .sidebar { display:none; } }
+</style>
 </head>
-<body class="app">
-<div class="spiral"></div>
-<div class="app-shell">
-  <div class="app-header">
-    <div class="brand">☕ সেবার বিস্তারিত</div>
-    <div class="hdr-actions"><button class="icon-btn" onclick="location.href='/dashboard.html'">🏠</button></div>
+<body>
+<div class="desktop">
+  <div class="sidebar">
+    <div class="side-logo"><h2>🔷 All In One</h2><p>বিশ্বাস ও সেবার ঠিকানা</p></div>
+    <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+    <div class="side-link on" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সেবা</div>
+    <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
+    <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট</div>
+    <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> প্রোফাইল</div>
   </div>
-  <div class="page">
+  <div class="main">
     <span class="back-link" onclick="location.href='/services.html'">← সেবা সমূহ</span>
-    <div class="form-card" id="detail" style="margin-top:12px;"><div style="color:var(--muted)">লোড হচ্ছে…</div></div>
+    <div class="card" id="detail" style="margin-top:12px;"><div style="color:#64748b;">লোড হচ্ছে…</div></div>
   </div>
 </div>
-<div class="wa-fab" id="waFab" title="WhatsApp"><img src="/icons/abc-logo.png" alt="Abc Authentic"><span class="wa-badge">💬</span></div>
+<div class="wa-fab" id="waFab"><img src="/icons/abc-logo.png" alt="Abc"><span style="position:absolute;bottom:0;right:0;">💬</span></div>
 <script src="/js/app.js?v=12"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -38,32 +55,30 @@ async function init(){
   if(!me.ok){location.href='/login.html';return;}
   const u=(await me.json()).user;
   document.getElementById('waFab').onclick=()=>{
-    window.open('https://wa.me/?text='+encodeURIComponent('আমি '+u.name+' (ফোন: '+u.phone+')। সেবা সম্পর্কে জানতে চাই।'),'_blank');
+    window.open('https://wa.me/?text='+encodeURIComponent('আমি '+u.name+'। সেবা সম্পর্কে জানতে চাই।'),'_blank');
   };
   const r=await ABC.api('/services/'+id);
-  if(!r.ok){document.getElementById('detail').innerHTML='<div class="err">সেবা পাওয়া যায়নি</div>';return;}
+  if(!r.ok){document.getElementById('detail').innerHTML='<div style="color:#dc2626;">সেবা পাওয়া যায়নি</div>';return;}
   const {service:s}=await r.json();
   const docs=(s.documents_required||[]).map(d=>'<li>'+esc(d)+'</li>').join('')||'<li>কোনো ডকুমেন্ট লাগবে না</li>';
-  const sched=s.schedule&&s.schedule.open?('<div class="s" style="color:var(--muted);font-size:13px;margin-top:8px;">🕘 খোলা: '+esc(s.schedule.open)+' - '+esc(s.schedule.close||'')+'</div>'):'';
   document.getElementById('detail').innerHTML=
     '<h2>'+esc(s.name_bn||s.name)+'</h2>'+
-    '<div style="margin-bottom:12px;"><span class="badge '+(s.type==='manual'?'manual':'')+'">'+(s.type==='manual'?'ম্যানুয়াল':'অটোমেটেড')+'</span> '+
-    '<span class="pill">৳'+Number(s.price).toLocaleString('bn-BD')+'</span></div>'+
-    '<div style="color:var(--cream);font-size:14px;margin-bottom:10px;"><b style="color:var(--gold)">প্রয়োজনীয় ডকুমেন্ট:</b><ul style="padding-left:18px;margin-top:6px;">'+docs+'</ul></div>'+
-    sched+
-    '<button class="btn-secondary" onclick="showRules()">📜 নিয়মাবলী দেখুন</button>'+
+    '<div style="margin-bottom:12px;"><span class="ptype '+(s.type==='manual'?'manual':'auto')+'">'+(s.type==='manual'?'manual':'automated')+'</span> '+
+    '<span class="price">৳'+Number(s.price).toLocaleString('bn-BD')+'</span></div>'+
+    '<div style="font-size:14px;margin-bottom:10px;"><b>প্রয়োজনীয় ডকুমেন্ট:</b><ul style="padding-left:18px;margin-top:6px;">'+docs+'</ul></div>'+
+    '<button class="btn-sec" onclick="showRules()">📜 নিয়মাবলী দেখুন</button>'+
     (s.engine_id==='bdris-certificate'&&s.open?'<button class="btn" onclick="location.href=\'/bdris-certificate.html\'">⚡ এখনই সনদ তৈরি করুন →</button>':'')+
     (s.engine_id==='bdris-apply'&&s.open?'<button class="btn" onclick="location.href=\'/bdris-apply.html\'">⚡ এখনই আবেদন করুন →</button>':'')+
     (s.engine_id==='death-verify'&&s.open?'<button class="btn" onclick="location.href=\'/death-verify.html\'">⚡ এখনই যাচাই করুন →</button>':'')+
     (s.engine_id==='nid-replica'&&s.open?'<button class="btn" onclick="location.href=\'/nid-replica.html\'">⚡ এখনই তৈরি করুন →</button>':'')+
     (s.open?'<button class="btn" onclick="location.href=\'/order-create.html?service='+s.id+'\'">অর্ডার করুন →</button>'
-           :'<div class="err" style="margin-top:12px;">এই সেবা এখন বন্ধ আছে</div>');
+           :'<div style="color:#dc2626;margin-top:12px;">এই সেবা এখন বন্ধ আছে</div>');
   window._rules=s.rules_text||'কোনো বিশেষ নিয়ম নেই।';
 }
 function showRules(){
   const bg=document.createElement('div');
-  bg.className='modal-bg';
-  bg.innerHTML='<div class="modal"><h3>📜 নিয়মাবলী</h3><p>'+esc(window._rules).replace(/\n/g,'<br>')+'</p><button class="btn" onclick="this.closest(\'.modal-bg\').remove()">বুঝেছি</button></div>';
+  bg.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000;';
+  bg.innerHTML='<div style="background:#fff;border-radius:16px;padding:24px;max-width:400px;margin:20px;"><h3>📜 নিয়মাবলী</h3><p style="margin:12px 0;">'+esc(window._rules).replace(/\n/g,'<br>')+'</p><button class="btn" onclick="this.closest(\'div\').parentElement.remove()">বুঝেছি</button></div>';
   bg.onclick=(e)=>{if(e.target===bg)bg.remove();};
   document.body.appendChild(bg);
 }
