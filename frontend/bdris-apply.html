@@ -993,6 +993,7 @@ function renderHome() {
       '<div class="ds">নম্বর: ' + esc(a.no) + ' • ' + esc(fmtTime(a.at)) + '</div></div>' +
       '<div class="da"><button class="btn small" data-copy="' + esc(a.no) + '">📋 নম্বর কপি</button>' +
       (a.pdfB64 ? '<button class="btn ghost small" data-pdf="' + esc(a.id) + '">⬇️ কপি</button>' : '') +
+      '<button class="btn small" data-orig="' + esc(a.no) + '">⬇️ আসল PDF</button>' +
       '<button class="btn danger small" data-ackdel="' + esc(a.id) + '">🗑️ মুছুন</button></div></div>').join('') + '</div>') : '';
   showBody(
     '<div class="hero compact">' +
@@ -1035,6 +1036,18 @@ function renderHome() {
     delAck(b.dataset.ackdel);
     renderHome();
     note('✔ সাম্প্রতিক আবেদন মুছে ফেলা হয়েছে', 'ok');
+  });
+  // আসল PDF (2026-10-17): recent list থেকেও original PDF আনা যাবে
+  els('[data-orig]').forEach(b => b.onclick = async () => {
+    const ackNo = b.dataset.orig;
+    b.disabled = true; b.textContent = '⏳ চার্জ হচ্ছে…';
+    const token = await charge('pdf');
+    if (!token) { b.disabled = false; b.textContent = '⬇️ আসল PDF'; return; }
+    b.textContent = '⏳ PDF আসছে…';
+    S._origAutoDl = ackNo;
+    socket.emit('FETCH_ORIGINAL', { ack: ackNo, _chargeToken: token });
+    // Ready হলে auto-download হবে (ORIGINAL_PDF handler দেখে)
+    setTimeout(() => { b.disabled = false; b.textContent = '⬇️ আসল PDF'; }, 30000);
   });
 }
 
