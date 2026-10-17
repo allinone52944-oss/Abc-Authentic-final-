@@ -69,7 +69,8 @@
   .m-bal { background:#fff; margin:-20px 20px 0; border-radius:16px; padding:18px; box-shadow:0 4px 20px rgba(0,0,0,0.08); display:flex; justify-content:space-between; align-items:center; position:relative; display:none; }
   .m-content { padding:16px 20px; display:none; }
   .m-svc-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
-  .bn-strip { margin-bottom:16px; }
+  .bn-strip { margin-bottom:16px; overflow:hidden; border-radius:12px; max-width:100%; }
+  .bn-strip img { max-width:100%; height:auto; display:block; }
   @media (max-width:768px) { html,body{overflow-x:hidden;}
     .desktop { display:none; }
     .sidebar { display:none; }
