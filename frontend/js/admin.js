@@ -1840,6 +1840,7 @@ function closeModal() {
     m.remove();
   }
 }
+window.closeModal = closeModal;
 
 
 /* ---------------- REPORTS (user spec 2026-10-16) ---------------- */
