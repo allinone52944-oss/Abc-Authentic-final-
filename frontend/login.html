@@ -149,7 +149,7 @@ body {
         <label>পাসওয়ার্ড</label>
         <input type="password" id="lg_pw" placeholder="পাসওয়ার্ড" autocomplete="current-password">
       </div>
-      <button class="btn" onclick="doLogin()">প্রবেশ করুন →</button>
+      <button class="btn" id="lg_btn" onclick="doLogin()">প্রবেশ করুন →</button>
       <div class="err" id="lg_err"></div>
       <div style="text-align:center;margin-top:10px;">
         <a href="#" onclick="showForgot();return false;" style="color:var(--gold);font-size:13px;">🔑 পাসওয়ার্ড ভুলে গেছেন?</a>
@@ -240,8 +240,10 @@ async function doLogin() {
   const id = document.getElementById('lg_id').value.trim();
   const pw = document.getElementById('lg_pw').value;
   const err = document.getElementById('lg_err');
+  const btn = document.getElementById('lg_btn');
   err.textContent = '';
   if (!id || !pw) { err.textContent = 'ID ও পাসওয়ার্ড দিন'; return; }
+  btn.disabled = true; btn.textContent = '⏳ লোড হচ্ছে...';
   try {
     const r = await fetch('/api/auth/login', {
       method: 'POST',
@@ -249,7 +251,7 @@ async function doLogin() {
       body: JSON.stringify({ login: id, password: pw })
     });
     const d = await r.json();
-    if (!r.ok) { err.textContent = d.error || 'Login ব্যর্থ'; return; }
+    if (!r.ok) { err.textContent = d.error || 'Login ব্যর্থ'; btn.disabled = false; btn.textContent = 'প্রবেশ করুন →'; return; }
     sessionStorage.setItem('abc_access_token', d.access_token);
     // Religion voice greeting: arm one-shot flag for dashboard (non-admin only).
     try {
@@ -262,7 +264,7 @@ async function doLogin() {
     } catch (e) {}
     const next = new URLSearchParams(location.search).get('next') || '/dashboard.html';
     location.href = next;
-  } catch (e) { err.textContent = 'নেটওয়ার্ক সমস্যা'; }
+  } catch (e) { err.textContent = 'নেটওয়ার্ক সমস্যা'; btn.disabled = false; btn.textContent = 'প্রবেশ করুন →'; }
 }
 async function doRegister() {
   const err = document.getElementById('rg_err');
