@@ -64,10 +64,10 @@ function scheduleRestart() {
 
 function init() {
   if (_proc || _installing) return;
-  // v2 disabled (2026-10-17): startup issue on production, rolled back to v1
-  // const v2ServerJs = path.join(engineDir(), 'v2', 'server.js');
+  // v2 enabled (2026-10-18): startup bootstrap fixed + verified (10 checks)
+  const v2ServerJs = path.join(engineDir(), 'v2', 'server.js');
   const v1ServerJs = path.join(engineDir(), 'server.js');
-  const serverJs = v1ServerJs;
+  const serverJs = fs.existsSync(v2ServerJs) ? v2ServerJs : v1ServerJs;
   if (!fs.existsSync(serverJs)) {
     console.error('[bdris-apply] server.js not found, engine not started');
     return;
@@ -110,9 +110,10 @@ function init() {
 
 function startEngine() {
   if (_proc) return;
-  // v2 disabled (2026-10-17): startup issue on production, rolled back to v1
+  // v2 enabled (2026-10-18): startup bootstrap fixed + verified
+  const v2ServerJs = path.join(engineDir(), 'v2', 'server.js');
   const v1ServerJs = path.join(engineDir(), 'server.js');
-  const serverJs = v1ServerJs;
+  const serverJs = fs.existsSync(v2ServerJs) ? v2ServerJs : v1ServerJs;
   _proc = spawn(process.execPath, [serverJs], {
     cwd: engineDir(),
     env: Object.assign({}, process.env, {
