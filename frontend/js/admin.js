@@ -13,6 +13,7 @@ const content = document.getElementById('content');
 let me = null;
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function escJs(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"').replace(/\n/g,'\\n');}
 function bn(n){return Number(n||0).toLocaleString('bn-BD');}
 
 async function init() {
@@ -388,7 +389,7 @@ window.AdmUsers = {
       '<td>' + esc(u.phone) + '</td><td>' + esc(u.religion) + '</td>' +
       '<td>৳' + bn(u.balance) + '</td><td>' + esc(u.status) + '</td>' +
       '<td><button class="mini-btn" onclick="AdmUsers.edit(\'' + u.id + '\')">এডিট</button>' +
-      (u.id !== myId ? '<button class="mini-btn danger" onclick="AdmUsers.del(\'' + u.id + '\',\'' + esc(u.name) + '\')">ডিলিট</button>' : '<small style="color:var(--dim)">(নিজে)</small>') +
+      (u.id !== myId ? '<button class="mini-btn danger" onclick="AdmUsers.del(\'' + u.id + '\',\'' + escJs(u.name) + '\')">ডিলিট</button>' : '<small style="color:var(--dim)">(নিজে)</small>') +
       '</td></tr>';
   },
   async more() {
@@ -481,7 +482,7 @@ window.AdmUsers = {
           : '<button class="btn-secondary" onclick="AdmUsers.verifyEmail(\'' + id + '\')">✅ ইমেইল যাচাই করুন</button>') +
         '<button class="btn-secondary" onclick="AdmUsers.resetPw(\'' + id + '\')">🔑 পাসওয়ার্ড রিসেট</button>' +
         '<button class="btn-secondary" onclick="AdmUsers.viewData(\'' + id + '\')">📊 ইউজার ডেটা দেখুন</button>' +
-        '<button class="btn" style="background:#dc2626;" onclick="AdmUsers.del(\'' + id + '\',\'' + esc(u.name) + '\')">🗑️ ইউজার ডিলিট</button>' +
+        '<button class="btn" style="background:#dc2626;" onclick="AdmUsers.del(\'' + id + '\',\'' + escJs(u.name) + '\')">🗑️ ইউজার ডিলিট</button>' +
         '</div>';
     }
 
