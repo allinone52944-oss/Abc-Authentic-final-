@@ -97,6 +97,38 @@ class BdrisEngineV2 {
 
     // Add more commands here as needed:
     // SUBMIT_S0, SUBMIT_S1, etc. — migrated from v1 with clean patterns
+    const { StepHandler } = require('./services/StepHandler');
+
+    const stepCommands = [
+      ['SUBMIT_S0', 'submitS0', 60000],
+      ['SUBMIT_S1', 'submitS1', 120000],
+      ['SUBMIT_S2', 'submitS2', 120000],
+      ['SUBMIT_S2B', 'submitS2B', 120000],
+      ['SUBMIT_S3_DOCS', 'submitS3', 180000],
+      ['SUBMIT_S4_OTP', 'submitS4', 120000],
+    ];
+
+    for (const [cmdName, methodName, timeoutMs] of stepCommands) {
+      this.executor.register(cmdName,
+        async (params, ctx) => {
+          const session = ctx.session;
+          if (!session?.page) {
+            throw new Error('No active session');
+          }
+          const nav = new BdrisNavigator(session.page);
+          const handler = new StepHandler(nav, {
+            emit: (ev, msg) => ctx.emit(ev, msg),
+          });
+          if (typeof handler[methodName] !== 'function') {
+            throw new Error(`StepHandler.${methodName} not implemented`);
+          }
+          const result = await handler[methodName](params);
+          // Map to legacy STEP_CHANGE_ACK shape for frontend compat
+          return result;
+        },
+        { timeoutMs }
+      );
+    }
   }
 
   setupSocketHandlers() {
