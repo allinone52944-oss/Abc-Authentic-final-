@@ -978,7 +978,7 @@ TABS.services = async () => {
         '<b style="font-size:15px;">' + esc(cat.name_bn || cat.name) + '</b>' +
         '<span style="color:var(--dim); font-size:12px;">' + bn(list.length) + 'টি সেবা</span>' +
         '<span style="margin-left:auto; display:flex; gap:6px;">' +
-        '<button class="mini-btn" onclick="show(\'cats\')" title="ক্যাটাগরি ম্যানেজ">⚙️ ম্যানেজ</button>' +
+        '<button class="mini-btn" onclick="document.querySelector(\'[data-t=cats]\').click()" title="ক্যাটাগরি ম্যানেজ">⚙️ ম্যানেজ</button>' +
         '</span></div>';
     } else {
       h += '<div style="margin-bottom:12px;"><b>📦 অন্যান্য</b> <span style="color:var(--dim); font-size:12px;">' + bn(list.length) + 'টি</span></div>';
