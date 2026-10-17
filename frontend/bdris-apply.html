@@ -1808,7 +1808,9 @@ async function warmFromData() {
       if (node.tagName === 'SELECT') {
         if (!setSelByText(L.ui, want)) {
           // Option এখনো আসেনি — level reload করে আবার চেষ্টা
-          await withTimeout(geoLoad(L.k, GEO_LEVELS, data, want), 12000);
+          // PERMANENT FIX: zone/ward-এর জন্য 30s (engine endpoint 25s + overhead)
+          const tmo = (L.k === 'paurasavaUnion' || L.k === 'ward') ? 30000 : 12000;
+          await withTimeout(geoLoad(L.k, GEO_LEVELS, data, want), tmo);
           if (!setSelByText(L.ui, want)) {
             setGeoState(L.k, GEO_LEVELS, 'error');
             continue;
@@ -1822,7 +1824,8 @@ async function warmFromData() {
          user বদলালে geoChanged mirror করবে। */
       const nxt = GEO_LEVELS[GEO_LEVELS.indexOf(L) + 1];
       if (nxt) {
-        await withTimeout(geoLoad(nxt.k, GEO_LEVELS, data), 12000);
+        const tmo2 = (nxt.k === 'paurasavaUnion' || nxt.k === 'ward') ? 30000 : 12000;
+        await withTimeout(geoLoad(nxt.k, GEO_LEVELS, data), tmo2);
       }
     }
   } finally {
