@@ -310,6 +310,9 @@ async function init() {
   }
   const { user } = await meR.json();
   window._user = user;
+  // Update avatar with user's initial
+  const avEl = document.getElementById('avatar');
+  if (avEl && user.name) avEl.textContent = user.name.trim().charAt(0);
   if (user.role === 'admin') {
     document.getElementById('adminLink').style.display = '';
     const mAdmin = document.getElementById('mAdminTab');

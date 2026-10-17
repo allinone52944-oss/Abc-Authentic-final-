@@ -309,7 +309,7 @@ TABS.stats = async () => {
     '</div>' +
     '<div class="form-card" style="max-width:none;"><h2>🚨 দ্রুত কাজ</h2>' +
     '<button class="mini-btn" onclick="document.querySelector(\'[data-t=recharge]\').click()">পেন্ডিং রিচার্জ (' + num(s.pending_recharge) + ')</button> ' +
-    '<button class="mini-btn" onclick="document.querySelector(\'[data-t=orders]\').click()">নতুন অর্ডার (' + s.orders_new + ')</button></div>' +
+    '<button class="mini-btn" onclick="document.querySelector(\'[data-t=orders]\').click()">নতুন অর্ডার (' + num(s.orders_new) + ')</button></div>' +
     '<div class="form-card" style="margin-top:14px;"><h3 style="color:var(--gold);margin:0 0 10px;">📊 PDF রিপোর্ট</h3>' +
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">' +
     '<div class="field" style="margin:0;"><label>থেকে</label><input type="date" id="rp_from"></div>' +
