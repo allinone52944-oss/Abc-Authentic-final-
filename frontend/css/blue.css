@@ -133,3 +133,17 @@ body.admin-blue .app-header {
 .auth .gold-orb {
   display: none !important;
 }
+
+/* ---- Password inputs: bulletproof light rendering ----
+   Dark-mode browsers paint password inputs (esp. autofilled) with a dark
+   UA/autofill background that ignores normal author styles. Author
+   !important beats UA !important, so this always wins. */
+input[type="password"] {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  color-scheme: light;
+}
+input[type="password"]::placeholder {
+  color: rgba(15,23,42,0.45) !important;
+}
