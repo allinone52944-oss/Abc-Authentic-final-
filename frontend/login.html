@@ -31,17 +31,6 @@ body {
   position: relative;
   overflow: hidden;
 }
-.brand-panel::before {
-  content: '☕';
-  font-size: 200px;
-  opacity: 0.05;
-  position: absolute;
-  animation: float 6s ease-in-out infinite;
-}
-@keyframes float {
-  0%, 100% { transform: translateY(0) rotate(-5deg); }
-  50% { transform: translateY(-20px) rotate(5deg); }
-}
 .brand-logo { font-size: 48px; margin-bottom: 16px; }
 .brand-title {
   font-size: 32px;
@@ -97,21 +86,21 @@ body {
 .field input, .field input[type="password"] {
   width: 100%;
   padding: 14px 16px;
-  background: rgba(0,0,0,0.4);
-  border: 1px solid rgba(212,175,55,0.25);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 10px;
-  color: #f5e6c8;
+  color: #0f172a;
   font-size: 15px;
   outline: none;
 }
-.field input:focus { border-color: #d4af37; }
-.field input::placeholder { color: rgba(245,230,200,0.55); }
-/* keep our dark styling when the browser autofills saved credentials */
+.field input:focus { border-color: #3b82f6; }
+.field input::placeholder { color: rgba(15,23,42,0.45); }
+/* keep light styling when the browser autofills saved credentials */
 .field input:-webkit-autofill,
 .field input:-webkit-autofill:hover,
 .field input:-webkit-autofill:focus {
-  -webkit-text-fill-color: #f5e6c8;
-  -webkit-box-shadow: 0 0 0 1000px rgba(0,0,0,0.4) inset;
+  -webkit-text-fill-color: #0f172a;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
   transition: background-color 5000s ease-in-out 0s;
 }
 .btn {
@@ -132,7 +121,6 @@ body {
 @media (max-width: 768px) {
   body { flex-direction: column; }
   .brand-panel { padding: 30px 20px; }
-  .brand-panel::before { font-size: 120px; }
   .brand-title { font-size: 24px; }
   .form-panel { padding: 20px; }
   .field input { font-size: 16px; } /* Prevent iOS auto-zoom */
