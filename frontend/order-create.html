@@ -130,11 +130,23 @@ async function init(){
   if(svc.manual_sample){
     document.getElementById('sampleWrap').style.display='block';
     document.getElementById('sampleText').textContent=svc.manual_sample;
-    document.getElementById('copySample').onclick=()=>{
-      navigator.clipboard.writeText(svc.manual_sample).then(()=>{
-        document.getElementById('copySample').textContent='✅ কপি হয়েছে';
-        setTimeout(()=>{document.getElementById('copySample').textContent='📋 কপি';},2000);
-      });
+    document.getElementById('copySample').onclick=async ()=>{
+      const btn=document.getElementById('copySample');
+      // Clean text: trim lines, remove extra blank lines
+      const clean=String(svc.manual_sample||'').split('\n').map(l=>l.trimEnd()).join('\n').replace(/\n{3,}/g,'\n\n').trim();
+      try{
+        await navigator.clipboard.writeText(clean);
+      }catch(e){
+        // Fallback for older browsers
+        const ta=document.createElement('textarea');
+        ta.value=clean; ta.style.position='fixed'; ta.style.opacity='0';
+        document.body.appendChild(ta); ta.select();
+        try{document.execCommand('copy');}catch(_){}
+        ta.remove();
+      }
+      btn.textContent='✅ কপি হয়েছে!';
+      btn.style.background='#15803d';
+      setTimeout(()=>{btn.textContent='📋 কপি';btn.style.background='#16a34a';},2000);
     };
   }
   // Dynamic fields from service definition

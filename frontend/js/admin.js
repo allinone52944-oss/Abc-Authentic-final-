@@ -1028,8 +1028,8 @@ window.AdmSvc = {
       '<option value="nid">NID Engine</option>' +
       '<option value="apply">Apply Engine (:3102)</option>' +
       '</select><small style="color:var(--dim)">Engine-এর ভেতরে হাত দেওয়া হবে না</small></div></div>' +
-      '<div id="sv_manualBox"><div class="field"><label>📋 নির্দেশনা</label><textarea id="sv_instructions" rows="3" placeholder="User-কে কী করতে হবে..."></textarea></div>' +
-      '<div class="field"><label>📄 নমুনা (copy button সহ দেখাবে)</label><textarea id="sv_sample" rows="4" placeholder="নমুনা ফরম্যাট..."></textarea></div>' +
+      '<div id="sv_manualBox"><div class="field"><label>📋 নির্দেশনা <small style="color:#64748b;">(user কী করবে)</small></label><textarea id="sv_instructions" rows="3" placeholder="যেমন: নিচের ফরম্যাট অনুযায়ী তথ্য দিন। প্রতিটি লাইনে একটি করে তথ্য লিখুন।" style="font-size:14px;line-height:1.6;"></textarea></div>' +
+      '<div class="field"><label>📄 নমুনা ফরম্যাট <small style="color:#64748b;">(user কপি করে পূরণ করবে)</small></label><textarea id="sv_sample" rows="5" placeholder="যেমন:&#10;নাম: &#10;এনআইডি নং: &#10;জন্ম তারিখ: " style="font-family:monospace;font-size:13px;line-height:1.7;background:#f8fafc;"></textarea><small style="color:#64748b;">💡 প্রতিটি field নতুন লাইনে লিখুন। User "📋 কপি" বাটনে ক্লিক করে clean copy পাবে।</small></div>' +
       fld('📎 ডকুমেন্ট সংখ্যা (১-৬)', 'number', 'sv_doccount', '1') + '</div>' +
       fld('দাম (৳)', 'number', 'sv_price') +
       fld('ডকুমেন্ট (কমা দিয়ে: NID, Photo)', 'text', 'sv_docs') +
