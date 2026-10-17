@@ -52,12 +52,13 @@
     <div class="card">
       <div class="pill" id="svcPrice" style="display:inline-block;margin-bottom:14px;">৳০</div>
       <div id="instrWrap" style="display:none;margin-bottom:14px;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;">
-        <div style="font-weight:700;margin-bottom:6px;"><span style="background:#1e40af;color:#fff;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;margin-right:6px;">১</span>📋 নির্দেশনা পড়ুন</div>
-        <div id="instrText" style="font-size:14px;white-space:pre-wrap;"></div>
+        <div style="font-weight:700;margin-bottom:6px;"><span style="background:#1e40af;color:#fff;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;margin-right:6px;">১</span>📋 নির্দেশনা</div>
+        <div style="font-size:14px;line-height:1.7;">নিচের ফরম্যাটে আপনার তথ্য লিখুন। প্রতিটি লাইনে একটি করে তথ্য দিন। চাইলে কপি করে অন্য জায়গায় লিখে এখানে পেস্ট করতে পারেন।</div>
       </div>
       <div id="sampleWrap" style="display:none;margin-bottom:14px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
-        <div style="font-weight:700;margin-bottom:6px;"><span style="background:#16a34a;color:#fff;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;margin-right:6px;">২</span>📝 নমুনা দেখে কপি করুন <button id="copySample" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;margin-left:8px;">📋 কপি</button></div>
-        <div id="sampleText" style="font-size:13px;white-space:pre-wrap;background:#fff;padding:8px;border-radius:6px;border:1px solid #e5e7eb;"></div>
+        <div style="font-weight:700;margin-bottom:6px;"><span style="background:#16a34a;color:#fff;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;margin-right:6px;">২</span>📝 তথ্য লিখুন <button id="copySample" type="button" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;margin-left:8px;">📋 ফরম্যাট কপি</button></div>
+        <textarea id="sampleInput" rows="8" style="width:100%;font-family:monospace;font-size:13px;line-height:1.7;padding:10px;border-radius:8px;border:1px solid #bbf7d0;background:#fff;resize:vertical;min-height:150px;" placeholder="এখানে আপনার তথ্য লিখুন..."></textarea>
+        <div style="font-size:12px;color:#64748b;margin-top:6px;">💡 উপরের ফরম্যাট অনুযায়ী লিখুন, বা কপি করে এডিট করুন</div>
       </div>
       <div id="dynFields"></div>
       <div style="font-weight:700;margin:14px 0 8px;"><span id="stepInfo" style="background:#7c3aed;color:#fff;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;margin-right:6px;">৩</span>তথ্য লিখুন</div>
@@ -122,22 +123,22 @@ async function init(){
   if(!window._orderIdemKey) window._orderIdemKey = (crypto.randomUUID ? crypto.randomUUID() : 'k'+Date.now()+Math.random().toString(16).slice(2));
   document.getElementById('svcName').textContent=svc.name_bn||svc.name;
   document.getElementById('svcPrice').textContent='৳'+Number(svc.price).toLocaleString('bn-BD');
-  // Manual flow: instructions + sample form (per 2026-10-16 spec)
-  if(svc.manual_instructions){
+  // Manual flow: hardcoded instructions + editable sample (user spec 2026-10-17)
+  // Instructions are built-in, admin only writes the sample format
+  const isManual = svc.type === 'manual';
+  if(isManual){
     document.getElementById('instrWrap').style.display='block';
-    document.getElementById('instrText').textContent=svc.manual_instructions;
   }
-  if(svc.manual_sample){
+  if(isManual && svc.manual_sample){
     document.getElementById('sampleWrap').style.display='block';
-    document.getElementById('sampleText').textContent=svc.manual_sample;
+    // Pre-fill the editable textarea with the sample format
+    document.getElementById('sampleInput').value=svc.manual_sample;
     document.getElementById('copySample').onclick=async ()=>{
       const btn=document.getElementById('copySample');
-      // Clean text: trim lines, remove extra blank lines
       const clean=String(svc.manual_sample||'').split('\n').map(l=>l.trimEnd()).join('\n').replace(/\n{3,}/g,'\n\n').trim();
       try{
         await navigator.clipboard.writeText(clean);
       }catch(e){
-        // Fallback for older browsers
         const ta=document.createElement('textarea');
         ta.value=clean; ta.style.position='fixed'; ta.style.opacity='0';
         document.body.appendChild(ta); ta.select();
@@ -145,9 +146,13 @@ async function init(){
         ta.remove();
       }
       btn.textContent='✅ কপি হয়েছে!';
-      btn.style.background='#15803d';
-      setTimeout(()=>{btn.textContent='📋 কপি';btn.style.background='#16a34a';},2000);
+      setTimeout(()=>{btn.textContent='📋 ফরম্যাট কপি';},2000);
     };
+  } else if(isManual){
+    // Manual but no sample configured: show empty editable area
+    document.getElementById('sampleWrap').style.display='block';
+    document.getElementById('copySample').style.display='none';
+  }
   }
   // Dynamic fields from service definition
   const fields=svc.fields_required||[];
@@ -227,6 +232,9 @@ async function submit(){
   const btn=document.getElementById('submitBtn');
   btn.disabled=true;btn.textContent='প্রসেস হচ্ছে…';
   // First create order, then upload documents
+  // Include the editable sample text as form_data
+  const sampleText=document.getElementById('sampleInput')?document.getElementById('sampleInput').value.trim():'';
+  if(sampleText) data._manual_form=sampleText;
   const r=await ABC.api('/orders',{method:'POST',body:{
     service_id:sid,data,notes:document.getElementById('notes').value.trim(),
     idempotency_key: window._orderIdemKey,
