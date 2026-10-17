@@ -421,7 +421,7 @@ window.AdmUsers = {
       { id: 'security', icon: '🔒', label: 'সিকিউরিটি' },
     ];
     const activeTab = window._usrTab || 'profile';
-    let tabBtns = '<div style="display:flex; gap:6px; margin-bottom:16px; border-bottom:2px solid var(--line); padding-bottom:10px;">';
+    let tabBtns = '<div style="display:flex; gap:6px; margin-bottom:16px; border-bottom:2px solid var(--line); padding-bottom:10px; flex-wrap:wrap;">';
     tabs.forEach(t => {
       tabBtns += '<button class="mini-btn' + (activeTab === t.id ? ' ok' : '') + '" ' +
         'onclick="window._usrTab=\'' + t.id + '\';AdmUsers.edit(\'' + id + '\')">' + t.icon + ' ' + t.label + '</button>';
