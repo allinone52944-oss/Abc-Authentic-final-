@@ -37,6 +37,7 @@ const ENGINE_PORT = parseInt(process.env.BDRIS_APPLY_PORT || '3102', 10);
 const ENGINE_HOST = '127.0.0.1';
 
 let _proc = null;
+let _procStartTime = 0; // W-1 fix: process কখন start হলো — probe কখনো OK না হলে zombie ধরা যাবে
 let _ready = false;
 
 function engineDir() {
@@ -115,6 +116,8 @@ function startEngine() {
     }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  _procStartTime = Date.now(); // W-1 fix
+  _lastProbeOk = 0; // W-1 fix: নতুন process-এর জন্য probe history রিসেট
   _proc.stdout.on('data', (d) => {
     const s = String(d);
     if (/listening|ready|BDRIS/i.test(s)) _ready = true;
@@ -133,6 +136,7 @@ function startEngine() {
   _proc.on('exit', (code) => {
     console.error('[bdris-apply] engine exited with code', code);
     _proc = null;
+    _procStartTime = 0;
     _ready = false;
     // Supervisor: restart crashed engine (2026-10-15 — previously a single
     // crash left the engine dead until the next full service restart).
@@ -150,15 +154,27 @@ function startEngine() {
         console.error('[bdris-apply] watchdog: process hung (no probe OK in 2min), killing');
         try { _proc.kill('SIGKILL'); } catch (e) {}
         _proc = null;
+        _procStartTime = 0;
         _ready = false;
         _crashCount = 0; // fresh start, not a crash loop
+        scheduleRestart();
+      }
+      // W-1 fix: process start হয়েছে কিন্তু 90s-এ একবারও probe OK হয়নি
+      // (port bind fail / silent hang) — zombie kill করে restart
+      if (_proc && _lastProbeOk === 0 && _procStartTime > 0 && Date.now() - _procStartTime > 90000) {
+        console.error('[bdris-apply] watchdog: process never became healthy in 90s, killing zombie');
+        try { _proc.kill('SIGKILL'); } catch (e) {}
+        _proc = null;
+        _procStartTime = 0;
+        _ready = false;
         scheduleRestart();
       }
     }, 60000);
     if (_watchdog.unref) _watchdog.unref();
   }
   // Give it a moment; readiness is best-effort (proxy retries anyway)
-  setTimeout(() => { _ready = true; }, 8000);
+  // W-3 fix: শুধু process এখনো বেঁচে থাকলেই ready flag ওঠাও — crash হলে নয়
+  setTimeout(() => { if (_proc) _ready = true; }, 8000);
 }
 
 function isReady() {

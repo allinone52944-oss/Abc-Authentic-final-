@@ -3364,6 +3364,14 @@ socket.on('BOT_STATUS', (d) => {
     return;
   }
   if (st === 'LOADING') { note('⏳ সংযোগ প্রস্তুত হচ্ছে…', 'info'); return; }
+  // C-1 fix (2026-10-17): অন্য user সেশন চালাচ্ছে — busy জানাও, starting-এ আটকে রেখো না
+  if (st === 'BUSY') {
+    S.starting = false;
+    clearTimeout(S._startT);
+    busy(false);
+    showBanner('warn', san(d.message || '⏳ অন্য একজন এখন আবেদন করছেন। কিছুক্ষণ পর আবার চেষ্টা করুন।'), () => { hideBanner(); });
+    return;
+  }
   if (st === 'PROGRESS' || st === 'OTP_WAITING') {
     const lv = ['ok', 'warn', 'err', 'info'].includes(d.level) ? d.level : 'info';
     note(san(d.message || 'প্রক্রিয়া চলছে…'), lv);

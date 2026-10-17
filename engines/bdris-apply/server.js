@@ -113,6 +113,11 @@ let context = null;
 let page = null;
 let isLaunching = false;
 let lastActivity = Date.now();
+// C-1 fix (2026-10-17): session ownership — একটাই global browser/page বলে
+// একসাথে দুই user চালালে data corrupt হতো। এখন একবারে একজনই সেশন
+// চালাতে পারবে; অন্যজন "ব্যস্ত" বার্তা পাবে। multi-user parallel-এর জন্য
+// per-context isolation লাগবে (ভবিষ্যৎ কাজ)।
+let sessionOwner = null;
 // শেষ OTP-নেটওয়ার্ক ফল (2026-10-11): সাইটের otpSentError non-JSON 400-তে চুপচাপ
 // ক্র্যাশ করে — তাই response listener এখানে ধরিয়ে রাখে, S4prep আসল কারণ দেখাতে পারে
 let lastOtpNet = null;
@@ -1320,6 +1325,9 @@ async function findBdrisSelectors() {
 async function closeBrowser() {
   try { if (browser) await browser.close(); } catch { /* ignore */ }
   browser = null; context = null; page = null; isLaunching = false;
+  sessionOwner = null; // C-1 fix: browser বন্ধ হলে লকও যাবে
+  appData = {};
+  applicantDobIso = null;
 }
 
 // ═══════════ HTTP routes ═══════════
@@ -1655,6 +1663,13 @@ io.on('connection', (socket) => {
   socket.on('START_BDRIS_SESSION', async () => {
     console.log(`[${ts()}] [START_BDRIS_SESSION] received from ${socket.id}`);
     touchSession();
+    // C-1 fix: অন্য user-এর সক্রিয় সেশন থাকলে নতুন user-কে ব্যস্ত জানাও —
+    // একই page/appData শেয়ার করে data corrupt করা যাবে না।
+    if (sessionOwner && sessionOwner !== socket.id && page && browser && browser.isConnected()
+        && Date.now() - lastActivity < SESSION_TIMEOUT_MS) {
+      status(socket, 'BUSY', '⏳ অন্য একজন এখন আবেদন করছেন। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।');
+      return;
+    }
     if (isLaunching) {
       status(socket, 'LOADING', '⏳ সংযোগ প্রস্তুত হচ্ছে... একটু অপেক্ষা করুন');
       // প্রস্তুত হওয়ামাত্র এই socket-কেও জানাও — নইলে ২য় ট্যাব/চাপ আটকে থাকে
@@ -1667,6 +1682,12 @@ io.on('connection', (socket) => {
       return;
     }
     if (page && browser && browser.isConnected()) {
+      // C-1 fix: warm সেশন — মালিক না থাকলে বা একই socket হলে মালিকানা নাও।
+      // (ভিন্ন socket + সক্রিয় সেশন কেস উপরের BUSY চেকে আটকেছে।)
+      if (!sessionOwner || sessionOwner === socket.id) {
+        if (sessionOwner !== socket.id) { appData = {}; applicantDobIso = null; }
+        sessionOwner = socket.id;
+      }
       status(socket, 'READY', '✅ BDRIS সেশন ইতিমধ্যে চালু আছে। ধাপ ১-এর তথ্য দিন।');
       return;
     }
@@ -1779,6 +1800,13 @@ io.on('connection', (socket) => {
         ? '✅ BDRIS পোর্টাল লোড সম্পন্ন! ধাপ ১-এ আবেদনের ভিত্তি নির্বাচন করুন।'
         : '⚠️ BDRIS লোড হয়েছে (ধীর নেটওয়ার্ক)। ধাপ ১-এর তথ্য দিন।';
       console.log(`[${ts()}] [READY] ${readyMsg}`);
+      // C-1 fix: এই socket এখন সেশনের মালিক। মালিক বদলালে appData রিসেট —
+      // আগের user-এর তথ্য নতুন user-এর ফর্মে যাবে না।
+      if (sessionOwner !== socket.id) {
+        appData = {};
+        applicantDobIso = null;
+      }
+      sessionOwner = socket.id;
       // fresh: true = নতুন সেশন (পেজ ধাপ ১-এ) — UI-এর ধাপগুলো রি-আর্ম করার সংকেত
       socket.emit('BOT_STATUS', { status: 'READY', level: 'ok', fresh: true, message: readyMsg });
     } catch (err) {
@@ -3141,12 +3169,21 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log(`[${ts()}] 🔌 disconnected: ${socket.id}`);
+    // C-1 fix: মালিক চলে গেলে লক ছাড়ো — পরের user নতুন appData নিয়ে শুরু করবে।
+    if (sessionOwner === socket.id) {
+      sessionOwner = null;
+      appData = {};
+      applicantDobIso = null;
+    }
   });
 });
 
 setInterval(() => {
   if (browser && Date.now() - lastActivity > SESSION_TIMEOUT_MS) {
     console.log(`[${ts()}] ⏱ Session timeout — browser auto-closing`);
+    sessionOwner = null; // C-1 fix: timeout-এ লক ছাড়ো
+    appData = {};
+    applicantDobIso = null;
     closeBrowser().then(() => {
       io.emit('BOT_STATUS', {
         status: 'SESSION_TIMEOUT', level: 'warn',
