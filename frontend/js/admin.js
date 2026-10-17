@@ -1068,6 +1068,9 @@ window.AdmSvc = {
       '</select></div>' +
       fld('ডকুমেন্ট (কমা দিয়ে)', 'text', 'esv_docs', (s.documents_required || []).join(', ')) +
       '<div class="field"><label>নিয়মাবলী</label><textarea id="esv_rules" rows="3">' + esc(s.rules_text || '') + '</textarea></div>' +
+      '<div class="field"><label>📋 নির্দেশনা <small style="color:#64748b;">(manual service)</small></label><textarea id="esv_instructions" rows="3" style="font-size:14px;line-height:1.6;">' + esc(s.manual_instructions || '') + '</textarea></div>' +
+      '<div class="field"><label>📄 নমুনা ফরম্যাট <small style="color:#64748b;">(user কপি করবে)</small></label><textarea id="esv_sample" rows="4" style="font-family:monospace;font-size:13px;line-height:1.7;background:#f8fafc;">' + esc(s.manual_sample || '') + '</textarea></div>' +
+      fld('📎 ডকুমেন্ট সংখ্যা (১-৬)', 'number', 'esv_doccount', s.manual_doc_count || 1) +
       '<button class="btn" onclick="AdmSvc.save(\'' + id + '\')">সংরক্ষণ</button>');
   },
   async save(id) {
@@ -1077,6 +1080,9 @@ window.AdmSvc = {
       status: document.getElementById('esv_status').value,
       category_id: document.getElementById('esv_cat').value || null,
       documents_required: docs, rules_text: v('esv_rules'),
+      manual_instructions: v('esv_instructions') || null,
+      manual_sample: v('esv_sample') || null,
+      manual_doc_count: Math.min(6, Math.max(1, Number(v('esv_doccount')) || 1)),
     }});
     if (!r.ok) { alert('ব্যর্থ'); return; }
     closeModal(); show('services');
