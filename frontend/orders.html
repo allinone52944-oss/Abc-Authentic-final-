@@ -22,6 +22,7 @@
   .topbar h2 { font-size:20px; margin-bottom:4px; }
   .topbar p { font-size:13px; color:#64748b; margin-bottom:16px; }
   .filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+  @media (max-width:768px) { .filters { flex-wrap:nowrap; overflow-x:auto; padding-bottom:4px; } .filters .fbtn { flex-shrink:0; } }
   .fbtn { background:#f1f5f9; border:none; padding:8px 16px; border-radius:20px; font-size:13px; cursor:pointer; }
   .fbtn.on { background:#1e40af; color:#fff; }
   .card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:18px; }
