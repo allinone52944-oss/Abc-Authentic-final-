@@ -72,10 +72,11 @@
   .bn-strip { margin-bottom:16px; overflow:hidden; border-radius:12px; max-width:100%; opacity:0; transition:opacity 0.4s ease; }
   .bn-strip.show { opacity:1; }
   .bn-strip img { max-width:100%; height:auto; display:block; }
-  /* Smooth button press - prevents janky feeling */
-  button, .btn, .m-tab, .svc2, .stat { transition:transform 0.1s ease, opacity 0.15s ease; }
-  button:active, .btn:active, .m-tab:active { transform:scale(0.97); }
-  .svc2:active, .stat:active { transform:scale(0.98); }
+  /* Smooth button press - subtle, no shake */
+  button, .btn { transition:transform 0.08s ease, opacity 0.12s ease; }
+  button:active, .btn:active { transform:scale(0.98); opacity:0.9; }
+  .svc2, .stat { transition:transform 0.12s ease, box-shadow 0.15s ease; }
+  .svc2:active, .stat:active { transform:scale(0.99); }
   @media (max-width:768px) { html,body{overflow-x:hidden;}
     .desktop { display:none; }
     .sidebar { display:none; }
