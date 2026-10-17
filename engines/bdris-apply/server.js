@@ -1665,7 +1665,11 @@ io.on('connection', (socket) => {
     touchSession();
     // C-1 fix: অন্য user-এর সক্রিয় সেশন থাকলে নতুন user-কে ব্যস্ত জানাও —
     // একই page/appData শেয়ার করে data corrupt করা যাবে না।
-    if (sessionOwner && sessionOwner !== socket.id && page && browser && browser.isConnected()
+    // 2026-10-17: একই user নতুন tab খুললে block নয় — ownership transfer।
+    const ownerUid = sessionOwner && sessionOwner.userId;
+    const myUid = socket.abcUser && socket.abcUser.id;
+    const sameUser = ownerUid && myUid && String(ownerUid) === String(myUid);
+    if (sessionOwner && sessionOwner.socketId !== socket.id && !sameUser && page && browser && browser.isConnected()
         && Date.now() - lastActivity < SESSION_TIMEOUT_MS) {
       status(socket, 'BUSY', '⏳ অন্য একজন এখন আবেদন করছেন। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।');
       return;
@@ -1682,11 +1686,14 @@ io.on('connection', (socket) => {
       return;
     }
     if (page && browser && browser.isConnected()) {
-      // C-1 fix: warm সেশন — মালিক না থাকলে বা একই socket হলে মালিকানা নাও।
-      // (ভিন্ন socket + সক্রিয় সেশন কেস উপরের BUSY চেকে আটকেছে।)
-      if (!sessionOwner || sessionOwner === socket.id) {
-        if (sessionOwner !== socket.id) { appData = {}; applicantDobIso = null; }
-        sessionOwner = socket.id;
+      // C-1 fix: warm সেশন — মালিক না থাকলে বা একই socket/user হলে মালিকানা নাও।
+      const ownerSid = sessionOwner && sessionOwner.socketId;
+      const ownerUid2 = sessionOwner && sessionOwner.userId;
+      const myUid2 = socket.abcUser && socket.abcUser.id;
+      const sameUser2 = ownerUid2 && myUid2 && String(ownerUid2) === String(myUid2);
+      if (!sessionOwner || ownerSid === socket.id || sameUser2) {
+        if (ownerSid !== socket.id) { appData = {}; applicantDobIso = null; }
+        sessionOwner = { socketId: socket.id, userId: myUid2 || null };
       }
       status(socket, 'READY', '✅ BDRIS সেশন ইতিমধ্যে চালু আছে। ধাপ ১-এর তথ্য দিন।');
       return;
@@ -1802,11 +1809,14 @@ io.on('connection', (socket) => {
       console.log(`[${ts()}] [READY] ${readyMsg}`);
       // C-1 fix: এই socket এখন সেশনের মালিক। মালিক বদলালে appData রিসেট —
       // আগের user-এর তথ্য নতুন user-এর ফর্মে যাবে না।
-      if (sessionOwner !== socket.id) {
+      const prevSid = sessionOwner && sessionOwner.socketId;
+      const prevUid = sessionOwner && sessionOwner.userId;
+      const curUid = socket.abcUser && socket.abcUser.id;
+      if (prevSid !== socket.id && !(prevUid && curUid && String(prevUid) === String(curUid))) {
         appData = {};
         applicantDobIso = null;
       }
-      sessionOwner = socket.id;
+      sessionOwner = { socketId: socket.id, userId: curUid || null };
       // fresh: true = নতুন সেশন (পেজ ধাপ ১-এ) — UI-এর ধাপগুলো রি-আর্ম করার সংকেত
       socket.emit('BOT_STATUS', { status: 'READY', level: 'ok', fresh: true, message: readyMsg });
     } catch (err) {
@@ -3184,7 +3194,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log(`[${ts()}] 🔌 disconnected: ${socket.id}`);
     // C-1 fix: মালিক চলে গেলে লক ছাড়ো — পরের user নতুন appData নিয়ে শুরু করবে।
-    if (sessionOwner === socket.id) {
+    if (sessionOwner && sessionOwner.socketId === socket.id) {
       sessionOwner = null;
       appData = {};
       applicantDobIso = null;
