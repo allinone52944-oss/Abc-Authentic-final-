@@ -619,6 +619,15 @@ window.AdmOrders = {
     try {
       const data = typeof o.data === 'string' ? JSON.parse(o.data) : (o.data || {});
       // Auto-format: clean key names, trim values
+      // Special handling for _manual_form: show as pre-formatted block
+      let manualFormHtml = '';
+      if (data._manual_form) {
+        manualFormHtml = '<div style="margin:10px 0;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">' +
+          '<div style="font-weight:700;margin-bottom:6px;color:#166534;">📝 User-এর পূরণকৃত ফরম</div>' +
+          '<pre style="white-space:pre-wrap;font-family:monospace;font-size:13px;margin:0;">' + esc(String(data._manual_form)) + '</pre>' +
+          '<button onclick="navigator.clipboard.writeText(' + JSON.stringify(String(data._manual_form)).replace(/</g, '\\u003c') + ').then(()=>alert(\'✅ কপি হয়েছে\'))" style="margin-top:8px;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;">📋 কপি করুন</button></div>';
+        delete data._manual_form;
+      }
       const formatted = Object.entries(data).map(([k, v]) => {
         const cleanK = String(k).replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim();
         const cleanV = String(v == null ? '' : v).trim();
@@ -627,7 +636,7 @@ window.AdmOrders = {
           '<span style="color:var(--muted)">' + esc(cleanK) + ':</span> ' +
           '<b style="color:var(--cream)">' + esc(cleanV) + '</b></div>';
       }).join('') || '<div style="color:var(--muted)">কোনো ফর্ম ডেটা নেই</div>';
-      dataHtml = formatted;
+      dataHtml = manualFormHtml + formatted;
       TABS._viewRaw = rawText;
     } catch (e) { dataHtml = '<div style="color:var(--muted)">ডেটা পড়া যায়নি</div>'; }
     let docsHtml = '';
