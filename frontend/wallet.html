@@ -158,9 +158,12 @@ async function loadWallet(){
   const r=await ABC.api('/wallet?limit=10'); if(!r.ok)return;
   const d=await r.json();
   document.getElementById('bal').textContent='৳'+Number(d.balance).toLocaleString('bn-BD');
+  const shortRef=x=>{x=String(x||'');const m=x.match(/^order-([0-9a-f]{8})/i);return m?'#'+m[1]:(x.length>24?x.slice(0,24)+'…':x);};
+  const fmtAmt=a=>{a=Number(a);return (a<0?'-':'+')+'৳'+Math.abs(a).toLocaleString('bn-BD');};
+  const fmtDt=s=>{try{return new Date(s).toLocaleString('bn-BD').replace(' PM',' পিএম').replace(' AM',' এএম');}catch(e){return '';}};
   document.getElementById('txList').innerHTML=d.transactions.map(t=>
-    '<div class="tx"><div><b>'+(TYPBN[t.type]||t.type)+'</b> <small style="color:#94a3b8;">'+esc(t.trxid||'')+'</small><br><small style="color:#64748b;">'+new Date(t.created_at).toLocaleString('bn-BD')+'</small></div>'+
-    '<b style="color:'+(Number(t.amount)>=0?'#16a34a':'#dc2626')+'">'+(Number(t.amount)>=0?'+':'')+'৳'+Number(t.amount).toLocaleString('bn-BD')+'</b></div>'
+    '<div class="tx"><div><b>'+(TYPBN[t.type]||t.type)+'</b> <small style="color:#94a3b8;">'+esc(shortRef(t.trxid))+'</small><br><small style="color:#64748b;">'+fmtDt(t.created_at)+'</small></div>'+
+    '<b style="color:'+(Number(t.amount)>=0?'#16a34a':'#dc2626')+'">'+fmtAmt(t.amount)+'</b></div>'
   ).join('')||'<div style="color:#64748b;">কোনো লেনদেন নেই</div>';
 }
 async function submitRecharge(){

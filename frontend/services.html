@@ -74,10 +74,24 @@
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
+/* Smart icon fallback when service/category has no icon configured (DB empty) */
+function autoIcon(name){
+  const n=String(name||'');
+  if(/জন্ম|birth/i.test(n))return '👶';
+  if(/মৃত্যু|death/i.test(n))return '🕊️';
+  if(/এনআইডি|NID|ভোটার/i.test(n))return '🪪';
+  if(/পাসপোর্ট|passport/i.test(n))return '🛂';
+  if(/টিকিট|ticket/i.test(n))return '🎫';
+  if(/আবেদন|apply|application/i.test(n))return '📝';
+  if(/সনদ|certificate/i.test(n))return '📜';
+  if(/অর্ডার|order/i.test(n))return '📦';
+  if(/রিচার্জ|recharge|বিকাশ|নগদ/i.test(n))return '💳';
+  return '🛎️';
+}
 function card(s){
   const closed = s.open ? '' : '<span class="ptype closed">বন্ধ</span>';
   return '<div class="svc-card" onclick="location.href=\'/service-detail.html?id='+s.id+'\'">'+
-    '<div class="svc-ico">'+esc(s.icon||'🛎️')+'</div>'+
+    '<div class="svc-ico">'+esc(s.icon||autoIcon(s.name_bn||s.name))+'</div>'+
     '<div class="svc-info"><h4>'+esc(s.name_bn||s.name)+'</h4>'+
     '<span class="ptype '+(s.type==='manual'?'manual':'auto')+'">'+(s.type==='manual'?'manual':'automated')+'</span>'+closed+'</div>'+
     '<div class="svc-pr">৳'+bnNum(s.price)+(s.open?'':'<div style="font-size:10px;color:#b91c1c;">এখন বন্ধ</div>')+'</div></div>';
@@ -119,7 +133,7 @@ async function init(){
     if (s.category_id) {
       if (!map[s.category_id]) {
         map[s.category_id] = { id:s.category_id, name:s.category_name_bn||s.category_name||'ক্যাটাগরি',
-          icon:s.category_icon||'📁', services:[], ord:(s.category_serial==null?999999:s.category_serial) };
+          icon:s.category_icon||autoIcon(s.category_name_bn||s.category_name), services:[], ord:(s.category_serial==null?999999:s.category_serial) };
         GROUPS.push(map[s.category_id]);
       }
       map[s.category_id].services.push(s);

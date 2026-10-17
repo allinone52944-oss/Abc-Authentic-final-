@@ -148,6 +148,20 @@ const bnNum = (n) => Number(n || 0).toLocaleString('bn-BD');
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+/* Smart icon fallback when service has no icon configured (DB empty) */
+function autoIcon(name) {
+  const n = String(name || '');
+  if (/জন্ম|birth/i.test(n)) return '👶';
+  if (/মৃত্যু|death/i.test(n)) return '🕊️';
+  if (/এনআইডি|NID|ভোটার/i.test(n)) return '🪪';
+  if (/পাসপোর্ট|passport/i.test(n)) return '🛂';
+  if (/টিকিট|ticket/i.test(n)) return '🎫';
+  if (/আবেদন|apply|application/i.test(n)) return '📝';
+  if (/সনদ|certificate/i.test(n)) return '📜';
+  if (/অর্ডার|order/i.test(n)) return '📦';
+  if (/রিচার্জ|recharge|বিকাশ|নগদ/i.test(n)) return '💳';
+  return '🛎️';
+}
 /* Voice greeting - preserved from old dashboard (user: logic থাকলে bad যাবে না) */
 const GREET_EMOJI = { islam: '🤲', hindu: '🙏', buddhist: '🪷', christian: '✝️', other: '🌸' };
 function timeGreeting() {
@@ -319,10 +333,10 @@ async function loadServices() {
     const svcs = d.services || [];
     setText('hubServices', bnNum(svcs.length));
     pop.innerHTML = svcs.slice(0, 4).map(s =>
-      '<div class="svc2" onclick="location.href=\'/services.html\'"><div class="ico">' + (s.icon || '🛎️') + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
+      '<div class="svc2" onclick="location.href=\'/services.html\'"><div class="ico">' + (s.icon || autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
     ).join('') || '<div>কোনো সেবা নেই</div>';
     mob.innerHTML = svcs.slice(0, 6).map(s =>
-      '<div class="svc2" onclick="location.href=\'/services.html\'"><div class="ico">' + (s.icon || '🛎️') + '</div><h4>' + escapeHtml((s.name_bn || s.name).slice(0,8)) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
+      '<div class="svc2" onclick="location.href=\'/services.html\'"><div class="ico">' + (s.icon || autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml((s.name_bn || s.name).slice(0,8)) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
     ).join('') || '<div>কোনো সেবা নেই</div>';
   } catch (e) {
     setText('hubServices', '–');

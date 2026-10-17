@@ -34,6 +34,11 @@
   /* Admin content styles (compatible with admin.js) */
   #content { font-size:14px; }
   #content .card, #content .form-card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:18px; margin-bottom:16px; }
+  #content .stat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+  #content .stat { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; }
+  #content .stat .n { font-size:24px; font-weight:700; color:#1e40af; }
+  #content .stat .l { font-size:12px; color:#64748b; margin-top:4px; }
+  @media (max-width:768px) { #content .stat-grid { grid-template-columns:repeat(2,1fr); } }
   #content table { width:100%; border-collapse:collapse; font-size:13px; }
   #content th { text-align:left; padding:10px 8px; color:#64748b; font-size:12px; border-bottom:1px solid #e2e8f0; }
   #content td { padding:10px 8px; border-bottom:1px solid #f1f5f9; }
