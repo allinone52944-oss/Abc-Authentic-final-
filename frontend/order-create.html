@@ -122,15 +122,15 @@ async function init(){
   document.getElementById('svcName').textContent=svc.name_bn||svc.name;
   document.getElementById('svcPrice').textContent='৳'+Number(svc.price).toLocaleString('bn-BD');
   // Manual flow: instructions + sample form (per 2026-10-16 spec)
-  if(svc.instructions){
+  if(svc.manual_instructions){
     document.getElementById('instrWrap').style.display='block';
-    document.getElementById('instrText').textContent=svc.instructions;
+    document.getElementById('instrText').textContent=svc.manual_instructions;
   }
-  if(svc.sample_text){
+  if(svc.manual_sample){
     document.getElementById('sampleWrap').style.display='block';
-    document.getElementById('sampleText').textContent=svc.sample_text;
+    document.getElementById('sampleText').textContent=svc.manual_sample;
     document.getElementById('copySample').onclick=()=>{
-      navigator.clipboard.writeText(svc.sample_text).then(()=>{
+      navigator.clipboard.writeText(svc.manual_sample).then(()=>{
         document.getElementById('copySample').textContent='✅ কপি হয়েছে';
         setTimeout(()=>{document.getElementById('copySample').textContent='📋 কপি';},2000);
       });
@@ -148,7 +148,7 @@ async function init(){
   }).join('');
   // Documents
   const docs=svc.documents_required||[];
-  const docCount=Math.min(6,Math.max(0,Number(svc.doc_count)||0));
+  const docCount=Math.min(6,Math.max(0,Number(svc.manual_doc_count)||0));
   if(docs.length){
     document.getElementById('docWrap').style.display='block';
     document.getElementById('docList').innerHTML=docs.map((d,i)=>'<div class="field"><label>📎 '+esc(d)+' *</label><input type="file" data-doc="'+i+'" data-doctype="'+esc(d)+'" accept=".pdf,.jpg,.jpeg,.png"></div>').join('');
