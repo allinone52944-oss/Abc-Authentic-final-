@@ -1600,6 +1600,17 @@ function fetchOpts(selector, tmo) {
     });
   });
 }
+// PERMANENT FIX (2026-10-17): Engine-এর dedicated address endpoint ব্যবহার করো —
+// mirror logic-এর race condition ও state drift স্থায়ীভাবে দূর হয়।
+function fetchAddrOpts(level, parents, tmo) {
+  return new Promise((res) => {
+    let done = false;
+    const t = setTimeout(() => { if (!done) { done = true; res([]); } }, tmo || 25000);
+    socket.emit('GET_ADDRESS_OPTIONS', { level, parents }, (r) => {
+      if (!done) { done = true; clearTimeout(t); res(Array.isArray(r) ? r : []); }
+    });
+  });
+}
 function mirrorSelect(sel, label, childSel, value) {
   return new Promise((res) => {
     let done = false;
@@ -1679,15 +1690,33 @@ async function geoLoad(k, Ls, data, wantOv) {
   let opts = staticGeoOpts(k, data) || [];
   let fromAlt = false;
   if (!opts.length) {
-    // engine fallback (country/ward বা অমিল লেবেল) — static কভারেজ থাকায়
-    // পুরনো ৪৫s লুপ দরকার নেই; ১৫s-এ না এলে দ্রুত text-এ degrade
-    const t0 = Date.now();
-    while (!opts.length && Date.now() - t0 < 15000) {
-      if (S._opBusy) { await new Promise(r => setTimeout(r, 1500)); continue; }
-      opts = await fetchOpts(L.site, 9000);
-      if (!opts.length && L.altSite) { opts = await fetchOpts(L.altSite, 6000); if (opts.length) fromAlt = true; }
-      if (!opts.length) opts = await fetchOpts(L.site, 5000);
-      if (!opts.length) await new Promise(r => setTimeout(r, 900)); // ফাঁকা ফিরলে ফাঁক দিয়ে আবার
+    // PERMANENT FIX (2026-10-17): zone/ward-এর জন্য dedicated engine endpoint —
+    // engine নিজে cascade manage করে, frontend-এ mirror/state sync লাগে না।
+    if (k === 'paurasavaUnion' || k === 'ward') {
+      const parents = {
+        division: data.division || '',
+        district: data.district || '',
+        upazila: data.cityCorpUpazila || '',
+        zone: data.paurasavaUnion || '',
+      };
+      const lvl = (k === 'paurasavaUnion') ? 'zone' : 'ward';
+      opts = await fetchAddrOpts(lvl, parents, 25000);
+      // zone-এর জন্য WardInCityCorp থেকে এলে fromAlt সেট করো (label-এর জন্য)
+      if (lvl === 'zone' && opts.length) {
+        // Engine দুটো selector-ই check করে, যেটায় পায় সেটা ফেরত দেয়
+        fromAlt = true;
+      }
+    } else {
+      // engine fallback (country বা অমিল লেবেল) — static কভারেজ থাকায়
+      // পুরনো ৪৫s লুপ দরকার নেই; ১৫s-এ না এলে দ্রুত text-এ degrade
+      const t0 = Date.now();
+      while (!opts.length && Date.now() - t0 < 15000) {
+        if (S._opBusy) { await new Promise(r => setTimeout(r, 1500)); continue; }
+        opts = await fetchOpts(L.site, 9000);
+        if (!opts.length && L.altSite) { opts = await fetchOpts(L.altSite, 6000); if (opts.length) fromAlt = true; }
+        if (!opts.length) opts = await fetchOpts(L.site, 5000);
+        if (!opts.length) await new Promise(r => setTimeout(r, 900)); // ফাঁকা ফিরলে ফাঁক দিয়ে আবার
+      }
     }
   }
   L._alt = fromAlt; // মিরর কোন slot-এ বসবে (সিটি কর্পোরেশনে অঞ্চল WardInCityCorp-এ)

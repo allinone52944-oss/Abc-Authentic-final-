@@ -1401,6 +1401,100 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ── PERMANENT FIX (2026-10-17): Dedicated address options endpoint ──
+  // Frontend আর mirror করে না — শুধু level + parents পাঠায়, engine নিজে
+  // browser state manage করে options ফেরত দেয়। Race condition ও state drift
+  // স্থায়ীভাবে দূর হয়।
+  socket.on('GET_ADDRESS_OPTIONS', async (data, callback) => {
+    touchSession();
+    try {
+      const { level, parents = {} } = data || {};
+      if (!level) return callback({ error: 'level required' });
+      for (let i = 0; i < 20 && !page; i++) await new Promise((r) => setTimeout(r, 500));
+      if (!page) return callback({ error: 'Bot not ready' });
+
+      // Address cascade order: division → district → upazila → zone → ward
+      const order = ['division', 'district', 'upazila', 'zone', 'ward'];
+      const targetIdx = order.indexOf(level);
+      if (targetIdx < 0) return callback({ error: 'invalid level: ' + level });
+
+      // BDRIS selectors for each level (birth address form)
+      const SEL = {
+        division: '#birthPlaceDiv, select[name="birthPlaceDiv"]',
+        district: '#birthPlaceDist, select[name="birthPlaceDist"]',
+        upazila: '#birthPlaceCityCorpCantOrUpazila, select[name="birthPlaceCityCorpCantOrUpazila"]',
+        zone: '#birthPlacePaurasavaOrUnion, select[name="birthPlacePaurasavaOrUnion"], #birthPlaceWardInCityCorp, select[name="birthPlaceWardInCityCorp"]',
+        ward: '#birthPlaceWardInPaurasavaOrUnion, select[name="birthPlaceWardInPaurasavaOrUnion"]',
+      };
+
+      // Set parent selections in order, waiting for each child to populate
+      for (let i = 0; i < targetIdx; i++) {
+        const pLevel = order[i];
+        const pValue = parents[pLevel];
+        if (!pValue) continue;
+        const pSel = SEL[pLevel];
+        const cSel = SEL[order[i + 1]];
+        // Select parent option by label
+        const done = await page.evaluate(({ pSel, pValue }) => {
+          const sels = pSel.split(',').map(s => s.trim());
+          for (const s of sels) {
+            const node = document.querySelector(s);
+            if (!node) continue;
+            const norm = (t) => String(t || '').replace(/[\u09DC]/g, '\u09A1\u09BC').replace(/[\u09DD]/g, '\u09A2\u09BC').replace(/[\u09DF]/g, '\u09AF\u09BC').replace(/[\u0981\u200C\u200D]/g, '').replace(/\s+/g, ' ').trim();
+            const w = norm(pValue);
+            const opt = Array.from(node.options).find(o => norm(o.text) === w) ||
+              Array.from(node.options).find(o => { const t = norm(o.text); return t && (t.includes(w) || w.includes(t)); });
+            if (opt) {
+              node.value = opt.value;
+              node.dispatchEvent(new Event('input', { bubbles: true }));
+              node.dispatchEvent(new Event('change', { bubbles: true }));
+              return true;
+            }
+          }
+          return false;
+        }, { pSel, pValue }).catch(() => false);
+        if (!done) return callback({ error: `parent not found: ${pLevel}=${pValue}` });
+        // Wait for child to populate (up to 10s)
+        if (cSel) {
+          await page.waitForFunction((sel) => {
+            const sels = sel.split(',').map(s => s.trim());
+            for (const s of sels) {
+              const child = document.querySelector(s);
+              if (child && child.options.length > 1) return true;
+            }
+            return false;
+          }, cSel, { timeout: 10000 }).catch(() => {});
+        }
+        await page.waitForTimeout(500);
+      }
+
+      // Now scrape the target level options
+      const tSel = SEL[level];
+      const scrape = () => page.evaluate((sel) => {
+        const sels = sel.split(',').map(s => s.trim());
+        for (const s of sels) {
+          const el = document.querySelector(s);
+          if (!el) continue;
+          const opts = Array.from(el.options)
+            .filter(o => o.value && o.value !== '-1' && o.value !== '' && o.text.trim() !== '' && !/নির্বাচন করুন/.test(o.text))
+            .map(o => ({ id: o.value, name: o.text.trim() }));
+          if (opts.length) return opts;
+        }
+        return [];
+      }, tSel);
+      let options = await scrape();
+      for (let i = 0; i < 5 && !options.length; i++) {
+        await page.waitForTimeout(1200);
+        options = await scrape();
+      }
+      console.log('ADDR-OPTS:', level, '→', options.length);
+      callback(options);
+    } catch (e) {
+      console.error('GET_ADDRESS_OPTIONS Error:', e.message);
+      callback({ error: 'Failed to get address options' });
+    }
+  });
+
   socket.on('SELECT_DOM_OPTION', async (data, callback) => {
     touchSession();
     try {
