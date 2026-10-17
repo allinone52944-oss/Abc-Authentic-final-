@@ -596,7 +596,7 @@ TABS.orders = async () => {
   const d = await r.json();
   TABS._orders = d.orders;
   let html = '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">' +
-    ['new', 'pending', 'waiting', 'received', 'processing', 'registered', 'completed', 'delivered', 'failed', 'cancelled', 'refunded']
+    ['new', 'pending', 'received', 'processing', 'registered', 'completed', 'delivered', 'failed', 'cancelled', 'refunded']
       .map(s => '<button class="mini-btn' + (_f === s ? ' ok' : '') + '" onclick="AdmOrders.filter(\'' + s + '\')">' + (STBN[s] || s) + '</button>').join('') +
     '<button class="mini-btn" onclick="AdmOrders.filter(\'\')">সব</button></div>' +
     '<div style="overflow-x:auto;"><table class="adm"><tr><th>সেবা</th><th>ইউজার</th><th>দাম</th><th>স্ট্যাটাস</th><th>তারিখ</th><th>কাজ</th></tr>';
