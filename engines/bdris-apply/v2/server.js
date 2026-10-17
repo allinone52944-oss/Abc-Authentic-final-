@@ -351,6 +351,43 @@ class BdrisEngineV2 {
         });
       }
 
+      // Legacy: Address book (SAVE_ADDRESS / DELETE_ADDRESS)
+      // v1-এর file-based address storage — userId অনুযায়ী আলাদা file।
+      const path = require('path');
+      const fs = require('fs');
+      const addrFileFor = (uid) => {
+        const safe = String(uid || 'anon').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 64) || 'anon';
+        return path.join(__dirname, '..', 'addresses_u_' + safe + '.json');
+      };
+      const loadAddresses = (uid) => {
+        try { return JSON.parse(fs.readFileSync(addrFileFor(uid), 'utf8')); }
+        catch { return []; }
+      };
+      const saveAddresses = (uid, list) => {
+        fs.writeFileSync(addrFileFor(uid), JSON.stringify(list, null, 1));
+      };
+      socket.on('SAVE_ADDRESS', (addr, callback) => {
+        try {
+          if (!addr || !addr.name) { if (callback) callback({ ok: false, error: 'নাম দিন' }); return; }
+          const uid = socket.abcUser?.id || userId || 'anon';
+          const list = loadAddresses(uid);
+          const id = addr.id || ('addr-' + Date.now().toString(36));
+          const rec = Object.assign({}, addr, { id });
+          const i = list.findIndex(x => x.id === id);
+          if (i >= 0) list[i] = rec; else list.push(rec);
+          saveAddresses(uid, list);
+          if (callback) callback({ ok: true, addresses: list });
+        } catch (e) { if (callback) callback({ ok: false, error: 'সেভ করা যায়নি' }); }
+      });
+      socket.on('DELETE_ADDRESS', (id, callback) => {
+        try {
+          const uid = socket.abcUser?.id || userId || 'anon';
+          const list = loadAddresses(uid).filter(a => a.id !== id);
+          saveAddresses(uid, list);
+          if (callback) callback({ ok: true, addresses: list });
+        } catch (e) { if (callback) callback({ ok: false, error: 'মুছে ফেলা যায়নি' }); }
+      });
+
       socket.on('disconnect', async () => {
         this.log(`Disconnected: ${socket.id}`);
         // Don't destroy session immediately — allow reconnection
