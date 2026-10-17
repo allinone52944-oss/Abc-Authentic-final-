@@ -147,6 +147,7 @@
     <div class="m-tab" tabindex="0" role="button" onclick="location.href='/orders.html'"><div class="ico">📦</div>অর্ডার</div>
     <div class="m-tab" tabindex="0" role="button" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
     <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
+    <div class="m-tab" id="mAdminTab" style="display:none;" tabindex="0" role="button" onclick="location.href='/admin.html'"><div class="ico">⚙️</div>এডমিন</div>
   </div>
 </div>
 
@@ -309,7 +310,11 @@ async function init() {
   }
   const { user } = await meR.json();
   window._user = user;
-  if (user.role === 'admin') document.getElementById('adminLink').style.display = '';
+  if (user.role === 'admin') {
+    document.getElementById('adminLink').style.display = '';
+    const mAdmin = document.getElementById('mAdminTab');
+    if (mAdmin) mAdmin.style.display = '';
+  }
   // Wallet balance (was dropped in rebuild — restore)
   setText('balancePill', '৳' + bnNum(user.balance || 0));
   setText('hubBalance', '৳' + bnNum(user.balance || 0));
