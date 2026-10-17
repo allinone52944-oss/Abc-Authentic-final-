@@ -86,7 +86,8 @@ async function init(){
     (s.engine_id==='nid-replica'&&s.open?'<button class="btn" onclick="location.href=\'/nid-replica.html\'">⚡ এখনই তৈরি করুন →</button>':'')+
     (s.open?'<button class="btn" onclick="location.href=\'/order-create.html?service='+s.id+'\'">অর্ডার করুন →</button>'
            :'<div style="color:#dc2626;margin-top:12px;">এই সেবা এখন বন্ধ আছে</div>');
-  window._rules=s.rules_text||'কোনো বিশেষ নিয়ম নেই।';
+  // For manual services, use manual_instructions as the rules (unified, no duplication)
+  window._rules=(s.type==='manual'&&s.manual_instructions)?s.manual_instructions:(s.rules_text||'কোনো বিশেষ নিয়ম নেই।');
 }
 function showRules(){
   const bg=document.createElement('div');
