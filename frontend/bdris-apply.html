@@ -1712,7 +1712,16 @@ async function geoMirror(k, Ls) {
   while (S._opBusy && Date.now() - t0 < 30000) await new Promise(r => setTimeout(r, 700));
   // সাইটের নিজের option-value-ও পাঠাই — লেবেল-মেলানো ব্যর্থ হলেও নির্বাচন নিশ্চিত
   const site = (L._alt && L.altSite) ? L.altSite : L.site;
-  await mirrorSelect(site, label, L.childSite, node.value);
+  // 2026-10-17: city corp-এর zone WardInCityCorp-এ আসে, PaurasavaOrUnion-এ নয়।
+  // childSite-এ দুটোই দিলে engine যেটা populate হয় সেটার জন্য wait করবে।
+  let childSite = L.childSite;
+  if (k === 'cityCorpUpazila') {
+    const idx = Ls.indexOf(L);
+    const nextL = idx >= 0 ? Ls[idx + 1] : null;
+    const wc = nextL && nextL.altSite;
+    if (wc && !String(childSite).includes('WardInCityCorp')) childSite = childSite + ', ' + wc;
+  }
+  await mirrorSelect(site, label, childSite, node.value);
 }
 async function geoChanged(k, Ls, data) {
   Ls = Ls || GEO_LEVELS; data = data || (S.d.s1 = S.d.s1 || {});
