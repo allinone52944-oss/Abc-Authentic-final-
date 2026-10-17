@@ -375,3 +375,47 @@ class BdrisEngineV2 {
 }
 
 module.exports = { BdrisEngineV2 };
+
+// ── Bootstrap: standalone subprocess entry point ──
+// Adapter (index.js) এই file-কে subprocess হিসেবে spawn করে।
+// v1-এর মতো Express + Socket.IO server চালু করতে হবে, নইলে
+// health check "starting"-এ আটকে থাকবে।
+if (require.main === module) {
+  const express = require('express');
+  const http = require('http');
+  const { Server } = require('socket.io');
+
+  const PORT = parseInt(process.env.BDRIS_APPLY_PORT || '3102', 10);
+  const app = express();
+  app.use(express.json({ limit: '10mb' }));
+
+  app.get('/api/health', (req, res) => {
+    res.json({ ok: true, engine: 'bdris-apply-v2', time: new Date().toISOString() });
+  });
+
+  const server = http.createServer(app);
+  const io = new Server(server, {
+    cors: { origin: true, credentials: true },
+  });
+
+  const engine = new BdrisEngineV2(io, {});
+  // setupSocketHandlers() constructor-এই call হয়
+
+  server.listen(PORT, '127.0.0.1', () => {
+    console.log(`[bdris-apply-v2] listening on 127.0.0.1:${PORT}`);
+  });
+
+  process.on('unhandledRejection', (e) => {
+    console.error('UNHANDLED-REJECTION:', (e && e.stack) ? String(e.stack).slice(0, 500) : String(e).slice(0, 500));
+  });
+  process.on('uncaughtException', (e) => {
+    console.error('UNCAUGHT-EXCEPTION:', (e && e.stack) ? String(e.stack).slice(0, 500) : String(e).slice(0, 500));
+  });
+
+  const shutdown = async () => {
+    await engine.shutdown();
+    server.close(() => process.exit(0));
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+}
