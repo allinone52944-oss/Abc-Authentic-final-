@@ -76,7 +76,7 @@ async function show(tab) {
 /* ============ Phase 3: Voice alerts (Web Speech API, Bengali) ============ */
 const VoiceAlert = {
   enabled: localStorage.getItem('abc_voice') !== 'off',
-  _last: { recharge: 0, order: 0, manual: 0 },
+  _last: { recharge: 0, order: 0 },
   _voices: [],
   // Notification sound (plays alongside TTS; files were unused before)
   playSound(file) {
@@ -140,29 +140,7 @@ const VoiceAlert = {
       const s = await r.json();
       const pr = Number(s.pending_recharge || 0);
       const no = Number(s.orders_new || 0);
-      const mn = Number(s.manual_new || 0);
-      if (this._last.manual && mn > this._last.manual) {
-        this.playSound('new-message.mp3');
-        this.speak('নতুন ম্যানুয়াল আবেদন এসেছে। অনুগ্রহ করে চেক করুন।');
-        try {
-          const mr = await ABC.api('/admin/manual?status=new');
-          if (mr.ok) {
-            const md = await mr.json();
-            const latest = (md.list || [])[0];
-            if (latest && latest.user_name) {
-              setTimeout(() => {
-                const u = new SpeechSynthesisUtterance('কাস্টমার: ' + latest.user_name);
-                u.lang = 'bn-BD'; u.rate = 0.9; u.pitch = 1.1;
-                speechSynthesis.speak(u);
-              }, 3500);
-            }
-          }
-        } catch (e) {}
-        // On-screen popup for new manual submission
-        try {
-          if (window.AdmManual) { show('manual'); }
-        } catch (e) {}
-      } else if (this._last.recharge && pr > this._last.recharge) {
+      if (this._last.recharge && pr > this._last.recharge) {
         this.playSound('new-recharge.mp3');
         this.speak('নতুন রিচার্জ রিকোয়েস্ট এসেছে। অনুগ্রহ করে চেক করুন।');
         // Speak customer name sweetly via TTS
@@ -201,7 +179,6 @@ const VoiceAlert = {
       }
       this._last.recharge = pr;
       this._last.order = no;
-      this._last.manual = mn;
       // Unmatched SMS (separate lightweight endpoint; table may not exist yet)
       try {
         const sr = await ABC.api('/admin/stats/sms');
