@@ -147,6 +147,7 @@ class BdrisEngineV2 {
       ['SUBMIT_S2', 'submitS2', 120000],
       ['SUBMIT_S2B', 'submitS2B', 120000],
       ['SUBMIT_S3_DOCS', 'submitS3', 180000],
+      ['SUBMIT_S4_PREP', 'submitS4Prep', 120000],
       ['SUBMIT_S4_OTP', 'submitS4', 120000],
     ];
 
@@ -288,6 +289,67 @@ class BdrisEngineV2 {
           fail(e.message || 'FETCH_FAILED');
         }
       });
+
+      // Legacy compatibility: SUBMIT_* handlers emit STEP_CHANGE_ACK
+      // Frontend v1-এর মতো socket.emit('SUBMIT_S1', data) করে আর
+      // STEP_CHANGE_ACK-এর অপেক্ষা করে — সেই wire protocol বজায় রাখা হলো।
+      const legacySubmits = [
+        'SUBMIT_S0', 'SUBMIT_S1', 'SUBMIT_S2', 'SUBMIT_S2B',
+        'SUBMIT_S3_DOCS', 'SUBMIT_S4_PREP', 'SUBMIT_S4_OTP',
+      ];
+      for (const evName of legacySubmits) {
+        socket.on(evName, async (data = {}) => {
+          // Auto-init session if needed
+          if (!sessionId) {
+            try {
+              const sess = await this.sessionManager.create(userId, { socketId: socket.id });
+              sessionId = sess.id;
+              const nav0 = new BdrisNavigator(sess.page);
+              await nav0.gotoForm();
+            } catch (e) {
+              socket.emit('STEP_CHANGE_ACK', { step: 0, failed: [{ reason: e.message }] });
+              return;
+            }
+          }
+          const session = this.sessionManager.get(sessionId);
+          if (!session) {
+            socket.emit('STEP_CHANGE_ACK', { step: 0, failed: [{ reason: 'SESSION_EXPIRED' }] });
+            return;
+          }
+          this.sessionManager.touch(sessionId);
+          try {
+            const result = await this.executor.execute(evName, data, {
+              session,
+              emit: (ev, payload) => socket.emit(ev, payload),
+              socket,
+            });
+            // v1 shape: {step, message, failed, blocked}
+            socket.emit('STEP_CHANGE_ACK', {
+              step: result.step || 0,
+              message: result.message || '',
+              failed: result.failed || [],
+              blocked: result.blocked || undefined,
+              ok: result.ok,
+            });
+            // S4 completion → BOT_STATUS/COMPLETED for frontend
+            if (evName === 'SUBMIT_S4_OTP' && result.ok && result.completed) {
+              socket.emit('BOT_STATUS', {
+                status: 'COMPLETED',
+                ackId: result.ackId,
+                ackNum: result.ackNum,
+                screenshot: result.screenshot,
+                pdf: result.pdf,
+                original: result.originalRec || null,
+              });
+            }
+          } catch (e) {
+            socket.emit('STEP_CHANGE_ACK', {
+              step: 0,
+              failed: [{ reason: e.message || 'EXECUTION_FAILED' }],
+            });
+          }
+        });
+      }
 
       socket.on('disconnect', async () => {
         this.log(`Disconnected: ${socket.id}`);
