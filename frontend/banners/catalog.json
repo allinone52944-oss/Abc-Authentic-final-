@@ -1,1 +1,228 @@
-{"designs":[{"category":"promo","default_bn":"বিশেষ ছাড় চলছে!","default_en":"Special discount is on!","file":"01-golden-shine.html","id":1,"name":"গোল্ডেন শাইন","name_en":"Golden Shine"},{"category":"promo","default_bn":"গরম গরম অফার","default_en":"Hot fresh offers","file":"02-coffee-steam.html","id":2,"name":"কফি স্টিম","name_en":"Coffee Steam"},{"category":"offer","default_bn":"আজকের সেরা ডিল","default_en":"Today's best deal","file":"03-pulse-offer.html","id":3,"name":"পালস অফার","name_en":"Pulse Offer"},{"category":"announcement","default_bn":"গুরুত্বপূর্ণ ঘোষণা","default_en":"Important announcement","file":"04-marquee.html","id":4,"name":"মার্কি ঘোষণা","name_en":"Marquee"},{"category":"promo","default_bn":"ঝলমলে অফার","default_en":"Dazzling offers","file":"05-neon-gold.html","id":5,"name":"নিয়ন গোল্ড","name_en":"Neon Gold"},{"category":"promo","default_bn":"অফারের বৃষ্টি","default_en":"Raining offers","file":"06-bean-rain.html","id":6,"name":"বিন বৃষ্টি","name_en":"Bean Rain"},{"category":"announcement","default_bn":"নতুন আপডেট এসেছে","default_en":"New update arrived","file":"07-wave.html","id":7,"name":"ঢেউ","name_en":"Wave"},{"category":"announcement","default_bn":"মনোযোগ দিন...","default_en":"Pay attention...","file":"08-typewriter.html","id":8,"name":"টাইপরাইটার","name_en":"Typewriter"},{"category":"offer","default_bn":"সীমিত সময়ের অফার","default_en":"Limited time offer","file":"09-gradient-shift.html","id":9,"name":"গ্র্যাডিয়েন্ট","name_en":"Gradient Shift"},{"category":"festival","default_bn":"উৎসবের শুভেচ্ছা!","default_en":"Festival greetings!","file":"10-confetti.html","id":10,"name":"কনফেত্তি","name_en":"Confetti"},{"category":"festival","default_bn":"ঈদ মোবারক!","default_en":"Eid Mubarak!","file":"11-eid-glow.html","id":11,"name":"ঈদ গ্লো","name_en":"Eid Glow"},{"category":"festival","default_bn":"শুভ দুর্গাপূজা!","default_en":"Happy Durga Puja!","file":"12-puja-lights.html","id":12,"name":"পূজার আলো","name_en":"Puja Lights"},{"category":"festival","default_bn":"শুভ নববর্ষ!","default_en":"Happy New Year!","file":"13-fireworks.html","id":13,"name":"আতশবাজি","name_en":"Fireworks"},{"category":"festival","default_bn":"মহান বিজয় দিবস!","default_en":"Victory Day!","file":"14-flag-wave.html","id":14,"name":"পতাকা","name_en":"Flag Wave"},{"category":"festival","default_bn":"অমর একুশে!","default_en":"Amar Ekushey!","file":"15-language-day.html","id":15,"name":"ভাষা দিবস","name_en":"Language Day"},{"category":"offer","default_bn":"সময় শেষ হওয়ার আগে!","default_en":"Before time runs out!","file":"16-countdown.html","id":16,"name":"কাউন্টডাউন","name_en":"Countdown"},{"category":"offer","default_bn":"দুই দিকেই চমক","default_en":"Surprise on both sides","file":"17-flip-card.html","id":17,"name":"ফ্লিপ কার্ড","name_en":"Flip Card"},{"category":"promo","default_bn":"আলোয় আসুন!","default_en":"Step into the light!","file":"18-spotlight.html","id":18,"name":"স্পটলাইট","name_en":"Spotlight"},{"category":"announcement","default_bn":"সরাসরি আপডেট","default_en":"Live updates","file":"19-ticker.html","id":19,"name":"লাইভ টিকার","name_en":"Live Ticker"},{"category":"welcome","default_bn":"স্বাগতম!","default_en":"Welcome!","file":"20-welcome-bloom.html","id":20,"name":"স্বাগতম","name_en":"Welcome Bloom"},{"category":"welcome","default_bn":"আমাদের সাথে যোগ দিন","default_en":"Join us","file":"21-handshake.html","id":21,"name":"হ্যান্ডশেক","name_en":"Handshake"},{"category":"welcome","default_bn":"নতুনদের জন্য উপহার!","default_en":"Gift for newcomers!","file":"22-gift-box.html","id":22,"name":"গিফট বক্স","name_en":"Gift Box"},{"category":"maintenance","default_bn":"রক্ষণাবেক্ষণ চলছে","default_en":"Maintenance in progress","file":"23-gears.html","id":23,"name":"মেরামত","name_en":"Maintenance Gears"},{"category":"maintenance","default_bn":"শীঘ্রই ফিরছি","default_en":"Back soon","file":"24-hourglass.html","id":24,"name":"অপেক্ষা","name_en":"Back Soon"}],"version":1}
+{
+  "designs": [
+    {
+      "category": "promo",
+      "default_bn": "বিশেষ ছাড় চলছে!",
+      "default_en": "Special discount is on!",
+      "file": "01-golden-shine.html",
+      "id": 1,
+      "name": "গোল্ডেন শাইন",
+      "name_en": "Golden Shine"
+    },
+    {
+      "category": "promo",
+      "default_bn": "গরম গরম অফার",
+      "default_en": "Hot fresh offers",
+      "file": "02-coffee-steam.html",
+      "id": 2,
+      "name": "কফি স্টিম",
+      "name_en": "Coffee Steam"
+    },
+    {
+      "category": "offer",
+      "default_bn": "আজকের সেরা ডিল",
+      "default_en": "Today's best deal",
+      "file": "03-pulse-offer.html",
+      "id": 3,
+      "name": "পালস অফার",
+      "name_en": "Pulse Offer"
+    },
+    {
+      "category": "announcement",
+      "default_bn": "গুরুত্বপূর্ণ ঘোষণা",
+      "default_en": "Important announcement",
+      "file": "04-marquee.html",
+      "id": 4,
+      "name": "মার্কি ঘোষণা",
+      "name_en": "Marquee"
+    },
+    {
+      "category": "promo",
+      "default_bn": "ঝলমলে অফার",
+      "default_en": "Dazzling offers",
+      "file": "05-neon-gold.html",
+      "id": 5,
+      "name": "নিয়ন গোল্ড",
+      "name_en": "Neon Gold"
+    },
+    {
+      "category": "promo",
+      "default_bn": "অফারের বৃষ্টি",
+      "default_en": "Raining offers",
+      "file": "06-bean-rain.html",
+      "id": 6,
+      "name": "বিন বৃষ্টি",
+      "name_en": "Bean Rain"
+    },
+    {
+      "category": "announcement",
+      "default_bn": "নতুন আপডেট এসেছে",
+      "default_en": "New update arrived",
+      "file": "07-wave.html",
+      "id": 7,
+      "name": "ঢেউ",
+      "name_en": "Wave"
+    },
+    {
+      "category": "announcement",
+      "default_bn": "মনোযোগ দিন...",
+      "default_en": "Pay attention...",
+      "file": "08-typewriter.html",
+      "id": 8,
+      "name": "টাইপরাইটার",
+      "name_en": "Typewriter"
+    },
+    {
+      "category": "offer",
+      "default_bn": "সীমিত সময়ের অফার",
+      "default_en": "Limited time offer",
+      "file": "09-gradient-shift.html",
+      "id": 9,
+      "name": "গ্র্যাডিয়েন্ট",
+      "name_en": "Gradient Shift"
+    },
+    {
+      "category": "festival",
+      "default_bn": "উৎসবের শুভেচ্ছা!",
+      "default_en": "Festival greetings!",
+      "file": "10-confetti.html",
+      "id": 10,
+      "name": "কনফেত্তি",
+      "name_en": "Confetti"
+    },
+    {
+      "category": "festival",
+      "default_bn": "ঈদ মোবারক!",
+      "default_en": "Eid Mubarak!",
+      "file": "11-eid-glow.html",
+      "id": 11,
+      "name": "ঈদ গ্লো",
+      "name_en": "Eid Glow"
+    },
+    {
+      "category": "festival",
+      "default_bn": "শুভ দুর্গাপূজা!",
+      "default_en": "Happy Durga Puja!",
+      "file": "12-puja-lights.html",
+      "id": 12,
+      "name": "পূজার আলো",
+      "name_en": "Puja Lights"
+    },
+    {
+      "category": "festival",
+      "default_bn": "শুভ নববর্ষ!",
+      "default_en": "Happy New Year!",
+      "file": "13-fireworks.html",
+      "id": 13,
+      "name": "আতশবাজি",
+      "name_en": "Fireworks"
+    },
+    {
+      "category": "festival",
+      "default_bn": "মহান বিজয় দিবস!",
+      "default_en": "Victory Day!",
+      "file": "14-flag-wave.html",
+      "id": 14,
+      "name": "পতাকা",
+      "name_en": "Flag Wave"
+    },
+    {
+      "category": "festival",
+      "default_bn": "অমর একুশে!",
+      "default_en": "Amar Ekushey!",
+      "file": "15-language-day.html",
+      "id": 15,
+      "name": "ভাষা দিবস",
+      "name_en": "Language Day"
+    },
+    {
+      "category": "offer",
+      "default_bn": "সময় শেষ হওয়ার আগে!",
+      "default_en": "Before time runs out!",
+      "file": "16-countdown.html",
+      "id": 16,
+      "name": "কাউন্টডাউন",
+      "name_en": "Countdown"
+    },
+    {
+      "category": "offer",
+      "default_bn": "দুই দিকেই চমক",
+      "default_en": "Surprise on both sides",
+      "file": "17-flip-card.html",
+      "id": 17,
+      "name": "ফ্লিপ কার্ড",
+      "name_en": "Flip Card"
+    },
+    {
+      "category": "promo",
+      "default_bn": "আলোয় আসুন!",
+      "default_en": "Step into the light!",
+      "file": "18-spotlight.html",
+      "id": 18,
+      "name": "স্পটলাইট",
+      "name_en": "Spotlight"
+    },
+    {
+      "category": "announcement",
+      "default_bn": "সরাসরি আপডেট",
+      "default_en": "Live updates",
+      "file": "19-ticker.html",
+      "id": 19,
+      "name": "লাইভ টিকার",
+      "name_en": "Live Ticker"
+    },
+    {
+      "category": "welcome",
+      "default_bn": "স্বাগতম!",
+      "default_en": "Welcome!",
+      "file": "20-welcome-bloom.html",
+      "id": 20,
+      "name": "স্বাগতম",
+      "name_en": "Welcome Bloom"
+    },
+    {
+      "category": "welcome",
+      "default_bn": "আমাদের সাথে যোগ দিন",
+      "default_en": "Join us",
+      "file": "21-handshake.html",
+      "id": 21,
+      "name": "হ্যান্ডশেক",
+      "name_en": "Handshake"
+    },
+    {
+      "category": "welcome",
+      "default_bn": "নতুনদের জন্য উপহার!",
+      "default_en": "Gift for newcomers!",
+      "file": "22-gift-box.html",
+      "id": 22,
+      "name": "গিফট বক্স",
+      "name_en": "Gift Box"
+    },
+    {
+      "category": "maintenance",
+      "default_bn": "রক্ষণাবেক্ষণ চলছে",
+      "default_en": "Maintenance in progress",
+      "file": "23-gears.html",
+      "id": 23,
+      "name": "মেরামত",
+      "name_en": "Maintenance Gears"
+    },
+    {
+      "category": "maintenance",
+      "default_bn": "শীঘ্রই ফিরছি",
+      "default_en": "Back soon",
+      "file": "24-hourglass.html",
+      "id": 24,
+      "name": "অপেক্ষা",
+      "name_en": "Back Soon"
+    },
+    {
+      "id": 25,
+      "name": "ব্লু ওয়েভ",
+      "file": "samples/25-blue-wave.html",
+      "default_bn": "স্বাগতম",
+      "default_en": "Welcome to Abc Authentic"
+    }
+  ],
+  "version": 1
+}
