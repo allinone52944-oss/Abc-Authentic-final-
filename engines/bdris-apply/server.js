@@ -1408,7 +1408,7 @@ io.on('connection', (socket) => {
   socket.on('GET_ADDRESS_OPTIONS', async (data, callback) => {
     touchSession();
     try {
-      const { level, parents = {} } = data || {};
+      const { level, parents = {}, form = 'birth' } = data || {};
       if (!level) return callback({ error: 'level required' });
       for (let i = 0; i < 20 && !page; i++) await new Promise((r) => setTimeout(r, 500));
       if (!page) return callback({ error: 'Bot not ready' });
@@ -1418,13 +1418,15 @@ io.on('connection', (socket) => {
       const targetIdx = order.indexOf(level);
       if (targetIdx < 0) return callback({ error: 'invalid level: ' + level });
 
-      // BDRIS selectors for each level (birth address form)
+      // BDRIS selectors — form অনুযায়ী prefix বদলায়
+      // birth: birthPlace*, perm: permAddr*, prsnt: prsntAddr*
+      const pfx = form === 'perm' ? 'permAddr' : (form === 'prsnt' ? 'prsntAddr' : 'birthPlace');
       const SEL = {
-        division: '#birthPlaceDiv, select[name="birthPlaceDiv"]',
-        district: '#birthPlaceDist, select[name="birthPlaceDist"]',
-        upazila: '#birthPlaceCityCorpCantOrUpazila, select[name="birthPlaceCityCorpCantOrUpazila"]',
-        zone: '#birthPlacePaurasavaOrUnion, select[name="birthPlacePaurasavaOrUnion"], #birthPlaceWardInCityCorp, select[name="birthPlaceWardInCityCorp"]',
-        ward: '#birthPlaceWardInPaurasavaOrUnion, select[name="birthPlaceWardInPaurasavaOrUnion"]',
+        division: `#${pfx}Div, select[name="${pfx}Div"]`,
+        district: `#${pfx}Dist, select[name="${pfx}Dist"]`,
+        upazila: `#${pfx}CityCorpCantOrUpazila, select[name="${pfx}CityCorpCantOrUpazila"]`,
+        zone: `#${pfx}PaurasavaOrUnion, select[name="${pfx}PaurasavaOrUnion"], #${pfx}WardInCityCorp, select[name="${pfx}WardInCityCorp"]`,
+        ward: `#${pfx}WardInPaurasavaOrUnion, select[name="${pfx}WardInPaurasavaOrUnion"]`,
       };
 
       // Set parent selections in order, waiting for each child to populate

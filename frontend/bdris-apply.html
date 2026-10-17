@@ -1602,11 +1602,11 @@ function fetchOpts(selector, tmo) {
 }
 // PERMANENT FIX (2026-10-17): Engine-এর dedicated address endpoint ব্যবহার করো —
 // mirror logic-এর race condition ও state drift স্থায়ীভাবে দূর হয়।
-function fetchAddrOpts(level, parents, tmo) {
+function fetchAddrOpts(level, parents, tmo, form) {
   return new Promise((res) => {
     let done = false;
     const t = setTimeout(() => { if (!done) { done = true; res([]); } }, tmo || 25000);
-    socket.emit('GET_ADDRESS_OPTIONS', { level, parents }, (r) => {
+    socket.emit('GET_ADDRESS_OPTIONS', { level, parents, form: form || 'birth' }, (r) => {
       if (!done) { done = true; clearTimeout(t); res(Array.isArray(r) ? r : []); }
     });
   });
@@ -1700,7 +1700,10 @@ async function geoLoad(k, Ls, data, wantOv) {
         zone: data.paurasavaUnion || '',
       };
       const lvl = (k === 'paurasavaUnion') ? 'zone' : 'ward';
-      opts = await fetchAddrOpts(lvl, parents, 25000);
+      // Form নির্ণয়: UI id prefix থেকে (g_=birth, sp_=perm, pr_=prsnt)
+      const uiId = L.ui || '';
+      const form = uiId.startsWith('sp_') ? 'perm' : (uiId.startsWith('pr_') ? 'prsnt' : 'birth');
+      opts = await fetchAddrOpts(lvl, parents, 25000, form);
       // zone-এর জন্য WardInCityCorp থেকে এলে fromAlt সেট করো (label-এর জন্য)
       if (lvl === 'zone' && opts.length) {
         // Engine দুটো selector-ই check করে, যেটায় পায় সেটা ফেরত দেয়
