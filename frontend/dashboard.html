@@ -333,10 +333,10 @@ async function loadServices() {
     const svcs = d.services || [];
     setText('hubServices', bnNum(svcs.length));
     pop.innerHTML = svcs.slice(0, 4).map(s =>
-      '<div class="svc2" onclick="location.href=\'/services.html\'"><div class="ico">' + (s.icon || autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
+      '<div class="svc2" onclick="location.href=\'/services.html\'"><div class="ico">' + ((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
     ).join('') || '<div>কোনো সেবা নেই</div>';
     mob.innerHTML = svcs.slice(0, 6).map(s =>
-      '<div class="svc2" onclick="location.href=\'/services.html\'"><div class="ico">' + (s.icon || autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml((s.name_bn || s.name).slice(0,8)) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
+      '<div class="svc2" onclick="location.href=\'/services.html\'"><div class="ico">' + ((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml((s.name_bn || s.name).slice(0,8)) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
     ).join('') || '<div>কোনো সেবা নেই</div>';
   } catch (e) {
     setText('hubServices', '–');

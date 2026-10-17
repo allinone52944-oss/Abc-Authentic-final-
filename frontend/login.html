@@ -191,6 +191,11 @@ body {
   </div>
 </div>
 <script>
+/* DARK-MODE PASSWORD FIX: Chromium paints type=password via UA !important
+   (beats author CSS, so no stylesheet can override). Where supported,
+   render as text + disc masking instead; autocomplete attrs keep the
+   password manager working. Firefox keeps native type=password. */
+try{if(window.CSS&&CSS.supports('-webkit-text-security','disc')){document.querySelectorAll('input[type="password"]').forEach(function(el){el.setAttribute('type','text');el.style.webkitTextSecurity='disc';});}}catch(e){}
 // Maintenance notice (H-5: backend also gates APIs with 503 during maintenance)
 (async () => {
   try {
