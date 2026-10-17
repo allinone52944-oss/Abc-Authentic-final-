@@ -64,7 +64,10 @@ function scheduleRestart() {
 
 function init() {
   if (_proc || _installing) return;
-  const serverJs = path.join(engineDir(), 'server.js');
+  // v2 engine (permanent rewrite) — falls back to v1 if v2 not present
+  const v2ServerJs = path.join(engineDir(), 'v2', 'server.js');
+  const v1ServerJs = path.join(engineDir(), 'server.js');
+  const serverJs = fs.existsSync(v2ServerJs) ? v2ServerJs : v1ServerJs;
   if (!fs.existsSync(serverJs)) {
     console.error('[bdris-apply] server.js not found, engine not started');
     return;
@@ -107,7 +110,9 @@ function init() {
 
 function startEngine() {
   if (_proc) return;
-  const serverJs = path.join(engineDir(), 'server.js');
+  const v2ServerJs = path.join(engineDir(), 'v2', 'server.js');
+  const v1ServerJs = path.join(engineDir(), 'server.js');
+  const serverJs = fs.existsSync(v2ServerJs) ? v2ServerJs : v1ServerJs;
   _proc = spawn(process.execPath, [serverJs], {
     cwd: engineDir(),
     env: Object.assign({}, process.env, {
