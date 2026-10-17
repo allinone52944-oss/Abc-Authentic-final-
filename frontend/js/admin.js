@@ -1528,6 +1528,8 @@ window.AdmBn = {
       fld('লেখা (বাংলা)', 'text', 'bn_text_bn') +
       fld('লেখা (English)', 'text', 'bn_text_en') +
       fld('লিংক (optional)', 'text', 'bn_link') +
+      '<div class="field"><label>ব্যাকগ্রাউন্ড রং (optional)</label><input type="color" id="bn_bg_color" value="#1e40af" style="width:60px;height:40px;"></div>' +
+      '<div class="field"><label>লেখার রং (optional)</label><input type="color" id="bn_text_color" value="#ffffff" style="width:60px;height:40px;"></div>' +
       '<button class="btn" onclick="AdmBn.create()">তৈরি করুন</button>');
     this.updatePreview();
     ['bn_text_bn', 'bn_text_en'].forEach((id) => {
@@ -1547,12 +1549,16 @@ window.AdmBn = {
     const bn = document.getElementById('bn_text_bn');
     const en = document.getElementById('bn_text_en');
     const lk = document.getElementById('bn_link');
+    const bgc = document.getElementById('bn_bg_color');
+    const txc = document.getElementById('bn_text_color');
     const html = await BannerRender.render({
       design_id: this._selDesign,
       content: {
         text_bn: (bn && bn.value) || d.default_bn,
         text_en: (en && en.value) || d.default_en,
         link: (lk && lk.value) || '',
+        bg_color: (bgc && bgc.value) || '',
+        text_color: (txc && txc.value) || '',
       },
     });
     const pv = document.getElementById('bnPreview');
@@ -1564,7 +1570,8 @@ window.AdmBn = {
       title: v('bn_title'), design_id: this._selDesign,
       animation_type: document.getElementById('bn_anim').value,
       animation_speed: Number(document.getElementById('bn_speed').value) || 30,
-      content: { text_bn: v('bn_text_bn'), text_en: v('bn_text_en'), link: v('bn_link') },
+      content: { text_bn: v('bn_text_bn'), text_en: v('bn_text_en'), link: v('bn_link'),
+        bg_color: v('bn_bg_color'), text_color: v('bn_text_color') },
     }});
     if (!r.ok) { alert('ব্যর্থ'); return; }
     closeModal(); show('banners');

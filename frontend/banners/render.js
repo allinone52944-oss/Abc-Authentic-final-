@@ -28,6 +28,9 @@
     const c = banner.content || {};
     const textBn = esc(c.text_bn || d.default_bn);
     const textEn = esc(c.text_en || d.default_en);
+    // Custom colors (admin can override design colors)
+    const bgColor = c.bg_color ? String(c.bg_color).trim() : '';
+    const textColor = c.text_color ? String(c.text_color).trim() : '';
 
     let html;
     try {
@@ -43,7 +46,10 @@
     let body = bodyMatch ? bodyMatch[1] : html;
     body = body.split('{{text_bn}}').join(textBn).split('{{text_en}}').join(textEn);
     const link = c.link ? String(c.link).trim() : '';
-    const inner = '<style>' + css + '</style>' + body;
+    let customCss = '';
+    if (bgColor) customCss += '.bn{background:' + esc(bgColor) + ' !important;}';
+    if (textColor) customCss += '.bn h2,.bn p{color:' + esc(textColor) + ' !important;}';
+    const inner = '<style>' + css + customCss + '</style>' + body;
     if (link) {
       return '<a href="' + esc(link) + '" target="_blank" rel="noopener" style="text-decoration:none;display:block;">' + inner + '</a>';
     }
