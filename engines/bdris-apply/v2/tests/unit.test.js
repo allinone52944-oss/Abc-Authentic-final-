@@ -124,4 +124,100 @@ describe('SessionManager', () => {
   });
 });
 
+describe('OriginalFetcher (no browser)', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { OriginalFetcher } = require('../services/OriginalFetcher');
+
+  const fakeBM = { launch: async () => { throw new Error('no browser in unit test'); } };
+
+  function tmpDir() {
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'origfetch-'));
+  }
+
+  it('cachedOriginal returns null when no file', () => {
+    const f = new OriginalFetcher({ browserManager: fakeBM, frontendDir: tmpDir(), log: () => {} });
+    assert.strictEqual(f.cachedOriginal('12345'), null);
+  });
+
+  it('cachedOriginal validates %PDF header and size', () => {
+    const dir = tmpDir();
+    const buf = Buffer.concat([Buffer.from('%PDF-1.4 test'), Buffer.alloc(9000)]);
+    fs.writeFileSync(path.join(dir, 'bdris-original-999.pdf'), buf);
+    fs.writeFileSync(path.join(dir, 'bdris-original-111.pdf'), Buffer.from('tiny'));
+    const f = new OriginalFetcher({ browserManager: fakeBM, frontendDir: dir, log: () => {} });
+    const hit = f.cachedOriginal('999');
+    assert.strictEqual(hit.ok, true);
+    assert.strictEqual(hit.url, '/bdris-original-999.pdf');
+    assert.strictEqual(hit.cached, true);
+    assert.strictEqual(f.cachedOriginal('111'), null); // too small
+    assert.strictEqual(f.cachedOriginal('000'), null); // missing
+  });
+
+  it('ensureOriginal returns cached result without browser', async () => {
+    const dir = tmpDir();
+    const buf = Buffer.concat([Buffer.from('%PDF-1.4 test'), Buffer.alloc(9000)]);
+    fs.writeFileSync(path.join(dir, 'bdris-original-777.pdf'), buf);
+    const f = new OriginalFetcher({ browserManager: fakeBM, frontendDir: dir, log: () => {} });
+    const job = await f.ensureOriginal({ appId: '777' });
+    assert.strictEqual(job.status, 'done');
+    assert.strictEqual(job.result.cached, true);
+  });
+
+  it('ensureOriginal rejects on missing appId', async () => {
+    const f = new OriginalFetcher({ browserManager: fakeBM, frontendDir: tmpDir(), log: () => {} });
+    await assert.rejects(() => f.ensureOriginal({}), /MISSING_APPID/);
+  });
+
+  it('hanging job settles via timeout (v1 bug fix)', async () => {
+    // _runJob never resolves — job must still settle as failed, not hang forever
+    const f = new OriginalFetcher({
+      browserManager: fakeBM, frontendDir: tmpDir(),
+      jobTimeoutMs: 300, jobTtlMs: 60000, log: () => {},
+    });
+    f._runJob = () => new Promise(() => {}); // hang forever
+    const job = await f.ensureOriginal({ appId: '555' });
+    assert.strictEqual(job.status, 'failed');
+    assert.match(job.result.err, /timed out/);
+    assert.strictEqual(f.getStatus('555').status, 'failed');
+  });
+
+  it('concurrent callers join the same running job', async () => {
+    const f = new OriginalFetcher({
+      browserManager: fakeBM, frontendDir: tmpDir(), log: () => {},
+    });
+    let calls = 0;
+    f._runJob = async () => { calls++; await new Promise(r => setTimeout(r, 100)); return { ok: true, url: '/x.pdf', bytes: 9000 }; };
+    const [a, b] = await Promise.all([
+      f.ensureOriginal({ appId: '333' }),
+      f.ensureOriginal({ appId: '333' }),
+    ]);
+    assert.strictEqual(calls, 1); // single job for same appId
+    assert.strictEqual(a, b);
+    assert.strictEqual(a.status, 'done');
+  });
+
+  it('finished jobs are cleaned up after TTL (v1 leak fix)', async () => {
+    const f = new OriginalFetcher({
+      browserManager: fakeBM, frontendDir: tmpDir(), jobTtlMs: 200, log: () => {},
+    });
+    f._runJob = async () => ({ ok: false, url: null, bytes: 0 });
+    await f.ensureOriginal({ appId: '222' });
+    assert.ok(f.getStatus('222'));
+    await new Promise(r => setTimeout(r, 400));
+    assert.strictEqual(f.getStatus('222'), null); // cleaned
+  });
+
+  it('saveRec/loadRec round-trip via index file', () => {
+    const dir = tmpDir();
+    const idx = path.join(dir, 'originals-index.json');
+    const f = new OriginalFetcher({ browserManager: fakeBM, frontendDir: dir, indexFile: idx, log: () => {} });
+    assert.strictEqual(f.loadRec('123'), null);
+    const rec = { appId: '123', date: '01/01/2020', nameEn: 'Test', mobileNo: '01700000000' };
+    assert.strictEqual(f.saveRec('123', rec), true);
+    assert.deepStrictEqual(f.loadRec('123'), rec);
+  });
+});
+
 console.log('All v2 unit tests passed!');

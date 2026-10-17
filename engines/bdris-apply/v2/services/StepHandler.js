@@ -1932,4 +1932,4 @@ class StepHandler {
   }
 }
 
-module.exports = { StepHandler };
+module.exports = { StepHandler, verifyChargeToken };

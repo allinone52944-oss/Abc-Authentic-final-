@@ -20,6 +20,8 @@ const { SessionManager } = require('./core/SessionManager');
 const { CommandExecutor } = require('./core/CommandExecutor');
 const { BdrisNavigator } = require('./services/BdrisNavigator');
 const { AddressService } = require('./services/AddressService');
+const { StepHandler, verifyChargeToken } = require('./services/StepHandler');
+const { OriginalFetcher } = require('./services/OriginalFetcher');
 
 class BdrisEngineV2 {
   constructor(io, options = {}) {
@@ -39,6 +41,14 @@ class BdrisEngineV2 {
 
     this.executor = new CommandExecutor({
       defaultTimeoutMs: options.defaultTimeoutMs || 60000,
+    });
+
+    // ── OriginalFetcher: আসল PDF (কার্যালয়ের কপি) ──
+    // v1 original-fetcher.js থেকে migrate; নিজস্ব isolated browser context ব্যবহার করে,
+    // চলমান আবেদন-সেশনে হাত দেয় না।
+    this.originalFetcher = new OriginalFetcher({
+      browserManager: this.browserManager,
+      log: (...a) => this.log(...a),
     });
 
     this.registerCommands();
@@ -93,6 +103,38 @@ class BdrisEngineV2 {
         return { ready: true };
       },
       { timeoutMs: 45000 }
+    );
+
+    // ── FETCH_ORIGINAL: আসল PDF (কার্যালয়ের কপি) ──
+    // v1-এর socket.on('FETCH_ORIGINAL') থেকে migrate।
+    // Charge token যাচাই (backend /charge/pdf দেয়) — টোকেন ছাড়া ডাউনলোড নয়।
+    // {ok:true, url} বা {ok:false, error} ফেরত দেয়।
+    this.executor.register('FETCH_ORIGINAL',
+      async (params, ctx) => {
+        const data = params || {};
+        const userId = ctx.socket?.abcUser?.id || null;
+
+        if (process.env.ABC_JWT_SECRET) {
+          if (!verifyChargeToken(data._chargeToken, userId, 'pdf')) {
+            throw new Error('CHARGE_REQUIRED');
+          }
+        }
+
+        const ack = String(data.ack || data.ackId || '').replace(/\D/g, '');
+        // rec সরাসরি আসতে পারে, নইলে shared index (v1-এর সাথে continuity) থেকে
+        let rec = data.rec || null;
+        if (!rec) {
+          if (!ack) throw new Error('MISSING_ACK');
+          rec = this.originalFetcher.loadRec(ack);
+        }
+        if (!rec) throw new Error('NO_RECORD');
+
+        const job = await this.originalFetcher.ensureOriginal(rec);
+        const r = job.result || {};
+        if (!r.ok) throw new Error(r.err || 'FETCH_FAILED');
+        return { ok: true, url: r.url, bytes: r.bytes || 0, ackId: this.originalFetcher.keyOf(rec.appId) };
+      },
+      { timeoutMs: 6 * 60 * 1000 } // job timeout (5min) + buffer
     );
 
     // Add more commands here as needed:
@@ -218,6 +260,33 @@ class BdrisEngineV2 {
           command: 'GET_ADDRESS_OPTIONS',
           params: data,
         }, callback);
+      });
+
+      // Legacy compatibility: FETCH_ORIGINAL direct
+      // Frontend socket.emit('FETCH_ORIGINAL', {ack, _chargeToken}) করে আর
+      // BOT_STATUS/ORIGINAL_PDF event-এর অপেক্ষা করে — সেই shape বজায় রাখা হলো।
+      // Session লাগে না (OriginalFetcher নিজস্ব isolated context ব্যবহার করে)।
+      socket.on('FETCH_ORIGINAL', async (data = {}) => {
+        const ack = String(data.ack || data.ackId || '').replace(/\D/g, '');
+        const fail = (msg) => socket.emit('BOT_STATUS', {
+          status: 'ORIGINAL_PDF', ackId: ack, original: null, ok: false, error: msg,
+        });
+        try {
+          const result = await this.executor.execute('FETCH_ORIGINAL', data, {
+            session: sessionId ? this.sessionManager.get(sessionId) : null,
+            emit: (ev, payload) => socket.emit(ev, payload),
+            socket,
+          });
+          if (!result.ok) return fail(result.error || result.message);
+          socket.emit('BOT_STATUS', {
+            status: 'ORIGINAL_PDF',
+            ackId: result.ackId || ack,
+            original: result.url || null,
+            ok: true,
+          });
+        } catch (e) {
+          fail(e.message || 'FETCH_FAILED');
+        }
       });
 
       socket.on('disconnect', async () => {
