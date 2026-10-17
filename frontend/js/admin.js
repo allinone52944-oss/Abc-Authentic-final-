@@ -61,6 +61,9 @@ async function init() {
 let _showGen = 0;
 async function show(tab) {
   const gen = ++_showGen;
+  // Close mobile sidebar menu when navigating
+  const sb = document.querySelector('.sidebar');
+  if (sb) sb.classList.remove('open');
   if (!content) return;
   content.innerHTML = '<div style="color:var(--muted)">লোড হচ্ছে…</div>';
   try {

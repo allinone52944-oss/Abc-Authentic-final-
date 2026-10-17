@@ -68,7 +68,8 @@
   #content .field label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; }
   #content .badge { font-size:11px; padding:3px 10px; border-radius:20px; font-weight:600; background:#dbeafe; color:#1d4ed8; }
   #content .err { color:#dc2626; } #content .okmsg { color:#16a34a; }
-  @media (max-width:768px) { .sidebar { display:none; } }
+  @media (max-width:768px) { .sidebar { display:none; } .sidebar.open { display:block; position:fixed; top:0; left:0; height:100vh; z-index:1000; } #mMenuBtn { display:flex !important; } }
+  #mMenuBtn { display:none; position:fixed; bottom:20px; right:20px; width:56px; height:56px; border-radius:50%; background:#1e40af; color:#fff; font-size:24px; align-items:center; justify-content:center; z-index:1001; box-shadow:0 4px 12px rgba(0,0,0,0.3); border:none; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -108,12 +109,13 @@
 </div>
 <script src="/js/app.js?v=13"></script>
 <script src="/banners/render.js?v=2"></script>
-<script src="/js/admin.js?v=38"></script>
+<script src="/js/admin.js?v=39"></script>
 <script>
 // Register service worker (push notifications only, no caching — see sw.js v6)
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 </script>
+<button id="mMenuBtn" onclick="document.querySelector('.sidebar').classList.toggle('open')">☰</button>
 </body>
 </html>
