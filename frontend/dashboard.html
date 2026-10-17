@@ -50,7 +50,7 @@
   .svc2:hover { transform:translateY(-3px); box-shadow:0 8px 20px rgba(30,64,175,.12); border-color:#93c5fd; }
   .svc2:active { transform:translateY(-1px); }
   .svc2 .ico { font-size:26px; margin-bottom:6px; }
-  .svc2 h4 { font-size:13px; }
+  .svc2 h4 { font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .svc2 p { font-size:11px; color:#64748b; }
   .svc2 .pr { font-size:13px; font-weight:700; color:#1e40af; margin-top:4px; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
@@ -339,7 +339,7 @@ async function loadServices() {
       '<div class="svc2" onclick="location.href=\'/services.html\'"><div class="ico">' + escapeHtml((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
     ).join('') || '<div>কোনো সেবা নেই</div>';
     mob.innerHTML = svcs.slice(0, 6).map(s =>
-      '<div class="svc2" onclick="location.href=\'/services.html\'"><div class="ico">' + escapeHtml((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml((s.name_bn || s.name).slice(0,8)) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
+      '<div class="svc2" onclick="location.href=\'/services.html\'"><div class="ico">' + escapeHtml((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
     ).join('') || '<div>কোনো সেবা নেই</div>';
   } catch (e) {
     setText('hubServices', '–');
@@ -354,15 +354,16 @@ async function loadNotices() {
     if (!r.ok) throw new Error('bad');
     const d = await r.json();
     const valid = (d.notices || []).filter(n => (n.title||'').trim() || (n.message||'').trim()).slice(0,3);
+    const trunc = (s, n) => { s = String(s||''); return s.length > n ? s.slice(0, s.lastIndexOf(' ', n)) + '…' : s; };
     box.innerHTML = valid.map(n =>
-      '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;"><b style="font-size:13px;">' + escapeHtml(n.title) + '</b><br><span style="font-size:12px;color:#64748b;">' + escapeHtml((n.message||'').slice(0,60)) + '</span></div>'
+      '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;"><b style="font-size:13px;">' + escapeHtml(n.title) + '</b><br><span style="font-size:12px;color:#64748b;">' + escapeHtml(trunc(n.message, 60)) + '</span></div>'
     ).join('') || '<div style="color:#64748b;">কোনো নোটিশ নেই</div>';
     // mobile strip: first notice only
     const mn = document.getElementById('mNotices');
     if (mn) {
       if (valid.length) {
         mn.style.display = 'block';
-        mn.innerHTML = '🔔 <b>' + escapeHtml(valid[0].title) + '</b> ' + escapeHtml((valid[0].message||'').slice(0,50));
+        mn.innerHTML = '🔔 <b>' + escapeHtml(valid[0].title) + '</b> ' + escapeHtml(trunc(valid[0].message, 50));
       } else { mn.style.display = 'none'; }
     }
   } catch (e) {
