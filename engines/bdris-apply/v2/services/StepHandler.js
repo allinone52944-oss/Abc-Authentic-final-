@@ -976,6 +976,227 @@ class StepHandler {
     };
   }
 
+  /**
+   * Step 4-prep: Contact info (email/phone) + "ওটিপি পাঠান" button
+   * Migrated from v1 SUBMIT_S4_PREP (server.js) — selectors/timing preserved.
+   * v1 appData-equivalents come from data + constructor options.
+   */
+  async submitS4Prep(data = {}) {
+    if (!this.page) {
+      this.progress('❌ সংযোগ নেই — আবার চেষ্টা করুন।');
+      return { ok: false, message: '❌ সংযোগ নেই — আবার চেষ্টা করুন।' };
+    }
+    // v1 appData-equivalent for cinno / probe-autofix
+    const fd = {
+      s1: data.s1 || {},
+      singleName: data.singleName !== undefined ? data.singleName : this.singleName,
+      gatePassedNames: data.gatePassedNames !== undefined ? data.gatePassedNames : this.gatePassedNames,
+    };
+    const failed = [];
+    let resumable = false;
+    let otpSent = false;
+
+    this.progress('🔄 যোগাযোগের তথ্য বসানো হচ্ছে...');
+    const anchor = await this._waitVisible(['#email', 'input[name="email"]', '#phone', 'input[name="phone"]'], 12000);
+    if (!anchor) {
+      // সেশন নতুন করে তৈরি হয়েছে কি না — সাইট ধাপ ১-এ থাকলে UI চেইন রিপ্লে করবে
+      const atStart = await this._waitVisible(
+        ['#officeBirthplace', 'input[name="officeAddressType"]', 'select[name="officeAddrCountry"]'], 3000);
+      if (atStart) {
+        resumable = true;
+        this.progress('🔄 নতুন সেশন — তথ্যগুলো আবার বসিয়ে ওটিপি পাঠানো হবে…');
+        return {
+          ok: true, step: 6, otpSent: false, resumable: true, failed: [], blocked: false,
+          message: '🔄 তথ্য আবার বসিয়ে ওটিপি পাঠানো হবে — একটু অপেক্ষা করুন।',
+        };
+      }
+      failed.push({ field: 'যোগাযোগ ধাপ', reason: 'পেজ পাওয়া যায়নি' });
+    }
+    if (anchor && data.email) {
+      const r = await this._typeInto(['#email', 'input[name="email"]'], data.email, 'ইমেইল', {});
+      if (!r.ok && !r.skipped) failed.push({ field: r.field, reason: r.reason });
+    }
+    if (anchor && data.phone) {
+      const r = await this._typeInto(['#phone', 'input[name="phone"]', 'input[type="tel"]'],
+        data.phone, 'মোবাইল নম্বর', { required: true });
+      if (!r.ok) failed.push({ field: r.field, reason: r.reason });
+      // সাইটের getPhone() সরাসরি #phone.value পড়ে — intl-tel-input স্পেস/ড্যাশ বসালে
+      // digitOrPlus/length রুল ফেল করে validateForm() চুপচাপ আটকায় (2026-10-11)।
+      // তাই মান নরমালাইজ (শুধু ডিজিট/প্লাস) করে দিই, তারপর ফাঁকা হলে নতুন করে লিখি।
+      const normPhone = await this.page.evaluate(() => {
+        const el = document.querySelector('#phone');
+        if (!el) return { raw: '', clean: '' };
+        const raw = String(el.value || '');
+        const clean = raw.replace(/[^\d+]/g, '');
+        if (clean !== raw) {
+          el.value = clean;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        return { raw, clean };
+      }).catch(() => ({ raw: '', clean: '' }));
+      if (!/\d{4,}/.test(String(normPhone.clean).replace(/[^\d]/g, ''))) {
+        await this._typeInto(['#phone', 'input[name="phone"]'], String(data.phone).replace(/\D/g, ''),
+          'মোবাইল নম্বর (পুনঃলিখন)', { typeCharByChar: true });
+      }
+    }
+    // ── cinno-প্রথম (2026-10-11): ওটিপি পাঠানোর *আগেই* নামে cinno-সহ আসল রূপ
+    // (hidden join সহ) + name-rule শিথিল — সার্ভারে যাওয়া তথ্যেই cinno থাকে।
+    // আটকালে নিচের probe-ফলব্যাক সাথে সাথে cinno বাদ দেয় — নাগরিক আটকাবে না।
+    let cinnosPre = [];
+    if (anchor) {
+      cinnosPre = buildCinnos(fd);
+      if (cinnosPre.length) {
+        const n = await applyCinnos(this.page, cinnosPre, true);
+        const rx = await relaxNameRules(this.page);
+        console.log('S4PREP-CINNO-SNEAK:', JSON.stringify({ applied: n + '/' + cinnosPre.length, relax: rx }));
+      }
+    }
+    // ── সাবমিট-পূর্ব যাচাই (probe) + অটো-ফিক্স — সাইটের validateForm() কখনো
+    // চুপচাপ আটকায় (না toast, না SMS); এখানেই ধরব ও নিজেরাই সারাব।
+    if (anchor) {
+      const probe = () => this.page.evaluate(() => {
+        try {
+          const ok = (typeof validateForm === 'function') ? validateForm() : null;
+          const errs = [];
+          document.querySelectorAll('.form-to-be-validated label.error, .form-to-be-validated .text-danger, .form-to-be-validated .invalid-feedback').forEach((e) => {
+            if (e.offsetParent === null) return;
+            const t = (e.innerText || '').trim();
+            if (t && !errs.includes(t)) errs.push(t.slice(0, 100));
+          });
+          const g = (s) => { const el = document.querySelector(s); return el ? String(el.value || '').slice(0, 30) : ''; };
+          return { valid: ok, errs: errs.slice(0, 5), phone: g('#phone'), email: g('#email') };
+        } catch (e) { return { valid: null, errs: [], phone: '', email: '' }; }
+      }).catch(() => ({ valid: null, errs: [], phone: '', email: '' }));
+      if (fd.singleName) await relaxEmptyLast(this.page, fd.singleName).catch(() => {});
+      let p = await probe();
+      console.log('S4-PRE-PROBE:', JSON.stringify(p).slice(0, 300));
+      if (p.valid === false) {
+        console.log('S4-PROBE-BLOCKED:', JSON.stringify(p));
+        const s1 = fd.s1 || {};
+        const nmFallback = [s1.firstNameEn, s1.lastNameEn].map((x) => String(x || '').trim()).filter(Boolean).join(' ');
+        const fix = await this.page.evaluate((nmFb) => {
+          const out = {};
+          const radios = Array.from(document.querySelectorAll('input[name="relationWithApplicant"]'));
+          if (radios.length) {
+            const c = radios.find((r) => r.checked);
+            if (!c || c.offsetParent === null) {
+              const vis = radios.filter((r) => r.offsetParent !== null && r.getClientRects().length);
+              const t = vis.find((r) => r.value === 'SELF') || vis.find((r) => r.value === 'FATHER') || vis[0];
+              if (t) { t.click(); out.relation = t.value; }
+            }
+          }
+          const d = document.querySelector('#declaration');
+          if (d && !d.checked) { d.click(); out.decl = true; }
+          const nm = document.querySelector('#applicantName');
+          if (nm && nm.offsetParent !== null && String(nm.value || '').trim().length < 2 && nmFb) {
+            nm.removeAttribute('readonly');
+            nm.value = nmFb;
+            nm.dispatchEvent(new Event('input', { bubbles: true }));
+            nm.dispatchEvent(new Event('change', { bubbles: true }));
+            out.name = true;
+          }
+          return out;
+        }, nmFallback).catch(() => ({}));
+        console.log('S4-AUTOFIX:', JSON.stringify(fix));
+        await this.page.waitForTimeout(800);
+        p = await probe();
+      }
+      if (p.valid === false && fd.singleName && !fd.gatePassedNames) {
+        // ১-নাম: খালি শেষ-নামে সাইটের validateForm() আটকালে — OTP-ধাপ পার হতেই
+        // বাধ্য-পূরণ; চূড়ান্ত সাবমিটে আবার খালি করে এক-নাম রেকর্ড রাখার চেষ্টা হবে
+        const f = await fillDoubledLast(this.page, fd.s1 || {}, fd.singleName);
+        console.log('S4PREP-SINGLE-FORCE-FILL:', f);
+        await this.page.waitForTimeout(600);
+        p = await probe();
+        console.log('S4-PRE-PROBE(after fill):', JSON.stringify(p).slice(0, 200));
+      }
+      if (p.valid === false && cinnosPre.length) {
+        // cinno-র কারণেই আটকেছে — নাগরিক আটকাবে না: cinno বাদ দিয়ে আবার যাচাই
+        await applyCinnos(this.page, cinnosPre, false);
+        console.log('S4PREP-CINNO-REVERT (validateForm blocked)');
+        await this.page.waitForTimeout(400);
+        p = await probe();
+        console.log('S4-PRE-PROBE(clean):', JSON.stringify(p).slice(0, 300));
+      }
+      if (p.valid === false) {
+        failed.push({ field: 'ফরম যাচাই', reason: `সাইটের নিজস্ব যাচাইয়ে বাকি: ${p.errs.join(' | ') || 'কিছু ঘর অসম্পূর্ণ'}` });
+      }
+    }
+    // ── "ওটিপি পাঠান" ক্লিক + সত্যিকারের প্রমাণ ──
+    if (anchor) {
+      const sendBtn = await this._waitVisible(['button:has-text("ওটিপি পাঠান")'], 10000);
+      if (!sendBtn) {
+        failed.push({ field: 'ওটিপি পাঠান', reason: 'বাটন পাওয়া যায়নি' });
+      } else {
+        const clickedOk = await this._robustClick(sendBtn, 'ওটিপি পাঠান', 8000);
+        console.log('S4-SENDOTP-CLICK:', clickedOk ? 'ok' : 'fail');
+        const ev = await this._waitOtpEvidence(30000);
+        if (ev.ok) {
+          otpSent = true;
+          // সাইট কী বলল (মোবাইল/ইমেইল কোথায় পাঠাল) — operator log-এর জন্য
+          if (ev.note) console.log('OTP-SITE-MSG:', ev.note);
+          this.progress('📲 কোড পাঠানো হয়েছে — হাতে আসা কোড নিচে বসান');
+        } else {
+          failed.push({ field: 'ওটিপি পাঠান', reason: ev.reason });
+        }
+      }
+    }
+    await this._dismissNotices();
+    return {
+      ok: failed.length === 0,
+      step: 6, otpSent, resumable,
+      message: otpSent ? '📲 ওটিপি পাঠানো হয়েছে! কোডটি বসিয়ে জমা দিন।'
+        : `⚠️ ওটিপি পাঠানো যায়নি — ${failed.length}টি কারণে।`,
+      failed,
+      blocked: failed.length > 0,
+    };
+  }
+
+  /**
+   * OTP পাঠানোর সত্যিকারের প্রমাণ — toast / #otpIntervalText পর্যবেক্ষণ।
+   * v1 waitOtpEvidence(ms) থেকে faithful port (this.page ব্যবহার)।
+   */
+  async _waitOtpEvidence(ms) {
+    const deadline = Date.now() + ms;
+    let last = { toasts: [], interval: false };
+    while (Date.now() < deadline) {
+      const st = await this.page.evaluate(() => {
+        const toasts = [];
+        document.querySelectorAll('.jq-toast-single').forEach((t) => {
+          if (t.offsetParent === null) return;
+          const txt = (t.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 160);
+          if (!txt) return;
+          toasts.push({
+            txt,
+            err: !!t.querySelector('.jq-icon-error, .jq-icon-error-circle'),
+            ok: !!t.querySelector('.jq-icon-success, .jq-icon-success-circle'),
+          });
+        });
+        const it = document.querySelector('#otpIntervalText');
+        const sb = document.querySelector('#sendOtp');
+        return {
+          toasts: toasts.slice(-3),
+          interval: !!(it && it.offsetParent !== null),
+          sendHidden: !!(sb && sb.offsetParent === null),
+        };
+      }).catch(() => ({ toasts: [], interval: false, sendHidden: false }));
+      last = st;
+      if (st.interval || st.toasts.some((t) => t.ok)) {
+        const good = st.toasts.find((t) => t.ok);
+        return { ok: true, note: good ? good.txt : '' };
+      }
+      const bad = st.toasts.find((t) => t.err);
+      if (bad) return { ok: false, reason: `সাইটের বার্তা: ${bad.txt}` };
+      await this.page.waitForTimeout(600);
+    }
+    console.log('OTP-EVIDENCE-TIMEOUT:', JSON.stringify(last).slice(0, 400));
+    return {
+      ok: false,
+      reason: last.toasts[0] ? `সাইটের বার্তা: ${last.toasts[0].txt}` : 'সাইট কোড পাঠানোর নিশ্চিত প্রমাণ দেয়নি — নম্বর দেখে আবার চেষ্টা করুন',
+    };
+  }
+
   async submitS4(data = {}) {
     if (!this.page) {
       this.progress('❌ সংযোগ নেই — আবার চেষ্টা করুন।');
