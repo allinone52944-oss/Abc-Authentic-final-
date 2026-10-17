@@ -1037,8 +1037,8 @@ window.AdmSvc = {
       '<option value="nid">NID Engine</option>' +
       '<option value="apply">Apply Engine (:3102)</option>' +
       '</select><small style="color:var(--dim)">Engine-এর ভেতরে হাত দেওয়া হবে না</small></div></div>' +
-      '<div id="sv_manualBox"><div class="field"><label>📋 নির্দেশনা <small style="color:#64748b;">(user কী করবে)</small></label><textarea id="sv_instructions" rows="3" placeholder="যেমন: নিচের ফরম্যাট অনুযায়ী তথ্য দিন। প্রতিটি লাইনে একটি করে তথ্য লিখুন।" style="font-size:14px;line-height:1.6;"></textarea></div>' +
-      '<div class="field"><label>📄 নমুনা ফরম্যাট <small style="color:#64748b;">(user কপি করে পূরণ করবে)</small></label><textarea id="sv_sample" rows="5" placeholder="যেমন:&#10;নাম: &#10;এনআইডি নং: &#10;জন্ম তারিখ: " style="font-family:monospace;font-size:13px;line-height:1.7;background:#f8fafc;"></textarea><small style="color:#64748b;">💡 প্রতিটি field নতুন লাইনে লিখুন। User "📋 কপি" বাটনে ক্লিক করে clean copy পাবে।</small></div>' +
+      '<div id="sv_manualBox">' +
+      '<div class="field"><label>📄 নমুনা ফরম্যাট <small style="color:#64748b;">(user কপি করে পূরণ করবে)</small></label><textarea id="sv_sample" rows="6" placeholder="যেমন:&#10;নাম: &#10;এনআইডি নং: &#10;জন্ম তারিখ: " style="font-family:monospace;font-size:13px;line-height:1.7;background:#f8fafc;"></textarea><small style="color:#64748b;">💡 প্রতিটি তথ্য নতুন লাইনে লিখুন।</small></div>' +
       fld('📎 ডকুমেন্ট সংখ্যা (১-৬)', 'number', 'sv_doccount', '1') + '</div>' +
       fld('দাম (৳)', 'number', 'sv_price') +
       fld('ডকুমেন্ট (কমা দিয়ে: NID, Photo)', 'text', 'sv_docs') +
@@ -1055,7 +1055,6 @@ window.AdmSvc = {
       category_id: document.getElementById('sv_cat').value || null,
       documents_required: docs, rules_text: v('sv_rules'),
       engine_id: type === 'automated' ? (document.getElementById('sv_engine').value || null) : null,
-      manual_instructions: type === 'manual' ? v('sv_instructions') : null,
       manual_sample: type === 'manual' ? v('sv_sample') : null,
       manual_doc_count: type === 'manual' ? (Number(v('sv_doccount')) || 1) : 1,
     }});
@@ -1076,9 +1075,7 @@ window.AdmSvc = {
       ['active', 'disabled'].map(x => '<option value="' + x + '"' + (s.status === x ? ' selected' : '') + '>' + x + '</option>').join('') +
       '</select></div>' +
       fld('ডকুমেন্ট (কমা দিয়ে)', 'text', 'esv_docs', (s.documents_required || []).join(', ')) +
-      '<div class="field"><label>নিয়মাবলী <small style="color:#64748b;">(manual-এর জন্য নির্দেশনা ব্যবহার করুন)</small></label><textarea id="esv_rules" rows="3">' + esc(s.rules_text || '') + '</textarea></div>' +
-      '<div class="field"><label>📋 নির্দেশনা <small style="color:#64748b;">(manual service)</small></label><textarea id="esv_instructions" rows="3" style="font-size:14px;line-height:1.6;">' + esc(s.manual_instructions || '') + '</textarea></div>' +
-      '<div class="field"><label>📄 নমুনা ফরম্যাট <small style="color:#64748b;">(user কপি করবে)</small></label><textarea id="esv_sample" rows="4" style="font-family:monospace;font-size:13px;line-height:1.7;background:#f8fafc;">' + esc(s.manual_sample || '') + '</textarea></div>' +
+      '<div class="field"><label>📄 নমুনা ফরম্যাট <small style="color:#64748b;">(user কপি করে পূরণ করবে)</small></label><textarea id="esv_sample" rows="6" style="font-family:monospace;font-size:13px;line-height:1.7;background:#f8fafc;">' + esc(s.manual_sample || '') + '</textarea><small style="color:#64748b;">💡 প্রতিটি তথ্য নতুন লাইনে লিখুন। যেমন:<br>নাম:<br>এনআইডি নং:<br>জন্ম তারিখ:</small></div>' +
       fld('📎 ডকুমেন্ট সংখ্যা (১-৬)', 'number', 'esv_doccount', s.manual_doc_count || 1) +
       '<button class="btn" onclick="AdmSvc.save(\'' + id + '\')">সংরক্ষণ</button>');
   },
@@ -1088,8 +1085,7 @@ window.AdmSvc = {
       name: v('esv_name'), name_bn: v('esv_bn'), price: Number(v('esv_price')) || 0,
       status: document.getElementById('esv_status').value,
       category_id: document.getElementById('esv_cat').value || null,
-      documents_required: docs, rules_text: v('esv_rules'),
-      manual_instructions: v('esv_instructions') || null,
+      documents_required: docs,
       manual_sample: v('esv_sample') || null,
       manual_doc_count: Math.min(6, Math.max(1, Number(v('esv_doccount')) || 1)),
     }});
