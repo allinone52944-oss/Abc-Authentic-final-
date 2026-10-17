@@ -118,6 +118,7 @@ class BdrisEngineV2 {
           const nav = new BdrisNavigator(session.page);
           const handler = new StepHandler(nav, {
             emit: (ev, msg) => ctx.emit(ev, msg),
+            userId: ctx.socket?.abcUser?.id || null,
           });
           if (typeof handler[methodName] !== 'function') {
             throw new Error(`StepHandler.${methodName} not implemented`);
