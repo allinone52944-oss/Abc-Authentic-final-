@@ -41,7 +41,6 @@
   .stat .ico { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; margin-bottom:6px; }
   .stat .num { font-size:22px; font-weight:700; line-height:1.2; }
   .stat .lbl { font-size:11px; color:#64748b; margin-top:2px; }
-  .stat .lbl { font-size:12px; color:#64748b; }
   .two-col { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
   .card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:18px; }
   .card h3 { font-size:15px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; }
@@ -121,7 +120,7 @@
     </div>
     <div class="two-col">
       <div class="card">
-        <h3>জনপ্রিয় সেবা <a onclick="location.href='/services.html'">সব দেখুন →</a></h3>
+        <h3>জনপ্রিয় সেবা <a href="/services.html">সব দেখুন →</a></h3>
         <div class="svc-grid2" id="popularServices"><div class="skel" style="height:64px;"></div><div class="skel" style="height:64px;margin-top:8px;"></div></div>
       </div>
       <div class="card">
@@ -314,6 +313,9 @@ async function init() {
   // Wallet balance (was dropped in rebuild — restore)
   setText('balancePill', '৳' + bnNum(user.balance || 0));
   setText('hubBalance', '৳' + bnNum(user.balance || 0));
+  // Time-based greeting
+  const tg = timeGreeting() + ' 👋';
+  setText('greet', tg); setText('greetM', tg);
   // Parallel data load (was 5 sequential awaits). Each section fails
   // independently with its own error UI + retry (no more endless "লোড হচ্ছে…").
   loadCounts(); loadServices(); loadNotices(); loadBanners(); loadSettings();
