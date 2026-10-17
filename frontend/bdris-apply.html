@@ -2912,7 +2912,7 @@ function renderAuto() {
       '<div class="fld"><label>লিঙ্গ <b>*</b></label>' + autoSel('a_gender', FB.gender, s1.gender) + '</div>' +
       fldI('a_country', 'দেশ', s1.country || 'বাংলাদেশ', 'যেমন: বাংলাদেশ', true) +
     '</div>' +
-    '<h4 class="sub-h"><span class="snum">📍</span> জন্মস্থানের ঠিকানা</h4>' +
+    '<h4 class="sub-h"><span class="snum">📍</span> জন্মস্থানের ঠিকানা <button class="btn small ghost" id="aBirthBook" style="margin-left:8px">📍 ঠিকানা বই</button></h4>' +
     '<div class="row2">' +
       fldI('geo_division', 'বিভাগ', s1.division, 'যেমন: ঢাকা', true) +
       fldI('geo_district', 'জেলা', s1.district, 'যেমন: ঢাকা', true) +
@@ -2976,6 +2976,15 @@ function renderAuto() {
   $('spBook').onclick = () => { collectAuto(); renderAddrBook((rec) => { S.d.s2b.perm = Object.assign({}, rec); renderAuto(); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
   $('rpFromPerm').onclick = () => { fillPrefixFrom('rp', readAddrFields('sp')); note('✔ স্থায়ী ঠিকানা থেকে বসানো হয়েছে', 'ok'); };
   $('rpBook').onclick = () => { collectAuto(); renderAddrBook((rec) => { S.d.s2b.pres = Object.assign({}, rec); renderAuto(); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
+  // Auto mode জন্মস্থানে ঠিকানা বই (2026-10-17)
+  const abb = $('aBirthBook'); if (abb) abb.onclick = () => {
+    collectAuto();
+    renderAddrBook((rec) => {
+      const f = ['division','district','cityCorpUpazila','paurasavaUnion','ward'];
+      f.forEach(k => { const el = $('geo_' + k); if (el && rec[k] !== undefined) el.value = rec[k]; });
+      renderAuto(); note('✔ ঠিকানা বসানো হয়েছে', 'ok');
+    }, () => renderAuto());
+  };
   els('.rcard.rsm').forEach(c => c.onclick = () => {
     S.d.relation = c.dataset.rel;
     els('.rcard.rsm').forEach(x => x.classList.toggle('sel', x.dataset.rel === S.d.relation));
