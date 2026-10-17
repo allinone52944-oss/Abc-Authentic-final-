@@ -6,7 +6,7 @@
 (function () {
 'use strict';
 
-const STBN = { new:'নতুন', pending:'অপেক্ষমান', waiting:'অপেক্ষমাণ', received:'গৃহীত',
+const STBN = { new:'নতুন', pending:'অপেক্ষমান', received:'গৃহীত',
   processing:'প্রসেসিং', registered:'নিবন্ধিত', completed:'সম্পন্ন',
   delivered:'ডেলিভার্ড', failed:'ব্যর্থ', cancelled:'বাতিল', refunded:'রিফান্ডেড' };
 const content = document.getElementById('content');
