@@ -509,6 +509,11 @@ socket.on('connect', () => {
   // Permanent (2026-10-15): reconnect-এ READY মিস হলে queue আটকে থাকে —
   // pending callback থাকলে session আবার চাই
   if (!S.ready && (S._readyQ || []).length > 0 && !S.starting) { startSession(); }
+  // 2026-10-17: আবেদনে ঢুকলেই engine চালু — zone/ward engine থেকে আসে,
+  // session না থাকলে text-এ degrade হয়। User-এর নির্দেশ।
+  if (!S.ready && !S.starting && (S._readyQ || []).length === 0) {
+    ensureReady(() => {});
+  }
 });
 // proactive: refresh the token every 12 min (< 15-min TTL) so long
 // sessions (form fill → OTP relay) never expire mid-flow.
