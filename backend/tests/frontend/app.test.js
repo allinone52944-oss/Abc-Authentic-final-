@@ -32,6 +32,7 @@ function installGlobals() {
     createElement: () => ({ style: {}, appendChild() {}, addEventListener() {} }),
     head: { appendChild() {} },
     body: { appendChild() {} },
+    addEventListener: jest.fn(),
   };
   global.window = {
     addEventListener: jest.fn(),

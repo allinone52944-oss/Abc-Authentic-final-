@@ -203,6 +203,7 @@ const VoiceAlert = {
     return this.enabled;
   },
 };
+window.VoiceAlert = VoiceAlert;
 
 /* ============ Web Push (screen-off sound alerts for admin) ============ */
 function urlBase64ToUint8Array(base64String) {
@@ -281,6 +282,7 @@ const PushNotify = {
     } catch (e) {}
   },
 };
+window.PushNotify = PushNotify;
 
 const TABS = {};
 
