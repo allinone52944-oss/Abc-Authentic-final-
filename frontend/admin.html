@@ -25,7 +25,8 @@
   .sidebar { width:230px; background:linear-gradient(180deg,#1e3a8a,#1e40af); color:#fff; padding:20px 0; flex-shrink:0; max-height:100vh; overflow-y:auto; }
   .side-logo { padding:0 20px 20px; border-bottom:1px solid rgba(255,255,255,0.15); margin-bottom:16px; }
   .side-logo h2 { font-size:18px; } .side-logo p { font-size:11px; opacity:0.7; }
-  .side-link { display:flex; align-items:center; gap:12px; padding:11px 20px; font-size:13px; color:rgba(255,255,255,0.85); cursor:pointer; border-left:3px solid transparent; }
+  .side-link { display:flex; align-items:center; gap:12px; padding:11px 20px; font-size:13px; color:rgba(255,255,255,0.85); cursor:pointer; border-left:3px solid transparent; transition:background .15s ease, padding-left .15s ease; }
+  .side-link:hover { background:rgba(255,255,255,0.08); }
   .side-link.on { background:rgba(255,255,255,0.12); border-left-color:#fff; color:#fff; font-weight:600; }
   .side-link .ico { font-size:16px; }
   .main { flex:1; padding:24px; overflow:auto; }
