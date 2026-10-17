@@ -1908,7 +1908,7 @@ function renderStep2() {
       '<div class="fld"><label>লিঙ্গ <b>*</b></label><select id="s1_gender">' +
         FB.gender.map(t => '<option' + (s1.gender === t ? ' selected' : '') + '>' + esc(t) + '</option>').join('') + '</select></div>' +
     '</div>' +
-    '<h4 class="sub-h"><span class="snum">📍</span> জন্মস্থানের ঠিকানা</h4>' +
+    '<h4 class="sub-h"><span class="snum">📍</span> জন্মস্থানের ঠিকানা <button class="btn small ghost" id="gBook" style="margin-left:8px">📍 ঠিকানা বই</button></h4>' +
     '<div class="row2">' +
       selBox('g_country', 'দেশ') +
       selBox('g_div', 'বিভাগ') + selBox('g_dist', 'জেলা') + selBox('g_cc', 'সিটি কর্পোরেশন / উপজেলা') +
@@ -1924,6 +1924,19 @@ function renderStep2() {
   S.d.s1 = S.d.s1 || {};
   GEO_LEVELS.forEach(L => { const n = $(L.ui); if (n) n.onchange = () => geoChanged(L.k, GEO_LEVELS, S.d.s1); });
   warmFromData().catch(() => {});
+  // ঠিকানা বই থেকে জন্মস্থানে বসানো (2026-10-17)
+  const gb = $('gBook'); if (gb) gb.onclick = () => {
+    collectStep2();
+    renderAddrBook((rec) => {
+      S.d.s1 = S.d.s1 || {};
+      // Address book fields → birthplace s1 fields
+      ['division','district','cityCorpUpazila','paurasavaUnion','ward','postBn','postEn','vilBn','vilEn','houseBn','houseEn'].forEach(k => {
+        if (rec[k] !== undefined) S.d.s1[k] = rec[k];
+      });
+      renderStep2();
+      note('✔ ঠিকানা বসানো হয়েছে', 'ok');
+    }, () => renderStep2());
+  };
   setBtns([
     { html: 'পরবর্তী →', fn: () => submitStep2() },
     { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep2(); saveDraft(2, () => note('✔ খসড়ায় রাখা হয়েছে', 'ok')); } },
