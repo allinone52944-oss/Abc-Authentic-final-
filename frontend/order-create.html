@@ -215,18 +215,26 @@ async function submit(){
   // Upload documents if any
   const orderId = d.order.id;
   const fileInputs = document.querySelectorAll('[data-doc]');
+  let uploadFailed = false;
   for (const inp of fileInputs) {
     if (inp.files.length) {
       const fd = new FormData();
       fd.append('file', inp.files[0]);
       fd.append('doc_type', inp.dataset.doctype);
       const token = sessionStorage.getItem('abc_access_token') || '';
-      await fetch('/api/orders/'+orderId+'/documents', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer '+token },
-        body: fd
-      });
+      try {
+        const ur = await fetch('/api/orders/'+orderId+'/documents', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer '+token },
+          body: fd
+        });
+        if (!ur.ok) uploadFailed = true;
+      } catch(e) { uploadFailed = true; }
     }
+  }
+  if (uploadFailed) {
+    err.textContent = '⚠️ কিছু ডকুমেন্ট আপলোড হয়নি। অর্ডার তৈরি হয়েছে, পরে আপলোড করুন।';
+    return;
   }
   ABC.Drafts.clear('order_'+sid);
   location.href='/order-status.html?id='+orderId;
