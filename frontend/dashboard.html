@@ -69,8 +69,13 @@
   .m-bal { background:#fff; margin:-20px 20px 0; border-radius:16px; padding:18px; box-shadow:0 4px 20px rgba(0,0,0,0.08); display:flex; justify-content:space-between; align-items:center; position:relative; display:none; }
   .m-content { padding:16px 20px; display:none; }
   .m-svc-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
-  .bn-strip { margin-bottom:16px; overflow:hidden; border-radius:12px; max-width:100%; }
+  .bn-strip { margin-bottom:16px; overflow:hidden; border-radius:12px; max-width:100%; opacity:0; transition:opacity 0.4s ease; }
+  .bn-strip.show { opacity:1; }
   .bn-strip img { max-width:100%; height:auto; display:block; }
+  /* Smooth button press - prevents janky feeling */
+  button, .btn, .m-tab, .svc2, .stat { transition:transform 0.1s ease, opacity 0.15s ease; }
+  button:active, .btn:active, .m-tab:active { transform:scale(0.97); }
+  .svc2:active, .stat:active { transform:scale(0.98); }
   @media (max-width:768px) { html,body{overflow-x:hidden;}
     .desktop { display:none; }
     .sidebar { display:none; }
@@ -380,9 +385,9 @@ async function loadBanners() {
     const act = (d.banners || []).filter(b => b.active);
     if (act.length) {
       const ds = document.getElementById('bnStrip');
-      if (ds) { ds.style.display = 'block'; BannerRender.carousel(ds, act, 6000); }
+      if (ds) { ds.style.display = 'block'; BannerRender.carousel(ds, act, 6000); requestAnimationFrame(()=>ds.classList.add('show')); }
       const ms = document.getElementById('bnStripM');
-      if (ms) { ms.style.display = 'block'; BannerRender.carousel(ms, act, 6000); }
+      if (ms) { ms.style.display = 'block'; BannerRender.carousel(ms, act, 6000); requestAnimationFrame(()=>ms.classList.add('show')); }
     }
   } catch (e) { /* banner optional: stay hidden */ }
 }
