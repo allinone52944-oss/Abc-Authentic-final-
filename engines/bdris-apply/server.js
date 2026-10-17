@@ -1869,19 +1869,35 @@ io.on('connection', (socket) => {
       if (oid && socket._ackCache.has(oid)) {
         return socket.emit('STEP_CHANGE_ACK', socket._ackCache.get(oid));
       }
-      const origEmit = socket.emit.bind(socket);
-      socket.emit = (ev, ...args) => {
-        if (ev === 'STEP_CHANGE_ACK' && oid && args[0] && typeof args[0] === 'object') {
-          socket._ackCache.set(oid, args[0]);
-          while (socket._ackCache.size > 30) {
-            const k = socket._ackCache.keys().next().value;
-            socket._ackCache.delete(k);
+      // W-4 fix (2026-10-17): আগে প্রতি op-এ socket.emit override/restore হতো —
+      // concurrent op-এ একটা আরেকটার origEmit restore করে ফেলত (race)।
+      // এখন socket-প্রতি একবারই wrap, oid stack দিয়ে track — race নেই।
+      if (!socket._dedupPatched) {
+        socket._dedupPatched = true;
+        socket._dedupStack = [];
+        const realEmit = socket.emit.bind(socket);
+        socket.emit = (ev, ...args) => {
+          if (ev === 'STEP_CHANGE_ACK' && args[0] && typeof args[0] === 'object') {
+            const cur = socket._dedupStack[socket._dedupStack.length - 1];
+            if (cur) {
+              socket._ackCache.set(cur, args[0]);
+              while (socket._ackCache.size > 30) {
+                const k = socket._ackCache.keys().next().value;
+                socket._ackCache.delete(k);
+              }
+            }
           }
-        }
-        return origEmit(ev, ...args);
-      };
+          return realEmit(ev, ...args);
+        };
+      }
+      if (oid) socket._dedupStack.push(oid);
       try { await handler(data); }
-      finally { socket.emit = origEmit; }
+      finally {
+        if (oid) {
+          const i = socket._dedupStack.lastIndexOf(oid);
+          if (i >= 0) socket._dedupStack.splice(i, 1);
+        }
+      }
     };
   }
   socket.on('SUBMIT_S0', deduped('SUBMIT_S0', async (data = {}) => {
@@ -2932,12 +2948,10 @@ io.on('connection', (socket) => {
         if (ok) {
           if (ackNum) {
             pdf.name = 'abedon-copy-' + ackNum + '.pdf';
-            // সাইটের আসল PDF-এর কপি স্ট্যাটিক ফোল্ডারে — হিরোতে সরাসরি নামানো যায়
-            try {
-              const fdir = path.join(__dirname, '..', 'frontend');
-              require('fs').writeFileSync(path.join(fdir, 'bdris-original-' + ackNum + '.pdf'), Buffer.from(pdf.base64, 'base64'));
-              originalUrl = '/bdris-original-' + ackNum + '.pdf';
-            } catch { /* ঐচ্ছিক */ }
+            // W-6 fix (2026-10-17): নিচের static-file write ব্লক dead ছিল —
+            // engines/frontend/ directory নেই, writeFileSync সবসময় throw করত,
+            // originalUrl সবসময় null থেকে ensureOriginal()-এ fallthrough হতো।
+            // তাই ব্লকটা সরানো হলো — আচরণ অপরিবর্তিত।
           }
         } else {
           status(socket, 'PROGRESS', '⚠️ সাইটের ডাউনলোড ফাইলটি অসম্পূর্ণ — নিজস্ব আবেদন কপি তৈরি করা হচ্ছে', 'warn');
