@@ -154,6 +154,13 @@
       <div class="card">
         <h3>✏️ তথ্য ও ডকুমেন্ট জমা দিন</h3>
         <div class="field">
+          <label>নির্দিষ্ট সেবা নির্বাচন করুন (ঐচ্ছিক)</label>
+          <select id="manualSvcSelect" onchange="onServiceChanged(this.value)" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px;background:#ffffff;">
+            <option value="">-- সাধারণ ম্যানুয়াল আবেদন (ডিফল্ট) --</option>
+          </select>
+        </div>
+        <div id="svcInst" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin-bottom:14px;color:#1e40af;font-size:13px;line-height:1.6;"></div>
+        <div class="field">
           <label>পূরণকৃত তথ্য *</label>
           <textarea id="rawText" rows="9" placeholder="নমুনা অনুযায়ী পূরণকৃত তথ্য এখানে পেস্ট করুন…"></textarea>
         </div>
@@ -197,14 +204,52 @@ function esc(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'
 function showErr(m){ const e=document.getElementById('err'); e.textContent=m; e.classList.add('on'); setTimeout(()=>e.classList.remove('on'), 5000); }
 function showOk(m){ const e=document.getElementById('ok'); e.textContent=m; e.classList.add('on'); setTimeout(()=>e.classList.remove('on'), 4000); }
 let tplText = '';
+let allManualServices = [];
 
-async function init(){
+async function loadTemplateForService(svcId){
+  const instBox = document.getElementById('svcInst');
+  const matched = allManualServices.find(s => s.id === svcId);
+  if (matched && matched.manual_instructions) {
+    instBox.style.display = 'block';
+    instBox.innerHTML = '<b>📋 সেবার বিশেষ নির্দেশনা:</b><div style="margin-top:4px;white-space:pre-wrap;">' + esc(matched.manual_instructions) + '</div>';
+  } else {
+    instBox.style.display = 'none';
+    instBox.innerHTML = '';
+  }
+
   try {
-    const r = await ABC.api('/manual/template');
+    const url = svcId ? '/manual/template?service_id=' + encodeURIComponent(svcId) : '/manual/template';
+    const r = await ABC.api(url);
     const d = await r.json();
     tplText = d.template || '';
     document.getElementById('tplBox').textContent = tplText;
   } catch(e){ document.getElementById('tplBox').textContent = 'লোড ব্যর্থ'; }
+}
+
+function onServiceChanged(val){
+  loadTemplateForService(val);
+}
+
+async function init(){
+  const paramSvc = new URLSearchParams(location.search).get('service_id') || new URLSearchParams(location.search).get('service') || '';
+  try {
+    const sRes = await ABC.api('/services');
+    if (sRes.ok) {
+      const sData = await sRes.json();
+      allManualServices = (sData.services || []).filter(s => s.type === 'manual');
+      const sel = document.getElementById('manualSvcSelect');
+      allManualServices.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = (s.name_bn || s.name) + (s.price ? ' (৳' + s.price + ')' : '');
+        if (paramSvc && (paramSvc === s.id || paramSvc === s.name)) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+  } catch(e) {}
+
+  const currentSvcId = document.getElementById('manualSvcSelect').value;
+  await loadTemplateForService(currentSvcId);
   loadMine();
   document.getElementById('docs').addEventListener('change', function(){
     const n = this.files.length;
@@ -262,6 +307,8 @@ async function doSubmit(){
   try {
     const fd = new FormData();
     fd.append('raw_text', raw);
+    const selSvc = document.getElementById('manualSvcSelect').value;
+    if (selSvc) fd.append('service_id', selSvc);
     for(const f of files) fd.append('documents', f);
     const token = sessionStorage.getItem('abc_access_token');
     const r = await fetch('/api/manual/submit', {

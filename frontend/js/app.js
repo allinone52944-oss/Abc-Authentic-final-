@@ -158,6 +158,7 @@
 
   // ---- Draft persistence (survives refresh AND logout) ----
   const Drafts = {
+    get(key) { return this.load(key); },
     save(key, obj) {
       try { localStorage.setItem('abc_draft_' + key, JSON.stringify(obj)); } catch (e) {}
     },
@@ -172,7 +173,27 @@
     },
   };
 
-  window.ABC = { api, setTokens, clearTokens, refreshAccess, Drafts };
+  // ---- Idempotency helper (dedupes duplicate order submits) ----
+  const Idempotency = {
+    getOrCreate(key) {
+      try {
+        const stored = sessionStorage.getItem('abc_idem_' + key);
+        if (stored) return stored;
+        const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : 'idem_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+        sessionStorage.setItem('abc_idem_' + key, id);
+        return id;
+      } catch (_) {
+        return 'idem_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+      }
+    },
+    clear(key) {
+      try { sessionStorage.removeItem('abc_idem_' + key); } catch (_) {}
+    },
+  };
+
+  window.ABC = { api, setTokens, clearTokens, refreshAccess, Drafts, Idempotency };
 
   // ---- PWA: service worker (v6, push-only, no caching) ----
   if ('serviceWorker' in navigator) {

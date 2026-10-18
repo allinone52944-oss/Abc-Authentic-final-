@@ -289,6 +289,19 @@ describe('services', () => {
     expect(r.body.service.price).toBe(5);
   });
 
+  test("POST /services/:id/duplicate clones service as disabled copy", async () => {
+    db.__routeQuery([
+      ["SELECT * FROM services WHERE id = $1", { rows: [{ id: "s1", name: "Doc Service", name_bn: "ডক সেবা", type: "manual", price: 50, serial: 1 }] }],
+      ["SELECT COALESCE(MAX(serial), -1) + 1 AS s FROM services", { rows: [{ s: 2 }] }],
+      ["INSERT INTO services", { rows: [{ id: "s1_copy", name: "Doc Service (Copy)", name_bn: "ডক সেবা (কপি)", status: "disabled" }] }],
+      ["INSERT INTO audit_logs", { rows: [{ id: 1 }] }],
+    ]);
+    const r = await withAdmin(request(app()).post("/api/admin/services/s1/duplicate")).expect(201);
+    expect(r.body.service.id).toBe("s1_copy");
+    expect(r.body.service.status).toBe("disabled");
+  });
+
+
   test('DELETE /services/:id requires confirm=yes', async () => {
     await withAdmin(request(app()).delete('/api/admin/services/s1')).expect(400);
     db.__routeQuery([

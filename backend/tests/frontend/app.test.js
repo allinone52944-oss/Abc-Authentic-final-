@@ -303,3 +303,21 @@ describe('Drafts persistence', () => {
     expect(() => ABC.Drafts.save('q', { a: 1 })).not.toThrow();
   });
 });
+
+describe("Drafts.get and Idempotency helpers", () => {
+  test("Drafts.get aliases Drafts.load", () => {
+    const ABC = loadApp();
+    ABC.Drafts.save("test_key", { foo: "bar" });
+    expect(ABC.Drafts.get("test_key")).toEqual({ foo: "bar" });
+  });
+
+  test("Idempotency generates and reuses key from sessionStorage", () => {
+    const ABC = loadApp();
+    const k1 = ABC.Idempotency.getOrCreate("form1");
+    expect(k1).toBeTruthy();
+    const k2 = ABC.Idempotency.getOrCreate("form1");
+    expect(k2).toBe(k1);
+    ABC.Idempotency.clear("form1");
+    expect(global.sessionStorage.getItem("abc_idem_form1")).toBeNull();
+  });
+});

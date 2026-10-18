@@ -91,6 +91,9 @@ router.get('/services', async (req, res) => {
         fields_required: s.fields_required,
         schedule: s.schedule, rules_text: s.rules_text,
         engine_id: s.engine_id, open: serviceOpen(s.schedule),
+        manual_instructions: s.manual_instructions || null,
+        manual_sample: s.manual_sample || null,
+        manual_doc_count: s.manual_doc_count || 1,
       });
     }
     res.json({ services: out });
@@ -122,6 +125,9 @@ router.get('/services/:id', async (req, res) => {
         category_name: s.cat_name || null,
         category_name_bn: s.cat_name_bn || null,
         category_icon: s.cat_icon || null,
+        manual_instructions: s.manual_instructions || null,
+        manual_sample: s.manual_sample || null,
+        manual_doc_count: s.manual_doc_count || 1,
       },
     });
   } catch (e) {
@@ -136,6 +142,9 @@ router.get('/services/:id', async (req, res) => {
 
 // POST /api/orders — create order, debit wallet atomically
 router.post('/orders', async (req, res) => {
+  const clientKey = (req.body && req.body.idempotency_key)
+    ? String(req.body.idempotency_key).slice(0, 64)
+    : String(Date.now());
   try {
     const { service_id, data, notes } = req.body || {};
     if (!service_id) return res.status(400).json({ error: 'MISSING_SERVICE' });
@@ -159,11 +168,7 @@ router.post('/orders', async (req, res) => {
       return res.status(400).json({ error: 'MISSING_DOCUMENTS', missing });
     }
 
-    // M-15: client-generated idempotency key (frontend sends crypto.randomUUID()
-    // per form); Date.now() fallback only for very old clients.
-    const clientKey = (req.body && req.body.idempotency_key)
-      ? String(req.body.idempotency_key).slice(0, 64)
-      : String(Date.now());
+    // M-15: idempotency key resolved at handler entry so catch block can access it
     const order = await db.withTransaction(async (client) => {
       // Debit wallet (raises INSUFFICIENT_BALANCE if not enough)
       // Idempotency: same key → same ref → wallet_apply dedupes double submits.

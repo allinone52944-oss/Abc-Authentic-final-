@@ -130,6 +130,20 @@ describe('POST /api/orders', () => {
     const r = await withUser(request(app()).post('/api/orders')).send({ service_id: 's1' }).expect(402);
     expect(r.body.error).toBe('INSUFFICIENT_BALANCE');
   });
+
+  test("duplicate submit (DUPLICATE_TRANSACTION) returns existing order without clientKey scope crash", async () => {
+    db.__routeQuery([
+      ...serviceHandlers(),
+      ["wallet_apply", () => { throw new Error("DUPLICATE_TRANSACTION: order-test-key-u1"); }],
+      ["SELECT * FROM orders WHERE user_id = $1 AND idempotency_key = $2", { rows: [{ id: "o_orig", idempotency_key: "test-key" }] }],
+    ]);
+    const r = await withUser(request(app()).post("/api/orders"))
+      .send({ service_id: "s1", idempotency_key: "test-key" })
+      .expect(200);
+    expect(r.body.duplicate).toBe(true);
+    expect(r.body.order.id).toBe("o_orig");
+  });
+
 });
 
 describe('orders read + chat', () => {

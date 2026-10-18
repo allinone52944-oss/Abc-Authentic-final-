@@ -915,6 +915,37 @@ router.put('/services/:id', async (req, res) => {
   }
 });
 
+// POST /api/admin/services/:id/duplicate — clone an existing service
+router.post('/services/:id/duplicate', async (req, res) => {
+  try {
+    const sRes = await db.query('SELECT * FROM services WHERE id = $1', [req.params.id]);
+    if (!sRes.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    const orig = sRes.rows[0];
+    const maxSerial = await db.query('SELECT COALESCE(MAX(serial), -1) + 1 AS s FROM services');
+    const newName = (orig.name || '') + ' (Copy)';
+    const newNameBn = (orig.name_bn || orig.name) + ' (কপি)';
+    const r = await db.query(
+      `INSERT INTO services (name, name_bn, category_id, type, price, serial, documents_required,
+                             fields_required, schedule, rules_text, engine_id,
+                             manual_instructions, manual_sample, manual_doc_count, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'disabled') RETURNING *`,
+      [newName, newNameBn, orig.category_id, orig.type, Number(orig.price) || 0,
+       Number(maxSerial.rows[0].s),
+       typeof orig.documents_required === 'string' ? orig.documents_required : JSON.stringify(orig.documents_required || []),
+       typeof orig.fields_required === 'string' ? orig.fields_required : JSON.stringify(orig.fields_required || []),
+       typeof orig.schedule === 'string' ? orig.schedule : JSON.stringify(orig.schedule || {}),
+       orig.rules_text || null, orig.engine_id || null,
+       orig.manual_instructions || null, orig.manual_sample || null,
+       Math.min(6, Math.max(1, Number(orig.manual_doc_count) || 1))]
+    );
+    await logActivity(req.user.id, 'service.duplicate', { original_id: orig.id, service_id: r.rows[0].id });
+    res.status(201).json({ service: r.rows[0] });
+  } catch (e) {
+    safeLog('[admin] service duplicate error:', e.message);
+    res.status(500).json({ error: 'DUPLICATE_FAILED' });
+  }
+});
+
 router.delete('/services/:id', async (req, res) => {
   try {
     if (req.query.confirm !== 'yes') return res.status(400).json({ error: 'CONFIRM_REQUIRED' });

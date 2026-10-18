@@ -79,9 +79,10 @@ window.AdmMobile = {
 let _showGen = 0;
 async function show(tab) {
   const gen = ++_showGen;
+  const activeTabKey = (tab === 'cats') ? 'services' : tab;
   // Keep sidebar navigation in sync
   document.querySelectorAll('#tabs .side-link').forEach(x => {
-    if (x.dataset.t === tab) x.classList.add('on');
+    if (x.dataset.t === activeTabKey) x.classList.add('on');
     else x.classList.remove('on');
   });
   // Close mobile sidebar menu when navigating
@@ -89,7 +90,13 @@ async function show(tab) {
   if (!content) return;
   content.innerHTML = '<div style="color:var(--muted)">লোড হচ্ছে…</div>';
   try {
-    await TABS[tab]();
+    if (tab === 'cats') {
+      TABS._svcView = 'cats';
+      await TABS.services();
+    } else {
+      if (tab === 'services' && !TABS._svcView) TABS._svcView = 'services';
+      await TABS[tab]();
+    }
     if (gen !== _showGen) return; // Stale: another show() started, don't overwrite
   } catch (e) {
     if (gen !== _showGen) return;
@@ -2175,7 +2182,8 @@ async function loadCats() {
   try {
     const r = await ABC.api('/admin/service-categories');
     catCache = r.ok ? (await r.json()).categories : [];
-  } catch (e) { catCache = []; }
+    TABS._cats = catCache;
+  } catch (e) { catCache = []; TABS._cats = []; }
   return catCache;
 }
 function catOptions(selected) {
@@ -2187,91 +2195,252 @@ function catOptions(selected) {
   return h;
 }
 /* ============================================================
-   UNIFIED: Services + Categories (user spec 2026-10-16)
-   - One page: category pills (filter) + "+ ক্যাটাগরি"
-   - Services grouped under each category
-   - Category: inline rename/reorder/delete
-   - Service: price + type + on/off + manual config in one place
+   PREMIUM: Unified Services & Categories Hub
+   - Single unified center for Auto Services, Manual Services & Categories
+   - Sub-navigation: [ 📦 সেবা তালিকা ] & [ 📂 ক্যাটাগরি তালিকা ]
+   - Metric stat counters (মোট, সক্রিয়, ম্যানুয়াল, অটোমেটেড)
+   - Live search (বাংলা/ইংরেজি) + category pills + type pills
+   - One-click duplicate/clone, inline status toggle, inline edit
+   - Category ordering, edit, creation without leaving services
    ============================================================ */
 TABS.services = async () => {
   await loadCats();
   const r = await ABC.api('/admin/services');
   const d = await r.json();
-  const services = d.services || [];
-  const cats = TABS._cats || [];
-  const activeFilter = TABS._svcFilter || '';
+  const allServices = d.services || [];
+  const cats = catCache || [];
+  window._allAdminServices = allServices;
 
-  // Group services by category
-  const byCat = {};
-  const uncategorized = [];
-  services.forEach(s => {
-    if (s.category_id && cats.find(c => c.id === s.category_id)) {
-      (byCat[s.category_id] = byCat[s.category_id] || []).push(s);
+  const currentView = TABS._svcView || 'services';
+  const totalCount = allServices.length;
+  const activeCount = allServices.filter(s => s.status === 'active').length;
+  const manualCount = allServices.filter(s => s.type === 'manual').length;
+  const autoCount = allServices.filter(s => s.type === 'automated').length;
+
+  let html = '<div class="adm-svc-hub">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap;border-bottom:1px solid #e2e8f0;padding-bottom:14px;">' +
+      '<div style="display:flex;gap:8px;align-items:center;">' +
+        '<button class="adm-tab-btn ' + (currentView === 'services' ? 'active' : '') + '" onclick="TABS._svcView=\'services\';show(\'services\')" style="font-size:13px;padding:9px 14px;">' +
+          '<span>📦 সেবা তালিকা</span> <span class="adm-tab-chip">' + bn(totalCount) + '</span>' +
+        '</button>' +
+        '<button class="adm-tab-btn ' + (currentView === 'cats' ? 'active' : '') + '" onclick="TABS._svcView=\'cats\';show(\'services\')" style="font-size:13px;padding:9px 14px;">' +
+          '<span>📂 ক্যাটাগরি তালিকা</span> <span class="adm-tab-chip">' + bn(cats.length) + '</span>' +
+        '</button>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
+        (currentView === 'services'
+          ? '<button class="mini-btn ok" onclick="AdmSvc.createForm()" style="padding:9px 14px;font-weight:700;">+ নতুন সেবা</button>' +
+            '<button class="mini-btn" onclick="TABS._svcView=\'cats\';show(\'services\')" style="padding:9px 14px;font-weight:700;">📂 ক্যাটাগরি সাজান</button>'
+          : '<button class="mini-btn ok" onclick="AdmCat.createForm()" style="padding:9px 14px;font-weight:700;">+ নতুন ক্যাটাগরি</button>' +
+            '<button class="mini-btn" onclick="TABS._svcView=\'services\';show(\'services\')" style="padding:9px 14px;font-weight:700;">← সেবা তালিকায় ফিরুন</button>'
+        ) +
+      '</div>' +
+    '</div>';
+
+  if (currentView === 'cats') {
+    if (!cats.length) {
+      html += '<div style="background:#ffffff;border:1px dashed #cbd5e1;border-radius:var(--r-xl);padding:40px 20px;text-align:center;color:#64748b;">' +
+        '<div style="font-size:32px;margin-bottom:8px;">📁</div>' +
+        '<b style="font-size:15px;color:#0f172a;">কোনো ক্যাটাগরি তৈরি করা হয়নি</b><br>' +
+        '<span style="font-size:13px;">প্রথম ক্যাটাগরি তৈরি করুন (যেমন: জন্মনিবন্ধন সেবা, NID সেবা ইত্যাদি)।</span>' +
+        '<div style="margin-top:14px;"><button class="mini-btn ok" onclick="AdmCat.createForm()">+ নতুন ক্যাটাগরি তৈরি করুন</button></div>' +
+        '</div>';
     } else {
-      uncategorized.push(s);
-    }
-  });
+      html += '<div style="background:#ffffff;border:1px solid var(--border-light);border-radius:var(--r-xl);overflow:hidden;box-shadow:var(--shadow-xs);">' +
+        '<table class="adm" style="margin:0;border:none;">' +
+          '<thead>' +
+            '<tr>' +
+              '<th style="width:40px;text-align:center;">#</th>' +
+              '<th style="width:50px;text-align:center;">আইকন</th>' +
+              '<th>ক্যাটাগরির নাম</th>' +
+              '<th style="text-align:center;">সেবা সংখ্যা</th>' +
+              '<th style="text-align:center;">স্ট্যাটাস</th>' +
+              '<th style="text-align:center;">ক্রম (Order)</th>' +
+              '<th style="text-align:right;">কাজ</th>' +
+            '</tr>' +
+          '</thead>' +
+          '<tbody>';
 
-  // Filter
-  const showCat = (catId) => !activeFilter || activeFilter === catId || (activeFilter === '_uncat' && catId === '_uncat');
-
-  let html = '<div style="margin-bottom:14px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">' +
-    '<button class="mini-btn' + (!activeFilter ? ' ok' : '') + '" onclick="TABS._svcFilter=\'\';show(\'services\')">সব</button>';
-  cats.forEach(c => {
-    html += '<button class="mini-btn' + (activeFilter === c.id ? ' ok' : '') + '" onclick="TABS._svcFilter=\'' + c.id + '\';show(\'services\')">' +
-      esc(c.icon || '📁') + ' ' + esc(c.name_bn || c.name) + '</button>';
-  });
-  if (uncategorized.length) {
-    html += '<button class="mini-btn' + (activeFilter === '_uncat' ? ' ok' : '') + '" onclick="TABS._svcFilter=\'_uncat\';show(\'services\')">📦 অন্যান্য</button>';
-  }
-  html += '<button class="mini-btn ok" onclick="AdmCat.createForm()" style="margin-left:auto;">+ ক্যাটাগরি</button>' +
-    '<button class="mini-btn ok" onclick="AdmSvc.createForm()">+ নতুন সেবা</button></div>';
-
-  // Render each category section
-  const renderCatSection = (cat, list, isUncat) => {
-    if (!showCat(isUncat ? '_uncat' : cat.id)) return '';
-    let h = '<div style="background:var(--card); border-radius:12px; padding:14px; margin-bottom:14px;">';
-    if (!isUncat) {
-      h += '<div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">' +
-        '<span style="font-size:24px;">' + esc(cat.icon || '📁') + '</span>' +
-        '<b style="font-size:15px;">' + esc(cat.name_bn || cat.name) + '</b>' +
-        '<span style="color:var(--dim); font-size:12px;">' + bn(list.length) + 'টি সেবা</span>' +
-        '<span style="margin-left:auto; display:flex; gap:6px;">' +
-        '<button class="mini-btn" onclick="document.querySelector(\'[data-t=cats]\').click()" title="ক্যাটাগরি ম্যানেজ">⚙️ ম্যানেজ</button>' +
-        '</span></div>';
-    } else {
-      h += '<div style="margin-bottom:12px;"><b>📦 অন্যান্য</b> <span style="color:var(--dim); font-size:12px;">' + bn(list.length) + 'টি</span></div>';
-    }
-    if (!list.length) {
-      h += '<div style="color:var(--dim); font-size:13px;">কোনো সেবা নেই</div>';
-    } else {
-      h += '<div style="display:grid; gap:8px;">';
-      list.forEach(s => {
-        const isManual = s.type === 'manual';
-        h += '<div style="display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--bg); border-radius:10px;">' +
-          '<span style="font-size:20px;">' + esc(s.icon || (isManual ? '📝' : '⚡')) + '</span>' +
-          '<div style="flex:1;"><b>' + esc(s.name_bn || s.name) + '</b><br>' +
-          '<small style="color:var(--dim);">' + (isManual ? '📝 ম্যানুয়াল' : '⚡ অটো') + ' • ৳' + bn(s.price) +
-          (s.engine_id ? ' • 🔌 ' + esc(s.engine_id) : '') + '</small></div>' +
-          '<button class="mini-btn" onclick="AdmSvc.toggleType(\'' + s.id + '\',\'' + s.type + '\')" title="ধরন বদলান">' +
-          (isManual ? '→ অটো' : '→ ম্যানুয়াল') + '</button>' +
-          '<button class="mini-btn" onclick="AdmSvc.toggleStatus(\'' + s.id + '\',\'' + s.status + '\')">' +
-          (s.status === 'active' ? '🟢' : '🔴') + '</button>' +
-          '<button class="mini-btn" onclick="AdmSvc.edit(\'' + s.id + '\')">✏️</button>' +
-          '<button class="mini-btn danger" onclick="AdmSvc.del(\'' + s.id + '\')">🗑️</button>' +
-          '</div>';
+      cats.forEach((c, i) => {
+        const isActive = c.status === 'active';
+        html += '<tr>' +
+          '<td style="text-align:center;color:#64748b;font-weight:600;">' + bn(i + 1) + '</td>' +
+          '<td style="text-align:center;font-size:24px;">' + esc(c.icon || '📁') + '</td>' +
+          '<td>' +
+            '<b style="font-size:14px;color:#0f172a;">' + esc(c.name_bn || c.name) + '</b>' +
+            (c.name_bn && c.name && c.name_bn !== c.name ? '<br><small style="color:#64748b;">' + esc(c.name) + '</small>' : '') +
+          '</td>' +
+          '<td style="text-align:center;"><span class="badge" style="background:#f1f5f9;color:#334155;font-weight:700;">' + bn(c.service_count || 0) + 'টি</span></td>' +
+          '<td style="text-align:center;"><span class="badge ' + (isActive ? 'st-active' : 'st-disabled') + '">' + (isActive ? '🟢 সক্রিয়' : '🔴 নিষ্ক্রিয়') + '</span></td>' +
+          '<td style="text-align:center;">' +
+            '<button class="mini-btn" onclick="AdmCat.move(\'' + c.id + '\',-1)"' + (i === 0 ? ' disabled' : '') + ' style="padding:4px 8px;">↑</button> ' +
+            '<button class="mini-btn" onclick="AdmCat.move(\'' + c.id + '\',1)"' + (i === cats.length - 1 ? ' disabled' : '') + ' style="padding:4px 8px;">↓</button>' +
+          '</td>' +
+          '<td style="text-align:right;">' +
+            '<button class="mini-btn" onclick="AdmCat.edit(\'' + c.id + '\')" style="margin-right:4px;">✏️ এডিট</button>' +
+            '<button class="mini-btn danger" onclick="AdmCat.del(\'' + c.id + '\')">🗑️ ডিলিট</button>' +
+          '</td>' +
+        '</tr>';
       });
-      h += '</div>';
+
+      html += '</tbody></table></div>' +
+        '<div style="color:#64748b;margin-top:14px;font-size:12px;display:flex;align-items:center;gap:6px;">' +
+          '<span>💡</span> ক্যাটাগরি ডিলিট করলে ভিতরের সেবাগুলো অক্ষত থাকবে — সেগুলো স্বয়ংক্রিয়ভাবে "অন্যান্য সেবা" ক্যাটাগরিতে স্থানান্তরিত হবে।' +
+        '</div>';
     }
-    return h + '</div>';
-  };
+  } else {
+    const activeCat = TABS._svcCatFilter || '';
+    const activeType = TABS._svcTypeFilter || '';
+    const searchQ = (TABS._svcSearch || '').trim().toLowerCase();
 
-  cats.forEach(c => { html += renderCatSection(c, byCat[c.id] || [], false); });
-  if (uncategorized.length) html += renderCatSection(null, uncategorized, true);
+    const filtered = allServices.filter(s => {
+      if (activeCat === '_uncat') {
+        if (s.category_id && cats.some(c => c.id === s.category_id)) return false;
+      } else if (activeCat && s.category_id !== activeCat) {
+        return false;
+      }
+      if (activeType && s.type !== activeType) return false;
+      if (searchQ) {
+        const bnName = (s.name_bn || '').toLowerCase();
+        const enName = (s.name || '').toLowerCase();
+        const cat = (s.category_name_bn || s.category_name || '').toLowerCase();
+        if (!bnName.includes(searchQ) && !enName.includes(searchQ) && !cat.includes(searchQ)) return false;
+      }
+      return true;
+    });
 
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">' +
+      '<div style="background:#ffffff;border:1px solid var(--border-light);border-radius:var(--r-lg);padding:14px;box-shadow:var(--shadow-xs);cursor:pointer;" onclick="TABS._svcTypeFilter=\'\';TABS._svcCatFilter=\'\';show(\'services\')">' +
+        '<div style="font-size:12px;color:#64748b;font-weight:600;">মোট সেবা</div>' +
+        '<div style="font-size:22px;font-weight:800;color:#0f172a;margin-top:2px;">' + bn(totalCount) + '</div>' +
+      '</div>' +
+      '<div style="background:#ffffff;border:1px solid #bbf7d0;border-radius:var(--r-lg);padding:14px;box-shadow:var(--shadow-xs);">' +
+        '<div style="font-size:12px;color:#166534;font-weight:600;">সক্রিয় সেবা</div>' +
+        '<div style="font-size:22px;font-weight:800;color:#15803d;margin-top:2px;">' + bn(activeCount) + '</div>' +
+      '</div>' +
+      '<div style="background:#ffffff;border:1px solid #bfdbfe;border-radius:var(--r-lg);padding:14px;box-shadow:var(--shadow-xs);cursor:pointer;" onclick="TABS._svcTypeFilter=\'manual\';show(\'services\')" title="শুধু ম্যানুয়াল সেবা ফিল্টার">' +
+        '<div style="font-size:12px;color:#1e40af;font-weight:600;">ম্যানুয়াল আবেদন</div>' +
+        '<div style="font-size:22px;font-weight:800;color:#2563eb;margin-top:2px;">' + bn(manualCount) + '</div>' +
+      '</div>' +
+      '<div style="background:#ffffff;border:1px solid #e9d5ff;border-radius:var(--r-lg);padding:14px;box-shadow:var(--shadow-xs);cursor:pointer;" onclick="TABS._svcTypeFilter=\'automated\';show(\'services\')" title="শুধু অটো ইঞ্জিন সেবা ফিল্টার">' +
+        '<div style="font-size:12px;color:#6b21a8;font-weight:600;">অটোমেটেড ইঞ্জিন</div>' +
+        '<div style="font-size:22px;font-weight:800;color:#7c3aed;margin-top:2px;">' + bn(autoCount) + '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div style="background:#ffffff;border:1px solid var(--border-light);border-radius:var(--r-xl);padding:16px;margin-bottom:20px;box-shadow:var(--shadow-xs);">' +
+      '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">' +
+        '<div style="flex:1;min-width:240px;position:relative;">' +
+          '<input type="text" id="admSvcSearch" value="' + esc(TABS._svcSearch || '') + '" ' +
+            'placeholder="🔍 সেবার নাম লিখে খুঁজুন (বাংলা বা ইংরেজি)..." ' +
+            'style="width:100%;padding:10px 14px 10px 36px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px;" ' +
+            'oninput="AdmSvc.onSearch(this.value)">' +
+          '<span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:14px;">🔍</span>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
+          '<button class="mini-btn ok" onclick="AdmSvc.createForm()" style="padding:9px 14px;font-weight:700;">+ নতুন সেবা</button>' +
+          '<button class="mini-btn" onclick="TABS._svcView=\'cats\';show(\'services\')" style="padding:9px 14px;font-weight:700;">📂 ক্যাটাগরি সাজান</button>' +
+        '</div>' +
+      '</div>' +
+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px solid #f1f5f9;padding-top:12px;">' +
+        '<span style="font-size:12px;font-weight:700;color:#64748b;margin-right:4px;">ক্যাটাগরি:</span>' +
+        '<button class="mini-btn' + (!activeCat ? ' ok' : '') + '" onclick="TABS._svcCatFilter=\'\';show(\'services\')">সব (' + bn(totalCount) + ')</button>';
+
+    cats.forEach(c => {
+      const cCount = allServices.filter(s => s.category_id === c.id).length;
+      html += '<button class="mini-btn' + (activeCat === c.id ? ' ok' : '') + '" onclick="TABS._svcCatFilter=\'' + c.id + '\';show(\'services\')">' +
+        esc(c.icon || '📁') + ' ' + esc(c.name_bn || c.name) + ' (' + bn(cCount) + ')</button>';
+    });
+
+    const uncatCount = allServices.filter(s => !s.category_id || !cats.some(c => c.id === s.category_id)).length;
+    if (uncatCount > 0) {
+      html += '<button class="mini-btn' + (activeCat === '_uncat' ? ' ok' : '') + '" onclick="TABS._svcCatFilter=\'_uncat\';show(\'services\')">📦 অন্যান্য (' + bn(uncatCount) + ')</button>';
+    }
+
+    html += '<button class="mini-btn" onclick="TABS._svcView=\'cats\';show(\'services\')" style="border-style:dashed;color:#2563eb;" title="ক্যাটাগরি সাজান বা নতুন ক্যাটাগরি যোগ করুন">⚙️ ক্যাটাগরি সাজান</button>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">' +
+        '<span style="font-size:12px;font-weight:700;color:#64748b;margin-right:4px;">ধরন:</span>' +
+        '<button class="mini-btn' + (!activeType ? ' ok' : '') + '" onclick="TABS._svcTypeFilter=\'\';show(\'services\')">সকল ধরন</button>' +
+        '<button class="mini-btn' + (activeType === 'manual' ? ' ok' : '') + '" onclick="TABS._svcTypeFilter=\'manual\';show(\'services\')">📝 ম্যানুয়াল (' + bn(manualCount) + ')</button>' +
+        '<button class="mini-btn' + (activeType === 'automated' ? ' ok' : '') + '" onclick="TABS._svcTypeFilter=\'automated\';show(\'services\')">⚡ অটোমেটেড (' + bn(autoCount) + ')</button>' +
+      '</div>' +
+    '</div>';
+
+    if (!filtered.length) {
+      html += '<div style="background:#ffffff;border:1px dashed #cbd5e1;border-radius:var(--r-xl);padding:40px 20px;text-align:center;color:#64748b;">' +
+        '<div style="font-size:32px;margin-bottom:8px;">🔍</div>' +
+        '<b style="font-size:16px;color:#0f172a;">কোনো সেবা পাওয়া যায়নি</b>' +
+        '<p style="font-size:13px;margin-top:4px;">সার্চ বা ফিল্টার পরিবর্তন করুন অথবা নতুন সেবা যোগ করুন।</p>' +
+        '</div>';
+    } else {
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;">';
+      filtered.forEach(s => {
+        const isManual = s.type === 'manual';
+        const isActive = s.status === 'active';
+        const cat = cats.find(c => c.id === s.category_id);
+        const catName = cat ? (cat.name_bn || cat.name) : (s.category_name_bn || s.category_name || 'অন্যান্য');
+        const catIcon = cat ? (cat.icon || '📁') : '📦';
+
+        html += '<div style="background:#ffffff;border:1px solid ' + (isActive ? 'var(--border-light)' : '#fecaca') + ';border-radius:var(--r-lg);padding:16px;box-shadow:var(--shadow-xs);display:flex;flex-direction:column;justify-content:space-between;transition:box-shadow 0.2s;">' +
+          '<div>' +
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">' +
+              '<div style="display:flex;align-items:center;gap:10px;">' +
+                '<span style="font-size:24px;background:#f1f5f9;width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:10px;">' + esc(s.icon || (isManual ? '📝' : '⚡')) + '</span>' +
+                '<div>' +
+                  '<h4 style="margin:0;font-size:15px;font-weight:700;color:#0f172a;">' + esc(s.name_bn || s.name) + '</h4>' +
+                  (s.name_bn && s.name && s.name_bn !== s.name ? '<small style="color:#64748b;font-size:12px;">' + esc(s.name) + '</small>' : '') +
+                '</div>' +
+              '</div>' +
+              '<span style="font-size:16px;font-weight:800;color:var(--primary-700);white-space:nowrap;">৳' + bn(s.price) + '</span>' +
+            '</div>' +
+
+            '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:10px 0;">' +
+              '<span class="badge" style="background:' + (isManual ? '#eff6ff;color:#1e40af;border:1px solid #bfdbfe;' : '#f5f3ff;color:#6b21a8;border:1px solid #ddd6fe;') + '">' + (isManual ? '📝 ম্যানুয়াল' : '⚡ অটোমেটেড') + '</span>' +
+            '<button class="mini-btn" onclick="AdmSvc.toggleStatus(\'' + s.id + '\',\'' + s.status + '\')" style="padding:6px 10px;" title="চালু/বন্ধ">' + (isActive ? '🔴 বন্ধ' : '🟢 চালু') + '</button>' +
+              '<span class="badge" style="background:#f8fafc;color:#475569;border:1px solid #e2e8f0;">' + esc(catIcon) + ' ' + esc(catName) + '</span>' +
+              (s.engine_id ? '<span class="badge" style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;">🔌 ' + esc(s.engine_id) + '</span>' : '') +
+            '</div>' +
+
+            (isManual && s.manual_doc_count ? '<div style="font-size:12px;color:#64748b;margin-bottom:6px;">📎 সর্বোচ্চ ডকুমেন্ট: <b>' + bn(s.manual_doc_count) + 'টি</b></div>' : '') +
+            (s.documents_required && s.documents_required.length ? '<div style="font-size:11px;color:#64748b;margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📄 আবশ্যক: ' + esc(s.documents_required.join(', ')) + '</div>' : '') +
+          '</div>' +
+
+          '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;border-top:1px solid #f1f5f9;padding-top:12px;margin-top:10px;">' +
+            '<button class="mini-btn" onclick="AdmSvc.edit(\'' + s.id + '\')" style="flex:1;min-width:60px;">✏️ এডিট</button>' +
+            '<button class="mini-btn" onclick="AdmSvc.duplicate(\'' + s.id + '\')" title="এই সেবার হুবহু কপি তৈরি করুন" style="flex:1;min-width:65px;">📋 ডুপ্লিকেট</button>' +
+            '<button class="mini-btn" onclick="AdmSvc.toggleStatus(\'' + s.id + '\',\'' + s.status + '\')" style="padding:6px 10px;" title="চালু/বন্ধ">' + (isActive ? '🔴 বন্ধ' : '🟢 চালু') + '</button>' +
+            '<button class="mini-btn danger" onclick="AdmSvc.del(\'' + s.id + '\')" style="padding:6px 10px;" title="ডিলিট">🗑️</button>' +
+          '</div>' +
+        '</div>';
+      });
+      html += '</div>';
+    }
+  }
+
+  html += '</div>';
   content.innerHTML = html;
 };
+
+TABS.cats = async () => {
+  TABS._svcView = 'cats';
+  return TABS.services();
+};
+
 window.AdmSvc = {
+  onSearch(val) {
+    TABS._svcSearch = val;
+    clearTimeout(window._svcSearchTimer);
+    window._svcSearchTimer = setTimeout(() => { show('services'); }, 250);
+  },
+  onTypeChange(val, prefix) {
+    const isMan = val === 'manual';
+    const mb = document.getElementById(prefix + '_manualBox');
+    const eb = document.getElementById(prefix + '_engineBox');
+    if (mb) mb.style.display = isMan ? 'block' : 'none';
+    if (eb) eb.style.display = !isMan ? 'block' : 'none';
+  },
   async toggleType(id, cur) {
     const next = cur === 'manual' ? 'automated' : 'manual';
     if (!confirm('ধরন বদলাবেন? (' + (cur === 'manual' ? 'ম্যানুয়াল → অটো' : 'অটো → ম্যানুয়াল') + ')')) return;
@@ -2285,148 +2454,221 @@ window.AdmSvc = {
     if (!r.ok) { alert('ব্যর্থ'); return; }
     show('services');
   },
+  async duplicate(id) {
+    if (!confirm('এই সেবাটির একটি হুবহু কপি (ডুপ্লিকেট) তৈরি করবেন?')) return;
+    const r = await ABC.api('/admin/services/' + id + '/duplicate', { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) { alert('ডুপ্লিকেট ব্যর্থ: ' + (d.error || 'UNKNOWN')); return; }
+    alert('✅ সেবা সফলভাবে ডুপ্লিকেট হয়েছে! এটি নিষ্ক্রিয় (disabled) অবস্থায় সেভ হয়েছে, প্রয়োজনমতো এডিট করে চালু করুন।');
+    show('services');
+  },
   createForm() {
-    modal('🛎️ নতুন সেবা',
-      fld('নাম (বাংলা)', 'text', 'sv_bn') + fld('নাম (English)', 'text', 'sv_name') +
-      '<div class="field"><label>ক্যাটাগরি</label><select id="sv_cat">' + catOptions(null) + '</select></div>' +
-      '<div class="field"><label>ধরন</label><select id="sv_type" onchange="document.getElementById(\'sv_manualBox\').style.display=this.value===\'manual\'?\'block\':\'none\';document.getElementById(\'sv_engineBox\').style.display=this.value===\'automated\'?\'block\':\'none\'"><option value="manual">📝 ম্যানুয়াল</option><option value="automated">⚡ অটোমেটেড</option></select></div>' +
-      '<div id="sv_engineBox" style="display:none;"><div class="field"><label>🔌 Engine</label><select id="sv_engine">' +
-      '<option value="">-- বেছে নিন --</option>' +
-      '<option value="birth">Birth Engine (:3000)</option>' +
-      '<option value="death">Death Engine (:3001)</option>' +
-      '<option value="nid">NID Engine</option>' +
-      '<option value="apply">Apply Engine (:3102)</option>' +
-      '</select><small style="color:var(--dim)">Engine-এর ভেতরে হাত দেওয়া হবে না</small></div></div>' +
-      '<div id="sv_manualBox">' +
-      '<div class="field"><label>📄 নমুনা ফরম্যাট <small style="color:#64748b;">(user কপি করে পূরণ করবে)</small></label><textarea id="sv_sample" rows="6" placeholder="যেমন:&#10;নাম: &#10;এনআইডি নং: &#10;জন্ম তারিখ: " style="font-family:monospace;font-size:13px;line-height:1.7;background:#f8fafc;"></textarea><small style="color:#64748b;">💡 প্রতিটি তথ্য নতুন লাইনে লিখুন।</small></div>' +
-      fld('📎 ডকুমেন্ট সংখ্যা (১-৬)', 'number', 'sv_doccount', '1') + '</div>' +
-      fld('দাম (৳)', 'number', 'sv_price') +
-      fld('ডকুমেন্ট (কমা দিয়ে: NID, Photo)', 'text', 'sv_docs') +
-      '<div class="field"><label>নিয়মাবলী</label><textarea id="sv_rules" rows="3"></textarea></div>' +
-      '<button class="btn" onclick="AdmSvc.create()">তৈরি করুন</button>');
+    modal('🛎️ নতুন সেবা তৈরি করুন',
+      fld('নাম (বাংলা) *', 'text', 'sv_bn') +
+      fld('নাম (English) *', 'text', 'sv_name') +
+      '<div class="field"><label>ক্যাটাগরি</label>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<select id="sv_cat" style="flex:1;">' + catOptions(null) + '</select>' +
+          '<button type="button" class="mini-btn ok" onclick="AdmCat.inlineCreate(\'sv_cat\')" style="white-space:nowrap;padding:7px 12px;font-weight:700;">+ নতুন</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="field"><label>সেবার ধরন *</label><select id="sv_type" onchange="AdmSvc.onTypeChange(this.value,\'sv\')">' +
+        '<option value="manual">📝 ম্যানুয়াল আবেদন</option>' +
+        '<option value="automated">⚡ অটোমেটেড ইঞ্জিন</option>' +
+      '</select></div>' +
+      '<div id="sv_engineBox" style="display:none;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:12px;margin-bottom:14px;">' +
+        '<div style="font-size:12px;color:#6b21a8;font-weight:700;margin-bottom:8px;">⚡ অটোমেটেড ইঞ্জিন কনফিগারেশন</div>' +
+        '<div class="field" style="margin-bottom:6px;"><label>🔌 অটোমেশন ইঞ্জিন বেছে নিন *</label><select id="sv_engine">' +
+          '<option value="">-- ইঞ্জিন বেছে নিন --</option>' +
+          '<option value="bdris-certificate">জন্মনিবন্ধন সনদ ইঞ্জিন (Port 3000)</option>' +
+          '<option value="death-verify">মৃত্যুনিবন্ধন যাচাই ইঞ্জিন (Port 3001)</option>' +
+          '<option value="nid-replica">এনআইডি রেপ্লিকা ইঞ্জিন</option>' +
+          '<option value="bdris-apply">BDRIS অনলাইন আবেদন ইঞ্জিন (Port 3102)</option>' +
+        '</select></div>' +
+        '<small style="color:#64748b;font-size:11px;">গ্রাহক অর্ডার প্লেস করলে ইঞ্জিন ব্যাকগ্রাউন্ডে স্বয়ংক্রিয়ভাবে প্রসেস করে রেজাল্ট প্রদান করবে।</small>' +
+      '</div>' +
+      '<div id="sv_manualBox" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin-bottom:14px;">' +
+        '<div style="font-size:12px;color:#1e40af;font-weight:700;margin-bottom:8px;">📝 ম্যানুয়াল সেবা কনফিগারেশন</div>' +
+        '<div class="field"><label>📄 ম্যানুয়াল নমুনা ফরম্যাট <small style="color:#64748b;">(গ্রাহক এটি কপি করে পূরণ করবে)</small></label>' +
+        '<textarea id="sv_sample" rows="6" placeholder="যেমন: নাম, এনআইডি নং, জন্ম তারিখ ইত্যাদি" style="font-family:monospace;font-size:13px;line-height:1.7;background:#ffffff;width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:10px;"></textarea>' +
+        '<small style="color:#64748b;font-size:11px;">💡 প্রতিটি তথ্যের লেবেল নতুন লাইনে লিখুন।</small></div>' +
+        '<div class="field"><label>📋 ম্যানুয়াল আবেদনের নির্দেশনা</label>' +
+        '<textarea id="sv_man_inst" rows="3" placeholder="গ্রাহকের জন্য বিশেষ কোনো নির্দেশনা থাকলে লিখুন..." style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:10px;font-size:13px;background:#ffffff;"></textarea></div>' +
+        fld('📎 প্রয়োজনীয় ডকুমেন্ট সংখ্যা (১-৬)', 'number', 'sv_doccount', '1') +
+      '</div>' +
+      fld('সেবা মূল্য (৳) *', 'number', 'sv_price', '0') +
+      fld('প্রয়োজনীয় ডকুমেন্টের নাম (কমা দিয়ে, যেমন: NID, Photo, Signature)', 'text', 'sv_docs') +
+      '<div class="field"><label>📜 সাধারণ নিয়মাবলী ও শর্তাবলী</label><textarea id="sv_rules" rows="3" style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:10px;font-size:13px;"></textarea></div>' +
+      '<button class="btn" onclick="AdmSvc.create()" style="width:100%;padding:12px;font-weight:700;margin-top:10px;">✅ সেবা সংরক্ষণ করুন</button>');
   },
   async create() {
     const docs = v('sv_docs').split(',').map(x => x.trim()).filter(Boolean);
     const type = document.getElementById('sv_type').value;
+    const bnName = v('sv_bn');
+    const enName = v('sv_name') || bnName;
+    if (!bnName && !enName) { alert('অনুগ্রহ করে সেবার নাম দিন'); return; }
     const r = await ABC.api('/admin/services', { method: 'POST', body: {
-      name: v('sv_name') || v('sv_bn'), name_bn: v('sv_bn'),
+      name: enName, name_bn: bnName,
       type: type,
       price: Number(v('sv_price')) || 0,
       category_id: document.getElementById('sv_cat').value || null,
-      documents_required: docs, rules_text: v('sv_rules'),
+      documents_required: docs,
+      rules_text: v('sv_rules') || null,
       engine_id: type === 'automated' ? (document.getElementById('sv_engine').value || null) : null,
-      manual_sample: type === 'manual' ? v('sv_sample') : null,
-      manual_doc_count: type === 'manual' ? (Number(v('sv_doccount')) || 1) : 1,
+      manual_sample: type === 'manual' ? (v('sv_sample') || null) : null,
+      manual_instructions: type === 'manual' ? (v('sv_man_inst') || null) : null,
+      manual_doc_count: type === 'manual' ? Math.min(6, Math.max(1, Number(v('sv_doccount')) || 1)) : 1,
     }});
     const d = await r.json();
-    if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
+    if (!r.ok) { alert('ব্যর্থ: ' + (d.error || 'UNKNOWN')); return; }
     closeModal(); show('services');
   },
   async edit(id) {
     const r = await ABC.api('/admin/services');
     const s = (await r.json()).services.find(x => x.id === id);
     if (!s) return;
+    const isManual = s.type === 'manual';
     modal('✏️ ' + (s.name_bn || s.name),
-      fld('নাম (বাংলা)', 'text', 'esv_bn', s.name_bn || '') +
-      fld('নাম (English)', 'text', 'esv_name', s.name || '') +
-      '<div class="field"><label>ক্যাটাগরি</label><select id="esv_cat">' + catOptions(s.category_id) + '</select></div>' +
-      fld('দাম (৳)', 'number', 'esv_price', s.price) +
-      '<div class="field"><label>স্ট্যাটাস</label><select id="esv_status">' +
-      ['active', 'disabled'].map(x => '<option value="' + x + '"' + (s.status === x ? ' selected' : '') + '>' + x + '</option>').join('') +
+      fld('নাম (বাংলা) *', 'text', 'esv_bn', s.name_bn || '') +
+      fld('নাম (English) *', 'text', 'esv_name', s.name || '') +
+      '<div class="field"><label>ক্যাটাগরি</label>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<select id="esv_cat" style="flex:1;">' + catOptions(s.category_id) + '</select>' +
+          '<button type="button" class="mini-btn ok" onclick="AdmCat.inlineCreate(\'esv_cat\')" style="white-space:nowrap;padding:7px 12px;font-weight:700;">+ নতুন</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="field"><label>সেবার ধরন *</label><select id="esv_type" onchange="AdmSvc.onTypeChange(this.value,\'esv\')">' +
+        '<option value="manual"' + (isManual ? ' selected' : '') + '>📝 ম্যানুয়াল আবেদন</option>' +
+        '<option value="automated"' + (!isManual ? ' selected' : '') + '>⚡ অটোমেটেড ইঞ্জিন</option>' +
       '</select></div>' +
-      fld('ডকুমেন্ট (কমা দিয়ে)', 'text', 'esv_docs', (s.documents_required || []).join(', ')) +
-      '<div class="field"><label>📄 নমুনা ফরম্যাট <small style="color:#64748b;">(user কপি করে পূরণ করবে)</small></label><textarea id="esv_sample" rows="6" style="font-family:monospace;font-size:13px;line-height:1.7;background:#f8fafc;">' + esc(s.manual_sample || '') + '</textarea><small style="color:#64748b;">💡 প্রতিটি তথ্য নতুন লাইনে লিখুন। যেমন:<br>নাম:<br>এনআইডি নং:<br>জন্ম তারিখ:</small></div>' +
-      fld('📎 ডকুমেন্ট সংখ্যা (১-৬)', 'number', 'esv_doccount', s.manual_doc_count || 1) +
-      '<button class="btn" onclick="AdmSvc.save(\'' + id + '\')">সংরক্ষণ</button>');
+      '<div id="esv_engineBox" style="display:' + (!isManual ? 'block' : 'none') + ';background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:12px;margin-bottom:14px;">' +
+        '<div style="font-size:12px;color:#6b21a8;font-weight:700;margin-bottom:8px;">⚡ অটোমেটেড ইঞ্জিন কনফিগারেশন</div>' +
+        '<div class="field" style="margin-bottom:6px;"><label>🔌 অটোমেশন ইঞ্জিন</label><select id="esv_engine">' +
+          '<option value="">-- ইঞ্জিন বেছে নিন --</option>' +
+          '<option value="bdris-certificate"' + (s.engine_id === 'bdris-certificate' ? ' selected' : '') + '>জন্মনিবন্ধন সনদ ইঞ্জিন (Port 3000)</option>' +
+          '<option value="death-verify"' + (s.engine_id === 'death-verify' ? ' selected' : '') + '>মৃত্যুনিবন্ধন যাচাই ইঞ্জিন (Port 3001)</option>' +
+          '<option value="nid-replica"' + (s.engine_id === 'nid-replica' ? ' selected' : '') + '>এনআইডি রেপ্লিকা ইঞ্জিন</option>' +
+          '<option value="bdris-apply"' + (s.engine_id === 'bdris-apply' ? ' selected' : '') + '>BDRIS অনলাইন আবেদন ইঞ্জিন (Port 3102)</option>' +
+        '</select></div>' +
+      '</div>' +
+      '<div id="esv_manualBox" style="display:' + (isManual ? 'block' : 'none') + ';background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin-bottom:14px;">' +
+        '<div style="font-size:12px;color:#1e40af;font-weight:700;margin-bottom:8px;">📝 ম্যানুয়াল সেবা কনফিগারেশন</div>' +
+        '<div class="field"><label>📄 ম্যানুয়াল নমুনা ফরম্যাট <small style="color:#64748b;">(গ্রাহক এটি কপি করে পূরণ করবে)</small></label>' +
+        '<textarea id="esv_sample" rows="6" style="font-family:monospace;font-size:13px;line-height:1.7;background:#ffffff;width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:10px;">' + esc(s.manual_sample || '') + '</textarea>' +
+        '<small style="color:#64748b;font-size:11px;">💡 প্রতিটি তথ্যের লেবেল নতুন লাইনে লিখুন।</small></div>' +
+        '<div class="field"><label>📋 ম্যানুয়াল আবেদনের নির্দেশনা</label>' +
+        '<textarea id="esv_man_inst" rows="3" style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:10px;font-size:13px;background:#ffffff;">' + esc(s.manual_instructions || '') + '</textarea></div>' +
+        fld('📎 প্রয়োজনীয় ডকুমেন্ট সংখ্যা (১-৬)', 'number', 'esv_doccount', s.manual_doc_count || 1) +
+      '</div>' +
+      fld('দাম (৳) *', 'number', 'esv_price', s.price) +
+      '<div class="field"><label>স্ট্যাটাস</label><select id="esv_status">' +
+      ['active', 'disabled'].map(x => '<option value="' + x + '"' + (s.status === x ? ' selected' : '') + '>' + (x === 'active' ? '🟢 সক্রিয়' : '🔴 নিষ্ক্রিয়') + '</option>').join('') +
+      '</select></div>' +
+      fld('প্রয়োজনীয় ডকুমেন্টের নাম (কমা দিয়ে)', 'text', 'esv_docs', (s.documents_required || []).join(', ')) +
+      '<div class="field"><label>📜 সাধারণ নিয়মাবলী ও শর্তাবলী</label><textarea id="esv_rules" rows="3" style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:10px;font-size:13px;">' + esc(s.rules_text || '') + '</textarea></div>' +
+      '<button class="btn" onclick="AdmSvc.save(\'' + id + '\')" style="width:100%;padding:12px;font-weight:700;margin-top:10px;">💾 পরিবর্তন সংরক্ষণ করুন</button>');
   },
   async save(id) {
     const docs = v('esv_docs').split(',').map(x => x.trim()).filter(Boolean);
+    const type = document.getElementById('esv_type').value;
     const r = await ABC.api('/admin/services/' + id, { method: 'PUT', body: {
-      name: v('esv_name'), name_bn: v('esv_bn'), price: Number(v('esv_price')) || 0,
+      name: v('esv_name'),
+      name_bn: v('esv_bn'),
+      type: type,
+      price: Number(v('esv_price')) || 0,
       status: document.getElementById('esv_status').value,
       category_id: document.getElementById('esv_cat').value || null,
       documents_required: docs,
-      manual_sample: v('esv_sample') || null,
-      manual_doc_count: Math.min(6, Math.max(1, Number(v('esv_doccount')) || 1)),
+      engine_id: type === 'automated' ? (document.getElementById('esv_engine').value || null) : null,
+      manual_sample: type === 'manual' ? (v('esv_sample') || null) : null,
+      manual_instructions: type === 'manual' ? (v('esv_man_inst') || null) : null,
+      manual_doc_count: type === 'manual' ? Math.min(6, Math.max(1, Number(v('esv_doccount')) || 1)) : 1,
+      rules_text: v('esv_rules') || null,
     }});
-    if (!r.ok) { alert('ব্যর্থ'); return; }
+    if (!r.ok) { alert('সংরক্ষণ ব্যর্থ'); return; }
     closeModal(); show('services');
   },
   async del(id) {
-    if (!confirm('সেবা ডিলিট করবেন?')) return;
-    if (!confirm('শেষ কনফার্মেশন!')) return;
+    if (!confirm('সেবাটি ডিলিট করতে চান?')) return;
     const r = await ABC.api('/admin/services/' + id + '?confirm=yes', { method: 'DELETE' });
-    if (!r.ok) { alert('ব্যর্থ'); return; }
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      if (d.error === 'SERVICE_IN_USE') {
+        alert('⚠️ ' + (d.message || 'এই সার্ভিসে ইতিমধ্যে অর্ডার বিদ্যমান। ডিলিট করার পরিবর্তে এটি নিষ্ক্রিয় (disabled) করুন।'));
+      } else {
+        alert('ডিলিট ব্যর্থ: ' + (d.error || 'UNKNOWN'));
+      }
+      return;
+    }
     show('services');
   },
 };
 
-/* ---------------- SERVICE CATEGORIES ---------------- */
-TABS.cats = async () => {
-  const r = await ABC.api('/admin/service-categories');
-  const d = await r.json();
-  const cats = d.categories || [];
-  let html = '<button class="mini-btn ok" onclick="AdmCat.createForm()" style="margin-bottom:12px;">+ নতুন ক্যাটাগরি</button>';
-  if (!cats.length) {
-    html += '<div style="color:var(--muted)">কোনো ক্যাটাগরি নেই — প্রথম ক্যাটাগরি বানান (যেমন: জন্মনিবন্ধন সেবা) 📁</div>';
-  } else {
-    html += '<div style="overflow-x:auto;"><table class="adm"><tr><th>#</th><th>আইকন</th><th>নাম</th><th>সেবা</th><th>স্ট্যাটাস</th><th>ক্রম</th><th>কাজ</th></tr>';
-    cats.forEach((c, i) => {
-      html += '<tr><td>' + (i + 1) + '</td><td style="font-size:22px">' + esc(c.icon || '📁') + '</td>' +
-        '<td>' + esc(c.name_bn || c.name) + '<br><small style="color:var(--dim)">' + esc(c.name) + '</small></td>' +
-        '<td>' + bn(c.service_count) + 'টি</td>' +
-        '<td>' + esc(c.status) + '</td>' +
-        '<td><button class="mini-btn" onclick="AdmCat.move(\'' + c.id + '\',-1)"' + (i === 0 ? ' disabled' : '') + '>↑</button> ' +
-        '<button class="mini-btn" onclick="AdmCat.move(\'' + c.id + '\',1)"' + (i === cats.length - 1 ? ' disabled' : '') + '>↓</button></td>' +
-        '<td><button class="mini-btn" onclick="AdmCat.edit(\'' + c.id + '\')">এডিট</button> ' +
-        '<button class="mini-btn danger" onclick="AdmCat.del(\'' + c.id + '\')">ডিলিট</button></td></tr>';
-    });
-    html += '</table></div>' +
-      '<div style="color:var(--muted);margin-top:10px;font-size:13px;">💡 ক্যাটাগরি ডিলিট করলে ভিতরের সেবাগুলো ডিলিট হবে না — "অন্যান্য"-তে চলে যাবে।</div>';
-  }
-  content.innerHTML = html;
-};
 window.AdmCat = {
   createForm() {
-    modal('📁 নতুন ক্যাটাগরি',
-      fld('নাম (বাংলা)', 'text', 'ct_bn') + fld('নাম (English)', 'text', 'ct_name') +
-      fld('আইকন (emoji)', 'text', 'ct_icon', '📁') +
-      '<button class="btn" onclick="AdmCat.create()">তৈরি করুন</button>');
+    modal('📁 নতুন ক্যাটাগরি তৈরি করুন',
+      fld('নাম (বাংলা) *', 'text', 'ct_bn') +
+      fld('নাম (English) *', 'text', 'ct_name') +
+      fld('আইকন (Emoji) *', 'text', 'ct_icon', '📁') +
+      '<button class="btn" onclick="AdmCat.create()" style="width:100%;padding:12px;font-weight:700;margin-top:10px;">✅ ক্যাটাগরি সংরক্ষণ</button>');
+  },
+  async inlineCreate(selectId) {
+    const name = prompt('নতুন ক্যাটাগরির নাম লিখুন:');
+    if (!name || !name.trim()) return;
+    const r = await ABC.api('/admin/service-categories', {
+      method: 'POST',
+      body: { name: name.trim(), name_bn: name.trim(), icon: '📁' }
+    });
+    const d = await r.json();
+    if (!r.ok) { alert('ক্যাটাগরি তৈরি ব্যর্থ: ' + (d.error || 'UNKNOWN')); return; }
+    await loadCats();
+    const sel = document.getElementById(selectId);
+    if (sel) {
+      sel.innerHTML = catOptions(d.category ? d.category.id : null);
+    }
   },
   async create() {
+    const bnName = v('ct_bn');
+    const enName = v('ct_name') || bnName;
+    if (!bnName && !enName) { alert('অনুগ্রহ করে ক্যাটাগরির নাম দিন'); return; }
     const r = await ABC.api('/admin/service-categories', { method: 'POST', body: {
-      name: v('ct_name') || v('ct_bn'), name_bn: v('ct_bn'), icon: v('ct_icon') || '📁',
+      name: enName, name_bn: bnName, icon: v('ct_icon') || '📁',
     }});
     const d = await r.json();
-    if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
-    closeModal(); show('cats');
+    if (!r.ok) { alert('ব্যর্থ: ' + (d.error || 'UNKNOWN')); return; }
+    await loadCats();
+    closeModal();
+    show('services');
   },
   async edit(id) {
-    const r = await ABC.api('/admin/service-categories');
-    const c = (await r.json()).categories.find(x => x.id === id);
+    await loadCats();
+    const c = (catCache || []).find(x => x.id === id);
     if (!c) return;
     modal('✏️ ' + (c.name_bn || c.name),
-      fld('নাম (বাংলা)', 'text', 'ect_bn', c.name_bn || '') +
-      fld('নাম (English)', 'text', 'ect_name', c.name || '') +
-      fld('আইকন (emoji)', 'text', 'ect_icon', c.icon || '📁') +
+      fld('নাম (বাংলা) *', 'text', 'ect_bn', c.name_bn || '') +
+      fld('নাম (English) *', 'text', 'ect_name', c.name || '') +
+      fld('আইকন (Emoji)', 'text', 'ect_icon', c.icon || '📁') +
       '<div class="field"><label>স্ট্যাটাস</label><select id="ect_status">' +
-      ['active', 'disabled'].map(x => '<option value="' + x + '"' + (c.status === x ? ' selected' : '') + '>' + x + '</option>').join('') +
+      ['active', 'disabled'].map(x => '<option value="' + x + '"' + (c.status === x ? ' selected' : '') + '>' + (x === 'active' ? '🟢 সক্রিয়' : '🔴 নিষ্ক্রিয়') + '</option>').join('') +
       '</select></div>' +
-      '<button class="btn" onclick="AdmCat.save(\'' + id + '\')">সংরক্ষণ</button>');
+      '<button class="btn" onclick="AdmCat.save(\'' + id + '\')" style="width:100%;padding:12px;font-weight:700;margin-top:10px;">💾 পরিবর্তন সংরক্ষণ</button>');
   },
   async save(id) {
     const r = await ABC.api('/admin/service-categories/' + id, { method: 'PUT', body: {
-      name: v('ect_name'), name_bn: v('ect_bn'), icon: v('ect_icon'),
+      name: v('ect_name'), name_bn: v('ect_bn'), icon: v('ect_icon') || '📁',
       status: document.getElementById('ect_status').value,
     }});
-    if (!r.ok) { alert('ব্যর্থ'); return; }
-    closeModal(); show('cats');
+    if (!r.ok) { alert('সংরক্ষণ ব্যর্থ'); return; }
+    await loadCats();
+    closeModal();
+    show('services');
   },
   async del(id) {
-    if (!confirm('ক্যাটাগরি ডিলিট করবেন? ভিতরের সেবাগুলো ডিলিট হবে না, "অন্যান্য"-তে চলে যাবে।')) return;
+    if (!confirm('ক্যাটাগরি ডিলিট করবেন? ভেতরের সেবাগুলো "অন্যান্য" বিভাগে চলে যাবে।')) return;
     const r = await ABC.api('/admin/service-categories/' + id + '?confirm=yes', { method: 'DELETE' });
-    if (!r.ok) { alert('ব্যর্থ'); return; }
-    show('cats');
+    if (!r.ok) { alert('ডিলিট ব্যর্থ'); return; }
+    await loadCats();
+    show('services');
   },
   async move(id, dir) {
     const r = await ABC.api('/admin/service-categories');
@@ -2437,8 +2679,9 @@ window.AdmCat = {
     const order = cats.map(x => x.id);
     const t = order[i]; order[i] = order[j]; order[j] = t;
     const rr = await ABC.api('/admin/service-categories/reorder', { method: 'PUT', body: { order } });
-    if (!rr.ok) { alert('ব্যর্থ'); return; }
-    show('cats');
+    if (!rr.ok) { alert('ক্রম পরিবর্তন ব্যর্থ'); return; }
+    await loadCats();
+    show('services');
   },
 };
 

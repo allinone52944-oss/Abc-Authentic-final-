@@ -83,6 +83,15 @@ customerManual.use(requireAuth);
 
 // GET /api/manual/template — sample format for customer to copy
 customerManual.get('/template', async (req, res) => {
+  const serviceId = req.query.service_id;
+  if (serviceId) {
+    try {
+      const sr = await db.query('SELECT manual_sample FROM services WHERE id = $1', [serviceId]);
+      if (sr.rows.length && sr.rows[0].manual_sample) {
+        return res.json({ template: sr.rows[0].manual_sample, service_specific: true });
+      }
+    } catch (_) {}
+  }
   res.json({ template: await getTemplate() });
 });
 

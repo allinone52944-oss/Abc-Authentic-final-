@@ -90,6 +90,9 @@
 
       <div id="fields"></div>
 
+      <!-- Special instructions from admin -->
+      <div id="instWrap" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin-bottom:16px;color:#1e40af;font-size:13px;line-height:1.6;"></div>
+
       <!-- Sample / Instruction Preview -->
       <div id="sampleWrap" style="display:none;margin-bottom:16px;">
         <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:#334155;">ফরম নমুনা / তথ্য বিন্যাস (প্রয়োজনে এডিট করুন)</label>
@@ -137,13 +140,23 @@ async function init(){
   ).join('');
   document.getElementById('fields').innerHTML=fh;
 
+  // Service instructions
+  if(svc.manual_instructions){
+    const iw=document.getElementById('instWrap');
+    if(iw){
+      iw.style.display='block';
+      iw.innerHTML='<b>📋 সেবার বিশেষ নির্দেশনা:</b><div style="margin-top:4px;white-space:pre-wrap;">'+esc(svc.manual_instructions)+'</div>';
+    }
+  }
+
   // Auto-fill form template
-  if(svc.sample_format){
+  const sampleVal = svc.manual_sample || svc.sample_format;
+  if(sampleVal){
     const sw=document.getElementById('sampleWrap');
     const si=document.getElementById('sampleInput');
     if(sw&&si){
       sw.style.display='block';
-      si.value=svc.sample_format;
+      si.value=sampleVal;
     }
   }
 
@@ -162,10 +175,16 @@ async function init(){
       if(draft[el.dataset.field])el.value=draft[el.dataset.field];
     });
     if(draft.notes)document.getElementById('notes').value=draft.notes;
+    if(draft.sampleInput&&document.getElementById('sampleInput')){
+      document.getElementById('sampleInput').value=draft.sampleInput;
+    }
   }
   // Auto-save draft on input
   document.querySelector('.card').addEventListener('input',()=>{
-    const d={notes:document.getElementById('notes').value};
+    const d={
+      notes:document.getElementById('notes').value,
+      sampleInput:document.getElementById('sampleInput')?document.getElementById('sampleInput').value:''
+    };
     document.querySelectorAll('[data-field]').forEach(el=>{d[el.dataset.field]=el.value;});
     ABC.Drafts.save('order_'+sid,d);
   });
@@ -229,6 +248,7 @@ async function submit(){
     err.textContent = '⚠️ কিছু ডকুমেন্ট আপলোড হয়নি। অর্ডার তৈরি হয়েছে, পরে আপলোড করুন।';
     return;
   }
+  ABC.Idempotency.clear('order_submit_' + sid);
   ABC.Drafts.clear('order_'+sid);
   location.href='/order-status.html?id='+orderId;
 }
