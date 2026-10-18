@@ -47,7 +47,7 @@
     let body = bodyMatch ? bodyMatch[1] : html;
     body = body.split('{{text_bn}}').join(textBn).split('{{text_en}}').join(textEn);
     const link = c.link ? String(c.link).trim() : '';
-    let customCss = '';
+    let customCss = '.bn{max-width:100% !important;width:100% !important;border:none !important;border-radius:0 !important;box-sizing:border-box !important;}';
     if (bgColor) customCss += '.bn{background:' + esc(bgColor) + ' !important;}';
     if (textColor) customCss += '.bn h2,.bn p{color:' + esc(textColor) + ' !important;}';
     const inner = '<style>' + css + customCss + '</style>' + body;
