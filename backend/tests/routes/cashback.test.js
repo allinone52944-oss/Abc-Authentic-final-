@@ -113,3 +113,72 @@ describe('POST /api/cashback/redeem', () => {
     await request(app()).post('/api/cashback/redeem').expect(401);
   });
 });
+
+describe('POST /api/cashback/generate', () => {
+  function genHandlers(over = {}) {
+    return [
+      ['FROM transactions', over.rc || { rows: [{ id: 'tx-123', amount: 1000, user_id: 'u1' }] }],
+      ['SELECT id FROM coupons WHERE recharge_id', over.exist || { rows: [] }],
+      ["SELECT value FROM settings WHERE key = 'cashback'", over.cashback || CASHBACK_ON],
+      ['INSERT INTO coupons', over.insert || {
+        rows: [{
+          id: 'cp-1',
+          code: 'CB-ABCD1234',
+          percent: 10,
+          amount: 100,
+          service_id: null,
+          user_id: 'u1',
+          expires_at: new Date().toISOString(),
+          recharge_id: 'tx-123',
+          notes: 'recharge:tx-123'
+        }],
+      }],
+    ];
+  }
+
+  test('happy path → 201 with coupon code, amount and percent', async () => {
+    db.__routeQuery(genHandlers());
+    const r = await withUser(request(app()).post('/api/cashback/generate'))
+      .send({ recharge_id: 'tx-123' })
+      .expect(201);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.coupon.id).toBe('cp-1');
+    expect(r.body.coupon.code).toBe('CB-ABCD1234');
+    expect(r.body.coupon.amount).toBe(100);
+    expect(r.body.coupon.percent).toBe(10);
+    expect(db.withTransaction).toHaveBeenCalled();
+  });
+
+  test('missing recharge_id → 400 MISSING_RECHARGE', async () => {
+    const r = await withUser(request(app()).post('/api/cashback/generate')).send({}).expect(400);
+    expect(r.body.error).toBe('MISSING_RECHARGE');
+  });
+
+  test('invalid / unapproved recharge → 400 INVALID_RECHARGE', async () => {
+    db.__routeQuery(genHandlers({ rc: { rows: [] } }));
+    const r = await withUser(request(app()).post('/api/cashback/generate'))
+      .send({ recharge_id: 'tx-unapproved' })
+      .expect(400);
+    expect(r.body.error).toBe('INVALID_RECHARGE');
+  });
+
+  test('already generated for this recharge → 409 ALREADY_GENERATED', async () => {
+    db.__routeQuery(genHandlers({ exist: { rows: [{ id: 'cp-exist' }] } }));
+    const r = await withUser(request(app()).post('/api/cashback/generate'))
+      .send({ recharge_id: 'tx-123' })
+      .expect(409);
+    expect(r.body.error).toBe('ALREADY_GENERATED');
+  });
+
+  test('cashback disabled → 400 CASHBACK_DISABLED', async () => {
+    db.__routeQuery(genHandlers({ cashback: { rows: [{ value: { enabled: false, percent: 10 } }] } }));
+    const r = await withUser(request(app()).post('/api/cashback/generate'))
+      .send({ recharge_id: 'tx-123' })
+      .expect(400);
+    expect(r.body.error).toBe('CASHBACK_DISABLED');
+  });
+
+  test('requires auth → 401', async () => {
+    await request(app()).post('/api/cashback/generate').send({ recharge_id: 'tx-123' }).expect(401);
+  });
+});

@@ -113,6 +113,46 @@
   @keyframes coinFall {
     to { transform: translateY(110vh) rotate(720deg); }
   }
+  .cb-badge {
+    margin-top: 6px;
+    padding: 6px 10px;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: #065f46;
+  }
+  .cb-badge.pending {
+    background: #fffbeb;
+    border-color: #fde68a;
+    color: #92400e;
+  }
+  .cb-btn {
+    background: linear-gradient(135deg, #059669, #10b981);
+    color: #ffffff;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(16,185,129,0.3);
+    transition: transform 0.15s, opacity 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .cb-btn:hover { opacity: 0.95; transform: scale(1.02); }
+  .cb-btn.sec {
+    background: #ffffff;
+    color: #0f172a;
+    border: 1px solid #cbd5e1;
+    box-shadow: none;
+  }
 </style>
 </head>
 <body>
@@ -149,13 +189,7 @@
       <div style="font-size:13px;color:rgba(255,255,255,0.85);margin-top:4px;">অর্ডার করার সময় এই ব্যালেন্স থেকে স্বয়ংক্রিয়ভাবে ফি পরিশোধ হবে।</div>
     </div>
 
-    <!-- Cashback Card -->
-    <div class="card" id="cbCard" style="display:none;background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border-color:#a7f3d0;">
-      <h3>🎉 আজকের ক্যাশব্যাক অফার</h3>
-      <div style="font-size:28px;font-weight:800;color:#059669;" id="cbAmt">৳০</div>
-      <div style="font-size:13px;color:#047857;margin:6px 0 14px;" id="cbSub"></div>
-      <button class="btn" id="cbBtn" style="background:linear-gradient(135deg,#059669,#10b981);" onclick="redeemCashback()">রিডিম করুন 🎉</button>
-    </div>
+
 
     <!-- Recharge Form Card -->
     <div class="card">
@@ -253,10 +287,14 @@
 <!-- Cashback Win Overlay -->
 <div id="cbOverlay">
   <div class="big">🎉</div>
-  <div class="congrats">অভিনন্দন!</div>
+  <div class="congrats" id="cbTitle">অভিনন্দন! ক্যাশব্যাক কুপন তৈরি হয়েছে!</div>
   <div class="won" id="cbWon">৳০</div>
-  <div class="code" id="cbCode"></div>
-  <button class="btn" style="margin-top:24px;background:#ffffff;color:#1e40af;font-weight:700;" onclick="document.getElementById('cbOverlay').classList.remove('show')">ধন্যবাদ! ✨</button>
+  <div class="code" id="cbCode" style="font-size:16px;color:#fef08a;font-weight:700;letter-spacing:1px;margin:8px 0 16px;"></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+    <button class="btn" id="cbInstantBtn" style="background:linear-gradient(135deg,#059669,#10b981);color:#fff;font-weight:700;padding:12px 20px;">⚡ এখনই ওয়ালেটে যোগ করুন</button>
+    <button class="btn" id="cbCopyBtn" style="background:#ffffff;color:#1e293b;font-weight:700;padding:12px 20px;">📋 কোড কপি করুন</button>
+  </div>
+  <div style="font-size:12px;color:#94a3b8;margin-top:16px;cursor:pointer;" onclick="document.getElementById('cbOverlay').classList.remove('show')">✕ বন্ধ করুন</div>
 </div>
 
 <!-- WhatsApp Support Button -->
@@ -322,21 +360,121 @@ async function init(){
   });
   updateRecvNum();
   loadWallet();
-  setTimeout(loadCashback, 400);
 }
+
+const bn = n => Number(n || 0).toLocaleString('bn-BD');
 
 async function loadWallet(){
   const r=await ABC.api('/wallet?limit=10');
   if(!r.ok)return;
   const d=await r.json();
-  document.getElementById('bal').textContent='৳'+Number(d.balance).toLocaleString('bn-BD');
+  document.getElementById('bal').textContent='৳'+bn(d.balance);
   const shortRef=x=>{x=String(x||'');const m=x.match(/^order-([0-9a-f]{8})/i);return m?'#'+m[1]:(x.length>24?x.slice(0,24)+'…':x);};
   const fmtAmt=a=>{a=Number(a);return (a<0?'-':'+')+'৳'+Math.abs(a).toLocaleString('bn-BD');};
   const fmtDt=s=>{try{return new Date(s).toLocaleString('bn-BD').replace(' PM',' পিএম').replace(' AM',' এএম');}catch(e){return '';}};
-  document.getElementById('txList').innerHTML=d.transactions.map(t=>
-    '<div class="tx"><div><b style="font-size:14px;color:#0f172a;">'+esc(TYPBN[t.type]||t.type)+'</b> <small style="color:#94a3b8;margin-left:6px;">'+esc(shortRef(t.trxid))+'</small><br><small style="color:#64748b;">'+fmtDt(t.created_at)+'</small></div>'+
-    '<b style="font-size:16px;color:'+(Number(t.amount)>=0?'#059669':'#dc2626')+'">'+fmtAmt(t.amount)+'</b></div>'
-  ).join('')||'<div style="color:#64748b;padding:12px 0;">কোনো লেনদেনের ইতিহাস পাওয়া যায়নি</div>';
+
+  const cbCfg = d.cashback || { enabled: false, percent: 0 };
+
+  document.getElementById('txList').innerHTML = d.transactions.map(t => {
+    let cbHtml = '';
+    if (t.type === 'recharge') {
+      if (t.status === 'pending') {
+        cbHtml = '<div class="cb-badge pending">⏳ এডমিন ভেরিফিকেশন পেন্ডিং' +
+          (cbCfg.enabled && cbCfg.percent > 0 ? ' (অনুমোদন হলে ' + bn(cbCfg.percent) + '% ক্যাশব্যাক পাবেন)' : '') +
+          '</div>';
+      } else if (t.status === 'approved') {
+        const coupon = t.coupon;
+        if (coupon && coupon.code) {
+          if (coupon.status === 'redeemed') {
+            cbHtml = '<div class="cb-badge">✅ ক্যাশব্যাক কুপন <b>' + esc(coupon.code) + '</b> (৳' + bn(coupon.amount) + ') ব্যালেন্সে জমা হয়েছে</div>';
+          } else {
+            cbHtml = '<div class="cb-badge">🎟️ কুপন তৈরি হয়েছে: <b>' + esc(coupon.code) + '</b> (৳' + bn(coupon.amount) + ') ' +
+              '<button class="cb-btn" data-code="' + esc(coupon.code) + '" onclick="instantRedeemCode(this.dataset.code)">⚡ ওয়ালেটে রিডিম করুন</button> ' +
+              '<button class="cb-btn sec" data-code="' + esc(coupon.code) + '" onclick="copyCode(this.dataset.code)">📋 কপি</button></div>';
+          }
+        } else if (cbCfg.enabled && cbCfg.percent > 0) {
+          const expected = Math.floor(Number(t.amount) * cbCfg.percent / 100 * 100) / 100;
+          if (expected > 0) {
+            cbHtml = '<div class="cb-badge">🎁 <b>' + bn(cbCfg.percent) + '% ক্যাশব্যাক প্রাপ্য (৳' + bn(expected) + ')</b> ' +
+              '<button class="cb-btn" data-id="' + esc(t.id) + '" onclick="generateCashbackCoupon(this.dataset.id)">⚡ ১-ক্লিকে কুপন তৈরি করুন</button></div>';
+          }
+        }
+      } else if (t.status === 'rejected') {
+        cbHtml = '<div class="cb-badge pending" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;">❌ রিচার্জ প্রত্যাখ্যাত</div>';
+      }
+    }
+
+    return '<div class="tx"><div style="flex:1;"><b style="font-size:14px;color:#0f172a;">' +
+      esc(TYPBN[t.type] || t.type) + '</b> <small style="color:#94a3b8;margin-left:6px;">' +
+      esc(shortRef(t.trxid)) + '</small><br><small style="color:#64748b;">' +
+      fmtDt(t.created_at) + '</small>' + cbHtml + '</div>' +
+      '<b style="font-size:16px;color:' + (Number(t.amount) >= 0 ? '#059669' : '#dc2626') + '">' +
+      fmtAmt(t.amount) + '</b></div>';
+  }).join('') || '<div style="color:#64748b;padding:12px 0;">কোনো লেনদেনের ইতিহাস পাওয়া যায়নি</div>';
+}
+
+async function generateCashbackCoupon(rechargeId) {
+  try {
+    const r = await ABC.api('/cashback/generate', {
+      method: 'POST',
+      body: { recharge_id: rechargeId }
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      alert('❌ ' + (d.error === 'ALREADY_GENERATED' ? 'এই রিচার্জের কুপন ইতোমধ্যে তৈরি হয়েছে' : (d.error || 'ব্যর্থ')));
+      loadWallet();
+      return;
+    }
+    const c = d.coupon;
+    showCouponSuccess(c);
+    loadWallet();
+  } catch (e) {
+    alert('❌ ত্রুটি: ' + e.message);
+  }
+}
+
+function showCouponSuccess(coupon) {
+  const ov = document.getElementById('cbOverlay');
+  if (!ov) return;
+  document.getElementById('cbTitle').textContent = '🎉 ' + coupon.percent + '% ক্যাশব্যাক কুপন তৈরি হয়েছে!';
+  document.getElementById('cbCode').textContent = 'কুপন কোড: ' + coupon.code;
+  document.getElementById('cbWon').textContent = '৳' + bn(coupon.amount);
+  const instantBtn = document.getElementById('cbInstantBtn');
+  instantBtn.onclick = () => {
+    ov.classList.remove('show');
+    instantRedeemCode(coupon.code);
+  };
+  const copyBtn = document.getElementById('cbCopyBtn');
+  copyBtn.onclick = () => {
+    copyCode(coupon.code);
+  };
+  ov.classList.add('show');
+  celebrate(Number(coupon.amount) || 0, coupon.code);
+}
+
+async function instantRedeemCode(code) {
+  const r = await ABC.api('/wallet/coupon', { method: 'POST', body: { code } });
+  const d = await r.json();
+  if (!r.ok) {
+    alert('❌ ' + (d.error === 'ALREADY_REDEEMED' ? 'কুপনটি ইতোমধ্যে রিডিম করা হয়েছে' : (d.error || 'ব্যর্থ')));
+    loadWallet();
+    return;
+  }
+  loadWallet();
+  celebrate(Number(d.credited) || 0, code);
+  alert('🎉 অভিনন্দন! ৳' + bn(d.credited) + ' আপনার মূল ওয়ালেট ব্যালেন্সে যোগ হয়েছে!');
+}
+
+function copyCode(code) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(code).then(() => {
+      alert('📋 কুপন কোড ' + code + ' কপি করা হয়েছে!');
+    }).catch(() => {
+      prompt('কুপন কোডটি কপি করুন:', code);
+    });
+  } else {
+    prompt('কুপন কোডটি কপি করুন:', code);
+  }
 }
 
 async function submitRecharge(){
@@ -411,34 +549,7 @@ function celebrate(amount,code){
   })(t0);
 }
 
-async function loadCashback(){
-  const card=document.getElementById('cbCard');
-  try{
-    const r=await ABC.api('/cashback/today'); if(!r.ok)return;
-    const d=await r.json(); if(!d.enabled||d.percent<=0)return;
-    card.style.display='block';
-    const bn=n=>(+n).toLocaleString('bn-BD');
-    document.getElementById('cbAmt').textContent='৳'+bn(d.cashback_amount||0);
-    const btn=document.getElementById('cbBtn');
-    if(d.already_redeemed){document.getElementById('cbSub').textContent='নেওয়া হয়েছে ✅';btn.disabled=true;btn.textContent='নেওয়া হয়েছে ✅';}
-    else if(d.recharge_total>0){document.getElementById('cbSub').textContent='রিচার্জ ৳'+bn(d.recharge_total)+' × '+d.percent+'%';btn.disabled=false;}
-    else{document.getElementById('cbSub').textContent='রিচার্জ করুন, ক্যাশব্যাক পান!';btn.disabled=true;}
-  }catch(e){}
-}
 
-async function redeemCashback(){
-  const btn=document.getElementById('cbBtn');
-  btn.disabled=true; btn.textContent='প্রসেস হচ্ছে…';
-  try{
-    const r=await ABC.api('/cashback/redeem',{method:'POST'});
-    const d=await r.json();
-    if(r.ok){
-      document.getElementById('couponCode').value=d.coupon_code;
-      loadWallet();
-      loadCashback();
-    } else btn.textContent='❌ ব্যর্থ';
-  }catch(e){btn.textContent='❌ ব্যর্থ';}
-}
 
 init();
 </script>

@@ -414,13 +414,31 @@ router.get('/wallet', async (req, res) => {
     const { page, limit, offset } = pageParams(req);
     const total = await db.query('SELECT COUNT(*) FROM transactions WHERE user_id = $1', [req.user.id]);
     const rows = await db.query(
-      `SELECT id, type, amount, method, sender_no, trxid, status, created_at
+      `SELECT id, type, amount, method, sender_no, trxid, status, created_at,
+              (SELECT json_build_object('id', c.id, 'code', c.code, 'status', c.status, 'amount', c.amount)
+               FROM coupons c WHERE c.recharge_id = transactions.id LIMIT 1) AS coupon
        FROM transactions WHERE user_id = $1
        ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
       [req.user.id, limit, offset]);
+
+    let cashback = { enabled: false, percent: 0 };
+    try {
+      const cbSetting = await db.query("SELECT value FROM settings WHERE key = 'cashback' LIMIT 1");
+      if (cbSetting.rows && cbSetting.rows[0] && cbSetting.rows[0].value) {
+        const val = typeof cbSetting.rows[0].value === 'string'
+          ? JSON.parse(cbSetting.rows[0].value)
+          : cbSetting.rows[0].value;
+        cashback = {
+          enabled: val.enabled === true,
+          percent: Number(val.percent) || 0,
+        };
+      }
+    } catch (_) {}
+
     res.json({
       balance: Number(u.rows[0].balance),
       transactions: rows.rows,
+      cashback,
       total: parseInt(total.rows[0].count, 10), page, limit,
     });
   } catch (e) {

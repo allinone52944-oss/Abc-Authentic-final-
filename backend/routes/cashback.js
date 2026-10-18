@@ -209,6 +209,7 @@ router.post('/generate', async (req, res) => {
     res.status(201).json({
       ok: true,
       coupon: {
+        id: out.id,
         code: out.code,
         amount: Number(out.amount),
         percent: Number(out.percent),
