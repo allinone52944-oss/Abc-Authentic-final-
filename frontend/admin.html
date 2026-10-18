@@ -177,6 +177,138 @@
     color: var(--status-success-text);
     border-color: #a7f3d0;
   }
+  #content .mini-btn.danger {
+    background: var(--status-danger-bg);
+    color: var(--status-danger-text);
+    border-color: #fecaca;
+  }
+  #content .list-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 16px;
+    border-radius: var(--r-md);
+    background: #f8fafc;
+    border: 1px solid var(--border-light);
+    margin-bottom: 12px;
+    transition: all 0.15s ease;
+  }
+  #content .list-row:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+  }
+  #content .list-row .t {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-main);
+    line-height: 1.35;
+  }
+  #content .list-row .s, #content .s {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.45;
+  }
+  #content .pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  /* Premium Settings Workspace */
+  .adm-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 980px;
+    margin: 0 auto;
+  }
+  .adm-settings-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 24px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-xl);
+    box-shadow: var(--shadow-sm);
+  }
+  .adm-settings-eyebrow {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--primary-600);
+    margin-bottom: 6px;
+  }
+  .adm-settings-hero h1 {
+    margin: 0;
+    font-size: 24px;
+    color: var(--text-main);
+  }
+  .adm-settings-hero p {
+    margin: 6px 0 0;
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+  .adm-settings-hero-mark {
+    font-size: 42px;
+    opacity: 0.18;
+    user-select: none;
+  }
+  .adm-settings-card {
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 24px;
+    margin-bottom: 0;
+  }
+  .adm-settings-card h2 {
+    margin-top: 0;
+    margin-bottom: 16px;
+    font-size: 18px;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .adm-settings-card h3 {
+    font-size: 15px;
+    color: var(--text-main) !important;
+    font-weight: 700;
+  }
+  .adm-settings-card input,
+  .adm-settings-card select,
+  .adm-settings-card textarea {
+    background: #ffffff !important;
+    color: var(--text-main) !important;
+    border: 1px solid var(--border-light) !important;
+  }
+  .adm-settings-card input:focus,
+  .adm-settings-card select:focus,
+  .adm-settings-card textarea:focus {
+    border-color: var(--primary-500) !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
+  }
+  .adm-settings-card select option {
+    background: #ffffff;
+    color: var(--text-main);
+  }
+  @media (max-width: 768px) {
+    .adm-settings-hero {
+      padding: 16px;
+    }
+    .adm-settings-hero-mark {
+      display: none;
+    }
+    .adm-settings-card {
+      padding: 16px;
+    }
+  }
+
   #content input, #content select, #content textarea {
     padding: 10px 14px;
     border: 1px solid var(--border-light);
@@ -803,7 +935,7 @@
 
 <script src="/js/app.js?v=15"></script>
 <script src="/banners/render.js?v=2"></script>
-<script src="/js/admin.js?v=46"></script>
+<script src="/js/admin.js?v=47"></script>
 <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});

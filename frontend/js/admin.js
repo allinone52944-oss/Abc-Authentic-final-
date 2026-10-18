@@ -3273,10 +3273,11 @@ TABS.settings = async () => {
   }
 
   content.innerHTML =
-    '<div style="display:flex;flex-direction:column;gap:18px;max-width:840px;">' +
+    '<div class="adm-settings">' +
+    '<div class="adm-settings-hero"><div><div class="adm-settings-eyebrow">ADMIN CONTROL CENTER</div><h1>⚙️ সিস্টেম সেটিংস</h1><p>নিরাপত্তা, পেমেন্ট, রিওয়ার্ড ও নোটিফিকেশন এক জায়গা থেকে পরিচালনা করুন।</p></div><span class="adm-settings-hero-mark">⚙</span></div>' +
 
     // CARD 1: SYSTEM & SECURITY
-    '<div class="form-card">' +
+    '<div class="form-card adm-settings-card">' +
     '<h2>🛡️ সিস্টেম ও নিরাপত্তা (System & Security)</h2>' +
     '<div class="list-row" style="cursor:default;"><div><div class="t">নতুন ইউজার রেজিস্ট্রেশন</div><div class="s">বন্ধ থাকলে শুধু বিদ্যমান ইউজাররা লগইন করতে পারবেন</div></div>' + bool('registration_enabled') + '</div>' +
     '<div class="list-row" style="cursor:default;"><div><div class="t">মেইনটেন্যান্স মোড</div><div class="s">চালু করলে সাধারণ ব্যবহারকারীদের সাইট বন্ধ দেখাবে</div></div>' + bool('maintenance_mode') + '</div>' +
@@ -3289,7 +3290,7 @@ TABS.settings = async () => {
     '</div>' +
 
     // CARD 2: PAYMENT HUB
-    '<div class="form-card">' +
+    '<div class="form-card adm-settings-card">' +
     '<h2>💳 পেমেন্ট হাব ও রিচার্জ নম্বর</h2>' +
     '<p class="s" style="margin-bottom:14px;">গ্রাহক ওয়ালেট রিচার্জের সময় এই নম্বরগুলো দেখতে পাবে এবং টাকা পাঠাবে</p>' +
     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">' +
@@ -3301,7 +3302,7 @@ TABS.settings = async () => {
     '</div>' +
 
     // CARD 3: REWARDS & LIMITS
-    '<div class="form-card">' +
+    '<div class="form-card adm-settings-card">' +
     '<h2>🎁 রিওয়ার্ড, বোনাস ও পলিসি লিমিট</h2>' +
     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">' +
       '<div class="field"><label>ক্যাশব্যাক হার % (০ = বন্ধ)</label><input type="number" id="st_cb" value="' + ((s.cashback && s.cashback.percent) || 0) + '"><div class="s" style="margin-top:4px;">রিচার্জ অনুমোদিত হলে ইউজার এই হারে ১-ক্লিক কুপন পাবেন</div></div>' +
@@ -3312,7 +3313,7 @@ TABS.settings = async () => {
     '</div>' +
 
     // CARD 4: MESSAGING & ALERTS
-    '<div class="form-card">' +
+    '<div class="form-card adm-settings-card">' +
     '<h2>📢 মেসেজিং, নোটিফিকেশন ও গ্রিটিং</h2>' +
     '<div class="list-row" style="cursor:default;"><div><div class="t">🔊 অ্যাডমিন ভয়েস অ্যালার্ট</div><div class="s">নতুন রিচার্জ বা অর্ডার আসলে প্যানেলে বাংলা ভয়েস সতর্কবার্তা</div></div>' +
     '<button class="mini-btn ' + (VoiceAlert.enabled ? 'ok' : '') + '" onclick="var on=VoiceAlert.toggle();this.className=\'mini-btn \'+(on?\'ok\':\'\');this.textContent=on?\'✅ চালু\':\'❌ বন্ধ\';">' +
@@ -3375,7 +3376,7 @@ TABS.settings = async () => {
     '</div>' +
 
     // CARD 5: SYSTEM HEALTH, STORAGE & BACKUP
-    '<div class="form-card">' +
+    '<div class="form-card adm-settings-card adm-settings-health">' +
     '<h2>🗄️ সিস্টেম হেলথ, ডাটাবেস ও স্টোরেজ</h2>' +
     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:10px;">' +
       '<div style="background:var(--card-sub,rgba(255,255,255,0.03));padding:16px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);">' +
