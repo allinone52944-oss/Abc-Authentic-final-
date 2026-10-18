@@ -76,12 +76,83 @@ async function show(tab) {
   }
 }
 
-/* ============ Phase 3: Voice alerts (Web Speech API, Bengali) ============ */
+/* ============ Phase 3: Premium Voice & Realtime Sound Notifications ============ */
 const VoiceAlert = {
-  enabled: localStorage.getItem('abc_voice') !== 'off',
-  _last: { recharge: 0, order: 0 },
+  enabled: typeof localStorage !== 'undefined' && localStorage.getItem('abc_voice') !== 'off',
+  _last: { recharge: 0, order: 0, sms: 0 },
   _voices: [],
-  // Notification sound (plays alongside TTS; files were unused before)
+  _audioCtx: null,
+
+  _getAudioCtx() {
+    try {
+      if (!this._audioCtx && typeof window !== 'undefined') {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) this._audioCtx = new AudioCtx();
+      }
+      if (this._audioCtx && this._audioCtx.state === 'suspended') {
+        this._audioCtx.resume().catch(() => {});
+      }
+    } catch (e) {}
+    return this._audioCtx;
+  },
+
+  playChime(type = 'order') {
+    if (!this.enabled) return;
+    try {
+      const ctx = this._getAudioCtx();
+      if (!ctx) {
+        this.playSound(type === 'order' ? 'new-order.mp3' : 'new-recharge.mp3');
+        return;
+      }
+      const now = ctx.currentTime;
+      if (type === 'order') {
+        // Luxury 3-chord major chime (Eb5, G5, Bb5)
+        [622.25, 783.99, 932.33].forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+          gain.gain.setValueAtTime(0.24, now + idx * 0.08);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.65);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + idx * 0.08);
+          osc.stop(now + idx * 0.08 + 0.7);
+        });
+      } else if (type === 'recharge') {
+        // Coin transaction chime (F5 -> C6)
+        [698.46, 1046.50].forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.09);
+          gain.gain.setValueAtTime(0.28, now + idx * 0.09);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + 0.75);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + idx * 0.09);
+          osc.stop(now + idx * 0.09 + 0.8);
+        });
+      } else {
+        // Soft double ping
+        [880.00, 1174.66].forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.1);
+          gain.gain.setValueAtTime(0.2, now + idx * 0.1);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.1 + 0.5);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + idx * 0.1);
+          osc.stop(now + idx * 0.1 + 0.55);
+        });
+      }
+    } catch (e) {
+      this.playSound(type === 'order' ? 'new-order.mp3' : 'new-recharge.mp3');
+    }
+  },
+
   playSound(file) {
     if (!this.enabled) return;
     try {
@@ -89,119 +160,288 @@ const VoiceAlert = {
       a.play().catch(() => {});
     } catch (e) {}
   },
+
+  playAudio(file) {
+    this.playSound(file);
+  },
+
+  speak(text) {
+    if (!this.enabled || typeof window === 'undefined' || !window.speechSynthesis) return;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'bn-BD';
+      u.pitch = 1.05;
+      u.rate = 0.95;
+      speechSynthesis.speak(u);
+    } catch (e) {}
+  },
+
+  showToast(opts) {
+    if (typeof document === 'undefined') return;
+    try {
+      const type = opts.type || 'order';
+      const title = opts.title || 'নোটিফিকেশন';
+      const message = opts.message || '';
+      const badge = opts.badge || 'নতুন';
+      const icon = opts.icon || '🔔';
+      const actionText = opts.actionText || '';
+      const onAction = opts.onAction || null;
+      const duration = typeof opts.duration === 'number' ? opts.duration : 9000;
+
+      let container = document.getElementById('admToastContainer');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'admToastContainer';
+        container.className = 'adm-toast-container';
+        document.body.appendChild(container);
+      }
+
+      const toast = document.createElement('div');
+      toast.className = 'adm-toast toast-' + type;
+
+      const actId = 'toastAct_' + Math.random().toString(36).slice(2, 8);
+      const closeId = 'toastClose_' + Math.random().toString(36).slice(2, 8);
+
+      toast.innerHTML = 
+        '<div class="adm-toast-icon">' + icon + '</div>' +
+        '<div class="adm-toast-body">' +
+          '<div class="adm-toast-title">' +
+            '<span>' + esc(title) + '</span>' +
+            '<span class="adm-toast-badge">' + esc(badge) + '</span>' +
+          '</div>' +
+          '<div class="adm-toast-msg">' + message + '</div>' +
+          '<div class="adm-toast-time">এইমাত্র</div>' +
+        '</div>' +
+        '<div class="adm-toast-actions">' +
+          (actionText ? '<button class="adm-toast-btn-view" id="' + actId + '">' + esc(actionText) + '</button>' : '') +
+          '<button class="adm-toast-btn-close" id="' + closeId + '" title="বন্ধ করুন">✕</button>' +
+        '</div>';
+
+      container.prepend(toast);
+
+      const closeToast = () => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-12px) scale(0.94)';
+        setTimeout(() => toast.remove(), 260);
+      };
+
+      const closeBtn = document.getElementById(closeId);
+      if (closeBtn) closeBtn.onclick = closeToast;
+
+      if (actionText && onAction) {
+        const actBtn = document.getElementById(actId);
+        if (actBtn) {
+          actBtn.onclick = () => {
+            closeToast();
+            onAction();
+          };
+        }
+      }
+
+      if (duration > 0) {
+        setTimeout(closeToast, duration);
+      }
+    } catch (e) {}
+  },
+
   init() {
     try {
-      const load = () => { this._voices = speechSynthesis.getVoices(); };
-      load();
-      // Unlock audio on first user interaction (browser autoplay policy)
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        const load = () => { this._voices = speechSynthesis.getVoices(); };
+        load();
+        if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = load;
+      }
       const unlock = () => {
-        try {
-          const a = new Audio();
-          a.play().catch(() => {});
-          if (window.speechSynthesis) {
-            const u = new SpeechSynthesisUtterance('');
-            speechSynthesis.speak(u);
-          }
-        } catch (e) {}
-        document.removeEventListener('click', unlock);
+        this._getAudioCtx();
+        if (typeof document !== 'undefined') {
+          document.removeEventListener('pointerdown', unlock);
+          document.removeEventListener('keydown', unlock);
+          document.removeEventListener('click', unlock);
+        }
       };
-      document.addEventListener('click', unlock, { once: true });
-      if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = load;
-    } catch (e) { /* speech not supported */ }
-    // Poll every 30s for new recharge requests & orders
-    setInterval(() => this.check(), 30000);
-    setTimeout(() => this.check(), 8000);
-  },
-  playAudio(file) {
-    if (!this.enabled) return;
-    try {
-      const a = new Audio('/audio/' + file);
-      a.play().catch(() => {});
-    } catch (e) { /* ignore */ }
-  },
-  speak(text) {
-    // Map text to human voice audio files
-    if (text.includes('রিচার্জ')) this.playAudio('new-recharge.mp3');
-    else if (text.includes('অর্ডার')) this.playAudio('new-order.mp3');
-    else if (text.includes('মেসেজ') || text.includes('SMS')) this.playAudio('new-message.mp3');
-    else {
-      // Fallback to TTS for unknown
-      if (!this.enabled) return;
-      try {
-        speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = 'bn-BD';
-        speechSynthesis.speak(u);
-      } catch (e) { /* ignore */ }
+      if (typeof document !== 'undefined') {
+        document.addEventListener('pointerdown', unlock, { once: true });
+        document.addEventListener('keydown', unlock, { once: true });
+        document.addEventListener('click', unlock, { once: true });
+      }
+    } catch (e) {}
+
+    this.updateTopbarBtn();
+
+    if (typeof setInterval !== 'undefined') {
+      setInterval(() => this.check(), 12000);
+      setTimeout(() => this.check(), 3000);
     }
   },
+
+  updateTopbarBtn() {
+    if (typeof document === 'undefined') return;
+    const btn = document.getElementById('admSoundToggleBtn');
+    if (btn) {
+      if (this.enabled) {
+        btn.innerHTML = '🔊 সাউন্ড: চালু';
+        btn.style.color = '#16a34a';
+        btn.style.borderColor = '#bbf7d0';
+      } else {
+        btn.innerHTML = '🔇 সাউন্ড: বন্ধ';
+        btn.style.color = '#dc2626';
+        btn.style.borderColor = '#fecaca';
+      }
+    }
+  },
+
+  toggleSound() {
+    this.enabled = !this.enabled;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('abc_voice', this.enabled ? 'on' : 'off');
+    }
+    this.updateTopbarBtn();
+    if (this.enabled) {
+      this.playChime('order');
+      this.speak('ভয়েস ও সাউন্ড নোটিফিকেশন চালু হয়েছে');
+      this.showToast({
+        type: 'order',
+        icon: '🔊',
+        title: 'সাউন্ড চালু',
+        message: 'অর্ডার ও রিচার্জের প্রিমিয়াম সাউন্ড নোটিফিকেশন চালু করা হয়েছে।',
+        badge: 'অন',
+        duration: 4000
+      });
+    } else {
+      this.showToast({
+        type: 'chat',
+        icon: '🔇',
+        title: 'সাউন্ড বন্ধ',
+        message: 'সাউন্ড নোটিফিকেশন মিউট করা হয়েছে।',
+        badge: 'অফ',
+        duration: 3500
+      });
+    }
+    return this.enabled;
+  },
+
+  toggle() {
+    return this.toggleSound();
+  },
+
+  testAlert() {
+    this.playChime('order');
+    setTimeout(() => this.speak('সাউন্ড নোটিফিকেশন সিস্টেম কার্যকর আছে'), 450);
+    this.showToast({
+      type: 'order',
+      icon: '🛍️',
+      title: 'টেস্ট নোটিফিকেশন',
+      message: 'গ্রাহক: <b>মোঃ আরিফুল ইসলাম</b> • সার্ভিস: <b>NID কার্ড ডাউনলোড</b> (৳৫০)',
+      badge: 'টেস্ট সফল',
+      actionText: 'অর্ডার হাব দেখুন ➤',
+      onAction: () => { show('orders'); },
+      duration: 10000
+    });
+  },
+
   async check() {
-    if (!this.enabled || !me || me.role !== 'admin') return;
+    if (typeof me === 'undefined' || !me || me.role !== 'admin') return;
     try {
       const r = await ABC.api('/admin/stats');
       if (!r.ok) return;
       const s = await r.json();
       const pr = Number(s.pending_recharge || 0);
       const no = Number(s.orders_new || 0);
-      if (this._last.recharge && pr > this._last.recharge) {
-        this.playSound('new-recharge.mp3');
-        this.speak('নতুন রিচার্জ রিকোয়েস্ট এসেছে। অনুগ্রহ করে চেক করুন।');
-        // Speak customer name sweetly via TTS
-        try {
-          const rr = await ABC.api('/admin/recharge/pending');
-          if (rr.ok) {
-            const rd = await rr.json();
-            const latest = (rd.list || rd)[0];
-            if (latest && latest.user_name) {
-              setTimeout(() => {
-                const u = new SpeechSynthesisUtterance('কাস্টমার: ' + latest.user_name);
-                u.lang = 'bn-BD'; u.rate = 0.9; u.pitch = 1.1;
-                speechSynthesis.speak(u);
-              }, 3500);
-            }
-          }
-        } catch (e) {}
-      } else if (this._last.order && no > this._last.order) {
-        this.playSound('new-order.mp3');
-        this.speak('নতুন অর্ডার এসেছে।');
-        // Speak customer name sweetly via TTS
+
+      if (this._last.order && no > this._last.order) {
+        this.playChime('order');
+        this.speak('নতুন অর্ডার এসেছে');
         try {
           const or = await ABC.api('/admin/orders?status=new&limit=1');
           if (or.ok) {
             const od = await or.json();
             const latest = (od.list || od.orders || [])[0];
-            if (latest && latest.user_name) {
-              setTimeout(() => {
-                const u = new SpeechSynthesisUtterance('কাস্টমার: ' + latest.user_name);
-                u.lang = 'bn-BD'; u.rate = 0.9; u.pitch = 1.1;
-                speechSynthesis.speak(u);
-              }, 3500);
+            if (latest) {
+              this.showToast({
+                type: 'order',
+                icon: '🛍️',
+                title: 'নতুন অর্ডার এসেছে!',
+                message: 'গ্রাহক: <b>' + esc(latest.user_name || 'গ্রাহক') + '</b><br>সার্ভিস: <b>' + esc(latest.service_name_bn || latest.service_name || 'সেবা') + '</b> • ৳' + bn(latest.price || 0),
+                badge: 'নতুন',
+                actionText: 'অর্ডার খুলুন ➤',
+                onAction: () => {
+                  show('orders');
+                  setTimeout(() => AdmOrders.view(latest.id), 250);
+                }
+              });
             }
           }
-        } catch (e) {}
+        } catch (e) {
+          this.showToast({
+            type: 'order',
+            icon: '🛍️',
+            title: 'নতুন অর্ডার এসেছে!',
+            message: no + 'টি নতুন অর্ডার অপেক্ষমাণ আছে।',
+            actionText: 'অর্ডার দেখুন ➤',
+            onAction: () => show('orders')
+          });
+        }
       }
+
+      if (this._last.recharge && pr > this._last.recharge) {
+        this.playChime('recharge');
+        this.speak('নতুন রিচার্জ রিকোয়েস্ট এসেছে');
+        try {
+          const rr = await ABC.api('/admin/recharge/pending');
+          if (rr.ok) {
+            const rd = await rr.json();
+            const latest = (rd.list || rd)[0];
+            if (latest) {
+              this.showToast({
+                type: 'recharge',
+                icon: '💰',
+                title: 'নতুন রিচার্জ রিকোয়েস্ট!',
+                message: 'গ্রাহক: <b>' + esc(latest.user_name || 'গ্রাহক') + '</b><br>পরিমাণ: <b>৳' + bn(latest.amount || 0) + '</b> (' + esc(latest.method || 'পেমেন্ট') + ')',
+                badge: 'অপেক্ষমাণ',
+                actionText: 'অনুমোদন করুন ➤',
+                onAction: () => show('recharge')
+              });
+            }
+          }
+        } catch (e) {
+          this.showToast({
+            type: 'recharge',
+            icon: '💰',
+            title: 'নতুন রিচার্জ রিকোয়েস্ট!',
+            message: pr + 'টি রিচার্জ রিকোয়েস্ট অপেক্ষমাণ আছে।',
+            actionText: 'রিচার্জ খুলুন ➤',
+            onAction: () => show('recharge')
+          });
+        }
+      }
+
       this._last.recharge = pr;
       this._last.order = no;
-      // Unmatched SMS (separate lightweight endpoint; table may not exist yet)
+
       try {
         const sr = await ABC.api('/admin/stats/sms');
         if (sr.ok) {
           const sd = await sr.json();
           const us = Number(sd.unmatched_sms || 0);
           if (this._last.sms && us > this._last.sms) {
-            this.speak('নতুন পেমেন্ট SMS এসেছে, ম্যাচ হয়নি। অনুগ্রহ করে চেক করুন।');
+            this.playChime('message');
+            this.speak('নতুন পেমেন্ট SMS এসেছে, ম্যাচ হয়নি');
+            this.showToast({
+              type: 'chat',
+              icon: '📩',
+              title: 'আনম্যাচড পেমেন্ট SMS!',
+              message: 'নতুন এসএমএস এসেছে কিন্তু কোনো রিচার্জের সাথে মেলেনি।',
+              badge: 'SMS',
+              actionText: 'SMS গেটওয়ে ➤',
+              onAction: () => show('sms')
+            });
           }
           this._last.sms = us;
         }
-      } catch (e) { /* silent */ }
-    } catch (e) { /* silent */ }
-  },
-  toggle() {
-    this.enabled = !this.enabled;
-    localStorage.setItem('abc_voice', this.enabled ? 'on' : 'off');
-    if (this.enabled) this.speak('ভয়েস নোটিফিকেশন চালু হয়েছে।');
-    return this.enabled;
-  },
+      } catch (e) {}
+    } catch (e) {}
+  }
 };
 window.VoiceAlert = VoiceAlert;
 
@@ -1444,28 +1684,157 @@ window.AdmOrders = {
         docsHtml +
       '</div>' +
 
-      '<!-- Admin Notes & Support Chat -->' +
-      '<div style="margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:12px;background:#f8fafc;padding:14px;border-radius:8px;border:1px solid var(--border-light);">' +
-        '<div>' +
-          '<div style="font-weight:700;font-size:13px;margin-bottom:6px;color:var(--text-main);">👨‍💼 এডমিন ইন্টারনাল নোট:</div>' +
-          '<div style="display:flex;gap:6px;">' +
-            '<input type="text" id="admOrderNoteInput" value="' + esc(o.admin_note || '') + '" placeholder="এখানে নোট লিখুন..." style="flex:1;font-size:12px;padding:6px 10px;">' +
-            '<button class="mini-btn ok" onclick="AdmOrders.saveAdminNote(\'' + o.id + '\')">সংরক্ষণ</button>' +
-          '</div>' +
-        '</div>' +
-        '<div>' +
-          '<div style="font-weight:700;font-size:13px;margin-bottom:6px;color:var(--text-main);">💬 কাস্টমার সাপোর্ট মেসেজ:</div>' +
-          '<button class="btn-secondary" style="width:100%;font-size:12px;padding:7px 10px;" onclick="AdmOrders.supportForm(\'' + o.id + '\')">সাপোর্ট চ্যাট খুলুন ও মেসেজ দিন ➤</button>' +
+      '<!-- Admin Notes -->' +
+      '<div style="margin-top:20px;background:#f8fafc;padding:14px;border-radius:8px;border:1px solid var(--border-light);">' +
+        '<div style="font-weight:700;font-size:13px;margin-bottom:6px;color:var(--text-main);">👨‍💼 এডমিন ইন্টারনাল নোট (শুধুমাত্র এডমিনদের জন্য দৃশ্যমান):</div>' +
+        '<div style="display:flex;gap:6px;">' +
+          '<input type="text" id="admOrderNoteInput" value="' + esc(o.admin_note || '') + '" placeholder="এখানে ইন্টারনাল নোট লিখুন..." style="flex:1;font-size:12px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;">' +
+          '<button class="mini-btn ok" style="padding:8px 14px;font-size:12px;" onclick="AdmOrders.saveAdminNote(\'' + o.id + '\')">💾 নোট সংরক্ষণ</button>' +
         '</div>' +
       '</div>' +
 
-      '<div style="margin-top:18px;text-align:right;">' +
+      '<!-- Customer Support & Live Messaging (Phase 3) -->' +
+      '<div style="margin-top:18px;background:#fff;border:1px solid #bfdbfe;border-radius:10px;padding:16px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+          '<div style="font-weight:800;font-size:13px;color:var(--primary-800);">💬 কাস্টমার সাপোর্ট ও লাইভ চ্যাট মেসেজ</div>' +
+          '<span class="st-badge st-processing">সরাসরি যোগাযোগ</span>' +
+        '</div>' +
+        '<div style="margin-bottom:8px;">' +
+          '<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:5px;">⚡ দ্রুত রেডিমেড টেমপ্লেট পাঠান (১-ক্লিক):</div>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:6px;">' +
+            '<button class="adm-icon-btn" onclick="AdmOrders.useInModalTpl(\'' + o.id + '\', \'🌐 সাময়িক সার্ভার সমস্যার কারণে কিছুটা বিলম্ব হচ্ছে, অনুগ্রহ করে অপেক্ষা করুন।\')">🌐 সার্ভার সমস্যা</button>' +
+            '<button class="adm-icon-btn" onclick="AdmOrders.useInModalTpl(\'' + o.id + '\', \'⏳ আপনার অর্ডারের কাজ প্রসেসিং চলছে। অতি শীঘ্রই ডেলিভারি পাবেন।\')">⏳ কাজ চলছে</button>' +
+            '<button class="adm-icon-btn" onclick="AdmOrders.useInModalTpl(\'' + o.id + '\', \'📄 অনুগ্রহ করে সঠিক তথ্য অথবা ক্লিয়ার ডকুমেন্টটি দিন।\')">📄 ডকুমেন্ট সমস্যা</button>' +
+            '<button class="adm-icon-btn" onclick="AdmOrders.useInModalTpl(\'' + o.id + '\', \'✅ আপনার অর্ডারটি সফলভাবে সম্পন্ন হয়েছে। ফাইলটি ডাউনলোড করুন।\')">✅ কাজ সম্পন্ন</button>' +
+            '<button class="adm-icon-btn" onclick="AdmOrders.useInModalTpl(\'' + o.id + '\', \'💰 আপনার পেমেন্ট যাচাই সম্পন্ন হয়েছে।\')">💰 পেমেন্ট নিশ্চিত</button>' +
+          '</div>' +
+        '</div>' +
+        '<div id="admOrderChatThread_' + o.id + '" class="adm-chat-thread">' +
+          '<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:10px;">মেসেজ লোড হচ্ছে...</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;margin-top:10px;">' +
+          '<input type="text" id="admInModalSupMsg_' + o.id + '" placeholder="গ্রাহককে সরাসরি মেসেজ লিখুন..." style="flex:1;font-size:12px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:7px;" onkeydown="if(event.key===\'Enter\') AdmOrders.sendInModalSupport(\'' + o.id + '\')">' +
+          '<button class="btn-quick-primary" style="padding:8px 16px;font-size:12px;" onclick="AdmOrders.sendInModalSupport(\'' + o.id + '\')">পাঠান ➤</button>' +
+        '</div>' +
+      '</div>' +
+
+      '<!-- Order Status Timeline & Audit Trail (Phase 3) -->' +
+      '<div class="adm-timeline-box" style="margin-top:18px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+          '<div style="font-weight:800;font-size:13px;color:var(--primary-800);">📜 অর্ডার স্ট্যাটাস ও অডিট হিস্ট্রি টাইমলাইন</div>' +
+          '<button class="mini-btn" onclick="AdmOrders.loadHistory(\'' + o.id + '\')">🔄 রিফ্রেশ</button>' +
+        '</div>' +
+        '<div id="admOrderTimeline_' + o.id + '" class="adm-timeline-list">' +
+          '<div style="font-size:11px;color:var(--text-muted);">হিস্ট্রি লোড হচ্ছে...</div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div style="margin-top:20px;text-align:right;">' +
         '<button class="btn-secondary" onclick="closeModal()">✕ বন্ধ করুন</button>' +
       '</div>' +
     '</div>';
 
     modal('📦 অর্ডার প্রসেসিং ও ডেলিভারি হাব - #' + esc(String(o.id).slice(0, 8)), bodyHtml);
     window._modalDeliFile = null;
+    setTimeout(() => {
+      AdmOrders.loadHistory(o.id);
+      AdmOrders.loadInModalChat(o.id);
+    }, 60);
+  },
+
+  
+  async loadHistory(orderId) {
+    const el = document.getElementById('admOrderTimeline_' + orderId);
+    if (!el) return;
+    try {
+      const r = await ABC.api('/admin/orders/' + orderId + '/history');
+      if (!r.ok) throw new Error('ইতিহাস লোড করা যায়নি');
+      const d = await r.json();
+      const list = d.history || [];
+      if (!list.length) {
+        el.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:4px 0;">এখনো কোনো স্ট্যাটাস পরিবর্তন হয়নি।</div>';
+        return;
+      }
+      el.innerHTML = list.map(item => {
+        const fromSt = item.from_status ? (STBN[item.from_status] || item.from_status) : 'শুরু';
+        const toSt = item.to_status ? (STBN[item.to_status] || item.to_status) : '—';
+        const dateStr = item.created_at ? new Date(item.created_at).toLocaleString('bn-BD') : '—';
+        const adminName = item.admin_name || 'সিস্টেম এডমিন';
+        const note = item.note ? ('<div style="color:#334155;margin-top:2px;font-style:italic;">নোট: ' + esc(item.note) + '</div>') : '';
+        return '<div class="adm-timeline-item">' +
+          '<div class="adm-timeline-dot"></div>' +
+          '<div class="adm-timeline-title">' +
+            '<span class="st-badge st-' + (item.from_status || 'new') + '" style="font-size:9px;padding:2px 6px;">' + esc(fromSt) + '</span>' +
+            ' ➔ ' +
+            '<span class="st-badge st-' + (item.to_status || 'processing') + '" style="font-size:9px;padding:2px 6px;">' + esc(toSt) + '</span>' +
+          '</div>' +
+          '<div class="adm-timeline-meta">' +
+            '<span>🕒 ' + esc(dateStr) + '</span> • <span>👤 <b>' + esc(adminName) + '</b></span>' +
+          '</div>' +
+          note +
+        '</div>';
+      }).join('');
+    } catch (e) {
+      el.innerHTML = '<div style="font-size:11px;color:var(--danger);">ইতিহাস লোড ব্যর্থ: ' + esc(e.message) + '</div>';
+    }
+  },
+
+  async loadInModalChat(orderId) {
+    const el = document.getElementById('admOrderChatThread_' + orderId);
+    if (!el) return;
+    try {
+      const r = await ABC.api('/admin/orders/' + orderId + '/support-messages');
+      if (!r.ok) throw new Error('মেসেজ লোড ব্যর্থ');
+      const d = await r.json();
+      const msgs = (d.messages || []).slice().reverse(); // Show chronological
+      if (!msgs.length) {
+        el.innerHTML = '<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:12px;">গ্রাহকের সাথে এখনো কোনো কথোপকথন শুরু হয়নি।</div>';
+        return;
+      }
+      el.innerHTML = msgs.map(m => {
+        const isAdmin = !!m.admin_id;
+        const senderLabel = isAdmin ? (m.admin_name || 'এডমিন') : 'গ্রাহক';
+        const timeStr = m.created_at ? new Date(m.created_at).toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }) : '';
+        return '<div class="adm-chat-bubble ' + (isAdmin ? 'from-admin' : 'from-user') + '">' +
+          '<div style="font-weight:700;font-size:10px;opacity:0.8;margin-bottom:2px;">' + esc(senderLabel) + ':</div>' +
+          '<div>' + esc(m.message) + '</div>' +
+          '<div class="adm-chat-meta">' + esc(timeStr) + '</div>' +
+        '</div>';
+      }).join('');
+      el.scrollTop = el.scrollHeight;
+    } catch (e) {
+      el.innerHTML = '<div style="font-size:11px;color:var(--danger);text-align:center;">চ্যাট লোড ব্যর্থ: ' + esc(e.message) + '</div>';
+    }
+  },
+
+  useInModalTpl(orderId, text) {
+    const inp = document.getElementById('admInModalSupMsg_' + orderId);
+    if (inp) {
+      inp.value = text;
+      inp.focus();
+    }
+  },
+
+  async sendInModalSupport(orderId) {
+    const inp = document.getElementById('admInModalSupMsg_' + orderId);
+    if (!inp) return;
+    const msg = inp.value.trim();
+    if (!msg) { alert('মেসেজ লিখুন'); return; }
+    try {
+      inp.disabled = true;
+      const r = await ABC.api('/admin/orders/' + orderId + '/support-message', {
+        method: 'POST',
+        body: { message: msg }
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'পাঠানো যায়নি');
+      inp.value = '';
+      inp.disabled = false;
+      this.loadInModalChat(orderId);
+    } catch (e) {
+      alert('মেসেজ পাঠানো ব্যর্থ: ' + e.message);
+      inp.disabled = false;
+    }
   },
 
   modalFileSelected(inp) {

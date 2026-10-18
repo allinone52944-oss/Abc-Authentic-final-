@@ -217,6 +217,25 @@ async function notifyNewChatMessage(db, orderId, userId, message) {
   }
 }
 
+
+// Notify a single user (all of their registered devices). Fire-and-forget safe.
+async function notifyUser(db, userId, title, body, url) {
+  try {
+    const r = await db.query(
+      `SELECT ps.endpoint, ps.p256dh, ps.auth
+       FROM push_subscriptions ps
+       JOIN users u ON u.id = ps.user_id
+       WHERE u.id = $1 AND u.status = 'active'`,
+      [userId]
+    );
+    if (!r.rows.length) return { ok: true, sent: 0 };
+    return await pushToSubscriptions(db, r.rows, { title, body, url: url || '/orders.html' });
+  } catch (e) {
+    safeLog('[push] notifyUser failed:', e.message);
+    return { ok: false };
+  }
+}
+
 module.exports = {
   isConfigured,
   vapidPublicKey,
@@ -228,4 +247,5 @@ module.exports = {
   notifyNewRecharge,
   notifyNewUser,
   notifyNewChatMessage,
+  notifyUser,
 };

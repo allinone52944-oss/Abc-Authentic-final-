@@ -11,6 +11,7 @@ const db = require('../db');
 const { requireAuth, requireAdmin, hashPassword, verifyPassword } = require('../auth');
 const { safeLog, orderDocUpload } = require('../security');
 const wa = require('../utils/whatsapp');
+const push = require('../utils/push');
 
 // Delivery document uploads: settings-driven via orderDocUpload(db, 'delivery') (H-12).
 // Filenames stay random (C-2: never embed req.params.id).
@@ -781,6 +782,12 @@ router.post('/orders/:id/support-message', async (req, res) => {
     await logActivity(req.user.id, 'order.support_message', {
       order_id: req.params.id, message: msg.slice(0, 100),
     });
+    try {
+      const uq = await db.query('SELECT user_id FROM orders WHERE id = $1', [req.params.id]);
+      if (uq.rows.length && uq.rows[0].user_id) {
+        push.notifyUser(db, uq.rows[0].user_id, '💬 সাপোর্ট থেকে নতুন মেসেজ!', msg, '/orders.html').catch(() => {});
+      }
+    } catch (e) { /* fire-and-forget safe */ }
     res.status(201).json({ message: r.rows[0] });
   } catch (e) {
     safeLog('[admin] support message error:', e.message);

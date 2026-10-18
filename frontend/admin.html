@@ -416,6 +416,226 @@
     border: none;
     cursor: pointer;
   }
+  /* =========================================================
+     PREMIUM REALTIME NOTIFICATION TOASTS & SOUND SYSTEM
+     ========================================================= */
+  .adm-toast-container {
+    position: fixed;
+    top: 84px;
+    right: 24px;
+    z-index: 999999;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 420px;
+    width: calc(100vw - 48px);
+    pointer-events: none;
+  }
+  .adm-toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid #bfdbfe;
+    border-radius: 14px;
+    padding: 14px 16px;
+    box-shadow: 0 16px 36px -6px rgba(15, 23, 42, 0.16), 0 0 0 1px rgba(37, 99, 235, 0.08);
+    transform-origin: top right;
+    animation: admToastSlideIn 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    transition: transform 0.25s ease, opacity 0.25s ease;
+  }
+  .adm-toast.toast-order {
+    border-left: 5px solid #2563eb;
+  }
+  .adm-toast.toast-recharge {
+    border-left: 5px solid #16a34a;
+  }
+  .adm-toast.toast-chat {
+    border-left: 5px solid #f59e0b;
+  }
+  @keyframes admToastSlideIn {
+    0% { opacity: 0; transform: translateY(-16px) scale(0.94); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .adm-toast-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+    background: #eff6ff;
+  }
+  .toast-order .adm-toast-icon { background: #eff6ff; }
+  .toast-recharge .adm-toast-icon { background: #f0fdf4; }
+  .toast-chat .adm-toast-icon { background: #fefce8; }
+  .adm-toast-body { flex: 1; min-width: 0; }
+  .adm-toast-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    font-weight: 800;
+    color: #0f172a;
+  }
+  .adm-toast-badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: #2563eb;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    animation: pulseBadge 1.8s infinite;
+  }
+  @keyframes pulseBadge {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.65; }
+  }
+  .adm-toast-msg {
+    font-size: 12px;
+    color: #475569;
+    margin-top: 3px;
+    line-height: 1.45;
+  }
+  .adm-toast-time {
+    font-size: 10px;
+    color: #94a3b8;
+    margin-top: 4px;
+    font-weight: 600;
+  }
+  .adm-toast-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    margin-left: 4px;
+  }
+  .adm-toast-btn-view {
+    padding: 5px 11px;
+    border-radius: 7px;
+    border: none;
+    background: #2563eb;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    white-space: nowrap;
+  }
+  .adm-toast-btn-view:hover { background: #1d4ed8; }
+  .adm-toast-btn-close {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+  }
+  .adm-toast-btn-close:hover { color: #0f172a; background: #f1f5f9; }
+
+  /* =========================================================
+     ORDER STATUS TIMELINE & AUDIT TRAIL
+     ========================================================= */
+  .adm-timeline-box {
+    margin-top: 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .adm-timeline-list {
+    position: relative;
+    padding-left: 20px;
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .adm-timeline-list::before {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    background: #cbd5e1;
+  }
+  .adm-timeline-item {
+    position: relative;
+    font-size: 12px;
+  }
+  .adm-timeline-dot {
+    position: absolute;
+    left: -19px;
+    top: 2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #2563eb;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px #93c5fd;
+  }
+  .adm-timeline-title {
+    font-weight: 700;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .adm-timeline-meta {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 2px;
+  }
+
+  /* Support Chat In-Modal */
+  .adm-chat-thread {
+    max-height: 220px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-top: 8px;
+  }
+  .adm-chat-bubble {
+    max-width: 85%;
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .adm-chat-bubble.from-user {
+    align-self: flex-start;
+    background: #f1f5f9;
+    color: #1e293b;
+    border-bottom-left-radius: 2px;
+  }
+  .adm-chat-bubble.from-admin {
+    align-self: flex-end;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+    border-bottom-right-radius: 2px;
+  }
+  .adm-chat-meta {
+    font-size: 10px;
+    color: #94a3b8;
+    margin-top: 4px;
+    text-align: right;
+  }
+
 </style>
 </head>
 <body>
@@ -454,7 +674,9 @@
         <h2>এডমিন ড্যাশবোর্ড</h2>
         <p>সামগ্রিক প্ল্যাটফর্ম পরিসংখ্যান ও রিয়েলটাইম নিয়ন্ত্রণ</p>
       </div>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <button class="btn-secondary" id="admSoundToggleBtn" onclick="VoiceAlert.toggleSound()" title="সাউন্ড নোটিফিকেশন অন/অফ">🔊 সাউন্ড: চালু</button>
+        <button class="btn-secondary" id="admSoundTestBtn" onclick="VoiceAlert.testAlert()" title="সাউন্ড ও নোটিফিকেশন টেস্ট করুন">🔔 সাউন্ড টেস্ট</button>
         <button class="btn-secondary" onclick="location.href='/dashboard.html'" title="ইউজার ভিউতে যান">🏠 ইউজার হোম</button>
         <button class="btn-secondary" style="color:#dc2626;border-color:#fecaca;" id="logoutBtn" title="লগআউট">⏻ প্রস্থান</button>
       </div>
@@ -487,5 +709,6 @@ document.getElementById('logoutBtn').onclick = async () => {
   location.href = '/login.html';
 };
 </script>
+<div id="admToastContainer" class="adm-toast-container"></div>
 </body>
 </html>
