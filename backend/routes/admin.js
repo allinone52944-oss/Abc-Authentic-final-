@@ -69,6 +69,24 @@ router.get('/users', async (req, res) => {
   }
 });
 
+// GET /api/admin/users/:id (admin fetches single user)
+router.get('/users/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const r = await db.query(
+      `SELECT id, name, phone, whatsapp, email, religion, gender, role,
+              balance, status, login_enabled, email_verified, failed_attempts,
+              locked_until, created_at, updated_at
+       FROM users WHERE id = $1`, [id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    res.json({ user: r.rows[0] });
+  } catch (e) {
+    safeLog('[admin] user get error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 // POST /api/admin/users (admin creates user)
 router.post('/users', async (req, res) => {
   try {
@@ -121,7 +139,8 @@ router.post('/users', async (req, res) => {
 router.put('/users/:id', async (req, res) => {
   try {
     const id = req.params.id;
-    const { name, phone, email, religion, role, status, login_enabled, balance_adjust, admin_note } = req.body || {};
+    const { name, phone, email, religion, role, status, login_enabled, balance_adjust, admin_note, balance_note } = req.body || {};
+    const noteToLog = admin_note || balance_note || '';
 
     const cur = await db.query('SELECT * FROM users WHERE id = $1', [id]);
     if (!cur.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -245,7 +264,7 @@ router.put('/users/:id', async (req, res) => {
       await db.query('UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1', [id]);
     }
 
-    await logActivity(req.user.id, 'user.update', { user_id: id, changes });
+    await logActivity(req.user.id, 'user.update', { user_id: id, changes, note: noteToLog || undefined });
     const fresh = await db.query(
       `SELECT id, name, phone, whatsapp, email, religion, role, balance, status,
               login_enabled, created_at FROM users WHERE id = $1`, [id]);

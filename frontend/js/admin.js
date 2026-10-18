@@ -343,45 +343,204 @@ window.AdmReports = {
   },
 };
 
-/* ---------------- USERS ---------------- */
+/* ---------------- USERS (Fintech User Management Hub) ---------------- */
 TABS.users = async () => {
   TABS._upage = 1;
   const _q = TABS._uq || '';
-  const r = await ABC.api('/admin/users?limit=30' + (_q ? '&q=' + encodeURIComponent(_q) : ''));
-  const d = await r.json();
-  let html = '<div style="display:flex;gap:8px;margin-bottom:12px;">' +
-    '<input id="uq" placeholder="নাম/ফোন/ইমেইল খুঁজুন" style="flex:1;padding:10px 14px;background:rgba(0,0,0,0.4);border:1px solid rgba(212,175,55,0.25);border-radius:10px;color:var(--cream);outline:none;" value="' + esc(_q) + '">' +
-    '<button class="mini-btn" onclick="AdmUsers.search()">খুঁজুন</button>' +
-    '<button class="mini-btn ok" onclick="AdmUsers.createForm()">+ নতুন ইউজার</button></div>' +
-    '<div style="overflow-x:auto;"><table class="adm" id="uTable"><tr><th>নাম</th><th>ফোন</th><th>ধর্ম</th><th>ব্যালেন্স</th><th>স্ট্যাটাস</th><th>কাজ</th></tr>';
-  for (const u of d.users) {
+  const _st = TABS._ust || '';
+  let url = '/admin/users?limit=30';
+  if (_q) url += '&q=' + encodeURIComponent(_q);
+  if (_st) url += '&status=' + encodeURIComponent(_st);
+
+  let d = { users: [], total: 0 };
+  try {
+    const r = await ABC.api(url);
+    d = await r.json();
+  } catch (e) {
+    console.error('Failed to load users:', e);
+  }
+
+  const usersList = d.users || [];
+  const totalUsers = d.total || 0;
+
+  // Calculate high-level summary KPIs
+  let totalBal = 0;
+  let activeCnt = 0;
+  let pendingCnt = 0;
+  let blockedCnt = 0;
+  usersList.forEach(u => {
+    totalBal += Number(u.balance) || 0;
+    if (u.status === 'active') activeCnt++;
+    else if (u.status === 'pending') pendingCnt++;
+    else if (u.status === 'blocked' || u.status === 'disabled') blockedCnt++;
+  });
+
+  const statusTabs = [
+    { key: '', label: 'সব ইউজার', chip: totalUsers },
+    { key: 'active', label: '🟢 সক্রিয়', chip: activeCnt },
+    { key: 'pending', label: '🟡 অপেক্ষমান', chip: pendingCnt },
+    { key: 'blocked', label: '🔴 ব্লকড', chip: blockedCnt },
+  ];
+
+  let html = '<div class="adm-orders-wrap">' +
+    '<!-- KPI Metric Cards -->' +
+    '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px;">' +
+      '<div style="background:#fff; border:1px solid var(--border-light); border-radius:var(--r-lg); padding:14px; box-shadow:var(--shadow-sm);">' +
+        '<div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">👥 মোট নিবন্ধিত ইউজার</div>' +
+        '<div style="font-size:24px; font-weight:800; color:#0f172a; margin-top:4px;">' + bn(totalUsers) + ' <span style="font-size:12px; font-weight:600; color:#64748b;">জন</span></div>' +
+      '</div>' +
+      '<div style="background:#fff; border:1px solid var(--border-light); border-radius:var(--r-lg); padding:14px; box-shadow:var(--shadow-sm);">' +
+        '<div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">🟢 সক্রিয় অ্যাকাউন্ট</div>' +
+        '<div style="font-size:24px; font-weight:800; color:#166534; margin-top:4px;">' + bn(activeCnt) + ' <span style="font-size:12px; font-weight:600; color:#64748b;">টি</span></div>' +
+      '</div>' +
+      '<div style="background:#fff; border:1px solid var(--border-light); border-radius:var(--r-lg); padding:14px; box-shadow:var(--shadow-sm);">' +
+        '<div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">💰 বর্তমান ওয়ালেট তারল্য</div>' +
+        '<div style="font-size:24px; font-weight:800; color:#1d4ed8; margin-top:4px;">৳ ' + bn(totalBal) + '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<!-- Smart Filter & Search Toolbar -->' +
+    '<div class="adm-orders-toolbar">' +
+      '<div class="adm-tabs-row">' +
+        statusTabs.map(s => {
+          const isActive = (TABS._ust || '') === s.key;
+          return '<button class="adm-tab-btn' + (isActive ? ' active' : '') + '" onclick="AdmUsers.filterStatus(\'' + s.key + '\')">' +
+            s.label + ' <span class="adm-tab-chip">' + bn(s.chip) + '</span>' +
+          '</button>';
+        }).join('') +
+      '</div>' +
+      '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">' +
+        '<div style="display:flex; align-items:center; gap:8px; flex:1; min-width:260px;">' +
+          '<input type="text" id="uq" class="adm-search-input" placeholder="🔍 নাম, ফোন, WhatsApp বা ইউজার আইডি খুঁজুন..." value="' + esc(_q) + '" onkeydown="if(event.key===\'Enter\')AdmUsers.search()">' +
+          '<button class="mini-btn" onclick="AdmUsers.search()">খুঁজুন</button>' +
+          (_q || _st ? '<button class="mini-btn danger" onclick="AdmUsers.clearFilter()">✕ রিসেট</button>' : '') +
+        '</div>' +
+        '<button class="btn-quick-primary" style="padding:9px 16px; font-size:12px;" onclick="AdmUsers.createForm()">+ নতুন ইউজার তৈরি করুন</button>' +
+      '</div>' +
+    '</div>' +
+
+    '<!-- Modern High-Density Table -->' +
+    '<div class="adm-table-card">' +
+      '<div style="overflow-x:auto;">' +
+        '<table class="adm-table" id="uTable">' +
+          '<thead>' +
+            '<tr>' +
+              '<th>ব্যবহারকারী / কাস্টমার</th>' +
+              '<th>যোগাযোগ (ফোন ও WhatsApp)</th>' +
+              '<th>ধর্ম ও রোল</th>' +
+              '<th>ওয়ালেট ব্যালেন্স</th>' +
+              '<th>অ্যাকাউন্ট স্টেটাস</th>' +
+              '<th style="text-align:right;">ব্যবস্থাপনা ও অ্যাকশন</th>' +
+            '</tr>' +
+          '</thead>' +
+          '<tbody>';
+
+  for (const u of usersList) {
     html += AdmUsers.row(u);
   }
-  const shown = (d.users || []).length;
-  html += '</table></div><div style="color:var(--muted);font-size:12px;margin-top:8px;">মোট: ' + bn(d.total) + ' (দেখানো: ' + bn(shown) + ')</div>' +
-    '<div id="uMore">' + (d.total > shown ? '<button class="mini-btn" onclick="AdmUsers.more()">আরো দেখুন ↓</button>' : '') + '</div>';
+  if (!usersList.length) {
+    html += '<tr><td colspan="6" style="text-align:center; padding:36px; color:#64748b;">কোনো ইউজার পাওয়া যায়নি</td></tr>';
+  }
+
+  const shown = usersList.length;
+  html += '</tbody></table></div>' +
+    '<div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:#f8fafc; border-top:1px solid #eef2f7; font-size:12px; color:#64748b;">' +
+      '<div>মোট ইউজার: <b>' + bn(totalUsers) + '</b> জন (দেখানো হয়েছে: <b>' + bn(shown) + '</b> জন)</div>' +
+      '<div id="uMore">' + (totalUsers > shown ? '<button class="mini-btn" onclick="AdmUsers.more()">আরো দেখুন ↓</button>' : '') + '</div>' +
+    '</div>' +
+  '</div></div>';
+
   content.innerHTML = html;
 };
 
 window.AdmUsers = {
   row(u) {
     const myId = (typeof me !== 'undefined' && me && me.id) || '';
-    return '<tr><td>' + esc(u.name) + '<br><small style="color:var(--dim)">' + esc(u.id.slice(0, 8)) + '</small>' +
-      (u.email_verified === false ? '<br><small style="color:#f59e0b;">⚠️ ইমেইল অযাচাইকৃত</small>' : '') + '</td>' +
-      '<td>' + esc(u.phone) + '</td><td>' + esc(u.religion) + '</td>' +
-      '<td>৳' + bn(u.balance) + '</td><td>' + esc(u.status) + '</td>' +
-      '<td><button class="mini-btn" onclick="AdmUsers.edit(\'' + u.id + '\')">এডিট</button>' +
-      (u.id !== myId ? '<button class="mini-btn danger" onclick="AdmUsers.del(\'' + u.id + '\',\'' + escJs(u.name) + '\')">ডিলিট</button>' : '<small style="color:var(--dim)">(নিজে)</small>') +
-      '</td></tr>';
+    const initial = (u.name || 'ইউ').charAt(0).toUpperCase();
+    const isVerified = u.email_verified !== false;
+
+    let stBadge = '<span class="st-badge st-processing">অজ্ঞাত</span>';
+    if (u.status === 'active') stBadge = '<span class="st-badge st-completed">🟢 সক্রিয়</span>';
+    else if (u.status === 'pending') stBadge = '<span class="st-badge st-pending">🟡 অপেক্ষমান</span>';
+    else if (u.status === 'blocked') stBadge = '<span class="st-badge st-failed">🔴 ব্লকড</span>';
+    else if (u.status === 'disabled') stBadge = '<span class="st-badge st-failed">🔒 নিষ্ক্রিয়</span>';
+
+    const roleBadge = u.role === 'admin'
+      ? '<span style="display:inline-block; padding:2px 6px; border-radius:5px; background:#eff6ff; color:#1d4ed8; font-weight:700; font-size:10px;">🛡️ অ্যাডমিন</span>'
+      : '<span style="color:#64748b; font-size:11px;">কাস্টমার</span>';
+
+    const waLink = u.whatsapp
+      ? '<a href="https://wa.me/88' + esc(u.whatsapp.replace(/\D/g, '')) + '" target="_blank" style="color:#16a34a; font-weight:600; text-decoration:none;" title="হোয়াটসঅ্যাপে চ্যাট করুন">💬 ' + esc(u.whatsapp) + '</a>'
+      : '<span style="color:#94a3b8;">নেই</span>';
+
+    return '<tr>' +
+      '<td>' +
+        '<div class="adm-user-cell">' +
+          '<div class="adm-user-avatar">' + esc(initial) + '</div>' +
+          '<div>' +
+            '<div class="adm-user-name">' + esc(u.name) + '</div>' +
+            '<div style="display:flex; align-items:center; gap:6px; margin-top:2px;">' +
+              '<span class="adm-order-tag" title="ক্লিক করে আইডি কপি করুন" style="cursor:pointer;" onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + escJs(u.id) + '\');alert(\'ইউজার আইডি কপি হয়েছে\')">#' + esc(u.id.slice(0, 8)) + '</span>' +
+              (u.email ? '<span style="font-size:10px; color:#64748b;">' + esc(u.email) + '</span>' : '') +
+            '</div>' +
+            (u.email_verified === false ? '<div style="margin-top:2px;"><small style="color:#f59e0b; font-weight:600;">⚠️ ইমেইল অযাচাইকৃত</small></div>' : '') +
+          '</div>' +
+        '</div>' +
+      '</td>' +
+      '<td>' +
+        '<div style="font-size:12px; font-weight:600; color:#0f172a;">📞 ' + esc(u.phone) + '</div>' +
+        '<div style="font-size:11px; margin-top:3px;">' + waLink + '</div>' +
+      '</td>' +
+      '<td>' +
+        '<div style="font-size:12px; font-weight:600; color:#334155;">' + esc(u.religion || 'অনির্দিষ্ট') + '</div>' +
+        '<div style="margin-top:3px;">' + roleBadge + '</div>' +
+      '</td>' +
+      '<td>' +
+        '<div class="adm-price-badge">৳ ' + bn(u.balance) + '</div>' +
+      '</td>' +
+      '<td>' + stBadge + '</td>' +
+      '<td style="text-align:right;">' +
+        '<div style="display:inline-flex; align-items:center; gap:6px;">' +
+          '<button class="mini-btn ok" style="padding:6px 10px; font-size:11px; font-weight:700;" onclick="AdmUsers.edit(\'' + u.id + '\')">⚙️ নিয়ন্ত্রণ</button>' +
+          (u.id !== myId
+            ? '<button class="mini-btn danger" style="padding:6px 9px;" onclick="AdmUsers.del(\'' + u.id + '\',\'' + escJs(u.name) + '\')" title="ডিলিট করুন">🗑️</button>'
+            : '<span style="font-size:11px; color:#94a3b8; padding:0 6px;">(নিজ একাউন্ট)</span>') +
+        '</div>' +
+      '</td>' +
+    '</tr>';
   },
+
+  async filterStatus(st) {
+    TABS._ust = st;
+    TABS._upage = 1;
+    show('users');
+  },
+
+  clearFilter() {
+    TABS._uq = '';
+    TABS._ust = '';
+    TABS._upage = 1;
+    show('users');
+  },
+
   async more() {
     TABS._upage = (TABS._upage || 1) + 1;
     const _q = TABS._uq || '';
-    const r = await ABC.api('/admin/users?limit=30&page=' + TABS._upage + (_q ? '&q=' + encodeURIComponent(_q) : ''));
+    const _st = TABS._ust || '';
+    let url = '/admin/users?limit=30&page=' + TABS._upage;
+    if (_q) url += '&q=' + encodeURIComponent(_q);
+    if (_st) url += '&status=' + encodeURIComponent(_st);
+
+    const r = await ABC.api(url);
     const d = await r.json();
     const tbl = document.getElementById('uTable');
-    if (tbl) tbl.insertAdjacentHTML('beforeend', (d.users || []).map(u => AdmUsers.row(u)).join(''));
-    const shown = tbl ? tbl.rows.length - 1 : 0;
+    if (tbl && tbl.querySelector('tbody')) {
+      const tbody = tbl.querySelector('tbody');
+      (d.users || []).forEach(u => {
+        tbody.insertAdjacentHTML('beforeend', AdmUsers.row(u));
+      });
+    }
+    const shown = tbl ? tbl.querySelectorAll('tbody tr').length : 0;
     const moreBox = document.getElementById('uMore');
     if (moreBox) {
       moreBox.innerHTML = (d.total > shown)
@@ -389,36 +548,76 @@ window.AdmUsers = {
         : '<div style="color:var(--muted);font-size:12px;">সব দেখানো হয়েছে (' + bn(d.total) + ')</div>';
     }
   },
+
   async search() {
-    const q = document.getElementById('uq').value;
+    const q = (document.getElementById('uq') || {}).value || '';
     TABS._uq = q;
+    TABS._upage = 1;
     show('users');
   },
+
   createForm() {
-    modal('👥 নতুন ইউজার',
-      fld('নাম', 'text', 'cu_name') + fld('ফোন (01XXXXXXXXX)', 'text', 'cu_phone') +
-      fld('WhatsApp *', 'text', 'cu_wa') + fld('ইমেইল', 'email', 'cu_email') +
-      fld('পাসওয়ার্ড (৮+ অক্ষর, অক্ষর+সংখ্যা)', 'password', 'cu_pw') +
-      '<button class="btn" onclick="AdmUsers.create()">তৈরি করুন</button>');
+    modal('👥 নতুন ব্যবহারকারী তৈরি করুন',
+      '<div style="display:grid; gap:12px;">' +
+        fld('পূর্ণ নাম *', 'text', 'cu_name', '', 'গ্রাহকের পুরো নাম লিখুন') +
+        '<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">' +
+          fld('মোবাইল নম্বর * (01XXXXXXXXX)', 'text', 'cu_phone', '', '01XXXXXXXXX') +
+          fld('WhatsApp নম্বর * (01XXXXXXXXX)', 'text', 'cu_wa', '', '01XXXXXXXXX') +
+        '</div>' +
+        fld('ইমেইল অ্যাড্রেস (ঐচ্ছিক)', 'email', 'cu_email', '', 'name@example.com') +
+        fld('অ্যাকাউন্ট পাসওয়ার্ড (৮+ অক্ষর, অক্ষর ও সংখ্যা)', 'password', 'cu_pw', '', '••••••••') +
+        '<div class="field"><label>ধর্ম</label><select id="cu_religion">' +
+          ['islam', 'hindu', 'buddhist', 'christian', 'other'].map(x => '<option value="' + x + '">' + x + '</option>').join('') +
+        '</select></div>' +
+        '<button class="btn-quick-primary" style="margin-top:10px; width:100%; justify-content:center; padding:12px;" onclick="AdmUsers.create()">✅ ইউজার তৈরি ও সংরক্ষণ</button>' +
+      '</div>');
   },
+
   async create() {
     const body = {
-      name: v('cu_name'), phone: v('cu_phone'), whatsapp: v('cu_wa'),
-      email: v('cu_email'), password: v('cu_pw'),
+      name: v('cu_name'),
+      phone: v('cu_phone'),
+      whatsapp: v('cu_wa'),
+      email: v('cu_email'),
+      password: v('cu_pw'),
+      religion: v('cu_religion'),
     };
     const r = await ABC.api('/admin/users', { method: 'POST', body });
     const d = await r.json();
     if (!r.ok) {
-      const msg = { PHONE_TAKEN: 'এই ফোন নম্বর already ব্যবহার হয়েছে', EMAIL_TAKEN: 'এই ইমেইল already ব্যবহার হয়েছে', INVALID_INPUT: 'নাম/ফোন ঠিক করে দিন', INVALID_WHATSAPP: 'WhatsApp নম্বর ঠিক নয়', WEAK_PASSWORD: 'পাসওয়ার্ড কমপক্ষে ৮ অক্ষর, অক্ষর+সংখ্যা থাকতে হবে' }[d.error] || ('ব্যর্থ: ' + d.error);
+      const msg = {
+        PHONE_TAKEN: 'এই ফোন নম্বরটি ইতিমধ্যে ব্যবহৃত হয়েছে',
+        EMAIL_TAKEN: 'এই ইমেইলটি ইতিমধ্যে ব্যবহৃত হয়েছে',
+        INVALID_INPUT: 'নাম ও সঠিক ফোন নম্বর প্রদান করুন',
+        INVALID_WHATSAPP: 'সঠিক WhatsApp নম্বর প্রদান করুন (১১ ডিজিট)',
+        WEAK_PASSWORD: 'পাসওয়ার্ড কমপক্ষে ৮ অক্ষর, অক্ষর+সংখ্যা থাকতে হবে',
+      }[d.error] || ('ব্যর্থ: ' + d.error);
       alert(msg); return;
     }
-    closeModal(); show('users');
+    alert('✅ নতুন ইউজার সফলভাবে তৈরি হয়েছে');
+    closeModal();
+    show('users');
   },
+
   async edit(id) {
-    const r = await ABC.api('/admin/users?limit=100');
-    const u = (await r.json()).users.find(x => x.id === id);
-    if (!u) return;
-    // 4-tab interface (user spec 2026-10-16)
+    let u = null;
+    try {
+      const r = await ABC.api('/admin/users/' + id);
+      if (r.ok) {
+        const d = await r.json();
+        u = d.user;
+      }
+    } catch (e) {}
+
+    if (!u) {
+      const r = await ABC.api('/admin/users?limit=100');
+      u = (await r.json()).users.find(x => x.id === id);
+    }
+    if (!u) {
+      alert('ইউজার ডাটা লোড করা সম্ভব হয়নি');
+      return;
+    }
+
     const tabs = [
       { id: 'profile', icon: '📝', label: 'প্রোফাইল' },
       { id: 'balance', icon: '💰', label: 'ব্যালেন্স' },
@@ -426,109 +625,188 @@ window.AdmUsers = {
       { id: 'security', icon: '🔒', label: 'সিকিউরিটি' },
     ];
     const activeTab = window._usrTab || 'profile';
-    let tabBtns = '<div style="display:flex; gap:6px; margin-bottom:16px; border-bottom:2px solid var(--line); padding-bottom:10px; flex-wrap:wrap;">';
+
+    let tabBtns = '<div style="display:flex; gap:6px; margin-bottom:16px; border-bottom:2px solid var(--border-light); padding-bottom:10px; flex-wrap:wrap;">';
     tabs.forEach(t => {
       tabBtns += '<button class="mini-btn' + (activeTab === t.id ? ' ok' : '') + '" ' +
+        'style="padding:8px 14px; font-weight:700; border-radius:8px;" ' +
         'onclick="window._usrTab=\'' + t.id + '\';AdmUsers.edit(\'' + id + '\')">' + t.icon + ' ' + t.label + '</button>';
     });
     tabBtns += '</div>';
 
     let body = '';
     if (activeTab === 'profile') {
-      body = fld('নাম', 'text', 'eu_name', u.name) +
-        fld('ফোন', 'text', 'eu_phone', u.phone || '') +
-        fld('WhatsApp নম্বর', 'text', 'eu_wa', u.whatsapp || '') +
-        fld('ইমেইল', 'email', 'eu_email', u.email || '') +
-        '<div class="field"><label>ধর্ম</label><select id="eu_religion">' +
-        ['islam', 'hindu', 'buddhist', 'christian', 'other'].map(x =>
-          '<option value="' + x + '"' + (u.religion === x ? ' selected' : '') + '>' + x + '</option>').join('') +
-        '</select></div>' +
-        '<div class="field"><label>স্ট্যাটাস</label><select id="eu_status">' +
-        ['active', 'pending', 'disabled', 'blocked', 'suspended'].map(x => '<option value="' + x + '"' + (u.status === x ? ' selected' : '') + '>' + x + '</option>').join('') +
-        '</select></div>' +
-        '<button class="btn" onclick="AdmUsers.saveProfile(\'' + id + '\')">💾 সংরক্ষণ</button>';
+      body = '<div style="display:grid; gap:12px;">' +
+        '<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">' +
+          fld('পূর্ণ নাম', 'text', 'eu_name', u.name) +
+          fld('ফোন নম্বর', 'text', 'eu_phone', u.phone || '') +
+        '</div>' +
+        '<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">' +
+          fld('WhatsApp নম্বর', 'text', 'eu_wa', u.whatsapp || '') +
+          fld('ইমেইল অ্যাড্রেস', 'email', 'eu_email', u.email || '') +
+        '</div>' +
+        '<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">' +
+          '<div class="field"><label>ধর্ম</label><select id="eu_religion">' +
+            ['islam', 'hindu', 'buddhist', 'christian', 'other'].map(x =>
+              '<option value="' + x + '"' + (u.religion === x ? ' selected' : '') + '>' + x + '</option>').join('') +
+          '</select></div>' +
+          '<div class="field"><label>অ্যাকাউন্ট স্ট্যাটাস</label><select id="eu_status">' +
+            ['active', 'pending', 'disabled', 'blocked'].map(x =>
+              '<option value="' + x + '"' + (u.status === x ? ' selected' : '') + '>' + x + '</option>').join('') +
+          '</select></div>' +
+        '</div>' +
+        '<button class="btn-quick-primary" style="margin-top:8px; justify-content:center; padding:11px;" onclick="AdmUsers.saveProfile(\'' + id + '\')">💾 প্রোফাইল তথ্য সংরক্ষণ করুন</button>' +
+      '</div>';
     } else if (activeTab === 'balance') {
-      body = '<div style="background:var(--bg); padding:16px; border-radius:10px; margin-bottom:14px; text-align:center;">' +
-        '<div style="font-size:12px; color:var(--dim);">বর্তমান ব্যালেন্স</div>' +
-        '<div style="font-size:28px; font-weight:700; color:var(--gold);">৳' + bn(u.balance) + '</div></div>' +
-        fld('টাকা (যোগ করতে +সংখ্যা, বাদ দিতে -সংখ্যা)', 'number', 'eu_bal') +
-        fld('কারণ/নোট', 'text', 'eu_bal_note') +
-        '<div style="display:flex; gap:8px;">' +
-        '<button class="btn" style="flex:1;" onclick="AdmUsers.adjustBalance(\'' + id + '\',1)">➕ যোগ</button>' +
-        '<button class="btn" style="flex:1; background:#dc2626;" onclick="AdmUsers.adjustBalance(\'' + id + '\',-1)">➖ বাদ</button></div>';
+      body = '<div style="background:#eff6ff; border:1px solid #bfdbfe; padding:18px; border-radius:12px; margin-bottom:16px; text-align:center;">' +
+        '<div style="font-size:12px; font-weight:700; color:#1e40af; text-transform:uppercase;">বর্তমান ওয়ালেট ব্যালেন্স</div>' +
+        '<div style="font-size:32px; font-weight:800; color:#1d4ed8; margin-top:4px;">৳ ' + bn(u.balance) + '</div>' +
+      '</div>' +
+      '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;">' +
+        [100, 500, 1000, 5000].map(amt =>
+          '<button type="button" class="mini-btn" style="padding:6px 10px; font-weight:700;" onclick="document.getElementById(\'eu_bal\').value=\'' + amt + '\'">+৳' + amt + '</button>'
+        ).join('') +
+      '</div>' +
+      fld('টাকার পরিমাণ (সংখ্যা লিখুন)', 'number', 'eu_bal', '', 'যেমন: ৫০০') +
+      fld('লেনদেনের কারণ / অডিট নোট (বাধ্যতামূলক)', 'text', 'eu_bal_note', '', 'যেমন: অ্যাডমিন ব্যালেন্স সমন্বয় / রিচার্জ') +
+      '<div style="display:flex; gap:10px; margin-top:14px;">' +
+        '<button class="btn-quick-primary" style="flex:1; justify-content:center; padding:12px; background:#16a34a;" onclick="AdmUsers.adjustBalance(\'' + id + '\',1)">➕ ব্যালেন্স যোগ করুন</button>' +
+        '<button class="btn" style="flex:1; justify-content:center; padding:12px; background:#dc2626; color:#fff;" onclick="AdmUsers.adjustBalance(\'' + id + '\',-1)">➖ ব্যালেন্স কাটুন</button>' +
+      '</div>';
     } else if (activeTab === 'services') {
-      body = '<div id="usrSvcList" style="color:var(--dim);">লোড হচ্ছে...</div>';
-      // Load after modal opens
-      setTimeout(() => AdmUsers.loadUserServices(id), 100);
+      body = '<div id="usrSvcList" style="color:#64748b; padding:12px 0;">সেবাসমূহ লোড হচ্ছে...</div>';
+      setTimeout(() => AdmUsers.loadUserServices(id), 50);
     } else if (activeTab === 'security') {
-      body = '<div style="display:grid; gap:10px;">' +
-        '<button class="btn-secondary" onclick="AdmUsers.unblock(\'' + id + '\')">🔓 লিমিট আনব্লক</button>' +
-        (u.email_verified ? '<div style="color:#22c55e;">✅ ইমেইল যাচাইকৃত</div>'
-          : '<button class="btn-secondary" onclick="AdmUsers.verifyEmail(\'' + id + '\')">✅ ইমেইল যাচাই করুন</button>') +
-        '<button class="btn-secondary" onclick="AdmUsers.resetPw(\'' + id + '\')">🔑 পাসওয়ার্ড রিসেট</button>' +
-        '<button class="btn-secondary" onclick="AdmUsers.viewData(\'' + id + '\')">📊 ইউজার ডেটা দেখুন</button>' +
-        '<button class="btn" style="background:#dc2626;" onclick="AdmUsers.del(\'' + id + '\',\'' + escJs(u.name) + '\')">🗑️ ইউজার ডিলিট</button>' +
-        '</div>';
+      body = '<div style="display:grid; gap:12px;">' +
+        '<div style="display:flex; align-items:center; justify-content:space-between; padding:12px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;">' +
+          '<div>' +
+            '<div style="font-size:12px; font-weight:700; color:#0f172a;">লগইন সীমাবদ্ধতা ও নিরাপত্তা</div>' +
+            '<div style="font-size:11px; color:#64748b;">ভুল পাসওয়ার্ডে ব্লক হলে আনলক করুন</div>' +
+          '</div>' +
+          '<button class="mini-btn ok" style="padding:7px 12px;" onclick="AdmUsers.unblock(\'' + id + '\')">🔓 লিমিট আনব্লক</button>' +
+        '</div>' +
+        '<div style="display:flex; align-items:center; justify-content:space-between; padding:12px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;">' +
+          '<div>' +
+            '<div style="font-size:12px; font-weight:700; color:#0f172a;">ইমেইল ভেরিফিকেশন স্ট্যাটাস</div>' +
+            '<div style="font-size:11px; color:#64748b;">' + (u.email || 'কোনো ইমেইল যুক্ত নেই') + '</div>' +
+          '</div>' +
+          (u.email_verified ? '<div style="color:#22c55e;">✅ ইমেইল যাচাইকৃত</div>'
+            : '<button class="btn-secondary" onclick="AdmUsers.verifyEmail(\'' + id + '\')">✅ ইমেইল যাচাই করুন</button>') +
+        '</div>' +
+        '<div style="display:flex; align-items:center; justify-content:space-between; padding:12px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;">' +
+          '<div>' +
+            '<div style="font-size:12px; font-weight:700; color:#0f172a;">পাসওয়ার্ড রিসেট</div>' +
+            '<div style="font-size:11px; color:#64748b;">স্বয়ংক্রিয় নতুন র‍্যান্ডম পাসওয়ার্ড তৈরি হবে</div>' +
+          '</div>' +
+          '<button class="mini-btn" style="padding:7px 12px;" onclick="AdmUsers.resetPw(\'' + id + '\')">🔑 রিসেট পাসওয়ার্ড</button>' +
+        '</div>' +
+        '<div style="display:flex; align-items:center; justify-content:space-between; padding:12px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;">' +
+          '<div>' +
+            '<div style="font-size:12px; font-weight:700; color:#0f172a;">কার্যক্রম ও হিস্ট্রি সামারি</div>' +
+            '<div style="font-size:11px; color:#64748b;">অর্ডার ও লেনদেনের বিস্তারিত সংখ্যা</div>' +
+          '</div>' +
+          '<button class="mini-btn" style="padding:7px 12px;" onclick="AdmUsers.viewData(\'' + id + '\')">📊 ইউজার ডেটা দেখুন</button>' +
+        '</div>' +
+        '<div style="margin-top:10px; padding:14px; border:1px solid #fecaca; background:#fff1f2; border-radius:10px;">' +
+          '<div style="font-size:12px; font-weight:700; color:#991b1b;">⚠️ বিপদজনক অঞ্চল (Danger Zone)</div>' +
+          '<div style="font-size:11px; color:#7f1d1d; margin:4px 0 10px 0;">ইউজার মুছে ফেললে তার সমস্ত অর্ডার, ব্যালেন্স ও ট্রানজ্যাকশন ডাটা চিরতরে নষ্ট হবে।</div>' +
+          '<button class="btn" style="background:#dc2626; color:#fff; width:100%; justify-content:center; padding:10px;" onclick="AdmUsers.del(\'' + id + '\',\'' + escJs(u.name) + '\')">🗑️ ইউজার সম্পূর্ণ ডিলিট করুন</button>' +
+        '</div>' +
+      '</div>';
     }
 
-    modal('👤 ' + esc(u.name), tabBtns + body);
+    modal('👤 ব্যবহারকারী ব্যবস্থাপনা — ' + esc(u.name), tabBtns + body);
   },
+
   async saveProfile(id) {
     const body = {
-      name: v('eu_name'), phone: v('eu_phone'), whatsapp: v('eu_wa'),
-      email: v('eu_email'), religion: v('eu_religion'), status: v('eu_status'),
+      name: v('eu_name'),
+      phone: v('eu_phone'),
+      whatsapp: v('eu_wa'),
+      email: v('eu_email'),
+      religion: v('eu_religion'),
+      status: v('eu_status'),
     };
     const r = await ABC.api('/admin/users/' + id, { method: 'PUT', body });
     const d = await r.json();
-    if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
-    alert('✅ সংরক্ষণ হয়েছে'); closeModal(); show('users');
+    if (!r.ok) { alert('সংরক্ষণ ব্যর্থ: ' + (d.error || 'UNKNOWN')); return; }
+    alert('✅ ব্যবহারকারীর প্রোফাইল সফলভাবে আপডেট হয়েছে');
+    closeModal();
+    show('users');
   },
+
   async adjustBalance(id, dir) {
     let amt = Number(v('eu_bal')) || 0;
-    if (amt <= 0) { alert('টাকার পরিমাণ দিন'); return; }
+    if (amt <= 0) { alert('টাকার সঠিক পরিমাণ লিখুন'); return; }
     amt = dir * Math.abs(amt);
     const note = v('eu_bal_note');
-    const r = await ABC.api('/admin/users/' + id, { method: 'PUT', body: { balance_adjust: amt, balance_note: note } });
-    if (!r.ok) { alert('ব্যর্থ'); return; }
-    alert('✅ ব্যালেন্স ' + (amt > 0 ? 'যোগ' : 'বাদ') + ' হয়েছে'); closeModal(); show('users');
+    if (!note) {
+      if (!confirm('আপনি কোনো কারণ/নোট লেখেননি। নোট ছাড়া এগিয়ে যাবেন?')) return;
+    }
+    const r = await ABC.api('/admin/users/' + id, {
+      method: 'PUT',
+      body: { balance_adjust: amt, balance_note: note, admin_note: note }
+    });
+    if (!r.ok) { alert('ব্যালেন্স পরিবর্তন ব্যর্থ হয়েছে'); return; }
+    alert('✅ ব্যালেন্স সফলভাবে ' + (amt > 0 ? 'যোগ' : 'কর্তন') + ' করা হয়েছে');
+    closeModal();
+    show('users');
   },
+
   async loadUserServices(userId) {
     try {
       const [svcR, ovR] = await Promise.all([
-        ABC.api('/admin/services'), ABC.api('/admin/users/' + userId + '/service-overrides'),
+        ABC.api('/admin/services'),
+        ABC.api('/admin/users/' + userId + '/service-overrides'),
       ]);
       const services = (await svcR.json()).services || [];
       const overrides = (await ovR.json()).overrides || {};
-      let h = '<div style="display:grid; gap:8px; max-height:400px; overflow-y:auto;">';
+
+      let h = '<div style="display:grid; gap:8px; max-height:420px; overflow-y:auto; padding-right:4px;">';
       services.forEach(s => {
         const ov = overrides[s.id] || {};
         const enabled = ov.access_enabled !== false;
-        const price = ov.custom_price != null ? ov.custom_price : s.price;
-        h += '<div style="display:flex; align-items:center; gap:10px; padding:10px; background:var(--bg); border-radius:8px;">' +
-          '<span style="font-size:18px;">' + esc(s.icon || '📦') + '</span>' +
-          '<div style="flex:1;"><b style="font-size:13px;">' + esc(s.name_bn || s.name) + '</b><br>' +
-          '<small style="color:var(--dim);">ডিফল্ট ৳' + bn(s.price) + '</small></div>' +
-          '<input type="number" id="usv_price_' + s.id + '" value="' + (ov.custom_price != null ? ov.custom_price : '') + '" ' +
-          'placeholder="৳' + s.price + '" style="width:80px; padding:6px; border-radius:6px; border:1px solid var(--line);">' +
-          '<button class="mini-btn' + (enabled ? ' ok' : '') + '" onclick="AdmUsers.toggleSvc(\'' + userId + '\',\'' + s.id + '\',' + enabled + ')">' +
-          (enabled ? '🟢' : '🔴') + '</button></div>';
+        const customPrice = ov.custom_price != null ? ov.custom_price : '';
+        h += '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:9px;">' +
+          '<div style="display:flex; align-items:center; gap:10px; flex:1;">' +
+            '<span style="font-size:20px;">' + esc(s.icon || '📦') + '</span>' +
+            '<div>' +
+              '<div style="font-size:12px; font-weight:700; color:#0f172a;">' + esc(s.name_bn || s.name) + '</div>' +
+              '<div style="font-size:11px; color:#64748b;">ডিফল্ট রেট: <b>৳ ' + bn(s.price) + '</b></div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="display:flex; align-items:center; gap:8px;">' +
+            '<div style="display:flex; align-items:center; gap:4px;">' +
+              '<span style="font-size:11px; color:#64748b;">কাস্টম রেট:</span>' +
+              '<input type="number" id="usv_price_' + s.id + '" value="' + customPrice + '" ' +
+              'placeholder="৳ ' + s.price + '" style="width:85px; padding:6px 8px; border-radius:6px; border:1px solid #cbd5e1; font-size:12px; font-weight:700; text-align:right;">' +
+            '</div>' +
+            '<button class="mini-btn' + (enabled ? ' ok' : ' danger') + '" style="padding:6px 10px; font-size:11px; font-weight:700;" onclick="AdmUsers.toggleSvc(\'' + userId + '\',\'' + s.id + '\',' + enabled + ')">' +
+              (enabled ? '🟢 চালু' : '🔴 বন্ধ') +
+            '</button>' +
+          '</div>' +
+        '</div>';
       });
-      h += '</div><button class="btn" style="margin-top:12px;" onclick="AdmUsers.saveSvcPrices(\'' + userId + '\')">💾 দাম সংরক্ষণ</button>';
+      h += '</div>' +
+        '<button class="btn-quick-primary" style="margin-top:14px; width:100%; justify-content:center; padding:11px;" onclick="AdmUsers.saveSvcPrices(\'' + userId + '\')">💾 কাস্টম রেটসমূহ সংরক্ষণ করুন</button>';
+
       const el = document.getElementById('usrSvcList');
       if (el) el.innerHTML = h;
       window._usrSvcList = services;
     } catch (e) {
       const el = document.getElementById('usrSvcList');
-      if (el) el.innerHTML = '<div style="color:#dc2626;">লোড ব্যর্থ</div>';
+      if (el) el.innerHTML = '<div style="color:#dc2626; padding:12px;">সেবার তালিকা লোড ব্যর্থ হয়েছে</div>';
     }
   },
+
   async toggleSvc(userId, serviceId, cur) {
     const r = await ABC.api('/admin/users/' + userId + '/service-access', {
       method: 'PUT', body: { service_id: serviceId, enabled: !cur },
     });
-    if (!r.ok) { alert('ব্যর্থ'); return; }
+    if (!r.ok) { alert('সেবা স্টেটাস পরিবর্তন ব্যর্থ'); return; }
     AdmUsers.loadUserServices(userId);
   },
+
   async saveSvcPrices(userId) {
     const services = window._usrSvcList || [];
     const updates = [];
@@ -539,38 +817,51 @@ window.AdmUsers = {
     for (const u of updates) {
       await ABC.api('/admin/users/' + userId + '/service-pricing', { method: 'PUT', body: u });
     }
-    alert('✅ দাম সংরক্ষণ হয়েছে');
+    alert('✅ ইউজারের কাস্টম রেট সফলভাবে সংরক্ষিত হয়েছে');
   },
+
   async resetPw(id) {
-    if (!confirm('পাসওয়ার্ড রিসেট করবেন? নতুন পাসওয়ার্ড ইউজারকে জানাতে হবে।')) return;
+    if (!confirm('পাসওয়ার্ড রিসেট করবেন? নতুন পাসওয়ার্ড তৈরি হয়ে পর্দায় প্রদর্শিত হবে।')) return;
     const r = await ABC.api('/admin/users/' + id + '/reset-password', { method: 'POST' });
     const d = await r.json();
-    if (!r.ok) { alert('ব্যর্থ: ' + (d.error || '')); return; }
-    alert('✅ নতুন পাসওয়ার্ড: ' + d.new_password + '\n\nইউজারকে জানান!');
+    if (!r.ok) { alert('রিসেট ব্যর্থ: ' + (d.error || '')); return; }
+    alert('✅ নতুন পাসওয়ার্ড:\n\n' + d.new_password + '\n\nপাসওয়ার্ডটি কপি করে কাস্টমারকে সরবরাহ করুন।');
   },
+
   async viewData(id) {
     const r = await ABC.api('/admin/users/' + id + '/data');
     const d = await r.json();
-    alert('অর্ডার: ' + (d.orders || 0) + '\nলেনদেন: ' + (d.transactions || 0) + '\nব্যালেন্স: ৳' + (d.balance || 0));
+    alert('📊 ব্যবহারকারীর সারাংশ:\n\n' +
+      '• মোট সম্পন্ন অর্ডার: ' + (d.orders || 0) + ' টি\n' +
+      '• মোট লেনদেন: ' + (d.transactions || 0) + ' টি\n' +
+      '• বর্তমান ওয়ালেট ব্যালেন্স: ৳ ' + (d.balance || 0));
   },
+
   async unblock(id) {
     await ABC.api('/admin/users/' + id + '/unblock', { method: 'POST' });
-    alert('আনব্লক হয়েছে'); closeModal(); show('users');
+    alert('✅ ব্যবহারকারীর লগইন লিমিট সফলভাবে আনব্লক করা হয়েছে');
+    closeModal();
+    show('users');
   },
+
   async verifyEmail(id) {
     if (!confirm('এই ইউজারের ইমেইল যাচাইকৃত হিসেবে চিহ্নিত করবেন?')) return;
     const r = await ABC.api('/admin/users/' + id + '/verify-email', { method: 'POST' });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) { alert('ব্যর্থ: ' + (d.error || 'UNKNOWN')); return; }
-    alert('✅ ইমেইল যাচাই হয়েছে — এখন লগইন করতে পারবে'); closeModal(); show('users');
+    alert('✅ ইমেইল যাচাই হয়েছে — এখন লগইন করতে পারবে');
+    closeModal();
+    show('users');
   },
+
   async del(id, name) {
     if (!confirm('⚠️ সত্যিই ডিলিট করবেন?\n\n' + name + '\n\nসব ডাটা মুছে যাবে: অর্ডার, লেনদেন, কুপন, নোটিশ, চ্যাট, ডকুমেন্ট!')) return;
     if (!confirm('🔴 শেষ কনফার্মেশন — ফিরিয়ে আনা যাবে না!')) return;
     const r = await ABC.api('/admin/users/' + id + '?confirm=yes', { method: 'DELETE' });
     const d = await r.json();
     if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
-    alert('ডিলিট হয়েছে'); show('users');
+    alert('✅ ব্যবহারকারী সফলভাবে মুছে ফেলা হয়েছে');
+    show('users');
   },
 };
 

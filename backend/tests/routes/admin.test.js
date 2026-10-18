@@ -29,6 +29,22 @@ describe('auth gate', () => {
 });
 
 describe('users', () => {
+  test('GET /users/:id: single user fetch by id → 200 or 404', async () => {
+    db.__routeQuery([
+      ['SELECT id, name, phone', { rows: [{ id: 'u1', name: 'Rahim', phone: '01711223344' }] }],
+    ]);
+    const r1 = await withAdmin(request(app()).get('/api/admin/users/u1')).expect(200);
+    expect(r1.body.user.name).toBe('Rahim');
+
+    db.__reset();
+    db.__routeQuery([
+      ['SELECT id, name, phone', { rows: [] }],
+    ]);
+    const r2 = await withAdmin(request(app()).get('/api/admin/users/u-missing')).expect(404);
+    expect(r2.body.error).toBe('NOT_FOUND');
+    db.__reset();
+  });
+
   test('GET /users paginates; q becomes ILIKE param; invalid status ignored', async () => {
     db.__routeQuery([
       ['SELECT COUNT(*) FROM users', { rows: [{ count: '1' }] }],
