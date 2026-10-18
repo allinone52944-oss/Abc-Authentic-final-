@@ -10,13 +10,50 @@
 <meta name="theme-color" content="#1e40af">
 <title>সকল সেবা - All In One</title>
 <style>
+  .topbar-wrap {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .user-bal-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    padding: 8px 16px;
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-xs);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .user-bal-pill:hover {
+    border-color: var(--primary-400);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+  }
+  .wb-plus {
+    background: #eff6ff;
+    color: #1d4ed8;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 800;
+  }
   .search-bar-wrap {
-    margin-bottom: 24px;
+    margin-bottom: 16px;
     position: relative;
   }
   .search-input {
     width: 100%;
-    padding: 14px 18px 14px 44px;
+    padding: 14px 44px 14px 44px;
     background: #ffffff;
     border: 1px solid var(--border-light);
     border-radius: var(--r-lg);
@@ -39,6 +76,56 @@
     font-size: 18px;
     pointer-events: none;
   }
+  .search-clear {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #e2e8f0;
+    border: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    font-size: 12px;
+    color: #475569;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  .filter-tabs {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    margin-bottom: 20px;
+    scrollbar-width: none;
+  }
+  .filter-tabs::-webkit-scrollbar { display: none; }
+  .ftab {
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.18s ease;
+    user-select: none;
+  }
+  .ftab:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    color: var(--text-main);
+  }
+  .ftab.on {
+    background: #1e40af;
+    color: #ffffff;
+    border-color: #1e40af;
+    box-shadow: 0 4px 12px rgba(30, 64, 175, 0.25);
+  }
   .back-nav {
     display: inline-flex;
     align-items: center;
@@ -48,13 +135,20 @@
     font-size: 14px;
     cursor: pointer;
     margin-bottom: 16px;
-    padding: 6px 12px;
+    padding: 6px 14px;
     border-radius: var(--r-md);
     background: var(--primary-50);
     transition: all 0.15s ease;
   }
-  .back-nav:hover {
-    background: var(--primary-100);
+  .back-nav:hover { background: var(--primary-100); }
+  .cat-pill {
+    font-size: 11px;
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 2px 8px;
+    border-radius: 6px;
+    margin-right: 6px;
+    display: inline-block;
   }
 </style>
 </head>
@@ -78,23 +172,43 @@
   </div>
 
   <div class="main">
-    <div class="topbar">
+    <div class="topbar-wrap">
       <div>
-        <h2>🛎️ সকল ডিজিটাল সেবা</h2>
-        <p>আপনার প্রয়োজনীয় সেবা বেছে নিন অথবা ক্যাটাগরি ব্রাউজ করুন</p>
+        <h2 style="font-size:22px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:8px;">🛎️ সকল ডিজিটাল সেবা</h2>
+        <p style="color:#64748b;font-size:14px;margin-top:2px;">আপনার প্রয়োজনীয় সেবা বেছে নিন অথবা ক্যাটাগরি ব্রাউজ করুন</p>
+      </div>
+      <div class="user-bal-pill" onclick="location.href='/wallet.html'" title="ওয়ালেটে টাকা যোগ করতে ক্লিক করুন">
+        <span style="font-size:18px;">💳</span>
+        <div>
+          <div style="font-size:11px;color:#64748b;font-weight:600;">ওয়ালেট ব্যালেন্স</div>
+          <div id="topUserBal" style="font-size:16px;font-weight:800;color:#1e40af;">৳০</div>
+        </div>
+        <span class="wb-plus" title="রিচার্জ">+</span>
       </div>
     </div>
 
     <!-- Live Search Bar -->
     <div class="search-bar-wrap">
       <span class="search-icon">🔍</span>
-      <input type="text" id="svcSearch" class="search-input" placeholder="সেবার নাম লিখে খুঁজুন (যেমন: জন্ম নিবন্ধন, NID, পাসপোর্ট...)" oninput="filterServices(this.value)">
+      <input type="text" id="svcSearch" class="search-input" placeholder="সেবার নাম লিখে খুঁজুন (যেমন: জন্ম নিবন্ধন, NID, পাসপোর্ট...)" oninput="onSearchInput(this.value)">
+      <button class="search-clear" id="searchClear" onclick="clearSearch()" aria-label="অনুসন্ধান মুছুন">✕</button>
     </div>
 
+    <!-- Filter Segment Tabs -->
+    <div class="filter-tabs" id="filterTabs">
+      <button class="ftab on" id="tabCats" onclick="switchFilter('cats')">📁 ক্যাটাগরি ভিউ</button>
+      <button class="ftab" id="tabAll" onclick="switchFilter('all')">📋 সকল সেবা (<span id="cntAll">০</span>)</button>
+      <button class="ftab" id="tabAuto" onclick="switchFilter('auto')">⚡ স্বয়ংক্রিয় সেবা (<span id="cntAuto">০</span>)</button>
+      <button class="ftab" id="tabManual" onclick="switchFilter('manual')">📝 ম্যানুয়াল সেবা (<span id="cntManual">০</span>)</button>
+    </div>
+
+    <!-- Category Grid View -->
     <div id="catView">
       <div class="skel" style="height:120px;margin-bottom:12px;"></div>
       <div class="skel" style="height:120px;"></div>
     </div>
+
+    <!-- Direct Services Grid View -->
     <div id="svcView" style="display:none;"></div>
   </div>
 </div>
@@ -131,34 +245,115 @@ function autoIcon(name){
 
 function card(s){
   const closed = s.open ? '' : '<span class="ptype closed">সাময়িক বন্ধ</span>';
+  const catName = s.category_name_bn || s.category_name;
+  const catHtml = catName ? '<span class="cat-pill">📁 ' + esc(catName) + '</span>' : '';
+  const isAuto = s.type !== 'manual';
   return '<div class="svc-card" onclick="location.href=\'/service-detail.html?id='+s.id+'\'">'+
     '<div class="svc-ico">'+esc((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn||s.name))+'</div>'+
     '<div class="svc-info"><h4>'+esc(s.name_bn||s.name)+'</h4>'+
-    '<span class="ptype '+(s.type==='manual'?'manual':'auto')+'">'+(s.type==='manual'?'ম্যানুয়াল প্রসেস':'স্বয়ংক্রিয়')+'</span>'+closed+'</div>'+
-    '<div class="svc-pr">৳'+bnNum(s.price)+(s.open?'':'<div style="font-size:11px;color:#dc2626;font-weight:600;">বন্ধ আছে</div>')+'</div></div>';
+    '<div style="margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">' + catHtml +
+    '<span class="ptype '+(isAuto?'auto':'manual')+'">'+(isAuto?'⚡ স্বয়ংক্রিয়':'📝 ম্যানুয়াল')+'</span>'+closed+'</div></div>'+
+    '<div class="svc-pr">৳'+bnNum(s.price)+(s.open?'':'<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:2px;">বন্ধ আছে</div>')+'</div></div>';
 }
 
 let GROUPS = [];
 let ALL_SERVICES = [];
+let CURRENT_FILTER = 'cats';
 
-function filterServices(q) {
-  q = (q || '').trim().toLowerCase();
-  if (!q) {
-    showCats();
+function updateCounts(){
+  const allCnt = ALL_SERVICES.length;
+  const autoCnt = ALL_SERVICES.filter(s => s.type !== 'manual').length;
+  const manualCnt = ALL_SERVICES.filter(s => s.type === 'manual').length;
+  document.getElementById('cntAll').textContent = bnNum(allCnt);
+  document.getElementById('cntAuto').textContent = bnNum(autoCnt);
+  document.getElementById('cntManual').textContent = bnNum(manualCnt);
+}
+
+function switchFilter(f){
+  CURRENT_FILTER = f;
+  document.querySelectorAll('.ftab').forEach(b => b.classList.remove('on'));
+  const targetBtn = { cats:'tabCats', all:'tabAll', auto:'tabAuto', manual:'tabManual' }[f];
+  if(targetBtn) document.getElementById(targetBtn).classList.add('on');
+
+  const q = (document.getElementById('svcSearch').value || '').trim().toLowerCase();
+  if (q) {
+    applySearch(q);
     return;
   }
+
+  if (f === 'cats') {
+    showCats();
+  } else {
+    showFilteredServices(f);
+  }
+}
+
+function showFilteredServices(f){
   document.getElementById('catView').style.display = 'none';
   const v = document.getElementById('svcView');
   v.style.display = '';
-  const filtered = ALL_SERVICES.filter(s => {
+
+  let list = ALL_SERVICES;
+  let title = '📋 সকল ডিজিটাল সেবা (' + bnNum(list.length) + 'টি)';
+  if (f === 'auto') {
+    list = ALL_SERVICES.filter(s => s.type !== 'manual');
+    title = '⚡ স্বয়ংক্রিয় ইনস্ট্যান্ট সেবাসমূহ (' + bnNum(list.length) + 'টি)';
+  } else if (f === 'manual') {
+    list = ALL_SERVICES.filter(s => s.type === 'manual');
+    title = '📝 ম্যানুয়াল প্রসেসিং সেবাসমূহ (' + bnNum(list.length) + 'টি)';
+  }
+
+  v.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
+    '<h3 style="font-size:17px;font-weight:800;color:#0f172a;">' + title + '</h3>' +
+    '<span class="back-nav" style="margin-bottom:0;" onclick="switchFilter(\'cats\')">← ক্যাটাগরি ভিউ</span>' +
+    '</div>' +
+    '<div class="svc-grid">' +
+    (list.map(card).join('') || '<div style="color:#64748b;padding:30px 0;grid-column:1/-1;text-align:center;">এই বিভাগে কোনো সেবা পাওয়া যায়নি</div>') +
+    '</div>';
+}
+
+function onSearchInput(val){
+  const clearBtn = document.getElementById('searchClear');
+  if (val && val.trim()) {
+    clearBtn.style.display = 'inline-flex';
+    applySearch(val.trim().toLowerCase());
+  } else {
+    clearBtn.style.display = 'none';
+    if (CURRENT_FILTER === 'cats') showCats();
+    else showFilteredServices(CURRENT_FILTER);
+  }
+}
+
+function clearSearch(){
+  const inp = document.getElementById('svcSearch');
+  inp.value = '';
+  document.getElementById('searchClear').style.display = 'none';
+  if (CURRENT_FILTER === 'cats') showCats();
+  else showFilteredServices(CURRENT_FILTER);
+}
+
+function applySearch(q){
+  document.getElementById('catView').style.display = 'none';
+  const v = document.getElementById('svcView');
+  v.style.display = '';
+  
+  let baseList = ALL_SERVICES;
+  if (CURRENT_FILTER === 'auto') baseList = ALL_SERVICES.filter(s => s.type !== 'manual');
+  else if (CURRENT_FILTER === 'manual') baseList = ALL_SERVICES.filter(s => s.type === 'manual');
+
+  const filtered = baseList.filter(s => {
     const bn = (s.name_bn || '').toLowerCase();
     const en = (s.name || '').toLowerCase();
-    return bn.includes(q) || en.includes(q);
+    const cat = (s.category_name_bn || s.category_name || '').toLowerCase();
+    return bn.includes(q) || en.includes(q) || cat.includes(q);
   });
-  v.innerHTML = '<span class="back-nav" onclick="showCats()">← সকল ক্যাটাগরিতে ফিরুন</span>' +
-    '<h3 style="margin:16px 0;">🔍 অনুসন্ধানের ফলাফল (' + bnNum(filtered.length) + 'টি পাওয়া গেছে)</h3>' +
+
+  v.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
+    '<h3 style="font-size:17px;font-weight:800;color:#0f172a;">🔍 অনুসন্ধানের ফলাফল (' + bnNum(filtered.length) + 'টি পাওয়া গেছে)</h3>' +
+    '<span class="back-nav" style="margin-bottom:0;" onclick="clearSearch()">✕ ফিল্টার মুছুন</span>' +
+    '</div>' +
     '<div class="svc-grid">' +
-    (filtered.map(card).join('') || '<div style="color:#64748b;padding:20px 0;">কোনো সেবা খুঁজে পাওয়া যায়নি</div>') +
+    (filtered.map(card).join('') || '<div style="color:#64748b;padding:40px 0;grid-column:1/-1;text-align:center;background:#fff;border-radius:12px;border:1px dashed #cbd5e1;"><div style="font-size:32px;margin-bottom:8px;">🔍</div>কোনো সেবা খুঁজে পাওয়া যায়নি। সেবার নাম অন্যভাবে লিখে দেখুন।</div>') +
     '</div>';
 }
 
@@ -180,7 +375,8 @@ function showCat(i){
   document.getElementById('catView').style.display = 'none';
   const v = document.getElementById('svcView'); v.style.display = '';
   v.innerHTML = '<span class="back-nav" onclick="showCats()">← সকল ক্যাটাগরিতে ফিরুন</span>' +
-    '<h3 style="margin:16px 0;">'+esc(g.icon)+' '+esc(g.name)+'</h3><div class="svc-grid">' +
+    '<h3 style="margin:16px 0;font-size:18px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:8px;">'+esc(g.icon)+' '+esc(g.name)+' <span style="font-size:13px;font-weight:600;color:#64748b;">('+bnNum(g.services.length)+'টি)</span></h3>' +
+    '<div class="svc-grid">' +
     (g.services.map(card).join('') || '<div style="color:#64748b;padding:20px 0;">এই ক্যাটাগরিতে কোনো সেবা নেই</div>') + '</div>';
 }
 
@@ -188,6 +384,7 @@ async function init(){
   const me = await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
   const u=(await me.json()).user;
+  document.getElementById('topUserBal').textContent = '৳' + bnNum(u.balance || 0);
   document.getElementById('waFab').onclick=()=>{
     window.open('https://wa.me/?text='+encodeURIComponent('আমি '+u.name+'। সেবা সম্পর্কে জানতে চাই।'),'_blank');
   };
@@ -195,6 +392,8 @@ async function init(){
   if(!r.ok) return;
   const {services}=await r.json();
   ALL_SERVICES = services || [];
+  updateCounts();
+
   const map = {}; GROUPS = [];
   const uncat = { id:null, name:'অন্যান্য সেবা', icon:'📦', services:[], ord:999999 };
   services.forEach(s => {
@@ -214,9 +413,12 @@ async function init(){
   });
   if (uncat.services.length) GROUPS.push(uncat);
   GROUPS.sort((a,b)=>a.ord-b.ord);
+
   if (!GROUPS.length) {
-    document.getElementById('catView').innerHTML = '<div class="svc-grid">'+services.map(card).join('')+'</div>';
-  } else showCats();
+    switchFilter('all');
+  } else {
+    showCats();
+  }
 }
 init();
 </script>

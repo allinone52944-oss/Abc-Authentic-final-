@@ -206,6 +206,7 @@
     </div>
 
     <div class="status-card">
+      <div id="docWarningBox" style="display:none;background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:14px;margin-bottom:20px;color:#92400e;font-size:13px;text-align:left;line-height:1.5;"><b>⚠️ অর্ডার সফলভাবে তৈরি হয়েছে!</b> তবে ফাইল সাইজ বা নেটওয়ার্ক সমস্যার কারণে কিছু ডকুমেন্ট ফাইল আপলোড বাকি থাকতে পারে। নিচের <b>"অর্ডার ডিটেইলস ও চ্যাট"</b> বাটনে গিয়ে চ্যাটে যেকোনো সময় ফাইল পাঠাতে পারেন।</div>
       <div class="status-orb" id="orb">📦</div>
       <h2 style="color:var(--primary-700); font-size:22px; margin-bottom:4px;" id="stTitle">লোড হচ্ছে…</h2>
       <p style="color:var(--text-muted); font-size:14px;" id="stSub">—</p>
@@ -269,6 +270,10 @@ async function init() {
   document.getElementById('waFab').onclick = () => {
     window.open('https://wa.me/?text=' + encodeURIComponent('আসসালামু আলাইকুম! আমি ' + u.name + ' (ফোন: ' + u.phone + ')। অর্ডার #' + (oid ? oid.slice(0, 8) : '') + ' নিয়ে সাহায্য দরকার।'), '_blank');
   };
+  if (new URLSearchParams(location.search).get("doc_warning") === "1") {
+    const dw = document.getElementById("docWarningBox");
+    if (dw) dw.style.display = "block";
+  }
   if (!oid) {
     document.getElementById('stTitle').textContent = 'অর্ডার আইডি পাওয়া যায়নি';
     return;

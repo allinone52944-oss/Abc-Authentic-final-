@@ -24,8 +24,15 @@
     background: var(--primary-50);
     transition: all 0.15s ease;
   }
-  .back-nav:hover {
-    background: var(--primary-100);
+  .back-nav:hover { background: var(--primary-100); }
+
+  .svc-hero-card {
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-xl);
+    padding: 24px;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 20px;
   }
   .detail-header {
     border-bottom: 1px solid var(--border-light);
@@ -37,7 +44,7 @@
     border: 1px solid var(--border-light);
     border-radius: var(--r-md);
     padding: 16px 20px;
-    margin: 16px 0;
+    margin: 12px 0 20px;
   }
   .doc-list li {
     margin-bottom: 8px;
@@ -45,6 +52,41 @@
     font-size: 14px;
   }
   .doc-list li:last-child { margin-bottom: 0; }
+
+  .bal-box {
+    border-radius: var(--r-md);
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .bal-box.ok {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #166534;
+  }
+  .bal-box.warn {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #92400e;
+  }
+
+  .sample-box {
+    background: #0f172a;
+    color: #f8fafc;
+    border-radius: var(--r-md);
+    padding: 14px 18px;
+    font-family: monospace;
+    font-size: 13px;
+    white-space: pre-wrap;
+    line-height: 1.6;
+    max-height: 220px;
+    overflow-y: auto;
+    margin-top: 8px;
+  }
 </style>
 </head>
 <body>
@@ -68,7 +110,7 @@
 
   <div class="main">
     <span class="back-nav" onclick="location.href='/services.html'">← সকল সেবায় ফিরুন</span>
-    <div class="card" id="detail">
+    <div class="svc-hero-card" id="detail">
       <div class="skel" style="height:120px;margin-bottom:12px;"></div>
       <div class="skel" style="height:80px;"></div>
     </div>
@@ -79,57 +121,173 @@
 
 <!-- Mobile Tabbar -->
 <div class="m-tabbar">
-  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/dashboard.html'"><div class="ico">🏠</div>হোম</div>
-  <div class="m-tab on" aria-current="page"><div class="ico">🛎️</div>সেবা</div>
-  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/orders.html'"><div class="ico">📦</div>অর্ডার</div>
-  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
-  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/dashboard.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>হোম</div>
+  <div class="m-tab on" aria-current="page"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></div>সেবা</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/orders.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></div>অর্ডার</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/wallet.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg></div>ওয়ালেট</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
 </div>
 
 <script src="/js/app.js?v=13"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
 const id=new URLSearchParams(location.search).get('id');
+
+function autoIcon(name){
+  const n=String(name||'');
+  if(/জন্ম|birth/i.test(n))return '👶';
+  if(/মৃত্যু|death/i.test(n))return '🕊️';
+  if(/এনআইডি|NID|ভোটার/i.test(n))return '🪪';
+  if(/পাসপোর্ট|passport/i.test(n))return '🛂';
+  if(/টিকিট|ticket/i.test(n))return '🎫';
+  if(/আবেদন|apply|application/i.test(n))return '📝';
+  if(/সনদ|certificate/i.test(n))return '📜';
+  if(/অর্ডার|order/i.test(n))return '📦';
+  if(/রিচার্জ|recharge|বিকাশ|নগদ/i.test(n))return '💳';
+  return '🛎️';
+}
 
 async function init(){
   const me=await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
   const u=(await me.json()).user;
+  const userBalance = Number(u.balance || 0);
+
   document.getElementById('waFab').onclick=()=>{
     window.open('https://wa.me/?text='+encodeURIComponent('আমি '+u.name+'। সেবা সম্পর্কে জানতে চাই।'),'_blank');
   };
+
+  if (!id) {
+    document.getElementById('detail').innerHTML='<div style="color:#dc2626;padding:20px 0;">কোনো সেবা আইডি উল্লেখ করা হয়নি</div>';
+    return;
+  }
+
   const r=await ABC.api('/services/'+id);
   if(!r.ok){
     document.getElementById('detail').innerHTML='<div style="color:#dc2626;padding:20px 0;">সেবাটি খুঁজে পাওয়া যায়নি</div>';
     return;
   }
   const {service:s}=await r.json();
-  const docs=(s.documents_required||[]).map(d=>'<li>'+esc(d)+'</li>').join('')||'<li>কোনো বিশেষ ডকুমেন্ট প্রয়োজন নেই</li>';
+
+  const isAuto = s.type !== 'manual';
+  const hasEngine = Boolean(s.engine_id);
+  const price = Number(s.price || 0);
+  const catName = s.category_name_bn || s.category_name;
+  const icon = (s.icon && s.icon !== '🛎️') ? s.icon : autoIcon(s.name_bn || s.name);
+
+  // Docs
+  const docs=(s.documents_required||[]).map(d=>'<li>📄 '+esc(d)+'</li>').join('')||'<li>কোনো বিশেষ ডকুমেন্ট প্রয়োজন নেই</li>';
   const sched=(s.schedule&&s.schedule.open)?'<div style="color:#64748b;font-size:13px;margin:8px 0;">🕘 সেবার সময়সূচি: '+esc(s.schedule.open)+' - '+esc(s.schedule.close||'')+'</div>':'';
 
-  document.getElementById('detail').innerHTML=
+  // Balance Check
+  const hasEnoughBal = userBalance >= price;
+  const shortage = Math.max(0, price - userBalance);
+  const balBoxHtml = hasEnoughBal ?
+    '<div class="bal-box ok">' +
+      '<div>' +
+        '<div style="font-weight:700;font-size:14px;">✅ আপনার ওয়ালেটে পর্যাপ্ত ব্যালেন্স রয়েছে</div>' +
+        '<div style="font-size:12px;margin-top:2px;">বর্তমান ওয়ালেট ব্যালেন্স: <b>৳' + bnNum(userBalance) + '</b> (প্রয়োজন: ৳' + bnNum(price) + ')</div>' +
+      '</div>' +
+      '<button class="btn btn-secondary" onclick="location.href=\'/wallet.html\'" style="padding:6px 14px;font-size:13px;">+ ব্যালেন্স দেখুন</button>' +
+    '</div>' :
+    '<div class="bal-box warn">' +
+      '<div>' +
+        '<div style="font-weight:700;font-size:14px;color:#b45309;">⚠️ ওয়ালেটে ৳' + bnNum(shortage) + ' ঘাটতি রয়েছে</div>' +
+        '<div style="font-size:12px;margin-top:2px;">বর্তমান ব্যালেন্স: ৳' + bnNum(userBalance) + ' • সেবার ফি: ৳' + bnNum(price) + '</div>' +
+      '</div>' +
+      '<button class="btn btn-primary" onclick="location.href=\'/wallet.html\'" style="padding:8px 16px;font-size:13px;font-weight:700;">+ এখনই রিচার্জ করুন</button>' +
+    '</div>';
+
+  // Instructions & Sample Box
+  let instHtml = '';
+  if (s.manual_instructions) {
+    instHtml += '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px;margin-bottom:16px;color:#1e40af;font-size:13px;line-height:1.6;">' +
+      '<b>📋 সেবার বিশেষ নির্দেশনা:</b><div style="margin-top:6px;white-space:pre-wrap;">' + esc(s.manual_instructions) + '</div></div>';
+  }
+  if (s.manual_sample) {
+    instHtml += '<div style="margin-bottom:16px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+        '<label style="font-size:13px;font-weight:700;color:#334155;">📋 নমুনা ফরম্যাট</label>' +
+        '<button class="btn btn-secondary" onclick="copySample()" style="padding:4px 10px;font-size:12px;">কপি করুন</button>' +
+      '</div>' +
+      '<pre class="sample-box" id="samplePre">' + esc(s.manual_sample) + '</pre>' +
+    '</div>';
+  }
+
+  // Action CTA Logic
+  let actionHtml = '';
+  if (!s.open) {
+    actionHtml = '<div style="color:#dc2626;margin-top:14px;background:#fef2f2;border:1px solid #fecaca;padding:14px;border-radius:12px;text-align:center;font-weight:700;font-size:14px;">⚠️ এই সেবাটি বর্তমানে সাময়িকভাবে বন্ধ আছে। কিছুক্ষণের মধ্যে চালু হবে।</div>';
+  } else if (hasEngine) {
+    // AUTOMATED ENGINE SERVICE: Single focused engine action
+    let engineUrl = '/' + s.engine_id + '.html';
+    let engineLabel = '⚡ সরাসরি ইঞ্জিন সেবা শুরু করুন →';
+    if (s.engine_id === 'bdris-certificate') engineLabel = '⚡ এখনই সনদ তৈরি করুন →';
+    else if (s.engine_id === 'bdris-apply') engineLabel = '⚡ এখনই জন্ম নিবন্ধন আবেদন শুরু করুন →';
+    else if (s.engine_id === 'death-verify') engineLabel = '⚡ এখনই মৃত্যু সনদ যাচাই করুন →';
+    else if (s.engine_id === 'nid-replica') engineLabel = '⚡ এখনই NID তৈরি করুন →';
+
+    actionHtml = '<div style="margin-top:10px;">' +
+      '<button class="btn btn-primary" style="width:100%;padding:15px;font-size:16px;font-weight:700;box-shadow:0 4px 14px rgba(37,99,235,0.3);" onclick="location.href=\'' + engineUrl + '\'">' + engineLabel + '</button>' +
+      '<div style="font-size:12px;color:#64748b;margin-top:8px;text-align:center;">ℹ️ এটি একটি পূর্ণাঙ্গ স্বয়ংক্রিয় সেবা। বাটনে ক্লিক করে সরাসরি প্রয়োজনীয় তথ্য দিয়ে কাজ সম্পন্ন করুন।</div>' +
+    '</div>';
+  } else {
+    // MANUAL / GENERAL SERVICE
+    actionHtml = '<div style="margin-top:10px;">' +
+      '<button class="btn btn-primary" style="width:100%;padding:15px;font-size:16px;font-weight:700;box-shadow:0 4px 14px rgba(37,99,235,0.3);" onclick="location.href=\'/order-create.html?service=' + s.id + '\'">🛒 আবেদন ও অর্ডার করুন →</button>' +
+      (s.type === 'manual' ?
+        '<button class="btn btn-secondary" style="width:100%;margin-top:10px;padding:12px;font-size:14px;" onclick="location.href=\'/manual-submit.html?service_id=' + s.id + '\'">📝 নমুনা ফরম পূরণ করে ম্যানুয়াল আবেদন পাঠান</button>' : '') +
+      '<div style="font-size:12px;color:#64748b;margin-top:8px;text-align:center;">ℹ️ আবেদন জমা দেওয়ার পর অ্যাডমিন দ্রুত ভেরিফাই করে ডেলিভারি সম্পন্ন করবেন।</div>' +
+    '</div>';
+  }
+
+  document.getElementById('detail').innerHTML =
     '<div class="detail-header">' +
-      '<h2 style="font-size:24px;font-weight:800;color:#0f172a;margin-bottom:8px;">'+esc(s.name_bn||s.name)+'</h2>'+sched+
-      '<div style="display:flex;align-items:center;gap:12px;margin-top:12px;">' +
-        '<span class="ptype '+(s.type==='manual'?'manual':'auto')+'">'+(s.type==='manual'?'ম্যানুয়াল প্রসেসিং':'স্বয়ংক্রিয় প্রসেসিং')+'</span> '+
-        '<span style="font-size:26px;font-weight:800;color:#1e40af;">৳'+Number(s.price).toLocaleString('bn-BD')+'</span>' +
+      '<div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;">' +
+        '<div style="width:54px;height:54px;border-radius:14px;background:#eff6ff;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;">' + esc(icon) + '</div>' +
+        '<div>' +
+          '<h2 style="font-size:22px;font-weight:800;color:#0f172a;margin:0 0 4px;">' + esc(s.name_bn || s.name) + '</h2>' +
+          '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+            (catName ? '<span style="font-size:12px;color:#64748b;background:#f1f5f9;padding:2px 8px;border-radius:6px;">📁 ' + esc(catName) + '</span>' : '') +
+            '<span class="ptype ' + (isAuto ? 'auto' : 'manual') + '">' + (isAuto ? '⚡ স্বয়ংক্রিয়' : '📝 ম্যানুয়াল') + '</span>' +
+            (s.open ? '<span class="ptype" style="background:#dcfce7;color:#166534;">চালু</span>' : '<span class="ptype closed">সাময়িক বন্ধ</span>') +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      sched +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;background:#f8fafc;padding:12px 18px;border-radius:12px;border:1px solid #e2e8f0;">' +
+        '<div style="font-size:14px;color:#475569;font-weight:600;">সেবার মূল্য / সরকারি ফি:</div>' +
+        '<div style="font-size:24px;font-weight:800;color:#1e40af;">৳' + bnNum(price) + '</div>' +
       '</div>' +
     '</div>' +
+
+    balBoxHtml +
+
     '<div style="margin-bottom:16px;">' +
       '<div style="font-size:15px;font-weight:700;color:#334155;">প্রয়োজনীয় তথ্যাদি ও ডকুমেন্ট:</div>' +
-      '<ul class="doc-list">'+docs+'</ul>' +
+      '<ul class="doc-list">' + docs + '</ul>' +
     '</div>' +
-    '<div style="display:flex;gap:10px;margin-bottom:12px;">' +
-      '<button class="btn-secondary" style="width:100%;padding:12px;" onclick="showRules()">📜 নিয়মাবলী ও নির্দেশিকা</button>' +
-    '</div>' +
-    (s.engine_id==='bdris-certificate'&&s.open?'<button class="btn" style="width:100%;margin-bottom:8px;padding:14px;" onclick="location.href=\'/bdris-certificate.html\'">⚡ এখনই সনদ তৈরি করুন →</button>':'')+
-    (s.engine_id==='bdris-apply'&&s.open?'<button class="btn" style="width:100%;margin-bottom:8px;padding:14px;" onclick="location.href=\'/bdris-apply.html\'">⚡ এখনই আবেদন করুন →</button>':'')+
-    (s.engine_id==='death-verify'&&s.open?'<button class="btn" style="width:100%;margin-bottom:8px;padding:14px;" onclick="location.href=\'/death-verify.html\'">⚡ এখনই যাচাই করুন →</button>':'')+
-    (s.engine_id==='nid-replica'&&s.open?'<button class="btn" style="width:100%;margin-bottom:8px;padding:14px;" onclick="location.href=\'/nid-replica.html\'">⚡ এখনই তৈরি করুন →</button>':'')+
-    (s.open?'<button class="btn" style="width:100%;padding:14px;" onclick="location.href=\'/order-create.html?service='+s.id+'\'">অর্ডার করুন →</button>'
-           :'<div style="color:#dc2626;margin-top:12px;background:#fef2f2;padding:12px;border-radius:10px;text-align:center;font-weight:600;">⚠️ এই সেবা সাময়িকভাবে বন্ধ আছে</div>');
 
-  window._rules=(s.type==='manual'&&s.manual_instructions)?s.manual_instructions:(s.rules_text||'কোনো বিশেষ নিয়ম নেই।');
+    instHtml +
+
+    '<div style="display:flex;gap:10px;margin-bottom:14px;">' +
+      '<button class="btn-secondary" style="width:100%;padding:12px;font-size:14px;" onclick="showRules()">📜 নিয়মাবলী ও নির্দেশিকা</button>' +
+    '</div>' +
+
+    actionHtml;
+
+  window._rules = (s.type === 'manual' && s.manual_instructions) ? s.manual_instructions : (s.rules_text || 'কোনো বিশেষ নিয়ম নেই।');
+  window._sample = s.manual_sample || '';
+}
+
+function copySample(){
+  if (!window._sample) return;
+  navigator.clipboard.writeText(window._sample).then(()=>{
+    alert('📋 নমুনা ফরম্যাট কপি করা হয়েছে!');
+  }).catch(()=>{
+    alert('কপি করা সম্ভব হয়নি।');
+  });
 }
 
 function showRules(){
@@ -137,8 +295,8 @@ function showRules(){
   bg.className = 'modal-bg';
   bg.innerHTML = '<div class="modal">' +
     '<h3>📜 সেবার নিয়মাবলী ও শর্তাবলী</h3>' +
-    '<div style="margin:16px 0;font-size:14px;line-height:1.7;color:#334155;">'+esc(window._rules).replace(/\n/g,'<br>')+'</div>' +
-    '<button class="btn" style="width:100%;margin-top:14px;" onclick="this.closest(\'.modal-bg\').remove()">বুঝেছি</button>' +
+    '<div style="margin:16px 0;font-size:14px;line-height:1.7;color:#334155;max-height:360px;overflow-y:auto;">' + esc(window._rules).replace(/\n/g,'<br>') + '</div>' +
+    '<button class="btn btn-primary" style="width:100%;margin-top:14px;" onclick="this.closest(\'.modal-bg\').remove()">বুঝেছি</button>' +
   '</div>';
   bg.onclick=(e)=>{if(e.target===bg)bg.remove();};
   document.body.appendChild(bg);

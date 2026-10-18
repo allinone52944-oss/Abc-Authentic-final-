@@ -30,11 +30,13 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px;
+    padding: 16px 20px;
     background: #f8fafc;
     border: 1px solid var(--border-light);
-    border-radius: var(--r-md);
+    border-radius: var(--r-lg);
     margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
   }
 
   .file-drop {
@@ -45,6 +47,17 @@
     transition: border-color 0.2s;
   }
   .file-drop:hover { border-color: var(--primary-400); }
+
+  .bal-warning-box {
+    display: none;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    color: #92400e;
+    font-size: 14px;
+  }
 </style>
 </head>
 <body>
@@ -77,25 +90,37 @@
       </div>
     </div>
 
+    <!-- Balance shortage warning -->
+    <div class="bal-warning-box" id="balWarning">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+        <div>
+          <b>⚠️ ওয়ালেটে অপর্যাপ্ত ব্যালেন্স!</b>
+          <div id="balWarningText" style="margin-top:2px;">অর্ডার নিশ্চিত করতে ওয়ালেট রিচার্জ করুন।</div>
+        </div>
+        <button class="btn btn-primary" onclick="location.href='/wallet.html'" style="padding:8px 16px;font-size:13px;">+ এখনই রিচার্জ করুন</button>
+      </div>
+    </div>
+
     <div class="card" style="max-width:760px;">
       <div class="order-meta">
         <div>
           <h2 id="svcName" style="font-size:20px;font-weight:800;color:#0f172a;margin-bottom:4px;">সেবার নাম</h2>
           <div style="font-size:12px;color:#64748b;">অর্ডার কনফার্ম করার সাথে সাথে ওয়ালেট থেকে ফি কর্তন হবে</div>
         </div>
-        <div>
+        <div style="text-align:right;">
           <span class="st st-new" id="svcPrice" style="font-size:18px;font-weight:800;padding:6px 16px;">৳০</span>
+          <div id="userBalSub" style="font-size:12px;color:#64748b;margin-top:4px;">ওয়ালেট: ৳০</div>
         </div>
       </div>
 
       <div id="fields"></div>
 
       <!-- Special instructions from admin -->
-      <div id="instWrap" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin-bottom:16px;color:#1e40af;font-size:13px;line-height:1.6;"></div>
+      <div id="instWrap" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px;margin-bottom:16px;color:#1e40af;font-size:13px;line-height:1.6;"></div>
 
       <!-- Sample / Instruction Preview -->
       <div id="sampleWrap" style="display:none;margin-bottom:16px;">
-        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:#334155;">ফরম নমুনা / তথ্য বিন্যাস (প্রয়োজনে এডিট করুন)</label>
+        <label style="display:block;font-size:13px;font-weight:700;margin-bottom:6px;color:#334155;">📋 ফরম নমুনা / তথ্য বিন্যাস (প্রয়োজনে এডিট করুন)</label>
         <textarea id="sampleInput" rows="6" style="width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-family:monospace;font-size:13px;line-height:1.6;"></textarea>
       </div>
 
@@ -113,23 +138,49 @@
   </div>
 </div>
 
+<!-- Mobile Tabbar -->
+<div class="m-tabbar">
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/dashboard.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>হোম</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/services.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></div>সেবা</div>
+  <div class="m-tab on" aria-current="page"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg></div>অর্ডার</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/wallet.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg></div>ওয়ালেট</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
+</div>
+
 <script src="/js/app.js?v=13"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
 const sid=new URLSearchParams(location.search).get('service');
 let svc=null;
+let userBal=0;
 
 async function init(){
   const me=await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
+  const u=(await me.json()).user;
+  userBal=Number(u.balance || 0);
+
   if(!sid){location.href='/services.html';return;}
   window._orderIdemKey = ABC.Idempotency.getOrCreate('order_submit_' + sid);
   const r=await ABC.api('/services/'+sid);
   if(!r.ok){alert('সেবা পাওয়া যায়নি');location.href='/services.html';return;}
   const d=await r.json();
   svc=d.service;
+  const svcPrice = Number(svc.price || 0);
+
   document.getElementById('svcName').textContent=svc.name_bn||svc.name;
-  document.getElementById('svcPrice').textContent='৳'+Number(svc.price).toLocaleString('bn-BD');
+  document.getElementById('svcPrice').textContent='৳'+bnNum(svcPrice);
+  document.getElementById('userBalSub').textContent='ওয়ালেট: ৳'+bnNum(userBal);
+
+  // Check balance affordability
+  if (userBal < svcPrice) {
+    const diff = svcPrice - userBal;
+    const bw = document.getElementById('balWarning');
+    bw.style.display = 'block';
+    document.getElementById('balWarningText').textContent = 'আপনার ওয়ালেটে ৳' + bnNum(diff) + ' ঘাটতি রয়েছে (ব্যালেন্স: ৳' + bnNum(userBal) + ', সেবার ফি: ৳' + bnNum(svcPrice) + ')।';
+  }
+
   const fields=svc.fields_required||[];
   const fh=fields.map(f=>
     '<div class="field"><label>'+esc(f.label||f.name)+(f.required?' *':'')+'</label>'+
@@ -200,7 +251,7 @@ async function submit(){
   for(const f of fields){
     const v=data[f.name]||'';
     if(f.required && !v){
-      err.textContent='⚠️ '+(f.label||f.name)+' দিন';
+      err.textContent='⚠️ '+(f.label||f.name)+' পূরণ করুন';
       return;
     }
     if(/brn/i.test(f.name) && v && !/^\d{17}$/.test(v)){
@@ -208,28 +259,35 @@ async function submit(){
       return;
     }
   }
+
   const btn=document.getElementById('submitBtn');
   btn.disabled=true;btn.textContent='প্রসেস হচ্ছে…';
+
   const sampleText=document.getElementById('sampleInput')?document.getElementById('sampleInput').value.trim():'';
   if(sampleText) data._manual_form=sampleText;
+
   const r=await ABC.api('/orders',{method:'POST',body:{
     service_id:sid,data,notes:document.getElementById('notes').value.trim(),
     idempotency_key: window._orderIdemKey,
     documents:(svc.documents_required||[]).map(d=>({type:d,ref:''}))
   }});
   const d=await r.json();
-  btn.disabled=false;btn.textContent='অর্ডার নিশ্চিত করুন →';
+
   if(!r.ok){
+    btn.disabled=false;btn.textContent='অর্ডার নিশ্চিত করুন →';
     err.textContent=d.error==='INSUFFICIENT_BALANCE'?'⚠️ ওয়ালেটে পর্যাপ্ত ব্যালেন্স নেই! আগে টাকা রিচার্জ করুন।':
       d.error==='MISSING_DOCUMENTS'?'⚠️ প্রয়োজনীয় ডকুমেন্ট দিন: '+(d.missing||[]).join(', '):
       d.error==='SERVICE_CLOSED'?'⚠️ এই সেবাটি সাময়িকভাবে বন্ধ আছে':'❌ '+d.error;
     return;
   }
+
   const orderId = d.order.id;
   const fileInputs = document.querySelectorAll('[data-doc]');
   let uploadFailed = false;
+
   for (const inp of fileInputs) {
     if (inp.files.length) {
+      btn.textContent = 'ডকুমেন্ট আপলোড হচ্ছে…';
       const fd = new FormData();
       fd.append('file', inp.files[0]);
       fd.append('doc_type', inp.dataset.doctype);
@@ -244,12 +302,17 @@ async function submit(){
       } catch(e) { uploadFailed = true; }
     }
   }
-  if (uploadFailed) {
-    err.textContent = '⚠️ কিছু ডকুমেন্ট আপলোড হয়নি। অর্ডার তৈরি হয়েছে, পরে আপলোড করুন।';
-    return;
-  }
+
+  // Clear drafts & idempotency key since order is committed
   ABC.Idempotency.clear('order_submit_' + sid);
   ABC.Drafts.clear('order_'+sid);
+
+  if (uploadFailed) {
+    alert('⚠️ আপনার অর্ডারটি তৈরি হয়েছে (ID: #' + orderId.slice(0,8) + ')! তবে ফাইল সাইজ বা নেটওয়ার্ক সমস্যার কারণে কিছু ডকুমেন্ট আপলোড বাকি থাকতে পারে। আপনি অর্ডার পেজে গিয়ে চ্যাটে ফাইলগুলো দিতে পারবেন।');
+    location.href='/order-status.html?id='+orderId+'&doc_warning=1';
+    return;
+  }
+
   location.href='/order-status.html?id='+orderId;
 }
 
