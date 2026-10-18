@@ -462,6 +462,11 @@ describe('coupons / banners / notices', () => {
       .send({ type: 'banner', title: 'T' }).expect(201);
     const r3 = await withAdmin(request(app()).put('/api/admin/banners/b1')).send({}).expect(400);
     expect(r3.body.error).toBe('NOTHING_TO_UPDATE');
+    // Test updating type, animation, design_id, active
+    db.__routeQuery([['UPDATE banners', { rows: [{ id: 'b1', type: 'popup', design_id: 5 }] }]]);
+    const r4 = await withAdmin(request(app()).put('/api/admin/banners/b1'))
+      .send({ type: 'popup', design_id: 5, active: true }).expect(200);
+    expect(r4.body.banner.type).toBe('popup');
     await withAdmin(request(app()).delete('/api/admin/banners/b1')).expect(200);
   });
 

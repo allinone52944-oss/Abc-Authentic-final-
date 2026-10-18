@@ -3041,21 +3041,66 @@ function fallbackCopy(t, done) {
 TABS.banners = async () => {
   const r = await ABC.api('/admin/banners');
   const d = await r.json();
+  const banners = d.banners || [];
   const animBn = { slide: '➡️ স্লাইড', fade: '🔄 ফেইড', ticker: '📰 টিকার', bounce: '⬆️ বাউন্স', none: '⏸️ স্থির' };
-  let html = '<button class="mini-btn ok" onclick="AdmBn.createForm()" style="margin-bottom:12px;">+ নতুন ব্যানার</button>' +
-    '<div style="overflow-x:auto;"><table class="adm"><tr><th>ধরন</th><th>শিরোনাম</th><th>ডিজাইন</th><th>🎬 অ্যানিমেশন</th><th>সক্রিয়</th><th>কাজ</th></tr>';
-  for (const b of d.banners) {
-    html += '<tr><td>' + esc(b.type) + '</td><td>' + esc(b.title) + '</td><td>#' + b.design_id + '</td>' +
-      '<td><small>' + (animBn[b.animation_type] || b.animation_type || '-') + '<br>⚡' + (b.animation_speed || 30) + '</small></td>' +
-      '<td>' + (b.active ? '✅' : '❌') + '</td>' +
-      '<td><button class="mini-btn" onclick="AdmBn.editForm(\'' + b.id + '\')">✏️ এডিট</button>' +
-      '<button class="mini-btn" onclick="AdmBn.toggle(\'' + b.id + '\',' + (!b.active) + ')">' +
-      (b.active ? 'বন্ধ' : 'চালু') + '</button>' +
-      '<button class="mini-btn danger" onclick="AdmBn.del(\'' + b.id + '\')">ডিলিট</button></td></tr>';
+  const typeLabels = {
+    banner: '<span class="pill" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;">🖼️ ব্যানার</span>',
+    ad: '<span class="pill" style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;">📢 বিজ্ঞাপন</span>',
+    popup: '<span class="pill" style="background:#fef3c7;color:#b45309;border:1px solid #fde68a;">💬 পপআপ</span>'
+  };
+
+  let rows = '';
+  if (!banners.length) {
+    rows = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted);">এখনো কোনো ব্যানার তৈরি করা হয়নি। উপরের বাটন দিয়ে নতুন ব্যানার তৈরি করুন।</td></tr>';
+  } else {
+    for (const b of banners) {
+      const c = b.content || {};
+      const typeBadge = typeLabels[b.type] || ('<span class="pill">' + esc(b.type) + '</span>');
+      rows += '<tr>' +
+        '<td>' + typeBadge + '</td>' +
+        '<td><div style="font-weight:700;color:var(--text-main);">' + esc(b.title) + '</div>' +
+        '<div class="s" style="margin-top:2px;">' + esc(c.text_bn || '') + (c.link ? ' • 🔗 ' + esc(c.link) : '') + '</div></td>' +
+        '<td><span class="pill" style="background:#f8fafc;border:1px solid #e2e8f0;">#' + b.design_id + '</span></td>' +
+        '<td><small style="font-weight:600;">' + (animBn[b.animation_type] || b.animation_type || '-') + '</small><div class="s">গতি: ' + (b.animation_speed || 30) + '</div></td>' +
+        '<td>' +
+          '<button class="mini-btn ' + (b.active ? 'ok' : '') + '" onclick="AdmBn.toggle(\'' + b.id + '\',' + (!b.active) + ')">' +
+          (b.active ? '✅ চালু' : '❌ বন্ধ') + '</button>' +
+        '</td>' +
+        '<td>' +
+          '<div style="display:flex;gap:6px;">' +
+            '<button class="mini-btn" onclick="AdmBn.editForm(\'' + b.id + '\')">✏️ এডিট</button>' +
+            '<button class="mini-btn danger" onclick="AdmBn.del(\'' + b.id + '\')">🗑️</button>' +
+          '</div>' +
+        '</td>' +
+      '</tr>';
+    }
   }
-  content.innerHTML = html + '</table></div>' +
-    '<div style="color:var(--gold);font-size:12px;margin-top:8px;">✨ ২৪টি animated design — সব edit করা যায়</div>';
+
+  content.innerHTML =
+    '<div class="adm-settings" style="max-width:1100px;">' +
+      '<div class="adm-settings-hero">' +
+        '<div>' +
+          '<div class="adm-settings-eyebrow">PROMOTIONS & NOTICES</div>' +
+          '<h1>🖼️ ব্যানার ও অফার ম্যানেজমেন্ট</h1>' +
+          '<p>ইউজার ড্যাশবোর্ডের টপ স্লাইডার ব্যানার, বিজ্ঞাপন এবং বিশেষ ঘোষণা পপআপ নিয়ন্ত্রণ করুন।</p>' +
+        '</div>' +
+        '<button class="adm-settings-hero-btn" onclick="AdmBn.createForm()">+ নতুন ব্যানার তৈরি</button>' +
+      '</div>' +
+
+      '<div class="form-card adm-settings-card" style="padding:0;overflow:hidden;">' +
+        '<div style="overflow-x:auto;">' +
+          '<table class="adm" style="margin:0;">' +
+            '<thead>' +
+              '<tr><th>ধরন</th><th>শিরোনাম ও টেক্সট</th><th>ডিজাইন</th><th>অ্যানিমেশন</th><th>স্ট্যাটাস</th><th>অ্যাকশন</th></tr>' +
+            '</thead>' +
+            '<tbody>' + rows + '</tbody>' +
+          '</table>' +
+        '</div>' +
+      '</div>' +
+      '<div class="s" style="margin-top:6px;color:var(--text-muted);">✨ ড্যাশবোর্ডে ব্যানার ও বিজ্ঞাপন স্লাইডার আকারে স্বয়ংক্রিয়ভাবে চলবে। পপআপ সেট করলে ইউজাররা পেজে ঢোকার পর স্পেশাল নোটিশ কার্ড দেখতে পাবেন।</div>' +
+    '</div>';
 };
+
 window.AdmBn = {
   _catalog: null,
   _selDesign: 1,
@@ -3068,35 +3113,50 @@ window.AdmBn = {
   async createForm() {
     this._selDesign = 1;
     const cat = await this._cat();
-    modal('🖼️ নতুন ব্যানার/বিজ্ঞাপন/পপআপ',
-      '<div class="field"><label>ধরন</label><select id="bn_type"><option value="banner">ব্যানার</option><option value="ad">বিজ্ঞাপন</option><option value="popup">পপআপ</option></select></div>' +
-      fld('শিরোনাম (admin)', 'text', 'bn_title') +
-      '<div class="field"><label>🎬 অ্যানিমেশন</label><select id="bn_anim">' +
-      '<option value="slide">➡️ স্লাইড (ticker-মতো)</option>' +
-      '<option value="fade">🔄 ফেইড</option>' +
-      '<option value="ticker">📰 নিউজ টিকার</option>' +
-      '<option value="bounce">⬆️ বাউন্স</option>' +
-      '<option value="none">⏸️ স্থির</option></select></div>' +
-      '<div class="field"><label>⚡ গতি (৫=ধীর, ১২০=দ্রুত)</label>' +
-      '<input type="range" id="bn_speed" min="5" max="120" value="30" style="width:100%;" ' +
-      'oninput="document.getElementById(\'bn_speed_v\').textContent=this.value">' +
-      '<span id="bn_speed_v">30</span></div>' +
-      '<div class="field"><label>ডিজাইন বেছে নিন (' + cat.designs.length + 'টি)</label>' +
-      '<div class="bn-design-grid" id="bnDesignGrid">' +
-      cat.designs.map((d) =>
-        '<div class="bn-design-opt' + (d.id === 1 ? ' sel' : '') + '" data-id="' + d.id + '" onclick="AdmBn.pick(' + d.id + ')">' +
-        '<div class="dname">#' + d.id + ' ' + esc(d.name) + '</div><div class="dcat">' + esc(d.category) + '</div></div>'
-      ).join('') + '</div></div>' +
-      '<div class="field"><label>লাইভ প্রিভিউ</label><div class="bn-preview" id="bnPreview"></div></div>' +
-      fld('লেখা (বাংলা)', 'text', 'bn_text_bn') +
-      fld('লেখা (English)', 'text', 'bn_text_en') +
-      fld('লিংক (optional)', 'text', 'bn_link') +
-      '<div class="field"><label>ব্যাকগ্রাউন্ড রং (optional)</label><input type="color" id="bn_bg_color" value="#1e40af" style="width:60px;height:40px;"></div>' +
-      '<div class="field"><label>লেখার রং (optional)</label><input type="color" id="bn_text_color" value="#ffffff" style="width:60px;height:40px;"></div>' +
-      '<button class="btn" onclick="AdmBn.create()">তৈরি করুন</button>');
+    modal('🖼️ নতুন ব্যানার / বিজ্ঞাপন / পপআপ',
+      '<div class="field"><label>ধরন (Placement Type)</label>' +
+        '<select id="bn_type">' +
+          '<option value="banner">🖼️ ব্যানার (ড্যাশবোর্ড টপ স্লাইডার)</option>' +
+          '<option value="ad">📢 বিজ্ঞাপন (অফার ব্যানার)</option>' +
+          '<option value="popup">💬 পপআপ (লগইনের পর স্পেশাল কার্ড)</option>' +
+        '</select>' +
+      '</div>' +
+      fld('শিরোনাম (Admin Reference Title)', 'text', 'bn_title') +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+        '<div class="field"><label>🎬 অ্যানিমেশন ধরন</label><select id="bn_anim">' +
+          '<option value="slide">➡️ স্লাইড (Slide)</option>' +
+          '<option value="fade">🔄 ফেইড (Fade)</option>' +
+          '<option value="ticker">📰 নিউজ টিকার (Ticker)</option>' +
+          '<option value="bounce">⬆️ বাউন্স (Bounce)</option>' +
+          '<option value="none">⏸️ স্থির (None)</option>' +
+        '</select></div>' +
+        '<div class="field"><label>⚡ ট্রানজিশন গতি (৫=ধীর, ১২০=দ্রুত)</label>' +
+          '<input type="range" id="bn_speed" min="5" max="120" value="30" style="width:100%;margin-top:8px;" ' +
+          'oninput="document.getElementById(\'bn_speed_v\').textContent=this.value">' +
+          '<div class="s">বর্তমান স্পিড: <b id="bn_speed_v">30</b></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="field"><label>ডিজাইন টেমপ্লেট বেছে নিন (' + cat.designs.length + 'টি রেডি ডিজাইন)</label>' +
+        '<div class="bn-design-grid" id="bnDesignGrid">' +
+        cat.designs.map((d) =>
+          '<div class="bn-design-opt' + (d.id === 1 ? ' sel' : '') + '" data-id="' + d.id + '" onclick="AdmBn.pick(' + d.id + ')">' +
+          '<div class="dname">#' + d.id + ' ' + esc(d.name) + '</div><div class="dcat">' + esc(d.category) + '</div></div>'
+        ).join('') + '</div>' +
+      '</div>' +
+      '<div class="field"><label>লাইভ প্রিভিউ (Live Preview)</label><div class="bn-preview" id="bnPreview"></div></div>' +
+      fld('মূল বার্তা (বাংলা)', 'text', 'bn_text_bn') +
+      fld('সাব-টেক্সট (English)', 'text', 'bn_text_en') +
+      fld('ক্লিক লিংক (Optional Link, e.g. /wallet.html)', 'text', 'bn_link') +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+        '<div class="field"><label>কাস্টম ব্যাকগ্রাউন্ড রং</label><input type="color" id="bn_bg_color" value="#1e40af" style="width:100%;height:38px;padding:2px;border-radius:6px;cursor:pointer;"></div>' +
+        '<div class="field"><label>কাস্টম লেখার রং</label><input type="color" id="bn_text_color" value="#ffffff" style="width:100%;height:38px;padding:2px;border-radius:6px;cursor:pointer;"></div>' +
+      '</div>' +
+      '<button class="btn" style="margin-top:16px;" onclick="AdmBn.create()">✅ ব্যানার সংরক্ষণ করুন</button>');
+
     this.updatePreview();
-    ['bn_text_bn', 'bn_text_en'].forEach((id) => {
-      document.getElementById(id).addEventListener('input', () => this.updatePreview());
+    ['bn_text_bn', 'bn_text_en', 'bn_link', 'bn_bg_color', 'bn_text_color'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', () => this.updatePreview());
     });
   },
   pick(id) {
@@ -3128,15 +3188,23 @@ window.AdmBn = {
     if (pv) pv.innerHTML = html;
   },
   async create() {
+    const title = v('bn_title');
+    if (!title) { alert('ব্যানারের একটি শিরোনাম লিখুন'); return; }
     const r = await ABC.api('/admin/banners', { method: 'POST', body: {
       type: document.getElementById('bn_type').value,
-      title: v('bn_title'), design_id: this._selDesign,
+      title: title,
+      design_id: this._selDesign,
       animation_type: document.getElementById('bn_anim').value,
       animation_speed: Number(document.getElementById('bn_speed').value) || 30,
-      content: { text_bn: v('bn_text_bn'), text_en: v('bn_text_en'), link: v('bn_link'),
-        bg_color: v('bn_bg_color'), text_color: v('bn_text_color') },
+      content: {
+        text_bn: v('bn_text_bn'),
+        text_en: v('bn_text_en'),
+        link: v('bn_link'),
+        bg_color: v('bn_bg_color'),
+        text_color: v('bn_text_color'),
+      },
     }});
-    if (!r.ok) { alert('ব্যর্থ'); return; }
+    if (!r.ok) { alert('❌ ব্যানার তৈরি ব্যর্থ হয়েছে'); return; }
     closeModal(); show('banners');
   },
   async editForm(id) {
@@ -3148,41 +3216,71 @@ window.AdmBn = {
     const cat = await this._cat();
     const c = b.content || {};
     modal('✏️ ব্যানার এডিট করুন',
-      fld('শিরোনাম (admin)', 'text', 'bn_title', b.title) +
-      '<div class="field"><label>🎬 অ্যানিমেশন</label><select id="bn_anim">' +
-      '<option value="slide"' + (b.animation_type === 'slide' ? ' selected' : '') + '>➡️ স্লাইড (ticker-মতো)</option>' +
-      '<option value="fade"' + (b.animation_type === 'fade' ? ' selected' : '') + '>🔄 ফেইড</option>' +
-      '<option value="ticker"' + (b.animation_type === 'ticker' ? ' selected' : '') + '>📰 নিউজ টিকার</option>' +
-      '<option value="bounce"' + (b.animation_type === 'bounce' ? ' selected' : '') + '>⬆️ বাউন্স</option>' +
-      '<option value="none"' + (b.animation_type === 'none' ? ' selected' : '') + '>⏸️ স্থির</option></select></div>' +
-      '<div class="field"><label>⚡ গতি (৫=ধীর, ১২০=দ্রুত)</label>' +
-      '<input type="range" id="bn_speed" min="5" max="120" value="' + (b.animation_speed || 30) + '" style="width:100%;" ' +
-      'oninput="document.getElementById(\'bn_speed_v\').textContent=this.value">' +
-      '<span id="bn_speed_v">' + (b.animation_speed || 30) + '</span></div>' +
-      '<div class="field"><label>ডিজাইন</label><div class="bn-design-grid" id="bnDesignGrid">' +
-      cat.designs.map((x) =>
-        '<div class="bn-design-opt' + (x.id === b.design_id ? ' sel' : '') + '" data-id="' + x.id + '" onclick="AdmBn.pick(' + x.id + ')">' +
-        '<div class="dname">#' + x.id + ' ' + esc(x.name) + '</div><div class="dcat">' + esc(x.category) + '</div></div>'
-      ).join('') + '</div></div>' +
+      '<div class="field"><label>ধরন (Placement Type)</label>' +
+        '<select id="bn_type">' +
+          '<option value="banner"' + (b.type === 'banner' ? ' selected' : '') + '>🖼️ ব্যানার (ড্যাশবোর্ড টপ স্লাইডার)</option>' +
+          '<option value="ad"' + (b.type === 'ad' ? ' selected' : '') + '>📢 বিজ্ঞাপন (অফার ব্যানার)</option>' +
+          '<option value="popup"' + (b.type === 'popup' ? ' selected' : '') + '>💬 পপআপ (লগইনের পর স্পেশাল কার্ড)</option>' +
+        '</select>' +
+      '</div>' +
+      fld('শিরোনাম (Admin Reference Title)', 'text', 'bn_title', b.title) +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+        '<div class="field"><label>🎬 অ্যানিমেশন ধরন</label><select id="bn_anim">' +
+          '<option value="slide"' + (b.animation_type === 'slide' ? ' selected' : '') + '>➡️ স্লাইড (Slide)</option>' +
+          '<option value="fade"' + (b.animation_type === 'fade' ? ' selected' : '') + '>🔄 ফেইড (Fade)</option>' +
+          '<option value="ticker"' + (b.animation_type === 'ticker' ? ' selected' : '') + '>📰 নিউজ টিকার (Ticker)</option>' +
+          '<option value="bounce"' + (b.animation_type === 'bounce' ? ' selected' : '') + '>⬆️ বাউন্স (Bounce)</option>' +
+          '<option value="none"' + (b.animation_type === 'none' ? ' selected' : '') + '>⏸️ স্থির (None)</option>' +
+        '</select></div>' +
+        '<div class="field"><label>⚡ ট্রানজিশন গতি</label>' +
+          '<input type="range" id="bn_speed" min="5" max="120" value="' + (b.animation_speed || 30) + '" style="width:100%;margin-top:8px;" ' +
+          'oninput="document.getElementById(\'bn_speed_v\').textContent=this.value">' +
+          '<div class="s">বর্তমান স্পিড: <b id="bn_speed_v">' + (b.animation_speed || 30) + '</b></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="field"><label>ডিজাইন টেমপ্লেট বেছে নিন</label>' +
+        '<div class="bn-design-grid" id="bnDesignGrid">' +
+        cat.designs.map((x) =>
+          '<div class="bn-design-opt' + (x.id === b.design_id ? ' sel' : '') + '" data-id="' + x.id + '" onclick="AdmBn.pick(' + x.id + ')">' +
+          '<div class="dname">#' + x.id + ' ' + esc(x.name) + '</div><div class="dcat">' + esc(x.category) + '</div></div>'
+        ).join('') + '</div>' +
+      '</div>' +
       '<div class="field"><label>লাইভ প্রিভিউ</label><div class="bn-preview" id="bnPreview"></div></div>' +
-      fld('লেখা (বাংলা)', 'text', 'bn_text_bn', c.text_bn || '') +
-      fld('লেখা (English)', 'text', 'bn_text_en', c.text_en || '') +
-      fld('লিংক', 'text', 'bn_link', c.link || '') +
-      '<div class="field"><label><input type="checkbox" id="bn_active" ' + (b.active ? 'checked' : '') + '> সক্রিয়</label></div>' +
-      '<button class="btn" onclick="AdmBn.save(\'' + id + '\')">সেভ করুন</button>');
+      fld('মূল বার্তা (বাংলা)', 'text', 'bn_text_bn', c.text_bn || '') +
+      fld('সাব-টেক্সট (English)', 'text', 'bn_text_en', c.text_en || '') +
+      fld('ক্লিক লিংক (Optional)', 'text', 'bn_link', c.link || '') +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+        '<div class="field"><label>কাস্টম ব্যাকগ্রাউন্ড রং</label><input type="color" id="bn_bg_color" value="' + esc(c.bg_color || '#1e40af') + '" style="width:100%;height:38px;padding:2px;border-radius:6px;cursor:pointer;"></div>' +
+        '<div class="field"><label>কাস্টম লেখার রং</label><input type="color" id="bn_text_color" value="' + esc(c.text_color || '#ffffff') + '" style="width:100%;height:38px;padding:2px;border-radius:6px;cursor:pointer;"></div>' +
+      '</div>' +
+      '<div class="field" style="margin-top:12px;"><label><input type="checkbox" id="bn_active" ' + (b.active ? 'checked' : '') + '> এই ব্যানারটি ইউজারদের সামনে সক্রিয় রাখুন</label></div>' +
+      '<button class="btn" style="margin-top:16px;" onclick="AdmBn.save(\'' + id + '\')">💾 পরিবর্তন সংরক্ষণ করুন</button>');
+
     this.updatePreview();
-    ['bn_text_bn', 'bn_text_en'].forEach((x) => {
-      document.getElementById(x).addEventListener('input', () => this.updatePreview());
+    ['bn_text_bn', 'bn_text_en', 'bn_link', 'bn_bg_color', 'bn_text_color'].forEach((x) => {
+      const el = document.getElementById(x);
+      if (el) el.addEventListener('input', () => this.updatePreview());
     });
   },
   async save(id) {
+    const title = v('bn_title');
+    if (!title) { alert('ব্যানারের একটি শিরোনাম লিখুন'); return; }
     const r = await ABC.api('/admin/banners/' + id, { method: 'PUT', body: {
-      title: v('bn_title'), design_id: this._selDesign, active: document.getElementById('bn_active').checked,
+      type: document.getElementById('bn_type').value,
+      title: title,
+      design_id: this._selDesign,
+      active: document.getElementById('bn_active').checked,
       animation_type: document.getElementById('bn_anim').value,
       animation_speed: Number(document.getElementById('bn_speed').value) || 30,
-      content: { text_bn: v('bn_text_bn'), text_en: v('bn_text_en'), link: v('bn_link') },
+      content: {
+        text_bn: v('bn_text_bn'),
+        text_en: v('bn_text_en'),
+        link: v('bn_link'),
+        bg_color: v('bn_bg_color'),
+        text_color: v('bn_text_color'),
+      },
     }});
-    if (!r.ok) { alert('ব্যর্থ'); return; }
+    if (!r.ok) { alert('❌ সংরক্ষণ ব্যর্থ হয়েছে'); return; }
     closeModal(); show('banners');
   },
   async toggle(id, active) {
@@ -3190,12 +3288,11 @@ window.AdmBn = {
     show('banners');
   },
   async del(id) {
-    if (!confirm('ডিলিট করবেন?')) return;
+    if (!confirm('এই ব্যানারটি কি স্থায়ীভাবে মুছে ফেলতে চান?')) return;
     await ABC.api('/admin/banners/' + id, { method: 'DELETE' });
     show('banners');
   },
 };
-
 /* ---------------- NOTICES ---------------- */
 TABS.notices = async () => {
   const r = await ABC.api('/admin/notices');

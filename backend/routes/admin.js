@@ -1249,7 +1249,7 @@ router.post('/banners', async (req, res) => {
     const r = await db.query(
       `INSERT INTO banners (type, title, design_id, content, active, animation_type, animation_speed)
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [type, String(title).trim(), Math.min(30, Math.max(1, Number(design_id) || 1)),
+      [type, String(title).trim(), Math.min(24, Math.max(1, Number(design_id) || 1)),
        JSON.stringify(content || {}), active !== false, animType, animSpeed]
     );
     await logActivity(req.user.id, 'banner.create', { banner_id: r.rows[0].id });
@@ -1259,10 +1259,13 @@ router.post('/banners', async (req, res) => {
 
 router.put('/banners/:id', async (req, res) => {
   try {
-    const { title, design_id, content, active, animation_type, animation_speed } = req.body || {};
+    const { type, title, design_id, content, active, animation_type, animation_speed } = req.body || {};
     const sets = []; const params = []; let i = 1;
+    if (type !== undefined && ['banner', 'ad', 'popup'].includes(type)) {
+      sets.push(`type = $${i++}`); params.push(type);
+    }
     if (title !== undefined) { sets.push(`title = $${i++}`); params.push(String(title).trim()); }
-    if (design_id !== undefined) { sets.push(`design_id = $${i++}`); params.push(Math.min(30, Math.max(1, Number(design_id) || 1))); }
+    if (design_id !== undefined) { sets.push(`design_id = $${i++}`); params.push(Math.min(24, Math.max(1, Number(design_id) || 1))); }
     if (content !== undefined) { sets.push(`content = $${i++}`); params.push(JSON.stringify(content)); }
     if (active !== undefined) { sets.push(`active = $${i++}`); params.push(!!active); }
     if (animation_type !== undefined && ['slide', 'fade', 'ticker', 'bounce', 'none'].includes(animation_type)) {

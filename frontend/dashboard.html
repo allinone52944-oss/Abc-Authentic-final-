@@ -391,7 +391,7 @@
 </div>
 
 <script src="/js/app.js?v=15"></script>
-<script src="/banners/render.js?v=2"></script>
+<script src="/banners/render.js?v=3"></script>
 <script>
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({
@@ -683,14 +683,20 @@ async function loadNotices() {
 
 async function loadBanners() {
   try {
-    const r = await ABC.api('/banners?type=banner');
+    const r = await ABC.api('/banners');
     const d = r.ok ? await r.json() : { banners: [] };
     const act = (d.banners || []).filter(b => b.active);
-    if (act.length) {
+    const stripBanners = act.filter(b => b.type === 'banner' || b.type === 'ad' || !b.type);
+    const popupBanners = act.filter(b => b.type === 'popup');
+
+    if (stripBanners.length) {
       const ds = document.getElementById('bnStrip');
-      if (ds) { ds.style.display = 'block'; BannerRender.carousel(ds, act, 6000); requestAnimationFrame(()=>ds.classList.add('show')); }
+      if (ds) { ds.style.display = 'block'; BannerRender.carousel(ds, stripBanners, 6000); requestAnimationFrame(()=>ds.classList.add('show')); }
       const ms = document.getElementById('bnStripM');
-      if (ms) { ms.style.display = 'block'; BannerRender.carousel(ms, act, 6000); requestAnimationFrame(()=>ms.classList.add('show')); }
+      if (ms) { ms.style.display = 'block'; BannerRender.carousel(ms, stripBanners, 6000); requestAnimationFrame(()=>ms.classList.add('show')); }
+    }
+    if (popupBanners.length && window.BannerRender && typeof BannerRender.showPopup === 'function') {
+      BannerRender.showPopup(popupBanners[0]);
     }
   } catch (e) {}
 }
