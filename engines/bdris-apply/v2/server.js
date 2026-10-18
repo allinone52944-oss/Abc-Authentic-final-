@@ -308,7 +308,9 @@ class BdrisEngineV2 {
             emit: (ev, payload) => socket.emit(ev, payload),
             socket,
           });
-          if (callback) callback(result);
+          // v1 compat: frontend expects raw array (Array.isArray check)
+          const opts = result?.options || result;
+          if (callback) callback(Array.isArray(opts) ? opts : []);
         } catch (e) {
           if (callback) callback({ ok: false, error: e.message });
         }
