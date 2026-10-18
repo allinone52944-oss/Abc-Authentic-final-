@@ -408,7 +408,10 @@ window.AdmUsers = {
     };
     const r = await ABC.api('/admin/users', { method: 'POST', body });
     const d = await r.json();
-    if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
+    if (!r.ok) {
+      const msg = { PHONE_TAKEN: 'এই ফোন নম্বর already ব্যবহার হয়েছে', EMAIL_TAKEN: 'এই ইমেইল already ব্যবহার হয়েছে', INVALID_INPUT: 'নাম/ফোন ঠিক করে দিন', INVALID_WHATSAPP: 'WhatsApp নম্বর ঠিক নয়', WEAK_PASSWORD: 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষর হতে হবে' }[d.error] || ('ব্যর্থ: ' + d.error);
+      alert(msg); return;
+    }
     closeModal(); show('users');
   },
   async edit(id) {

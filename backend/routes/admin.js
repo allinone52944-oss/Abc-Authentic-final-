@@ -84,6 +84,11 @@ router.post('/users', async (req, res) => {
     }
     const r = await db.query('SELECT id FROM users WHERE phone = $1 LIMIT 1', [String(phone).trim()]);
     if (r.rows.length) return res.status(409).json({ error: 'PHONE_TAKEN' });
+    const cleanEmail = email ? String(email).trim().toLowerCase() : null;
+    if (cleanEmail) {
+      const er = await db.query('SELECT id FROM users WHERE email = $1 LIMIT 1', [cleanEmail]);
+      if (er.rows.length) return res.status(409).json({ error: 'EMAIL_TAKEN' });
+    }
 
     const password_hash = await hashPassword(String(password));
     const ins = await db.query(
@@ -91,13 +96,19 @@ router.post('/users', async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7,'active',TRUE)
        RETURNING id, name, phone, whatsapp, email, religion, role, balance, status, created_at`,
       [String(name).trim(), String(phone).trim(), String(whatsapp).trim(),
-       email ? String(email).trim().toLowerCase() : null,
+       cleanEmail,
        password_hash, religion || 'other', role === 'admin' ? 'admin' : 'user']
     );
     await logActivity(req.user.id, 'user.create', { user_id: ins.rows[0].id, phone });
     res.status(201).json({ user: ins.rows[0] });
   } catch (e) {
     safeLog('[admin] user create error:', e.message);
+    // Return specific error for unique violations
+    if (e.code === '23505') {
+      if (e.constraint && e.constraint.includes('phone')) return res.status(409).json({ error: 'PHONE_TAKEN' });
+      if (e.constraint && e.constraint.includes('email')) return res.status(409).json({ error: 'EMAIL_TAKEN' });
+      return res.status(409).json({ error: 'DUPLICATE' });
+    }
     res.status(500).json({ error: 'CREATE_FAILED' });
   }
 });
