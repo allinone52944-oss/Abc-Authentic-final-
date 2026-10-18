@@ -4,53 +4,80 @@
 <meta charset="UTF-8">
 <link rel="manifest" href="/manifest.json">
 <link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/premium.css?v=1">
 <link rel="stylesheet" href="/css/motion.css?v=2">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1e40af">
 <title>সেবার বিস্তারিত - All In One</title>
 <style>
-  html,body{overflow-x:hidden;}
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'Hind Siliguri',system-ui,sans-serif; background:#eef2f7; color:#0f172a; }
-  .desktop { max-width:1100px; margin:0 auto; background:#fff; min-height:100vh; display:flex; }
-  .sidebar { width:220px; background:linear-gradient(180deg,#1e3a8a,#1e40af); color:#fff; padding:20px 0; flex-shrink:0; }
-  .side-logo { padding:0 20px 20px; border-bottom:1px solid rgba(255,255,255,0.15); margin-bottom:16px; }
-  .side-logo h2 { font-size:18px; } .side-logo p { font-size:11px; opacity:0.7; }
-  .side-link { display:flex; align-items:center; gap:12px; padding:12px 20px; font-size:14px; color:rgba(255,255,255,0.85); cursor:pointer; border-left:3px solid transparent; }
-  .side-link.on { background:rgba(255,255,255,0.12); border-left-color:#fff; color:#fff; font-weight:600; }
-  .side-link .ico { font-size:18px; }
-  .main { flex:1; padding:24px; overflow:auto; }
-  .card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:24px; }
-  .card h2 { font-size:20px; margin-bottom:12px; }
-  .ptype { font-size:11px; padding:4px 12px; border-radius:20px; font-weight:600; }
-  .ptype.auto { background:#dbeafe; color:#1d4ed8; }
-  .ptype.manual { background:#fef3c7; color:#92400e; }
-  .price { font-size:24px; font-weight:700; color:#1e40af; }
-  .btn { background:linear-gradient(135deg,#1e40af,#3b82f6); color:#fff; border:none; padding:12px 24px; border-radius:10px; font-weight:700; cursor:pointer; display:block; width:100%; margin-top:12px; font-size:15px; }
-  .btn-sec { background:#f1f5f9; color:#334155; border:none; padding:10px 20px; border-radius:10px; cursor:pointer; margin-top:8px; }
-  .back-link { color:#2563eb; cursor:pointer; font-size:14px; }
-  .wa-fab { position:fixed; bottom:20px; right:20px; width:56px; height:56px; border-radius:50%; background:#fff; box-shadow:0 4px 16px rgba(0,0,0,0.15); display:flex; align-items:center; justify-content:center; cursor:pointer; }
-  .wa-fab img { width:32px; height:32px; }
-  @media (max-width:768px) { .sidebar { display:none; } }
+  .back-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--primary-700);
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    margin-bottom: 20px;
+    padding: 6px 14px;
+    border-radius: var(--r-md);
+    background: var(--primary-50);
+    transition: all 0.15s ease;
+  }
+  .back-nav:hover {
+    background: var(--primary-100);
+  }
+  .detail-header {
+    border-bottom: 1px solid var(--border-light);
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+  }
+  .doc-list {
+    background: #f8fafc;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-md);
+    padding: 16px 20px;
+    margin: 16px 0;
+  }
+  .doc-list li {
+    margin-bottom: 8px;
+    color: var(--text-main);
+    font-size: 14px;
+  }
+  .doc-list li:last-child { margin-bottom: 0; }
 </style>
 </head>
 <body>
 <div class="desktop">
   <div class="sidebar">
-    <div class="side-logo"><h2>🔷 All In One</h2><p>বিশ্বাস ও সেবার ঠিকানা</p></div>
-    <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
-    <div class="side-link on" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সেবা</div>
-    <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
-    <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট</div>
-    <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> প্রোফাইল</div>
+    <div class="side-logo">
+      <div class="logo-icon">🔷</div>
+      <div>
+        <h2>All In One</h2>
+        <p>বিশ্বাস ও সেবার ঠিকানা</p>
+      </div>
+    </div>
+    <nav>
+      <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+      <div class="side-link on" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সকল সেবা</div>
+      <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
+      <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট ও রিচার্জ</div>
+      <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> পার্সোনাল প্রোফাইল</div>
+    </nav>
   </div>
+
   <div class="main">
-    <span class="back-link" onclick="location.href='/services.html'">← সেবা সমূহ</span>
-    <div class="card" id="detail" style="margin-top:12px;"><div style="color:#64748b;">লোড হচ্ছে…</div></div>
+    <span class="back-nav" onclick="location.href='/services.html'">← সকল সেবায় ফিরুন</span>
+    <div class="card" id="detail">
+      <div class="skel" style="height:120px;margin-bottom:12px;"></div>
+      <div class="skel" style="height:80px;"></div>
+    </div>
   </div>
 </div>
+
 <button class="wa-fab" id="waFab" aria-label="WhatsApp-এ সাহায্য চান"><img src="/icons/abc-logo.png" alt="Abc"></button>
-<!-- mobile tabbar -->
+
+<!-- Mobile Tabbar -->
 <div class="m-tabbar">
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/dashboard.html'"><div class="ico">🏠</div>হোম</div>
   <div class="m-tab on" aria-current="page"><div class="ico">🛎️</div>সেবা</div>
@@ -58,10 +85,12 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
 </div>
+
 <script src="/js/app.js?v=13"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 const id=new URLSearchParams(location.search).get('id');
+
 async function init(){
   const me=await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
@@ -70,32 +99,51 @@ async function init(){
     window.open('https://wa.me/?text='+encodeURIComponent('আমি '+u.name+'। সেবা সম্পর্কে জানতে চাই।'),'_blank');
   };
   const r=await ABC.api('/services/'+id);
-  if(!r.ok){document.getElementById('detail').innerHTML='<div style="color:#dc2626;">সেবা পাওয়া যায়নি</div>';return;}
+  if(!r.ok){
+    document.getElementById('detail').innerHTML='<div style="color:#dc2626;padding:20px 0;">সেবাটি খুঁজে পাওয়া যায়নি</div>';
+    return;
+  }
   const {service:s}=await r.json();
-  const docs=(s.documents_required||[]).map(d=>'<li>'+esc(d)+'</li>').join('')||'<li>কোনো ডকুমেন্ট লাগবে না</li>';
-  const sched=(s.schedule&&s.schedule.open)?'<div style="color:#64748b;font-size:13px;margin:8px 0;">🕘 খোলা: '+esc(s.schedule.open)+' - '+esc(s.schedule.close||'')+'</div>':'';
+  const docs=(s.documents_required||[]).map(d=>'<li>'+esc(d)+'</li>').join('')||'<li>কোনো বিশেষ ডকুমেন্ট প্রয়োজন নেই</li>';
+  const sched=(s.schedule&&s.schedule.open)?'<div style="color:#64748b;font-size:13px;margin:8px 0;">🕘 সেবার সময়সূচি: '+esc(s.schedule.open)+' - '+esc(s.schedule.close||'')+'</div>':'';
+
   document.getElementById('detail').innerHTML=
-    '<h2>'+esc(s.name_bn||s.name)+'</h2>'+sched+
-    '<div style="margin-bottom:12px;"><span class="ptype '+(s.type==='manual'?'manual':'auto')+'">'+(s.type==='manual'?'manual':'automated')+'</span> '+
-    '<span class="price">৳'+Number(s.price).toLocaleString('bn-BD')+'</span></div>'+
-    '<div style="font-size:14px;margin-bottom:10px;"><b>প্রয়োজনীয় ডকুমেন্ট:</b><ul style="padding-left:18px;margin-top:6px;">'+docs+'</ul></div>'+
-    '<button class="btn-sec" onclick="showRules()">📜 নিয়মাবলী দেখুন</button>'+
-    (s.engine_id==='bdris-certificate'&&s.open?'<button class="btn" onclick="location.href=\'/bdris-certificate.html\'">⚡ এখনই সনদ তৈরি করুন →</button>':'')+
-    (s.engine_id==='bdris-apply'&&s.open?'<button class="btn" onclick="location.href=\'/bdris-apply.html\'">⚡ এখনই আবেদন করুন →</button>':'')+
-    (s.engine_id==='death-verify'&&s.open?'<button class="btn" onclick="location.href=\'/death-verify.html\'">⚡ এখনই যাচাই করুন →</button>':'')+
-    (s.engine_id==='nid-replica'&&s.open?'<button class="btn" onclick="location.href=\'/nid-replica.html\'">⚡ এখনই তৈরি করুন →</button>':'')+
-    (s.open?'<button class="btn" onclick="location.href=\'/order-create.html?service='+s.id+'\'">অর্ডার করুন →</button>'
-           :'<div style="color:#dc2626;margin-top:12px;">এই সেবা এখন বন্ধ আছে</div>');
-  // For manual services, use manual_instructions as the rules (unified, no duplication)
+    '<div class="detail-header">' +
+      '<h2 style="font-size:24px;font-weight:800;color:#0f172a;margin-bottom:8px;">'+esc(s.name_bn||s.name)+'</h2>'+sched+
+      '<div style="display:flex;align-items:center;gap:12px;margin-top:12px;">' +
+        '<span class="ptype '+(s.type==='manual'?'manual':'auto')+'">'+(s.type==='manual'?'ম্যানুয়াল প্রসেসিং':'স্বয়ংক্রিয় প্রসেসিং')+'</span> '+
+        '<span style="font-size:26px;font-weight:800;color:#1e40af;">৳'+Number(s.price).toLocaleString('bn-BD')+'</span>' +
+      '</div>' +
+    '</div>' +
+    '<div style="margin-bottom:16px;">' +
+      '<div style="font-size:15px;font-weight:700;color:#334155;">প্রয়োজনীয় তথ্যাদি ও ডকুমেন্ট:</div>' +
+      '<ul class="doc-list">'+docs+'</ul>' +
+    '</div>' +
+    '<div style="display:flex;gap:10px;margin-bottom:12px;">' +
+      '<button class="btn-secondary" style="width:100%;padding:12px;" onclick="showRules()">📜 নিয়মাবলী ও নির্দেশিকা</button>' +
+    '</div>' +
+    (s.engine_id==='bdris-certificate'&&s.open?'<button class="btn" style="width:100%;margin-bottom:8px;padding:14px;" onclick="location.href=\'/bdris-certificate.html\'">⚡ এখনই সনদ তৈরি করুন →</button>':'')+
+    (s.engine_id==='bdris-apply'&&s.open?'<button class="btn" style="width:100%;margin-bottom:8px;padding:14px;" onclick="location.href=\'/bdris-apply.html\'">⚡ এখনই আবেদন করুন →</button>':'')+
+    (s.engine_id==='death-verify'&&s.open?'<button class="btn" style="width:100%;margin-bottom:8px;padding:14px;" onclick="location.href=\'/death-verify.html\'">⚡ এখনই যাচাই করুন →</button>':'')+
+    (s.engine_id==='nid-replica'&&s.open?'<button class="btn" style="width:100%;margin-bottom:8px;padding:14px;" onclick="location.href=\'/nid-replica.html\'">⚡ এখনই তৈরি করুন →</button>':'')+
+    (s.open?'<button class="btn" style="width:100%;padding:14px;" onclick="location.href=\'/order-create.html?service='+s.id+'\'">অর্ডার করুন →</button>'
+           :'<div style="color:#dc2626;margin-top:12px;background:#fef2f2;padding:12px;border-radius:10px;text-align:center;font-weight:600;">⚠️ এই সেবা সাময়িকভাবে বন্ধ আছে</div>');
+
   window._rules=(s.type==='manual'&&s.manual_instructions)?s.manual_instructions:(s.rules_text||'কোনো বিশেষ নিয়ম নেই।');
 }
+
 function showRules(){
   const bg=document.createElement('div');
-  bg.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000;';
-  bg.innerHTML='<div style="background:#fff;border-radius:16px;padding:24px;max-width:400px;margin:20px;"><h3>📜 নিয়মাবলী</h3><p style="margin:12px 0;">'+esc(window._rules).replace(/\n/g,'<br>')+'</p><button class="btn" onclick="this.closest(\'div\').parentElement.remove()">বুঝেছি</button></div>';
+  bg.className = 'modal-bg';
+  bg.innerHTML = '<div class="modal">' +
+    '<h3>📜 সেবার নিয়মাবলী ও শর্তাবলী</h3>' +
+    '<div style="margin:16px 0;font-size:14px;line-height:1.7;color:#334155;">'+esc(window._rules).replace(/\n/g,'<br>')+'</div>' +
+    '<button class="btn" style="width:100%;margin-top:14px;" onclick="this.closest(\'.modal-bg\').remove()">বুঝেছি</button>' +
+  '</div>';
   bg.onclick=(e)=>{if(e.target===bg)bg.remove();};
   document.body.appendChild(bg);
 }
+
 init();
 </script>
 </body>

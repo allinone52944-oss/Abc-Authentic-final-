@@ -5,64 +5,103 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="/manifest.json">
 <link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/premium.css?v=1">
 <link rel="stylesheet" href="/css/motion.css?v=2">
 <meta name="theme-color" content="#1e40af">
-<title>সেবা - All In One</title>
+<title>সকল সেবা - All In One</title>
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'Hind Siliguri',system-ui,sans-serif; background:#eef2f7; color:#0f172a; }
-  .desktop { max-width:1100px; margin:0 auto; background:#fff; min-height:100vh; display:flex; }
-  .sidebar { width:220px; background:linear-gradient(180deg,#1e3a8a,#1e40af); color:#fff; padding:20px 0; flex-shrink:0; }
-  .side-logo { padding:0 20px 20px; border-bottom:1px solid rgba(255,255,255,0.15); margin-bottom:16px; }
-  .side-logo h2 { font-size:18px; } .side-logo p { font-size:11px; opacity:0.7; }
-  .side-link { display:flex; align-items:center; gap:12px; padding:12px 20px; font-size:14px; color:rgba(255,255,255,0.85); cursor:pointer; border-left:3px solid transparent; }
-  .side-link.on { background:rgba(255,255,255,0.12); border-left-color:#fff; color:#fff; font-weight:600; }
-  .side-link .ico { font-size:18px; }
-  .main { flex:1; padding:24px; overflow:auto; }
-  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
-  .topbar h2 { font-size:20px; } .topbar p { font-size:13px; color:#64748b; }
-  .cat-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:20px; }
-  .cat-card { background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:20px 14px; text-align:center; cursor:pointer; }
-  .cat-card:hover { border-color:#3b82f6; }
-  .cat-icon { font-size:36px; margin-bottom:8px; }
-  .cat-name { font-weight:700; font-size:15px; }
-  .cat-count { color:#64748b; font-size:12px; margin-top:4px; }
-  .svc-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
-  .svc-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; cursor:pointer; display:flex; gap:12px; align-items:center; }
-  .svc-card:hover { border-color:#3b82f6; }
-  .svc-ico { width:48px; height:48px; border-radius:12px; background:#dbeafe; display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0; }
-  .svc-info { flex:1; } .svc-info h4 { font-size:14px; } .svc-info p { font-size:12px; color:#64748b; }
-  .svc-pr { font-size:16px; font-weight:700; color:#1e40af; }
-  .ptype { font-size:10px; padding:2px 8px; border-radius:12px; display:inline-block; margin-top:4px; }
-  .ptype.auto { background:#dbeafe; color:#1d4ed8; }
-  .ptype.manual { background:#fef3c7; color:#92400e; }
-  .ptype.closed { background:#fee2e2; color:#b91c1c; margin-left:4px; }
-  .back-link { color:#2563eb; cursor:pointer; font-size:14px; }
-  @media (max-width:768px) { html,body{overflow-x:hidden;}
-    .sidebar { display:none; }
-    .cat-grid { grid-template-columns:repeat(2,1fr); }
-    .svc-grid { grid-template-columns:1fr; }
+  .search-bar-wrap {
+    margin-bottom: 24px;
+    position: relative;
+  }
+  .search-input {
+    width: 100%;
+    padding: 14px 18px 14px 44px;
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-lg);
+    font-size: 15px;
+    font-family: inherit;
+    box-shadow: var(--shadow-xs);
+    transition: all 0.2s ease;
+  }
+  .search-input:focus {
+    outline: none;
+    border-color: var(--primary-500);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  }
+  .search-icon {
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+    font-size: 18px;
+    pointer-events: none;
+  }
+  .back-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--primary-700);
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    margin-bottom: 16px;
+    padding: 6px 12px;
+    border-radius: var(--r-md);
+    background: var(--primary-50);
+    transition: all 0.15s ease;
+  }
+  .back-nav:hover {
+    background: var(--primary-100);
   }
 </style>
 </head>
 <body>
 <div class="desktop">
   <div class="sidebar">
-    <div class="side-logo"><h2>🔷 All In One</h2><p>বিশ্বাস ও সেবার ঠিকানা</p></div>
-    <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
-    <div class="side-link on"><span class="ico">🛎️</span> সেবা</div>
-    <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
-    <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট</div>
-    <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> প্রোফাইল</div>
+    <div class="side-logo">
+      <div class="logo-icon">🔷</div>
+      <div>
+        <h2>All In One</h2>
+        <p>বিশ্বাস ও সেবার ঠিকানা</p>
+      </div>
+    </div>
+    <nav>
+      <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+      <div class="side-link on"><span class="ico">🛎️</span> সকল সেবা</div>
+      <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
+      <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট ও রিচার্জ</div>
+      <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> পার্সোনাল প্রোফাইল</div>
+    </nav>
   </div>
+
   <div class="main">
-    <div class="topbar"><div><h2>🛎️ সেবা সমূহ</h2><p>পছন্দের সেবা বেছে নিন</p></div></div>
-    <div id="catView"></div>
+    <div class="topbar">
+      <div>
+        <h2>🛎️ সকল ডিজিটাল সেবা</h2>
+        <p>আপনার প্রয়োজনীয় সেবা বেছে নিন অথবা ক্যাটাগরি ব্রাউজ করুন</p>
+      </div>
+    </div>
+
+    <!-- Live Search Bar -->
+    <div class="search-bar-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="svcSearch" class="search-input" placeholder="সেবার নাম লিখে খুঁজুন (যেমন: জন্ম নিবন্ধন, NID, পাসপোর্ট...)" oninput="filterServices(this.value)">
+    </div>
+
+    <div id="catView">
+      <div class="skel" style="height:120px;margin-bottom:12px;"></div>
+      <div class="skel" style="height:120px;"></div>
+    </div>
     <div id="svcView" style="display:none;"></div>
   </div>
 </div>
+
 <button class="wa-fab" id="waFab" aria-label="WhatsApp-এ সাহায্য চান"><img src="/icons/abc-logo.png" alt="Abc"></button>
-<!-- mobile tabbar -->
+
+<!-- Mobile Tabbar -->
 <div class="m-tabbar">
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/dashboard.html'"><div class="ico">🏠</div>হোম</div>
   <div class="m-tab on" aria-current="page"><div class="ico">🛎️</div>সেবা</div>
@@ -70,11 +109,12 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
 </div>
+
 <script src="/js/app.js?v=13"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
-/* Smart icon fallback when service/category has no icon configured (DB empty) */
+
 function autoIcon(name){
   const n=String(name||'');
   if(/জন্ম|birth/i.test(n))return '👶';
@@ -88,15 +128,40 @@ function autoIcon(name){
   if(/রিচার্জ|recharge|বিকাশ|নগদ/i.test(n))return '💳';
   return '🛎️';
 }
+
 function card(s){
-  const closed = s.open ? '' : '<span class="ptype closed">বন্ধ</span>';
+  const closed = s.open ? '' : '<span class="ptype closed">সাময়িক বন্ধ</span>';
   return '<div class="svc-card" onclick="location.href=\'/service-detail.html?id='+s.id+'\'">'+
     '<div class="svc-ico">'+esc((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn||s.name))+'</div>'+
     '<div class="svc-info"><h4>'+esc(s.name_bn||s.name)+'</h4>'+
-    '<span class="ptype '+(s.type==='manual'?'manual':'auto')+'">'+(s.type==='manual'?'manual':'automated')+'</span>'+closed+'</div>'+
-    '<div class="svc-pr">৳'+bnNum(s.price)+(s.open?'':'<div style="font-size:10px;color:#b91c1c;">এখন বন্ধ</div>')+'</div></div>';
+    '<span class="ptype '+(s.type==='manual'?'manual':'auto')+'">'+(s.type==='manual'?'ম্যানুয়াল প্রসেস':'স্বয়ংক্রিয়')+'</span>'+closed+'</div>'+
+    '<div class="svc-pr">৳'+bnNum(s.price)+(s.open?'':'<div style="font-size:11px;color:#dc2626;font-weight:600;">বন্ধ আছে</div>')+'</div></div>';
 }
+
 let GROUPS = [];
+let ALL_SERVICES = [];
+
+function filterServices(q) {
+  q = (q || '').trim().toLowerCase();
+  if (!q) {
+    showCats();
+    return;
+  }
+  document.getElementById('catView').style.display = 'none';
+  const v = document.getElementById('svcView');
+  v.style.display = '';
+  const filtered = ALL_SERVICES.filter(s => {
+    const bn = (s.name_bn || '').toLowerCase();
+    const en = (s.name || '').toLowerCase();
+    return bn.includes(q) || en.includes(q);
+  });
+  v.innerHTML = '<span class="back-nav" onclick="showCats()">← সকল ক্যাটাগরিতে ফিরুন</span>' +
+    '<h3 style="margin:16px 0;">🔍 অনুসন্ধানের ফলাফল (' + bnNum(filtered.length) + 'টি পাওয়া গেছে)</h3>' +
+    '<div class="svc-grid">' +
+    (filtered.map(card).join('') || '<div style="color:#64748b;padding:20px 0;">কোনো সেবা খুঁজে পাওয়া যায়নি</div>') +
+    '</div>';
+}
+
 function showCats(){
   document.getElementById('catView').style.display = '';
   document.getElementById('svcView').style.display = 'none';
@@ -105,18 +170,20 @@ function showCats(){
     h += '<div class="cat-card" onclick="showCat('+i+')">'+
       '<div class="cat-icon">'+esc(g.icon)+'</div>'+
       '<div class="cat-name">'+esc(g.name)+'</div>'+
-      '<div class="cat-count">'+bnNum(g.services.length)+'টি সেবা</div></div>';
+      '<div class="cat-count">'+bnNum(g.services.length)+'টি সেবা উপলব্ধ</div></div>';
   });
   document.getElementById('catView').innerHTML = h + '</div>';
 }
+
 function showCat(i){
   const g = GROUPS[i]; if(!g) return;
   document.getElementById('catView').style.display = 'none';
   const v = document.getElementById('svcView'); v.style.display = '';
-  v.innerHTML = '<span class="back-link" onclick="showCats()">← সব ক্যাটাগরি</span>' +
-    '<h3 style="margin:14px 0;">'+esc(g.icon)+' '+esc(g.name)+'</h3><div class="svc-grid">' +
-    (g.services.map(card).join('') || '<div>কোনো সেবা নেই</div>') + '</div>';
+  v.innerHTML = '<span class="back-nav" onclick="showCats()">← সকল ক্যাটাগরিতে ফিরুন</span>' +
+    '<h3 style="margin:16px 0;">'+esc(g.icon)+' '+esc(g.name)+'</h3><div class="svc-grid">' +
+    (g.services.map(card).join('') || '<div style="color:#64748b;padding:20px 0;">এই ক্যাটাগরিতে কোনো সেবা নেই</div>') + '</div>';
 }
+
 async function init(){
   const me = await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
@@ -127,13 +194,19 @@ async function init(){
   const r=await ABC.api('/services');
   if(!r.ok) return;
   const {services}=await r.json();
+  ALL_SERVICES = services || [];
   const map = {}; GROUPS = [];
-  const uncat = { id:null, name:'অন্যান্য', icon:'📦', services:[], ord:999999 };
+  const uncat = { id:null, name:'অন্যান্য সেবা', icon:'📦', services:[], ord:999999 };
   services.forEach(s => {
     if (s.category_id) {
       if (!map[s.category_id]) {
-        map[s.category_id] = { id:s.category_id, name:s.category_name_bn||s.category_name||'ক্যাটাগরি',
-          icon:((s.category_icon&&s.category_icon!=='📁')?s.category_icon:autoIcon(s.category_name_bn||s.category_name)), services:[], ord:(s.category_serial==null?999999:s.category_serial) };
+        map[s.category_id] = {
+          id:s.category_id,
+          name:s.category_name_bn||s.category_name||'ক্যাটাগরি',
+          icon:((s.category_icon&&s.category_icon!=='📁')?s.category_icon:autoIcon(s.category_name_bn||s.category_name)),
+          services:[],
+          ord:(s.category_serial==null?999999:s.category_serial)
+        };
         GROUPS.push(map[s.category_id]);
       }
       map[s.category_id].services.push(s);

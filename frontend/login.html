@@ -5,238 +5,533 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1e40af">
 <meta name="color-scheme" content="light">
-<title>All In One (Abc Authentic) - Login</title>
-<link rel="stylesheet" href="/css/coffee.css?v=9">
-<link rel="stylesheet" href="/css/blue.css?v=4">
+<title>All In One (Abc Authentic) - প্রবেশ করুন</title>
+<link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/premium.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=2">
 <style>
-  html,body{overflow-x:hidden;}
-/* Override coffee.css overflow:hidden for login page */
-body { overflow-y: auto !important; overflow-x: hidden; }
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  font-family: 'Hind Siliguri', sans-serif;
-  background: #1a120b;
-  color: #f5e6c8;
-  min-height: 100vh;
-  display: flex;
-}
-/* Left: Branding panel */
-.brand-panel {
-  flex: 1;
-  background: linear-gradient(135deg, #2b1d14 0%, #1a120b 100%);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding: 40px;
-  position: relative;
-  overflow: hidden;
-}
-.brand-logo { font-size: 48px; margin-bottom: 16px; }
-.brand-title {
-  font-size: 32px;
-  color: #d4af37;
-  letter-spacing: 3px;
-  margin-bottom: 8px;
-}
-.brand-tag {
-  font-size: 16px;
-  color: #c9a961;
-  letter-spacing: 1px;
-}
-/* Right: Form panel */
-.form-panel {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 40px 20px;
-  background: #241811;
-}
-.form-card {
-  width: 100%;
-  max-width: 400px;
-}
-.tabs {
-  display: flex;
-  margin-bottom: 24px;
-  border-bottom: 2px solid #3a2a1a;
-}
-.tab {
-  flex: 1;
-  text-align: center;
-  padding: 12px;
-  cursor: pointer;
-  color: #8a7355;
-  font-size: 16px;
-  transition: all 0.3s;
-}
-.tab.active {
-  color: #1a120b;
-  background: #d4af37;
-  border-bottom: 3px solid #d4af37;
-  margin-bottom: -2px;
-}
-.field { margin-bottom: 16px; }
-.field label {
-  display: block;
-  margin-bottom: 6px;
-  color: #c9a961;
-  font-size: 14px;
-}
-.field input, .field input[type="password"] {
-  width: 100%;
-  padding: 14px 16px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  color: #0f172a;
-  font-size: 15px;
-  outline: none;
-}
-.field input:focus { border-color: #3b82f6; }
-.field input::placeholder { color: rgba(15,23,42,0.45); }
-/* keep light styling when the browser autofills saved credentials */
-.field input:-webkit-autofill,
-.field input:-webkit-autofill:hover,
-.field input:-webkit-autofill:focus {
-  -webkit-text-fill-color: #0f172a;
-  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
-  transition: background-color 5000s ease-in-out 0s;
-}
-.btn {
-  width: 100%;
-  padding: 15px;
-  background: linear-gradient(135deg, #d4af37, #b8941f);
-  border: none;
-  border-radius: 10px;
-  color: #1a120b;
-  font-size: 16px;
-  font-weight: bold;
-  cursor: pointer;
-  margin-top: 8px;
-}
-.btn:hover { opacity: 0.9; }
-.err { color: #ff6b6b; font-size: 14px; margin-top: 12px; text-align: center; }
-/* Mobile */
-@media (max-width: 768px) {
-  body { flex-direction: column; }
-  .brand-panel { padding: 30px 20px; }
-  .brand-title { font-size: 24px; }
-  .form-panel { padding: 20px; }
-  .field input { font-size: 16px; } /* Prevent iOS auto-zoom */
-}
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    overflow-x: hidden;
+    background: #091326;
+    font-family: 'Hind Siliguri', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  .login-wrapper {
+    min-height: 100vh;
+    display: flex;
+    width: 100%;
+  }
+
+  /* Left Brand Showcase */
+  .brand-panel {
+    flex: 1.1;
+    background: radial-gradient(circle at 20% 30%, #1e3a8a 0%, #0b1528 70%);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 60px 48px;
+    color: #ffffff;
+    overflow: hidden;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .brand-panel::before {
+    content: '';
+    position: absolute;
+    width: 400px;
+    height: 400px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(56, 189, 248, 0.15) 0%, transparent 70%);
+    top: -100px;
+    left: -100px;
+    pointer-events: none;
+  }
+
+  .brand-panel::after {
+    content: '';
+    position: absolute;
+    width: 350px;
+    height: 350px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(37, 99, 235, 0.2) 0%, transparent 70%);
+    bottom: -60px;
+    right: -60px;
+    pointer-events: none;
+  }
+
+  .brand-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    z-index: 2;
+  }
+
+  .brand-header .logo-box {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #2563eb, #38bdf8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.35);
+  }
+
+  .brand-header .logo-box img {
+    width: 34px;
+    height: 34px;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+  }
+
+  .brand-header h1 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -0.01em;
+  }
+
+  .brand-header p {
+    font-size: 12px;
+    color: #93c5fd;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .brand-hero {
+    margin: 40px 0;
+    z-index: 2;
+  }
+
+  .brand-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 9999px;
+    background: rgba(37, 99, 235, 0.2);
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    color: #93c5fd;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    backdrop-filter: blur(8px);
+  }
+
+  .brand-hero h2 {
+    font-size: 36px;
+    font-weight: 800;
+    line-height: 1.25;
+    color: #ffffff;
+    letter-spacing: -0.02em;
+    margin-bottom: 16px;
+  }
+
+  .brand-hero h2 span {
+    background: linear-gradient(135deg, #60a5fa 0%, #38bdf8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .brand-hero p {
+    font-size: 16px;
+    color: #cbd5e1;
+    line-height: 1.6;
+    max-width: 440px;
+  }
+
+  .feature-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    z-index: 2;
+  }
+
+  .feature-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    color: #e2e8f0;
+  }
+
+  .feature-check {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    color: #34d399;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .brand-footer {
+    font-size: 13px;
+    color: #64748b;
+    z-index: 2;
+  }
+
+  /* Right Form Panel */
+  .form-panel {
+    flex: 1;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+    position: relative;
+  }
+
+  .form-card {
+    width: 100%;
+    max-width: 440px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    padding: 36px 32px;
+    box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.08);
+  }
+
+  /* Modern Segmented Tab */
+  .tabs {
+    display: flex;
+    background: #f1f5f9;
+    padding: 4px;
+    border-radius: 12px;
+    margin-bottom: 28px;
+    border: 1px solid #e2e8f0;
+  }
+
+  .tab {
+    flex: 1;
+    text-align: center;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #64748b;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .tab.active {
+    background: #ffffff;
+    color: #1e40af;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+  }
+
+  .form-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 6px;
+  }
+
+  .form-sub {
+    font-size: 13px;
+    color: #64748b;
+    margin-bottom: 22px;
+  }
+
+  .field {
+    margin-bottom: 16px;
+  }
+
+  .field label {
+    display: block;
+    margin-bottom: 6px;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .field input {
+    width: 100%;
+    padding: 12px 14px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    color: #0f172a;
+    font-size: 14px;
+    font-family: inherit;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .field input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  }
+
+  .field input::placeholder {
+    color: #94a3b8;
+  }
+
+  .btn-submit {
+    width: 100%;
+    padding: 13px;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    border: none;
+    border-radius: 10px;
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+  }
+
+  .btn-submit:hover {
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35);
+    transform: translateY(-1px);
+  }
+
+  .btn-submit:active {
+    transform: scale(0.98);
+  }
+
+  .btn-submit:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .forgot-link {
+    text-align: center;
+    margin-top: 16px;
+  }
+
+  .forgot-link a {
+    color: #2563eb;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+
+  .forgot-link a:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+  }
+
+  .forgot-box {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 16px;
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  @media (max-width: 900px) {
+    .login-wrapper {
+      flex-direction: column;
+    }
+    .brand-panel {
+      padding: 36px 24px;
+      flex: none;
+    }
+    .brand-hero {
+      margin: 20px 0;
+    }
+    .brand-hero h2 {
+      font-size: 26px;
+    }
+    .feature-list {
+      display: none;
+    }
+    .brand-footer {
+      display: none;
+    }
+    .form-panel {
+      padding: 24px 16px;
+    }
+    .form-card {
+      padding: 24px 20px;
+      border-radius: 16px;
+    }
+  }
 </style>
 </head>
 <body>
-<div class="brand-panel">
-  <img src="/icons/abc-uncommon.svg" alt="ABC" style="width:80px;height:80px;margin-bottom:16px;">
-  <div class="brand-title">ALL IN ONE</div>
-  <div style="color:#d4af37;letter-spacing:2px;margin-bottom:12px;">ABC AUTHENTIC</div>
-  <div class="brand-tag">বিশ্বাস ও সেবার ঠিকানা</div>
-</div>
-<div class="form-panel">
-  <div class="form-card">
-    <div class="tabs">
-      <div class="tab active" onclick="showTab('login',this)">লগইন</div>
-      <div class="tab" onclick="showTab('reg',this)">রেজিস্ট্রেশন</div>
+<div class="login-wrapper">
+  <!-- Left Brand Showcase -->
+  <div class="brand-panel">
+    <div class="brand-header">
+      <div class="logo-box">
+        <img src="/icons/abc-uncommon.svg" alt="ABC Logo">
+      </div>
+      <div>
+        <h1>ALL IN ONE</h1>
+        <p>ABC AUTHENTIC</p>
+      </div>
     </div>
-    <div id="tab-login">
-      <div class="field">
-        <label>মোবাইল / ইমেইল</label>
-        <input type="text" id="lg_id" placeholder="01XXXXXXXXX বা ইমেইল" autocomplete="username">
+
+    <div class="brand-hero">
+      <div class="brand-badge">✨ বিশ্বস্ত ও আধুনিক ডিজিটাল সেবা প্ল্যাটফর্ম</div>
+      <h2>সব সেবা এখন এক ছাতার নিচে, <span>সহজে ও নিরাপদে</span></h2>
+      <p>জন্ম নিবন্ধন, মৃত্যু সনদ, ভোটার ও জাতীয় পরিচয়পত্রসহ প্রয়োজনীয় সব পাবলিক ও সরকারি সেবা পান দ্রুততম সময়ে।</p>
+    </div>
+
+    <div class="feature-list">
+      <div class="feature-item">
+        <div class="feature-check">✓</div>
+        <span>অটোমেটেড ও ম্যানুয়াল হাই-স্পিড সার্ভিস প্রসেসিং</span>
       </div>
-      <div class="field">
-        <label>পাসওয়ার্ড</label>
-        <input type="password" id="lg_pw" placeholder="পাসওয়ার্ড" autocomplete="current-password">
+      <div class="feature-item">
+        <div class="feature-check">✓</div>
+        <span>বিকাশ, নগদ ও রকেট ইনস্ট্যান্ট ওয়ালেট রিচার্জ</span>
       </div>
-      <button class="btn" id="lg_btn" onclick="doLogin()">প্রবেশ করুন →</button>
-      <div class="err" id="lg_err"></div>
-      <div style="text-align:center;margin-top:10px;">
-        <a href="#" onclick="showForgot();return false;" style="color:var(--gold);font-size:13px;">🔑 পাসওয়ার্ড ভুলে গেছেন?</a>
+      <div class="feature-item">
+        <div class="feature-check">✓</div>
+        <span>লাইভ চ্যাট সাপোর্ট ও ২৪/৭ ডেডিকেটেড হেল্পলাইন</span>
       </div>
-      <div id="forgotWrap" style="display:none;margin-top:10px;">
+    </div>
+
+    <div class="brand-footer">
+      © 2026 All In One (Abc Authentic). সর্বস্বত্ব সংরক্ষিত।
+    </div>
+  </div>
+
+  <!-- Right Form Card -->
+  <div class="form-panel">
+    <div class="form-card">
+      <div class="tabs">
+        <div class="tab active" onclick="showTab('login',this)">প্রবেশ (Login)</div>
+        <div class="tab" onclick="showTab('reg',this)">নিবন্ধন (Register)</div>
+      </div>
+
+      <!-- Login Tab -->
+      <div id="tab-login">
+        <div class="form-title">অ্যাকাউন্টে লগইন করুন</div>
+        <div class="form-sub">আপনার মোবাইল নম্বর অথবা ইমেইল দিয়ে প্রবেশ করুন</div>
+
         <div class="field">
-          <label>ইমেইল</label>
-          <input type="email" id="fg_email" placeholder="email@example.com" autocomplete="email">
+          <label>মোবাইল নম্বর / ইমেইল</label>
+          <input type="text" id="lg_id" placeholder="01XXXXXXXXX বা ইমেইল" autocomplete="username">
         </div>
-        <button class="btn" onclick="doForgot()">রিসেট লিংক পাঠান →</button>
-        <div class="err" id="fg_err"></div>
-        <div class="okmsg" id="fg_ok"></div>
+
+        <div class="field">
+          <label>পাসওয়ার্ড</label>
+          <input type="password" id="lg_pw" placeholder="আপনার গোপন পাসওয়ার্ড" autocomplete="current-password">
+        </div>
+
+        <button class="btn-submit" id="lg_btn" onclick="doLogin()">লগইন করুন →</button>
+        <div class="err" id="lg_err"></div>
+
+        <div class="forgot-link">
+          <a href="#" onclick="showForgot();return false;">🔑 পাসওয়ার্ড ভুলে গেছেন?</a>
+        </div>
+
+        <div id="forgotWrap" class="forgot-box" style="display:none;">
+          <div class="field">
+            <label>আপনার রেজিস্টার্ড ইমেইল দিন</label>
+            <input type="email" id="fg_email" placeholder="email@example.com" autocomplete="email">
+          </div>
+          <button class="btn-submit" style="margin-top:4px;" onclick="doForgot()">রিসেট লিংক পাঠান →</button>
+          <div class="err" id="fg_err"></div>
+          <div class="okmsg" id="fg_ok"></div>
+        </div>
       </div>
-    </div>
-    <div id="tab-reg" style="display:none;">
-      <div class="field">
-        <label>নাম *</label>
-        <input type="text" id="rg_name" placeholder="আপনার নাম" autocomplete="name">
+
+      <!-- Registration Tab -->
+      <div id="tab-reg" style="display:none;">
+        <div class="form-title">নতুন অ্যাকাউন্ট খুলুন</div>
+        <div class="form-sub">কয়েক সেকেন্ডেই তৈরি করুন আপনার পার্সোনাল প্রোফাইল</div>
+
+        <div class="field">
+          <label>পূর্ণ নাম *</label>
+          <input type="text" id="rg_name" placeholder="আপনার নাম লিখুন" autocomplete="name">
+        </div>
+
+        <div class="field">
+          <label>মোবাইল নম্বর *</label>
+          <input type="text" id="rg_phone" placeholder="01XXXXXXXXX" autocomplete="tel">
+        </div>
+
+        <div class="field">
+          <label>WhatsApp নম্বর *</label>
+          <input type="text" id="rg_wa" placeholder="01XXXXXXXXX" autocomplete="tel">
+        </div>
+
+        <div class="field">
+          <label>ইমেইল এড্রেস *</label>
+          <input type="email" id="rg_email" placeholder="email@example.com" autocomplete="email">
+        </div>
+
+        <div class="field">
+          <label>পাসওয়ার্ড * (কমপক্ষে ৬ অক্ষর)</label>
+          <input type="password" id="rg_pw" placeholder="কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড" autocomplete="new-password">
+        </div>
+
+        <button class="btn-submit" onclick="doRegister()">রেজিস্টার করুন →</button>
+        <div class="err" id="rg_err"></div>
       </div>
-      <div class="field">
-        <label>মোবাইল নম্বর *</label>
-        <input type="text" id="rg_phone" placeholder="01XXXXXXXXX" autocomplete="tel">
-      </div>
-      <div class="field">
-        <label>WhatsApp নম্বর *</label>
-        <input type="text" id="rg_wa" placeholder="01XXXXXXXXX" autocomplete="tel">
-      </div>
-      <div class="field">
-        <label>ইমেইল *</label>
-        <input type="email" id="rg_email" placeholder="email@example.com" autocomplete="email">
-      </div>
-      <div class="field">
-        <label>পাসওয়ার্ড * (min 6)</label>
-        <input type="password" id="rg_pw" placeholder="পাসওয়ার্ড" autocomplete="new-password">
-      </div>
-      <button class="btn" onclick="doRegister()">রেজিস্টার করুন →</button>
-      <div class="err" id="rg_err"></div>
     </div>
   </div>
 </div>
+
 <script>
-/* DARK-MODE PASSWORD FIX: Chromium paints type=password via UA !important
-   (beats author CSS, so no stylesheet can override). Swap to text+disc on
-   focus/input (keeps type=password at load so password managers and
-   automation can target the field); autocomplete attrs keep the password
-   manager working. Firefox keeps native type=password. */
+/* DARK-MODE PASSWORD FIX */
 try{if(window.CSS&&CSS.supports('-webkit-text-security','disc')){var swapPw=function(el){if(el.getAttribute('type')==='password'){el.setAttribute('type','text');el.style.webkitTextSecurity='disc';}};document.querySelectorAll('input[type="password"]').forEach(function(el){el.addEventListener('focus',function(){swapPw(el);});el.addEventListener('input',function(){swapPw(el);});if(el.value)swapPw(el);});}}catch(e){}
-// Maintenance notice (H-5: backend also gates APIs with 503 during maintenance)
+
+// Maintenance notice
 (async () => {
   try {
     const r = await fetch('/api/public/settings');
     const s = await r.json();
     if (s.maintenance_mode && s.maintenance_mode.enabled) {
       const bar = document.createElement('div');
-      bar.style.cssText = 'background:#3a2a12;color:#f0c75e;padding:10px 14px;font-size:14px;text-align:center;border-bottom:1px solid #6b4f1d;';
+      bar.style.cssText = 'background:#1e293b;color:#facc15;padding:12px 16px;font-size:14px;text-align:center;border-bottom:1px solid #334155;';
       bar.textContent = '🔧 ' + (s.maintenance_mode.message || 'সাইট এখন মেনটেনেন্সে আছে');
       document.body.prepend(bar);
     }
   } catch (e) {}
 })();
+
 function showTab(which, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   document.getElementById('tab-login').style.display = which === 'login' ? '' : 'none';
   document.getElementById('tab-reg').style.display = which === 'reg' ? '' : 'none';
 }
-// Login/Register logic will be added here (copy from old file)
+
 function showForgot(){
-  const w=document.getElementById('forgotWrap');
-  w.style.display=w.style.display==='none'?'':'none';
+  const w = document.getElementById('forgotWrap');
+  w.style.display = w.style.display === 'none' ? '' : 'none';
 }
+
 async function doForgot(){
-  const email=document.getElementById('fg_email').value.trim();
-  const err=document.getElementById('fg_err');
-  const ok=document.getElementById('fg_ok');
-  err.textContent='';ok.textContent='';
-  if(!email){err.textContent='ইমেইল দিন';return;}
+  const email = document.getElementById('fg_email').value.trim();
+  const err = document.getElementById('fg_err');
+  const ok = document.getElementById('fg_ok');
+  err.textContent = ''; ok.textContent = '';
+  if(!email){ err.textContent = 'ইমেইল দিন'; return; }
   try{
-    const r=await fetch('/api/auth/forgot-password',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({email})
+    const r = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
     });
-    if(r.ok){ok.textContent='✅ রিসেট লিংক পাঠানো হয়েছে (ইমেইল চেক করুন)';}
-    else{err.textContent='ব্যর্থ হয়েছে';}
-  }catch(e){err.textContent='নেটওয়ার্ক সমস্যা';}
+    if(r.ok){
+      ok.textContent = '✅ রিসেট লিংক পাঠানো হয়েছে (আপনার ইনবক্স চেক করুন)';
+    } else {
+      err.textContent = 'রিসেট রিকোয়েস্ট ব্যর্থ হয়েছে';
+    }
+  } catch(e){
+    err.textContent = 'নেটওয়ার্ক সমস্যা হয়েছে';
+  }
 }
+
 async function doLogin() {
   const id = document.getElementById('lg_id').value.trim();
   const pw = document.getElementById('lg_pw').value;
@@ -244,7 +539,7 @@ async function doLogin() {
   const btn = document.getElementById('lg_btn');
   err.textContent = '';
   if (!id || !pw) { err.textContent = 'ID ও পাসওয়ার্ড দিন'; return; }
-  btn.disabled = true; btn.textContent = '⏳ লোড হচ্ছে...';
+  btn.disabled = true; btn.textContent = '⏳ যাচাই করা হচ্ছে...';
   try {
     const r = await fetch('/api/auth/login', {
       method: 'POST',
@@ -252,9 +547,13 @@ async function doLogin() {
       body: JSON.stringify({ login: id, password: pw })
     });
     const d = await r.json();
-    if (!r.ok) { err.textContent = d.error || 'Login ব্যর্থ'; btn.disabled = false; btn.textContent = 'প্রবেশ করুন →'; return; }
+    if (!r.ok) {
+      err.textContent = d.error || 'Login ব্যর্থ';
+      btn.disabled = false;
+      btn.textContent = 'লগইন করুন →';
+      return;
+    }
     sessionStorage.setItem('abc_access_token', d.access_token);
-    // Religion voice greeting: arm one-shot flag for dashboard (non-admin only).
     try {
       if (d.user && d.user.role !== 'admin') {
         var vi = parseInt(localStorage.getItem('greeting_voice_rotation') || '0', 10);
@@ -265,8 +564,13 @@ async function doLogin() {
     } catch (e) {}
     const next = new URLSearchParams(location.search).get('next') || '/dashboard.html';
     location.href = next;
-  } catch (e) { err.textContent = 'নেটওয়ার্ক সমস্যা'; btn.disabled = false; btn.textContent = 'প্রবেশ করুন →'; }
+  } catch (e) {
+    err.textContent = 'নেটওয়ার্ক সমস্যা';
+    btn.disabled = false;
+    btn.textContent = 'লগইন করুন →';
+  }
 }
+
 async function doRegister() {
   const err = document.getElementById('rg_err');
   err.textContent = '';
@@ -285,21 +589,23 @@ async function doRegister() {
     });
     const d = await r.json();
     if (!r.ok) { err.textContent = d.error || 'Registration ব্যর্থ'; return; }
-    alert('✅ রেজিস্ট্রেশন সফল! ইমেইল যাচাই করুন।');
-    showTab('login', document.querySelector('.tab'));
-  } catch (e) { err.textContent = 'নেটওয়ার্ক সমস্যা'; }
+    alert('✅ রেজিস্ট্রেশন সফল হয়েছে! অনুগ্রহ করে লগইন করুন।');
+    showTab('login', document.querySelectorAll('.tab')[0]);
+  } catch (e) {
+    err.textContent = 'নেটওয়ার্ক সমস্যা';
+  }
 }
-// Hide registration tab if disabled
+
 (async()=>{
   try{
-    const r=await fetch('/api/auth/registration-status');
-    const d=await r.json();
-    if(d.enabled===false){
-      document.querySelectorAll('.tab')[1].style.display='none';
+    const r = await fetch('/api/auth/registration-status');
+    const d = await r.json();
+    if(d.enabled === false){
+      const regTab = document.querySelectorAll('.tab')[1];
+      if (regTab) regTab.style.display = 'none';
     }
   }catch(e){}
 })();
-<!-- L-10 (2026-10-15): pre-login voice greeting removed — SPEC: greeting only on dashboard login entry -->
 </script>
 </body>
 </html>

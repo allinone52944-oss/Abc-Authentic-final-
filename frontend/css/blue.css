@@ -1,149 +1,18 @@
 /* ============================================================
-   All In One (Abc Authentic) - Blue Theme (user confirmed 2026-10-17)
-   Overrides coffee.css variables for blue design
-   Based on: allinone-final-design.html
+   All In One (Abc Authentic) - Blue Theme Master
    ============================================================ */
+@import url('/fonts/hind-siliguri.css?v=1');
+@import url('/css/premium.css?v=1');
+
 :root {
-  /* Blue palette */
-  --espresso: #1e3a8a;        /* was #2b1d14 - now deep blue */
-  --espresso-deep: #1e40af;   /* was #1d130c - now primary blue */
-  --gold: #3b82f6;            /* was #d4af37 - now bright blue */
-  --gold-dark: #1d4ed8;       /* was #b8860b - now darker blue */
-  --gold-soft: #60a5fa;       /* was #c9a961 - now soft blue */
-  --cream: #eff6ff;            /* was #f5e6c8 - now light blue-white */
-  --muted: #64748b;           /* was #a08050 - now slate */
-  --dim: #94a3b8;             /* was #6b543a - now light slate */
-}
-
-/* Blue background */
-body.app {
-  background: #eef2f7 !important;
-  color: #0f172a !important;
-}
-
-/* Header - blue gradient */
-.app-header {
-  border-bottom: 1px solid rgba(30, 64, 175, 0.15) !important;
-}
-
-.brand {
-  color: #1e40af !important;
-}
-
-/* Cards - white with blue accents */
-.hub-card {
-  background: #ffffff !important;
-  border: 1px solid #e2e8f0 !important;
-  box-shadow: 0 2px 8px rgba(30, 64, 175, 0.08) !important;
-}
-
-.hub-card:hover {
-  border-color: #3b82f6 !important;
-  box-shadow: 0 4px 16px rgba(30, 64, 175, 0.15) !important;
-}
-
-/* Buttons - blue */
-.btn, .btn-primary {
-  background: linear-gradient(135deg, #1e40af, #3b82f6) !important;
-  color: #ffffff !important;
-}
-
-/* Pills and badges */
-.pill {
-  background: #dbeafe !important;
-  color: #1e40af !important;
-}
-
-/* Remove coffee-specific decorations */
-.spiral, .gold-orb {
-  display: none !important;
-}
-
-/* ---- ADMIN PANEL: Dark blue theme (not light) ---- */
-body.admin-blue {
-  background: #0f172a !important;
-  color: #e2e8f0 !important;
-}
-
-body.admin-blue .brand {
-  color: #60a5fa !important;
-}
-
-body.admin-blue .app-header {
-  border-bottom: 1px solid rgba(96, 165, 250, 0.2) !important;
-}
-
-/* ---- LOGIN PAGE: Blue design (HTML/JS untouched) ---- */
-.brand-panel {
-  background: linear-gradient(135deg, #1e3a8a, #1e40af) !important;
-}
-.brand-title {
-  color: #ffffff !important;
-}
-.brand-tag {
-  color: rgba(255, 255, 255, 0.8) !important;
-}
-.form-card {
-  background: #ffffff !important;
-  border: 1px solid #e2e8f0 !important;
-  border-radius: 16px !important;
-  box-shadow: 0 10px 40px rgba(30, 64, 175, 0.1) !important;
-}
-.tabs .tab {
-  color: #64748b !important;
-}
-.tabs .tab.active {
-  color: #1e40af !important;
-  border-bottom: 2px solid #1e40af !important;
-}
-.form-card .btn {
-  background: linear-gradient(135deg, #1e40af, #3b82f6) !important;
-  color: #ffffff !important;
-}
-.form-card .field input {
-  border: 1px solid #e2e8f0 !important;
-  border-radius: 10px !important;
-}
-.form-card .field input:focus {
-  border-color: #3b82f6 !important;
-  outline: none !important;
-}
-
-/* ---- AUTH PAGES (forgot/reset/verify): Blue design ---- */
-.auth {
-  background: #eef2f7 !important;
-}
-.auth .card {
-  background: #ffffff !important;
-  border: 1px solid #e2e8f0 !important;
-  border-radius: 16px !important;
-  box-shadow: 0 10px 40px rgba(30, 64, 175, 0.1) !important;
-}
-.auth .logo {
-  color: #1e40af !important;
-}
-.auth .btn {
-  background: linear-gradient(135deg, #1e40af, #3b82f6) !important;
-  color: #ffffff !important;
-}
-.auth .field input {
-  border: 1px solid #e2e8f0 !important;
-  border-radius: 10px !important;
-}
-.auth .gold-orb {
-  display: none !important;
-}
-
-/* ---- Password inputs: bulletproof light rendering ----
-   Dark-mode browsers paint password inputs (esp. autofilled) with a dark
-   UA/autofill background that ignores normal author styles. Author
-   !important beats UA !important, so this always wins. */
-input[type="password"] {
-  background-color: #ffffff !important;
-  color: #0f172a !important;
-  -webkit-text-fill-color: #0f172a !important;
-  color-scheme: light;
-}
-input[type="password"]::placeholder {
-  color: rgba(15,23,42,0.45) !important;
+  --espresso: #091326;
+  --espresso-deep: #0b1528;
+  --gold: #2563eb;
+  --gold-dark: #1d4ed8;
+  --gold-soft: #60a5fa;
+  --cream: #0f172a;
+  --muted: #475569;
+  --dim: #94a3b8;
+  --card: #ffffff;
+  --bg: #f8fafc;
 }

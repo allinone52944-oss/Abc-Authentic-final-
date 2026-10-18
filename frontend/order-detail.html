@@ -4,65 +4,156 @@
 <meta charset="UTF-8">
 <link rel="manifest" href="/manifest.json">
 <link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/premium.css?v=1">
 <link rel="stylesheet" href="/css/motion.css?v=2">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1e40af">
-<title>অর্ডার বিস্তারিত - All In One</title>
+<title>অর্ডারের বিস্তারিত ও লাইভ চ্যাট - All In One</title>
 <style>
-  html,body{overflow-x:hidden;}
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'Hind Siliguri',system-ui,sans-serif; background:#eef2f7; color:#0f172a; }
-  .desktop { max-width:1100px; margin:0 auto; background:#fff; min-height:100vh; display:flex; }
-  .sidebar { width:220px; background:linear-gradient(180deg,#1e3a8a,#1e40af); color:#fff; padding:20px 0; flex-shrink:0; }
-  .side-logo { padding:0 20px 20px; border-bottom:1px solid rgba(255,255,255,0.15); margin-bottom:16px; }
-  .side-logo h2 { font-size:18px; } .side-logo p { font-size:11px; opacity:0.7; }
-  .side-link { display:flex; align-items:center; gap:12px; padding:12px 20px; font-size:14px; color:rgba(255,255,255,0.85); cursor:pointer; border-left:3px solid transparent; }
-  .side-link.on { background:rgba(255,255,255,0.12); border-left-color:#fff; color:#fff; font-weight:600; }
-  .side-link .ico { font-size:18px; }
-  .main { flex:1; padding:24px; overflow:auto; }
-  .card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:20px; margin-bottom:16px; }
-  .card h2 { font-size:18px; margin-bottom:10px; }
-  .st { font-size:11px; padding:3px 10px; border-radius:20px; font-weight:600; }
-  .st-new { background:#dbeafe; color:#1d4ed8; } .st-pending { background:#fef3c7; color:#92400e; }
-  .st-processing { background:#fef3c7; color:#92400e; } .st-completed { background:#dcfce7; color:#166534; }
-  .st-delivered { background:#dcfce7; color:#166534; }
-  .chat-box { max-height:300px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:12px; background:#f8fafc; }
-  .chat-msg { margin-bottom:10px; }
-  .chat-msg .b { display:inline-block; background:#fff; border:1px solid #e2e8f0; padding:8px 12px; border-radius:12px; font-size:13px; }
-  .chat-msg.admin .b { background:#dbeafe; }
-  .chat-msg .tm { font-size:11px; color:#94a3b8; margin-top:4px; }
-  .chat-input { display:flex; gap:8px; }
-  .chat-input input { flex:1; padding:10px; border:1px solid #e2e8f0; border-radius:10px; }
-  .btn { background:linear-gradient(135deg,#1e40af,#3b82f6); color:#fff; border:none; padding:10px 20px; border-radius:10px; font-weight:600; cursor:pointer; }
-  .btn-sm { background:#eff6ff; color:#2563eb; border:none; padding:6px 14px; border-radius:8px; font-size:12px; cursor:pointer; }
-  .back-link { color:#2563eb; cursor:pointer; font-size:14px; }
-  @media (max-width:768px) { .sidebar { display:none; } }
+  .back-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--primary-700);
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    margin-bottom: 20px;
+    padding: 6px 14px;
+    border-radius: var(--r-md);
+    background: var(--primary-50);
+    transition: all 0.15s ease;
+  }
+  .back-nav:hover { background: var(--primary-100); }
+
+  .order-header {
+    border-bottom: 1px solid var(--border-light);
+    padding-bottom: 18px;
+    margin-bottom: 18px;
+  }
+
+  .chat-box {
+    max-height: 380px;
+    min-height: 180px;
+    overflow-y: auto;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-md);
+    padding: 16px;
+    margin-bottom: 14px;
+    background: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .chat-msg {
+    display: flex;
+    flex-direction: column;
+    max-width: 80%;
+  }
+
+  .chat-msg.user {
+    align-self: flex-end;
+    align-items: flex-end;
+  }
+
+  .chat-msg.admin {
+    align-self: flex-start;
+    align-items: flex-start;
+  }
+
+  .chat-msg .b {
+    padding: 10px 16px;
+    border-radius: 16px;
+    font-size: 14px;
+    line-height: 1.5;
+    word-break: break-word;
+    box-shadow: var(--shadow-xs);
+  }
+
+  .chat-msg.user .b {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #ffffff;
+    border-bottom-right-radius: 4px;
+  }
+
+  .chat-msg.admin .b {
+    background: #ffffff;
+    color: #0f172a;
+    border: 1px solid var(--border-light);
+    border-bottom-left-radius: 4px;
+  }
+
+  .chat-msg .tm {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-top: 4px;
+  }
+
+  .chat-input {
+    display: flex;
+    gap: 10px;
+  }
+
+  .chat-input input {
+    flex: 1;
+    padding: 12px 16px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-md);
+    font-size: 14px;
+    font-family: inherit;
+  }
+
+  .chat-input input:focus {
+    outline: none;
+    border-color: var(--primary-500);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  }
 </style>
 </head>
 <body>
 <div class="desktop">
   <div class="sidebar">
-    <div class="side-logo"><h2>🔷 All In One</h2><p>বিশ্বাস ও সেবার ঠিকানা</p></div>
-    <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
-    <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সেবা</div>
-    <div class="side-link on" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
-    <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট</div>
-    <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> প্রোফাইল</div>
+    <div class="side-logo">
+      <div class="logo-icon">🔷</div>
+      <div>
+        <h2>All In One</h2>
+        <p>বিশ্বাস ও সেবার ঠিকানা</p>
+      </div>
+    </div>
+    <nav>
+      <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+      <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সকল সেবা</div>
+      <div class="side-link on" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
+      <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট ও রিচার্জ</div>
+      <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> পার্সোনাল প্রোফাইল</div>
+    </nav>
   </div>
+
   <div class="main">
-    <span class="back-link" onclick="location.href='/orders.html'">← সব অর্ডার</span>
-    <div class="card" id="detail" style="margin-top:12px;"><div style="color:#64748b;">লোড হচ্ছে…</div></div>
+    <span class="back-nav" onclick="location.href='/orders.html'">← সকল অর্ডারে ফিরুন</span>
+
+    <div class="card" id="detail">
+      <div class="skel" style="height:120px;margin-bottom:12px;"></div>
+      <div class="skel" style="height:60px;"></div>
+    </div>
+
+    <!-- Live Order Support Chat -->
     <div class="card">
-      <h3 style="margin-bottom:12px;">💬 চ্যাট</h3>
-      <div class="chat-box" id="chatBox"><div style="color:#94a3b8;font-size:13px;">কোনো বার্তা নেই</div></div>
+      <h3>💬 এই অর্ডার নিয়ে এডমিনের সাথে লাইভ চ্যাট</h3>
+      <p style="font-size:13px;color:#64748b;margin-bottom:14px;">অর্ডার সম্পর্কে কোনো জিজ্ঞাসা বা তথ্য দিতে সরাসরি এখানে বার্তা লিখুন।</p>
+      <div class="chat-box" id="chatBox">
+        <div style="color:#94a3b8;font-size:13px;text-align:center;padding:20px 0;">কোনো বার্তা নেই</div>
+      </div>
       <div class="chat-input">
-        <input type="text" id="chatIn" placeholder="লিখুন…" maxlength="2000">
-        <button class="btn" onclick="sendChat()">পাঠান</button>
+        <input type="text" id="chatIn" placeholder="আপনার বার্তা লিখুন…" maxlength="2000">
+        <button class="btn" style="width:auto;padding:12px 24px;" onclick="sendChat()">পাঠান →</button>
       </div>
     </div>
   </div>
 </div>
-<!-- mobile tabbar -->
+
+<!-- Mobile Tabbar -->
 <div class="m-tabbar">
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/dashboard.html'"><div class="ico">🏠</div>হোম</div>
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/services.html'"><div class="ico">🛎️</div>সেবা</div>
@@ -70,65 +161,99 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
 </div>
+
 <script src="/js/app.js?v=13"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 const STBN={new:'নতুন',pending:'অপেক্ষমান',received:'গৃহীত',processing:'প্রসেসিং',registered:'নিবন্ধিত',completed:'সম্পন্ন',delivered:'ডেলিভার্ড',failed:'ব্যর্থ',cancelled:'বাতিল',refunded:'রিফান্ডেড'};
 const oid=new URLSearchParams(location.search).get('id');
+
 async function init(){
   const me=await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
   const r=await ABC.api('/orders/'+oid);
-  if(!r.ok){document.getElementById('detail').innerHTML='<div style="color:#dc2626;">অর্ডার পাওয়া যায়নি</div>';return;}
+  if(!r.ok){
+    document.getElementById('detail').innerHTML='<div style="color:#dc2626;padding:20px 0;">অর্ডারটি খুঁজে পাওয়া যায়নি</div>';
+    return;
+  }
   const {order:o}=await r.json();
-  const data=Object.entries(o.data||{}).map(([k,v])=>'<div style="font-size:13px;color:#64748b;margin:4px 0;">'+esc(k)+': <b style="color:#0f172a;">'+esc(v)+'</b></div>').join('');
+  const data=Object.entries(o.data||{}).map(([k,v])=>
+    '<div style="font-size:13px;color:#475569;margin:6px 0;display:flex;justify-content:space-between;border-bottom:1px solid #f1f5f9;padding-bottom:4px;">' +
+      '<span>'+esc(k)+'</span> <b style="color:#0f172a;">'+esc(v)+'</b>' +
+    '</div>'
+  ).join('');
+
   let docs=[]; try{docs=JSON.parse(o.documents||'[]');}catch(_){}
   const adminDocs=docs.filter(d=>d&&d.uploaded_by==='admin');
-  const docsHtml='<div style="margin-top:16px;"><div style="font-weight:700;margin-bottom:8px;">📄 ডেলিভারি ডকুমেন্ট</div>'+
-    (adminDocs.length?adminDocs.map((d,i)=>'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;">'+
-      '<span>📎</span><span style="flex:1;font-size:13px;">'+esc(d.originalname||d.filename)+'</span>'+
-      '<button class="btn-sm" onclick="dlDoc('+i+')">⬇️ ডাউনলোড</button></div>').join(''):
-    '<div style="color:#64748b;font-size:13px;">এখনো ডকুমেন্ট আপলোড হয়নি</div>')+'</div>';
+  const docsHtml='<div style="margin-top:20px;padding-top:16px;border-top:1px solid #e2e8f0;">' +
+    '<div style="font-weight:700;font-size:14px;color:#0f172a;margin-bottom:10px;">📄 ডেলিভারি ফাইল / রেজাল্ট ডকুমেন্ট</div>'+
+    (adminDocs.length?adminDocs.map((d,i)=>
+      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">'+
+        '<span style="font-size:18px;">📎</span><span style="flex:1;font-size:13px;font-weight:600;color:#0f172a;">'+esc(d.originalname||d.filename)+'</span>'+
+        '<button class="mini-btn ok" onclick="dlDoc('+i+')">⬇️ ডাউনলোড</button>' +
+      '</div>').join(''):
+    '<div style="color:#64748b;font-size:13px;background:#f8fafc;padding:12px;border-radius:8px;">অর্ডারের কাজ সম্পন্ন হলে এডমিন এখানে আপনার ডেলিভারি ডকুমেন্ট বা ফাইল আপলোড করবেন।</div>')+'</div>';
+
   window._adminDocs=adminDocs;
   document.getElementById('detail').innerHTML=
-    '<h2>'+esc(o.service_name_bn||o.service_name)+'</h2>'+
-    '<div style="margin:10px 0;"><span class="st st-'+o.status+'">'+(STBN[o.status]||o.status)+'</span> '+
-    '<b style="color:#1e40af;">৳'+Number(o.price).toLocaleString('bn-BD')+'</b></div>'+
-    '<div style="font-size:13px;color:#64748b;">🕘 '+new Date(o.created_at).toLocaleString('bn-BD')+'</div>'+
-    '<div style="margin-top:10px;">'+data+'</div>'+
-    (o.notes?'<div style="font-size:14px;margin-top:8px;">📝 '+esc(o.notes)+'</div>':'')+
-    (o.admin_note?'<div style="font-size:14px;margin-top:8px;color:#1e40af;">👨‍💼 এডমিন: '+esc(o.admin_note)+'</div>':'')+docsHtml;
+    '<div class="order-header">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
+        '<div>' +
+          '<h2 style="font-size:22px;font-weight:800;color:#0f172a;">'+esc(o.service_name_bn||o.service_name)+'</h2>' +
+          '<div style="font-size:12px;color:#64748b;margin-top:4px;">অর্ডার ট্র্যাকিং আইডি: #'+o.id+'</div>' +
+        '</div>' +
+        '<span class="st st-'+o.status+'" style="font-size:13px;padding:5px 14px;">'+(STBN[o.status]||o.status)+'</span>' +
+      '</div>' +
+      '<div style="display:flex;gap:20px;margin-top:14px;align-items:center;">' +
+        '<div><span style="font-size:12px;color:#64748b;">চার্জ:</span> <b style="font-size:18px;color:#1e40af;">৳'+Number(o.price).toLocaleString('bn-BD')+'</b></div>' +
+        '<div style="font-size:12px;color:#64748b;">🕘 তারিখ: '+new Date(o.created_at).toLocaleString('bn-BD')+'</div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="margin-top:12px;"><div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#0f172a;">প্রদত্ত তথ্যাবলি:</div>'+data+'</div>'+
+    (o.notes?'<div style="font-size:13px;margin-top:12px;background:#fffbeb;padding:10px 14px;border-radius:8px;color:#92400e;"><b>📝 আপনার নোট:</b> '+esc(o.notes)+'</div>':'')+
+    (o.admin_note?'<div style="font-size:13px;margin-top:12px;background:#eff6ff;padding:10px 14px;border-radius:8px;color:#1e40af;"><b>👨‍💼 এডমিন মেসেজ:</b> '+esc(o.admin_note)+'</div>':'')+docsHtml;
+
   loadChat();
   document.getElementById('chatIn').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
 }
+
 async function dlDoc(i){
   const d=(window._adminDocs||[])[i]; if(!d)return;
   try{
     const r=await ABC.api('/orders/'+oid+'/documents/'+encodeURIComponent(d.filename));
-    if(!r.ok){alert('ডাউনলোড ব্যর্থ');return;}
+    if(!r.ok){alert('ডাউনলোড ব্যর্থ হয়েছে');return;}
     const blob=await r.blob();
     const a=document.createElement('a');
     a.href=URL.createObjectURL(blob); a.download=d.originalname||d.filename;
     document.body.appendChild(a); a.click();
     setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);
-  }catch(e){alert('ডাউনলোড ব্যর্থ');}
+  }catch(e){alert('ডাউনলোড ব্যর্থ হয়েছে');}
 }
+
 async function loadChat(){
   const r=await ABC.api('/orders/'+oid+'/chat'); if(!r.ok)return;
   const {messages}=await r.json();
   const box=document.getElementById('chatBox');
-  if(!messages.length){box.innerHTML='<div style="color:#94a3b8;font-size:13px;">কোনো বার্তা নেই</div>';return;}
+  if(!messages.length){
+    box.innerHTML='<div style="color:#94a3b8;font-size:13px;text-align:center;padding:20px 0;">কোনো বার্তা নেই</div>';
+    return;
+  }
   box.innerHTML=messages.map(m=>
-    '<div class="chat-msg '+m.sender+'"><span class="b">'+esc(m.message)+'</span><div class="tm">'+new Date(m.created_at).toLocaleString('bn-BD')+'</div></div>'
+    '<div class="chat-msg '+m.sender+'">'+
+      '<span class="b">'+esc(m.message)+'</span>'+
+      '<div class="tm">'+new Date(m.created_at).toLocaleString('bn-BD')+'</div>'+
+    '</div>'
   ).join('');
   box.scrollTop=box.scrollHeight;
 }
+
 async function sendChat(){
   const inp=document.getElementById('chatIn');
   const msg=inp.value.trim(); if(!msg)return; inp.value='';
   const r=await ABC.api('/orders/'+oid+'/chat',{method:'POST',body:{message:msg}});
   if(r.ok)loadChat();
 }
+
 init();
 </script>
 </body>

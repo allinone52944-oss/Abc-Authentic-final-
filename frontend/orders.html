@@ -2,75 +2,119 @@
 <html lang="bn">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="/manifest.json">
 <link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/premium.css?v=1">
 <link rel="stylesheet" href="/css/motion.css?v=2">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1e40af">
-<title>অর্ডার - All In One</title>
+<title>আমার অর্ডার - All In One</title>
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'Hind Siliguri',system-ui,sans-serif; background:#eef2f7; color:#0f172a; }
-  .desktop { max-width:1100px; margin:0 auto; background:#fff; min-height:100vh; display:flex; }
-  .sidebar { width:220px; background:linear-gradient(180deg,#1e3a8a,#1e40af); color:#fff; padding:20px 0; flex-shrink:0; }
-  .side-logo { padding:0 20px 20px; border-bottom:1px solid rgba(255,255,255,0.15); margin-bottom:16px; }
-  .side-logo h2 { font-size:18px; } .side-logo p { font-size:11px; opacity:0.7; }
-  .side-link { display:flex; align-items:center; gap:12px; padding:12px 20px; font-size:14px; color:rgba(255,255,255,0.85); cursor:pointer; border-left:3px solid transparent; }
-  .side-link.on { background:rgba(255,255,255,0.12); border-left-color:#fff; color:#fff; font-weight:600; }
-  .side-link .ico { font-size:18px; }
-  .main { flex:1; padding:24px; overflow:auto; }
-  .topbar h2 { font-size:20px; margin-bottom:4px; }
-  .topbar p { font-size:13px; color:#64748b; margin-bottom:16px; }
-  .filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
-  @media (max-width:768px) { .filters { flex-wrap:nowrap; overflow-x:auto; padding-bottom:4px; } .filters .fbtn { flex-shrink:0; } }
-  .fbtn { background:#f1f5f9; border:none; padding:8px 16px; border-radius:20px; font-size:13px; cursor:pointer; }
-  .fbtn.on { background:#1e40af; color:#fff; }
-  .card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:18px; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th { text-align:left; padding:10px 8px; color:#64748b; font-size:12px; border-bottom:1px solid #e2e8f0; }
-  td { padding:10px 8px; border-bottom:1px solid #f1f5f9; }
-  .st { font-size:11px; padding:3px 10px; border-radius:20px; font-weight:600; }
-  .st-new { background:#dbeafe; color:#1d4ed8; }
-  .st-pending { background:#fef3c7; color:#92400e; }
-  .st-processing { background:#fef3c7; color:#92400e; }
-  .st-completed { background:#dcfce7; color:#166534; }
-  .st-delivered { background:#dcfce7; color:#166534; }
-  .st-failed { background:#fee2e2; color:#991b1b; }
-  .st-cancelled { background:#f1f5f9; color:#64748b; }
-  .btn-view { background:#eff6ff; color:#2563eb; border:none; padding:6px 14px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; }
-  .btn-more { background:#f1f5f9; border:none; padding:10px 24px; border-radius:10px; cursor:pointer; display:block; margin:16px auto; }
-  @media (max-width:768px) { html,body{overflow-x:hidden;} .sidebar { display:none; } .card { overflow-x:auto; } table { min-width:480px; } }
+  .table-container {
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-lg);
+    overflow-x: auto;
+    box-shadow: var(--shadow-sm);
+  }
+  .btn-view {
+    background: var(--primary-50);
+    color: var(--primary-700);
+    border: 1px solid var(--primary-200);
+    padding: 6px 14px;
+    border-radius: var(--r-sm);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-view:hover {
+    background: var(--primary-100);
+    border-color: var(--primary-300);
+  }
+  .btn-more {
+    display: block;
+    width: 100%;
+    margin-top: 16px;
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    color: var(--text-main);
+    padding: 12px;
+    border-radius: var(--r-md);
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-more:hover {
+    background: var(--bg-subtle);
+  }
 </style>
 </head>
 <body>
 <div class="desktop">
   <div class="sidebar">
-    <div class="side-logo"><h2>🔷 All In One</h2><p>বিশ্বাস ও সেবার ঠিকানা</p></div>
-    <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
-    <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সেবা</div>
-    <div class="side-link on"><span class="ico">📦</span> আমার অর্ডার</div>
-    <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট</div>
-    <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> প্রোফাইল</div>
+    <div class="side-logo">
+      <div class="logo-icon">🔷</div>
+      <div>
+        <h2>All In One</h2>
+        <p>বিশ্বাস ও সেবার ঠিকানা</p>
+      </div>
+    </div>
+    <nav>
+      <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+      <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সকল সেবা</div>
+      <div class="side-link on"><span class="ico">📦</span> আমার অর্ডার</div>
+      <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট ও রিচার্জ</div>
+      <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> পার্সোনাল প্রোফাইল</div>
+    </nav>
   </div>
+
   <div class="main">
-    <div class="topbar"><h2>📦 আমার অর্ডার</h2><p>সব অর্ডারের তালিকা</p></div>
+    <div class="topbar">
+      <div>
+        <h2>📦 আমার অর্ডারসমূহ</h2>
+        <p>আপনার প্রদত্ত সকল অর্ডারের রিয়েল-টাইম অগ্রগতি ও স্ট্যাটাস</p>
+      </div>
+    </div>
+
+    <!-- Status Filter Buttons -->
     <div class="filters" id="filters">
-      <button class="fbtn on" data-st="">সব</button>
+      <button class="fbtn on" data-st="">সব অর্ডার</button>
       <button class="fbtn" data-st="new">নতুন</button>
       <button class="fbtn" data-st="pending">অপেক্ষমান</button>
       <button class="fbtn" data-st="processing">প্রসেসিং</button>
       <button class="fbtn" data-st="completed">সম্পন্ন</button>
       <button class="fbtn" data-st="delivered">ডেলিভার্ড</button>
     </div>
-    <div class="card">
-      <table><thead><tr><th>সেবা</th><th>টাকা</th><th>স্ট্যাটাস</th><th>তারিখ</th><th></th></tr></thead>
-      <tbody id="list"></tbody></table>
-      <button class="btn-more" id="moreBtn" style="display:none;">আরো দেখুন</button>
+
+    <!-- Orders Table -->
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>সেবার নাম</th>
+            <th>মূল্য</th>
+            <th>বর্তমান অবস্থা</th>
+            <th>অর্ডারের তারিখ</th>
+            <th style="text-align:right;">অ্যাকশন</th>
+          </tr>
+        </thead>
+        <tbody id="list">
+          <tr>
+            <td colspan="5" style="text-align:center;padding:30px 0;color:#94a3b8;">লোড হচ্ছে…</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
+
+    <button class="btn-more" id="moreBtn" style="display:none;">আরো লোড করুন ↓</button>
   </div>
 </div>
+
 <button class="wa-fab" id="waFab" aria-label="WhatsApp-এ সাহায্য চান"><img src="/icons/abc-logo.png" alt="Abc"></button>
-<!-- mobile tabbar -->
+
+<!-- Mobile Tabbar -->
 <div class="m-tabbar">
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/dashboard.html'"><div class="ico">🏠</div>হোম</div>
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/services.html'"><div class="ico">🛎️</div>সেবা</div>
@@ -78,11 +122,13 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
 </div>
+
 <script src="/js/app.js?v=13"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 const STBN={new:'নতুন',pending:'অপেক্ষমান',received:'গৃহীত',processing:'প্রসেসিং',registered:'নিবন্ধিত',completed:'সম্পন্ন',delivered:'ডেলিভার্ড',failed:'ব্যর্থ',cancelled:'বাতিল',refunded:'রিফান্ডেড'};
 let page=1,status='';
+
 async function init(){
   const me=await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
@@ -91,25 +137,45 @@ async function init(){
     window.open('https://wa.me/?text='+encodeURIComponent('আসসালামু আলাইকুম! আমি '+ou.name+' (ফোন: '+ou.phone+')। সাহায্য দরকার।'),'_blank');
   };
   document.querySelectorAll('#filters .fbtn').forEach(b=>{
-    b.onclick=()=>{document.querySelectorAll('#filters .fbtn').forEach(x=>x.classList.remove('on'));b.classList.add('on');status=b.dataset.st;page=1;document.getElementById('list').innerHTML='';load();};
+    b.onclick=()=>{
+      document.querySelectorAll('#filters .fbtn').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+      status=b.dataset.st;
+      page=1;
+      document.getElementById('list').innerHTML='';
+      load();
+    };
   });
   document.getElementById('moreBtn').onclick=()=>{page++;load();};
   load();
 }
+
 async function load(){
   const r=await ABC.api('/orders?limit=10&page='+page+(status?'&status='+status:''));
   if(!r.ok)return;
   const d=await r.json();
   const html=d.orders.map(o=>
-    '<tr><td>'+esc(o.service_name_bn||o.service_name)+'</td><td>৳'+Number(o.price).toLocaleString('bn-BD')+'</td>'+
-    '<td><span class="st st-'+o.status+'">'+(STBN[o.status]||o.status)+'</span></td>'+
-    '<td>'+new Date(o.created_at).toLocaleDateString('bn-BD')+'</td>'+
-    '<td><button class="btn-view" onclick="location.href=\'/order-detail.html?id='+o.id+'\'">দেখুন</button></td></tr>'
+    '<tr>'+
+      '<td><b style="color:#0f172a;font-size:14px;">'+esc(o.service_name_bn||o.service_name)+'</b><div style="font-size:11px;color:#94a3b8;margin-top:2px;">ID: #'+o.id.slice(0,8)+'</div></td>'+
+      '<td><b style="color:#1e40af;font-size:15px;">৳'+Number(o.price).toLocaleString('bn-BD')+'</b></td>'+
+      '<td><span class="st st-'+o.status+'">'+(STBN[o.status]||o.status)+'</span></td>'+
+      '<td>'+new Date(o.created_at).toLocaleDateString('bn-BD')+'</td>'+
+      '<td style="text-align:right;"><button class="btn-view" onclick="location.href=\'/order-detail.html?id='+o.id+'\'">বিস্তারিত দেখুন →</button></td>'+
+    '</tr>'
   ).join('');
-  document.getElementById('list').insertAdjacentHTML('beforeend',html);
+
+  if (page === 1) {
+    document.getElementById('list').innerHTML = html;
+  } else {
+    document.getElementById('list').insertAdjacentHTML('beforeend', html);
+  }
+
   document.getElementById('moreBtn').style.display=(page*10>=d.total)?'none':'block';
-  if(!d.orders.length&&page===1)document.getElementById('list').innerHTML='<tr><td colspan="5" style="text-align:center;color:#64748b;padding:30px;">কোনো অর্ডার নেই</td></tr>';
+  if(!d.orders.length&&page===1){
+    document.getElementById('list').innerHTML='<tr><td colspan="5" style="text-align:center;color:#64748b;padding:40px;">কোনো অর্ডার পাওয়া যায়নি</td></tr>';
+  }
 }
+
 init();
 </script>
 </body>

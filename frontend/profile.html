@@ -4,83 +4,118 @@
 <meta charset="UTF-8">
 <link rel="manifest" href="/manifest.json">
 <link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/premium.css?v=1">
 <link rel="stylesheet" href="/css/motion.css?v=2">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1e40af">
-<title>প্রোফাইল - All In One</title>
+<title>আমার প্রোফাইল - All In One</title>
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'Hind Siliguri',system-ui,sans-serif; background:#eef2f7; color:#0f172a; }
-  .desktop { max-width:1100px; margin:0 auto; background:#fff; min-height:100vh; display:flex; }
-  .sidebar { width:220px; background:linear-gradient(180deg,#1e3a8a,#1e40af); color:#fff; padding:20px 0; flex-shrink:0; }
-  .side-logo { padding:0 20px 20px; border-bottom:1px solid rgba(255,255,255,0.15); margin-bottom:16px; }
-  .side-logo h2 { font-size:18px; } .side-logo p { font-size:11px; opacity:0.7; }
-  .side-link { display:flex; align-items:center; gap:12px; padding:12px 20px; font-size:14px; color:rgba(255,255,255,0.85); cursor:pointer; border-left:3px solid transparent; }
-  .side-link.on { background:rgba(255,255,255,0.12); border-left-color:#fff; color:#fff; font-weight:600; }
-  .side-link .ico { font-size:18px; }
-  .main { flex:1; padding:24px; overflow:auto; }
-  .card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:20px; margin-bottom:16px; max-width:600px; }
-  .card h3 { font-size:16px; margin-bottom:16px; }
-  .field { margin-bottom:12px; }
-  .field label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:#334155; }
-  .field input, .field select { width:100%; padding:12px; border:1px solid #e2e8f0; border-radius:10px; font-size:14px; }
-  .field input:disabled { background:#f1f5f9; }
-  /* Dark-mode browsers paint password inputs black; author !important beats UA */
-  .field input[type="password"] { background-color:#ffffff !important; color:#0f172a !important; -webkit-text-fill-color:#0f172a !important; color-scheme:light; }
-  .btn { background:linear-gradient(135deg,#1e40af,#3b82f6); color:#fff; border:none; padding:12px 24px; border-radius:10px; font-weight:700; cursor:pointer; }
-  .btn-sm { background:#f1f5f9; border:none; padding:8px 16px; border-radius:8px; cursor:pointer; font-size:13px; }
-  .err { color:#dc2626; font-size:13px; margin:8px 0; }
-  .okmsg { color:#16a34a; font-size:13px; margin:8px 0; }
-  @media (max-width:768px) { html,body{overflow-x:hidden;} .sidebar { display:none; } }
+  .profile-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    max-width: 680px;
+    gap: 20px;
+  }
 </style>
 </head>
 <body>
 <div class="desktop">
   <div class="sidebar">
-    <div class="side-logo"><h2>🔷 All In One</h2><p>বিশ্বাস ও সেবার ঠিকানা</p></div>
-    <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
-    <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সেবা</div>
-    <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
-    <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট</div>
-    <div class="side-link on"><span class="ico">👤</span> প্রোফাইল</div>
-  </div>
-  <div class="main">
-    <div class="card">
-      <h3>👤 প্রোফাইল</h3>
-      <div class="field"><label>নাম</label><input type="text" id="name"></div>
-      <div class="field"><label>মোবাইল</label><input type="text" id="phone" disabled></div>
-      <div class="field"><label>WhatsApp</label><input type="text" id="whatsapp"></div>
-      <div class="field"><label>ইমেইল</label><input type="email" id="email"></div>
-      <div class="field"><label>ধর্ম</label>
-        <select id="religion">
-          <option value="islam">ইসলাম</option><option value="hindu">হিন্দু</option>
-          <option value="buddhist">বৌদ্ধ</option><option value="christian">খ্রিস্টান</option>
-          <option value="other">অন্যান্য</option>
-        </select>
+    <div class="side-logo">
+      <div class="logo-icon">🔷</div>
+      <div>
+        <h2>All In One</h2>
+        <p>বিশ্বাস ও সেবার ঠিকানা</p>
       </div>
-      <div class="err" id="err"></div><div class="okmsg" id="ok"></div>
-      <button class="btn" onclick="save()">সংরক্ষণ করুন</button>
     </div>
-    <div class="card">
-      <h3>🔊 ভয়েস গ্রিটিং</h3>
-      <button class="btn-sm" id="vgToggle" onclick="toggleVoiceGreet()">…</button>
+    <nav>
+      <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+      <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সকল সেবা</div>
+      <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
+      <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট ও রিচার্জ</div>
+      <div class="side-link on"><span class="ico">👤</span> পার্সোনাল প্রোফাইল</div>
+    </nav>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <h2>👤 পার্সোনাল প্রোফাইল ও সেটিংস</h2>
+        <p>ব্যক্তিগত তথ্য, ভয়েস নোটিফিকেশন ও নিরাপত্তা নিয়ন্ত্রণ</p>
+      </div>
     </div>
-    <div class="card">
-      <h3>🔒 পাসওয়ার্ড বদলান</h3>
-      <div class="field"><label>বর্তমান পাসওয়ার্ড</label><input type="password" id="cur"></div>
-      <div class="field"><label>নতুন পাসওয়ার্ড</label><input type="password" id="nw"></div>
-      <div class="err" id="perr"></div><div class="okmsg" id="pok"></div>
-      <button class="btn" onclick="changePw()">বদলান</button>
-    </div>
-    <div class="card">
-      <h3>🚪 লগআউট</h3>
-      <p style="font-size:13px;color:#64748b;margin:0 0 12px;">এই ডিভাইস থেকে নিরাপদে বের হোন।</p>
-      <button class="btn" style="background:#fef2f2;color:#dc2626;" onclick="logout()">লগআউট করুন</button>
+
+    <div class="profile-grid">
+      <!-- Profile Information -->
+      <div class="card">
+        <h3>👤 ব্যক্তিগত তথ্যাবলি</h3>
+        <div class="field">
+          <label>আপনার পূর্ণ নাম</label>
+          <input type="text" id="name" placeholder="নাম লিখুন">
+        </div>
+        <div class="field">
+          <label>মোবাইল নম্বর (লগইন আইডি - পরিবর্তনযোগ্য নয়)</label>
+          <input type="text" id="phone" disabled>
+        </div>
+        <div class="field">
+          <label>WhatsApp নম্বর</label>
+          <input type="text" id="whatsapp" placeholder="01XXXXXXXXX">
+        </div>
+        <div class="field">
+          <label>ইমেইল এড্রেস</label>
+          <input type="email" id="email" placeholder="email@example.com">
+        </div>
+        <div class="field">
+          <label>ধর্ম (ধর্মীয় শুভেচ্ছা ও অভিবাদনের জন্য)</label>
+          <select id="religion">
+            <option value="islam">ইসলাম (সালামু আলাইকুম)</option>
+            <option value="hindu">হিন্দু (নমস্কার)</option>
+            <option value="buddhist">বৌদ্ধ</option>
+            <option value="christian">খ্রিস্টান</option>
+            <option value="other">অন্যান্য</option>
+          </select>
+        </div>
+        <div class="err" id="err"></div>
+        <div class="okmsg" id="ok"></div>
+        <button class="btn" style="width:100%;margin-top:8px;" onclick="save()">তথ্য সংরক্ষণ করুন</button>
+      </div>
+
+      <!-- Voice Greeting Card -->
+      <div class="card">
+        <h3>🔊 অডিও ভয়েস গ্রিটিং (Voice Greeting)</h3>
+        <p style="font-size:13px;color:#64748b;margin-bottom:14px;">লগইন করার পর স্বয়ংক্রিয় মিষ্টি কন্ঠে স্বাগত বার্তা শোনা যাবে কিনা তা বেছে নিন।</p>
+        <button class="mini-btn ok" id="vgToggle" style="padding:10px 20px;font-size:14px;" onclick="toggleVoiceGreet()">…</button>
+      </div>
+
+      <!-- Password Change Card -->
+      <div class="card">
+        <h3>🔒 পাসওয়ার্ড পরিবর্তন</h3>
+        <div class="field">
+          <label>বর্তমান পাসওয়ার্ড</label>
+          <input type="password" id="cur" placeholder="বর্তমান পাসওয়ার্ড দিন">
+        </div>
+        <div class="field">
+          <label>নতুন পাসওয়ার্ড</label>
+          <input type="password" id="nw" placeholder="কমপক্ষে ৬ অক্ষরের নতুন পাসওয়ার্ড">
+        </div>
+        <div class="err" id="perr"></div>
+        <div class="okmsg" id="pok"></div>
+        <button class="btn" style="width:100%;margin-top:8px;" onclick="changePw()">পাসওয়ার্ড পরিবর্তন করুন</button>
+      </div>
+
+      <!-- Logout Card -->
+      <div class="card" style="border-color:#fecaca;background:#fffafb;">
+        <h3 style="color:#dc2626;">🚪 সাইন আউট (লগআউট)</h3>
+        <p style="font-size:13px;color:#64748b;margin:0 0 14px;">বর্তমান ডিভাইস থেকে আপনার অ্যাকাউন্ট নিরাপদে সাইন আউট করুন।</p>
+        <button class="btn" style="background:#fee2e2;color:#dc2626;border:1px solid #fecaca;box-shadow:none;" onclick="logout()">লগআউট করুন</button>
+      </div>
     </div>
   </div>
 </div>
+
 <button class="wa-fab" id="waFab" aria-label="WhatsApp-এ সাহায্য চান"><img src="/icons/abc-logo.png" alt="Abc"></button>
-<!-- mobile tabbar -->
+
+<!-- Mobile Tabbar -->
 <div class="m-tabbar">
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/dashboard.html'"><div class="ico">🏠</div>হোম</div>
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/services.html'"><div class="ico">🛎️</div>সেবা</div>
@@ -88,22 +123,26 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
   <div class="m-tab on" aria-current="page"><div class="ico">👤</div>প্রোফাইল</div>
 </div>
+
 <script src="/js/app.js?v=13"></script>
 <script>
-/* DARK-MODE PASSWORD FIX: Chromium paints type=password via UA !important
-   (beats author CSS). Swap to text+disc on focus/input (keeps
-   type=password at load for password managers/automation). */
+/* DARK-MODE PASSWORD FIX */
 try{if(window.CSS&&CSS.supports('-webkit-text-security','disc')){var swapPw=function(el){if(el.getAttribute('type')==='password'){el.setAttribute('type','text');el.style.webkitTextSecurity='disc';}};document.querySelectorAll('input[type="password"]').forEach(function(el){el.addEventListener('focus',function(){swapPw(el);});el.addEventListener('input',function(){swapPw(el);});if(el.value)swapPw(el);});}}catch(e){}
+
 function voiceGreetOn(){try{return localStorage.getItem('abc_greet_voice')!=='off';}catch(e){return true;}}
+
 function paintVoiceGreetBtn(){
   const b=document.getElementById('vgToggle');
-  b.textContent=voiceGreetOn()?'✅ চালু':'❌ বন্ধ';
-  b.style.background=voiceGreetOn()?'#dcfce7':'#f1f5f9';
+  const on = voiceGreetOn();
+  b.textContent = on ? '✅ ভয়েস গ্রিটিং চালু আছে' : '❌ ভয়েস গ্রিটিং বন্ধ আছে';
+  b.className = on ? 'mini-btn ok' : 'mini-btn';
 }
+
 function toggleVoiceGreet(){
   try{localStorage.setItem('abc_greet_voice',voiceGreetOn()?'off':'on');}catch(e){}
   paintVoiceGreetBtn();
 }
+
 async function init(){
   const r=await ABC.api('/auth/me');
   if(!r.ok){location.href='/login.html';return;}
@@ -118,6 +157,7 @@ async function init(){
   document.getElementById('religion').value=user.religion||'other';
   paintVoiceGreetBtn();
 }
+
 async function save(){
   const err=document.getElementById('err'),ok=document.getElementById('ok');
   err.textContent='';ok.textContent='';
@@ -128,8 +168,9 @@ async function save(){
     religion:document.getElementById('religion').value}});
   const d=await r.json();
   if(!r.ok){err.textContent='❌ '+(d.error||'ব্যর্থ');return;}
-  ok.textContent='✅ সংরক্ষণ হয়েছে!';
+  ok.textContent='✅ প্রোফাইলের তথ্য সফলভাবে সংরক্ষণ হয়েছে!';
 }
+
 async function changePw(){
   const perr=document.getElementById('perr'),pok=document.getElementById('pok');
   perr.textContent='';pok.textContent='';
@@ -137,10 +178,11 @@ async function changePw(){
     current_password:document.getElementById('cur').value,
     new_password:document.getElementById('nw').value}});
   const d=await r.json();
-  if(!r.ok){perr.textContent='❌ '+(d.error==='WRONG_CURRENT_PASSWORD'?'বর্তমান পাসওয়ার্ড ভুল':d.error);return;}
-  pok.textContent='✅ পাসওয়ার্ড বদলে গেছে!';
+  if(!r.ok){perr.textContent='❌ '+(d.error==='WRONG_CURRENT_PASSWORD'?'বর্তমান পাসওয়ার্ডটি সঠিক নয়':d.error);return;}
+  pok.textContent='✅ পাসওয়ার্ড সফলভাবে বদলে গেছে!';
   document.getElementById('cur').value='';document.getElementById('nw').value='';
 }
+
 async function logout(){
   try{
     const rt=localStorage.getItem('abc_refresh_token');
@@ -148,6 +190,7 @@ async function logout(){
   }catch(e){}
   ABC.clearTokens();location.href='/login.html';
 }
+
 init();
 </script>
 </body>

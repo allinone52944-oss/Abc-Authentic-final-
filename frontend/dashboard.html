@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="/manifest.json">
 <link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/premium.css?v=1">
 <link rel="stylesheet" href="/css/motion.css?v=2">
 <meta name="theme-color" content="#1e40af">
 <meta name="mobile-web-app-capable" content="yes">
@@ -15,117 +16,323 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <title>ড্যাশবোর্ড - All In One (Abc Authentic)</title>
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'Hind Siliguri',system-ui,sans-serif; background:#eef2f7; color:#0f172a; }
-  .desktop { max-width:1100px; margin:0 auto; background:#fff; min-height:100vh; display:flex; }
-  .sidebar { width:220px; background:linear-gradient(180deg,#1e3a8a,#1e40af); color:#fff; padding:20px 0; flex-shrink:0; }
-  .side-logo { padding:0 20px 20px; border-bottom:1px solid rgba(255,255,255,0.15); margin-bottom:16px; }
-  .side-logo h2 { font-size:18px; }
-  .side-logo p { font-size:11px; opacity:0.7; }
-  .side-link { display:flex; align-items:center; gap:12px; padding:12px 20px; font-size:14px; line-height:1.4; color:rgba(255,255,255,0.85); cursor:pointer; border-left:3px solid transparent; transition:background .15s ease; }
-  .side-link:hover { background:rgba(255,255,255,0.08); }
-  .side-link.on { background:rgba(255,255,255,0.12); border-left-color:#fff; color:#fff; font-weight:600; }
-  .side-link .ico { font-size:18px; }
-  .main { flex:1; padding:24px; overflow:auto; }
-  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
-  .topbar h2 { font-size:20px; }
-  .topbar p { font-size:13px; color:#64748b; }
-  .user-chip { display:flex; align-items:center; gap:10px; }
-  .avatar { width:38px; height:38px; background:#dbeafe; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; color:#1e40af; }
-  .hero-blue { background:linear-gradient(135deg,#1e40af,#3b82f6); color:#fff; border-radius:16px; padding:22px; display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
-  .hero-blue .wb { font-size:13px; opacity:0.85; }
-  .hero-blue .amt { font-size:30px; font-weight:700; margin-top:4px; }
-  .btn-add { background:#fff; color:#1e40af; border:none; padding:10px 20px; border-radius:10px; font-weight:700; font-size:13px; cursor:pointer; }
-  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
-  .stat { background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:14px; cursor:pointer; }
-  .stat .ico { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; margin-bottom:6px; }
-  .stat .num { font-size:22px; font-weight:700; line-height:1.2; }
-  .stat .lbl { font-size:11px; color:#64748b; margin-top:2px; }
-  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-  .card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:18px; }
-  .card h3 { font-size:15px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; }
-  .card h3 a { font-size:12px; color:#2563eb; text-decoration:none; cursor:pointer; }
-  .svc-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-  .svc2 { background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px; text-align:center; cursor:pointer; transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
-  .svc2:hover { transform:translateY(-3px); box-shadow:0 8px 20px rgba(30,64,175,.12); border-color:#93c5fd; }
-  .svc2:active { transform:translateY(-1px); }
-  .svc2 .ico { font-size:26px; margin-bottom:6px; }
-  .svc2 h4 { font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .svc2 p { font-size:11px; color:#64748b; }
-  .svc2 .pr { font-size:13px; font-weight:700; color:#1e40af; margin-top:4px; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th { text-align:left; padding:10px 8px; color:#64748b; font-size:12px; border-bottom:1px solid #e2e8f0; }
-  td { padding:10px 8px; border-bottom:1px solid #f1f5f9; }
-  .st { font-size:11px; padding:3px 10px; border-radius:20px; font-weight:600; }
-  .st.done { background:#dcfce7; color:#166534; }
-  .st.proc { background:#fef3c7; color:#92400e; }
-  .st.new { background:#dbeafe; color:#1d4ed8; }
-  .btn-view { background:#eff6ff; color:#2563eb; border:none; padding:6px 14px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; }
-  /* Mobile */
-  .mobile-only { display:none; }
-  .m-top { background:linear-gradient(135deg,#1e40af,#3b82f6); color:#fff; padding:20px; display:none; }
-  .m-top h2 { font-size:18px; } .m-top p { font-size:12px; opacity:0.85; }
-  .m-bal { background:#fff; margin:-20px 20px 0; border-radius:16px; padding:18px; box-shadow:0 4px 20px rgba(0,0,0,0.08); display:flex; justify-content:space-between; align-items:center; position:relative; display:none; }
-  .m-content { padding:16px 20px; display:none; }
-  .m-svc-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
-  .bn-strip { margin-bottom:16px; overflow:hidden; border-radius:12px; max-width:100%; opacity:0; transition:opacity 0.4s ease; }
-  .bn-strip.show { opacity:1; }
-  .bn-strip img { max-width:100%; height:auto; display:block; }
-  /* Smooth button press - subtle, no shake */
-  button, .btn { transition:transform 0.08s ease, opacity 0.12s ease; }
-  button:active, .btn:active { transform:scale(0.98); opacity:0.9; }
-  .svc2, .stat { transition:transform 0.12s ease, box-shadow 0.15s ease; }
-  .svc2:active, .stat:active { transform:scale(0.99); }
-  @media (max-width:768px) { html,body{overflow-x:hidden;}
-    .desktop { display:none; }
-    .sidebar { display:none; }
-    .main { padding:0; }
-    .topbar, .hero-blue, .stats, .two-col, .card { display:none; }
-    .m-top, .m-bal, .m-content { display:block; }
-    .mobile-only { display:block; }
+  /* Extra Dashboard Polish */
+  .dash-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    background: #ffffff;
+    padding: 16px 20px;
+    border-radius: var(--r-lg);
+    border: 1px solid var(--border-light);
+    box-shadow: var(--shadow-xs);
+  }
+
+  .user-badge-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--r-md);
+    background: linear-gradient(135deg, #1e40af, #3b82f6);
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+  }
+
+  .hero-flex {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+    z-index: 2;
+  }
+
+  .hero-action {
+    display: flex;
+    gap: 10px;
+  }
+
+  .btn-add {
+    background: #ffffff;
+    color: var(--primary-700);
+    border: none;
+    padding: 12px 22px;
+    border-radius: var(--r-md);
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+  }
+
+  .btn-add:hover {
+    background: #f8fafc;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-lg);
+    padding: 18px 20px;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .stat-card:hover {
+    transform: translateY(-2px);
+    border-color: #cbd5e1;
+    box-shadow: var(--shadow-md);
+  }
+
+  .stat-card .ico {
+    width: 46px;
+    height: 46px;
+    border-radius: var(--r-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .stat-card .num {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--text-main);
+    line-height: 1.1;
+  }
+
+  .stat-card .lbl {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 20px;
+  }
+
+  .svc-grid2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .svc2 {
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-md);
+    padding: 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .svc2:hover {
+    transform: translateY(-2px);
+    border-color: var(--primary-400);
+    box-shadow: var(--shadow-md);
+  }
+
+  .svc2 .ico {
+    font-size: 28px;
+    margin-bottom: 8px;
+  }
+
+  .svc2 h4 {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .svc2 .pr {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--primary-700);
+    margin-top: 6px;
+  }
+
+  .bn-strip {
+    margin-bottom: 20px;
+    overflow: hidden;
+    border-radius: var(--r-lg);
+    border: 1px solid var(--border-light);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    box-shadow: var(--shadow-sm);
+  }
+  .bn-strip.show { opacity: 1; }
+
+  /* Mobile Exclusive Elements */
+  .mobile-only { display: none; }
+  .m-top {
+    background: linear-gradient(135deg, #091326 0%, #1e3a8a 100%);
+    color: #fff;
+    padding: 24px 20px 36px;
+    border-radius: 0 0 24px 24px;
+  }
+  .m-bal {
+    background: #ffffff;
+    margin: -24px 16px 0;
+    border-radius: var(--r-xl);
+    padding: 20px;
+    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid var(--border-light);
+  }
+  .m-content { padding: 20px 16px; }
+  .m-svc-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  @media (max-width: 768px) {
+    .desktop { display: none; }
+    .mobile-only { display: block; }
   }
 </style>
 </head>
 <body>
-<!-- PC Layout -->
+
+<!-- Desktop Layout -->
 <div class="desktop">
   <div class="sidebar">
-    <div class="side-logo"><h2>🔷 All In One</h2><p>বিশ্বাস ও সেবার ঠিকানা</p></div>
-    <div class="side-link on"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
-    <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সেবা</div>
-    <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
-    <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট</div>
-    <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> প্রোফাইল</div>
-    <div class="side-link" id="adminLink" style="display:none;" onclick="location.href='/admin.html'"><span class="ico">⚙️</span> এডমিন</div>
-  </div>
-  <div class="main">
-    <div class="topbar">
-      <div><h2 id="greet">স্বাগতম 👋</h2><p>আপনার ওয়ালেট ও সেবা প্রস্তুত</p></div>
-      <div class="user-chip">
-        <div class="avatar" id="avatar">র</div>
-        <button id="greetVoiceBtn" style="display:none;background:none;border:none;font-size:20px;cursor:pointer;">🔊</button>
-        <button id="logoutBtn" style="background:none;border:none;font-size:20px;cursor:pointer;">⏻</button>
+    <div class="side-logo">
+      <div class="logo-icon">🔷</div>
+      <div>
+        <h2>All In One</h2>
+        <p>বিশ্বাস ও সেবার ঠিকানা</p>
       </div>
     </div>
+    <nav>
+      <div class="side-link on"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+      <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সকল সেবা</div>
+      <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
+      <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট ও রিচার্জ</div>
+      <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> পার্সোনাল প্রোফাইল</div>
+      <div class="side-link" id="adminLink" style="display:none;" onclick="location.href='/admin.html'"><span class="ico">⚙️</span> এডমিন কন্ট্রোল</div>
+    </nav>
+  </div>
+
+  <div class="main">
+    <!-- Topbar -->
+    <div class="dash-top">
+      <div>
+        <h2 id="greet">স্বাগতম 👋</h2>
+        <p>আপনার অ্যাকাউন্ট ও সেবাসমূহ প্রস্তুত রয়েছে</p>
+      </div>
+      <div class="user-badge-wrap">
+        <button id="greetVoiceBtn" style="display:none;background:#f1f5f9;border:1px solid #e2e8f0;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:16px;" title="ভয়েস শুনুন">🔊</button>
+        <div class="avatar" id="avatar">র</div>
+        <button id="logoutBtn" style="background:#fef2f2;border:1px solid #fecaca;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:16px;color:#dc2626;" title="লগআউট">⏻</button>
+      </div>
+    </div>
+
+    <!-- Banner Strip (Desktop) -->
     <div class="bn-strip" id="bnStrip" style="display:none;"></div>
+
+    <!-- Balance Hero -->
     <div class="hero-blue">
-      <div><div class="wb">ওয়ালেট ব্যালেন্স</div><div class="amt" id="balancePill">৳০</div></div>
-      <button class="btn-add" onclick="location.href='/wallet.html'">+ টাকা যোগ করুন</button>
+      <div class="hero-flex">
+        <div>
+          <div class="wb">✨ বর্তমান ওয়ালেট ব্যালেন্স</div>
+          <div class="amt" id="balancePill">৳০</div>
+        </div>
+        <div class="hero-action">
+          <button class="btn-add" onclick="location.href='/wallet.html'">+ ইনস্ট্যান্ট টাকা যোগ করুন</button>
+        </div>
+      </div>
     </div>
+
+    <!-- 4 KPI Stats Grid -->
     <div class="stats">
-      <div class="stat" onclick="location.href='/orders.html'"><div class="ico" style="background:#dbeafe;">📦</div><div class="num" id="hubOrders">০</div><div class="lbl">মোট অর্ডার</div></div>
-      <div class="stat" onclick="location.href='/orders.html'"><div class="ico" style="background:#dcfce7;">✅</div><div class="num" id="hubOrdersDone">০</div><div class="lbl">সম্পন্ন</div></div>
-      <div class="stat" onclick="location.href='/orders.html'"><div class="ico" style="background:#fef3c7;">⏳</div><div class="num" id="hubOrdersSub">০</div><div class="lbl">চলমান</div></div>
-      <div class="stat" onclick="location.href='/services.html'"><div class="ico" style="background:#ede9fe;">🛎️</div><div class="num" id="hubServices">০</div><div class="lbl">সেবা</div></div>
+      <div class="stat-card" onclick="location.href='/orders.html'">
+        <div class="ico" style="background:#dbeafe;color:#1d4ed8;">📦</div>
+        <div>
+          <div class="num" id="hubOrders">০</div>
+          <div class="lbl">মোট অর্ডার</div>
+        </div>
+      </div>
+      <div class="stat-card" onclick="location.href='/orders.html'">
+        <div class="ico" style="background:#dcfce7;color:#166534;">✅</div>
+        <div>
+          <div class="num" id="hubOrdersDone">০</div>
+          <div class="lbl">সম্পন্ন হয়েছে</div>
+        </div>
+      </div>
+      <div class="stat-card" onclick="location.href='/orders.html'">
+        <div class="ico" style="background:#fef3c7;color:#92400e;">⏳</div>
+        <div>
+          <div class="num" id="hubOrdersSub">০</div>
+          <div class="lbl">চলমান প্রসেস</div>
+        </div>
+      </div>
+      <div class="stat-card" onclick="location.href='/services.html'">
+        <div class="ico" style="background:#ede9fe;color:#6b21a8;">🛎️</div>
+        <div>
+          <div class="num" id="hubServices">০</div>
+          <div class="lbl">উপলব্ধ সেবা</div>
+        </div>
+      </div>
     </div>
+
+    <!-- 2 Column Section: Popular Services & Notices -->
     <div class="two-col">
       <div class="card">
-        <h3>জনপ্রিয় সেবা <a href="/services.html">সব দেখুন →</a></h3>
-        <div class="svc-grid2" id="popularServices"><div class="skel" style="height:64px;"></div><div class="skel" style="height:64px;margin-top:8px;"></div></div>
+        <h3>
+          <span>🛎️ জনপ্রিয় সেবা</span>
+          <a href="/services.html" style="color:#2563eb;font-weight:600;font-size:13px;text-decoration:none;">সবগুলো দেখুন →</a>
+        </h3>
+        <div class="svc-grid2" id="popularServices">
+          <div class="skel" style="height:100px;"></div>
+          <div class="skel" style="height:100px;"></div>
+        </div>
       </div>
+
       <div class="card">
-        <h3>🔔 নোটিশ <a onclick="showNotices()">সব দেখুন →</a></h3>
-        <div id="noticeList"><div class="skel" style="height:40px;"></div><div class="skel" style="height:40px;margin-top:8px;"></div></div>
+        <h3>
+          <span>🔔 জরুরি নোটিশ</span>
+          <a href="#" onclick="showNotices();return false;" style="color:#2563eb;font-weight:600;font-size:13px;text-decoration:none;">সব নোটিশ</a>
+        </h3>
+        <div id="noticeList" style="display:flex;flex-direction:column;gap:8px;">
+          <div class="skel" style="height:40px;"></div>
+          <div class="skel" style="height:40px;"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -133,34 +340,66 @@
 
 <!-- Mobile Layout -->
 <div class="mobile-only">
-  <div class="m-top"><h2 id="greetM">স্বাগতম 👋</h2><button id="greetVoiceBtnM" style="display:none;background:none;border:none;font-size:22px;cursor:pointer;float:right;margin-top:2px;" title="শুভেচ্ছা শুনুন">🔊</button><p>আপনার ওয়ালেট ও সেবা প্রস্তুত</p></div>
-  <div class="m-bal"><div><div style="font-size:12px;color:#64748b;">ওয়ালেট ব্যালেন্স</div><div style="font-size:24px;font-weight:700;" id="hubBalance">৳০</div></div><button class="btn-add" style="background:#eff6ff;" onclick="location.href='/wallet.html'">+ যোগ করুন</button></div>
-  <div class="bn-strip" id="bnStripM" style="display:none;margin:12px 16px 0;"></div>
-  <div id="mNotices" style="display:none;margin:0 16px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:10px 12px;font-size:12px;color:#92400e;"></div>
-  <div class="m-content">
-    <div style="font-size:14px;font-weight:700;margin-bottom:10px;">সেবা সমূহ</div>
-    <div class="m-svc-grid" id="mobileServices"><div class="skel" style="height:64px;"></div><div class="skel" style="height:64px;margin-top:8px;"></div></div>
+  <div class="m-top">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <h2 id="greetM" style="font-size:20px;font-weight:700;">স্বাগতম 👋</h2>
+        <p style="font-size:12px;opacity:0.8;margin-top:2px;">All In One ডিজিটাল প্ল্যাটফর্ম</p>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button id="greetVoiceBtnM" style="display:none;background:rgba(255,255,255,0.2);border:none;color:#fff;padding:6px 10px;border-radius:8px;font-size:14px;">🔊</button>
+        <button onclick="location.href='/profile.html'" style="background:rgba(255,255,255,0.2);border:none;color:#fff;width:38px;height:38px;border-radius:50%;font-size:16px;cursor:pointer;">👤</button>
+      </div>
+    </div>
   </div>
-  <div class="m-tabbar">
-    <div class="m-tab on" aria-current="page"><div class="ico">🏠</div>হোম</div>
-    <div class="m-tab" tabindex="0" role="button" onclick="location.href='/services.html'"><div class="ico">🛎️</div>সেবা</div>
-    <div class="m-tab" tabindex="0" role="button" onclick="location.href='/orders.html'"><div class="ico">📦</div>অর্ডার</div>
-    <div class="m-tab" tabindex="0" role="button" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
-    <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
-    <div class="m-tab" id="mAdminTab" style="display:none;" tabindex="0" role="button" onclick="location.href='/admin.html'"><div class="ico">⚙️</div>এডমিন</div>
+
+  <div class="m-bal">
+    <div>
+      <div style="font-size:12px;color:#64748b;font-weight:600;text-transform:uppercase;">ওয়ালেট ব্যালেন্স</div>
+      <div id="hubBalance" style="font-size:28px;font-weight:800;color:#1e40af;margin-top:2px;">৳০</div>
+    </div>
+    <button class="btn" style="padding:10px 18px;font-size:13px;border-radius:10px;" onclick="location.href='/wallet.html'">+ রিচার্জ</button>
+  </div>
+
+  <div class="m-content">
+    <div id="mNotices" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px;font-size:13px;color:#1e40af;margin-bottom:16px;"></div>
+    <div class="bn-strip" id="bnStripM" style="display:none;"></div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3 style="font-size:16px;font-weight:700;">🛎️ আমাদের সেবাসমূহ</h3>
+      <a href="/services.html" style="font-size:13px;color:#2563eb;text-decoration:none;font-weight:600;">সবগুলো দেখুন →</a>
+    </div>
+
+    <div class="m-svc-grid" id="mobileServices">
+      <div class="skel" style="height:90px;"></div>
+      <div class="skel" style="height:90px;"></div>
+    </div>
   </div>
 </div>
 
+<!-- Floating Action Button -->
 <button class="wa-fab" id="waFab" aria-label="WhatsApp-এ সাহায্য চান"><img src="/icons/abc-logo.png" alt="Abc"></button>
+
+<!-- Mobile Tabbar -->
+<div class="m-tabbar">
+  <div class="m-tab on" aria-current="page"><div class="ico">🏠</div>হোম</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/services.html'"><div class="ico">🛎️</div>সেবা</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/orders.html'"><div class="ico">📦</div>অর্ডার</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
+  <div class="m-tab" id="mAdminTab" style="display:none;" tabindex="0" role="button" onclick="location.href='/admin.html'"><div class="ico">⚙️</div>এডমিন</div>
+</div>
 
 <script src="/js/app.js?v=13"></script>
 <script src="/banners/render.js?v=2"></script>
 <script>
-const bnNum = (n) => Number(n || 0).toLocaleString('bn-BD');
 function escapeHtml(s) {
-  return String(s || '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return String(s || '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
 }
-/* Smart icon fallback when service has no icon configured (DB empty) */
+function bnNum(n) { return Number(n || 0).toLocaleString('bn-BD'); }
+
 function autoIcon(name) {
   const n = String(name || '');
   if (/জন্ম|birth/i.test(n)) return '👶';
@@ -174,165 +413,82 @@ function autoIcon(name) {
   if (/রিচার্জ|recharge|বিকাশ|নগদ/i.test(n)) return '💳';
   return '🛎️';
 }
-/* Voice greeting - preserved from old dashboard (user: logic থাকলে bad যাবে না) */
-const GREET_EMOJI = { islam: '🤲', hindu: '🙏', buddhist: '🪷', christian: '✝️', other: '🌸' };
+
 function timeGreeting() {
   const h = new Date().getHours();
-  if (h < 11) return 'সুপ্রভাত'; if (h < 16) return 'শুভ দুপুর';
-  if (h < 19) return 'শুভ সন্ধ্যা'; return 'শুভ রাত্রি';
+  if (h >= 5 && h < 12) return 'শুভ সকাল';
+  if (h >= 12 && h < 16) return 'শুভ দুপুর';
+  if (h >= 16 && h < 18) return 'শুভ বিকেল';
+  return 'শুভ সন্ধ্যা';
 }
-function resolveGreeting(religion, cfg) {
-  const r = ['islam','hindu','buddhist','christian','other'].includes(religion) ? religion : 'other';
-  const g = (cfg && cfg.greetings) || {};
-  let text = String(g[r] || '').trim();
-  if (!text && r === 'other') text = timeGreeting();
-  if (!text) text = 'শুভেচ্ছা';
-  return { text, emoji: GREET_EMOJI[r] };
-}
-const GreetVoice = {
-  _cfg: null, _lastText: '', _lastVoice: 0, _lastReligion: 'other',
-  userEnabled() { try { return localStorage.getItem('abc_greet_voice') !== 'off'; } catch(e) { return true; } },
-  pickVoice(voices, voiceIdx) {
-    const bn = voices.filter((v) => v.lang && v.lang.toLowerCase().startsWith('bn'));
-    if (voiceIdx === 0) return bn.find((v) => /male/i.test(v.name) && !/female/i.test(v.name)) || null;
-    if (voiceIdx === 1) return bn.find((v) => /female/i.test(v.name)) || null;
-    return null; // child: pitch simulation only
-  },
-  speak(text, voiceIdx, cfg) {
-    // Try human voice MP3 first (pre-recorded), fallback to TTS
-    try {
-      const rel = (this._lastReligion && ['islam','hindu','buddhist','christian','other'].includes(this._lastReligion)) ? this._lastReligion : 'other';
-      const vname = ['male','female','child'][voiceIdx] || 'male';
-      const a = new Audio('/audio/greet-' + rel + '-' + vname + '.mp3');
-      a.play().then(() => {
-        this.hideReplayBtn();
-      }).catch(() => { this._speakTTS(text, voiceIdx, cfg); });
-      return;
-    } catch (e) { /* fall through to TTS */ }
-    this._speakTTS(text, voiceIdx, cfg);
-  },
-  _speakTTS(text, voiceIdx, cfg) {
-    if (!('speechSynthesis' in window)) return;
-    try {
-      speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'bn-BD';
-      const voices = speechSynthesis.getVoices();
-      const real = this.pickVoice(voices, voiceIdx);
-      if (real) {
-        u.voice = real; // real gendered Bengali voice: use as-is
-      } else {
-        const bn = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('bn'));
-        if (bn) u.voice = bn;
-        // Pitch simulation: male 0.8 / female 1.2 / child 1.5
-        const sim = [
-          { pitch: 0.8, rate: 1.0 },
-          { pitch: 1.2, rate: 1.0 },
-          { pitch: 1.5, rate: 1.1 },
-        ][voiceIdx] || { pitch: 1, rate: 1 };
-        if (cfg && cfg.rotation === false) { u.pitch = 1; u.rate = 1; }
-        else { u.pitch = sim.pitch; u.rate = sim.rate; }
-      }
-      const self = this;
-      u.onerror = (e) => {
-        // Autoplay blocked: draw attention to the replay buttons
-        if (e.error === 'not-allowed' || e.error === 'interrupted') {
-          self.showReplayBtn(true);
-        }
-      };
-      speechSynthesis.speak(u);
-    } catch (e) { /* speech not supported */ }
-  },
-  replay() {
-    if (this._lastText) this.speak(this._lastText, this._lastVoice, this._cfg);
-  },
-  showReplayBtn(highlight) {
-    ['greetVoiceBtn', 'greetVoiceBtnM'].forEach(id => {
-      const btn = document.getElementById(id);
-      if (btn) {
-        btn.style.display = '';
-        if (highlight) {
-          btn.style.animation = 'fadeUp 0.6s';
-          btn.style.boxShadow = '0 0 0 3px rgba(30,64,175,.5)';
-          setTimeout(() => { btn.style.boxShadow = ''; }, 4000);
-        }
-      }
-    });
-  },
-  hideReplayBtn() {
-    ['greetVoiceBtn', 'greetVoiceBtnM'].forEach(id => {
-      const btn = document.getElementById(id);
-      if (btn) btn.style.display = 'none';
-    });
-  },
-  async maybePlay(user) {
-    // One-shot: consume the login flag immediately (login only, never on refresh)
-    let flag = null;
-    try {
-      flag = JSON.parse(sessionStorage.getItem('abc_greet_on_login') || 'null');
-      sessionStorage.removeItem('abc_greet_on_login');
-    } catch (e) { try { sessionStorage.removeItem('abc_greet_on_login'); } catch (e2) {} }
-    if (!flag || !this.userEnabled()) return;
-    const cfg = window._vgCfg || {};
-    if (cfg.enabled === false) return;
-    this._cfg = cfg;
-    const g = resolveGreeting(user.religion, cfg);
-    const text = g.text + ', ' + user.name + '! All In One-এ স্বাগতম';
-    this._lastText = text;
-    this._lastVoice = (typeof flag.voice === 'number') ? flag.voice : 0;
-    this._lastReligion = user.religion;
-    // Show the replay/fallback buttons (desktop + mobile)
-    this.showReplayBtn(false);
-    const self = this;
-    ['greetVoiceBtn', 'greetVoiceBtnM'].forEach(id => {
-      const btn = document.getElementById(id);
-      if (btn) btn.onclick = () => self.replay();
-    });
-    // Try immediately; on autoplay-block, play on first user interaction
-    let played = false;
-    const playOnInteract = () => {
-      if (played) return;
-      played = true;
-      this.speak(text, this._lastVoice, cfg);
-      ['click','touchstart','keydown'].forEach(ev => document.removeEventListener(ev, playOnInteract));
-      this.hideReplayBtn();
-    };
-    try { this.speak(text, this._lastVoice, cfg); played = true; this.hideReplayBtn(); } catch (e) {}
-    ['click','touchstart','keydown'].forEach(ev => document.addEventListener(ev, playOnInteract));
-  },
-};
-async function init() {
-  const meR = await ABC.api('/auth/me');
-  if (!meR.ok) {
-    if (meR.status === 401 || meR.status === 403 || meR.status === 404) { location.href = '/login.html'; return; }
-    document.body.innerHTML = '<div style="padding:40px;text-align:center;">সার্ভার ব্যস্ত। <button onclick="location.reload()">পুনরায়</button></div>';
-    return;
+
+const GreetVoice = (() => {
+  let _audio = null;
+  function userWantsVoice() {
+    try { return localStorage.getItem('abc_greet_voice') !== 'off'; } catch (e) { return true; }
   }
-  const { user } = await meR.json();
+  function isConfigured() {
+    return Boolean(window._vgCfg && window._vgCfg.enabled && Array.isArray(window._vgCfg.files) && window._vgCfg.files.length);
+  }
+  function fileForUser(u, rot) {
+    if (!isConfigured()) return null;
+    const rel = (u && u.religion ? String(u.religion).toLowerCase() : 'other');
+    const files = window._vgCfg.files;
+    let pool = files.filter(f => f.rel === rel);
+    if (!pool.length) pool = files.filter(f => f.rel === 'other');
+    if (!pool.length) pool = files;
+    const idx = (typeof rot === 'number' && rot >= 0) ? (rot % pool.length) : 0;
+    return pool[idx] || pool[0] || null;
+  }
+  function play(f) {
+    if (!f || !f.path) return;
+    try {
+      if (_audio) { _audio.pause(); _audio = null; }
+      _audio = new Audio(f.path);
+      _audio.play().catch(() => {});
+    } catch (e) {}
+  }
+  function maybePlay(user) {
+    if (!user || user.role === 'admin') return;
+    if (!userWantsVoice()) return;
+    try {
+      const raw = sessionStorage.getItem('abc_greet_on_login');
+      if (!raw) return;
+      sessionStorage.removeItem('abc_greet_on_login');
+      const p = JSON.parse(raw);
+      const f = fileForUser(user, p && typeof p.voice === 'number' ? p.voice : 0);
+      if (f) play(f);
+    } catch (e) {}
+  }
+  return { maybePlay, isConfigured, fileForUser, play };
+})();
+
+async function init() {
+  const r = await ABC.api('/auth/me');
+  if (!r.ok) { location.href = '/login.html'; return; }
+  const { user } = await r.json();
   window._user = user;
-  // Update avatar with user's initial
-  const avEl = document.getElementById('avatar');
-  if (avEl && user.name) avEl.textContent = user.name.trim().charAt(0);
+  const av = (user.name || 'ইউ')[0];
+  setText('avatar', av);
   if (user.role === 'admin') {
     document.getElementById('adminLink').style.display = '';
     const mAdmin = document.getElementById('mAdminTab');
     if (mAdmin) mAdmin.style.display = '';
   }
-  // Wallet balance (was dropped in rebuild — restore)
   setText('balancePill', '৳' + bnNum(user.balance || 0));
   setText('hubBalance', '৳' + bnNum(user.balance || 0));
-  // Time-based greeting
   const tg = timeGreeting() + ' 👋';
   setText('greet', tg); setText('greetM', tg);
-  // Parallel data load (was 5 sequential awaits). Each section fails
-  // independently with its own error UI + retry (no more endless "লোড হচ্ছে…").
   loadCounts(); loadServices(); loadNotices(); loadBanners(); loadSettings();
 }
+
 function setText(id, t) { const el = document.getElementById(id); if (el) el.textContent = t; }
+
 function retryBox(fn) {
   return '<div style="color:#dc2626;font-size:13px;padding:6px 0;">⚠️ লোড ব্যর্থ। ' +
     '<button onclick="' + fn + '()" style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;border-radius:8px;padding:4px 12px;cursor:pointer;">আবার চেষ্টা</button></div>';
 }
+
 async function loadCounts() {
   try {
     const r = await ABC.api('/order-counts');
@@ -345,6 +501,7 @@ async function loadCounts() {
     setText('hubOrders', '–'); setText('hubOrdersDone', '–'); setText('hubOrdersSub', '–');
   }
 }
+
 async function loadServices() {
   const pop = document.getElementById('popularServices');
   const mob = document.getElementById('mobileServices');
@@ -366,6 +523,7 @@ async function loadServices() {
     mob.innerHTML = retryBox('loadServices');
   }
 }
+
 async function loadNotices() {
   const box = document.getElementById('noticeList');
   try {
@@ -375,20 +533,20 @@ async function loadNotices() {
     const valid = (d.notices || []).filter(n => (n.title||'').trim() || (n.message||'').trim()).slice(0,3);
     const trunc = (s, n) => { s = String(s||''); return s.length > n ? s.slice(0, s.lastIndexOf(' ', n)) + '…' : s; };
     box.innerHTML = valid.map(n =>
-      '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;"><b style="font-size:13px;">' + escapeHtml(n.title) + '</b><br><span style="font-size:12px;color:#64748b;">' + escapeHtml(trunc(n.message, 60)) + '</span></div>'
-    ).join('') || '<div style="color:#64748b;">কোনো নোটিশ নেই</div>';
-    // mobile strip: first notice only
+      '<div style="padding:10px 0;border-bottom:1px solid #f1f5f9;"><b style="font-size:13px;color:#0f172a;">' + escapeHtml(n.title) + '</b><br><span style="font-size:12px;color:#64748b;margin-top:2px;display:inline-block;">' + escapeHtml(trunc(n.message, 60)) + '</span></div>'
+    ).join('') || '<div style="color:#64748b;font-size:13px;">কোনো নোটিশ নেই</div>';
     const mn = document.getElementById('mNotices');
     if (mn) {
       if (valid.length) {
         mn.style.display = 'block';
-        mn.innerHTML = '🔔 <b>' + escapeHtml(valid[0].title) + '</b> ' + escapeHtml(trunc(valid[0].message, 50));
+        mn.innerHTML = '🔔 <b>' + escapeHtml(valid[0].title) + '</b>: ' + escapeHtml(trunc(valid[0].message, 50));
       } else { mn.style.display = 'none'; }
     }
   } catch (e) {
     box.innerHTML = retryBox('loadNotices');
   }
 }
+
 async function loadBanners() {
   try {
     const r = await ABC.api('/banners?type=banner');
@@ -400,8 +558,9 @@ async function loadBanners() {
       const ms = document.getElementById('bnStripM');
       if (ms) { ms.style.display = 'block'; BannerRender.carousel(ms, act, 6000); requestAnimationFrame(()=>ms.classList.add('show')); }
     }
-  } catch (e) { /* banner optional: stay hidden */ }
+  } catch (e) {}
 }
+
 async function loadSettings() {
   try {
     const ps = await fetch('/api/public/settings');
@@ -409,27 +568,31 @@ async function loadSettings() {
   } catch (e) { window._vgCfg = {}; }
   GreetVoice.maybePlay(window._user);
 }
-  document.getElementById('waFab').onclick = () => {
-    const u = window._user || {};
-    const text = 'আসসালামু আলাইকুম! আমি ' + (u.name || '') + ' (ফোন: ' + (u.phone || '') + ')। সাহায্য দরকার।';
-    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
-  };
-  document.getElementById('logoutBtn').onclick = async () => {
-    const rt = localStorage.getItem('abc_refresh_token');
-    await ABC.api('/auth/logout', { method: 'POST', body: { refresh_token: rt } });
-    ABC.clearTokens(); location.href = '/login.html';
-  };
+
+document.getElementById('waFab').onclick = () => {
+  const u = window._user || {};
+  const text = 'আসসালামু আলাইকুম! আমি ' + (u.name || '') + ' (ফোন: ' + (u.phone || '') + ')। সাহায্য দরকার।';
+  window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+};
+
+document.getElementById('logoutBtn').onclick = async () => {
+  const rt = localStorage.getItem('abc_refresh_token');
+  await ABC.api('/auth/logout', { method: 'POST', body: { refresh_token: rt } });
+  ABC.clearTokens(); location.href = '/login.html';
+};
+
 async function showNotices() {
   const r = await ABC.api('/notices');
   const d = r.ok ? await r.json() : { notices: [] };
   const valid = d.notices.filter(n => (n.title || '').trim() || (n.message || '').trim());
-  const list = valid.map(n => '<li><b>' + escapeHtml(n.title) + '</b><br>' + escapeHtml(n.message) + '</li>').join('') || '<li>কোনো নোটিশ নেই</li>';
+  const list = valid.map(n => '<li style="margin-bottom:12px;"><b>' + escapeHtml(n.title) + '</b><br><span style="font-size:13px;color:#475569;">' + escapeHtml(n.message) + '</span></li>').join('') || '<li>কোনো নোটিশ নেই</li>';
   const bg = document.createElement('div');
-  bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000;';
-  bg.innerHTML = '<div style="background:#fff;border-radius:16px;padding:24px;max-width:400px;margin:20px;"><h3>🔔 নোটিশ</h3><ul style="padding-left:18px;margin:12px 0;">' + list + '</ul><button style="background:#1e40af;color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;" onclick="this.closest(\'div\').parentElement.remove()">বন্ধ করুন</button></div>';
+  bg.className = 'modal-bg';
+  bg.innerHTML = '<div class="modal"><h3>🔔 সকল নোটিশ</h3><ul style="padding-left:18px;margin:16px 0;">' + list + '</ul><button class="btn" style="width:100%;margin-top:10px;" onclick="this.closest(\'.modal-bg\').remove()">বন্ধ করুন</button></div>';
   bg.onclick = (e) => { if (e.target === bg) bg.remove(); };
   document.body.appendChild(bg);
 }
+
 init();
 </script>
 </body>

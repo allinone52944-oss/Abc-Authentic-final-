@@ -5,73 +5,79 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#1e40af">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Abc Authentic">
-<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
-<title>ইমেইল যাচাই - All In One (Abc Authentic)</title>
-<link rel="stylesheet" href="/css/coffee.css?v=8">
-<link rel="stylesheet" href="/css/blue.css?v=4">
+<title>ইমেইল যাচাইকরণ - All In One (Abc Authentic)</title>
+<link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/premium.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=2">
 <style>
-  html,body{overflow-x:hidden;}
-.verify-icon { font-size: 64px; margin-bottom: 12px; }
-.verify-icon.ok { animation: popIn .5s ease; }
-.verify-icon.err { animation: shake .5s ease; }
-@keyframes popIn { 0% { transform: scale(0); } 70% { transform: scale(1.2); } 100% { transform: scale(1); } }
-@keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
-.checkmark { animation: drawCheck .6s ease forwards; }
-@keyframes drawCheck { to { stroke-dashoffset: 0; } }
-.spin { animation: spin 1s linear infinite; display: inline-block; }
-@keyframes spin { to { transform: rotate(360deg); } }
+  body {
+    background: #091326;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .auth-card {
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-xl);
+    padding: 36px 32px;
+    max-width: 440px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+  }
+  .auth-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 54px;
+    height: 54px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #2563eb, #38bdf8);
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+    margin-bottom: 16px;
+  }
+  .auth-logo img { width: 32px; height: 32px; }
+  .hidden { display: none !important; }
+  .verify-icon { font-size: 54px; margin-bottom: 14px; }
+  .spin { animation: spin 1s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
-<!-- cache-bust 2026-10-13: force fresh document load -->
 </head>
-<body class="auth">
-<div class="spiral"></div>
-<div class="gold-orb" style="width:300px;height:300px;top:10%;left:5%;"></div>
-<div class="gold-orb" style="width:200px;height:200px;bottom:15%;right:8%;animation-delay:-4s;"></div>
-
-<div class="card" style="text-align:center;">
-  <div class="logo">
-    <h1>☕ ALL IN ONE</h1>
-    <p>ABC AUTHENTIC</p>
-    <div style="margin-top:12px;color:#c9a961;font-size:14px;letter-spacing:1px;">বিশ্বাস ও সেবার ঠিকানা</div>
+<body>
+<div class="auth-card">
+  <div class="auth-logo">
+    <img src="/icons/abc-uncommon.svg" alt="ABC">
   </div>
+  <h2 style="font-size:22px;font-weight:800;color:#0f172a;margin-bottom:4px;">All In One (Abc Authentic)</h2>
+  <div style="font-size:12px;color:#64748b;margin-bottom:24px;">বিশ্বাস ও সেবার ঠিকানা</div>
 
   <div id="state-loading">
     <div class="verify-icon"><span class="spin">⏳</span></div>
-    <h3 style="color:var(--gold);">ইমেইল যাচাই হচ্ছে…</h3>
-    <p style="color:var(--muted);font-size:14px;">একটু অপেক্ষা করুন</p>
+    <h3 style="color:#1e40af;margin-bottom:8px;">ইমেইল যাচাই করা হচ্ছে…</h3>
+    <p style="color:#64748b;font-size:14px;">অনুগ্রহ করে কয়েক সেকেন্ড অপেক্ষা করুন</p>
   </div>
 
   <div id="state-ok" class="hidden">
-    <div class="verify-icon ok">
-      <svg width="84" height="84" viewBox="0 0 84 84">
-        <circle cx="42" cy="42" r="38" fill="none" stroke="#d4af37" stroke-width="5"
-                stroke-dasharray="239" stroke-dashoffset="239" class="checkmark"/>
-        <path d="M28 43 L38 53 L57 32" fill="none" stroke="#d4af37" stroke-width="6"
-              stroke-linecap="round" stroke-dasharray="60" stroke-dashoffset="60"
-              class="checkmark" style="animation-delay:.4s;"/>
-      </svg>
-    </div>
-    <h3 style="color:var(--gold);">🎉 ইমেইল যাচাই সম্পন্ন!</h3>
-    <p style="color:var(--muted);font-size:14px;">আপনার অ্যাকাউন্ট এখন সক্রিয়। লগইন করুন।</p>
-    <button class="btn" onclick="location.href='/login.html'" style="margin-top:14px;">লগইন করুন →</button>
+    <div class="verify-icon">🎉</div>
+    <h3 style="color:#059669;margin-bottom:8px;">ইমেইল যাচাই সম্পন্ন হয়েছে!</h3>
+    <p style="color:#64748b;font-size:14px;line-height:1.6;">আপনার অ্যাকাউন্ট এখন সম্পূর্ণ সক্রিয়। আপনি এখনই প্ল্যাটফর্মে প্রবেশ করতে পারেন।</p>
+    <button class="btn" onclick="location.href='/login.html'" style="width:100%;padding:13px;margin-top:20px;">লগইন করুন →</button>
   </div>
 
   <div id="state-err" class="hidden">
-    <div class="verify-icon err">⚠️</div>
-    <h3 style="color:#ff6b6b;">যাচাই ব্যর্থ</h3>
-    <p style="color:var(--muted);font-size:14px;" id="err_msg">লিংকটি ভুল বা মেয়াদোত্তীর্ণ।</p>
-    <div class="field" style="max-width:300px;margin:14px auto;text-align:left;">
-      <label>ইমেইল</label>
+    <div class="verify-icon">⚠️</div>
+    <h3 style="color:#dc2626;margin-bottom:8px;">যাচাইকরণ ব্যর্থ হয়েছে</h3>
+    <p style="color:#64748b;font-size:14px;line-height:1.6;margin-bottom:18px;" id="err_msg">লিংকটি ভুল অথবা এর মেয়াদ শেষ হয়ে গেছে।</p>
+    <div class="field" style="text-align:left;">
+      <label>নতুন ভেরিফিকেশন লিংক পেতে ইমেইল লিখুন</label>
       <input type="email" id="rs_email" placeholder="email@example.com">
     </div>
     <div class="err" id="rs_err"></div>
-    <button class="btn" id="rs_btn" onclick="doResend()">🔄 নতুন লিংক পাঠান</button>
-    <div style="margin-top:12px;"><a href="/login.html" style="color:var(--gold);font-size:14px;">← লগইনে ফিরুন</a></div>
+    <button class="btn" id="rs_btn" style="width:100%;padding:12px;margin-top:10px;" onclick="doResend()">🔄 নতুন লিংক পাঠান</button>
+    <div style="margin-top:16px;"><a href="/login.html" style="color:#2563eb;font-weight:600;font-size:14px;text-decoration:none;">← লগইনে ফিরুন</a></div>
   </div>
 </div>
 
@@ -80,11 +86,12 @@ function show(id) {
   ['state-loading', 'state-ok', 'state-err'].forEach(s =>
     document.getElementById(s).classList.toggle('hidden', s !== id));
 }
+
 async function doResend() {
   const email = document.getElementById('rs_email').value.trim();
   const err = document.getElementById('rs_err');
   const btn = document.getElementById('rs_btn');
-  if (!email) { err.textContent = 'ইমেইল দিন'; return; }
+  if (!email) { err.textContent = 'ইমেইল এড্রেস লিখুন'; return; }
   btn.disabled = true;
   try {
     const r = await fetch('/api/auth/resend-verification', {
@@ -92,21 +99,21 @@ async function doResend() {
       body: JSON.stringify({ email }),
     });
     const d = await r.json();
-    err.style.color = r.ok ? '#7ddb7d' : '';
-    err.textContent = r.ok ? '✅ নতুন লিংক পাঠানো হয়েছে — ইমেইল চেক করুন'
-      : (d.error === 'TOO_MANY_REQUESTS' ? 'অনেকবার চেষ্টা করেছেন — ১ ঘণ্টা পরে আবার চেষ্টা করুন' : 'ব্যর্থ: ' + d.error);
-  } catch (e) { err.textContent = 'সংযোগ ব্যর্থ'; }
+    err.style.color = r.ok ? '#059669' : '';
+    err.textContent = r.ok ? '✅ নতুন লিংক পাঠানো হয়েছে — আপনার ইমেইল চেক করুন'
+      : (d.error === 'TOO_MANY_REQUESTS' ? 'অনেকবার চেষ্টা করা হয়েছে — ১ ঘণ্টা পরে আবার চেষ্টা করুন' : 'ব্যর্থ: ' + d.error);
+  } catch (e) { err.textContent = 'সংযোগ স্থাপন ব্যর্থ হয়েছে'; }
   finally { btn.disabled = false; }
 }
+
 (async () => {
   const token = new URLSearchParams(location.search).get('token') || '';
   if (!/^[a-f0-9]{64}$/.test(token)) {
-    document.getElementById('err_msg').textContent = 'লিংকটি সঠিক নয়।';
+    document.getElementById('err_msg').textContent = 'ভেরিফিকেশন লিংকটি সঠিক নয়।';
     show('state-err');
     return;
   }
   try {
-    // L-4: verification consumes via POST (state-changing GET removed)
     const r = await fetch('/api/auth/verify-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -121,7 +128,7 @@ async function doResend() {
       show('state-err');
     }
   } catch (e) {
-    document.getElementById('err_msg').textContent = 'সংযোগ ব্যর্থ — আবার চেষ্টা করুন।';
+    document.getElementById('err_msg').textContent = 'নেটওয়ার্ক সমস্যা — পুনরায় চেষ্টা করুন।';
     show('state-err');
   }
 })();

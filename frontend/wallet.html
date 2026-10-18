@@ -4,122 +4,265 @@
 <meta charset="UTF-8">
 <link rel="manifest" href="/manifest.json">
 <link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/premium.css?v=1">
 <link rel="stylesheet" href="/css/motion.css?v=2">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1e40af">
-<title>ওয়ালেট - All In One</title>
+<title>ওয়ালেট ও রিচার্জ - All In One</title>
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'Hind Siliguri',system-ui,sans-serif; background:#eef2f7; color:#0f172a; }
-  .desktop { max-width:1100px; margin:0 auto; background:#fff; min-height:100vh; display:flex; }
-  .sidebar { width:220px; background:linear-gradient(180deg,#1e3a8a,#1e40af); color:#fff; padding:20px 0; flex-shrink:0; }
-  .side-logo { padding:0 20px 20px; border-bottom:1px solid rgba(255,255,255,0.15); margin-bottom:16px; }
-  .side-logo h2 { font-size:18px; } .side-logo p { font-size:11px; opacity:0.7; }
-  .side-link { display:flex; align-items:center; gap:12px; padding:12px 20px; font-size:14px; color:rgba(255,255,255,0.85); cursor:pointer; border-left:3px solid transparent; }
-  .side-link.on { background:rgba(255,255,255,0.12); border-left-color:#fff; color:#fff; font-weight:600; }
-  .side-link .ico { font-size:18px; }
-  .main { flex:1; padding:24px; overflow:auto; }
-  .hero-blue { background:linear-gradient(135deg,#1e40af,#3b82f6); color:#fff; border-radius:16px; padding:22px; margin-bottom:20px; }
-  .hero-blue .wb { font-size:13px; opacity:0.85; }
-  .hero-blue .amt { font-size:32px; font-weight:700; margin-top:4px; }
-  .card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:18px; margin-bottom:16px; }
-  .card h3 { font-size:15px; margin-bottom:14px; }
-  .method-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:14px; }
-  .method { background:#f8fafc; border:2px solid #e2e8f0; border-radius:12px; padding:14px; text-align:center; cursor:pointer; }
-  .method.sel { border-color:#1e40af; background:#eff6ff; }
-  .method img { width:40px; height:40px; object-fit:contain; }
-  .method div { font-size:12px; margin-top:6px; font-weight:600; }
-  .field { margin-bottom:12px; }
-  .field label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:#334155; }
-  .field input { width:100%; padding:12px; border:1px solid #e2e8f0; border-radius:10px; font-size:14px; }
-  .btn { background:linear-gradient(135deg,#1e40af,#3b82f6); color:#fff; border:none; padding:12px 24px; border-radius:10px; font-weight:700; cursor:pointer; width:100%; font-size:15px; }
-  .tx { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #f1f5f9; font-size:13px; }
-  .tx:last-child { border:none; }
-  .err { color:#dc2626; font-size:13px; margin-top:8px; }
-  .okmsg { color:#16a34a; font-size:13px; margin-top:8px; }
-  @media (max-width:768px) { html,body{overflow-x:hidden;} .sidebar { display:none; } .method-grid { grid-template-columns:repeat(2,1fr); } }
-/* cashback celebrate overlay (restored) */
-#cbOverlay{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;flex-direction:column;background:rgba(15,23,42,.88);backdrop-filter:blur(4px);}
-#cbOverlay.show{display:flex;}
-#cbOverlay .big{font-size:64px;animation:pop .6s ease-out;}
-@keyframes pop{0%{transform:scale(0);}70%{transform:scale(1.25);}100%{transform:scale(1);}}
-#cbOverlay .congrats{color:#fff;font-size:30px;font-weight:800;margin:14px 0 6px;}
-#cbOverlay .won{color:#fbbf24;font-size:44px;font-weight:800;}
-#cbOverlay .code{color:#94a3b8;font-size:13px;margin-top:10px;letter-spacing:2px;}
-.coin{position:absolute;top:-40px;font-size:26px;animation:coinFall linear forwards;pointer-events:none;}
-@keyframes coinFall{to{transform:translateY(110vh) rotate(720deg);}}
+  .method-card-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  @media (max-width: 900px) {
+    .method-card-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  .pay-method {
+    background: #ffffff;
+    border: 2px solid var(--border-light);
+    border-radius: var(--r-lg);
+    padding: 16px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    box-shadow: var(--shadow-xs);
+  }
+
+  .pay-method:hover {
+    border-color: #cbd5e1;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .pay-method.sel {
+    border-color: var(--primary-600);
+    background: var(--primary-50);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  }
+
+  .pay-method img {
+    width: 44px;
+    height: 44px;
+    object-fit: contain;
+    border-radius: var(--r-sm);
+  }
+
+  .pay-method div {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+
+  .recv-box {
+    background: #eff6ff;
+    border: 1px dashed #93c5fd;
+    border-radius: var(--r-md);
+    padding: 14px 18px;
+    margin-bottom: 18px;
+  }
+
+  .tx {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 0;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .tx:last-child { border-bottom: none; }
+
+  /* Cashback celebration overlay */
+  #cbOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  #cbOverlay.show { display: flex; }
+  #cbOverlay .big { font-size: 64px; animation: pop 0.6s ease-out; }
+  @keyframes pop {
+    0% { transform: scale(0); }
+    70% { transform: scale(1.25); }
+    100% { transform: scale(1); }
+  }
+  #cbOverlay .congrats { color: #fff; font-size: 30px; font-weight: 800; margin: 14px 0 6px; }
+  #cbOverlay .won { color: #fbbf24; font-size: 48px; font-weight: 800; }
+  #cbOverlay .code { color: #94a3b8; font-size: 13px; margin-top: 10px; letter-spacing: 2px; }
+  .coin {
+    position: absolute;
+    top: -40px;
+    font-size: 26px;
+    animation: coinFall linear forwards;
+    pointer-events: none;
+  }
+  @keyframes coinFall {
+    to { transform: translateY(110vh) rotate(720deg); }
+  }
 </style>
 </head>
 <body>
 <div class="desktop">
   <div class="sidebar">
-    <div class="side-logo"><h2>🔷 All In One</h2><p>বিশ্বাস ও সেবার ঠিকানা</p></div>
-    <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
-    <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সেবা</div>
-    <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
-    <div class="side-link on"><span class="ico">💳</span> ওয়ালেট</div>
-    <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> প্রোফাইল</div>
-  </div>
-  <div class="main">
-    <div class="hero-blue"><div class="wb">ওয়ালেট ব্যালেন্স</div><div class="amt" id="bal">৳০</div></div>
-    <div class="card" id="cbCard" style="display:none;">
-      <h3>🎉 আজকের ক্যাশব্যাক</h3>
-      <div style="font-size:24px;font-weight:700;color:#1e40af;" id="cbAmt">৳০</div>
-      <div style="font-size:13px;color:#64748b;margin:6px 0;" id="cbSub"></div>
-      <button class="btn" id="cbBtn" onclick="redeemCashback()">রিডিম করুন 🎉</button>
-    </div>
-    <div class="card">
-      <h3>💰 টাকা যোগ করুন</h3>
-      <div class="method-grid" id="methods">
-        <div class="method sel" data-m="bkash_payment"><img src="/icons/bkash-logo.webp" alt="bKash"><div>bKash Payment</div></div>
-        <div class="method" data-m="bkash_personal"><img src="/icons/bkash-logo.webp" alt="bKash"><div>bKash Personal</div></div>
-        <div class="method" data-m="nagad"><img src="/icons/nagad-logo.png" alt="Nagad"><div>Nagad</div></div>
+    <div class="side-logo">
+      <div class="logo-icon">🔷</div>
+      <div>
+        <h2>All In One</h2>
+        <p>বিশ্বাস ও সেবার ঠিকানা</p>
       </div>
-      <div class="field" id="recvNumWrap" style="display:none;">
-        <label>এই নম্বরে পাঠান</label>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <div id="recvNum" style="font-size:20px;font-weight:700;color:#1e40af;flex:1;"></div>
-          <button class="btn" style="width:auto;padding:8px 16px;" onclick="copyRecvNum()">📋 কপি</button>
+    </div>
+    <nav>
+      <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+      <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সকল সেবা</div>
+      <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
+      <div class="side-link on"><span class="ico">💳</span> ওয়ালেট ও রিচার্জ</div>
+      <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> পার্সোনাল প্রোফাইল</div>
+    </nav>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <h2>💳 আমার ওয়ালেট</h2>
+        <p>ব্যালেন্স রিচার্জ, কুপন রিডিম এবং ট্রানজ্যাকশন হিস্ট্রি</p>
+      </div>
+    </div>
+
+    <!-- Balance Hero -->
+    <div class="hero-blue">
+      <div class="wb">✨ উপলব্ধ ব্যালেন্স</div>
+      <div class="amt" id="bal">৳০</div>
+      <div style="font-size:13px;color:rgba(255,255,255,0.85);margin-top:4px;">অর্ডার করার সময় এই ব্যালেন্স থেকে স্বয়ংক্রিয়ভাবে ফি পরিশোধ হবে।</div>
+    </div>
+
+    <!-- Cashback Card -->
+    <div class="card" id="cbCard" style="display:none;background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border-color:#a7f3d0;">
+      <h3>🎉 আজকের ক্যাশব্যাক অফার</h3>
+      <div style="font-size:28px;font-weight:800;color:#059669;" id="cbAmt">৳০</div>
+      <div style="font-size:13px;color:#047857;margin:6px 0 14px;" id="cbSub"></div>
+      <button class="btn" id="cbBtn" style="background:linear-gradient(135deg,#059669,#10b981);" onclick="redeemCashback()">রিডিম করুন 🎉</button>
+    </div>
+
+    <!-- Recharge Form Card -->
+    <div class="card">
+      <h3>💰 টাকা যোগ করুন (ব্যালেন্স রিচার্জ)</h3>
+      <p style="font-size:13px;color:#64748b;margin-bottom:16px;">নিচের যেকোনো মাধ্যমে টাকা পাঠিয়ে TrxID সাবমিট করুন। এডমিন ভেরিফাই করলেই ব্যালেন্স যোগ হবে।</p>
+
+      <div class="method-card-grid" id="methods">
+        <div class="method pay-method sel" data-m="bkash_payment">
+          <img src="/icons/bkash-logo.webp" alt="bKash">
+          <div>bKash Payment</div>
+        </div>
+        <div class="method pay-method" data-m="bkash_personal">
+          <img src="/icons/bkash-logo.webp" alt="bKash">
+          <div>bKash Personal</div>
+        </div>
+        <div class="method pay-method" data-m="nagad">
+          <img src="/icons/nagad-logo.png" alt="Nagad">
+          <div>Nagad</div>
+        </div>
+        <div class="method pay-method" data-m="rocket">
+          <img src="/icons/rocket-logo.svg" alt="Rocket">
+          <div>Rocket</div>
         </div>
       </div>
-      <div class="field"><label>টাকার পরিমাণ (৳১০ - ৳১,০০,০০০)</label><input type="number" id="amount" placeholder="500" min="10" max="100000"></div>
-      <div class="field"><label>যে নম্বর থেকে পাঠিয়েছেন</label><input type="text" id="sender" placeholder="01XXXXXXXXX"></div>
-      <div class="field"><label>TrxID</label><input type="text" id="trxid" placeholder="TrxID লিখুন"></div>
-      <div class="err" id="err"></div><div class="okmsg" id="ok"></div>
-      <button class="btn" onclick="submitRecharge()">রিকোয়েস্ট পাঠান</button>
-    </div>
-    <div class="card">
-      <h3>🎟️ কুপন</h3>
-      <div style="display:flex;gap:8px;">
-        <input type="text" id="couponCode" placeholder="কুপন কোড" style="flex:1;padding:12px;border:1px solid #e2e8f0;border-radius:10px;">
-        <button class="btn" style="width:auto;" onclick="redeem()">রিডিম</button>
+
+      <div class="recv-box" id="recvNumWrap" style="display:none;">
+        <div style="font-size:12px;font-weight:700;color:#1e40af;text-transform:uppercase;margin-bottom:4px;">এই নম্বরে টাকা পাঠান:</div>
+        <div style="display:flex;gap:12px;align-items:center;">
+          <div id="recvNum" style="font-size:22px;font-weight:800;color:#1e40af;flex:1;letter-spacing:1px;"></div>
+          <button class="btn-secondary" id="copyBtn" onclick="copyRecvNum()">📋 কপি করুন</button>
+        </div>
       </div>
-      <div class="err" id="cerr"></div><div class="okmsg" id="cok"></div>
+
+      <div class="field">
+        <label>টাকার পরিমাণ (৳১০ - ৳১,০০,০০০)</label>
+        <input type="number" id="amount" placeholder="যেমন: 500" min="10" max="100000">
+        <div class="quick-amounts">
+          <div class="amount-chip" onclick="setAmount(100)">+ ৳১০০</div>
+          <div class="amount-chip" onclick="setAmount(500)">+ ৳৫০০</div>
+          <div class="amount-chip" onclick="setAmount(1000)">+ ৳১,০০০</div>
+          <div class="amount-chip" onclick="setAmount(2000)">+ ৳২,০০০</div>
+          <div class="amount-chip" onclick="setAmount(5000)">+ ৳৫,০০০</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>যে নম্বর থেকে টাকা পাঠিয়েছেন (সেন্ডার নম্বর)</label>
+        <input type="text" id="sender" placeholder="01XXXXXXXXX" maxlength="15">
+      </div>
+
+      <div class="field">
+        <label>ট্রানজ্যাকশন আইডি (TrxID)</label>
+        <input type="text" id="trxid" placeholder="যেমন: BL10293847" maxlength="40">
+      </div>
+
+      <div class="err" id="err"></div>
+      <div class="okmsg" id="ok"></div>
+
+      <button class="btn" style="width:100%;margin-top:10px;padding:14px;" onclick="submitRecharge()">টাকা যোগ করার রিকোয়েস্ট পাঠান →</button>
     </div>
+
+    <!-- Coupon Code Card -->
     <div class="card">
-      <h3>📜 লেনদেন</h3>
-      <div id="txList"><div style="color:#64748b;">লোড হচ্ছে…</div></div>
+      <h3>🎟️ প্রমোশন বা উপহার কুপন</h3>
+      <p style="font-size:13px;color:#64748b;margin-bottom:12px;">আপনার কাছে ডিসকাউন্ট বা গিফট কুপন থাকলে কোড লিখুন:</p>
+      <div style="display:flex;gap:10px;">
+        <input type="text" id="couponCode" placeholder="কুপন কোড লিখুন (যেমন: WELCOME50)" style="flex:1;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px;">
+        <button class="btn" style="width:auto;padding:12px 24px;" onclick="redeem()">রিডিম করুন</button>
+      </div>
+      <div class="err" id="cerr"></div>
+      <div class="okmsg" id="cok"></div>
     </div>
+
+    <!-- Transaction History -->
     <div class="card">
-      <h3>💰 রিফান্ড নীতি</h3>
-      <div style="font-size:14px;line-height:1.8;color:#64748b;">
-        <p>• অর্ডার বাতিল হলে (সেবা শুরু হওয়ার আগে) সম্পূর্ণ টাকা ওয়ালেটে ফেরত দেওয়া হবে।</p>
-        <p>• সেবা প্রসেসিং শুরু হয়ে গেলে রিফান্ড প্রযোজ্য নয়।</p>
-        <p>• ভুল তথ্য দিয়ে অর্ডার করলে রিফান্ড দেওয়া হবে না।</p>
-        <p>• রিফান্ডের টাকা ২৪ ঘণ্টার মধ্যে ওয়ালেটে যোগ হবে।</p>
+      <h3>📜 লেনদেনের ইতিহাস</h3>
+      <div id="txList">
+        <div class="skel" style="height:40px;margin-bottom:8px;"></div>
+        <div class="skel" style="height:40px;"></div>
+      </div>
+    </div>
+
+    <!-- Policy Card -->
+    <div class="card" style="background:#f8fafc;">
+      <h3>🛡️ রিফান্ড ও ব্যালেন্স পলিসি</h3>
+      <div style="font-size:13px;line-height:1.8;color:#475569;">
+        <p>• সেবা শুরু হওয়ার আগে যেকোনো সময় অর্ডার বাতিল করলে সম্পূর্ণ টাকা ইনস্ট্যান্ট ওয়ালেটে ফেরত আসবে।</p>
+        <p>• ম্যানুয়াল রিচার্জ সাধারণত ৫ থেকে ১৫ মিনিটের মধ্যে এডমিন দ্বারা যাচাই করে জমা করা হয়।</p>
+        <p>• যেকোনো রিচার্জ বা লেনদেন সম্পর্কিত জটিলতায় নিচের WhatsApp বাটনে যোগাযোগ করতে পারেন।</p>
       </div>
     </div>
   </div>
 </div>
+
+<!-- Cashback Win Overlay -->
 <div id="cbOverlay">
   <div class="big">🎉</div>
   <div class="congrats">অভিনন্দন!</div>
   <div class="won" id="cbWon">৳০</div>
   <div class="code" id="cbCode"></div>
-  <button class="btn" style="margin-top:22px;background:#1e40af;color:#fff;" onclick="document.getElementById('cbOverlay').classList.remove('show')">দারুণ! ✨</button>
+  <button class="btn" style="margin-top:24px;background:#ffffff;color:#1e40af;font-weight:700;" onclick="document.getElementById('cbOverlay').classList.remove('show')">ধন্যবাদ! ✨</button>
 </div>
+
+<!-- WhatsApp Support Button -->
 <button class="wa-fab" id="waFab" aria-label="WhatsApp-এ সাহায্য চান"><img src="/icons/abc-logo.png" alt="Abc"></button>
-<!-- mobile tabbar -->
+
+<!-- Mobile Tabbar -->
 <div class="m-tabbar">
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/dashboard.html'"><div class="ico">🏠</div>হোম</div>
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/services.html'"><div class="ico">🛎️</div>সেবা</div>
@@ -127,20 +270,40 @@
   <div class="m-tab on" aria-current="page"><div class="ico">💳</div>ওয়ালেট</div>
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
 </div>
+
 <script src="/js/app.js?v=13"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-let method='bkash_payment'; let rechargeNums={};
-const TYPBN={recharge:'রিচার্জ',cashback:'ক্যাশব্যাক',promo:'প্রোমো',refund:'রিফান্ড',debit:'খরচ',bonus:'বোনাস'};
+
+const TYPBN={recharge:'রিচার্জ',order_payment:'অর্ডার ফি',refund:'রিফান্ড',coupon:'কুপন',admin_adjustment:'এডমিন সমন্বয়'};
+let method='bkash_payment', rechargeNums={};
+
+function setAmount(n){
+  const el = document.getElementById('amount');
+  if(el){ el.value = n; el.focus(); }
+}
+
 function updateRecvNum(){
+  const w=document.getElementById('recvNumWrap');
+  if(!w) return;
   const num=rechargeNums[method]||'';
-  document.getElementById('recvNumWrap').style.display=num?'':'none';
+  w.style.display=num?'block':'none';
   if(num) document.getElementById('recvNum').textContent=num;
 }
+
 function copyRecvNum(){
   const n=document.getElementById('recvNum').textContent;
-  if(n&&navigator.clipboard) navigator.clipboard.writeText(n);
+  const btn = document.getElementById('copyBtn');
+  if(n&&navigator.clipboard){
+    navigator.clipboard.writeText(n);
+    if(btn){
+      const orig = btn.textContent;
+      btn.textContent = '✅ কপি হয়েছে!';
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  }
 }
+
 async function init(){
   const me=await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
@@ -150,47 +313,87 @@ async function init(){
   };
   try{const nr=await ABC.api('/recharge-numbers');if(nr.ok)rechargeNums=(await nr.json()).numbers||{};}catch(e){}
   document.querySelectorAll('#methods .method').forEach(m=>{
-    m.onclick=()=>{document.querySelectorAll('#methods .method').forEach(x=>x.classList.remove('sel'));m.classList.add('sel');method=m.dataset.m;updateRecvNum();};
+    m.onclick=()=>{
+      document.querySelectorAll('#methods .method').forEach(x=>x.classList.remove('sel'));
+      m.classList.add('sel');
+      method=m.dataset.m;
+      updateRecvNum();
+    };
   });
-  updateRecvNum(); loadWallet(); setTimeout(loadCashback,400);
+  updateRecvNum();
+  loadWallet();
+  setTimeout(loadCashback, 400);
 }
+
 async function loadWallet(){
-  const r=await ABC.api('/wallet?limit=10'); if(!r.ok)return;
+  const r=await ABC.api('/wallet?limit=10');
+  if(!r.ok)return;
   const d=await r.json();
   document.getElementById('bal').textContent='৳'+Number(d.balance).toLocaleString('bn-BD');
   const shortRef=x=>{x=String(x||'');const m=x.match(/^order-([0-9a-f]{8})/i);return m?'#'+m[1]:(x.length>24?x.slice(0,24)+'…':x);};
   const fmtAmt=a=>{a=Number(a);return (a<0?'-':'+')+'৳'+Math.abs(a).toLocaleString('bn-BD');};
   const fmtDt=s=>{try{return new Date(s).toLocaleString('bn-BD').replace(' PM',' পিএম').replace(' AM',' এএম');}catch(e){return '';}};
   document.getElementById('txList').innerHTML=d.transactions.map(t=>
-    '<div class="tx"><div><b>'+esc(TYPBN[t.type]||t.type)+'</b> <small style="color:#94a3b8;">'+esc(shortRef(t.trxid))+'</small><br><small style="color:#64748b;">'+fmtDt(t.created_at)+'</small></div>'+
-    '<b style="color:'+(Number(t.amount)>=0?'#16a34a':'#dc2626')+'">'+fmtAmt(t.amount)+'</b></div>'
-  ).join('')||'<div style="color:#64748b;">কোনো লেনদেন নেই</div>';
+    '<div class="tx"><div><b style="font-size:14px;color:#0f172a;">'+esc(TYPBN[t.type]||t.type)+'</b> <small style="color:#94a3b8;margin-left:6px;">'+esc(shortRef(t.trxid))+'</small><br><small style="color:#64748b;">'+fmtDt(t.created_at)+'</small></div>'+
+    '<b style="font-size:16px;color:'+(Number(t.amount)>=0?'#059669':'#dc2626')+'">'+fmtAmt(t.amount)+'</b></div>'
+  ).join('')||'<div style="color:#64748b;padding:12px 0;">কোনো লেনদেনের ইতিহাস পাওয়া যায়নি</div>';
 }
+
 async function submitRecharge(){
   const err=document.getElementById('err'),ok=document.getElementById('ok');
   err.textContent='';ok.textContent='';
-  const r=await ABC.api('/wallet/recharge',{method:'POST',body:{method,sender_no:document.getElementById('sender').value.trim(),trxid:document.getElementById('trxid').value.trim(),amount:document.getElementById('amount').value}});
+  const amt = document.getElementById('amount').value;
+  const sender = document.getElementById('sender').value.trim();
+  const trxid = document.getElementById('trxid').value.trim();
+
+  if(!amt || Number(amt) < 10){
+    err.textContent = '❌ অনুগ্রহ করে সর্বনিম্ন ১০ টাকা বা তার বেশি পরিমাণ লিখুন';
+    return;
+  }
+  if(!sender){
+    err.textContent = '❌ যে নম্বর থেকে টাকা পাঠিয়েছেন তা লিখুন';
+    return;
+  }
+  if(!trxid){
+    err.textContent = '❌ ট্রানজ্যাকশন আইডি (TrxID) লিখুন';
+    return;
+  }
+
+  const r=await ABC.api('/wallet/recharge',{
+    method:'POST',
+    body:{method, sender_no:sender, trxid:trxid, amount:amt}
+  });
   const d=await r.json();
-  if(!r.ok){err.textContent='❌ '+(d.error||'ব্যর্থ');return;}
-  ok.textContent='✅ রিকোয়েস্ট পাঠানো হয়েছে!'; loadWallet();
+  if(!r.ok){
+    err.textContent='❌ '+(d.error||'ব্যর্থ');
+    return;
+  }
+  ok.textContent='✅ রিচার্জ রিকোয়েস্ট সফলভাবে জমা হয়েছে! এডমিন যাচাই করে দ্রুত ব্যালেন্স যুক্ত করবেন।';
+  document.getElementById('amount').value = '';
+  document.getElementById('sender').value = '';
+  document.getElementById('trxid').value = '';
+  loadWallet();
 }
+
 async function redeem(){
   const cerr=document.getElementById('cerr'),cok=document.getElementById('cok');
   cerr.textContent='';cok.textContent='';
   const code=document.getElementById('couponCode').value.trim();
-  if(!code){cerr.textContent='⚠️ কোড লিখুন';return;}
+  if(!code){cerr.textContent='⚠️ কুপন কোড লিখুন';return;}
   const r=await ABC.api('/wallet/coupon',{method:'POST',body:{code}});
   const d=await r.json();
   if(!r.ok){cerr.textContent='❌ '+(d.error||'ব্যর্থ');return;}
-  cok.textContent='🎉 ৳'+Number(d.credited).toLocaleString('bn-BD')+' যোগ হয়েছে!';
-  document.getElementById('couponCode').value=''; loadWallet();
+  cok.textContent='🎉 ৳'+Number(d.credited).toLocaleString('bn-BD')+' ব্যালেন্সে যোগ হয়েছে!';
+  document.getElementById('couponCode').value='';
+  loadWallet();
   celebrate(Number(d.credited)||0, code);
 }
+
 function celebrate(amount,code){
-  const ov=document.getElementById('cbOverlay'); if(!ov) return;
-  document.getElementById('cbCode').textContent='কুপন: '+code;
+  const ov=document.getElementById('cbOverlay');
+  if(!ov) return;
+  document.getElementById('cbCode').textContent='কুপন কোড: '+code;
   ov.classList.add('show');
-  // coin rain
   for(let i=0;i<40;i++){
     const c=document.createElement('div');c.className='coin';
     c.textContent=['🪙','💰','✨'][i%3];
@@ -200,7 +403,6 @@ function celebrate(amount,code){
     ov.appendChild(c);
     setTimeout(()=>c.remove(),5500);
   }
-  // count-up
   const el=document.getElementById('cbWon');const t0=performance.now(),dur=1500;
   (function tick(t){
     const p=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-p,3);
@@ -208,6 +410,7 @@ function celebrate(amount,code){
     if(p<1)requestAnimationFrame(tick);
   })(t0);
 }
+
 async function loadCashback(){
   const card=document.getElementById('cbCard');
   try{
@@ -222,15 +425,21 @@ async function loadCashback(){
     else{document.getElementById('cbSub').textContent='রিচার্জ করুন, ক্যাশব্যাক পান!';btn.disabled=true;}
   }catch(e){}
 }
+
 async function redeemCashback(){
-  const btn=document.getElementById('cbBtn'); btn.disabled=true; btn.textContent='প্রসেস হচ্ছে…';
+  const btn=document.getElementById('cbBtn');
+  btn.disabled=true; btn.textContent='প্রসেস হচ্ছে…';
   try{
     const r=await ABC.api('/cashback/redeem',{method:'POST'});
     const d=await r.json();
-    if(r.ok){document.getElementById('couponCode').value=d.coupon_code;loadWallet();loadCashback();}
-    else btn.textContent='❌ ব্যর্থ';
+    if(r.ok){
+      document.getElementById('couponCode').value=d.coupon_code;
+      loadWallet();
+      loadCashback();
+    } else btn.textContent='❌ ব্যর্থ';
   }catch(e){btn.textContent='❌ ব্যর্থ';}
 }
+
 init();
 </script>
 </body>

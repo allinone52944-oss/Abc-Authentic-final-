@@ -5,197 +5,158 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="/manifest.json">
 <link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/premium.css?v=1">
 <link rel="stylesheet" href="/css/motion.css?v=2">
 <meta name="theme-color" content="#1e40af">
-<title>অর্ডার করুন - All In One</title>
+<title>নতুন অর্ডার প্রদান - All In One</title>
 <style>
-  html,body{overflow-x:hidden;}
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'Hind Siliguri',system-ui,sans-serif; background:#eef2f7; color:#0f172a; }
-  .desktop { max-width:1100px; margin:0 auto; background:#fff; min-height:100vh; display:flex; }
-  .sidebar { width:220px; background:linear-gradient(180deg,#1e3a8a,#1e40af); color:#fff; padding:20px 0; flex-shrink:0; }
-  .side-logo { padding:0 20px 20px; border-bottom:1px solid rgba(255,255,255,0.15); margin-bottom:16px; }
-  .side-logo h2 { font-size:18px; } .side-logo p { font-size:11px; opacity:0.7; }
-  .side-link { display:flex; align-items:center; gap:12px; padding:12px 20px; font-size:14px; color:rgba(255,255,255,0.85); cursor:pointer; border-left:3px solid transparent; }
-  .side-link.on { background:rgba(255,255,255,0.12); border-left-color:#fff; color:#fff; font-weight:600; }
-  .side-link .ico { font-size:18px; }
-  .main { flex:1; padding:24px; overflow:auto; }
-  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
-  .topbar h2 { font-size:20px; } .topbar p { font-size:13px; color:#64748b; }
-  .card { background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:20px; margin-bottom:16px; }
-  .card h2 { font-size:18px; margin-bottom:8px; }
-  .pill { background:#dbeafe; color:#1d4ed8; font-weight:700; border-radius:20px; padding:6px 16px; font-size:15px; }
-  .field { margin-bottom:14px; }
-  .field label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; }
-  .field input, .field textarea { width:100%; padding:12px; border:1px solid #cbd5e1; border-radius:10px; font-size:14px; font-family:inherit; }
-  .btn { background:#1e40af; color:#fff; border:none; border-radius:10px; padding:12px 24px; font-size:15px; font-weight:700; cursor:pointer; }
-  .btn:disabled { opacity:.6; cursor:default; }
-  .err { color:#dc2626; font-size:13px; margin:8px 0; }
-  @media (max-width:768px) {
-    .sidebar { display:none; }
-    .main { padding:16px; }
+  .back-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--primary-700);
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    margin-bottom: 20px;
+    padding: 6px 14px;
+    border-radius: var(--r-md);
+    background: var(--primary-50);
+    transition: all 0.15s ease;
   }
+  .back-nav:hover { background: var(--primary-100); }
+
+  .order-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    background: #f8fafc;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-md);
+    margin-bottom: 20px;
+  }
+
+  .file-drop {
+    border: 2px dashed var(--border-light);
+    border-radius: var(--r-md);
+    padding: 14px 16px;
+    background: #fafcff;
+    transition: border-color 0.2s;
+  }
+  .file-drop:hover { border-color: var(--primary-400); }
 </style>
 </head>
 <body>
 <div class="desktop">
   <div class="sidebar">
-    <div class="side-logo"><h2>🔷 All In One</h2><p>বিশ্বাস ও সেবার ঠিকানা</p></div>
-    <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
-    <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সেবা</div>
-    <div class="side-link on"><span class="ico">🛒</span> নতুন অর্ডার</div>
-    <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
-    <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট</div>
+    <div class="side-logo">
+      <div class="logo-icon">🔷</div>
+      <div>
+        <h2>All In One</h2>
+        <p>বিশ্বাস ও সেবার ঠিকানা</p>
+      </div>
+    </div>
+    <nav>
+      <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+      <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🛎️</span> সকল সেবা</div>
+      <div class="side-link on"><span class="ico">🛒</span> নতুন অর্ডার</div>
+      <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
+      <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">💳</span> ওয়ালেট ও রিচার্জ</div>
+      <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> পার্সোনাল প্রোফাইল</div>
+    </nav>
   </div>
+
   <div class="main">
-    <div class="topbar"><div><h2 id="svcName">অর্ডার</h2><p>তথ্য দিয়ে অর্ডার নিশ্চিত করুন</p></div></div>
-    <div class="card">
-      <div class="pill" id="svcPrice" style="display:inline-block;margin-bottom:14px;">৳০</div>
-      <div id="instrWrap" style="display:none;margin-bottom:14px;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;">
-        <div style="font-weight:700;margin-bottom:6px;"><span style="background:#1e40af;color:#fff;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;margin-right:6px;">১</span>📋 নির্দেশনা</div>
-        <div style="font-size:14px;line-height:1.7;">নিচের ফরম্যাটে আপনার তথ্য লিখুন। প্রতিটি লাইনে একটি করে তথ্য দিন। চাইলে কপি করে অন্য জায়গায় লিখে এখানে পেস্ট করতে পারেন।</div>
+    <span class="back-nav" onclick="history.back()">← পূর্বের পৃষ্ঠায় ফিরুন</span>
+
+    <div class="topbar">
+      <div>
+        <h2>🛒 নতুন সেবার আবেদন / অর্ডার</h2>
+        <p>প্রয়োজনীয় তথ্য প্রদান করে দ্রুত অর্ডার সম্পন্ন করুন</p>
       </div>
-      <div id="sampleWrap" style="display:none;margin-bottom:14px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
-        <div style="font-weight:700;margin-bottom:6px;"><span style="background:#16a34a;color:#fff;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;margin-right:6px;">২</span>📝 তথ্য লিখুন <button id="copySample" type="button" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;margin-left:8px;">📋 ফরম্যাট কপি</button></div>
-        <textarea id="sampleInput" rows="8" style="width:100%;font-family:monospace;font-size:13px;line-height:1.7;padding:10px;border-radius:8px;border:1px solid #bbf7d0;background:#fff;resize:vertical;min-height:150px;" placeholder="এখানে আপনার তথ্য লিখুন..."></textarea>
-        <div style="font-size:12px;color:#64748b;margin-top:6px;">💡 উপরের ফরম্যাট অনুযায়ী লিখুন, বা কপি করে এডিট করুন</div>
+    </div>
+
+    <div class="card" style="max-width:760px;">
+      <div class="order-meta">
+        <div>
+          <h2 id="svcName" style="font-size:20px;font-weight:800;color:#0f172a;margin-bottom:4px;">সেবার নাম</h2>
+          <div style="font-size:12px;color:#64748b;">অর্ডার কনফার্ম করার সাথে সাথে ওয়ালেট থেকে ফি কর্তন হবে</div>
+        </div>
+        <div>
+          <span class="st st-new" id="svcPrice" style="font-size:18px;font-weight:800;padding:6px 16px;">৳০</span>
+        </div>
       </div>
-      <div id="dynFields"></div>
-      <div style="font-weight:700;margin:14px 0 8px;"><span id="stepInfo" style="background:#7c3aed;color:#fff;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;margin-right:6px;">৩</span>তথ্য লিখুন</div>
-      <div class="field">
-        <label>নোট (ঐচ্ছিক)</label>
-        <textarea id="notes" rows="2" placeholder="যেমন: দ্রুত লাগবে"></textarea>
+
+      <div id="fields"></div>
+
+      <!-- Sample / Instruction Preview -->
+      <div id="sampleWrap" style="display:none;margin-bottom:16px;">
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:#334155;">ফরম নমুনা / তথ্য বিন্যাস (প্রয়োজনে এডিট করুন)</label>
+        <textarea id="sampleInput" rows="6" style="width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-family:monospace;font-size:13px;line-height:1.6;"></textarea>
       </div>
-      <div class="field" id="docWrap" style="display:none;">
-        <div style="font-weight:700;margin-bottom:8px;"><span id="stepDoc" style="background:#ea580c;color:#fff;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;margin-right:6px;">৪</span>ডকুমেন্ট আপলোড করুন</div>
-        <div id="docList" style="color:#64748b;font-size:13px;"></div>
+
+      <div id="docs"></div>
+
+      <div class="field" style="margin-top:16px;">
+        <label>অতিরিক্ত নোট বা নির্দেশনা (ঐচ্ছিক)</label>
+        <textarea id="notes" rows="3" placeholder="কোনো বিশেষ নির্দেশ থাকলে লিখুন…"></textarea>
       </div>
+
       <div class="err" id="err"></div>
-      <button class="btn" id="submitBtn"><span id="stepSubmit" style="background:rgba(255,255,255,0.3);border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;margin-right:6px;">৫</span>অর্ডার নিশ্চিত করুন →</button>
+
+      <button class="btn" id="submitBtn" style="width:100%;padding:14px;font-size:15px;margin-top:10px;">অর্ডার নিশ্চিত করুন →</button>
     </div>
   </div>
 </div>
-<button class="wa-fab" id="waFab" aria-label="WhatsApp-এ সাহায্য চান"><img src="/icons/abc-logo.png" alt="Abc"></button>
-<!-- mobile tabbar -->
-<div class="m-tabbar">
-  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/dashboard.html'"><div class="ico">🏠</div>হোম</div>
-  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/services.html'"><div class="ico">🛎️</div>সেবা</div>
-  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/orders.html'"><div class="ico">📦</div>অর্ডার</div>
-  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/wallet.html'"><div class="ico">💳</div>ওয়ালেট</div>
-  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
-</div>
+
 <script src="/js/app.js?v=13"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 const sid=new URLSearchParams(location.search).get('service');
 let svc=null;
+
 async function init(){
   const me=await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
-  const u=(await me.json()).user||{};
-  document.getElementById('waFab').onclick=()=>{
-    window.open('https://wa.me/?text='+encodeURIComponent('আসসালামু আলাইকুম! আমি '+u.name+' (ফোন: '+u.phone+')। সাহায্য দরকার।'),'_blank');
-  };
-  if(!sid){
-    // No service ID: show service picker
-    const r=await ABC.api('/services');
-    if(!r.ok){document.getElementById('err').textContent='সেবা লোড হয়নি';return;}
-    const d=await r.json();
-    const svcs=d.services||[];
-    if(!svcs.length){document.getElementById('err').textContent='কোনো সেবা নেই';return;}
-    document.getElementById('svcName').textContent='সেবা বেছে নিন';
-    document.getElementById('svcPrice').style.display='none';
-    const engMap={'bdris-certificate':'/bdris-certificate.html','bdris-apply':'/bdris-apply.html','death-verify':'/death-verify.html','nid-replica':'/nid-replica.html'};
-    document.getElementById('dynFields').innerHTML=svcs.map(s=>{
-      const isAuto=s.type==='automated'&&s.engine_id&&engMap[s.engine_id];
-      const url=isAuto?engMap[s.engine_id]:'/order-create.html?service='+s.id;
-      const badge=s.type==='automated'?' ⚡':'';
-      return '<button class="btn svc-pick" data-url="'+esc(url)+'" style="margin:4px 0;width:100%;text-align:left;">'+esc(s.name_bn||s.name)+badge+' — ৳'+Number(s.price).toLocaleString('bn-BD')+'</button>';
-    }).join('');
-    document.querySelectorAll('.svc-pick').forEach(b=>{b.onclick=()=>{location.href=b.dataset.url;};});
-    document.getElementById('submitBtn').style.display='none';
-    return;
-  }
+  if(!sid){location.href='/services.html';return;}
+  window._orderIdemKey = ABC.Idempotency.getOrCreate('order_submit_' + sid);
   const r=await ABC.api('/services/'+sid);
-  if(!r.ok){document.getElementById('err').textContent='সেবা পাওয়া যায়নি';return;}
-  svc=(await r.json()).service;
-  // M-15: one idempotency key per form load — double-clicks/retries dedupe to one order
-  if(!window._orderIdemKey) window._orderIdemKey = (crypto.randomUUID ? crypto.randomUUID() : 'k'+Date.now()+Math.random().toString(16).slice(2));
+  if(!r.ok){alert('সেবা পাওয়া যায়নি');location.href='/services.html';return;}
+  const d=await r.json();
+  svc=d.service;
   document.getElementById('svcName').textContent=svc.name_bn||svc.name;
   document.getElementById('svcPrice').textContent='৳'+Number(svc.price).toLocaleString('bn-BD');
-  // Manual flow: hardcoded instructions + editable sample (user spec 2026-10-17)
-  // Instructions are built-in, admin only writes the sample format
-  const isManual = svc.type === 'manual';
-  if(isManual){
-    document.getElementById('instrWrap').style.display='block';
-  }
-  if(isManual && svc.manual_sample){
-    document.getElementById('sampleWrap').style.display='block';
-    // Pre-fill the editable textarea with the sample format
-    document.getElementById('sampleInput').value=svc.manual_sample;
-    document.getElementById('copySample').onclick=async ()=>{
-      const btn=document.getElementById('copySample');
-      const clean=String(svc.manual_sample||'').split('\n').map(l=>l.trimEnd()).join('\n').replace(/\n{3,}/g,'\n\n').trim();
-      try{
-        await navigator.clipboard.writeText(clean);
-      }catch(e){
-        const ta=document.createElement('textarea');
-        ta.value=clean; ta.style.position='fixed'; ta.style.opacity='0';
-        document.body.appendChild(ta); ta.select();
-        try{document.execCommand('copy');}catch(_){}
-        ta.remove();
-      }
-      btn.textContent='✅ কপি হয়েছে!';
-      setTimeout(()=>{btn.textContent='📋 ফরম্যাট কপি';},2000);
-    };
-  } else if(isManual){
-    // Manual but no sample configured: show empty editable area
-    document.getElementById('sampleWrap').style.display='block';
-    document.getElementById('copySample').style.display='none';
-  }
-  // Dynamic fields from service definition
   const fields=svc.fields_required||[];
-  document.getElementById('dynFields').innerHTML=fields.map((f,i)=>{
-    const nm=String(f.name||'').toLowerCase(), lb=String(f.label||'').toLowerCase(), ph=String(f.placeholder||'');
-    const isLong=/address|ঠিকানা|description|বিবরণ|note|নোট|details/.test(nm+' '+lb) || ph.length>30;
-    const input=isLong
-      ? '<textarea data-field="'+esc(f.name)+'" rows="3" placeholder="'+esc(ph)+'" style="width:100%;"></textarea>'
-      : '<input type="text" data-field="'+esc(f.name)+'" placeholder="'+esc(ph)+'">';
-    return '<div class="field"><label>'+esc(f.label||f.name)+(f.required?' *':'')+'</label>'+input+'</div>';
-  }).join('');
-  // Documents
-  const docs=svc.documents_required||[];
-  const docCount=Math.min(6,Math.max(0,Number(svc.manual_doc_count)||0));
-  if(docs.length){
-    document.getElementById('docWrap').style.display='block';
-    document.getElementById('docList').innerHTML=docs.map((d,i)=>'<div class="field"><label>📎 '+esc(d)+' *</label><input type="file" data-doc="'+i+'" data-doctype="'+esc(d)+'" accept=".pdf,.jpg,.jpeg,.png"></div>').join('');
-  } else if(docCount>0){
-    // Admin set doc_count but no named documents: show generic upload fields
-    document.getElementById('docWrap').style.display='block';
-    let html='';
-    for(let i=0;i<docCount;i++){
-      html+='<div class="field"><label>📎 ডকুমেন্ট '+(i+1)+' *</label><input type="file" data-doc="'+i+'" data-doctype="document-'+(i+1)+'" accept=".pdf,.jpg,.jpeg,.png"></div>';
+  const fh=fields.map(f=>
+    '<div class="field"><label>'+esc(f.label||f.name)+(f.required?' *':'')+'</label>'+
+    (f.type==='textarea'?
+      '<textarea data-field="'+esc(f.name)+'" placeholder="'+esc(f.placeholder||'')+'" rows="3"></textarea>':
+      '<input type="'+(f.type||'text')+'" data-field="'+esc(f.name)+'" placeholder="'+esc(f.placeholder||'')+'">')+
+    '</div>'
+  ).join('');
+  document.getElementById('fields').innerHTML=fh;
+
+  // Auto-fill form template
+  if(svc.sample_format){
+    const sw=document.getElementById('sampleWrap');
+    const si=document.getElementById('sampleInput');
+    if(sw&&si){
+      sw.style.display='block';
+      si.value=svc.sample_format;
     }
-    document.getElementById('docList').innerHTML=html;
   }
-  // Renumber steps based on visible sections (bn numerals)
-  (function(){
-    const bn=['১','২','৩','৪','৫'];
-    let n=0;
-    const hasInstr=document.getElementById('instrWrap').style.display!=='none';
-    const hasSample=document.getElementById('sampleWrap').style.display!=='none';
-    const hasDoc=document.getElementById('docWrap').style.display!=='none';
-    if(hasInstr) n++;
-    if(hasSample) n++;
-    // info step
-    n++; const si=document.getElementById('stepInfo'); if(si) si.textContent=bn[n-1]||n;
-    // doc step
-    if(hasDoc){ n++; const sd=document.getElementById('stepDoc'); if(sd) sd.textContent=bn[n-1]||n; }
-    // submit step
-    n++; const ss=document.getElementById('stepSubmit'); if(ss) ss.textContent=bn[n-1]||n;
-  })();
-  // Restore draft (survives refresh)
-  const draft=ABC.Drafts.load('order_'+sid);
+
+  const docs=svc.documents_required||[];
+  const dh=docs.map((doc,i)=>
+    '<div class="field"><label>📄 '+esc(doc)+' (ডকুমেন্ট আপলোড)</label>'+
+    '<div class="file-drop"><input type="file" data-doc="'+i+'" data-doctype="'+esc(doc)+'" accept="image/*,.pdf"></div>'+
+    '</div>'
+  ).join('');
+  document.getElementById('docs').innerHTML=dh;
+
+  // Restore draft
+  const draft=ABC.Drafts.get('order_'+sid);
   if(draft){
     document.querySelectorAll('[data-field]').forEach(el=>{
       if(draft[el.dataset.field])el.value=draft[el.dataset.field];
@@ -210,11 +171,12 @@ async function init(){
   });
   document.getElementById('submitBtn').onclick=submit;
 }
+
 async function submit(){
   const err=document.getElementById('err');
   err.textContent='';
   const data={};
-  document.querySelectorAll('[data-field]').forEach(el=>{data[el.dataset.field]=el.value.trim();});  // Validation
+  document.querySelectorAll('[data-field]').forEach(el=>{data[el.dataset.field]=el.value.trim();});
   const fields=svc.fields_required||[];
   for(const f of fields){
     const v=data[f.name]||'';
@@ -222,7 +184,6 @@ async function submit(){
       err.textContent='⚠️ '+(f.label||f.name)+' দিন';
       return;
     }
-    // BRN must be 17 digits
     if(/brn/i.test(f.name) && v && !/^\d{17}$/.test(v)){
       err.textContent='⚠️ BRN ১৭ সংখ্যার হতে হবে';
       return;
@@ -230,8 +191,6 @@ async function submit(){
   }
   const btn=document.getElementById('submitBtn');
   btn.disabled=true;btn.textContent='প্রসেস হচ্ছে…';
-  // First create order, then upload documents
-  // Include the editable sample text as form_data
   const sampleText=document.getElementById('sampleInput')?document.getElementById('sampleInput').value.trim():'';
   if(sampleText) data._manual_form=sampleText;
   const r=await ABC.api('/orders',{method:'POST',body:{
@@ -242,12 +201,11 @@ async function submit(){
   const d=await r.json();
   btn.disabled=false;btn.textContent='অর্ডার নিশ্চিত করুন →';
   if(!r.ok){
-    err.textContent=d.error==='INSUFFICIENT_BALANCE'?'⚠️ ব্যালেন্স কম! আগে রিচার্জ করুন।':
-      d.error==='MISSING_DOCUMENTS'?'⚠️ ডকুমেন্ট দিন: '+(d.missing||[]).join(', '):
-      d.error==='SERVICE_CLOSED'?'⚠️ সেবা এখন বন্ধ আছে':'❌ '+d.error;
+    err.textContent=d.error==='INSUFFICIENT_BALANCE'?'⚠️ ওয়ালেটে পর্যাপ্ত ব্যালেন্স নেই! আগে টাকা রিচার্জ করুন।':
+      d.error==='MISSING_DOCUMENTS'?'⚠️ প্রয়োজনীয় ডকুমেন্ট দিন: '+(d.missing||[]).join(', '):
+      d.error==='SERVICE_CLOSED'?'⚠️ এই সেবাটি সাময়িকভাবে বন্ধ আছে':'❌ '+d.error;
     return;
   }
-  // Upload documents if any
   const orderId = d.order.id;
   const fileInputs = document.querySelectorAll('[data-doc]');
   let uploadFailed = false;
@@ -274,6 +232,7 @@ async function submit(){
   ABC.Drafts.clear('order_'+sid);
   location.href='/order-status.html?id='+orderId;
 }
+
 init();
 </script>
 </body>

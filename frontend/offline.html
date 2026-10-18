@@ -3,29 +3,48 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>অফলাইন - Abc Authentic</title>
+<title>অফলাইন - All In One</title>
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#d4af37">
-<link rel="stylesheet" href="/css/coffee.css?v=8">
+<meta name="theme-color" content="#1e40af">
+<link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/premium.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=2">
 <style>
-  html,body{overflow-x:hidden;}
-.off-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;}
-.off-cup{font-size:72px;animation:steam 2.4s ease-in-out infinite;}
-@keyframes steam{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
-.off-title{color:#d4af37;font-size:28px;margin:16px 0 8px;}
-.off-msg{color:#c9a961;font-size:16px;margin-bottom:24px;}
-.off-btn{background:linear-gradient(135deg,#d4af37,#b8941f);color:#2b1d14;border:none;border-radius:12px;padding:14px 36px;font-size:17px;font-weight:bold;cursor:pointer;}
-.off-btn:active{transform:scale(.96);}
+  body {
+    background: #091326;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    margin: 0;
+  }
+  .off-wrap {
+    background: #ffffff;
+    border-radius: var(--r-xl);
+    padding: 40px 32px;
+    max-width: 440px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  }
+  .off-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 0.9; }
+    50% { transform: scale(1.08); opacity: 1; }
+  }
 </style>
-<!-- cache-bust 2026-10-13: force fresh document load -->
 </head>
 <body>
-<div class="spiral"></div>
 <div class="off-wrap">
-  <div class="off-cup">☕</div>
-  <div class="off-title">ইন্টারনেট সংযোগ নেই</div>
-  <div class="off-msg">অনুগ্রহ করে সংযোগ চেক করে আবার চেষ্টা করুন</div>
-  <button class="off-btn" onclick="location.reload()">🔄 আবার চেষ্টা করুন</button>
+  <div class="off-icon">📡</div>
+  <h2 style="font-size:24px;font-weight:800;color:#0f172a;margin-bottom:8px;">ইন্টারনেট সংযোগ নেই</h2>
+  <p style="font-size:14px;color:#64748b;line-height:1.6;margin-bottom:24px;">আপনার ডিভাইসটি অফলাইনে রয়েছে। অনুগ্রহ করে Wi-Fi বা মোবাইল ডেটা সংযোগ চেক করে আবার চেষ্টা করুন।</p>
+  <button class="btn" style="width:100%;padding:14px;" onclick="location.reload()">🔄 পুনরায় সংযোগ পরীক্ষা করুন</button>
 </div>
 </body>
 </html>

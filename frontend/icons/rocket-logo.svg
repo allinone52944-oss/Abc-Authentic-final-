@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="rocketGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#9333ea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6b21a8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" rx="22" fill="url(#rocketGrad)" />
+  <!-- Rocket glyph -->
+  <path d="M50 18 C58 28 66 42 66 56 C66 66 60 70 50 70 C40 70 34 66 34 56 C34 42 42 28 50 18 Z" fill="#ffffff" />
+  <path d="M34 58 L24 68 L32 72 L38 66 Z" fill="#facc15" />
+  <path d="M66 58 L76 68 L68 72 L62 66 Z" fill="#facc15" />
+  <circle cx="50" cy="42" r="6" fill="#8c3494" />
+  <path d="M46 72 L50 82 L54 72 Z" fill="#ef4444" />
+</svg>
