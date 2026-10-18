@@ -19,6 +19,18 @@ const push = require('../utils/push');
 const router = express.Router();
 router.use(requireAuth);
 
+function safeJsonArray(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string') {
+    try {
+      const p = JSON.parse(val);
+      if (Array.isArray(p)) return p;
+    } catch (_) {}
+  }
+  return [];
+}
+
 function pageParams(req) {
   const page = Math.max(1, parseInt(req.query.page || '1', 10) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || '10', 10) || 10));
@@ -87,8 +99,8 @@ router.get('/services', async (req, res) => {
         category_name_bn: s.cat_name_bn || null,
         category_icon: s.cat_icon || null,
         category_serial: s.cat_serial == null ? null : Number(s.cat_serial),
-        documents_required: s.documents_required,
-        fields_required: s.fields_required,
+        documents_required: safeJsonArray(s.documents_required),
+        fields_required: safeJsonArray(s.fields_required),
         schedule: s.schedule, rules_text: s.rules_text,
         engine_id: s.engine_id, open: serviceOpen(s.schedule),
         manual_instructions: s.manual_instructions || null,
@@ -117,8 +129,8 @@ router.get('/services/:id', async (req, res) => {
     res.json({
       service: {
         id: s.id, name: s.name, name_bn: s.name_bn, type: s.type,
-        price: eff.price, documents_required: s.documents_required,
-        fields_required: s.fields_required, schedule: s.schedule,
+        price: eff.price, documents_required: safeJsonArray(s.documents_required),
+        fields_required: safeJsonArray(s.fields_required), schedule: s.schedule,
         rules_text: s.rules_text, engine_id: s.engine_id,
         open: serviceOpen(s.schedule),
         category_id: s.cat_id || null,

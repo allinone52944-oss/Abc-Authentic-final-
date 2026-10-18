@@ -132,6 +132,14 @@
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
+function safeArray(val){
+  if(!val) return [];
+  if(Array.isArray(val)) return val;
+  if(typeof val === 'string'){
+    try { const p = JSON.parse(val); if(Array.isArray(p)) return p; } catch(_){}
+  }
+  return [];
+}
 const id=new URLSearchParams(location.search).get('id');
 
 function autoIcon(name){
@@ -177,7 +185,7 @@ async function init(){
   const icon = (s.icon && s.icon !== '🛎️') ? s.icon : autoIcon(s.name_bn || s.name);
 
   // Docs
-  const docs=(s.documents_required||[]).map(d=>'<li>📄 '+esc(d)+'</li>').join('')||'<li>কোনো বিশেষ ডকুমেন্ট প্রয়োজন নেই</li>';
+  const docs=safeArray(s.documents_required).map(d=>'<li>📄 '+esc(d)+'</li>').join('')||'<li>কোনো বিশেষ ডকুমেন্ট প্রয়োজন নেই</li>';
   const sched=(s.schedule&&s.schedule.open)?'<div style="color:#64748b;font-size:13px;margin:8px 0;">🕘 সেবার সময়সূচি: '+esc(s.schedule.open)+' - '+esc(s.schedule.close||'')+'</div>':'';
 
   // Balance Check
