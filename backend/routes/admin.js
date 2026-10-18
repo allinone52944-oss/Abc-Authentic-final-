@@ -103,6 +103,10 @@ router.post('/users', async (req, res) => {
     res.status(201).json({ user: ins.rows[0] });
   } catch (e) {
     safeLog('[admin] user create error:', e.message);
+    // Password strength failure from hashPassword
+    if (e.message === 'WEAK_PASSWORD') {
+      return res.status(400).json({ error: 'WEAK_PASSWORD' });
+    }
     // Return specific error for unique violations
     if (e.code === '23505') {
       if (e.constraint && e.constraint.includes('phone')) return res.status(409).json({ error: 'PHONE_TAKEN' });
