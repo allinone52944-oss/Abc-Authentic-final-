@@ -251,6 +251,26 @@
       <button class="btn" style="width:100%;margin-top:10px;padding:14px;" onclick="submitRecharge()">টাকা যোগ করার রিকোয়েস্ট পাঠান →</button>
     </div>
 
+    <!-- Recharge Cashback Hub Card -->
+    <div class="card" id="cbHubCard" style="background:linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);border:1.5px solid #a7f3d0;box-shadow:0 4px 14px rgba(16, 185, 129, 0.08);">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:24px;">🎁</span>
+          <div>
+            <h3 style="margin:0;font-size:16px;color:#065f46;font-weight:800;">রিচার্জ ক্যাশব্যাক অফার</h3>
+            <p style="margin:2px 0 0;font-size:12px;color:#047857;">অনুমোদিত প্রতিটি রিচার্জে আকর্ষণীয় কুপন বোনাস</p>
+          </div>
+        </div>
+        <div id="cbRateBadge" style="background:#059669;color:#ffffff;font-size:12px;font-weight:800;padding:4px 12px;border-radius:20px;box-shadow:0 2px 4px rgba(5,150,105,0.25);">
+          ক্যাশব্যাক অফার
+        </div>
+      </div>
+
+      <div id="cbHubBody" style="background:#ffffff;border:1px solid #d1fae5;border-radius:12px;padding:16px;">
+        <div class="skel" style="height:36px;width:100%;border-radius:8px;"></div>
+      </div>
+    </div>
+
     <!-- Coupon Code Card -->
     <div class="card">
       <h3>🎟️ প্রমোশন বা উপহার কুপন</h3>
@@ -364,16 +384,140 @@ async function init(){
 
 const bn = n => Number(n || 0).toLocaleString('bn-BD');
 
+
+const shortRef = x => {
+  x = String(x || '');
+  const m = x.match(/^order-([0-9a-f]{8})/i);
+  return m ? '#' + m[1] : (x.length > 24 ? x.slice(0, 24) + '…' : x);
+};
+
+function renderCashbackHub(d) {
+  const cbCfg = (d && d.cashback) || { enabled: false, percent: 0 };
+  const badge = document.getElementById('cbRateBadge');
+  const body = document.getElementById('cbHubBody');
+  if (!body) return;
+
+  const txs = (d && d.transactions) || [];
+  const recharges = txs.filter(t => t.type === 'recharge');
+
+  const eligible = recharges.filter(t => t.status === 'approved' && (!t.coupon || !t.coupon.code));
+  const unredeemed = recharges.filter(t => t.status === 'approved' && t.coupon && t.coupon.status !== 'redeemed');
+  const pending = recharges.filter(t => t.status === 'pending');
+
+  if (badge) {
+    if (cbCfg.enabled && cbCfg.percent > 0) {
+      badge.textContent = '✨ ' + bn(cbCfg.percent) + '% ক্যাশব্যাক চালু';
+      badge.style.display = 'inline-block';
+      badge.style.background = '#059669';
+    } else {
+      badge.textContent = 'অফার সাময়িক বন্ধ';
+      badge.style.background = '#64748b';
+    }
+  }
+
+  let html = '';
+
+  // 1. Ready-to-redeem coupons
+  if (unredeemed.length > 0) {
+    html += '<div style="margin-bottom:12px;">' +
+      '<div style="font-size:13px;font-weight:700;color:#854d0e;margin-bottom:8px;display:flex;align-items:center;gap:6px;">' +
+        '<span>🎟️ প্রস্তুতকৃত ক্যাশব্যাক কুপন (ব্যালেন্সে রিডিম করুন):</span>' +
+      '</div>';
+    unredeemed.forEach(t => {
+      const c = t.coupon;
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:#fefce8;border:1px solid #fef08a;border-radius:10px;padding:12px 14px;margin-bottom:8px;">' +
+        '<div>' +
+          '<div style="font-size:14px;font-weight:800;color:#854d0e;letter-spacing:0.5px;">' +
+            'কোড: <span style="font-family:monospace;background:#fef08a;padding:2px 8px;border-radius:6px;">' + esc(c.code) + '</span>' +
+          '</div>' +
+          '<div style="font-size:12px;color:#a16207;margin-top:3px;">' +
+            'ক্যাশব্যাক মূল্য: <b>৳' + bn(c.amount) + '</b> (রিচার্জ ৳' + bn(t.amount) + ')' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<button class="cb-btn" data-code="' + esc(c.code) + '" onclick="instantRedeemCode(this.dataset.code)">⚡ ওয়ালেটে রিডিম করুন</button>' +
+          '<button class="cb-btn sec" data-code="' + esc(c.code) + '" onclick="copyCode(this.dataset.code)">📋 কপি</button>' +
+        '</div>' +
+      '</div>';
+    });
+    html += '</div>';
+  }
+
+  // 2. Eligible approved recharges (1-click coupon creation)
+  if (cbCfg.enabled && cbCfg.percent > 0 && eligible.length > 0) {
+    html += '<div style="margin-bottom:12px;">' +
+      '<div style="font-size:13px;font-weight:700;color:#065f46;margin-bottom:8px;display:flex;align-items:center;gap:6px;">' +
+        '<span>🎉 অনুমোদিত রিচার্জ—ক্যাশব্যাক কুপন সংগ্রহ করুন:</span>' +
+      '</div>';
+    eligible.forEach(t => {
+      const expected = Math.floor(Number(t.amount) * cbCfg.percent / 100 * 100) / 100;
+      if (expected > 0) {
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px;margin-bottom:8px;">' +
+          '<div>' +
+            '<div style="font-size:14px;font-weight:800;color:#065f46;">' +
+              '৳' + bn(t.amount) + ' রিচার্জ সফল হয়েছে' +
+            '</div>' +
+            '<div style="font-size:12px;color:#047857;margin-top:3px;">' +
+              'প্রাপ্য ক্যাশব্যাক: <b style="color:#059669;">৳' + bn(expected) + '</b> (' + bn(cbCfg.percent) + '%)' +
+              (t.trxid ? ' • TrxID: ' + esc(shortRef(t.trxid)) : '') +
+            '</div>' +
+          '</div>' +
+          '<button class="cb-btn" data-id="' + esc(t.id) + '" onclick="generateCashbackCoupon(this.dataset.id)">' +
+            '⚡ ১-ক্লিকে কুপন তৈরি করুন (৳' + bn(expected) + ')' +
+          '</button>' +
+        '</div>';
+      }
+    });
+    html += '</div>';
+  }
+
+  // 3. Pending recharges
+  if (pending.length > 0) {
+    const p = pending[0];
+    const expText = (cbCfg.enabled && cbCfg.percent > 0)
+      ? ' (অনুমোদন হলে ৳' + bn(Math.floor(Number(p.amount) * cbCfg.percent / 100 * 100) / 100) + ' ক্যাশব্যাক পাবেন)'
+      : '';
+    html += '<div style="display:flex;align-items:center;gap:10px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 14px;margin-bottom:8px;font-size:13px;color:#92400e;">' +
+      '<span style="font-size:20px;">⏳</span>' +
+      '<div>' +
+        '<b>আপনার ৳' + bn(p.amount) + ' ব্যালেন্স রিচার্জ ভেরিফিকেশন পেন্ডিং রয়েছে।</b>' +
+        '<div style="font-size:12px;color:#b45309;margin-top:2px;">এডমিন TrxID ভেরিফাই করলেই আপনি এই কার্ড থেকে সরাসরি ১-ক্লিকে ক্যাশব্যাক কুপন পেয়ে যাবেন!' + expText + '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // 4. Default notice
+  if (eligible.length === 0 && unredeemed.length === 0) {
+    if (cbCfg.enabled && cbCfg.percent > 0) {
+      html += '<div style="display:flex;align-items:center;gap:14px;padding:6px 4px;color:#065f46;">' +
+        '<div style="font-size:32px;line-height:1;">⚡</div>' +
+        '<div style="font-size:13px;line-height:1.6;">' +
+          '<b style="color:#0f172a;">প্রতিটি সফল ব্যালেন্স রিচার্জে পাবেন ' + bn(cbCfg.percent) + '% ক্যাশব্যাক কুপন!</b><br>' +
+          '<span style="color:#64748b;">উপরে যেকোনো পেমেন্ট মেথডে টাকা পাঠিয়ে TrxID সাবমিট করুন। এডমিন অনুমোদনের সাথে সাথেই এই কার্ডে ১-ক্লিক কুপন বাটন চলে আসবে এবং সরাসরি ওয়ালেট ব্যালেন্সে রিডিম করতে পারবেন।</span>' +
+        '</div>' +
+      '</div>';
+    } else {
+      html += '<div style="display:flex;align-items:center;gap:12px;padding:6px 4px;color:#64748b;font-size:13px;">' +
+        '<span style="font-size:24px;">ℹ️</span>' +
+        '<div>বর্তমানে কোনো ক্যাশব্যাক অফার সক্রিয় নেই। নতুন অফার চালু হলে স্বয়ংক্রিয়ভাবে এখানে দেখা যাবে।</div>' +
+      '</div>';
+    }
+  }
+
+  body.innerHTML = html;
+}
+
 async function loadWallet(){
   const r=await ABC.api('/wallet?limit=10');
   if(!r.ok)return;
   const d=await r.json();
   document.getElementById('bal').textContent='৳'+bn(d.balance);
-  const shortRef=x=>{x=String(x||'');const m=x.match(/^order-([0-9a-f]{8})/i);return m?'#'+m[1]:(x.length>24?x.slice(0,24)+'…':x);};
+  // shortRef is global
   const fmtAmt=a=>{a=Number(a);return (a<0?'-':'+')+'৳'+Math.abs(a).toLocaleString('bn-BD');};
   const fmtDt=s=>{try{return new Date(s).toLocaleString('bn-BD').replace(' PM',' পিএম').replace(' AM',' এএম');}catch(e){return '';}};
 
   const cbCfg = d.cashback || { enabled: false, percent: 0 };
+  renderCashbackHub(d);
 
   document.getElementById('txList').innerHTML = d.transactions.map(t => {
     let cbHtml = '';
