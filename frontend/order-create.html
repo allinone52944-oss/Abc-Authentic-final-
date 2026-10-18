@@ -226,7 +226,7 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
 </div>
 
-<script src="/js/app.js?v=13"></script>
+<script src="/js/app.js?v=15"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -353,6 +353,63 @@ function applySampleToInput(){
   }
 }
 
+
+const LocalDraft = {
+  get(k) {
+    try {
+      if (window.ABC && window.ABC.Drafts) {
+        if (typeof window.ABC.Drafts.get === 'function') return window.ABC.Drafts.get(k);
+        if (typeof window.ABC.Drafts.load === 'function') return window.ABC.Drafts.load(k);
+      }
+      const v = localStorage.getItem('abc_draft_' + k);
+      return v ? JSON.parse(v) : null;
+    } catch (_) { return null; }
+  },
+  save(k, obj) {
+    try {
+      if (window.ABC && window.ABC.Drafts && typeof window.ABC.Drafts.save === 'function') {
+        return window.ABC.Drafts.save(k, obj);
+      }
+      localStorage.setItem('abc_draft_' + k, JSON.stringify(obj));
+    } catch (_) {}
+  },
+  clear(k) {
+    try {
+      if (window.ABC && window.ABC.Drafts && typeof window.ABC.Drafts.clear === 'function') {
+        window.ABC.Drafts.clear(k);
+      }
+    } catch (_) {}
+    try { localStorage.removeItem('abc_draft_' + k); } catch (_) {}
+  }
+};
+
+const LocalIdem = {
+  getOrCreate(k) {
+    try {
+      if (window.ABC && window.ABC.Idempotency && typeof window.ABC.Idempotency.getOrCreate === 'function') {
+        return window.ABC.Idempotency.getOrCreate(k);
+      }
+      const stored = sessionStorage.getItem('abc_idem_' + k);
+      if (stored) return stored;
+      const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'idem_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+      sessionStorage.setItem('abc_idem_' + k, id);
+      return id;
+    } catch (_) {
+      return 'idem_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+    }
+  },
+  clear(k) {
+    try {
+      if (window.ABC && window.ABC.Idempotency && typeof window.ABC.Idempotency.clear === 'function') {
+        window.ABC.Idempotency.clear(k);
+      }
+    } catch (_) {}
+    try { sessionStorage.removeItem('abc_idem_' + k); } catch (_) {}
+  }
+};
+
 async function init(){
   try {
     const me=await ABC.api('/auth/me');
@@ -376,9 +433,7 @@ async function init(){
       return;
     }
 
-    if(ABC.Idempotency && ABC.Idempotency.getOrCreate){
-      window._orderIdemKey = ABC.Idempotency.getOrCreate('order_submit_' + sid);
-    }
+    window._orderIdemKey = LocalIdem.getOrCreate('order_submit_' + sid);
     const r=await ABC.api('/services/'+sid);
     if(!r.ok){
       document.getElementById('svcName').textContent = '⚠️ সেবা পাওয়া যায়নি';
@@ -511,30 +566,44 @@ async function init(){
     }
   }
 
-  // Restore draft
-  const draft=ABC.Drafts.get('order_'+sid);
-  if(draft){
-    document.querySelectorAll('[data-field]').forEach(el=>{
-      if(draft[el.dataset.field]) el.value = draft[el.dataset.field];
-    });
-    if(draft.notes) document.getElementById('notes').value = draft.notes;
-    if(draft.manualDetails && document.getElementById('manualDetailsInput')){
-      document.getElementById('manualDetailsInput').value = draft.manualDetails;
+  // Always bind submit button regardless of draft state
+  const sbBtn = document.getElementById('submitBtn');
+  if(sbBtn) sbBtn.onclick = submit;
+
+  // Restore draft safely (isolated from submit button binding)
+  try {
+    const draft = LocalDraft.get('order_' + sid);
+    if(draft){
+      document.querySelectorAll('[data-field]').forEach(el=>{
+        if(draft[el.dataset.field] !== undefined) el.value = draft[el.dataset.field];
+      });
+      const notesEl = document.getElementById('notes');
+      if(draft.notes && notesEl) notesEl.value = draft.notes;
+      const manualEl = document.getElementById('manualDetailsInput');
+      if(draft.manualDetails && manualEl){
+        manualEl.value = draft.manualDetails;
+      }
     }
+  } catch(err) {
+    console.warn('Draft restore warning:', err);
   }
 
   // Auto-save draft on input
-  document.querySelector('.card').addEventListener('input', triggerDraftSave);
-  document.getElementById('submitBtn').onclick = submit;
+  const cardEl = document.querySelector('.card');
+  if(cardEl) cardEl.addEventListener('input', triggerDraftSave);
 }
 
 function triggerDraftSave(){
-  const d={
-    notes: document.getElementById('notes').value,
-    manualDetails: document.getElementById('manualDetailsInput') ? document.getElementById('manualDetailsInput').value : ''
-  };
-  document.querySelectorAll('[data-field]').forEach(el=>{ d[el.dataset.field] = el.value; });
-  ABC.Drafts.save('order_'+sid, d);
+  try {
+    const notesEl = document.getElementById('notes');
+    const manualEl = document.getElementById('manualDetailsInput');
+    const d = {
+      notes: notesEl ? notesEl.value : '',
+      manualDetails: manualEl ? manualEl.value : ''
+    };
+    document.querySelectorAll('[data-field]').forEach(el=>{ d[el.dataset.field] = el.value; });
+    LocalDraft.save('order_' + sid, d);
+  } catch(_) {}
 }
 
 async function submit(){
@@ -672,9 +741,9 @@ async function submit(){
     }
   }
 
-  // Clear drafts & idempotency key
-  ABC.Idempotency.clear('order_submit_' + sid);
-  ABC.Drafts.clear('order_' + sid);
+  // Clear drafts & idempotency key safely
+  LocalIdem.clear('order_submit_' + sid);
+  LocalDraft.clear('order_' + sid);
 
   notice.style.background = '#f0fdf4';
   notice.style.borderColor = '#86efac';

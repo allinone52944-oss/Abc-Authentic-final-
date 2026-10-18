@@ -169,7 +169,7 @@
       } catch (e) { return null; }
     },
     clear(key) {
-      localStorage.removeItem('abc_draft_' + key);
+      try { localStorage.removeItem('abc_draft_' + key); } catch (e) {}
     },
   };
 
