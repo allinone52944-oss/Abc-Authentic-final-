@@ -462,7 +462,7 @@ function renderCashbackHub(d) {
               (t.trxid ? ' • TrxID: ' + esc(shortRef(t.trxid)) : '') +
             '</div>' +
           '</div>' +
-          '<button class="cb-btn" data-id="' + esc(t.id) + '" onclick="generateCashbackCoupon(this.dataset.id)">' +
+          '<button class="cb-btn" data-id="' + esc(t.id) + '" onclick="generateCashbackCoupon(this.dataset.id, this)">' +
             '⚡ ১-ক্লিকে কুপন তৈরি করুন (৳' + bn(expected) + ')' +
           '</button>' +
         '</div>';
@@ -545,7 +545,7 @@ async function loadWallet(){
           const expected = Math.floor(Number(t.amount) * cbCfg.percent / 100 * 100) / 100;
           if (expected > 0) {
             cbHtml = '<div class="cb-badge">🎁 <b>' + bn(cbCfg.percent) + '% ক্যাশব্যাক প্রাপ্য (৳' + bn(expected) + ')</b> ' +
-              '<button class="cb-btn" data-id="' + esc(t.id) + '" onclick="generateCashbackCoupon(this.dataset.id)">⚡ ১-ক্লিকে কুপন তৈরি করুন</button></div>';
+              '<button class="cb-btn" data-id="' + esc(t.id) + '" onclick="generateCashbackCoupon(this.dataset.id, this)">⚡ ১-ক্লিকে কুপন তৈরি করুন</button></div>';
           }
         }
       } else if (t.status === 'rejected') {
@@ -566,15 +566,28 @@ async function loadWallet(){
   }
 }
 
-async function generateCashbackCoupon(rechargeId) {
+async function generateCashbackCoupon(rechargeId, btnEl) {
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.dataset.origText = btnEl.innerHTML;
+    btnEl.innerHTML = "⏳ তৈরি হচ্ছে...";
+  }
   try {
-    const r = await ABC.api('/cashback/generate', {
-      method: 'POST',
+    const r = await ABC.api("/cashback/generate", {
+      method: "POST",
       body: { recharge_id: rechargeId }
     });
     const d = await r.json();
     if (!r.ok) {
-      alert('❌ ' + (d.error === 'ALREADY_GENERATED' ? 'এই রিচার্জের কুপন ইতোমধ্যে তৈরি হয়েছে' : (d.error || 'ব্যর্থ')));
+      const errMap = {
+        "ALREADY_GENERATED": "এই রিচার্জের কুপন ইতোমধ্যে তৈরি হয়েছে।",
+        "CASHBACK_DISABLED": "বর্তমানে ক্যাশব্যাক অফার বন্ধ রয়েছে।",
+        "NOTHING_TO_GENERATE": "এই রিচার্জের জন্য কোনো ক্যাশব্যাক প্রাপ্য নেই।",
+        "INVALID_RECHARGE": "অনুমোদিত রিচার্জ পাওয়া যায়নি বা এটি ক্যাশব্যাকের জন্য উপযুক্ত নয়।",
+        "MISSING_RECHARGE": "রিচার্জ আইডি পাওয়া যায়নি।"
+      };
+      const msg = errMap[d.error] || (d.message ? "ত্রুটি: " + d.message : (d.error || "ব্যর্থ"));
+      alert("❌ " + msg);
       loadWallet();
       return;
     }
@@ -582,10 +595,14 @@ async function generateCashbackCoupon(rechargeId) {
     showCouponSuccess(c);
     loadWallet();
   } catch (e) {
-    alert('❌ ত্রুটি: ' + e.message);
+    alert("❌ ত্রুটি: " + e.message);
+  } finally {
+    if (btnEl) {
+      btnEl.disabled = false;
+      if (btnEl.dataset.origText) btnEl.innerHTML = btnEl.dataset.origText;
+    }
   }
 }
-
 function showCouponSuccess(coupon) {
   const ov = document.getElementById('cbOverlay');
   if (!ov) return;

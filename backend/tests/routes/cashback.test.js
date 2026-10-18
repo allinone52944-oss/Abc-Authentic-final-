@@ -178,6 +178,34 @@ describe('POST /api/cashback/generate', () => {
     expect(r.body.error).toBe('CASHBACK_DISABLED');
   });
 
+  test("preserves client query context inside withTransaction", async () => {
+    let calledWithCorrectThis = false;
+    db.withTransaction.mockImplementationOnce(async (fn) => {
+      const client = {
+        query: function (sql, params) {
+          if (this !== client) throw new Error("Unbound client.query called!");
+          if (/settings/.test(sql)) {
+            calledWithCorrectThis = true;
+            return { rows: [{ value: { enabled: true, percent: 10 } }] };
+          }
+          if (/FROM transactions/.test(sql)) return { rows: [{ id: "tx-ctx", amount: 500, user_id: "u1" }] };
+          if (/SELECT id FROM coupons/.test(sql)) return { rows: [] };
+          if (/INSERT INTO coupons/.test(sql)) return {
+            rows: [{ id: "cp-ctx", code: "CB-CTX", amount: 50, percent: 10, expires_at: new Date().toISOString() }]
+          };
+          return { rows: [] };
+        }
+      };
+      return fn(client);
+    });
+
+    const r = await withUser(request(app()).post("/api/cashback/generate"))
+      .send({ recharge_id: "tx-ctx" })
+      .expect(201);
+    expect(r.body.ok).toBe(true);
+    expect(calledWithCorrectThis).toBe(true);
+  });
+
   test('requires auth → 401', async () => {
     await request(app()).post('/api/cashback/generate').send({ recharge_id: 'tx-123' }).expect(401);
   });

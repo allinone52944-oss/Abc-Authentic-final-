@@ -25,12 +25,14 @@ const DHARAKA_TODAY_TX_SQL = `
     AND DATE((created_at AT TIME ZONE 'Asia/Dhaka')) = ${DHARAKA_DAY_SQL}`;
 
 async function cashbackConfig(client) {
-  const q = client.query || db.query.bind(db);
-  const r = await q(`SELECT value FROM settings WHERE key = 'cashback' LIMIT 1`);
+  const runner = client && typeof client.query === 'function' ? client : db;
+  const r = await runner.query(`SELECT value FROM settings WHERE key = 'cashback' LIMIT 1`);
   const v = (r.rows[0] && r.rows[0].value) || {};
   return {
     enabled: !!v.enabled,
     percent: Number(v.percent) || 0,
+    expiry_days: Number(v.expiry_days) || 30,
+    service_id: (typeof v.service_id === 'string' && v.service_id.trim().length === 36) ? v.service_id.trim() : null,
   };
 }
 
@@ -219,9 +221,9 @@ router.post('/generate', async (req, res) => {
     });
   } catch (e) {
     safeLog('[cashback] generate error:', e.message);
-    if (e.statusCode === 409) return res.status(409).json({ error: 'ALREADY_GENERATED' });
-    if (e.statusCode === 400) return res.status(400).json({ error: e.message });
-    res.status(500).json({ error: 'FAILED' });
+    if (e.statusCode === 409) return res.status(409).json({ error: 'ALREADY_GENERATED', message: e.message });
+    if (e.statusCode === 400) return res.status(400).json({ error: e.message, message: e.message });
+    res.status(500).json({ error: 'FAILED', message: e.message });
   }
 });
 
