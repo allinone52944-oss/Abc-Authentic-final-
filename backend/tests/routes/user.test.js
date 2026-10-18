@@ -107,7 +107,7 @@ describe('POST /api/orders', () => {
   });
 
   test('closed service (schedule) → 403 SERVICE_CLOSED', async () => {
-    const closed = { ...SERVICE, schedule: { open: '23:00', close: '23:59' } };
+    const closed = { ...SERVICE, schedule: { days: [99], open: '00:00', close: '00:01' } };
     db.__routeQuery(serviceHandlers(closed));
     const r = await withUser(request(app()).post('/api/orders')).send({ service_id: 's1' }).expect(403);
     expect(r.body.error).toBe('SERVICE_CLOSED');
