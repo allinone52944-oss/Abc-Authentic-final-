@@ -532,7 +532,9 @@ router.post('/wallet/coupon', async (req, res) => {
 
       const credit = Number(coupon.amount) > 0 ? Number(coupon.amount) : 0;
       let finalCredit = credit;
-      if (Number(coupon.percent) > 0) {
+      // Dynamic percentage credit applies only when fixed amount is not set (e.g. promo coupons with amount=0).
+      // Pre-calculated recharge coupons or fixed-amount coupons credit the exact coupon.amount.
+      if (finalCredit <= 0 && Number(coupon.percent) > 0) {
         let spent;
         if (coupon.service_id) {
           // Service-scoped percent: base = ওই service-এ ব্যবহারকারীর মোট খরচ

@@ -316,6 +316,15 @@ describe('POST /api/wallet/coupon (security fix: transaction + CODE_TOO_LONG)', 
     expect(r.body.credited).toBe(100); // 10% of 1000
   });
 
+  test('recharge cashback coupon with both amount and percent credits fixed amount directly', async () => {
+    db.__routeQuery(couponHandlers({
+      id: 'c3', code: 'CB-1234', type: 'cashback', percent: 10, amount: 25,
+      expires_at: null, user_id: null, status: 'active', recharge_id: 'r1',
+    }));
+    const r = await post('CB-1234').expect(200);
+    expect(r.body).toMatchObject({ ok: true, credited: 25, balance: 150 });
+  });
+
   test('DUPLICATE_TRANSACTION → 409 ALREADY_REDEEMED', async () => {
     db.__routeQuery([
       ['FROM coupons WHERE code', { rows: [{ id: 'c1', code: 'D', type: 'cashback', percent: 0, amount: 10, expires_at: null, user_id: null, status: 'active' }] }],
