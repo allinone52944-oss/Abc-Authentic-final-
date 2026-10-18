@@ -440,6 +440,64 @@ class BdrisEngineV2 {
           if (callback) callback({ ok: true, addresses: list });
         } catch (e) { if (callback) callback({ ok: false, error: 'মুছে ফেলা যায়নি' }); }
       });
+      socket.on('LIST_ADDRESSES', (callback) => {
+        try {
+          const uid = socket.abcUser?.id || userId || 'anon';
+          if (callback) callback({ ok: true, addresses: loadAddresses(uid) });
+        } catch (e) { if (callback) callback({ ok: false, addresses: [] }); }
+      });
+
+      // Legacy: Draft handlers (v1 compat)
+      const DRAFTS_BASE = path.join(__dirname, '..', 'drafts');
+      const draftsDirFor = (uid) => {
+        const safe = String(uid || 'anon').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 64) || 'anon';
+        const d = path.join(DRAFTS_BASE, 'u_' + safe);
+        try { fs.mkdirSync(d, { recursive: true }); } catch {}
+        return d;
+      };
+      socket.on('SAVE_DRAFT', (data, callback) => {
+        try {
+          const uid = socket.abcUser?.id || userId || 'anon';
+          const raw = (data && data.draftId) || ('draft-' + Date.now().toString(36));
+          const id = String(raw).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 80) || ('draft-' + Date.now().toString(36));
+          const rec = Object.assign({}, data, { draftId: id, savedAt: new Date().toISOString() });
+          fs.writeFileSync(path.join(draftsDirFor(uid), id + '.json'), JSON.stringify(rec));
+          socket.emit('BOT_STATUS', { status: 'PROGRESS', message: `💾 খসড়া সংরক্ষিত (${id})` });
+          if (callback) callback({ ok: true, draftId: id, savedAt: rec.savedAt });
+        } catch (e) { if (callback) callback({ ok: false, error: 'খসড়া সংরক্ষণ করা যায়নি' }); }
+      });
+      socket.on('LIST_DRAFTS', (callback) => {
+        try {
+          const uid = socket.abcUser?.id || userId || 'anon';
+          const list = fs.readdirSync(draftsDirFor(uid)).filter(f => f.endsWith('.json')).map(f => {
+            try {
+              const r = JSON.parse(fs.readFileSync(path.join(draftsDirFor(uid), f), 'utf8'));
+              return {
+                draftId: r.draftId, savedAt: r.savedAt, uiStep: parseInt(r.uiStep, 10) || 0,
+                name: [r.s1 && r.s1.firstNameBn, r.s1 && r.s1.lastNameBn].filter(Boolean).join(' ') || '(নাম নেই)',
+                dob: (r.s1 && r.s1.dob) || '',
+              };
+            } catch { return null; }
+          }).filter(Boolean).sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')));
+          if (callback) callback(list);
+        } catch { if (callback) callback([]); }
+      });
+      socket.on('LOAD_DRAFT', (draftId, callback) => {
+        try {
+          const uid = socket.abcUser?.id || userId || 'anon';
+          const f = path.join(draftsDirFor(uid), String(draftId).replace(/[^a-zA-Z0-9-]/g, '') + '.json');
+          const draft = JSON.parse(fs.readFileSync(f, 'utf8'));
+          if (callback) callback({ ok: true, draft });
+        } catch (e) { if (callback) callback({ ok: false, error: 'খসড়া পাওয়া যায়নি' }); }
+      });
+      socket.on('DELETE_DRAFT', (draftId, callback) => {
+        try {
+          const uid = socket.abcUser?.id || userId || 'anon';
+          const f = path.join(draftsDirFor(uid), String(draftId).replace(/[^a-zA-Z0-9-]/g, '') + '.json');
+          fs.unlinkSync(f);
+          if (callback) callback({ ok: true });
+        } catch (e) { if (callback) callback({ ok: false }); }
+      });
 
       socket.on('disconnect', async () => {
         this.log(`Disconnected: ${socket.id}`);
