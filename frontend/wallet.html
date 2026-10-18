@@ -329,7 +329,7 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
 </div>
 
-<script src="/js/app.js?v=15"></script>
+<script src="/js/app.js?v=16"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
@@ -508,10 +508,15 @@ function renderCashbackHub(d) {
 }
 
 async function loadWallet(){
-  const r=await ABC.api('/wallet?limit=10');
-  if(!r.ok)return;
-  const d=await r.json();
-  document.getElementById('bal').textContent='৳'+bn(d.balance);
+  try {
+    const r=await ABC.api('/wallet?limit=10');
+    if(!r.ok){
+      const tx = document.getElementById('txList');
+      if(tx) tx.innerHTML = '<div style="color:#ef4444;padding:16px 0;">ওয়ালেট তথ্য লোড করা সম্ভব হয়নি। পেজ রিফ্রেশ করুন।</div>';
+      return;
+    }
+    const d=await r.json();
+    document.getElementById('bal').textContent='৳'+bn(d.balance);
   // shortRef is global
   const fmtAmt=a=>{a=Number(a);return (a<0?'-':'+')+'৳'+Math.abs(a).toLocaleString('bn-BD');};
   const fmtDt=s=>{try{return new Date(s).toLocaleString('bn-BD').replace(' PM',' পিএম').replace(' AM',' এএম');}catch(e){return '';}};
@@ -555,6 +560,10 @@ async function loadWallet(){
       '<b style="font-size:16px;color:' + (Number(t.amount) >= 0 ? '#059669' : '#dc2626') + '">' +
       fmtAmt(t.amount) + '</b></div>';
   }).join('') || '<div style="color:#64748b;padding:12px 0;">কোনো লেনদেনের ইতিহাস পাওয়া যায়নি</div>';
+  } catch(e) {
+    const tx = document.getElementById('txList');
+    if(tx) tx.innerHTML = '<div style="color:#ef4444;padding:16px 0;">নেটওয়ার্ক সমস্যা হয়েছে।</div>';
+  }
 }
 
 async function generateCashbackCoupon(rechargeId) {
@@ -623,6 +632,7 @@ function copyCode(code) {
 
 async function submitRecharge(){
   const err=document.getElementById('err'),ok=document.getElementById('ok');
+  const btn = document.querySelector('button[onclick*="submitRecharge"]');
   err.textContent='';ok.textContent='';
   const amt = document.getElementById('amount').value;
   const sender = document.getElementById('sender').value.trim();
@@ -641,20 +651,27 @@ async function submitRecharge(){
     return;
   }
 
-  const r=await ABC.api('/wallet/recharge',{
-    method:'POST',
-    body:{method, sender_no:sender, trxid:trxid, amount:amt}
-  });
-  const d=await r.json();
-  if(!r.ok){
-    err.textContent='❌ '+(d.error||'ব্যর্থ');
-    return;
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ সাবমিট হচ্ছে…'; }
+  try {
+    const r=await ABC.api('/wallet/recharge',{
+      method:'POST',
+      body:{method, sender_no:sender, trxid:trxid, amount:amt}
+    });
+    const d=await r.json();
+    if(!r.ok){
+      err.textContent='❌ '+(d.error==='DUPLICATE_TRXID'?'এই ট্রানজ্যাকশন আইডি (TrxID) ইতিপূর্বে ব্যবহার করা হয়েছে':(d.error||'ব্যর্থ'));
+      return;
+    }
+    ok.textContent='✅ রিচার্জ রিকোয়েস্ট সফলভাবে জমা হয়েছে! এডমিন যাচাই করে দ্রুত ব্যালেন্স যুক্ত করবেন।';
+    document.getElementById('amount').value = '';
+    document.getElementById('sender').value = '';
+    document.getElementById('trxid').value = '';
+    loadWallet();
+  } catch(e) {
+    err.textContent = '❌ নেটওয়ার্ক সমস্যা হয়েছে। পুনরায় চেষ্টা করুন।';
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = 'রিচার্জ রিকোয়েস্ট পাঠান →'; }
   }
-  ok.textContent='✅ রিচার্জ রিকোয়েস্ট সফলভাবে জমা হয়েছে! এডমিন যাচাই করে দ্রুত ব্যালেন্স যুক্ত করবেন।';
-  document.getElementById('amount').value = '';
-  document.getElementById('sender').value = '';
-  document.getElementById('trxid').value = '';
-  loadWallet();
 }
 
 async function redeem(){

@@ -178,7 +178,7 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
 </div>
 
-<script src="/js/app.js?v=15"></script>
+<script src="/js/app.js?v=16"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 const STBN={new:'নতুন',pending:'অপেক্ষমান',received:'গৃহীত',processing:'প্রসেসিং',registered:'নিবন্ধিত',completed:'সম্পন্ন',delivered:'ডেলিভার্ড',failed:'ব্যর্থ',cancelled:'বাতিল',refunded:'রিফান্ডেড'};
@@ -206,28 +206,41 @@ async function init(){
 }
 
 async function load(){
-  const r=await ABC.api('/orders?limit=10&page='+page+(status?'&status='+status:''));
-  if(!r.ok)return;
-  const d=await r.json();
-  const html=d.orders.map(o=>
-    '<tr>'+
-      '<td><b style="color:#0f172a;font-size:14px;">'+esc(o.service_name_bn||o.service_name)+'</b><div style="font-size:11px;color:#94a3b8;margin-top:2px;">ID: #'+o.id.slice(0,8)+'</div></td>'+
-      '<td><b style="color:#1e40af;font-size:15px;">৳'+Number(o.price).toLocaleString('bn-BD')+'</b></td>'+
-      '<td><span class="st st-'+o.status+'">'+(STBN[o.status]||o.status)+'</span></td>'+
-      '<td>'+new Date(o.created_at).toLocaleDateString('bn-BD')+'</td>'+
-      '<td style="text-align:right;"><button class="btn-view" onclick="location.href=\'/order-detail.html?id='+o.id+'\'">বিস্তারিত দেখুন →</button></td>'+
-    '</tr>'
-  ).join('');
+  try {
+    const r=await ABC.api('/orders?limit=10&page='+page+(status?'&status='+status:''));
+    if(!r.ok){
+      if(page===1){
+        document.getElementById('list').innerHTML='<tr><td colspan="5" style="text-align:center;padding:30px 0;color:#ef4444;">অর্ডার তালিকা লোড করা সম্ভব হয়নি। পেজ রিফ্রেশ করুন।</td></tr>';
+      }
+      return;
+    }
+    const d=await r.json();
+    const orders = (d && d.orders) ? d.orders : [];
+    if(!orders.length && page===1){
+      document.getElementById('list').innerHTML='<tr><td colspan="5" style="text-align:center;color:#64748b;padding:40px;">কোনো অর্ডার পাওয়া যায়নি</td></tr>';
+      document.getElementById('moreBtn').style.display='none';
+      return;
+    }
+    const html=orders.map(o=>
+      '<tr>'+
+        '<td><b style="color:#0f172a;font-size:14px;">'+esc(o.service_name_bn||o.service_name)+'</b><div style="font-size:11px;color:#94a3b8;margin-top:2px;">ID: #'+esc((o.id||'').slice(0,8))+'</div></td>'+
+        '<td><b style="color:#1e40af;font-size:15px;">৳'+Number(o.price||0).toLocaleString('bn-BD')+'</b></td>'+
+        '<td><span class="st st-'+esc(o.status)+'">'+esc(STBN[o.status]||o.status)+'</span></td>'+
+        '<td>'+(o.created_at ? new Date(o.created_at).toLocaleDateString('bn-BD') : '-')+'</td>'+
+        '<td style="text-align:right;"><button class="btn-view" onclick="location.href=\'/order-detail.html?id=' + encodeURIComponent(o.id) + '\'">বিস্তারিত দেখুন →</button></td>'+
+      '</tr>'
+    ).join('');
 
-  if (page === 1) {
-    document.getElementById('list').innerHTML = html;
-  } else {
-    document.getElementById('list').insertAdjacentHTML('beforeend', html);
-  }
-
-  document.getElementById('moreBtn').style.display=(page*10>=d.total)?'none':'block';
-  if(!d.orders.length&&page===1){
-    document.getElementById('list').innerHTML='<tr><td colspan="5" style="text-align:center;color:#64748b;padding:40px;">কোনো অর্ডার পাওয়া যায়নি</td></tr>';
+    if (page === 1) {
+      document.getElementById('list').innerHTML = html;
+    } else {
+      document.getElementById('list').insertAdjacentHTML('beforeend', html);
+    }
+    document.getElementById('moreBtn').style.display=(page*10>=(d.total||0))?'none':'block';
+  } catch(e) {
+    if(page===1){
+      document.getElementById('list').innerHTML='<tr><td colspan="5" style="text-align:center;padding:30px 0;color:#ef4444;">নেটওয়ার্ক সমস্যা হয়েছে। পুনরায় চেষ্টা করুন।</td></tr>';
+    }
   }
 }
 

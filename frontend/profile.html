@@ -124,7 +124,7 @@
   <div class="m-tab on" aria-current="page"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
 </div>
 
-<script src="/js/app.js?v=15"></script>
+<script src="/js/app.js?v=16"></script>
 <script>
 /* DARK-MODE PASSWORD FIX */
 try{if(window.CSS&&CSS.supports('-webkit-text-security','disc')){var swapPw=function(el){if(el.getAttribute('type')==='password'){el.setAttribute('type','text');el.style.webkitTextSecurity='disc';}};document.querySelectorAll('input[type="password"]').forEach(function(el){el.addEventListener('focus',function(){swapPw(el);});el.addEventListener('input',function(){swapPw(el);});if(el.value)swapPw(el);});}}catch(e){}
@@ -158,29 +158,65 @@ async function init(){
   paintVoiceGreetBtn();
 }
 
-async function save(){
+const PROFILE_ERRORS = {
+  'INVALID_NAME': 'নাম কমপক্ষে ২ ও সর্বোচ্চ ১২০ অক্ষরের হতে হবে',
+  'INVALID_WHATSAPP': 'সঠিক ১১ ডিজিটের WhatsApp নম্বর দিন',
+  'INVALID_EMAIL': 'একটি বৈধ ও সক্রিয় ইমেইল এড্রেস দিন',
+  'EMAIL_TAKEN': 'এই ইমেইল দিয়ে ইতিমধ্যে অন্য অ্যাকাউন্ট নিবন্ধিত আছে',
+  'INVALID_RELIGION': 'অনুগ্রহ করে তালিকা থেকে ধর্ম নির্বাচন করুন',
+  'WRONG_CURRENT_PASSWORD': 'বর্তমান পাসওয়ার্ডটি সঠিক নয়',
+  'PASSWORD_TOO_SHORT': 'নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে'
+};
+
+async function save(e){
   const err=document.getElementById('err'),ok=document.getElementById('ok');
+  const btn = (e && e.target) || document.querySelector('button[onclick*="save"]');
   err.textContent='';ok.textContent='';
-  const r=await ABC.api('/auth/me',{method:'PUT',body:{
-    name:document.getElementById('name').value.trim(),
-    whatsapp:document.getElementById('whatsapp').value.trim(),
-    email:document.getElementById('email').value.trim(),
-    religion:document.getElementById('religion').value}});
-  const d=await r.json();
-  if(!r.ok){err.textContent='❌ '+(d.error||'ব্যর্থ');return;}
-  ok.textContent='✅ প্রোফাইলের তথ্য সফলভাবে সংরক্ষণ হয়েছে!';
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ সংরক্ষণ হচ্ছে…'; }
+  try {
+    const r=await ABC.api('/auth/me',{method:'PUT',body:{
+      name:document.getElementById('name').value.trim(),
+      whatsapp:document.getElementById('whatsapp').value.trim(),
+      email:document.getElementById('email').value.trim(),
+      religion:document.getElementById('religion').value}});
+    const d=await r.json();
+    if(!r.ok){
+      err.textContent='❌ '+(PROFILE_ERRORS[d.error] || d.error || 'সংরক্ষণ ব্যর্থ হয়েছে');
+      return;
+    }
+    ok.textContent='✅ প্রোফাইলের তথ্য সফলভাবে সংরক্ষণ হয়েছে!';
+  } catch(ex){
+    err.textContent='❌ নেটওয়ার্ক সমস্যা হয়েছে';
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = 'পরিবর্তন সংরক্ষণ করুন'; }
+  }
 }
 
-async function changePw(){
+async function changePw(e){
   const perr=document.getElementById('perr'),pok=document.getElementById('pok');
+  const btn = (e && e.target) || document.querySelector('button[onclick*="changePw"]');
   perr.textContent='';pok.textContent='';
-  const r=await ABC.api('/auth/change-password',{method:'POST',body:{
-    current_password:document.getElementById('cur').value,
-    new_password:document.getElementById('nw').value}});
-  const d=await r.json();
-  if(!r.ok){perr.textContent='❌ '+(d.error==='WRONG_CURRENT_PASSWORD'?'বর্তমান পাসওয়ার্ডটি সঠিক নয়':d.error);return;}
-  pok.textContent='✅ পাসওয়ার্ড সফলভাবে বদলে গেছে!';
-  document.getElementById('cur').value='';document.getElementById('nw').value='';
+  const cur = document.getElementById('cur').value;
+  const nw = document.getElementById('nw').value;
+  if(!cur){ perr.textContent='❌ বর্তমান পাসওয়ার্ড দিন'; return; }
+  if(!nw || nw.length < 6){ perr.textContent='❌ নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে'; return; }
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ পাসওয়ার্ড পরিবর্তন হচ্ছে…'; }
+  try {
+    const r=await ABC.api('/auth/change-password',{method:'POST',body:{
+      current_password:cur,
+      new_password:nw}});
+    const d=await r.json();
+    if(!r.ok){
+      perr.textContent='❌ '+(PROFILE_ERRORS[d.error] || (d.error==='WRONG_CURRENT_PASSWORD'?'বর্তমান পাসওয়ার্ডটি সঠিক নয়':d.error));
+      return;
+    }
+    pok.textContent='✅ পাসওয়ার্ড সফলভাবে বদলে গেছে!';
+    document.getElementById('cur').value='';document.getElementById('nw').value='';
+  } catch(ex){
+    perr.textContent='❌ নেটওয়ার্ক সমস্যা হয়েছে';
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = 'পাসওয়ার্ড পরিবর্তন করুন'; }
+  }
 }
 
 async function logout(){

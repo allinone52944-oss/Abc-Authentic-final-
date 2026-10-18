@@ -34,23 +34,35 @@
 
   // Access token kept in memory primarily; mirrored to sessionStorage
   // so a page refresh does not force re-login within its lifetime.
-  let accessToken = sessionStorage.getItem(LS_ACCESS) || null;
+  let accessToken = null;
+  try {
+    accessToken = sessionStorage.getItem(LS_ACCESS) || null;
+  } catch (e) {}
 
   function setTokens(access, refresh) {
     accessToken = access;
-    if (access) sessionStorage.setItem(LS_ACCESS, access);
-    else sessionStorage.removeItem(LS_ACCESS);
-    if (refresh) localStorage.setItem(LS_REFRESH, refresh);
+    try {
+      if (access) sessionStorage.setItem(LS_ACCESS, access);
+      else sessionStorage.removeItem(LS_ACCESS);
+    } catch (e) {}
+    try {
+      if (refresh) localStorage.setItem(LS_REFRESH, refresh);
+    } catch (e) {}
   }
 
   function clearTokens() {
     accessToken = null;
-    sessionStorage.removeItem(LS_ACCESS);
-    localStorage.removeItem(LS_REFRESH);
+    try {
+      sessionStorage.removeItem(LS_ACCESS);
+      localStorage.removeItem(LS_REFRESH);
+    } catch (e) {}
   }
 
   async function refreshAccess() {
-    const rt = localStorage.getItem(LS_REFRESH);
+    let rt = null;
+    try {
+      rt = localStorage.getItem(LS_REFRESH);
+    } catch (e) {}
     if (!rt) return false;
     try {
       const ctrl = new AbortController();

@@ -226,7 +226,7 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
 </div>
 
-<script src="/js/app.js?v=15"></script>
+<script src="/js/app.js?v=16"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -676,17 +676,27 @@ async function submit(){
   notice.style.display = 'block';
   notice.textContent = '⏳ ১. ওয়ালেট থেকে ফি কর্তন ও অর্ডার রেজিস্টার করা হচ্ছে…';
 
-  const r = await ABC.api('/orders', {
-    method: 'POST',
-    body: {
-      service_id: sid,
-      data,
-      notes: document.getElementById('notes').value.trim(),
-      idempotency_key: window._orderIdemKey,
-      documents: orderDocs
-    }
-  });
-  const d = await r.json();
+  let r, d;
+  try {
+    r = await ABC.api('/orders', {
+      method: 'POST',
+      body: {
+        service_id: sid,
+        data,
+        notes: document.getElementById('notes').value.trim(),
+        idempotency_key: window._orderIdemKey,
+        documents: orderDocs
+      }
+    });
+    d = await r.json();
+  } catch (netErr) {
+    btn.disabled = false;
+    btn.textContent = 'অর্ডার নিশ্চিত করুন →';
+    notice.style.display = 'none';
+    err.style.display = 'block';
+    err.textContent = '❌ নেটওয়ার্ক সমস্যা বা সার্ভার সংযোগ বিঘ্নিত হয়েছে। পুনরায় চেষ্টা করুন।';
+    return;
+  }
 
   if(!r.ok){
     btn.disabled = false;
