@@ -58,12 +58,29 @@ async function init() {
   }
 }
 
+window.AdmMobile = {
+  toggleSidebar(force) {
+    const sb = document.getElementById('admSidebar');
+    const bdp = document.getElementById('admBackdrop');
+    if (!sb) return;
+    const isOpen = typeof force === 'boolean' ? force : !sb.classList.contains('open');
+    if (isOpen) {
+      sb.classList.add('open');
+      if (bdp) bdp.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    } else {
+      sb.classList.remove('open');
+      if (bdp) bdp.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+  }
+};
+
 let _showGen = 0;
 async function show(tab) {
   const gen = ++_showGen;
   // Close mobile sidebar menu when navigating
-  const sb = document.querySelector('.sidebar');
-  if (sb) sb.classList.remove('open');
+  if (window.AdmMobile) window.AdmMobile.toggleSidebar(false);
   if (!content) return;
   content.innerHTML = '<div style="color:var(--muted)">লোড হচ্ছে…</div>';
   try {
