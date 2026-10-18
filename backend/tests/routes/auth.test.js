@@ -454,3 +454,39 @@ describe('OTP endpoints', () => {
     expect(r.body.error).toBe('TOO_MANY_ATTEMPTS');
   });
 });
+
+describe('GET /api/auth/voice-greeting', () => {
+  test('returns enabled: false when setting is missing or disabled', async () => {
+    db.__routeQuery([
+      ['SELECT value FROM settings WHERE key', { rows: [] }],
+    ]);
+    const r = await request(app()).get('/api/auth/voice-greeting').expect(200);
+    expect(r.body).toEqual({ enabled: false });
+
+    db.__routeQuery([
+      ['SELECT value FROM settings WHERE key', { rows: [{ value: { enabled: false } }] }],
+    ]);
+    const r2 = await request(app()).get('/api/auth/voice-greeting').expect(200);
+    expect(r2.body).toEqual({ enabled: false });
+  });
+
+  test('returns configured voice greeting with rotation, voices and religions', async () => {
+    db.__routeQuery([
+      ['SELECT value FROM settings WHERE key', {
+        rows: [{
+          value: {
+            enabled: true,
+            rotation: true,
+            greetings: { islam: 'আসসালামু আলাইকুম', hindu: 'নমস্কার' }
+          }
+        }]
+      }],
+    ]);
+    const r = await request(app()).get('/api/auth/voice-greeting').expect(200);
+    expect(r.body.enabled).toBe(true);
+    expect(r.body.rotation).toBe(true);
+    expect(r.body.greetings.islam).toBe('আসসালামু আলাইকুম');
+    expect(r.body.voices).toEqual(['male', 'female', 'child']);
+    expect(r.body.religions).toEqual(['islam', 'hindu', 'buddhist', 'christian', 'other']);
+  });
+});

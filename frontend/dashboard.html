@@ -257,7 +257,7 @@
         <p>আপনার অ্যাকাউন্ট ও সেবাসমূহ প্রস্তুত রয়েছে</p>
       </div>
       <div class="user-badge-wrap">
-        <button id="greetVoiceBtn" style="display:none;background:#f1f5f9;border:1px solid #e2e8f0;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:16px;" title="ভয়েস শুনুন">🔊</button>
+        <button id="greetVoiceBtn" style="display:none;background:#f8fafc;border:1px solid #cbd5e1;padding:7px 12px;border-radius:10px;cursor:pointer;font-size:13px;align-items:center;gap:6px;font-weight:600;color:#334155;transition:all 0.2s;" title="ধর্মভিত্তিক শুভেচ্ছা ভয়েস শুনুন">🔊 <span>ভয়েস শুনুন</span></button>
         <div class="avatar" id="avatar">র</div>
         <button id="logoutBtn" style="background:#fef2f2;border:1px solid #fecaca;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:16px;color:#dc2626;" title="লগআউট">⏻</button>
       </div>
@@ -347,7 +347,7 @@
         <p style="font-size:12px;opacity:0.8;margin-top:2px;">All In One ডিজিটাল প্ল্যাটফর্ম</p>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
-        <button id="greetVoiceBtnM" style="display:none;background:rgba(255,255,255,0.2);border:none;color:#fff;padding:6px 10px;border-radius:8px;font-size:14px;" aria-label="সাউন্ড ভয়েস"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg></button>
+        <button id="greetVoiceBtnM" style="display:none;background:rgba(255,255,255,0.22);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:6px 10px;border-radius:8px;font-size:13px;align-items:center;gap:5px;cursor:pointer;" aria-label="সাউন্ড ভয়েস"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg><span>ভয়েস</span></button>
         <button onclick="location.href='/profile.html'" aria-label="প্রোফাইল" style="background:rgba(255,255,255,0.22);border:1px solid rgba(255,255,255,0.3);color:#fff;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform 0.15s ease;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
       </div>
     </div>
@@ -416,51 +416,185 @@ function autoIcon(name) {
 
 function timeGreeting() {
   const h = new Date().getHours();
-  if (h >= 5 && h < 12) return 'শুভ সকাল';
-  if (h >= 12 && h < 16) return 'শুভ দুপুর';
-  if (h >= 16 && h < 18) return 'শুভ বিকেল';
-  return 'শুভ সন্ধ্যা';
+  if (h >= 5 && h < 12) return "শুভ সকাল";
+  if (h >= 12 && h < 16) return "শুভ দুপুর";
+  if (h >= 16 && h < 18) return "শুভ বিকেল";
+  return "শুভ সন্ধ্যা";
+}
+
+function getPersonalizedGreeting(user, cfg) {
+  const rel = (user && user.religion ? String(user.religion).trim().toLowerCase() : "other");
+  const custom = (cfg && cfg.greetings) || {};
+  let g = custom[rel];
+  if (!g || !g.trim()) {
+    if (rel === "islam") g = "আসসালামু আলাইকুম";
+    else if (rel === "hindu") g = "নমস্কার";
+    else if (rel === "buddhist") g = "নমো বুদ্ধায়";
+    else if (rel === "christian") g = "প্রভুর শান্তি";
+    else g = timeGreeting();
+  }
+  const name = (user && user.name ? user.name.trim() : "");
+  const firstName = name ? name.split(" ")[0] : "";
+  return firstName ? `${g}, ${firstName} 👋` : `${g} 👋`;
 }
 
 const GreetVoice = (() => {
   let _audio = null;
+  const VOICES = ["male", "female", "child"];
+  const VOICE_LABELS = ["পুরুষ কণ্ঠ", "মহিলা কণ্ঠ", "শিশু কণ্ঠ"];
+
   function userWantsVoice() {
-    try { return localStorage.getItem('abc_greet_voice') !== 'off'; } catch (e) { return true; }
+    try { return localStorage.getItem("abc_greet_voice") !== "off"; } catch (e) { return true; }
   }
+
   function isConfigured() {
-    return Boolean(window._vgCfg && window._vgCfg.enabled && Array.isArray(window._vgCfg.files) && window._vgCfg.files.length);
+    if (window._vgCfg && window._vgCfg.enabled === false) return false;
+    return true;
   }
+
+  function resolveReligion(u) {
+    const rel = (u && u.religion ? String(u.religion).trim().toLowerCase() : "");
+    if (["islam", "hindu", "buddhist", "christian"].includes(rel)) return rel;
+    return "other";
+  }
+
   function fileForUser(u, rot) {
     if (!isConfigured()) return null;
-    const rel = (u && u.religion ? String(u.religion).toLowerCase() : 'other');
-    const files = window._vgCfg.files;
-    let pool = files.filter(f => f.rel === rel);
-    if (!pool.length) pool = files.filter(f => f.rel === 'other');
-    if (!pool.length) pool = files;
-    const idx = (typeof rot === 'number' && rot >= 0) ? (rot % pool.length) : 0;
-    return pool[idx] || pool[0] || null;
+    const rel = resolveReligion(u);
+    const rotationEnabled = (!window._vgCfg || window._vgCfg.rotation !== false);
+    const idx = (rotationEnabled && typeof rot === "number" && rot >= 0) ? (rot % 3) : 0;
+    const voice = VOICES[idx] || "male";
+    return {
+      rel,
+      voice: idx,
+      voiceType: voice,
+      voiceLabel: VOICE_LABELS[idx] || "কণ্ঠ",
+      path: "/audio/greet-" + encodeURIComponent(rel) + "-" + encodeURIComponent(voice) + ".mp3"
+    };
   }
+
+  function isPlaying() {
+    return Boolean(_audio && !_audio.paused && !_audio.ended);
+  }
+
+  function setButtonState(playing, file) {
+    const btn = document.getElementById("greetVoiceBtn");
+    const btnM = document.getElementById("greetVoiceBtnM");
+
+    if (btn) {
+      if (playing) {
+        btn.innerHTML = '🔊 <span style="font-size:12px;color:#2563eb;font-weight:700;">' + (file ? file.voiceLabel : 'বাজছে...') + '</span>';
+        btn.style.borderColor = "#93c5fd";
+        btn.style.background = "#eff6ff";
+        btn.title = (file ? file.voiceLabel : "ভয়েস") + " বাজছে (থামাতে ক্লিক করুন)";
+      } else {
+        btn.innerHTML = '🔊 <span style="font-size:12px;color:#334155;font-weight:600;">ভয়েস শুনুন</span>';
+        btn.style.borderColor = "#cbd5e1";
+        btn.style.background = "#f8fafc";
+        btn.title = "ধর্মভিত্তিক শুভেচ্ছা ভয়েস শুনুন";
+      }
+    }
+
+    if (btnM) {
+      if (playing) {
+        btnM.style.background = "rgba(255,255,255,0.45)";
+        btnM.title = "থামাতে ট্যাপ করুন";
+      } else {
+        btnM.style.background = "rgba(255,255,255,0.22)";
+        btnM.title = "সাউন্ড ভয়েস শুনুন";
+      }
+    }
+  }
+
+  function stop() {
+    if (_audio) {
+      try { _audio.pause(); } catch (e) {}
+      _audio = null;
+    }
+    setButtonState(false);
+  }
+
   function play(f) {
     if (!f || !f.path) return;
     try {
-      if (_audio) { _audio.pause(); _audio = null; }
+      stop();
       _audio = new Audio(f.path);
-      _audio.play().catch(() => {});
-    } catch (e) {}
+      setButtonState(true, f);
+      _audio.onended = () => {
+        setButtonState(false);
+        _audio = null;
+      };
+      _audio.onerror = () => {
+        setButtonState(false);
+        _audio = null;
+      };
+      const p = _audio.play();
+      if (p && typeof p.catch === "function") {
+        p.catch(() => {
+          setButtonState(false);
+        });
+      }
+    } catch (e) {
+      setButtonState(false);
+    }
   }
+
+  function handleManualClick(user) {
+    if (isPlaying()) {
+      stop();
+      return;
+    }
+    let curRot = 0;
+    try {
+      curRot = parseInt(localStorage.getItem("greeting_voice_rotation") || "0", 10);
+      if (isNaN(curRot) || curRot < 0 || curRot > 2) curRot = 0;
+    } catch (e) {}
+
+    const f = fileForUser(user, curRot);
+    if (f) {
+      play(f);
+      if (!window._vgCfg || window._vgCfg.rotation !== false) {
+        try {
+          localStorage.setItem("greeting_voice_rotation", String((curRot + 1) % 3));
+        } catch (e) {}
+      }
+    }
+  }
+
+  function initUI(user) {
+    const btn = document.getElementById("greetVoiceBtn");
+    const btnM = document.getElementById("greetVoiceBtnM");
+    if (!isConfigured() || (user && user.role === "admin")) {
+      if (btn) btn.style.display = "none";
+      if (btnM) btnM.style.display = "none";
+      return;
+    }
+    if (btn) {
+      btn.style.display = "inline-flex";
+      btn.onclick = () => handleManualClick(user);
+    }
+    if (btnM) {
+      btnM.style.display = "inline-flex";
+      btnM.onclick = () => handleManualClick(user);
+    }
+    setButtonState(false);
+  }
+
   function maybePlay(user) {
-    if (!user || user.role === 'admin') return;
+    if (!user || user.role === "admin") return;
     if (!userWantsVoice()) return;
     try {
-      const raw = sessionStorage.getItem('abc_greet_on_login');
+      const raw = sessionStorage.getItem("abc_greet_on_login");
       if (!raw) return;
-      sessionStorage.removeItem('abc_greet_on_login');
+      sessionStorage.removeItem("abc_greet_on_login");
       const p = JSON.parse(raw);
-      const f = fileForUser(user, p && typeof p.voice === 'number' ? p.voice : 0);
+      const rot = (p && typeof p.voice === "number") ? p.voice : 0;
+      const f = fileForUser(user, rot);
       if (f) play(f);
     } catch (e) {}
   }
-  return { maybePlay, isConfigured, fileForUser, play };
+
+  return { maybePlay, isConfigured, fileForUser, play, stop, initUI, isPlaying, handleManualClick };
 })();
 
 async function init() {
@@ -566,7 +700,12 @@ async function loadSettings() {
     const ps = await fetch('/api/public/settings');
     if (ps.ok) { const pj = await ps.json(); window._vgCfg = pj.voice_greeting || {}; }
   } catch (e) { window._vgCfg = {}; }
-  GreetVoice.maybePlay(window._user);
+  if (window._user) {
+    const tg = getPersonalizedGreeting(window._user, window._vgCfg);
+    setText('greet', tg); setText('greetM', tg);
+    GreetVoice.initUI(window._user);
+    GreetVoice.maybePlay(window._user);
+  }
 }
 
 document.getElementById('waFab').onclick = () => {

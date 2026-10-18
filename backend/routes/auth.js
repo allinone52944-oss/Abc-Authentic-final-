@@ -100,7 +100,9 @@ router.get('/voice-greeting', async (req, res) => {
     res.json({
       enabled: true,
       rotation: vg.rotation !== false,
-      greetings: vg.greetings || {}
+      greetings: vg.greetings || {},
+      voices: ['male', 'female', 'child'],
+      religions: ['islam', 'hindu', 'buddhist', 'christian', 'other']
     });
   } catch (e) {
     res.json({ enabled: false });

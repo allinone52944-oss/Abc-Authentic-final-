@@ -3351,6 +3351,27 @@ TABS.settings = async () => {
       fld('খ্রিস্টান গ্রিটিং', 'text', 'st_vg_christian', (((s.voice_greeting||{}).greetings||{}).christian) || 'প্রভুর শান্তি') +
     '</div>' +
     fld('অন্যান্য গ্রিটিং (খালি রাখলে সময়ভিত্তিক হবে)', 'text', 'st_vg_other', (((s.voice_greeting||{}).greetings||{}).other) || '') +
+    '<div style="background:var(--card-sub,rgba(255,255,255,0.03));border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;margin-top:14px;">' +
+      '<div style="font-weight:700;font-size:14px;margin-bottom:6px;color:var(--gold);">🎧 অডিও টেস্ট ও প্রিভিউ প্লেয়ার</div>' +
+      '<div class="s" style="margin-bottom:10px;">যেকোনো ধর্মের পুরুষ, মহিলা বা শিশু কণ্ঠের শুভেচ্ছা অডিও প্লে করে পরীক্ষা করুন:</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">' +
+        '<select id="adm_vg_rel" style="padding:8px 12px;border-radius:8px;background:var(--input-bg,#1e293b);color:var(--text,#fff);border:1px solid var(--border,#334155);font-size:13px;">' +
+          '<option value="islam">ইসলাম (আসসালামু আলাইকুম)</option>' +
+          '<option value="hindu">হিন্দু (নমস্কার)</option>' +
+          '<option value="buddhist">বৌদ্ধ (নমো বুদ্ধায়)</option>' +
+          '<option value="christian">খ্রিস্টান (প্রভুর শান্তি)</option>' +
+          '<option value="other">অন্যান্য (সময়ভিত্তিক)</option>' +
+        '</select>' +
+        '<select id="adm_vg_voice" style="padding:8px 12px;border-radius:8px;background:var(--input-bg,#1e293b);color:var(--text,#fff);border:1px solid var(--border,#334155);font-size:13px;">' +
+          '<option value="male">পুরুষ কণ্ঠ (Male)</option>' +
+          '<option value="female">মহিলা কণ্ঠ (Female)</option>' +
+          '<option value="child">শিশু কণ্ঠ (Child)</option>' +
+        '</select>' +
+        '<button class="mini-btn ok" type="button" onclick="AdmSt.testVoiceGreet()">▶ টেস্ট প্লে করুন</button>' +
+        '<button class="mini-btn" type="button" onclick="AdmSt.stopVoiceGreet()">⏹ থামান</button>' +
+        '<span id="adm_vg_status" style="font-size:12px;color:var(--text-dim,#94a3b8);margin-left:6px;"></span>' +
+      '</div>' +
+    '</div>' +
     '</div>' +
 
     // CARD 5: SYSTEM HEALTH, STORAGE & BACKUP
@@ -3379,6 +3400,38 @@ TABS.settings = async () => {
 };
 
 window.AdmSt = {
+  _vgAudio: null,
+  testVoiceGreet() {
+    try {
+      this.stopVoiceGreet();
+      const relEl = document.getElementById('adm_vg_rel');
+      const voiceEl = document.getElementById('adm_vg_voice');
+      const rel = (relEl && relEl.value) || 'islam';
+      const voice = (voiceEl && voiceEl.value) || 'male';
+      const path = '/audio/greet-' + encodeURIComponent(rel) + '-' + encodeURIComponent(voice) + '.mp3';
+      const st = document.getElementById('adm_vg_status');
+      if (st) st.textContent = '🔊 লোড হচ্ছে...';
+      const a = new Audio(path);
+      this._vgAudio = a;
+      a.onended = () => { if (st) st.textContent = '✅ প্লে সম্পন্ন'; this._vgAudio = null; };
+      a.onerror = () => { if (st) st.textContent = '❌ অডিও ফাইল লোড ব্যর্থ'; this._vgAudio = null; };
+      a.play().then(() => {
+        if (st) st.textContent = '▶ বাজছে (' + rel + ' - ' + voice + ')';
+      }).catch(err => {
+        if (st) st.textContent = '⚠️ ব্রাউজার বাধা: ' + (err.message || 'অটোপ্লে সীমাবদ্ধ');
+      });
+    } catch (e) {
+      alert('প্লেব্যাক ত্রুটি: ' + e.message);
+    }
+  },
+  stopVoiceGreet() {
+    if (this._vgAudio) {
+      try { this._vgAudio.pause(); } catch (_) {}
+      this._vgAudio = null;
+      const st = document.getElementById('adm_vg_status');
+      if (st) st.textContent = '⏹ থামানো হয়েছে';
+    }
+  },
   async toggle(key, sub, val) {
     const cur = await (await ABC.api('/admin/settings')).json();
     const obj = Object.assign({}, cur[key] || {});
