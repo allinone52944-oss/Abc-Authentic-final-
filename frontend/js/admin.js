@@ -79,6 +79,11 @@ window.AdmMobile = {
 let _showGen = 0;
 async function show(tab) {
   const gen = ++_showGen;
+  // Keep sidebar navigation in sync
+  document.querySelectorAll('#tabs .side-link').forEach(x => {
+    if (x.dataset.t === tab) x.classList.add('on');
+    else x.classList.remove('on');
+  });
   // Close mobile sidebar menu when navigating
   if (window.AdmMobile) window.AdmMobile.toggleSidebar(false);
   if (!content) return;
@@ -94,6 +99,21 @@ async function show(tab) {
 }
 
 /* ============ Phase 3: Premium Voice & Realtime Sound Notifications ============ */
+window.admToast = (title, message, type = 'info', badge = 'সফল') => {
+  if (window.VoiceAlert && VoiceAlert.showToast) {
+    VoiceAlert.showToast({
+      title,
+      message,
+      type: type === 'error' ? 'order' : type,
+      badge,
+      icon: type === 'error' ? '⚠️' : (type === 'recharge' ? '💰' : '✅'),
+      duration: 4000
+    });
+  } else if (typeof alert !== 'undefined') {
+    alert(title + ': ' + message);
+  }
+};
+
 const VoiceAlert = {
   enabled: typeof localStorage !== 'undefined' && localStorage.getItem('abc_voice') !== 'off',
   _last: { recharge: 0, order: 0, sms: 0 },
@@ -2028,13 +2048,13 @@ window.AdmOrders = {
 
 /* ---------------- MANUAL SUBMISSIONS (standalone module) ---------------- */
 const MANUAL_CSS = '<style>' +
- '.mp-sec{margin-bottom:14px;border:1px solid var(--line);border-radius:10px;overflow:hidden;}' +
- '.mp-title{background:#2b1d14;color:var(--gold);font-weight:700;padding:8px 12px;font-size:14px;}' +
+ '.mp-sec{margin-bottom:14px;border:1px solid var(--border-light, #e2e8f0);border-radius:12px;overflow:hidden;background:#ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.05);}' +
+ '.mp-title{background:linear-gradient(135deg, #1e3a8a, #0284c7);color:#ffffff;font-weight:700;padding:10px 14px;font-size:14px;letter-spacing:.3px;}' +
  '.mp-table{width:100%;border-collapse:collapse;}' +
- '.mp-table td{padding:7px 12px;border-top:1px solid var(--line);font-size:13px;vertical-align:top;}' +
+ '.mp-table td{padding:9px 14px;border-top:1px solid #f1f5f9;font-size:13px;vertical-align:top;}' +
  '.mp-table tr:first-child td{border-top:none;}' +
- '.mp-key{color:var(--muted);width:42%;}' +
- '.mp-val{color:var(--cream);}' +
+ '.mp-key{color:#64748b;width:38%;font-weight:600;}' +
+ '.mp-val{color:#0f172a;}' +
  '</style>';
 
 TABS.manual = async () => {
@@ -2429,25 +2449,61 @@ TABS.recharge = async () => {
   if (!r.ok || !d.transactions) { content.innerHTML = '<div style="color:var(--danger)">⚠️ লোড ব্যর্থ! রিফ্রেশ করুন</div>'; return; }
   // Recharge mode: auto (SMS) + manual (user spec 2026-10-16)
   const mode = window._rechargeMode || 'both';
-  let html = '<div style="display:flex; gap:8px; margin-bottom:12px; align-items:center; flex-wrap:wrap;">' +
-    '<b style="color:var(--gold);">💰 রিচার্জ মোড:</b>' +
-    '<button class="mini-btn' + (mode === 'auto' ? ' ok' : '') + '" onclick="window._rechargeMode=\'auto\';show(\'recharge\')" title="শুধু SMS অটো-ম্যাচ">🤖 অটো</button>' +
+  let html = '<div style="display:flex; gap:10px; margin-bottom:16px; align-items:center; flex-wrap:wrap;">' +
+    '<span style="font-weight:700; color:#1e3a8a; font-size:14px;">💰 রিচার্জ মোড:</span>' +
+    '<button class="mini-btn' + (mode === 'auto' ? ' ok' : '') + '" onclick="window._rechargeMode=\'auto\';show(\'recharge\')" title="শুধু SMS অটো-ম্যাচ">🤖 অটো (SMS)</button>' +
     '<button class="mini-btn' + (mode === 'manual' ? ' ok' : '') + '" onclick="window._rechargeMode=\'manual\';show(\'recharge\')" title="শুধু ম্যানুয়াল approve">👤 ম্যানুয়াল</button>' +
-    '<button class="mini-btn' + (mode === 'both' ? ' ok' : '') + '" onclick="window._rechargeMode=\'both\';show(\'recharge\')" title="দুটোই চালু">🔀 দুটোই</button>' +
-    '<button class="mini-btn" onclick="show(\'sms\')" style="margin-left:auto;">📩 SMS লগ</button></div>';
-  html += '<h3 style="color:var(--gold);margin-bottom:12px;">⏳ পেন্ডিং রিচার্জ (' + bn(d.total) + ')</h3>';
-  if (!d.transactions.length) html += '<div style="color:var(--muted)">কোনো পেন্ডিং রিকোয়েস্ট নেই 🎉</div>';
-  for (const t of d.transactions) {
-    html += '<div class="list-row" style="cursor:default;"><div>' +
-      '<div class="t">' + esc(t.user_name) + ' <small style="color:var(--dim)">' + esc(t.user_phone) + '</small></div>' +
-      '<div class="s">' + esc(t.method) + ' • ' + esc(t.sender_no) + ' • TrxID: ' + esc(t.trxid) + '<br>' +
-      new Date(t.created_at).toLocaleString('bn-BD') + '</div></div>' +
-      '<div style="text-align:right;"><div class="pill" style="margin-bottom:6px;">৳' + bn(t.amount) + '</div><br>' +
-      '<button class="mini-btn ok" onclick="AdmTx.approve(\'' + t.id + '\')">✅ Approve</button>' +
-      '<button class="mini-btn danger" onclick="AdmTx.reject(\'' + t.id + '\')">❌ Reject</button></div></div>';
+    '<button class="mini-btn' + (mode === 'both' ? ' ok' : '') + '" onclick="window._rechargeMode=\'both\';show(\'recharge\')" title="দুটোই চালু">🔀 অটো + ম্যানুয়াল</button>' +
+    '<button class="mini-btn" onclick="show(\'sms\')" style="margin-left:auto; display:inline-flex; align-items:center; gap:6px;">📩 SMS অডিট লগ</button></div>';
+  
+  html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">' +
+    '<h3 style="margin:0; font-size:16px; font-weight:700; color:#0f172a;">⏳ অপেক্ষমান রিচার্জ অনুমোদন (' + bn(d.total) + ')</h3>' +
+    '<span style="font-size:12px; color:#64748b;">সর্বশেষ ৩০টি রিকোয়েস্ট</span>' +
+    '</div>';
+
+  if (!d.transactions.length) {
+    html += '<div style="text-align:center; padding:48px 16px; background:#ffffff; border:1px dashed #cbd5e1; border-radius:14px; color:#64748b;">' +
+      '<div style="font-size:32px; margin-bottom:8px;">🎉</div>' +
+      '<b style="font-size:15px; color:#0f172a;">কোনো পেন্ডিং রিচার্জ রিকোয়েস্ট নেই</b><br>' +
+      '<span style="font-size:13px;">সবগুলো রিকোয়েস্ট সফলভাবে নিষ্পত্তি করা হয়েছে।</span>' +
+      '</div>';
+  } else {
+    html += '<div style="display:grid; gap:10px;">';
+    for (const t of d.transactions) {
+      const mLow = (t.method || '').toLowerCase();
+      let mBadge = '<span style="display:inline-block; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:700; background:#e0f2fe; color:#0369a1;">' + esc(t.method) + '</span>';
+      if (mLow.includes('bkash')) {
+        mBadge = '<span style="display:inline-block; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:700; background:#fdf2f8; color:#db2777; border:1px solid #fbcfe8;">bKash</span>';
+      } else if (mLow.includes('nagad')) {
+        mBadge = '<span style="display:inline-block; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:700; background:#fff7ed; color:#ea580c; border:1px solid #ffedd5;">Nagad</span>';
+      } else if (mLow.includes('rocket')) {
+        mBadge = '<span style="display:inline-block; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:700; background:#faf5ff; color:#9333ea; border:1px solid #f3e8ff;">Rocket</span>';
+      }
+
+      html += '<div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; display:flex; gap:14px; align-items:center; flex-wrap:wrap; box-shadow:0 1px 3px rgba(0,0,0,0.03);">' +
+        '<div style="flex:1; min-width:240px;">' +
+          '<div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">' +
+            '<b style="font-size:15px; color:#0f172a;">' + esc(t.user_name) + '</b>' +
+            mBadge +
+          '</div>' +
+          '<div style="font-size:13px; color:#475569; display:flex; flex-wrap:wrap; gap:12px; align-items:center;">' +
+            '<span>📞 ' + esc(t.sender_no || t.user_phone) + '</span>' +
+            '<span>TrxID: <button style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:1px 6px; font-family:monospace; font-size:12px; cursor:pointer;" onclick="navigator.clipboard.writeText(\'' + esc(t.trxid) + '\');admToast(\'কপি সফল\', \'TrxID কপি করা হয়েছে\')">📋 ' + esc(t.trxid) + '</button></span>' +
+          '</div>' +
+          '<div style="font-size:11px; color:#94a3b8; margin-top:4px;">🕒 ' + new Date(t.created_at).toLocaleString('bn-BD') + '</div>' +
+        '</div>' +
+        '<div style="display:flex; align-items:center; gap:10px; margin-left:auto;">' +
+          '<div style="background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; font-size:18px; font-weight:800; padding:6px 14px; border-radius:10px;">৳' + bn(t.amount) + '</div>' +
+          '<button class="mini-btn ok" style="padding:8px 14px; font-size:13px; font-weight:700; background:#16a34a; color:#fff;" onclick="AdmTx.approve(\'' + t.id + '\', ' + t.amount + ', \'' + esc(t.user_name).replace(/'/g, "\\'") + '\')">✅ Approve</button>' +
+          '<button class="mini-btn danger" style="padding:8px 12px; font-size:13px; font-weight:600;" onclick="AdmTx.reject(\'' + t.id + '\', ' + t.amount + ', \'' + esc(t.user_name).replace(/'/g, "\\'") + '\')">❌ Reject</button>' +
+        '</div>' +
+      '</div>';
+    }
+    html += '</div>';
   }
   content.innerHTML = html;
 };
+
 /* ---------------- SMS AUTO-MATCH ---------------- */
 TABS.sms = async () => {
   const f = window._smsFilter || 'no';
@@ -2552,22 +2608,58 @@ window.AdmSms = {
 };
 
 window.AdmTx = {
-  async approve(id) {
-    if (!confirm('৳ যোগ করবেন?')) return;
-    const r = await ABC.api('/admin/transactions/' + id + '/approve', { method: 'PUT' });
-    const d = await r.json();
-    if (!r.ok) {
-      alert('⚠️ ' + (d.error === 'DUPLICATE_TRANSACTION'
-        ? 'এই রিচার্জটি ইতিমধ্যে approve করা হয়েছে (অন্য admin করেছেন)।'
-        : 'ব্যর্থ: ' + d.error));
-      return;
-    }
-    show('recharge');
+  approve(id, amount, name) {
+    modal('💰 রিচার্জ অনুমোদন নিশ্চিত করুন',
+      '<div style="text-align:center; padding:10px 0;">' +
+        '<div style="font-size:32px; font-weight:800; color:#15803d; margin-bottom:8px;">৳' + bn(amount || 0) + '</div>' +
+        '<div style="font-size:14px; color:#334155; margin-bottom:18px;">গ্রাহক: <b>' + esc(name || 'গ্রাহক') + '</b>-এর ওয়ালেটে টাকা যোগ করা হবে।</div>' +
+        '<div style="display:flex; gap:10px; justify-content:center;">' +
+          '<button class="btn ok" style="background:#16a34a; font-weight:700;" onclick="AdmTx._doApprove(\'' + id + '\')">অনুমোদন নিশ্চিত করুন</button>' +
+          '<button class="btn-secondary" onclick="closeModal()">বাতিল</button>' +
+        '</div>' +
+      '</div>'
+    );
   },
-  async reject(id) {
-    if (!confirm('Reject করবেন?')) return;
-    await ABC.api('/admin/transactions/' + id + '/reject', { method: 'PUT' });
-    show('recharge');
+  async _doApprove(id) {
+    closeModal();
+    try {
+      const r = await ABC.api('/admin/transactions/' + id + '/approve', { method: 'PUT' });
+      const d = await r.json();
+      if (!r.ok) {
+        admToast('অনুমোদন ব্যর্থ', d.error === 'DUPLICATE_TRANSACTION' ? 'এই রিচার্জটি ইতিমধ্যে অন্য অ্যাডমিন দ্বারা অনুমোদিত হয়েছে।' : 'ব্যর্থ: ' + (d.error || 'UNKNOWN'), 'error');
+        return;
+      }
+      admToast('রিচার্জ সফল 🎉', 'গ্রাহকের ওয়ালেটে সফলভাবে ব্যালেন্স যোগ হয়েছে।', 'recharge');
+      show('recharge');
+    } catch (e) {
+      admToast('নেটওয়ার্ক ত্রুটি', 'সার্ভারে সংযোগ করা যায়নি', 'error');
+    }
+  },
+  reject(id, amount, name) {
+    modal('❌ রিচার্জ বাতিল করুন',
+      '<div style="text-align:center; padding:10px 0;">' +
+        '<div style="font-size:15px; color:#334155; margin-bottom:14px;">আপনি কি <b>' + esc(name || 'গ্রাহক') + '</b>-এর <b>৳' + bn(amount || 0) + '</b> রিচার্জ রিকোয়েস্ট বাতিল করতে চান?</div>' +
+        '<div style="display:flex; gap:10px; justify-content:center;">' +
+          '<button class="btn danger" style="background:#dc2626; font-weight:700;" onclick="AdmTx._doReject(\'' + id + '\')">বাতিল নিশ্চিত করুন</button>' +
+          '<button class="btn-secondary" onclick="closeModal()">ফিরে যান</button>' +
+        '</div>' +
+      '</div>'
+    );
+  },
+  async _doReject(id) {
+    closeModal();
+    try {
+      const r = await ABC.api('/admin/transactions/' + id + '/reject', { method: 'PUT' });
+      const d = await r.json();
+      if (!r.ok) {
+        admToast('বাতিল ব্যর্থ', 'ত্রুটি: ' + (d.error || 'NOT_PENDING'), 'error');
+        return;
+      }
+      admToast('বাতিল সম্পন্ন', 'রিচার্জ রিকোয়েস্টটি সফলভাবে বাতিল করা হয়েছে।', 'info');
+      show('recharge');
+    } catch (e) {
+      admToast('নেটওয়ার্ক ত্রুটি', 'সার্ভারে সংযোগ করা যায়নি', 'error');
+    }
   },
 };
 
