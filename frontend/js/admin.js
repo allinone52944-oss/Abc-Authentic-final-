@@ -574,37 +574,177 @@ window.AdmUsers = {
   },
 };
 
-/* ---------------- ORDERS ---------------- */
+/* ---------------- ORDERS (Fintech Order Hub Redesign) ---------------- */
+const ORDER_LABELS_BN = {
+  nid: 'জাতীয় পরিচয়পত্র (NID)',
+  nid_number: 'NID নম্বর',
+  nid_no: 'NID নম্বর',
+  dob: 'জন্ম তারিখ',
+  birth_date: 'জন্ম তারিখ',
+  birth_registration_number: 'জন্মনিবন্ধন নম্বর',
+  brn: 'জন্মনিবন্ধন নম্বর',
+  name: 'নাম',
+  full_name: 'পূর্ণ নাম',
+  user_name: 'গ্রাহকের নাম',
+  phone: 'মোবাইল নম্বর',
+  user_phone: 'মোবাইল নম্বর',
+  email: 'ইমেইল',
+  father_name: 'পিতার নাম',
+  mother_name: 'মাতার নাম',
+  spouse_name: 'স্বামী/স্ত্রীর নাম',
+  division: 'বিভাগ',
+  district: 'জেলা',
+  upazila: 'উপজেলা/থানা',
+  thana: 'উপজেলা/থানা',
+  union: 'ইউনিয়ন/পৌরসভা',
+  post_office: 'ডাকঘর',
+  village: 'গ্রাম/মহল্লা',
+  ward: 'ওয়ার্ড',
+  tracking_number: 'ট্র্যাকিং নম্বর',
+  application_id: 'আবেদন আইডি',
+  comments: 'মন্তব্য',
+  note: 'নোট',
+  gender: 'লিঙ্গ'
+};
+
 TABS.orders = async () => {
   const _f = TABS._f || '';
-  const r = await ABC.api('/admin/orders?limit=30' + (_f ? '&status=' + _f : ''));
-  const d = await r.json();
-  TABS._orders = d.orders;
-  let html = '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">' +
-    ['new', 'pending', 'received', 'processing', 'registered', 'completed', 'delivered', 'failed', 'cancelled', 'refunded']
-      .map(s => '<button class="mini-btn' + (_f === s ? ' ok' : '') + '" onclick="AdmOrders.filter(\'' + s + '\')">' + (STBN[s] || s) + '</button>').join('') +
-    '<button class="mini-btn" onclick="AdmOrders.filter(\'\')">সব</button></div>' +
-    '<div style="overflow-x:auto;"><table class="adm"><tr><th>সেবা</th><th>ইউজার</th><th>দাম</th><th>স্ট্যাটাস</th><th>তারিখ</th><th>কাজ</th></tr>';
-  for (const o of d.orders) {
-    html += '<tr><td>' + esc(o.service_name_bn || o.service_name) + '</td>' +
-      '<td>' + esc(o.user_name) + '<br><small style="color:var(--dim)">' + esc(o.user_phone) + '</small></td>' +
-      '<td>৳' + bn(o.price) + '</td>' +
-      '<td><span class="badge st-' + o.status + '">' + (STBN[o.status] || o.status) + '</span></td>' +
-      '<td><small>' + new Date(o.created_at).toLocaleString('bn-BD') + '</small></td>' +
-      '<td><select onchange="AdmOrders.setStatus(\'' + o.id + '\',this.value)">' +
-      Object.keys(STBN).map(s => '<option value="' + s + '"' + (o.status === s ? ' selected' : '') + '>' + STBN[s] + '</option>').join('') +
-      '</select> <button class="mini-btn" title="বিস্তারিত" onclick="AdmOrders.view(\'' + o.id + '\')">👁️</button> ' +
-      '<button class="mini-btn" title="সাপোর্ট মেসেজ" onclick="AdmOrders.supportForm(\'' + o.id + '\')">💬</button> ' +
-      '<button class="mini-btn" title="ডেলিভারি ডকুমেন্ট" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎</button></td></tr>';
+  const _q = TABS._q || '';
+  let url = '/admin/orders?limit=50';
+  if (_f) url += '&status=' + encodeURIComponent(_f);
+  if (_q) url += '&q=' + encodeURIComponent(_q);
+
+  const [ordersRes, statsRes] = await Promise.all([
+    ABC.api(url),
+    ABC.api('/admin/stats').catch(() => ({ ok: false }))
+  ]);
+
+  const d = await ordersRes.json();
+  const stats = statsRes.ok ? await statsRes.json().catch(() => ({})) : {};
+  TABS._orders = d.orders || [];
+
+  const statusList = [
+    { key: '', label: 'সব অর্ডার', count: stats.orders_total },
+    { key: 'new', label: 'নতুন', count: stats.orders_new },
+    { key: 'processing', label: 'প্রসেসিং', count: stats.orders_active },
+    { key: 'completed', label: 'সম্পন্ন', count: stats.orders_completed },
+    { key: 'delivered', label: 'ডেলিভার্ড' },
+    { key: 'pending', label: 'অপেক্ষমান' },
+    { key: 'cancelled', label: 'বাতিল' },
+    { key: 'refunded', label: 'রিফান্ডেড' }
+  ];
+
+  let html = '<div class="adm-orders-wrap">' +
+    '<!-- Top Toolbar & Search -->' +
+    '<div class="adm-orders-toolbar">' +
+      '<div class="adm-tabs-row">' +
+        statusList.map(s => {
+          const isActive = _f === s.key;
+          const countBadge = (s.count !== undefined && s.count !== null) ? '<span class="adm-tab-chip">' + bn(s.count) + '</span>' : '';
+          return '<button class="adm-tab-btn' + (isActive ? ' active' : '') + '" onclick="AdmOrders.filter(\'' + s.key + '\')">' +
+            esc(s.label) + countBadge + '</button>';
+        }).join('') +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-left:auto;">' +
+        '<input type="text" id="admOrderSearch" class="adm-search-input" placeholder="🔍 গ্রাহকের নাম, মোবাইল বা সার্ভিস খুঁজুন..." value="' + esc(_q) + '" onkeydown="if(event.key===\'Enter\')AdmOrders.search(this.value)">' +
+        '<button class="mini-btn" onclick="AdmOrders.search(document.getElementById(\'admOrderSearch\').value)">খুঁজুন</button>' +
+        (_q ? '<button class="mini-btn danger" onclick="AdmOrders.clearSearch()">✕ ক্লিয়ার</button>' : '') +
+      '</div>' +
+    '</div>' +
+
+    '<!-- Orders Table Card -->' +
+    '<div class="adm-table-card">' +
+      '<div style="overflow-x:auto;">' +
+        '<table class="adm-table">' +
+          '<thead><tr>' +
+            '<th>অর্ডার ও গ্রাহক</th>' +
+            '<th>সেবা</th>' +
+            '<th>মূল্য</th>' +
+            '<th>স্ট্যাটাস</th>' +
+            '<th>তারিখ ও সময়</th>' +
+            '<th style="text-align:right;">অ্যাকশন ও প্রসেসিং</th>' +
+          '</tr></thead>' +
+          '<tbody>';
+
+  if (!TABS._orders.length) {
+    html += '<tr><td colspan="6" style="text-align:center;padding:48px 20px;color:var(--text-muted);">' +
+      '<div style="font-size:36px;margin-bottom:8px;">📦</div>' +
+      '<div style="font-size:15px;font-weight:600;">কোনো অর্ডার পাওয়া যায়নি</div>' +
+      '<div style="font-size:12px;margin-top:4px;">অন্য কোনো ফিল্টার বা সার্চ দিয়ে চেষ্টা করুন।</div>' +
+      '</td></tr>';
+  } else {
+    for (const o of TABS._orders) {
+      const uName = o.user_name || 'গ্রাহক';
+      const initials = uName.slice(0, 2).toUpperCase();
+      const stClass = 'st-' + (o.status || 'new');
+      const stText = STBN[o.status] || o.status;
+
+      // Smart Quick Action button
+      let quickActionBtn = '';
+      if (o.status === 'new' || o.status === 'pending') {
+        quickActionBtn = '<button class="btn-quick-primary" onclick="AdmOrders.startProcessing(\'' + o.id + '\')">▶️ গ্রহণ করুন</button>';
+      } else if (o.status === 'processing' || o.status === 'received' || o.status === 'registered') {
+        quickActionBtn = '<button class="btn-quick-success" onclick="AdmOrders.openQuickComplete(\'' + o.id + '\')">✅ সম্পন্ন ও ডেলিভারি</button>';
+      } else if (o.status === 'completed') {
+        quickActionBtn = '<button class="btn-quick-emerald" onclick="AdmOrders.markDelivered(\'' + o.id + '\')">🚀 ডেলিভার্ড করুন</button>';
+      } else if (o.status === 'delivered') {
+        quickActionBtn = '<span style="color:#059669;font-weight:700;font-size:11px;">✓ ডেলিভার্ড সম্পন্ন</span>';
+      }
+
+      html += '<tr>' +
+        '<td>' +
+          '<div class="adm-user-cell">' +
+            '<div class="adm-user-avatar">' + esc(initials) + '</div>' +
+            '<div>' +
+              '<div class="adm-user-name">' + esc(uName) + '</div>' +
+              '<div class="adm-user-phone">' +
+                '<span>📞 <a href="tel:' + esc(o.user_phone) + '" style="color:inherit;text-decoration:none;">' + esc(o.user_phone) + '</a></span>' +
+                '<span class="adm-order-tag">#' + esc(String(o.id).slice(0, 8)) + '</span>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</td>' +
+        '<td>' +
+          '<div class="adm-svc-title">' + esc(o.service_name_bn || o.service_name || 'সেবা') + '</div>' +
+        '</td>' +
+        '<td>' +
+          '<span class="adm-price-badge">৳' + bn(o.price) + '</span>' +
+        '</td>' +
+        '<td>' +
+          '<span class="st-badge ' + stClass + '">' + esc(stText) + '</span>' +
+        '</td>' +
+        '<td>' +
+          '<div style="font-size:12px;font-weight:600;color:var(--text-main);">' + new Date(o.created_at).toLocaleDateString('bn-BD') + '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted);">' + new Date(o.created_at).toLocaleTimeString('bn-BD', {hour:'2-digit', minute:'2-digit'}) + '</div>' +
+        '</td>' +
+        '<td>' +
+          '<div class="adm-action-grp" style="justify-content:flex-end;">' +
+            quickActionBtn +
+            '<button class="adm-icon-btn" title="সম্পূর্ণ তথ্য পর্যালোচনা ও ডেলিভারি" onclick="AdmOrders.view(\'' + o.id + '\')">👁️ বিস্তারিত</button>' +
+            '<button class="adm-icon-btn" title="গ্রাহকের সাথে সাপোর্ট চ্যাট" onclick="AdmOrders.supportForm(\'' + o.id + '\')">💬</button>' +
+            '<button class="adm-icon-btn" title="ডেলিভারি ফাইল আপলোড" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎</button>' +
+          '</div>' +
+        '</td>' +
+      '</tr>';
+    }
   }
-  content.innerHTML = html + '</table></div>';
+
+  html += '</tbody></table></div></div></div>';
+  content.innerHTML = html;
 };
+
 window.AdmOrders = {
   copyData() {
     const t = TABS._viewRaw || '';
     if (!t) { alert('কপি করার মতো ডেটা নেই'); return; }
-    navigator.clipboard.writeText(t).then(() => alert('✅ কপি হয়েছে')).catch(() => alert('কপি ব্যর্থ'));
+    navigator.clipboard.writeText(t).then(() => alert('✅ সব তথ্য সফলভাবে কপি হয়েছে')).catch(() => alert('কপি ব্যর্থ'));
   },
+
+  copyVal(val) {
+    if (!val) return;
+    navigator.clipboard.writeText(String(val)).then(() => alert('✅ কপি হয়েছে: ' + val)).catch(() => alert('কপি ব্যর্থ'));
+  },
+
   async dlDoc(orderId, idx) {
     const d = (TABS._viewDocs || [])[idx];
     if (!d) return;
@@ -619,72 +759,482 @@ window.AdmOrders = {
       setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
     } catch (e) { alert('ডাউনলোড ব্যর্থ'); }
   },
+
+  async search(q) {
+    TABS._q = (q || '').trim();
+    show('orders');
+  },
+
+  clearSearch() {
+    TABS._q = '';
+    show('orders');
+  },
+
+  async filter(s) {
+    TABS._f = s;
+    show('orders');
+  },
+
+  // Smart transition compliant with backend ORDER_TRANSITIONS
+  async smartTransition(id, fromStatus, targetStatus, adminNote) {
+    if (fromStatus === targetStatus) return true;
+    const path = [];
+    if (targetStatus === 'delivered') {
+      if (fromStatus === 'new') path.push('processing', 'completed', 'delivered');
+      else if (fromStatus === 'pending') path.push('processing', 'completed', 'delivered');
+      else if (fromStatus === 'processing' || fromStatus === 'received' || fromStatus === 'registered') path.push('completed', 'delivered');
+      else if (fromStatus === 'completed') path.push('delivered');
+      else path.push('delivered');
+    } else if (targetStatus === 'completed') {
+      if (fromStatus === 'new') path.push('processing', 'completed');
+      else if (fromStatus === 'pending') path.push('processing', 'completed');
+      else if (fromStatus === 'processing' || fromStatus === 'received' || fromStatus === 'registered') path.push('completed');
+      else path.push('completed');
+    } else if (targetStatus === 'processing') {
+      if (fromStatus === 'new' || fromStatus === 'pending') path.push('processing');
+      else path.push('processing');
+    } else {
+      path.push(targetStatus);
+    }
+
+    for (const st of path) {
+      const r = await ABC.api('/admin/orders/' + id + '/status', {
+        method: 'PUT',
+        body: { status: st, admin_note: adminNote || undefined }
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.error || ('স্ট্যাটাস পরিবর্তন ব্যর্থ (' + st + ')'));
+      }
+    }
+    return true;
+  },
+
+  async setStatus(id, status, adminNote) {
+    const o = (TABS._orders || []).find(x => x.id === id);
+    const fromStatus = o ? o.status : 'new';
+    try {
+      await this.smartTransition(id, fromStatus, status, adminNote);
+      alert('✅ অর্ডার স্ট্যাটাস সফলভাবে আপডেট করা হয়েছে (' + (STBN[status] || status) + ')');
+      closeModal();
+      show('orders');
+    } catch (e) {
+      alert('❌ ব্যর্থ: ' + e.message);
+    }
+  },
+
+  async startProcessing(id) {
+    const o = (TABS._orders || []).find(x => x.id === id);
+    if (!confirm('অর্ডারটি গ্রহণ করে প্রসেসিং শুরু করতে চান?')) return;
+    try {
+      await this.smartTransition(id, o ? o.status : 'new', 'processing');
+      alert('✅ অর্ডার গৃহীত ও প্রসেসিং শুরু হয়েছে');
+      show('orders');
+    } catch (e) {
+      alert('❌ ব্যর্থ: ' + e.message);
+    }
+  },
+
+  async markCompleted(id) {
+    const o = (TABS._orders || []).find(x => x.id === id);
+    if (!confirm('অর্ডারটির কাজ সম্পন্ন হিসেবে মার্ক করতে চান?')) return;
+    try {
+      await this.smartTransition(id, o ? o.status : 'processing', 'completed');
+      alert('✅ অর্ডার সম্পন্ন মার্ক করা হয়েছে');
+      closeModal();
+      show('orders');
+    } catch (e) {
+      alert('❌ ব্যর্থ: ' + e.message);
+    }
+  },
+
+  async markDelivered(id) {
+    const o = (TABS._orders || []).find(x => x.id === id);
+    if (!confirm('অর্ডারটি গ্রাহককে ডেলিভার্ড হিসেবে মার্ক করতে চান?')) return;
+    try {
+      await this.smartTransition(id, o ? o.status : 'completed', 'delivered');
+      alert('✅ অর্ডার ডেলিভার্ড মার্ক করা হয়েছে এবং গ্রাহককে নোটিফিকেশন পাঠানো হয়েছে');
+      closeModal();
+      show('orders');
+    } catch (e) {
+      alert('❌ ব্যর্থ: ' + e.message);
+    }
+  },
+
+  async cancelOrder(id) {
+    const note = prompt('অর্ডার বাতিলের কারণ লিখুন (ঐচ্ছিক):');
+    if (note === null) return;
+    const o = (TABS._orders || []).find(x => x.id === id);
+    try {
+      const r = await ABC.api('/admin/orders/' + id + '/status', {
+        method: 'PUT',
+        body: { status: 'cancelled', admin_note: note || 'এডমিন কর্তৃক বাতিল' }
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'বাতিল ব্যর্থ');
+      alert('অর্ডার বাতিল করা হয়েছে');
+      closeModal();
+      show('orders');
+    } catch (e) {
+      alert('❌ ব্যর্থ: ' + e.message);
+    }
+  },
+
+  async refundOrder(id) {
+    const o = (TABS._orders || []).find(x => x.id === id);
+    if (!confirm('অর্ডারের মূল্য ৳' + bn(o ? o.price : 0) + ' গ্রাহকের ওয়ালেটে রিফান্ড ফেরত দিতে চান?')) return;
+    try {
+      const r = await ABC.api('/admin/orders/' + id + '/status', {
+        method: 'PUT',
+        body: { status: 'refunded', admin_note: 'এডমিন কর্তৃক ওয়ালেট রিফান্ড' }
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'রিফান্ড ব্যর্থ');
+      alert('✅ অর্ডারের মূল্য সফলভাবে গ্রাহকের ওয়ালেটে রিফান্ড করা হয়েছে');
+      closeModal();
+      show('orders');
+    } catch (e) {
+      alert('❌ রিফান্ড ব্যর্থ: ' + e.message);
+    }
+  },
+
+  async saveAdminNote(id) {
+    const note = document.getElementById('admOrderNoteInput');
+    if (!note) return;
+    const txt = note.value.trim();
+    const o = (TABS._orders || []).find(x => x.id === id);
+    try {
+      const r = await ABC.api('/admin/orders/' + id + '/status', {
+        method: 'PUT',
+        body: { status: o ? o.status : 'processing', admin_note: txt }
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'নোট সংরক্ষণ ব্যর্থ');
+      alert('✅ এডমিন নোট সংরক্ষিত হয়েছে');
+    } catch (e) {
+      alert('❌ সংরক্ষণ ব্যর্থ: ' + e.message);
+    }
+  },
+
+  openQuickComplete(id) {
+    this.view(id);
+  },
+
   view(id) {
     const o = (TABS._orders || []).find(x => x.id === id);
     if (!o) { alert('অর্ডার পাওয়া যায়নি'); return; }
-    let dataHtml = '';
-    let rawText = '';
+
+    // Parse Submitted Form Data
+    let dataCardsHtml = '';
+    let rawText = 'অর্ডার: ' + (o.service_name_bn || o.service_name || '') + '\n' +
+      'গ্রাহক: ' + (o.user_name || '') + ' (' + (o.user_phone || '') + ')\n\n--- ফর্ম ডেটা ---\n';
+
     try {
       const data = typeof o.data === 'string' ? JSON.parse(o.data) : (o.data || {});
-      // Auto-format: clean key names, trim values
-      // Special handling for _manual_form: show as pre-formatted block
       let manualFormHtml = '';
       if (data._manual_form) {
-        manualFormHtml = '<div style="margin:10px 0;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">' +
-          '<div style="font-weight:700;margin-bottom:6px;color:#166534;">📝 User-এর পূরণকৃত ফরম</div>' +
-          '<pre style="white-space:pre-wrap;font-family:monospace;font-size:13px;margin:0;">' + esc(String(data._manual_form)) + '</pre>' +
-          '<button onclick="navigator.clipboard.writeText(' + JSON.stringify(String(data._manual_form)).replace(/</g, '\\u003c') + ').then(()=>alert(\'✅ কপি হয়েছে\'))" style="margin-top:8px;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;">📋 কপি করুন</button></div>';
+        manualFormHtml = '<div style="margin:12px 0;padding:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">' +
+          '<div style="font-weight:700;margin-bottom:8px;color:#166534;display:flex;justify-content:space-between;align-items:center;">' +
+            '<span>📝 ইউজার কর্তৃক পূরণকৃত আবেদন</span>' +
+            '<button onclick="AdmOrders.copyVal(' + JSON.stringify(String(data._manual_form)).replace(/</g, '\\u003c') + ')" class="mini-btn ok">📋 কপি করুন</button>' +
+          '</div>' +
+          '<pre style="white-space:pre-wrap;font-family:monospace;font-size:13px;margin:0;color:#1e293b;">' + esc(String(data._manual_form)) + '</pre>' +
+        '</div>';
+        rawText += String(data._manual_form) + '\n';
         delete data._manual_form;
       }
-      const formatted = Object.entries(data).map(([k, v]) => {
-        const cleanK = String(k).replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim();
-        const cleanV = String(v == null ? '' : v).trim();
-        rawText += cleanK + ': ' + cleanV + '\n';
-        return '<div style="padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;">' +
-          '<span style="color:var(--muted)">' + esc(cleanK) + ':</span> ' +
-          '<b style="color:var(--cream)">' + esc(cleanV) + '</b></div>';
-      }).join('') || '<div style="color:var(--muted)">কোনো ফর্ম ডেটা নেই</div>';
-      dataHtml = manualFormHtml + formatted;
+
+      const entries = Object.entries(data);
+      if (entries.length) {
+        dataCardsHtml = '<div class="adm-fields-grid">' +
+          entries.map(([k, v]) => {
+            const label = ORDER_LABELS_BN[k] || String(k).replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+            const val = String(v == null ? '' : v).trim();
+            rawText += label + ': ' + val + '\n';
+            return '<div class="adm-field-card">' +
+              '<div class="adm-field-head">' +
+                '<span class="adm-field-label">' + esc(label) + '</span>' +
+                '<button class="adm-copy-chip" onclick="AdmOrders.copyVal(' + JSON.stringify(val).replace(/</g, '\\u003c') + ')">📋 কপি</button>' +
+              '</div>' +
+              '<div class="adm-field-val">' + (val ? esc(val) : '<span style="color:#94a3b8;font-weight:normal;">(খালি)</span>') + '</div>' +
+            '</div>';
+          }).join('') +
+        '</div>';
+      } else if (!manualFormHtml) {
+        dataCardsHtml = '<div style="color:var(--text-muted);padding:10px 0;">কোনো ফর্ম ডেটা জমা দেওয়া হয়নি</div>';
+      }
+      dataCardsHtml = manualFormHtml + dataCardsHtml;
       TABS._viewRaw = rawText;
-    } catch (e) { dataHtml = '<div style="color:var(--muted)">ডেটা পড়া যায়নি</div>'; }
+    } catch (e) {
+      dataCardsHtml = '<div style="color:var(--danger);padding:10px 0;">ডেটা প্রসেস করতে ব্যর্থ</div>';
+    }
+
+    // Customer Attached Documents
     let docsHtml = '';
     try {
       const docs = typeof o.documents === 'string' ? JSON.parse(o.documents || '[]') : (o.documents || []);
-      docsHtml = docs.length ?
-        docs.map((d, i) => '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;">' +
-          '<span style="flex:1;">📎 ' + esc(d.originalname || d.filename || '') + '</span>' +
-          '<button class="mini-btn" onclick="AdmOrders.dlDoc(\'' + o.id + '\',' + i + ')">⬇️ ডাউনলোড</button></div>').join('') :
-        '<div style="color:var(--muted);font-size:13px;">কোনো ডকুমেন্ট নেই</div>';
+      const userDocs = docs.filter(d => !d.uploaded_by || d.uploaded_by === 'user');
+      const adminDocs = docs.filter(d => d.uploaded_by === 'admin' || d.type === 'delivery');
+
+      if (userDocs.length) {
+        docsHtml = '<div class="adm-docs-grid">' +
+          userDocs.map((d, i) => {
+            const origIdx = docs.indexOf(d);
+            return '<div class="adm-doc-card">' +
+              '<div style="display:flex;align-items:center;gap:8px;overflow:hidden;">' +
+                '<span style="font-size:22px;">📎</span>' +
+                '<div style="overflow:hidden;">' +
+                  '<div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + esc(d.originalname || d.filename) + '">' +
+                    esc(d.originalname || d.filename || 'ডকুমেন্ট') +
+                  '</div>' +
+                  '<div style="font-size:10px;color:var(--text-muted);">গ্রাহকের ফাইল</div>' +
+                '</div>' +
+              '</div>' +
+              '<button class="mini-btn ok" onclick="AdmOrders.dlDoc(\'' + o.id + '\',' + origIdx + ')">⬇️ ডাউনলোড</button>' +
+            '</div>';
+          }).join('') +
+        '</div>';
+      } else {
+        docsHtml = '<div style="color:var(--text-muted);font-size:13px;padding:6px 0;">গ্রাহক কোনো ডকুমেন্ট যুক্ত করেননি</div>';
+      }
+
+      let adminDocsHtml = '';
+      if (adminDocs.length) {
+        adminDocsHtml = '<div style="margin-top:14px;"><div style="font-weight:700;font-size:13px;color:#059669;margin-bottom:6px;">📤 ইতিমধ্যে ডেলিভারিকৃত ডকুমেন্ট:</div><div class="adm-docs-grid">' +
+          adminDocs.map((d, i) => {
+            const origIdx = docs.indexOf(d);
+            return '<div class="adm-doc-card" style="border-color:#a7f3d0;background:#f0fdf4;">' +
+              '<div style="display:flex;align-items:center;gap:8px;overflow:hidden;">' +
+                '<span style="font-size:22px;">✅</span>' +
+                '<div style="overflow:hidden;">' +
+                  '<div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(d.originalname || d.filename) + '</div>' +
+                  '<div style="font-size:10px;color:#16a34a;">ডেলিভারি ফাইল</div>' +
+                '</div>' +
+              '</div>' +
+              '<button class="mini-btn ok" onclick="AdmOrders.dlDoc(\'' + o.id + '\',' + origIdx + ')">⬇️ ডাউনলোড</button>' +
+            '</div>';
+          }).join('') +
+        '</div></div>';
+      }
+      docsHtml += adminDocsHtml;
       TABS._viewDocs = docs;
-    } catch (e) { docsHtml = '<div style="color:var(--muted)">ডকুমেন্ট পড়া যায়নি</div>'; }
-    modal('👁️ অর্ডার বিস্তারিত',
-      '<div style="margin-bottom:12px;"><b style="color:var(--gold)">' + esc(o.service_name_bn || o.service_name || '') + '</b><br>' +
-      '<span class="badge st-' + o.status + '">' + (STBN[o.status] || o.status) + '</span> ' +
-      '<span class="pill">৳' + bn(o.price) + '</span> ' +
-      '<button class="mini-btn" onclick="AdmOrders.copyData()">📋 কপি</button><br>' +
-      '<small style="color:var(--muted)">👤 ' + esc(o.user_name || '') + ' (' + esc(o.user_phone || '') + ')<br>🕘 ' + new Date(o.created_at).toLocaleString('bn-BD') + '</small></div>' +
-      '<div style="color:var(--gold);font-weight:700;margin:10px 0 6px;">📝 ফর্ম ডেটা</div>' + dataHtml +
-      '<div style="color:var(--gold);font-weight:700;margin:10px 0 6px;">📎 ডকুমেন্ট</div>' + docsHtml +
-      (o.notes ? '<div style="margin-top:10px;font-size:13px;">📝 নোট: ' + esc(o.notes) + '</div>' : '') +
-      (o.admin_note ? '<div style="margin-top:6px;font-size:13px;color:var(--gold);">👨‍💼 এডমিন: ' + esc(o.admin_note) + '</div>' : '')
-    );
+    } catch (e) {
+      docsHtml = '<div style="color:var(--danger);font-size:13px;">ডকুমেন্ট তালিকা লোড ব্যর্থ</div>';
+    }
+
+    // Visual Pipeline Stepper
+    const stepOrder = ['new', 'processing', 'completed', 'delivered'];
+    const curStatus = o.status || 'new';
+    let activeIdx = stepOrder.indexOf(curStatus);
+    if (curStatus === 'pending') activeIdx = 0;
+    if (curStatus === 'received' || curStatus === 'registered') activeIdx = 1;
+    if (activeIdx === -1 && curStatus === 'completed') activeIdx = 2;
+    if (activeIdx === -1 && curStatus === 'delivered') activeIdx = 3;
+
+    const pipelineHtml = '<div class="adm-pipeline-steps">' +
+      '<div class="adm-step-item' + (activeIdx >= 0 ? (activeIdx === 0 ? ' active' : ' done') : '') + '">' +
+        '<div class="adm-step-dot">' + (activeIdx > 0 ? '✓' : '১') + '</div>' +
+        '<div class="adm-step-label">নতুন অর্ডার</div>' +
+      '</div>' +
+      '<div style="flex:1;height:2px;background:' + (activeIdx >= 1 ? '#16a34a' : '#cbd5e1') + ';margin:0 8px;"></div>' +
+      '<div class="adm-step-item' + (activeIdx >= 1 ? (activeIdx === 1 ? ' active' : ' done') : '') + '">' +
+        '<div class="adm-step-dot">' + (activeIdx > 1 ? '✓' : '২') + '</div>' +
+        '<div class="adm-step-label">প্রসেসিং</div>' +
+      '</div>' +
+      '<div style="flex:1;height:2px;background:' + (activeIdx >= 2 ? '#16a34a' : '#cbd5e1') + ';margin:0 8px;"></div>' +
+      '<div class="adm-step-item' + (activeIdx >= 2 ? (activeIdx === 2 ? ' active' : ' done') : '') + '">' +
+        '<div class="adm-step-dot">' + (activeIdx > 2 ? '✓' : '৩') + '</div>' +
+        '<div class="adm-step-label">সম্পন্ন</div>' +
+      '</div>' +
+      '<div style="flex:1;height:2px;background:' + (activeIdx >= 3 ? '#16a34a' : '#cbd5e1') + ';margin:0 8px;"></div>' +
+      '<div class="adm-step-item' + (activeIdx >= 3 ? ' active done' : '') + '">' +
+        '<div class="adm-step-dot">' + (activeIdx >= 3 ? '✓' : '৪') + '</div>' +
+        '<div class="adm-step-label">ডেলিভার্ড</div>' +
+      '</div>' +
+    '</div>';
+
+    // Action Hub (Clear, prominent controls for completion & delivery)
+    let actionHubHtml = '';
+    if (curStatus === 'new' || curStatus === 'pending') {
+      actionHubHtml = '<div class="adm-hub-card">' +
+        '<div class="adm-hub-title">' +
+          '<span>🎯 পরবর্তী অ্যাকশন: অর্ডার গ্রহণ</span>' +
+          '<span class="st-badge st-' + curStatus + '">' + (STBN[curStatus] || curStatus) + '</span>' +
+        '</div>' +
+        '<p style="color:var(--text-muted);font-size:12px;margin:4px 0 10px;">গ্রাহকের প্রদত্ত তথ্য পরীক্ষা করুন এবং কাজ শুরু করার জন্য গ্রহণ করুন।</p>' +
+        '<div class="adm-hub-actions">' +
+          '<button class="btn-quick-primary" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.startProcessing(\'' + o.id + '\')">▶️ অর্ডার গ্রহণ ও প্রসেসিং শুরু করুন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.cancelOrder(\'' + o.id + '\')">❌ বাতিল করুন</button>' +
+        '</div>' +
+      '</div>';
+    } else if (curStatus === 'processing' || curStatus === 'received' || curStatus === 'registered') {
+      actionHubHtml = '<div class="adm-hub-card" style="border-left-color:#16a34a;background:linear-gradient(135deg, #f0fdf4, #ffffff);">' +
+        '<div class="adm-hub-title" style="color:#166534;">' +
+          '<span>🎯 অর্ডার ডেলিভারি ও সমাপ্তকরণ</span>' +
+          '<span class="st-badge st-processing">প্রসেসিং চলছে</span>' +
+        '</div>' +
+        '<p style="color:var(--text-muted);font-size:12px;margin:4px 0 10px;">গ্রাহককে প্রস্তুতকৃত ডকুমেন্ট (PDF/ছবি) ডেলিভারি দিন অথবা সরাসরি কাজ সম্পন্ন মার্ক করুন।</p>' +
+
+        '<!-- Delivery File Box -->' +
+        '<div style="background:#ffffff;border:2px dashed #bbf7d0;border-radius:8px;padding:14px;text-align:center;margin-bottom:12px;">' +
+          '<input type="file" id="admModalDeliFile" accept=".pdf,.jpg,.jpeg,.png" style="display:none;" onchange="AdmOrders.modalFileSelected(this)">' +
+          '<div id="admModalDeliPreview" style="color:var(--text-muted);font-size:13px;">' +
+            '📄 ডেলিভারি ফাইল যুক্ত করুন (PDF, JPG, PNG)<br>' +
+            '<button class="mini-btn" style="margin-top:6px;" onclick="document.getElementById(\'admModalDeliFile\').click()">📁 ফাইল বেছে নিন</button>' +
+          '</div>' +
+        '</div>' +
+
+        '<div class="adm-hub-actions">' +
+          '<button class="btn-quick-emerald" id="admModalUploadDeliverBtn" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.modalDeliverWithFile(\'' + o.id + '\')" disabled>🚀 ডেলিভারি ফাইল আপলোড ও সমাপ্ত করুন</button>' +
+          '<button class="btn-quick-success" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.markCompleted(\'' + o.id + '\')">✅ ফাইল ছাড়া সম্পন্ন মার্ক করুন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.cancelOrder(\'' + o.id + '\')">❌ বাতিল/ব্যর্থ</button>' +
+        '</div>' +
+      '</div>';
+    } else if (curStatus === 'completed') {
+      actionHubHtml = '<div class="adm-hub-card" style="border-left-color:#059669;background:linear-gradient(135deg, #ecfdf5, #ffffff);">' +
+        '<div class="adm-hub-title" style="color:#065f46;">' +
+          '<span>🎯 অর্ডার সম্পন্ন: গ্রাহককে ডেলিভার্ড মার্ক করুন</span>' +
+          '<span class="st-badge st-completed">সম্পন্ন</span>' +
+        '</div>' +
+        '<p style="color:var(--text-muted);font-size:12px;margin:4px 0 10px;">অর্ডারটির কাজ সম্পন্ন হয়েছে। গ্রাহককে চূড়ান্ত ডেলিভারি কনফার্ম করুন।</p>' +
+        '<div class="adm-hub-actions">' +
+          '<button class="btn-quick-emerald" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.markDelivered(\'' + o.id + '\')">🚀 ডেলিভার্ড মার্ক করুন ও নোটিফিকেশন দিন</button>' +
+          '<button class="mini-btn" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎 অতিরিক্ত ডেলিভারি ফাইল যোগ করুন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\')">↩️ রিফান্ড করুন</button>' +
+        '</div>' +
+      '</div>';
+    } else if (curStatus === 'delivered') {
+      actionHubHtml = '<div class="adm-hub-card" style="border-left-color:#10b981;background:#f0fdf4;">' +
+        '<div class="adm-hub-title" style="color:#065f46;">' +
+          '<span>🎉 অর্ডার সফলভাবে ডেলিভার্ড সম্পন্ন</span>' +
+          '<span class="st-badge st-delivered">ডেলিভার্ড</span>' +
+        '</div>' +
+        '<p style="color:#166534;font-size:12px;margin:4px 0 10px;">গ্রাহক ইতিমধ্যে তাঁর ডেলিভারি ডকুমেন্ট পেয়েছেন এবং কাজ সম্পন্ন হয়েছে।</p>' +
+        '<div class="adm-hub-actions">' +
+          '<button class="mini-btn" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎 অতিরিক্ত ফাইল সংযোজন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\')">↩️ রিফান্ড করুন</button>' +
+        '</div>' +
+      '</div>';
+    }
+
+    const bodyHtml = '<div class="adm-modal-content">' +
+      '<!-- Top Info Box -->' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;border-bottom:1px solid var(--border-light);padding-bottom:14px;margin-bottom:14px;">' +
+        '<div>' +
+          '<div style="font-size:18px;font-weight:800;color:var(--primary-800);">' + esc(o.service_name_bn || o.service_name || 'সেবা') + '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:13px;color:var(--text-muted);">' +
+            '<span>👤 <b>' + esc(o.user_name || 'গ্রাহক') + '</b></span> • ' +
+            '<span>📞 <a href="tel:' + esc(o.user_phone) + '" style="color:var(--primary-600);text-decoration:none;font-weight:600;">' + esc(o.user_phone) + '</a></span> • ' +
+            '<span><a href="https://wa.me/' + esc(String(o.user_phone).replace(/[^0-9]/g, '')) + '" target="_blank" style="color:#16a34a;text-decoration:none;font-weight:700;">💬 WhatsApp</a></span>' +
+          '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">🕘 জমাদানের তারিখ: ' + new Date(o.created_at).toLocaleString('bn-BD') + '</div>' +
+        '</div>' +
+        '<div style="text-align:right;">' +
+          '<div class="adm-price-badge" style="font-size:16px;padding:4px 14px;">৳' + bn(o.price) + '</div>' +
+          '<div style="margin-top:6px;"><button class="mini-btn" onclick="AdmOrders.copyData()">📋 সব তথ্য কপি</button></div>' +
+        '</div>' +
+      '</div>' +
+
+      pipelineHtml +
+      actionHubHtml +
+
+      '<!-- Submitted Data Grid -->' +
+      '<div style="margin-top:16px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+          '<div style="font-size:14px;font-weight:800;color:var(--primary-800);">📝 গ্রাহকের পূরণকৃত তথ্য (১-ক্লিক কপি)</div>' +
+          '<button class="adm-copy-chip" onclick="AdmOrders.copyData()">📋 পুরো ফর্ম কপি</button>' +
+        '</div>' +
+        dataCardsHtml +
+      '</div>' +
+
+      '<!-- Uploaded Documents -->' +
+      '<div style="margin-top:20px;">' +
+        '<div style="font-size:14px;font-weight:800;color:var(--primary-800);margin-bottom:8px;">📎 গ্রাহক ও ডেলিভারি ডকুমেন্টসমূহ</div>' +
+        docsHtml +
+      '</div>' +
+
+      '<!-- Admin Notes & Support Chat -->' +
+      '<div style="margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:12px;background:#f8fafc;padding:14px;border-radius:8px;border:1px solid var(--border-light);">' +
+        '<div>' +
+          '<div style="font-weight:700;font-size:13px;margin-bottom:6px;color:var(--text-main);">👨‍💼 এডমিন ইন্টারনাল নোট:</div>' +
+          '<div style="display:flex;gap:6px;">' +
+            '<input type="text" id="admOrderNoteInput" value="' + esc(o.admin_note || '') + '" placeholder="এখানে নোট লিখুন..." style="flex:1;font-size:12px;padding:6px 10px;">' +
+            '<button class="mini-btn ok" onclick="AdmOrders.saveAdminNote(\'' + o.id + '\')">সংরক্ষণ</button>' +
+          '</div>' +
+        '</div>' +
+        '<div>' +
+          '<div style="font-weight:700;font-size:13px;margin-bottom:6px;color:var(--text-main);">💬 কাস্টমার সাপোর্ট মেসেজ:</div>' +
+          '<button class="btn-secondary" style="width:100%;font-size:12px;padding:7px 10px;" onclick="AdmOrders.supportForm(\'' + o.id + '\')">সাপোর্ট চ্যাট খুলুন ও মেসেজ দিন ➤</button>' +
+        '</div>' +
+      '</div>' +
+
+      '<div style="margin-top:18px;text-align:right;">' +
+        '<button class="btn-secondary" onclick="closeModal()">✕ বন্ধ করুন</button>' +
+      '</div>' +
+    '</div>';
+
+    modal('📦 অর্ডার প্রসেসিং ও ডেলিভারি হাব - #' + esc(String(o.id).slice(0, 8)), bodyHtml);
+    window._modalDeliFile = null;
   },
-  async filter(s) {
-    const r = await ABC.api('/admin/orders?limit=30' + (s ? '&status=' + s : ''));
-    const d = await r.json();
-    // re-render via show then filter — simple: reload tab with query stored
-    TABS._f = s; show('orders');
+
+  modalFileSelected(inp) {
+    const f = inp.files[0];
+    if (!f) return;
+    window._modalDeliFile = f;
+    const pv = document.getElementById('admModalDeliPreview');
+    const btn = document.getElementById('admModalUploadDeliverBtn');
+    if (pv) {
+      pv.innerHTML = '<span style="font-size:20px;">✅</span> <b>' + esc(f.name) + '</b> (' + Math.round(f.size / 1024) + ' KB)' +
+        '<br><button class="mini-btn danger" style="margin-top:6px;" onclick="AdmOrders.modalFileClear()">বাদ দিন</button>';
+    }
+    if (btn) btn.disabled = false;
   },
-  async setStatus(id, status) {
-    const r = await ABC.api('/admin/orders/' + id + '/status', { method: 'PUT', body: { status } });
-    const d = await r.json();
-    if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
-    show('orders');
+
+  modalFileClear() {
+    window._modalDeliFile = null;
+    const inp = document.getElementById('admModalDeliFile');
+    const pv = document.getElementById('admModalDeliPreview');
+    const btn = document.getElementById('admModalUploadDeliverBtn');
+    if (inp) inp.value = '';
+    if (pv) pv.innerHTML = '📄 ডেলিভারি ফাইল যুক্ত করুন (PDF, JPG, PNG)<br><button class="mini-btn" style="margin-top:6px;" onclick="document.getElementById(\'admModalDeliFile\').click()">📁 ফাইল বেছে নিন</button>';
+    if (btn) btn.disabled = true;
   },
+
+  async modalDeliverWithFile(id) {
+    const f = window._modalDeliFile;
+    if (!f) { alert('ফাইল বেছে নিন'); return; }
+    const btn = document.getElementById('admModalUploadDeliverBtn');
+    if (btn) { btn.disabled = true; btn.innerText = 'আপলোড ও ডেলিভারি হচ্ছে…'; }
+
+    try {
+      // 1. Upload delivery doc
+      const fd = new FormData();
+      fd.append('file', f);
+      fd.append('doc_type', 'delivery');
+      const r = await fetch('/api/admin/orders/' + id + '/delivery-docs', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('abc_access_token') },
+        body: fd
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'ডেলিভারি ফাইল আপলোড ব্যর্থ');
+
+      // 2. Advance status smoothly to delivered
+      const o = (TABS._orders || []).find(x => x.id === id);
+      await this.smartTransition(id, o ? o.status : 'processing', 'delivered');
+
+      alert('✅ ডেলিভারি ফাইল সফলভাবে গ্রাহকের কাছে পৌঁছে গেছে এবং অর্ডারটি ডেলিভার্ড সম্পন্ন হয়েছে!');
+      closeModal();
+      show('orders');
+    } catch (e) {
+      alert('❌ ডেলিভারি ব্যর্থ: ' + e.message);
+      if (btn) { btn.disabled = false; btn.innerText = '🚀 ডেলিভারি ফাইল আপলোড ও সমাপ্ত করুন'; }
+    }
+  },
+
   async deliForm(id) {
     const o = (TABS._orders || []).find(x => x.id === id);
-    // Delivery modal: blank page style, editable (user spec 2026-10-16)
-    modal('📎 ডেলিভারি ডকুমেন্ট',
+    modal('📎 ডেলিভারি ডকুমেন্ট আপলোড',
       '<div style="margin-bottom:12px;"><b>' + esc(o ? (o.service_name_bn || o.service_name) : '') + '</b><br>' +
       '<small style="color:var(--muted)">👤 ' + esc(o ? (o.user_name || '') : '') + '</small></div>' +
       '<div id="deliPreview" style="min-height:120px; border:2px dashed var(--line); border-radius:12px; ' +
@@ -699,6 +1249,7 @@ window.AdmOrders = {
     );
     window._deliFile = null;
   },
+
   deliPreview(inp) {
     const f = inp.files[0];
     if (!f) return;
@@ -717,6 +1268,7 @@ window.AdmOrders = {
     }
     if (btn) btn.disabled = false;
   },
+
   deliClear() {
     window._deliFile = null;
     const pv = document.getElementById('deliPreview');
@@ -726,6 +1278,7 @@ window.AdmOrders = {
     if (btn) btn.disabled = true;
     if (inp) inp.value = '';
   },
+
   async deliUpload(id) {
     const f = window._deliFile;
     if (!f) { alert('ফাইল বেছে নিন'); return; }
@@ -740,11 +1293,14 @@ window.AdmOrders = {
     const d = await r.json();
     if (r.ok) {
       alert('✅ ডকুমেন্ট আপলোড হয়েছে');
-      // Auto-set to delivered if not already
       const o = (TABS._orders || []).find(x => x.id === id);
       if (o && o.status !== 'delivered') {
-        if (confirm('Status "ডেলিভার্ড" করবেন?')) {
-          await AdmOrders.setStatus(id, 'delivered');
+        if (confirm('অর্ডার স্ট্যাটাস "ডেলিভার্ড" সম্পন্ন করতে চান?')) {
+          try {
+            await this.smartTransition(id, o.status, 'delivered');
+          } catch (e) {
+            alert('স্ট্যাটাস আপডেট ব্যর্থ: ' + e.message);
+          }
         }
       }
       closeModal(); show('orders');
@@ -752,6 +1308,7 @@ window.AdmOrders = {
       alert('❌ ব্যর্থ: ' + (d.error || r.status));
     }
   },
+
   // ---- Support messages (Phase 3) ----
   _tpls: [],
   useTpl(btn) {

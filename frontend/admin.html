@@ -304,6 +304,80 @@
     background: #dbeafe;
     color: #1d4ed8;
   }
+  /* Premium Admin Order Hub */
+  .adm-orders-wrap { display:flex; flex-direction:column; gap:14px; }
+  .adm-orders-toolbar { display:flex; flex-direction:column; gap:12px; background:#fff; border:1px solid var(--border-light); border-radius:var(--r-lg); padding:14px; box-shadow:var(--shadow-sm); }
+  .adm-tabs-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-bottom:10px; border-bottom:1px solid #eef2f7; }
+  .adm-tab-btn { display:inline-flex; align-items:center; gap:7px; padding:8px 12px; border:1px solid transparent; border-radius:9px; background:transparent; color:#64748b; font-size:12px; font-weight:700; cursor:pointer; transition:.18s ease; white-space:nowrap; }
+  .adm-tab-btn:hover { background:#f1f5f9; color:#0f172a; }
+  .adm-tab-btn.active { background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe; }
+  .adm-tab-chip { padding:1px 6px; border-radius:999px; background:#e2e8f0; color:#475569; font-size:10px; }
+  .adm-tab-btn.active .adm-tab-chip { background:#2563eb; color:#fff; }
+  .adm-search-input { width:min(360px, 100%); font-size:12px !important; padding:8px 12px !important; border-radius:9px !important; }
+  .adm-table-card { background:#fff; border:1px solid var(--border-light); border-radius:var(--r-lg); box-shadow:var(--shadow-sm); overflow:hidden; }
+  .adm-table { width:100%; border-collapse:separate !important; border-spacing:0; min-width:900px; }
+  .adm-table th { background:#f8fafc !important; color:#64748b !important; font-size:11px !important; font-weight:700 !important; padding:12px 14px !important; border-bottom:1px solid #e2e8f0 !important; white-space:nowrap; }
+  .adm-table td { padding:13px 14px !important; border-bottom:1px solid #f1f5f9 !important; vertical-align:middle; }
+  .adm-table tbody tr:last-child td { border-bottom:0 !important; }
+  .adm-table tbody tr:hover td { background:#f8fbff !important; }
+  .adm-user-cell { display:flex; align-items:center; gap:10px; min-width:170px; }
+  .adm-user-avatar { width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:linear-gradient(135deg,#dbeafe,#bfdbfe); color:#1d4ed8; font-size:11px; font-weight:800; }
+  .adm-user-name { font-size:12px; font-weight:700; color:#0f172a; }
+  .adm-user-phone { display:flex; align-items:center; gap:7px; margin-top:3px; font-size:10px; color:#64748b; }
+  .adm-order-tag { background:#f1f5f9; color:#64748b; padding:1px 5px; border-radius:4px; font-family:monospace; }
+  .adm-svc-title { max-width:190px; font-size:12px; font-weight:700; color:#1e293b; }
+  .adm-price-badge { display:inline-block; background:#eff6ff; border:1px solid #dbeafe; border-radius:7px; padding:3px 8px; color:#1d4ed8; font-weight:800; font-size:12px; white-space:nowrap; }
+  .st-badge { display:inline-flex; align-items:center; border-radius:999px; padding:4px 9px; font-size:10px; font-weight:800; white-space:nowrap; }
+  .st-badge.st-new { background:#e0e7ff;color:#3730a3; }
+  .st-badge.st-pending { background:#fef3c7;color:#92400e; }
+  .st-badge.st-processing,.st-badge.st-registered,.st-badge.st-received { background:#e0f2fe;color:#075985; }
+  .st-badge.st-completed,.st-badge.st-delivered { background:#dcfce7;color:#166534; }
+  .st-badge.st-failed,.st-badge.st-cancelled { background:#fee2e2;color:#991b1b; }
+  .st-badge.st-refunded { background:#f3e8ff;color:#6b21a8; }
+  .adm-action-grp { display:flex; align-items:center; gap:5px; min-width:230px; }
+  .adm-icon-btn { border:1px solid #e2e8f0; border-radius:7px; padding:5px 7px; background:#fff; color:#475569; font-size:10px; font-weight:700; cursor:pointer; white-space:nowrap; transition:.15s ease; }
+  .adm-icon-btn:hover { background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8; }
+  .btn-quick-primary,.btn-quick-success,.btn-quick-emerald { border:0; border-radius:7px; padding:6px 9px; font-family:inherit; font-size:10px; font-weight:800; cursor:pointer; white-space:nowrap; transition:transform .15s ease, box-shadow .15s ease; }
+  .btn-quick-primary { background:linear-gradient(135deg,#2563eb,#1d4ed8); color:#fff; box-shadow:0 2px 5px #2563eb33; }
+  .btn-quick-success { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
+  .btn-quick-emerald { background:linear-gradient(135deg,#059669,#047857); color:#fff; box-shadow:0 2px 5px #05966933; }
+  .btn-quick-primary:hover,.btn-quick-success:hover,.btn-quick-emerald:hover { transform:translateY(-1px); }
+  .adm-modal-content { max-height:70vh; overflow-y:auto; padding-right:3px; }
+  #admModal .modal { max-width:850px; width:min(94vw,850px); padding:22px; }
+  .adm-pipeline-steps { display:flex; align-items:center; justify-content:center; padding:14px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; margin-bottom:14px; }
+  .adm-step-item { display:flex; flex-direction:column; align-items:center; gap:5px; min-width:62px; color:#94a3b8; }
+  .adm-step-dot { width:25px; height:25px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid #cbd5e1; background:#fff; color:#64748b; font-size:10px; font-weight:800; }
+  .adm-step-item.active .adm-step-dot { background:#2563eb; border-color:#2563eb; color:#fff; box-shadow:0 0 0 4px #dbeafe; }
+  .adm-step-item.done .adm-step-dot { background:#16a34a; border-color:#16a34a; color:#fff; }
+  .adm-step-item.active .adm-step-label,.adm-step-item.done .adm-step-label { color:#0f172a; }
+  .adm-step-label { font-size:10px; font-weight:700; white-space:nowrap; }
+  .adm-hub-card { padding:14px; border:1px solid #bfdbfe; border-left:4px solid #2563eb; border-radius:10px; background:linear-gradient(135deg,#eff6ff,#fff); }
+  .adm-hub-title { display:flex; align-items:center; justify-content:space-between; gap:10px; color:#1e3a8a; font-size:13px; font-weight:800; }
+  .adm-hub-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .adm-fields-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  .adm-field-card { padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc; min-width:0; }
+  .adm-field-head { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .adm-field-label { color:#64748b; font-size:11px; font-weight:700; }
+  .adm-copy-chip { border:1px solid #bfdbfe; border-radius:5px; background:#eff6ff; color:#1d4ed8; padding:3px 7px; font-family:inherit; font-size:10px; font-weight:700; cursor:pointer; white-space:nowrap; }
+  .adm-field-val { color:#0f172a; font-size:13px; font-weight:700; overflow-wrap:anywhere; margin-top:5px; }
+  .adm-docs-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:8px; }
+  .adm-doc-card { display:flex; align-items:center; justify-content:space-between; gap:8px; border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc; padding:9px; }
+  #admModalDeliPreview { padding:10px; }
+  #admModalUploadDeliverBtn:disabled { opacity:.45; cursor:not-allowed; box-shadow:none; }
+  @media (max-width:900px) { .adm-search-input{width:220px;} .adm-action-grp{min-width:220px;} }
+  @media (max-width:768px) {
+    .adm-search-input { width:100%; }
+    .adm-orders-toolbar > div:last-child { margin-left:0 !important; flex-wrap:wrap; }
+    .adm-fields-grid { grid-template-columns:1fr; }
+    .adm-pipeline-steps { padding:10px 3px; }
+    .adm-step-item { min-width:48px; }
+    .adm-step-label { font-size:9px; }
+    .adm-hub-title { align-items:flex-start; }
+    .adm-hub-actions > button { flex:1; }
+    #admModal .modal { padding:18px; }
+    .adm-modal-content > div[style*="grid-template-columns:1fr 1fr"] { grid-template-columns:1fr !important; }
+  }
+
   #content .err { color: #dc2626; margin: 6px 0; }
   #content .okmsg { color: #16a34a; margin: 6px 0; }
 
@@ -399,7 +473,7 @@
 
 <script src="/js/app.js?v=13"></script>
 <script src="/banners/render.js?v=2"></script>
-<script src="/js/admin.js?v=44"></script>
+<script src="/js/admin.js?v=45"></script>
 <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
