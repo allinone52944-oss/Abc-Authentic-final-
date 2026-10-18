@@ -281,16 +281,37 @@ class BdrisEngineV2 {
 
       // Legacy compatibility: GET_ADDRESS_OPTIONS direct
       socket.on('GET_ADDRESS_OPTIONS', async (data = {}, callback) => {
-        if (!sessionId) {
-          // Auto-init session if needed
-          await new Promise((resolve) => {
-            socket.emit('INIT_SESSION', {}, resolve);
+        try {
+          // Ensure session exists (direct, not via self-emit)
+          if (!sessionId) {
+            let sid = null;
+            if (userId) {
+              const existing = this.sessionManager.findByUser(userId);
+              if (existing) { sid = existing.id; this.sessionManager.touch(sid); }
+            }
+            if (!sid) {
+              const sess = await this.sessionManager.create(userId, { socketId: socket.id });
+              sid = sess.id;
+              const nav0 = new BdrisNavigator(sess.page);
+              await nav0.gotoForm();
+            }
+            sessionId = sid;
+          }
+          const session = this.sessionManager.get(sessionId);
+          if (!session) {
+            if (callback) callback({ ok: false, error: 'SESSION_EXPIRED' });
+            return;
+          }
+          this.sessionManager.touch(sessionId);
+          const result = await this.executor.execute('GET_ADDRESS_OPTIONS', data, {
+            session,
+            emit: (ev, payload) => socket.emit(ev, payload),
+            socket,
           });
+          if (callback) callback(result);
+        } catch (e) {
+          if (callback) callback({ ok: false, error: e.message });
         }
-        socket.emit('ENGINE_COMMAND', {
-          command: 'GET_ADDRESS_OPTIONS',
-          params: data,
-        }, callback);
       });
 
       // Legacy compatibility: FETCH_ORIGINAL direct
