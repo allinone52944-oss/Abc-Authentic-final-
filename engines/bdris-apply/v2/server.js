@@ -183,6 +183,36 @@ class BdrisEngineV2 {
       // Authenticate (from JWT or standalone)
       const userId = socket.abcUser?.id || null;
 
+      // Legacy: START_BDRIS_SESSION (frontend page-load-এ emit করে)
+      // v1-এর মতো BOT_STATUS/READY পাঠাতে হবে, নইলে frontend "প্রস্তুত হচ্ছে"-তে আটকে থাকে
+      socket.on('START_BDRIS_SESSION', async () => {
+        try {
+          socket.emit('BOT_STATUS', { status: 'LOADING', message: '⏳ সংযোগ প্রস্তুত হচ্ছে...' });
+          // Session তৈরি বা reuse (INIT_SESSION-এর logic)
+          let sid = sessionId;
+          if (!sid) {
+            if (userId) {
+              const existing = this.sessionManager.findByUser(userId);
+              if (existing) {
+                sid = existing.id;
+                this.sessionManager.touch(sid);
+              }
+            }
+            if (!sid) {
+              const sess = await this.sessionManager.create(userId, { socketId: socket.id });
+              sid = sess.id;
+              const nav = new BdrisNavigator(sess.page);
+              await nav.gotoForm();
+            }
+            sessionId = sid;
+          }
+          socket.emit('BOT_STATUS', { status: 'READY', message: '✅ BDRIS সেশন প্রস্তুত।', fresh: true });
+          socket.emit('SESSION_READY', { sessionId: sid });
+        } catch (e) {
+          socket.emit('BOT_STATUS', { status: 'ERROR', message: '❌ সংযোগ তৈরি হয়নি — আবার চেষ্টা করুন।' });
+        }
+      });
+
       socket.on('INIT_SESSION', async (data = {}, callback) => {
         try {
           // Same-user takeover: reuse existing session
