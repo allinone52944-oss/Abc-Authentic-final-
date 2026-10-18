@@ -215,11 +215,19 @@ async function init(){
   }
   if (s.manual_sample) {
     instHtml += '<div style="margin-bottom:16px;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
-        '<label style="font-size:13px;font-weight:700;color:#334155;">📋 নমুনা ফরম্যাট</label>' +
-        '<button class="btn btn-secondary" onclick="copySample()" style="padding:4px 10px;font-size:12px;">কপি করুন</button>' +
-      '</div>' +
-      '<pre class="sample-box" id="samplePre">' + esc(s.manual_sample) + '</pre>' +
+      '<details style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;cursor:pointer;">' +
+        '<summary style="font-size:13px;font-weight:700;color:#334155;user-select:none;display:flex;justify-content:space-between;align-items:center;">' +
+          '<span>📋 আবেদনের নমুনা ফরম্যাট (প্রিভিউ দেখতে ক্লিক করুন)</span>' +
+          '<span style="font-size:12px;color:#2563eb;font-weight:600;">প্রিভিউ ▾</span>' +
+        '</summary>' +
+        '<div style="margin-top:10px;padding-top:10px;border-top:1px dashed #cbd5e1;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+            '<span style="font-size:11px;color:#64748b;">অর্ডার পেজে সরাসরি ফরম্যাটটি পূরণ করতে পারবেন</span>' +
+            '<button type="button" class="btn btn-secondary" onclick="event.stopPropagation();copySample()" style="padding:4px 10px;font-size:11px;">📋 কপি করুন</button>' +
+          '</div>' +
+          '<pre class="sample-box" id="samplePre" style="margin:0;font-size:12px;line-height:1.6;max-height:180px;overflow-y:auto;background:#ffffff;padding:12px;border-radius:8px;border:1px solid #cbd5e1;white-space:pre-wrap;color:#334155;">' + esc(s.manual_sample) + '</pre>' +
+        '</div>' +
+      '</details>' +
     '</div>';
   }
 

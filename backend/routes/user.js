@@ -174,7 +174,7 @@ router.post('/orders', async (req, res) => {
 
     // Validate required documents for manual services
     const docs = (req.body.documents || []);
-    const required = service.documents_required || [];
+    const required = safeJsonArray(service.documents_required);
     const missing = required.filter((d) => !docs.some((x) => x && x.type === d));
     if (missing.length) {
       return res.status(400).json({ error: 'MISSING_DOCUMENTS', missing });

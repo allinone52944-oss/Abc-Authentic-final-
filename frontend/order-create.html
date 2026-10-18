@@ -188,8 +188,8 @@
       <!-- Named required documents (if defined by admin) -->
       <div id="namedDocs"></div>
 
-      <!-- Universal Multi-file uploader -->
-      <div class="field" style="margin-top:20px;margin-bottom:20px;">
+      <!-- Universal Multi-file uploader (shown only when no specific required documents) -->
+      <div id="universalUploadSection" class="field" style="margin-top:20px;margin-bottom:20px;">
         <label style="display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:700;color:#1e293b;margin-bottom:6px;">
           <span>📎 প্রয়োজনীয় ডকুমেন্টস ও ফাইল আপলোড</span>
           <span style="font-size:12px;font-weight:normal;color:#64748b;">(ছবি বা PDF — সর্বোচ্চ ৬টি)</span>
@@ -321,10 +321,32 @@ function copySampleText(){
   });
 }
 
+
+function updateDocFeedback(inp, idx){
+  const fb = document.getElementById('docFeedback_' + idx);
+  if(!fb) return;
+  if(inp.files && inp.files[0]){
+    const f = inp.files[0];
+    fb.innerHTML = '<span style="font-size:20px;color:#16a34a;">✅</span>' +
+      '<div>' +
+        '<div style="font-weight:700;color:#15803d;">' + esc(f.name) + ' (' + formatBytes(f.size) + ')</div>' +
+        '<div style="font-size:11px;color:#64748b;">পরিবর্তন করতে পুনরায় ক্লিক করুন</div>' +
+      '</div>';
+    const parentBox = inp.closest('.file-drop');
+    if(parentBox){
+      parentBox.style.borderColor = '#86efac';
+      parentBox.style.background = '#f0fdf4';
+    }
+  }
+}
+
 function applySampleToInput(){
   if(!rawSampleText) return;
   const input = document.getElementById('manualDetailsInput');
   if(input){
+    if(input.value && input.value.trim() !== rawSampleText.trim()){
+      if(!confirm("আপনি কি মূল নমুনা ফরম্যাটে ফিরে যেতে চান? আপনার টাইপ করা তথ্য মুছে যাবে।")) return;
+    }
     input.value = rawSampleText;
     input.focus();
     triggerDraftSave();
@@ -394,23 +416,23 @@ async function init(){
       }
     }
 
-    // Format sample
-    rawSampleText = svc.manual_sample || svc.sample_format || '';
-    if(rawSampleText){
-      const sw=document.getElementById('sampleWrap');
-      const sp=document.getElementById('samplePre');
-      if(sw&&sp){
-        sw.style.display='block';
-        sp.textContent=rawSampleText;
-      }
-    }
+       // Format sample
+    rawSampleText = svc.manual_sample || svc.sample_format || "";
+    const sw = document.getElementById("sampleWrap");
+    const sp = document.getElementById("samplePre");
 
     // Fields Rendering with safeArray
     const fields = safeArray(svc.fields_required);
-    const fieldsContainer = document.getElementById('fieldsContainer');
+    const fieldsContainer = document.getElementById("fieldsContainer");
 
     if(fields && fields.length > 0){
       // Admin configured structured fields
+      if(rawSampleText && sw && sp){
+        sw.style.display = "block";
+        sp.textContent = rawSampleText;
+      } else if(sw){
+        sw.style.display = "none";
+      }
       fieldsContainer.innerHTML = fields.map(f=>
         '<div class="field" style="margin-bottom:14px;"><label style="font-size:13px;font-weight:600;color:#334155;display:block;margin-bottom:6px;">'+esc(f.label||f.name)+(f.required?' <span style="color:#ef4444;">*</span>':'')+'</label>'+
         (f.type==='textarea'?
@@ -420,33 +442,66 @@ async function init(){
       ).join('');
     } else {
       // Manual / General fallback: prominent details textarea
+      // Hide standalone sampleWrap so user never sees duplicate format box on order page
+      if(sw) sw.style.display = "none";
+
       fieldsContainer.innerHTML =
         '<div class="field" style="margin-bottom:18px;">' +
-          '<label style="display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:700;color:#1e293b;margin-bottom:6px;">' +
-            '<span>📝 আবেদনের ফরম / প্রয়োজনীয় তথ্য পূরণ <span style="color:#ef4444;">*</span></span>' +
-            '<span style="font-size:12px;font-weight:normal;color:#64748b;">(তথ্য লিখে বা ফরম্যাট পূরণ করে দিন)</span>' +
-          '</label>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">' +
+            '<label style="font-size:14px;font-weight:700;color:#1e293b;margin:0;">' +
+              '📝 আবেদনের ফরম / প্রয়োজনীয় তথ্য পূরণ <span style="color:#ef4444;">*</span>' +
+            '</label>' +
+            (rawSampleText ?
+              '<div style="display:flex;gap:6px;">' +
+                '<button type="button" class="btn btn-secondary" onclick="copySampleText()" style="padding:4px 10px;font-size:12px;">📋 ফরম্যাট কপি</button>' +
+                '<button type="button" class="btn btn-secondary" onclick="applySampleToInput()" style="padding:4px 10px;font-size:12px;background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8;">🔄 ফরম্যাট রিসেট</button>' +
+              '</div>' : '') +
+          '</div>' +
           '<textarea id="manualDetailsInput" data-field="_manual_form" rows="8" placeholder="এখানে নাম, মোবাইল নম্বর এবং প্রয়োজনীয় আবেদন ফরম্যাটের তথ্য লিখে পূরণ করুন…" style="width:100%;padding:12px 14px;border:1px solid #cbd5e1;border-radius:12px;font-size:14px;line-height:1.6;font-family:inherit;"></textarea>' +
-          '<div style="font-size:12px;color:#64748b;margin-top:4px;">💡 নমুনা ফরম্যাট থাকলে উপরের বাটনে ক্লিক করে ফরম্যাটটি এই বক্সে আনতে পারেন।</div>' +
+          (rawSampleText ?
+            '<div style="font-size:12px;color:#64748b;margin-top:4px;">💡 নিচে নমুনা ফরম্যাটটি দেওয়া হয়েছে। প্রতিটি লাইনে আপনার সঠিক তথ্য বসিয়ে এডিট করুন।</div>' :
+            '<div style="font-size:12px;color:#64748b;margin-top:4px;">(প্রয়োজনীয় নাম, মোবাইল ও আবেদনের তথ্যাদি লিখে পূরণ করুন)</div>') +
         '</div>';
 
       // Auto-fill sample if empty
       if(rawSampleText){
-        const mdi = document.getElementById('manualDetailsInput');
+        const mdi = document.getElementById("manualDetailsInput");
         if(mdi && !mdi.value) mdi.value = rawSampleText;
       }
     }
 
     // Named required documents with safeArray
     const docs = safeArray(svc.documents_required);
+    const universalSec = document.getElementById('universalUploadSection');
+
     if(docs && docs.length > 0){
+      // Admin configured specific required documents -> hide universal uploader to avoid duplicate/double system
+      if(universalSec) universalSec.style.display = 'none';
+
       document.getElementById('namedDocs').innerHTML =
-        '<div style="margin-top:16px;margin-bottom:10px;font-weight:700;font-size:14px;color:#1e293b;">📄 আবশ্যক নির্দিষ্ট ডকুমেন্ট:</div>' +
+        '<div style="margin-top:20px;margin-bottom:12px;font-weight:700;font-size:15px;color:#1e293b;">📄 আবশ্যক নির্দিষ্ট ডকুমেন্ট (' + docs.length + 'টি):</div>' +
         docs.map((doc,i)=>
-          '<div class="field" style="margin-bottom:12px;"><label style="font-size:13px;font-weight:600;color:#334155;margin-bottom:4px;display:block;">📄 '+esc(doc)+' আপলোড</label>'+
-          '<div class="file-drop"><input type="file" data-doc="'+i+'" data-doctype="'+esc(doc)+'" accept="image/*,.pdf" style="width:100%;"></div>'+
+          '<div class="field" style="margin-bottom:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;">' +
+            '<label style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">' +
+              '<span>📄 ' + esc(doc) + ' <span style="color:#ef4444;">*</span></span>' +
+              '<span style="font-size:11px;font-weight:normal;color:#64748b;">(JPG, PNG বা PDF)</span>' +
+            '</label>' +
+            '<div class="file-drop" style="background:#ffffff;border:1.5px dashed #cbd5e1;border-radius:10px;padding:12px 14px;cursor:pointer;" onclick="this.querySelector(\'input\').click()">' +
+              '<input type="file" data-doc="' + i + '" data-doctype="' + esc(doc) + '" accept="image/*,.pdf" style="display:none;" onchange="updateDocFeedback(this, \'' + i + '\')">' +
+              '<div id="docFeedback_' + i + '" style="display:flex;align-items:center;gap:10px;color:#475569;font-size:13px;">' +
+                '<span style="font-size:22px;">📤</span>' +
+                '<div>' +
+                  '<div style="font-weight:600;color:#2563eb;">' + esc(doc) + ' ফাইল নির্বাচন করতে এখানে ক্লিক করুন</div>' +
+                  '<div style="font-size:11px;color:#64748b;">JPG, PNG অথবা PDF ফাইল নির্বাচন করতে পারেন</div>' +
+                '</div>' +
+              '</div>' +
+            '</div>' +
           '</div>'
         ).join('');
+    } else {
+      // No specific documents configured by admin -> show universal multi-dropzone
+      if(universalSec) universalSec.style.display = 'block';
+      document.getElementById('namedDocs').innerHTML = '';
     }
   } catch(e) {
     console.error('Init error:', e);
@@ -518,6 +573,33 @@ async function submit(){
     data._manual_form = manualVal;
   }
 
+  // Validate required documents if any
+  const reqDocs = safeArray(svc.documents_required);
+  if(reqDocs && reqDocs.length > 0){
+    const missingDocs = [];
+    reqDocs.forEach((doc, idx)=>{
+      const inp = document.querySelector('[data-doc="' + idx + '"]');
+      if(!inp || !inp.files || !inp.files.length){
+        missingDocs.push(doc);
+      }
+    });
+    if(missingDocs.length > 0){
+      err.textContent = '⚠️ অনুগ্রহ করে আবশ্যক ডকুমেন্ট যুক্ত করুন: ' + missingDocs.join(', ');
+      err.style.display = 'block';
+      return;
+    }
+  }
+
+  const orderDocs = [];
+  document.querySelectorAll('[data-doc]').forEach(inp=>{
+    if(inp.files && inp.files.length){
+      orderDocs.push({ type: inp.dataset.doctype || 'ডকুমেন্ট', ref: inp.files[0].name });
+    }
+  });
+  selectedFiles.forEach((f, idx)=>{
+    orderDocs.push({ type: 'সংযুক্ত ডকুমেন্ট ' + (idx + 1), ref: f.name });
+  });
+
   const btn = document.getElementById('submitBtn');
   btn.disabled = true;
   btn.textContent = 'অর্ডার প্রসেস হচ্ছে…';
@@ -532,7 +614,7 @@ async function submit(){
       data,
       notes: document.getElementById('notes').value.trim(),
       idempotency_key: window._orderIdemKey,
-      documents: (svc.documents_required || []).map(d=>({ type: d, ref: '' }))
+      documents: orderDocs
     }
   });
   const d = await r.json();
