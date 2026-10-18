@@ -109,6 +109,79 @@
     border-color: var(--primary-500);
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
   }
+
+  /* Pipeline Stepper */
+  .detail-stepper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    margin: 18px 0;
+    padding: 0 4px;
+  }
+  .detail-step-line {
+    position: absolute;
+    top: 15px;
+    left: 20px;
+    right: 20px;
+    height: 3px;
+    background: #e2e8f0;
+    z-index: 1;
+  }
+  .detail-step-fill {
+    position: absolute;
+    top: 15px;
+    left: 20px;
+    height: 3px;
+    background: linear-gradient(90deg, #3b82f6, #10b981);
+    z-index: 2;
+    transition: width 0.3s ease;
+  }
+  .detail-step {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+  }
+  .detail-step-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 2px solid #cbd5e1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    color: #64748b;
+  }
+  .detail-step.done .detail-step-icon {
+    background: #10b981;
+    border-color: #10b981;
+    color: #ffffff;
+  }
+  .detail-step.now .detail-step-icon {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
+  }
+  .detail-step.terminal .detail-step-icon {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: #ffffff;
+  }
+  .detail-step-text {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+  }
+  .detail-step.now .detail-step-text { color: #1e40af; font-weight: 700; }
+  .detail-step.done .detail-step-text { color: #065f46; }
+
 </style>
 </head>
 <body>
@@ -177,26 +250,89 @@ async function init(){
     return;
   }
   const {order:o}=await r.json();
-  const data=Object.entries(o.data||{}).map(([k,v])=>
+  const dataObj = Object.assign({}, o.data || {});
+  let manualFormHtml = '';
+  if (dataObj._manual_form) {
+    manualFormHtml = '<div style="margin-top:12px;margin-bottom:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px;">' +
+      '<div style="font-weight:700;font-size:13px;color:#1e293b;margin-bottom:6px;">📝 পূরণকৃত আবেদন / ফরমের তথ্য:</div>' +
+      '<pre style="white-space:pre-wrap;font-family:monospace;font-size:13px;margin:0;color:#0f172a;line-height:1.6;background:#ffffff;padding:10px;border-radius:8px;border:1px solid #cbd5e1;">' + esc(dataObj._manual_form) + '</pre>' +
+    '</div>';
+    delete dataObj._manual_form;
+  }
+
+  const dataEntries = Object.entries(dataObj);
+  const data = dataEntries.length ? dataEntries.map(([k,v])=>
     '<div style="font-size:13px;color:#475569;margin:6px 0;display:flex;justify-content:space-between;border-bottom:1px solid #f1f5f9;padding-bottom:4px;">' +
       '<span>'+esc(k)+'</span> <b style="color:#0f172a;">'+esc(v)+'</b>' +
     '</div>'
-  ).join('');
+  ).join('') : (manualFormHtml ? '' : '<div style="color:#64748b;font-size:13px;">কোনো পৃথক ফিল্ড তথ্য নেই</div>');
 
   let docs=[]; try{docs=JSON.parse(o.documents||'[]');}catch(_){}
-  const adminDocs=docs.filter(d=>d&&d.uploaded_by==='admin');
-  const docsHtml='<div style="margin-top:20px;padding-top:16px;border-top:1px solid #e2e8f0;">' +
-    '<div style="font-weight:700;font-size:14px;color:#0f172a;margin-bottom:10px;">📄 ডেলিভারি ফাইল / রেজাল্ট ডকুমেন্ট</div>'+
+  const adminDocs = docs.filter(d=>d && d.uploaded_by==='admin');
+  const userDocs = docs.filter(d=>d && d.uploaded_by!=='admin' && d.filename);
+
+  window._adminDocs = adminDocs;
+  window._userDocs = userDocs;
+
+  let activeStep = 1, fillPercent = 0, isTerminal = ['cancelled', 'refunded', 'failed'].includes(o.status);
+  if (isTerminal) { activeStep = 1; fillPercent = 0; }
+  else if (o.status === 'received') { activeStep = 2; fillPercent = 25; }
+  else if (['processing', 'registered'].includes(o.status)) { activeStep = 3; fillPercent = 50; }
+  else if (o.status === 'delivered') { activeStep = 4; fillPercent = 75; }
+  else if (o.status === 'completed') { activeStep = 5; fillPercent = 100; }
+
+  const stepsDef = [
+    { n: 'আবেদন', e: '📥' },
+    { n: 'গৃহীত', e: '📋' },
+    { n: 'প্রসেসিং', e: '⚙️' },
+    { n: 'ডেলিভার্ড', e: '🎁' },
+    { n: 'সম্পন্ন', e: '✅' }
+  ];
+
+  const stepperHtml = '<div class="detail-stepper">' +
+    '<div class="detail-step-line"></div>' +
+    '<div class="detail-step-fill" style="width:' + fillPercent + '%;"></div>' +
+    stepsDef.map((s, idx) => {
+      const stepNum = idx + 1;
+      let cls = 'detail-step';
+      if (isTerminal) { if (stepNum === 1) cls += ' terminal'; }
+      else {
+        if (stepNum < activeStep) cls += ' done';
+        else if (stepNum === activeStep) cls += ' now';
+      }
+      return '<div class="' + cls + '"><div class="detail-step-icon">' + s.e + '</div><div class="detail-step-text">' + s.n + '</div></div>';
+    }).join('') +
+  '</div>';
+
+
+  const userDocsHtml = '<div style="margin-top:16px;padding-top:14px;border-top:1px solid #e2e8f0;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+      '<div style="font-weight:700;font-size:14px;color:#0f172a;">📎 আপনার প্রেরিত ডকুমেন্টস (' + userDocs.length + 'টি)</div>' +
+      '<button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="triggerExtraDoc()">+ নতুন ফাইল যোগ করুন</button>' +
+    '</div>' +
+    '<input type="file" id="extraDocInp" style="display:none;" onchange="uploadExtraDoc(this.files)">' +
+    '<div id="extraDocNotice" style="font-size:12px;color:#2563eb;margin-bottom:6px;display:none;"></div>' +
+    (userDocs.length ? userDocs.map((d,i)=>
+      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">' +
+        '<span style="font-size:16px;">📄</span><span style="flex:1;font-size:13px;font-weight:600;color:#0f172a;">'+esc(d.originalname||d.filename)+'</span>' +
+        '<button type="button" class="mini-btn" style="padding:4px 8px;font-size:12px;background:#e2e8f0;" onclick="dlUserDoc('+i+')">⬇️ দেখুন</button>' +
+      '</div>').join('') : '<div style="color:#64748b;font-size:12px;">কোনো ডকুমেন্ট ফাইল সংযুক্ত করা হয়নি। প্রয়োজনে উপরের বাটন থেকে ফাইল যোগ করতে পারেন।</div>') +
+    '</div>';
+
+  const docsHtml='<div style="margin-top:18px;padding-top:14px;border-top:1px solid #e2e8f0;">' +
+    '<div style="font-weight:700;font-size:14px;color:#0f172a;margin-bottom:8px;">🎉 ডেলিভারি ফাইল / রেজাল্ট ডকুমেন্ট</div>'+
     (adminDocs.length?adminDocs.map((d,i)=>
-      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">'+
-        '<span style="font-size:18px;">📎</span><span style="flex:1;font-size:13px;font-weight:600;color:#0f172a;">'+esc(d.originalname||d.filename)+'</span>'+
+      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:10px 14px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;">'+
+        '<span style="font-size:18px;">🎁</span><span style="flex:1;font-size:13px;font-weight:700;color:#15803d;">'+esc(d.originalname||d.filename)+'</span>'+
         '<button class="mini-btn ok" onclick="dlDoc('+i+')">⬇️ ডাউনলোড</button>' +
       '</div>').join(''):
     '<div style="color:#64748b;font-size:13px;background:#f8fafc;padding:12px;border-radius:8px;">অর্ডারের কাজ সম্পন্ন হলে এডমিন এখানে আপনার ডেলিভারি ডকুমেন্ট বা ফাইল আপলোড করবেন।</div>')+'</div>';
 
-  window._adminDocs=adminDocs;
   document.getElementById('detail').innerHTML=
     '<div class="order-header">' +
+      '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">' +
+        '<button type="button" class="btn btn-secondary" style="padding:5px 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;" onclick="viewLiveStatus()">⚡ লাইভ ট্র্যাকার দেখুন →</button>' +
+      '</div>' + stepperHtml +
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
         '<div>' +
           '<h2 style="font-size:22px;font-weight:800;color:#0f172a;">'+esc(o.service_name_bn||o.service_name)+'</h2>' +
@@ -209,12 +345,63 @@ async function init(){
         '<div style="font-size:12px;color:#64748b;">🕘 তারিখ: '+new Date(o.created_at).toLocaleString('bn-BD')+'</div>' +
       '</div>' +
     '</div>' +
-    '<div style="margin-top:12px;"><div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#0f172a;">প্রদত্ত তথ্যাবলি:</div>'+data+'</div>'+
+    manualFormHtml +
+    (data ? '<div style="margin-top:12px;"><div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#0f172a;">প্রদত্ত তথ্যাবলি:</div>'+data+'</div>' : '') +
+    userDocsHtml +
     (o.notes?'<div style="font-size:13px;margin-top:12px;background:#fffbeb;padding:10px 14px;border-radius:8px;color:#92400e;"><b>📝 আপনার নোট:</b> '+esc(o.notes)+'</div>':'')+
     (o.admin_note?'<div style="font-size:13px;margin-top:12px;background:#eff6ff;padding:10px 14px;border-radius:8px;color:#1e40af;"><b>👨‍💼 এডমিন মেসেজ:</b> '+esc(o.admin_note)+'</div>':'')+docsHtml;
 
   loadChat();
   document.getElementById('chatIn').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+}
+
+function viewLiveStatus(){
+  location.href = '/order-status.html?id=' + encodeURIComponent(oid);
+}
+
+function triggerExtraDoc(){
+  const inp = document.getElementById('extraDocInp');
+  if(inp) inp.click();
+}
+
+async function dlUserDoc(i){
+  const d=(window._userDocs||[])[i]; if(!d)return;
+  try{
+    const r=await ABC.api('/orders/'+oid+'/documents/'+encodeURIComponent(d.filename));
+    if(!r.ok){alert('ডাউনলোড ব্যর্থ হয়েছে');return;}
+    const blob=await r.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download=d.originalname||d.filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);
+  }catch(e){alert('ডাউনলোড ব্যর্থ হয়েছে');}
+}
+
+async function uploadExtraDoc(files){
+  if(!files || !files.length) return;
+  const n = document.getElementById('extraDocNotice');
+  if(n){ n.style.display='block'; n.textContent='আপলোড হচ্ছে…'; }
+  const fd = new FormData();
+  fd.append('file', files[0]);
+  fd.append('doc_type', 'গ্রাহক সংযুক্ত ডকুমেন্ট');
+  const token = sessionStorage.getItem('abc_access_token') || '';
+  try {
+    const r = await fetch('/api/orders/' + oid + '/documents', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token },
+      body: fd
+    });
+    if(r.ok){
+      if(n) n.textContent = '✅ ডকুমেন্ট আপলোড সম্পন্ন!';
+      setTimeout(()=>init(), 1000);
+    } else {
+      alert('আপলোড ব্যর্থ হয়েছে');
+      if(n) n.style.display='none';
+    }
+  } catch(e) {
+    alert('আপলোড ত্রুটি');
+    if(n) n.style.display='none';
+  }
 }
 
 async function dlDoc(i){

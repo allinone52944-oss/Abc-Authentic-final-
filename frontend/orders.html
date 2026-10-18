@@ -49,6 +49,60 @@
   .btn-more:hover {
     background: var(--bg-subtle);
   }
+
+  @media (max-width: 768px) {
+    .table-container {
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      overflow: visible;
+    }
+    .table-container table, .table-container thead, .table-container tbody, .table-container tr, .table-container td {
+      display: block;
+      width: 100%;
+    }
+    .table-container thead {
+      display: none;
+    }
+    .table-container tr {
+      background: #ffffff;
+      border: 1px solid var(--border-light);
+      border-radius: var(--r-lg);
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow-sm);
+    }
+    .table-container td {
+      padding: 4px 0 !important;
+      border: none !important;
+      text-align: left !important;
+    }
+    .mobile-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+    .mobile-card-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 8px 0 12px;
+      padding-top: 8px;
+      border-top: 1px dashed #e2e8f0;
+    }
+    .mobile-card-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .mobile-card-actions button {
+      flex: 1;
+      padding: 8px;
+      font-size: 12px;
+    }
+  }
+
 </style>
 </head>
 <body>
@@ -86,6 +140,7 @@
       <button class="fbtn" data-st="processing">প্রসেসিং</button>
       <button class="fbtn" data-st="completed">সম্পন্ন</button>
       <button class="fbtn" data-st="delivered">ডেলিভার্ড</button>
+      <button class="fbtn" data-st="cancelled">বাতিল/রিফান্ড</button>
     </div>
 
     <!-- Orders Table -->
