@@ -3249,71 +3249,135 @@ TABS.activity = async () => {
 TABS.settings = async () => {
   const r = await ABC.api('/admin/settings');
   const s = await r.json();
+  let backupInfo = null;
+  try {
+    const br = await ABC.api('/admin/backup');
+    if (br.ok) backupInfo = await br.json();
+  } catch (_) {}
+
   const bool = (key, sub) => {
     const on = s[key] && s[key][sub || 'enabled'];
     return '<button class="mini-btn ' + (on ? 'ok' : '') + '" onclick="AdmSt.toggle(\'' + key + '\',\'' + (sub || 'enabled') + '\',' + (!on) + ')">' + (on ? '✅ চালু' : '❌ বন্ধ') + '</button>';
   };
+
+  const maintMsg = (s.maintenance_mode && s.maintenance_mode.message) || '';
+  const sessMin = (s.session_timeout && s.session_timeout.minutes) || 60;
+  const maxLogin = (s.login_security && s.login_security.max_attempts) || 5;
+  const lockoutMin = (s.login_security && s.login_security.lockout_minutes) || 15;
+
+  let backupLastText = 'কোনো তথ্য নেই';
+  if (backupInfo && backupInfo.last && backupInfo.last.at) {
+    try {
+      backupLastText = new Date(backupInfo.last.at).toLocaleString('bn-BD') + (backupInfo.last.bytes ? ' (' + (backupInfo.last.bytes / 1048576).toFixed(2) + ' MB)' : '');
+    } catch (_) { backupLastText = String(backupInfo.last.at); }
+  }
+
   content.innerHTML =
-    '<div class="form-card" style="max-width:640px;">' +
-    '<h2>⚙️ সিস্টেম সেটিংস</h2>' +
-    '<div class="list-row" style="cursor:default;"><div><div class="t">রেজিস্ট্রেশন</div><div class="s">বন্ধ থাকলে শুধু লগইন দেখাবে</div></div>' + bool('registration_enabled') + '</div>' +
-    '<div class="list-row" style="cursor:default;"><div><div class="t">মেনটেনেন্স মোড</div><div class="s">সাইট সাময়িক বন্ধ</div></div>' + bool('maintenance_mode') + '</div>' +
-    '<div class="list-row" style="cursor:default;"><div><div class="t">🔊 ভয়েস নোটিফিকেশন</div><div class="s">নতুন রিচার্জ/অর্ডারে বাংলা ভয়েস অ্যালার্ট</div></div>' +
+    '<div style="display:flex;flex-direction:column;gap:18px;max-width:840px;">' +
+
+    // CARD 1: SYSTEM & SECURITY
+    '<div class="form-card">' +
+    '<h2>🛡️ সিস্টেম ও নিরাপত্তা (System & Security)</h2>' +
+    '<div class="list-row" style="cursor:default;"><div><div class="t">নতুন ইউজার রেজিস্ট্রেশন</div><div class="s">বন্ধ থাকলে শুধু বিদ্যমান ইউজাররা লগইন করতে পারবেন</div></div>' + bool('registration_enabled') + '</div>' +
+    '<div class="list-row" style="cursor:default;"><div><div class="t">মেইনটেন্যান্স মোড</div><div class="s">চালু করলে সাধারণ ব্যবহারকারীদের সাইট বন্ধ দেখাবে</div></div>' + bool('maintenance_mode') + '</div>' +
+    ta('মেইনটেন্যান্স নোটিশ / বার্তা', 'st_maint_msg', maintMsg, 'মেইনটেন্যান্স মোড চালু থাকলে গ্রাহকরা এই বার্তাটি দেখতে পাবেন') +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:10px;">' +
+      '<div class="field"><label>অটো সেশন টাইমআউট (মিনিট)</label><input type="number" id="st_session_timeout" value="' + sessMin + '"></div>' +
+      '<div class="field"><label>ভুল পাসওয়ার্ড লিমিট (লকআউট)</label><input type="number" id="st_max_login" value="' + maxLogin + '"></div>' +
+      '<div class="field"><label>লকআউট স্থায়িত্ব (মিনিট)</label><input type="number" id="st_lockout_min" value="' + lockoutMin + '"></div>' +
+    '</div>' +
+    '</div>' +
+
+    // CARD 2: PAYMENT HUB
+    '<div class="form-card">' +
+    '<h2>💳 পেমেন্ট হাব ও রিচার্জ নম্বর</h2>' +
+    '<p class="s" style="margin-bottom:14px;">গ্রাহক ওয়ালেট রিচার্জের সময় এই নম্বরগুলো দেখতে পাবে এবং টাকা পাঠাবে</p>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">' +
+      fld('বিকাশ পেমেন্ট নম্বর', 'text', 'st_rn_bkash_pay', (((s.recharge_numbers || {}).bkash_payment) || '')) +
+      fld('বিকাশ পার্সোনাল নম্বর', 'text', 'st_rn_bkash_per', (((s.recharge_numbers || {}).bkash_personal) || '')) +
+      fld('নগদ নম্বর', 'text', 'st_rn_nagad', (((s.recharge_numbers || {}).nagad) || '')) +
+      fld('রকেট নম্বর', 'text', 'st_rn_rocket', (((s.recharge_numbers || {}).rocket) || '')) +
+    '</div>' +
+    '</div>' +
+
+    // CARD 3: REWARDS & LIMITS
+    '<div class="form-card">' +
+    '<h2>🎁 রিওয়ার্ড, বোনাস ও পলিসি লিমিট</h2>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">' +
+      '<div class="field"><label>ক্যাশব্যাক হার % (০ = বন্ধ)</label><input type="number" id="st_cb" value="' + ((s.cashback && s.cashback.percent) || 0) + '"><div class="s" style="margin-top:4px;">রিচার্জ অনুমোদিত হলে ইউজার এই হারে ১-ক্লিক কুপন পাবেন</div></div>' +
+      '<div class="field"><label>স্বাগতম বোনাস (৳, ০ = বন্ধ)</label><input type="number" id="st_wb" value="' + ((s.welcome_bonus && s.welcome_bonus.amount) || 0) + '"><div class="s" style="margin-top:4px;">নতুন ইউজার রেজিস্ট্রেশন করলে স্বয়ংক্রিয়ভাবে জমা হবে</div></div>' +
+      '<div class="field"><label>ফাইল আপলোড সীমা (MB)</label><input type="number" id="st_mb" value="' + ((s.file_upload && s.file_upload.max_mb) || 5) + '"><div class="s" style="margin-top:4px;">আবেদনে সর্বোচ্চ ফাইল সাইজ লিমিট</div></div>' +
+      '<div class="field"><label>BDRIS আবেদন PDF চার্জ (৳, ০ = ফ্রি)</label><input type="number" id="st_bdris_pdf" value="' + (Number(s['bdris_apply.pdf_price']) || 0) + '"><div class="s" style="margin-top:4px;">জন্মনিবন্ধন আবেদন PDF ডাউনলোড ফি</div></div>' +
+    '</div>' +
+    '</div>' +
+
+    // CARD 4: MESSAGING & ALERTS
+    '<div class="form-card">' +
+    '<h2>📢 মেসেজিং, নোটিফিকেশন ও গ্রিটিং</h2>' +
+    '<div class="list-row" style="cursor:default;"><div><div class="t">🔊 অ্যাডমিন ভয়েস অ্যালার্ট</div><div class="s">নতুন রিচার্জ বা অর্ডার আসলে প্যানেলে বাংলা ভয়েস সতর্কবার্তা</div></div>' +
     '<button class="mini-btn ' + (VoiceAlert.enabled ? 'ok' : '') + '" onclick="var on=VoiceAlert.toggle();this.className=\'mini-btn \'+(on?\'ok\':\'\');this.textContent=on?\'✅ চালু\':\'❌ বন্ধ\';">' +
     (VoiceAlert.enabled ? '✅ চালু' : '❌ বন্ধ') + '</button></div>' +
-    '<div class="list-row" style="cursor:default;"><div><div class="t">🔔 Push নোটিফিকেশন</div><div class="s">স্ক্রিন বন্ধ থাকলেও সাউন্ড + ভাইব্রেশন অ্যালার্ট</div></div>' +
+    '<div class="list-row" style="cursor:default;"><div><div class="t">🔔 Push নোটিফিকেশন</div><div class="s">স্ক্রিন বন্ধ থাকলেও ডিভাইসে সাউন্ড ও ভাইব্রেশন অ্যালার্ট</div></div>' +
     '<button class="mini-btn ' + (PushNotify.enabled ? 'ok' : '') + '" onclick="PushNotify.toggle().then(function(on){this.className=\'mini-btn \'+(on?\'ok\':\'\');this.textContent=on?\'✅ চালু\':\'❌ বন্ধ\';}.bind(this))">' +
     (PushNotify.enabled ? '✅ চালু' : '❌ বন্ধ') + '</button></div>' +
-    '<div class="list-row" style="cursor:default;"><div><div class="t">🔊 Religion Voice Greeting</div><div class="s">লগইনে ধর্মভিত্তিক বাংলা ভয়েস শুভেচ্ছা</div></div>' + bool('voice_greeting') + '</div>' +
-    '<div class="list-row" style="cursor:default;"><div><div class="t">🔄 ভয়েস রোটেশন</div><div class="s">পুরুষ → মহিলা → শিশু কণ্ঠে পর্যায়ক্রমে</div></div>' + bool('voice_greeting', 'rotation') + '</div>' +
-    '<div class="list-row" style="cursor:default;"><div><div class="t">💬 WhatsApp নোটিফিকেশন</div><div class="s">অর্ডার সফল / রিচার্জ সফল হলে গ্রাহকের WhatsApp-এ অটো মেসেজ</div></div>' + bool('whatsapp') + '</div>' +
-    '<div class="field"><label><input type="checkbox" id="wa_n_order_completed" ' + ((((s.whatsapp||{}).notify||{}).order_completed !== false) ? 'checked' : '') + '> ✅ অর্ডার সফল মেসেজ পাঠাবে</label></div>' +
-    '<div class="field"><label><input type="checkbox" id="wa_n_order_failed" ' + ((((s.whatsapp||{}).notify||{}).order_failed !== false) ? 'checked' : '') + '> ❌ অর্ডার ব্যর্থ মেসেজ পাঠাবে</label></div>' +
-    '<div class="field"><label><input type="checkbox" id="wa_n_order_cancelled" ' + ((((s.whatsapp||{}).notify||{}).order_cancelled !== false) ? 'checked' : '') + '> 🚫 অর্ডার বাতিল মেসেজ পাঠাবে</label></div>' +
-    '<div class="field"><label><input type="checkbox" id="wa_n_recharge_approved" ' + ((((s.whatsapp||{}).notify||{}).recharge_approved !== false) ? 'checked' : '') + '> 💰 রিচার্জ সফল মেসেজ পাঠাবে</label></div>' +
-    '<div class="field"><label><input type="checkbox" id="wa_n_recharge_rejected" ' + ((((s.whatsapp||{}).notify||{}).recharge_rejected !== false) ? 'checked' : '') + '> ⚠️ রিচার্জ বাতিল মেসেজ পাঠাবে</label></div>' +
-    fld('WhatsApp বিজনেস নম্বর (ডিসপ্লে)', 'text', 'st_wa_num', ((s.whatsapp || {}).business_number) || '') +
-    fld('Phone Number ID', 'text', 'st_wa_phone_id', ((s.whatsapp || {}).phone_number_id) || '') +
-    '<div class="field"><label>Access Token (password)</label>' +
-    '<input type="password" id="st_wa_token" value="" placeholder="নতুন token বসান (খালি রাখলে আগেরটা থাকবে)" autocomplete="new-password">' +
+
+    '<h3 style="margin:20px 0 10px;color:var(--gold);">💬 WhatsApp ক্লাউড অটোমেশন</h3>' +
+    '<div class="list-row" style="cursor:default;"><div><div class="t">WhatsApp অটো নোটিফিকেশন</div><div class="s">অর্ডার বা রিচার্জ সম্পন্ন হলে গ্রাহককে WhatsApp-এ মেসেজ পাঠানো</div></div>' + bool('whatsapp') + '</div>' +
+    '<div style="display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 14px;">' +
+      '<label><input type="checkbox" id="wa_n_order_completed" ' + ((((s.whatsapp||{}).notify||{}).order_completed !== false) ? 'checked' : '') + '> ✅ অর্ডার সফল</label>' +
+      '<label><input type="checkbox" id="wa_n_order_failed" ' + ((((s.whatsapp||{}).notify||{}).order_failed !== false) ? 'checked' : '') + '> ❌ অর্ডার ব্যর্থ</label>' +
+      '<label><input type="checkbox" id="wa_n_order_cancelled" ' + ((((s.whatsapp||{}).notify||{}).order_cancelled !== false) ? 'checked' : '') + '> 🚫 অর্ডার বাতিল</label>' +
+      '<label><input type="checkbox" id="wa_n_recharge_approved" ' + ((((s.whatsapp||{}).notify||{}).recharge_approved !== false) ? 'checked' : '') + '> 💰 রিচার্জ সফল</label>' +
+      '<label><input type="checkbox" id="wa_n_recharge_rejected" ' + ((((s.whatsapp||{}).notify||{}).recharge_rejected !== false) ? 'checked' : '') + '> ⚠️ রিচার্জ বাতিল</label>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">' +
+      fld('WhatsApp বিজনেস নম্বর', 'text', 'st_wa_num', ((s.whatsapp || {}).business_number) || '') +
+      fld('Phone Number ID', 'text', 'st_wa_phone_id', ((s.whatsapp || {}).phone_number_id) || '') +
+    '</div>' +
+    '<div class="field" style="margin-top:10px;"><label>Access Token (Password Protected)</label>' +
+    '<input type="password" id="st_wa_token" value="" placeholder="নতুন token বসান (খালি রাখলে অপরিবর্তিত থাকবে)" autocomplete="new-password">' +
     '<div class="s" style="margin-top:4px;">' + (((s.whatsapp || {}).access_token_env) ? '✅ Token সেট আছে (ENV)' : ((s.whatsapp || {}).access_token_set ? '✅ Token সেট আছে' : '❌ Token সেট নেই')) + '</div></div>' +
-    '<div class="field"><button class="mini-btn" onclick="AdmWa.test()">🔗 Test Connection</button></div>' +
-    ta('📩 অর্ডার সফল মেসেজ (WhatsApp)', 'st_wa_order_msg', ((s.whatsapp || {}).order_completed_msg) || '', 'প্লেসহোল্ডার: {name} {order_number} {service_name}') +
-    ta('📩 রিচার্জ সফল মেসেজ (WhatsApp)', 'st_wa_recharge_msg', ((s.whatsapp || {}).recharge_approved_msg) || '', 'প্লেসহোল্ডার: {name} {amount} {balance}') +
-    fld('ইসলাম গ্রিটিং', 'text', 'st_vg_islam', (((s.voice_greeting||{}).greetings||{}).islam) || 'আসসালামু আলাইকুম') +
-    fld('হিন্দু গ্রিটিং', 'text', 'st_vg_hindu', (((s.voice_greeting||{}).greetings||{}).hindu) || 'নমস্কার') +
-    fld('বৌদ্ধ গ্রিটিং', 'text', 'st_vg_buddhist', (((s.voice_greeting||{}).greetings||{}).buddhist) || 'নমো বুদ্ধায়') +
-    fld('খ্রিস্টান গ্রিটিং', 'text', 'st_vg_christian', (((s.voice_greeting||{}).greetings||{}).christian) || 'প্রভুর শান্তি') +
-    fld('অন্যান্য গ্রিটিং (খালি = সময়ভিত্তিক)', 'text', 'st_vg_other', (((s.voice_greeting||{}).greetings||{}).other) || '') +
-    '<div class="field" style="margin-top:14px;"><label>স্বাগতম বোনাস (৳, ০ = বন্ধ)</label><input type="number" id="st_wb" value="' + ((s.welcome_bonus && s.welcome_bonus.amount) || 0) + '"></div>' +
-    '<div class="field"><label>ক্যাশব্যাক % (০ = বন্ধ)</label><input type="number" id="st_cb" value="' + ((s.cashback && s.cashback.percent) || 0) + '"></div>' +
-    '<div class="field"><label>ফাইল আপলোড সীমা (MB)</label><input type="number" id="st_mb" value="' + ((s.file_upload && s.file_upload.max_mb) || 5) + '"></div>' +
-    '<div class="field"><label>BDRIS আবেদন PDF ডাউনলোড চার্জ (৳, ০ = ফ্রি)</label><input type="number" id="st_bdris_pdf" value="' + (Number(s['bdris_apply.pdf_price']) || 0) + '"></div>' +
-    '<h3 style="margin:18px 0 8px;color:var(--gold);">💳 রিচার্জ রিসিভ নম্বর</h3>' +
-    '<div class="s" style="margin-bottom:8px;">গ্রাহক এই নম্বরগুলোতে টাকা পাঠিয়ে রিচার্জ রিকোয়েস্ট করবে</div>' +
-    fld('বিকাশ পেমেন্ট নম্বর', 'text', 'st_rn_bkash_pay', (((s.recharge_numbers || {}).bkash_payment) || '')) +
-    fld('বিকাশ পার্সোনাল নম্বর', 'text', 'st_rn_bkash_per', (((s.recharge_numbers || {}).bkash_personal) || '')) +
-    fld('নগদ নম্বর', 'text', 'st_rn_nagad', (((s.recharge_numbers || {}).nagad) || '')) +
-    fld('রকেট নম্বর', 'text', 'st_rn_rocket', (((s.recharge_numbers || {}).rocket) || '')) +
-    '<button class="btn" onclick="AdmSt.save()">সংরক্ষণ</button></div>' +
-    '<div class="form-card" style="margin-top:14px;"><h2>💾 ফাইল স্টোরেজ</h2><div id="stgList"><div style="color:var(--muted)">লোড হচ্ছে…</div></div></div>';
-  loadStorage();
+    '<div class="field"><button class="mini-btn" onclick="AdmWa.test()">🔗 Test WhatsApp Connection</button></div>' +
+    ta('📩 অর্ডার সফল মেসেজ টেমপ্লেট', 'st_wa_order_msg', ((s.whatsapp || {}).order_completed_msg) || '', 'প্লেসহোল্ডার: {name} {order_number} {service_name}') +
+    ta('📩 রিচার্জ সফল মেসেজ টেমপ্লেট', 'st_wa_recharge_msg', ((s.whatsapp || {}).recharge_approved_msg) || '', 'প্লেসহোল্ডার: {name} {amount} {balance}') +
+
+    '<h3 style="margin:20px 0 10px;color:var(--gold);">🔊 ধর্মভিত্তিক ভয়েস শুভেচ্ছা (Religion Greeting)</h3>' +
+    '<div class="list-row" style="cursor:default;"><div><div class="t">ভয়েস শুভেচ্ছা সার্ভিস</div><div class="s">লগইনের সময় ধর্মভিত্তিক কণ্ঠে শুভেচ্ছা বার্তা</div></div>' + bool('voice_greeting') + '</div>' +
+    '<div class="list-row" style="cursor:default;"><div><div class="t">কণ্ঠ রোটেশন (Rotation)</div><div class="s">পুরুষ → মহিলা → শিশু কণ্ঠে পর্যায়ক্রমে প্লে হবে</div></div>' + bool('voice_greeting', 'rotation') + '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:10px;">' +
+      fld('ইসলাম গ্রিটিং', 'text', 'st_vg_islam', (((s.voice_greeting||{}).greetings||{}).islam) || 'আসসালামু আলাইকুম') +
+      fld('হিন্দু গ্রিটিং', 'text', 'st_vg_hindu', (((s.voice_greeting||{}).greetings||{}).hindu) || 'নমস্কার') +
+      fld('বৌদ্ধ গ্রিটিং', 'text', 'st_vg_buddhist', (((s.voice_greeting||{}).greetings||{}).buddhist) || 'নমো বুদ্ধায়') +
+      fld('খ্রিস্টান গ্রিটিং', 'text', 'st_vg_christian', (((s.voice_greeting||{}).greetings||{}).christian) || 'প্রভুর শান্তি') +
+    '</div>' +
+    fld('অন্যান্য গ্রিটিং (খালি রাখলে সময়ভিত্তিক হবে)', 'text', 'st_vg_other', (((s.voice_greeting||{}).greetings||{}).other) || '') +
+    '</div>' +
+
+    // CARD 5: SYSTEM HEALTH, STORAGE & BACKUP
+    '<div class="form-card">' +
+    '<h2>🗄️ সিস্টেম হেলথ, ডাটাবেস ও স্টোরেজ</h2>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:10px;">' +
+      '<div style="background:var(--card-sub,rgba(255,255,255,0.03));padding:16px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);">' +
+        '<div style="font-weight:700;font-size:15px;margin-bottom:6px;">💾 ডাটাবেস ব্যাকআপ</div>' +
+        '<div class="s" style="margin-bottom:12px;">সর্বশেষ ব্যাকআপ: <b>' + esc(backupLastText) + '</b></div>' +
+        '<button class="mini-btn ok" onclick="AdmSt.triggerBackup()">⚡ এখনই নতুন ব্যাকআপ তৈরি করুন</button>' +
+      '</div>' +
+      '<div style="background:var(--card-sub,rgba(255,255,255,0.03));padding:16px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);">' +
+        '<div style="font-weight:700;font-size:15px;margin-bottom:6px;">📂 ক্লাউড ফাইল স্টোরেজ</div>' +
+        '<div class="s" style="margin-bottom:12px;">গ্রাহকদের আবেদনের ডকুমেন্টস ও ফাইল সরাসরি স্টোরেজ হাবে সংরক্ষিত হয়</div>' +
+        '<button class="mini-btn" style="background:var(--blue);color:#fff;" onclick="show(\'storage\')">ফাইল স্টোরেজ হাব খুলুন →</button>' +
+      '</div>' +
+    '</div>' +
+    '</div>' +
+
+    // SAVE BUTTON
+    '<div style="padding:10px 0 20px;">' +
+      '<button class="btn" style="padding:14px 28px;font-size:15px;font-weight:700;cursor:pointer;" onclick="AdmSt.save()">💾 সমস্ত সেটিংস সংরক্ষণ করুন</button>' +
+    '</div>' +
+
+    '</div>';
 };
-async function loadStorage(){
-  const r = await ABC.api('/admin/storage');
-  const d = await r.json();
-  const el = document.getElementById('stgList');
-  if (!el) return;
-  if (!r.ok || !d.files.length) { el.innerHTML = '<div style="color:var(--muted)">কোনো ফাইল নেই</div>'; return; }
-  let total = d.files.reduce((s,f)=>s+f.size,0);
-  el.innerHTML = '<div style="margin-bottom:8px;">মোট: ' + (total/1024/1024).toFixed(2) + ' MB (' + d.files.length + ' ফাইল)</div>' +
-    d.files.map(f=>'<div class="list-row"><div><div class="t">'+esc(f.filename)+'</div><div class="s">'+esc(f.user_phone||'—')+' • '+(f.size_kb)+' KB</div></div><button class="mini-btn" onclick="delFile(\''+esc(f.filename)+'\')">🗑️</button></div>').join('');
-}
-async function delFile(fn){
-  if (!confirm('ডিলিট করবেন?')) return;
-  const r = await ABC.api('/admin/storage/' + encodeURIComponent(fn), {method:'DELETE'});
-  if (r.ok) loadStorage(); else alert('ব্যর্থ');
-}
+
 window.AdmSt = {
   async toggle(key, sub, val) {
     const cur = await (await ABC.api('/admin/settings')).json();
@@ -3323,62 +3387,95 @@ window.AdmSt = {
     await ABC.api('/admin/settings', { method: 'PUT', body });
     show('settings');
   },
+  async triggerBackup() {
+    if (!confirm('ডাটাবেস ব্যাকআপ তৈরি করতে চান?')) return;
+    try {
+      const r = await ABC.api('/admin/backup', { method: 'POST', body: {} });
+      const d = await r.json();
+      if (r.ok && d.started) {
+        alert('✅ ডাটাবেস ব্যাকআপ প্রসেস ব্যাকগ্রাউন্ডে শুরু হয়েছে!');
+        setTimeout(() => show('settings'), 1500);
+      } else {
+        alert('❌ ব্যাকআপ শুরু ব্যর্থ: ' + (d.error || 'FAILED'));
+      }
+    } catch (e) {
+      alert('❌ ত্রুটি: ' + e.message);
+    }
+  },
   async save() {
     try {
-    const cur = await (await ABC.api('/admin/settings')).json();
-    const vg = Object.assign({ enabled: true, rotation: true }, cur.voice_greeting || {});
-    vg.greetings = {
-      islam: v('st_vg_islam'), hindu: v('st_vg_hindu'), buddhist: v('st_vg_buddhist'),
-      christian: v('st_vg_christian'), other: v('st_vg_other'),
-    };
-    const waCur = Object.assign({ enabled: false, business_number: '' }, cur.whatsapp || {});
-    // New token (if any) requires admin password confirmation on the server.
-    const newToken = String(v('st_wa_token') || '').trim();
-    let admin_password = '';
-    if (newToken) {
-      admin_password = prompt('WhatsApp token পরিবর্তন করতে আপনার admin password দিন:') || '';
-      if (!admin_password) { alert('বাতিল হয়েছে — token পরিবর্তন হয়নি'); return; }
-    }
-    const waBody = {
-      enabled: waCur.enabled === true,
-      business_number: String(v('st_wa_num') || '').trim(),
-      phone_number_id: String(v('st_wa_phone_id') || '').trim(),
-      order_completed_msg: vr('st_wa_order_msg') || waCur.order_completed_msg || '',
-      recharge_approved_msg: vr('st_wa_recharge_msg') || waCur.recharge_approved_msg || '',
-      notify: {
-        order_completed: document.getElementById('wa_n_order_completed').checked,
-        order_failed: document.getElementById('wa_n_order_failed').checked,
-        order_cancelled: document.getElementById('wa_n_order_cancelled').checked,
-        recharge_approved: document.getElementById('wa_n_recharge_approved').checked,
-        recharge_rejected: document.getElementById('wa_n_recharge_rejected').checked,
-      },
-    };
-    const putBody = {
-      welcome_bonus: { enabled: Number(v('st_wb')) > 0, amount: Number(v('st_wb')) || 0 },
-      cashback: { enabled: Number(v('st_cb')) > 0, percent: Number(v('st_cb')) || 0 },
-      file_upload: { max_mb: Number(v('st_mb')) || 5, allowed: ['pdf', 'jpg', 'jpeg', 'png'] },
-      'bdris_apply.pdf_price': Number(v('st_bdris_pdf')) || 0,
-      recharge_numbers: {
-        bkash_payment: String(v('st_rn_bkash_pay') || '').trim(),
-        bkash_personal: String(v('st_rn_bkash_per') || '').trim(),
-        nagad: String(v('st_rn_nagad') || '').trim(),
-        rocket: String(v('st_rn_rocket') || '').trim(),
-      },
-      voice_greeting: vg,
-      whatsapp: waBody,
-    };
-    if (newToken) {
-      waBody.access_token = newToken;
-      putBody.admin_password = admin_password; // server verifies before storing
-    }
-    const resp = await ABC.api('/admin/settings', { method: 'PUT', body: putBody });
-    const rd = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
-      const msg = rd.error === 'WRONG_PASSWORD' ? '❌ ভুল password — token পরিবর্তন হয়নি' : '❌ সংরক্ষণ ব্যর্থ: ' + (rd.error || ('HTTP ' + resp.status));
-      alert(msg);
-      return;
-    }
-    alert('সংরক্ষণ হয়েছে');
+      const cur = await (await ABC.api('/admin/settings')).json();
+      const vg = Object.assign({ enabled: true, rotation: true }, cur.voice_greeting || {});
+      vg.greetings = {
+        islam: v('st_vg_islam'),
+        hindu: v('st_vg_hindu'),
+        buddhist: v('st_vg_buddhist'),
+        christian: v('st_vg_christian'),
+        other: v('st_vg_other'),
+      };
+      const waCur = Object.assign({ enabled: false, business_number: '' }, cur.whatsapp || {});
+      const newToken = String(v('st_wa_token') || '').trim();
+      let admin_password = '';
+      if (newToken) {
+        admin_password = prompt('WhatsApp token পরিবর্তন করতে আপনার admin password দিন:') || '';
+        if (!admin_password) { alert('বাতিল হয়েছে — token পরিবর্তন হয়নি'); return; }
+      }
+      const waBody = {
+        enabled: waCur.enabled === true,
+        business_number: String(v('st_wa_num') || '').trim(),
+        phone_number_id: String(v('st_wa_phone_id') || '').trim(),
+        order_completed_msg: vr('st_wa_order_msg') || waCur.order_completed_msg || '',
+        recharge_approved_msg: vr('st_wa_recharge_msg') || waCur.recharge_approved_msg || '',
+        notify: {
+          order_completed: document.getElementById('wa_n_order_completed').checked,
+          order_failed: document.getElementById('wa_n_order_failed').checked,
+          order_cancelled: document.getElementById('wa_n_order_cancelled').checked,
+          recharge_approved: document.getElementById('wa_n_recharge_approved').checked,
+          recharge_rejected: document.getElementById('wa_n_recharge_rejected').checked,
+        },
+      };
+
+      const maintCur = Object.assign({ enabled: false, message: '' }, cur.maintenance_mode || {});
+      const maintMsg = String(vr('st_maint_msg') || '').trim();
+
+      const putBody = {
+        maintenance_mode: {
+          enabled: maintCur.enabled === true,
+          message: maintMsg || 'সাইট সাময়িক রক্ষণাবেক্ষণের জন্য বন্ধ আছে। কিছুক্ষণের মধ্যে আবার চালু হবে।'
+        },
+        session_timeout: {
+          minutes: Math.max(5, Math.min(1440, Number(v('st_session_timeout')) || 60))
+        },
+        login_security: {
+          max_attempts: Math.max(3, Math.min(20, Number(v('st_max_login')) || 5)),
+          lockout_minutes: Math.max(1, Math.min(120, Number(v('st_lockout_min')) || 15))
+        },
+        welcome_bonus: { enabled: Number(v('st_wb')) > 0, amount: Number(v('st_wb')) || 0 },
+        cashback: { enabled: Number(v('st_cb')) > 0, percent: Number(v('st_cb')) || 0 },
+        file_upload: { max_mb: Number(v('st_mb')) || 5, allowed: ['pdf', 'jpg', 'jpeg', 'png'] },
+        'bdris_apply.pdf_price': Number(v('st_bdris_pdf')) || 0,
+        recharge_numbers: {
+          bkash_payment: String(v('st_rn_bkash_pay') || '').trim(),
+          bkash_personal: String(v('st_rn_bkash_per') || '').trim(),
+          nagad: String(v('st_rn_nagad') || '').trim(),
+          rocket: String(v('st_rn_rocket') || '').trim(),
+        },
+        voice_greeting: vg,
+        whatsapp: waBody,
+      };
+      if (newToken) {
+        waBody.access_token = newToken;
+        putBody.admin_password = admin_password;
+      }
+      const resp = await ABC.api('/admin/settings', { method: 'PUT', body: putBody });
+      const rd = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const msg = rd.error === 'WRONG_PASSWORD' ? '❌ ভুল password — token পরিবর্তন হয়নি' : '❌ সংরক্ষণ ব্যর্থ: ' + (rd.error || ('HTTP ' + resp.status));
+        alert(msg);
+        return;
+      }
+      alert('✅ সমস্ত সেটিংস সফলভাবে সংরক্ষিত হয়েছে');
+      show('settings');
     } catch (e) {
       alert('❌ সংরক্ষণ ব্যর্থ: ' + (e.message || 'নেটওয়ার্ক সমস্যা'));
     }
