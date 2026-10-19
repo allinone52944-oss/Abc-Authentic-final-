@@ -462,6 +462,7 @@ function getPersonalizedGreeting(user, cfg) {
 
 const GreetVoice = (() => {
   let _audio = null;
+  let _pendingAutoGreeting = null;
   const VOICES = ["male", "female", "child"];
   const VOICE_LABELS = ["পুরুষ কণ্ঠ", "মহিলা কণ্ঠ", "শিশু কণ্ঠ"];
 
@@ -541,6 +542,7 @@ const GreetVoice = (() => {
     try {
       stop();
       _audio = new Audio(f.path);
+      _audio.volume = 1.0;
       setButtonState(true, f);
       _audio.onended = () => {
         setButtonState(false);
@@ -554,6 +556,27 @@ const GreetVoice = (() => {
       if (p && typeof p.catch === "function") {
         p.catch(() => {
           setButtonState(false);
+          // Autoplay blocked: queue for instant play on the very first touch/click
+          _pendingAutoGreeting = f;
+          const unlockGreet = () => {
+            if (_pendingAutoGreeting) {
+              const toPlay = _pendingAutoGreeting;
+              _pendingAutoGreeting = null;
+              play(toPlay);
+            }
+            if (typeof document !== 'undefined') {
+              document.removeEventListener('pointerdown', unlockGreet);
+              document.removeEventListener('keydown', unlockGreet);
+              document.removeEventListener('click', unlockGreet);
+              document.removeEventListener('touchstart', unlockGreet);
+            }
+          };
+          if (typeof document !== 'undefined') {
+            document.addEventListener('pointerdown', unlockGreet, { once: true });
+            document.addEventListener('keydown', unlockGreet, { once: true });
+            document.addEventListener('click', unlockGreet, { once: true });
+            document.addEventListener('touchstart', unlockGreet, { once: true });
+          }
         });
       }
     } catch (e) {

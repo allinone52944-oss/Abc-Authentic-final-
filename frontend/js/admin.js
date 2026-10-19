@@ -144,6 +144,7 @@ const VoiceAlert = {
   _last: { recharge: 0, order: 0, sms: 0 },
   _voices: [],
   _audioCtx: null,
+  _unlocked: false,
 
   _getAudioCtx() {
     try {
@@ -158,68 +159,121 @@ const VoiceAlert = {
     return this._audioCtx;
   },
 
+  unlock() {
+    try {
+      const ctx = this._getAudioCtx();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      if (ctx) {
+        // Play 1-sample silent buffer to reliably unlock web audio in all browsers
+        const buf = ctx.createBuffer(1, 1, 22050);
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(ctx.destination);
+        src.start(0);
+      }
+      this._unlocked = true;
+    } catch (e) {}
+  },
+
   playChime(type = 'order') {
     if (!this.enabled) return;
     try {
       const ctx = this._getAudioCtx();
-      if (!ctx) {
-        this.playSound(type === 'order' ? 'new-order.mp3' : 'new-recharge.mp3');
-        return;
+      if (ctx) {
+        if (ctx.state === 'suspended') {
+          ctx.resume().catch(() => {});
+        }
+        const now = ctx.currentTime;
+        const masterGain = ctx.createGain();
+        masterGain.gain.setValueAtTime(0.9, now);
+        masterGain.connect(ctx.destination);
+
+        if (type === 'order') {
+          // Loud, crisp 4-chord fanfare (C5, E5, G5, C6) with rich triangle harmonics
+          [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+            gain.gain.setValueAtTime(0.42, now + idx * 0.07);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.65);
+            osc.connect(gain);
+            gain.connect(masterGain);
+            osc.start(now + idx * 0.07);
+            osc.stop(now + idx * 0.07 + 0.7);
+          });
+        } else if (type === 'recharge') {
+          // Bright energetic cash fanfare (G5, B5, D6)
+          [783.99, 987.77, 1174.66].forEach((freq, idx) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+            gain.gain.setValueAtTime(0.45, now + idx * 0.08);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.7);
+            osc.connect(gain);
+            gain.connect(masterGain);
+            osc.start(now + idx * 0.08);
+            osc.stop(now + idx * 0.08 + 0.75);
+          });
+        } else {
+          // Double alert ping
+          [880.00, 1318.51].forEach((freq, idx) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, now + idx * 0.09);
+            gain.gain.setValueAtTime(0.4, now + idx * 0.09);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + 0.55);
+            osc.connect(gain);
+            gain.connect(masterGain);
+            osc.start(now + idx * 0.09);
+            osc.stop(now + idx * 0.09 + 0.6);
+          });
+        }
       }
-      const now = ctx.currentTime;
-      if (type === 'order') {
-        // Luxury 3-chord major chime (Eb5, G5, Bb5)
-        [622.25, 783.99, 932.33].forEach((freq, idx) => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(freq, now + idx * 0.08);
-          gain.gain.setValueAtTime(0.24, now + idx * 0.08);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.65);
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start(now + idx * 0.08);
-          osc.stop(now + idx * 0.08 + 0.7);
-        });
-      } else if (type === 'recharge') {
-        // Coin transaction chime (F5 -> C6)
-        [698.46, 1046.50].forEach((freq, idx) => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = 'triangle';
-          osc.frequency.setValueAtTime(freq, now + idx * 0.09);
-          gain.gain.setValueAtTime(0.28, now + idx * 0.09);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + 0.75);
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start(now + idx * 0.09);
-          osc.stop(now + idx * 0.09 + 0.8);
-        });
-      } else {
-        // Soft double ping
-        [880.00, 1174.66].forEach((freq, idx) => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(freq, now + idx * 0.1);
-          gain.gain.setValueAtTime(0.2, now + idx * 0.1);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.1 + 0.5);
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start(now + idx * 0.1);
-          osc.stop(now + idx * 0.1 + 0.55);
-        });
-      }
-    } catch (e) {
-      this.playSound(type === 'order' ? 'new-order.mp3' : 'new-recharge.mp3');
-    }
+    } catch (e) {}
+
+    // ALWAYS play the human Bengali voice MP3 alert loudly
+    const soundFile = type === 'order' ? 'new-order.mp3' : (type === 'recharge' ? 'new-recharge.mp3' : 'new-message.mp3');
+    setTimeout(() => {
+      this.playSound(soundFile);
+    }, 280);
   },
 
   playSound(file) {
     if (!this.enabled) return;
     try {
+      this.unlock();
       const a = new Audio('/audio/' + file);
-      a.play().catch(() => {});
+      a.volume = 1.0;
+      const p = a.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch(() => {
+          // If browser blocked autoplay, schedule retry on very next user touch/click
+          const retryOnGesture = () => {
+            try {
+              const a2 = new Audio('/audio/' + file);
+              a2.volume = 1.0;
+              a2.play().catch(() => {});
+            } catch (_) {}
+            if (typeof document !== 'undefined') {
+              document.removeEventListener('pointerdown', retryOnGesture);
+              document.removeEventListener('keydown', retryOnGesture);
+              document.removeEventListener('click', retryOnGesture);
+              document.removeEventListener('touchstart', retryOnGesture);
+            }
+          };
+          if (typeof document !== 'undefined') {
+            document.addEventListener('pointerdown', retryOnGesture, { once: true });
+            document.addEventListener('keydown', retryOnGesture, { once: true });
+            document.addEventListener('click', retryOnGesture, { once: true });
+            document.addEventListener('touchstart', retryOnGesture, { once: true });
+          }
+        });
+      }
     } catch (e) {}
   },
 
@@ -232,9 +286,17 @@ const VoiceAlert = {
     try {
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'bn-BD';
-      u.pitch = 1.05;
-      u.rate = 0.95;
+      u.volume = 1.0;
+      u.rate = 1.0;
+      u.pitch = 1.0;
+      const voices = (typeof speechSynthesis.getVoices === 'function') ? speechSynthesis.getVoices() : [];
+      const bnVoice = voices.find(v => v.lang && (v.lang.startsWith('bn') || v.lang.includes('Bengali') || v.lang.includes('Bangla')));
+      if (bnVoice) {
+        u.voice = bnVoice;
+        u.lang = bnVoice.lang;
+      } else {
+        u.lang = 'bn-BD';
+      }
       speechSynthesis.speak(u);
     } catch (e) {}
   },
@@ -314,18 +376,20 @@ const VoiceAlert = {
         load();
         if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = load;
       }
-      const unlock = () => {
-        this._getAudioCtx();
+      const unlockHandler = () => {
+        this.unlock();
         if (typeof document !== 'undefined') {
-          document.removeEventListener('pointerdown', unlock);
-          document.removeEventListener('keydown', unlock);
-          document.removeEventListener('click', unlock);
+          document.removeEventListener('pointerdown', unlockHandler);
+          document.removeEventListener('keydown', unlockHandler);
+          document.removeEventListener('click', unlockHandler);
+          document.removeEventListener('touchstart', unlockHandler);
         }
       };
       if (typeof document !== 'undefined') {
-        document.addEventListener('pointerdown', unlock, { once: true });
-        document.addEventListener('keydown', unlock, { once: true });
-        document.addEventListener('click', unlock, { once: true });
+        document.addEventListener('pointerdown', unlockHandler, { once: true });
+        document.addEventListener('keydown', unlockHandler, { once: true });
+        document.addEventListener('click', unlockHandler, { once: true });
+        document.addEventListener('touchstart', unlockHandler, { once: true });
       }
     } catch (e) {}
 
@@ -388,6 +452,7 @@ const VoiceAlert = {
   },
 
   testAlert() {
+    this.unlock();
     this.playChime('order');
     setTimeout(() => this.speak('সাউন্ড নোটিফিকেশন সিস্টেম কার্যকর আছে'), 450);
     this.showToast({

@@ -127,6 +127,7 @@ describe('esc() — HTML escaping', () => {
     const { esc } = loadHelpers(makeDocument().doc);
     expect(esc('&lt;')).toBe('&amp;lt;');
   });
+
 });
 
 describe('bn() — Bengali digit formatting', () => {
@@ -158,6 +159,7 @@ describe('bn() — Bengali digit formatting', () => {
     const { bn } = loadHelpers(makeDocument().doc);
     expect(bn('2500')).toBe('২,৫০০');
   });
+
 });
 
 describe('modal() — FIX #7 title escaping (XSS)', () => {
@@ -227,6 +229,7 @@ describe('modal() — FIX #7 title escaping (XSS)', () => {
     const modalSrc = extractFn(ADMIN_SRC, 'modal');
     expect(modalSrc).toMatch(/esc\s*\(\s*title\s*\)/);
   });
+
 });
 
 describe('urlBase64ToUint8Array() — VAPID key decoding', () => {
@@ -252,6 +255,7 @@ describe('urlBase64ToUint8Array() — VAPID key decoding', () => {
     expect(out).toBeInstanceOf(Uint8Array);
     expect(out.length).toBe(0);
   });
+
 });
 
 describe('admin.js full-script smoke test', () => {
@@ -306,6 +310,7 @@ describe('admin.js full-script smoke test', () => {
     expect(typeof global.window.VoiceAlert.init).toBe('function');
     expect(typeof global.window.PushNotify.ensure).toBe('function');
   });
+
 });
 
 describe('TABS.stats — never renders undefined cards on API failure', () => {
@@ -353,6 +358,7 @@ describe('TABS.stats — never renders undefined cards on API failure', () => {
     expect(content.innerHTML).toContain('৳500');
     expect(content.innerHTML).not.toContain('undefined');
   });
+
 });
 
 describe('init() — selective redirect on /auth/me failure (static guard)', () => {
@@ -369,6 +375,7 @@ describe('init() — selective redirect on /auth/me failure (static guard)', () 
     expect(src).toMatch(/429/);
     expect(src).toContain('পুনরায় চেষ্টা');
   });
+
 });
 
 /**
@@ -398,8 +405,8 @@ describe('admin one-click email verify (2026-10-15)', () => {
     expect(ajs).toMatch(/ইমেইল অযাচাইকৃত/);
     expect(ajs).toMatch(/u\.email_verified === false/);
   });
-});
 
+});
 
 describe('admin panel navigation & premium workflows (2026-10-19)', () => {
   const ADMIN_HTML = path.join(__dirname, '..', '..', '..', 'frontend', 'admin.html');
@@ -411,7 +418,7 @@ describe('admin panel navigation & premium workflows (2026-10-19)', () => {
     expect(ahtml).toContain('অপারেশন ও লেনদেন');
     expect(ahtml).toContain('মার্কেটিং ও কন্টেন্ট');
     expect(ahtml).toContain('সিস্টেম ও অডিট');
-    expect(ahtml).toMatch(/admin\.js\?v=54/);
+    expect(ahtml).toMatch(/admin\.js\?v=55/);
   });
 
   test('admin.js exposes getAuthToken helper and uses it across downloads & uploads', () => {
@@ -461,6 +468,14 @@ describe('admin panel navigation & premium workflows (2026-10-19)', () => {
     expect(stBlock).toContain('pane_voice');
     expect(stBlock).toContain('pane_backup');
     expect(ajs).toMatch(/switchTab\(tabId\)\s*\{/);
+  });
+
+  test('VoiceAlert provides loud chime, unlock mechanism, and plays human voice MP3s', () => {
+    expect(ajs).toMatch(/unlock\(\)\s*\{/);
+    expect(ajs).toMatch(/masterGain\.gain\.setValueAtTime\(0\.9/);
+    expect(ajs).toMatch(/new-order\.mp3/);
+    expect(ajs).toMatch(/new-recharge\.mp3/);
+    expect(ajs).toMatch(/new-message\.mp3/);
   });
 });
 
