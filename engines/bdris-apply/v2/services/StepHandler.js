@@ -22,10 +22,12 @@ const fs = require('fs');
 // (engines/bdris-apply/server.js :: verifyChargeToken)
 // backend /charge/* endpoint দেয় — v1.<userId>.<kind>.<ref>.<ts>.<mac>
 // ═══════════════════════════════════════════════════════════════
-const ABC_JWT_SECRET = process.env.ABC_JWT_SECRET || '';
-function verifyChargeToken(tok, userId, kind) {
+const getJwtSecret = () => process.env.ABC_JWT_SECRET || process.env.JWT_SECRET || '';
+
+function verifyChargeToken(tok, userId, kind, secretOverride) {
   try {
-    if (!ABC_JWT_SECRET || !tok) return false;
+    const secret = secretOverride || getJwtSecret();
+    if (!secret || !tok) return false;
     const p = String(tok).split('.');
     if (p.length !== 6 || p[0] !== 'v1') return false;
     const [, tUid, tKind, tRef, tTs, tMac] = p;
@@ -33,7 +35,7 @@ function verifyChargeToken(tok, userId, kind) {
     if (String(tUid) !== String(userId)) return false;
     const ts = parseInt(tTs, 10);
     if (!ts || Math.abs(Date.now() - ts) > 30 * 60 * 1000) return false; // 30 min window
-    const mac = crypto.createHmac('sha256', ABC_JWT_SECRET).update(p.slice(0, 5).join('.')).digest('hex');
+    const mac = crypto.createHmac('sha256', secret).update(p.slice(0, 5).join('.')).digest('hex');
     if (mac.length !== tMac.length) return false;
     return crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(tMac));
   } catch { return false; }
@@ -1204,8 +1206,9 @@ class StepHandler {
     }
     // C-1 fix (2026-10-15): server-side charge enforcement — frontend-এর charge
     // ছাড়া সরাসরি emit করলেও টাকা না কেটে সাবমিট হবে না।
-    if (ABC_JWT_SECRET) {
-      if (!verifyChargeToken(data._chargeToken, this.userId, 'submit')) {
+    const secret = getJwtSecret();
+    if (secret) {
+      if (!verifyChargeToken(data._chargeToken, this.userId, 'submit', secret)) {
         this.progress('❌ পেমেন্ট যাচাই হয়নি — পেজ রিফ্রেশ করে আবার চেষ্টা করুন।');
         return {
           ok: false, blocked: true,

@@ -15,7 +15,22 @@
  * - Realtime by design
  */
 
+const crypto = require('crypto');
 const { BrowserManager } = require('./core/BrowserManager');
+
+function verifyJwtHS256(token, secret) {
+  try {
+    if (!token || !secret) return null;
+    const parts = String(token).split('.');
+    if (parts.length !== 3) return null;
+    const sig = crypto.createHmac('sha256', secret).update(parts[0] + '.' + parts[1]).digest('base64url');
+    if (sig.length !== parts[2].length) return null;
+    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(parts[2]))) return null;
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    if (payload.exp && Date.now() / 1000 > payload.exp + 60) return null;
+    return payload;
+  } catch { return null; }
+}
 const { SessionManager } = require('./core/SessionManager');
 const { CommandExecutor } = require('./core/CommandExecutor');
 const { BdrisNavigator } = require('./services/BdrisNavigator');
@@ -114,8 +129,9 @@ class BdrisEngineV2 {
         const data = params || {};
         const userId = ctx.socket?.abcUser?.id || null;
 
-        if (process.env.ABC_JWT_SECRET) {
-          if (!verifyChargeToken(data._chargeToken, userId, 'pdf')) {
+        const secret = process.env.ABC_JWT_SECRET || process.env.JWT_SECRET || '';
+        if (secret) {
+          if (!verifyChargeToken(data._chargeToken, userId, 'pdf', secret)) {
             throw new Error('CHARGE_REQUIRED');
           }
         }
@@ -176,6 +192,23 @@ class BdrisEngineV2 {
   }
 
   setupSocketHandlers() {
+    const getSecret = () => process.env.ABC_JWT_SECRET || process.env.JWT_SECRET || '';
+
+    this.io.use((socket, next) => {
+      const secret = getSecret();
+      if (!secret) {
+        socket.abcUser = null;
+        return next();
+      }
+      const token = socket.handshake && socket.handshake.auth && socket.handshake.auth.token;
+      const payload = verifyJwtHS256(token, secret);
+      if (!payload) return next(new Error('UNAUTHORIZED'));
+      const uid = payload.id || payload.sub || payload.userId;
+      if (!uid) return next(new Error('UNAUTHORIZED'));
+      socket.abcUser = { id: String(uid), role: payload.role || 'user' };
+      next();
+    });
+
     this.io.on('connection', (socket) => {
       this.log(`Connected: ${socket.id}`);
       let sessionId = null;
@@ -497,6 +530,33 @@ class BdrisEngineV2 {
           fs.unlinkSync(f);
           if (callback) callback({ ok: true });
         } catch (e) { if (callback) callback({ ok: false }); }
+      });
+
+      socket.on('KEEPALIVE', () => {
+        if (sessionId) this.sessionManager.touch(sessionId);
+      });
+
+      socket.on('GET_DOM_OPTIONS', async (selector, callback) => {
+        try {
+          if (!sessionId) { if (callback) callback([]); return; }
+          const session = this.sessionManager.get(sessionId);
+          if (!session || !session.page) { if (callback) callback([]); return; }
+          this.sessionManager.touch(sessionId);
+          const page = session.page;
+          await page.waitForSelector(selector, { state: 'attached', timeout: 3000 }).catch(() => {});
+          const options = await page.evaluate((sel) => {
+            const selectors = sel.includes(',') ? sel.split(',').map(s => s.trim()) : [sel];
+            let el = null;
+            for (const s of selectors) { el = document.querySelector(s); if (el) break; }
+            if (!el || !el.options) return [];
+            return Array.from(el.options)
+              .filter(o => o.value && o.value !== '-1' && o.value !== '' && o.text.trim() !== '' && !/নির্বাচন করুন/.test(o.text))
+              .map(o => ({ id: o.value, name: o.text.trim() }));
+          }, selector).catch(() => []);
+          if (callback) callback(options);
+        } catch {
+          if (callback) callback({ error: 'Failed to read DOM' });
+        }
       });
 
       socket.on('disconnect', async () => {
