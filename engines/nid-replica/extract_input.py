@@ -1098,6 +1098,8 @@ def extract(pdf_path="input.pdf", work_dir="work"):
         except Exception as e:
             print("Failed to save %s image:" % kind, e)
 
+    with open(os.path.join(work_dir, "input_data.json"), "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
     with open(os.path.join(work_dir, "input_images.json"), "w", encoding="utf-8") as f:
         json.dump(images, f, ensure_ascii=False, indent=1)
 
