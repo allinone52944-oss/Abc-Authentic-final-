@@ -189,7 +189,7 @@ async function init(){
   if(!me.ok){location.href='/login.html';return;}
   const ou=(await me.json()).user||{};
   document.getElementById('waFab').onclick=()=>{
-    window.open('https://wa.me/?text='+encodeURIComponent('আসসালামু আলাইকুম! আমি '+ou.name+' (ফোন: '+ou.phone+')। সাহায্য দরকার।'),'_blank');
+    window.open('https://wa.me/8801835414122?text='+encodeURIComponent('আসসালামু আলাইকুম! আমি '+ou.name+' (ফোন: '+ou.phone+')। সাহায্য দরকার।'),'_blank');
   };
   document.querySelectorAll('#filters .fbtn').forEach(b=>{
     b.onclick=()=>{

@@ -224,6 +224,40 @@ describe('orders', () => {
     expect(w).toBeDefined();
     expect(w[1]).toEqual(['u1', 200, 'refund', 'refund-o1']);
   });
+
+  test('DELETE /orders/:id: not found → 404', async () => {
+    db.__routeQuery([['SELECT * FROM orders WHERE id', { rows: [] }]]);
+    await withAdmin(request(app()).delete('/api/admin/orders/o_missing')).expect(404);
+  });
+
+  test('DELETE /orders/:id without refund → 200 and deletes order', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o1', user_id: 'u1', price: '150', status: 'new', documents: '[]' }] }],
+      ['DELETE FROM orders WHERE id', { rowCount: 1 }],
+    ]);
+    const r = await withAdmin(request(app()).delete('/api/admin/orders/o1')).expect(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.deleted_id).toBe('o1');
+    expect(r.body.refunded).toBe(false);
+    const w = db.query.mock.calls.find((c) => /wallet_apply/.test(c[0]));
+    expect(w).toBeUndefined();
+    const d = db.query.mock.calls.find((c) => /DELETE FROM orders WHERE id/.test(c[0]));
+    expect(d).toBeDefined();
+  });
+
+  test('DELETE /orders/:id?refund=yes credits wallet and deletes order', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o2', user_id: 'u1', price: '250', status: 'processing', documents: '[]' }] }],
+      ['DELETE FROM orders WHERE id', { rowCount: 1 }],
+    ]);
+    const r = await withAdmin(request(app()).delete('/api/admin/orders/o2?refund=yes')).expect(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.deleted_id).toBe('o2');
+    expect(r.body.refunded).toBe(true);
+    const w = db.query.mock.calls.find((c) => /wallet_apply/.test(c[0]));
+    expect(w).toBeDefined();
+    expect(w[1]).toEqual(['u1', 250, 'refund', 'refund-del-o2']);
+  });
 });
 
 describe('support messages', () => {

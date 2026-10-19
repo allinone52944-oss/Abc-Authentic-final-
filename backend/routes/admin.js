@@ -594,6 +594,77 @@ router.put('/orders/:id/status', async (req, res) => {
   }
 });
 
+// DELETE /api/admin/orders/:id?refund=yes|no — permanently delete order (with optional refund)
+router.delete('/orders/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const cur = await db.query('SELECT * FROM orders WHERE id = $1', [id]);
+    if (!cur.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    const order = cur.rows[0];
+
+    const refundRequested = req.query.refund === 'yes';
+    let refunded = false;
+
+    // Refund: credit order price back to user wallet if requested and not already refunded
+    if (refundRequested && Number(order.price) > 0 && order.status !== 'refunded') {
+      try {
+        await db.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
+          order.user_id, Number(order.price), 'refund', 'refund-del-' + order.id,
+        ]);
+        refunded = true;
+      } catch (e) {
+        safeLog('[admin] order delete refund failed:', e.message);
+      }
+    }
+
+    // Collect uploaded documents before deleting order row
+    let docFiles = [];
+    try {
+      let docs = [];
+      if (typeof order.documents === 'string') {
+        docs = JSON.parse(order.documents || '[]');
+      } else if (Array.isArray(order.documents)) {
+        docs = order.documents;
+      }
+      for (const d of docs) {
+        if (d && (d.filename || d.path)) docFiles.push(d.filename || d.path);
+      }
+    } catch (_) {
+      safeLog('[admin] corrupt documents JSON during order delete');
+    }
+
+    // Delete order row (cascades order_status_history, chat_messages, support_messages)
+    await db.query('DELETE FROM orders WHERE id = $1', [id]);
+
+    // Clean up physical uploaded files from disk safely
+    try {
+      const path = require('path');
+      const UP = '/opt/all-in-one-abc-authentic/uploads/orders';
+      for (const f of docFiles) {
+        const full = path.resolve(UP, path.basename(f));
+        if (full.startsWith(UP) && fs.existsSync(full)) {
+          fs.unlinkSync(full);
+        }
+      }
+    } catch (e) {
+      safeLog('[admin] order file delete skipped:', e.message);
+    }
+
+    await logActivity(req.user.id, 'order.delete', {
+      order_id: id,
+      user_id: order.user_id,
+      price: order.price,
+      status: order.status,
+      refunded,
+    });
+
+    res.json({ ok: true, deleted_id: id, refunded });
+  } catch (e) {
+    safeLog('[admin] order delete error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 // GET /api/admin/orders/:id/history — status transition timeline (H-1)
 router.get('/orders/:id/history', async (req, res) => {
   try {

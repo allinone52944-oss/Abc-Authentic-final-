@@ -65,27 +65,13 @@
           <label>ইমেইল এড্রেস</label>
           <input type="email" id="email" placeholder="email@example.com">
         </div>
-        <div class="field">
-          <label>ধর্ম (ধর্মীয় শুভেচ্ছা ও অভিবাদনের জন্য)</label>
-          <select id="religion">
-            <option value="islam">ইসলাম (সালামু আলাইকুম)</option>
-            <option value="hindu">হিন্দু (নমস্কার)</option>
-            <option value="buddhist">বৌদ্ধ</option>
-            <option value="christian">খ্রিস্টান</option>
-            <option value="other">অন্যান্য</option>
-          </select>
-        </div>
+
         <div class="err" id="err"></div>
         <div class="okmsg" id="ok"></div>
         <button class="btn" style="width:100%;margin-top:8px;" onclick="save()">তথ্য সংরক্ষণ করুন</button>
       </div>
 
-      <!-- Voice Greeting Card -->
-      <div class="card">
-        <h3>🔊 অডিও ভয়েস গ্রিটিং (Voice Greeting)</h3>
-        <p style="font-size:13px;color:#64748b;margin-bottom:14px;">লগইন করার পর স্বয়ংক্রিয় মিষ্টি কন্ঠে স্বাগত বার্তা শোনা যাবে কিনা তা বেছে নিন।</p>
-        <button class="mini-btn ok" id="vgToggle" style="padding:10px 20px;font-size:14px;" onclick="toggleVoiceGreet()">…</button>
-      </div>
+
 
       <!-- Password Change Card -->
       <div class="card">
@@ -129,33 +115,20 @@
 /* DARK-MODE PASSWORD FIX */
 try{if(window.CSS&&CSS.supports('-webkit-text-security','disc')){var swapPw=function(el){if(el.getAttribute('type')==='password'){el.setAttribute('type','text');el.style.webkitTextSecurity='disc';}};document.querySelectorAll('input[type="password"]').forEach(function(el){el.addEventListener('focus',function(){swapPw(el);});el.addEventListener('input',function(){swapPw(el);});if(el.value)swapPw(el);});}}catch(e){}
 
-function voiceGreetOn(){try{return localStorage.getItem('abc_greet_voice')!=='off';}catch(e){return true;}}
 
-function paintVoiceGreetBtn(){
-  const b=document.getElementById('vgToggle');
-  const on = voiceGreetOn();
-  b.textContent = on ? '✅ ভয়েস গ্রিটিং চালু আছে' : '❌ ভয়েস গ্রিটিং বন্ধ আছে';
-  b.className = on ? 'mini-btn ok' : 'mini-btn';
-}
-
-function toggleVoiceGreet(){
-  try{localStorage.setItem('abc_greet_voice',voiceGreetOn()?'off':'on');}catch(e){}
-  paintVoiceGreetBtn();
-}
 
 async function init(){
   const r=await ABC.api('/auth/me');
   if(!r.ok){location.href='/login.html';return;}
   const {user}=await r.json();
   document.getElementById('waFab').onclick=()=>{
-    window.open('https://wa.me/?text='+encodeURIComponent('আসসালামু আলাইকুম! আমি '+user.name+' (ফোন: '+user.phone+')। সাহায্য দরকার।'),'_blank');
+    window.open('https://wa.me/8801835414122?text='+encodeURIComponent('আসসালামু আলাইকুম! আমি '+user.name+' (ফোন: '+user.phone+')। সাহায্য দরকার।'),'_blank');
   };
   document.getElementById('name').value=user.name||'';
   document.getElementById('phone').value=user.phone||'';
   document.getElementById('whatsapp').value=user.whatsapp||'';
   document.getElementById('email').value=user.email||'';
-  document.getElementById('religion').value=user.religion||'other';
-  paintVoiceGreetBtn();
+
 }
 
 const PROFILE_ERRORS = {
@@ -177,8 +150,7 @@ async function save(e){
     const r=await ABC.api('/auth/me',{method:'PUT',body:{
       name:document.getElementById('name').value.trim(),
       whatsapp:document.getElementById('whatsapp').value.trim(),
-      email:document.getElementById('email').value.trim(),
-      religion:document.getElementById('religion').value}});
+      email:document.getElementById('email').value.trim()}});
     const d=await r.json();
     if(!r.ok){
       err.textContent='❌ '+(PROFILE_ERRORS[d.error] || d.error || 'সংরক্ষণ ব্যর্থ হয়েছে');

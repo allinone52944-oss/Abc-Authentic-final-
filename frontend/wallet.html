@@ -367,7 +367,7 @@ async function init(){
   if(!me.ok){location.href='/login.html';return;}
   const wu=(await me.json()).user||{};
   document.getElementById('waFab').onclick=()=>{
-    window.open('https://wa.me/?text='+encodeURIComponent('আসসালামু আলাইকুম! আমি '+wu.name+' (ফোন: '+wu.phone+')। সাহায্য দরকার।'),'_blank');
+    window.open('https://wa.me/8801835414122?text='+encodeURIComponent('আসসালামু আলাইকুম! আমি '+wu.name+' (ফোন: '+wu.phone+')। সাহায্য দরকার।'),'_blank');
   };
   try{const nr=await ABC.api('/recharge-numbers');if(nr.ok)rechargeNums=(await nr.json()).numbers||{};}catch(e){}
   document.querySelectorAll('#methods .method').forEach(m=>{

@@ -259,7 +259,7 @@ async function init(){
   if (me.ok) {
     const u = (await me.json()).user || {};
     document.getElementById('waFab').onclick = () => {
-      window.open('https://wa.me/?text=' + encodeURIComponent('আসসালামু আলাইকুম! আমি ' + u.name + ' (ফোন: ' + u.phone + ')। ম্যানুয়াল আবেদন নিয়ে সাহায্য দরকার।'), '_blank');
+      window.open('https://wa.me/8801835414122?text=' + encodeURIComponent('আসসালামু আলাইকুম! আমি ' + u.name + ' (ফোন: ' + u.phone + ')। ম্যানুয়াল আবেদন নিয়ে সাহায্য দরকার।'), '_blank');
     };
   }
 }
