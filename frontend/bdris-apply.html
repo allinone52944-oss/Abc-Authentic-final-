@@ -1734,6 +1734,10 @@ async function geoLoad(k, Ls, data, wantOv) {
   if (!$(L.ui)) { setGeoState(k, Ls, 'error'); return; }
   const want = (wantOv != null && wantOv !== '') ? wantOv : (data[k] || '');
   if (!opts.length) {
+    if (k === 'country' && $(L.ui) && $(L.ui).tagName === 'SELECT') {
+      setGeoState(k, Ls, 'loaded');
+      return;
+    }
     setGeoState(k, Ls, 'empty');
     degradeToText(L.ui, L.lbl, want);
     return;
@@ -1807,7 +1811,9 @@ async function warmFromData() {
   })();
   try {
     const withTimeout = (p, ms) => Promise.race([p, new Promise(r => setTimeout(r, ms))]);
-    await withTimeout(geoLoad('country', GEO_LEVELS, data), 15000);
+    const wantCountry = data.country && data.country !== 'বাংলাদেশ';
+    const countryP = geoLoad('country', GEO_LEVELS, data).catch(() => {});
+    if (wantCountry) await withTimeout(countryP, 15000);
     await withTimeout(divFillP, 15000);
     /* Deterministic rebuild: প্রতিটি level চেষ্টা করো, fail হলে error state-এ
        রেখে পরের level-এ যাও (আগের break-এ বাকিগুলো চিরতরে আটকে থাকত) */
@@ -1888,7 +1894,9 @@ function renderStep2() {
   setView('flow');
   const s1 = S.d.s1 || {};
   const selBox = (id, lbl) => '<div class="fld"><label id="' + id + '_lbl">' + esc(lbl) + ' <b>*</b></label>' +
-    '<select id="' + id + '"><option value="">লোড হচ্ছে…</option></select></div>';
+    '<select id="' + id + '">' + (id === 'g_country'
+      ? '<option value="বাংলাদেশ" selected>বাংলাদেশ</option>'
+      : '<option value="">লোড হচ্ছে…</option>') + '</select></div>';
   showBody(
     '<div class="sec"><div class="sub-h"><span class="snum">২</span> নিবন্ধনাধীন ব্যক্তির পরিচিতি</div>' +
     '<p class="hint">নাম এক অংশের হলে শেষ অংশ খালি রাখুন — বাকিটা স্বয়ংক্রিয়ভাবে সামলে নেওয়া হবে।</p></div>' +
