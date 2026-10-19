@@ -67,7 +67,7 @@ async function approveRechargeTx(client, txId, smsId) {
       [tx.id, smsId]
     );
   }
-  return tx;
+  return { ...tx, status: 'approved' };
 }
 
 const SMS_METHODS = {
@@ -320,4 +320,58 @@ adminSms.get('/pending-recharges', async (req, res) => {
   }
 });
 
-module.exports = { webhook, adminSms };
+
+// Check if an unmatched incoming SMS arrived before the user submitted recharge
+async function tryAutoMatchRecharge(tx) {
+  if (!tx || !tx.id || !tx.trxid || tx.status !== 'pending') return null;
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Lock matching unmatched SMS (exact TrxID + matching amount)
+    const r = await client.query(
+      `SELECT * FROM incoming_sms
+       WHERE matched_recharge_id IS NULL
+         AND parse_status = 'parsed'
+         AND trxid IS NOT NULL AND UPPER(trxid) = UPPER($1)
+         AND amount = $2
+       ORDER BY created_at DESC LIMIT 1
+       FOR UPDATE`,
+      [String(tx.trxid).trim(), Number(tx.amount)]
+    );
+    const sms = r.rows[0];
+    if (!sms) {
+      await client.query('COMMIT');
+      return null;
+    }
+
+    const MAX_AUTO_APPROVE = Number(process.env.SMS_MAX_AUTO_APPROVE || 50000);
+    if (Number(tx.amount) > MAX_AUTO_APPROVE) {
+      await client.query('COMMIT');
+      await logActivity(null, 'sms.large_amount_hold', {
+        sms_id: sms.id, tx_id: tx.id, amount: Number(tx.amount),
+      });
+      return null;
+    }
+
+    const approvedTx = await approveRechargeTx(client, tx.id, sms.id);
+    await client.query('COMMIT');
+
+    if (approvedTx) {
+      await logActivity(null, 'sms.auto_match', {
+        sms_id: sms.id, tx_id: approvedTx.id, user_id: approvedTx.user_id,
+        amount: Number(approvedTx.amount), how: 'trxid_late_submit', trxid: approvedTx.trxid,
+      });
+      wa.notifyRechargeApproved(db, approvedTx).catch(() => {});
+      return approvedTx;
+    }
+    return null;
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    safeLog('[sms] tryAutoMatchRecharge failed:', e.message);
+    return null;
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { webhook, adminSms, tryAutoMatchRecharge, approveRechargeTx };

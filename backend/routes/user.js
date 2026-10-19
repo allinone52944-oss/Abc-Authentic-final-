@@ -15,6 +15,7 @@ const fs = require('fs');
 // Order document uploads: settings-driven via orderDocUpload(db, 'order') (H-12).
 // Filenames stay random (C-2: never embed req.params.id).
 const push = require('../utils/push');
+const { tryAutoMatchRecharge } = require('./sms');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -479,10 +480,22 @@ router.post('/wallet/recharge', async (req, res) => {
        VALUES ($1, 'recharge', $2, $3, $4, $5, $6, 'pending') RETURNING *`,
       [req.user.id, amt, method, String(sender_no).trim(), String(trxid).trim(), screenshot || null]);
 
-    // Web Push: notify admins of new recharge request (async, non-blocking)
-    push.notifyNewRecharge(db, r.rows[0], req.user.id).catch(() => {});
+    let tx = r.rows[0];
 
-    res.status(201).json({ transaction: r.rows[0] });
+    // Auto-match check: if SMS arrived before user submitted form
+    try {
+      const matched = await tryAutoMatchRecharge(tx);
+      if (matched) tx = matched;
+    } catch (err) {
+      safeLog('[user] auto-match error:', err.message);
+    }
+
+    if (tx.status === 'pending') {
+      // Web Push: notify admins of new recharge request (async, non-blocking)
+      push.notifyNewRecharge(db, tx, req.user.id).catch(() => {});
+    }
+
+    res.status(201).json({ transaction: tx });
   } catch (e) {
     safeLog('[user] recharge error:', e.message);
     res.status(500).json({ error: 'FAILED' });

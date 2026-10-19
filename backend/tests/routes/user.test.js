@@ -239,6 +239,37 @@ describe('wallet', () => {
       const r = await withUser(request(app()).post('/api/wallet/recharge')).send(GOOD).expect(201);
       expect(r.body.transaction.id).toBe('t1');
     });
+    test('auto-match late-arriving form: amount > SMS_MAX_AUTO_APPROVE stays pending', async () => {
+      db.__routeQuery([
+        ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
+        ['FROM transactions WHERE trxid', { rows: [] }],
+        ['INSERT INTO transactions', { rows: [{ id: 't2', user_id: 'u1', amount: 60000, trxid: 'TRXBIG', status: 'pending' }] }],
+        ['FROM incoming_sms', { rows: [{ id: 'sms2', amount: 60000, trxid: 'TRXBIG' }] }],
+        ['INSERT INTO activity_log', { rows: [] }],
+      ]);
+      const BIG = { method: 'bkash_personal', sender_no: '01712345678', trxid: 'TRXBIG', amount: 60000 };
+      const r = await withUser(request(app()).post('/api/wallet/recharge')).send(BIG).expect(201);
+      expect(r.body.transaction.id).toBe('t2');
+      expect(r.body.transaction.status).toBe('pending');
+    });
+
+    test('auto-match late-arriving form path → approved without double notification', async () => {
+      db.__routeQuery([
+        ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
+        ['FROM transactions WHERE trxid', { rows: [] }],
+        ['INSERT INTO transactions', { rows: [{ id: 't1', user_id: 'u1', amount: 500, trxid: 'TRX12345', status: 'pending' }] }],
+        ['FROM incoming_sms', { rows: [{ id: 'sms1', amount: 500, trxid: 'TRX12345' }] }],
+        ['WHERE id = $1 AND status = \'pending\' AND type = \'recharge\'', { rows: [{ id: 't1', user_id: 'u1', amount: 500, trxid: 'TRX12345', status: 'pending' }] }],
+        ['SELECT * FROM wallet_apply', { rows: [{ new_balance: '600', tx_id: 't1' }] }],
+        ['UPDATE transactions SET admin_id = NULL', { rows: [] }],
+        ['UPDATE incoming_sms SET matched_recharge_id', { rows: [] }],
+        ['INSERT INTO activity_log', { rows: [] }],
+      ]);
+      const r = await withUser(request(app()).post('/api/wallet/recharge')).send(GOOD).expect(201);
+      expect(r.body.transaction.id).toBe('t1');
+      expect(r.body.transaction.status).toBe('approved');
+    });
+
   });
 });
 
