@@ -272,10 +272,13 @@
   </div>
 
   <div class="main">
-    <div class="topbar">
+    <div class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
       <div>
         <h2>🪪 এনআইডি কার্ড রেপ্লিকা জেনারেটর</h2>
         <p>ভোটার নিবন্ধন ফরমের PDF আপলোড করে স্বয়ংক্রিয়ভাবে কার্ড প্রস্তুত করুন</p>
+      </div>
+      <div id="walletBadge" style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">
+        💳 ব্যালেন্স: ৳<span id="balVal">০</span>
       </div>
     </div>
 
@@ -535,6 +538,22 @@ function collectFields(){
   return out;
 }
 
+let currentPrice = 0;
+async function updateBalance(){
+  try{
+    const p = await ABC.api(API+'/price');
+    if(p.ok){
+      const d = await p.json();
+      if(document.getElementById('balVal')) document.getElementById('balVal').textContent = d.balance;
+      currentPrice = d.price || 0;
+      const b3 = document.getElementById('b3');
+      if(b3 && currentPrice > 0){
+        b3.textContent = 'কার্ড তৈরি করুন (৳' + currentPrice + ') →';
+      }
+    }
+  }catch(e){}
+}
+
 async function doBuild(){
   busy('b3',true,'কার্ড তৈরি হচ্ছে…');
   try{
@@ -552,11 +571,15 @@ async function doBuild(){
     });
     if(!r.ok){
       const j=await r.json().catch(()=>({}));
-      throw new Error(j.error==='JOB_NOT_FOUND'?'সেশন শেষ — আবার আপলোড করুন।':'কার্ড তৈরি ব্যর্থ।');
+      if (r.status === 402 || j.error === 'INSUFFICIENT_BALANCE') {
+        throw new Error(j.message || 'পর্যাপ্ত ব্যালেন্স নেই। অনুগ্রহ করে ওয়ালেট রিচার্জ করুন।');
+      }
+      throw new Error(j.message || (j.error==='JOB_NOT_FOUND'?'সেশন শেষ — আবার আপলোড করুন।':'কার্ড তৈরি ব্যর্থ।'));
     }
     S.pdfBlob=await r.blob();
     document.getElementById('cardFrame').src=URL.createObjectURL(S.pdfBlob);
-    go(4);showOk('কার্ড প্রস্তুত ✓');
+    go(4);showOk('কার্ড প্রস্তুত ও ডাউনলোড হয়েছে ✓');
+    updateBalance();
   }catch(e){showErr(e.message||'কার্ড তৈরি ব্যর্থ।');}
   busy('b3',false);
 }
@@ -572,6 +595,7 @@ function dlPdf(){
   const me=await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
   const u=(await me.json()).user;
+  updateBalance();
   document.getElementById('waFab').onclick=()=>{window.open('https://wa.me/8801835414122?text='+encodeURIComponent('আমি '+u.name+' (ফোন: '+u.phone+')। এনআইডি কার্ড সম্পর্কে জানতে চাই।'),'_blank');};
 })();
 </script>
