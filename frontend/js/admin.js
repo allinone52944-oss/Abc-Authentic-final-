@@ -1342,6 +1342,7 @@ TABS.orders = async () => {
             '<button class="adm-icon-btn" title="সম্পূর্ণ তথ্য পর্যালোচনা ও ডেলিভারি" onclick="AdmOrders.view(\'' + o.id + '\')">👁️ বিস্তারিত</button>' +
             '<button class="adm-icon-btn" title="গ্রাহকের সাথে সাপোর্ট চ্যাট" onclick="AdmOrders.supportForm(\'' + o.id + '\')">💬</button>' +
             '<button class="adm-icon-btn" title="ডেলিভারি ফাইল আপলোড" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎</button>' +
+            '<button class="adm-icon-btn danger" title="অর্ডার ডিলিট করুন" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️</button>' +
           '</div>' +
         '</td>' +
       '</tr>';
@@ -1517,6 +1518,60 @@ window.AdmOrders = {
     }
   },
 
+  deleteOrder(id) {
+    const o = (TABS._orders || []).find(x => String(x.id) === String(id));
+    const orderNum = o ? ('#' + String(o.id).slice(0, 8)) : ('#' + String(id).slice(0, 8));
+    const price = o ? Number(o.price || 0) : 0;
+    const userName = o ? (o.user_name || 'গ্রাহক') : 'গ্রাহক';
+    const isRefundable = price > 0 && o && o.status !== 'refunded';
+
+    let confirmHtml = '<div style="padding:10px 0;">' +
+      '<div style="background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;padding:12px;border-radius:8px;margin-bottom:14px;font-size:13px;line-height:1.5;">' +
+        '⚠️ <b>সতর্কতা:</b> অর্ডার ' + esc(orderNum) + ' মুছে ফেললে এটি এবং এর সাথে সম্পর্কিত সব চ্যাট ও ডকুমেন্টস স্থায়ীভাবে ডাটাবেজ থেকে মুছে যাবে।' +
+      '</div>' +
+      '<div style="margin-bottom:16px;font-size:13px;line-height:1.6;color:var(--text-main);">' +
+        '• <b>গ্রাহক:</b> ' + esc(userName) + '<br>' +
+        '• <b>সেবা:</b> ' + esc(o ? (o.service_name_bn || o.service_name || 'সেবা') : 'সেবা') + '<br>' +
+        '• <b>অর্ডারের মূল্য:</b> <span class="adm-price-badge" style="font-size:13px;padding:2px 8px;">৳' + bn(price) + '</span><br>' +
+        '• <b>বর্তমান স্ট্যাটাস:</b> <b>' + esc(o ? (STBN[o.status] || o.status) : '') + '</b>' +
+      '</div>';
+
+    if (isRefundable) {
+      confirmHtml += '<div style="margin-bottom:14px;font-weight:700;font-size:13px;color:var(--text-main);">ডিলিট করার ধরণ বেছে নিন:</div>' +
+        '<div style="display:flex;flex-direction:column;gap:10px;">' +
+          '<button class="btn-quick-emerald" style="padding:12px;font-size:13px;text-align:center;" onclick="AdmOrders.confirmDelete(\'' + id + '\', true)">' +
+            '💰 ৳' + bn(price) + ' রিফান্ড দিয়ে ডিলিট করুন (গ্রাহকের ওয়ালেটে টাকা ফেরত যাবে)' +
+          '</button>' +
+          '<button class="mini-btn danger" style="padding:12px;font-size:13px;text-align:center;" onclick="AdmOrders.confirmDelete(\'' + id + '\', false)">' +
+            '🗑️ কোনো রিফান্ড ছাড়া সরাসরি ডিলিট করুন (টেস্ট/ফেক অর্ডারের জন্য)' +
+          '</button>' +
+          '<button class="btn-secondary" style="padding:10px;text-align:center;" onclick="closeModal()">✕ ফিরে যান</button>' +
+        '</div>';
+    } else {
+      confirmHtml += '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
+        '<button class="btn-secondary" onclick="closeModal()">✕ বাতিল</button>' +
+        '<button class="mini-btn danger" style="padding:10px 18px;" onclick="AdmOrders.confirmDelete(\'' + id + '\', false)">🗑️ নিশ্চিতভাবে মুছে ফেলুন</button>' +
+      '</div>';
+    }
+    confirmHtml += '</div>';
+
+    modal('🗑️ অর্ডার মুছে ফেলার কনফার্মেশন ' + esc(orderNum), confirmHtml);
+  },
+
+  async confirmDelete(id, refund) {
+    try {
+      const q = refund ? '?refund=yes' : '?refund=no';
+      const r = await ABC.api('/admin/orders/' + id + q, { method: 'DELETE' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || 'অর্ডার মুছতে ব্যর্থ');
+      alert(refund ? '✅ অর্ডারের মূল্য রিফান্ড করে সফলভাবে মুছে ফেলা হয়েছে' : '✅ অর্ডার সফলভাবে মুছে ফেলা হয়েছে');
+      closeModal();
+      show('orders');
+    } catch (e) {
+      alert('❌ মুছে ফেলা ব্যর্থ: ' + e.message);
+    }
+  },
+
   async saveAdminNote(id) {
     const note = document.getElementById('admOrderNoteInput');
     if (!note) return;
@@ -1684,6 +1739,7 @@ window.AdmOrders = {
         '<div class="adm-hub-actions">' +
           '<button class="btn-quick-primary" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.startProcessing(\'' + o.id + '\')">▶️ অর্ডার গ্রহণ ও প্রসেসিং শুরু করুন</button>' +
           '<button class="mini-btn danger" onclick="AdmOrders.cancelOrder(\'' + o.id + '\')">❌ বাতিল করুন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ মুছে ফেলুন</button>' +
         '</div>' +
       '</div>';
     } else if (curStatus === 'processing' || curStatus === 'received' || curStatus === 'registered') {
@@ -1707,6 +1763,7 @@ window.AdmOrders = {
           '<button class="btn-quick-emerald" id="admModalUploadDeliverBtn" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.modalDeliverWithFile(\'' + o.id + '\')" disabled>🚀 ডেলিভারি ফাইল আপলোড ও সমাপ্ত করুন</button>' +
           '<button class="btn-quick-success" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.markCompleted(\'' + o.id + '\')">✅ ফাইল ছাড়া সম্পন্ন মার্ক করুন</button>' +
           '<button class="mini-btn danger" onclick="AdmOrders.cancelOrder(\'' + o.id + '\')">❌ বাতিল/ব্যর্থ</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ মুছে ফেলুন</button>' +
         '</div>' +
       '</div>';
     } else if (curStatus === 'completed') {
@@ -1720,6 +1777,7 @@ window.AdmOrders = {
           '<button class="btn-quick-emerald" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.markDelivered(\'' + o.id + '\')">🚀 ডেলিভার্ড মার্ক করুন ও নোটিফিকেশন দিন</button>' +
           '<button class="mini-btn" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎 অতিরিক্ত ডেলিভারি ফাইল যোগ করুন</button>' +
           '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\')">↩️ রিফান্ড করুন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ মুছে ফেলুন</button>' +
         '</div>' +
       '</div>';
     } else if (curStatus === 'delivered') {
@@ -1732,6 +1790,7 @@ window.AdmOrders = {
         '<div class="adm-hub-actions">' +
           '<button class="mini-btn" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎 অতিরিক্ত ফাইল সংযোজন</button>' +
           '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\')">↩️ রিফান্ড করুন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ মুছে ফেলুন</button>' +
         '</div>' +
       '</div>';
     }
@@ -1817,7 +1876,8 @@ window.AdmOrders = {
         '</div>' +
       '</div>' +
 
-      '<div style="margin-top:20px;text-align:right;">' +
+      '<div style="margin-top:20px;display:flex;justify-content:space-between;align-items:center;">' +
+        '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ এই অর্ডারটি মুছে ফেলুন</button>' +
         '<button class="btn-secondary" onclick="closeModal()">✕ বন্ধ করুন</button>' +
       '</div>' +
     '</div>';

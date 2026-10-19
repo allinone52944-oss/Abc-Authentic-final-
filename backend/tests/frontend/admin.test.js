@@ -411,7 +411,7 @@ describe('admin panel navigation & premium workflows (2026-10-19)', () => {
     expect(ahtml).toContain('অপারেশন ও লেনদেন');
     expect(ahtml).toContain('মার্কেটিং ও কন্টেন্ট');
     expect(ahtml).toContain('সিস্টেম ও অডিট');
-    expect(ahtml).toMatch(/admin\.js\?v=52/);
+    expect(ahtml).toMatch(/admin\.js\?v=53/);
   });
 
   test('admin.js exposes getAuthToken helper and uses it across downloads & uploads', () => {
@@ -442,6 +442,13 @@ describe('admin panel navigation & premium workflows (2026-10-19)', () => {
     expect(stBlock).toContain('💾 ডাটাবেস ব্যাকআপ ও ব্যবস্থাপনা');
     expect(stBlock).not.toContain('🗄️ সিস্টেম হেলথ, ডাটাবেস ও স্টোরেজ');
     expect(stBlock).not.toContain("show('storage')");
+  });
+
+  test('orders tab and view modal provide safe delete button and deleteOrder handler', () => {
+    expect(ajs).toMatch(/AdmOrders\.deleteOrder\(/);
+    expect(ajs).toMatch(/deleteOrder\(id\)\s*\{/);
+    expect(ajs).toMatch(/confirmDelete\(id,\s*refund\)/);
+    expect(ajs).toContain('🗑️ এই অর্ডারটি মুছে ফেলুন');
   });
 });
 
