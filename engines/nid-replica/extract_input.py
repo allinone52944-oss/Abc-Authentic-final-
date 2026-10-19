@@ -11,6 +11,7 @@ import sys
 import os
 import json
 import difflib
+import re
 
 if hasattr(sys.stdout, "reconfigure"):
     try:
@@ -544,19 +545,38 @@ ADDR_LABELS = set(l for l, _ in ADDR_WANT)
 
 def get_spans(page, pno):
     spans = []
-    d = page.get_text("dict")
-    for b in d["blocks"]:
-        if b["type"] != 0:
+    try:
+        raw = json.loads(page.get_text("rawjson"))
+        blocks = raw.get("blocks", [])
+    except Exception:
+        blocks = page.get_text("dict").get("blocks", [])
+
+    for b in blocks:
+        if b.get("type", 0) != 0:
             continue
-        for line in b["lines"]:
-            for s in line["spans"]:
-                txt = s["text"]
+        for line in b.get("lines", []):
+            for s in line.get("spans", []):
+                chars = s.get("chars", [])
+                size = s.get("size", 8)
+                if chars:
+                    parts = []
+                    prev_c = None
+                    for c in chars:
+                        if prev_c is not None:
+                            gap = c["bbox"][0] - prev_c["bbox"][2]
+                            if gap > max(1.2, size * 0.15):
+                                parts.append(" ")
+                        parts.append(c["c"])
+                        prev_c = c
+                    txt = "".join(parts)
+                else:
+                    txt = s.get("text", "")
                 if not txt.strip():
                     continue
                 x0, y0, x1, y1 = [round(v, 2) for v in s["bbox"]]
                 spans.append({"page": pno, "text": txt,
                               "x0": x0, "y0": y0, "x1": x1, "y1": y1,
-                              "size": round(s["size"], 2),
+                              "size": round(size, 2),
                               "font": s.get("font", "")})
     return _coalesce_fragments(spans)
 
@@ -639,12 +659,29 @@ def join_fragments(cands):
         "মোঃঃ": "মোঃ",
         "ংং": "ং",
         "ংাং": "ং",
-        "ĺ": "",  # Remove weird artifacts
-        "ʛ": "",  # Remove weird artifacts
-        "  ": " ", # Double space to single
+        "˙": "রু",
+        "ǻ": "ঞ্জ",
+        "ǘ": "ক্ষ",
+        "Ƶ": "প্রি",
+        "Ȱ": "ন্দ্র",
+        "ɨ": "ল্ল",
+        "িসেলট": "সিলেট",
+        "গৃিহনী": "গৃহিনী",
+        "িনরǘর": "নিরক্ষর",
+        "আিম": "আমি",
+        "িবিব": "বিবি",
+        "ছাতকĺপৗরসভা": "ছাতক পৌরসভা",
+        "ĺপৗরসভা": "পৌরসভা",
+        "ĺনছা": "নেছা",
+        "ʛ": "",
+        "  ": " ",
     }
     for bad, good in replacements.items():
         text = text.replace(bad, good)
+
+    text = re.sub(r'ĺ([ক-হ])', r'\g<1>ে', text)
+    text = re.sub(r'([ক-হ])ৌ', r'\g<1>ৌ', text)
+    text = text.replace("ĺ", "ে")
 
     text = text.strip()
 
