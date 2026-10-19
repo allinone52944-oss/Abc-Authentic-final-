@@ -140,6 +140,25 @@ describe('api() — happy paths', () => {
     expect(JSON.parse(opts.body)).toEqual({ phone: '01700000000', password: 'x' });
   });
 
+  test('preserves FormData / Blob / URLSearchParams bodies without JSON-stringifying', async () => {
+    const ABC = loadApp();
+    global.fetch.mockResolvedValueOnce(okJson({}));
+    const fd = new FormData();
+    fd.append('foo', 'bar');
+    await ABC.api('/upload', { method: 'POST', body: fd });
+    const [, opts] = global.fetch.mock.calls[0];
+    expect(opts.headers['Content-Type']).toBeUndefined();
+    expect(opts.body).toBe(fd);
+  });
+
+  test('getAccessToken returns active in-memory access token', () => {
+    const ABC = loadApp();
+    ABC.setTokens('my-token-123', 'ref-1');
+    expect(ABC.getAccessToken()).toBe('my-token-123');
+    ABC.clearTokens();
+    expect(ABC.getAccessToken()).toBeNull();
+  });
+
   test('preserves caller-supplied headers and works with no opts', async () => {
     const ABC = loadApp();
     ABC.setTokens('acc1', 'ref1');

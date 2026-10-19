@@ -16,6 +16,24 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;',
 function escJs(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"').replace(/\n/g,'\\n');}
 function bn(n){return Number(n||0).toLocaleString('bn-BD');}
 
+function getAuthToken() {
+  try {
+    if (typeof ABC !== 'undefined' && ABC.getAccessToken) {
+      const t = ABC.getAccessToken();
+      if (t) return t;
+    }
+    if (typeof localStorage !== 'undefined') {
+      const t = localStorage.getItem('abc_access_token');
+      if (t) return t;
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      const t = sessionStorage.getItem('abc_access_token');
+      if (t) return t;
+    }
+  } catch (_) {}
+  return '';
+}
+
 async function init() {
   try {
     const r = await ABC.api('/auth/me');
@@ -608,23 +626,49 @@ TABS.stats = async () => {
 
 window.AdmReports = {
   dl(kind) {
-    const f = document.getElementById('rp_from').value;
-    const t = document.getElementById('rp_to').value;
+    const fEl = document.getElementById('rp_from');
+    const tEl = document.getElementById('rp_to');
+    const f = (fEl && fEl.value) || '';
+    const t = (tEl && tEl.value) || '';
     const q = (f ? 'from=' + f : '') + (t ? '&to=' + t : '');
-    const token = localStorage.getItem('abc_access_token') || '';
-    // Use fetch with auth header to download the PDF blob
+    const token = getAuthToken();
     fetch('/api/admin/reports/' + kind + (q ? '?' + q : ''), {
       headers: { 'Authorization': 'Bearer ' + token },
     }).then(async (r) => {
-      if (!r.ok) { alert('রিপোর্ট ব্যর্থ'); return; }
+      if (!r.ok) { alert('রিপোর্ট ডাউনলোড ব্যর্থ হয়েছে'); return; }
       const blob = await r.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = kind + '-report.pdf';
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    }).catch(() => alert('রিপোর্ট ব্যর্থ'));
+    }).catch(() => alert('রিপোর্ট তৈরি ব্যর্থ হয়েছে'));
   },
+  setPreset(preset) {
+    const fromEl = document.getElementById('rp_from');
+    const toEl = document.getElementById('rp_to');
+    if (!fromEl || !toEl) return;
+    const now = new Date();
+    const fmt = (d) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + day;
+    };
+    toEl.value = fmt(now);
+    if (preset === 'today') {
+      fromEl.value = fmt(now);
+    } else if (preset === '7d') {
+      const d = new Date(now.getTime() - 7 * 86400000);
+      fromEl.value = fmt(d);
+    } else if (preset === 'month') {
+      const d = new Date(now.getFullYear(), now.getMonth(), 1);
+      fromEl.value = fmt(d);
+    } else if (preset === 'all') {
+      fromEl.value = '';
+      toEl.value = '';
+    }
+  }
 };
 
 /* ---------------- USERS (Fintech User Management Hub) ---------------- */
@@ -1917,7 +1961,7 @@ window.AdmOrders = {
       fd.append('doc_type', 'delivery');
       const r = await fetch('/api/admin/orders/' + id + '/delivery-docs', {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('abc_access_token') },
+        headers: { 'Authorization': 'Bearer ' + getAuthToken() },
         body: fd
       });
       const d = await r.json();
@@ -1991,7 +2035,7 @@ window.AdmOrders = {
     fd.append('doc_type', 'delivery');
     const r = await fetch('/api/admin/orders/' + id + '/delivery-docs', {
       method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('abc_access_token') },
+      headers: { 'Authorization': 'Bearer ' + getAuthToken() },
       body: fd
     });
     const d = await r.json();
@@ -2687,32 +2731,52 @@ window.AdmCat = {
 
 /* ---------------- RECHARGE ---------------- */
 TABS.recharge = async () => {
-  const r = await ABC.api('/admin/transactions?type=recharge&status=pending&limit=30');
+  const st = TABS._rchStatus !== undefined ? TABS._rchStatus : 'pending';
+  const url = '/admin/transactions?type=recharge' + (st ? '&status=' + encodeURIComponent(st) : '') + '&limit=50';
+  const r = await ABC.api(url);
   const d = await r.json();
-  if (!r.ok || !d.transactions) { content.innerHTML = '<div style="color:var(--danger)">⚠️ লোড ব্যর্থ! রিফ্রেশ করুন</div>'; return; }
-  // Recharge mode: auto (SMS) + manual (user spec 2026-10-16)
-  const mode = window._rechargeMode || 'both';
-  let html = '<div style="display:flex; gap:10px; margin-bottom:16px; align-items:center; flex-wrap:wrap;">' +
-    '<span style="font-weight:700; color:#1e3a8a; font-size:14px;">💰 রিচার্জ মোড:</span>' +
-    '<button class="mini-btn' + (mode === 'auto' ? ' ok' : '') + '" onclick="window._rechargeMode=\'auto\';show(\'recharge\')" title="শুধু SMS অটো-ম্যাচ">🤖 অটো (SMS)</button>' +
-    '<button class="mini-btn' + (mode === 'manual' ? ' ok' : '') + '" onclick="window._rechargeMode=\'manual\';show(\'recharge\')" title="শুধু ম্যানুয়াল approve">👤 ম্যানুয়াল</button>' +
-    '<button class="mini-btn' + (mode === 'both' ? ' ok' : '') + '" onclick="window._rechargeMode=\'both\';show(\'recharge\')" title="দুটোই চালু">🔀 অটো + ম্যানুয়াল</button>' +
-    '<button class="mini-btn" onclick="show(\'sms\')" style="margin-left:auto; display:inline-flex; align-items:center; gap:6px;">📩 SMS অডিট লগ</button></div>';
+  if (!r.ok || !d.transactions) { content.innerHTML = '<div style="color:var(--danger)">⚠️ রিচার্জ তথ্য লোড ব্যর্থ! রিফ্রেশ করুন</div>'; return; }
   
-  html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">' +
-    '<h3 style="margin:0; font-size:16px; font-weight:700; color:#0f172a;">⏳ অপেক্ষমান রিচার্জ অনুমোদন (' + bn(d.total) + ')</h3>' +
-    '<span style="font-size:12px; color:#64748b;">সর্বশেষ ৩০টি রিকোয়েস্ট</span>' +
-    '</div>';
+  TABS._rchList = d.transactions || [];
+  const q = (TABS._rchQuery || '').trim().toLowerCase();
+  const filtered = q
+    ? TABS._rchList.filter(t =>
+        (t.trxid || '').toLowerCase().includes(q) ||
+        (t.user_phone || '').includes(q) ||
+        (t.sender_no || '').includes(q) ||
+        (t.user_name || '').toLowerCase().includes(q)
+      )
+    : TABS._rchList;
 
-  if (!d.transactions.length) {
+  let html = '<div style="display:flex; flex-direction:column; gap:14px; margin-bottom:16px;">' +
+    '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">' +
+      '<div><h3 style="margin:0; font-size:18px; font-weight:800; color:#0f172a;">💳 রিচার্জ ও ডিপোজিট কন্ট্রোল</h3>' +
+      '<p style="margin:4px 0 0; font-size:12px; color:#64748b;">গ্রাহকদের ওয়ালেট রিচার্জ যাচাই, অনুমোদন ও লেনদেন অডিট</p></div>' +
+      '<button class="mini-btn" onclick="show(\'sms\')" style="display:inline-flex; align-items:center; gap:6px;">📩 SMS গেটওয়ে অডিট লগ</button>' +
+    '</div>' +
+
+    '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; background:#fff; padding:12px 14px; border:1px solid #e2e8f0; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">' +
+      '<div style="display:flex; gap:6px; flex-wrap:wrap;">' +
+        '<button class="mini-btn' + (st === 'pending' ? ' ok' : '') + '" onclick="TABS._rchStatus=\'pending\';show(\'recharge\')">⏳ অপেক্ষমান (' + (st === 'pending' ? bn(d.total) : '•') + ')</button>' +
+        '<button class="mini-btn' + (st === 'approved' ? ' ok' : '') + '" onclick="TABS._rchStatus=\'approved\';show(\'recharge\')">✅ অনুমোদিত</button>' +
+        '<button class="mini-btn' + (st === 'rejected' ? ' ok' : '') + '" onclick="TABS._rchStatus=\'rejected\';show(\'recharge\')">❌ বাতিলকৃত</button>' +
+        '<button class="mini-btn' + (st === '' ? ' ok' : '') + '" onclick="TABS._rchStatus=\'\';show(\'recharge\')">📋 সকল লেনদেন</button>' +
+      '</div>' +
+      '<div style="flex:1; min-width:220px; max-width:360px;">' +
+        '<input type="text" id="admRchSearchInput" placeholder="🔍 TrxID বা মোবাইল নম্বর খুঁজুন…" value="' + esc(TABS._rchQuery || '') + '" oninput="AdmTx.search(this.value)" style="width:100%; padding:7px 12px; font-size:12px; border-radius:8px; border:1px solid #cbd5e1;">' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  if (!filtered.length) {
     html += '<div style="text-align:center; padding:48px 16px; background:#ffffff; border:1px dashed #cbd5e1; border-radius:14px; color:#64748b;">' +
-      '<div style="font-size:32px; margin-bottom:8px;">🎉</div>' +
-      '<b style="font-size:15px; color:#0f172a;">কোনো পেন্ডিং রিচার্জ রিকোয়েস্ট নেই</b><br>' +
-      '<span style="font-size:13px;">সবগুলো রিকোয়েস্ট সফলভাবে নিষ্পত্তি করা হয়েছে।</span>' +
+      '<div style="font-size:32px; margin-bottom:8px;">' + (q ? '🔍' : '🎉') + '</div>' +
+      '<b style="font-size:15px; color:#0f172a;">' + (q ? 'কোনো রিচার্জ মেলেনি' : (st === 'pending' ? 'কোনো অপেক্ষমান রিচার্জ রিকোয়েস্ট নেই' : 'কোনো লেনদেন পাওয়া যায়নি')) + '</b><br>' +
+      '<span style="font-size:13px;">' + (q ? 'অন্য নম্বর বা TrxID দিয়ে চেষ্টা করুন।' : 'সবগুলো রিকোয়েস্ট সফলভাবে নিষ্পত্তি করা হয়েছে।') + '</span>' +
       '</div>';
   } else {
     html += '<div style="display:grid; gap:10px;">';
-    for (const t of d.transactions) {
+    for (const t of filtered) {
       const mLow = (t.method || '').toLowerCase();
       let mBadge = '<span style="display:inline-block; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:700; background:#e0f2fe; color:#0369a1;">' + esc(t.method) + '</span>';
       if (mLow.includes('bkash')) {
@@ -2723,6 +2787,20 @@ TABS.recharge = async () => {
         mBadge = '<span style="display:inline-block; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:700; background:#faf5ff; color:#9333ea; border:1px solid #f3e8ff;">Rocket</span>';
       }
 
+      let actionBlock = '';
+      if (t.status === 'pending') {
+        actionBlock = '<div style="display:flex; align-items:center; gap:8px;">' +
+          '<button class="mini-btn ok" style="padding:7px 14px; font-size:12px; font-weight:700; background:#16a34a; color:#fff;" onclick="AdmTx.approve(' + JSON.stringify(t.id) + ', ' + t.amount + ', ' + JSON.stringify(t.user_name) + ')">✅ Approve</button>' +
+          '<button class="mini-btn danger" style="padding:7px 12px; font-size:12px; font-weight:600;" onclick="AdmTx.reject(' + JSON.stringify(t.id) + ', ' + t.amount + ', ' + JSON.stringify(t.user_name) + ')">❌ Reject</button>' +
+        '</div>';
+      } else if (t.status === 'approved') {
+        actionBlock = '<span style="display:inline-block; padding:4px 10px; border-radius:6px; font-size:12px; font-weight:700; background:#dcfce7; color:#15803d; border:1px solid #bbf7d0;">✅ অনুমোদিত</span>';
+      } else if (t.status === 'rejected') {
+        actionBlock = '<span style="display:inline-block; padding:4px 10px; border-radius:6px; font-size:12px; font-weight:700; background:#fee2e2; color:#b91c1c; border:1px solid #fecaca;">❌ বাতিলকৃত</span>';
+      } else {
+        actionBlock = '<span class="badge">' + esc(t.status) + '</span>';
+      }
+
       html += '<div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; display:flex; gap:14px; align-items:center; flex-wrap:wrap; box-shadow:0 1px 3px rgba(0,0,0,0.03);">' +
         '<div style="flex:1; min-width:240px;">' +
           '<div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">' +
@@ -2731,14 +2809,13 @@ TABS.recharge = async () => {
           '</div>' +
           '<div style="font-size:13px; color:#475569; display:flex; flex-wrap:wrap; gap:12px; align-items:center;">' +
             '<span>📞 ' + esc(t.sender_no || t.user_phone) + '</span>' +
-            '<span>TrxID: <button style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:1px 6px; font-family:monospace; font-size:12px; cursor:pointer;" onclick="navigator.clipboard.writeText(\'' + esc(t.trxid) + '\');admToast(\'কপি সফল\', \'TrxID কপি করা হয়েছে\')">📋 ' + esc(t.trxid) + '</button></span>' +
+            '<span>TrxID: <button style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:1px 6px; font-family:monospace; font-size:12px; cursor:pointer;" onclick="navigator.clipboard.writeText(' + JSON.stringify(t.trxid) + ');admToast(\'কপি সফল\', \'TrxID কপি করা হয়েছে\')">📋 ' + esc(t.trxid) + '</button></span>' +
           '</div>' +
           '<div style="font-size:11px; color:#94a3b8; margin-top:4px;">🕒 ' + new Date(t.created_at).toLocaleString('bn-BD') + '</div>' +
         '</div>' +
-        '<div style="display:flex; align-items:center; gap:10px; margin-left:auto;">' +
+        '<div style="display:flex; align-items:center; gap:12px; margin-left:auto;">' +
           '<div style="background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; font-size:18px; font-weight:800; padding:6px 14px; border-radius:10px;">৳' + bn(t.amount) + '</div>' +
-          '<button class="mini-btn ok" style="padding:8px 14px; font-size:13px; font-weight:700; background:#16a34a; color:#fff;" onclick="AdmTx.approve(\'' + t.id + '\', ' + t.amount + ', \'' + esc(t.user_name).replace(/'/g, "\\'") + '\')">✅ Approve</button>' +
-          '<button class="mini-btn danger" style="padding:8px 12px; font-size:13px; font-weight:600;" onclick="AdmTx.reject(\'' + t.id + '\', ' + t.amount + ', \'' + esc(t.user_name).replace(/'/g, "\\'") + '\')">❌ Reject</button>' +
+          actionBlock +
         '</div>' +
       '</div>';
     }
@@ -2851,6 +2928,13 @@ window.AdmSms = {
 };
 
 window.AdmTx = {
+  search(q) {
+    TABS._rchQuery = q;
+    clearTimeout(this._searchTimer);
+    this._searchTimer = setTimeout(() => {
+      show('recharge');
+    }, 250);
+  },
   approve(id, amount, name) {
     modal('💰 রিচার্জ অনুমোদন নিশ্চিত করুন',
       '<div style="text-align:center; padding:10px 0;">' +
@@ -3297,49 +3381,135 @@ window.AdmBn = {
 TABS.notices = async () => {
   const r = await ABC.api('/admin/notices');
   const d = await r.json();
-  if (!r.ok || !d.notices) { content.innerHTML = '<div style="color:var(--danger)">⚠️ লোড ব্যর্থ! রিফ্রেশ করুন</div>'; return; }
-  let html = '<button class="mini-btn ok" onclick="AdmNt.createForm()" style="margin-bottom:12px;">+ নতুন নোটিশ</button>';
-  for (const n of d.notices) {
-    html += '<div class="list-row" style="cursor:default;"><div>' +
-      '<div class="t">' + esc(n.title) + '</div><div class="s">' + esc(n.message) + '<br>' +
-      (n.user_name ? '👤 ' + esc(n.user_name) : '📢 সবাই') + ' • ' + new Date(n.created_at).toLocaleString('bn-BD') + '</div></div>' +
-      '<button class="mini-btn danger" onclick="AdmNt.del(\'' + n.id + '\')">ডিলিট</button></div>';
+  if (!r.ok || !d.notices) { content.innerHTML = '<div style="color:var(--danger)">⚠️ নোটিশ লোড ব্যর্থ! রিফ্রেশ করুন</div>'; return; }
+  
+  const list = d.notices || [];
+  let html = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">' +
+    '<div><h3 style="margin:0; font-size:18px; font-weight:800; color:#0f172a;">📢 নোটিশ ও ঘোষণা হাব</h3>' +
+    '<p style="margin:4px 0 0; font-size:12px; color:#64748b;">গ্রাহকদের ড্যাশবোর্ডে সার্বজনীন অথবা নির্দিষ্ট ব্যবহারকারীকে বার্তা পাঠান</p></div>' +
+    '<button class="btn ok" style="padding:9px 18px; font-size:13px; font-weight:700; background:#2563eb; color:#fff;" onclick="AdmNt.createForm()">+ নতুন নোটিশ প্রকাশ করুন</button>' +
+    '</div>';
+
+  if (!list.length) {
+    html += '<div style="text-align:center; padding:48px 16px; background:#ffffff; border:1px dashed #cbd5e1; border-radius:14px; color:#64748b;">' +
+      '<div style="font-size:32px; margin-bottom:8px;">📭</div>' +
+      '<b style="font-size:15px; color:#0f172a;">কোনো সক্রিয় নোটিশ নেই</b><br>' +
+      '<span style="font-size:13px;">নতুন নোটিশ তৈরি করতে উপরের "নতুন নোটিশ প্রকাশ করুন" বাটনে চাপ দিন।</span>' +
+      '</div>';
+  } else {
+    html += '<div style="display:grid; gap:12px;">';
+    for (const n of list) {
+      const isGlobal = !n.user_id && !n.user_name;
+      const targetBadge = isGlobal
+        ? '<span style="padding:3px 9px; border-radius:999px; font-size:11px; font-weight:700; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe;">📢 সকল ইউজার</span>'
+        : '<span style="padding:3px 9px; border-radius:999px; font-size:11px; font-weight:700; background:#fef3c7; color:#b45309; border:1px solid #fde68a;">👤 ব্যক্তিগত: ' + esc(n.user_name || n.user_id) + '</span>';
+
+      html += '<div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px; box-shadow:0 1px 3px rgba(0,0,0,0.03); display:flex; justify-content:space-between; align-items:flex-start; gap:14px;">' +
+        '<div style="flex:1;">' +
+          '<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">' +
+            '<h4 style="margin:0; font-size:15px; font-weight:700; color:#0f172a;">' + esc(n.title) + '</h4>' +
+            targetBadge +
+          '</div>' +
+          '<div style="font-size:13px; color:#334155; line-height:1.5; white-space:pre-wrap; margin-bottom:8px;">' + esc(n.message) + '</div>' +
+          '<div style="font-size:11px; color:#94a3b8;">🕒 প্রকাশিত: ' + new Date(n.created_at).toLocaleString('bn-BD') + '</div>' +
+        '</div>' +
+        '<button class="mini-btn danger" style="padding:6px 12px; font-size:12px;" onclick="AdmNt.del(' + JSON.stringify(n.id) + ')">🗑️ ডিলিট</button>' +
+      '</div>';
+    }
+    html += '</div>';
   }
-  content.innerHTML = html || '<div style="color:var(--muted)">কোনো নোটিশ নেই</div>';
+  content.innerHTML = html;
 };
 window.AdmNt = {
   createForm() {
-    modal('🔔 নতুন নোটিশ',
-      fld('শিরোনাম', 'text', 'nt_title') +
-      '<div class="field"><label>বার্তা</label><textarea id="nt_msg" rows="3"></textarea></div>' +
-      '<div class="field"><label>যার জন্য (খালি = সবাই)</label><input type="text" id="nt_user" placeholder="User ID (ঐচ্ছিক)"></div>' +
-      '<button class="btn" onclick="AdmNt.create()">পাঠান</button>');
+    modal('🔔 নতুন নোটিশ প্রকাশ করুন',
+      fld('শিরোনাম (Title)', 'text', 'nt_title') +
+      '<div class="field"><label>নোটিশ বার্তা (Message)</label><textarea id="nt_msg" rows="3" placeholder="গ্রাহকদের জন্য নোটিশ লিখুন…"></textarea></div>' +
+      '<div class="field"><label>নির্দিষ্ট ইউজারের জন্য (খালি রাখলে সবাই দেখতে পাবে)</label><input type="text" id="nt_user" placeholder="User ID (ঐচ্ছিক)"></div>' +
+      '<button class="btn" style="width:100%; font-weight:700;" onclick="AdmNt.create()">📢 নোটিশ পোস্ট করুন</button>');
   },
   async create() {
+    const t = v('nt_title').trim();
+    const m = v('nt_msg').trim();
+    if (!t || !m) { alert('অনুগ্রহ করে শিরোনাম ও বার্তা লিখুন'); return; }
     const r = await ABC.api('/admin/notices', { method: 'POST', body: {
-      title: v('nt_title'), message: v('nt_msg'), user_id: v('nt_user') || null,
+      title: t, message: m, user_id: v('nt_user').trim() || null,
     }});
-    if (!r.ok) { alert('ব্যর্থ'); return; }
+    if (!r.ok) { alert('নোটিশ পোস্ট ব্যর্থ'); return; }
     closeModal(); show('notices');
   },
   async del(id) {
-    if (!confirm('ডিলিট করবেন?')) return;
+    if (!confirm('নোটিশটি ডিলিট করতে চান?')) return;
     await ABC.api('/admin/notices/' + id, { method: 'DELETE' });
     show('notices');
   },
 };
-
 /* ---------------- ACTIVITY LOG ---------------- */
 TABS.activity = async () => {
-  const r = await ABC.api('/admin/activity-log?limit=30');
+  const r = await ABC.api('/admin/activity-log?limit=50');
   const d = await r.json();
-  let html = '<div style="overflow-x:auto;"><table class="adm"><tr><th>সময়</th><th>এডমিন</th><th>কাজ</th><th>বিস্তারিত</th></tr>';
-  for (const a of d.log) {
-    html += '<tr><td><small>' + new Date(a.created_at).toLocaleString('bn-BD') + '</small></td>' +
-      '<td>' + esc(a.admin_name || '-') + '</td><td><span class="badge">' + esc(a.action) + '</span></td>' +
-      '<td><small style="color:var(--dim)">' + esc(JSON.stringify(a.details)).slice(0, 120) + '</small></td></tr>';
+  const logs = (d && d.log) || [];
+
+  const ACTION_MAP = {
+    'login': { label: '🔐 এডমিন লগইন', cls: 'badge' },
+    'recharge_approve': { label: '💰 রিচার্জ অনুমোদন', cls: 'badge ok' },
+    'recharge_reject': { label: '❌ রিচার্জ বাতিল', cls: 'badge danger' },
+    'order_update': { label: '📦 অর্ডার স্ট্যাটাস', cls: 'badge' },
+    'order_deliver': { label: '🚚 ফাইল ডেলিভারি', cls: 'badge ok' },
+    'settings_update': { label: '⚙️ সেটিংস আপডেট', cls: 'badge warn' },
+    'service_update': { label: '🛠️ সেবা আপডেট', cls: 'badge' },
+    'notice_create': { label: '📢 নোটিশ প্রকাশ', cls: 'badge ok' },
+    'notice_delete': { label: '🗑️ নোটিশ মোছা', cls: 'badge danger' },
+    'user_block': { label: '🚫 ইউজার ব্লক', cls: 'badge danger' }
+  };
+
+  let html = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">' +
+    '<div><h3 style="margin:0; font-size:18px; font-weight:800; color:#0f172a;">📜 এডমিন সিকিউরিটি ও অ্যাক্টিভিটি অডিট লগ</h3>' +
+    '<p style="margin:4px 0 0; font-size:12px; color:#64748b;">অ্যাডমিনদের দ্বারা পরিচালিত প্রতিটি সংবেদনশীল অপারেশনের অপরিবর্তনীয় অডিট ট্রেইল</p></div>' +
+    '<button class="mini-btn" onclick="show(\'activity\')">🔄 রিফ্রেশ লগ</button>' +
+  '</div>';
+
+  if (!logs.length) {
+    html += '<div style="text-align:center; padding:48px 16px; background:#fff; border:1px dashed #cbd5e1; border-radius:14px; color:#64748b;">' +
+      '<div style="font-size:32px; margin-bottom:8px;">📜</div>' +
+      '<b style="font-size:15px; color:#0f172a;">কোনো অডিট লগ রেকর্ড নেই</b>' +
+      '</div>';
+  } else {
+    html += '<div style="background:#fff; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03);">' +
+      '<div style="overflow-x:auto;"><table class="adm" style="margin:0; width:100%; border-collapse:collapse;">' +
+      '<thead style="background:#f8fafc; border-bottom:1px solid #e2e8f0;">' +
+        '<tr><th style="padding:12px 16px; text-align:left; font-size:12px; color:#64748b;">সময়</th>' +
+        '<th style="padding:12px 16px; text-align:left; font-size:12px; color:#64748b;">দায়িত্বপ্রাপ্ত এডমিন</th>' +
+        '<th style="padding:12px 16px; text-align:left; font-size:12px; color:#64748b;">অপারেশন</th>' +
+        '<th style="padding:12px 16px; text-align:left; font-size:12px; color:#64748b;">কার্যক্রমের বিবরণ</th></tr>' +
+      '</thead><tbody>';
+
+    for (const a of logs) {
+      const actInfo = ACTION_MAP[a.action] || { label: a.action, cls: 'badge' };
+      let detailsFormatted = '';
+      try {
+        if (typeof a.details === 'object' && a.details !== null) {
+          detailsFormatted = Object.entries(a.details)
+            .map(([k, v]) => '<span style="display:inline-block; margin-right:8px;"><b>' + esc(k) + ':</b> ' + esc(String(v)) + '</span>')
+            .join(' ');
+        } else {
+          detailsFormatted = esc(String(a.details || '-'));
+        }
+      } catch (_) {
+        detailsFormatted = esc(String(a.details || '-'));
+      }
+
+      html += '<tr style="border-bottom:1px solid #f1f5f9;">' +
+        '<td style="padding:12px 16px; white-space:nowrap; font-size:12px; color:#64748b;">' + new Date(a.created_at).toLocaleString('bn-BD') + '</td>' +
+        '<td style="padding:12px 16px; font-weight:700; font-size:13px; color:#0f172a;">👤 ' + esc(a.admin_name || 'সুপার এডমিন') + '</td>' +
+        '<td style="padding:12px 16px;"><span class="' + actInfo.cls + '" style="font-size:11px;">' + actInfo.label + '</span></td>' +
+        '<td style="padding:12px 16px; font-size:12px; color:#475569;">' + detailsFormatted + '</td>' +
+      '</tr>';
+    }
+
+    html += '</tbody></table></div></div>';
   }
-  content.innerHTML = html + '</table></div>';
+  content.innerHTML = html;
 };
 
 /* ---------------- SETTINGS ---------------- */
@@ -3448,7 +3618,7 @@ TABS.settings = async () => {
     '<div class="adm-settings-subgrid">' +
       // LEFT SUB-PANEL: WhatsApp & System Alerts
       '<div style="background:var(--bg-muted,#f8fafc);padding:18px;border-radius:10px;border:1px solid var(--border-light);">' +
-        '<h3 style="margin-top:0;color:var(--primary-600);font-size:15px;">💬 WhatsApp ও সিস্টেম অ্যালার্ট</h3>' +
+        '<h3 style="margin-top:0;color:var(--primary-600);font-size:15px;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">🔔 অ্যাডমিন লাইভ অ্যালার্ট ও WhatsApp নোটিফিকেশন <span style="font-size:11px;font-weight:600;background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:999px;">অ্যাডমিন ডেস্কটপ</span></h3>' +
         '<div class="list-row" style="cursor:default;padding:8px 0;"><div><div class="t">🔊 অ্যাডমিন ভয়েস অ্যালার্ট</div><div class="s">নতুন রিচার্জ/অর্ডারে বাংলা ভয়েস সতর্কবার্তা</div></div>' +
         '<button class="mini-btn ' + (VoiceAlert.enabled ? 'ok' : '') + '" onclick="var on=VoiceAlert.toggle();this.className=\'mini-btn \'+(on?\'ok\':\'\');this.textContent=on?\'✅ চালু\':\'❌ বন্ধ\';">' +
         (VoiceAlert.enabled ? '✅ চালু' : '❌ বন্ধ') + '</button></div>' +
@@ -3479,7 +3649,7 @@ TABS.settings = async () => {
 
       // RIGHT SUB-PANEL: Voice Greeting & Preview Player
       '<div style="background:var(--bg-muted,#f8fafc);padding:18px;border-radius:10px;border:1px solid var(--border-light);">' +
-        '<h3 style="margin-top:0;color:var(--primary-600);font-size:15px;">🔊 ধর্মভিত্তিক ভয়েস শুভেচ্ছা (Religion Greeting)</h3>' +
+        '<h3 style="margin-top:0;color:var(--primary-600);font-size:15px;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">🎙️ কাস্টমার লগইন ভয়েস শুভেচ্ছা (Login Greeting) <span style="font-size:11px;font-weight:600;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;">গ্রাহক লগইন অডিও</span></h3>' +
         '<div class="list-row" style="cursor:default;padding:8px 0;"><div><div class="t">ভয়েস শুভেচ্ছা সার্ভিস</div><div class="s">লগইনের সময় ধর্মভিত্তিক কণ্ঠে শুভেচ্ছা বার্তা</div></div>' + bool('voice_greeting') + '</div>' +
         '<div class="list-row" style="cursor:default;padding:8px 0;"><div><div class="t">কণ্ঠ রোটেশন (Rotation)</div><div class="s">পুরুষ → মহিলা → শিশু কণ্ঠে পর্যায়ক্রমে প্লে হবে</div></div>' + bool('voice_greeting', 'rotation') + '</div>' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">' +
@@ -3708,114 +3878,252 @@ function closeModal() {
 window.closeModal = closeModal;
 
 
-/* ---------------- REPORTS (user spec 2026-10-16) ---------------- */
+/* ---------------- REPORTS (Financial & Operations Hub) ---------------- */
 TABS.reports = async () => {
-  // Server-side aggregates (was: client-side sum of capped 100-row pages = wrong totals)
   let sum = { revenue: 0, recharge: 0, byStatus: {}, users: 0 };
   try {
     const r = await ABC.api('/admin/reports/summary');
     if (r.ok) sum = await r.json();
-  } catch (e) { /* show zeros with error note */ }
+  } catch (e) { /* show zeros with fallback */ }
+
   const revenue = sum.revenue || 0;
   const walletTotal = sum.recharge || 0;
   const byStatus = sum.byStatus || {};
+  const totalOrders = Object.values(byStatus).reduce((a, b) => a + Number(b), 0);
 
-  let html = '<h3 style="color:var(--gold); margin-bottom:14px;">📊 রিপোর্ট</h3>' +
-    '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:18px;">' +
-    '<div style="background:var(--card); padding:16px; border-radius:12px; text-align:center;">' +
-    '<div style="font-size:12px; color:var(--dim);">💰 মোট রেভিনিউ</div>' +
-    '<div style="font-size:24px; font-weight:700; color:var(--gold);">৳' + bn(revenue) + '</div></div>' +
-    '<div style="background:var(--card); padding:16px; border-radius:12px; text-align:center;">' +
-    '<div style="font-size:12px; color:var(--dim);">💳 মোট রিচার্জ</div>' +
-    '<div style="font-size:24px; font-weight:700; color:#22c55e;">৳' + bn(walletTotal) + '</div></div>' +
-    '<div style="background:var(--card); padding:16px; border-radius:12px; text-align:center;">' +
-    '<div style="font-size:12px; color:var(--dim);">👥 মোট ইউজার</div>' +
-    '<div style="font-size:24px; font-weight:700;">' + bn(sum.users || 0) + '</div></div>' +
-    '<div style="background:var(--card); padding:16px; border-radius:12px; text-align:center;">' +
-    '<div style="font-size:12px; color:var(--dim);">📦 মোট অর্ডার</div>' +
-    '<div style="font-size:24px; font-weight:700;">' + bn(orders.length) + '</div></div></div>';
+  const ST_BN = {
+    new: 'নতুন',
+    pending: 'অপেক্ষমান',
+    processing: 'প্রসেসিং',
+    completed: 'সম্পন্ন',
+    delivered: 'ডেলিভার্ড',
+    cancelled: 'বাতিল',
+    rejected: 'বাতিল',
+    hold: 'হোল্ড'
+  };
 
-  html += '<h4 style="color:var(--gold); margin:14px 0 10px;">📦 Status অনুযায়ী অর্ডার</h4>' +
-    '<div style="display:grid; gap:8px;">';
-  Object.entries(byStatus).forEach(([s, c]) => {
-    html += '<div style="display:flex; justify-content:space-between; padding:10px 14px; background:var(--card); border-radius:8px;">' +
-      '<span><span class="badge st-' + s + '">' + (STBN[s] || s) + '</span></span>' +
-      '<b>' + bn(c) + 'টি</b></div>';
+  let html = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:10px;">' +
+    '<div><h3 style="margin:0; font-size:18px; font-weight:800; color:#0f172a;">📊 আর্থিক ও ব্যবসায়িক রিপোর্ট হাব</h3>' +
+    '<p style="margin:4px 0 0; font-size:12px; color:#64748b;">প্ল্যাটফর্মের সামগ্রিক রাজস্ব, ওয়ালেট রিচার্জ ও অর্ডার ভিত্তিক অ্যানালিটিক্স</p></div>' +
+    '</div>';
+
+  // 1. Metric Stat Cards
+  html += '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; margin-bottom:22px;">' +
+    '<div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">' +
+      '<div style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.04em;">💰 মোট রাজস্ব (Revenue)</div>' +
+      '<div style="font-size:26px; font-weight:800; color:#1d4ed8; margin-top:6px;">৳' + bn(revenue) + '</div>' +
+      '<div style="font-size:11px; color:#16a34a; margin-top:4px;">সফল ও ডেলিভার্ড অর্ডার থেকে অর্জিত</div>' +
+    '</div>' +
+    '<div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">' +
+      '<div style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.04em;">💳 মোট ওয়ালেট রিচার্জ</div>' +
+      '<div style="font-size:26px; font-weight:800; color:#16a34a; margin-top:6px;">৳' + bn(walletTotal) + '</div>' +
+      '<div style="font-size:11px; color:#64748b; margin-top:4px;">গ্রাহকদের মোট অনুমোদিত ডিপোজিট</div>' +
+    '</div>' +
+    '<div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">' +
+      '<div style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.04em;">👥 নিবন্ধিত ইউজার</div>' +
+      '<div style="font-size:26px; font-weight:800; color:#0f172a; margin-top:6px;">' + bn(sum.users || 0) + ' জন</div>' +
+      '<div style="font-size:11px; color:#64748b; margin-top:4px;">সক্রিয় অ্যাকাউন্ট সংখ্যা</div>' +
+    '</div>' +
+    '<div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">' +
+      '<div style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.04em;">📦 মোট অর্ডার প্রবাহ</div>' +
+      '<div style="font-size:26px; font-weight:800; color:#7c3aed; margin-top:6px;">' + bn(totalOrders) + ' টি</div>' +
+      '<div style="font-size:11px; color:#64748b; margin-top:4px;">সর্বমোট জমাকৃত আবেদনের সংখ্যা</div>' +
+    '</div>' +
+  '</div>';
+
+  // 2. Custom PDF Report Generator
+  html += '<div class="form-card" style="margin-bottom:20px; background:#ffffff; border:1px solid #e2e8f0; border-radius:14px; padding:20px;">' +
+    '<h3 style="margin:0 0 6px; font-size:16px; color:#1e40af; display:flex; align-items:center; gap:8px;">📄 কাস্টম PDF স্টেটমেন্ট ডাউনলোড</h3>' +
+    '<p style="margin:0 0 16px; font-size:13px; color:#64748b;">তারিখ নির্বাচন করে নির্দিষ্ট সময়কালের অর্ডার বা ওয়ালেট লেনদেনের অফিসিয়াল PDF ডাউনলোড করুন</p>' +
+    '<div style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end;">' +
+      '<div class="field" style="margin:0; flex:1; min-width:160px;"><label>শুরুর তারিখ</label><input type="date" id="rp_from"></div>' +
+      '<div class="field" style="margin:0; flex:1; min-width:160px;"><label>শেষের তারিখ</label><input type="date" id="rp_to"></div>' +
+      '<div style="display:flex; gap:6px; flex-wrap:wrap;">' +
+        '<button class="mini-btn" type="button" onclick="AdmReports.setPreset(\'today\')">আজ</button>' +
+        '<button class="mini-btn" type="button" onclick="AdmReports.setPreset(\'7d\')">শেষ ৭ দিন</button>' +
+        '<button class="mini-btn" type="button" onclick="AdmReports.setPreset(\'month\')">চলতি মাস</button>' +
+        '<button class="mini-btn" type="button" onclick="AdmReports.setPreset(\'all\')">সব সময়</button>' +
+      '</div>' +
+    '</div>' +
+    '<div style="display:flex; gap:10px; margin-top:16px; flex-wrap:wrap;">' +
+      '<button class="btn" style="display:inline-flex; align-items:center; gap:8px; font-weight:700;" onclick="AdmReports.dl(\'orders\')">📥 অর্ডার রিপোর্ট (PDF)</button>' +
+      '<button class="btn-secondary" style="display:inline-flex; align-items:center; gap:8px; font-weight:700;" onclick="AdmReports.dl(\'transactions\')">📥 লেনদেন ও রিচার্জ রিপোর্ট (PDF)</button>' +
+    '</div>' +
+  '</div>';
+
+  // 3. Status Breakdown
+  html += '<div class="form-card" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:14px; padding:20px;">' +
+    '<h3 style="margin:0 0 14px; font-size:16px; color:#0f172a;">📦 অর্ডার স্ট্যাটাস ব্রেকডাউন</h3>' +
+    '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px;">';
+
+  const statuses = ['completed', 'delivered', 'processing', 'pending', 'cancelled', 'rejected'];
+  statuses.forEach(s => {
+    const count = byStatus[s] || 0;
+    const pct = totalOrders > 0 ? Math.round((count / totalOrders) * 100) : 0;
+    html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;">' +
+      '<div><span class="badge st-' + s + '">' + (ST_BN[s] || s) + '</span><div style="font-size:11px; color:#64748b; margin-top:4px;">' + pct + '% অনুপাত</div></div>' +
+      '<b style="font-size:16px; color:#0f172a;">' + bn(count) + 'টি</b></div>';
   });
+
+  html += '</div></div>';
+  content.innerHTML = html;
+};
+
+/* ---------------- MONITOR (System Health & Engine Watchdog) ---------------- */
+TABS.monitor = async () => {
+  const r = await ABC.api('/admin/monitor');
+  const d = await r.json();
+  if (!r.ok) { content.innerHTML = '<div style="color:var(--danger)">⚠️ সার্ভার মনিটর তথ্য লোড ব্যর্থ!</div>'; return; }
+
+  let html = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:10px;">' +
+    '<div><h3 style="margin:0; font-size:18px; font-weight:800; color:#0f172a;">🖥️ রিয়েলটাইম সিস্টেম হেলথ ও সার্ভার মনিটর</h3>' +
+    '<p style="margin:4px 0 0; font-size:12px; color:#64748b;">ডাটাবেজ সংযোগ, ইঞ্জিন অ্যাক্টিভিটি ও বিগত ২৪ ঘণ্টার লাইভ পারফরম্যান্স</p></div>' +
+    '<button class="mini-btn ok" onclick="show(\'monitor\')">⚡ লাইভ রিফ্রেশ</button>' +
+  '</div>';
+
+  // 1. Health Status Grid
+  html += '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:22px;">' +
+    '<div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px;">' +
+      '<div style="font-size:11px; font-weight:700; color:#64748b;">🗄️ PostgreSQL ডাটাবেজ</div>' +
+      '<div style="font-size:22px; font-weight:800; color:' + (d.db === 'up' ? '#16a34a' : '#dc2626') + '; margin-top:6px;">' +
+        (d.db === 'up' ? '🟢 সচল ও সংযুক্ত' : '🔴 সংযোগ বিচ্ছিন্ন') +
+      '</div>' +
+    '</div>' +
+    '<div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px;">' +
+      '<div style="font-size:11px; font-weight:700; color:#64748b;">📦 অর্ডার প্রবাহ (২৪ ঘণ্টা)</div>' +
+      '<div style="font-size:22px; font-weight:800; color:#0f172a; margin-top:6px;">' + bn(d.last24h.orders) + ' টি</div>' +
+    '</div>' +
+    '<div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px;">' +
+      '<div style="font-size:11px; font-weight:700; color:#64748b;">👥 নতুন ইউজার (২৪ ঘণ্টা)</div>' +
+      '<div style="font-size:22px; font-weight:800; color:#2563eb; margin-top:6px;">' + bn(d.last24h.users) + ' জন</div>' +
+    '</div>' +
+    '<div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px;">' +
+      '<div style="font-size:11px; font-weight:700; color:#64748b;">💳 লেনদেন (২৪ ঘণ্টা)</div>' +
+      '<div style="font-size:22px; font-weight:800; color:#16a34a; margin-top:6px;">' + bn(d.last24h.transactions) + ' টি</div>' +
+    '</div>' +
+  '</div>';
+
+  // 2. Recent Server Activity Stream
+  html += '<div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:14px; padding:20px;">' +
+    '<h4 style="margin:0 0 14px; font-size:16px; color:#0f172a;">📜 সাম্প্রতিক সার্ভার ইভেন্ট ও অ্যাক্টিভিটি</h4>';
+  
+  if (!(d.recent_activity || []).length) {
+    html += '<div style="color:#64748b; font-size:13px; text-align:center; padding:24px;">কোনো সাম্প্রতিক সার্ভার ইভেন্ট নেই</div>';
+  } else {
+    html += '<div style="display:grid; gap:8px;">';
+    d.recent_activity.forEach(a => {
+      html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; font-size:13px;">' +
+        '<span style="font-weight:600; color:#1e293b;">' + esc(a.action) + '</span>' +
+        '<small style="color:#64748b;">🕒 ' + new Date(a.created_at).toLocaleString('bn-BD') + '</small></div>';
+    });
+    html += '</div>';
+  }
   html += '</div>';
   content.innerHTML = html;
 };
 
-/* ---------------- FILE STORAGE TAB (user spec 2026-10-16) ---------------- */
-/* ---------------- MONITOR (user spec 2026-10-16) ---------------- */
-TABS.monitor = async () => {
-  const r = await ABC.api('/admin/monitor');
-  const d = await r.json();
-  if (!r.ok) { content.innerHTML = '<div style="color:var(--danger)">⚠️ লোড ব্যর্থ!</div>'; return; }
-
-  let html = '<h3 style="color:var(--gold); margin-bottom:14px;">🖥️ মনিটর</h3>' +
-    '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:18px;">' +
-    '<div style="background:var(--card); padding:14px; border-radius:12px; text-align:center;">' +
-    '<div style="font-size:12px; color:var(--dim);">🗄️ ডাটাবেজ</div>' +
-    '<div style="font-size:20px; font-weight:700; color:' + (d.db === 'up' ? '#22c55e' : '#ef4444') + ';">' +
-    (d.db === 'up' ? '✅ চালু' : '❌ বন্ধ') + '</div></div>' +
-    '<div style="background:var(--card); padding:14px; border-radius:12px; text-align:center;">' +
-    '<div style="font-size:12px; color:var(--dim);">📦 অর্ডার (২৪ঘ)</div>' +
-    '<div style="font-size:20px; font-weight:700;">' + bn(d.last24h.orders) + '</div></div>' +
-    '<div style="background:var(--card); padding:14px; border-radius:12px; text-align:center;">' +
-    '<div style="font-size:12px; color:var(--dim);">👥 ইউজার (২৪ঘ)</div>' +
-    '<div style="font-size:20px; font-weight:700;">' + bn(d.last24h.users) + '</div></div>' +
-    '<div style="background:var(--card); padding:14px; border-radius:12px; text-align:center;">' +
-    '<div style="font-size:12px; color:var(--dim);">💳 লেনদেন (২৪ঘ)</div>' +
-    '<div style="font-size:20px; font-weight:700;">' + bn(d.last24h.transactions) + '</div></div></div>';
-
-  html += '<h4 style="color:var(--gold); margin:14px 0 10px;">📜 সাম্প্রতিক কার্যক্রম</h4>';
-  if (!(d.recent_activity || []).length) {
-    html += '<div style="color:var(--muted)">কোনো কার্যক্রম নেই</div>';
-  } else {
-    html += '<div style="display:grid; gap:6px;">';
-    d.recent_activity.forEach(a => {
-      html += '<div style="display:flex; justify-content:space-between; padding:8px 12px; background:var(--card); border-radius:8px; font-size:13px;">' +
-        '<span>' + esc(a.action) + '</span>' +
-        '<small style="color:var(--dim);">' + new Date(a.created_at).toLocaleString('bn-BD') + '</small></div>';
-    });
-    html += '</div>';
-  }
-  content.innerHTML = html;
-};
-
-/* ---------------- FILE STORAGE (defined below) ---------------- */
+/* ---------------- FILE STORAGE (Cloud Storage Hub) ---------------- */
 TABS.storage = async () => {
   const r = await ABC.api('/admin/storage');
   const d = await r.json();
-  const files = d.files || [];
-  const total = files.reduce((s, f) => s + (f.size || 0), 0);
-  let html = '<div style="display:flex; gap:8px; margin-bottom:12px; align-items:center; flex-wrap:wrap;">' +
-    '<b style="color:var(--gold);">💾 ফাইল স্টোরেজ</b>' +
-    '<span style="color:var(--dim); font-size:12px;">মোট: ' + (total / 1024 / 1024).toFixed(2) + ' MB (' + bn(files.length) + ' ফাইল)</span>' +
-    (files.length ? '<button class="mini-btn danger" style="margin-left:auto;" onclick="AdmStorage.delAll()">🗑️ সব ডিলিট</button>' : '') +
-    '</div>';
-  if (!files.length) {
-    html += '<div style="color:var(--muted)">কোনো ফাইল নেই</div>';
+  const allFiles = d.files || [];
+  const totalBytes = allFiles.reduce((s, f) => s + (f.size || 0), 0);
+  const totalMb = (totalBytes / 1024 / 1024).toFixed(2);
+  
+  TABS._storageList = allFiles;
+  const q = (TABS._storageQuery || '').trim().toLowerCase();
+  const fType = TABS._storageType || 'all';
+
+  const filtered = allFiles.filter(f => {
+    const fn = (f.filename || '').toLowerCase();
+    const phone = (f.user_phone || '').toLowerCase();
+    const matchesQ = !q || fn.includes(q) || phone.includes(q);
+    if (!matchesQ) return false;
+    if (fType === 'pdf') return fn.endsWith('.pdf');
+    if (fType === 'img') return fn.endsWith('.png') || fn.endsWith('.jpg') || fn.endsWith('.jpeg') || fn.endsWith('.webp');
+    return true;
+  });
+
+  let html = '<div style="display:flex; flex-direction:column; gap:16px; margin-bottom:20px;">' +
+    '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">' +
+      '<div><h3 style="margin:0; font-size:18px; font-weight:800; color:#0f172a;">📂 ক্লাউড ফাইল ও ডেলিভারি স্টোরেজ</h3>' +
+      '<p style="margin:4px 0 0; font-size:12px; color:#64748b;">গ্রাহকদের জমাকৃত আবেদন ডকুমেন্ট ও ডেলিভারি ফাইল ব্যবস্থাপনা</p></div>' +
+      (allFiles.length ? '<button class="mini-btn danger" style="padding:7px 14px; font-size:12px;" onclick="AdmStorage.delAll()">🗑️ সব ফাইল সাফ করুন</button>' : '') +
+    '</div>' +
+
+    // Storage Metric Overview
+    '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px;">' +
+      '<div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px;">' +
+        '<div style="font-size:11px; font-weight:700; color:#64748b;">💾 মোট ব্যবহৃত স্টোরেজ</div>' +
+        '<div style="font-size:22px; font-weight:800; color:#2563eb; margin-top:4px;">' + totalMb + ' MB</div>' +
+      '</div>' +
+      '<div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px;">' +
+        '<div style="font-size:11px; font-weight:700; color:#64748b;">📄 সর্বমোট সংরক্ষিত ফাইল</div>' +
+        '<div style="font-size:22px; font-weight:800; color:#0f172a; margin-top:4px;">' + bn(allFiles.length) + ' টি</div>' +
+      '</div>' +
+      '<div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px;">' +
+        '<div style="font-size:11px; font-weight:700; color:#64748b;">🔍 ফিল্টারকৃত ফলাফল</div>' +
+        '<div style="font-size:22px; font-weight:800; color:#16a34a; margin-top:4px;">' + bn(filtered.length) + ' টি</div>' +
+      '</div>' +
+    '</div>' +
+
+    // Toolbar & Search
+    '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; background:#fff; padding:12px 14px; border:1px solid #e2e8f0; border-radius:12px;">' +
+      '<div style="display:flex; gap:6px; flex-wrap:wrap;">' +
+        '<button class="mini-btn' + (fType === 'all' ? ' ok' : '') + '" onclick="TABS._storageType=\'all\';show(\'storage\')">সকল ফাইল</button>' +
+        '<button class="mini-btn' + (fType === 'pdf' ? ' ok' : '') + '" onclick="TABS._storageType=\'pdf\';show(\'storage\')">📕 শুধু PDF</button>' +
+        '<button class="mini-btn' + (fType === 'img' ? ' ok' : '') + '" onclick="TABS._storageType=\'img\';show(\'storage\')">🖼️ ছবি (PNG/JPG)</button>' +
+      '</div>' +
+      '<div style="flex:1; min-width:220px; max-width:360px;">' +
+        '<input type="text" placeholder="🔍 ফাইলের নাম বা ইউজার ফোন দিয়ে খুঁজুন…" value="' + esc(TABS._storageQuery || '') + '" oninput="AdmStorage.search(this.value)" style="width:100%; padding:7px 12px; font-size:12px; border-radius:8px; border:1px solid #cbd5e1;">' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  if (!filtered.length) {
+    html += '<div style="text-align:center; padding:48px 16px; background:#ffffff; border:1px dashed #cbd5e1; border-radius:14px; color:#64748b;">' +
+      '<div style="font-size:32px; margin-bottom:8px;">' + (q ? '🔍' : '📂') + '</div>' +
+      '<b style="font-size:15px; color:#0f172a;">' + (q ? 'কোনো ফাইল মেলেনি' : 'স্টোরেজে কোনো ফাইল নেই') + '</b><br>' +
+      '<span style="font-size:13px;">' + (q ? 'অনুসন্ধান ফিল্টার পরিবর্তন করে দেখুন।' : 'গ্রাহক ফাইল আপলোড করলে বা ডেলিভারি প্রদান করলে তা এখানে জমা থাকবে।') + '</span>' +
+      '</div>';
   } else {
-    html += '<div style="display:grid; gap:8px;">';
-    files.forEach(f => {
-      html += '<div style="display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--card); border-radius:10px;">' +
-        '<span style="font-size:24px;">📄</span>' +
-        '<div style="flex:1;"><b style="font-size:13px;">' + esc(f.filename) + '</b><br>' +
-        '<small style="color:var(--dim);">👤 ' + esc(f.user_phone || f.user_name || '—') + ' • ' + (f.size_kb || Math.round((f.size || 0) / 1024)) + ' KB</small></div>' +
-        '<button class="mini-btn" onclick="AdmStorage.download(\'' + esc(f.filename) + '\')">⬇️ ডাউনলোড</button>' +
-        '<button class="mini-btn danger" onclick="AdmStorage.del(\'' + esc(f.filename) + '\')">🗑️</button></div>';
+    html += '<div style="display:grid; gap:10px;">';
+    filtered.forEach(f => {
+      const isPdf = (f.filename || '').toLowerCase().endsWith('.pdf');
+      const isImg = /\.(png|jpg|jpeg|webp)$/i.test(f.filename || '');
+      const icon = isPdf ? '📕' : (isImg ? '🖼️' : '📄');
+      const sizeStr = f.size_kb ? f.size_kb + ' KB' : (Math.round((f.size || 0) / 1024) + ' KB');
+      const mtimeStr = f.mtime ? new Date(f.mtime).toLocaleString('bn-BD') : '';
+
+      html += '<div style="display:flex; align-items:center; gap:14px; padding:12px 16px; background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; box-shadow:0 1px 2px rgba(0,0,0,0.02); flex-wrap:wrap;">' +
+        '<span style="font-size:26px; line-height:1;">' + icon + '</span>' +
+        '<div style="flex:1; min-width:220px;">' +
+          '<b style="font-size:13px; color:#0f172a; word-break:break-all;">' + esc(f.filename) + '</b><br>' +
+          '<small style="color:#64748b; font-size:11px;">👤 ইউজার: ' + esc(f.user_phone || f.user_name || 'সিস্টেম') + ' • সাইজ: ' + sizeStr + (mtimeStr ? ' • ' + mtimeStr : '') + '</small>' +
+        '</div>' +
+        '<div style="display:flex; align-items:center; gap:8px; margin-left:auto;">' +
+          '<button class="mini-btn ok" style="padding:6px 14px; font-size:12px;" onclick="AdmStorage.download(\'' + esc(f.filename) + '\')">⬇️ ডাউনলোড</button>' +
+          '<button class="mini-btn danger" style="padding:6px 10px; font-size:12px;" onclick="AdmStorage.del(\'' + esc(f.filename) + '\')">🗑️</button>' +
+        '</div>' +
+      '</div>';
     });
     html += '</div>';
   }
   content.innerHTML = html;
 };
+
 window.AdmStorage = {
+  search(q) {
+    TABS._storageQuery = q;
+    clearTimeout(this._searchTimer);
+    this._searchTimer = setTimeout(() => {
+      show('storage');
+    }, 250);
+  },
   async download(fn) {
     try {
       const r = await fetch('/api/admin/storage/' + encodeURIComponent(fn) + '/download', {
-        headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('abc_access_token') },
+        headers: { 'Authorization': 'Bearer ' + getAuthToken() },
       });
       if (!r.ok) { alert('ডাউনলোড ব্যর্থ'); return; }
       const blob = await r.blob();
@@ -3824,21 +4132,22 @@ window.AdmStorage = {
       a.download = fn;
       document.body.appendChild(a); a.click();
       setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
-    } catch (e) { alert('ডাউনলোড ব্যর্থ'); }
+    } catch (e) { alert('ডাউনলোড ব্যর্থ হয়েছে'); }
   },
   async del(fn) {
-    if (!confirm('ডিলিট করবেন?\n' + fn)) return;
+    if (!confirm('ফাইলটি নিশ্চিতভাবে মুছে ফেলতে চান?\n' + fn)) return;
     const r = await ABC.api('/admin/storage/' + encodeURIComponent(fn), { method: 'DELETE' });
-    if (r.ok) show('storage'); else alert('ব্যর্থ');
+    if (r.ok) show('storage'); else alert('মুছে ফেলা ব্যর্থ');
   },
   async delAll() {
-    if (!confirm('⚠️ সব ফাইল ডিলিট করবেন?')) return;
-    if (!confirm('🔴 শেষ কনফার্মেশন!')) return;
+    if (!confirm('⚠️ সতর্কতা: স্টোরেজের সব ডেলিভারি ফাইল ডিলিট করবেন?')) return;
+    if (!confirm('🔴 চূড়ান্ত নিশ্চিতকরণ: মুছে ফেলা ফাইল আর ফিরে পাওয়া যাবে না!')) return;
     const r = await ABC.api('/admin/storage', { method: 'DELETE' });
-    if (r.ok) { alert('✅ সব ডিলিট হয়েছে'); show('storage'); }
-    else alert('ব্যর্থ');
+    if (r.ok) { alert('✅ স্টোরেজের সকল ফাইল সাফ করা হয়েছে'); show('storage'); }
+    else alert('সাফ করা ব্যর্থ');
   },
 };
+
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => init().catch((e) => {
     const c = document.getElementById('content');

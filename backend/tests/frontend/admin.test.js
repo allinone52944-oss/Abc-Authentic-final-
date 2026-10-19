@@ -399,3 +399,41 @@ describe('admin one-click email verify (2026-10-15)', () => {
     expect(ajs).toMatch(/u\.email_verified === false/);
   });
 });
+
+
+describe('admin panel navigation & premium workflows (2026-10-19)', () => {
+  const ADMIN_HTML = path.join(__dirname, '..', '..', '..', 'frontend', 'admin.html');
+  let ahtml;
+  beforeAll(() => { ahtml = fs.readFileSync(ADMIN_HTML, 'utf8'); });
+
+  test('admin.html categorizes sidebar navigation into distinct functional groups', () => {
+    expect(ahtml).toContain('মূল নিয়ন্ত্রণ');
+    expect(ahtml).toContain('অপারেশন ও লেনদেন');
+    expect(ahtml).toContain('মার্কেটিং ও কন্টেন্ট');
+    expect(ahtml).toContain('সিস্টেম ও অডিট');
+    expect(ahtml).toMatch(/admin\.js\?v=51/);
+  });
+
+  test('admin.js exposes getAuthToken helper and uses it across downloads & uploads', () => {
+    expect(ajs).toMatch(/function getAuthToken\(\)/);
+    expect(ajs).toMatch(/AdmStorage\s*=\s*\{[\s\S]*?getAuthToken\(\)/);
+    expect(ajs).toMatch(/AdmReports\s*=\s*\{[\s\S]*?getAuthToken\(\)/);
+  });
+
+  test('admin.js has live search and filter handlers for Recharge, Storage and Reports', () => {
+    expect(ajs).toMatch(/AdmTx\s*=\s*\{[\s\S]*?search\(q\)/);
+    expect(ajs).toMatch(/AdmStorage\s*=\s*\{[\s\S]*?search\(q\)/);
+    expect(ajs).toMatch(/AdmReports\s*=\s*\{[\s\S]*?setPreset\(preset\)/);
+  });
+
+  test('reports tab does not reference undefined orders.length and aggregates byStatus safely', () => {
+    const rpBlock = ajs.slice(ajs.indexOf("TABS.reports = async"), ajs.indexOf("TABS.monitor = async"));
+    expect(rpBlock).not.toContain("orders.length");
+    expect(rpBlock).toContain("Object.values(byStatus).reduce");
+  });
+
+  test('settings tab clearly differentiates admin live alerts from customer login greetings', () => {
+    expect(ajs).toContain('অ্যাডমিন লাইভ অ্যালার্ট ও WhatsApp');
+    expect(ajs).toContain('কাস্টমার লগইন ভয়েস শুভেচ্ছা');
+  });
+});

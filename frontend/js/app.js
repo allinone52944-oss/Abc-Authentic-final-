@@ -108,7 +108,13 @@
     opts = Object.assign({}, opts || {});
     opts.headers = Object.assign({}, opts.headers || {});
     if (accessToken) opts.headers['Authorization'] = 'Bearer ' + accessToken;
-    if (opts.body && typeof opts.body === 'object') {
+
+    const isBinaryOrForm = (typeof FormData !== 'undefined' && opts.body instanceof FormData) ||
+                           (typeof Blob !== 'undefined' && opts.body instanceof Blob) ||
+                           (typeof ArrayBuffer !== 'undefined' && (opts.body instanceof ArrayBuffer || ArrayBuffer.isView(opts.body))) ||
+                           (typeof URLSearchParams !== 'undefined' && opts.body instanceof URLSearchParams);
+
+    if (opts.body && typeof opts.body === 'object' && !isBinaryOrForm) {
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(opts.body);
     }
@@ -205,7 +211,7 @@
     },
   };
 
-  window.ABC = { api, setTokens, clearTokens, refreshAccess, Drafts, Idempotency };
+  window.ABC = { api, setTokens, clearTokens, refreshAccess, Drafts, Idempotency, getAccessToken: () => accessToken };
 
   // ---- PWA: service worker (v6, push-only, no caching) ----
   if ('serviceWorker' in navigator) {
