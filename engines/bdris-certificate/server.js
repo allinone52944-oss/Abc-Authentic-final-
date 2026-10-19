@@ -395,15 +395,21 @@ function normalizeBdrisData(data) {
         if (out[k]) out[k] = titleCase(out[k]);
     }
 
-    // Registration office: drop any "NB: ... Database. Location of the
-    // Register office:" preamble, keep the FULL address, split line1 / rest.
+    // Registration office (user spec 2026-10-19, 2 real everify PDFs):
+    // office1 = COMPLETE office name from the table (kokhono comma-split noy),
+    // office2 = NB "Location of the Register office" line MINUS its 1st part
+    // (1st part duplicates the office name, e.g. "ZONE - 1" / "UMARPUR").
     // (tolerates the BDRIS "retrived" typo, spacing/punctuation variants,
     //  or a bare "NB: <first sentence>. <address>" shape)
     if (out.registrationOffice) {
         let cleaned = String(out.registrationOffice).trim();
+        let fromLocationLine = false;
         const loc = cleaned.search(/location of the register office/i);
         if (loc >= 0) {
+            // cell itself held the location line (no separate office name):
+            // purono split behavior rakho jate data kokhono na haray
             cleaned = cleaned.slice(loc).replace(/^location of the register office\s*:?/i, '').trim();
+            fromLocationLine = true;
         } else {
             const fullNB = cleaned.match(/^NB:?\s*this record is retrie?ved from birth and death registration database\s*\.\s*(location of the register office\s*:?)?/i);
             if (fullNB) {
@@ -416,27 +422,29 @@ function normalizeBdrisData(data) {
         out.registrationOffice = cleaned;
         // a sentence-final period is punctuation, never part of the address
         cleaned = cleaned.replace(/[.。]+$/, '').trim();
-        const parts = cleaned.split(',').map(x => x.trim()).filter(Boolean);
-        out.office1 = parts.length ? parts[0] : cleaned;
-        out.office2 = parts.length > 1 ? parts.slice(1).join(', ') : '';
+        if (fromLocationLine) {
+            const parts = cleaned.split(',').map(x => x.trim()).filter(Boolean);
+            out.office1 = parts.length ? parts[0] : cleaned;
+            out.office2 = parts.length > 1 ? parts.slice(1).join(', ') : '';
+        } else {
+            out.office1 = cleaned;  // sampurna angsha (officer puro nam)
+            out.office2 = '';       // NB location theke asbe (niche)
+        }
     }
 
-    // Separate NB/location cell (office NAME was in the table, location here):
-    // use its location as office2 ONLY when the table value had no comma of its
-    // own. Never overrides an existing office2. Title-cased like the rest.
-    // Single-token location + no office1 -> office1 (kokhono data harabe na).
+    // NB "Location of the Register office" cell -> office2:
+    // 1st comma-part bad diye baki thikana (1st part office name-er duplicate).
+    // Single-part location + no office1 -> office1 (kokhono data harabe na).
     if (out.officeLocationRaw) {
-        if (!out.office2) {
-            const lm = String(out.officeLocationRaw).match(/location of the register office\s*:?\s*([\s\S]+)$/i);
-            if (lm) {
-                let loc = String(lm[1]).split(/[.。]\s*(https?:|everify|www\.)/i)[0].replace(/[.。]+$/, '').trim();
-                const lp = loc.split(',').map(x => x.trim()).filter(Boolean);
-                if (lp.length > 1) {
-                    out.office2 = titleCase(lp.slice(1).join(', '));
-                    if (!out.office1 && lp[0]) out.office1 = titleCase(lp[0]);
-                } else if (lp.length === 1 && !out.office1) {
-                    out.office1 = titleCase(lp[0]);
-                }
+        const lm = String(out.officeLocationRaw).match(/location of the register office\s*:?\s*([\s\S]+)$/i);
+        if (lm) {
+            let loc = String(lm[1]).split(/[.。]\s*(https?:|everify|www\.)/i)[0].replace(/[.。]+$/, '').trim();
+            const lp = loc.split(',').map(x => x.trim()).filter(Boolean);
+            if (lp.length > 1) {
+                out.office2 = titleCase(lp.slice(1).join(', '));
+                if (!out.office1 && lp[0]) out.office1 = titleCase(lp[0]);
+            } else if (lp.length === 1 && !out.office1) {
+                out.office1 = titleCase(lp[0]);
             }
         }
         delete out.officeLocationRaw;
