@@ -124,30 +124,97 @@
 
   .imgprev {
     display: flex;
-    gap: 16px;
-    margin: 16px 0;
+    gap: 20px;
+    margin: 16px 0 22px;
     justify-content: center;
     flex-wrap: wrap;
   }
-  .imgprev figure {
-    margin: 0;
-    text-align: center;
-    flex: 0 0 160px;
+  .img-slot-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    min-width: 180px;
   }
-  .imgprev img {
+  .img-slot-header {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--primary-700);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .img-preview-box {
     width: 130px;
     height: 150px;
-    object-fit: cover;
+    border-radius: 10px;
     border: 2px solid #bfdbfe;
-    border-radius: 12px;
-    background: #fff;
-    box-shadow: var(--shadow-sm);
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    margin-bottom: 10px;
+    position: relative;
   }
-  .imgprev figcaption {
-    font-size: 13px;
+  .img-preview-box.sign-box {
+    width: 190px;
+    height: 80px;
+  }
+  .img-preview-box.empty {
+    border: 2px dashed #94a3b8;
+    background: #f1f5f9;
+    color: #64748b;
+    padding: 8px;
+    text-align: center;
+  }
+  .img-preview-box img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .img-preview-box.sign-box img {
+    object-fit: contain;
+    background: #ffffff;
+    padding: 4px;
+  }
+  .img-btn-group {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    width: 100%;
+  }
+  .btn-img {
+    font-size: 12px;
     font-weight: 600;
-    color: var(--text-muted);
-    margin-top: 6px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: var(--primary-700);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s ease;
+  }
+  .btn-img:hover {
+    background: #eff6ff;
+    border-color: var(--primary-600);
+  }
+  .btn-img-danger {
+    color: #dc2626;
+    border-color: #fecaca;
+  }
+  .btn-img-danger:hover {
+    background: #fef2f2;
+    border-color: #f87171;
   }
 
   #fieldForm {
@@ -248,7 +315,8 @@
     <!-- STEP 3: REVIEW -->
     <div class="wiz" id="w3">
       <div class="form-card">
-        <h3 style="color:var(--primary-700); font-size:17px; font-weight:700; margin-bottom:12px;">✅ তথ্য মিলিয়ে নিন ও প্রয়োজন হলে সংশোধন করুন</h3>
+        <h3 style="color:var(--primary-700); font-size:17px; font-weight:700; margin-bottom:6px;">✅ তথ্য মিলিয়ে নিন ও প্রয়োজন হলে সংশোধন করুন</h3>
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">কাগজপত্রে ছবি, স্বাক্ষর বা কোনো তথ্য না থাকলে নিচের খালি ঘরে লিখে দিন অথবা ছবি/স্বাক্ষর আপলোড করে যুক্ত করুন।</p>
         <div class="imgprev" id="imgPrev"></div>
         <div id="fieldForm"></div>
         <div style="height:18px;"></div>
@@ -285,7 +353,7 @@
 <script src="/js/app.js?v=16"></script>
 <script>
 const API='/nid-engine';
-let S={jobId:null,fields:{},pdfBlob:null};
+let S={jobId:null,fields:{},photo:null,sign:null,pdfBlob:null};
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function showErr(m){const e=document.getElementById('err');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),6000);}
 function showOk(m){const e=document.getElementById('ok');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),4000);}
@@ -307,6 +375,133 @@ async function authFetch(url,opts){
   if(r.status===401&&await ABC.refreshAccess()){opts.headers=Object.assign({},opts.headers,authHeaders());r=await fetch(url,opts);}
   return r;
 }
+
+const STANDARD_FIELDS = [
+  { key: 'নাম:', label: 'নাম (বাংলা)', placeholder: 'নাম বাংলায় লিখুন' },
+  { key: 'Name:', label: 'Name (English)', placeholder: 'Name in English' },
+  { key: 'পিতা:', label: 'পিতার নাম', placeholder: 'পিতার নাম লিখুন' },
+  { key: 'মাতা:', label: 'মাতার নাম', placeholder: 'মাতার নাম লিখুন' },
+  { key: 'Date of Birth:', label: 'জন্ম তারিখ', placeholder: 'যেমন: 01 Jan 1990 বা ০১/০১/১৯৯০' },
+  { key: 'ID NO:', label: 'এনআইডি / ভোটার আইডি নম্বর', placeholder: '১০, ১৩ বা ১৭ সংখ্যার নম্বর' },
+  { key: 'জন্মস্থান:', label: 'জন্মস্থান (জেলা)', placeholder: 'যেমন: ঢাকা, বগুড়া ইত্যাদি' },
+  { key: '/Blood Group:', label: 'রক্তের গ্রুপ (Blood Group)', placeholder: 'যেমন: A+, B+, O+, AB+' },
+  { key: 'প্রদানের তারিখ:', label: 'প্রদানের তারিখ', placeholder: 'যেমন: ১৬/০৮/২০২৬' },
+  { key: 'Pin', label: 'পিন কোড (Pin - ঐচ্ছিক)', placeholder: '১৭ সংখ্যার পিন (বারকোডের জন্য)' },
+  { key: 'ঠিকানা:', label: 'ঠিকানা (সম্পূর্ণ ঠিকানা)', placeholder: 'বাসা/হোল্ডিং, গ্রাম/মহল্লা, ডাকঘর, উপজেলা, জেলা...', full: true }
+];
+
+function renderImagesUI(){
+  const ip=document.getElementById('imgPrev');
+  if(!ip) return;
+  ip.innerHTML = `
+    <div class="img-slot-card">
+      <div class="img-slot-header">👤 আবেদনকারীর ছবি</div>
+      <div class="img-preview-box ${S.photo ? '' : 'empty'}">
+        ${S.photo ? `<img src="${esc(S.photo.dataUrl)}" alt="ছবি">` : `
+          <div style="font-size:26px;margin-bottom:4px;">👤</div>
+          <div style="font-size:12px;font-weight:600;">ছবি নেই</div>
+        `}
+      </div>
+      <div class="img-btn-group">
+        <label class="btn-img">
+          ${S.photo ? '📷 ছবি বদলান' : '➕ ছবি যুক্ত করুন'}
+          <input type="file" accept="image/*" style="display:none;" onchange="handleImageUpload('photo', this)">
+        </label>
+        ${S.photo ? `<button type="button" class="btn-img btn-img-danger" onclick="removeImage('photo')">🗑️ মুছুন</button>` : ''}
+      </div>
+    </div>
+
+    <div class="img-slot-card">
+      <div class="img-slot-header">✍️ স্বাক্ষর / টিপসই</div>
+      <div class="img-preview-box sign-box ${S.sign ? '' : 'empty'}">
+        ${S.sign ? `<img src="${esc(S.sign.dataUrl)}" alt="স্বাক্ষর">` : `
+          <div style="font-size:24px;margin-bottom:4px;">✍️</div>
+          <div style="font-size:12px;font-weight:600;">স্বাক্ষর/টিপসই নেই</div>
+        `}
+      </div>
+      <div class="img-btn-group">
+        <label class="btn-img">
+          ${S.sign ? '✍️ স্বাক্ষর বদলান' : '➕ স্বাক্ষর যুক্ত করুন'}
+          <input type="file" accept="image/*" style="display:none;" onchange="handleImageUpload('sign', this)">
+        </label>
+        ${S.sign ? `<button type="button" class="btn-img btn-img-danger" onclick="removeImage('sign')">🗑️ মুছুন</button>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function handleImageUpload(kind, input){
+  const f = input.files && input.files[0];
+  if(!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    if(kind === 'photo'){
+      S.photo = { name: 'photo.png', dataUrl: r.result };
+      showOk('ছবি যুক্ত করা হয়েছে ✓');
+    } else {
+      S.sign = { name: 'sign.png', dataUrl: r.result };
+      showOk('স্বাক্ষর/টিপসই যুক্ত করা হয়েছে ✓');
+    }
+    renderImagesUI();
+  };
+  r.readAsDataURL(f);
+}
+
+function removeImage(kind){
+  if(kind === 'photo'){
+    S.photo = null;
+    showOk('ছবি বাদ দেওয়া হয়েছে');
+  } else {
+    S.sign = null;
+    showOk('স্বাক্ষর বাদ দেওয়া হয়েছে');
+  }
+  renderImagesUI();
+}
+
+function renderFieldsUI(){
+  const ff = document.getElementById('fieldForm');
+  if(!ff) return;
+  ff.innerHTML = '';
+
+  const fields = Object.assign({}, S.fields || {});
+  if(!fields['/Blood Group:'] && fields['Blood Group:']){
+    fields['/Blood Group:'] = fields['Blood Group:'];
+  }
+
+  const renderedKeys = new Set();
+
+  STANDARD_FIELDS.forEach((sf, i) => {
+    renderedKeys.add(sf.key);
+    const val = fields[sf.key] || '';
+    const d = document.createElement('div');
+    d.className = 'field' + (sf.full ? ' full' : '');
+    const id = 'std_fld_' + i;
+    if(sf.full){
+      d.innerHTML = '<label>' + esc(sf.label) + '</label>' +
+        '<textarea id="' + id + '" rows="3" data-k="' + esc(sf.key) + '" placeholder="' + esc(sf.placeholder) + '">' + esc(val) + '</textarea>';
+    } else {
+      d.innerHTML = '<label>' + esc(sf.label) + '</label>' +
+        '<input id="' + id + '" value="' + esc(val) + '" data-k="' + esc(sf.key) + '" placeholder="' + esc(sf.placeholder) + '">';
+    }
+    ff.appendChild(d);
+  });
+
+  Object.keys(fields).forEach((k, idx) => {
+    if(renderedKeys.has(k) || k === 'Blood Group:' || k.startsWith('_')) return;
+    const d = document.createElement('div');
+    d.className = 'field';
+    const isAddr = /address|ঠিকানা/i.test(k);
+    if(isAddr) d.classList.add('full');
+    const id = 'extra_fld_' + idx;
+    if(isAddr){
+      d.innerHTML = '<label>' + esc(k) + '</label><textarea id="' + id + '" rows="3" data-k="' + esc(k) + '">' + esc(fields[k]) + '</textarea>';
+    } else {
+      d.innerHTML = '<label>' + esc(k) + '</label><input id="' + id + '" value="' + esc(fields[k]) + '" data-k="' + esc(k) + '">';
+    }
+    ff.appendChild(d);
+  });
+}
+
 async function doExtract(){
   const f=document.getElementById('pdfFile').files[0];
   if(!f){showErr('PDF ফাইল বেছে নিন।');return;}
@@ -317,59 +512,48 @@ async function doExtract(){
     const r=await authFetch('/api'+API+'/extract',{method:'POST',body:fd});
     const j=await r.json();
     if(!r.ok||!j.ok)throw new Error(j.error==='PDF_TOO_LARGE'?'ফাইল অনেক বড়।':j.error==='NOT_A_PDF'?'শুধু PDF দিন।':'তথ্য বের করা যায়নি। আবার চেষ্টা করুন।');
-    S.jobId=j.jobId;S.fields=j.fields||{};
-    const ip=document.getElementById('imgPrev');ip.innerHTML='';
-    S.images=j.images||[];
-    S.images.forEach((im,idx)=>{
-      const fig=document.createElement('figure');
-      const label=/sign/i.test(im.name)?'স্বাক্ষর':/photo/i.test(im.name)?'ছবি':im.name;
-      fig.innerHTML='<img alt="'+esc(label)+'" src="'+im.dataUrl+'" id="imgPrev'+idx+'"><figcaption>'+esc(label)+'</figcaption><label style="cursor:pointer;color:var(--primary-600);font-size:12px;display:inline-block;margin-top:4px;font-weight:600;">📷 ছবি বদলান<input type="file" accept="image/*" style="display:none" onchange="replaceImg('+idx+',this)"></label>';
-      ip.appendChild(fig);
+    S.jobId=j.jobId;
+    S.fields=j.fields||{};
+    S.photo = null;
+    S.sign = null;
+    (j.images || []).forEach(im => {
+      if (/photo/i.test(im.name)) S.photo = { name: 'photo.png', dataUrl: im.dataUrl };
+      else if (/sign/i.test(im.name)) S.sign = { name: 'sign.png', dataUrl: im.dataUrl };
     });
-    const ff=document.getElementById('fieldForm');ff.innerHTML='';
-    const orderKeys=Object.keys(S.fields).sort((a,b)=>{
-      const pri=k=>{
-        const kl=k.toLowerCase();
-        if(/nid|national.*id/.test(kl))return 1;
-        if(/pin/.test(kl))return 2;
-        if(/birth|dob|জন্ম/.test(kl)&&/date|তারিখ/.test(kl))return 3;
-        if(/address|ঠিকানা|division|district|upazila|union|ward|village|post|mouza/.test(kl))return 99;
-        return 50;
-      };
-      return pri(a)-pri(b);
-    });
-    orderKeys.forEach((k,i)=>{
-      const d=document.createElement('div');d.className='field';
-      const id='fld'+i;
-      const isAddr=/address|ঠিকানা/i.test(k);
-      if(isAddr){
-        d.classList.add('full');
-        d.innerHTML='<label>'+esc(k)+'</label><textarea id="'+id+'" rows="3" data-k="'+esc(k)+'">'+esc(S.fields[k])+'</textarea>';
-      }else{
-        d.innerHTML='<label>'+esc(k)+'</label><input id="'+id+'" value="'+esc(S.fields[k])+'" data-k="'+esc(k)+'">';
-      }
-      ff.appendChild(d);
-    });
-    go(3);showOk('তথ্য পাওয়া গেছে ✓ ভুল থাকলে ঠিক করে দিন');
+
+    renderImagesUI();
+    renderFieldsUI();
+    go(3);
+    showOk('তথ্য পাওয়া গেছে ✓ ভুল থাকলে ঠিক করে দিন বা ছবি/স্বাক্ষর যুক্ত করুন');
   }catch(e){go(1);showErr(e.message||'তথ্য বের করা যায়নি।');}
   busy('b1',false);
 }
+
 function collectFields(){
   const out={};
   document.querySelectorAll('#fieldForm input,#fieldForm textarea').forEach(inp=>{out[inp.dataset.k]=inp.value;});
   return out;
 }
-function replaceImg(idx,input){
-  const f=input.files[0]; if(!f) return;
-  const r=new FileReader();
-  r.onload=()=>{S.images[idx].dataUrl=r.result; document.getElementById('imgPrev'+idx).src=r.result; showOk('ছবি আপডেট হয়েছে ✓');};
-  r.readAsDataURL(f);
-}
+
 async function doBuild(){
   busy('b3',true,'কার্ড তৈরি হচ্ছে…');
   try{
-    const r=await ABC.api(API+'/build',{method:'POST',body:{jobId:S.jobId,fields:collectFields(),images:S.images}});
-    if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.error==='JOB_NOT_FOUND'?'সেশন শেষ — আবার আপলোড করুন।':'কার্ড তৈরি ব্যর্থ।');}
+    const imgs = [];
+    if(S.photo && S.photo.dataUrl) imgs.push(S.photo);
+    if(S.sign && S.sign.dataUrl) imgs.push(S.sign);
+
+    const r=await ABC.api(API+'/build',{
+      method:'POST',
+      body:{
+        jobId:S.jobId,
+        fields:collectFields(),
+        images:imgs
+      }
+    });
+    if(!r.ok){
+      const j=await r.json().catch(()=>({}));
+      throw new Error(j.error==='JOB_NOT_FOUND'?'সেশন শেষ — আবার আপলোড করুন।':'কার্ড তৈরি ব্যর্থ।');
+    }
     S.pdfBlob=await r.blob();
     document.getElementById('cardFrame').src=URL.createObjectURL(S.pdfBlob);
     go(4);showOk('কার্ড প্রস্তুত ✓');

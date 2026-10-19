@@ -174,12 +174,21 @@ async function buildCard(jobId, fieldsJson, images, ownerId) {
     // Optional: replace extracted images with user-uploaded ones (dataURLs)
     if (Array.isArray(images)) {
         const imgDir = path.join(dir, 'work', 'images');
+        try { fs.mkdirSync(imgDir, { recursive: true }); } catch (_) {}
+        const passedNames = new Set();
         for (const im of images.slice(0, 10)) {
             if (!im || !im.name || !im.dataUrl || typeof im.dataUrl !== 'string') continue;
             const safeName = path.basename(String(im.name)).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+            passedNames.add(safeName);
             const m = im.dataUrl.match(/^data:image\/(png|jpe?g|webp);base64,(.+)$/);
             if (!m) continue;
             try { fs.writeFileSync(path.join(imgDir, safeName), Buffer.from(m[2], 'base64')); } catch (e) {}
+        }
+        if (!passedNames.has('photo.png') && fs.existsSync(path.join(imgDir, 'photo.png'))) {
+            try { fs.unlinkSync(path.join(imgDir, 'photo.png')); } catch (_) {}
+        }
+        if (!passedNames.has('sign.png') && fs.existsSync(path.join(imgDir, 'sign.png'))) {
+            try { fs.unlinkSync(path.join(imgDir, 'sign.png')); } catch (_) {}
         }
     }
     // Sanitize: keys/values must be strings, cap counts and sizes

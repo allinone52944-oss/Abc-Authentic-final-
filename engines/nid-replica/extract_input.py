@@ -1032,29 +1032,58 @@ def extract(pdf_path="input.pdf", work_dir="work"):
     except Exception:
         pass
 
-    images = {}
+    candidates = []
     for pno, page in enumerate(doc):
-        try:
-            pg_area = page.rect.width * page.rect.height
-        except Exception:
-            pg_area = 0
         for i, img in enumerate(page.get_images(full=True)):
             xref, smask = img[0], img[1]
             w_px = img[2] if len(img) > 2 else 0
             h_px = img[3] if len(img) > 3 else 0
-            # full-page scan image-ke photo/sign dhoro NA (80%+ area)
-            # (get_image_bbox-e tuple lage — int xref-e "bad image name" dey)
-            try:
-                ibb = page.get_image_bbox(img)
-                if ibb and pg_area and (ibb.width * ibb.height) / pg_area > 0.8:
-                    continue
-            except Exception:
-                pass
-            kind = classify_input_image(w_px, h_px)
-            if kind == "other" or kind in images:
+            if w_px < 25 or h_px < 25:
                 continue
-            pix = pymupdf.Pixmap(doc, xref)
-            if smask:  # soft-mask থাকলে স্বচ্ছতা (alpha) ধরে রাখো
+            r = w_px / max(1, h_px)
+            if r > 6.0 or r < 0.2:
+                continue
+            candidates.append({
+                "page": page, "xref": xref, "smask": smask,
+                "w": w_px, "h": h_px, "r": r,
+                "area": w_px * h_px, "pno": pno,
+            })
+
+    assigned = {}
+    if candidates:
+        wide_signs = [c for c in candidates if c["r"] >= 1.25]
+        portraits = [c for c in candidates if 0.45 <= c["r"] < 1.25]
+
+        if wide_signs and portraits:
+            portraits.sort(key=lambda c: c["area"], reverse=True)
+            assigned["photo"] = portraits[0]
+            assigned["sign"] = wide_signs[0]
+        elif len(portraits) >= 2:
+            portraits.sort(key=lambda c: c["area"], reverse=True)
+            assigned["photo"] = portraits[0]
+            assigned["sign"] = portraits[1]
+        elif wide_signs and not portraits:
+            assigned["sign"] = wide_signs[0]
+            others = [c for c in candidates if c != wide_signs[0]]
+            if others:
+                assigned["photo"] = others[0]
+        elif len(candidates) >= 2:
+            cands_sorted = sorted(candidates, key=lambda c: c["area"], reverse=True)
+            assigned["photo"] = cands_sorted[0]
+            assigned["sign"] = cands_sorted[1]
+        elif len(portraits) == 1:
+            assigned["photo"] = portraits[0]
+        elif len(wide_signs) == 1:
+            assigned["sign"] = wide_signs[0]
+        elif candidates:
+            assigned["photo"] = candidates[0]
+
+    images = {}
+    for kind, c in assigned.items():
+        try:
+            pix = pymupdf.Pixmap(doc, c["xref"])
+            smask = c["smask"]
+            if smask:
                 m = pymupdf.Pixmap(doc, smask)
                 if m.n > 1:
                     m = pymupdf.Pixmap(pymupdf.csGRAY, m)
@@ -1066,9 +1095,9 @@ def extract(pdf_path="input.pdf", work_dir="work"):
             fname = os.path.join(work_dir, "images", "%s.png" % kind)
             pix.save(fname)
             images[kind] = fname
+        except Exception as e:
+            print("Failed to save %s image:" % kind, e)
 
-    with open(os.path.join(work_dir, "input_data.json"), "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=1)
     with open(os.path.join(work_dir, "input_images.json"), "w", encoding="utf-8") as f:
         json.dump(images, f, ensure_ascii=False, indent=1)
 
