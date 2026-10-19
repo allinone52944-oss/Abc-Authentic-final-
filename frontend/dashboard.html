@@ -16,17 +16,38 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <title>ড্যাশবোর্ড - All In One (Abc Authentic)</title>
 <style>
-  /* Extra Dashboard Polish */
+  /* ==========================================================
+     PREMIUM DASHBOARD POLISH (DESKTOP & MOBILE)
+     ========================================================== */
+
+  /* Top Navigation Bar */
   .dash-top {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
+    margin-bottom: 20px;
     background: #ffffff;
-    padding: 16px 20px;
-    border-radius: var(--r-lg);
+    padding: 16px 22px;
+    border-radius: var(--r-xl);
     border: 1px solid var(--border-light);
     box-shadow: var(--shadow-xs);
+  }
+
+  .dash-top-title h2 {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1.2;
+  }
+
+  .dash-top-title p {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 3px;
+    font-weight: 500;
   }
 
   .user-badge-wrap {
@@ -35,60 +56,207 @@
     gap: 12px;
   }
 
+  .quick-bal-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    padding: 6px 12px;
+    border-radius: var(--r-full);
+    font-size: 13px;
+    font-weight: 700;
+    color: #1d4ed8;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .quick-bal-pill:hover {
+    background: #dbeafe;
+    transform: translateY(-1px);
+  }
+
   .avatar {
-    width: 44px;
-    height: 44px;
-    border-radius: var(--r-md);
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
     background: linear-gradient(135deg, #1e40af, #3b82f6);
     color: #ffffff;
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.22);
+    border: 2px solid #ffffff;
+  }
+
+  .btn-logout {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #dc2626;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .btn-logout:hover {
+    background: #fee2e2;
+    border-color: #f87171;
+    transform: translateY(-1px);
+  }
+
+  /* Fintech Hero Balance Card */
+  .hero-blue {
+    background: linear-gradient(135deg, #091326 0%, #1e3a8a 45%, #2563eb 100%);
+    color: #ffffff;
+    border-radius: var(--r-xl);
+    padding: 26px 28px;
+    margin-bottom: 22px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 14px 30px -8px rgba(30, 58, 138, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .hero-blue::before {
+    content: '';
+    position: absolute;
+    top: -50px;
+    right: -40px;
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.14) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-blue::after {
+    content: '';
+    position: absolute;
+    bottom: -40px;
+    left: 20%;
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(96, 165, 250, 0.2) 0%, transparent 70%);
+    pointer-events: none;
   }
 
   .hero-flex {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-end;
     position: relative;
     z-index: 2;
   }
 
-  .hero-action {
+  .hero-bal-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.82);
     display: flex;
-    gap: 10px;
+    align-items: center;
+    gap: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 
-  .btn-add {
+  .hero-bal-toggle {
+    background: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    cursor: pointer;
+    line-height: 1.4;
+  }
+
+  .hero-blue .amt {
+    font-size: 38px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin: 8px 0 14px;
+    color: #ffffff;
+    line-height: 1.1;
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 2;
+  }
+
+  .btn-hero-primary {
     background: #ffffff;
-    color: var(--primary-700);
+    color: #1e40af;
     border: none;
-    padding: 12px 22px;
+    padding: 11px 20px;
     border-radius: var(--r-md);
     font-weight: 700;
     font-size: 14px;
     cursor: pointer;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
     display: inline-flex;
     align-items: center;
     gap: 6px;
     transition: all 0.2s ease;
   }
-
-  .btn-add:hover {
+  .btn-hero-primary:hover {
     background: #f8fafc;
-    transform: translateY(-1px);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
   }
 
+  .btn-hero-glass {
+    background: rgba(255, 255, 255, 0.16);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    padding: 11px 18px;
+    border-radius: var(--r-md);
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    backdrop-filter: blur(8px);
+    transition: all 0.2s ease;
+  }
+  .btn-hero-glass:hover {
+    background: rgba(255, 255, 255, 0.26);
+    transform: translateY(-2px);
+  }
+
+  .hero-micro-bar {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+    position: relative;
+    z-index: 2;
+  }
+
+  /* KPI Stats Grid (Desktop) */
   .stats {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 16px;
-    margin-bottom: 24px;
+    margin-bottom: 22px;
   }
 
   .stat-card {
@@ -97,77 +265,198 @@
     border-radius: var(--r-lg);
     padding: 18px 20px;
     cursor: pointer;
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--shadow-xs);
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     display: flex;
     align-items: center;
-    gap: 16px;
+    justify-content: space-between;
   }
-
   .stat-card:hover {
     transform: translateY(-2px);
     border-color: #cbd5e1;
     box-shadow: var(--shadow-md);
   }
-
+  .stat-card-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
   .stat-card .ico {
     width: 46px;
     height: 46px;
-    border-radius: var(--r-md);
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
+    font-size: 22px;
     flex-shrink: 0;
   }
-
   .stat-card .num {
     font-size: 24px;
     font-weight: 800;
     color: var(--text-main);
     line-height: 1.1;
   }
-
   .stat-card .lbl {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--text-muted);
     margin-top: 2px;
   }
+  .stat-arrow {
+    color: #94a3b8;
+    font-size: 18px;
+    transition: transform 0.2s ease, color 0.2s ease;
+  }
+  .stat-card:hover .stat-arrow {
+    transform: translateX(3px);
+    color: #2563eb;
+  }
 
+  /* Active / Recent Orders Tracker */
+  .recent-orders-card {
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-xl);
+    padding: 20px 24px;
+    margin-bottom: 22px;
+    box-shadow: var(--shadow-xs);
+  }
+  .recent-orders-hdr {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .recent-orders-hdr h3 {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .recent-orders-hdr a {
+    color: #2563eb;
+    font-weight: 700;
+    font-size: 13px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .recent-orders-hdr a:hover {
+    text-decoration: underline;
+  }
+  .recent-order-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    border-radius: var(--r-md);
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 10px;
+    transition: all 0.15s ease;
+  }
+  .recent-order-item:last-child {
+    margin-bottom: 0;
+  }
+  .recent-order-item:hover {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+  }
+  .ro-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .ro-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .ro-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+  .ro-meta {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 2px;
+  }
+  .ro-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .ro-btn {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #1e40af;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .ro-btn:hover {
+    background: #1e40af;
+    color: #ffffff;
+    border-color: #1e40af;
+  }
+
+  /* Two Column Core Layout */
   .two-col {
     display: grid;
-    grid-template-columns: 1.5fr 1fr;
+    grid-template-columns: 1.55fr 1fr;
     gap: 20px;
   }
 
   .svc-grid2 {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    gap: 14px;
   }
 
   .svc2 {
     background: #ffffff;
     border: 1px solid var(--border-light);
-    border-radius: var(--r-md);
-    padding: 16px;
+    border-radius: var(--r-lg);
+    padding: 16px 14px;
     text-align: center;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
   }
-
   .svc2:hover {
-    transform: translateY(-2px);
-    border-color: var(--primary-400);
-    box-shadow: var(--shadow-md);
+    transform: translateY(-3px);
+    border-color: #93c5fd;
+    box-shadow: 0 10px 22px -4px rgba(37, 99, 235, 0.14);
   }
-
   .svc2 .ico {
-    font-size: 28px;
+    font-size: 32px;
     margin-bottom: 8px;
+    transition: transform 0.2s ease;
   }
-
+  .svc2:hover .ico {
+    transform: scale(1.1);
+  }
   .svc2 h4 {
     font-size: 14px;
     font-weight: 700;
@@ -175,15 +464,31 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    width: 100%;
   }
-
   .svc2 .pr {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 800;
     color: var(--primary-700);
-    margin-top: 6px;
+    background: #eff6ff;
+    padding: 3px 10px;
+    border-radius: var(--r-full);
+    margin-top: 8px;
+    border: 1px solid #dbeafe;
   }
 
+  .help-card-desk {
+    background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+    border: 1px solid #bfdbfe;
+    border-radius: var(--r-lg);
+    padding: 16px;
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* Banner Strip */
   .bn-strip {
     margin-bottom: 20px;
     overflow: hidden;
@@ -199,59 +504,144 @@
     width: 100% !important;
     max-width: 100% !important;
   }
-  @media (max-width: 768px) {
-    .bn-strip {
-      margin-bottom: 16px;
-      border-radius: 14px;
-    }
-    .bn-strip .bn {
-      padding: 18px 12px !important;
-    }
-    .bn-strip .bn h2 {
-      font-size: 19px !important;
-      line-height: 1.3 !important;
-    }
-    .bn-strip .bn p {
-      font-size: 13px !important;
-    }
-  }
   .bn-strip.show { opacity: 1; }
 
-  /* Mobile Exclusive Elements */
+  /* ==========================================================
+     MOBILE EXCLUSIVE STYLES
+     ========================================================== */
   .mobile-only { display: none; }
+
   .m-top {
-    background: linear-gradient(135deg, #091326 0%, #1e3a8a 100%);
-    color: #fff;
-    padding: 24px 20px 36px;
-    border-radius: 0 0 24px 24px;
+    background: linear-gradient(135deg, #091326 0%, #1e3a8a 60%, #1e40af 100%);
+    color: #ffffff;
+    padding: 22px 18px 38px;
+    border-radius: 0 0 26px 26px;
+    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.15);
   }
+
   .m-bal {
     background: #ffffff;
-    margin: -24px 16px 0;
+    margin: -26px 14px 0;
     border-radius: var(--r-xl);
-    padding: 20px;
-    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+    padding: 18px 18px 14px;
+    box-shadow: 0 12px 28px -6px rgba(15, 23, 42, 0.1);
+    border: 1px solid var(--border-light);
+  }
+
+  .m-bal-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border: 1px solid var(--border-light);
+    padding-bottom: 14px;
+    border-bottom: 1px solid #f1f5f9;
   }
-  .m-content { padding: 20px 16px; }
+
+  .m-quick-actions {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    padding-top: 14px;
+    text-align: center;
+  }
+
+  .m-qa-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    color: var(--text-main);
+  }
+
+  .m-qa-ico {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    transition: transform 0.15s ease;
+  }
+  .m-qa-item:active .m-qa-ico {
+    transform: scale(0.92);
+  }
+  .m-qa-lbl {
+    font-size: 11px;
+    font-weight: 700;
+    color: #334155;
+    line-height: 1.2;
+  }
+
+  .m-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .m-stat-card {
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-md);
+    padding: 12px 10px;
+    text-align: center;
+    cursor: pointer;
+    box-shadow: var(--shadow-xs);
+  }
+  .m-stat-card .num {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text-main);
+  }
+  .m-stat-card .lbl {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .m-content { padding: 18px 14px 90px; }
+
+  .m-active-order-pill {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    cursor: pointer;
+    box-shadow: var(--shadow-xs);
+  }
+
   .m-svc-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 12px;
   }
 
+  /* Responsive Switcher */
   @media (max-width: 768px) {
-    .desktop { display: none; }
-    .mobile-only { display: block; }
+    .desktop { display: none !important; }
+    .mobile-only { display: block !important; }
+    .bn-strip {
+      margin-bottom: 16px;
+      border-radius: 14px;
+    }
+    .bn-strip .bn {
+      padding: 16px 12px !important;
+    }
   }
 </style>
 </head>
 <body>
 
-<!-- Desktop Layout -->
+<!-- ==========================================================
+     DESKTOP LAYOUT
+     ========================================================== -->
 <div class="desktop">
   <div class="sidebar">
     <div class="side-logo">
@@ -267,69 +657,105 @@
       <div class="side-link" onclick="location.href='/orders.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span> আমার অর্ডার</div>
       <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg></span> ওয়ালেট ও রিচার্জ</div>
       <div class="side-link" onclick="location.href='/profile.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span> পার্সোনাল প্রোফাইল</div>
-      <div class="side-link" id="adminLink" style="display:none;" onclick="location.href='/admin.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> এডমিন কন্ট্রোল</div>
+      <div class="side-link" id="adminLink" style="display:none;" onclick="location.href='/admin.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> এডমিন কন্ট্রোল</div>
     </nav>
   </div>
 
   <div class="main">
     <!-- Topbar -->
     <div class="dash-top">
-      <div>
+      <div class="dash-top-title">
         <h2 id="greet">স্বাগতম 👋</h2>
         <p>আপনার অ্যাকাউন্ট ও সেবাসমূহ প্রস্তুত রয়েছে</p>
       </div>
       <div class="user-badge-wrap">
-        <button id="greetVoiceBtn" style="display:none;background:#f8fafc;border:1px solid #cbd5e1;padding:7px 12px;border-radius:10px;cursor:pointer;font-size:13px;align-items:center;gap:6px;font-weight:600;color:#334155;transition:all 0.2s;" title="ধর্মভিত্তিক শুভেচ্ছা ভয়েস শুনুন">🔊 <span>ভয়েস শুনুন</span></button>
-        <div class="avatar" id="avatar">র</div>
-        <button id="logoutBtn" style="background:#fef2f2;border:1px solid #fecaca;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:16px;color:#dc2626;" title="লগআউট">⏻</button>
+        <div class="quick-bal-pill" onclick="location.href='/wallet.html'" title="ব্যালেন্স দেখুন বা রিচার্জ করুন">
+          <span>💳 ওয়ালেট:</span>
+          <span id="quickBalText">৳০</span>
+        </div>
+        <button id="greetVoiceBtn" style="display:none;background:#f8fafc;border:1px solid #cbd5e1;padding:7px 14px;border-radius:10px;cursor:pointer;font-size:13px;align-items:center;gap:6px;font-weight:600;color:#334155;transition:all 0.2s;" title="ধর্মভিত্তিক শুভেচ্ছা ভয়েস শুনুন">🔊 <span>ভয়েস শুনুন</span></button>
+        <div class="avatar" id="avatar" title="প্রোফাইল">র</div>
+        <button class="btn-logout" id="logoutBtn" title="নিরাপদে লগআউট করুন">⏻</button>
       </div>
     </div>
 
     <!-- Banner Strip (Desktop) -->
     <div class="bn-strip" id="bnStrip" style="display:none;"></div>
 
-    <!-- Balance Hero -->
+    <!-- Fintech Balance Hero -->
     <div class="hero-blue">
       <div class="hero-flex">
         <div>
-          <div class="wb">✨ বর্তমান ওয়ালেট ব্যালেন্স</div>
+          <div class="hero-bal-label">
+            <span>✨ বর্তমান ওয়ালেট ব্যালেন্স</span>
+            <button class="hero-bal-toggle" id="balToggleDesk" onclick="toggleBalVisibility()" title="ব্যালেন্স লুকান বা দেখুন">👁️ লুকান</button>
+          </div>
           <div class="amt" id="balancePill">৳০</div>
         </div>
-        <div class="hero-action">
-          <button class="btn-add" onclick="location.href='/wallet.html'">+ ইনস্ট্যান্ট টাকা যোগ করুন</button>
+        <div class="hero-actions">
+          <button class="btn-hero-primary" onclick="location.href='/wallet.html'">+ ইনস্ট্যান্ট টাকা যোগ</button>
+          <button class="btn-hero-glass" onclick="location.href='/wallet.html#coupon'">🎁 ক্যাশব্যাক ও কুপন</button>
+          <button class="btn-hero-glass" onclick="location.href='/wallet.html'">📜 হিস্ট্রি</button>
         </div>
+      </div>
+      <div class="hero-micro-bar">
+        <span>🛡️ ১০০% সুরক্ষিত ডিজিটাল ওয়ালেট • অটোমেটেড ইনস্ট্যান্ট প্রসেসিং</span>
+        <span>⚡ ২৪/৭ কাস্টমার সাপোর্ট সার্ভিস</span>
       </div>
     </div>
 
     <!-- 4 KPI Stats Grid -->
     <div class="stats">
-      <div class="stat-card" onclick="location.href='/orders.html'">
-        <div class="ico" style="background:#dbeafe;color:#1d4ed8;">📦</div>
-        <div>
-          <div class="num" id="hubOrders">০</div>
-          <div class="lbl">মোট অর্ডার</div>
+      <div class="stat-card" onclick="location.href='/orders.html'" title="সকল অর্ডার দেখুন">
+        <div class="stat-card-left">
+          <div class="ico" style="background:#dbeafe;color:#1d4ed8;">📦</div>
+          <div>
+            <div class="num" id="hubOrders">০</div>
+            <div class="lbl">মোট অর্ডার</div>
+          </div>
         </div>
+        <span class="stat-arrow">→</span>
       </div>
-      <div class="stat-card" onclick="location.href='/orders.html'">
-        <div class="ico" style="background:#dcfce7;color:#166534;">✅</div>
-        <div>
-          <div class="num" id="hubOrdersDone">০</div>
-          <div class="lbl">সম্পন্ন হয়েছে</div>
+      <div class="stat-card" onclick="location.href='/orders.html?status=completed'" title="সম্পন্ন হওয়া অর্ডার">
+        <div class="stat-card-left">
+          <div class="ico" style="background:#dcfce7;color:#166534;">✅</div>
+          <div>
+            <div class="num" id="hubOrdersDone">০</div>
+            <div class="lbl">সম্পন্ন হয়েছে</div>
+          </div>
         </div>
+        <span class="stat-arrow">→</span>
       </div>
-      <div class="stat-card" onclick="location.href='/orders.html'">
-        <div class="ico" style="background:#fef3c7;color:#92400e;">⏳</div>
-        <div>
-          <div class="num" id="hubOrdersSub">০</div>
-          <div class="lbl">চলমান প্রসেস</div>
+      <div class="stat-card" onclick="location.href='/orders.html?status=processing'" title="বর্তমানে প্রসেসিং হচ্ছে">
+        <div class="stat-card-left">
+          <div class="ico" style="background:#fef3c7;color:#92400e;">⏳</div>
+          <div>
+            <div class="num" id="hubOrdersSub">০</div>
+            <div class="lbl">চলমান প্রসেস</div>
+          </div>
         </div>
+        <span class="stat-arrow">→</span>
       </div>
-      <div class="stat-card" onclick="location.href='/services.html'">
-        <div class="ico" style="background:#ede9fe;color:#6b21a8;">🛎️</div>
-        <div>
-          <div class="num" id="hubServices">০</div>
-          <div class="lbl">উপলব্ধ সেবা</div>
+      <div class="stat-card" onclick="location.href='/services.html'" title="সকল সেবা ব্রাউজ করুন">
+        <div class="stat-card-left">
+          <div class="ico" style="background:#ede9fe;color:#6b21a8;">🛎️</div>
+          <div>
+            <div class="num" id="hubServices">০</div>
+            <div class="lbl">উপলব্ধ সেবা</div>
+          </div>
         </div>
+        <span class="stat-arrow">→</span>
+      </div>
+    </div>
+
+    <!-- Active / Recent Orders Tracker (Desktop) -->
+    <div class="recent-orders-card">
+      <div class="recent-orders-hdr">
+        <h3><span>⚡ চলমান ও সাম্প্রতিক অর্ডার ট্র্যাকার</span></h3>
+        <a href="/orders.html">সকল অর্ডার দেখুন →</a>
+      </div>
+      <div id="recentOrdersDesk">
+        <div class="skel" style="height:52px;border-radius:10px;"></div>
       </div>
     </div>
 
@@ -337,62 +763,127 @@
     <div class="two-col">
       <div class="card">
         <h3>
-          <span>🛎️ জনপ্রিয় সেবা</span>
-          <a href="/services.html" style="color:#2563eb;font-weight:600;font-size:13px;text-decoration:none;">সবগুলো দেখুন →</a>
+          <span>🛎️ জনপ্রিয় ডিজিটাল সেবাসমূহ</span>
+          <a href="/services.html" style="color:#2563eb;font-weight:700;font-size:13px;text-decoration:none;">সবগুলো দেখুন →</a>
         </h3>
         <div class="svc-grid2" id="popularServices">
-          <div class="skel" style="height:100px;"></div>
-          <div class="skel" style="height:100px;"></div>
+          <div class="skel" style="height:110px;"></div>
+          <div class="skel" style="height:110px;"></div>
+          <div class="skel" style="height:110px;"></div>
+          <div class="skel" style="height:110px;"></div>
         </div>
       </div>
 
       <div class="card">
         <h3>
-          <span>🔔 জরুরি নোটিশ</span>
-          <a href="#" onclick="showNotices();return false;" style="color:#2563eb;font-weight:600;font-size:13px;text-decoration:none;">সব নোটিশ</a>
+          <span>🔔 জরুরি নোটিশ বোর্ড</span>
+          <a href="#" onclick="showNotices();return false;" style="color:#2563eb;font-weight:700;font-size:13px;text-decoration:none;">সব নোটিশ</a>
         </h3>
         <div id="noticeList" style="display:flex;flex-direction:column;gap:8px;">
-          <div class="skel" style="height:40px;"></div>
-          <div class="skel" style="height:40px;"></div>
+          <div class="skel" style="height:44px;"></div>
+          <div class="skel" style="height:44px;"></div>
+        </div>
+
+        <div class="help-card-desk">
+          <div>
+            <b style="font-size:13px;color:#1e3a8a;">সরাসরি সাহায্য প্রয়োজন?</b>
+            <p style="font-size:12px;color:#475569;margin-top:2px;">আমাদের হেল্পলাইনে WhatsApp-এ যোগাযোগ করুন।</p>
+          </div>
+          <button class="btn" style="padding:6px 14px;font-size:12px;" onclick="document.getElementById('waFab').click()">যোগাযোগ</button>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Mobile Layout -->
+<!-- ==========================================================
+     MOBILE LAYOUT
+     ========================================================== -->
 <div class="mobile-only">
+  <!-- Mobile Top Header -->
   <div class="m-top">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <div>
-        <h2 id="greetM" style="font-size:20px;font-weight:700;">স্বাগতম 👋</h2>
-        <p style="font-size:12px;opacity:0.8;margin-top:2px;">All In One ডিজিটাল প্ল্যাটফর্ম</p>
+        <h2 id="greetM" style="font-size:19px;font-weight:800;letter-spacing:-0.01em;">স্বাগতম 👋</h2>
+        <p style="font-size:12px;opacity:0.85;margin-top:2px;">All In One ডিজিটাল সার্ভিস প্ল্যাটফর্ম</p>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
-        <button id="greetVoiceBtnM" style="display:none;background:rgba(255,255,255,0.22);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:6px 10px;border-radius:8px;font-size:13px;align-items:center;gap:5px;cursor:pointer;" aria-label="সাউন্ড ভয়েস"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg><span>ভয়েস</span></button>
-        <button onclick="location.href='/profile.html'" aria-label="প্রোফাইল" style="background:rgba(255,255,255,0.22);border:1px solid rgba(255,255,255,0.3);color:#fff;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform 0.15s ease;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
+        <button id="greetVoiceBtnM" style="display:none;background:rgba(255,255,255,0.22);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:6px 10px;border-radius:10px;font-size:12px;align-items:center;gap:5px;cursor:pointer;" aria-label="সাউন্ড ভয়েস"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg><span>ভয়েস</span></button>
+        <button onclick="location.href='/profile.html'" aria-label="প্রোফাইল" style="background:rgba(255,255,255,0.22);border:1px solid rgba(255,255,255,0.3);color:#fff;width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
       </div>
     </div>
   </div>
 
+  <!-- Mobile Balance & 4-Action Grid -->
   <div class="m-bal">
-    <div>
-      <div style="font-size:12px;color:#64748b;font-weight:600;text-transform:uppercase;">ওয়ালেট ব্যালেন্স</div>
-      <div id="hubBalance" style="font-size:28px;font-weight:800;color:#1e40af;margin-top:2px;">৳০</div>
+    <div class="m-bal-row">
+      <div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">ওয়ালেট ব্যালেন্স</span>
+          <button class="hero-bal-toggle" style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;" onclick="toggleBalVisibility()">👁️</button>
+        </div>
+        <div id="hubBalance" style="font-size:28px;font-weight:800;color:#1e40af;margin-top:2px;">৳০</div>
+      </div>
+      <button class="btn" style="padding:10px 18px;font-size:13px;border-radius:12px;font-weight:700;" onclick="location.href='/wallet.html'">+ রিচার্জ</button>
     </div>
-    <button class="btn" style="padding:10px 18px;font-size:13px;border-radius:10px;" onclick="location.href='/wallet.html'">+ রিচার্জ</button>
+
+    <!-- 4 Mobile Quick Action Icons -->
+    <div class="m-quick-actions">
+      <div class="m-qa-item" onclick="location.href='/wallet.html'">
+        <div class="m-qa-ico" style="background:#eff6ff;color:#1d4ed8;">➕</div>
+        <div class="m-qa-lbl">টাকা যোগ</div>
+      </div>
+      <div class="m-qa-item" onclick="location.href='/orders.html'">
+        <div class="m-qa-ico" style="background:#f0fdf4;color:#166534;">📦</div>
+        <div class="m-qa-lbl">অর্ডার ট্র্যাক</div>
+      </div>
+      <div class="m-qa-item" onclick="location.href='/services.html'">
+        <div class="m-qa-ico" style="background:#faf5ff;color:#6b21a8;">🛎️</div>
+        <div class="m-qa-lbl">সকল সেবা</div>
+      </div>
+      <div class="m-qa-item" onclick="location.href='/wallet.html#coupon'">
+        <div class="m-qa-ico" style="background:#fff7ed;color:#c2410c;">🎁</div>
+        <div class="m-qa-lbl">কুপন ও বোনাস</div>
+      </div>
+    </div>
   </div>
 
+  <!-- Mobile Main Content -->
   <div class="m-content">
+    <!-- Mobile Active Order Pill -->
+    <div id="recentOrdersMob"></div>
+
+    <!-- Mobile 3 Stats Grid -->
+    <div class="m-stats-grid">
+      <div class="m-stat-card" onclick="location.href='/orders.html'">
+        <div class="num" id="mHubOrders">০</div>
+        <div class="lbl">মোট অর্ডার</div>
+      </div>
+      <div class="m-stat-card" onclick="location.href='/orders.html?status=processing'">
+        <div class="num" id="mHubOrdersSub" style="color:#d97706;">০</div>
+        <div class="lbl">চলমান প্রসেস</div>
+      </div>
+      <div class="m-stat-card" onclick="location.href='/orders.html?status=completed'">
+        <div class="num" id="mHubOrdersDone" style="color:#16a34a;">০</div>
+        <div class="lbl">সম্পন্ন</div>
+      </div>
+    </div>
+
+    <!-- Mobile Notice Alert -->
     <div id="mNotices" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px;font-size:13px;color:#1e40af;margin-bottom:16px;"></div>
+
+    <!-- Mobile Banner Strip -->
     <div class="bn-strip" id="bnStripM" style="display:none;"></div>
 
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <h3 style="font-size:16px;font-weight:700;">🛎️ আমাদের সেবাসমূহ</h3>
-      <a href="/services.html" style="font-size:13px;color:#2563eb;text-decoration:none;font-weight:600;">সবগুলো দেখুন →</a>
+    <!-- Mobile Services Section -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;margin-top:6px;">
+      <h3 style="font-size:16px;font-weight:800;color:#0f172a;">🛎️ জনপ্রিয় সেবাসমূহ</h3>
+      <a href="/services.html" style="font-size:13px;color:#2563eb;text-decoration:none;font-weight:700;">সবগুলো দেখুন →</a>
     </div>
 
     <div class="m-svc-grid" id="mobileServices">
+      <div class="skel" style="height:90px;"></div>
+      <div class="skel" style="height:90px;"></div>
       <div class="skel" style="height:90px;"></div>
       <div class="skel" style="height:90px;"></div>
     </div>
@@ -428,19 +919,46 @@ function autoIcon(name) {
   if (/মৃত্যু|death/i.test(n)) return '🕊️';
   if (/এনআইডি|NID|ভোটার/i.test(n)) return '🪪';
   if (/পাসপোর্ট|passport/i.test(n)) return '🛂';
-  if (/টিকিট|ticket/i.test(n)) return '🎫';
-  if (/আবেদন|apply|application/i.test(n)) return '📝';
-  if (/সনদ|certificate/i.test(n)) return '📜';
-  if (/অর্ডার|order/i.test(n)) return '📦';
-  if (/রিচার্জ|recharge|বিকাশ|নগদ/i.test(n)) return '💳';
+  if (/টিন|tin|কর/i.test(n)) return '📑';
+  if (/সার্টিফিকেট|certificate/i.test(n)) return '📜';
+  if (/পুলিশ|police|ক্লিয়ারেন্স/i.test(n)) return '👮';
+  if (/বায়োমেট্রিক|সিম|sim/i.test(n)) return '📱';
   return '🛎️';
+}
+
+const STBN = {
+  new: 'নতুন',
+  pending: 'অপেক্ষমান',
+  received: 'গৃহীত',
+  processing: 'প্রসেসিং চলছে',
+  registered: 'নিবন্ধিত',
+  completed: 'সম্পন্ন',
+  delivered: 'ডেলিভার্ড',
+  failed: 'ব্যর্থ',
+  cancelled: 'বাতিল',
+  refunded: 'রিফান্ডেড'
+};
+
+let _userBal = 0;
+let _balVisible = true;
+
+function toggleBalVisibility() {
+  _balVisible = !_balVisible;
+  const t = _balVisible ? ('৳' + bnNum(_userBal)) : '৳•••••';
+  setText('balancePill', t);
+  setText('hubBalance', t);
+  setText('quickBalText', t);
+  const btns = document.querySelectorAll('.hero-bal-toggle');
+  btns.forEach(b => {
+    b.textContent = _balVisible ? '👁️ লুকান' : '👁️ দেখুন';
+  });
 }
 
 function timeGreeting() {
   const h = new Date().getHours();
   if (h >= 5 && h < 12) return "শুভ সকাল";
-  if (h >= 12 && h < 16) return "শুভ দুপুর";
-  if (h >= 16 && h < 18) return "শুভ বিকেল";
+  if (h >= 12 && h < 15) return "শুভ দুপুর";
+  if (h >= 15 && h < 18) return "শুভ বিকাল";
   return "শুভ সন্ধ্যা";
 }
 
@@ -452,11 +970,10 @@ function getPersonalizedGreeting(user, cfg) {
     if (rel === "islam") g = "আসসালামু আলাইকুম";
     else if (rel === "hindu") g = "নমস্কার";
     else if (rel === "buddhist") g = "নমো বুদ্ধায়";
-    else if (rel === "christian") g = "প্রভুর শান্তি";
+    else if (rel === "christian") g = "নমস্কার";
     else g = timeGreeting();
   }
-  const name = (user && user.name ? user.name.trim() : "");
-  const firstName = name ? name.split(" ")[0] : "";
+  const firstName = (user && user.name) ? String(user.name).trim().split(" ")[0] : "";
   return firstName ? `${g}, ${firstName} 👋` : `${g} 👋`;
 }
 
@@ -556,7 +1073,6 @@ const GreetVoice = (() => {
       if (p && typeof p.catch === "function") {
         p.catch(() => {
           setButtonState(false);
-          // Autoplay blocked: queue for instant play on the very first touch/click
           _pendingAutoGreeting = f;
           const unlockGreet = () => {
             if (_pendingAutoGreeting) {
@@ -647,6 +1163,8 @@ async function init() {
   if (!r.ok) { location.href = '/login.html'; return; }
   const { user } = await r.json();
   window._user = user;
+  _userBal = user.balance || 0;
+
   const av = (user.name || 'ইউ')[0];
   setText('avatar', av);
   if (user.role === 'admin') {
@@ -654,11 +1172,21 @@ async function init() {
     const mAdmin = document.getElementById('mAdminTab');
     if (mAdmin) mAdmin.style.display = '';
   }
-  setText('balancePill', '৳' + bnNum(user.balance || 0));
-  setText('hubBalance', '৳' + bnNum(user.balance || 0));
+
+  const bText = '৳' + bnNum(_userBal);
+  setText('balancePill', bText);
+  setText('hubBalance', bText);
+  setText('quickBalText', bText);
+
   const tg = timeGreeting() + ' 👋';
   setText('greet', tg); setText('greetM', tg);
-  loadCounts(); loadServices(); loadNotices(); loadBanners(); loadSettings();
+
+  loadCounts();
+  loadRecentOrders();
+  loadServices();
+  loadNotices();
+  loadBanners();
+  loadSettings();
 }
 
 function setText(id, t) { const el = document.getElementById(id); if (el) el.textContent = t; }
@@ -673,11 +1201,89 @@ async function loadCounts() {
     const r = await ABC.api('/order-counts');
     if (!r.ok) throw new Error('bad');
     const d = await r.json();
-    setText('hubOrders', bnNum(d.total));
-    setText('hubOrdersDone', bnNum(d.done));
-    setText('hubOrdersSub', bnNum(d.active));
+    const tot = bnNum(d.total);
+    const don = bnNum(d.done);
+    const act = bnNum(d.active);
+    setText('hubOrders', tot);
+    setText('hubOrdersDone', don);
+    setText('hubOrdersSub', act);
+    setText('mHubOrders', tot);
+    setText('mHubOrdersDone', don);
+    setText('mHubOrdersSub', act);
   } catch (e) {
     setText('hubOrders', '–'); setText('hubOrdersDone', '–'); setText('hubOrdersSub', '–');
+    setText('mHubOrders', '–'); setText('mHubOrdersDone', '–'); setText('mHubOrdersSub', '–');
+  }
+}
+
+async function loadRecentOrders() {
+  const desk = document.getElementById('recentOrdersDesk');
+  const mob = document.getElementById('recentOrdersMob');
+  try {
+    const r = await ABC.api('/orders?limit=3');
+    if (!r.ok) throw new Error('bad');
+    const d = await r.json();
+    const orders = (d && d.orders) ? d.orders : [];
+
+    if (!orders.length) {
+      if (desk) {
+        desk.innerHTML = '<div style="text-align:center;padding:24px 12px;color:#64748b;background:#f8fafc;border-radius:12px;border:1px dashed #cbd5e1;">' +
+          '<div style="font-size:24px;margin-bottom:6px;">📋</div>' +
+          '<p style="font-size:13px;font-weight:600;color:#334155;">আপনার এখনো কোনো চলমান বা পূর্বের অর্ডার নেই</p>' +
+          '<button class="btn" style="margin-top:10px;padding:7px 16px;font-size:12px;border-radius:8px;" onclick="location.href='/services.html'">+ নতুন সেবার আবেদন করুন</button>' +
+          '</div>';
+      }
+      if (mob) mob.innerHTML = '';
+      return;
+    }
+
+    if (desk) {
+      desk.innerHTML = orders.map(o => {
+        const sName = escapeHtml(o.service_name_bn || o.service_name || 'ডিজিটাল সেবা');
+        const sIcon = autoIcon(sName);
+        const stKey = String(o.status || 'pending').toLowerCase();
+        const stText = STBN[stKey] || o.status || 'অপেক্ষমান';
+        const dateStr = o.created_at ? new Date(o.created_at).toLocaleDateString('bn-BD') : '';
+        const oid = escapeHtml((o.id || '').slice(0, 8));
+        return '<div class="recent-order-item">' +
+          '<div class="ro-info">' +
+            '<div class="ro-icon">' + sIcon + '</div>' +
+            '<div>' +
+              '<div class="ro-name">' + sName + ' <span style="font-size:11px;color:#94a3b8;font-weight:normal;">(#' + oid + ')</span></div>' +
+              '<div class="ro-meta">মূল্য: ৳' + bnNum(o.price || 0) + ' • তারিখ: ' + dateStr + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="ro-right">' +
+            '<span class="st st-' + escapeHtml(stKey) + '">' + escapeHtml(stText) + '</span>' +
+            '<button class="ro-btn" onclick="location.href='/order-detail.html?id=' + encodeURIComponent(o.id) + ''">ট্র্যাক করুন →</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    if (mob) {
+      const activeOrder = orders.find(o => ['pending', 'processing', 'received', 'registered'].includes(String(o.status).toLowerCase())) || orders[0];
+      if (activeOrder) {
+        const sName = escapeHtml(activeOrder.service_name_bn || activeOrder.service_name || 'সেবা');
+        const stKey = String(activeOrder.status || 'pending').toLowerCase();
+        const stText = STBN[stKey] || activeOrder.status;
+        mob.innerHTML = '<div class="m-active-order-pill" onclick="location.href='/order-detail.html?id=' + encodeURIComponent(activeOrder.id) + ''">' +
+          '<div style="display:flex;align-items:center;gap:10px;">' +
+            '<div style="font-size:20px;">' + autoIcon(sName) + '</div>' +
+            '<div>' +
+              '<div style="font-size:13px;font-weight:700;color:#0f172a;">' + sName + '</div>' +
+              '<div style="font-size:11px;color:#64748b;">স্ট্যাটাস: <b style="color:#1d4ed8;">' + escapeHtml(stText) + '</b></div>' +
+            '</div>' +
+          '</div>' +
+          '<span style="font-size:12px;color:#2563eb;font-weight:700;">ট্র্যাক →</span>' +
+        '</div>';
+      } else {
+        mob.innerHTML = '';
+      }
+    }
+  } catch (e) {
+    if (desk) desk.innerHTML = '<div style="color:#64748b;font-size:12px;padding:8px 0;">অর্ডার তথ্য লোড করা যায়নি</div>';
+    if (mob) mob.innerHTML = '';
   }
 }
 
@@ -691,10 +1297,10 @@ async function loadServices() {
     const svcs = d.services || [];
     setText('hubServices', bnNum(svcs.length));
     pop.innerHTML = svcs.slice(0, 4).map(s =>
-      '<div class="svc2" onclick="location.href=\'/service-detail.html?id='+s.id+'\'"><div class="ico">' + escapeHtml((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
+      '<div class="svc2" onclick="location.href='/service-detail.html?id='+s.id+''"><div class="ico">' + escapeHtml((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
     ).join('') || '<div>কোনো সেবা নেই</div>';
     mob.innerHTML = svcs.slice(0, 6).map(s =>
-      '<div class="svc2" onclick="location.href=\'/service-detail.html?id='+s.id+'\'"><div class="ico">' + escapeHtml((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
+      '<div class="svc2" onclick="location.href='/service-detail.html?id='+s.id+''"><div class="ico">' + escapeHtml((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
     ).join('') || '<div>কোনো সেবা নেই</div>';
   } catch (e) {
     setText('hubServices', '–');
@@ -778,7 +1384,7 @@ async function showNotices() {
   const list = valid.map(n => '<li style="margin-bottom:12px;"><b>' + escapeHtml(n.title) + '</b><br><span style="font-size:13px;color:#475569;">' + escapeHtml(n.message) + '</span></li>').join('') || '<li>কোনো নোটিশ নেই</li>';
   const bg = document.createElement('div');
   bg.className = 'modal-bg';
-  bg.innerHTML = '<div class="modal"><h3>🔔 সকল নোটিশ</h3><ul style="padding-left:18px;margin:16px 0;">' + list + '</ul><button class="btn" style="width:100%;margin-top:10px;" onclick="this.closest(\'.modal-bg\').remove()">বন্ধ করুন</button></div>';
+  bg.innerHTML = '<div class="modal"><h3>🔔 সকল নোটিশ</h3><ul style="padding-left:18px;margin:16px 0;">' + list + '</ul><button class="btn" style="width:100%;margin-top:10px;" onclick="this.closest('.modal-bg').remove()">বন্ধ করুন</button></div>';
   bg.onclick = (e) => { if (e.target === bg) bg.remove(); };
   document.body.appendChild(bg);
 }
