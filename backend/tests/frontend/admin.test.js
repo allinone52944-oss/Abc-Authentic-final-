@@ -411,7 +411,7 @@ describe('admin panel navigation & premium workflows (2026-10-19)', () => {
     expect(ahtml).toContain('অপারেশন ও লেনদেন');
     expect(ahtml).toContain('মার্কেটিং ও কন্টেন্ট');
     expect(ahtml).toContain('সিস্টেম ও অডিট');
-    expect(ahtml).toMatch(/admin\.js\?v=53/);
+    expect(ahtml).toMatch(/admin\.js\?v=54/);
   });
 
   test('admin.js exposes getAuthToken helper and uses it across downloads & uploads', () => {
@@ -449,6 +449,18 @@ describe('admin panel navigation & premium workflows (2026-10-19)', () => {
     expect(ajs).toMatch(/deleteOrder\(id\)\s*\{/);
     expect(ajs).toMatch(/confirmDelete\(id,\s*refund\)/);
     expect(ajs).toContain('🗑️ এই অর্ডারটি মুছে ফেলুন');
+  });
+  test('settings tab uses horizontal segmented pill navigation without vertical scroll sprawl', () => {
+    const stBlock = ajs.slice(ajs.indexOf('TABS.settings = async'), ajs.indexOf('TABS.reports = async'));
+    expect(stBlock).toContain('adm-settings-nav');
+    expect(stBlock).toContain('AdmSt.switchTab');
+    expect(stBlock).toContain('pane_general');
+    expect(stBlock).toContain('pane_payment');
+    expect(stBlock).toContain('pane_rewards');
+    expect(stBlock).toContain('pane_messaging');
+    expect(stBlock).toContain('pane_voice');
+    expect(stBlock).toContain('pane_backup');
+    expect(ajs).toMatch(/switchTab\(tabId\)\s*\{/);
   });
 });
 

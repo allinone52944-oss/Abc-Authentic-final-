@@ -3600,6 +3600,7 @@ TABS.settings = async () => {
   }
 
   const saveBtn = '<button class="adm-settings-hero-btn" type="button" onclick="AdmSt.save()">💾 সেটিংস সংরক্ষণ</button>';
+  const activeTab = AdmSt._activeTab || 'general';
 
   content.innerHTML =
     '<div class="adm-settings">' +
@@ -3608,7 +3609,7 @@ TABS.settings = async () => {
       '<div>' +
         '<div class="adm-settings-eyebrow">ADMIN CONTROL CENTER</div>' +
         '<h1>⚙️ সিস্টেম সেটিংস</h1>' +
-        '<p>নিরাপত্তা, পেমেন্ট, রিওয়ার্ড ও নোটিফিকেশন এক জায়গা থেকে পরিচালনা করুন।</p>' +
+        '<p>নিরাপত্তা, পেমেন্ট, রিওয়ার্ড, নোটিফিকেশন ও ব্যাকআপ এক জায়গা থেকে পরিচালনা করুন।</p>' +
       '</div>' +
       '<div style="display:flex;align-items:center;gap:12px;">' +
         saveBtn +
@@ -3616,136 +3617,156 @@ TABS.settings = async () => {
       '</div>' +
     '</div>' +
 
-    '<div class="adm-settings-grid">' +
-
-    // ROW 1, COL 1: SYSTEM & SECURITY
-    '<div class="form-card adm-settings-card">' +
-    '<h2>🛡️ সিস্টেম ও নিরাপত্তা (System & Security)</h2>' +
-    '<div class="list-row" style="cursor:default;"><div><div class="t">নতুন ইউজার রেজিস্ট্রেশন</div><div class="s">বন্ধ থাকলে শুধু বিদ্যমান ইউজাররা লগইন করতে পারবেন</div></div>' + bool('registration_enabled') + '</div>' +
-    '<div class="list-row" style="cursor:default;"><div><div class="t">মেইনটেন্যান্স মোড</div><div class="s">চালু করলে সাধারণ ব্যবহারকারীদের সাইট বন্ধ দেখাবে</div></div>' + bool('maintenance_mode') + '</div>' +
-    ta('মেইনটেন্যান্স নোটিশ / বার্তা', 'st_maint_msg', maintMsg, 'মেইনটেন্যান্স মোড চালু থাকলে গ্রাহকরা এই বার্তাটি দেখতে পাবেন') +
-    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:10px;">' +
-      '<div class="field"><label>সেশন টাইমআউট (মিনিট)</label><input type="number" id="st_session_timeout" value="' + sessMin + '"></div>' +
-      '<div class="field"><label>ভুল পাসওয়ার্ড লিমিট (লকআউট)</label><input type="number" id="st_max_login" value="' + maxLogin + '"></div>' +
-      '<div class="field"><label>লকআউট স্থায়িত্ব (মিনিট)</label><input type="number" id="st_lockout_min" value="' + lockoutMin + '"></div>' +
-    '</div>' +
+    // Horizontal Segmented Pill Tabs
+    '<div class="adm-settings-nav" id="admSettingsNav">' +
+      '<button class="adm-settings-tab ' + (activeTab === 'general' ? 'active' : '') + '" data-tab="general" onclick="AdmSt.switchTab(\'general\')">🛡️ সিস্টেম ও নিরাপত্তা</button>' +
+      '<button class="adm-settings-tab ' + (activeTab === 'payment' ? 'active' : '') + '" data-tab="payment" onclick="AdmSt.switchTab(\'payment\')">💳 পেমেন্ট ও রিচার্জ</button>' +
+      '<button class="adm-settings-tab ' + (activeTab === 'rewards' ? 'active' : '') + '" data-tab="rewards" onclick="AdmSt.switchTab(\'rewards\')">🎁 বোনাস ও লিমিট</button>' +
+      '<button class="adm-settings-tab ' + (activeTab === 'messaging' ? 'active' : '') + '" data-tab="messaging" onclick="AdmSt.switchTab(\'messaging\')">📢 মেসেজিং ও নোটিফিকেশন</button>' +
+      '<button class="adm-settings-tab ' + (activeTab === 'voice' ? 'active' : '') + '" data-tab="voice" onclick="AdmSt.switchTab(\'voice\')">🎙️ ভয়েস শুভেচ্ছা</button>' +
+      '<button class="adm-settings-tab ' + (activeTab === 'backup' ? 'active' : '') + '" data-tab="backup" onclick="AdmSt.switchTab(\'backup\')">💾 ডাটাবেস ব্যাকআপ</button>' +
     '</div>' +
 
-    // ROW 1, COL 2: PAYMENT HUB
-    '<div class="form-card adm-settings-card">' +
-    '<h2>💳 পেমেন্ট হাব ও রিচার্জ নম্বর</h2>' +
-    '<p class="s" style="margin-bottom:14px;">গ্রাহক ওয়ালেট রিচার্জের সময় এই নম্বরগুলো দেখতে পাবে এবং টাকা পাঠাবে</p>' +
-    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">' +
-      fld('বিকাশ পেমেন্ট নম্বর', 'text', 'st_rn_bkash_pay', (((s.recharge_numbers || {}).bkash_payment) || '')) +
-      fld('বিকাশ পার্সোনাল নম্বর', 'text', 'st_rn_bkash_per', (((s.recharge_numbers || {}).bkash_personal) || '')) +
-      fld('নগদ নম্বর', 'text', 'st_rn_nagad', (((s.recharge_numbers || {}).nagad) || '')) +
-      fld('রকেট নম্বর', 'text', 'st_rn_rocket', (((s.recharge_numbers || {}).rocket) || '')) +
-    '</div>' +
-    '<div style="margin-top:auto;padding-top:14px;"><div class="s" style="background:var(--bg-muted,#f8fafc);padding:10px 12px;border-radius:8px;border:1px dashed var(--border-light);">💡 ইউজাররা ওয়ালেটে রিচার্জ ফর্ম পূরণের সময় এই নম্বরগুলো লাইভ দেখতে পায়।</div></div>' +
-    '</div>' +
-
-    // ROW 2, COL 1: REWARDS & LIMITS
-    '<div class="form-card adm-settings-card">' +
-    '<h2>🎁 রিওয়ার্ড, বোনাস ও পলিসি লিমিট</h2>' +
-    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">' +
-      '<div class="field"><label>ক্যাশব্যাক হার % (০ = বন্ধ)</label><input type="number" id="st_cb" value="' + ((s.cashback && s.cashback.percent) || 0) + '"><div class="s" style="margin-top:4px;">রিচার্জে ১-ক্লিক কুপন পারসেন্টেজ</div></div>' +
-      '<div class="field"><label>স্বাগতম বোনাস (৳, ০ = বন্ধ)</label><input type="number" id="st_wb" value="' + ((s.welcome_bonus && s.welcome_bonus.amount) || 0) + '"><div class="s" style="margin-top:4px;">নতুন ইউজার সাইন-আপ গিফট</div></div>' +
-      '<div class="field"><label>ফাইল আপলোড সীমা (MB)</label><input type="number" id="st_mb" value="' + ((s.file_upload && s.file_upload.max_mb) || 5) + '"><div class="s" style="margin-top:4px;">আবেদনে সর্বোচ্চ সাইজ লিমিট</div></div>' +
-      '<div class="field"><label>BDRIS আবেদন PDF চার্জ (৳)</label><input type="number" id="st_bdris_pdf" value="' + (Number(s['bdris_apply.pdf_price']) || 0) + '"><div class="s" style="margin-top:4px;">জন্মনিবন্ধন আবেদন PDF ফি</div></div>' +
-    '</div>' +
-    '</div>' +
-
-    // ROW 2, COL 2: DATABASE BACKUP & RESTORE
-    '<div class="form-card adm-settings-card adm-settings-backup">' +
-    '<h2>💾 ডাটাবেস ব্যাকআপ ও ব্যবস্থাপনা</h2>' +
-    '<div style="display:flex;flex-direction:column;gap:12px;">' +
-      '<div style="background:var(--bg-muted,#f8fafc);padding:16px;border-radius:10px;border:1px solid var(--border-light);">' +
-        '<div style="font-weight:700;font-size:14px;margin-bottom:6px;color:var(--text-main);display:flex;align-items:center;gap:6px;">🗄️ ফুল ডাটাবেস স্ন্যাপশট</div>' +
-        '<div class="s" style="margin-bottom:12px;line-height:1.6;">সর্বশেষ ব্যাকআপ: <b style="color:var(--text-main);">' + esc(backupLastText) + '</b><br>নিয়মিত ব্যাকআপ সার্ভার ক্র্যাশ বা অনিচ্ছাকৃত তথ্য হারানোর হাত থেকে সম্পূর্ণ সুরক্ষিত রাখে।</div>' +
-        '<button class="mini-btn ok" style="padding:8px 16px;font-size:13px;" onclick="AdmSt.triggerBackup()">⚡ এখনই নতুন ব্যাকআপ তৈরি করুন</button>' +
+    // TAB 1: SYSTEM & SECURITY
+    '<div class="adm-settings-pane ' + (activeTab === 'general' ? 'active' : '') + '" id="pane_general">' +
+      '<div class="form-card adm-settings-card">' +
+        '<h2>🛡️ সিস্টেম ও নিরাপত্তা (System & Security)</h2>' +
+        '<div class="list-row" style="cursor:default;"><div><div class="t">নতুন ইউজার রেজিস্ট্রেশন</div><div class="s">বন্ধ থাকলে শুধু বিদ্যমান ইউজাররা লগইন করতে পারবেন</div></div>' + bool('registration_enabled') + '</div>' +
+        '<div class="list-row" style="cursor:default;"><div><div class="t">মেইনটেন্যান্স মোড</div><div class="s">চালু করলে সাধারণ ব্যবহারকারীদের সাইট বন্ধ দেখাবে</div></div>' + bool('maintenance_mode') + '</div>' +
+        ta('মেইনটেন্যান্স নোটিশ / বার্তা', 'st_maint_msg', maintMsg, 'মেইনটেন্যান্স মোড চালু থাকলে গ্রাহকরা এই বার্তাটি দেখতে পাবেন') +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:14px;">' +
+          '<div class="field"><label>সেশন টাইমআউট (মিনিট)</label><input type="number" id="st_session_timeout" value="' + sessMin + '"></div>' +
+          '<div class="field"><label>ভুল পাসওয়ার্ড লিমিট (লকআউট)</label><input type="number" id="st_max_login" value="' + maxLogin + '"></div>' +
+          '<div class="field"><label>লকআউট স্থায়িত্ব (মিনিট)</label><input type="number" id="st_lockout_min" value="' + lockoutMin + '"></div>' +
+        '</div>' +
       '</div>' +
     '</div>' +
+
+    // TAB 2: PAYMENT & RECHARGE
+    '<div class="adm-settings-pane ' + (activeTab === 'payment' ? 'active' : '') + '" id="pane_payment">' +
+      '<div class="form-card adm-settings-card">' +
+        '<h2>💳 পেমেন্ট হাব ও রিচার্জ নম্বর</h2>' +
+        '<p class="s" style="margin-bottom:16px;">গ্রাহক ওয়ালেট রিচার্জের সময় এই নম্বরগুলো দেখতে পাবে এবং টাকা পাঠাবে</p>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;">' +
+          fld('বিকাশ পেমেন্ট নম্বর', 'text', 'st_rn_bkash_pay', (((s.recharge_numbers || {}).bkash_payment) || '')) +
+          fld('বিকাশ পার্সোনাল নম্বর', 'text', 'st_rn_bkash_per', (((s.recharge_numbers || {}).bkash_personal) || '')) +
+          fld('নগদ নম্বর', 'text', 'st_rn_nagad', (((s.recharge_numbers || {}).nagad) || '')) +
+          fld('রকেট নম্বর', 'text', 'st_rn_rocket', (((s.recharge_numbers || {}).rocket) || '')) +
+        '</div>' +
+        '<div style="margin-top:18px;"><div class="s" style="background:var(--bg-muted,#f8fafc);padding:12px 14px;border-radius:8px;border:1px dashed var(--border-light);">💡 ইউজাররা ওয়ালেটে রিচার্জ ফর্ম পূরণের সময় এই নম্বরগুলো লাইভ দেখতে পায়।</div></div>' +
+      '</div>' +
     '</div>' +
 
-    // ROW 3: FULL WIDTH CARD SPLIT INTO 2 SIDE-BY-SIDE PANELS FOR MESSAGING & GREETING
-    '<div class="form-card adm-settings-card adm-settings-col-full">' +
-    '<h2>📢 মেসেজিং, অটোমেশন ও গ্রিটিং (Messaging & Automation)</h2>' +
-    '<div class="adm-settings-subgrid">' +
-      // LEFT SUB-PANEL: WhatsApp & System Alerts
-      '<div style="background:var(--bg-muted,#f8fafc);padding:18px;border-radius:10px;border:1px solid var(--border-light);">' +
-        '<h3 style="margin-top:0;color:var(--primary-600);font-size:15px;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">🔔 অ্যাডমিন লাইভ অ্যালার্ট ও WhatsApp নোটিফিকেশন <span style="font-size:11px;font-weight:600;background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:999px;">অ্যাডমিন ডেস্কটপ</span></h3>' +
-        '<div class="list-row" style="cursor:default;padding:8px 0;"><div><div class="t">🔊 অ্যাডমিন ভয়েস অ্যালার্ট</div><div class="s">নতুন রিচার্জ/অর্ডারে বাংলা ভয়েস সতর্কবার্তা</div></div>' +
-        '<button class="mini-btn ' + (VoiceAlert.enabled ? 'ok' : '') + '" onclick="var on=VoiceAlert.toggle();this.className=\'mini-btn \'+(on?\'ok\':\'\');this.textContent=on?\'✅ চালু\':\'❌ বন্ধ\';">' +
-        (VoiceAlert.enabled ? '✅ চালু' : '❌ বন্ধ') + '</button></div>' +
-        '<div class="list-row" style="cursor:default;padding:8px 0;"><div><div class="t">🔔 Push নোটিফিকেশন</div><div class="s">স্ক্রিন বন্ধ থাকলেও ব্রাউজার পুশ নোটিফিকেশন</div></div>' +
-        '<button class="mini-btn ' + (PushNotify.enabled ? 'ok' : '') + '" onclick="PushNotify.toggle().then(function(on){this.className=\'mini-btn \'+(on?\'ok\':\'\');this.textContent=on?\'✅ চালু\':\'❌ বন্ধ\';}.bind(this))">' +
-        (PushNotify.enabled ? '✅ চালু' : '❌ বন্ধ') + '</button></div>' +
-        '<div class="list-row" style="cursor:default;padding:8px 0;margin-top:6px;border-top:1px dashed var(--border-light);">' +
-          '<div><div class="t">WhatsApp অটো নোটিফিকেশন</div><div class="s">অর্ডার বা রিচার্জ স্ট্যাটাসে গ্রাহককে WhatsApp মেসেজ</div></div>' + bool('whatsapp') +
+    // TAB 3: REWARDS & LIMITS
+    '<div class="adm-settings-pane ' + (activeTab === 'rewards' ? 'active' : '') + '" id="pane_rewards">' +
+      '<div class="form-card adm-settings-card">' +
+        '<h2>🎁 রিওয়ার্ড, বোনাস ও পলিসি লিমিট</h2>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;">' +
+          '<div class="field"><label>ক্যাশব্যাক হার % (০ = বন্ধ)</label><input type="number" id="st_cb" value="' + ((s.cashback && s.cashback.percent) || 0) + '"><div class="s" style="margin-top:4px;">রিচার্জে ১-ক্লিক কুপন পারসেন্টেজ</div></div>' +
+          '<div class="field"><label>স্বাগতম বোনাস (৳, ০ = বন্ধ)</label><input type="number" id="st_wb" value="' + ((s.welcome_bonus && s.welcome_bonus.amount) || 0) + '"><div class="s" style="margin-top:4px;">নতুন ইউজার সাইন-আপ গিফট</div></div>' +
+          '<div class="field"><label>ফাইল আপলোড সীমা (MB)</label><input type="number" id="st_mb" value="' + ((s.file_upload && s.file_upload.max_mb) || 5) + '"><div class="s" style="margin-top:4px;">আবেদনে সর্বোচ্চ সাইজ লিমিট</div></div>' +
+          '<div class="field"><label>BDRIS আবেদন PDF চার্জ (৳)</label><input type="number" id="st_bdris_pdf" value="' + (Number(s['bdris_apply.pdf_price']) || 0) + '"><div class="s" style="margin-top:4px;">জন্মনিবন্ধন আবেদন PDF ফি</div></div>' +
         '</div>' +
-        '<div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 12px;font-size:12px;">' +
-          '<label><input type="checkbox" id="wa_n_order_completed" ' + ((((s.whatsapp||{}).notify||{}).order_completed !== false) ? 'checked' : '') + '> ✅ অর্ডার সফল</label>' +
-          '<label><input type="checkbox" id="wa_n_order_failed" ' + ((((s.whatsapp||{}).notify||{}).order_failed !== false) ? 'checked' : '') + '> ❌ অর্ডার ব্যর্থ</label>' +
-          '<label><input type="checkbox" id="wa_n_order_cancelled" ' + ((((s.whatsapp||{}).notify||{}).order_cancelled !== false) ? 'checked' : '') + '> 🚫 অর্ডার বাতিল</label>' +
-          '<label><input type="checkbox" id="wa_n_recharge_approved" ' + ((((s.whatsapp||{}).notify||{}).recharge_approved !== false) ? 'checked' : '') + '> 💰 রিচার্জ সফল</label>' +
-          '<label><input type="checkbox" id="wa_n_recharge_rejected" ' + ((((s.whatsapp||{}).notify||{}).recharge_rejected !== false) ? 'checked' : '') + '> ⚠️ রিচার্জ বাতিল</label>' +
-        '</div>' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-          fld('WhatsApp বিজনেস নম্বর', 'text', 'st_wa_num', ((s.whatsapp || {}).business_number) || '') +
-          fld('Phone Number ID', 'text', 'st_wa_phone_id', ((s.whatsapp || {}).phone_number_id) || '') +
-        '</div>' +
-        '<div class="field" style="margin-top:10px;"><label>Access Token (Password Protected)</label>' +
-        '<input type="password" id="st_wa_token" value="" placeholder="নতুন token বসান (খালি রাখলে অপরিবর্তিত থাকবে)" autocomplete="new-password">' +
-        '<div class="s" style="margin-top:4px;">' + (((s.whatsapp || {}).access_token_env) ? '✅ Token সেট আছে (ENV)' : ((s.whatsapp || {}).access_token_set ? '✅ Token সেট আছে' : '❌ Token সেট নেই')) + '</div></div>' +
-        '<div class="field" style="margin-top:10px;"><button class="mini-btn" onclick="AdmWa.test()">🔗 Test WhatsApp Connection</button></div>' +
-        ta('📩 অর্ডার সফল মেসেজ টেমপ্লেট', 'st_wa_order_msg', ((s.whatsapp || {}).order_completed_msg) || '', 'প্লেসহোল্ডার: {name} {order_number} {service_name}') +
-        ta('📩 রিচার্জ সফল মেসেজ টেমপ্লেট', 'st_wa_recharge_msg', ((s.whatsapp || {}).recharge_approved_msg) || '', 'প্লেসহোল্ডার: {name} {amount} {balance}') +
       '</div>' +
+    '</div>' +
 
-      // RIGHT SUB-PANEL: Voice Greeting & Preview Player
-      '<div style="background:var(--bg-muted,#f8fafc);padding:18px;border-radius:10px;border:1px solid var(--border-light);">' +
-        '<h3 style="margin-top:0;color:var(--primary-600);font-size:15px;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">🎙️ কাস্টমার লগইন ভয়েস শুভেচ্ছা (Login Greeting) <span style="font-size:11px;font-weight:600;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;">গ্রাহক লগইন অডিও</span></h3>' +
-        '<div class="list-row" style="cursor:default;padding:8px 0;"><div><div class="t">ভয়েস শুভেচ্ছা সার্ভিস</div><div class="s">লগইনের সময় ধর্মভিত্তিক কণ্ঠে শুভেচ্ছা বার্তা</div></div>' + bool('voice_greeting') + '</div>' +
-        '<div class="list-row" style="cursor:default;padding:8px 0;"><div><div class="t">কণ্ঠ রোটেশন (Rotation)</div><div class="s">পুরুষ → মহিলা → শিশু কণ্ঠে পর্যায়ক্রমে প্লে হবে</div></div>' + bool('voice_greeting', 'rotation') + '</div>' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">' +
-          fld('ইসলাম গ্রিটিং', 'text', 'st_vg_islam', (((s.voice_greeting||{}).greetings||{}).islam) || 'আসসালামু আলাইকুম') +
-          fld('হিন্দু গ্রিটিং', 'text', 'st_vg_hindu', (((s.voice_greeting||{}).greetings||{}).hindu) || 'নমস্কার') +
-          fld('বৌদ্ধ গ্রিটিং', 'text', 'st_vg_buddhist', (((s.voice_greeting||{}).greetings||{}).buddhist) || 'নমো বুদ্ধায়') +
-          fld('খ্রিস্টান গ্রিটিং', 'text', 'st_vg_christian', (((s.voice_greeting||{}).greetings||{}).christian) || 'প্রভুর শান্তি') +
+    // TAB 4: MESSAGING & NOTIFICATIONS
+    '<div class="adm-settings-pane ' + (activeTab === 'messaging' ? 'active' : '') + '" id="pane_messaging">' +
+      '<div class="form-card adm-settings-card">' +
+        '<h2>📢 মেসেজিং, অটোমেশন ও অ্যালার্ট (Messaging & Automation)</h2>' +
+        '<div style="background:var(--bg-muted,#f8fafc);padding:18px;border-radius:10px;border:1px solid var(--border-light);margin-bottom:16px;">' +
+          '<h3 style="margin-top:0;color:var(--primary-600);font-size:15px;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">🔔 অ্যাডমিন লাইভ অ্যালার্ট ও WhatsApp নোটিফিকেশন <span style="font-size:11px;font-weight:600;background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:999px;">অ্যাডমিন ডেস্কটপ</span></h3>' +
+          '<div class="list-row" style="cursor:default;padding:8px 0;"><div><div class="t">🔊 অ্যাডমিন ভয়েস অ্যালার্ট</div><div class="s">নতুন রিচার্জ/অর্ডারে বাংলা ভয়েস সতর্কবার্তা</div></div>' +
+          '<button class="mini-btn ' + (VoiceAlert.enabled ? 'ok' : '') + '" onclick="var on=VoiceAlert.toggle();this.className=\'mini-btn \'+(on?\'ok\':\'\');this.textContent=on?\'✅ চালু\':\'❌ বন্ধ\';">' +
+          (VoiceAlert.enabled ? '✅ চালু' : '❌ বন্ধ') + '</button></div>' +
+          '<div class="list-row" style="cursor:default;padding:8px 0;"><div><div class="t">🔔 Push নোটিফিকেশন</div><div class="s">স্ক্রিন বন্ধ থাকলেও ব্রাউজার পুশ নোটিফিকেশন</div></div>' +
+          '<button class="mini-btn ' + (PushNotify.enabled ? 'ok' : '') + '" onclick="PushNotify.toggle().then(function(on){this.className=\'mini-btn \'+(on?\'ok\':\'\');this.textContent=on?\'✅ চালু\':\'❌ বন্ধ\';}.bind(this))">' +
+          (PushNotify.enabled ? '✅ চালু' : '❌ বন্ধ') + '</button></div>' +
         '</div>' +
-        fld('অন্যান্য গ্রিটিং (খালি রাখলে সময়ভিত্তিক হবে)', 'text', 'st_vg_other', (((s.voice_greeting||{}).greetings||{}).other) || '') +
-        '<div style="background:#ffffff;border:1px solid var(--border-light);border-radius:10px;padding:14px;margin-top:14px;box-shadow:var(--shadow-xs);">' +
-          '<div style="font-weight:700;font-size:13px;margin-bottom:4px;color:var(--text-main);">🎧 অডিও টেস্ট ও প্রিভিউ প্লেয়ার</div>' +
-          '<div class="s" style="margin-bottom:10px;">যেকোনো ধর্মের পুরুষ, মহিলা বা শিশু কণ্ঠের শুভেচ্ছা অডিও প্লে করে পরীক্ষা করুন:</div>' +
-          '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">' +
-            '<select id="adm_vg_rel" style="padding:6px 10px;border-radius:6px;font-size:12px;">' +
-              '<option value="islam">ইসলাম (আসসালামু আলাইকুম)</option>' +
-              '<option value="hindu">হিন্দু (নমস্কার)</option>' +
-              '<option value="buddhist">বৌদ্ধ (নমো বুদ্ধায়)</option>' +
-              '<option value="christian">খ্রিস্টান (প্রভুর শান্তি)</option>' +
-              '<option value="other">অন্যান্য (সময়ভিত্তিক)</option>' +
-            '</select>' +
-            '<select id="adm_vg_voice" style="padding:6px 10px;border-radius:6px;font-size:12px;">' +
-              '<option value="male">পুরুষ কণ্ঠ (Male)</option>' +
-              '<option value="female">মহিলা কণ্ঠ (Female)</option>' +
-              '<option value="child">শিশু কণ্ঠ (Child)</option>' +
-            '</select>' +
-            '<button class="mini-btn ok" type="button" onclick="AdmSt.testVoiceGreet()">▶ প্লে</button>' +
-            '<button class="mini-btn" type="button" onclick="AdmSt.stopVoiceGreet()">⏹ স্টপ</button>' +
+
+        '<div style="background:var(--bg-muted,#f8fafc);padding:18px;border-radius:10px;border:1px solid var(--border-light);">' +
+          '<div class="list-row" style="cursor:default;padding:8px 0;">' +
+            '<div><div class="t">WhatsApp ক্লাউড অটো নোটিফিকেশন</div><div class="s">অর্ডার বা রিচার্জ স্ট্যাটাসে গ্রাহককে স্বয়ংক্রিয় WhatsApp মেসেজ পাঠান</div></div>' + bool('whatsapp') +
           '</div>' +
-          '<div id="adm_vg_status" style="font-size:11px;color:var(--text-muted);margin-top:8px;"></div>' +
+          '<div style="display:flex;gap:12px;flex-wrap:wrap;margin:12px 0 14px;font-size:12px;">' +
+            '<label><input type="checkbox" id="wa_n_order_completed" ' + ((((s.whatsapp||{}).notify||{}).order_completed !== false) ? 'checked' : '') + '> ✅ অর্ডার সফল</label>' +
+            '<label><input type="checkbox" id="wa_n_order_failed" ' + ((((s.whatsapp||{}).notify||{}).order_failed !== false) ? 'checked' : '') + '> ❌ অর্ডার ব্যর্থ</label>' +
+            '<label><input type="checkbox" id="wa_n_order_cancelled" ' + ((((s.whatsapp||{}).notify||{}).order_cancelled !== false) ? 'checked' : '') + '> 🚫 অর্ডার বাতিল</label>' +
+            '<label><input type="checkbox" id="wa_n_recharge_approved" ' + ((((s.whatsapp||{}).notify||{}).recharge_approved !== false) ? 'checked' : '') + '> 💰 রিচার্জ সফল</label>' +
+            '<label><input type="checkbox" id="wa_n_recharge_rejected" ' + ((((s.whatsapp||{}).notify||{}).recharge_rejected !== false) ? 'checked' : '') + '> ⚠️ রিচার্জ বাতিল</label>' +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">' +
+            fld('WhatsApp বিজনেস নম্বর', 'text', 'st_wa_num', ((s.whatsapp || {}).business_number) || '') +
+            fld('Phone Number ID', 'text', 'st_wa_phone_id', ((s.whatsapp || {}).phone_number_id) || '') +
+          '</div>' +
+          '<div class="field" style="margin-top:10px;"><label>Access Token (Password Protected)</label>' +
+          '<input type="password" id="st_wa_token" value="" placeholder="নতুন token বসান (খালি রাখলে অপরিবর্তিত থাকবে)" autocomplete="new-password">' +
+          '<div class="s" style="margin-top:4px;">' + (((s.whatsapp || {}).access_token_env) ? '✅ Token সেট আছে (ENV)' : ((s.whatsapp || {}).access_token_set ? '✅ Token সেট আছে' : '❌ Token সেট নেই')) + '</div></div>' +
+          '<div class="field" style="margin-top:10px;"><button class="mini-btn" onclick="AdmWa.test()">🔗 Test WhatsApp Connection</button></div>' +
+          ta('📩 অর্ডার সফল মেসেজ টেমপ্লেট', 'st_wa_order_msg', ((s.whatsapp || {}).order_completed_msg) || '', 'প্লেসহোল্ডার: {name} {order_number} {service_name}') +
+          ta('📩 রিচার্জ সফল মেসেজ টেমপ্লেট', 'st_wa_recharge_msg', ((s.whatsapp || {}).recharge_approved_msg) || '', 'প্লেসহোল্ডার: {name} {amount} {balance}') +
         '</div>' +
       '</div>' +
-    '</div>' + // end subgrid
-    '</div>' + // end full card
+    '</div>' +
 
-    '</div>' + // end adm-settings-grid
+    // TAB 5: VOICE GREETING
+    '<div class="adm-settings-pane ' + (activeTab === 'voice' ? 'active' : '') + '" id="pane_voice">' +
+      '<div class="form-card adm-settings-card">' +
+        '<h2>🎙️ কাস্টমার লগইন ভয়েস শুভেচ্ছা (Login Greeting)</h2>' +
+        '<div style="background:var(--bg-muted,#f8fafc);padding:18px;border-radius:10px;border:1px solid var(--border-light);">' +
+          '<div class="list-row" style="cursor:default;padding:8px 0;"><div><div class="t">ভয়েস শুভেচ্ছা সার্ভিস</div><div class="s">গ্রাহক লগইনের সময় ধর্মভিত্তিক কণ্ঠে শুভেচ্ছা বার্তা প্লে হবে</div></div>' + bool('voice_greeting') + '</div>' +
+          '<div class="list-row" style="cursor:default;padding:8px 0;"><div><div class="t">কণ্ঠ রোটেশন (Rotation)</div><div class="s">পুরুষ → মহিলা → শিশু কণ্ঠে পর্যায়ক্রমে প্লে হবে</div></div>' + bool('voice_greeting', 'rotation') + '</div>' +
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:14px;">' +
+            fld('ইসলাম গ্রিটিং', 'text', 'st_vg_islam', (((s.voice_greeting||{}).greetings||{}).islam) || 'আসসালামু আলাইকুম') +
+            fld('হিন্দু গ্রিটিং', 'text', 'st_vg_hindu', (((s.voice_greeting||{}).greetings||{}).hindu) || 'নমস্কার') +
+            fld('বৌদ্ধ গ্রিটিং', 'text', 'st_vg_buddhist', (((s.voice_greeting||{}).greetings||{}).buddhist) || 'নমো বুদ্ধায়') +
+            fld('খ্রিস্টান গ্রিটিং', 'text', 'st_vg_christian', (((s.voice_greeting||{}).greetings||{}).christian) || 'প্রভুর শান্তি') +
+          '</div>' +
+          fld('অন্যান্য গ্রিটিং (খালি রাখলে সময়ভিত্তিক হবে)', 'text', 'st_vg_other', (((s.voice_greeting||{}).greetings||{}).other) || '') +
+          '<div style="background:#ffffff;border:1px solid var(--border-light);border-radius:10px;padding:14px;margin-top:14px;box-shadow:var(--shadow-xs);">' +
+            '<div style="font-weight:700;font-size:13px;margin-bottom:4px;color:var(--text-main);">🎧 অডিও টেস্ট ও প্রিভিউ প্লেয়ার</div>' +
+            '<div class="s" style="margin-bottom:10px;">যেকোনো ধর্মের পুরুষ, মহিলা বা শিশু কণ্ঠের শুভেচ্ছা অডিও প্লে করে পরীক্ষা করুন:</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">' +
+              '<select id="adm_vg_rel" style="padding:6px 10px;border-radius:6px;font-size:12px;">' +
+                '<option value="islam">ইসলাম (আসসালামু আলাইকুম)</option>' +
+                '<option value="hindu">হিন্দু (নমস্কার)</option>' +
+                '<option value="buddhist">বৌদ্ধ (নমো বুদ্ধায়)</option>' +
+                '<option value="christian">খ্রিস্টান (প্রভুর শান্তি)</option>' +
+                '<option value="other">অন্যান্য (সময়ভিত্তিক)</option>' +
+              '</select>' +
+              '<select id="adm_vg_voice" style="padding:6px 10px;border-radius:6px;font-size:12px;">' +
+                '<option value="male">পুরুষ কণ্ঠ (Male)</option>' +
+                '<option value="female">মহিলা কণ্ঠ (Female)</option>' +
+                '<option value="child">শিশু কণ্ঠ (Child)</option>' +
+              '</select>' +
+              '<button class="mini-btn ok" type="button" onclick="AdmSt.testVoiceGreet()">▶ প্লে</button>' +
+              '<button class="mini-btn" type="button" onclick="AdmSt.stopVoiceGreet()">⏹ স্টপ</button>' +
+            '</div>' +
+            '<div id="adm_vg_status" style="font-size:11px;color:var(--text-muted);margin-top:8px;"></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    // TAB 6: DATABASE BACKUP
+    '<div class="adm-settings-pane ' + (activeTab === 'backup' ? 'active' : '') + '" id="pane_backup">' +
+      '<div class="form-card adm-settings-card adm-settings-backup">' +
+        '<h2>💾 ডাটাবেস ব্যাকআপ ও ব্যবস্থাপনা</h2>' +
+        '<div style="display:flex;flex-direction:column;gap:12px;">' +
+          '<div style="background:var(--bg-muted,#f8fafc);padding:18px;border-radius:10px;border:1px solid var(--border-light);">' +
+            '<div style="font-weight:700;font-size:15px;margin-bottom:6px;color:var(--text-main);display:flex;align-items:center;gap:8px;">🗄️ ফুল ডাটাবেস স্ন্যাপশট</div>' +
+            '<div class="s" style="margin-bottom:14px;line-height:1.6;">সর্বশেষ ব্যাকআপ: <b style="color:var(--text-main);">' + esc(backupLastText) + '</b><br>নিয়মিত ব্যাকআপ সার্ভার ক্র্যাশ বা অনিচ্ছাকৃত তথ্য হারানোর হাত থেকে ডাটাবেস সম্পূর্ণ সুরক্ষিত রাখে।</div>' +
+            '<button class="mini-btn ok" style="padding:10px 18px;font-size:13px;" onclick="AdmSt.triggerBackup()">⚡ এখনই নতুন ব্যাকআপ তৈরি করুন</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
 
     // BOTTOM SAVE BAR
-    '<div class="adm-settings-save-bar">' +
+    '<div class="adm-settings-save-bar" style="margin-top:16px;">' +
       '<div>' +
         '<div style="font-weight:700;font-size:15px;color:var(--text-main);">সেটিংস সংরক্ষণ</div>' +
-        '<div class="s">যেকোনো ফিল্ডে পরিবর্তন করার পর এই বাটনে ক্লিক করে লাইভ আপডেট কার্যকর করুন।</div>' +
+        '<div class="s">যেকোনো ট্যাবে পরিবর্তন করার পর এই বাটনে ক্লিক করে লাইভ কার্যকর করুন।</div>' +
       '</div>' +
       saveBtn +
     '</div>' +
@@ -3754,6 +3775,19 @@ TABS.settings = async () => {
 };
 
 window.AdmSt = {
+  _activeTab: 'general',
+  switchTab(tabId) {
+    AdmSt._activeTab = tabId;
+    const nav = document.getElementById('admSettingsNav');
+    if (nav) {
+      nav.querySelectorAll('.adm-settings-tab').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-tab') === tabId);
+      });
+    }
+    document.querySelectorAll('.adm-settings-pane').forEach(p => {
+      p.classList.toggle('active', p.id === ('pane_' + tabId));
+    });
+  },
   _vgAudio: null,
   testVoiceGreet() {
     try {

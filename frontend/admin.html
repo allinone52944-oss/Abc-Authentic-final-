@@ -372,6 +372,59 @@
       grid-template-columns: 1fr;
     }
   }
+  /* Segmented Pill Tabs for Settings */
+  .adm-settings-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f1f5f9;
+    padding: 6px;
+    border-radius: var(--r-xl);
+    border: 1px solid var(--border-light);
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .adm-settings-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .adm-settings-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: var(--r-lg);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    user-select: none;
+    font-family: inherit;
+  }
+  .adm-settings-tab:hover {
+    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.65);
+  }
+  .adm-settings-tab.active {
+    color: var(--primary-600);
+    background: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+  .adm-settings-pane {
+    display: none;
+    animation: fadeInPane 0.2s ease;
+  }
+  .adm-settings-pane.active {
+    display: block;
+  }
+  @keyframes fadeInPane {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
   @media (max-width: 768px) {
     .adm-settings-hero {
       padding: 16px;
@@ -382,12 +435,13 @@
     .adm-settings-card {
       padding: 16px;
     }
-  }
-    .adm-settings-hero-mark {
-      display: none;
+    .adm-settings-nav {
+      gap: 6px;
+      padding: 5px;
     }
-    .adm-settings-card {
-      padding: 16px;
+    .adm-settings-tab {
+      padding: 8px 14px;
+      font-size: 12px;
     }
   }
 
@@ -1026,7 +1080,7 @@
 
 <script src="/js/app.js?v=16"></script>
 <script src="/banners/render.js?v=4"></script>
-<script src="/js/admin.js?v=53"></script>
+<script src="/js/admin.js?v=54"></script>
 <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
