@@ -115,7 +115,7 @@ class OriginalFetcher {
       || path.join(__dirname, '..', '..', 'originals-index.json');
     this.solve2 = options.solve2 || require('../../captcha-solve2.js');
     this.workers = Math.max(1, parseInt(options.workers || DEFAULT_WORKERS, 10));
-    this.jobTimeoutMs = Math.max(20000, parseInt(options.jobTimeoutMs || DEFAULT_JOB_TIMEOUT_MS, 10));
+    this.jobTimeoutMs = options.jobTimeoutMs !== undefined ? Math.max(50, parseInt(options.jobTimeoutMs, 10)) : DEFAULT_JOB_TIMEOUT_MS;
     this.candCap = Math.max(4, parseInt(options.candCap || DEFAULT_CAND_CAP, 10));
     this.roundsPerWorker = Math.max(1, parseInt(options.roundsPerWorker || DEFAULT_ROUNDS_PER_WORKER, 10));
     this.jobTtlMs = Math.max(100, parseInt(options.jobTtlMs || DEFAULT_JOB_TTL_MS, 10));
@@ -236,7 +236,6 @@ class OriginalFetcher {
         e.code = 'JOB_TIMEOUT';
         reject(e);
       }, this.jobTimeoutMs);
-      if (timer.unref) timer.unref();
     });
     try {
       return await Promise.race([this._runJob(rec, job), timeoutP]);

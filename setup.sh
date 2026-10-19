@@ -18,11 +18,11 @@ echo "[3/5] Installing git and tools..."
 sudo apt install -y git curl wget
 
 echo "[4/5] Creating app directory..."
-sudo mkdir -p /opt/shebahub-v2
-sudo chown -R $USER:$USER /opt/shebahub-v2
+sudo mkdir -p /opt/all-in-one-abc-authentic
+sudo chown -R $USER:$USER /opt/all-in-one-abc-authentic
 
 echo "[5/5] Cloning repo..."
-cd /opt/shebahub-v2
+cd /opt/all-in-one-abc-authentic
 git clone https://github.com/allinone52944-oss/Abc-Authentic-final-.git .
 
 echo ""

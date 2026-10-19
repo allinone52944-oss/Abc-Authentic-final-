@@ -18,7 +18,7 @@ require('node:tls').DEFAULT_MAX_VERSION = 'TLSv1.2';
 
 const EVERIFY = 'https://everify.bdris.gov.bd';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
-const PORT = 3001;
+const PORT = parseInt(process.env.DEATH_ENGINE_PORT || process.env.PORT || '3104', 10);
 const SESSION_TTL_MS = 5 * 60 * 1000;
 // "Auto Calculate" button-er jonno (optional) — start-verify.bat-e set hoy.
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';

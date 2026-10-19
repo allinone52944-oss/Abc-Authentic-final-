@@ -223,8 +223,8 @@ function probePort(force) {
 // W-2 fix: 10s → 5s — isReady() async probe-এর stale window অর্ধেক হলো।
 // (পুরোপুরি sync করা যায় না — Node-এ network I/O async-ই; health check
 //  কম frequency-তে hit হয় বলে ~5s lag গ্রহণযোগ্য।)
-setInterval(probePort, 5000);
-if (typeof probePort.unref === 'function') { /* keep alive for accuracy */ }
+const _probeTimer = setInterval(probePort, 5000);
+if (_probeTimer && typeof _probeTimer.unref === 'function') { _probeTimer.unref(); }
 probePort();
 
 // Simple reverse proxy middleware (HTTP). Strips the mount prefix.

@@ -14,7 +14,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
-const ENGINE_PORT = 3001;
+const ENGINE_PORT = parseInt(process.env.DEATH_ENGINE_PORT || '3104', 10);
 
 let _proc = null;
 
@@ -27,7 +27,7 @@ function init() {
   }
   _proc = spawn(process.execPath, [serverJs], {
     cwd: __dirname,
-    env: Object.assign({}, process.env),
+    env: Object.assign({}, process.env, { PORT: String(ENGINE_PORT), DEATH_ENGINE_PORT: String(ENGINE_PORT) }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   _proc.stdout.on('data', (d) => {
@@ -47,7 +47,7 @@ function getApp() {
   // Return a plain middleware function (no express required)
   return (req, res) => {
     const bodyData = req.body ? JSON.stringify(req.body) : null;
-    const headers = { ...req.headers, host: '127.0.0.1:3001' };
+    const headers = { ...req.headers, host: '127.0.0.1:' + ENGINE_PORT };
     delete headers['content-length'];
     delete headers['transfer-encoding'];
     if (bodyData) headers['content-length'] = Buffer.byteLength(bodyData);

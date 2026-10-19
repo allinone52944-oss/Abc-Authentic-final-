@@ -2481,7 +2481,7 @@ window.AdmSvc = {
         '<div class="field" style="margin-bottom:6px;"><label>🔌 অটোমেশন ইঞ্জিন বেছে নিন *</label><select id="sv_engine">' +
           '<option value="">-- ইঞ্জিন বেছে নিন --</option>' +
           '<option value="bdris-certificate">জন্মনিবন্ধন সনদ ইঞ্জিন (Port 3000)</option>' +
-          '<option value="death-verify">মৃত্যুনিবন্ধন যাচাই ইঞ্জিন (Port 3001)</option>' +
+          '<option value="death-verify">মৃত্যুনিবন্ধন যাচাই ইঞ্জিন (Port 3104)</option>' +
           '<option value="nid-replica">এনআইডি রেপ্লিকা ইঞ্জিন</option>' +
           '<option value="bdris-apply">BDRIS অনলাইন আবেদন ইঞ্জিন (Port 3102)</option>' +
         '</select></div>' +
@@ -2546,7 +2546,7 @@ window.AdmSvc = {
         '<div class="field" style="margin-bottom:6px;"><label>🔌 অটোমেশন ইঞ্জিন</label><select id="esv_engine">' +
           '<option value="">-- ইঞ্জিন বেছে নিন --</option>' +
           '<option value="bdris-certificate"' + (s.engine_id === 'bdris-certificate' ? ' selected' : '') + '>জন্মনিবন্ধন সনদ ইঞ্জিন (Port 3000)</option>' +
-          '<option value="death-verify"' + (s.engine_id === 'death-verify' ? ' selected' : '') + '>মৃত্যুনিবন্ধন যাচাই ইঞ্জিন (Port 3001)</option>' +
+          '<option value="death-verify"' + (s.engine_id === 'death-verify' ? ' selected' : '') + '>মৃত্যুনিবন্ধন যাচাই ইঞ্জিন (Port 3104)</option>' +
           '<option value="nid-replica"' + (s.engine_id === 'nid-replica' ? ' selected' : '') + '>এনআইডি রেপ্লিকা ইঞ্জিন</option>' +
           '<option value="bdris-apply"' + (s.engine_id === 'bdris-apply' ? ' selected' : '') + '>BDRIS অনলাইন আবেদন ইঞ্জিন (Port 3102)</option>' +
         '</select></div>' +
