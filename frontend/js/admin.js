@@ -3595,19 +3595,14 @@ TABS.settings = async () => {
     '</div>' +
     '</div>' +
 
-    // ROW 2, COL 2: SYSTEM HEALTH, STORAGE & BACKUP
-    '<div class="form-card adm-settings-card adm-settings-health">' +
-    '<h2>🗄️ সিস্টেম হেলথ, ডাটাবেস ও স্টোরেজ</h2>' +
+    // ROW 2, COL 2: DATABASE BACKUP & RESTORE
+    '<div class="form-card adm-settings-card adm-settings-backup">' +
+    '<h2>💾 ডাটাবেস ব্যাকআপ ও ব্যবস্থাপনা</h2>' +
     '<div style="display:flex;flex-direction:column;gap:12px;">' +
-      '<div style="background:var(--bg-muted,#f8fafc);padding:14px;border-radius:8px;border:1px solid var(--border-light);">' +
-        '<div style="font-weight:700;font-size:14px;margin-bottom:4px;color:var(--text-main);">💾 ডাটাবেস ব্যাকআপ</div>' +
-        '<div class="s" style="margin-bottom:10px;">সর্বশেষ ব্যাকআপ: <b>' + esc(backupLastText) + '</b></div>' +
-        '<button class="mini-btn ok" onclick="AdmSt.triggerBackup()">⚡ এখনই নতুন ব্যাকআপ তৈরি করুন</button>' +
-      '</div>' +
-      '<div style="background:var(--bg-muted,#f8fafc);padding:14px;border-radius:8px;border:1px solid var(--border-light);">' +
-        '<div style="font-weight:700;font-size:14px;margin-bottom:4px;color:var(--text-main);">📂 ক্লাউড ফাইল স্টোরেজ</div>' +
-        '<div class="s" style="margin-bottom:10px;">গ্রাহকদের আবেদনের ডকুমেন্টস ও ফাইল স্টোরেজ হাবে সংরক্ষিত হয়</div>' +
-        '<button class="mini-btn" style="background:var(--primary-600);color:#fff;" onclick="show(\'storage\')">ফাইল স্টোরেজ হাব খুলুন →</button>' +
+      '<div style="background:var(--bg-muted,#f8fafc);padding:16px;border-radius:10px;border:1px solid var(--border-light);">' +
+        '<div style="font-weight:700;font-size:14px;margin-bottom:6px;color:var(--text-main);display:flex;align-items:center;gap:6px;">🗄️ ফুল ডাটাবেস স্ন্যাপশট</div>' +
+        '<div class="s" style="margin-bottom:12px;line-height:1.6;">সর্বশেষ ব্যাকআপ: <b style="color:var(--text-main);">' + esc(backupLastText) + '</b><br>নিয়মিত ব্যাকআপ সার্ভার ক্র্যাশ বা অনিচ্ছাকৃত তথ্য হারানোর হাত থেকে সম্পূর্ণ সুরক্ষিত রাখে।</div>' +
+        '<button class="mini-btn ok" style="padding:8px 16px;font-size:13px;" onclick="AdmSt.triggerBackup()">⚡ এখনই নতুন ব্যাকআপ তৈরি করুন</button>' +
       '</div>' +
     '</div>' +
     '</div>' +

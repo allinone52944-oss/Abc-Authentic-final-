@@ -411,7 +411,7 @@ describe('admin panel navigation & premium workflows (2026-10-19)', () => {
     expect(ahtml).toContain('অপারেশন ও লেনদেন');
     expect(ahtml).toContain('মার্কেটিং ও কন্টেন্ট');
     expect(ahtml).toContain('সিস্টেম ও অডিট');
-    expect(ahtml).toMatch(/admin\.js\?v=51/);
+    expect(ahtml).toMatch(/admin\.js\?v=52/);
   });
 
   test('admin.js exposes getAuthToken helper and uses it across downloads & uploads', () => {
@@ -436,4 +436,12 @@ describe('admin panel navigation & premium workflows (2026-10-19)', () => {
     expect(ajs).toContain('অ্যাডমিন লাইভ অ্যালার্ট ও WhatsApp');
     expect(ajs).toContain('কাস্টমার লগইন ভয়েস শুভেচ্ছা');
   });
+
+  test('settings tab has dedicated backup card without duplicate storage shortcut', () => {
+    const stBlock = ajs.slice(ajs.indexOf('TABS.settings = async'), ajs.indexOf('TABS.reports = async'));
+    expect(stBlock).toContain('💾 ডাটাবেস ব্যাকআপ ও ব্যবস্থাপনা');
+    expect(stBlock).not.toContain('🗄️ সিস্টেম হেলথ, ডাটাবেস ও স্টোরেজ');
+    expect(stBlock).not.toContain("show('storage')");
+  });
 });
+
