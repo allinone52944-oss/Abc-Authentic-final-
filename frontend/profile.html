@@ -122,7 +122,7 @@ async function init(){
   if(!r.ok){location.href='/login.html';return;}
   const {user}=await r.json();
   document.getElementById('waFab').onclick=()=>{
-    window.open('https://wa.me/?text='+encodeURIComponent('আসসালামু আলাইকুম! আমি '+user.name+' (ফোন: '+user.phone+')। সাহায্য দরকার।'),'_blank');
+    window.open('https://wa.me/8801835414122?text='+encodeURIComponent('আসসালামু আলাইকুম! আমি '+user.name+' (ফোন: '+user.phone+')। সাহায্য দরকার।'),'_blank');
   };
   document.getElementById('name').value=user.name||'';
   document.getElementById('phone').value=user.phone||'';

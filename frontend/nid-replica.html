@@ -388,7 +388,7 @@ function dlPdf(){
   const me=await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
   const u=(await me.json()).user;
-  document.getElementById('waFab').onclick=()=>{window.open('https://wa.me/?text='+encodeURIComponent('আমি '+u.name+' (ফোন: '+u.phone+')। এনআইডি কার্ড সম্পর্কে জানতে চাই।'),'_blank');};
+  document.getElementById('waFab').onclick=()=>{window.open('https://wa.me/8801835414122?text='+encodeURIComponent('আমি '+u.name+' (ফোন: '+u.phone+')। এনআইডি কার্ড সম্পর্কে জানতে চাই।'),'_blank');};
 })();
 </script>
 </body>

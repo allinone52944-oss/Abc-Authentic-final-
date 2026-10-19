@@ -6,7 +6,7 @@
 <link rel="manifest" href="/manifest.json">
 <link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
 <link rel="stylesheet" href="/css/premium.css?v=1">
-<link rel="stylesheet" href="/css/motion.css?v=2">
+<link rel="stylesheet" href="/css/motion.css?v=3">
 <meta name="theme-color" content="#1e40af">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -478,14 +478,52 @@
   }
 
   .help-card-desk {
-    background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
-    border: 1px solid #bfdbfe;
-    border-radius: var(--r-lg);
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #f8fffb 0%, #effcf5 100%);
+    border: 1px solid #cdebd8;
+    border-radius: 18px;
     padding: 16px;
     margin-top: 14px;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 14px;
+  }
+  .help-card-desk::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: linear-gradient(180deg, #25d366, #128c7e);
+  }
+  .help-card-desk .help-copy { min-width: 0; }
+  .help-card-desk .help-title { color: #123c2c; font-size: 14px; font-weight: 800; }
+  .help-card-desk .help-subtitle { color: #52645b; font-size: 12px; margin-top: 3px; }
+  .help-wa-link {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid rgba(255,255,255,.4);
+    border-radius: 12px;
+    color: #fff;
+    background: linear-gradient(135deg, #20bd5a, #128c7e);
+    box-shadow: 0 5px 14px rgba(18, 140, 126, .2);
+    font-size: 13px;
+    font-weight: 800;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .help-wa-link:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(18, 140, 126, .28); }
+  .help-wa-link:focus-visible { outline: 3px solid #86efac; outline-offset: 3px; }
+  @media (max-width: 520px) {
+    .help-card-desk { align-items: flex-start; flex-direction: column; }
+    .help-wa-link { width: 100%; }
   }
 
   /* Banner Strip */
@@ -784,12 +822,14 @@
           <div class="skel" style="height:44px;"></div>
         </div>
 
-        <div class="help-card-desk">
-          <div>
-            <b style="font-size:13px;color:#1e3a8a;">সরাসরি সাহায্য প্রয়োজন?</b>
-            <p style="font-size:12px;color:#475569;margin-top:2px;">আমাদের হেল্পলাইনে WhatsApp-এ যোগাযোগ করুন।</p>
+        <div class="help-card-desk" aria-label="WhatsApp হেল্পলাইন">
+          <div class="help-copy">
+            <div class="help-title">সরাসরি সাহায্য প্রয়োজন?</div>
+            <p class="help-subtitle">আমাদের হেল্পলাইনে WhatsApp-এ যোগাযোগ করুন।</p>
           </div>
-          <button class="btn" style="padding:6px 14px;font-size:12px;" onclick="document.getElementById('waFab').click()">যোগাযোগ</button>
+          <a class="help-wa-link" href="https://wa.me/8801835414122?text=%E0%A6%86%E0%A6%B8%E0%A6%B8%E0%A6%BE%E0%A6%B2%E0%A6%BE%E0%A6%AE%E0%A7%81%20%E0%A6%86%E0%A6%B2%E0%A6%BE%E0%A6%87%E0%A6%95%E0%A7%81%E0%A6%AE%21%20All%20In%20One%20%E0%A6%A1%E0%A7%8D%E0%A6%AF%E0%A6%BE%E0%A6%B6%E0%A6%AC%E0%A7%8B%E0%A6%B0%E0%A7%8D%E0%A6%A1%20%E0%A6%A5%E0%A7%87%E0%A6%95%E0%A7%87%20%E0%A6%B8%E0%A6%B9%E0%A6%BE%E0%A7%9F%E0%A6%A4%E0%A6%BE%20%E0%A6%9A%E0%A6%BE%E0%A6%87%E0%A5%A4" target="_blank" rel="noopener noreferrer" aria-label="অ্যাডমিনের WhatsApp হেল্পলাইনে যোগাযোগ করুন">
+            <img src="/icons/whatsapp.svg" alt="" width="18" height="18"> WhatsApp-এ যোগাযোগ
+          </a>
         </div>
       </div>
     </div>
@@ -887,12 +927,20 @@
       <div class="skel" style="height:90px;"></div>
       <div class="skel" style="height:90px;"></div>
     </div>
+
+    <div class="help-card-desk" aria-label="WhatsApp হেল্পলাইন">
+      <div class="help-copy">
+        <div class="help-title">সরাসরি সাহায্য প্রয়োজন?</div>
+        <p class="help-subtitle">আমাদের হেল্পলাইনে WhatsApp-এ যোগাযোগ করুন।</p>
+      </div>
+      <a class="help-wa-link" href="https://wa.me/8801835414122?text=%E0%A6%86%E0%A6%B8%E0%A6%B8%E0%A6%BE%E0%A6%B2%E0%A6%BE%E0%A6%AE%E0%A7%81%20%E0%A6%86%E0%A6%B2%E0%A6%BE%E0%A6%87%E0%A6%95%E0%A7%81%E0%A6%AE%21%20All%20In%20One%20%E0%A6%A1%E0%A7%8D%E0%A6%AF%E0%A6%BE%E0%A6%B6%E0%A6%AC%E0%A7%8B%E0%A6%B0%E0%A7%8D%E0%A6%A1%20%E0%A6%A5%E0%A7%87%E0%A6%95%E0%A7%87%20%E0%A6%B8%E0%A6%B9%E0%A6%BE%E0%A7%9F%E0%A6%A4%E0%A6%BE%20%E0%A6%9A%E0%A6%BE%E0%A6%87%E0%A5%A4" target="_blank" rel="noopener noreferrer" aria-label="অ্যাডমিনের WhatsApp হেল্পলাইনে যোগাযোগ করুন">
+        <img src="/icons/whatsapp.svg" alt="" width="18" height="18"> WhatsApp-এ যোগাযোগ
+      </a>
+    </div>
   </div>
 </div>
 
 <!-- Floating Action Button -->
-<button class="wa-fab" id="waFab" aria-label="WhatsApp-এ সাহায্য চান" title="WhatsApp-এ সরাসরি সাহায্য চান"><img src="/icons/whatsapp.svg" alt="WhatsApp"></button>
-
 <!-- Mobile Tabbar -->
 <div class="m-tabbar">
   <div class="m-tab on" aria-current="page"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>হোম</div>
@@ -1364,12 +1412,6 @@ async function loadSettings() {
     GreetVoice.maybePlay(window._user);
   }
 }
-
-document.getElementById('waFab').onclick = () => {
-  const u = window._user || {};
-  const text = 'আসসালামু আলাইকুম! আমি ' + (u.name || '') + ' (ফোন: ' + (u.phone || '') + ')। সাহায্য দরকার।';
-  window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
-};
 
 document.getElementById('logoutBtn').onclick = async () => {
   const rt = localStorage.getItem('abc_refresh_token');
