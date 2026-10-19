@@ -1230,7 +1230,7 @@ async function loadRecentOrders() {
         desk.innerHTML = '<div style="text-align:center;padding:24px 12px;color:#64748b;background:#f8fafc;border-radius:12px;border:1px dashed #cbd5e1;">' +
           '<div style="font-size:24px;margin-bottom:6px;">📋</div>' +
           '<p style="font-size:13px;font-weight:600;color:#334155;">আপনার এখনো কোনো চলমান বা পূর্বের অর্ডার নেই</p>' +
-          '<button class="btn" style="margin-top:10px;padding:7px 16px;font-size:12px;border-radius:8px;" onclick="location.href='/services.html'">+ নতুন সেবার আবেদন করুন</button>' +
+          '<button class="btn" style="margin-top:10px;padding:7px 16px;font-size:12px;border-radius:8px;" onclick="location.href=\'/services.html\'">+ নতুন সেবার আবেদন করুন</button>' +
           '</div>';
       }
       if (mob) mob.innerHTML = '';
@@ -1255,7 +1255,7 @@ async function loadRecentOrders() {
           '</div>' +
           '<div class="ro-right">' +
             '<span class="st st-' + escapeHtml(stKey) + '">' + escapeHtml(stText) + '</span>' +
-            '<button class="ro-btn" onclick="location.href='/order-detail.html?id=' + encodeURIComponent(o.id) + ''">ট্র্যাক করুন →</button>' +
+            '<button class="ro-btn" onclick="location.href=\'/order-detail.html?id=' + encodeURIComponent(o.id) + '\'">ট্র্যাক করুন →</button>' +
           '</div>' +
         '</div>';
       }).join('');
@@ -1267,7 +1267,7 @@ async function loadRecentOrders() {
         const sName = escapeHtml(activeOrder.service_name_bn || activeOrder.service_name || 'সেবা');
         const stKey = String(activeOrder.status || 'pending').toLowerCase();
         const stText = STBN[stKey] || activeOrder.status;
-        mob.innerHTML = '<div class="m-active-order-pill" onclick="location.href='/order-detail.html?id=' + encodeURIComponent(activeOrder.id) + ''">' +
+        mob.innerHTML = '<div class="m-active-order-pill" onclick="location.href=\'/order-detail.html?id=' + encodeURIComponent(activeOrder.id) + '\'">' +
           '<div style="display:flex;align-items:center;gap:10px;">' +
             '<div style="font-size:20px;">' + autoIcon(sName) + '</div>' +
             '<div>' +
@@ -1297,10 +1297,10 @@ async function loadServices() {
     const svcs = d.services || [];
     setText('hubServices', bnNum(svcs.length));
     pop.innerHTML = svcs.slice(0, 4).map(s =>
-      '<div class="svc2" onclick="location.href='/service-detail.html?id='+s.id+''"><div class="ico">' + escapeHtml((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
+      '<div class="svc2" onclick="location.href=\'/service-detail.html?id=' + encodeURIComponent(s.id) + '\'"><div class="ico">' + escapeHtml((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
     ).join('') || '<div>কোনো সেবা নেই</div>';
     mob.innerHTML = svcs.slice(0, 6).map(s =>
-      '<div class="svc2" onclick="location.href='/service-detail.html?id='+s.id+''"><div class="ico">' + escapeHtml((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
+      '<div class="svc2" onclick="location.href=\'/service-detail.html?id=' + encodeURIComponent(s.id) + '\'"><div class="ico">' + escapeHtml((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
     ).join('') || '<div>কোনো সেবা নেই</div>';
   } catch (e) {
     setText('hubServices', '–');
@@ -1384,7 +1384,7 @@ async function showNotices() {
   const list = valid.map(n => '<li style="margin-bottom:12px;"><b>' + escapeHtml(n.title) + '</b><br><span style="font-size:13px;color:#475569;">' + escapeHtml(n.message) + '</span></li>').join('') || '<li>কোনো নোটিশ নেই</li>';
   const bg = document.createElement('div');
   bg.className = 'modal-bg';
-  bg.innerHTML = '<div class="modal"><h3>🔔 সকল নোটিশ</h3><ul style="padding-left:18px;margin:16px 0;">' + list + '</ul><button class="btn" style="width:100%;margin-top:10px;" onclick="this.closest('.modal-bg').remove()">বন্ধ করুন</button></div>';
+  bg.innerHTML = '<div class="modal"><h3>🔔 সকল নোটিশ</h3><ul style="padding-left:18px;margin:16px 0;">' + list + '</ul><button class="btn" style="width:100%;margin-top:10px;" onclick="this.closest(\'.modal-bg\').remove()\">বন্ধ করুন</button></div>';
   bg.onclick = (e) => { if (e.target === bg) bg.remove(); };
   document.body.appendChild(bg);
 }
