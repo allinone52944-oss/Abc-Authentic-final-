@@ -104,6 +104,7 @@ async function show(tab) {
     content.innerHTML = '<div class="err">লোড ব্যর্থ: ' + esc(msg) + '</div>';
   }
 }
+window.show = show;
 
 /* ============ Phase 3: Premium Voice & Realtime Sound Notifications ============ */
 window.admToast = (title, message, type = 'info', badge = 'সফল') => {
@@ -569,6 +570,7 @@ const PushNotify = {
 window.PushNotify = PushNotify;
 
 const TABS = {};
+window.TABS = TABS;
 
 /* ---------------- STATS ---------------- */
 TABS.stats = async () => {
