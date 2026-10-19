@@ -1,0 +1,99 @@
+PARSE FIX NOTE — BDRIS field parser (death engine, port 3001)
+==============================================================
+Khyal: ei note-ta Death-Verify-Engine er. BuilderEngine (birth, port 3000)
+er note onno file — sei folder-e PARSE_FIX_NOTE.txt dekhen.
+API contract: ENGINE_API.txt (ekta change: registrationOffice response-e
+    nei — office printed ONCE; baki age-er moto).
+Sample response: sample_verify_response.json
+
+-----------------------------------------------------------------------------
+A) KENO FAIL KORCHILO (root cause)
+-----------------------------------------------------------------------------
+1) extractRows SHUDHU <td> nichhilo.
+   Result page-e label <th>-e hole cell-i extract hoto na -> shob khali.
+   FIX: <td> + <th> (document-order) + entity decode.
+
+2) mapBirthResultData-e label EXACT list lagto:
+   ['REGISTRATION DATE','REGISTRATION OFFICE','ISSUANCE DATE', ...]
+   toUpperCase + exact — label spelling/space/colon/BN badalei fail.
+   FIX: nlab() normalize + EN/BN alias (LAB object) + per-field validator.
+
+3) mapBirthResultData-er grid value pick-if-empty chilo.
+   Tar age mapResultData (4-col) birth page-er LABEL ROW ke
+   [bnLabel][bnValue][enLabel][enValue] bhore nilo ->
+       issuanceDate = 'DATE OF BIRTH'   (bhul value, silent)
+   FIX: grid value AUTHORITATIVE (grid thakle grid-i jebe) +
+   final sanitizer (je value-i label, ba date field-e date na -> delete).
+
+4) office2 theke "Raozan" token hariye jeto (lp.slice(1) while office1 set).
+   FIX: office1 thakle puro location-i office2 = "Raozan, Chattogram".
+
+5) Sparse (empty value cell) hole positional shift -> porer value ageye jato.
+   FIX: strict positional (empty holeo position thake) + forward-scan
+   fallback with used-set (ek-i value dui field-e na jay).
+
+6) Response-e office name 2 BAR ashto: registrationOffice (raw copy) +
+   office1+office2 (split) — dui tai ek-i office.
+   FIX: normalizeBdrisData-e office1 thakle registrationOffice DELETE
+   (parse level-e thake, shudhu response theke bad). Sample PDF-e
+   office name EKBAR — sample er layout er sathe milate.
+
+-----------------------------------------------------------------------------
+B) KIVABE KAJ KORE EKHON
+-----------------------------------------------------------------------------
+- extractRows  : <td>+<th>, entity decode
+- nlab()/LAB   : label normalize + EN/BN alias -> field
+- VALID        : date/brn/sex/office validator (bhul value rokhte)
+- grid pass    : run-based strict positional (grid + pair)
+- fwd fallback : forward-scan + used-set
+- sanitizer    : label-value / not-a-date delete
+- office split : office1 = office name line, office2 = full location
+- birth enrichment (line ~993): reg/issue/DOB/sex/office na thakle
+  /UBRNVerification/Search theke niche ase — ei mapBirthResultData-i
+  robust korlam, tai enrichment-eo fix kaj korbe.
+
+TEST (module-level, live BDRIS na — deterministic layout cases):
+    node test-parse.js   ->  RESULT pass=29 fail=0
+Covered: 4-col death rows / birth grid exact / <th>+alias / pair /
+         sparse empty / death header sentence / NB footer / e2e office split /
+         dedupe (registrationOffice response-e NA — CASE 8).
+
+-----------------------------------------------------------------------------
+C) BUILDER/CONSUMER APP KI KORBE
+-----------------------------------------------------------------------------
+  GET  /api/captcha            -> { success, sessionId, image }
+  POST /api/solve-captcha      { sessionId } -> { answer }
+  POST /api/verify             { sessionId, drn, dod, captcha }
+                              -> { success:true, data } | {success:false,error}
+  data niye  POST /api/preview  ba  POST /api/pdf
+
+*** BDRIS-er HTML NIBEN NA — engine already structured data dey. ***
+
+data.registrationDate   ->  regDate / registrationDate (DD/MM/YYYY)
+data.issuanceDate       ->  issueDate / issuanceDate (DD/MM/YYYY)
+data.office1            ->  office1   (header line 1)
+data.office2            ->  office2   (header line 2)
+data.registrationOffice ->  RESPONSE-E NEI (office name 2 bar dekhato;
+                            office1+office2 = canonical, tai delete)
+data.brn / dod / dob / sex / nameEn / nameBn
+data.placeOfDeathEn-Bn / causeOfDeathEn-Bn
+data.motherNameEn-Bn / motherNationalityEn-Bn
+data.fatherNameEn-Bn / fatherNationalityEn-Bn
+data.verificationUrl / recordType:"death"
+
+-----------------------------------------------------------------------------
+D) DEBUG
+-----------------------------------------------------------------------------
+1) data.missingFields  = ki miss hoyeche (array). ei response-te thake.
+2) _last-result.html   = actually asha page (path error message-e ache).
+   _last-birth.html    = birth enrichment page.
+3) Parser nijei:   node test-parse.js    (folder-ei, install lagbe na)
+4) Notun label:    server.js-e LAB object-e ek line add koro. Code change na.
+
+-----------------------------------------------------------------------------
+E) LIMIT (guarantee boundary)
+-----------------------------------------------------------------------------
+- Live BDRIS nirbhor: site table bodlale parser vangte pare —
+  _last-result.html diye report dile alias add korte hobe.
+- Notun record-er DOB ajana hole birth enrichment ashte pare na ->
+  short data (error NA). missingFields dekhabe ki khali.

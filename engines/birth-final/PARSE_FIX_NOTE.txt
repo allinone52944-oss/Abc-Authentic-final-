@@ -1,0 +1,140 @@
+PARSE FIX NOTE — BDRIS field parser (office location / reg date / issue date)
+=============================================================================
+Khyal: eta BuilderEngine (birth, port 3000) er note. Death engine-e same note
+file ache, kintu file name onno (dekhen oi folder-e).
+
+-----------------------------------------------------------------------------
+A) KENO FAIL KORCHILO (root cause — 6 ta, prove-sahit)
+-----------------------------------------------------------------------------
+1) extractTdTexts SHUDHU <td> nichhilo.
+   BDRIS result page jodi label <th>-e rakhe (table header variant), tabe
+   ekta-o cell extract hoto na -> registrationDate / issuanceDate /
+   registrationOffice SHOB khali.
+   FIX: <td> + <th> (document-order), entity decode, ar table-i na thakle
+   div/span/label layout-e tag-boundary tokenizer fallback.
+
+2) mapResultData-e label EXACT match lagto:  text === 'Registration Date'
+   plus value always tds[i+3].
+   Label spelling / case / space / colon / BN badalei fail:
+     "Date of Registration" , "  registration date :" , "ISSUANCE DATE" ,
+     "নিবন্ধনের তারিখ"  -> kichui match korto na.
+   FIX: nlab() normalize (markup/space/case/punctuation tolerant) +
+   RESULT_LABELS alias list (EN + BN) + per-field validator.
+
+3) Pair layout (label | value adjacent) hole i+3 mile PORER field-er value
+   chole ashto -> bhul data print hoto (silent corruption).
+   FIX: PASS A run-based STRICT positional — grid layout o pair layout dui
+   tai thik, ar majhkhan-e empty cell thakleo position na sore.
+
+4) office2 theke "Raozan" token hariye jeto.
+   office1 table theke already set thakle officeLocationRaw theke
+   lp.slice(1) nileo -> office2 = "Chattogram" (thana token lost).
+   FIX: office1 thakle puro location-i office2 = "Raozan, Chattogram".
+
+5) (death engine) birth result page-er LABEL ROW ke 4-col data-row bhore
+   nilo ->  issuanceDate = 'DATE OF BIRTH'  mis-set hoyechilo.
+   FIX: grid value authoritative + final sanitizer (je value-i label ba
+   date field-e date na, seta delete).
+
+6) Response-e office name 2 BAR ashto: registrationOffice (raw copy) +
+   office1+office2 (split) � dui tai ek-i office.
+   FIX: normalizeBdrisData-e office1 thakle registrationOffice DELETE
+   (parse/validation level-e thake, shudhu response theke bad).
+   Keno: sample PDF (Desktop\hares b.pdf) -e office name EKBAR �
+   sample er layout er sathe milate. missingFields list thekeo sorano.
+
+-----------------------------------------------------------------------------
+B) KIVABE KAJ KORE EKHON (fallback sahit — 100% coverage target)
+-----------------------------------------------------------------------------
+- nlab()            : label normalize (space/case/colon/BN-tolerant)
+- RESULT_LABELS     : EN + BN alias -> field   (NOTUN LABEL EK LINE ADD KORBO)
+- FIELD_VALID       : date/brn/sex/office validator (bhul cell-e value jabe na)
+- PASS A            : run-based strict positional (grid + pair, empty tolerated)
+- PASS B            : forward-scan fallback + used-set (ek-i value dui field-e na)
+- safety net        : label-er nikosh theke date / office / brn khujo
+- officeLocationRaw : table-r BAIREE (<p>/<div>) holeo pura html theke niche nao
+- sanitizer (death) : label-value bhule thakleo clear
+
+TEST RESULT (module-level, live BDRIS na — deterministic layout cases):
+    node test-parse.js   ->  RESULT pass=47 fail=0
+Covered: grid / pair / <th> labels / alias+colon+case / sparse empty cell /
+         div-label layout / cross-field guard / NB footer / e2e office split /
+         dedupe (registrationOffice response-e NA — CASE 12).
+
+-----------------------------------------------------------------------------
+C) BUILDER APP KI KORBE (API contract)  *** SORVOTCHORO ***
+-----------------------------------------------------------------------------
+FLOW:
+  GET  /api/captcha            -> { sessionId, captchaImage, ... }
+  POST /api/solve-captcha      -> { answer }   (ba nije dhorben)
+  POST /api/verify             { sessionId, brn, dob, captcha }
+                              -> { success: true, data: {...} }
+  data niye  POST /api/preview  ba  POST /generate-pdf
+
+*** BDRIS-er HTML NIBEN NA. Engine already structured data diye dey. ***
+*** App-nije HTML parse korle fix-gula lagbei na, ar duplicate kaj hoy. ***
+
+data (ENGINE KEY)              ->  CERTIFICATE PAYLOAD KEY
+--------------------------------    -------------------------------
+data.registrationDate          ->  regDate      (DD/MM/YYYY)
+data.issuanceDate              ->  issueDate    (DD/MM/YYYY)
+data.office1                   ->  office1      (certificate header line 1)
+data.office2                   ->  office2      (certificate header line 2)
+data.registrationOffice        ->  RESPONSE-E NEI (office name duplicate �
+                                   delete; office1+office2-i canonical)
+data.brn                       ->  brn
+data.dob                       ->  dob  (+ dobWords = dobToWords(dob))
+data.sex                       ->  sex
+data.nameEn / data.nameBn      ->  nameEn / nameBn
+data.motherNameEn / ...Bn      ->  motherEn / motherBn
+data.motherNationalityEn / Bn  ->  motherNatEn / motherNatBn
+data.fatherNameEn / ...Bn      ->  fatherEn / fatherBn
+data.fatherNationalityEn / Bn  ->  fatherNatEn / fatherNatBn
+data.placeOfBirthEn / ...Bn    ->  pobEn / pobBn
+data.permanentAddressEn / Bn   ->  permEn / permBn
+data.verificationCode          ->  verificationCode
+data.verificationUrl           ->  verificationUrl
+data.recordType                ->  'birth'
+
+READY REFERENCE (copy-paste korte parben):
+    check-api.html  ->  doVerify()  function  (line ~160)
+    sei exact mapping-i apnader lagbe.
+    full payload shape: sample-payload.json
+
+office1 / office2 kothay boshe:
+    certificate-builder.js -> buildCertificateHtml
+    (server.js-e header line 1 = office1, line 2 = office2)
+
+-----------------------------------------------------------------------------
+D) DEBUG (parse miss korle ki korben)
+-----------------------------------------------------------------------------
+1) response-e  data.missingFields  dekhen  -> ja parse hoyni tar list (array).
+   Missing thakle:
+2) BuilderEngine-fixed/last-result.html  -> SHOB verify-e save hoy (notun fix).
+   Ei file diye structure dekhay NOTUN label/offset thakle fix korte parben.
+3) /api/verify response-e jodi debug thake -> tds.slice(0,40) = cell list.
+4) Parser nijei re-run:   node test-parse.js
+   (folder-ei thake, kono install lagbe na)
+
+NOTUN LABEL ASLE:
+   server.js-e RESULT_LABELS object-e ek-ta alias line add koro. E.g.
+       registrationDate: [..., 'নতুন লেবেল'],
+   Kono code-logic change lagbe na, ar test still pass korbe.
+
+-----------------------------------------------------------------------------
+E) MANUAL RECORD FEED (live verify na)
+-----------------------------------------------------------------------------
+   POST /api/records   { number, url?, data: { ...payload } }
+   GET  /api/records/:number
+   -> number -> key -> verifyUrl -> QR + CODE128
+   (data = uporekar payload key same-i, Oracle/filer-e store)
+
+-----------------------------------------------------------------------------
+F) NOTICES / GUARANTEE BOUNDARY
+-----------------------------------------------------------------------------
+- Same input -> same output (deterministic), age-er moto.
+- BDRIS live data bodlale output bodlabe (engine-er dosh na).
+- `npm ci` chalaynen (folder copy-as-is na), puppeteer pinned Chrome,
+  single instance (3000 busy hole exit 2).
+- BN OCR / live-site table change = best-effort. last-result.html diye
+  report dile next patch-e alias add hoye jabe.

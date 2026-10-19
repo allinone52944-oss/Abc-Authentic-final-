@@ -3,3 +3,27 @@ node_modules/
 backend/.env
 *.log
 .DS_Store
+
+# Security & temporary data exclusions
+.env
+*.env
+.gemini.env
+start.sh
+*.log
+**/server.log
+**/node_modules/
+**/sessions/
+backups/
+*-backup-*/
+**/last-result.html
+**/_last-result.html
+.deploy-state
+
+# Runtime user data and python cache
+**/__pycache__/
+*.pyc
+engines/bdris-apply/downloads/
+engines/bdris-apply/drafts/
+engines/bdris-apply/addresses_*.json
+engines/bdris-apply/originals-index.json
+engines/*-engine-new/

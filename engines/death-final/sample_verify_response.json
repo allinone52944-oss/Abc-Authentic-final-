@@ -1,0 +1,27 @@
+{
+  "success": true,
+  "data": {
+    "brn": "19681517411127048",
+    "dod": "19/11/2022",
+    "nameEn": "Jahangir Alam",
+    "nameBn": "জাহাঙ্গীর আলম",
+    "placeOfDeathEn": "Munsiganj, Bangladesh",
+    "placeOfDeathBn": "মুন্সিগঞ্জ, বাংলাদেশ",
+    "motherNameEn": "Zanu",
+    "motherNameBn": "জানু",
+    "fatherNameEn": "Abdul Rezzak Khondokar",
+    "fatherNameBn": "আব্দুল রেজ্জাক খন্দকার",
+    "registrationDate": "23/09/2026",
+    "issuanceDate": "23/09/2026",
+    "dob": "01/01/1968",
+    "recordType": "death",
+    "verificationUrl": "https://bdris.gov.bd/certificate/verify?key=VvhyRT3BnUPZyENQKzkPyMdq1iSQiS5uvHfLbt6xCfrbo+BqkrdNuIIrPDwDJQZ2",
+    "motherNationalityEn": "Bangladeshi",
+    "motherNationalityBn": "বাংলাদেশী",
+    "fatherNationalityEn": "Bangladeshi",
+    "fatherNationalityBn": "বাংলাদেশী",
+    "sex": "Male",
+    "office1": "Bagoan Union Parishad",
+    "office2": "Bagoan, Raozan, Chattogram"
+  }
+}

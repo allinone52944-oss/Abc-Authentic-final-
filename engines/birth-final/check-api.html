@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<title>API CHECK - BDRIS Engine (birth)</title>
+<style>
+  body { font-family: "Nirmala UI", Arial, sans-serif; background: #14161c; color: #e8e8e8; margin: 0; padding: 20px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #999; font-size: 13px; margin-bottom: 14px; }
+  .card { background: #1e212b; border: 1px solid #333; border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid #2a2e3a; font-size: 14px; }
+  .row:last-child { border-bottom: none; }
+  .name { flex: 0 0 220px; font-weight: bold; }
+  .pill { flex: 0 0 74px; text-align: center; border-radius: 20px; padding: 3px 0; font-size: 12px; font-weight: bold; }
+  .wait { background: #333; color: #aaa; }
+  .run { background: #6b5e00; color: #ffe45e; }
+  .pass { background: #0d5c2e; color: #7dffab; }
+  .fail { background: #7a1f1f; color: #ffb3b3; }
+  .detail { flex: 1; color: #bbb; font-size: 12px; word-break: break-all; }
+  button { background: #c9a227; color: #111; border: none; border-radius: 8px; padding: 10px 18px; font-size: 15px; font-weight: bold; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  input[type=text] { background: #10131a; color: #eee; border: 1px solid #444; border-radius: 6px; padding: 8px; font-size: 14px; }
+  label { font-size: 13px; color: #bbb; }
+  .grid { display: grid; grid-template-columns: 150px 1fr; gap: 8px 10px; align-items: center; margin: 10px 0; }
+  #capImg { border: 1px solid #555; border-radius: 6px; background: #fff; }
+  pre { background: #10131a; border: 1px solid #333; border-radius: 8px; padding: 10px; font-size: 12px; max-height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+  iframe { width: 100%; height: 520px; border: 1px solid #444; border-radius: 8px; background: #fff; }
+  a.dl { color: #7dffab; }
+  #summary { font-size: 16px; font-weight: bold; margin: 6px 0 12px; }
+</style>
+</head>
+<body>
+<h1>🔌 API CHECK <span style="font-size:13px;color:#999">birth engine</span></h1>
+<div class="sub">Server: <input type="text" id="apiBase" value="http://localhost:3000" style="width:220px"> — server chalaccho to? (<b>node server.js</b>)</div>
+
+<div class="card">
+  <div id="summary">Run chap dao…</div>
+  <button id="btnRun" onclick="runAll()">▶ Run all checks</button>
+  <div id="rows" style="margin-top:10px"></div>
+</div>
+
+<div class="card">
+  <h3 style="margin:0 0 6px">🧪 Manual verify (real record diye try koro)</h3>
+  <div class="grid">
+    <label>BRN (17 digit)</label>
+    <input type="text" id="vNum" maxlength="17" inputmode="numeric" value="20008812737140064">
+    <label>জন্ম তারিখ (DD/MM/YYYY)</label>
+    <input type="text" id="vDate" value="03/01/2000">
+    <label>Captcha</label>
+    <div><button onclick="vCaptcha()">🧩 Captcha ano</button> <img id="capImg" style="display:none;vertical-align:middle" alt="captcha"></div>
+    <label>Captcha উত্তর</label>
+    <input type="text" id="vAns" placeholder="chobi dekhe likho">
+  </div>
+  <button id="btnV" onclick="doVerify()">✅ Verify &amp; Fetch Data</button>
+  <pre id="verifyOut">result ekhane asbe…</pre>
+  <div id="pvWrap" style="display:none">
+    <b>Preview (verify data theke):</b>
+    <iframe id="pvFrame" title="verify preview"></iframe>
+  </div>
+</div>
+
+<script>
+const SAMPLE_BIRTH = {"brn": "20008812737140064", "dob": "03/01/2000", "dobWords": "Third of January Two Thousand", "fatherBn": "মোঃ বাতেন সরদার", "fatherEn": "Md Baten Sarder", "fatherNatBn": "বাংলাদেশী", "fatherNatEn": "Bangladeshi", "issueDate": "30/09/2026", "motherBn": "মোছাঃ হাসিনা খাতুন", "motherEn": "Mst Hasina Khatun", "motherNatBn": "বাংলাদেশী", "motherNatEn": "Bangladeshi", "nameBn": "মোঃ হারেছ আলী", "nameEn": "Md Hares Ali", "office1": "Umarpur Union Parishad", "office2": "Chauhali, Sirajganj", "permBn": "পাচুরিয়া সোলজানা, ওয়ার্ড - ৬\nউমরপুর, চৌহালি, সিরাজগঞ্জ", "permEn": "Pachuria Soljana, Ward - 6\nUmarpur, Chauhali, Sirajganj", "pobBn": "সিরাজগঞ্জ, বাংলাদেশ", "pobEn": "Sirajganj, Bangladesh", "regDate": "30/09/2026", "sex": "Male", "verificationCode": "QHHI"};
+const $ = id => document.getElementById(id);
+const API = () => $('apiBase').value.replace(/\/$/, '');
+let vSession = null;
+
+const CHECKS = [
+  { id: 'store',    name: '1. Store health', fn: async () => {
+      const j = await (await fetch(API() + '/api/store/health')).json();
+      return { ok: !!j.success, detail: 'mode=' + j.mode }; } },
+  { id: 'cap-b',    name: '2. Captcha (birth)', fn: async () => {
+      const j = await (await fetch(API() + '/api/captcha')).json();
+      if (j.success && j.sessionId) window._sessB = j.sessionId;
+      return { ok: !!(j.success && j.image), detail: j.diag || j.error }; } },
+  { id: 'eng-b',    name: '3. Engine (birth no)', fn: async () => {
+      const j = await (await fetch(API() + '/api/engine', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number: SAMPLE_BIRTH.brn }) })).json();
+      return { ok: !!(j.success && j.engine && j.engine.key && j.engine.key.length >= 60),
+               detail: 'key ' + ((j.engine && j.engine.key) || '').slice(0, 12) + '…' }; } },
+  { id: 'pv-b',     name: '4. Preview (birth)', fn: async () => {
+      const j = await (await fetch(API() + '/api/preview', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(SAMPLE_BIRTH) })).json();
+      const ok = !!(j.success && j.html && j.html.includes('Birth Registration Certificate -'));
+      return { ok, detail: 'html ' + ((j.html || '').length / 1024).toFixed(0) + ' KB' }; } },
+  { id: 'pdf-b',    name: '5. PDF (birth)', fn: async () => {
+      const r = await fetch(API() + '/generate-pdf', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(SAMPLE_BIRTH) });
+      const b = await r.blob();
+      const kb = b.size / 1024;
+      const url = URL.createObjectURL(b);
+      return { ok: r.ok && b.size > 100 * 1024,
+               detail: kb.toFixed(0) + ' KB <a class="dl" href="' + url + '" download="check-birth.pdf">download</a>' }; } },
+  { id: 'rec-l',    name: '6. Records list', fn: async () => {
+      const j = await (await fetch(API() + '/api/records?limit=1')).json();
+      return { ok: !!j.success, detail: 'mode=' + j.mode + ' count=' + (j.records || []).length }; } },
+];
+
+function paint(id, cls, detail) {
+  const pill = document.querySelector('#pill-' + id);
+  const det = document.querySelector('#det-' + id);
+  if (!pill) return;
+  pill.className = 'pill ' + cls;
+  pill.textContent = cls === 'pass' ? 'PASS' : cls === 'fail' ? 'FAIL' : cls === 'run' ? '…' : 'WAIT';
+  if (detail !== undefined) det.innerHTML = detail;
+}
+function buildRows() {
+  $('rows').innerHTML = CHECKS.map(c =>
+    '<div class="row"><span class="name">' + c.name + '</span>' +
+    '<span class="pill wait" id="pill-' + c.id + '">WAIT</span>' +
+    '<span class="detail" id="det-' + c.id + '"></span></div>').join('');
+}
+async function runAll() {
+  const btn = $('btnRun');
+  btn.disabled = true;
+  buildRows();
+  let pass = 0;
+  for (const c of CHECKS) {
+    paint(c.id, 'run', 'cholche…');
+    try {
+      const r = await c.fn();
+      paint(c.id, r.ok ? 'pass' : 'fail', r.detail || '');
+      if (r.ok) pass++;
+    } catch (e) {
+      paint(c.id, 'fail', 'server chalaccho to? node server.js — ' + (e.message || e));
+    }
+    $('summary').textContent = pass + ' / ' + CHECKS.length + ' PASS';
+  }
+  btn.disabled = false;
+}
+
+/* ---------- manual verify ---------- */
+function dobToWords(s) {
+  const months = { '01': 'January', '02': 'February', '03': 'March', '04': 'April', '05': 'May', '06': 'June', '07': 'July', '08': 'August', '09': 'September', '10': 'October', '11': 'November', '12': 'December' };
+  const days = ['', 'First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth', 'Eleventh', 'Twelfth', 'Thirteenth', 'Fourteenth', 'Fifteenth', 'Sixteenth', 'Seventeenth', 'Eighteenth', 'Nineteenth', 'Twentieth', 'Twenty First', 'Twenty Second', 'Twenty Third', 'Twenty Fourth', 'Twenty Fifth', 'Twenty Sixth', 'Twenty Seventh', 'Twenty Eighth', 'Twenty Ninth', 'Thirtieth', 'Thirty First'];
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  const m = String(s || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return { date: s, words: '' };
+  const day = parseInt(m[1], 10), mn = m[2].padStart(2, '0'), yr = parseInt(m[3], 10);
+  let ys = 'Two Thousand';
+  if (yr >= 2000) { const r = yr - 2000; if (r > 0 && r < 20) ys += ' ' + ones[r]; else if (r >= 20) ys += ' ' + tens[Math.floor(r / 10)] + (r % 10 ? ' ' + ones[r % 10] : ''); }
+  else { const r = yr - 1900; ys = 'Nineteen Hundred'; if (r > 0 && r < 20) ys += ' ' + ones[r]; else if (r >= 20) ys += ' ' + tens[Math.floor(r / 10)] + (r % 10 ? ' ' + ones[r % 10] : ''); }
+  return { date: m[1].padStart(2, '0') + '/' + mn + '/' + m[3], words: days[day] + ' of ' + months[mn] + '  ' + ys };
+}
+async function vCaptcha() {
+  const r = await fetch(API() + '/api/captcha');
+  const j = await r.json();
+  if (!j.success) { $('verifyOut').textContent = 'captcha fail: ' + (j.error || ''); return; }
+  vSession = j.sessionId;
+  const img = $('capImg');
+  img.src = j.image;
+  img.style.display = 'inline';
+  $('vAns').value = '';
+  $('verifyOut').textContent = 'captcha eseche (session ' + vSession.slice(0, 8) + '…) — uttor likho';
+}
+async function doVerify() {
+  const num = $('vNum').value.trim(), date = $('vDate').value.trim(), ans = $('vAns').value.trim();
+  if (!vSession) { $('verifyOut').textContent = 'age Captcha ano'; return; }
+  if (!ans) { $('verifyOut').textContent = 'captcha uttor dao'; return; }
+  $('btnV').disabled = true;
+  try {
+    const r = await fetch(API() + '/api/verify', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: vSession, brn: num, dob: date, captcha: ans }) });
+    const j = await r.json();
+    $('verifyOut').textContent = JSON.stringify(j, null, 1).slice(0, 4000);
+    if (!j.success) return;
+    const d = j.data || {};
+    const tt = s => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '';
+    const dw = dobToWords(d.dob);
+    const fields = {
+      office1: d.office1 || '', office2: d.office2 || '',
+      verificationCode: d.verificationCode || '', verificationUrl: d.verificationUrl || '',
+      brn: d.brn || num, regDate: d.registrationDate || '', issueDate: d.issuanceDate || '',
+      dob: dw.date, dobWords: dw.words, sex: tt(d.sex),
+      nameBn: d.nameBn || '', nameEn: d.nameEn || '',
+      motherBn: d.motherNameBn || '', motherEn: d.motherNameEn || '',
+      motherNatBn: d.motherNationalityBn || 'বাংলাদেশী', motherNatEn: d.motherNationalityEn || 'Bangladeshi',
+      fatherBn: d.fatherNameBn || '', fatherEn: d.fatherNameEn || '',
+      fatherNatBn: d.fatherNationalityBn || 'বাংলাদেশী', fatherNatEn: d.fatherNationalityEn || 'Bangladeshi',
+      pobBn: d.placeOfBirthBn || '', pobEn: d.placeOfBirthEn || '',
+      permBn: d.permanentAddressBn || '', permEn: d.permanentAddressEn || '',
+    };
+    const p = await fetch(API() + '/api/preview', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fields) });
+    const pj = await p.json();
+    if (pj.success) {
+      $('pvWrap').style.display = 'block';
+      $('pvFrame').srcdoc = pj.html;
+    }
+  } catch (e) {
+    $('verifyOut').textContent = 'error: ' + (e.message || e);
+  }
+  $('btnV').disabled = false;
+}
+buildRows();
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "author": "",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "body-parser": "^2.3.0",
+    "bwip-js": "^4.5.1",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "oracledb": "^7.0.1",
+    "pdf-lib": "^1.17.1",
+    "puppeteer": "^25.12.0",
+    "qrcode": "^1.5.4"
+  },
+  "description": "BDRIS verification scraper + birth registration certificate PDF generator",
+  "keywords": [],
+  "license": "ISC",
+  "main": "server.js",
+  "name": "bdris-scrapper",
+  "scripts": {
+    "start": "node server.js",
+    "test:engine": "node test_engine.js",
+    "build:standalone": "node build-standalone.js"
+  },
+  "type": "commonjs",
+  "version": "2.0.0"
+}

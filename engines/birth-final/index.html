@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BDRIS Certificate Studio</title>
+<style>
+  :root {
+    --navy: #0b1526;
+    --navy2: #111f38;
+    --card: #14243f;
+    --gold: #d4af37;
+    --gold2: #f0d060;
+    --ink: #eef2f8;
+    --muted: #9fb0cc;
+    --line: rgba(212, 175, 55, .25);
+    --ok: #35c26e;
+    --err: #ff6b6b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Noto Sans Bengali', 'Hind Siliguri', 'Nirmala UI', sans-serif;
+    background:
+      radial-gradient(1200px 600px at 15% -5%, rgba(212,175,55,.10), transparent 60%),
+      radial-gradient(900px 500px at 95% 10%, rgba(53,194,110,.06), transparent 60%),
+      var(--navy);
+    color: var(--ink);
+    min-height: 100vh;
+    padding: 28px 16px 120px;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; }
+
+  /* ---------- header ---------- */
+  header.brand { text-align: center; margin-bottom: 22px; }
+  header.brand h1 {
+    font-size: 30px; letter-spacing: .5px; color: var(--gold2);
+    text-shadow: 0 2px 18px rgba(212,175,55,.25);
+  }
+  header.brand p { color: var(--muted); font-size: 14px; margin-top: 6px; }
+
+  /* ---------- steps ---------- */
+  .steps { display: flex; gap: 10px; justify-content: center; margin: 0 auto 26px; flex-wrap: wrap; }
+  .step {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--navy2); border: 1px solid var(--line);
+    padding: 10px 18px; border-radius: 999px; color: var(--muted);
+    font-size: 15px; transition: all .3s;
+  }
+  .step .n {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: grid; place-items: center; font-weight: bold;
+    background: #22345a; color: var(--muted); font-size: 14px;
+  }
+  .step.active { color: var(--ink); border-color: var(--gold); box-shadow: 0 0 18px rgba(212,175,55,.25); }
+  .step.active .n { background: var(--gold); color: #1a1405; }
+  .step.done .n { background: var(--ok); color: #06260f; }
+  .step.done { color: var(--ink); }
+
+  /* ---------- cards ---------- */
+  .card {
+    background: linear-gradient(180deg, var(--card), #0f1c33);
+    border: 1px solid var(--line); border-radius: 18px;
+    padding: 28px; margin-bottom: 22px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.45);
+    animation: rise .45s ease;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  .card h2 { font-size: 20px; color: var(--gold2); margin-bottom: 6px; }
+  .card .sub { color: var(--muted); font-size: 14px; margin-bottom: 20px; }
+  .hidden { display: none !important; }
+
+  label { display: block; margin: 0 0 7px; font-size: 14px; color: var(--gold2); font-weight: bold; }
+  input[type=text], textarea {
+    width: 100%; padding: 12px 14px; font-size: 16px;
+    background: #0a1322; border: 1px solid #2b3d63; color: var(--ink);
+    border-radius: 10px; outline: none; transition: border .2s, box-shadow .2s;
+    font-family: inherit;
+  }
+  input[type=text]:focus, textarea:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(212,175,55,.18); }
+  textarea { resize: vertical; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+  .fg { margin-bottom: 16px; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    border: none; cursor: pointer; border-radius: 12px;
+    padding: 14px 26px; font-size: 17px; font-weight: bold; font-family: inherit;
+    transition: transform .12s, box-shadow .2s, filter .2s;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn-gold {
+    background: linear-gradient(180deg, var(--gold2), var(--gold));
+    color: #221a06; box-shadow: 0 8px 24px rgba(212,175,55,.35);
+  }
+  .btn-gold:hover { filter: brightness(1.07); box-shadow: 0 10px 30px rgba(212,175,55,.5); }
+  .btn-ghost {
+    background: transparent; color: var(--gold2);
+    border: 1px solid var(--gold);
+  }
+  .btn-ghost:hover { background: rgba(212,175,55,.12); }
+  .btn:disabled { opacity: .5; cursor: wait; }
+  .btn-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
+  .btn-row .btn { flex: 1; min-width: 200px; }
+
+  /* ---------- captcha ---------- */
+  .captcha-frame {
+    background: #fff; border-radius: 14px; padding: 18px;
+    display: inline-block; border: 3px solid var(--gold);
+    box-shadow: 0 0 30px rgba(212,175,55,.2);
+  }
+  .captcha-frame img { display: block; max-width: 100%; height: auto; border-radius: 6px; }
+  .captcha-wrap { text-align: center; margin: 8px 0 18px; }
+  .refresh { color: var(--muted); font-size: 14px; cursor: pointer; margin-top: 10px; display: inline-block; }
+  .refresh:hover { color: var(--gold2); }
+  .hint {
+    background: rgba(212,175,55,.08); border: 1px dashed var(--line);
+    border-radius: 10px; padding: 12px 16px; color: var(--muted);
+    font-size: 14px; margin-top: 16px;
+  }
+
+  /* ---------- editor layout ---------- */
+  .studio { display: grid; grid-template-columns: 1fr 420px; gap: 22px; align-items: start; }
+  @media (max-width: 1020px) { .studio { grid-template-columns: 1fr; } }
+
+  details.group {
+    background: #0d1830; border: 1px solid #22345a; border-radius: 14px;
+    margin-bottom: 14px; overflow: hidden;
+  }
+  details.group[open] { border-color: var(--line); }
+  details.group summary {
+    cursor: pointer; padding: 15px 18px; font-weight: bold; font-size: 16px;
+    color: var(--gold2); list-style: none; display: flex; justify-content: space-between; align-items: center;
+  }
+  details.group summary::-webkit-details-marker { display: none; }
+  details.group summary::after { content: '▾'; color: var(--muted); transition: transform .2s; }
+  details.group[open] summary::after { transform: rotate(180deg); }
+  details.group .body { padding: 4px 18px 18px; }
+
+  /* ---------- live preview ---------- */
+  .preview-pane { position: sticky; top: 18px; }
+  .paper {
+    background: #fff; border-radius: 8px; padding: 10px;
+    box-shadow: 0 24px 70px rgba(0,0,0,.6), 0 0 0 1px var(--line);
+  }
+  .paper .cap { text-align: center; color: var(--gold2); font-size: 14px; margin-bottom: 8px; font-weight: bold; }
+  .preview-box {
+    width: 100%; aspect-ratio: 794 / 1123; overflow: hidden;
+    border-radius: 4px; background: #fff; position: relative;
+  }
+  .preview-box iframe {
+    width: 794px; height: 1123px; border: 0;
+    transform: scale(.5); transform-origin: top left;
+    pointer-events: none;
+  }
+  @media (max-width: 480px) { .preview-box iframe { transform: scale(.42); } }
+  .updating {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    background: rgba(255,255,255,.55); color: #7a5c00; font-size: 14px;
+    opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  .updating.on { opacity: 1; }
+
+  /* ---------- bottom bar ---------- */
+  .dock {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+    background: rgba(11,21,38,.92); backdrop-filter: blur(10px);
+    border-top: 1px solid var(--line); padding: 14px 18px;
+    display: flex; justify-content: center;
+  }
+  .dock .btn { min-width: 320px; font-size: 19px; padding: 16px 30px; }
+
+  /* ---------- toast / loading ---------- */
+  #toast {
+    position: fixed; top: 22px; left: 50%; transform: translateX(-50%) translateY(-80px);
+    background: #1c2c4d; border: 1px solid var(--gold); color: var(--ink);
+    padding: 13px 24px; border-radius: 12px; font-size: 15px; z-index: 99;
+    transition: transform .3s; box-shadow: 0 12px 40px rgba(0,0,0,.5);
+    max-width: 90vw; text-align: center;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  #toast.err { border-color: var(--err); }
+  .spin {
+    display: inline-block; width: 18px; height: 18px; border-radius: 50%;
+    border: 3px solid rgba(0,0,0,.25); border-top-color: currentColor;
+    animation: sp .7s linear infinite; vertical-align: -3px;
+  }
+  @keyframes sp { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="brand">
+    <h1>🏛️ BDRIS Certificate Studio <span style="font-size:12px;color:var(--muted);font-weight:400">v3.19</span></h1>
+    <p>যাচাই → প্রিভিউ → ডাউনলোড — একই জায়গায়</p>
+  </header>
+
+  <div class="steps">
+    <div class="step active" id="st1"><span class="n">১</span> ক্যাপচা</div>
+    <div class="step" id="st2"><span class="n">২</span> ভেরিফাই</div>
+    <div class="step" id="st3"><span class="n">৩</span> প্রিভিউ ও তৈরি</div>
+  </div>
+
+  <!-- STEP 1 : search + captcha -->
+  <section class="card" id="secSearch">
+    <h2>🔍 তথ্য দিন</h2>
+    <p class="sub" id="searchSub">BRN ও জন্ম তারিখ দিয়ে ক্যাপচা আনুন</p>
+    <div class="grid2">
+      <div class="fg">
+        <label id="brnLabel">Birth Registration Number (১৭ সংখ্যা)</label>
+        <input type="text" id="brn" placeholder="যেমন 20008812737140064" maxlength="17" inputmode="numeric">
+      </div>
+      <div class="fg">
+        <label id="dobLabel">জন্ম তারিখ</label>
+        <input type="text" id="dob" placeholder="DD/MM/YYYY — যেমন 03/01/2000">
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-gold" id="btnCaptcha" onclick="fetchCaptcha()">🧩 Captcha আনুন</button>
+    </div>
+
+    <div id="captchaZone" class="hidden">
+      <div class="captcha-wrap">
+        <div class="captcha-frame"><img id="captchaImg" alt="captcha"></div>
+        <div id="capDiag" style="display:none;color:var(--muted);font-size:12px;margin-top:8px;font-family:monospace"></div>
+        <br><span class="refresh" onclick="fetchCaptcha()">↻ নতুন captcha আনুন</span>
+      </div>
+      <div class="grid2">
+        <div class="fg">
+          <label>Captcha-এর উত্তর</label>
+          <input type="text" id="captchaAns" placeholder="ছবি দেখে লিখুন">
+        </div>
+        <div class="fg" style="display:flex;align-items:flex-end;">
+          <button class="btn btn-ghost" id="btnAuto" onclick="autoCalculate()" style="width:100%">✨ Auto Calculate</button>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-gold" id="btnVerify" onclick="verify()">✅ Verify &amp; Fetch Data</button>
+      </div>
+      <div id="verifyDebug" style="display:none;background:#3a1f1f;border:1px solid #a33;border-radius:10px;padding:12px 16px;color:#f0c0c0;font-size:13px;margin-top:12px;font-family:monospace;white-space:pre-wrap;word-break:break-word"></div>
+      <div class="hint">💡 ছবিতে গণিত থাকলে (যেমন 5+10=) <b>Auto Calculate</b> চাপুন — সঠিক মান নিজে বসে যাবে। চাইলে নিজেও টাইপ করতে পারেন।</div>
+    </div>
+  </section>
+
+  <!-- STEP 3 : preview + edit -->
+  <section class="card hidden" id="secStudio">
+    <h2>👁️ প্রিভিউ ও এডিট</h2>
+    <p class="sub">বামে এডিট করুন — ডানে লাইভ সার্টিফিকেট প্রিভিউ দেখুন</p>
+    <div class="studio">
+      <div id="editGroups"></div>
+      <div class="preview-pane">
+        <div class="paper">
+          <div class="cap">📄 লাইভ প্রিভিউ</div>
+          <div class="preview-box">
+            <iframe id="previewFrame" title="certificate preview"></iframe>
+            <div class="updating" id="pvUpdating"><span><span class="spin"></span> আপডেট হচ্ছে…</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="dock hidden" id="dock">
+  <button class="btn btn-gold" id="btnCreate" onclick="createPDF()">⬇ Create PDF</button>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = 'http://localhost:3000';
+let sessionId = null;
+let pvTimer = null;
+
+/* ---------------- helpers ---------------- */
+function toast(msg, isErr) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.toggle('err', !!isErr);
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove('show'), 3500);
+}
+function setStep(n) {
+  [1,2,3].forEach(i => {
+    const el = document.getElementById('st' + i);
+    el.classList.toggle('active', i === n);
+    el.classList.toggle('done', i < n);
+  });
+}
+function busy(btn, on, label) {
+  btn.disabled = on;
+  if (on) { btn._t = btn.innerHTML; btn.innerHTML = '<span class="spin"></span> ' + (label || 'অপেক্ষা করুন…'); }
+  else btn.innerHTML = btn._t;
+}
+const val = id => document.getElementById(id).value;
+
+/* ---------------- field definitions ---------------- */
+const GROUPS = [
+  { title: '📋 নিবন্ধন তথ্য', fields: [
+    ['office1','Registration Office (লাইন ১)'], ['office2','Registration Office (লাইন ২)'],
+    ['verificationCode','QR Verification Code (ধূসর ৪ অক্ষর)'],
+    ['brn','BRN'], ['regDate','Date of Registration'], ['issueDate','Date of Issuance'],
+  ]},
+  { title: '👤 ব্যক্তির তথ্য', fields: [
+    ['nameBn','নাম (বাংলা)'], ['nameEn','Name (English)'],
+    ['dob','Date of Birth'], ['dobWords','DOB In Words'], ['sex','Sex'],
+    ['pobBn','জন্মস্থান (বাংলা)'], ['pobEn','Place of Birth (English)'],
+  ]},
+  { title: '👩 মাতার তথ্য', fields: [
+    ['motherBn','মাতার নাম (বাংলা)'], ['motherEn',"Mother's Name (English)"],
+    ['motherNatBn','মাতার জাতীয়তা (বাংলা)'], ['motherNatEn',"Mother's Nationality (English)"],
+  ]},
+  { title: '👨 পিতার তথ্য', fields: [
+    ['fatherBn','পিতার নাম (বাংলা)'], ['fatherEn',"Father's Name (English)"],
+    ['fatherNatBn','পিতার জাতীয়তা (বাংলা)'], ['fatherNatEn',"Father's Nationality (English)"],
+  ]},
+  { title: '🏠 স্থায়ী ঠিকানা', fields: [
+    ['permBn','স্থায়ী ঠিকানা (বাংলা)', 'ta'], ['permEn','Permanent Address (English)', 'ta'],
+  ]},
+];
+const FIELD_IDS = GROUPS.flatMap(g => g.fields.map(f => f[0]));
+
+function buildEditor() {
+  const host = document.getElementById('editGroups');
+  host.innerHTML = '';
+  GROUPS.forEach((g, gi) => {
+    const d = document.createElement('details');
+    d.className = 'group';
+    if (gi < 2) d.open = true;
+    const s = document.createElement('summary');
+    s.textContent = g.title;
+    d.appendChild(s);
+    const body = document.createElement('div');
+    body.className = 'body';
+    g.fields.forEach(([fid, flabel, kind]) => {
+      const fg = document.createElement('div');
+      fg.className = 'fg';
+      const lb = document.createElement('label');
+      lb.textContent = flabel;
+      fg.appendChild(lb);
+      let inp;
+      if (kind === 'ta') { inp = document.createElement('textarea'); inp.rows = 3; }
+      else { inp = document.createElement('input'); inp.type = 'text'; }
+      inp.id = 'f_' + fid;
+      inp.addEventListener('input', schedulePreview);
+      fg.appendChild(inp);
+      body.appendChild(fg);
+    });
+    d.appendChild(body);
+    host.appendChild(d);
+  });
+}
+function collectFields() {
+  const o = {};
+  FIELD_IDS.forEach(fid => { o[fid] = val('f_' + fid); });
+  // Include auto-extracted verification URL for QR (not a form field)
+  if (window._verificationUrl) o.verificationUrl = window._verificationUrl;
+  return o;
+}
+function fillFields(o) {
+  FIELD_IDS.forEach(fid => {
+    const el = document.getElementById('f_' + fid);
+    if (el) el.value = o[fid] || '';
+  });
+}
+
+/* ---------------- step 1: captcha ---------------- */
+async function fetchCaptcha() {
+  const brn = val('brn').trim(), dob = val('dob').trim();
+  if (!brn || !dob) { toast('BRN ও জন্ম তারিখ দিন', true); return; }
+  const btn = document.getElementById('btnCaptcha');
+  busy(btn, true, 'সার্ভারে যুক্ত হচ্ছে…');
+  try {
+    const r = await fetch(API + '/api/captcha');
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'Captcha load failed');
+    sessionId = j.sessionId;
+    document.getElementById('captchaImg').src = j.image;
+    const dg = document.getElementById('capDiag');
+    if (dg) { dg.textContent = j.diag || ''; dg.style.display = 'block'; }
+    document.getElementById('captchaAns').value = '';
+    document.getElementById('captchaZone').classList.remove('hidden');
+    setStep(2);
+    toast('Captcha এসেছে — উত্তর দিন');
+    document.getElementById('captchaZone').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (e) {
+    toast('সার্ভার চালু আছে তো? node server.js — ' + e.message, true);
+  }
+  busy(btn, false);
+}
+
+/* ---------------- step 2a: auto calculate ---------------- */
+async function autoCalculate() {
+  if (!sessionId) { toast('আগে Captcha আনুন', true); return; }
+  const btn = document.getElementById('btnAuto');
+  busy(btn, true, 'হিসাব করছে…');
+  try {
+    const r = await fetch(API + '/api/solve-captcha', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId })
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'Auto-solve failed');
+    const ans = (j.answer || '').trim();
+    document.getElementById('captchaAns').value = j.answer;
+    toast('✨ সঠিক মান বসেছে: ' + j.answer);
+  } catch (e) {
+    toast(e.message || 'Auto failed — নিজে টাইপ করুন', true);
+  }
+  busy(btn, false);
+}
+
+/* ---------------- step 2b: verify ---------------- */
+function cleanOfficeText(s) {
+  // Same NB-preamble strip as the server (fallback path only; server values win).
+  s = String(s || '');
+  const loc = s.search(/location of the register office/i);
+  if (loc >= 0) return s.slice(loc).replace(/^location of the register office\s*:?/i, '').trim();
+  const fullNB = s.match(/^NB:?\s*this record is retrie?ved from birth and death registration database\s*\.\s*(location of the register office\s*:?)?/i);
+  if (fullNB) return s.slice(fullNB[0].length).trim();
+  const anyNB = s.match(/^NB:?\s*.*?\.\s+/i);
+  if (anyNB) return s.slice(anyNB[0].length).trim();
+  return s.trim();
+}
+function splitOffice(s) {
+  s = cleanOfficeText(s);
+  if (!s) return ['', ''];
+  const p = s.split(',').map(x => x.trim()).filter(Boolean);
+  return p.length <= 1 ? [s, ''] : [p[0], p.slice(1).join(', ')];
+}
+function dobToWords(dobStr) {
+  // Supports: "02 August 2010" AND "18/09/2007" (DD/MM/YYYY)
+  const monthMap = { January:'01', February:'02', March:'03', April:'04', May:'05', June:'06', July:'07', August:'08', September:'09', October:'10', November:'11', December:'12' };
+  const monthNames = { '01':'January','02':'February','03':'March','04':'April','05':'May','06':'June','07':'July','08':'August','09':'September','10':'October','11':'November','12':'December' };
+  const days = ['', 'First','Second','Third','Fourth','Fifth','Sixth','Seventh','Eighth','Ninth','Tenth','Eleventh','Twelfth','Thirteenth','Fourteenth','Fifteenth','Sixteenth','Seventeenth','Eighteenth','Nineteenth','Twentieth','Twenty First','Twenty Second','Twenty Third','Twenty Fourth','Twenty Fifth','Twenty Sixth','Twenty Seventh','Twenty Eighth','Twenty Ninth','Thirtieth','Thirty First'];
+  const ones = ['', 'One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+  const tens = ['', '', 'Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+  let day, monthNum, year, monthName, date;
+  // Try DD/MM/YYYY first
+  let m = String(dobStr || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) {
+    day = parseInt(m[1], 10); monthNum = m[2].padStart(2, '0'); year = parseInt(m[3], 10);
+    monthName = monthNames[monthNum] || 'January';
+    date = m[1].padStart(2, '0') + '/' + monthNum + '/' + m[3];
+  } else {
+    // Fallback: "02 August 2010"
+    const parts = (dobStr || '').split(' ');
+    if (parts.length !== 3) return { date: dobStr, words: '' };
+    date = parts[0] + '/' + (monthMap[parts[1]] || '01') + '/' + parts[2];
+    day = parseInt(parts[0], 10); year = parseInt(parts[2], 10);
+    monthName = parts[1];
+  }
+  let ys = 'Two Thousand';
+  if (year >= 2000) { const r = year - 2000; if (r > 0 && r < 20) ys += ' ' + ones[r]; else if (r >= 20) ys += ' ' + tens[Math.floor(r/10)] + (r%10 ? ' ' + ones[r%10] : ''); }
+  else { const r = year - 1900; ys = 'Nineteen Hundred'; if (r > 0 && r < 20) ys += ' ' + ones[r]; else if (r >= 20) ys += ' ' + tens[Math.floor(r/10)] + (r%10 ? ' ' + ones[r%10] : ''); }
+  return { date, words: days[day] + ' of ' + monthName + '  ' + ys };
+}
+
+async function verify() {
+  const captcha = val('captchaAns').trim();
+  if (!sessionId) { toast('আগে Captcha আনুন', true); return; }
+  if (!captcha) { toast('Captcha-এর উত্তর দিন', true); return; }
+  const btn = document.getElementById('btnVerify');
+  busy(btn, true, 'যাচাই চলছে…');
+  try {
+    const r = await fetch(API + '/api/verify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, brn: val('brn').trim(), dob: val('dob').trim(), captcha })
+    });
+    const j = await r.json();
+    if (!j.success) {
+      const dbg = document.getElementById('verifyDebug');
+      if (dbg && j.debug) {
+        dbg.style.display = 'block';
+        dbg.innerHTML = '<b>Debug — পাওয়া তথ্য:</b><br>' + j.debug.map((t, i) => i + ': ' + String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;')).join('<br>');
+        dbg.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      throw new Error(j.error);
+    }
+    const d = j.data || {};
+    const toTitle = s => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '';
+    // Office lines: prefer server-cleaned values (NB preamble stripped, full
+    // address split); fall back to local comma-split of the raw office string.
+    const [so1, so2] = splitOffice(d.registrationOffice || '');
+    const o1 = d.office1 || so1, o2 = (d.office1 || d.office2) ? (d.office2 || '') : so2;
+    const dw = dobToWords(d.dob);
+    // Store verification URL for QR (auto-extracted from BDRIS)
+    window._verificationUrl = d.verificationUrl || '';
+    fillFields({
+      office1: o1, office2: o2, verificationCode: d.verificationCode || '',
+      brn: d.brn || val('brn').trim(),
+      regDate: d.registrationDate || '', issueDate: d.issuanceDate || '',
+      dob: dw.date, dobWords: dw.words, sex: toTitle(d.sex),
+      nameBn: d.nameBn || '', nameEn: d.nameEn || '',
+      motherBn: d.motherNameBn || '', motherEn: d.motherNameEn || '',
+      motherNatBn: d.motherNationalityBn || 'বাংলাদেশী', motherNatEn: d.motherNationalityEn || 'Bangladeshi',
+      fatherBn: d.fatherNameBn || '', fatherEn: d.fatherNameEn || '',
+      fatherNatBn: d.fatherNationalityBn || 'বাংলাদেশী', fatherNatEn: d.fatherNationalityEn || 'Bangladeshi',
+      pobBn: d.placeOfBirthBn || '',
+      pobEn: d.placeOfBirthEn || '',
+      permBn: (d.permanentAddressBn || '').replace(/\\n/g, '\n'),
+      permEn: (d.permanentAddressEn || '').replace(/\\n/g, '\n'),
+    });
+    document.getElementById('secStudio').classList.remove('hidden');
+    document.getElementById('dock').classList.remove('hidden');
+    setStep(3);
+    toast('✅ Data এসেছে — এডিট করে Create চাপুন');
+    updatePreview();
+    document.getElementById('secStudio').scrollIntoView({ behavior: 'smooth' });
+  } catch (e) {
+    toast(e.message || 'Verify failed', true);
+  }
+  busy(btn, false);
+}
+
+/* ---------------- step 3: live preview ---------------- */
+function schedulePreview() {
+  document.getElementById('pvUpdating').classList.add('on');
+  clearTimeout(pvTimer);
+  pvTimer = setTimeout(updatePreview, 600);
+}
+async function updatePreview() {
+  try {
+    const r = await fetch(API + '/api/preview', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(collectFields())
+    });
+    const j = await r.json();
+    if (j.success) document.getElementById('previewFrame').srcdoc = j.html;
+  } catch (e) { /* preview is best-effort */ }
+  document.getElementById('pvUpdating').classList.remove('on');
+}
+
+/* ---------------- step 4: create & auto-download ---------------- */
+async function createPDF() {
+  const btn = document.getElementById('btnCreate');
+  busy(btn, true, 'PDF বানানো হচ্ছে…');
+  try {
+    const payload = collectFields();
+    const r = await fetch(API + '/generate-pdf', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!r.ok) throw new Error('PDF failed');
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Certificate_' + (payload.brn || 'output') + '.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast('⬇ PDF ডাউনলোড হচ্ছে');
+  } catch (e) {
+    toast('PDF তৈরি হয়নি: ' + e.message, true);
+  }
+  busy(btn, false);
+}
+
+buildEditor();
+</script>
+</body>
+</html>

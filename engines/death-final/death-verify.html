@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>⚰️ Death নম্বর যাচাই — UDRN</title>
+<style>
+  :root { --bg:#14161c; --card:#1e212b; --line:#333; --gold:#c9a227; --ok:#7dffab; --bad:#ffb3b3; --muted:#999; }
+  * { box-sizing: border-box; }
+  body { font-family:"Nirmala UI", Arial, sans-serif; background:var(--bg); color:#e8e8e8; margin:0; padding:20px; }
+  h1 { font-size:21px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:14px; }
+  .grid { display:grid; grid-template-columns:170px 1fr; gap:10px; align-items:center; margin-bottom:10px; }
+  label { font-size:14px; color:#bbb; }
+  input[type=text] { background:#10131a; color:#eee; border:1px solid #444; border-radius:6px; padding:9px 10px; font-size:15px; width:100%; }
+  select { background:#10131a; color:#eee; border:1px solid #444; border-radius:6px; padding:9px 10px; font-size:15px; width:100%; }
+  button { background:var(--gold); color:#111; border:none; border-radius:8px; padding:10px 18px; font-size:15px; font-weight:bold; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  button.ghost { background:#2a2e3a; color:#ddd; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
+  #status { display:none; padding:12px 14px; border-radius:8px; font-size:14px; margin-top:10px; white-space:pre-wrap; }
+  #status.ok { display:block; background:#0d3a1e; border:1px solid #176; color:var(--ok); }
+  #status.bad { display:block; background:#3a1f1f; border:1px solid #a33; color:var(--bad); }
+  #capImg { border:1px solid #555; border-radius:6px; background:#fff; max-height:70px; }
+  table.res { width:100%; border-collapse:collapse; font-size:14px; }
+  table.res td { border-bottom:1px solid #2a2e3a; padding:7px 6px; vertical-align:top; }
+  table.res td.k { color:#9ab; width:230px; font-weight:bold; }
+  .bn { font-family:'SutonnyOMJ','Nirmala UI',sans-serif; }
+  iframe { width:100%; height:760px; border:1px solid #444; border-radius:8px; background:#777; }
+  a { color:var(--ok); }
+  .hint { font-size:12.5px; color:var(--muted); margin-top:8px; }
+  .spin { display:inline-block; width:14px; height:14px; border:2px solid #111; border-top-color:transparent; border-radius:50%; animation:sp 0.8s linear infinite; vertical-align:-2px; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  #pdfLink { display:none; }
+</style>
+</head>
+<body>
+<h1>⚰️ Death নম্বর যাচাই <span style="font-size:13px;color:#999;font-weight:normal">UDRN · everify.bdris.gov.bd</span></h1>
+<div class="sub">Server: <b>http://localhost:3001</b> — chalaccho to? (<code>node death-verify-server.js</code> / <code>start-verify.bat</code>)</div>
+
+<div class="card">
+  <div class="grid">
+    <label>Death Registration No (১৭ সংখ্যা)</label>
+    <input type="text" id="drn" maxlength="17" inputmode="numeric" placeholder="যেমন 19681517411127048" value="">
+    <label>মৃত্যুর তারিখ (DD/MM/YYYY)</label>
+    <input type="text" id="dod" placeholder="যেমন 19/11/2022" value="">
+  </div>
+  <div class="row">
+    <button id="btnCap" onclick="fetchCaptcha()">🧩 Captcha আনুন</button>
+  </div>
+
+  <div id="capZone" style="display:none">
+    <div class="grid" style="margin-top:12px">
+      <label>Captcha ছবি</label>
+      <div><img id="capImg" alt="captcha"><div class="hint">↻ <a href="javascript:fetchCaptcha()">নতুন captcha আনুন</a> · ছবি দেখে উত্তর নিচে লিখুন</div></div>
+      <label>Captcha-এর উত্তর</label>
+      <input type="text" id="capAns" placeholder="ছবি দেখে লিখুন">
+    </div>
+    <div class="row">
+      <button id="btnGo" onclick="doVerify()">✅ যাচাই করুন</button>
+      <button id="btnAuto" class="ghost" onclick="autoCalculate()">🧮 Auto Calculate</button>
+    </div>
+    <div class="hint">Captcha পড়া কঠিন হলে <b>Auto Calculate</b> — Gemini দিয়ে নিজে উত্তর বসায় (start-verify.bat-এ key লাগে)।</div>
+  </div>
+
+  <div id="status"></div>
+</div>
+
+<div class="card" id="resCard" style="display:none">
+  <h3 style="margin:0 0 10px">📋 BDRIS থেকে পাওয়া তথ্য</h3>
+  <table class="res" id="resTable"></table>
+  <div id="causeBox" style="margin:12px 0 4px">
+    <label for="causeSel" style="display:block;margin-bottom:6px">🩺 মৃত্যুর কারণ <span class="hint">(API দেয় না — নিচ থেকে বেছে নিন; সনদে বসবে)</span></label>
+    <select id="causeSel" onchange="onCauseChange()"></select>
+    <div id="causeCustomBox" style="display:none;margin-top:8px">
+      <input type="text" id="causeCustomEn" placeholder="Cause (English) নিজে লিখুন" onchange="onCauseChange()" style="margin-bottom:8px">
+      <input type="text" id="causeCustomBn" class="bn" placeholder="কারণ (বাংলা) নিজে লিখুন" onchange="onCauseChange()">
+    </div>
+  </div>
+  <div class="row">
+    <button class="ghost" onclick="loadPreview()">🔍 সনদের Preview দেখুন</button>
+    <button id="btnPdf" class="ghost" onclick="getPdf()">📄 PDF নামান</button>
+    <a id="pdfLink" download>⬇️ PDF ডাউনলোড করুন</a>
+    <button class="ghost" onclick="resetAll()">↻ নতুন যাচাই</button>
+  </div>
+</div>
+
+<div class="card" id="pvCard" style="display:none">
+  <h3 style="margin:0 0 10px">🖼️ সনদের Preview (death replica)</h3>
+  <iframe id="pvFrame" title="death preview"></iframe>
+  <div class="hint">PDF = vector A4 (Chrome), লেখা select করা যায়।</div>
+</div>
+
+<script>
+let sessionId = null, lastData = null, lastRec = null;
+const $ = id => document.getElementById(id);
+function setStatus(msg, ok) {
+  const el = $('status');
+  el.className = ok ? 'ok' : 'bad';
+  el.textContent = msg || '';
+}
+function busy(btn, on, label) {
+  btn.disabled = on;
+  if (on) { btn._t = btn.innerHTML; btn.innerHTML = '<span class="spin"></span> ' + (label || 'অপেক্ষা…'); }
+  else btn.innerHTML = btn._t;
+}
+function dobToWords(s) {
+  const months = { '01':'January','02':'February','03':'March','04':'April','05':'May','06':'June','07':'July','08':'August','09':'September','10':'October','11':'November','12':'December' };
+  const days = ['','First','Second','Third','Fourth','Fifth','Sixth','Seventh','Eighth','Ninth','Tenth','Eleventh','Twelfth','Thirteenth','Fourteenth','Fifteenth','Sixteenth','Seventeenth','Eighteenth','Nineteenth','Twentieth','Twenty First','Twenty Second','Twenty Third','Twenty Fourth','Twenty Fifth','Twenty Sixth','Twenty Seventh','Twenty Eighth','Twenty Ninth','Thirtieth','Thirty First'];
+  const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+  const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+  const m = String(s || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return { date: s || '', words: '' };
+  const day = parseInt(m[1], 10), mn = m[2].padStart(2, '0'), yr = parseInt(m[3], 10);
+  let ys = 'Two Thousand';
+  if (yr >= 2000) { const r = yr - 2000; if (r > 0 && r < 20) ys += ' ' + ones[r]; else if (r >= 20) ys += ' ' + tens[Math.floor(r / 10)] + (r % 10 ? ' ' + ones[r % 10] : ''); }
+  else { const r = yr - 1900; ys = 'Nineteen Hundred'; if (r > 0 && r < 20) ys += ' ' + ones[r]; else if (r >= 20) ys += ' ' + tens[Math.floor(r / 10)] + (r % 10 ? ' ' + ones[r % 10] : ''); }
+  return { date: m[1].padStart(2, '0') + '/' + mn + '/' + m[3], words: days[day] + ' of ' + months[mn] + '  ' + ys };
+}
+function fieldRow(k, v, bn, raw) {
+  if (!v) return '';
+  const cls = bn ? ' class="bn"' : '';
+  const val = raw ? String(v) : String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>');
+  return '<tr><td class="k">' + k + '</td><td' + cls + '>' + val + '</td></tr>';
+}
+
+/* মৃত্যুর কারণ dropdown — API theke ashe na, verify-er por user select kore.
+   *** USER-ER LIST ASHLE NICER CAUSES ARRAY-TA REPLACE HOBE (ekhon starter) *** */
+const CAUSES = [
+  { en: 'Old Age', bn: 'বার্ধক্য জনিত' },
+  { en: 'Disease', bn: 'অসুস্থতা' },
+  { en: 'Road Accident', bn: 'সড়ক দুর্ঘটনা' },
+  { en: 'Other Accidents', bn: 'অন্যান্য দুর্ঘটনা' },
+  { en: 'Drowning', bn: 'পানিতে ডুবা' },
+  { en: 'Suicide', bn: 'আত্মহত্যা' },
+  { en: 'Homicide', bn: 'হত্যাকান্ড' },
+  { en: 'Maternal Death', bn: 'মাতৃত্বজনিত মৃত্যু' },
+  { en: 'Natural Calamity', bn: 'প্রাকৃতিক দুর্যোগ' },
+  { en: 'Cancer', bn: 'ক্যান্সার' },
+  { en: 'Stroke', bn: 'স্ট্রোক' },
+  { en: 'Respiratory Failure', bn: 'শ্বাসকষ্ট' },
+  { en: 'Liver Cirrhosis', bn: 'যকৃৎ অকার্যকর' },
+  { en: 'Others', bn: 'অন্যান্য', custom: true }
+];
+let apiCauseEn = '', apiCauseBn = '';
+function escOpt(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function buildCauseOptions(curEn, curBn) {
+  const sel = $('causeSel');
+  let h = curEn
+    ? '<option value="__cur">✓ ' + escOpt(curEn) + (curBn ? ' / ' + escOpt(curBn) : '') + '</option>'
+    : '<option value="">— নিচ থেকে মৃত্যুর কারণ বেছে নিন —</option>';
+  if (apiCauseEn && apiCauseEn !== curEn)
+    h += '<option value="__api">↩ API value: ' + escOpt(apiCauseEn) + '</option>';
+  CAUSES.forEach((c, i) => { h += '<option value="' + i + '">' + escOpt(c.en) + (c.bn ? ' / ' + escOpt(c.bn) : '') + '</option>'; });
+  h += '<option value="__custom">✏️ অন্যান্য (নিজে লিখুন)…</option>';
+  sel.innerHTML = h;
+}
+function syncCauseSel(hint) {
+  const curEn = lastData ? (lastData.causeOfDeathEn || '') : '';
+  const curBn = lastData ? (lastData.causeOfDeathBn || '') : '';
+  buildCauseOptions(curEn, curBn);
+  const sel = $('causeSel'), box = $('causeCustomBox');
+  let v = hint;
+  if (v == null) {
+    const idx = CAUSES.findIndex(c => c.en === curEn);
+    v = idx >= 0 ? String(idx) : (curEn ? (curEn === apiCauseEn ? '__cur' : '__custom') : '');
+  }
+  sel.value = v;
+  const picked = CAUSES[+v];
+  const custom = (v === '__custom') || !!(picked && picked.custom);
+  box.style.display = custom ? 'block' : 'none';
+  if (custom) {
+    if (document.activeElement !== $('causeCustomEn')) $('causeCustomEn').value = curEn;
+    if (document.activeElement !== $('causeCustomBn')) $('causeCustomBn').value = curBn;
+  }
+}
+function onCauseChange() {
+  if (!lastData) return;
+  const v = $('causeSel').value;
+  let en = '', bn = '';
+  if (v === '__custom' || (CAUSES[+v] && CAUSES[+v].custom)) {
+    const c = CAUSES[+v];
+    en = $('causeCustomEn').value.trim() || (c ? c.en : '');
+    bn = $('causeCustomBn').value.trim() || (c ? c.bn : '');
+  }
+  else if (v === '__api') { en = apiCauseEn; bn = apiCauseBn; }
+  else if (v !== '' && v !== '__cur') { const c = CAUSES[+v]; if (c) { en = c.en; bn = c.bn; } }
+  else if (v === '__cur') { en = lastData.causeOfDeathEn || ''; bn = lastData.causeOfDeathBn || ''; }
+  lastData.causeOfDeathEn = en; lastData.causeOfDeathBn = bn;
+  renderResult(lastData);
+  syncCauseSel(v === '__api' ? null : v);
+  saveState(); loadPreview();
+  setStatus(en ? ('✅ মৃত্যুর কারণ: ' + en + ' — Preview/PDF-তে বসেছে।') : 'মৃত্যুর কারণ খালি রাখা হলো।', !!en);
+}
+
+async function fetchCaptcha() {
+  const drn = $('drn').value.trim(), dod = $('dod').value.trim();
+  if (!drn || !dod) { setStatus('Death number ও মৃত্যুর তারিখ — দুটোই দিন।', false); return; }
+  const btn = $('btnCap');
+  busy(btn, true, 'সার্ভারে যুক্ত হচ্ছে…');
+  setStatus('');
+  try {
+    const r = await fetch('/api/captcha');
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'Captcha load failed');
+    sessionId = j.sessionId;
+    $('capImg').src = j.image;
+    $('capAns').value = '';
+    $('capZone').style.display = 'block';
+    saveState();
+    setStatus('Captcha এসেছে — ছবি দেখে উত্তর দিন, বা "Auto Calculate" চাপুন, তারপর "যাচাই করুন"।', true);
+    $('capZone').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (e) {
+    setStatus('সার্ভার চালু আছে তো? node death-verify-server.js — ' + e.message, false);
+  }
+  busy(btn, false);
+}
+
+/* Auto Calculate: captcha image Gemini diye solve kore input-e boshay */
+async function autoCalculate() {
+  if (!sessionId) { setStatus('আগে Captcha আনুন।', false); return; }
+  const btn = $('btnAuto');
+  busy(btn, true, 'সমাধান চলছে…');
+  setStatus('');
+  try {
+    const r = await fetch('/api/solve-captcha', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId })
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'auto-solve failed');
+    $('capAns').value = j.answer || '';
+    saveState();
+    setStatus('Auto Calculate সমাধান বসিয়েছে — "যাচাই করুন" চাপুন।', true);
+    $('btnGo').focus();
+  } catch (e) {
+    setStatus('❌ Auto-solve: ' + e.message, false);
+  }
+  busy(btn, false);
+}
+
+async function doVerify() {
+  const ans = $('capAns').value.trim();
+  if (!sessionId) { setStatus('আগে Captcha আনুন।', false); return; }
+  if (!ans) { setStatus('Captcha-এর উত্তর লিখুন।', false); return; }
+  const btn = $('btnGo');
+  busy(btn, true, 'যাচাই চলছে…');
+  setStatus('');
+  try {
+    const r = await fetch('/api/verify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, drn: $('drn').value.trim(), dod: $('dod').value.trim(), captcha: ans })
+    });
+    const j = await r.json();
+    if (!j.success) { setStatus('❌ ' + (j.error || 'যাচাই ব্যর্থ'), false); sessionId = null; saveState(); return; }
+    apiCauseEn = (j.data && j.data.causeOfDeathEn) || '';
+    apiCauseBn = (j.data && j.data.causeOfDeathBn) || '';
+    renderResult(j.data || {});
+    saveState();
+    setStatus('✅ রেকর্ড পাওয়া গেছে — BDRIS থেকে live data এসেছে।', true);
+    $('resCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    loadPreview();
+  } catch (e) {
+    setStatus('Error: ' + e.message, false);
+  }
+  busy(btn, false);
+}
+
+function renderResult(d) {
+  lastData = d;
+  const dodRaw = d.dod || $('dod').value.trim();
+  const ddw = dobToWords(dodRaw);
+  lastRec = Object.assign({}, d, {
+    brn: d.brn || $('drn').value.trim(),
+    dod: dodRaw,
+    dodWords: ddw.words,
+    pobBn: d.placeOfDeathBn || '',
+    pobEn: d.placeOfDeathEn || '',
+    codBn: d.causeOfDeathBn || '',
+    codEn: d.causeOfDeathEn || ''
+  });
+  d.brn = lastRec.brn;
+  d.dod = lastRec.dod;
+  d.dodWords = lastRec.dodWords;
+  const t = $('resTable');
+  t.innerHTML =
+    fieldRow('Death Registration No', d.brn) +
+    fieldRow('Name (English)', d.nameEn) +
+    fieldRow('নাম (বাংলা)', d.nameBn, true) +
+    fieldRow('Date of Birth', d.dob) +
+    fieldRow('Date of Death', d.dod) +
+    fieldRow('Death In Words', d.dodWords) +
+    fieldRow('Place of Death (EN)', d.placeOfDeathEn) +
+    fieldRow('মৃত্যুস্থান (বাংলা)', d.placeOfDeathBn, true) +
+    fieldRow('Cause of Death (EN)', d.causeOfDeathEn) +
+    fieldRow('মৃত্যুর কারণ (বাংলা)', d.causeOfDeathBn, true) +
+    fieldRow('Sex', d.sex) +
+    fieldRow('Date of Registration', d.registrationDate) +
+    fieldRow('Date of Issuance', d.issuanceDate) +
+    fieldRow('Registration Office', d.office1) +
+    fieldRow('Office location', d.office2) +
+    fieldRow("Mother's Name", d.motherNameEn) +
+    fieldRow("মায়ের নাম (বাংলা)", d.motherNameBn, true) +
+    fieldRow("Mother's Nationality", d.motherNationalityEn) +
+    fieldRow("মাতার জাতীয়তা (বাংলা)", d.motherNationalityBn, true) +
+    fieldRow("Father's Name", d.fatherNameEn) +
+    fieldRow("বাবার নাম (বাংলা)", d.fatherNameBn, true) +
+    fieldRow("Father's Nationality", d.fatherNationalityEn) +
+    fieldRow("পিতার জাতীয়তা (বাংলা)", d.fatherNationalityBn, true) +
+    (d.verificationUrl ? fieldRow('Verify URL', '<a href="' + d.verificationUrl + '" target="_blank" rel="noopener">' + d.verificationUrl + '</a>', false, true) : '');
+  $('resCard').style.display = 'block';
+  syncCauseSel();
+}
+
+async function loadPreview() {
+  if (!lastRec) return;
+  $('pvCard').style.display = 'block';
+  try {
+    const r = await fetch('/api/preview', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(lastRec)
+    });
+    const j = await r.json();
+    if (j.success) $('pvFrame').srcdoc = j.html;
+    else setStatus('Preview failed: ' + j.error, false);
+  } catch (e) { setStatus('Preview error: ' + e.message, false); }
+}
+
+async function getPdf() {
+  if (!lastRec) return;
+  const btn = $('btnPdf');
+  busy(btn, true, 'PDF বানানো হচ্ছে…');
+  try {
+    const r = await fetch('/api/pdf', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(lastRec)
+    });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || ('HTTP ' + r.status)); }
+    const b = await r.blob();
+    const a = $('pdfLink');
+    a.href = URL.createObjectURL(b);
+    a.download = 'Death_Certificate_' + (lastRec.brn || '') + '.pdf';
+    a.textContent = '⬇️ PDF ডাউনলোড (' + Math.round(b.size / 1024) + ' KB)';
+    a.style.display = 'inline';
+    a.click();
+    setStatus('✅ PDF তৈরি (' + Math.round(b.size / 1024) + ' KB) — ডাউনলোড শুরু হয়েছে।', true);
+  } catch (e) {
+    setStatus('PDF error: ' + e.message, false);
+  }
+  busy(btn, false);
+}
+
+function resetAll() {
+  sessionId = null; lastData = null; lastRec = null;
+  apiCauseEn = ''; apiCauseBn = '';
+  try { localStorage.removeItem('dv_state'); } catch (e) {}
+  $('capZone').style.display = 'none';
+  $('resCard').style.display = 'none';
+  $('pvCard').style.display = 'none';
+  $('pdfLink').style.display = 'none';
+  setStatus('');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* refresh-proof state: drn/dod/captcha/result localStorage-এ থাকে */
+function saveState() {
+  try {
+    const capShown = $('capZone').style.display === 'block';
+    localStorage.setItem('dv_state', JSON.stringify({
+      drn: $('drn').value.trim(), dod: $('dod').value.trim(),
+      sessionId: sessionId || null,
+      capImg: (capShown && $('capImg').src.startsWith('data:')) ? $('capImg').src : '',
+      capAns: $('capAns').value,
+      lastData: lastData, lastRec: lastRec,
+      at: Date.now()
+    }));
+  } catch (e) {}
+}
+function restoreState() {
+  let s;
+  try { s = JSON.parse(localStorage.getItem('dv_state') || 'null'); } catch (e) { return; }
+  if (!s) return;
+  if (s.drn) $('drn').value = s.drn;
+  if (s.dod) $('dod').value = s.dod;
+  if (s.capAns) $('capAns').value = s.capAns;
+  if (s.lastRec) {
+    lastRec = s.lastRec;
+    renderResult(s.lastData || s.lastRec);
+    setStatus('♻️ আগের ফলাফল ফিরিয়ে এনেছি — রিফ্রেশেও থাকবে।', true);
+    loadPreview();
+    return;
+  }
+  if (s.sessionId && s.capImg) {
+    sessionId = s.sessionId;
+    $('capImg').src = s.capImg;
+    $('capZone').style.display = 'block';
+    setStatus('♻️ আগের ক্যাপচা ফিরিয়ে এনেছি — উত্তর দিন, বা Auto Calculate চাপুন।', true);
+  }
+}
+['drn', 'dod', 'capAns'].forEach(id => $(id).addEventListener('input', saveState));
+restoreState();
+</script>
+</body>
+</html>

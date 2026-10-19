@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<title>Engine Check - double-click kore kholo</title>
+<style>
+  body { font-family: Arial, sans-serif; background: #0b1526; color: #eef2f8; padding: 24px; }
+  h1 { color: #f0d060; font-size: 22px; }
+  .row { background: #14243f; border: 1px solid rgba(212,175,55,.25); border-radius: 12px; padding: 14px 18px; margin: 12px 0; }
+  .pass { color: #35c26e; font-weight: bold; } .fail { color: #ff6b6b; font-weight: bold; }
+  code { word-break: break-all; color: #9fb0cc; font-size: 13px; }
+  img { background: #fff; padding: 10px; border-radius: 8px; margin-top: 8px; }
+  #bar { width: 420px; }
+  .small { color: #9fb0cc; font-size: 13px; }
+</style>
+<script src="cert-engine-standalone.js"></script>
+</head>
+<body>
+<h1>🔍 Engine Check <span class="small">(server lagbe na — ei page-i shob check kore)</span></h1>
+<div id="out"><p>Cholche…</p></div>
+<script>
+(function () {
+  var EXP_KEY = 'PvYNXkUFc0BpsX6Mw7QcnMfWk8qU8C4IlWrEeB3Dg4adt2upQl/7vfvGlMhGWeRz';
+  var EXP_URL = 'https://bdris.gov.bd/certificate/verify?key=TSYiAHrMWWjGwps6S6dAppFbTVJIdTFSZUXfAtUFCwWY3nhUm30/BEy2sCdsZ3cP';
+  var out = [];
+  function row(name, ok, detail) {
+    var d = document.createElement('div');
+    d.className = 'row';
+    d.innerHTML = '<span class="' + (ok ? 'pass' : 'fail') + '">' +
+      (ok ? '✅ PASS' : '❌ FAIL') + '</span> <b>' + name + '</b><br>' + detail;
+    document.getElementById('out').appendChild(d);
+  }
+  function paint(px, w, h, id, width) {
+    var cv = document.createElement('canvas');
+    cv.width = w; cv.height = h; cv.id = id;
+    if (width) cv.style.width = width;
+    var g = cv.getContext('2d');
+    g.putImageData(new ImageData(CertEngine.grayToRGBA(px), w, h), 0, 0);
+    return cv;
+  }
+  var t0 = Date.now();
+  CertEngine.build({ number: '20008812737140064' }).then(function (r1) {
+    return CertEngine.build({ number: '20008812737140064', url: EXP_URL }).then(function (r2) {
+      var host = document.getElementById('out');
+      host.innerHTML = '';
+      row('Key engine', r1.key === EXP_KEY, '<code>' + r1.key + '</code>');
+      row('Barcode (145 modules)', r1.barcode.moduleCount === 145 && r1.barcode.text === '20008812737140064',
+        '<code>' + r1.barcode.text + ' — ' + r1.barcode.moduleCount + ' modules</code>');
+      row('QR official URL', r2.verifyUrl === EXP_URL, '<code>' + r2.verifyUrl + '</code>');
+      row('QR code', r2.code === 'TSYI', '<code>' + r2.code + '</code>');
+      var d1 = document.createElement('div'); d1.className = 'row';
+      d1.innerHTML = '<b>QR (phone diye scan koro)</b><br>';
+      d1.appendChild(paint(r2.qr.px, r2.qr.width, r2.qr.height));
+      host.appendChild(d1);
+      var d2 = document.createElement('div'); d2.className = 'row';
+      d2.innerHTML = '<b>Barcode (phone diye scan koro)</b><br>';
+      d2.appendChild(paint(r1.barcode.px, r1.barcode.width, r1.barcode.height, 'bar'));
+      host.appendChild(d2);
+      var ms = document.createElement('p'); ms.className = 'small';
+      ms.textContent = 'Shob check ' + (Date.now() - t0) + 'ms-e shesh (server charai).';
+      host.appendChild(ms);
+    });
+  }).catch(function (e) {
+    document.getElementById('out').innerHTML =
+      '<div class="row"><span class="fail">❌ FAIL</span> <b>' + e.message + '</b><br>' +
+      '<span class="small">https/localhost theke kholo (file:// te key check nao ashte pare).</span></div>';
+  });
+})();
+</script>
+</body>
+</html>

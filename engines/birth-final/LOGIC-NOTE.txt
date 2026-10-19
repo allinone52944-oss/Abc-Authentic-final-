@@ -1,0 +1,285 @@
+===============================================================================
+LOGIC-NOTE.txt (PERMANENT RECORD) - BDRIS BIRTH + DEATH ENGINE
+===============================================================================
+KENO EI FILE:
+  Engine jeno VM-e bosanar SATHE SATHE kaj kore, kono logic nosto na hoy,
+  ar builder kono NOTUN kichu add/modify korte na hoy. Ei file porle bujhbe:
+  ki ki logic ache (file:line diye), ki KOKHONO change kora jay na,
+  ki KOKHONO add kora jay na. Code change-er dorkar-i nei - sob fix done.
+
+FOLDER MAP (2 ta engine, 2 ta zip, 2 ta port):
+  BuilderEngine-fixed\   port 3000 (127.0.0.1)  file: server.js (1093 line)
+  Death-Verify-Engine\   port 3001 (127.0.0.1)  file: death-verify-server.js (1163 line)
+  Ei note dui folder-e EXACT same - kothao-oi copy ache.
+
+-------------------------------------------------------------------------------
+1) VM DEPLOY (plug and play - etai shuru)
+-------------------------------------------------------------------------------
+BIRTH (BuilderEngine-fixed):
+  a) zip extract -> folder-e asho
+  b) npm ci          (1 bar; zip-e node_modules NEI - tai dorkar;
+                      puppeteer nijei Chrome download korbe)
+  c) start.bat double-click  (ba: node server.js)
+  d) check: http://localhost:3000  +  check-api.html -> "Run all checks" 6/6
+DEATH (Death-Verify-Engine):
+  a) zip extract -> start-verify.bat double-click (ba node death-verify-server.js)
+  b) ZERO npm dependency (Node 18+ built-in fetch) - npm ci LAGBE NA
+  c) PDF-er jonno system Chrome lage (auto khoj: Program Files -> PATH 'chrome')
+ENV (sob optional, na dileo chole):
+  GEMINI_API_KEY     -> shudhu "Auto Calculate" captcha button (start.bat-e set)
+  ORACLE_CONN_STR/ORACLE_USER/ORACLE_PASSWORD -> Oracle store;
+      na dile file store (_data/records.json), Oracle down hole automatic
+      file-fallback -> health-e degraded:true (data loss nei).
+RULE: ek shomaye EKTA-i instance (port busy hole exit 2 + server.log-e karon).
+
+-------------------------------------------------------------------------------
+2) BIRTH FLOW (port 3000, server.js)
+-------------------------------------------------------------------------------
+  GET  /api/captcha    (line 136)  -> { sessionId, captchaImage }  5-min TTL
+  POST /api/solve-captcha (259)    -> { answer }  local solver -> Gemini -> manual
+  POST /api/verify     (597)       -> one-shot session, BDRIS scrape + parse
+                                     -> { success, data } + missingFields
+  POST /api/preview    (1021)      -> certificate HTML (same builder as PDF)
+  POST /generate-pdf   (1031)      -> puppeteer vector PDF (A4, margin 0)
+  POST /api/engine     /api/records -> QR/barcode/key + store
+  Har verify-e last-result.html save hoy (debug evidence).
+  TLS: line 29 - DEFAULT_MAX_VERSION='TLSv1.2' (BDRIS TLS1.3 bhenge "bad
+  ecpoint" dey) - ETA EKBHOI ROYE, comment-o soraben na (top-ei lage).
+
+-------------------------------------------------------------------------------
+3) BIRTH PARSING LOGIC (server.js)
+-------------------------------------------------------------------------------
+extractTdTexts (275):
+  - <td> AND <th> nay (document-order) - shudhu <td> hole <th>-e label-e
+    100% data harat (root cause #1)
+  - table na thakle div/span/label tag-boundary tokenizer fallback
+  - entity decode + whitespace collapse
+nlab (315): label normalize - markup/space/case/punctuation/BN tolerant
+RESULT_LABELS (328): field -> EN+BN alias list. NOTUN LABEL ASHE ->
+  SHUDHU ekta alias line add. CODE LOGIC change NA.
+FIELD_VALID (342): date/brn/sex/office validator - bhul cell-e value jabe NA.
+mapResultData (355) 4-pass:
+  PASS A  : label-run dhor + STRICT positional (grid [L1 L2 L3][V1 V2 V3]
+            o pair [L1 V1][L2 V2] dui-tai; majhkhan-e khaali cell holeo
+            position SORE NA) - root cause #3 fix
+  PASS B  : forward-scan fallback + used-set (ek-i value dui field-e jabe NA)
+  pair    : Registered Person/Place/Mother/Father/Permanent Address ->
+            value = i+1, BN value = i-1
+  safety  : date/office/brn label-er nikosh theke (4 cell porjanto)
+  NB footer: "Location of the Register office: ..." officeLocationRaw;
+    table-r baire holeo /api/verify (597 tarpor) PURA html theke nicheo.
+QR (661): 6 ta fallback pair random + page theke official key/thakle ORER.
+missingFields (693): ['registrationDate','issuanceDate','office1','office2']
+  je-khali seta array-te.
+
+-------------------------------------------------------------------------------
+4) NORMALIZE LOGIC - DUI ENGINE SAME (normalizeBdrisData)
+-------------------------------------------------------------------------------
+Builder server.js 479 | Death death-verify-server.js 301
+  clean    (483/305): backtick/quote artifacts strip
+  titleCase: EN name/nationality/office/sex  MANSURA AKHTER -> Mansura Akhter
+  toDDMMYYYY: "29 September 2026" -> 29/09/2026 (dob/reg/issuance;
+               death-e dod-o)
+  office split: "NB: ... Database. Location of the Register office:" preamble
+    strip -> FULL address comma-diye split -> office1 (name), office2 (rest)
+  officeLocationRaw merge: office1 already thakle PURO location-i office2
+    ("Raozan" token loss fix - root cause #4); office2 exist korle override NA
+  OFFICE EKBAR (579/409): office1 thakle `delete out.registrationOffice`
+    - response-e registrationOffice KHOBI NA (office1+office2-i canonical;
+      sample certificate-e office name 1 bar) - root cause #6 fix.
+    Parse/validation level-e registrationOffice kaj-i kore; shudhu
+    response-e bad. missingFields list thekeo sorano.
+  birth: placeOfBirthEn/Bn-e ", Bangladesh" suffix (already thakle add NA)
+  death: placeOfDeath dup token dedupe ("munsiganj munsiganj" -> 1 bar)
+         + ", Bangladesh" suffix; causeOfDeathEn TITLE-CASE HOY NA
+         (BDRIS CAPS-e chape, replica-eo CAPS - 336 line-e comment)
+         name-e trailing ` artifact strip (death only)
+root cause #5 (death): birth result page-er LABEL ROW ke 4-col value
+  bhore niyechilo -> GRID VALUE AUTHORITATIVE (272) + SANITIZER (288):
+  je value-i label ba date field-e date na, seta DELETE.
+
+-------------------------------------------------------------------------------
+5) DEATH-SPECIFIC (death-verify-server.js)
+-------------------------------------------------------------------------------
+extractRows (84): per-<tr> td+th + entity decode
+mapResultData (112): header sentence theke brn/dod/nameEn
+  ("...registration number X and Date of Death is Y ... belonged to NAME")
+  + 4-col data rows [bnL][bnV][enL][enV]
+mapBirthResultData (196): birth-enrichment page (DOB/sex/office) ->
+  grid strict positional + fwd fallback + grid authoritative + sanitizer
+  + NB footer regex
+fetchBirthRecord (833): DRN+DOB diye birth page fetch (debug)
+buildDeathCertificateHtml (446): replica layout (forensic mm positions)
+  .seal: left:26.9mm top:84.95mm width:149.8mm (same as birth - sample match)
+  BRN number: top:83.7mm (label top:78.87mm theke ~4.8mm niche - birth er same)
+solve (801): LOCAL offline solver age (solve_local.py + templates.json),
+  fail -> Gemini (684), fail -> manual. Har dui-ei answer shudhu 1-bar
+  chalay (routeVerify 937 one-shot).
+PDF: routePdf (1064) system Chrome --headless --print-to-pdf
+  (npm puppeteer NA - zero dep); tmp html/pdf cleanup finally-te.
+  toTemplateFields (1032): long field names auto-map + dodWords auto-compute
+Crash-proof: uncaught -> server.log; port busy -> exit 2; 127.0.0.1 bind.
+
+-------------------------------------------------------------------------------
+6) CERTIFICATE RENDER - LAYOUT INVARIANTS (BIRTH, server.js 790)
+-------------------------------------------------------------------------------
+ETA SCANNED SAMPLE-ER MEASUREMENT (hares b.pdf) - KOKHONO DRIFT HOBE NA:
+  .bar  left:134.2 top:21.1 w:48.5 h:7.8mm -> RIGHT EDGE = 182.7mm
+  header office1 top:47.8mm | office2 top:54.57mm (office ONCE, ek-i line-e)
+  column locks: BN label ~23 | ':' 53.40 | BN value ~56.3 ||
+                EN label 101.55 | ':' 128.10 | EN value 131.10
+  addrBn (930): left:56.1mm width:40mm max-height:43mm
+  addrEn (933): left:131.1mm width:56.4mm max-height:43mm
+                131.1 + 56.4 = 187.5mm = sample address right edge
+                (sample-e address barcode line 182.7 pass kore 187.5mm porjanto jay)
+  .seal: left:26.9mm top:84.95mm width:149.8mm (sample circle center (101.8,149.0) r=65.2mm match)
+  signature block top:228.6mm (addr box 43mm max-height theke NICHTE PARBE NA)
+  fonts: assets/fonts.css base64 (fontsCss 19) - machine-e same render
+  esc (767): HTML escape - injection-safe
+
+-------------------------------------------------------------------------------
+7) ADDRESS AUTO-FIT (BIRTH - PERMANENT, server.js 948-986)
+-------------------------------------------------------------------------------
+  inline <script> fitOne(id, 43mm):
+    1. font-size 11pt theke 0.25px kore shrink JODI scrollHeight > 43mm,
+       FLOOR = 6.5px (fs > 6.5 loop guard)
+    2. tarpor line-height 0.5px kore tighten (min = fs * 0.95)
+    3. tarpor overflow:hidden (clip) - layout KOKHONO bhenge NA
+  REALISTIC INPUT (<= ~10 line): kono shrink NA - 11pt-i thake.
+  (user-er rule: font size/position REALISTIC input-e KOKHONO change hobe NA;
+   shrink = extreme 10+ line fallback only)
+  run: preview iframe-eo + PDF-eo. generate-pdf (1047) wait kore
+  `window.__fitDone === true` (timeout 4000, fail holeo PDF ruk hobe NA).
+  SHOB path (preview/PDF/API) EKTA buildCertificateHtml-i use kore.
+  TEST: fit_test.js - sample + stress ALL PASS (EN right <= 182.7).
+
+-------------------------------------------------------------------------------
+8) EN ADDRESS TITLE-CASE (BIRTH - PERMANENT, server.js 778, 794)
+-------------------------------------------------------------------------------
+  titleCaseAddr(s): comma spacing uniform (", ")-> space collapse ->
+    word = first-upper + rest-lower.
+  apply: enL = permEn.split().map(titleCaseAddr)  (line 794, render-time)
+  CASE-AGNOSTIC: "amal chy bari,middle mohara"  == input small
+                 "AMAL CHY BARI, MIDDLE MOHARA" == input CAPS
+                 donoi print: "Amal Chy Bari, Middle Mohara"
+  Idempotent (title-cased input-eo same output). FONT/POSITION BODLE NA.
+  PROOF PDFs (Desktop): ADDR_CASE_lower_input.pdf, ADDR_CASE_UPPER_input.pdf
+  (byte-e same text output).
+
+-------------------------------------------------------------------------------
+8b) FIELD MAPPING + AUTO dobWords/dodWords (BOTH ENGINES - PERMANENT)
+-------------------------------------------------------------------------------
+BIRTH (server.js toTemplateFields - line ~1021):
+  Long API names -> short template names (BIRTH_OUTPUT.json format support):
+    registrationDate -> regDate
+    issuanceDate -> issueDate
+    motherNameEn -> motherEn
+    motherNameBn -> motherBn
+    fatherNameEn -> fatherEn
+    fatherNameBn -> fatherBn
+    motherNationalityEn -> motherNatEn
+    motherNationalityBn -> motherNatBn
+    fatherNationalityEn -> fatherNatEn
+    fatherNationalityBn -> fatherNatBn
+    placeOfBirthEn -> pobEn
+    placeOfBirthBn -> pobBn
+    permanentAddressEn -> permEn
+    permanentAddressBn -> permBn
+  AUTO dobWords: jodi dobWords NA thake, dob theke compute hoy
+    "01/01/1968" -> "First of January  Nineteen Hundred Sixty Eight"
+  apply: /api/preview + /generate-pdf BOTH toTemplateFields diye jay
+
+DEATH (death-verify-server.js toTemplateFields - line ~1032):
+  Long -> short mapping (DEATH_OUTPUT.json format support):
+    placeOfDeathEn -> pobEn
+    placeOfDeathBn -> pobBn
+    causeOfDeathEn -> codEn
+    causeOfDeathBn -> codBn
+    motherNameEn -> motherEn (etc - same pattern)
+    registrationDate -> regDate
+    issuanceDate -> issueDate
+  AUTO dodWords: jodi dodWords NA thake, dod theke compute hoy
+    "19/11/2022" -> "Nineteenth of November  Two Thousand Twenty Two"
+  apply: /api/preview + /api/pdf BOTH toTemplateFields diye jay
+
+NOTE: dobWords/dodWords auto-compute KOKHONO change hobe NA. Jodi user
+explicitly dobWords/dodWords field dey, seta priority pabe (auto-compute skip).
+
+-------------------------------------------------------------------------------
+9) PDF GENERATION (BIRTH, server.js 1031)
+-------------------------------------------------------------------------------
+  puppeteer launch flags: --no-sandbox --disable-setuid-sandbox
+    --disable-gpu --disable-lcd-text --force-color-profile=srgb
+  setContent networkidle0 -> waitForFunction __fitDone -> +120ms ->
+  page.pdf({ printBackground, preferCSSPageSize:true, margin 0 })
+  VECTOR PDF (text selectable, ~470KB) - raster 300DPI lagbe NA (3MB).
+
+-------------------------------------------------------------------------------
+10) ENGINE + STORE + CAPTCHA (shared pieces)
+-------------------------------------------------------------------------------
+  engine.js / cert-engine-standalone.js:
+    number -> SHA-512 key -> verify URL -> QR (matrix) + CODE128 barcode
+    DETERMINISTIC: same input -> same output (15/15 cross-check vs
+    update_codes.py). Official URL thakle official, nahole engine key.
+  store.js: Oracle env -> table auto-create; else file store; Oracle
+    unreachable -> sticky file fallback (data loss NA).
+  captcha: sessions 5-min TTL, verify one-shot (sessions.delete),
+    GEMINI_API_KEY hardcoded KHOBI NA (env/start.bat theke).
+
+-------------------------------------------------------------------------------
+11) WHAT THE BUILDER MUST DO / MUST NOT DO  (SHOB LOGIC ER SUMMARY)
+-------------------------------------------------------------------------------
+DO (jetuku i ache, setai chalao):
+  1. folder as-is copy -> npm ci (birth only) -> start -> API call.
+  2. BDRIS HTML/PDF NIBEN NA - /api/verify er data-i structured.
+     data -> payload mapping: check-api.html doVerify / BUILDER-NIRDESHONA.
+  3. field khali ashe -> data.missingFields + last-result.html dekhao.
+  4. regression gate chalao kono doubt-e:  node test-parse.js (no deps)
+
+DO NOT (kono kichu ADD/change KORBE NA - fixed/permanent):
+  1. server.js / death-verify-server.js-e NOTUN feature/endpoint add NA
+     (kono notun dependency, package.json edit NA).
+  2. layout mm positions, font-size, .bar/addrEn/addrBn box NA change.
+     (addrEn width = 56.4mm FIXED - sample address right edge 187.5mm match)
+     (.seal left:26.9mm top:84.95mm width:149.8mm FIXED - sample match)
+  3. fit script (fs > 6.5 guard, __fitDone) NA change/delete.
+  4. titleCaseAddr / enL map NA change (title-case permanent rule).
+  5. `delete out.registrationOffice` NA fela (office EKBAR rule).
+  6. TLS 1.2 line top-e thakbe, sorabe NA.
+  7. BDRIS parse app-nije NAO (duplicate kaj -> bug).
+  8. registrationOffice wapas response-e ANBE NA.
+  9. hardcoded key/password/code NA (env diye).
+ 10. NOTUN LABEL jodi BDRIS add kore: shudhu ekta alias line
+     RESULT_LABELS (birth 328) / LAB (death) add - ba last-result.html
+     diye report -> 1-line patch. LOGIC change NA.
+ 11. toTemplateFields NA change/delete (long field name auto-map +
+     dobWords/dodWords auto-compute - PERMANENT).
+ 12. Death BRN number top:83.7mm FIXED (label theke ~4.8mm niche -
+     birth er same spacing).
+
+-------------------------------------------------------------------------------
+12) REGRESSION GATE (edit/pull korle EGULO MUST GREEN)
+-------------------------------------------------------------------------------
+  cd BuilderEngine-fixed && node test-parse.js  -> RESULT pass=47 fail=0
+  cd Death-Verify-Engine && node test-parse.js  -> RESULT pass=29 fail=0
+  node --check server.js / death-verify-server.js   (syntax)
+  covered: grid / pair / <th> / alias+colon+case / sparse empty /
+  div-layout / office split / dedupe (registrationOffice) /
+  address title-case (birth CASE 13) / cross-field guard / sanitizer.
+  FAIL hole oita NOTUN bug - code change koro NA, age kothay fail seta
+  bolo; karon: sob fix evidence+sample diye prove kora.
+
+LIVE PROOF (already done, evidence Desktop-e):
+  BDRIS_LIVE_OUTPUT.png - birth ans=28 + death ans=70, BOTH PASS,
+  office ONCE, UTF-8 Bangla correct.
+  BIRTH_OUTPUT.json / DEATH_OUTPUT.json - live responses.
+  BIG_ADDR_BARCODE_MARGIN.pdf / BIG_CAPS_BARCODE_MARGIN.pdf - 21-line
+  address, right=182.7 exact, clip NA, signature safe.
+  hares b.pdf - scanned real sample (measurement reference).
+
+PARS detail: PARSE_FIX_NOTE.txt (dui folder) | API contract: BUILDER.txt,
+ENGINE_API.txt | quick start: BUILDER_NOTE.txt | nirdeksha:
+Desktop\BUILDER-NIRDESHONA.txt
+
+NOTE: Oracle live DB test (host:port/service + user + password) - akhono pending.
+===============================================================================

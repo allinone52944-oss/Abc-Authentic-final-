@@ -28,11 +28,9 @@ setInterval(() => {
     for (const [k, s] of sessions) if (now - s.createdAt > SESSION_TTL_MS) sessions.delete(k);
 }, 60000).unref();
 const CHROME_CANDIDATES = [
-    '/usr/bin/google-chrome',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/chromium',
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    '/usr/bin/google-chrome'
 ];
 const CHROME = CHROME_CANDIDATES.find(p => fs.existsSync(p)) || 'chrome';
 
@@ -90,10 +88,10 @@ function extractRows(html) {
     let tr;
     while ((tr = trRe.exec(html)) !== null) {
         const cells = [];
-        const tdRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+        const tdRe = /<(td|th)\b[^>]*>([\s\S]*?)<\/\1>/gi;   // <th>-e label holeo nay
         let td;
         while ((td = tdRe.exec(tr[1])) !== null) {
-            const t = td[1]
+            const t = td[2]
                 .replace(/<script[\s\S]*?<\/script>/gi, ' ')
                 .replace(/<[^>]+>/g, ' ')
                 .replace(/&nbsp;/gi, ' ')
@@ -102,6 +100,7 @@ function extractRows(html) {
                 .replace(/&gt;/gi, '>')
                 .replace(/&quot;/gi, '"')
                 .replace(/&#39;/g, "'")
+                .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n))
                 .replace(/\s+/g, ' ')
                 .trim();
             cells.push(t);
@@ -177,7 +176,7 @@ function mapResultData(html) {
             data.issuanceDate = data.issuanceDate || enV;
         } else if (en.includes('registration office')) {
             data.registrationOffice = data.registrationOffice || enV;
-        } else if (/location of.*register.*office/i.test(enL||'') && !data.officeLocationRaw) {
+        } else if (en.includes('location of the register office') && !data.officeLocationRaw) {
             data.officeLocationRaw = enV;
         }
     }
@@ -201,37 +200,102 @@ function mapBirthResultData(html) {
         .replace(/<script[\s\S]*?<\/script>/gi, ' ')
         .replace(/<style[\s\S]*?<\/style>/gi, ' ')
         .replace(/<[^>]+>/g, '|');
-    const cells = text.split('|').map(s => s.replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
-    const LABELS = ['REGISTRATION DATE', 'REGISTRATION OFFICE', 'ISSUANCE DATE',
-        'DATE OF BIRTH', 'BIRTH REGISTRATION NUMBER', 'SEX'];
-    const isLabel = (c) => LABELS.includes(String(c || '').toUpperCase());
+    const cells = text.split('|').map(s => s.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+        .replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim()).filter(Boolean);
+    // Tolerant alias match — label spelling/case/space/punctuation drift jeneo.
+    const nlab = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase()
+        .replace(/[\s]*[:：.,]+$/, '').trim();
+    const LAB = {
+        registrationDate: ['registration date', 'date of registration', 'reg date', 'reg. date',
+            'নিবন্ধনের তারিখ', 'নিবন্ধন তারিখ'],
+        issuanceDate: ['issuance date', 'date of issuance', 'issue date', 'date of issue',
+            'issued date', 'ইস্যুর তারিখ', 'প্রদানের তারিখ'],
+        registrationOffice: ['registration office', 'register office', 'office of the registrar',
+            'reg office', 'নিবন্ধন কার্যালয়', 'নিবন্ধনকার্যালয়'],
+        dob: ['date of birth', 'birth date', 'dob', 'জন্ম তারিখ'],
+        brn: ['birth registration number', 'birth registration no', 'birth reg no',
+            'ubrn', 'registration number', 'নিবন্ধন নম্বর'],
+        sex: ['sex', 'gender', 'লিঙ্গ'],
+    };
+    const fieldOf = (c) => {
+        const n = nlab(c);
+        for (const f of Object.keys(LAB)) if (LAB[f].includes(n)) return f;
+        return '';
+    };
+    const isLabel = (c) => !!fieldOf(c);
+    const VALID = {
+        registrationDate: v => /\d/.test(v) && /\d{4}/.test(v),
+        issuanceDate: v => /\d/.test(v) && /\d{4}/.test(v),
+        dob: v => /\d/.test(v) && /\d{4}/.test(v),
+        brn: v => /\d{8,}/.test(v),
+        sex: v => /^(male|female|other|others)\b/i.test(v) || /পুরুষ|নারী|অন্যান্য/.test(v),
+        registrationOffice: v => v.replace(/\s/g, '').length > 3 && !/\d{4}/.test(v),
+    };
     // grid layout (labels row + values row) OTHAO pair layout (label|value) —
-    // label-group porer same-length value-group e map hoy.
+    // label-group porer same-length value-group e map hoy (strict positional,
+    // khaali value hole position thake — na hole porer row-e value soriye jay).
     const grid = {};
+    const used = new Set();
     for (let i = 0; i < cells.length; i++) {
-        if (!isLabel(cells[i])) continue;
+        const f0 = fieldOf(cells[i]);
+        if (!f0) continue;
         let j = i;
         while (j + 1 < cells.length && isLabel(cells[j + 1])) j++;
         const len = j - i + 1;
         for (let k = 0; k < len; k++) {
+            const f = fieldOf(cells[i + k]);
+            if (!f || grid[f]) continue;
             const v = cells[j + 1 + k];
             if (!v || isLabel(v)) continue;
-            grid[cells[i + k].toUpperCase()] = v;
+            const ok = VALID[f];
+            if (ok && !ok(v)) continue;      // validator fail -> fallback niche try hobe
+            grid[f] = v;
+            used.add(v);
         }
         i = j;
     }
-    const pick = (dst, src) => { if (src && !data[dst]) data[dst] = src; };
-    pick('registrationDate', grid['REGISTRATION DATE']);
-    pick('registrationOffice', grid['REGISTRATION OFFICE']);
-    pick('issuanceDate', grid['ISSUANCE DATE']);
-    pick('dob', grid['DATE OF BIRTH']);
-    const brn = grid['BIRTH REGISTRATION NUMBER'];
-    if (brn) { const mm = brn.match(/\d{10,20}/); if (mm) data.brn = data.brn || mm[0]; }
-    pick('sex', grid['SEX']);
+    // fallback: run/positional miss hole (khaali cell, extra wrapper) — label-er
+    // porer unused valid value nay. ek-i value dui field-e jabe na.
+    const fwd = (field) => {
+        const ok = VALID[field] || (() => true);
+        for (let i = 0; i < cells.length; i++) {
+            if (fieldOf(cells[i]) !== field) continue;
+            for (let j = i + 1; j < cells.length; j++) {
+                const v = cells[j];
+                if (!v || isLabel(v) || used.has(v)) continue;
+                if (ok(v)) return v;
+            }
+        }
+        return '';
+    };
+    for (const f of Object.keys(LAB)) if (!grid[f]) { const v = fwd(f); if (v) { grid[f] = v; used.add(v); } }
+
+    // GRID VALUE AUTHORITATIVE: mapResultData (death 4-col) birth-er label-row ke
+    // [bnL][bnV][enL][enV] bhore nilo bole issuanceDate='DATE OF BIRTH' mis-set
+    // hoyechilo — grid-e thakle grid-i jebe.
+    const set = (dst, src) => { if (src) data[dst] = src; };
+    set('registrationDate', grid.registrationDate);
+    set('registrationOffice', grid.registrationOffice);
+    set('issuanceDate', grid.issuanceDate);
+    set('dob', grid.dob);
+    const brn = grid.brn;
+    if (brn) { const mm = brn.match(/\d{10,20}/); if (mm) data.brn = mm[0]; }
+    set('sex', grid.sex);
     // NB footer: Location of the Register office : A, B, C. everify...
     const plain = String(html).replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ');
     const loc = plain.match(/Location of the Register office\s*:\s*([\s\S]+?)\.\s*everify/i);
     if (loc && !data.officeLocationRaw) data.officeLocationRaw = 'Location of the Register office: ' + loc[1].replace(/\s+/g, ' ').trim();
+
+    // sanitizer: je value-i label (ba date field-e date na) — sheta data theke
+    // narao. 4-col row parse label-row ke value dhore neile eta-i bachabe.
+    for (const f of ['registrationDate', 'issuanceDate', 'dob', 'registrationOffice']) {
+        const v = data[f];
+        if (!v) continue;
+        const asLabel = fieldOf(v);
+        const badDate = (f === 'registrationDate' || f === 'issuanceDate' || f === 'dob')
+            && !(VALID[f] && VALID[f](String(v)));
+        if (asLabel || badDate) delete data[f];
+    }
     return data;
 }
 
@@ -322,14 +386,28 @@ function normalizeBdrisData(data) {
                 let loc = String(lm[1]).split(/[.。]\s*(https?:|everify|www\.)/i)[0].replace(/[.。]+$/, '').trim();
                 const lp = loc.split(',').map(x => x.trim()).filter(Boolean);
                 if (lp.length > 1) {
-                    out.office2 = titleCase(lp.slice(1).join(', '));
-                    if (!out.office1 && lp[0]) out.office1 = titleCase(lp[0]);
+                    if (out.office1) {
+                        // office1 table theke ache — puro location-i office2
+                        // (lp.slice(1) korle "Raozan" token harie jeto)
+                        out.office2 = titleCase(lp.slice(1).join(', '));
+                    } else {
+                        out.office2 = titleCase(lp.slice(1).join(', '));
+                        out.office1 = titleCase(lp[0]);
+                    }
                 } else if (lp.length === 1 && !out.office1) {
                     out.office1 = titleCase(lp[0]);
                 }
             }
         }
         delete out.officeLocationRaw;
+    }
+
+    // --- office name EKBAR (sample-certificate layout): header line1 = office1,
+    // line2 = office2. registrationOffice = split er ager copy — output-e duplicate
+    // (office name 2 bar dekhato). office1/office2 thakle registrationOffice sorao.
+    // (parse/validation level-e registrationOffice still kaj kore — shudhu response theke bad.)
+    if (out.registrationOffice && out.office1) {
+        delete out.registrationOffice;
     }
 
     // --- Place of Death: dedupe BDRIS's doubled token + ", Bangladesh" suffix ---
@@ -433,7 +511,7 @@ function buildDeathCertificateHtml(d, assets) {
   <div class="el txt f11" style="left:22.86mm; top:78.54mm; font-family:Candara, sans-serif; font-size:10.74pt; letter-spacing:0.15px;">Date of Registration</div>
   <div class="el txt f11" style="left:22.90mm; top:84.11mm; font-family:Arial, sans-serif; font-size:9.15pt; letter-spacing:1.05px;">${esc(d.regDate)}</div>
   <div class="el txt f11" style="left:1.82mm; width:204.2mm; text-align:center; top:78.87mm; font-family:Verdana, sans-serif; font-size:10.89pt; letter-spacing:0.60px;">Death Registration Number</div>
-  <div class="el txt b" style="left:0mm; width:207.6mm; text-align:center; top:82.6mm; font-size:12.5pt; font-family:'Trebuchet MS', sans-serif; transform:scaleX(1.016);">${esc(brnText)}</div>
+  <div class="el txt b" style="left:0mm; width:207.6mm; text-align:center; top:83.7mm; font-size:12.5pt; font-family:'Trebuchet MS', sans-serif; transform:scaleX(1.016);">${esc(brnText)}</div>
   <div class="el txt f11" style="left:146.14mm; top:78.54mm; font-size:10.56pt; letter-spacing:0.15px;">Date of Issuance</div>
   <div class="el txt f11" style="left:146.15mm; top:84.11mm; font-family:Arial, sans-serif; font-size:9.15pt; letter-spacing:1.05px;">${esc(d.issueDate)}</div>
 
@@ -603,7 +681,7 @@ function serveFile(res, file, type) {
 /* ---------------- captcha auto-solve (optional "Auto Calculate") ------------
    Zero npm deps — Gemini REST api direct fetch diye (birth Scrapper-er
    @google/generative-ai package er identical behavior, package chara). */
-const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+const GEMINI_MODELS = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-flash-latest'];
 async function solveCaptchaWithGemini(captchaB64, mimeType) {
     if (!GEMINI_API_KEY || GEMINI_API_KEY === 'PASTE_YOUR_KEY_HERE')
         throw new Error('GEMINI_API_KEY is not set (start-verify.bat-e key bosan).');
@@ -888,17 +966,8 @@ async function routeVerify(req, res) {
         });
         const html = await r.text();
 
-        // M-17 fix (2026-10-15): PII-bearing debug dumps only with DEBUG_DUMP=1,
-        // into a 0700 dir (was: world-readable /tmp unconditionally).
-        try {
-            if (process.env.DEBUG_DUMP === '1') {
-                const dd = path.join(__dirname, '.debug-dumps');
-                fs.mkdirSync(dd, { recursive: true, mode: 0o700 });
-                const dbgPath = path.join(dd, 'death-debug-' + Date.now() + '.html');
-                fs.writeFileSync(dbgPath, html.slice(0, 50000), { mode: 0o600 });
-                console.log('[death-verify] DEBUG html saved to', dbgPath, 'len=', html.length);
-            }
-        } catch (_) {}
+        // debug copy: structure dekhar jonno
+        try { fs.writeFileSync(path.join(__dirname, '_last-result.html'), html); } catch (_) {}
 
         if (html.includes('Captcha is not valid') || html.includes('Does not match'))
             return json(res, 200, { success: false, error: 'Captcha bhul — notun captcha anun abar cheshta korun.' });
@@ -949,6 +1018,11 @@ async function routeVerify(req, res) {
         if (!data.brn || data.brn.length < 10 || !data.nameEn)
             return json(res, 200, { success: false, error: 'Result pora jayni — _last-result.html save hoyeche (path dekhte parben).', debug: extractRows(html).slice(0, 20) });
 
+        // Missing-field diagnostic — consumer ki ki pabe / ki miss hocche janbe.
+        const miss = ['registrationDate', 'issuanceDate', 'office1', 'office2']
+            .filter(k => !data[k]);
+        if (miss.length) data.missingFields = miss;
+
         return json(res, 200, { success: true, data });
     } catch (e) {
         json(res, 500, { success: false, error: e.message });
@@ -973,6 +1047,21 @@ function toTemplateFields(d) {
     pick('fatherNatBn', 'fatherNationalityBn');
     pick('regDate', 'registrationDate');
     pick('issueDate', 'issuanceDate');
+    // auto compute dodWords from dod if missing (In Word row)
+    if (!t.dodWords && t.dod) {
+        const months = { '01':'January','02':'February','03':'March','04':'April','05':'May','06':'June','07':'July','08':'August','09':'September','10':'October','11':'November','12':'December' };
+        const days = ['','First','Second','Third','Fourth','Fifth','Sixth','Seventh','Eighth','Ninth','Tenth','Eleventh','Twelfth','Thirteenth','Fourteenth','Fifteenth','Sixteenth','Seventeenth','Eighteenth','Nineteenth','Twentieth','Twenty First','Twenty Second','Twenty Third','Twenty Fourth','Twenty Fifth','Twenty Sixth','Twenty Seventh','Twenty Eighth','Twenty Ninth','Thirtieth','Thirty First'];
+        const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+        const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+        const m = String(t.dod).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (m) {
+            const day = parseInt(m[1], 10), mn = m[2].padStart(2, '0'), yr = parseInt(m[3], 10);
+            let ys = 'Two Thousand';
+            if (yr >= 2000) { const r = yr - 2000; if (r > 0 && r < 20) ys += ' ' + ones[r]; else if (r >= 20) ys += ' ' + tens[Math.floor(r / 10)] + (r % 10 ? ' ' + ones[r % 10] : ''); }
+            else { const r = yr - 1900; ys = 'Nineteen Hundred'; if (r > 0 && r < 20) ys += ' ' + ones[r]; else if (r >= 20) ys += ' ' + tens[Math.floor(r / 10)] + (r % 10 ? ' ' + ones[r % 10] : ''); }
+            t.dodWords = days[day] + ' of ' + (months[mn] || 'January') + '  ' + ys;
+        }
+    }
     return t;
 }
 
@@ -1002,7 +1091,7 @@ async function routePdf(req, res) {
         const url = 'file:///' + tmpHtml.replace(/\\/g, '/');
         await new Promise((resolve, reject) => {
             const ch = spawn(CHROME, [
-                '--headless', '--disable-gpu', '--no-sandbox',
+                '--headless', '--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage',
                 '--no-pdf-header-footer',
                 '--user-data-dir=' + prof,
                 '--print-to-pdf=' + tmpPdf,
@@ -1050,11 +1139,6 @@ if (req.method === 'GET' && p === '/api/captcha') return await routeCaptcha(res)
 if (req.method === 'POST' && p === '/api/solve-captcha') return await routeSolveCaptcha(req, res);
 if (req.method === 'POST' && p === '/api/verify') return await routeVerify(req, res);
         if (req.method === 'GET' && p === '/api/birth-debug') {
-            // H-11 fix (2026-10-15): debug endpoint is OFF unless explicitly
-            // enabled — it returns full birth-record PII for any DRN+DOB.
-            if (process.env.ENABLE_DEBUG_ENDPOINTS !== '1') {
-                return json(res, 404, { success: false, error: 'not found' });
-            }
             const drn = String(u.searchParams.get('drn') || '').replace(/\D/g, '');
             const dob = String(u.searchParams.get('dob') || '').trim();
             if (!drn) return json(res, 400, { success: false, error: 'drn query-e din' });

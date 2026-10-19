@@ -23,22 +23,6 @@ function fontsCss() {
     return _fontsCss;
 }
 
-// Cached seal/logo base64 (read once, not on every PDF request)
-let _sealBase64 = null;
-function sealBase64() {
-    if (_sealBase64 === null) {
-        _sealBase64 = fs.readFileSync(path.join(__dirname, 'assets', 'seal.jpg')).toString('base64');
-    }
-    return _sealBase64;
-}
-let _logoBase64 = null;
-function logoBase64() {
-    if (_logoBase64 === null) {
-        _logoBase64 = fs.readFileSync(path.join(__dirname, 'assets', 'logo.png')).toString('base64');
-    }
-    return _logoBase64;
-}
-
 // TLS fix: everify.bdris.gov.bd-এর TLS 1.3 handshake কিছু network-এ ভাঙে
 // ("bad ecpoint" error)। তাই এই app-এর সব HTTPS কল TLS 1.2 দিয়ে হবে।
 // (কোডেই বসানো — আলাদা env var/flag লাগবে না।)
@@ -125,7 +109,7 @@ function parseFormPage(html) {
 async function solveCaptchaWithGemini(captchaB64, mimeType) {
     if (!genAI) throw new Error('GEMINI_API_KEY is not set.');
     const imageParts = [{ inlineData: { data: captchaB64, mimeType: mimeType || 'image/png' } }];
-    const modelsToTry = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+    const modelsToTry = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-flash-latest'];
     const prompt = "Solve the math problem shown in this image. If it's a math problem like '92-48=?', return only the final calculated number (e.g. 44). If it is just a string of random letters and numbers, return those exactly. ONLY return the final answer without any explanation or extra text. Make sure you calculate correctly.";
     let lastErr = null;
     const withTimeout = (p, ms, msg) => Promise.race([
@@ -135,7 +119,7 @@ async function solveCaptchaWithGemini(captchaB64, mimeType) {
         for (const modelName of modelsToTry) {
             try {
                 const model = genAI.getGenerativeModel({ model: modelName });
-                const result = await withTimeout(model.generateContent([prompt, ...imageParts]), 15000, 'Gemini timeout');
+                const result = await withTimeout(model.generateContent([prompt, ...imageParts]), 45000, 'Gemini timeout');
                 return result.response.text().trim();
             } catch (e) {
                 lastErr = e;
@@ -289,62 +273,204 @@ app.post('/api/solve-captcha', async (req, res) => {
 
 // --- Step 2: submit + scrape ---------------------------------------------------
 function extractTdTexts(html) {
-    const tds = [];
-    const re = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+    const raw = String(html || '')
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<!--[\s\S]*?-->/g, ' ');
+    const unesc = (s) => String(s)
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n))
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    // (a) table cells — <td> AND <th>, document-order-e (label <th>-e holeo nay;
+    //     purano shudhu-<td> code-e eta-i 100% data haranor karon chhilo).
+    const cells = [];
+    const re = /<(td|th)\b[^>]*>([\s\S]*?)<\/\1>/gi;
     let m;
-    while ((m = re.exec(html)) !== null) {
-        let t = m[1]
-            .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    while ((m = re.exec(raw)) !== null) cells.push(unesc(m[2]));
+
+    // (b) kono table na thakle (div/span/label layout) — tag-boundary diye tokenize
+    if (!cells.length) {
+        const SEP = '\u0001';
+        return raw
+            .replace(/<\/(?:div|p|tr|li|h[1-6]|span|section|label|dt|dd)>/gi, SEP)
             .replace(/<[^>]+>/g, ' ')
             .replace(/&nbsp;/gi, ' ')
             .replace(/&amp;/gi, '&')
-            .replace(/&lt;/gi, '<')
-            .replace(/&gt;/gi, '>')
-            .replace(/&quot;/gi, '"')
-            .replace(/&#39;/g, "'")
-            .replace(/\s+/g, ' ')
-            .trim();
-        tds.push(t);
+            .split(SEP)
+            .map(s => s.replace(/\s+/g, ' ').trim())
+            .filter(Boolean);
     }
-    return tds;
+    return cells;
 }
 
+// Tolerant label normalize: markup/space/case/punctuation drift jeneo match koro.
+function nlab(s) {
+    return String(s == null ? '' : s)
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/[\u200b-\u200d\ufeff]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase()
+        .replace(/[\s]*[:：.,]+$/, '')
+        .trim();
+}
+
+// Field -> label aliases (EN + BN). Edit korlei notun label support hobe.
+const RESULT_LABELS = {
+    registrationDate: ['registration date', 'date of registration', 'reg date', 'reg. date',
+        'registration date of', 'নিবন্ধনের তারিখ', 'নিবন্ধন তারিখ'],
+    issuanceDate: ['issuance date', 'date of issuance', 'issue date', 'date of issue',
+        'issued date', 'issue date of', 'ইস্যুর তারিখ', 'প্রদানের তারিখ'],
+    registrationOffice: ['registration office', 'register office', 'office of the registrar',
+        'registration place', 'reg office', 'নিবন্ধন কার্যালয়', 'নিবন্ধনকার্যালয়'],
+    dob: ['date of birth', 'birth date', 'date of brith', 'dob', 'জন্ম তারিখ'],
+    brn: ['birth registration number', 'birth registration no', 'birth reg. no', 'birth reg no',
+        'ubrn', 'registration number', 'registration no', 'জন্ম নিবন্ধন নম্বর', 'নিবন্ধন নম্বর'],
+    sex: ['sex', 'gender', 'লিঙ্গ', 'লিঙग'],
+};
+
+// Value validation (bhul cell-e jawa rokhte) — jodi value na mile, porer offset try hoy.
+const FIELD_VALID = {
+    registrationDate: v => /\d/.test(v) && /\d{4}/.test(v),
+    issuanceDate: v => /\d/.test(v) && /\d{4}/.test(v),
+    dob: v => /\d/.test(v) && /\d{4}/.test(v),
+    brn: v => /\d{8,}/.test(v),
+    sex: v => /^(male|female|other|others|m|f)\b/i.test(String(v).trim()) || /পুরুষ|নারী|অন্যান্য/.test(v),
+    registrationOffice: v => String(v).replace(/\s/g, '').length > 3
+        && !/\d{4}/.test(v)                                   // date na
+        && !/^(date|number|no|sex|dob|brn|birth registration)\b/i.test(String(v).trim()),
+};
+
+// Niyom: i+1 (pair layout) age try, tarpor i+3 (grid layout), tarpor baki offset.
+// Kintu label cell ba validator-fail value kabar hobe na.
 function mapResultData(tds) {
     const data = {};
-    for (let i = 0; i < tds.length; i++) {
-        const text = tds[i];
-        if (/registration date/i.test(text)) {
-            for (const off of [3, 1, 2, 4]) { if (tds[i+off] && /\d/.test(tds[i+off])) { data.registrationDate = tds[i+off]; break; } }
+    const cells = (tds || []).map(t => String(t == null ? '' : t).replace(/\s+/g, ' ').trim());
+    const N = cells.map(nlab);
+
+    const LABEL_SET = new Set();
+    for (const k of Object.keys(RESULT_LABELS)) for (const a of RESULT_LABELS[k]) LABEL_SET.add(a);
+    // Ei cell gulo kokhono value na — value candidate hisebe skip hobe.
+    ['registered person name', 'place of birth', "mother's name", "father's name",
+     "mother's nationality", "father's nationality", 'permanent address', 'present address',
+     'smart card info', 'license documents', 'verify by nid', 'no documents available'
+    ].forEach(x => LABEL_SET.add(x));
+    const isLabel = i => i >= 0 && i < N.length && LABEL_SET.has(N[i]);
+
+    const used = new Set();
+    const setField = (field, val) => {
+        if (!val || data[field]) return;
+        const ok = FIELD_VALID[field];
+        if (ok && !ok(val)) return;   // validator fail -> dhoro na (fallback porobortiye bhorte parbe)
+        data[field] = val;
+        used.add(val);                // ek-i value dui field-e jabe na
+    };
+
+    // ---- PASS A: layout-agnostic RUN detection -----------------------------
+    // Kono BDRIS table dui rkom hoy:
+    //   grid : [L1 L2 L3][V1 V2 V3]  (label-run porer runLen ta cell = value)
+    //   pair : [L1 V1][L2 V2]        (runLen=1, porer taich = value)
+    // Label-run dhor (majhkhan-e khaali cell thakleo) — run-er niye STRRICT
+    // positional: runLen-ta porer cell-i value (khaali value hole position
+    // na-sarate rakhbe, na hole porer row-er value ageye jabe).
+    const nextNonEmpty = (from) => { for (let j = from; j < cells.length; j++) if (cells[j]) return j; return -1; };
+    for (let i = 0; i < cells.length;) {
+        if (!isLabel(i)) { i++; continue; }
+        const runIdx = [i];
+        let last = i;
+        let j = nextNonEmpty(i + 1);
+        while (j >= 0 && isLabel(j)) { runIdx.push(j); last = j; j = nextNonEmpty(j + 1); }
+        for (let k = 0; k < runIdx.length; k++) {
+            const lab = N[runIdx[k]];
+            const v = cells[last + 1 + k] || '';   // strict positional (empties included)
+            for (const field of Object.keys(RESULT_LABELS)) {
+                if (data[field]) continue;
+                if (RESULT_LABELS[field].includes(lab)) setField(field, v);
+            }
         }
-        if (text === 'Registration Office' && tds[i + 3]) data.registrationOffice = tds[i + 3];
-        // Some result pages put the office NAME in the table value cell and the
-        // "NB: ... Location of the Register office : A, B, C" line in its own cell.
-        // Keep that line aside: it becomes office2 when the table value had none.
-        if (/location of.*register.*office/i.test(text) && !data.officeLocationRaw) {
+        i = last + 1;
+    }
+
+    // ---- PASS B: forward-scan fallback (run/positional miss hole) ----------
+    // Nije theke age, already-berokto value skip, validator milate hobe.
+    const nearestValid = (i, field) => {
+        const valid = FIELD_VALID[field] || (() => true);
+        for (let j = i + 1; j < cells.length; j++) {
+            const v = cells[j];
+            if (!v || isLabel(j) || used.has(v)) continue;
+            if (valid(v)) return v;
+        }
+        return '';
+    };
+
+    for (let i = 0; i < cells.length; i++) {
+        const text = cells[i];
+        const lab = N[i];
+
+        // 1) fallback: ei label er field ekhono khali hole nearest-valid value
+        for (const field of Object.keys(RESULT_LABELS)) {
+            if (data[field]) continue;
+            if (RESULT_LABELS[field].includes(lab)) setField(field, nearestValid(i, field));
+        }
+
+        // 2) single-cell "Label: value" pattern
+        const m = text.match(/^([^:：]{3,48})\s*[:：]\s*(.+)$/);
+        if (m) {
+            const klab = nlab(m[1]);
+            for (const field of Object.keys(RESULT_LABELS)) {
+                if (data[field]) continue;
+                if (RESULT_LABELS[field].includes(klab)) setField(field, m[2].trim());
+            }
+        }
+
+        // 3) NB footer: "Location of the Register office : A, B, C. everify..."
+        if (/location of the register office/i.test(text) && !data.officeLocationRaw) {
             data.officeLocationRaw = text;
         }
-        // Fallback: try other offsets if i+3 is empty
-        if (text === 'Registration Office' && !data.registrationOffice) {
-            for (const off of [1, 2, 4, 5]) {
-                if (tds[i + off] && tds[i + off].trim().length > 3) {
-                    data.registrationOffice = tds[i + off];
-                    break;
+
+        // 4) pair cells: label at i -> value i+1, Bn value i-1 (layout unchanged)
+        if (text.includes('Registered Person Name')) { data.nameEn = cells[i + 1]; data.nameBn = cells[i - 1]; }
+        if (text.includes('Place of Birth')) { data.placeOfBirthEn = cells[i + 1]; data.placeOfBirthBn = cells[i - 1]; }
+        if (text.includes("Mother's Name")) { data.motherNameEn = cells[i + 1]; data.motherNameBn = cells[i - 1]; }
+        if (text.includes("Mother's Nationality")) { data.motherNationalityEn = cells[i + 1]; data.motherNationalityBn = cells[i - 1]; }
+        if (text.includes("Father's Name")) { data.fatherNameEn = cells[i + 1]; data.fatherNameBn = cells[i - 1]; }
+        if (text.includes("Father's Nationality")) { data.fatherNationalityEn = cells[i + 1]; data.fatherNationalityBn = cells[i - 1]; }
+        if (text.includes('Permanent Address')) { data.permanentAddressEn = cells[i + 1]; data.permanentAddressBn = cells[i - 1]; }
+    }
+
+    // 5) safety net: kono layout-e label/labeler porer cell theke date/office khujo
+    if (!data.registrationDate || !data.issuanceDate || !data.registrationOffice || !data.brn) {
+        const near = (labPat, valid) => {
+            const k = cells.findIndex((c, idx) => labPat.test(N[idx] || c));
+            if (k < 0) return '';
+            for (let j = k + 1; j < Math.min(k + 5, cells.length); j++) {
+                const v = cells[j];
+                if (!v || isLabel(j)) continue;
+                if (!valid || valid(v)) return v;
+            }
+            return '';
+        };
+        if (!data.registrationDate) setField('registrationDate', near(/^registration date$|^date of registration$/i, FIELD_VALID.registrationDate));
+        if (!data.issuanceDate) setField('issuanceDate', near(/^issuance date$|^issue date$|^date of issuance$/i, FIELD_VALID.issuanceDate));
+        if (!data.registrationOffice) setField('registrationOffice', near(/^registration office$|^register office$|^office of the registrar$/i, FIELD_VALID.registrationOffice));
+        if (!data.brn) {
+            const k = cells.findIndex(c => /birth registration number/i.test(c));
+            if (k >= 0) {
+                for (let j = k + 1; j < Math.min(k + 5, cells.length); j++) {
+                    const mm = cells[j].match(/\d{10,20}/);
+                    if (mm) { setField('brn', mm[0]); break; }
                 }
             }
         }
-        if (/issuance date/i.test(text)) {
-            for (const off of [3, 1, 2, 4]) { if (tds[i+off] && /\d/.test(tds[i+off])) { data.issuanceDate = tds[i+off]; break; } }
-        }
-        if (text === 'Date of Birth' && tds[i + 3]) data.dob = tds[i + 3];
-        if (text === 'Birth Registration Number' && tds[i + 3]) data.brn = tds[i + 3];
-        if (text === 'Sex' && tds[i + 3]) data.sex = tds[i + 3];
-        if (text.includes('Registered Person Name')) { data.nameEn = tds[i + 1]; data.nameBn = tds[i - 1]; }
-        if (text.includes('Place of Birth')) { data.placeOfBirthEn = tds[i + 1]; data.placeOfBirthBn = tds[i - 1]; }
-        if (text.includes("Mother's Name")) { data.motherNameEn = tds[i + 1]; data.motherNameBn = tds[i - 1]; }
-        if (text.includes("Mother's Nationality")) { data.motherNationalityEn = tds[i + 1]; data.motherNationalityBn = tds[i - 1]; }
-        if (text.includes("Father's Name")) { data.fatherNameEn = tds[i + 1]; data.fatherNameBn = tds[i - 1]; }
-        if (text.includes("Father's Nationality")) { data.fatherNationalityEn = tds[i + 1]; data.fatherNationalityBn = tds[i - 1]; }
-    if (text.includes('Permanent Address')) { data.permanentAddressEn = tds[i + 1]; data.permanentAddressBn = tds[i - 1]; }
     }
     return data;
 }
@@ -382,9 +508,6 @@ function normalizeBdrisData(data) {
     out.registrationDate = toDDMMYYYY(out.registrationDate);
     out.issuanceDate = toDDMMYYYY(out.issuanceDate);
     out.dob = toDDMMYYYY(out.dob);
-    // Aliases for template (expects regDate/issueDate)
-    out.regDate = out.registrationDate;
-    out.issueDate = out.issuanceDate;
 
     // --- English names/places: Title Case ---
     for (const k of ['nameEn', 'motherNameEn', 'fatherNameEn', 'placeOfBirthEn', 'permanentAddressEn', 'registrationOffice']) {
@@ -395,21 +518,15 @@ function normalizeBdrisData(data) {
         if (out[k]) out[k] = titleCase(out[k]);
     }
 
-    // Registration office (user spec 2026-10-19, 2 real everify PDFs):
-    // office1 = COMPLETE office name from the table (kokhono comma-split noy),
-    // office2 = NB "Location of the Register office" line MINUS its 1st part
-    // (1st part duplicates the office name, e.g. "ZONE - 1" / "UMARPUR").
+    // Registration office: drop any "NB: ... Database. Location of the
+    // Register office:" preamble, keep the FULL address, split line1 / rest.
     // (tolerates the BDRIS "retrived" typo, spacing/punctuation variants,
     //  or a bare "NB: <first sentence>. <address>" shape)
     if (out.registrationOffice) {
         let cleaned = String(out.registrationOffice).trim();
-        let fromLocationLine = false;
         const loc = cleaned.search(/location of the register office/i);
         if (loc >= 0) {
-            // cell itself held the location line (no separate office name):
-            // purono split behavior rakho jate data kokhono na haray
             cleaned = cleaned.slice(loc).replace(/^location of the register office\s*:?/i, '').trim();
-            fromLocationLine = true;
         } else {
             const fullNB = cleaned.match(/^NB:?\s*this record is retrie?ved from birth and death registration database\s*\.\s*(location of the register office\s*:?)?/i);
             if (fullNB) {
@@ -422,32 +539,44 @@ function normalizeBdrisData(data) {
         out.registrationOffice = cleaned;
         // a sentence-final period is punctuation, never part of the address
         cleaned = cleaned.replace(/[.。]+$/, '').trim();
-        if (fromLocationLine) {
-            const parts = cleaned.split(',').map(x => x.trim()).filter(Boolean);
-            out.office1 = parts.length ? parts[0] : cleaned;
-            out.office2 = parts.length > 1 ? parts.slice(1).join(', ') : '';
-        } else {
-            out.office1 = cleaned;  // sampurna angsha (officer puro nam)
-            out.office2 = '';       // NB location theke asbe (niche)
-        }
+        const parts = cleaned.split(',').map(x => x.trim()).filter(Boolean);
+        out.office1 = parts.length ? parts[0] : cleaned;
+        out.office2 = parts.length > 1 ? parts.slice(1).join(', ') : '';
     }
 
-    // NB "Location of the Register office" cell -> office2:
-    // 1st comma-part bad diye baki thikana (1st part office name-er duplicate).
-    // Single-part location + no office1 -> office1 (kokhono data harabe na).
+    // Separate NB/location cell (office NAME was in the table, location here):
+    // use its location as office2 ONLY when the table value had no comma of its
+    // own. Never overrides an existing office2. Title-cased like the rest.
+    // Single-token location + no office1 -> office1 (kokhono data harabe na).
     if (out.officeLocationRaw) {
-        const lm = String(out.officeLocationRaw).match(/location of the register office\s*:?\s*([\s\S]+)$/i);
-        if (lm) {
-            let loc = String(lm[1]).split(/[.。]\s*(https?:|everify|www\.)/i)[0].replace(/[.。]+$/, '').trim();
-            const lp = loc.split(',').map(x => x.trim()).filter(Boolean);
-            if (lp.length > 1) {
-                out.office2 = titleCase(lp.slice(1).join(', '));
-                if (!out.office1 && lp[0]) out.office1 = titleCase(lp[0]);
-            } else if (lp.length === 1 && !out.office1) {
-                out.office1 = titleCase(lp[0]);
+        if (!out.office2) {
+            const lm = String(out.officeLocationRaw).match(/location of the register office\s*:?\s*([\s\S]+)$/i);
+            if (lm) {
+                let loc = String(lm[1]).split(/[.。]\s*(https?:|everify|www\.)/i)[0].replace(/[.。]+$/, '').trim();
+                const lp = loc.split(',').map(x => x.trim()).filter(Boolean);
+                if (lp.length > 1) {
+                    if (out.office1) {
+                        // office1 table theke ache — puro location-i office2
+                        // (lp.slice(1) korle "Raozan" token harie jeto)
+                        out.office2 = titleCase(lp.slice(1).join(', '));
+                    } else {
+                        out.office2 = titleCase(lp.slice(1).join(', '));
+                        out.office1 = titleCase(lp[0]);
+                    }
+                } else if (lp.length === 1 && !out.office1) {
+                    out.office1 = titleCase(lp[0]);
+                }
             }
         }
         delete out.officeLocationRaw;
+    }
+
+    // --- office name EKBAR (sample-certificate layout): header line1 = office1,
+    // line2 = office2. registrationOffice = split er ager copy — output-e duplicate
+    // (office name 2 bar dekhato). office1/office2 thakle registrationOffice sorao.
+    // (parse/validation level-e registrationOffice still kaj kore — shudhu response theke bad.)
+    if (out.registrationOffice && out.office1) {
+        delete out.registrationOffice;
     }
 
     // --- Place of Birth: ", Bangladesh" / ", বাংলাদেশ" যোগ করো ---
@@ -505,31 +634,28 @@ app.post('/api/verify', async (req, res) => {
             body
         });
         const html = await r.text();
-        // M-17 fix (2026-10-15): PII-bearing debug dumps only with DEBUG_DUMP=1,
-        // into a 0700 dir (was: world-readable /tmp unconditionally).
-        try {
-            if (process.env.DEBUG_DUMP === '1') {
-                const fs2 = require('fs');
-                const dd = require('path').join(__dirname, '.debug-dumps');
-                fs2.mkdirSync(dd, { recursive: true, mode: 0o700 });
-                const dbgPath = require('path').join(dd, 'bdris-debug-' + Date.now() + '.html');
-                fs2.writeFileSync(dbgPath, html.slice(0, 80000), { mode: 0o600 });
-                console.log('[bdris-cert] DEBUG html saved to', dbgPath, 'len=', html.length);
-            }
-        } catch (_) {}
+        // Shob verify-e page save — parse fail korle structure dekhe fix kora jabe.
+        // (builder app theke last-result.html niye bug report korte parben)
+        try { require('fs').writeFileSync(require('path').join(__dirname, 'last-result.html'), html); } catch (_) {}
 
         if (html.includes('No record found') || html.includes('Captcha is not valid') || html.includes('Does not match')) {
             return res.json({ success: false, error: 'Data not found or captcha wrong. Fetch a new captcha and try again.' });
         }
 
         const tds = extractTdTexts(html);
-        const mapped = mapResultData(tds);
-        // Fallback: search raw HTML for office location if not in TDs
-        if (!mapped.officeLocationRaw) {
-            const hm = html.match(/location of the register office\s*:?\s*([^<]{3,200})/i);
-            if (hm) mapped.officeLocationRaw = 'Location of the Register office: ' + hm[1].trim();
+        // NB footer table-r baire (<p>/<div>) hole td-th parse-e ashe na —
+        // pura html theke office location niche nao, nahole office2 khali thake.
+        if (!tds.some(t => /location of the register office/i.test(t))) {
+            const m = String(html)
+                .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+                .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+                .replace(/<[^>]+>/g, ' ')
+                .replace(/&nbsp;/gi, ' ')
+                .replace(/\s+/g, ' ')
+                .match(/location of the register office\s*:?\s*([^.]{2,200})/i);
+            if (m) tds.push('Location of the Register office: ' + m[1].trim());
         }
-        const data = normalizeBdrisData(mapped);
+        const data = normalizeBdrisData(mapResultData(tds));
 
         // 6 fallback pairs provided by user (BIRTH records only)
         const qrFallbackList = [
@@ -558,15 +684,13 @@ app.post('/api/verify', async (req, res) => {
             data.qrImageSrc = qrImgMatch[1];
         }
         if (!data.brn && !data.nameEn) {
-            // Debug: result page save করে রাখি যাতে structure দেখা যায়
-            try { require('fs').writeFileSync(require('path').join(__dirname, 'last-result.html'), html); } catch (_) {}
             return res.json({ success: false, error: 'Could not read the result. Fetch a new captcha and try again. (last-result.html saved)', debug: tds.slice(0, 40) });
         }
-        const missingFields = [];
-        for (const f of ['registrationDate', 'issuanceDate', 'office1', 'office2']) {
-            if (!data[f]) missingFields.push(f);
-        }
-        if (missingFields.length) data.missingFields = missingFields;
+        // Missing-field diagnostic — builder app-e ki ki parse hocche dekhte parben.
+        // (registrationOffice NA — output-e office1+office2 i canonical address.)
+        const miss = ['registrationDate', 'issuanceDate', 'office1', 'office2']
+            .filter(k => !data[k]);
+        if (miss.length) data.missingFields = miss;
         res.json({ success: true, data });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
@@ -646,6 +770,19 @@ const esc = (s) => String(s == null ? '' : s)
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
+// English thikana user jemon-i likhuk (all small / ALL CAPS / mixed) —
+// certificate-e TITLE CASE diye print hoy:
+//   "amal chy bari,middle mohara"  -> "Amal Chy Bari, Middle Mohara"
+//   "AMAL CHY BARI, MIDDLE MOHARA" -> "Amal Chy Bari, Middle Mohara"
+// (position/font rules age-er motoi; kono font size badol na.)
+const titleCaseAddr = (s) => String(s == null ? '' : s)
+    .replace(/\s*,\s*/g, ', ')   // comma spacing uniform: "bari,middle" -> "bari, middle"
+    .replace(/\s+/g, ' ')        // double space / tab clean
+    .trim()
+    .split(' ')
+    .map(w => w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w)
+    .join(' ');
+
 // Replica layout (same look as birth-certificate/index.html), driven by record data.
 // Positions/fonts are the scan-measured replica values; QR + barcode come from
 // the shared engine (cert-engine.js) via buildAssets. No client JS needed:
@@ -654,9 +791,7 @@ function buildCertificateHtml(d, assets) {
     // collapse-proof spaces (replica uses &nbsp; for the double space in dobWords)
     const N = (s) => esc(s).replace(/ {2,}/g, (m) => '&nbsp;'.repeat(m.length));
     const bnL = String(d.permBn == null ? '' : d.permBn).split('\n');
-    // Title Case for English address: any input case -> proper case
-    const _tc = (s) => String(s || '').toLowerCase().split(/(\s+)/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
-    const enL = _tc(d.permEn).split('\n');
+    const enL = String(d.permEn == null ? '' : d.permEn).split(/\r?\n/).map(titleCaseAddr);
     const brnText = String(d.brn == null ? '' : d.brn);
 
     return `<!DOCTYPE html>
@@ -680,7 +815,7 @@ function buildCertificateHtml(d, assets) {
     overflow: hidden;
   }
   .sheet .el { position: absolute; white-space: nowrap; line-height: 1.15; }
-  .seal { position: absolute; left: 21mm; top: 69.8mm; width: 168mm; z-index: 0; }
+  .seal { position: absolute; left: 26.9mm; top: 84.95mm; width: 149.8mm; z-index: 0; }
   .sheet .txt { z-index: 1; }
   .qr   { position: absolute; left: 17.7mm; top: 20.4mm; width: 29.3mm; height: 29.3mm; z-index: 1; }
   .qhhi { position: absolute; left: 14.5mm; top: 52.1mm; width: 29.0mm; z-index: 1; line-height: 1;
@@ -786,13 +921,16 @@ function buildCertificateHtml(d, assets) {
   <div class="el txt f11" style="left:128.1mm; top:167.3mm;">:</div>
   <div class="el txt f11" style="left:131.43mm; top:167.3mm; font-family:Tahoma, sans-serif; letter-spacing:1.10px; transform:scaleX(0.9856); transform-origin:left center;">${esc(d.pobEn)}</div>
 
-  <!-- row 7 address: wrap boxes (same font/size; long text flows DOWN, never restyles) -->
+  <!-- row 7 address: wrap boxes (same font/size; long text flows DOWN, never restyles)
+       FIT LOGIC (permanent): fixed width = horizontal BOUND (word-break for unbroken
+       tokens), max-height 43mm = vertical BOUND (never reaches the signature block),
+       inline script auto-shrinks font/line-height until it fits -> layout intact. -->
   <div class="el txt f11" style="left:22.7mm; top:180.8mm; font-family:'SutonnyOMJ'; transform:scaleX(1.089); transform-origin:left bottom">স্থায়ী ঠিকানা</div>
   <div class="el txt f11" style="left:53.9mm; top:179.9mm;">:</div>
-  <div class="el txt f11" style="left:56.1mm; top:180.8mm; width:40mm; font-family:'SutonnyOMJ'; transform:scaleX(1.018); transform-origin:left bottom; line-height:4.3mm; white-space:normal;">${bnL.map(esc).join('<br>')}</div>
+  <div id="addrBn" class="el txt f11" style="left:56.1mm; top:180.8mm; width:40mm; max-height:43mm; overflow:hidden; font-family:'SutonnyOMJ'; transform:scaleX(1.018); transform-origin:left bottom; line-height:4.3mm; white-space:normal; overflow-wrap:anywhere; word-break:break-word;">${bnL.map(esc).join('<br>')}</div>
   <div class="el txt f11" style="left:101.55mm; top:179.9mm; font-family:Verdana, sans-serif; transform:scaleX(1.024); transform-origin:left center;">Permanent</div>
   <div class="el txt f11" style="left:128.1mm; top:179.9mm;">:</div>
-  <div class="el txt f11" style="left:131.1mm; top:180.43mm; width:51.6mm; max-width:51.6mm; white-space:normal; overflow-wrap:break-word;"><div style="font-family:Tahoma, sans-serif; letter-spacing:0.96px; transform:scaleX(1.002); transform-origin:left center; line-height:4.27mm;">${esc(enL[0])}</div>${enL.length > 1 ? `<div style="font-family:Tahoma, sans-serif; letter-spacing:1.07px; transform:scaleX(1.002); transform-origin:left center; line-height:4.27mm;">${enL.slice(1).map(esc).join('<br>')}</div>` : ''}</div>
+  <div id="addrEn" class="el txt f11" style="left:131.1mm; top:180.43mm; width:56.4mm; max-height:43mm; overflow:hidden; white-space:normal; overflow-wrap:anywhere; word-break:break-word; line-height:4.27mm;"><div style="font-family:Tahoma, sans-serif; letter-spacing:0.96px; transform:scaleX(1.002); transform-origin:left center;">${esc(enL[0] || '')}</div>${enL.length > 1 ? `<div style="font-family:Tahoma, sans-serif; letter-spacing:1.07px; transform:scaleX(1.002); transform-origin:left center;">${enL.slice(1).map(esc).join('<br>')}</div>` : ''}</div>
   <div class="el txt f11" style="left:101.55mm; top:184.7mm; font-family:Verdana, sans-serif; transform:scaleX(1.047); transform-origin:left center;">Address</div>
 
   <!-- signatures -->
@@ -803,17 +941,60 @@ function buildCertificateHtml(d, assets) {
   <div class="el txt f11 b" style="left:126.15mm; width:75mm; text-align:center; top:234.6mm; letter-spacing:0px; font-family:Arial, sans-serif;">Registrar</div>
 
   <!-- footer -->
-  <div class="el txt" style="left:1.1mm; width:208.6mm; text-align:center; padding-right:4.4mm; top:260.9mm; font-size:8.32pt; letter-spacing:0.15px; white-space:normal;">This certificate is generated from bdris.gov.bd, and to verify this certificate, please scan the above QR Code &amp; Bar Code.</div>
+  <div class="el txt" style="left:1.1mm; width:208.6mm; text-align:center; padding-right:4.4mm; top:260.9mm; font-size:8.32pt; letter-spacing:0.15px;">This certificate is generated from bdris.gov.bd, and to verify this certificate, please scan the above QR Code &amp; Bar Code.</div>
 
 </div>
+
+<!-- AUTO-FIT (permanent): thikana jotoi boro/hok — addrBn/addrEn box-er FIXED
+     width ar max-height BOUND cheye ber jabe NA (pixel area-r baire jabena).
+     addrEn RIGHT bound = uporer barcode-er right edge line (134.2+48.5=182.7mm),
+     niche oi vertical line porjanto — thikana oi line-er daye thakbe.
+     Long text = font/line-height otikrompe choto hoye nijei fit hoy (position
+     adjust), final fallback = clip — kakhono signature/layout bhenge na.
+     Run hoy: preview iframe-eo, PDF (puppeteer)-eo. -->
+<script>
+(function () {
+  function fitOne(id, maxMm) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var maxPx = maxMm * 96 / 25.4;
+    var fs0, lh0;
+    if (el.dataset.fitFs) { fs0 = parseFloat(el.dataset.fitFs); lh0 = parseFloat(el.dataset.fitLh); }
+    else {
+      var cs = getComputedStyle(el);
+      fs0 = parseFloat(cs.fontSize) || 14.67;
+      lh0 = parseFloat(cs.lineHeight);
+      if (!isFinite(lh0) || lh0 <= 0) lh0 = fs0 * 1.2;
+      el.dataset.fitFs = fs0; el.dataset.fitLh = lh0;
+    }
+    el.style.fontSize = ''; el.style.lineHeight = '';
+    var fs = fs0, lh = lh0;
+    while (el.scrollHeight > maxPx && fs > 6.5) {
+      fs -= 0.25;
+      lh = Math.max(lh0 * (fs / fs0), fs * 1.02);
+      el.style.fontSize = fs + 'px';
+      el.style.lineHeight = lh + 'px';
+    }
+    while (el.scrollHeight > maxPx && lh > fs * 0.95) {
+      lh -= 0.5;
+      el.style.lineHeight = lh + 'px';
+    }
+    el.style.overflow = 'hidden';
+  }
+  function fitAll() { fitOne('addrBn', 43); fitOne('addrEn', 43); window.__fitDone = true; }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fitAll);
+  else fitAll();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitAll);
+})();
+</script>
 </body>
 </html>`;
 }
 
 
 async function buildAssets(d) {
-    const sealB64 = sealBase64();
-    const logoB64 = logoBase64();
+    const sealBase64 = fs.readFileSync(path.join(__dirname, 'assets', 'seal.jpg')).toString('base64');
+    const logoBase64 = fs.readFileSync(path.join(__dirname, 'assets', 'logo.png')).toString('base64');
     const brnText = String(d.brn || '').trim();
     let qrDataUrl;
     let barcodeDataUrl = '';
@@ -828,8 +1009,8 @@ async function buildAssets(d) {
         qrDataUrl = await QRCode.toDataURL(' ', { width: 400, margin: 0, errorCorrectionLevel: 'M' });
     }
     return {
-        seal: `data:image/jpeg;base64,${sealB64}`,
-        logo: `data:image/png;base64,${logoB64}`,
+        seal: `data:image/jpeg;base64,${sealBase64}`,
+        logo: `data:image/png;base64,${logoBase64}`,
         qr: qrDataUrl,
         barcode: barcodeDataUrl,
         code
@@ -837,9 +1018,47 @@ async function buildAssets(d) {
 }
 
 // Live preview for the editor (returns the exact certificate HTML).
+/* ---- field mapping: long API names -> short template names + dobWords ----
+   BIRTH_OUTPUT.json / BDRIS API use motherNameEn, registrationDate etc.
+   buildCertificateHtml expects motherEn, regDate, dobWords, permBn/permEn. */
+function toTemplateFields(d) {
+    const t = Object.assign({}, d);
+    const pick = (dst, src) => { if (!t[dst] && t[src]) t[dst] = t[src]; };
+    pick('regDate', 'registrationDate');
+    pick('issueDate', 'issuanceDate');
+    pick('motherEn', 'motherNameEn');
+    pick('motherBn', 'motherNameBn');
+    pick('fatherEn', 'fatherNameEn');
+    pick('fatherBn', 'fatherNameBn');
+    pick('motherNatEn', 'motherNationalityEn');
+    pick('motherNatBn', 'motherNationalityBn');
+    pick('fatherNatEn', 'fatherNationalityEn');
+    pick('fatherNatBn', 'fatherNationalityBn');
+    pick('pobEn', 'placeOfBirthEn');
+    pick('pobBn', 'placeOfBirthBn');
+    pick('permEn', 'permanentAddressEn');
+    pick('permBn', 'permanentAddressBn');
+    // auto compute dobWords from dob if missing (In Word row)
+    if (!t.dobWords && t.dob) {
+        const months = { '01':'January','02':'February','03':'March','04':'April','05':'May','06':'June','07':'July','08':'August','09':'September','10':'October','11':'November','12':'December' };
+        const days = ['','First','Second','Third','Fourth','Fifth','Sixth','Seventh','Eighth','Ninth','Tenth','Eleventh','Twelfth','Thirteenth','Fourteenth','Fifteenth','Sixteenth','Seventeenth','Eighteenth','Nineteenth','Twentieth','Twenty First','Twenty Second','Twenty Third','Twenty Fourth','Twenty Fifth','Twenty Sixth','Twenty Seventh','Twenty Eighth','Twenty Ninth','Thirtieth','Thirty First'];
+        const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+        const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+        const m = String(t.dob).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (m) {
+            const day = parseInt(m[1], 10), mn = m[2].padStart(2, '0'), yr = parseInt(m[3], 10);
+            let ys = 'Two Thousand';
+            if (yr >= 2000) { const r = yr - 2000; if (r > 0 && r < 20) ys += ' ' + ones[r]; else if (r >= 20) ys += ' ' + tens[Math.floor(r / 10)] + (r % 10 ? ' ' + ones[r % 10] : ''); }
+            else { const r = yr - 1900; ys = 'Nineteen Hundred'; if (r > 0 && r < 20) ys += ' ' + ones[r]; else if (r >= 20) ys += ' ' + tens[Math.floor(r / 10)] + (r % 10 ? ' ' + ones[r % 10] : ''); }
+            t.dobWords = days[day] + ' of ' + (months[mn] || 'January') + '  ' + ys;
+        }
+    }
+    return t;
+}
+
 app.post('/api/preview', async (req, res) => {
     try {
-        const d = req.body || {};
+        const d = toTemplateFields(req.body || {});
         const html = buildCertificateHtml(d, await buildAssets(d));
         res.json({ success: true, html });
     } catch (e) {
@@ -848,7 +1067,7 @@ app.post('/api/preview', async (req, res) => {
 });
 
 app.post('/generate-pdf', async (req, res) => {
-    const d = req.body || {};
+    const d = toTemplateFields(req.body || {});
     let browser;
     try {
         const html = buildCertificateHtml(d, await buildAssets(d));
@@ -858,10 +1077,14 @@ app.post('/generate-pdf', async (req, res) => {
             executablePath: '/usr/bin/google-chrome',
             // same rendering flags as the audited CLI renders (build.cmd)
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu',
-                   '--disable-lcd-text', '--force-color-profile=srgb']
+                   '--disable-dev-shm-usage', '--disable-lcd-text', '--force-color-profile=srgb']
         });
         const page = await browser.newPage();
-        await page.setContent(html, { waitUntil: 'networkidle0' });
+        await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 15000 });
+        // address auto-fit script sesh hote dao (preview-e jothajoth dekha jay,
+        // PDF-eo same layout) — fit na holeo PDF generation ruk hobe na.
+        try { await page.waitForFunction('window.__fitDone === true', { timeout: 1000 }); } catch (_) {}
+        await new Promise(r => setTimeout(r, 120));
         // VECTOR PDF (preferCSSPageSize honours @page A4, margin 0) — same as
         // the audited deliverable birth-certificate.pdf (486 KB). Text stays
         // selectable + file stays small; the old 300 DPI raster embed made
@@ -871,12 +1094,11 @@ app.post('/generate-pdf', async (req, res) => {
             preferCSSPageSize: true,
             margin: { top: 0, right: 0, bottom: 0, left: 0 }
         });
+        await browser.close();
 
         const brnText = String(d.brn || '').trim();
-        // Filename: person's English name with underscores (fallback to BRN)
-        const nameText = String(d.nameEn || '').trim().replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '_') || brnText || 'output';
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=${nameText}.pdf`);
+        res.setHeader('Content-Disposition', `attachment; filename=Certificate_${brnText || 'output'}.pdf`);
         res.send(pdfBuffer);
     } catch (err) {
         console.error('PDF generation error:', err);
