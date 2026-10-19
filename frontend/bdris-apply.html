@@ -581,7 +581,7 @@ const FB = {
   thChild: ['১ম', '২য়', '৩য়', '৪র্থ', '৫ম', '৬ষ্ঠ', '৭ম', '৮ম', '৯ম', '১০ম', '১১তম'],
   gender: ['পুরুষ', 'মহিলা', 'তৃতীয় লিঙ্গ'],
   nationality: ['বাংলাদেশী', 'অজানা'],
-  country: ['বাংলাদেশ']
+  country: ['বাংলাদেশ', 'ভারত', 'সৌদি আরব', 'সংযুক্ত আরব আমিরাত', 'মালয়েশিয়া', 'কুয়েত', 'ওমান', 'কাতার', 'যুক্তরাজ্য', 'যুক্তরাষ্ট্র', 'সিঙ্গাপুর', 'ইতালি', 'কানাডা', 'অস্ট্রেলিয়া']
 };
 
 /* ═══════════ স্থির ঠিকানা-তালিকা (permanent fix 2026-10-15) ═══════════
@@ -620,6 +620,7 @@ function geoFindKey(obj, want) {
 /* k-লেভেলের অপশন static data থেকে দাও; না থাকলে null (engine fallback)।
    data-তে parent লেভেলগুলোর বাংলা লেবেল থাকে (geoChanged/data[k] = label)। */
 function staticGeoOpts(k, data) {
+  if (k === 'country') return (FB.country || ['বাংলাদেশ']).map(c => ({ id: c, name: c }));
   if (!GEO_DATA) return null;
   try {
     if (k === 'division') {
@@ -1341,7 +1342,7 @@ function freshData(mode) {
   return {
     mode: mode, uiStep: 0,
     s0: { addressType: 'BIRTHPLACE', embassy: false },
-    s1: {}, s2: { father: {}, mother: {} }, s2b: {},
+    s1: { country: 'বাংলাদেশ' }, s2: { father: {}, mother: {} }, s2b: {},
     relation: '', docs: [], email: '', phone: ''
   };
 }
@@ -1671,6 +1672,13 @@ function setGeoState(k, Ls, state) {
   GEO_STATE[L.ui] = state;
   const node = $(L.ui);
   if (!node || node.tagName !== 'SELECT') return;
+  if (k === 'country') {
+    if (node.options.length <= 1) {
+      node.innerHTML = (FB.country || ['বাংলাদেশ']).map(c => '<option value="' + esc(c) + '">' + esc(c) + '</option>').join('');
+      node.value = 'বাংলাদেশ';
+    }
+    return;
+  }
   if (state === 'loading') {
     node.innerHTML = '<option value="">লোড হচ্ছে…</option>';
   } else if (state === 'idle' || state === 'empty') {
@@ -1798,6 +1806,7 @@ async function warmFromData() {
   _warmRunning = true;
   try {
   const data = S.d.s1 = S.d.s1 || {};
+  if (!data.country) data.country = 'বাংলাদেশ';
   /* Static fill: division সাথে সাথে load করো (country-এর জন্য অপেক্ষা নয়)।
      Country engine থেকে আসতে 15s লাগতে পারে — division parallel-এ চলবে। */
   const divFillP = (async () => {
@@ -1895,7 +1904,7 @@ function renderStep2() {
   const s1 = S.d.s1 || {};
   const selBox = (id, lbl) => '<div class="fld"><label id="' + id + '_lbl">' + esc(lbl) + ' <b>*</b></label>' +
     '<select id="' + id + '">' + (id === 'g_country'
-      ? '<option value="বাংলাদেশ" selected>বাংলাদেশ</option>'
+      ? (FB.country || ['বাংলাদেশ']).map(c => '<option value="' + esc(c) + '"' + (c === (s1.country || 'বাংলাদেশ') ? ' selected' : '') + '>' + esc(c) + '</option>').join('')
       : '<option value="">লোড হচ্ছে…</option>') + '</select></div>';
   showBody(
     '<div class="sec"><div class="sub-h"><span class="snum">২</span> নিবন্ধনাধীন ব্যক্তির পরিচিতি</div>' +
