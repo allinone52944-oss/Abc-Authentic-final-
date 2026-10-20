@@ -21,6 +21,7 @@ const {
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+app.set('trust proxy', 1);
 
 // gzip responses >1KB (mobile data). Before static so JS/CSS/JSON all compress.
 app.use(require('compression')({ threshold: 1024 }));
@@ -211,6 +212,7 @@ app.use('/api/invite', apiLimiter, publicInvites);
 const { rateLimit } = require('express-rate-limit');
 const { requireAuth } = require('./auth');
 const bdrisEngineLimiter = rateLimit({
+  validate: { xForwardedForHeader: false },
   windowMs: 60 * 1000,
   max: 30,
   standardHeaders: true,
@@ -240,6 +242,7 @@ try {
 // Python + opencv + ddddocr are optional (offline captcha solver);
 // without them the engine still works with manual captcha entry.
 const deathEngineLimiter = rateLimit({
+  validate: { xForwardedForHeader: false },
   windowMs: 60 * 1000,
   max: 30,
   standardHeaders: true,
@@ -265,6 +268,7 @@ try {
 //   POST /api/nid-engine/build   ({ jobId, fields }) → application/pdf
 // Python deps (VM): pip3 install pymupdf Pillow pdf417gen
 const nidEngineLimiter = rateLimit({
+  validate: { xForwardedForHeader: false },
   windowMs: 60 * 1000,
   max: 30,
   standardHeaders: true,
@@ -293,6 +297,7 @@ try {
 // Engine deps (VM): cd engines/bdris-apply && npm install
 //   (playwright downloads ~170MB browser on first run)
 const bdrisApplyLimiter = rateLimit({
+  validate: { xForwardedForHeader: false },
   windowMs: 60 * 1000,
   max: 30,
   standardHeaders: true,
