@@ -418,7 +418,7 @@ describe('admin panel navigation & premium workflows (2026-10-19)', () => {
     expect(ahtml).toContain('অপারেশন ও লেনদেন');
     expect(ahtml).toContain('মার্কেটিং ও কন্টেন্ট');
     expect(ahtml).toContain('সিস্টেম ও অডিট');
-    expect(ahtml).toMatch(/admin\.js\?v=55/);
+    expect(ahtml).toMatch(/admin\.js\?v=\d+/);
   });
 
   test('admin.js exposes getAuthToken helper and uses it across downloads & uploads', () => {

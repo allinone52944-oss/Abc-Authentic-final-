@@ -495,8 +495,15 @@ router.get('/orders', async (req, res) => {
     let i = 1;
     if (req.query.status) { conds.push(`o.status = $${i++}`); params.push(req.query.status); }
     if (req.query.q) {
-      conds.push(`(u.name ILIKE $${i} OR u.phone ILIKE $${i} OR s.name ILIKE $${i})`);
+      conds.push(`(u.name ILIKE $${i} OR u.phone ILIKE $${i} OR s.name ILIKE $${i} OR s.name_bn ILIKE $${i})`);
       params.push('%' + req.query.q.trim() + '%'); i++;
+    }
+    if (req.query.type) {
+      if (req.query.type === 'manual') {
+        conds.push(`(s.type = 'manual' OR (o.data::text LIKE '%_manual_form%'))`);
+      } else if (req.query.type === 'auto') {
+        conds.push(`(s.type != 'manual' AND NOT (o.data::text LIKE '%_manual_form%'))`);
+      }
     }
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
     const total = await db.query(
@@ -504,7 +511,8 @@ router.get('/orders', async (req, res) => {
        JOIN services s ON s.id = o.service_id ${where}`, params);
     const rows = await db.query(
       `SELECT o.*, u.name AS user_name, u.phone AS user_phone,
-              s.name AS service_name, s.name_bn AS service_name_bn
+              s.name AS service_name, s.name_bn AS service_name_bn,
+              s.type AS service_type, s.engine_id AS service_engine, s.icon AS service_icon
        FROM orders o JOIN users u ON u.id = o.user_id
        JOIN services s ON s.id = o.service_id
        ${where} ORDER BY o.created_at DESC LIMIT $${i} OFFSET $${i + 1}`,

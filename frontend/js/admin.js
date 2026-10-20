@@ -659,8 +659,6 @@ window.TABS = TABS;
 TABS.stats = async () => {
   const r = await ABC.api('/admin/stats');
   if (!r.ok) {
-    // Never render stat cards with undefined data (looks like a "broken"
-    // dashboard). Surface the failure with a retry instead.
     let why = 'পরিসংখ্যান লোড ব্যর্থ';
     try {
       const d = await r.json();
@@ -670,25 +668,161 @@ TABS.stats = async () => {
     throw new Error(why);
   }
   const s = (await r.json()) || {};
-  const num = (v) => (v == null || isNaN(Number(v)) ? 0 : v);
-  content.innerHTML =
-    '<div class="stat-grid">' +
-    stat(num(s.users), 'মোট ইউজার') + stat(num(s.admins), 'এডমিন') +
-    stat(num(s.orders_total), 'মোট অর্ডার') + stat(num(s.orders_new), 'নতুন অর্ডার') +
-    stat(num(s.orders_active), 'চলমান অর্ডার') + stat(num(s.orders_completed), 'সম্পন্ন') +
-    stat(num(s.pending_recharge), 'পেন্ডিং রিচার্জ') + stat('৳' + bn(num(s.revenue_today)), 'আজকের আয়') +
+  const num = (v) => (v == null || isNaN(Number(v)) ? 0 : Number(v));
+
+  const pendingRecharge = num(s.pending_recharge);
+  const ordersNew = num(s.orders_new);
+  const ordersActive = num(s.orders_active);
+  const ordersCompleted = num(s.orders_completed);
+  const ordersTotal = num(s.orders_total);
+  const usersTotal = num(s.users);
+  const adminsTotal = num(s.admins);
+  const revenueToday = num(s.revenue_today);
+  const ordersToday = num(s.orders_today);
+  const usersToday = num(s.users_today);
+  const servicesActive = num(s.services_active);
+
+  // Urgent action alert banner
+  let alertBanner = '';
+  if (pendingRecharge > 0 || ordersNew > 0) {
+    alertBanner = '<div class="adm-alert-card urgent">' +
+      '<div class="adm-alert-icon">⚡</div>' +
+      '<div class="adm-alert-body">' +
+        '<div class="adm-alert-title">অ্যাকশন প্রয়োজন — নতুন রিকোয়েস্ট অপেক্ষমান</div>' +
+        '<div class="adm-alert-desc">গ্রাহকদের দ্রুত সেবা নিশ্চিত করতে অপেক্ষমান অর্ডার ও রিচার্জগুলো অনুমোদন করুন।</div>' +
+      '</div>' +
+      '<div class="adm-alert-actions">' +
+        (pendingRecharge > 0
+          ? '<button type="button" class="adm-alert-btn recharge" onclick="if(window.show)show(\'recharge\');else document.querySelector(\'[data-t=recharge]\')?.click()">💳 রিচার্জ অনুমোদন বাকি (' + bn(pendingRecharge) + ')</button>'
+          : '') +
+        (ordersNew > 0
+          ? '<button type="button" class="adm-alert-btn orders" onclick="if(window.TABS)TABS._f=\'new\';if(window.show)show(\'orders\');else document.querySelector(\'[data-t=orders]\')?.click()">📦 নতুন অর্ডার ও আবেদন (' + bn(ordersNew) + ')</button>'
+          : '') +
+      '</div>' +
+    '</div>';
+  } else {
+    alertBanner = '<div class="adm-alert-card success">' +
+      '<div class="adm-alert-icon">✨</div>' +
+      '<div class="adm-alert-body">' +
+        '<div class="adm-alert-title" style="color:#065f46;">সবকিছু আপ-টু-ডেট আছে!</div>' +
+        '<div class="adm-alert-desc" style="color:#047857;">এই মুহূর্তে কোনো পেন্ডিং রিচার্জ বা নতুন অর্ডার জমে নেই। সিস্টেম সম্পূর্ণ স্মুথলি চলছে।</div>' +
+      '</div>' +
+      '<div class="adm-alert-actions">' +
+        '<button type="button" class="adm-alert-btn neutral" onclick="if(window.show)show(\'orders\');else document.querySelector(\'[data-t=orders]\')?.click()">📦 অর্ডার সেন্টার</button>' +
+        '<button type="button" class="adm-alert-btn neutral" onclick="if(window.show)show(\'users\');else document.querySelector(\'[data-t=users]\')?.click()">👥 ইউজার তালিকা</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // Header Bar
+  const headerHtml = '<div class="adm-dashboard-head">' +
+    '<div>' +
+      '<h1 class="adm-dashboard-title">এডমিন কন্ট্রোল সেন্টার</h1>' +
+      '<div class="adm-dashboard-sub">রিয়েলটাইম প্ল্যাটফর্ম ওভারভিউ ও দ্রুত অ্যাকশন হাব</div>' +
     '</div>' +
-    '<div class="form-card" style="max-width:none;"><h2>🚨 দ্রুত কাজ</h2>' +
-    '<button class="mini-btn" onclick="document.querySelector(\'[data-t=recharge]\').click()">পেন্ডিং রিচার্জ (' + num(s.pending_recharge) + ')</button> ' +
-    '<button class="mini-btn" onclick="document.querySelector(\'[data-t=orders]\').click()">নতুন অর্ডার (' + num(s.orders_new) + ')</button></div>' +
-    '<div class="form-card" style="margin-top:14px;"><h3 style="color:var(--gold);margin:0 0 10px;">📊 PDF রিপোর্ট</h3>' +
-    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">' +
-    '<div class="field" style="margin:0;"><label>থেকে</label><input type="date" id="rp_from"></div>' +
-    '<div class="field" style="margin:0;"><label>পর্যন্ত</label><input type="date" id="rp_to"></div>' +
-    '<button class="mini-btn ok" onclick="AdmReports.dl(\'orders\')">📥 অর্ডার রিপোর্ট</button>' +
-    '<button class="mini-btn ok" onclick="AdmReports.dl(\'transactions\')">📥 লেনদেন রিপোর্ট</button>' +
-    '</div></div>';
-  function stat(n, l) { return '<div class="stat"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>'; }
+    '<div class="adm-head-badges">' +
+      '<span class="adm-live-badge"><span class="adm-live-dot"></span> সিস্টেম অনলাইন</span>' +
+      '<button type="button" class="adm-refresh-btn" onclick="if(window.show)show(\'stats\');else location.reload()" title="ডাটা রিফ্রেশ করুন">🔄 রিফ্রেশ</button>' +
+    '</div>' +
+  '</div>';
+
+  // 8-Card Stat Grid (Preserves .stat-grid, .stat, .n, .l for complete test compatibility)
+  const statGridHtml = '<div class="stat-grid">' +
+    statCard('৳' + bn(revenueToday), 'আজকের আয়', '💰', 'recharge', 'text-emerald', revenueToday > 0 ? 'আজকের অনুমোদিত রিচার্জ' : 'আজকের মোট আয়') +
+    statCard(bn(ordersNew), 'নতুন অর্ডার', '🆕', 'orders', 'text-amber', ordersNew > 0 ? 'জরুরি প্রসেসিং প্রয়োজন' : 'সব প্রসেসড', 'new') +
+    statCard(bn(ordersActive), 'চলমান প্রসেসিং', '⏳', 'orders', 'text-blue', 'প্রসেসিং বা যাচাইধীন', 'processing') +
+    statCard(bn(ordersCompleted), 'সম্পন্ন অর্ডার', '✅', 'orders', 'text-teal', 'সফলভাবে তৈরি ও প্রেরিত', 'completed') +
+    statCard(bn(ordersTotal), 'মোট অর্ডার', '📦', 'orders', 'text-indigo', ordersToday > 0 ? 'আজকে ' + bn(ordersToday) + ' টি অর্ডার' : 'সর্বমোট অর্ডার') +
+    statCard(bn(pendingRecharge), 'পেন্ডিং রিচার্জ', '💳', 'recharge', 'text-rose', pendingRecharge > 0 ? 'অনুমোদনের অপেক্ষায়' : 'সব অনুমোদিত') +
+    statCard(bn(usersTotal), 'মোট গ্রাহক', '👥', 'users', 'text-violet', (usersToday > 0 ? 'আজকে +' + bn(usersToday) + ' জন নতুন' : (adminsTotal > 0 ? bn(adminsTotal) + ' জন এডমিন' : 'সক্রিয় গ্রাহক'))) +
+    statCard(bn(servicesActive), 'অ্যাক্টিভ ডিজিটাল সেবা', '⚡', 'services', 'text-cyan', 'সেবা ও ক্যাটাগরি কনফিগার') +
+  '</div>';
+
+  // Quick Launch Hub
+  const launchpadHtml = '<div class="adm-launchpad-card">' +
+    '<div class="adm-card-head">' +
+      '<div>' +
+        '<div class="adm-card-title">🚀 দ্রুত অপারেশন লঞ্চপ্যাড</div>' +
+        '<div class="adm-card-desc">সচরাচর ব্যবহৃত অ্যাডমিন মডিউলসমূহে তাৎক্ষণিক প্রবেশ করুন</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="adm-launchpad-grid">' +
+      launchItem('📦', 'অর্ডার ও প্রসেসিং', 'সকল অটো ইঞ্জিন ও ম্যানুয়াল অর্ডার', 'orders') +
+      launchItem('💳', 'রিচার্জ ও ব্যালেন্স', 'অপেক্ষমান ব্যালেন্স রিচার্জ ও হিস্টোরি', 'recharge') +
+      launchItem('👥', 'গ্রাহক ব্যবস্থাপনা', 'ইউজার তথ্য, ব্যালেন্স অ্যাড ও যাচাই', 'users') +
+      launchItem('⚙️', 'সেবা ও ক্যাটাগরি', 'ফি, নির্দেশনা ও ম্যানুয়াল ফর্ম সাজান', 'services') +
+      launchItem('📢', 'নোটিশ ও ঘোষণা', 'ব্যবহারকারীদের নোটিশ ও অ্যালার্ট পাঠান', 'notices') +
+      launchItem('🎨', 'ব্যানার ও অফার', 'হোমপেজের ব্যানার ও স্পেশাল নোটিফিকেশন', 'banners') +
+    '</div>' +
+  '</div>';
+
+  // PDF Report Center
+  const reportCenterHtml = '<div class="adm-report-card">' +
+    '<div class="adm-card-head">' +
+      '<div>' +
+        '<div class="adm-card-title">📊 অফিশিয়াল PDF রিপোর্ট সেন্টার</div>' +
+        '<div class="adm-card-desc">নির্দিষ্ট সময়সীমার লেনদেন ও অর্ডারের প্রিন্ট উপযোগী স্টেটমেন্ট ডাউনলোড করুন</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="adm-report-body">' +
+      '<div class="adm-preset-row">' +
+        '<span style="font-size:12px;font-weight:600;color:var(--text-muted);">সময়সীমা প্রিসেট:</span>' +
+        '<button type="button" class="adm-chip-btn" onclick="AdmReports.setPreset(\'today\')">📅 আজকের</button>' +
+        '<button type="button" class="adm-chip-btn" onclick="AdmReports.setPreset(\'7d\')">🗓️ গত ৭ দিন</button>' +
+        '<button type="button" class="adm-chip-btn" onclick="AdmReports.setPreset(\'month\')">📊 চলতি মাস</button>' +
+        '<button type="button" class="adm-chip-btn" onclick="AdmReports.setPreset(\'all\')">🌐 সব সময়</button>' +
+      '</div>' +
+      '<div class="adm-report-form-row">' +
+        '<div class="field" style="margin:0;flex:1;min-width:140px;">' +
+          '<label style="font-size:12px;font-weight:600;">শুরুর তারিখ (From)</label>' +
+          '<input type="date" id="rp_from" class="adm-date-input">' +
+        '</div>' +
+        '<div class="field" style="margin:0;flex:1;min-width:140px;">' +
+          '<label style="font-size:12px;font-weight:600;">শেষের তারিখ (To)</label>' +
+          '<input type="date" id="rp_to" class="adm-date-input">' +
+        '</div>' +
+        '<div class="adm-report-btns">' +
+          '<button type="button" class="btn-dl-report orders" onclick="AdmReports.dl(\'orders\')">' +
+            '<span>📥</span> <span>অর্ডার রিপোর্ট (PDF)</span>' +
+          '</button>' +
+          '<button type="button" class="btn-dl-report tx" onclick="AdmReports.dl(\'transactions\')">' +
+            '<span>📥</span> <span>লেনদেন স্টেটমেন্ট (PDF)</span>' +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  content.innerHTML = '<div class="adm-dashboard-wrap">' +
+    headerHtml +
+    alertBanner +
+    statGridHtml +
+    launchpadHtml +
+    reportCenterHtml +
+  '</div>';
+
+  function statCard(n, l, icon, tabTarget, colorClass, subtitle, filterKey) {
+    const clickAction = tabTarget ? 'onclick="if(window.TABS&&' + (filterKey ? 'true' : 'false') + ')TABS._f=\'' + (filterKey || '') + '\';if(window.show)show(\'' + tabTarget + '\');"' : '';
+    return '<div class="stat clickable ' + (colorClass || '') + '" ' + clickAction + ' title="ক্লিক করে ' + esc(l) + ' দেখুন">' +
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">' +
+        '<div class="l">' + esc(l) + '</div>' +
+        '<span style="font-size:20px;line-height:1;">' + (icon || '📊') + '</span>' +
+      '</div>' +
+      '<div class="n">' + n + '</div>' +
+      (subtitle ? '<div class="adm-stat-sub">' + esc(subtitle) + '</div>' : '') +
+    '</div>';
+  }
+
+  function launchItem(icon, title, desc, tab) {
+    return '<div class="adm-launch-item" onclick="if(window.show)show(\'' + tab + '\')">' +
+      '<div class="adm-launch-icon">' + icon + '</div>' +
+      '<div class="adm-launch-text">' +
+        '<div class="adm-launch-title">' + esc(title) + '</div>' +
+        '<div class="adm-launch-desc">' + esc(desc) + '</div>' +
+      '</div>' +
+      '<span class="adm-launch-arrow">→</span>' +
+    '</div>';
+  }
 };
 
 window.AdmReports = {
@@ -1296,9 +1430,11 @@ const ORDER_LABELS_BN = {
 TABS.orders = async () => {
   const _f = TABS._f || '';
   const _q = TABS._q || '';
+  const _type = TABS._orderType || '';
   let url = '/admin/orders?limit=50';
   if (_f) url += '&status=' + encodeURIComponent(_f);
   if (_q) url += '&q=' + encodeURIComponent(_q);
+  if (_type) url += '&type=' + encodeURIComponent(_type);
 
   const [ordersRes, statsRes] = await Promise.all([
     ABC.api(url),
@@ -1306,8 +1442,15 @@ TABS.orders = async () => {
   ]);
 
   const d = await ordersRes.json();
+  if (!ordersRes.ok) throw new Error(d.error || 'অর্ডার লোড ব্যর্থ');
   const stats = statsRes.ok ? await statsRes.json().catch(() => ({})) : {};
   TABS._orders = d.orders || [];
+  const pendingManual = Number(stats.manual_new) || 0;
+  const orderTypeTabs = [
+    { key: '', label: 'সব প্রসেসিং', icon: '📦' },
+    { key: 'auto', label: 'অটো সেবা', icon: '⚙️' },
+    { key: 'manual', label: 'ম্যানুয়াল আবেদন', icon: '📝' }
+  ];
 
   const statusList = [
     { key: '', label: 'সব অর্ডার', count: stats.orders_total },
@@ -1323,6 +1466,9 @@ TABS.orders = async () => {
   let html = '<div class="adm-orders-wrap">' +
     '<!-- Top Toolbar & Search -->' +
     '<div class="adm-orders-toolbar">' +
+      '<div class="adm-orders-type-switch" role="tablist" aria-label="অর্ডারের ধরন">' +
+        orderTypeTabs.map(t => '<button type="button" class="adm-type-tab' + (_type === t.key ? ' active' : '') + '" onclick="AdmOrders.filterType(\'' + t.key + '\')">' + t.icon + ' ' + esc(t.label) + (t.key === 'manual' && pendingManual > 0 ? '<span class="adm-type-count">' + bn(pendingManual) + '</span>' : '') + '</button>').join('') +
+      '</div>' +
       '<div class="adm-tabs-row">' +
         statusList.map(s => {
           const isActive = _f === s.key;
@@ -1392,6 +1538,12 @@ TABS.orders = async () => {
         '</td>' +
         '<td>' +
           '<div class="adm-svc-title">' + esc(o.service_name_bn || o.service_name || 'সেবা') + '</div>' +
+          '<div class="adm-order-meta">' +
+            (o.service_type === 'manual' || (o.data && (typeof o.data === 'object' ? o.data._manual_form : String(o.data).includes('_manual_form')))
+              ? '<span class="adm-type-badge manual">📝 ম্যানুয়াল</span>'
+              : '<span class="adm-type-badge auto">⚙️ অটো</span>') +
+            (o.service_engine ? '<span class="adm-engine-mini">' + esc(o.service_engine) + '</span>' : '') +
+          '</div>' +
         '</td>' +
         '<td>' +
           '<span class="adm-price-badge">৳' + bn(o.price) + '</span>' +
@@ -1454,6 +1606,11 @@ window.AdmOrders = {
 
   clearSearch() {
     TABS._q = '';
+    show('orders');
+  },
+
+  filterType(type) {
+    TABS._orderType = type;
     show('orders');
   },
 
