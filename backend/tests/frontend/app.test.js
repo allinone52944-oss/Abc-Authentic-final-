@@ -151,6 +151,25 @@ describe('api() — happy paths', () => {
     expect(opts.body).toBe(fd);
   });
 
+  test('preserves a FormData-like body from another realm (instanceof fails)', async () => {
+    const ABC = loadApp();
+    global.fetch.mockResolvedValueOnce(okJson({}));
+    // A FormData created in another frame/realm fails `instanceof FormData`
+    // here. Regression (nid extract NO_FILE): api() used to JSON.stringify it
+    // into "{}", silently dropping the uploaded file.
+    class ForeignFormData {
+      append() {}
+      get() { return null; }
+      getAll() { return []; }
+    }
+    const fd = new ForeignFormData();
+    expect(fd instanceof FormData).toBe(false);
+    await ABC.api('/nid-engine/extract', { method: 'POST', body: fd });
+    const [, opts] = global.fetch.mock.calls[0];
+    expect(opts.headers['Content-Type']).toBeUndefined();
+    expect(opts.body).toBe(fd);
+  });
+
   test('getAccessToken returns active in-memory access token', () => {
     const ABC = loadApp();
     ABC.setTokens('my-token-123', 'ref-1');
