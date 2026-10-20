@@ -109,14 +109,24 @@
     opts.headers = Object.assign({}, opts.headers || {});
     if (accessToken) opts.headers['Authorization'] = 'Bearer ' + accessToken;
 
-    const isBinaryOrForm = (typeof FormData !== 'undefined' && opts.body instanceof FormData) ||
-                           (typeof Blob !== 'undefined' && opts.body instanceof Blob) ||
-                           (typeof ArrayBuffer !== 'undefined' && (opts.body instanceof ArrayBuffer || ArrayBuffer.isView(opts.body))) ||
-                           (typeof URLSearchParams !== 'undefined' && opts.body instanceof URLSearchParams);
-
-    if (opts.body && typeof opts.body === 'object' && !isBinaryOrForm) {
+    // Realm-safe body detection. instanceof alone can fail when the body was
+    // created in another frame/realm (or the global is wrapped), which let a
+    // FormData fall through to JSON.stringify() below — silently turning a
+    // file upload into "{}" and dropping the file (nid extract NO_FILE bug).
+    const _body = opts.body;
+    const isBinaryOrForm = !!_body && (
+      (typeof FormData !== 'undefined' && _body instanceof FormData) ||
+      (typeof Blob !== 'undefined' && _body instanceof Blob) ||
+      (typeof ArrayBuffer !== 'undefined' && (_body instanceof ArrayBuffer || ArrayBuffer.isView(_body))) ||
+      (typeof URLSearchParams !== 'undefined' && _body instanceof URLSearchParams) ||
+      // Duck-type fallback: anything with the FormData interface is a form.
+      (typeof _body.append === 'function' && typeof _body.get === 'function' && typeof _body.getAll === 'function')
+    );
+    // JSON-encode exactly what the old code did — any non-form object body —
+    // so the ONLY behavior change is that a form body is now always detected.
+    if (_body && typeof _body === 'object' && !isBinaryOrForm) {
       opts.headers['Content-Type'] = 'application/json';
-      opts.body = JSON.stringify(opts.body);
+      opts.body = JSON.stringify(_body);
     }
     // Timeout: don't hang forever on flaky network (tunnel)
     // Default 15s, but allow override via opts.timeout (e.g., PDF generation needs 60s)
