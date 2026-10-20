@@ -1441,8 +1441,8 @@ TABS.orders = async () => {
     ABC.api('/admin/stats').catch(() => ({ ok: false }))
   ]);
 
-  const d = await ordersRes.json();
-  if (!ordersRes.ok) throw new Error(d.error || 'অর্ডার লোড ব্যর্থ');
+  const d = await ordersRes.json().catch(() => ({}));
+  if (!ordersRes.ok) throw new Error(d.error && d.error !== 'FAILED' ? d.error : 'অর্ডার লোড ব্যর্থ (সার্ভার সমস্যা)');
   const stats = statsRes.ok ? await statsRes.json().catch(() => ({})) : {};
   TABS._orders = d.orders || [];
   const pendingManual = Number(stats.manual_new) || 0;
