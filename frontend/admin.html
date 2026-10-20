@@ -1423,6 +1423,213 @@
     border-radius: 6px;
   }
 
+
+  /* ============================================================ */
+  /* UNIFIED PAGE HEADERS & MODERN SECTION COMPONENTS             */
+  /* ============================================================ */
+  .adm-page-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 20px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border-light);
+  }
+  .adm-page-title {
+    font-size: 20px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.01em;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .adm-page-sub {
+    font-size: 13px;
+    color: #64748b;
+    margin-top: 4px;
+  }
+  .adm-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  
+  /* Modern Responsive Elevated Tables */
+  .adm-table-card {
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .adm-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    text-align: left;
+  }
+  .adm-table thead th {
+    background: #f8fafc;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--border-light);
+    white-space: nowrap;
+  }
+  .adm-table tbody td {
+    padding: 13px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #1e293b;
+    vertical-align: middle;
+  }
+  .adm-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .adm-table tbody tr:hover td {
+    background: #fafcff;
+  }
+  
+  /* Code Chip & Quick Copy */
+  .adm-code-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-family: monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: #0f172a;
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+  .adm-code-chip:hover {
+    background: #e2e8f0;
+    border-color: #94a3b8;
+  }
+
+  /* Empty State Card */
+  .adm-empty-state {
+    text-align: center;
+    padding: 48px 20px;
+    background: #ffffff;
+    border: 1px dashed #cbd5e1;
+    border-radius: var(--r-lg);
+    color: #64748b;
+    margin: 16px 0;
+  }
+  .adm-empty-icon {
+    font-size: 38px;
+    margin-bottom: 8px;
+    line-height: 1;
+  }
+  .adm-empty-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 4px;
+  }
+  .adm-empty-desc {
+    font-size: 13px;
+    color: #64748b;
+  }
+  
+  /* Unified Status Pills */
+  .st-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .st-badge.active, .st-badge.completed, .st-badge.approved, .st-badge.success {
+    background: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+  }
+  .st-badge.pending, .st-badge.new, .st-badge.processing, .st-badge.warn {
+    background: #fffbeb;
+    color: #92400e;
+    border: 1px solid #fde68a;
+  }
+  .st-badge.disabled, .st-badge.cancelled, .st-badge.rejected, .st-badge.danger {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+  .st-badge.info {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+  }
+
+  /* Mobile Responsive Viewport Polish */
+  @media (max-width: 768px) {
+    .adm-page-head {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 12px;
+    }
+    .adm-head-actions {
+      width: 100%;
+    }
+    .adm-head-actions > button, .adm-head-actions > .btn, .adm-head-actions > .mini-btn {
+      flex: 1;
+      text-align: center;
+      justify-content: center;
+    }
+    .adm-table-card {
+      border-radius: 10px;
+      margin-left: -6px;
+      margin-right: -6px;
+    }
+    .adm-table thead th {
+      padding: 10px 12px;
+      font-size: 11px;
+    }
+    .adm-table tbody td {
+      padding: 11px 12px;
+      font-size: 12px;
+    }
+    /* Compact Topbar actions on mobile */
+    .topbar {
+      padding: 12px 14px;
+    }
+    .topbar .adm-top-actions {
+      display: flex;
+      gap: 6px;
+      width: 100%;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+    .topbar .adm-top-actions .btn-secondary {
+      padding: 6px 10px;
+      font-size: 11px;
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+    /* Modal responsive enhancement */
+    #admModal .modal {
+      width: 95vw !important;
+      max-width: 580px !important;
+      margin: 20px auto;
+      border-radius: 16px;
+      padding: 20px 16px;
+    }
+  }
+
 </style>
 </head>
 <body>
@@ -1493,7 +1700,7 @@
 
 <script src="/js/app.js?v=16"></script>
 <script src="/banners/render.js?v=4"></script>
-<script src="/js/admin.js?v=61"></script>
+<script src="/js/admin.js?v=62"></script>
 <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});

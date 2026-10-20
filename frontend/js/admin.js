@@ -3115,50 +3115,84 @@ TABS.sms = async () => {
   const d = await r.json();
   const pr = await (await ABC.api('/admin/sms/pending-recharges')).json();
   const pend = pr.pending || [];
-  let html =
-    '<h3 style="color:var(--gold);margin-bottom:12px;">📩 SMS অটো-ম্যাচ</h3>' +
-    '<div style="margin-bottom:12px;">' +
-    '<button class="mini-btn' + (f === 'no' ? ' ok' : '') + '" onclick="window._smsFilter=\'no\';show(\'sms\')">⏳ আনম্যাচড</button> ' +
-    '<button class="mini-btn' + (f === 'yes' ? ' ok' : '') + '" onclick="window._smsFilter=\'yes\';show(\'sms\')">✅ ম্যাচড</button> ' +
-    '<button class="mini-btn' + (f === '' ? ' ok' : '') + '" onclick="window._smsFilter=\'\';show(\'sms\')">📋 সব</button></div>';
+  const list = d.sms || [];
 
-  if (!(d.sms || []).length) html += '<div style="color:var(--muted)">কোনো SMS নেই 🎉</div>';
-  for (const s of (d.sms || [])) {
-    const matched = !!s.matched_recharge_id;
-    html += '<div class="list-row" style="cursor:default;"><div>' +
-      '<div class="t">৳' + bn(s.amount) + ' <small style="color:var(--dim)">' + esc(s.method || 'unknown') + '</small> ' +
-      (matched
-        ? '<span class="pill" style="background:#1d3b24;color:#7fd68f;">✅ ম্যাচড</span>'
-        : '<span class="pill" style="background:#3b2a1d;color:#e0a75e;">⏳ আনম্যাচড</span>') + '</div>' +
-      '<div class="s">প্রেরক: ' + esc(s.sender || '—') + ' • TrxID: ' + esc(s.trxid || '—') + '<br>' +
-      '<span style="opacity:.75">"' + esc((s.raw_message || '').slice(0, 120)) + '"</span><br>' +
-      new Date(s.created_at).toLocaleString('bn-BD');
-    if (matched) {
-      html += '<br>👤 ' + esc(s.user_name || '') + ' (' + esc(s.user_phone || '') + ') • ৳' + bn(s.tx_amount);
+  let html = '<div class="adm-page-head">' +
+    '<div>' +
+      '<h2 class="adm-page-title">📩 SMS গেটওয়ে ও অটো-ম্যাচ হাব</h2>' +
+      '<p class="adm-page-sub">ব্যাংকিং SMS পর্যালোচনা ও রিচার্জ অটোমেশন অডিট</p>' +
+    '</div>' +
+    '<div class="adm-head-actions">' +
+      '<button class="mini-btn' + (f === 'no' ? ' ok' : '') + '" onclick="window._smsFilter=\'no\';show(\'sms\')">⏳ আনম্যাচড</button>' +
+      '<button class="mini-btn' + (f === 'yes' ? ' ok' : '') + '" onclick="window._smsFilter=\'yes\';show(\'sms\')">✅ ম্যাচড</button>' +
+      '<button class="mini-btn' + (f === '' ? ' ok' : '') + '" onclick="window._smsFilter=\'\';show(\'sms\')">📋 সব SMS</button>' +
+    '</div>' +
+  '</div>';
+
+  if (!list.length) {
+    html += '<div class="adm-empty-state">' +
+      '<div class="adm-empty-icon">📩</div>' +
+      '<div class="adm-empty-title">কোনো SMS পাওয়া যায়নি</div>' +
+      '<div class="adm-empty-desc">এই ফিল্টারে বর্তমানে কোনো এসএমএস রেকর্ড নেই।</div>' +
+    '</div>';
+  } else {
+    html += '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">';
+    for (const s of list) {
+      const matched = !!s.matched_recharge_id;
+      const method = (s.method || 'unknown').toLowerCase();
+      let methodColor = '#2563eb';
+      if (method.includes('bkash')) methodColor = '#e11d48';
+      else if (method.includes('nagad')) methodColor = '#ea580c';
+      else if (method.includes('rocket')) methodColor = '#7c3aed';
+
+      html += '<div class="adm-table-card" style="padding:16px;margin-bottom:0;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">' +
+          '<div style="flex:1;min-width:260px;">' +
+            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">' +
+              '<span style="font-size:18px;font-weight:800;color:#0f172a;">৳' + bn(s.amount) + '</span>' +
+              '<span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:#f8fafc;border:1px solid #cbd5e1;color:' + methodColor + ';">' + esc(s.method || 'SMS') + '</span>' +
+              (matched
+                ? '<span class="st-badge active">✅ ম্যাচড</span>'
+                : '<span class="st-badge pending">⏳ আনম্যাচড</span>') +
+            '</div>' +
+            '<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">' +
+              'প্রেরক: <b>' + esc(s.sender || '—') + '</b> • TrxID: <span class="adm-code-chip" onclick="AdmInv.copyText(\'' + esc(s.trxid || '') + '\')">' + esc(s.trxid || '—') + ' 📋</span>' +
+            '</div>' +
+            '<div style="font-size:12px;color:#334155;background:#f8fafc;padding:8px 10px;border-radius:6px;border:1px solid #e2e8f0;margin:6px 0;">' +
+              '\"' + esc((s.raw_message || '').slice(0, 160)) + '\"' +
+            '</div>' +
+            '<div style="font-size:11px;color:#94a3b8;">🕒 ' + new Date(s.created_at).toLocaleString('bn-BD') + '</div>' +
+            (matched
+              ? '<div style="margin-top:6px;font-size:12px;color:#059669;font-weight:600;">👤 ম্যাচকৃত গ্রাহক: ' + esc(s.user_name || '') + ' (' + esc(s.user_phone || '') + ') • ৳' + bn(s.tx_amount) + '</div>'
+              : '') +
+          '</div>' +
+          '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">' +
+            (!matched
+              ? '<select id="sms-tx-' + s.id + '" class="mini-btn" style="max-width:200px;font-size:12px;">' +
+                  '<option value="">পেন্ডিং রিচার্জ বাছুন…</option>' +
+                  pend.map(p => '<option value="' + p.id + '">৳' + bn(p.amount) + ' • ' + esc(p.user_name) + ' • ' + esc(p.trxid || '') + '</option>').join('') +
+                '</select>' +
+                '<div style="display:flex;gap:6px;">' +
+                  '<button class="mini-btn ok" onclick="AdmSms.match(\'' + s.id + '\')">🔗 ম্যাচ করুন</button>' +
+                  '<button class="mini-btn danger" onclick="AdmSms.ignore(\'' + s.id + '\')">🙈 বাদ দিন</button>' +
+                '</div>'
+              : '<span style="color:#059669;font-size:12px;font-weight:700;">✓ অটো প্রসেসড</span>') +
+          '</div>' +
+        '</div>' +
+      '</div>';
     }
-    html += '</div></div><div style="text-align:right;min-width:150px;">';
-    if (!matched) {
-      html += '<select id="sms-tx-' + s.id + '" class="mini-btn" style="margin-bottom:6px;max-width:150px;">' +
-        '<option value="">রিচার্জ বেছে নিন…</option>';
-      for (const p of pend) {
-        html += '<option value="' + p.id + '">৳' + bn(p.amount) + ' • ' + esc(p.user_name) + ' • ' + esc(p.trxid || '') + '</option>';
-      }
-      html += '</select><br>' +
-        '<button class="mini-btn ok" onclick="AdmSms.match(\'' + s.id + '\')">🔗 ম্যাচ</button> ' +
-        '<button class="mini-btn danger" onclick="AdmSms.ignore(\'' + s.id + '\')">🙈 ইগনোর</button>';
-    }
-    html += '</div></div>';
+    html += '</div>';
   }
 
   // Forwarding setup instructions
-  html += '<div class="form-card" style="margin-top:16px;max-width:none;"><h3 style="color:var(--gold);margin:0 0 10px;">📱 SMS ফরওয়ার্ড সেটআপ (Android)</h3>' +
-    '<ol style="color:var(--muted);font-size:14px;line-height:1.9;margin:0;padding-left:20px;">' +
+  html += '<div class="adm-table-card" style="padding:20px;"><h3 style="color:#1e40af;margin:0 0 10px;font-size:16px;">📱 SMS ফরওয়ার্ড সেটআপ (Android)</h3>' +
+    '<ol style="color:var(--text-muted);font-size:13px;line-height:1.9;margin:0;padding-left:20px;">' +
     '<li>Play Store থেকে <b>SMS Forwarder</b> জাতীয় অ্যাপ ইনস্টল করুন।</li>' +
     '<li>ফিল্টার: প্রেরক <b>bKash (16247)</b>, <b>Nagad (16167)</b>, <b>Rocket (16216)</b>।</li>' +
-    '<li>Webhook URL বসান:<br><code id="smsSecretUrl" style="color:var(--gold);word-break:break-all;">' +
+    '<li>Webhook URL বসান:<br><code id="smsSecretUrl" style="color:#2563eb;word-break:break-all;">' +
     location.origin + '/api/sms/incoming?secret=আপনার_SMS_WEBHOOK_SECRET</code><br>' +
-    '<button class="mini-btn" onclick="AdmSms.showSecret()">🔑 Secret দেখুন</button></li>' +
-    '<li>মেথড: <b>POST</b>, JSON body: <code>{"sender":"{sender}","message":"{message}"}</code></li>' +
+    '<button class="mini-btn" style="margin-top:6px;" onclick="AdmSms.showSecret()">🔑 Secret দেখুন</button></li>' +
+    '<li>মেথড: <b>POST</b>, JSON body: <code>{\"sender\":\"{sender}\",\"message\":\"{message}\"}</code></li>' +
     '<li>টাকা ঢুকলেই SMS এলে অটো-ম্যাচ হবে — TrxID মিললে বা টাকা+নম্বর মিললে ✅</li>' +
     '</ol></div>';
 
@@ -3278,16 +3312,69 @@ window.AdmTx = {
 TABS.coupons = async () => {
   const r = await ABC.api('/admin/coupons');
   const d = await r.json();
-  let html = '<button class="mini-btn ok" onclick="AdmCp.createForm()" style="margin-bottom:12px;">+ নতুন কুপন</button>' +
-    '<div style="overflow-x:auto;"><table class="adm"><tr><th>কোড</th><th>ধরন</th><th>%</th><th>টাকা</th><th>স্ট্যাটাস</th><th>কাজ</th></tr>';
-  for (const c of d.coupons) {
-    html += '<tr><td><b>' + esc(c.code) + '</b></td><td>' + esc(c.type) + '</td><td>' + c.percent + '%</td>' +
-      '<td>৳' + bn(c.amount) + '</td><td>' + esc(c.status) + '</td>' +
-      '<td>' + (c.status === 'active'
-        ? '<button class="mini-btn danger" onclick="AdmCp.set(\'' + c.id + '\',\'disabled\')">Disable</button>'
-        : '<button class="mini-btn ok" onclick="AdmCp.set(\'' + c.id + '\',\'active\')">Enable</button>') + '</td></tr>';
+  const coupons = d.coupons || [];
+  const activeCount = coupons.filter(c => c.status === 'active').length;
+
+  let html = '<div class="adm-page-head">' +
+    '<div>' +
+      '<h2 class="adm-page-title">🎟️ কুপন ও ডিসকাউন্ট ভাউচার</h2>' +
+      '<p class="adm-page-sub">গ্রাহকদের প্রমোশনাল ডিসকাউন্ট ও ক্যাশব্যাক কুপন কোড ব্যবস্থাপনা</p>' +
+    '</div>' +
+    '<div class="adm-head-actions">' +
+      '<span class="st-badge info">মোট কুপন: ' + bn(coupons.length) + '</span>' +
+      '<span class="st-badge active">সক্রিয়: ' + bn(activeCount) + '</span>' +
+      '<button class="btn ok" onclick="AdmCp.createForm()">+ নতুন কুপন তৈরি করুন</button>' +
+    '</div>' +
+  '</div>';
+
+  if (!coupons.length) {
+    html += '<div class="adm-empty-state">' +
+      '<div class="adm-empty-icon">🎟️</div>' +
+      '<div class="adm-empty-title">কোনো কুপন তৈরি করা হয়নি</div>' +
+      '<div class="adm-empty-desc">গ্রাহকদের জন্য প্রোমো বা ক্যাশব্যাক কুপন কোড তৈরি করতে উপরের বাটনে চাপ দিন।</div>' +
+      '<div style="margin-top:14px;"><button class="btn ok" onclick="AdmCp.createForm()">+ নতুন কুপন তৈরি করুন</button></div>' +
+    '</div>';
+  } else {
+    html += '<div class="adm-table-card">' +
+      '<div style="overflow-x:auto;">' +
+        '<table class="adm-table">' +
+          '<thead><tr>' +
+            '<th>কুপন কোড</th>' +
+            '<th>ধরন</th>' +
+            '<th>ডিসকাউন্ট রেট</th>' +
+            '<th>ফিক্সড ছাড়</th>' +
+            '<th>স্ট্যাটাস</th>' +
+            '<th style="text-align:right;">অ্যাকশন</th>' +
+          '</tr></thead><tbody>';
+
+    for (const c of coupons) {
+      const isActive = c.status === 'active';
+      const stClass = isActive ? 'active' : 'disabled';
+      const stText = isActive ? 'সক্রিয়' : 'নিষ্ক্রিয়';
+      const typeBadge = c.type === 'cashback'
+        ? '<span class="st-badge info">💰 ক্যাশব্যাক</span>'
+        : '<span class="st-badge active">🎁 প্রোমো</span>';
+
+      html += '<tr>' +
+        '<td>' +
+          '<div style="display:flex;align-items:center;gap:6px;">' +
+            '<span class="adm-code-chip" onclick="AdmInv.copyText(\'' + esc(c.code) + '\')" title="ক্লিক করে কোড কপি করুন">' + esc(c.code) + ' 📋</span>' +
+          '</div>' +
+        '</td>' +
+        '<td>' + typeBadge + '</td>' +
+        '<td>' + (c.percent ? '<b style="color:#0f172a;">' + bn(c.percent) + '%</b>' : '<span style="color:#94a3b8;">—</span>') + '</td>' +
+        '<td>' + (c.amount ? '<b style="color:#15803d;">৳' + bn(c.amount) + '</b>' : '<span style="color:#94a3b8;">—</span>') + '</td>' +
+        '<td><span class="st-badge ' + stClass + '">' + stText + '</span></td>' +
+        '<td style="text-align:right;">' +
+          (isActive
+            ? '<button class="mini-btn danger" onclick="AdmCp.set(\'' + c.id + '\',\'disabled\')">বন্ধ করুন</button>'
+            : '<button class="mini-btn ok" onclick="AdmCp.set(\'' + c.id + '\',\'active\')">চালু করুন</button>') +
+        '</td>' +
+      '</tr>';
+    }
+    html += '</tbody></table></div></div>';
   }
-  content.innerHTML = html + '</table></div>';
+  content.innerHTML = html;
 };
 window.AdmCp = {
   createForm() {
@@ -3330,30 +3417,78 @@ window.AdmCp = {
 TABS.invites = async () => {
   const r = await ABC.api('/admin/invites');
   const d = await r.json();
-  const rows = (d.invites || []).map(x => {
-    const used = Number(x.used_count) || 0;
-    const max = x.max_uses == null ? '∞' : bn(x.max_uses);
-    const exp = x.expires_at ? new Date(x.expires_at).toLocaleString('bn-BD') : '—';
-    const st = !x.is_active ? '<span style="color:#ff6b6b;">বন্ধ</span>'
-      : (x.expires_at && new Date(x.expires_at) <= new Date()) ? '<span style="color:#ff6b6b;">মেয়াদ শেষ</span>'
-      : (x.max_uses != null && used >= Number(x.max_uses)) ? '<span style="color:#ffb84d;">পূর্ণ</span>'
-      : '<span style="color:#7ddb7d;">চালু</span>';
-    const link = location.origin + '/login.html?invite=' + encodeURIComponent(x.code);
-    return '<tr><td><b>' + esc(x.code) + '</b><br><small style="color:var(--muted)">' + esc(x.note || '') + '</small></td>' +
-      '<td>' + used + ' / ' + max + '</td><td>' + exp + '</td><td>' + st + '</td>' +
-      '<td style="white-space:nowrap;">' +
-      '<button class="mini-btn" onclick="AdmInv.copyLink(\'' + esc(x.code) + '\')">📋 লিংক কপি</button> ' +
-      (x.is_active
-        ? '<button class="mini-btn danger" onclick="AdmInv.set(\'' + x.id + '\',false)">বন্ধ করুন</button>'
-        : '<button class="mini-btn ok" onclick="AdmInv.set(\'' + x.id + '\',true)">চালু করুন</button>') + ' ' +
-      '<button class="mini-btn danger" onclick="AdmInv.del(\'' + x.id + '\')">🗑️</button></td></tr>';
-  }).join('');
-  content.innerHTML =
-    '<button class="mini-btn ok" onclick="AdmInv.createForm()" style="margin-bottom:12px;">+ নতুন ইনভাইট লিংক</button>' +
-    '<div style="color:var(--muted);font-size:13px;margin-bottom:12px;">রেজিস্ট্রেশন OFF থাকলেও এই লিংক দিয়ে রেজিস্টার করা যাবে।</div>' +
-    '<div style="overflow-x:auto;"><table class="adm"><tr><th>কোড / নোট</th><th>ব্যবহার</th><th>মেয়াদ</th><th>স্ট্যাটাস</th><th>কাজ</th></tr>' +
-    (rows || '<tr><td colspan="5" style="text-align:center;color:var(--muted)">কোনো লিংক নেই</td></tr>') +
-    '</table></div>';
+  const invites = d.invites || [];
+
+  let html = '<div class="adm-page-head">' +
+    '<div>' +
+      '<h2 class="adm-page-title">🔗 ইনভাইট ও রেজিস্ট্রেশন কোড</h2>' +
+      '<p class="adm-page-sub">রেজিস্ট্রেশন বন্ধ থাকলেও এই এক্সক্লুসিভ লিংক দিয়ে একাউন্ট তৈরি করা যাবে</p>' +
+    '</div>' +
+    '<div class="adm-head-actions">' +
+      '<span class="st-badge info">মোট ইনভাইট: ' + bn(invites.length) + '</span>' +
+      '<button class="btn ok" onclick="AdmInv.createForm()">+ নতুন ইনভাইট লিংক</button>' +
+    '</div>' +
+  '</div>';
+
+  if (!invites.length) {
+    html += '<div class="adm-empty-state">' +
+      '<div class="adm-empty-icon">🔗</div>' +
+      '<div class="adm-empty-title">কোনো ইনভাইট লিংক তৈরি করা হয়নি</div>' +
+      '<div class="adm-empty-desc">ব্যবহারকারীদের আমন্ত্রণ জানাতে নতুন ইনভাইটেশন লিংক তৈরি করুন।</div>' +
+      '<div style="margin-top:14px;"><button class="btn ok" onclick="AdmInv.createForm()">+ নতুন ইনভাইট লিংক</button></div>' +
+    '</div>';
+  } else {
+    html += '<div class="adm-table-card">' +
+      '<div style="overflow-x:auto;">' +
+        '<table class="adm-table">' +
+          '<thead><tr>' +
+            '<th>ইনভাইট কোড ও নোট</th>' +
+            '<th>ব্যবহার</th>' +
+            '<th>মেয়াদ</th>' +
+            '<th>স্ট্যাটাস</th>' +
+            '<th style="text-align:right;">অ্যাকশন</th>' +
+          '</tr></thead><tbody>';
+
+    for (const x of invites) {
+      const used = Number(x.used_count) || 0;
+      const max = x.max_uses == null ? '∞' : bn(x.max_uses);
+      const exp = x.expires_at ? new Date(x.expires_at).toLocaleString('bn-BD') : 'মেয়াদহীন';
+      const isExpired = x.expires_at && new Date(x.expires_at) <= new Date();
+      const isFull = x.max_uses != null && used >= Number(x.max_uses);
+
+      let stBadge = '';
+      if (!x.is_active) {
+        stBadge = '<span class="st-badge disabled">বন্ধ</span>';
+      } else if (isExpired) {
+        stBadge = '<span class="st-badge danger">মেয়াদ শেষ</span>';
+      } else if (isFull) {
+        stBadge = '<span class="st-badge warn">পূর্ণ</span>';
+      } else {
+        stBadge = '<span class="st-badge active">সক্রিয়</span>';
+      }
+
+      html += '<tr>' +
+        '<td>' +
+          '<div style="display:flex;align-items:center;gap:6px;">' +
+            '<span class="adm-code-chip" onclick="AdmInv.copyLink(\'' + esc(x.code) + '\')" title="ক্লিক করে লিংক কপি করুন">' + esc(x.code) + ' 📋</span>' +
+          '</div>' +
+          (x.note ? '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">' + esc(x.note) + '</div>' : '') +
+        '</td>' +
+        '<td><b>' + bn(used) + '</b> / ' + max + '</td>' +
+        '<td><span style="font-size:12px;color:var(--text-muted);">' + exp + '</span></td>' +
+        '<td>' + stBadge + '</td>' +
+        '<td style="text-align:right;white-space:nowrap;">' +
+          '<button class="mini-btn" onclick="AdmInv.copyLink(\'' + esc(x.code) + '\')" title="লিংক কপি">📋 কপি</button> ' +
+          (x.is_active
+            ? '<button class="mini-btn danger" onclick="AdmInv.set(\'' + x.id + '\',false)">বন্ধ</button>'
+            : '<button class="mini-btn ok" onclick="AdmInv.set(\'' + x.id + '\',true)">চালু</button>') + ' ' +
+          '<button class="mini-btn danger" onclick="AdmInv.del(\'' + x.id + '\')" title="মুছে ফেলুন">🗑️</button>' +
+        '</td>' +
+      '</tr>';
+    }
+    html += '</tbody></table></div></div>';
+  }
+  content.innerHTML = html;
 };
 window.AdmInv = {
   createForm() {
@@ -3735,46 +3870,52 @@ TABS.activity = async () => {
   const logs = (d && d.log) || [];
 
   const ACTION_MAP = {
-    'login': { label: '🔐 এডমিন লগইন', cls: 'badge' },
-    'recharge_approve': { label: '💰 রিচার্জ অনুমোদন', cls: 'badge ok' },
-    'recharge_reject': { label: '❌ রিচার্জ বাতিল', cls: 'badge danger' },
-    'order_update': { label: '📦 অর্ডার স্ট্যাটাস', cls: 'badge' },
-    'order_deliver': { label: '🚚 ফাইল ডেলিভারি', cls: 'badge ok' },
-    'settings_update': { label: '⚙️ সেটিংস আপডেট', cls: 'badge warn' },
-    'service_update': { label: '🛠️ সেবা আপডেট', cls: 'badge' },
-    'notice_create': { label: '📢 নোটিশ প্রকাশ', cls: 'badge ok' },
-    'notice_delete': { label: '🗑️ নোটিশ মোছা', cls: 'badge danger' },
-    'user_block': { label: '🚫 ইউজার ব্লক', cls: 'badge danger' }
+    'login': { label: '🔐 এডমিন লগইন', cls: 'st-badge info' },
+    'recharge_approve': { label: '💰 রিচার্জ অনুমোদন', cls: 'st-badge active' },
+    'recharge_reject': { label: '❌ রিচার্জ বাতিল', cls: 'st-badge danger' },
+    'order_update': { label: '📦 অর্ডার স্ট্যাটাস', cls: 'st-badge info' },
+    'order_deliver': { label: '🚚 ফাইল ডেলিভারি', cls: 'st-badge active' },
+    'settings_update': { label: '⚙️ সেটিংস আপডেট', cls: 'st-badge pending' },
+    'service_update': { label: '🛠️ সেবা আপডেট', cls: 'st-badge info' },
+    'notice_create': { label: '📢 নোটিশ প্রকাশ', cls: 'st-badge active' },
+    'notice_delete': { label: '🗑️ নোটিশ মোছা', cls: 'st-badge danger' },
+    'user_block': { label: '🚫 ইউজার ব্লক', cls: 'st-badge danger' }
   };
 
-  let html = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">' +
-    '<div><h3 style="margin:0; font-size:18px; font-weight:800; color:#0f172a;">📜 এডমিন সিকিউরিটি ও অ্যাক্টিভিটি অডিট লগ</h3>' +
-    '<p style="margin:4px 0 0; font-size:12px; color:#64748b;">অ্যাডমিনদের দ্বারা পরিচালিত প্রতিটি সংবেদনশীল অপারেশনের অপরিবর্তনীয় অডিট ট্রেইল</p></div>' +
-    '<button class="mini-btn" onclick="show(\'activity\')">🔄 রিফ্রেশ লগ</button>' +
+  let html = '<div class="adm-page-head">' +
+    '<div>' +
+      '<h2 class="adm-page-title">📜 এডমিন অডিট ও অ্যাক্টিভিটি লগ</h2>' +
+      '<p class="adm-page-sub">অ্যাডমিনদের দ্বারা পরিচালিত প্রতিটি সংবেদনশীল অপারেশনের অপরিবর্তনীয় অডিট ট্রেইল</p>' +
+    '</div>' +
+    '<div class="adm-head-actions">' +
+      '<span class="st-badge info">সাম্প্রতিক রেকর্ড: ' + bn(logs.length) + '</span>' +
+      '<button class="mini-btn" onclick="show(\'activity\')">🔄 রিফ্রেশ লগ</button>' +
+    '</div>' +
   '</div>';
 
   if (!logs.length) {
-    html += '<div style="text-align:center; padding:48px 16px; background:#fff; border:1px dashed #cbd5e1; border-radius:14px; color:#64748b;">' +
-      '<div style="font-size:32px; margin-bottom:8px;">📜</div>' +
-      '<b style="font-size:15px; color:#0f172a;">কোনো অডিট লগ রেকর্ড নেই</b>' +
-      '</div>';
+    html += '<div class="adm-empty-state">' +
+      '<div class="adm-empty-icon">📜</div>' +
+      '<div class="adm-empty-title">কোনো অডিট লগ রেকর্ড নেই</div>' +
+      '<div class="adm-empty-desc">এডমিন প্যানেলে পরিচালিত কোনো কার্যক্রম এখনো রেকর্ড হয়নি।</div>' +
+    '</div>';
   } else {
-    html += '<div style="background:#fff; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03);">' +
-      '<div style="overflow-x:auto;"><table class="adm" style="margin:0; width:100%; border-collapse:collapse;">' +
-      '<thead style="background:#f8fafc; border-bottom:1px solid #e2e8f0;">' +
-        '<tr><th style="padding:12px 16px; text-align:left; font-size:12px; color:#64748b;">সময়</th>' +
-        '<th style="padding:12px 16px; text-align:left; font-size:12px; color:#64748b;">দায়িত্বপ্রাপ্ত এডমিন</th>' +
-        '<th style="padding:12px 16px; text-align:left; font-size:12px; color:#64748b;">অপারেশন</th>' +
-        '<th style="padding:12px 16px; text-align:left; font-size:12px; color:#64748b;">কার্যক্রমের বিবরণ</th></tr>' +
+    html += '<div class="adm-table-card">' +
+      '<div style="overflow-x:auto;"><table class="adm-table">' +
+      '<thead>' +
+        '<tr><th>সময় ও তারিখ</th>' +
+        '<th>দায়িত্বপ্রাপ্ত এডমিন</th>' +
+        '<th>অপারেশন</th>' +
+        '<th>কার্যক্রমের বিবরণ</th></tr>' +
       '</thead><tbody>';
 
     for (const a of logs) {
-      const actInfo = ACTION_MAP[a.action] || { label: a.action, cls: 'badge' };
+      const actInfo = ACTION_MAP[a.action] || { label: a.action, cls: 'st-badge info' };
       let detailsFormatted = '';
       try {
         if (typeof a.details === 'object' && a.details !== null) {
           detailsFormatted = Object.entries(a.details)
-            .map(([k, v]) => '<span style="display:inline-block; margin-right:8px;"><b>' + esc(k) + ':</b> ' + esc(String(v)) + '</span>')
+            .map(([k, v]) => '<span style="display:inline-block; margin-right:8px; background:#f8fafc; padding:2px 6px; border-radius:4px; border:1px solid #e2e8f0;"><b>' + esc(k) + ':</b> ' + esc(String(v)) + '</span>')
             .join(' ');
         } else {
           detailsFormatted = esc(String(a.details || '-'));
@@ -3783,11 +3924,11 @@ TABS.activity = async () => {
         detailsFormatted = esc(String(a.details || '-'));
       }
 
-      html += '<tr style="border-bottom:1px solid #f1f5f9;">' +
-        '<td style="padding:12px 16px; white-space:nowrap; font-size:12px; color:#64748b;">' + new Date(a.created_at).toLocaleString('bn-BD') + '</td>' +
-        '<td style="padding:12px 16px; font-weight:700; font-size:13px; color:#0f172a;">👤 ' + esc(a.admin_name || 'সুপার এডমিন') + '</td>' +
-        '<td style="padding:12px 16px;"><span class="' + actInfo.cls + '" style="font-size:11px;">' + actInfo.label + '</span></td>' +
-        '<td style="padding:12px 16px; font-size:12px; color:#475569;">' + detailsFormatted + '</td>' +
+      html += '<tr>' +
+        '<td style="white-space:nowrap; font-size:12px; color:#64748b;">🕒 ' + new Date(a.created_at).toLocaleString('bn-BD') + '</td>' +
+        '<td style="font-weight:700; font-size:13px; color:#0f172a;">👤 ' + esc(a.admin_name || 'সুপার এডমিন') + '</td>' +
+        '<td><span class="' + actInfo.cls + '">' + actInfo.label + '</span></td>' +
+        '<td style="font-size:12px; color:#334155;">' + detailsFormatted + '</td>' +
       '</tr>';
     }
 
