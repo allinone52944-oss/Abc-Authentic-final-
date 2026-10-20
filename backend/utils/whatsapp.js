@@ -379,6 +379,27 @@ async function notifyRechargeApproved(db, tx) {
 }
 
 
+// Recharge request cancelled because the SMS amount and the claimed
+// amount disagree. More informative than the generic rejected message.
+async function notifyRechargeMismatch(db, tx, smsAmount) {
+  try {
+    if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
+    if (!(await isNotifyEnabled(db, 'recharge_rejected'))) return { ok: false, error: 'NOTIFY_OFF' };
+    const u = await db.query(
+      'SELECT name, whatsapp FROM users WHERE id = $1', [tx.user_id]
+    );
+    const user = u.rows[0];
+    if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
+    const msg = `দুঃখিত ${user.name || ''}, আপনার রিচার্জ রিকোয়েস্টে ৳${Number(tx.amount)} লেখা হয়েছিল, কিন্তু আপনার পাঠানো টাকার SMS এ ৳${Number(smsAmount)} এসেছে। রিকোয়েস্টটি বাতিল করা হয়েছে — টাকা যোগ হয়নি। সঠিক পরিমাণ লিখে আবার চেষ্টা করুন।`;
+    const r = await sendTextMessage(user.whatsapp, msg, db);
+    safeLog('[whatsapp] recharge mismatch notify', tx.id, '->', r.ok ? 'sent' : r.error);
+    return r;
+  } catch (e) {
+    safeLog('[whatsapp] notifyRechargeMismatch failed:', e.message);
+    return { ok: false, error: 'FAILED' };
+  }
+}
+
 async function notifyRechargeRejected(db, tx) {
   try {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
@@ -411,6 +432,7 @@ module.exports = {
   notifyOrderFailed,
   notifyOrderCancelled,
   notifyRechargeApproved,
+  notifyRechargeMismatch,
   notifyRechargeRejected,
 };
 // M-22 (2026-10-15): removed never-used exports (canSend, graphPost,

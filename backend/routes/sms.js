@@ -16,6 +16,7 @@ const { requireAuth, requireAdmin } = require('../auth');
 const { safeLog } = require('../security');
 const { parseSms } = require('../utils/sms-parser');
 const wa = require('../utils/whatsapp');
+const push = require('../utils/push');
 
 const smsLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -68,6 +69,22 @@ async function approveRechargeTx(client, txId, smsId) {
     );
   }
   return { ...tx, status: 'approved' };
+}
+
+// Amount equality with 2-decimal tolerance (NUMERIC column vs parsed float).
+function amountsEqual(a, b) {
+  return Math.abs(Number(a) - Number(b)) < 0.005;
+}
+
+// Cancel a pending recharge without touching the wallet.
+// Amount-mismatch path: the request is voided, nobody is credited.
+async function cancelRechargeTx(client, txId) {
+  const r = await client.query(
+    `UPDATE transactions SET status = 'rejected', admin_id = NULL
+     WHERE id = $1 AND status = 'pending' AND type = 'recharge' RETURNING *`,
+    [txId]
+  );
+  return r.rows[0] || null;
 }
 
 const SMS_METHODS = {
@@ -169,6 +186,32 @@ webhook.post('/incoming', async (req, res) => {
       if (parsed && parseStatus === 'parsed' && parsed.direction !== 'out') {
         matchInfo = await findMatch(client, parsed);
         if (matchInfo) {
+          // Fraud guard: a TrxID match must also agree on the amount.
+          // Without this, a customer could submit ৳5,000 against a ৳50 SMS.
+          if (matchInfo.how === 'trxid') {
+            if (parsed.amount == null) {
+              // Amount could not be parsed from the SMS — never auto-credit blind.
+              await client.query('COMMIT');
+              await logActivity(null, 'sms.amount_unverified_hold', {
+                sms_id: smsId, tx_id: matchInfo.tx.id, amount: Number(matchInfo.tx.amount),
+              });
+              return res.json({ ok: true, held_for_review: true, reason: 'AMOUNT_UNPARSED' });
+            }
+            if (!amountsEqual(parsed.amount, matchInfo.tx.amount)) {
+              const cancelled = await cancelRechargeTx(client, matchInfo.tx.id);
+              await client.query('COMMIT');
+              await logActivity(null, 'sms.amount_mismatch_cancel', {
+                sms_id: smsId, tx_id: matchInfo.tx.id, user_id: matchInfo.tx.user_id,
+                claimed_amount: Number(matchInfo.tx.amount), sms_amount: parsed.amount,
+              });
+              // Notify customer (WhatsApp) + admins (Web Push). Async, never breaks the webhook.
+              if (cancelled) {
+                wa.notifyRechargeMismatch(db, cancelled, parsed.amount).catch(() => {});
+                push.notifyAmountMismatch(db, cancelled, parsed.amount).catch(() => {});
+              }
+              return res.json({ ok: true, mismatch_cancelled: true, sms_id: smsId });
+            }
+          }
           // Anomaly protection: large amounts require manual review
           const MAX_AUTO_APPROVE = Number(process.env.SMS_MAX_AUTO_APPROVE || 50000);
           if (Number(matchInfo.tx.amount) > MAX_AUTO_APPROVE) {
@@ -262,6 +305,19 @@ adminSms.post('/:id/match', async (req, res) => {
       if (sms.matched_recharge_id) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: 'ALREADY_MATCHED' });
+      }
+      // Fraud guard: manual match must also agree on the amount.
+      if (sms.amount != null) {
+        const t = await client.query('SELECT * FROM transactions WHERE id = $1 FOR UPDATE', [txId]);
+        const txRow = t.rows[0];
+        if (txRow && txRow.type === 'recharge' && !amountsEqual(sms.amount, txRow.amount)) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({
+            error: 'AMOUNT_MISMATCH',
+            sms_amount: Number(sms.amount),
+            requested_amount: Number(txRow.amount),
+          });
+        }
       }
       const tx = await approveRechargeTx(client, txId, smsId);
       await client.query('COMMIT');

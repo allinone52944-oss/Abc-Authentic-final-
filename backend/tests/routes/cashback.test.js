@@ -170,6 +170,20 @@ describe('POST /api/cashback/generate', () => {
     expect(r.body.error).toBe('ALREADY_GENERATED');
   });
 
+  test('daily cashback already taken for that day → 409, no coupon created', async () => {
+    db.__routeQuery([
+      ['FROM transactions', { rows: [{ id: 'tx-123', amount: 1000, user_id: 'u1', day: '2026-10-20' }] }],
+      ['FROM daily_cashback_redemptions', { rows: [{ id: 'd1' }] }],
+      ...genHandlers(),
+    ]);
+    const r = await withUser(request(app()).post('/api/cashback/generate'))
+      .send({ recharge_id: 'tx-123' })
+      .expect(409);
+    expect(r.body.error).toBe('ALREADY_GENERATED');
+    const ins = db.__client.query.mock.calls.find((c) => /INSERT INTO coupons/.test(c[0]));
+    expect(ins).toBeUndefined();
+  });
+
   test('cashback disabled → 400 CASHBACK_DISABLED', async () => {
     db.__routeQuery(genHandlers({ cashback: { rows: [{ value: { enabled: false, percent: 10 } }] } }));
     const r = await withUser(request(app()).post('/api/cashback/generate'))

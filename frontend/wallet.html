@@ -243,6 +243,7 @@
       <div class="field">
         <label>ট্রানজ্যাকশন আইডি (TrxID)</label>
         <input type="text" id="trxid" placeholder="যেমন: BL10293847" maxlength="40">
+        <div style="margin-top:8px;padding:10px 12px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:12.5px;line-height:1.6;">⚠️ <b>সতর্কতা:</b> ডুপ্লিকেট (আগে ব্যবহৃত) বা ভুল/ভুয়া ট্রানজ্যাকশন আইডি (TrxID) দিয়ে বারবার চেষ্টা করলে আপনার অ্যাকাউন্ট <b>স্থায়ীভাবে ব্লক</b> করা হতে পারে। শুধুমাত্র সঠিক TrxID ও সঠিক টাকার পরিমাণ লিখুন।</div>
       </div>
 
       <div class="err" id="err"></div>
@@ -676,7 +677,7 @@ async function submitRecharge(){
     });
     const d=await r.json();
     if(!r.ok){
-      err.textContent='❌ '+(d.error==='DUPLICATE_TRXID'?'এই ট্রানজ্যাকশন আইডি (TrxID) ইতিপূর্বে ব্যবহার করা হয়েছে':(d.error||'ব্যর্থ'));
+      err.textContent='❌ '+(d.error==='DUPLICATE_TRXID'?'এই ট্রানজ্যাকশন আইডি (TrxID) ইতিপূর্বে ব্যবহার করা হয়েছে। ⚠️ বারবার ডুপ্লিকেট বা ভুল TrxID দিলে অ্যাকাউন্ট ব্লক হতে পারে।':d.error==='TRXID_AMOUNT_MISMATCH'?('আপনার পাঠানো টাকার SMS এ ৳'+(d.sms_amount||'')+' এসেছে — আপনি যে পরিমাণ লিখেছেন তার সাথে মেলে না। সঠিক পরিমাণ লিখে আবার চেষ্টা করুন। ⚠️ বারবার ভুল তথ্য দিলে অ্যাকাউন্ট ব্লক হতে পারে।'):(d.error||'ব্যর্থ'));
       return;
     }
     ok.textContent='✅ রিচার্জ রিকোয়েস্ট সফলভাবে জমা হয়েছে! এডমিন যাচাই করে দ্রুত ব্যালেন্স যুক্ত করবেন।';

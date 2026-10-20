@@ -230,6 +230,16 @@ describe('wallet', () => {
       expect(r.body.error).toBe('DUP_TRXID');
     });
 
+    test('SMS with same TrxID but different amount → 409 TRXID_AMOUNT_MISMATCH', async () => {
+      db.__routeQuery([
+        ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
+        ['FROM transactions WHERE trxid', { rows: [] }],
+        ['FROM incoming_sms', { rows: [{ amount: '50' }] }],
+      ]);
+      const r = await withUser(request(app()).post('/api/wallet/recharge')).send(GOOD).expect(409);
+      expect(r.body).toMatchObject({ error: 'TRXID_AMOUNT_MISMATCH', sms_amount: 50 });
+    });
+
     test('happy path → 201', async () => {
       db.__routeQuery([
         ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
@@ -345,6 +355,30 @@ describe('POST /api/wallet/coupon (security fix: transaction + CODE_TOO_LONG)', 
     }));
     const r = await post('P10').expect(200);
     expect(r.body.credited).toBe(100); // 10% of 1000
+  });
+
+  const SVC = '11111111-1111-1111-1111-111111111111';
+  const svcCoupon = { id: 'c9', code: 'CBSVC', type: 'cashback', percent: 0, amount: 40,
+    service_id: SVC, expires_at: null, user_id: null, status: 'active' };
+
+  test('admin switch ON (default): service cashback coupon without prior order → 403 SERVICE_MISMATCH', async () => {
+    db.__routeQuery([
+      ['FROM settings WHERE key', { rows: [{ value: { enabled: true, percent: 5 } }] }],
+      ['FROM orders', { rows: [{ c: '0' }] }],
+      ...couponHandlers(svcCoupon),
+    ]);
+    const r = await post('CBSVC').expect(403);
+    expect(r.body.error).toBe('SERVICE_MISMATCH');
+  });
+
+  test('admin switch OFF: service cashback coupon redeems without prior order', async () => {
+    db.__routeQuery([
+      ['FROM settings WHERE key', { rows: [{ value: { enabled: true, percent: 5, require_service_order: false } }] }],
+      ['FROM orders', { rows: [{ c: '0' }] }],
+      ...couponHandlers(svcCoupon),
+    ]);
+    const r = await post('CBSVC').expect(200);
+    expect(r.body.credited).toBe(40);
   });
 
   test('recharge cashback coupon with both amount and percent credits fixed amount directly', async () => {

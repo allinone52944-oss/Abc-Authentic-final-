@@ -22,6 +22,7 @@ const DHARAKA_TODAY_TX_SQL = `
   WHERE user_id = $1
     AND type = 'recharge'
     AND status = 'approved'
+    AND NOT EXISTS (SELECT 1 FROM coupons c WHERE c.recharge_id = transactions.id)
     AND DATE((created_at AT TIME ZONE 'Asia/Dhaka')) = ${DHARAKA_DAY_SQL}`;
 
 async function cashbackConfig(client) {
@@ -158,8 +159,11 @@ router.post('/generate', async (req, res) => {
     const out = await db.withTransaction(async (client) => {
       // Get the recharge (must be approved and belong to user)
       const rc = await client.query(
-        `SELECT id, amount, user_id FROM transactions
-         WHERE id = $1 AND user_id = $2 AND type = 'recharge' AND status = 'approved' LIMIT 1`,
+        `SELECT id, amount, user_id,
+                TO_CHAR(DATE(created_at AT TIME ZONE 'Asia/Dhaka'), 'YYYY-MM-DD') AS day
+         FROM transactions
+         WHERE id = $1 AND user_id = $2 AND type = 'recharge' AND status = 'approved'
+         LIMIT 1 FOR UPDATE`,
         [recharge_id, req.user.id]
       );
       if (!rc.rows.length) {
@@ -177,6 +181,19 @@ router.post('/generate', async (req, res) => {
         const err = new Error('ALREADY_GENERATED');
         err.statusCode = 409;
         throw err;
+      }
+
+      // Same recharge must not earn cashback twice (daily redeem + coupon)
+      if (rc.rows[0].day) {
+        const daily = await client.query(
+          `SELECT id FROM daily_cashback_redemptions WHERE user_id = $1 AND day = $2::date LIMIT 1`,
+          [req.user.id, rc.rows[0].day]
+        );
+        if (daily.rows.length) {
+          const err = new Error('ALREADY_GENERATED');
+          err.statusCode = 409;
+          throw err;
+        }
       }
 
       const cfg = await cashbackConfig(client);

@@ -475,6 +475,21 @@ router.post('/wallet/recharge', async (req, res) => {
       'SELECT id FROM transactions WHERE trxid = $1 LIMIT 1', [String(trxid).trim()]);
     if (dup.rows.length) return res.status(409).json({ error: 'DUP_TRXID' });
 
+    // Fraud guard: if an SMS with this TrxID already arrived, the reported
+    // amount must equal it — tell the user immediately instead of at approval.
+    const smsArrived = await db.query(
+      `SELECT amount FROM incoming_sms
+       WHERE trxid IS NOT NULL AND UPPER(trxid) = UPPER($1) AND amount IS NOT NULL
+       ORDER BY created_at DESC LIMIT 1`,
+      [String(trxid).trim()]
+    );
+    if (smsArrived.rows.length) {
+      const smsAmt = Number(smsArrived.rows[0].amount);
+      if (Math.abs(smsAmt - amt) >= 0.005) {
+        return res.status(409).json({ error: 'TRXID_AMOUNT_MISMATCH', sms_amount: smsAmt });
+      }
+    }
+
     const r = await db.query(
       `INSERT INTO transactions (user_id, type, amount, method, sender_no, trxid, screenshot, status)
        VALUES ($1, 'recharge', $2, $3, $4, $5, $6, 'pending') RETURNING *`,
@@ -531,7 +546,15 @@ router.post('/wallet/coupon', async (req, res) => {
       }
       // H-2 fix (2026-10-15): service_id scoping enforced — service-নির্দিষ্ট
       // promo শুধু ওই service-এর গ্রাহক redeem করতে পারবে।
-      if (coupon.service_id) {
+      // Admin control: settings.cashback.require_service_order (default true).
+      // বন্ধ থাকলে ক্যাশব্যাক কুপনে আগের অর্ডারের শর্ত লাগবে না।
+      let requireSvcOrder = true;
+      if (coupon.service_id && coupon.type === 'cashback') {
+        const cs = await client.query(`SELECT value FROM settings WHERE key = 'cashback' LIMIT 1`);
+        const cv = (cs.rows[0] && cs.rows[0].value) || {};
+        if (cv.require_service_order === false) requireSvcOrder = false;
+      }
+      if (coupon.service_id && requireSvcOrder) {
         const svc = await client.query(
           `SELECT COUNT(*) AS c FROM orders
            WHERE user_id = $1 AND service_id = $2 AND status NOT IN ('cancelled','refunded')`,

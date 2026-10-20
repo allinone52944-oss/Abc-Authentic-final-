@@ -1222,6 +1222,28 @@ router.put('/transactions/:id/approve', async (req, res) => {
     if (!tx) return res.status(404).json({ error: 'NOT_FOUND' });
     if (tx.status !== 'pending') return res.status(400).json({ error: 'ALREADY_PROCESSED' });
 
+    // Recharge fraud guard: an SMS with the same TrxID but a different
+    // amount must never be approved — reject it instead.
+    if (tx.type === 'recharge' && tx.trxid) {
+      const sms = await db.query(
+        `SELECT amount FROM incoming_sms
+         WHERE trxid IS NOT NULL AND UPPER(trxid) = UPPER($1) AND amount IS NOT NULL
+           AND matched_recharge_id IS DISTINCT FROM $2
+         ORDER BY created_at DESC LIMIT 1`,
+        [String(tx.trxid).trim(), tx.id]
+      );
+      if (sms.rows.length) {
+        const smsAmt = Number(sms.rows[0].amount);
+        if (Math.abs(smsAmt - Number(tx.amount)) >= 0.005) {
+          return res.status(400).json({
+            error: 'AMOUNT_MISMATCH',
+            sms_amount: smsAmt,
+            requested_amount: Number(tx.amount),
+          });
+        }
+      }
+    }
+
     await db.withTransaction(async (client) => {
       // C-4 fix (2026-10-15): existing pending row reuse করা হয় — ডবল ledger row নয়।
       // Idempotent atomic credit; raises DUPLICATE_TRANSACTION if already applied

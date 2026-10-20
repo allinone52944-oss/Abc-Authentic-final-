@@ -186,6 +186,22 @@ async function notifyNewRecharge(db, tx, userId) {
   }
 }
 
+// Recharge cancelled because the SMS amount and the claimed amount disagree.
+async function notifyAmountMismatch(db, tx, smsAmount) {
+  try {
+    const uname = await userLabel(db, tx.user_id);
+    return await notifyAdmins(
+      db,
+      '⚠️ রিচার্জ অমিল ধরা পড়েছে!',
+      `${uname}: ৳${Number(tx.amount).toLocaleString('bn-BD')} লিখেছে, কিন্তু SMS এ ৳${Number(smsAmount).toLocaleString('bn-BD')} এসেছে। রিকোয়েস্ট বাতিল হয়েছে (TrxID: ${tx.trxid || '—'})`,
+      '/admin.html'
+    );
+  } catch (e) {
+    safeLog('[push] notifyAmountMismatch failed:', e.message);
+    return { ok: false };
+  }
+}
+
 async function notifyNewUser(db, user) {  try {
     return await notifyAdmins(
       db,
@@ -245,6 +261,7 @@ module.exports = {
   notifyAdmins,
   notifyNewOrder,
   notifyNewRecharge,
+  notifyAmountMismatch,
   notifyNewUser,
   notifyNewChatMessage,
   notifyUser,

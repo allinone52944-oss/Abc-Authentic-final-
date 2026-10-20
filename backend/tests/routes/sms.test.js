@@ -223,3 +223,79 @@ describe('adminSms routes', () => {
     expect(r.body.pending).toHaveLength(1);
   });
 });
+
+// ============================================================
+// Fraud guard: TrxID match must also agree on the amount
+// (claimed amount vs SMS amount) — mismatch => auto-cancel + notify.
+// ============================================================
+describe('POST /api/sms/incoming — TrxID amount fraud guard', () => {
+  const TX = { id: 't1', user_id: 'u1', amount: '500', trxid: '9HXK2LQM4N', status: 'pending' };
+  const SMS50 = 'You have received Tk 50.00 from 01712345678. TrxID 9HXK2LQM4N.';
+
+  test('SMS amount ≠ claimed amount → auto-cancel, NO wallet credit', async () => {
+    db.__routeQuery([
+      ['FROM incoming_sms', { rows: [] }], // dup check
+      ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
+      ['UPPER(trxid) = UPPER($1)', { rows: [TX] }],
+      ["UPDATE transactions SET status = 'rejected'", { rows: [{ ...TX, status: 'rejected' }] }],
+    ]);
+    const r = await postIncoming({ secret: SECRET, message: SMS50, sender: 'bKash' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, mismatch_cancelled: true, sms_id: 's1' });
+    expect(db.__client.query.mock.calls.filter((c) => /wallet_apply/.test(c[0]))).toHaveLength(0);
+    const cancel = db.__client.query.mock.calls.find((c) => /UPDATE transactions SET status = 'rejected'/.test(c[0]));
+    expect(cancel).toBeDefined();
+    const log = db.query.mock.calls.find((c) => /INSERT INTO activity_log/.test(c[0]));
+    expect(log).toBeDefined();
+    expect(JSON.parse(log[1][2])).toMatchObject({ claimed_amount: 500, sms_amount: 50 });
+  });
+
+  test('SMS amount == claimed amount → still auto-approved', async () => {
+    db.__routeQuery([
+      ['FROM incoming_sms', { rows: [] }],
+      ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
+      ['UPPER(trxid) = UPPER($1)', { rows: [TX] }],
+      ['SELECT * FROM transactions', { rows: [TX] }],
+    ]);
+    const r = await postIncoming({ secret: SECRET, message: BKASH_MSG, sender: 'bKash' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, matched: true, how: 'trxid' });
+    expect(db.__client.query.mock.calls.filter((c) => /wallet_apply/.test(c[0]))).toHaveLength(1);
+  });
+
+  test('amount unparseable → held for review, NO wallet credit', async () => {
+    db.__routeQuery([
+      ['FROM incoming_sms', { rows: [] }],
+      ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
+      ['UPPER(trxid) = UPPER($1)', { rows: [TX] }],
+    ]);
+    const r = await postIncoming({
+      secret: SECRET,
+      message: 'You have received money. TrxID 9HXK2LQM4N.',
+      sender: 'bKash',
+    }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, held_for_review: true, reason: 'AMOUNT_UNPARSED' });
+    expect(db.__client.query.mock.calls.filter((c) => /wallet_apply/.test(c[0]))).toHaveLength(0);
+  });
+});
+
+describe('adminSms manual match — amount fraud guard', () => {
+  test('SMS amount ≠ request amount → 400 AMOUNT_MISMATCH, NO wallet credit', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', matched_recharge_id: null, amount: '50' }] }],
+      ['SELECT * FROM transactions', { rows: [{ id: 't1', user_id: 'u1', amount: '500', trxid: 'X', status: 'pending', type: 'recharge' }] }],
+    ]);
+    const r = await withAdmin(request(adminApp()).post('/api/admin/sms/s1/match'))
+      .send({ transaction_id: 't1' }).expect(400);
+    expect(r.body).toMatchObject({ error: 'AMOUNT_MISMATCH', sms_amount: 50, requested_amount: 500 });
+    expect(db.__client.query.mock.calls.filter((c) => /wallet_apply/.test(c[0]))).toHaveLength(0);
+  });
+
+  test('SMS amount == request amount → match proceeds', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', matched_recharge_id: null, amount: '500' }] }],
+      ['SELECT * FROM transactions', { rows: [{ id: 't1', user_id: 'u1', amount: '500', trxid: 'X', status: 'pending', type: 'recharge' }] }],
+    ]);
+    const r = await withAdmin(request(adminApp()).post('/api/admin/sms/s1/match'))
+      .send({ transaction_id: 't1' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, tx_id: 't1' });
+  });
+});

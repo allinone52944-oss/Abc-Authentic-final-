@@ -161,7 +161,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     amount      NUMERIC(12,2) NOT NULL,
     method      VARCHAR(30),                            -- bkash_payment, bkash_personal, nagad, rocket
     sender_no   VARCHAR(20),
-    trxid       VARCHAR(60),
+    trxid       VARCHAR(255),                       -- widened by migration 025
     screenshot  TEXT,                                   -- base64 or file ref
     status      VARCHAR(20) NOT NULL DEFAULT 'pending'
                 CHECK (status IN ('pending','approved','rejected')),

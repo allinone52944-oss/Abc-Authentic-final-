@@ -3952,6 +3952,7 @@ TABS.activity = async () => {
 TABS.settings = async () => {
   const r = await ABC.api('/admin/settings');
   const s = await r.json();
+  window.__admSettingsCache = s || {};
   let backupInfo = null;
   try {
     const br = await ABC.api('/admin/backup');
@@ -4039,6 +4040,8 @@ TABS.settings = async () => {
         '<h2>🎁 রিওয়ার্ড, বোনাস ও পলিসি লিমিট</h2>' +
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;">' +
           '<div class="field"><label>ক্যাশব্যাক হার % (০ = বন্ধ)</label><input type="number" id="st_cb" value="' + ((s.cashback && s.cashback.percent) || 0) + '"><div class="s" style="margin-top:4px;">রিচার্জে ১-ক্লিক কুপন পারসেন্টেজ</div></div>' +
+          '<div class="field"><label>ক্যাশব্যাক কুপনের মেয়াদ (দিন)</label><input type="number" id="st_cb_exp" min="1" max="365" value="' + ((s.cashback && s.cashback.expiry_days) || 30) + '"><div class="s" style="margin-top:4px;">কুপন কত দিন ব্যবহার করা যাবে</div></div>' +
+          '<div class="field"><label style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="st_cb_req_svc" style="width:auto;"' + ((s.cashback && s.cashback.require_service_order === false) ? '' : ' checked') + '> সার্ভিসে আগে অর্ডার লাগবে</label><div class="s" style="margin-top:4px;">চালু থাকলে: ক্যাশব্যাক কুপনে নির্দিষ্ট সার্ভিস থাকলে কাস্টমার আগে সেই সার্ভিসে অর্ডার না করলে কুপন ব্যবহার করতে পারবে না। বন্ধ করলে সবাই ব্যবহার করতে পারবে।</div></div>' +
           '<div class="field"><label>স্বাগতম বোনাস (৳, ০ = বন্ধ)</label><input type="number" id="st_wb" value="' + ((s.welcome_bonus && s.welcome_bonus.amount) || 0) + '"><div class="s" style="margin-top:4px;">নতুন ইউজার সাইন-আপ গিফট</div></div>' +
           '<div class="field"><label>ফাইল আপলোড সীমা (MB)</label><input type="number" id="st_mb" value="' + ((s.file_upload && s.file_upload.max_mb) || 5) + '"><div class="s" style="margin-top:4px;">আবেদনে সর্বোচ্চ সাইজ লিমিট</div></div>' +
           '<div class="field"><label>BDRIS আবেদন PDF চার্জ (৳)</label><input type="number" id="st_bdris_pdf" value="' + (Number(s['bdris_apply.pdf_price']) || 0) + '"><div class="s" style="margin-top:4px;">জন্মনিবন্ধন আবেদন PDF ফি</div></div>' +
@@ -4268,7 +4271,12 @@ window.AdmSt = {
           lockout_minutes: Math.max(1, Math.min(120, Number(v('st_lockout_min')) || 15))
         },
         welcome_bonus: { enabled: Number(v('st_wb')) > 0, amount: Number(v('st_wb')) || 0 },
-        cashback: { enabled: Number(v('st_cb')) > 0, percent: Number(v('st_cb')) || 0 },
+        cashback: Object.assign({}, (window.__admSettingsCache && window.__admSettingsCache.cashback) || {}, {
+          enabled: Number(v('st_cb')) > 0,
+          percent: Number(v('st_cb')) || 0,
+          expiry_days: Math.max(1, Math.min(365, Number(v('st_cb_exp')) || 30)),
+          require_service_order: !!(document.getElementById('st_cb_req_svc') || {}).checked,
+        }),
         file_upload: { max_mb: Number(v('st_mb')) || 5, allowed: ['pdf', 'jpg', 'jpeg', 'png'] },
         'bdris_apply.pdf_price': Number(v('st_bdris_pdf')) || 0,
         recharge_numbers: {
