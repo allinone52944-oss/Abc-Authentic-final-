@@ -11,6 +11,7 @@ import json
 import os
 import re
 import html
+import datetime
 
 if hasattr(sys.stdout, "reconfigure"):
     try:
@@ -57,7 +58,7 @@ def clean_bn(text):
         'ফয়জুলু হক': 'ফয়জুল হক', 'জুনাবআলী': 'জুনাব আলী',
         'ওয়াসিমউদ্দিন': 'ওয়াসিম উদ্দিন', 'ওয়াসিমউদ্দিন': 'ওয়াসিম উদ্দিন',
         'আলীআজগর': 'আলী আজগর', 'কুলছুমাখাতুন': 'কুলছুমা খাতুন',
-        'ছাতকĺপৗরসভা': 'ছাতক পৌরসভা', 'ĺপৗরসভা': 'পৌরসভা', 'ĺনছা': 'নেছা',
+        'ছাতকĺপৗরসভা': 'ছাতক পৌরসভা', 'হিবগঞ্জ': 'হবিগঞ্জ', 'হিবগǻ': 'হবিগঞ্জ', 'সুিপ্রিয়া': 'সুপ্রিয়া', 'িƵ': 'প্রি', 'ĺপৗরসভা': 'পৌরসভা', 'ĺনছা': 'নেছা',
     }
     for bad, good in replacements.items():
         s = s.replace(bad, good)
@@ -76,6 +77,9 @@ def clean_bn(text):
                       ("্্", "্"), ("ঁঁ", "ঁ")]:
         while bad in s:
             s = s.replace(bad, good)
+    # Vowel-shifted hrasva-i fix (যেমন: সুিবদপুর -> সুবিদপুর)
+    s = re.sub(r"([ক-হ][া-ৌ])ি([ক-হ])", r"\g<1>\g<2>ি", s)
+    s = re.sub(r"([^\s])দেবনাথ", r"\1 দেবনাথ", s)
     return re.sub(r'\s+', ' ', s).strip()
 
 def fmt_dob(s):
