@@ -432,20 +432,9 @@ function renderCashbackHub(d) {
     '</div>';
   }
 
-  // 2. Eligible approved recharges — SUMMARY ONLY. The 1-click create button
-  // lives on each recharge's own card in the transaction list (single place).
-  if (cbCfg.enabled && cbCfg.percent > 0 && eligible.length > 0) {
-    const totalExp = eligible.reduce((sum, t) => sum + Math.floor(Number(t.amount) * cbCfg.percent / 100 * 100) / 100, 0);
-    if (totalExp > 0) {
-      html += '<div style="display:flex;align-items:center;gap:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px;margin-bottom:8px;">' +
-        '<span style="font-size:20px;">🎉</span>' +
-        '<div style="font-size:13px;color:#065f46;">' +
-          '<b>আপনার ' + bn(eligible.length) + 'টি অনুমোদিত রিচার্জে মোট ৳' + bn(totalExp) + ' ক্যাশব্যাক প্রাপ্য।</b>' +
-          '<div style="font-size:12px;color:#047857;margin-top:2px;">সারাদিনে যতবারই রিচার্জ হোক, ক্যাশব্যাক দিনে একবারই সংগ্রহ করা যায় — নিচের বাটন থেকে আজকের মোটের ক্যাশব্যাক সংগ্রহ করুন।</div>' +
-        '</div>' +
-      '</div>';
-    }
-  }
+  // 2. Eligible approved recharges are NOT summarised here: the hub
+  // list spans all dates, while the daily rule is strictly same-day.
+  // The daily slot below (from /cashback/today) is the one true figure.
 
   // 3. Pending recharges
   if (pending.length > 0) {
@@ -469,7 +458,7 @@ function renderCashbackHub(d) {
         '<div style="font-size:32px;line-height:1;">⚡</div>' +
         '<div style="font-size:13px;line-height:1.6;">' +
           '<b style="color:#0f172a;">প্রতিটি সফল ব্যালেন্স রিচার্জে পাবেন ' + bn(cbCfg.percent) + '% ক্যাশব্যাক কুপন!</b><br>' +
-          '<span style="color:#64748b;">উপরে যেকোনো পেমেন্ট মেথডে টাকা পাঠিয়ে TrxID সাবমিট করুন। এডমিন অনুমোদনের সাথে সাথেই লেনদেনের তালিকায় রিচার্জের পাশে ১-ক্লিক কুপন বাটন চলে আসবে এবং সরাসরি ওয়ালেট ব্যালেন্সে রিডিম করতে পারবেন।</span>' +
+          '<span style="color:#64748b;">উপরে যেকোনো পেমেন্ট মেথডে টাকা পাঠিয়ে TrxID সাবমিট করুন। রিচার্জ অনুমোদিত হলেই এই কার্ড থেকে সেদিনের মোটের ওপর ক্যাশব্যাক সংগ্রহ করে সরাসরি ওয়ালেট ব্যালেন্সে নিতে পারবেন। মনে রাখবেন — ক্যাশব্যাক শুধু রিচার্জের দিনই সংগ্রহ করা যায়।</span>' +
         '</div>' +
       '</div>';
     } else {
@@ -559,12 +548,13 @@ async function loadDailyCashback() {
     if (d.can_redeem) {
       slot.innerHTML = '<div style="margin-top:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:12px 14px;">' +
         '<button class="cb-btn" style="width:100%;font-size:14px;padding:10px;" onclick="claimDailyCashback(this)">🎁 আজকের ক্যাশব্যাক সংগ্রহ করুন (৳' + bn(d.cashback_amount) + ')</button>' +
-        '<div style="font-size:12px;color:#047857;margin-top:8px;text-align:center;">অদাবিকৃত ' + bn(d.recharge_count) + 'টি রিচার্জের মোট ৳' + bn(d.recharge_total) + '-এর ওপর ' + bn(d.percent) + '% — দিনে একবারই সংগ্রহ করা যায়।</div>' +
+        '<div style="font-size:12px;color:#047857;margin-top:8px;text-align:center;">আজকের ' + bn(d.recharge_count) + 'টি রিচার্জের মোট ৳' + bn(d.recharge_total) + '-এর ওপর ' + bn(d.percent) + '% — দিনে একবারই সংগ্রহ করা যায়।</div>' +
+        '<div style="font-size:12px;color:#b91c1c;margin-top:4px;text-align:center;">⚠️ আজকের ক্যাশব্যাক আজই সংগ্রহ করতে হবে — না করলে বাদ।</div>' +
       '</div>';
     } else if (d.already_redeemed) {
       slot.innerHTML = '<div style="margin-top:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px;font-size:13px;color:#15803d;">' +
         '✅ <b>আজকের ক্যাশব্যাক সংগ্রহ করা হয়েছে</b>' + (d.coupon_code ? ' (কোড: ' + esc(d.coupon_code) + ')' : '') +
-        (Number(d.cashback_amount) > 0 ? '<div style="font-size:12px;color:#16a34a;margin-top:3px;">এরপরের রিচার্জগুলোর ক্যাশব্যাক আগামীকাল সংগ্রহ করা যাবে।</div>' : '') +
+        (Number(d.cashback_amount) > 0 ? '<div style="font-size:12px;color:#b91c1c;margin-top:3px;">আজ আর নতুন ক্যাশব্যাক সংগ্রহ করা যাবে না — আজকের বাকি রিচার্জের ক্যাশব্যাকও আজই বাদ।</div>' : '') +
       '</div>';
     } else {
       slot.innerHTML = '';

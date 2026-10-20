@@ -130,6 +130,17 @@ describe('POST /api/cashback/redeem', () => {
   });
 });
 
+describe('claim basis — strictly same-day (owner rule)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const SRC = fs.readFileSync(path.join(__dirname, '../../routes/cashback.js'), 'utf8');
+  test("unclaimed set is limited to today's (Asia/Dhaka) recharges — no carry-over", () => {
+    const where = SRC.slice(SRC.indexOf('const UNCLAIMED_WHERE'), SRC.indexOf('const UNCLAIMED_TOTAL_SQL'));
+    expect(where).toContain("DATE((created_at AT TIME ZONE 'Asia/Dhaka'))");
+    expect(where).toContain('daily_cashback_redemptions');
+  });
+});
+
 describe('POST /api/cashback/generate', () => {
   function genHandlers(over = {}) {
     return [

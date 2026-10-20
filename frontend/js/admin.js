@@ -4048,6 +4048,7 @@ TABS.settings = async () => {
           '<div class="field"><label>ক্যাশব্যাক হার % (০ = বন্ধ)</label><input type="number" id="st_cb" value="' + ((s.cashback && s.cashback.percent) || 0) + '"><div class="s" style="margin-top:4px;">রিচার্জে ১-ক্লিক কুপন পারসেন্টেজ</div></div>' +
           '<div class="field"><label>ক্যাশব্যাক কুপনের মেয়াদ (দিন)</label><input type="number" id="st_cb_exp" min="1" max="365" value="' + ((s.cashback && s.cashback.expiry_days) || 30) + '"><div class="s" style="margin-top:4px;">কুপন কত দিন ব্যবহার করা যাবে</div></div>' +
           '<div class="field"><label style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="st_cb_req_svc" style="width:auto;"' + ((s.cashback && s.cashback.require_service_order === false) ? '' : ' checked') + '> সার্ভিসে আগে অর্ডার লাগবে</label><div class="s" style="margin-top:4px;">চালু থাকলে: ক্যাশব্যাক কুপনে নির্দিষ্ট সার্ভিস থাকলে কাস্টমার আগে সেই সার্ভিসে অর্ডার না করলে কুপন ব্যবহার করতে পারবে না। বন্ধ করলে সবাই ব্যবহার করতে পারবে।</div></div>' +
+          '<div class="field"><label>🛎️ ক্যাশব্যাক কোন সেবায় সীমাবদ্ধ</label><select id="st_cb_svc"><option value="">সব সেবা (সীমাবদ্ধতা নেই)</option></select><div class="s" style="margin-top:4px;">নির্দিষ্ট সেবা বাছলে ক্যাশব্যাক কুপন শুধু ওই সেবার গ্রাহকের জন্য প্রযোজ্য হবে — সব সেবায় ব্যবহার করা যাবে না। খালি রাখলে সব সেবার জন্য প্রযোজ্য।</div></div>' +
           '<div class="field"><label>স্বাগতম বোনাস (৳, ০ = বন্ধ)</label><input type="number" id="st_wb" value="' + ((s.welcome_bonus && s.welcome_bonus.amount) || 0) + '"><div class="s" style="margin-top:4px;">নতুন ইউজার সাইন-আপ গিফট</div></div>' +
           '<div class="field"><label>ফাইল আপলোড সীমা (MB)</label><input type="number" id="st_mb" value="' + ((s.file_upload && s.file_upload.max_mb) || 5) + '"><div class="s" style="margin-top:4px;">আবেদনে সর্বোচ্চ সাইজ লিমিট</div></div>' +
           '<div class="field"><label>BDRIS আবেদন PDF চার্জ (৳)</label><input type="number" id="st_bdris_pdf" value="' + (Number(s['bdris_apply.pdf_price']) || 0) + '"><div class="s" style="margin-top:4px;">জন্মনিবন্ধন আবেদন PDF ফি</div></div>' +
@@ -4157,6 +4158,22 @@ TABS.settings = async () => {
     '</div>' +
 
     '</div>';
+  // Cashback service-scope picker: fill services + restore the saved scope.
+  try {
+    const sr = await ABC.api('/admin/services');
+    const sd = await sr.json();
+    const selSvc = document.getElementById('st_cb_svc');
+    if (selSvc) {
+      (sd.services || []).forEach((sv) => {
+        const o = document.createElement('option');
+        o.value = sv.id; o.textContent = (sv.name_bn || sv.name);
+        selSvc.appendChild(o);
+      });
+      const curSvc = (s.cashback && s.cashback.service_id) || '';
+      if (curSvc) selSvc.value = curSvc;
+    }
+  } catch (_) {}
+
 };
 
 window.AdmSt = {
@@ -4282,6 +4299,7 @@ window.AdmSt = {
           percent: Number(v('st_cb')) || 0,
           expiry_days: Math.max(1, Math.min(365, Number(v('st_cb_exp')) || 30)),
           require_service_order: !!(document.getElementById('st_cb_req_svc') || {}).checked,
+          service_id: (document.getElementById('st_cb_svc') || {}).value || null,
         }),
         file_upload: { max_mb: Number(v('st_mb')) || 5, allowed: ['pdf', 'jpg', 'jpeg', 'png'] },
         'bdris_apply.pdf_price': Number(v('st_bdris_pdf')) || 0,

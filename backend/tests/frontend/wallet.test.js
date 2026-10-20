@@ -39,7 +39,7 @@ describe('wallet cashback — daily claim, one button, one place', () => {
   test('hub renders NO action buttons itself (summary + daily slot only)', () => {
     expect(hub).not.toContain('instantRedeemCode(this.dataset.code');
     expect(hub).toContain('cbDailySlot');
-    expect(hub).toContain('ক্যাশব্যাক প্রাপ্য');
+    expect(hub).not.toContain('ক্যাশব্যাক প্রাপ্য'); // all-dates summary removed — daily slot is the only figure
     expect(hub).toContain('রিডিমের জন্য প্রস্তুত');
   });
 
@@ -49,6 +49,12 @@ describe('wallet cashback — daily claim, one button, one place', () => {
     expect(SRC).toContain("ABC.api('/cashback/redeem'");
     expect(daily).toContain('আজকের ক্যাশব্যাক সংগ্রহ করুন');
     expect(daily).toContain('আজকের ক্যাশব্যাক সংগ্রহ করা হয়েছে');
+  });
+
+  test('strict same-day rule in the UI copy: no carry-over promise', () => {
+    expect(SRC).not.toContain('আগামীকাল সংগ্রহ করা যাবে');
+    expect(daily).toContain('আজই সংগ্রহ করতে হবে');
+    expect(daily).toContain('আজ আর নতুন ক্যাশব্যাক সংগ্রহ করা যাবে না');
   });
 
   test('transaction list keeps coupon redeem + redeemed badge (old coupons stay usable)', () => {

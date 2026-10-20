@@ -3,15 +3,15 @@
 // - Cashback % comes from settings: cashback = {enabled, percent}
 // - "Today" = Asia/Dhaka date (user's day, not UTC)
 // - ONE claim per user per day (UNIQUE user_id, day) — idempotent
-// - A claim covers ALL still-unclaimed APPROVED recharges (any date):
-//   however many times the user recharges, they create/collect once
-//   per day on the combined total. Recharges approved after the
-//   day's claim are not lost — they join the next day's claim.
-//   Coverage is exact: claimed recharge ids are stored on the
-//   redemption row (recharge_ids, migration 031). A recharge with a
-//   per-recharge coupon (POST /generate) is excluded here, and a
-//   recharge covered by a daily claim cannot get a coupon either
-//   (the wallet API hides it via the coupon subquery + claim ids).
+// - STRICTLY same-day (owner rule, corrected 2026-10-21): a claim
+//   covers the day's APPROVED recharges up to the moment of the
+//   claim, combined into one total — however many recharges that
+//   is. No carry-over: a day not claimed is forfeited, and a
+//   recharge can never be claimed on a later day. Claimed recharge
+//   ids are stored on the redemption row (recharge_ids, migration
+//   031) so the same recharge can never ALSO mint a per-recharge
+//   coupon (POST /generate guard), and recharges that already have
+//   a per-recharge coupon are excluded from the day's total.
 // ============================================================
 const express = require('express');
 const crypto = require('crypto');
@@ -24,12 +24,13 @@ router.use(requireAuth);
 
 // Dhaka "today" as DATE
 const DHARAKA_DAY_SQL = `DATE((NOW() AT TIME ZONE 'Asia/Dhaka'))`;
-// Still-unclaimed approved recharges for a user: no per-recharge coupon,
-// and not covered by any earlier daily claim (recharge_ids, migration 031).
+// The day's claimable recharges: approved TODAY (Asia/Dhaka), no
+// per-recharge coupon, and not already inside today's claim.
 const UNCLAIMED_WHERE = `
     user_id = $1
     AND type = 'recharge'
     AND status = 'approved'
+    AND DATE((created_at AT TIME ZONE 'Asia/Dhaka')) = ${DHARAKA_DAY_SQL}
     AND NOT EXISTS (SELECT 1 FROM coupons c WHERE c.recharge_id = transactions.id)
     AND NOT EXISTS (
       SELECT 1 FROM daily_cashback_redemptions r
@@ -64,7 +65,7 @@ function makeCouponCode(dayStr) {
 }
 
 // GET /api/cashback/today — claim status for this user:
-// what the next claim would pay (all unclaimed approved recharges),
+// what today's claim would pay (today's approved recharges combined),
 // and whether today's one claim is still available.
 router.get('/today', async (req, res) => {
   try {
@@ -117,8 +118,8 @@ router.post('/redeem', async (req, res) => {
         throw err;
       }
 
-      // Lock every still-unclaimed approved recharge and take the
-      // combined total — one claim per day, however many recharges.
+      // Lock today's claimable recharges and take the combined
+      // total — one claim per day, however many recharges it covers.
       const list = await client.query(UNCLAIMED_LIST_SQL + ' FOR UPDATE', [req.user.id]);
       const rechargeIds = list.rows.map((x) => String(x.id));
       const rechargeTotal = list.rows.reduce((sum, x) => sum + Number(x.amount || 0), 0);
