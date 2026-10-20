@@ -162,14 +162,17 @@ async function extractFields(pdfBuffer, ownerId) {
  */
 async function buildCard(jobId, fieldsJson, images, ownerId) {
     const dir = resolveJobDir(jobId);
+    if (!dir || !fieldsJson || typeof fieldsJson !== 'object' || Array.isArray(fieldsJson)) {
+        return { ok: false, error: 'INVALID_REQUEST' };
+    }
+    if (!fs.existsSync(dir) || !fs.existsSync(path.join(dir, 'work', 'input_data.json'))) {
+        return { ok: false, error: 'JOB_NOT_FOUND' };
+    }
     // L-7: job ownership check
     if (ownerId) {
         let owner = null;
         try { owner = fs.readFileSync(path.join(dir, '.owner'), 'utf8').trim(); } catch (_) {}
         if (owner && owner !== String(ownerId)) return { ok: false, error: 'NOT_YOUR_JOB' };
-    }
-    if (!dir || !fieldsJson || typeof fieldsJson !== 'object' || Array.isArray(fieldsJson)) {
-        return { ok: false, error: 'INVALID_REQUEST' };
     }
     // Optional: replace extracted images with user-uploaded ones (dataURLs)
     if (Array.isArray(images)) {
@@ -181,7 +184,7 @@ async function buildCard(jobId, fieldsJson, images, ownerId) {
             const safeName = path.basename(String(im.name)).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
             passedNames.add(safeName);
             const m = im.dataUrl.match(/^data:image\/(png|jpe?g|webp);base64,(.+)$/);
-            if (!m) continue;
+            if (!m || m[2].length > 14 * 1024 * 1024) continue; // cap at ~10MB decoded
             try { fs.writeFileSync(path.join(imgDir, safeName), Buffer.from(m[2], 'base64')); } catch (e) {}
         }
         if (!passedNames.has('photo.png') && fs.existsSync(path.join(imgDir, 'photo.png'))) {

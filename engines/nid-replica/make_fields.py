@@ -79,11 +79,21 @@ def clean_bn(text):
     return re.sub(r'\s+', ' ', s).strip()
 
 def fmt_dob(s):
-    """1977-02-02 -> 02 Feb 1977"""
-    m = re.match(r"\s*(\d{4})-(\d{2})-(\d{2})\s*", s or "")
+    """1977-02-02 -> 02 Feb 1977; handles Bengali numerals & slash formats"""
+    if not s:
+        return ""
+    t = str(s).translate(str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")).strip()
+    t = re.sub(r"^DATE\s*OF\s*BIRTH\s*[:：]?\s*", "", t, flags=re.I).strip()
+    m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", t)
     if m:
-        return "%s %s %s" % (m.group(3), MONTHS.get(m.group(2), m.group(2)), m.group(1))
-    return (s or "").strip()
+        return "%02d %s %s" % (int(m.group(3)), MONTHS.get(m.group(2).zfill(2), m.group(2)), m.group(1))
+    m = re.match(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$", t)
+    if m:
+        return "%02d %s %s" % (int(m.group(1)), MONTHS.get(m.group(2).zfill(2), m.group(2)), m.group(3))
+    m = re.match(r"^(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})$", t)
+    if m:
+        return "%02d %s %s" % (int(m.group(1)), m.group(2)[:3].capitalize(), m.group(3))
+    return t
 
 
 def bn_digits(s):
@@ -279,21 +289,37 @@ def build_fields(data, tpl):
             print("  সতর্কতা: টেমপ্লেটে স্লট পাওয়া যায়নি:", tpl_label)
             continue
         val = data.get(in_field, "")
+        if in_field == "National ID" and not val:
+            val = data.get("Pin", "") or data.get("Voter No", "")
         if in_field == "Date of Birth":
             val = fmt_dob(val)
+        elif in_field == "Name(English)":
+            val = re.sub(r"^NAME\s*[:：]?\s*", "", str(val or "").strip(), flags=re.I).upper()
         else:
             val = clean_bn(val)
+            if tpl_label == "নাম:":
+                val = re.sub(r"^নাম\s*[:：]?\s*", "", val).strip()
+            elif tpl_label == "পিতা:":
+                val = re.sub(r"^পিতা\s*[:：]?\s*", "", val).strip()
+            elif tpl_label == "মাতা:":
+                val = re.sub(r"^মাতা\s*[:：]?\s*", "", val).strip()
+            elif tpl_label == "জন্মস্থান:":
+                val = re.sub(r"^জন্মস্থান\s*[:：]?\s*", "", val).strip()
+        if tpl_label == "ID NO:":
+            val = str(val or "").translate(str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")).strip()
         fields[tpl_label] = val
 
     # ঠিকানা: Present Address টেবিল থেকে অটো-কম্পোজ (টেমপ্লেটে address_slot থাকলে);
     # Present na thakle Permanent table fallback
     if has_address_slot:
         pa_tbl = data.get("Present Address") or data.get("Permanent Address")
-        fields["ঠিকানা:"] = compose_address(pa_tbl, data)
+        raw_addr = compose_address(pa_tbl, data)
+        fields["ঠিকানা:"] = re.sub(r"^ঠিকানা\s*[:：]?\s*", "", raw_addr).strip()
 
-    # প্রদানের তারিখ: ডিফল্ট টেমপ্লেটের তারিখ ১৬/০৮/২০২৬ বসাও; নির্দিষ্ট তারিখ চাইলে fields.json-এ বদলে নেওয়া যায়
+    # প্রদানের তারিখ: ডিফল্ট আজকের তারিখ বসাও
     if "প্রদানের তারিখ:" in tpl_slots and not fields.get("প্রদানের তারিখ:"):
-        fields["প্রদানের তারিখ:"] = "১৬/০৮/২০২৬"
+        t = datetime.date.today()
+        fields["প্রদানের তারিখ:"] = ("%02d/%02d/%04d" % (t.day, t.month, t.year)).translate(str.maketrans("0123456789", "০১২৩৪৫৬৭৮৯"))
 
     # রক্তের গ্রুপ: টেমপ্লেটের স্লট-নাম অনুযায়ী (নতুন টেমপ্লেটে "/Blood Group:")
     bg = ""

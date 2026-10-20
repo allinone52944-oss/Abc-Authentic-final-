@@ -29,6 +29,42 @@ beforeEach(() => {
   adapter.buildCard.mockReset();
 });
 
+describe('GET /api/nid-engine/price', () => {
+  test('requires auth → 401', async () => {
+    await request(app()).get('/api/nid-engine/price').expect(401);
+  });
+
+  test('default service price and user balance → 200', async () => {
+    db.__routeQuery([
+      ['FROM services WHERE', { rows: [{ id: 10, price: 50 }] }],
+      ['FROM user_services WHERE', { rows: [] }],
+      ['FROM users WHERE', { rows: [{ balance: 120 }] }],
+    ]);
+    const r = await withUser(request(app()).get('/api/nid-engine/price')).expect(200);
+    expect(r.body).toEqual({ ok: true, allowed: true, price: 50, balance: 120, serviceId: 10 });
+  });
+
+  test('custom price override → 200 with custom price', async () => {
+    db.__routeQuery([
+      ['FROM services WHERE', { rows: [{ id: 10, price: 50 }] }],
+      ['FROM user_services WHERE', { rows: [{ custom_price: 30, access_enabled: true }] }],
+      ['FROM users WHERE', { rows: [{ balance: 120 }] }],
+    ]);
+    const r = await withUser(request(app()).get('/api/nid-engine/price')).expect(200);
+    expect(r.body).toEqual({ ok: true, allowed: true, price: 30, balance: 120, serviceId: 10 });
+  });
+
+  test('access disabled in user_services → 200 with allowed: false', async () => {
+    db.__routeQuery([
+      ['FROM services WHERE', { rows: [{ id: 10, price: 50 }] }],
+      ['FROM user_services WHERE', { rows: [{ custom_price: null, access_enabled: false }] }],
+      ['FROM users WHERE', { rows: [{ balance: 120 }] }],
+    ]);
+    const r = await withUser(request(app()).get('/api/nid-engine/price')).expect(200);
+    expect(r.body).toEqual({ ok: true, allowed: false, price: 0, balance: 120, serviceId: 10 });
+  });
+});
+
 describe('POST /api/nid-engine/extract', () => {
   test('requires auth → 401', async () => {
     await request(app()).post('/api/nid-engine/extract').expect(401);
@@ -63,6 +99,7 @@ describe('POST /api/nid-engine/extract', () => {
     expect(r.body).toMatchObject({ ok: true, jobId: 'job1', fields: { name: 'Rahim' } });
     expect(adapter.extractFields).toHaveBeenCalledTimes(1);
     expect(Buffer.isBuffer(adapter.extractFields.mock.calls[0][0])).toBe(true);
+    expect(adapter.extractFields.mock.calls[0][1]).toBe('u1');
   });
 
   test('adapter failure → 422 with its error code', async () => {
@@ -88,26 +125,102 @@ describe('POST /api/nid-engine/build', () => {
     expect(r.body.error).toBe('INVALID_REQUEST');
   });
 
+  test('service access disabled → 403 SERVICE_ACCESS_DISABLED', async () => {
+    db.__routeQuery([
+      ['FROM services WHERE', { rows: [{ id: 10, price: 50 }] }],
+      ['FROM user_services WHERE', { rows: [{ access_enabled: false }] }],
+    ]);
+    const r = await withUser(request(app()).post('/api/nid-engine/build'))
+      .send({ jobId: 'j1', fields: { name: 'R' } }).expect(403);
+    expect(r.body.error).toBe('SERVICE_ACCESS_DISABLED');
+  });
+
+  test('insufficient balance → 402 INSUFFICIENT_BALANCE', async () => {
+    db.__routeQuery([
+      ['FROM services WHERE', { rows: [{ id: 10, price: 50 }] }],
+      ['FROM user_services WHERE', { rows: [] }],
+      ['FROM users WHERE', { rows: [{ balance: 10 }] }],
+    ]);
+    const r = await withUser(request(app()).post('/api/nid-engine/build'))
+      .send({ jobId: 'j1', fields: { name: 'R' } }).expect(402);
+    expect(r.body.error).toBe('INSUFFICIENT_BALANCE');
+    expect(adapter.buildCard).not.toHaveBeenCalled();
+  });
+
   test('JOB_NOT_FOUND → 404', async () => {
+    db.__routeQuery([
+      ['FROM services WHERE', { rows: [] }],
+      ['FROM users WHERE', { rows: [{ balance: 0 }] }],
+    ]);
     adapter.buildCard.mockResolvedValue({ ok: false, error: 'JOB_NOT_FOUND' });
     const r = await withUser(request(app()).post('/api/nid-engine/build'))
       .send({ jobId: 'j1', fields: {} }).expect(404);
     expect(r.body.error).toBe('JOB_NOT_FOUND');
   });
 
+  test('NOT_YOUR_JOB → 403', async () => {
+    db.__routeQuery([
+      ['FROM services WHERE', { rows: [] }],
+      ['FROM users WHERE', { rows: [{ balance: 0 }] }],
+    ]);
+    adapter.buildCard.mockResolvedValue({ ok: false, error: 'NOT_YOUR_JOB' });
+    const r = await withUser(request(app()).post('/api/nid-engine/build'))
+      .send({ jobId: 'j1', fields: {} }).expect(403);
+    expect(r.body.error).toBe('NOT_YOUR_JOB');
+  });
+
   test('other adapter error → 422', async () => {
+    db.__routeQuery([
+      ['FROM services WHERE', { rows: [] }],
+      ['FROM users WHERE', { rows: [{ balance: 0 }] }],
+    ]);
     adapter.buildCard.mockResolvedValue({ ok: false, error: 'RENDER_FAILED' });
     const r = await withUser(request(app()).post('/api/nid-engine/build'))
       .send({ jobId: 'j1', fields: {} }).expect(422);
     expect(r.body.error).toBe('RENDER_FAILED');
   });
 
-  test('happy path → 200 application/pdf download', async () => {
+  test('happy path with wallet debit and order creation → 200 application/pdf', async () => {
     const pdfBytes = Buffer.from('%PDF-1.4 card');
     adapter.buildCard.mockResolvedValue({ ok: true, pdfBuffer: pdfBytes });
+    let walletDebitCalled = false;
+    let orderInsertCalled = false;
+
+    db.__routeQuery([
+      ['FROM services WHERE', { rows: [{ id: 10, price: 40 }] }],
+      ['FROM user_services WHERE', { rows: [] }],
+      ['FROM users WHERE', { rows: [{ balance: 100 }] }],
+      ['FROM transactions WHERE', { rows: [] }],
+      ['wallet_apply', () => { walletDebitCalled = true; return { rows: [{ balance: 60 }] }; }],
+      ['INSERT INTO orders', () => { orderInsertCalled = true; return { rows: [] }; }],
+    ]);
+
     const r = await withUser(request(app()).post('/api/nid-engine/build'))
       .send({ jobId: 'j1', fields: { name: 'R' } }).expect(200);
+
     expect(r.headers['content-type']).toContain('application/pdf');
     expect(r.headers['content-disposition']).toContain('nid-card.pdf');
+    expect(walletDebitCalled).toBe(true);
+    expect(orderInsertCalled).toBe(true);
+  });
+
+  test('already paid job → no double debit on download retry', async () => {
+    const pdfBytes = Buffer.from('%PDF-1.4 card');
+    adapter.buildCard.mockResolvedValue({ ok: true, pdfBuffer: pdfBytes });
+    let walletDebitCalled = false;
+
+    db.__routeQuery([
+      ['FROM services WHERE', { rows: [{ id: 10, price: 40 }] }],
+      ['FROM user_services WHERE', { rows: [] }],
+      ['FROM users WHERE', { rows: [{ balance: 100 }] }],
+      ['FROM transactions WHERE', { rows: [{ id: 99 }] }], // already paid
+      ['wallet_apply', () => { walletDebitCalled = true; return { rows: [] }; }],
+    ]);
+
+    const r = await withUser(request(app()).post('/api/nid-engine/build'))
+      .send({ jobId: 'j1', fields: { name: 'R' } }).expect(200);
+
+    expect(r.headers['content-type']).toContain('application/pdf');
+    expect(walletDebitCalled).toBe(false);
   });
 });

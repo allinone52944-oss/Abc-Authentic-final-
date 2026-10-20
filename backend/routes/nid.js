@@ -128,19 +128,11 @@ router.post('/build', requireAuth, async (req, res) => {
           ]);
           safeLog('[nid-engine] charged', price, 'for user', req.user.id, 'job', jobId);
 
-          if (serviceId) {
-            await db.query(
-              `INSERT INTO orders (user_id, service_id, status, data, price, idempotency_key)
-               VALUES ($1, $2, 'completed', $3, $4, $5)
-               ON CONFLICT (user_id, idempotency_key) DO NOTHING`,
-              [req.user.id, serviceId, JSON.stringify(fields || {}), price, 'nid-' + jobId]
-            ).catch(e => safeLog('[nid-engine] order record insert error:', e.message));
-          }
-        } catch (e) {
+                  } catch (e) {
           if (/INSUFFICIENT_BALANCE/.test(e.message)) {
             return res.status(402).json({
-              error: 'INSUFFICIENT_BALANCE',
-              message: 'পর্যাপ্ত ব্যালেন্স নেই। অনুগ্রহ করে ওয়ালেট রিচার্জ করুন।'
+              error: "INSUFFICIENT_BALANCE",
+              message: "পর্যাপ্ত ব্যালেন্স নেই। অনুগ্রহ করে ওয়ালেট রিচার্জ করুন।"
             });
           }
           if (!/DUPLICATE_TRANSACTION/.test(e.message)) {
@@ -148,6 +140,15 @@ router.post('/build', requireAuth, async (req, res) => {
           }
         }
       }
+    }
+
+    if (serviceId) {
+      await db.query(
+        `INSERT INTO orders (user_id, service_id, status, data, price, idempotency_key)
+         VALUES ($1, $2, 'completed', $3, $4, $5)
+         ON CONFLICT (user_id, idempotency_key) DO NOTHING`,
+        [req.user.id, serviceId, JSON.stringify(fields || {}), price, 'nid-' + jobId]
+      ).catch(e => safeLog('[nid-engine] order record insert error:', e.message));
     }
 
     res.setHeader('Content-Type', 'application/pdf');

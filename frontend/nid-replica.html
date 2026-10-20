@@ -299,7 +299,7 @@
           <input type="file" id="pdfFile" accept="application/pdf,.pdf">
           <div style="font-size:42px; margin-bottom:8px;">📄</div>
           <div style="font-size:16px; font-weight:700; color:var(--primary-700);">NID ফর্মের PDF ফাইল নির্বাচন করুন</div>
-          <div style="font-size:13px; color:var(--text-muted); margin-top:4px;">ক্লিক করুন বা ড্র্যাগ করে ফেলুন (সর্বোচ্চ ৫ MB)</div>
+          <div style="font-size:13px; color:var(--text-muted); margin-top:4px;">ক্লিক করুন বা ড্র্যাগ করে ফেলুন (সর্বোচ্চ ১০ MB)</div>
         </label>
         <div style="height:16px;"></div>
         <button class="btn btn-primary" id="b1" onclick="doExtract()" style="width:100%;">তথ্য বের করুন →</button>
@@ -333,6 +333,9 @@
         <h3 style="color:var(--success); font-size:17px; font-weight:700; margin-bottom:12px;">🎉 আপনার এনআইডি কার্ড প্রস্তুত!</h3>
         <iframe id="cardFrame" title="NID card preview"></iframe>
         <div style="height:16px;"></div>
+        <div style="text-align:center; margin-bottom:12px;">
+          <a id="mobileDlLink" class="btn btn-secondary" target="_blank" style="display:none; width:100%; text-decoration:none; justify-content:center;" download="NID_Card.pdf">📱 মোবাইলে সরাসরি দেখুন / ডাউনলোড করুন</a>
+        </div>
         <div class="row2">
           <button class="btn btn-secondary" onclick="go(3)">← তথ্য পরিবর্তন</button>
           <button class="btn btn-primary" id="b4" onclick="dlPdf()">📥 PDF ডাউনলোড করুন</button>
@@ -371,13 +374,7 @@ function go(n){
   });
   window.scrollTo(0,0);
 }
-function authHeaders(){const t=sessionStorage.getItem('abc_access_token');return t?{'Authorization':'Bearer '+t}:{};}
-async function authFetch(url,opts){
-  opts=opts||{};opts.headers=Object.assign({},opts.headers||{},authHeaders());
-  let r=await fetch(url,opts);
-  if(r.status===401&&await ABC.refreshAccess()){opts.headers=Object.assign({},opts.headers,authHeaders());r=await fetch(url,opts);}
-  return r;
-}
+// Standard ABC.api used for all requests
 
 const STANDARD_FIELDS = [
   { key: 'নাম:', label: 'নাম (বাংলা)', placeholder: 'নাম বাংলায় লিখুন' },
@@ -508,11 +505,11 @@ function renderFieldsUI(){
 async function doExtract(){
   const f=document.getElementById('pdfFile').files[0];
   if(!f){showErr('PDF ফাইল বেছে নিন।');return;}
-  if(f.size>5*1024*1024){showErr('ফাইল ৫ MB-এর বেশি।');return;}
+  if(f.size>10*1024*1024){showErr('ফাইল ১০ MB-এর বেশি।');return;}
   busy('b1',true,'আপলোড হচ্ছে…');go(2);
   try{
     const fd=new FormData();fd.append('pdf',f,f.name);
-    const r=await authFetch('/api'+API+'/extract',{method:'POST',body:fd});
+    const r=await ABC.api(API+'/extract',{method:'POST',body:fd,timeout:60000});
     const j=await r.json();
     if(!r.ok||!j.ok)throw new Error(j.error==='PDF_TOO_LARGE'?'ফাইল অনেক বড়।':j.error==='NOT_A_PDF'?'শুধু PDF দিন।':'তথ্য বের করা যায়নি। আবার চেষ্টা করুন।');
     S.jobId=j.jobId;
@@ -550,6 +547,11 @@ async function updateBalance(){
       if(b3 && currentPrice > 0){
         b3.textContent = 'কার্ড তৈরি করুন (৳' + currentPrice + ') →';
       }
+      if(d.allowed === false){
+        showErr('এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।');
+        const b1 = document.getElementById('b1');
+        if(b1){ b1.disabled = true; b1.textContent = 'সেবা অনুপলব্ধ'; }
+      }
     }
   }catch(e){}
 }
@@ -563,6 +565,7 @@ async function doBuild(){
 
     const r=await ABC.api(API+'/build',{
       method:'POST',
+      timeout:90000,
       body:{
         jobId:S.jobId,
         fields:collectFields(),
@@ -574,24 +577,55 @@ async function doBuild(){
       if (r.status === 402 || j.error === 'INSUFFICIENT_BALANCE') {
         throw new Error(j.message || 'পর্যাপ্ত ব্যালেন্স নেই। অনুগ্রহ করে ওয়ালেট রিচার্জ করুন।');
       }
+      if (r.status === 403 || j.error === 'SERVICE_ACCESS_DISABLED') {
+        throw new Error(j.message || 'এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।');
+      }
       throw new Error(j.message || (j.error==='JOB_NOT_FOUND'?'সেশন শেষ — আবার আপলোড করুন।':'কার্ড তৈরি ব্যর্থ।'));
     }
     S.pdfBlob=await r.blob();
-    document.getElementById('cardFrame').src=URL.createObjectURL(S.pdfBlob);
-    go(4);showOk('কার্ড প্রস্তুত ও ডাউনলোড হয়েছে ✓');
+    if(S.pdfUrl){ try{ URL.revokeObjectURL(S.pdfUrl); }catch(_){} }
+    S.pdfUrl=URL.createObjectURL(S.pdfBlob);
+    document.getElementById('cardFrame').src=S.pdfUrl;
+    const mLink=document.getElementById('mobileDlLink');
+    if(mLink){ mLink.href=S.pdfUrl; mLink.style.display='inline-flex'; }
+    go(4);showOk('কার্ড প্রস্তুত হয়েছে ✓');
     updateBalance();
   }catch(e){showErr(e.message||'কার্ড তৈরি ব্যর্থ।');}
   busy('b3',false);
 }
 function dlPdf(){
   if(!S.pdfBlob){showErr('আগে কার্ড তৈরি করুন।');return;}
+  const url = S.pdfUrl || URL.createObjectURL(S.pdfBlob);
   const a=document.createElement('a');
-  a.href=URL.createObjectURL(S.pdfBlob);
+  a.href=url;
   a.download='NID_Card.pdf';
   document.body.appendChild(a);a.click();a.remove();
   showOk('PDF ডাউনলোড শুরু হয়েছে ✓');
 }
+function setupDropZone(){
+  const dz = document.getElementById('dropZone');
+  const fi = document.getElementById('pdfFile');
+  if(!dz || !fi) return;
+  const updateTxt = (file) => {
+    const info = dz.querySelector('div:nth-child(3)');
+    if(info && file) info.innerHTML = '✅ নির্বাচিত: <b>' + esc(file.name) + '</b> (' + (file.size/(1024*1024)).toFixed(2) + ' MB)';
+  };
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = 'var(--primary-600)'; dz.style.background = '#dbeafe'; });
+  dz.addEventListener('dragleave', e => { e.preventDefault(); dz.style.borderColor = '#93c5fd'; dz.style.background = '#eff6ff'; });
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.style.borderColor = '#93c5fd';
+    dz.style.background = '#eff6ff';
+    if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]){
+      fi.files = e.dataTransfer.files;
+      updateTxt(fi.files[0]);
+    }
+  });
+  fi.addEventListener('change', () => { if(fi.files && fi.files[0]) updateTxt(fi.files[0]); });
+}
+
 (async function init(){
+  setupDropZone();
   const me=await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
   const u=(await me.json()).user;

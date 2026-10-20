@@ -385,13 +385,17 @@ def format_dob(val):
     months = {"01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr",
               "05": "May", "06": "Jun", "07": "Jul", "08": "Aug",
               "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dec"}
-    t = val.strip()
-    m = re.match(r"(\d{4})-(\d{1,2})-(\d{1,2})", t)
+    t = str(val).translate(str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")).strip()
+    t = re.sub(r"^DATE\s*OF\s*BIRTH\s*[:：]?\s*", "", t, flags=re.I).strip()
+    m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", t)
     if m:
         return "%02d %s %s" % (int(m.group(3)), months.get(m.group(2).zfill(2), m.group(2)), m.group(1))
-    m = re.match(r"(\d{1,2})[/-](\d{1,2})[/-](\d{4})", t)
+    m = re.match(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$", t)
     if m:
         return "%02d %s %s" % (int(m.group(1)), months.get(m.group(2).zfill(2), m.group(2)), m.group(3))
+    m = re.match(r"^(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})$", t)
+    if m:
+        return "%02d %s %s" % (int(m.group(1)), m.group(2)[:3].capitalize(), m.group(3))
     return t
 
 
@@ -479,9 +483,20 @@ def clean_template_content_stream(doc, fields, page_no=0):
         if slot == "Date of Birth:":
             val = format_dob(val)
         elif slot == "Name:":
-            val = (val or "").strip().upper()
+            val = re.sub(r"^NAME\s*[:：]?\s*", "", str(val or "").strip(), flags=re.I).upper()
         elif slot == "/Blood Group:":
-            val = (fields.get("/Blood Group:") or fields.get("Blood Group:") or "").strip()
+            val = re.sub(r"^(/|\s)*BLOOD\s*GROUP\s*[:：]?\s*", "", (fields.get("/Blood Group:") or fields.get("Blood Group:") or "").strip(), flags=re.I).strip()
+        elif slot == "ID NO:":
+            val = str(val or "").translate(str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")).strip()
+            val = re.sub(r"^(ID\s*NO|NID|VOTER\s*ID)\s*[:：]?\s*", "", val, flags=re.I).strip()
+        elif slot == "নাম:":
+            val = re.sub(r"^নাম\s*[:：]?\s*", "", str(val or "").strip())
+        elif slot == "পিতা:":
+            val = re.sub(r"^পিতা\s*[:：]?\s*", "", str(val or "").strip())
+        elif slot == "মাতা:":
+            val = re.sub(r"^মাতা\s*[:：]?\s*", "", str(val or "").strip())
+        elif slot == "জন্মস্থান:":
+            val = re.sub(r"^জন্মস্থান\s*[:：]?\s*", "", str(val or "").strip())
 
         gt_val = TEMPLATE_GROUND_TRUTH.get(slot, "")
         if val == gt_val:
@@ -494,6 +509,7 @@ def clean_template_content_stream(doc, fields, page_no=0):
 
     # Address check
     addr_val = (fields.get("ঠিকানা:") or "").strip()
+    addr_val = re.sub(r"^ঠিকানা\s*[:：]?\s*", "", addr_val).strip()
     addr_val = addr_val.translate(str.maketrans("0123456789", "০১২৩৪৫৬৭৮৯"))
     if addr_val == TEMPLATE_GROUND_TRUTH["ঠিকানা:"]:
         needs_render["ঠিকানা:"] = False
@@ -542,8 +558,8 @@ def render_vector_barcode(page, fields):
         print("Warning: pdf417gen not installed, skipping barcode.")
         return
 
-    pin = (fields.get("Pin") or fields.get("ID NO:") or "").strip()
-    nm = fields.get("Name:", "").strip().upper()
+    pin = str(fields.get("Pin") or fields.get("ID NO:") or "").translate(str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")).strip()
+    nm = re.sub(r"^NAME\s*[:：]?\s*", "", str(fields.get("Name:", "")).strip(), flags=re.I).upper()
     dob = format_dob(fields.get("Date of Birth:", ""))
     if not (pin and nm and dob):
         print("WARNING: Pin/Name/DOB nei — barcode khali thakbe!")
@@ -600,9 +616,12 @@ def render_all_fields(page, fields, H, needs_render):
         if slot == "Date of Birth:":
             val = format_dob(val)
         elif slot == "Name:":
-            val = (val or "").strip().upper()
+            val = re.sub(r"^NAME\s*[:：]?\s*", "", str(val or "").strip(), flags=re.I).upper()
         elif slot == "/Blood Group:":
-            val = (fields.get("/Blood Group:") or fields.get("Blood Group:") or "").strip()
+            val = re.sub(r"^(/|\s)*BLOOD\s*GROUP\s*[:：]?\s*", "", (fields.get("/Blood Group:") or fields.get("Blood Group:") or "").strip(), flags=re.I).strip()
+        elif slot == "ID NO:":
+            val = str(val or "").translate(str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")).strip()
+            val = re.sub(r"^(ID\s*NO|NID|VOTER\s*ID)\s*[:：]?\s*", "", val, flags=re.I).strip()
 
         if not val or not val.strip():
             continue
@@ -648,8 +667,18 @@ def render_all_fields(page, fields, H, needs_render):
     for slot, spec in bengali_specs.items():
         if not needs_render.get(slot, False):
             continue
-        txt = fields.get(slot, "")
-        if not txt or not txt.strip():
+        txt = str(fields.get(slot, "") or "").strip()
+        if slot == "নাম:":
+            txt = re.sub(r"^নাম\s*[:：]?\s*", "", txt).strip()
+        elif slot == "পিতা:":
+            txt = re.sub(r"^পিতা\s*[:：]?\s*", "", txt).strip()
+        elif slot == "মাতা:":
+            txt = re.sub(r"^মাতা\s*[:：]?\s*", "", txt).strip()
+        elif slot == "জন্মস্থান:":
+            txt = re.sub(r"^জন্মস্থান\s*[:：]?\s*", "", txt).strip()
+        elif slot == "প্রদানের তারিখ:":
+            txt = re.sub(r"^প্রদানের\s*তারিখ\s*[:：]?\s*", "", txt).strip()
+        if not txt:
             continue
         size_pt = spec["size"]
         stroke_pt = spec["stroke_pt"]
@@ -686,6 +715,7 @@ def render_all_fields(page, fields, H, needs_render):
     # 3. Address wrapping
     if needs_render.get("ঠিকানা:", False):
         addr_txt = (fields.get("ঠিকানা:") or "").strip()
+        addr_txt = re.sub(r"^ঠিকানা\s*[:：]?\s*", "", addr_txt).strip()
         addr_txt = addr_txt.translate(str.maketrans("0123456789", "০১২৩৪৫৬৭৮৯"))
         size_pt = ADDRESS_SPEC["size"]
         px = int(round(size_pt * SCALE))
