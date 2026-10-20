@@ -298,8 +298,41 @@ KNOWN_LABELS = [
     "Home/Holding No", "Post Office", "Postal Code", "Region",
     "Mouza/Moholla", "Additional Mouza/Moholla",
     "City Corporation Or Municipality",
+    # Card format labels
+    "নাম:", "Name:", "পিতা:", "মাতা:", "Date of Birth:", "ID NO:",
+    "জন্মস্থান:", "/Blood Group:", "Blood Group:", "ঠিকানা:",
 ]
 LABEL_SET = set(KNOWN_LABELS)
+
+CARD_LABEL_MAP = {
+    "name:": "Name(English)",
+    "name": "Name(English)",
+    "name(english)": "Name(English)",
+    "name(bangla)": "Name(Bangla)",
+    "নাম:": "Name(Bangla)",
+    "নাম": "Name(Bangla)",
+    "father name": "Father Name",
+    "পিতা:": "Father Name",
+    "পিতা": "Father Name",
+    "mother name": "Mother Name",
+    "মাতা:": "Mother Name",
+    "মাতা": "Mother Name",
+    "date of birth:": "Date of Birth",
+    "date of birth": "Date of Birth",
+    "id no:": "National ID",
+    "id no": "National ID",
+    "national id": "National ID",
+    "birth place:": "Birth Place",
+    "birth place": "Birth Place",
+    "জন্মস্থান:": "Birth Place",
+    "জন্মস্থান": "Birth Place",
+    "রক্তের গ্রুপ:": "Blood Group",
+    "রক্তের গ্রুপ": "Blood Group",
+    "/blood group:": "Blood Group",
+    "blood group:": "Blood Group",
+    "blood group": "Blood Group",
+}
+
 
 # এই লেবেলগুলো টেবিল-সেকশন — ডানপাশের সাধারণ ক্যাপচারে নেওয়া হবে না
 SKIP_GENERIC = {"Present Address", "Permanent Address", "Foreign Address"}
@@ -1032,6 +1065,29 @@ def extract(pdf_path="input.pdf", work_dir="work"):
     except Exception:
         pass
 
+    # Card format & inline Label: Value fallback
+    # কোনো ফিল্ড খালি থাকলে কার্ড স্প্যান বা ইনলাইন টেক্সট থেকে পূরণ করো
+    inline_pat = re.compile(
+        r'^(Date of Birth|ID NO|Name|National ID|Name\(English\)|Name\(Bangla\)|Father Name|Mother Name|Birth Place|নাম|পিতা|মাতা|জন্মস্থান)\s*[:：]\s*(.+)$',
+        re.I
+    )
+    for s in all_spans:
+        txt = s.get("text", "").strip()
+        m = inline_pat.match(txt)
+        if m:
+            c_lbl = CARD_LABEL_MAP.get(m.group(1).lower().strip())
+            if c_lbl and (c_lbl not in data or not data[c_lbl]):
+                data[c_lbl] = m.group(2).strip()
+                continue
+        # কার্ড লেবেল আলাদা স্প্যান হলে
+        c_lbl = CARD_LABEL_MAP.get(txt.lower())
+        if c_lbl and (c_lbl not in data or not data[c_lbl]):
+            # কার্ডের ক্ষেত্রে ফ্রন্ট সাইড লিমিট ৩০৫
+            card_max_x = 305 if s.get("x0", 0) < 250 else 600
+            v = right_value(s, all_spans, set(CARD_LABEL_MAP.keys()) | SIDEBAR_STOP, max_x0=card_max_x)
+            if v:
+                data[c_lbl] = v
+
     candidates = []
     for pno, page in enumerate(doc):
         for i, img in enumerate(page.get_images(full=True)):
@@ -1108,8 +1164,9 @@ def extract(pdf_path="input.pdf", work_dir="work"):
 
 def main():
     pdf_path = sys.argv[1] if len(sys.argv) > 1 else "input.pdf"
-    data, images = extract(pdf_path, "work")
-    print("Done: images=%s -> work/input_data.json" % list(images))
+    work_dir = sys.argv[2] if len(sys.argv) > 2 else "work"
+    data, images = extract(pdf_path, work_dir)
+    print("Done: images=%s -> %s/input_data.json" % (list(images), work_dir))
 
 
 if __name__ == "__main__":

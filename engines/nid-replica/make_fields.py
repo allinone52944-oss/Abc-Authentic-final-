@@ -63,6 +63,12 @@ def clean_bn(text):
     for bad, good in replacements.items():
         s = s.replace(bad, good)
 
+    s = re.sub(r'মো\s+হাম্মদ', 'মোহাম্মদ', s)
+    s = re.sub(r'মোঃ\s*[:ঃ]\s*', 'মোঃ ', s)
+    s = re.sub(r'এষ্টে\s+ট', 'এষ্টেট', s)
+    s = re.sub(r'শ্রে\s+ণী', 'শ্রেণী', s)
+    s = re.sub(r'রুপালী\s*হাউজিং', 'রুপালী হাউজিং', s)
+
     s = re.sub(r'ĺ([\u0995-\u09B9])', r'\1ে', s)
     s = re.sub(r'([\u0995-\u09B9])ৌ', r'\1ৌ', s)
     s = s.replace('ĺ', 'ে')
@@ -165,30 +171,34 @@ def fix_ocr_spelling(text):
 
 def compose_address(pa, data=None):
     """Present Address টেবিলের অংশ থেকে কার্ডের ঠিকানা বানাও; খালি অংশ বাদ।"""
+    if isinstance(pa, str):
+        return fix_ocr_spelling(bn_digits(clean_bn(pa).strip()))
     pa = pa or {}
     data = data or {}
     parts = []
 
-    h = bn_digits(clean_bn(pa.get("holding", "")).strip())
-    if h and h != "-":
-        parts.append("বাসা/হোল্ডিং: " + h)
+    # 1. বাসা/হোল্ডিং: শুধু সংখ্যা বা টেক্সট থাকলে আসবে, ফাঁকা বা '-' থাকলে পুরোপুরি বাদ
+    raw_h = clean_bn(pa.get("holding", "")).strip()
+    if raw_h and re.sub(r'[-–—\s]', '', raw_h):
+        parts.append("বাসা/হোল্ডিং: " + bn_digits(raw_h))
 
+    # 2. গ্রাম ও মৌজা: একই হলে একবার, ভিন্ন হলে কমা দিয়ে মৌজা
     vill_parts = []
     for k in ("village", "additional_village"):
         v = clean_bn(pa.get(k, "")).strip()
-        if v and v not in vill_parts and v != "-":
+        if v and v not in vill_parts and re.sub(r'[-–—\s]', '', v):
             vill_parts.append(v)
     for k in ("mouza", "additional_mouza"):
         v = clean_bn(pa.get(k, "")).strip()
-        if v and v not in vill_parts and v != "-":
+        if v and v not in vill_parts and re.sub(r'[-–—\s]', '', v):
             vill_parts.append(v)
     if vill_parts:
         parts.append("গ্রাম/রাস্তা: " + ", ".join(vill_parts))
 
+    # 3. ডাকঘর ও পোস্ট কোড
     po = clean_bn(pa.get("post_office", "")).strip()
-    pc = bn_digits(clean_bn(pa.get("postal_code", "")).strip())
-    if pc == "-":
-        pc = ""
+    raw_pc = clean_bn(pa.get("postal_code", "")).strip()
+    pc = "" if not re.sub(r'[-–—\s]', '', raw_pc) else bn_digits(raw_pc)
     if po and pc:
         parts.append("ডাকঘর: %s - %s" % (po, pc))
     elif po:
@@ -196,13 +206,14 @@ def compose_address(pa, data=None):
     elif pc:
         parts.append("ডাকঘর: " + pc)
 
+    # 4. উপজেলা, RMO (পল্লী / সিটি কর্পোরেশন / পৌরসভা / শহর) ও জেলা
     upozila = clean_bn(pa.get("upozila", "")).strip() or clean_bn(data.get("Upozila", "")).strip()
     city_full = ""
-    rmo_val = clean_bn(pa.get("rmo", "")).strip()
+    rmo_val = clean_bn(pa.get("rmo", "")).strip() or clean_bn(data.get("RMO", "")).strip()
     if "সিটি" in rmo_val or "পৌরসভা" in rmo_val or "শহর" in rmo_val:
         c_parts = [clean_bn(pa.get(k, "")).strip()
                    for k in ("city_corp", "city_corp2", "city_corp3")]
-        c_parts = [c for c in c_parts if c and c != "-"]
+        c_parts = [c for c in c_parts if c and re.sub(r'[-–—\s]', '', c)]
         city_full = " ".join(c_parts)
     district = clean_bn(pa.get("district", "")).strip() or clean_bn(data.get("District", "")).strip()
 
