@@ -3613,6 +3613,12 @@ window.AdmBn = {
     this._catalog = await r.json();
     return this._catalog;
   },
+  toggleColors() {
+    const chk = document.getElementById('bn_use_colors');
+    const box = document.getElementById('bn_color_fields');
+    if (box) box.style.display = (chk && chk.checked) ? 'grid' : 'none';
+    this.updatePreview();
+  },
   async createForm() {
     this._selDesign = 1;
     const cat = await this._cat();
@@ -3650,7 +3656,8 @@ window.AdmBn = {
       fld('মূল বার্তা (বাংলা)', 'text', 'bn_text_bn') +
       fld('সাব-টেক্সট (English)', 'text', 'bn_text_en') +
       fld('ক্লিক লিংক (Optional Link, e.g. /wallet.html)', 'text', 'bn_link') +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+      '<div class="field" style="margin-top:10px;"><label style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;font-weight:600;"><input type="checkbox" id="bn_use_colors" onchange="AdmBn.toggleColors()"> 🎨 কাস্টম রং প্রয়োগ করুন</label></div>' +
+      '<div id="bn_color_fields" style="display:none;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px;">' +
         '<div class="field"><label>কাস্টম ব্যাকগ্রাউন্ড রং</label><input type="color" id="bn_bg_color" value="#1e40af" style="width:100%;height:38px;padding:2px;border-radius:6px;cursor:pointer;"></div>' +
         '<div class="field"><label>কাস্টম লেখার রং</label><input type="color" id="bn_text_color" value="#ffffff" style="width:100%;height:38px;padding:2px;border-radius:6px;cursor:pointer;"></div>' +
       '</div>' +
@@ -3683,8 +3690,9 @@ window.AdmBn = {
         text_bn: (bn && bn.value) || d.default_bn,
         text_en: (en && en.value) || d.default_en,
         link: (lk && lk.value) || '',
-        bg_color: (bgc && bgc.value) || '',
-        text_color: (txc && txc.value) || '',
+        use_custom_colors: !!document.getElementById('bn_use_colors')?.checked,
+        bg_color: document.getElementById('bn_use_colors')?.checked ? ((bgc && bgc.value) || '') : '',
+        text_color: document.getElementById('bn_use_colors')?.checked ? ((txc && txc.value) || '') : '',
       },
     });
     const pv = document.getElementById('bnPreview');
@@ -3703,8 +3711,9 @@ window.AdmBn = {
         text_bn: v('bn_text_bn'),
         text_en: v('bn_text_en'),
         link: v('bn_link'),
-        bg_color: v('bn_bg_color'),
-        text_color: v('bn_text_color'),
+        use_custom_colors: !!document.getElementById('bn_use_colors')?.checked,
+        bg_color: document.getElementById('bn_use_colors')?.checked ? v('bn_bg_color') : '',
+        text_color: document.getElementById('bn_use_colors')?.checked ? v('bn_text_color') : '',
       },
     }});
     if (!r.ok) { alert('❌ ব্যানার তৈরি ব্যর্থ হয়েছে'); return; }
@@ -3752,7 +3761,8 @@ window.AdmBn = {
       fld('মূল বার্তা (বাংলা)', 'text', 'bn_text_bn', c.text_bn || '') +
       fld('সাব-টেক্সট (English)', 'text', 'bn_text_en', c.text_en || '') +
       fld('ক্লিক লিংক (Optional)', 'text', 'bn_link', c.link || '') +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+      '<div class="field" style="margin-top:10px;"><label style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;font-weight:600;"><input type="checkbox" id="bn_use_colors" ' + (c.use_custom_colors ? 'checked' : '') + ' onchange="AdmBn.toggleColors()"> 🎨 কাস্টম রং প্রয়োগ করুন</label></div>' +
+      '<div id="bn_color_fields" style="display:' + (c.use_custom_colors ? 'grid' : 'none') + ';grid-template-columns:1fr 1fr;gap:12px;margin-top:4px;">' +
         '<div class="field"><label>কাস্টম ব্যাকগ্রাউন্ড রং</label><input type="color" id="bn_bg_color" value="' + esc(c.bg_color || '#1e40af') + '" style="width:100%;height:38px;padding:2px;border-radius:6px;cursor:pointer;"></div>' +
         '<div class="field"><label>কাস্টম লেখার রং</label><input type="color" id="bn_text_color" value="' + esc(c.text_color || '#ffffff') + '" style="width:100%;height:38px;padding:2px;border-radius:6px;cursor:pointer;"></div>' +
       '</div>' +
@@ -3779,8 +3789,9 @@ window.AdmBn = {
         text_bn: v('bn_text_bn'),
         text_en: v('bn_text_en'),
         link: v('bn_link'),
-        bg_color: v('bn_bg_color'),
-        text_color: v('bn_text_color'),
+        use_custom_colors: !!document.getElementById('bn_use_colors')?.checked,
+        bg_color: document.getElementById('bn_use_colors')?.checked ? v('bn_bg_color') : '',
+        text_color: document.getElementById('bn_use_colors')?.checked ? v('bn_text_color') : '',
       },
     }});
     if (!r.ok) { alert('❌ সংরক্ষণ ব্যর্থ হয়েছে'); return; }
