@@ -207,3 +207,20 @@ describe('GET /api/invite/:code/validate (public)', () => {
     expect(r.body).toEqual({ valid: false });
   });
 });
+
+describe('invite code length vs schema (regression: creation always failed live)', () => {
+  // Live bug 2026-10-21: genCode() mints 36-char codes ('INV-' + 32
+  // hex) but invite_links.code was VARCHAR(24) — every INSERT failed
+  // with "value too long" and the endpoint returned 500 FAILED.
+  // Mocked DBs cannot see column limits, so pin the contract here.
+  const fs = require('fs');
+  const path = require('path');
+  test('generated code format is 36 chars and migration 033 widens the column to fit', () => {
+    const src = fs.readFileSync(path.join(__dirname, '../../routes/invites.js'), 'utf8');
+    expect(src).toContain("crypto.randomBytes(16).toString('hex')");
+    expect(src).toContain("return 'INV-' +");
+    const mig = fs.readFileSync(
+      path.join(__dirname, '../../../database/migrations/033_invite_code_length.sql'), 'utf8');
+    expect(mig).toMatch(/ALTER COLUMN code TYPE VARCHAR\(48\)/);
+  });
+});

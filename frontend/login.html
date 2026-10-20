@@ -428,6 +428,18 @@
         <button class="btn-submit" id="lg_btn" onclick="doLogin()">লগইন করুন →</button>
         <div class="err" id="lg_err"></div>
 
+        <div id="verifyWrap" class="forgot-box" style="display:none;">
+          <div style="font-size:14px;line-height:1.7;margin-bottom:10px;">📩 আপনার ইমেইল এখনো যাচাই হয়নি<span id="vf_email_wrap"> (<b id="vf_email"></b>)</span>। যাচাই ছাড়া লগইন করা যাবে না — নিচে কোড পাঠিয়ে যাচাই করুন, অথবা আগের পাঠানো ইমেইলের লিংকে ক্লিক করলেও হবে।</div>
+          <button class="btn-submit" id="vf_send" onclick="sendVerifyCode()">📩 যাচাই কোড পাঠান</button>
+          <div class="field" style="margin-top:10px;">
+            <label>ইমেইলে পাওয়া ৬-সংখ্যার কোড</label>
+            <input type="text" id="vf_code" inputmode="numeric" maxlength="6" placeholder="123456" autocomplete="one-time-code">
+          </div>
+          <button class="btn-submit" style="margin-top:4px;" onclick="doVerifyCode()">✅ যাচাই করুন</button>
+          <div class="err" id="vf_err"></div>
+          <div class="forgot-link"><a href="#" onclick="resendVerifyLink();return false;">✉️ যাচাই লিংক আবার পাঠান</a></div>
+        </div>
+
         <div class="forgot-link">
           <a href="#" onclick="showForgot();return false;">🔑 পাসওয়ার্ড ভুলে গেছেন?</a>
         </div>
@@ -537,6 +549,66 @@ async function doForgot(){
   }
 }
 
+let _verifyEmail = '';
+function showVerifyBox(email) {
+  if (email) _verifyEmail = email;
+  const w = document.getElementById('verifyWrap');
+  if (w) w.style.display = 'block';
+  const e = document.getElementById('vf_email');
+  if (e) e.textContent = _verifyEmail || '';
+}
+async function sendVerifyCode() {
+  const err = document.getElementById('vf_err');
+  const btn = document.getElementById('vf_send');
+  err.textContent = '';
+  if (!_verifyEmail) { err.textContent = 'ইমেইল পাওয়া যায়নি — আবার লগইন চেষ্টা করুন'; return; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ পাঠানো হচ্ছে...'; }
+  try {
+    const r = await fetch('/api/auth/send-otp', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: _verifyEmail })
+    });
+    const d = await r.json();
+    if (!r.ok) { err.textContent = d.error === 'TOO_MANY_REQUESTS' ? 'অনেকবার চেষ্টা হয়েছে — কিছুক্ষণ পর আবার চেষ্টা করুন' : 'কোড পাঠানো যায়নি, আবার চেষ্টা করুন'; return; }
+    err.style.color = '#16a34a';
+    err.textContent = '✅ কোড পাঠানো হয়েছে — ইমেইল চেক করুন (কোড ৫ মিনিট কার্যকর)।';
+    setTimeout(() => { err.style.color = ''; }, 4000);
+  } catch (e) { err.textContent = 'নেটওয়ার্ক সমস্যা'; }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '📩 যাচাই কোড পাঠান'; } }
+}
+async function doVerifyCode() {
+  const err = document.getElementById('vf_err');
+  const code = document.getElementById('vf_code').value.trim();
+  err.textContent = '';
+  if (!/^\d{6}$/.test(code)) { err.textContent = '৬-সংখ্যার কোডটি লিখুন'; return; }
+  try {
+    const r = await fetch('/api/auth/verify-otp', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: _verifyEmail, code })
+    });
+    const d = await r.json();
+    if (!r.ok) { err.textContent = 'কোডটি মেলেনি অথবা মেয়াদ শেষ — নতুন কোড পাঠিয়ে আবার চেষ্টা করুন'; return; }
+    err.style.color = '#16a34a';
+    err.textContent = '✅ ইমেইল যাচাই সম্পন্ন! লগইন করা হচ্ছে...';
+    setTimeout(() => { err.style.color = ''; }, 4000);
+    doLogin();
+  } catch (e) { err.textContent = 'নেটওয়ার্ক সমস্যা'; }
+}
+async function resendVerifyLink() {
+  const err = document.getElementById('vf_err');
+  err.textContent = '';
+  if (!_verifyEmail) { err.textContent = 'ইমেইল পাওয়া যায়নি — আবার লগইন চেষ্টা করুন'; return; }
+  try {
+    await fetch('/api/auth/resend-verification', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: _verifyEmail })
+    });
+    err.style.color = '#16a34a';
+    err.textContent = '✅ যাচাই লিংক পাঠানো হয়েছে — ইমেইলের লিংকে ক্লিক করুন।';
+    setTimeout(() => { err.style.color = ''; }, 4000);
+  } catch (e) { err.textContent = 'নেটওয়ার্ক সমস্যা'; }
+}
+
 async function doLogin() {
   const id = document.getElementById('lg_id').value.trim();
   const pw = document.getElementById('lg_pw').value;
@@ -553,7 +625,12 @@ async function doLogin() {
     });
     const d = await r.json();
     if (!r.ok) {
-      err.textContent = d.error || 'Login ব্যর্থ';
+      if (d.error === 'EMAIL_NOT_VERIFIED') {
+        err.textContent = 'আপনার ইমেইল এখনো যাচাই হয়নি — নিচের বাক্স থেকে যাচাই করুন।';
+        showVerifyBox(d.email || '');
+      } else {
+        err.textContent = d.error || 'Login ব্যর্থ';
+      }
       btn.disabled = false;
       btn.textContent = 'লগইন করুন →';
       return;
@@ -595,6 +672,7 @@ async function doRegister() {
   const btn = document.querySelector('#tab-reg .btn-submit');
   err.textContent = '';
   const body = {
+    invite_code: (new URLSearchParams(location.search).get('invite') || sessionStorage.getItem('abc_invite') || '') || undefined,
     name: document.getElementById('rg_name').value.trim(),
     phone: document.getElementById('rg_phone').value.trim(),
     whatsapp: document.getElementById('rg_wa').value.trim(),
@@ -620,9 +698,12 @@ async function doRegister() {
       err.textContent = REG_ERRORS[d.error] || (d.error || 'রেজিস্ট্রেশন সম্পন্ন করা সম্ভব হয়নি');
       return;
     }
-    alert('✅ রেজিস্ট্রেশন সফল হয়েছে! এখন লগইন করুন।');
+    alert(d.email_sent === false
+      ? '✅ রেজিস্ট্রেশন সফল! ইমেইল পাঠাতে সমস্যা হয়েছে — লগইন ট্যাবের যাচাই বাক্স থেকে কোড পাঠিয়ে যাচাই করুন।'
+      : '✅ রেজিস্ট্রেশন সফল! আপনার ইমেইলে যাচাই লিংক পাঠানো হয়েছে — লিংকে ক্লিক করুন, বা নিচের বাক্সে কোড দিয়ে যাচাই করুন।');
     document.getElementById('lg_id').value = body.phone;
     showTab('login', document.querySelectorAll('.tab')[0]);
+    showVerifyBox(body.email);
   } catch (e) {
     err.textContent = 'নেটওয়ার্ক সমস্যা হয়েছে';
   } finally {
@@ -631,10 +712,17 @@ async function doRegister() {
 }
 
 (async()=>{
+  // Invite link (?invite=INV-...): keep the code for registration and
+  // never hide the register tab for invited visitors.
+  try {
+    const inv = new URLSearchParams(location.search).get('invite');
+    if (inv) sessionStorage.setItem('abc_invite', inv);
+  } catch (e) {}
+  const hasInvite = !!sessionStorage.getItem('abc_invite');
   try{
     const r = await fetch('/api/auth/registration-status');
     const d = await r.json();
-    if(d.enabled === false){
+    if(d.enabled === false && !hasInvite){
       const regTab = document.querySelectorAll('.tab')[1];
       if (regTab) regTab.style.display = 'none';
     }
