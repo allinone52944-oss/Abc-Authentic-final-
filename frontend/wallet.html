@@ -418,58 +418,33 @@ function renderCashbackHub(d) {
 
   let html = '';
 
-  // 1. Ready-to-redeem coupons
+  // 1. Ready-to-redeem coupons — SUMMARY ONLY. The redeem/copy buttons live
+  // on each recharge's own card in the transaction list below, so a coupon
+  // action appears in exactly one place (dedup fix, 2026-10-21).
   if (unredeemed.length > 0) {
-    html += '<div style="margin-bottom:12px;">' +
-      '<div style="font-size:13px;font-weight:700;color:#854d0e;margin-bottom:8px;display:flex;align-items:center;gap:6px;">' +
-        '<span>🎟️ প্রস্তুতকৃত ক্যাশব্যাক কুপন (ব্যালেন্সে রিডিম করুন):</span>' +
-      '</div>';
-    unredeemed.forEach(t => {
-      const c = t.coupon;
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:#fefce8;border:1px solid #fef08a;border-radius:10px;padding:12px 14px;margin-bottom:8px;">' +
-        '<div>' +
-          '<div style="font-size:14px;font-weight:800;color:#854d0e;letter-spacing:0.5px;">' +
-            'কোড: <span style="font-family:monospace;background:#fef08a;padding:2px 8px;border-radius:6px;">' + esc(c.code) + '</span>' +
-          '</div>' +
-          '<div style="font-size:12px;color:#a16207;margin-top:3px;">' +
-            'ক্যাশব্যাক মূল্য: <b>৳' + bn(c.amount) + '</b> (রিচার্জ ৳' + bn(t.amount) + ')' +
-          '</div>' +
-        '</div>' +
-        '<div style="display:flex;gap:8px;">' +
-          '<button class="cb-btn" data-code="' + esc(c.code) + '" onclick="instantRedeemCode(this.dataset.code)">⚡ ওয়ালেটে রিডিম করুন</button>' +
-          '<button class="cb-btn sec" data-code="' + esc(c.code) + '" onclick="copyCode(this.dataset.code)">📋 কপি</button>' +
-        '</div>' +
-      '</div>';
-    });
-    html += '</div>';
+    const totalAmt = unredeemed.reduce((sum, t) => sum + Number((t.coupon && t.coupon.amount) || 0), 0);
+    html += '<div style="display:flex;align-items:center;gap:10px;background:#fefce8;border:1px solid #fef08a;border-radius:10px;padding:12px 14px;margin-bottom:8px;">' +
+      '<span style="font-size:20px;">🎟️</span>' +
+      '<div style="font-size:13px;color:#854d0e;">' +
+        '<b>আপনার ' + bn(unredeemed.length) + 'টি ক্যাশব্যাক কুপন (মোট ৳' + bn(totalAmt) + ') রিডিমের জন্য প্রস্তুত।</b>' +
+        '<div style="font-size:12px;color:#a16207;margin-top:2px;">নিচে লেনদেনের তালিকায় সংশ্লিষ্ট রিচার্জের পাশে "ওয়ালেটে রিডিম করুন" বাটন থেকে ব্যালেন্সে জমা করুন।</div>' +
+      '</div>' +
+    '</div>';
   }
 
-  // 2. Eligible approved recharges (1-click coupon creation)
+  // 2. Eligible approved recharges — SUMMARY ONLY. The 1-click create button
+  // lives on each recharge's own card in the transaction list (single place).
   if (cbCfg.enabled && cbCfg.percent > 0 && eligible.length > 0) {
-    html += '<div style="margin-bottom:12px;">' +
-      '<div style="font-size:13px;font-weight:700;color:#065f46;margin-bottom:8px;display:flex;align-items:center;gap:6px;">' +
-        '<span>🎉 অনুমোদিত রিচার্জ—ক্যাশব্যাক কুপন সংগ্রহ করুন:</span>' +
+    const totalExp = eligible.reduce((sum, t) => sum + Math.floor(Number(t.amount) * cbCfg.percent / 100 * 100) / 100, 0);
+    if (totalExp > 0) {
+      html += '<div style="display:flex;align-items:center;gap:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px;margin-bottom:8px;">' +
+        '<span style="font-size:20px;">🎉</span>' +
+        '<div style="font-size:13px;color:#065f46;">' +
+          '<b>আপনার ' + bn(eligible.length) + 'টি অনুমোদিত রিচার্জে মোট ৳' + bn(totalExp) + ' ক্যাশব্যাক প্রাপ্য।</b>' +
+          '<div style="font-size:12px;color:#047857;margin-top:2px;">নিচে লেনদেনের তালিকায় প্রতিটি রিচার্জের পাশের বাটন থেকে ১-ক্লিকে কুপন তৈরি করুন।</div>' +
+        '</div>' +
       '</div>';
-    eligible.forEach(t => {
-      const expected = Math.floor(Number(t.amount) * cbCfg.percent / 100 * 100) / 100;
-      if (expected > 0) {
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px;margin-bottom:8px;">' +
-          '<div>' +
-            '<div style="font-size:14px;font-weight:800;color:#065f46;">' +
-              '৳' + bn(t.amount) + ' রিচার্জ সফল হয়েছে' +
-            '</div>' +
-            '<div style="font-size:12px;color:#047857;margin-top:3px;">' +
-              'প্রাপ্য ক্যাশব্যাক: <b style="color:#059669;">৳' + bn(expected) + '</b> (' + bn(cbCfg.percent) + '%)' +
-              (t.trxid ? ' • TrxID: ' + esc(shortRef(t.trxid)) : '') +
-            '</div>' +
-          '</div>' +
-          '<button class="cb-btn" data-id="' + esc(t.id) + '" onclick="generateCashbackCoupon(this.dataset.id, this)">' +
-            '⚡ ১-ক্লিকে কুপন তৈরি করুন (৳' + bn(expected) + ')' +
-          '</button>' +
-        '</div>';
-      }
-    });
-    html += '</div>';
+    }
   }
 
   // 3. Pending recharges
@@ -482,7 +457,7 @@ function renderCashbackHub(d) {
       '<span style="font-size:20px;">⏳</span>' +
       '<div>' +
         '<b>আপনার ৳' + bn(p.amount) + ' ব্যালেন্স রিচার্জ ভেরিফিকেশন পেন্ডিং রয়েছে।</b>' +
-        '<div style="font-size:12px;color:#b45309;margin-top:2px;">এডমিন TrxID ভেরিফাই করলেই আপনি এই কার্ড থেকে সরাসরি ১-ক্লিকে ক্যাশব্যাক কুপন পেয়ে যাবেন!' + expText + '</div>' +
+        '<div style="font-size:12px;color:#b45309;margin-top:2px;">এডমিন TrxID ভেরিফাই করলেই লেনদেনের তালিকায় রিচার্জের পাশে ১-ক্লিকে ক্যাশব্যাক কুপনের বাটন চলে আসবে!' + expText + '</div>' +
       '</div>' +
     '</div>';
   }
@@ -494,7 +469,7 @@ function renderCashbackHub(d) {
         '<div style="font-size:32px;line-height:1;">⚡</div>' +
         '<div style="font-size:13px;line-height:1.6;">' +
           '<b style="color:#0f172a;">প্রতিটি সফল ব্যালেন্স রিচার্জে পাবেন ' + bn(cbCfg.percent) + '% ক্যাশব্যাক কুপন!</b><br>' +
-          '<span style="color:#64748b;">উপরে যেকোনো পেমেন্ট মেথডে টাকা পাঠিয়ে TrxID সাবমিট করুন। এডমিন অনুমোদনের সাথে সাথেই এই কার্ডে ১-ক্লিক কুপন বাটন চলে আসবে এবং সরাসরি ওয়ালেট ব্যালেন্সে রিডিম করতে পারবেন।</span>' +
+          '<span style="color:#64748b;">উপরে যেকোনো পেমেন্ট মেথডে টাকা পাঠিয়ে TrxID সাবমিট করুন। এডমিন অনুমোদনের সাথে সাথেই লেনদেনের তালিকায় রিচার্জের পাশে ১-ক্লিক কুপন বাটন চলে আসবে এবং সরাসরি ওয়ালেট ব্যালেন্সে রিডিম করতে পারবেন।</span>' +
         '</div>' +
       '</div>';
     } else {
