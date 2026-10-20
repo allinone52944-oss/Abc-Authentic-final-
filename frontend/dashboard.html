@@ -1490,7 +1490,21 @@ const GreetVoice = (() => {
       if (Array.isArray(fallback) && fallback.length) return fallback[0];
       if (typeof fallback === "string" && fallback) return fallback;
     }
-    return null;
+    const voice = VOICES.includes(rot) ? rot : "male";
+    return `/audio/greet-${rel}-${voice}.mp3`;
+  }
+
+  function selectedVoice() {
+    const cfg = window._vgCfg || {};
+    if (cfg.rotation !== false) {
+      try {
+        const loginGreeting = JSON.parse(sessionStorage.getItem("abc_greet_on_login") || "null");
+        if (loginGreeting && Number.isInteger(loginGreeting.voice) && VOICES[loginGreeting.voice]) {
+          return VOICES[loginGreeting.voice];
+        }
+      } catch (e) {}
+    }
+    return VOICES.includes(cfg.voice_rotation) ? cfg.voice_rotation : "male";
   }
 
   function play(filePath) {
@@ -1498,7 +1512,14 @@ const GreetVoice = (() => {
     if (!filePath) return;
     try {
       _audio = new Audio(filePath);
-      _audio.play().catch(() => {});
+      const current = _audio;
+      current.onended = () => updateVoiceButtons(false);
+      current.onerror = () => updateVoiceButtons(false);
+      current.play().then(() => {
+        if (_audio === current) updateVoiceButtons(true);
+      }).catch(() => {
+        if (_audio === current) updateVoiceButtons(false);
+      });
     } catch (e) {}
   }
 
@@ -1519,15 +1540,10 @@ const GreetVoice = (() => {
       updateVoiceButtons(false);
       return;
     }
-    const rot = (window._vgCfg && window._vgCfg.voice_rotation) || "male";
+    const rot = selectedVoice();
     const f = fileForUser(user, rot);
     if (f) {
       play(f);
-      updateVoiceButtons(true);
-      if (_audio) {
-        _audio.onended = () => updateVoiceButtons(false);
-        _audio.onerror = () => updateVoiceButtons(false);
-      }
     } else {
       alert("এই শুভেচ্ছা বার্তার অডিও ফাইল সংযুক্ত নেই।");
     }
@@ -1573,10 +1589,12 @@ const GreetVoice = (() => {
     try {
       const last = sessionStorage.getItem("abc_greet_played");
       if (last === "1") return;
-      sessionStorage.setItem("abc_greet_played", "1");
-      const rot = (window._vgCfg && window._vgCfg.voice_rotation) || "male";
+      const rot = selectedVoice();
       const f = fileForUser(user, rot);
-      if (f) play(f);
+      if (f) {
+        sessionStorage.setItem("abc_greet_played", "1");
+        play(f);
+      }
     } catch (e) {}
   }
 
