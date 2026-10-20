@@ -760,7 +760,21 @@ function clearBtns() { $('btnRow').innerHTML = ''; }
 
 /* ═══════════ acks / storage helpers ═══════════ */
 function getAcks() { try { return JSON.parse(localStorage.getItem('bdris_acks') || '[]'); } catch { return []; } }
+function reportAckToServer(a) {
+  // জমা হওয়া আবেদন সার্ভারেও জমা হয় — যাতে admin সব আবেদন দেখতে
+  // পান (শুধু এই ব্রাউজারের তালিকায় নয়)। ব্যর্থ হলে স্থানীয়
+  // রেকর্ড থাকছেই; নম্বর ছাড়া রেকর্ড পাঠানো হয় না।
+  try {
+    if (!a || !a.no || a.no === 'সংরক্ষিত নয়') return;
+    fetch('/api/bdris-apply/applications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
+      body: JSON.stringify({ ack_no: a.no, name: a.name || '' })
+    }).catch(() => {});
+  } catch {}
+}
 function addAck(a) {
+  reportAckToServer(a);
   const l = getAcks();
   l.unshift(a);
   // পুরোনো এন্ট্রির PDF খোঁচা বাদ — localStorage ফুলে উড়ে না যায় (শুধু শেষ আবেদনের কপি থাকে)
@@ -769,6 +783,13 @@ function addAck(a) {
 }
 function delAck(id) {
   try {
+    const rec = getAcks().find(x => String(x.id) === String(id));
+    if (rec && rec.no) {
+      fetch('/api/bdris-apply/applications/' + encodeURIComponent(rec.no), {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + getToken() }
+      }).catch(() => {});
+    }
     const l = getAcks().filter(x => String(x.id) !== String(id));
     localStorage.setItem('bdris_acks', JSON.stringify(l));
   } catch {}

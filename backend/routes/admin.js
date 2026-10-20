@@ -602,6 +602,32 @@ router.put('/orders/:id/status', async (req, res) => {
   }
 });
 
+// ---- BDRIS applications (auto service) ---------------------------
+// Submitted birth-registration applications from ALL customers
+// (recorded by POST /api/bdris-apply/applications). The owner asked
+// that everything a customer does — auto or manual — reaches the
+// admin, and that the admin can delete it.
+router.get('/bdris-applications', async (req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT a.id, a.ack_no, a.applicant_name, a.created_at,
+              u.name AS user_name, u.phone AS user_phone
+         FROM bdris_applications a
+         JOIN users u ON u.id = a.user_id
+        ORDER BY a.created_at DESC LIMIT 200`);
+    res.json({ ok: true, applications: r.rows });
+  } catch (e) { safeLog('[admin] bdris applications error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+router.delete('/bdris-applications/:id', async (req, res) => {
+  try {
+    const r = await db.query('DELETE FROM bdris_applications WHERE id = $1 RETURNING ack_no', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    await logActivity(req.user.id, 'bdris_application.delete', { ack_no: r.rows[0].ack_no });
+    res.json({ ok: true });
+  } catch (e) { safeLog('[admin] bdris application delete error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
 // DELETE /api/admin/orders/:id?refund=yes|no — permanently delete order (with optional refund)
 router.delete('/orders/:id', async (req, res) => {
   try {

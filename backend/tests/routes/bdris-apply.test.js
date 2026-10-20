@@ -166,3 +166,33 @@ describe('GET /api/bdris-apply/prices', () => {
     expect(r.body.pdfPrice).toBe(0);
   });
 });
+
+describe('POST/GET/DELETE /api/bdris-apply/applications (আবেদনের সার্ভার রেকর্ড)', () => {
+  test('record a submitted application → 201, idempotent on (user, ack)', async () => {
+    db.__routeQuery([
+      ['INSERT INTO bdris_applications', { rows: [{ id: 'a1', ack_no: '265530312', applicant_name: 'টেস্ট', created_at: 'x' }] }],
+    ]);
+    const r = await withUser(request(app()).post('/api/bdris-apply/applications'))
+      .send({ ack_no: '265530312', name: 'টেস্ট' }).expect(201);
+    expect(r.body.application.ack_no).toBe('265530312');
+    const ins = db.query.mock.calls.find((c) => /INSERT INTO bdris_applications/.test(c[0]));
+    expect(ins[0]).toMatch(/ON CONFLICT \(user_id, ack_no\) DO NOTHING/);
+    expect(ins[1]).toEqual(['u1', '265530312', 'টেস্ট']);
+  });
+
+  test('missing ack_no → 400', async () => {
+    await withUser(request(app()).post('/api/bdris-apply/applications')).send({}).expect(400);
+  });
+
+  test('own list + own delete by ack number', async () => {
+    db.__routeQuery([
+      ['FROM bdris_applications', { rows: [{ id: 'a1', ack_no: '123' }] }],
+      ['DELETE FROM bdris_applications', { rows: [{ id: 'a1' }] }],
+    ]);
+    const r = await withUser(request(app()).get('/api/bdris-apply/applications')).expect(200);
+    expect(r.body.applications).toHaveLength(1);
+    await withUser(request(app()).delete('/api/bdris-apply/applications/123')).expect(200);
+    const del = db.query.mock.calls.find((c) => /DELETE FROM bdris_applications/.test(c[0]));
+    expect(del[1]).toEqual(['u1', '123']); // always scoped to the caller
+  });
+});

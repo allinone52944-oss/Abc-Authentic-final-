@@ -650,3 +650,23 @@ describe('recharge/pending (TTS notifier endpoint)', () => {
     expect(r.body.list[0].user_name).toBe('করিম');
   });
 });
+
+describe('BDRIS applications (admin visibility + delete)', () => {
+  test('GET /api/admin/bdris-applications lists all customers applications', async () => {
+    db.__routeQuery([
+      ['FROM bdris_applications a', { rows: [{ id: 'a1', ack_no: '265530312', user_name: 'কাস্টমার', user_phone: '01700000000' }] }],
+    ]);
+    const r = await withAdmin(request(app()).get('/api/admin/bdris-applications')).expect(200);
+    expect(r.body.applications).toHaveLength(1);
+    expect(r.body.applications[0].ack_no).toBe('265530312');
+  });
+
+  test('DELETE /api/admin/bdris-applications/:id removes the record', async () => {
+    db.__routeQuery([
+      ['DELETE FROM bdris_applications', { rows: [{ ack_no: '265530312' }] }],
+    ]);
+    await withAdmin(request(app()).delete('/api/admin/bdris-applications/a1')).expect(200);
+    const del = db.query.mock.calls.find((c) => /DELETE FROM bdris_applications/.test(c[0]));
+    expect(del[1]).toEqual(['a1']);
+  });
+});

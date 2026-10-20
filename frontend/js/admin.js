@@ -1575,10 +1575,36 @@ TABS.orders = async () => {
   }
 
   html += '</tbody></table></div></div></div>';
+  html += '<div class="card" style="margin-top:16px;"><h3>🕘 BDRIS আবেদনসমূহ (অটো সেবা)</h3>' +
+    '<div id="admBdrisApps" class="s">⏳ লোড হচ্ছে…</div></div>';
   content.innerHTML = html;
+  AdmOrders.loadBdrisApps();
 };
 
 window.AdmOrders = {
+  async loadBdrisApps() {
+    const box = document.getElementById('admBdrisApps');
+    if (!box) return;
+    try {
+      const r = await ABC.api('/admin/bdris-applications');
+      const d = await r.json();
+      const apps = d.applications || [];
+      if (!apps.length) { box.textContent = 'এখনো কোনো BDRIS আবেদন জমা হয়নি।'; return; }
+      box.innerHTML = '<div class="tw"><table><thead><tr><th>আবেদন নম্বর</th><th>আবেদনকারী</th><th>গ্রাহক</th><th>সময়</th><th></th></tr></thead><tbody>' +
+        apps.map(a =>
+          '<tr><td>' + esc(a.ack_no) + '</td><td>' + esc(a.applicant_name || '') + '</td>' +
+          '<td>' + esc(a.user_name || '') + ' <span class="s">' + esc(a.user_phone || '') + '</span></td>' +
+          '<td class="s">' + new Date(a.created_at).toLocaleString('bn-BD') + '</td>' +
+          '<td><button class="mini-btn danger" onclick="AdmOrders.deleteBdrisApp(' + jqAttr(a.id) + ')">🗑️ ডিলিট</button></td></tr>'
+        ).join('') + '</tbody></table></div>';
+    } catch (e) { box.textContent = 'লোড ব্যর্থ হয়েছে।'; }
+  },
+  async deleteBdrisApp(id) {
+    if (!confirm('এই BDRIS আবেদনের রেকর্ড মুছে ফেলবেন? (আসল আবেদন সরকারি পোর্টালে থেকে যাবে — শুধু এখানের রেকর্ড মুছবে)')) return;
+    const r = await ABC.api('/admin/bdris-applications/' + id, { method: 'DELETE' });
+    if (!r.ok) { alert('ডিলিট ব্যর্থ হয়েছে'); return; }
+    AdmOrders.loadBdrisApps();
+  },
   copyData() {
     const t = TABS._viewRaw || '';
     if (!t) { alert('কপি করার মতো ডেটা নেই'); return; }

@@ -139,4 +139,65 @@ router.get('/prices', requireAuth, async (req, res) => {
   }
 });
 
+// ---- submitted application records --------------------------------
+// The customer's recent list used to live only in their browser
+// (localStorage). Every successful submit now also lands here, so
+// the admin sees all applications (Admin → অর্ডার tab) and can
+// delete a record; the customer can fetch/delete their own.
+
+// POST /api/bdris-apply/applications { ack_no, name } — idempotent
+router.post('/applications', requireAuth, async (req, res) => {
+  try {
+    const ackNo = String((req.body && req.body.ack_no) || '').trim().slice(0, 64);
+    const name = String((req.body && req.body.name) || '').trim().slice(0, 160);
+    if (!ackNo) return res.status(400).json({ error: 'MISSING_ACK' });
+    const r = await db.query(
+      `INSERT INTO bdris_applications (user_id, ack_no, applicant_name)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, ack_no) DO NOTHING
+       RETURNING id, ack_no, applicant_name, created_at`,
+      [req.user.id, ackNo, name]
+    );
+    if (r.rows.length) return res.status(201).json({ ok: true, application: r.rows[0] });
+    const cur = await db.query(
+      'SELECT id, ack_no, applicant_name, created_at FROM bdris_applications WHERE user_id = $1 AND ack_no = $2',
+      [req.user.id, ackNo]
+    );
+    return res.json({ ok: true, duplicate: true, application: cur.rows[0] || null });
+  } catch (e) {
+    safeLog('[bdris-apply] application record error:', e.message);
+    return res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// GET /api/bdris-apply/applications — the customer's own records
+router.get('/applications', requireAuth, async (req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT id, ack_no, applicant_name, created_at FROM bdris_applications
+       WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`,
+      [req.user.id]
+    );
+    return res.json({ ok: true, applications: r.rows });
+  } catch (e) {
+    safeLog('[bdris-apply] applications list error:', e.message);
+    return res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// DELETE /api/bdris-apply/applications/:ackNo — customer removes own
+router.delete('/applications/:ackNo', requireAuth, async (req, res) => {
+  try {
+    const r = await db.query(
+      'DELETE FROM bdris_applications WHERE user_id = $1 AND ack_no = $2 RETURNING id',
+      [req.user.id, String(req.params.ackNo).slice(0, 64)]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    return res.json({ ok: true });
+  } catch (e) {
+    safeLog('[bdris-apply] application delete error:', e.message);
+    return res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 module.exports = router;
