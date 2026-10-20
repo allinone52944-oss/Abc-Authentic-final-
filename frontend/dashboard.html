@@ -661,6 +661,269 @@
     gap: 12px;
   }
 
+  
+  /* ==========================================================
+     FLAGSHIP 4 CORE AUTOMATED ENGINES
+     ========================================================== */
+  .engine-hub-section {
+    margin-bottom: 24px;
+  }
+  .engine-hub-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .engine-hub-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .engine-hub-title h3 {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--text-main);
+    margin: 0;
+  }
+  .engine-pulse-badge {
+    background: #ef4444;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 7px;
+    border-radius: var(--r-full);
+    letter-spacing: 0.05em;
+    animation: enginePulse 2s infinite;
+  }
+  @keyframes enginePulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.05); }
+  }
+  .engine-hub-sub {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .engine-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+  .engine-card {
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-lg);
+    padding: 18px 16px;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: var(--shadow-xs);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+  }
+  .engine-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 24px -4px rgba(37, 99, 235, 0.15);
+    border-color: #93c5fd;
+  }
+  .engine-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+  .engine-icon-wrap {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--r-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+  .engine-tag {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: var(--r-full);
+  }
+  .engine-card h4 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-main);
+    margin-bottom: 4px;
+    line-height: 1.3;
+  }
+  .engine-card p {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.45;
+    margin-bottom: 14px;
+    flex-grow: 1;
+  }
+  .engine-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 10px;
+    border-top: 1px solid #f1f5f9;
+    font-size: 12px;
+  }
+  .engine-charge {
+    font-weight: 700;
+    color: #1e40af;
+  }
+  .engine-btn {
+    font-weight: 700;
+    color: #2563eb;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: transform 0.2s ease;
+  }
+  .engine-card:hover .engine-btn {
+    transform: translateX(3px);
+  }
+
+  /* Instant Live Service Search Box */
+  .svc-search-wrap {
+    position: relative;
+    margin-bottom: 12px;
+  }
+  .svc-search-input {
+    width: 100%;
+    padding: 9px 14px 9px 34px;
+    font-size: 13px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-md);
+    outline: none;
+    background: #ffffff;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+    color: var(--text-main);
+    font-family: inherit;
+  }
+  .svc-search-input:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  }
+  .svc-search-ico {
+    position: absolute;
+    left: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 14px;
+    color: #94a3b8;
+    pointer-events: none;
+  }
+
+  /* Floating WhatsApp FAB */
+  .wa-fab {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #25d366, #128c7e);
+    color: #fff;
+    border: none;
+    box-shadow: 0 4px 18px rgba(37, 211, 102, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 99;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .wa-fab:hover {
+    transform: scale(1.08) translateY(-2px);
+    box-shadow: 0 8px 25px rgba(37, 211, 102, 0.55);
+  }
+
+  /* Sidebar bottom user badge */
+  .side-user-card {
+    margin-top: auto;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--r-md);
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #fff;
+  }
+  .side-user-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #2563eb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .side-user-info {
+    flex-grow: 1;
+    overflow: hidden;
+  }
+  .side-user-name {
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .side-user-bal {
+    font-size: 11px;
+    color: #93c5fd;
+  }
+
+  @media (max-width: 768px) {
+    .wa-fab {
+      bottom: 78px;
+      right: 18px;
+      width: 48px;
+      height: 48px;
+    }
+    .engine-cards-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .engine-card {
+      padding: 12px;
+      border-radius: 14px;
+    }
+    .engine-card p {
+      display: none;
+    }
+    .engine-card h4 {
+      font-size: 13px;
+      margin-bottom: 2px;
+    }
+    .engine-card-top {
+      margin-bottom: 8px;
+    }
+    .engine-icon-wrap {
+      width: 36px;
+      height: 36px;
+      font-size: 18px;
+      border-radius: 10px;
+    }
+    .engine-tag {
+      font-size: 10px;
+      padding: 2px 6px;
+    }
+    .engine-card-footer {
+      padding-top: 8px;
+      font-size: 11px;
+    }
+  }
+
   /* Responsive Switcher */
   @media (max-width: 768px) {
     .desktop { display: none !important; }
@@ -697,6 +960,13 @@
       <div class="side-link" onclick="location.href='/profile.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span> পার্সোনাল প্রোফাইল</div>
       <div class="side-link" id="adminLink" style="display:none;" onclick="location.href='/admin.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> এডমিন কন্ট্রোল</div>
     </nav>
+    <div class="side-user-card" id="sideUserCard" onclick="location.href='/profile.html'" style="cursor:pointer;" title="প্রোফাইল সেটিংস">
+      <div class="side-user-avatar" id="sideAvatar">ইউ</div>
+      <div class="side-user-info">
+        <div class="side-user-name" id="sideUserName">লোড হচ্ছে...</div>
+        <div class="side-user-bal" id="sideUserBal">ব্যালেন্স: ৳০</div>
+      </div>
+    </div>
   </div>
 
   <div class="main">
@@ -786,6 +1056,74 @@
       </div>
     </div>
 
+    <!-- 4 Core Automated Engines Hub (Desktop) -->
+    <div class="engine-hub-section">
+      <div class="engine-hub-header">
+        <div class="engine-hub-title">
+          <span class="engine-pulse-badge">LIVE</span>
+          <h3>ইনস্ট্যান্ট অটোমেটেড ইঞ্জিন সেবা</h3>
+        </div>
+        <span class="engine-hub-sub">১০০% দ্রুত ও স্বয়ংক্রিয় প্রসেসিং</span>
+      </div>
+      <div class="engine-cards-grid">
+        <!-- Engine 1: BDRIS Apply -->
+        <div class="engine-card" onclick="location.href='/bdris-apply.html'">
+          <div class="engine-card-top">
+            <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #eff6ff, #dbeafe);color:#1d4ed8;">👶</div>
+            <span class="engine-tag" style="background:#dbeafe;color:#1e40af;">লাইভ আবেদন</span>
+          </div>
+          <h4>জন্ম নিবন্ধন আবেদন</h4>
+          <p>BDRIS রিয়েল-টাইম আবেদন, ড্রাফট সংরক্ষণ ও অটো-ফিল সেবা</p>
+          <div class="engine-card-footer">
+            <span class="engine-charge" id="engChargeApply">চার্জ: ৳১০০</span>
+            <span class="engine-btn">আবেদন শুরু →</span>
+          </div>
+        </div>
+
+        <!-- Engine 2: Birth Certificate -->
+        <div class="engine-card" onclick="location.href='/bdris-certificate.html'">
+          <div class="engine-card-top">
+            <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #f0fdf4, #dcfce7);color:#15803d;">📜</div>
+            <span class="engine-tag" style="background:#dcfce7;color:#166534;">তাৎক্ষণিক সনদ</span>
+          </div>
+          <h4>জন্ম নিবন্ধন সনদ</h4>
+          <p>ভেরিফাইড QR কোড ও নিখুঁত অফিসিয়াল ফরম্যাটে সনদ ডাউনলোড</p>
+          <div class="engine-card-footer">
+            <span class="engine-charge" id="engChargeCert">চার্জ: ৳৫০</span>
+            <span class="engine-btn">তৈরি করুন →</span>
+          </div>
+        </div>
+
+        <!-- Engine 3: NID Replica -->
+        <div class="engine-card" onclick="location.href='/nid-replica.html'">
+          <div class="engine-card-top">
+            <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #faf5ff, #f3e8ff);color:#7e22ce;">🪪</div>
+            <span class="engine-tag" style="background:#f3e8ff;color:#6b21a8;">এইচডি প্রিন্ট</span>
+          </div>
+          <h4>এনআইডি কার্ড রিপ্রিন্ট</h4>
+          <p>PDF এক্সট্রাক্ট, ছবি-স্বাক্ষর সম্পাদনা ও প্রিন্ট রেডি স্মার্ট কার্ড</p>
+          <div class="engine-card-footer">
+            <span class="engine-charge" id="engChargeNid">চার্জ: ৳৫০</span>
+            <span class="engine-btn">প্রিন্ট নিন →</span>
+          </div>
+        </div>
+
+        <!-- Engine 4: Death Verify -->
+        <div class="engine-card" onclick="location.href='/death-verify.html'">
+          <div class="engine-card-top">
+            <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #fff7ed, #ffedd5);color:#c2410c;">🕊️</div>
+            <span class="engine-tag" style="background:#ffedd5;color:#9a3412;">যাচাই ও কপি</span>
+          </div>
+          <h4>মৃত্যু সনদ যাচাই</h4>
+          <p>অনলাইন মৃত্যু নিবন্ধন নম্বর দিয়ে যাচাই ও অফিসিয়াল সনদ ডাউনলোড</p>
+          <div class="engine-card-footer">
+            <span class="engine-charge" id="engChargeDeath">চার্জ: ৳৫০</span>
+            <span class="engine-btn">যাচাই করুন →</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Active / Recent Orders Tracker (Desktop) -->
     <div class="recent-orders-card">
       <div class="recent-orders-hdr">
@@ -804,6 +1142,10 @@
           <span>🛎️ জনপ্রিয় ডিজিটাল সেবাসমূহ</span>
           <a href="/services.html" style="color:#2563eb;font-weight:700;font-size:13px;text-decoration:none;">সবগুলো দেখুন →</a>
         </h3>
+        <div class="svc-search-wrap">
+          <span class="svc-search-ico">🔍</span>
+          <input type="text" class="svc-search-input" id="svcSearchDesk" placeholder="সেবার নাম লিখে ফিল্টার করুন (যেমন: জন্ম, এনআইডি)..." oninput="onSvcFilter(this.value, 'popularServices')" autocomplete="off">
+        </div>
         <div class="svc-grid2" id="popularServices">
           <div class="skel" style="height:110px;"></div>
           <div class="skel" style="height:110px;"></div>
@@ -860,7 +1202,7 @@
       <div>
         <div style="display:flex;align-items:center;gap:6px;">
           <span style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">ওয়ালেট ব্যালেন্স</span>
-          <button class="hero-bal-toggle" style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;" onclick="toggleBalVisibility()">👁️</button>
+          <button class="hero-bal-toggle" id="balToggleMob" style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;padding:4px 8px;font-size:14px;border-radius:8px;" onclick="toggleBalVisibility()" title="ব্যালেন্স লুকান বা দেখুন">👁️</button>
         </div>
         <div id="hubBalance" style="font-size:28px;font-weight:800;color:#1e40af;margin-top:2px;">৳০</div>
       </div>
@@ -884,6 +1226,70 @@
       <div class="m-qa-item" onclick="location.href='/wallet.html#coupon'">
         <div class="m-qa-ico" style="background:#fff7ed;color:#c2410c;">🎁</div>
         <div class="m-qa-lbl">কুপন ও বোনাস</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile 4 Core Automated Engines Hub -->
+  <div style="padding:0 14px 14px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="engine-pulse-badge">LIVE</span>
+        <h3 style="font-size:15px;font-weight:800;color:#0f172a;margin:0;">অটোমেটেড ইঞ্জিন</h3>
+      </div>
+      <span style="font-size:11px;font-weight:700;color:#2563eb;">তাৎক্ষণিক ডেলিভারি</span>
+    </div>
+    <div class="engine-cards-grid">
+      <!-- M Engine 1 -->
+      <div class="engine-card" onclick="location.href='/bdris-apply.html'">
+        <div class="engine-card-top">
+          <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #eff6ff, #dbeafe);color:#1d4ed8;">👶</div>
+          <span class="engine-tag" style="background:#dbeafe;color:#1e40af;">আবেদন</span>
+        </div>
+        <h4>জন্ম আবেদন</h4>
+        <div class="engine-card-footer">
+          <span class="engine-charge" id="mEngChargeApply">৳১০০</span>
+          <span class="engine-btn">শুরু →</span>
+        </div>
+      </div>
+
+      <!-- M Engine 2 -->
+      <div class="engine-card" onclick="location.href='/bdris-certificate.html'">
+        <div class="engine-card-top">
+          <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #f0fdf4, #dcfce7);color:#15803d;">📜</div>
+          <span class="engine-tag" style="background:#dcfce7;color:#166534;">সনদ</span>
+        </div>
+        <h4>জন্ম সনদ</h4>
+        <div class="engine-card-footer">
+          <span class="engine-charge" id="mEngChargeCert">৳৫০</span>
+          <span class="engine-btn">তৈরি →</span>
+        </div>
+      </div>
+
+      <!-- M Engine 3 -->
+      <div class="engine-card" onclick="location.href='/nid-replica.html'">
+        <div class="engine-card-top">
+          <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #faf5ff, #f3e8ff);color:#7e22ce;">🪪</div>
+          <span class="engine-tag" style="background:#f3e8ff;color:#6b21a8;">কার্ড</span>
+        </div>
+        <h4>এনআইডি রিপ্রিন্ট</h4>
+        <div class="engine-card-footer">
+          <span class="engine-charge" id="mEngChargeNid">৳৫০</span>
+          <span class="engine-btn">প্রিন্ট →</span>
+        </div>
+      </div>
+
+      <!-- M Engine 4 -->
+      <div class="engine-card" onclick="location.href='/death-verify.html'">
+        <div class="engine-card-top">
+          <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #fff7ed, #ffedd5);color:#c2410c;">🕊️</div>
+          <span class="engine-tag" style="background:#ffedd5;color:#9a3412;">যাচাই</span>
+        </div>
+        <h4>মৃত্যু সনদ</h4>
+        <div class="engine-card-footer">
+          <span class="engine-charge" id="mEngChargeDeath">৳৫০</span>
+          <span class="engine-btn">কপি →</span>
+        </div>
       </div>
     </div>
   </div>
@@ -916,9 +1322,13 @@
     <div class="bn-strip" id="bnStripM" style="display:none;"></div>
 
     <!-- Mobile Services Section -->
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;margin-top:6px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;margin-top:6px;">
       <h3 style="font-size:16px;font-weight:800;color:#0f172a;">🛎️ জনপ্রিয় সেবাসমূহ</h3>
       <a href="/services.html" style="font-size:13px;color:#2563eb;text-decoration:none;font-weight:700;">সবগুলো দেখুন →</a>
+    </div>
+    <div class="svc-search-wrap">
+      <span class="svc-search-ico">🔍</span>
+      <input type="text" class="svc-search-input" id="svcSearchMob" placeholder="সেবা খুঁজুন..." oninput="onSvcFilter(this.value, 'mobileServices')" autocomplete="off">
     </div>
 
     <div class="m-svc-grid" id="mobileServices">
@@ -941,6 +1351,9 @@
 </div>
 
 <!-- Floating Action Button -->
+<button class="wa-fab" id="waFab" aria-label="WhatsApp-এ সরাসরি সহায়তা চান" title="WhatsApp-এ সরাসরি সহায়তা চান">
+  <img src="/icons/whatsapp.svg" alt="WhatsApp" width="28" height="28">
+</button>
 <!-- Mobile Tabbar -->
 <div class="m-tabbar">
   <div class="m-tab on" aria-current="page"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>হোম</div>
@@ -971,6 +1384,8 @@ function autoIcon(name) {
   if (/সার্টিফিকেট|certificate/i.test(n)) return '📜';
   if (/পুলিশ|police|ক্লিয়ারেন্স/i.test(n)) return '👮';
   if (/বায়োমেট্রিক|সিম|sim/i.test(n)) return '📱';
+  if (/ড্রাইভিং|লাইসেন্স|গাড়ি/i.test(n)) return '🚗';
+  if (/বিদ্যুৎ|গ্যাস|বিল/i.test(n)) return '⚡';
   return '🛎️';
 }
 
@@ -989,17 +1404,33 @@ const STBN = {
 
 let _userBal = 0;
 let _balVisible = true;
+try {
+  _balVisible = localStorage.getItem('abc_bal_hidden') !== '1';
+} catch (e) {}
 
-function toggleBalVisibility() {
-  _balVisible = !_balVisible;
+let _allServices = [];
+
+function updateBalUI() {
   const t = _balVisible ? ('৳' + bnNum(_userBal)) : '৳•••••';
   setText('balancePill', t);
   setText('hubBalance', t);
   setText('quickBalText', t);
-  const btns = document.querySelectorAll('.hero-bal-toggle');
-  btns.forEach(b => {
-    b.textContent = _balVisible ? '👁️ লুকান' : '👁️ দেখুন';
-  });
+  setText('sideUserBal', 'ব্যালেন্স: ' + t);
+  const deskBtn = document.getElementById('balToggleDesk');
+  if (deskBtn) deskBtn.textContent = _balVisible ? '👁️ লুকান' : '👁️ দেখুন';
+  const mobBtn = document.getElementById('balToggleMob');
+  if (mobBtn) {
+    mobBtn.textContent = _balVisible ? '👁️' : '🙈';
+    mobBtn.setAttribute('title', _balVisible ? 'ব্যালেন্স লুকান' : 'ব্যালেন্স দেখুন');
+  }
+}
+
+function toggleBalVisibility() {
+  _balVisible = !_balVisible;
+  try {
+    localStorage.setItem('abc_bal_hidden', _balVisible ? '0' : '1');
+  } catch (e) {}
+  updateBalUI();
 }
 
 function timeGreeting() {
@@ -1049,155 +1480,101 @@ const GreetVoice = (() => {
   function fileForUser(u, rot) {
     if (!isConfigured()) return null;
     const rel = resolveReligion(u);
-    const rotationEnabled = (!window._vgCfg || window._vgCfg.rotation !== false);
-    const idx = (rotationEnabled && typeof rot === "number" && rot >= 0) ? (rot % 3) : 0;
-    const voice = VOICES[idx] || "male";
-    return {
-      rel,
-      voice: idx,
-      voiceType: voice,
-      voiceLabel: VOICE_LABELS[idx] || "কণ্ঠ",
-      path: "/audio/greet-" + encodeURIComponent(rel) + "-" + encodeURIComponent(voice) + ".mp3"
-    };
+    const audioFiles = (window._vgCfg && window._vgCfg.audio_files) || {};
+    const relFiles = audioFiles[rel] || {};
+    const arr = relFiles[rot];
+    if (Array.isArray(arr) && arr.length) return arr[0];
+    if (typeof arr === "string" && arr) return arr;
+    for (const v of VOICES) {
+      const fallback = relFiles[v];
+      if (Array.isArray(fallback) && fallback.length) return fallback[0];
+      if (typeof fallback === "string" && fallback) return fallback;
+    }
+    return null;
   }
 
-  function isPlaying() {
-    return Boolean(_audio && !_audio.paused && !_audio.ended);
-  }
-
-  function setButtonState(playing, file) {
-    const btn = document.getElementById("greetVoiceBtn");
-    const btnM = document.getElementById("greetVoiceBtnM");
-
-    if (btn) {
-      if (playing) {
-        btn.innerHTML = '🔊 <span style="font-size:12px;color:#2563eb;font-weight:700;">' + (file ? file.voiceLabel : 'বাজছে...') + '</span>';
-        btn.style.borderColor = "#93c5fd";
-        btn.style.background = "#eff6ff";
-        btn.title = (file ? file.voiceLabel : "ভয়েস") + " বাজছে (থামাতে ক্লিক করুন)";
-      } else {
-        btn.innerHTML = '🔊 <span style="font-size:12px;color:#334155;font-weight:600;">ভয়েস শুনুন</span>';
-        btn.style.borderColor = "#cbd5e1";
-        btn.style.background = "#f8fafc";
-        btn.title = "ধর্মভিত্তিক শুভেচ্ছা ভয়েস শুনুন";
-      }
-    }
-
-    if (btnM) {
-      if (playing) {
-        btnM.style.background = "rgba(255,255,255,0.45)";
-        btnM.title = "থামাতে ট্যাপ করুন";
-      } else {
-        btnM.style.background = "rgba(255,255,255,0.22)";
-        btnM.title = "সাউন্ড ভয়েস শুনুন";
-      }
-    }
+  function play(filePath) {
+    stop();
+    if (!filePath) return;
+    try {
+      _audio = new Audio(filePath);
+      _audio.play().catch(() => {});
+    } catch (e) {}
   }
 
   function stop() {
     if (_audio) {
-      try { _audio.pause(); } catch (e) {}
+      try { _audio.pause(); _audio.currentTime = 0; } catch (e) {}
       _audio = null;
     }
-    setButtonState(false);
   }
 
-  function play(f) {
-    if (!f || !f.path) return;
-    try {
-      stop();
-      _audio = new Audio(f.path);
-      _audio.volume = 1.0;
-      setButtonState(true, f);
-      _audio.onended = () => {
-        setButtonState(false);
-        _audio = null;
-      };
-      _audio.onerror = () => {
-        setButtonState(false);
-        _audio = null;
-      };
-      const p = _audio.play();
-      if (p && typeof p.catch === "function") {
-        p.catch(() => {
-          setButtonState(false);
-          _pendingAutoGreeting = f;
-          const unlockGreet = () => {
-            if (_pendingAutoGreeting) {
-              const toPlay = _pendingAutoGreeting;
-              _pendingAutoGreeting = null;
-              play(toPlay);
-            }
-            if (typeof document !== 'undefined') {
-              document.removeEventListener('pointerdown', unlockGreet);
-              document.removeEventListener('keydown', unlockGreet);
-              document.removeEventListener('click', unlockGreet);
-              document.removeEventListener('touchstart', unlockGreet);
-            }
-          };
-          if (typeof document !== 'undefined') {
-            document.addEventListener('pointerdown', unlockGreet, { once: true });
-            document.addEventListener('keydown', unlockGreet, { once: true });
-            document.addEventListener('click', unlockGreet, { once: true });
-            document.addEventListener('touchstart', unlockGreet, { once: true });
-          }
-        });
-      }
-    } catch (e) {
-      setButtonState(false);
-    }
+  function isPlaying() {
+    return !!(_audio && !_audio.paused);
   }
 
   function handleManualClick(user) {
     if (isPlaying()) {
       stop();
+      updateVoiceButtons(false);
       return;
     }
-    let curRot = 0;
-    try {
-      curRot = parseInt(localStorage.getItem("greeting_voice_rotation") || "0", 10);
-      if (isNaN(curRot) || curRot < 0 || curRot > 2) curRot = 0;
-    } catch (e) {}
-
-    const f = fileForUser(user, curRot);
+    const rot = (window._vgCfg && window._vgCfg.voice_rotation) || "male";
+    const f = fileForUser(user, rot);
     if (f) {
       play(f);
-      if (!window._vgCfg || window._vgCfg.rotation !== false) {
-        try {
-          localStorage.setItem("greeting_voice_rotation", String((curRot + 1) % 3));
-        } catch (e) {}
+      updateVoiceButtons(true);
+      if (_audio) {
+        _audio.onended = () => updateVoiceButtons(false);
+        _audio.onerror = () => updateVoiceButtons(false);
       }
+    } else {
+      alert("এই শুভেচ্ছা বার্তার অডিও ফাইল সংযুক্ত নেই।");
+    }
+  }
+
+  function updateVoiceButtons(playing) {
+    const dBtn = document.getElementById("greetVoiceBtn");
+    const mBtn = document.getElementById("greetVoiceBtnM");
+    const text = playing ? "অডিও চলছে..." : "ভয়েস শুনুন";
+    if (dBtn) {
+      const span = dBtn.querySelector("span");
+      if (span) span.textContent = text;
+      dBtn.style.background = playing ? "#eff6ff" : "#f8fafc";
+      dBtn.style.color = playing ? "#1d4ed8" : "#334155";
+      dBtn.style.borderColor = playing ? "#93c5fd" : "#cbd5e1";
+    }
+    if (mBtn) {
+      const span = mBtn.querySelector("span");
+      if (span) span.textContent = playing ? "চলছে" : "ভয়েস";
     }
   }
 
   function initUI(user) {
-    const btn = document.getElementById("greetVoiceBtn");
-    const btnM = document.getElementById("greetVoiceBtnM");
-    if (!isConfigured() || (user && user.role === "admin")) {
-      if (btn) btn.style.display = "none";
-      if (btnM) btnM.style.display = "none";
+    const dBtn = document.getElementById("greetVoiceBtn");
+    const mBtn = document.getElementById("greetVoiceBtnM");
+    if (!isConfigured()) {
+      if (dBtn) dBtn.style.display = "none";
+      if (mBtn) mBtn.style.display = "none";
       return;
     }
-    if (btn) {
-      btn.style.display = "inline-flex";
-      btn.onclick = () => handleManualClick(user);
+    if (dBtn) {
+      dBtn.style.display = "inline-flex";
+      dBtn.onclick = () => handleManualClick(user);
     }
-    if (btnM) {
-      btnM.style.display = "inline-flex";
-      btnM.onclick = () => handleManualClick(user);
+    if (mBtn) {
+      mBtn.style.display = "inline-flex";
+      mBtn.onclick = () => handleManualClick(user);
     }
-    setButtonState(false);
   }
 
   function maybePlay(user) {
-    if (!user || user.role === "admin") return;
     if (!userWantsVoice()) return;
     try {
-      const raw = sessionStorage.getItem("abc_greet_on_login");
-      if (!raw) return;
-      sessionStorage.removeItem("abc_greet_on_login");
-      const p = JSON.parse(raw);
-      const rot = (p && typeof p.voice === "number") ? p.voice : 0;
+      const last = sessionStorage.getItem("abc_greet_played");
+      if (last === "1") return;
+      sessionStorage.setItem("abc_greet_played", "1");
+      const rot = (window._vgCfg && window._vgCfg.voice_rotation) || "male";
       const f = fileForUser(user, rot);
       if (f) play(f);
     } catch (e) {}
@@ -1215,18 +1592,24 @@ async function init() {
 
   const av = (user.name || 'ইউ')[0];
   setText('avatar', av);
+  setText('sideAvatar', av);
+  setText('sideUserName', user.name || 'ব্যবহারকারী');
+  const avEl = document.getElementById('avatar');
+  if (avEl) {
+    avEl.style.cursor = 'pointer';
+    avEl.onclick = () => location.href = '/profile.html';
+  }
+
   if (user.role === 'admin') {
-    document.getElementById('adminLink').style.display = '';
+    const adm = document.getElementById('adminLink');
+    if (adm) adm.style.display = '';
     const mAdmin = document.getElementById('mAdminTab');
     if (mAdmin) mAdmin.style.display = '';
   }
 
-  const bText = '৳' + bnNum(_userBal);
-  setText('balancePill', bText);
-  setText('hubBalance', bText);
-  setText('quickBalText', bText);
+  updateBalUI();
 
-  const tg = timeGreeting() + ' 👋';
+  const tg = getPersonalizedGreeting(user, window._vgCfg || {});
   setText('greet', tg); setText('greetM', tg);
 
   loadCounts();
@@ -1235,6 +1618,7 @@ async function init() {
   loadNotices();
   loadBanners();
   loadSettings();
+  setupWhatsApp();
 }
 
 function setText(id, t) { const el = document.getElementById(id); if (el) el.textContent = t; }
@@ -1259,8 +1643,10 @@ async function loadCounts() {
     setText('mHubOrdersDone', don);
     setText('mHubOrdersSub', act);
   } catch (e) {
-    setText('hubOrders', '–'); setText('hubOrdersDone', '–'); setText('hubOrdersSub', '–');
-    setText('mHubOrders', '–'); setText('mHubOrdersDone', '–'); setText('mHubOrdersSub', '–');
+    const errHtml = '<span title="লোড ব্যর্থ, পুনরায় ক্লিক করুন" onclick="loadCounts()" style="cursor:pointer;color:#dc2626;font-size:16px;">↻ রিফ্রেশ</span>';
+    const setHtml = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+    setHtml('hubOrders', errHtml); setHtml('hubOrdersDone', errHtml); setHtml('hubOrdersSub', errHtml);
+    setHtml('mHubOrders', errHtml); setHtml('mHubOrdersDone', errHtml); setHtml('mHubOrdersSub', errHtml);
   }
 }
 
@@ -1281,7 +1667,18 @@ async function loadRecentOrders() {
           '<button class="btn" style="margin-top:10px;padding:7px 16px;font-size:12px;border-radius:8px;" onclick="location.href=\'/services.html\'">+ নতুন সেবার আবেদন করুন</button>' +
           '</div>';
       }
-      if (mob) mob.innerHTML = '';
+      if (mob) {
+        mob.innerHTML = '<div class="m-active-order-pill" onclick="location.href=\'/services.html\'" style="background:#f8fafc;border:1px dashed #cbd5e1;">' +
+          '<div style="display:flex;align-items:center;gap:10px;">' +
+            '<div style="font-size:20px;">🛎️</div>' +
+            '<div>' +
+              '<div style="font-size:13px;font-weight:700;color:#0f172a;">নতুন সেবার আবেদন করুন</div>' +
+              '<div style="font-size:11px;color:#64748b;">আপনার কোনো চলমান অর্ডার নেই</div>' +
+            '</div>' +
+          '</div>' +
+          '<span style="font-size:12px;color:#2563eb;font-weight:700;">শুরু করুন →</span>' +
+        '</div>';
+      }
       return;
     }
 
@@ -1335,6 +1732,39 @@ async function loadRecentOrders() {
   }
 }
 
+function renderServiceGrid(containerId, list) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!list || !list.length) {
+    el.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:#64748b;font-size:13px;">কোনো সেবা পাওয়া যায়নি</div>';
+    return;
+  }
+  el.innerHTML = list.map(s => {
+    const name = escapeHtml(s.name_bn || s.name);
+    const ico = escapeHtml((s.icon && s.icon !== '🛎️') ? s.icon : autoIcon(name));
+    return '<div class="svc2" onclick="location.href=\'/service-detail.html?id=' + encodeURIComponent(s.id) + '\'">' +
+      '<div class="ico">' + ico + '</div>' +
+      '<h4>' + name + '</h4>' +
+      '<div class="pr">৳' + bnNum(s.price) + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function onSvcFilter(val, containerId) {
+  const q = String(val || '').trim().toLowerCase();
+  if (!q) {
+    const limit = containerId === 'popularServices' ? 4 : 6;
+    renderServiceGrid(containerId, _allServices.slice(0, limit));
+    return;
+  }
+  const filtered = _allServices.filter(s => {
+    const n1 = String(s.name_bn || '').toLowerCase();
+    const n2 = String(s.name || '').toLowerCase();
+    return n1.includes(q) || n2.includes(q);
+  });
+  renderServiceGrid(containerId, filtered);
+}
+
 async function loadServices() {
   const pop = document.getElementById('popularServices');
   const mob = document.getElementById('mobileServices');
@@ -1342,18 +1772,37 @@ async function loadServices() {
     const r = await ABC.api('/services');
     if (!r.ok) throw new Error('bad');
     const d = await r.json();
-    const svcs = d.services || [];
-    setText('hubServices', bnNum(svcs.length));
-    pop.innerHTML = svcs.slice(0, 4).map(s =>
-      '<div class="svc2" onclick="location.href=\'/service-detail.html?id=' + encodeURIComponent(s.id) + '\'"><div class="ico">' + escapeHtml((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
-    ).join('') || '<div>কোনো সেবা নেই</div>';
-    mob.innerHTML = svcs.slice(0, 6).map(s =>
-      '<div class="svc2" onclick="location.href=\'/service-detail.html?id=' + encodeURIComponent(s.id) + '\'"><div class="ico">' + escapeHtml((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn || s.name)) + '</div><h4>' + escapeHtml(s.name_bn || s.name) + '</h4><div class="pr">৳' + bnNum(s.price) + '</div></div>'
-    ).join('') || '<div>কোনো সেবা নেই</div>';
+    _allServices = d.services || [];
+    setText('hubServices', bnNum(_allServices.length));
+
+    // Update dynamic engine charges if found in services list
+    const applySvc = _allServices.find(s => s.engine_id === 'bdris-apply');
+    if (applySvc && applySvc.price) {
+      setText('engChargeApply', 'চার্জ: ৳' + bnNum(applySvc.price));
+      setText('mEngChargeApply', '৳' + bnNum(applySvc.price));
+    }
+    const certSvc = _allServices.find(s => s.engine_id === 'bdris-certificate');
+    if (certSvc && certSvc.price) {
+      setText('engChargeCert', 'চার্জ: ৳' + bnNum(certSvc.price));
+      setText('mEngChargeCert', '৳' + bnNum(certSvc.price));
+    }
+    const nidSvc = _allServices.find(s => s.engine_id === 'nid-replica');
+    if (nidSvc && nidSvc.price) {
+      setText('engChargeNid', 'চার্জ: ৳' + bnNum(nidSvc.price));
+      setText('mEngChargeNid', '৳' + bnNum(nidSvc.price));
+    }
+    const deathSvc = _allServices.find(s => s.engine_id === 'death-verify');
+    if (deathSvc && deathSvc.price) {
+      setText('engChargeDeath', 'চার্জ: ৳' + bnNum(deathSvc.price));
+      setText('mEngChargeDeath', '৳' + bnNum(deathSvc.price));
+    }
+
+    renderServiceGrid('popularServices', _allServices.slice(0, 4));
+    renderServiceGrid('mobileServices', _allServices.slice(0, 6));
   } catch (e) {
     setText('hubServices', '–');
-    pop.innerHTML = retryBox('loadServices');
-    mob.innerHTML = retryBox('loadServices');
+    if (pop) pop.innerHTML = retryBox('loadServices');
+    if (mob) mob.innerHTML = retryBox('loadServices');
   }
 }
 
@@ -1363,11 +1812,14 @@ async function loadNotices() {
     const r = await ABC.api('/notices');
     if (!r.ok) throw new Error('bad');
     const d = await r.json();
-    const valid = (d.notices || []).filter(n => (n.title||'').trim() || (n.message||'').trim()).slice(0,3);
-    const trunc = (s, n) => { s = String(s||''); return s.length > n ? s.slice(0, s.lastIndexOf(' ', n)) + '…' : s; };
-    box.innerHTML = valid.map(n =>
-      '<div style="padding:10px 0;border-bottom:1px solid #f1f5f9;"><b style="font-size:13px;color:#0f172a;">' + escapeHtml(n.title) + '</b><br><span style="font-size:12px;color:#64748b;margin-top:2px;display:inline-block;">' + escapeHtml(trunc(n.message, 60)) + '</span></div>'
-    ).join('') || '<div style="color:#64748b;font-size:13px;">কোনো নোটিশ নেই</div>';
+    const raw = (d && d.notices) ? d.notices : (Array.isArray(d) ? d : []);
+    const valid = raw.filter(n => n && ((n.title || '').trim() || (n.message || '').trim())).slice(0, 3);
+    const trunc = (s, n) => { s = String(s || ''); return s.length > n ? s.slice(0, s.lastIndexOf(' ', n) > 0 ? s.lastIndexOf(' ', n) : n) + '…' : s; };
+    if (box) {
+      box.innerHTML = valid.map(n =>
+        '<div style="padding:10px 0;border-bottom:1px solid #f1f5f9;"><b style="font-size:13px;color:#0f172a;">' + escapeHtml(n.title) + '</b><br><span style="font-size:12px;color:#64748b;margin-top:2px;display:inline-block;">' + escapeHtml(trunc(n.message, 60)) + '</span></div>'
+      ).join('') || '<div style="color:#64748b;font-size:13px;">কোনো নোটিশ নেই</div>';
+    }
     const mn = document.getElementById('mNotices');
     if (mn) {
       if (valid.length) {
@@ -1376,7 +1828,7 @@ async function loadNotices() {
       } else { mn.style.display = 'none'; }
     }
   } catch (e) {
-    box.innerHTML = retryBox('loadNotices');
+    if (box) box.innerHTML = retryBox('loadNotices');
   }
 }
 
@@ -1413,22 +1865,48 @@ async function loadSettings() {
   }
 }
 
-document.getElementById('logoutBtn').onclick = async () => {
-  const rt = localStorage.getItem('abc_refresh_token');
-  await ABC.api('/auth/logout', { method: 'POST', body: { refresh_token: rt } });
-  ABC.clearTokens(); location.href = '/login.html';
-};
+function setupWhatsApp() {
+  const waBtn = document.getElementById('waFab');
+  if (waBtn) {
+    waBtn.onclick = () => {
+      const uName = (window._user && window._user.name) ? window._user.name : 'ব্যবহারকারী';
+      window.open('https://wa.me/8801835414122?text=' + encodeURIComponent('আসসালামু আলাইকুম! আমি ' + uName + '। All In One ড্যাশবোর্ড থেকে সহায়তা চাই।'), '_blank');
+    };
+  }
+}
+
+const logoutBtn = document.getElementById('logoutBtn');
+if (logoutBtn) {
+  logoutBtn.onclick = async () => {
+    const rt = localStorage.getItem('abc_refresh_token');
+    try {
+      await ABC.api('/auth/logout', { method: 'POST', body: { refresh_token: rt } });
+    } catch (e) {}
+    ABC.clearTokens();
+    location.href = '/login.html';
+  };
+}
 
 async function showNotices() {
-  const r = await ABC.api('/notices');
-  const d = r.ok ? await r.json() : { notices: [] };
-  const valid = d.notices.filter(n => (n.title || '').trim() || (n.message || '').trim());
-  const list = valid.map(n => '<li style="margin-bottom:12px;"><b>' + escapeHtml(n.title) + '</b><br><span style="font-size:13px;color:#475569;">' + escapeHtml(n.message) + '</span></li>').join('') || '<li>কোনো নোটিশ নেই</li>';
-  const bg = document.createElement('div');
-  bg.className = 'modal-bg';
-  bg.innerHTML = '<div class="modal"><h3>🔔 সকল নোটিশ</h3><ul style="padding-left:18px;margin:16px 0;">' + list + '</ul><button class="btn" style="width:100%;margin-top:10px;" onclick="this.closest(\'.modal-bg\').remove()\">বন্ধ করুন</button></div>';
-  bg.onclick = (e) => { if (e.target === bg) bg.remove(); };
-  document.body.appendChild(bg);
+  try {
+    const r = await ABC.api('/notices');
+    const d = r && r.ok ? await r.json() : { notices: [] };
+    const raw = (d && d.notices) ? d.notices : (Array.isArray(d) ? d : []);
+    const valid = raw.filter(n => n && ((n.title || '').trim() || (n.message || '').trim()));
+    const list = valid.map(n =>
+      '<li style="margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #f1f5f9;">' +
+        '<div style="font-weight:700;color:#0f172a;font-size:14px;">' + escapeHtml(n.title || 'বিজ্ঞপ্তি') + '</div>' +
+        '<div style="font-size:13px;color:#475569;margin-top:4px;line-height:1.5;">' + escapeHtml(n.message || '') + '</div>' +
+      '</li>'
+    ).join('') || '<li style="color:#64748b;font-size:13px;">কোনো নোটিশ নেই</li>';
+    const bg = document.createElement('div');
+    bg.className = 'modal-bg';
+    bg.innerHTML = '<div class="modal"><h3>🔔 সকল নোটিশ</h3><ul style="padding-left:0;margin:16px 0;list-style:none;">' + list + '</ul><button class="btn" style="width:100%;margin-top:10px;" onclick="this.closest(\'.modal-bg\').remove()">বন্ধ করুন</button></div>';
+    bg.onclick = (e) => { if (e.target === bg) bg.remove(); };
+    document.body.appendChild(bg);
+  } catch (e) {
+    alert('নোটিশ লোড করা যায়নি।');
+  }
 }
 
 init();
