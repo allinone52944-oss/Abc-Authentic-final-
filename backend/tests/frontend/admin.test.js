@@ -479,3 +479,35 @@ describe('admin panel navigation & premium workflows (2026-10-19)', () => {
   });
 });
 
+
+describe('jqAttr() — JSON values inside double-quoted onclick attributes', () => {
+  // Regression (2026-10-21): raw JSON.stringify() output contains " chars
+  // that terminate an onclick="..." attribute early, leaving a truncated
+  // handler (`AdmTx.approve(`) -> "Uncaught SyntaxError: Unexpected end of
+  // input" when an admin clicked Approve/Reject on a recharge card.
+  const jqAttr = eval('(' + extractFn(ADMIN_SRC, 'jqAttr') + ')');
+
+  test('encodes double quotes as &quot; so the attribute cannot terminate early', () => {
+    expect(jqAttr('550e8400-e29b-41d4-a716-446655440000')).toBe('&quot;550e8400-e29b-41d4-a716-446655440000&quot;');
+    expect(jqAttr('a"b')).not.toContain('"');
+  });
+
+  test('browser round-trip: decoded attribute compiles and passes exact args', () => {
+    const html = '<button onclick="AdmTx.approve(' + jqAttr('id-1') + ', 50, ' + jqAttr('Admin "Boss" & Co') + ')">';
+    const attr = html.match(/onclick="([^"]*)"/)[1]; // attribute ends at first raw "
+    expect(attr).toContain('approve(');
+    expect(attr.endsWith(')')).toBe(true); // NOT truncated at `AdmTx.approve(`
+    const decoded = attr.replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+    const seen = [];
+    const AdmTx = { approve: (...a) => seen.push(a) };
+    eval(decoded.replace('AdmTx', 'AdmTx')); // eslint-disable-line no-eval
+    expect(seen).toEqual([['id-1', 50, 'Admin "Boss" & Co']]);
+  });
+
+  test('ampersand is escaped before quotes (no double-decode corruption)', () => {
+    const out = jqAttr('a & "b"');
+    expect(out).toBe('&quot;a &amp; \\&quot;b\\&quot;&quot;');
+    const back = out.replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+    expect(JSON.parse(back)).toBe('a & "b"');
+  });
+});

@@ -14,6 +14,12 @@ let me = null;
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function escJs(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"').replace(/\n/g,'\\n');}
+// JSON value for use INSIDE a double-quoted HTML attribute (e.g. onclick="fn(...)").
+// Raw JSON.stringify output contains " characters that terminate the attribute
+// early, leaving a truncated handler like `AdmTx.approve(` -> SyntaxError:
+// Unexpected end of input. Encoding the quotes as &quot; keeps the attribute
+// intact; the browser decodes them back before compiling the handler.
+function jqAttr(v){const s=JSON.stringify(v);return (s===undefined?'""':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');}
 function bn(n){return Number(n||0).toLocaleString('bn-BD');}
 
 function getAuthToken() {
@@ -1834,7 +1840,7 @@ window.AdmOrders = {
         manualFormHtml = '<div style="margin:12px 0;padding:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">' +
           '<div style="font-weight:700;margin-bottom:8px;color:#166534;display:flex;justify-content:space-between;align-items:center;">' +
             '<span>📝 ইউজার কর্তৃক পূরণকৃত আবেদন</span>' +
-            '<button onclick="AdmOrders.copyVal(' + JSON.stringify(String(data._manual_form)).replace(/</g, '\\u003c') + ')" class="mini-btn ok">📋 কপি করুন</button>' +
+            '<button onclick="AdmOrders.copyVal(' + jqAttr(String(data._manual_form)).replace(/</g, '\\u003c') + ')" class="mini-btn ok">📋 কপি করুন</button>' +
           '</div>' +
           '<pre style="white-space:pre-wrap;font-family:monospace;font-size:13px;margin:0;color:#1e293b;">' + esc(String(data._manual_form)) + '</pre>' +
         '</div>';
@@ -1852,7 +1858,7 @@ window.AdmOrders = {
             return '<div class="adm-field-card">' +
               '<div class="adm-field-head">' +
                 '<span class="adm-field-label">' + esc(label) + '</span>' +
-                '<button class="adm-copy-chip" onclick="AdmOrders.copyVal(' + JSON.stringify(val).replace(/</g, '\\u003c') + ')">📋 কপি</button>' +
+                '<button class="adm-copy-chip" onclick="AdmOrders.copyVal(' + jqAttr(val).replace(/</g, '\\u003c') + ')">📋 কপি</button>' +
               '</div>' +
               '<div class="adm-field-val">' + (val ? esc(val) : '<span style="color:#94a3b8;font-weight:normal;">(খালি)</span>') + '</div>' +
             '</div>';
@@ -3074,8 +3080,8 @@ TABS.recharge = async () => {
       let actionBlock = '';
       if (t.status === 'pending') {
         actionBlock = '<div style="display:flex; align-items:center; gap:8px;">' +
-          '<button class="mini-btn ok" style="padding:7px 14px; font-size:12px; font-weight:700; background:#16a34a; color:#fff;" onclick="AdmTx.approve(' + JSON.stringify(t.id) + ', ' + t.amount + ', ' + JSON.stringify(t.user_name) + ')">✅ Approve</button>' +
-          '<button class="mini-btn danger" style="padding:7px 12px; font-size:12px; font-weight:600;" onclick="AdmTx.reject(' + JSON.stringify(t.id) + ', ' + t.amount + ', ' + JSON.stringify(t.user_name) + ')">❌ Reject</button>' +
+          '<button class="mini-btn ok" style="padding:7px 14px; font-size:12px; font-weight:700; background:#16a34a; color:#fff;" onclick="AdmTx.approve(' + jqAttr(t.id) + ', ' + t.amount + ', ' + jqAttr(t.user_name) + ')">✅ Approve</button>' +
+          '<button class="mini-btn danger" style="padding:7px 12px; font-size:12px; font-weight:600;" onclick="AdmTx.reject(' + jqAttr(t.id) + ', ' + t.amount + ', ' + jqAttr(t.user_name) + ')">❌ Reject</button>' +
         '</div>';
       } else if (t.status === 'approved') {
         actionBlock = '<span style="display:inline-block; padding:4px 10px; border-radius:6px; font-size:12px; font-weight:700; background:#dcfce7; color:#15803d; border:1px solid #bbf7d0;">✅ অনুমোদিত</span>';
@@ -3093,7 +3099,7 @@ TABS.recharge = async () => {
           '</div>' +
           '<div style="font-size:13px; color:#475569; display:flex; flex-wrap:wrap; gap:12px; align-items:center;">' +
             '<span>📞 ' + esc(t.sender_no || t.user_phone) + '</span>' +
-            '<span>TrxID: <button style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:1px 6px; font-family:monospace; font-size:12px; cursor:pointer;" onclick="navigator.clipboard.writeText(' + JSON.stringify(t.trxid) + ');admToast(\'কপি সফল\', \'TrxID কপি করা হয়েছে\')">📋 ' + esc(t.trxid) + '</button></span>' +
+            '<span>TrxID: <button style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:1px 6px; font-family:monospace; font-size:12px; cursor:pointer;" onclick="navigator.clipboard.writeText(' + jqAttr(t.trxid) + ');admToast(\'কপি সফল\', \'TrxID কপি করা হয়েছে\')">📋 ' + esc(t.trxid) + '</button></span>' +
           '</div>' +
           '<div style="font-size:11px; color:#94a3b8; margin-top:4px;">🕒 ' + new Date(t.created_at).toLocaleString('bn-BD') + '</div>' +
         '</div>' +
@@ -3843,7 +3849,7 @@ TABS.notices = async () => {
           '<div style="font-size:13px; color:#334155; line-height:1.5; white-space:pre-wrap; margin-bottom:8px;">' + esc(n.message) + '</div>' +
           '<div style="font-size:11px; color:#94a3b8;">🕒 প্রকাশিত: ' + new Date(n.created_at).toLocaleString('bn-BD') + '</div>' +
         '</div>' +
-        '<button class="mini-btn danger" style="padding:6px 12px; font-size:12px;" onclick="AdmNt.del(' + JSON.stringify(n.id) + ')">🗑️ ডিলিট</button>' +
+        '<button class="mini-btn danger" style="padding:6px 12px; font-size:12px;" onclick="AdmNt.del(' + jqAttr(n.id) + ')">🗑️ ডিলিট</button>' +
       '</div>';
     }
     html += '</div>';
