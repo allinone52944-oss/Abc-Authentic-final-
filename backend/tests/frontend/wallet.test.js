@@ -1,11 +1,15 @@
 /**
- * Frontend regression — wallet.html cashback hub dedup (2026-10-21).
+ * Frontend regression — wallet.html cashback layout.
  *
- * The cashback create/redeem buttons used to render TWICE for the same
- * recharge: once inside the "Cashback Hub" card (renderCashbackHub) and
- * once on the recharge's own card in the transaction list (loadWallet).
- * The hub is now summary-only; the buttons live in exactly one place.
- * These tests pin that invariant against the real source file.
+ * History:
+ *  - 2026-10-21 (dedup): create/redeem buttons rendered twice for the
+ *    same recharge (hub card + transaction card). Hub became summary-only.
+ *  - 2026-10-21 (daily rule, owner spec): cashback is claimed ONCE per
+ *    day on the combined total of all unclaimed approved recharges.
+ *    Per-recharge coupon creation is removed from the UI entirely;
+ *    the hub carries the single daily claim button (cbDailySlot),
+ *    filled by loadDailyCashback() from GET /cashback/today.
+ * These tests pin the current invariants against the real source file.
  */
 const fs = require('fs');
 const path = require('path');
@@ -23,26 +27,32 @@ function slice(from, to) {
 }
 
 const hub = slice('function renderCashbackHub', 'async function loadWallet');
-const txList = slice('async function loadWallet', 'async function generateCashbackCoupon');
+const txList = slice('async function loadWallet', 'async function loadDailyCashback');
+const daily = slice('async function loadDailyCashback', 'async function instantRedeemCode');
 
-describe('wallet cashback hub — buttons in exactly one place', () => {
-  test('hub renders NO coupon action buttons (summary only)', () => {
-    expect(hub).not.toContain('generateCashbackCoupon(this.dataset.id');
-    expect(hub).not.toContain('instantRedeemCode(this.dataset.code');
-    expect(hub).not.toContain('copyCode(this.dataset.code');
+describe('wallet cashback — daily claim, one button, one place', () => {
+  test('per-recharge coupon creation is gone from the UI', () => {
+    expect(SRC).not.toContain('generateCashbackCoupon');
+    expect(SRC).not.toContain('/cashback/generate');
   });
 
-  test('hub still shows summary counts for eligible + unredeemed', () => {
+  test('hub renders NO action buttons itself (summary + daily slot only)', () => {
+    expect(hub).not.toContain('instantRedeemCode(this.dataset.code');
+    expect(hub).toContain('cbDailySlot');
     expect(hub).toContain('ক্যাশব্যাক প্রাপ্য');
     expect(hub).toContain('রিডিমের জন্য প্রস্তুত');
   });
 
-  test('transaction list keeps the single create + redeem buttons', () => {
-    expect(txList).toContain('generateCashbackCoupon(this.dataset.id');
-    expect(txList).toContain('instantRedeemCode(this.dataset.code');
+  test('daily claim UI is driven by /cashback/today and /cashback/redeem', () => {
+    expect(daily).toContain("ABC.api('/cashback/today')");
+    expect(daily).toContain('claimDailyCashback');
+    expect(SRC).toContain("ABC.api('/cashback/redeem'");
+    expect(daily).toContain('আজকের ক্যাশব্যাক সংগ্রহ করুন');
+    expect(daily).toContain('আজকের ক্যাশব্যাক সংগ্রহ করা হয়েছে');
   });
 
-  test('redeemed state stays a single badge in the transaction list', () => {
+  test('transaction list keeps coupon redeem + redeemed badge (old coupons stay usable)', () => {
+    expect(txList).toContain('instantRedeemCode(this.dataset.code');
     expect(txList).toContain("coupon.status === 'redeemed'");
     expect(txList).toContain('ব্যালেন্সে জমা হয়েছে');
   });

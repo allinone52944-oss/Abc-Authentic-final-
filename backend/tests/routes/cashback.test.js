@@ -70,7 +70,8 @@ describe('POST /api/cashback/redeem', () => {
       ["SELECT value FROM settings WHERE key = 'cashback'", over.cashback || CASHBACK_ON],
       ['TO_CHAR', { rows: [{ d: '2026-10-13' }] }],
       ['SELECT id FROM daily_cashback_redemptions WHERE user_id', over.exist || { rows: [] }],
-      ['COALESCE(SUM(amount), 0) AS total', { rows: [{ total: over.total === undefined ? '500' : over.total }] }],
+      ['SELECT id, amount', over.list || { rows: over.total === '0' ? [] : [{ id: 'tx1', amount: over.total === undefined ? '500' : over.total }] }],
+      ['recharge_ids @>', { rows: [] }],
       ['INSERT INTO daily_cashback_redemptions', over.insert || {
         rows: [{ coupon_code: 'CB-20261013-AB12', amount: 50, recharge_total: 500, percent: 10 }],
       }],
@@ -89,6 +90,21 @@ describe('POST /api/cashback/redeem', () => {
     const wallet = db.__client.query.mock.calls.find((c) => /wallet_apply/.test(c[0]));
     expect(wallet).toBeDefined();
     expect(wallet[1][3]).toContain('daily-cashback-'); // idempotent ref
+    const ins = db.__client.query.mock.calls.find((c) => /INSERT INTO daily_cashback_redemptions/.test(c[0]));
+    expect(ins).toBeDefined();
+    expect(JSON.parse(ins[1][6])).toEqual(['tx1']); // covered recharge ids frozen (migration 031)
+  });
+
+  test('claim covers ALL unclaimed recharges combined, not per-recharge', async () => {
+    db.__routeQuery(redeemHandlers({
+      list: { rows: [{ id: 'tx1', amount: '200' }, { id: 'tx2', amount: '300' }] },
+      insert: { rows: [{ coupon_code: 'CB-20261013-AB12', amount: 50, recharge_total: 500, percent: 10 }] },
+    }));
+    const r = await withUser(request(app()).post('/api/cashback/redeem')).expect(200);
+    expect(r.body.amount).toBe(50); // 10% of combined 200+300
+    expect(r.body.recharge_total).toBe(500);
+    const ins = db.__client.query.mock.calls.find((c) => /INSERT INTO daily_cashback_redemptions/.test(c[0]));
+    expect(JSON.parse(ins[1][6])).toEqual(['tx1', 'tx2']);
   });
 
   test('double redeem same day → 409 ALREADY_REDEEMED_TODAY', async () => {

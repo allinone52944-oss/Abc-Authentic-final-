@@ -441,7 +441,7 @@ function renderCashbackHub(d) {
         '<span style="font-size:20px;">🎉</span>' +
         '<div style="font-size:13px;color:#065f46;">' +
           '<b>আপনার ' + bn(eligible.length) + 'টি অনুমোদিত রিচার্জে মোট ৳' + bn(totalExp) + ' ক্যাশব্যাক প্রাপ্য।</b>' +
-          '<div style="font-size:12px;color:#047857;margin-top:2px;">নিচে লেনদেনের তালিকায় প্রতিটি রিচার্জের পাশের বাটন থেকে ১-ক্লিকে কুপন তৈরি করুন।</div>' +
+          '<div style="font-size:12px;color:#047857;margin-top:2px;">সারাদিনে যতবারই রিচার্জ হোক, ক্যাশব্যাক দিনে একবারই সংগ্রহ করা যায় — নিচের বাটন থেকে আজকের মোটের ক্যাশব্যাক সংগ্রহ করুন।</div>' +
         '</div>' +
       '</div>';
     }
@@ -480,6 +480,7 @@ function renderCashbackHub(d) {
     }
   }
 
+  html += '<div id="cbDailySlot"></div>';
   body.innerHTML = html;
 }
 
@@ -499,6 +500,7 @@ async function loadWallet(){
 
   const cbCfg = d.cashback || { enabled: false, percent: 0 };
   renderCashbackHub(d);
+  loadDailyCashback();
 
   document.getElementById('txList').innerHTML = d.transactions.map(t => {
     let cbHtml = '';
@@ -517,13 +519,9 @@ async function loadWallet(){
               '<button class="cb-btn" data-code="' + esc(coupon.code) + '" onclick="instantRedeemCode(this.dataset.code)">⚡ ওয়ালেটে রিডিম করুন</button> ' +
               '<button class="cb-btn sec" data-code="' + esc(coupon.code) + '" onclick="copyCode(this.dataset.code)">📋 কপি</button></div>';
           }
-        } else if (cbCfg.enabled && cbCfg.percent > 0) {
-          const expected = Math.floor(Number(t.amount) * cbCfg.percent / 100 * 100) / 100;
-          if (expected > 0) {
-            cbHtml = '<div class="cb-badge">🎁 <b>' + bn(cbCfg.percent) + '% ক্যাশব্যাক প্রাপ্য (৳' + bn(expected) + ')</b> ' +
-              '<button class="cb-btn" data-id="' + esc(t.id) + '" onclick="generateCashbackCoupon(this.dataset.id, this)">⚡ ১-ক্লিকে কুপন তৈরি করুন</button></div>';
-          }
         }
+        // No per-recharge create button: cashback is claimed once per
+        // day on the combined total from the hub card above (2026-10-21).
       } else if (t.status === 'rejected') {
         cbHtml = '<div class="cb-badge pending" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;">❌ রিচার্জ প্রত্যাখ্যাত</div>';
       }
@@ -542,60 +540,54 @@ async function loadWallet(){
   }
 }
 
-async function generateCashbackCoupon(rechargeId, btnEl) {
-  if (btnEl) {
-    btnEl.disabled = true;
-    btnEl.dataset.origText = btnEl.innerHTML;
-    btnEl.innerHTML = "⏳ তৈরি হচ্ছে...";
-  }
+// ============================================================
+// Daily cashback claim (2026-10-21): ONE claim per day on the
+// combined total of all still-unclaimed approved recharges.
+// Per-recharge coupon creation is gone from the UI on purpose —
+// however many times the user recharges in a day, they collect
+// cashback exactly once; nothing is lost, later recharges join
+// the next day's claim (backend: POST /cashback/redeem).
+// ============================================================
+async function loadDailyCashback() {
+  const slot = document.getElementById('cbDailySlot');
+  if (!slot) return;
   try {
-    const r = await ABC.api("/cashback/generate", {
-      method: "POST",
-      body: { recharge_id: rechargeId }
-    });
+    const r = await ABC.api('/cashback/today');
+    if (!r.ok) { slot.innerHTML = ''; return; }
+    const d = await r.json();
+    if (!d.enabled || !(Number(d.percent) > 0)) { slot.innerHTML = ''; return; }
+    if (d.can_redeem) {
+      slot.innerHTML = '<div style="margin-top:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:12px 14px;">' +
+        '<button class="cb-btn" style="width:100%;font-size:14px;padding:10px;" onclick="claimDailyCashback(this)">🎁 আজকের ক্যাশব্যাক সংগ্রহ করুন (৳' + bn(d.cashback_amount) + ')</button>' +
+        '<div style="font-size:12px;color:#047857;margin-top:8px;text-align:center;">অদাবিকৃত ' + bn(d.recharge_count) + 'টি রিচার্জের মোট ৳' + bn(d.recharge_total) + '-এর ওপর ' + bn(d.percent) + '% — দিনে একবারই সংগ্রহ করা যায়।</div>' +
+      '</div>';
+    } else if (d.already_redeemed) {
+      slot.innerHTML = '<div style="margin-top:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px;font-size:13px;color:#15803d;">' +
+        '✅ <b>আজকের ক্যাশব্যাক সংগ্রহ করা হয়েছে</b>' + (d.coupon_code ? ' (কোড: ' + esc(d.coupon_code) + ')' : '') +
+        (Number(d.cashback_amount) > 0 ? '<div style="font-size:12px;color:#16a34a;margin-top:3px;">এরপরের রিচার্জগুলোর ক্যাশব্যাক আগামীকাল সংগ্রহ করা যাবে।</div>' : '') +
+      '</div>';
+    } else {
+      slot.innerHTML = '';
+    }
+  } catch (e) { /* hub stays usable without the daily slot */ }
+}
+
+async function claimDailyCashback(btnEl) {
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳ সংগ্রহ হচ্ছে...'; }
+  try {
+    const r = await ABC.api('/cashback/redeem', { method: 'POST', body: {} });
     const d = await r.json();
     if (!r.ok) {
-      const errMap = {
-        "ALREADY_GENERATED": "এই রিচার্জের কুপন ইতোমধ্যে তৈরি হয়েছে।",
-        "CASHBACK_DISABLED": "বর্তমানে ক্যাশব্যাক অফার বন্ধ রয়েছে।",
-        "NOTHING_TO_GENERATE": "এই রিচার্জের জন্য কোনো ক্যাশব্যাক প্রাপ্য নেই।",
-        "INVALID_RECHARGE": "অনুমোদিত রিচার্জ পাওয়া যায়নি বা এটি ক্যাশব্যাকের জন্য উপযুক্ত নয়।",
-        "MISSING_RECHARGE": "রিচার্জ আইডি পাওয়া যায়নি।"
-      };
-      const msg = errMap[d.error] || (d.message ? "ত্রুটি: " + d.message : (d.error || "ব্যর্থ"));
-      alert("❌ " + msg);
+      alert('❌ ' + (d.error === 'ALREADY_REDEEMED_TODAY' ? 'আজকের ক্যাশব্যাক ইতোমধ্যে সংগ্রহ করা হয়েছে।' : (d.error || 'ব্যর্থ হয়েছে')));
       loadWallet();
       return;
     }
-    const c = d.coupon;
-    showCouponSuccess(c);
+    celebrate(Number(d.amount) || 0, d.coupon_code);
+    alert('🎉 অভিনন্দন! আজকের ক্যাশব্যাক ৳' + bn(d.amount) + ' আপনার ওয়ালেট ব্যালেন্সে যোগ হয়েছে!');
     loadWallet();
   } catch (e) {
-    alert("❌ ত্রুটি: " + e.message);
-  } finally {
-    if (btnEl) {
-      btnEl.disabled = false;
-      if (btnEl.dataset.origText) btnEl.innerHTML = btnEl.dataset.origText;
-    }
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = '🎁 আবার চেষ্টা করুন'; }
   }
-}
-function showCouponSuccess(coupon) {
-  const ov = document.getElementById('cbOverlay');
-  if (!ov) return;
-  document.getElementById('cbTitle').textContent = '🎉 ' + coupon.percent + '% ক্যাশব্যাক কুপন তৈরি হয়েছে!';
-  document.getElementById('cbCode').textContent = 'কুপন কোড: ' + coupon.code;
-  document.getElementById('cbWon').textContent = '৳' + bn(coupon.amount);
-  const instantBtn = document.getElementById('cbInstantBtn');
-  instantBtn.onclick = () => {
-    ov.classList.remove('show');
-    instantRedeemCode(coupon.code);
-  };
-  const copyBtn = document.getElementById('cbCopyBtn');
-  copyBtn.onclick = () => {
-    copyCode(coupon.code);
-  };
-  ov.classList.add('show');
-  celebrate(Number(coupon.amount) || 0, coupon.code);
 }
 
 async function instantRedeemCode(code) {

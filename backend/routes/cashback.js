@@ -2,8 +2,16 @@
 // All In One (Abc Authentic) - Daily Cashback routes
 // - Cashback % comes from settings: cashback = {enabled, percent}
 // - "Today" = Asia/Dhaka date (user's day, not UTC)
-// - Only APPROVED recharges count toward today's total
-// - One redeem per user per day (UNIQUE user_id, day) — idempotent
+// - ONE claim per user per day (UNIQUE user_id, day) — idempotent
+// - A claim covers ALL still-unclaimed APPROVED recharges (any date):
+//   however many times the user recharges, they create/collect once
+//   per day on the combined total. Recharges approved after the
+//   day's claim are not lost — they join the next day's claim.
+//   Coverage is exact: claimed recharge ids are stored on the
+//   redemption row (recharge_ids, migration 031). A recharge with a
+//   per-recharge coupon (POST /generate) is excluded here, and a
+//   recharge covered by a daily claim cannot get a coupon either
+//   (the wallet API hides it via the coupon subquery + claim ids).
 // ============================================================
 const express = require('express');
 const crypto = require('crypto');
@@ -16,14 +24,27 @@ router.use(requireAuth);
 
 // Dhaka "today" as DATE
 const DHARAKA_DAY_SQL = `DATE((NOW() AT TIME ZONE 'Asia/Dhaka'))`;
-const DHARAKA_TODAY_TX_SQL = `
-  SELECT COALESCE(SUM(amount), 0) AS total
-  FROM transactions
-  WHERE user_id = $1
+// Still-unclaimed approved recharges for a user: no per-recharge coupon,
+// and not covered by any earlier daily claim (recharge_ids, migration 031).
+const UNCLAIMED_WHERE = `
+    user_id = $1
     AND type = 'recharge'
     AND status = 'approved'
     AND NOT EXISTS (SELECT 1 FROM coupons c WHERE c.recharge_id = transactions.id)
-    AND DATE((created_at AT TIME ZONE 'Asia/Dhaka')) = ${DHARAKA_DAY_SQL}`;
+    AND NOT EXISTS (
+      SELECT 1 FROM daily_cashback_redemptions r
+      WHERE r.user_id = $1
+        AND r.recharge_ids @> jsonb_build_array(transactions.id::text)
+    )`;
+const UNCLAIMED_TOTAL_SQL = `
+  SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*)::int AS cnt
+  FROM transactions
+  WHERE ${UNCLAIMED_WHERE}`;
+const UNCLAIMED_LIST_SQL = `
+  SELECT id, amount
+  FROM transactions
+  WHERE ${UNCLAIMED_WHERE}
+  ORDER BY created_at ASC`;
 
 async function cashbackConfig(client) {
   const runner = client && typeof client.query === 'function' ? client : db;
@@ -42,12 +63,15 @@ function makeCouponCode(dayStr) {
   return 'CB-' + dayStr.replace(/-/g, '') + '-' + rand;
 }
 
-// GET /api/cashback/today — today's status for this user
+// GET /api/cashback/today — claim status for this user:
+// what the next claim would pay (all unclaimed approved recharges),
+// and whether today's one claim is still available.
 router.get('/today', async (req, res) => {
   try {
     const cfg = await cashbackConfig(db);
-    const t = await db.query(DHARAKA_TODAY_TX_SQL, [req.user.id]);
+    const t = await db.query(UNCLAIMED_TOTAL_SQL, [req.user.id]);
     const rechargeTotal = Number(t.rows[0].total) || 0;
+    const rechargeCount = Number(t.rows[0].cnt) || 0;
     const amount = cfg.enabled && cfg.percent > 0 && rechargeTotal > 0
       ? Math.floor(rechargeTotal * cfg.percent / 100 * 100) / 100
       : 0;
@@ -60,6 +84,7 @@ router.get('/today', async (req, res) => {
     res.json({
       ok: true,
       recharge_total: rechargeTotal,
+      recharge_count: rechargeCount,
       percent: cfg.percent,
       enabled: cfg.enabled,
       cashback_amount: amount,
@@ -92,11 +117,11 @@ router.post('/redeem', async (req, res) => {
         throw err;
       }
 
-      const t = await client.query(
-        DHARAKA_TODAY_TX_SQL.replace(DHARAKA_DAY_SQL, '$2::date'),
-        [req.user.id, dayStr]
-      );
-      const rechargeTotal = Number(t.rows[0].total) || 0;
+      // Lock every still-unclaimed approved recharge and take the
+      // combined total — one claim per day, however many recharges.
+      const list = await client.query(UNCLAIMED_LIST_SQL + ' FOR UPDATE', [req.user.id]);
+      const rechargeIds = list.rows.map((x) => String(x.id));
+      const rechargeTotal = list.rows.reduce((sum, x) => sum + Number(x.amount || 0), 0);
       const amount = cfg.enabled && cfg.percent > 0 && rechargeTotal > 0
         ? Math.floor(rechargeTotal * cfg.percent / 100 * 100) / 100
         : 0;
@@ -107,14 +132,15 @@ router.post('/redeem', async (req, res) => {
       }
 
       const couponCode = makeCouponCode(dayStr);
-      // Record redemption (unique constraint = second idempotency net)
+      // Record redemption (unique constraint = second idempotency net).
+      // recharge_ids freezes exactly which recharges this claim covered.
       const ins = await client.query(
         `INSERT INTO daily_cashback_redemptions
-           (user_id, day, recharge_total, percent, amount, coupon_code)
-         VALUES ($1, $2::date, $3, $4, $5, $6)
+           (user_id, day, recharge_total, percent, amount, coupon_code, recharge_ids)
+         VALUES ($1, $2::date, $3, $4, $5, $6, $7::jsonb)
          ON CONFLICT (user_id, day) DO NOTHING
          RETURNING *`,
-        [req.user.id, dayStr, rechargeTotal, cfg.percent, amount, couponCode]
+        [req.user.id, dayStr, rechargeTotal, cfg.percent, amount, couponCode, JSON.stringify(rechargeIds)]
       );
       if (!ins.rows.length) {
         const err = new Error('ALREADY_REDEEMED_TODAY');
@@ -183,7 +209,20 @@ router.post('/generate', async (req, res) => {
         throw err;
       }
 
-      // Same recharge must not earn cashback twice (daily redeem + coupon)
+      // Same recharge must not earn cashback twice (daily claim + coupon).
+      // Primary check: the recharge is already covered by a daily claim
+      // (recharge_ids, migration 031). Legacy check: a daily redemption
+      // exists for the recharge's own day (pre-031 claims store no ids).
+      const claimed = await client.query(
+        `SELECT id FROM daily_cashback_redemptions
+         WHERE user_id = $1 AND recharge_ids @> jsonb_build_array($2::text) LIMIT 1`,
+        [req.user.id, String(recharge_id)]
+      );
+      if (claimed.rows.length) {
+        const err = new Error('ALREADY_GENERATED');
+        err.statusCode = 409;
+        throw err;
+      }
       if (rc.rows[0].day) {
         const daily = await client.query(
           `SELECT id FROM daily_cashback_redemptions WHERE user_id = $1 AND day = $2::date LIMIT 1`,
