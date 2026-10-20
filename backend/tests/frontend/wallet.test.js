@@ -57,6 +57,17 @@ describe('wallet cashback — daily claim, one button, one place', () => {
     expect(daily).toContain('আজ আর নতুন ক্যাশব্যাক সংগ্রহ করা যাবে না');
   });
 
+  test('hub shows service-locked credits separately from the balance', () => {
+    expect(SRC).toContain('service_credits');
+    expect(SRC).toContain('শুধু এই সেবাতেই খরচ হবে');
+    expect(hub).toContain('সেবা-নির্দিষ্ট ক্রেডিট');
+  });
+
+  test('redeem messages explain the lock when the coupon is service-scoped', () => {
+    expect(SRC).toContain('service_locked');
+    expect(SRC).toContain('সংরক্ষিত ক্রেডিট');
+  });
+
   test('transaction list keeps coupon redeem + redeemed badge (old coupons stay usable)', () => {
     expect(txList).toContain('instantRedeemCode(this.dataset.code');
     expect(txList).toContain("coupon.status === 'redeemed'");

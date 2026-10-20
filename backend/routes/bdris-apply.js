@@ -54,13 +54,23 @@ async function getPdfPrice() {
   return isNaN(n) ? 0 : Math.max(0, n);
 }
 
-// Deduct amount from user wallet. Throws INSUFFICIENT_BALANCE.
+// Deduct amount for the bdris-apply service. Service-locked credit
+// for THIS service is consumed first, the rest from the wallet
+// balance (lib/serviceCredits). Throws INSUFFICIENT_BALANCE.
+const serviceCredits = require('../lib/serviceCredits');
+async function getBdrisServiceId() {
+  const r = await db.query(
+    `SELECT id FROM services WHERE engine_id = 'bdris-apply' AND status = 'active' LIMIT 1`);
+  return r.rows.length ? r.rows[0].id : null;
+}
 async function chargeWallet(userId, amount, ref) {
   if (!amount || amount <= 0) return { charged: 0 };
-  const r = await db.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
-    userId, -Math.abs(amount), 'debit', ref,
-  ]);
-  return { charged: amount, newBalance: Number(r.rows[0].new_balance) };
+  const serviceId = await getBdrisServiceId();
+  const out = await db.withTransaction((client) =>
+    serviceCredits.payForService(client, {
+      userId, serviceId, amount: Math.abs(amount), ref,
+    }));
+  return { charged: amount, newBalance: out.newBalance };
 }
 
 // ---- charge endpoints (JWT required) -------------------------

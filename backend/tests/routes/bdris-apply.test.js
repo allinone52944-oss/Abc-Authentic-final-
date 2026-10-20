@@ -20,8 +20,20 @@ const withUser = (req) => req.set('Authorization', 'Bearer ' + token());
 
 beforeEach(() => { db.__reset(); });
 
+// Charging now goes through lib/serviceCredits.payForService inside a
+// transaction: it needs the service id row and the locked user balance
+// row, and the wallet_apply call lands on the transaction client.
+// Defaults are appended AFTER each test's own handlers so tests can
+// still override (e.g. a zero balance for the insufficient cases).
+const __origRQ = db.__routeQuery.bind(db);
+db.__routeQuery = (handlers = [], fallback) => __origRQ([
+  ...handlers,
+  ['SELECT id FROM services WHERE engine_id', { rows: [{ id: 'svc-bdris' }] }],
+  ['users WHERE id = $1 FOR UPDATE', { rows: [{ balance: 10000 }] }],
+], fallback);
+
 function walletRefOfLastCharge() {
-  const call = db.query.mock.calls.filter((c) => /wallet_apply/.test(c[0])).pop();
+  const call = db.__client.query.mock.calls.filter((c) => /wallet_apply/.test(c[0])).pop();
   return call ? call[1][3] : null;
 }
 
@@ -84,7 +96,7 @@ describe('POST /api/bdris-apply/charge/submit', () => {
   test('insufficient balance → 402 INSUFFICIENT_BALANCE (Bengali message)', async () => {
     db.__routeQuery([
       ['FROM services WHERE engine_id', { rows: [{ price: '100' }] }],
-      ['wallet_apply', () => { throw new Error('INSUFFICIENT_BALANCE'); }],
+      ['users WHERE id = $1 FOR UPDATE', { rows: [{ balance: 0 }] }],
     ]);
     const r = await withUser(request(app()).post('/api/bdris-apply/charge/submit'))
       .send({ idempotency_key: 'k1' }).expect(402);
@@ -125,7 +137,7 @@ describe('POST /api/bdris-apply/charge/pdf', () => {
   test('insufficient balance → 402', async () => {
     db.__routeQuery([
       ["SELECT value FROM settings WHERE key = 'bdris_apply.pdf_price'", { rows: [{ value: 50 }] }],
-      ['wallet_apply', () => { throw new Error('INSUFFICIENT_BALANCE'); }],
+      ['users WHERE id = $1 FOR UPDATE', { rows: [{ balance: 0 }] }],
     ]);
     const r = await withUser(request(app()).post('/api/bdris-apply/charge/pdf'))
       .send({ idempotency_key: 'k' }).expect(402);

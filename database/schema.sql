@@ -153,6 +153,22 @@ CREATE INDEX IF NOT EXISTS idx_osh_order ON order_status_history(order_id, creat
 -- ------------------------------------------------------------
 -- TRANSACTIONS (wallet: recharge / cashback / promo / refund)
 -- ------------------------------------------------------------
+-- Service-locked credits (032): scoped coupon/cashback money that can
+-- only be spent on one service; never merges into users.balance.
+CREATE TABLE IF NOT EXISTS service_credits (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+    source     VARCHAR(20) NOT NULL DEFAULT 'coupon',
+    ref        VARCHAR(255) UNIQUE,
+    amount     NUMERIC(12,2) NOT NULL,
+    remaining  NUMERIC(12,2) NOT NULL,
+    expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_svc_credits_user_service
+    ON service_credits(user_id, service_id) WHERE remaining > 0;
+
 CREATE TABLE IF NOT EXISTS transactions (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

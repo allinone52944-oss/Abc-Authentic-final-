@@ -10,6 +10,7 @@ const express = require('express');
 const { requireAuth } = require('../auth');
 const { safeLog, uploadMiddleware } = require('../security');
 const db = require('../db');
+const serviceCredits = require('../lib/serviceCredits');
 const nidAdapter = require('../../engines/nid-replica/adapter');
 
 const router = express.Router();
@@ -98,7 +99,8 @@ router.post('/build', requireAuth, async (req, res) => {
     if (price > 0) {
       const u = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
       const balance = u.rows[0] ? Number(u.rows[0].balance) : 0;
-      if (balance < price) {
+      const lockedCredit = await serviceCredits.availableFor(db, req.user.id, serviceId);
+      if (balance + lockedCredit < price) {
         return res.status(402).json({
           error: 'INSUFFICIENT_BALANCE',
           message: `পর্যাপ্ত ব্যালেন্স নেই। কার্ড তৈরি করতে ৳${price} প্রয়োজন, বর্তমান ব্যালেন্স ৳${balance}।`,
@@ -117,15 +119,15 @@ router.post('/build', requireAuth, async (req, res) => {
     if (price > 0) {
       const ref = 'nid-card-' + jobId;
       const alreadyPaid = await db.query(
-        `SELECT 1 FROM transactions WHERE user_id = $1 AND trxid = $2 AND status = 'approved' LIMIT 1`,
-        [req.user.id, ref]
+        `SELECT 1 FROM transactions WHERE user_id = $1 AND trxid IN ($2, $3) AND status = 'approved' LIMIT 1`,
+        [req.user.id, ref, ref + ':svc']
       );
 
       if (!alreadyPaid.rows.length) {
         try {
-          await db.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
-            req.user.id, -Math.abs(price), 'debit', ref
-          ]);
+          await db.withTransaction((client) => serviceCredits.payForService(client, {
+            userId: req.user.id, serviceId, amount: Math.abs(price), ref,
+          }));
           safeLog('[nid-engine] charged', price, 'for user', req.user.id, 'job', jobId);
 
                   } catch (e) {

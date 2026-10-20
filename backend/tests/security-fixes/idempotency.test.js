@@ -30,8 +30,17 @@ function chargeHandlers() {
     ['wallet_apply', { rows: [{ new_balance: '900' }] }],
   ];
 }
+// Charging goes through lib/serviceCredits inside a transaction now:
+// defaults appended after each test's handlers (see routes/bdris test).
+const __origRQ = db.__routeQuery.bind(db);
+db.__routeQuery = (handlers = [], fallback) => __origRQ([
+  ...handlers,
+  ['SELECT id FROM services WHERE engine_id', { rows: [{ id: 'svc-bdris' }] }],
+  ['users WHERE id = $1 FOR UPDATE', { rows: [{ balance: 10000 }] }],
+], fallback);
+
 function lastWalletRef() {
-  const calls = db.query.mock.calls.filter((c) => /wallet_apply/.test(c[0]));
+  const calls = db.__client.query.mock.calls.filter((c) => /wallet_apply/.test(c[0]));
   return calls.length ? calls[calls.length - 1][1][3] : null;
 }
 

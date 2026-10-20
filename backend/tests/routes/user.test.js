@@ -84,6 +84,8 @@ describe('POST /api/orders', () => {
       ['FROM services WHERE id', { rows: [service] }],
       ['FROM user_services WHERE user_id', { rows: [] }],
       ['INSERT INTO orders', { rows: [{ id: 'o1', user_id: 'u1', service_id: service.id, status: 'new', price: service.price }] }],
+      ['users WHERE id = $1 FOR UPDATE', { rows: [{ balance: 10000 }] }],
+      ['wallet_apply', { rows: [{ new_balance: 9900, tx_id: 'tx9' }] }],
     ];
   }
 
@@ -124,8 +126,8 @@ describe('POST /api/orders', () => {
 
   test('insufficient balance → 402 INSUFFICIENT_BALANCE', async () => {
     db.__routeQuery([
+      ['users WHERE id = $1 FOR UPDATE', { rows: [{ balance: 10 }] }],
       ...serviceHandlers(),
-      ['wallet_apply', () => { throw new Error('INSUFFICIENT_BALANCE by wallet_apply'); }],
     ]);
     const r = await withUser(request(app()).post('/api/orders')).send({ service_id: 's1' }).expect(402);
     expect(r.body.error).toBe('INSUFFICIENT_BALANCE');
@@ -134,7 +136,7 @@ describe('POST /api/orders', () => {
   test("duplicate submit (DUPLICATE_TRANSACTION) returns existing order without clientKey scope crash", async () => {
     db.__routeQuery([
       ...serviceHandlers(),
-      ["wallet_apply", () => { throw new Error("DUPLICATE_TRANSACTION: order-test-key-u1"); }],
+      ["trxid IN", { rows: [{ "?column?": 1 }] }],
       ["SELECT * FROM orders WHERE user_id = $1 AND idempotency_key = $2", { rows: [{ id: "o_orig", idempotency_key: "test-key" }] }],
     ]);
     const r = await withUser(request(app()).post("/api/orders"))
@@ -290,6 +292,8 @@ describe('POST /api/wallet/coupon (security fix: transaction + CODE_TOO_LONG)', 
       ['SELECT COALESCE(SUM(ABS(amount)),0) AS s FROM transactions', { rows: [{ s: '1000' }] }],
       ['INSERT INTO daily_cashback_redemptions', { rows: [] }],
       ['SELECT balance FROM users WHERE id', { rows: [{ balance: '150' }] }],
+      ['INSERT INTO service_credits', { rows: [{ id: 'sc1' }] }],
+      ['name_bn, name FROM services', { rows: [{ name_bn: 'জন্ম নিবন্ধন', name: 'Birth Registration' }] }],
     ];
   }
   const post = (code) => withUser(request(app()).post('/api/wallet/coupon')).send(code === undefined ? {} : { code });
@@ -361,24 +365,28 @@ describe('POST /api/wallet/coupon (security fix: transaction + CODE_TOO_LONG)', 
   const svcCoupon = { id: 'c9', code: 'CBSVC', type: 'cashback', percent: 0, amount: 40,
     service_id: SVC, expires_at: null, user_id: null, status: 'active' };
 
-  test('admin switch ON (default): service cashback coupon without prior order → 403 SERVICE_MISMATCH', async () => {
-    db.__routeQuery([
-      ['FROM settings WHERE key', { rows: [{ value: { enabled: true, percent: 5 } }] }],
-      ['FROM orders', { rows: [{ c: '0' }] }],
-      ...couponHandlers(svcCoupon),
-    ]);
-    const r = await post('CBSVC').expect(403);
-    expect(r.body.error).toBe('SERVICE_MISMATCH');
+  // Strict service lock (owner rule, 2026-10-21): the old H-2
+  // prior-order gate is retired. A scoped coupon redeems WITHOUT
+  // any prior-order condition, but its value becomes a locked
+  // service credit — the wallet balance is never credited.
+  test('service cashback coupon redeems into a locked service credit (no prior order needed)', async () => {
+    db.__routeQuery([...couponHandlers(svcCoupon)]);
+    const r = await post('CBSVC').expect(200);
+    expect(r.body).toMatchObject({ ok: true, credited: 40, service_locked: true, service_name: 'জন্ম নিবন্ধন' });
+    const ins = db.__client.query.mock.calls.find((c) => /INSERT INTO service_credits/.test(c[0]));
+    expect(ins).toBeTruthy();
+    expect(ins[1]).toEqual(expect.arrayContaining([SVC, 40]));
+    const credit = db.__client.query.mock.calls.find((c) => /wallet_apply/.test(c[0]));
+    expect(credit).toBeFalsy(); // balance NOT credited for scoped coupons
   });
 
-  test('admin switch OFF: service cashback coupon redeems without prior order', async () => {
+  test('scoped percent coupon computes from that service spend, still locked', async () => {
     db.__routeQuery([
-      ['FROM settings WHERE key', { rows: [{ value: { enabled: true, percent: 5, require_service_order: false } }] }],
-      ['FROM orders', { rows: [{ c: '0' }] }],
-      ...couponHandlers(svcCoupon),
+      ['FROM orders', { rows: [{ s: '400' }] }], // SUM(price) FROM orders for the scoped service
+      ...couponHandlers({ ...svcCoupon, id: 'c10', code: 'CBPCT', percent: 10, amount: 0 }),
     ]);
-    const r = await post('CBSVC').expect(200);
-    expect(r.body.credited).toBe(40);
+    const r = await post('CBPCT').expect(200);
+    expect(r.body).toMatchObject({ credited: 40, service_locked: true });
   });
 
   test('recharge cashback coupon with both amount and percent credits fixed amount directly', async () => {

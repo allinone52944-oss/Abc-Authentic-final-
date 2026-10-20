@@ -55,6 +55,8 @@ test('FIXED(b) — POST /orders wallet ref is idempotent with idempotency_key', 
     ['FROM services WHERE id', { rows: [SERVICE] }],
     ['FROM user_services WHERE user_id', { rows: [] }],
     ['INSERT INTO orders', { rows: [{ id: 'o1' }] }],
+    ['users WHERE id = $1 FOR UPDATE', { rows: [{ balance: 10000 }] }],
+    ['wallet_apply', { rows: [{ new_balance: 9900, tx_id: 'tx9' }] }],
   ];
   const walletRefs = () => db.__client.query.mock.calls
     .filter((c) => /wallet_apply/.test(c[0]))

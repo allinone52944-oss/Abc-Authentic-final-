@@ -18,6 +18,7 @@ const crypto = require('crypto');
 const db = require('../db');
 const { requireAuth } = require('../auth');
 const { safeLog } = require('../security');
+const serviceCredits = require('../lib/serviceCredits');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -148,11 +149,25 @@ router.post('/redeem', async (req, res) => {
         err.statusCode = 409;
         throw err;
       }
-      // Credit wallet atomically (idempotent ref)
-      await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
-        req.user.id, amount, 'cashback', 'daily-cashback-' + couponCode,
-      ]);
-      return ins.rows[0];
+      // Pay the claim. If the admin scoped cashback to one service,
+      // the money becomes a service-locked credit for that service —
+      // it never enters the spend-anywhere balance (owner strict
+      // rule, 2026-10-21). Otherwise credit the wallet atomically.
+      let serviceLocked = false;
+      if (cfg.service_id) {
+        const expiresAt = new Date(Date.now() + (Number(cfg.expiry_days) || 30) * 24 * 60 * 60 * 1000);
+        await serviceCredits.addServiceCredit(client, {
+          userId: req.user.id, serviceId: cfg.service_id,
+          amount, source: 'cashback', ref: 'daily-cashback-' + couponCode,
+          expiresAt,
+        });
+        serviceLocked = true;
+      } else {
+        await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
+          req.user.id, amount, 'cashback', 'daily-cashback-' + couponCode,
+        ]);
+      }
+      return Object.assign({}, ins.rows[0], { serviceLocked });
     });
 
     const bal = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
@@ -163,6 +178,7 @@ router.post('/redeem', async (req, res) => {
       recharge_total: Number(out.recharge_total),
       percent: Number(out.percent),
       balance: Number(bal.rows[0].balance),
+      service_locked: !!out.serviceLocked,
     });
   } catch (e) {
     safeLog('[cashback] redeem error:', e.message);

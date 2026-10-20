@@ -469,6 +469,13 @@ function renderCashbackHub(d) {
     }
   }
 
+  const svcCredits = (d && d.service_credits) || [];
+  if (svcCredits.length) {
+    html += '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px;margin-bottom:10px;">' +
+      '<div style="font-size:13px;font-weight:700;color:#1d4ed8;">🔒 সেবা-নির্দিষ্ট ক্রেডিট</div>' +
+      svcCredits.map(function(sc){ return '<div style="font-size:12px;color:#1e40af;margin-top:3px;">' + esc(sc.service_name || 'সেবা') + ' — ৳' + bn(sc.amount) + ' (শুধু এই সেবাতেই খরচ হবে)</div>'; }).join('') +
+    '</div>';
+  }
   html += '<div id="cbDailySlot"></div>';
   body.innerHTML = html;
 }
@@ -573,7 +580,11 @@ async function claimDailyCashback(btnEl) {
       return;
     }
     celebrate(Number(d.amount) || 0, d.coupon_code);
-    alert('🎉 অভিনন্দন! আজকের ক্যাশব্যাক ৳' + bn(d.amount) + ' আপনার ওয়ালেট ব্যালেন্সে যোগ হয়েছে!');
+    if (d.service_locked) {
+      alert('🔒 অভিনন্দন! আজকের ক্যাশব্যাক ৳' + bn(d.amount) + ' নির্দিষ্ট সেবার জন্য সংরক্ষিত ক্রেডিটে যোগ হয়েছে — শুধু ওই সেবা কিনলেই খরচ হবে।');
+    } else {
+      alert('🎉 অভিনন্দন! আজকের ক্যাশব্যাক ৳' + bn(d.amount) + ' আপনার ওয়ালেট ব্যালেন্সে যোগ হয়েছে!');
+    }
     loadWallet();
   } catch (e) {
     if (btnEl) { btnEl.disabled = false; btnEl.textContent = '🎁 আবার চেষ্টা করুন'; }
@@ -590,7 +601,11 @@ async function instantRedeemCode(code) {
   }
   loadWallet();
   celebrate(Number(d.credited) || 0, code);
-  alert('🎉 অভিনন্দন! ৳' + bn(d.credited) + ' আপনার মূল ওয়ালেট ব্যালেন্সে যোগ হয়েছে!');
+  if (d.service_locked) {
+    alert('🔒 অভিনন্দন! ৳' + bn(d.credited) + ' শুধু "' + (d.service_name || 'নির্দিষ্ট সেবা') + '" সেবার জন্য সংরক্ষিত ক্রেডিট হিসেবে যোগ হয়েছে — এই টাকা শুধু ওই সেবা কিনলেই খরচ হবে।');
+  } else {
+    alert('🎉 অভিনন্দন! ৳' + bn(d.credited) + ' আপনার মূল ওয়ালেট ব্যালেন্সে যোগ হয়েছে!');
+  }
 }
 
 function copyCode(code) {
@@ -657,7 +672,9 @@ async function redeem(){
   const r=await ABC.api('/wallet/coupon',{method:'POST',body:{code}});
   const d=await r.json();
   if(!r.ok){cerr.textContent='❌ '+(d.error||'ব্যর্থ');return;}
-  cok.textContent='🎉 ৳'+Number(d.credited).toLocaleString('bn-BD')+' ব্যালেন্সে যোগ হয়েছে!';
+  cok.textContent = d.service_locked
+    ? '🔒 ৳'+Number(d.credited).toLocaleString('bn-BD')+' শুধু "' + (d.service_name||'নির্দিষ্ট সেবা') + '" সেবার জন্য সংরক্ষিত ক্রেডিটে যোগ হয়েছে — শুধু ওই সেবাতেই খরচ হবে।'
+    : '🎉 ৳'+Number(d.credited).toLocaleString('bn-BD')+' ব্যালেন্সে যোগ হয়েছে!';
   document.getElementById('couponCode').value='';
   loadWallet();
   celebrate(Number(d.credited)||0, code);

@@ -16,6 +16,7 @@ const fs = require('fs');
 // Filenames stay random (C-2: never embed req.params.id).
 const push = require('../utils/push');
 const { tryAutoMatchRecharge } = require('./sms');
+const serviceCredits = require('../lib/serviceCredits');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -183,11 +184,15 @@ router.post('/orders', async (req, res) => {
 
     // M-15: idempotency key resolved at handler entry so catch block can access it
     const order = await db.withTransaction(async (client) => {
-      // Debit wallet (raises INSUFFICIENT_BALANCE if not enough)
-      // Idempotency: same key → same ref → wallet_apply dedupes double submits.
-      await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
-        req.user.id, -Math.abs(eff.price), 'debit', 'order-' + clientKey + '-' + req.user.id,
-      ]);
+      // Pay for the service: service-locked credit for THIS service
+      // is consumed first, the rest comes from the wallet balance
+      // (lib/serviceCredits). Raises INSUFFICIENT_BALANCE if the two
+      // together cannot cover the price; the payment ref dedupes
+      // double submits exactly like wallet_apply did.
+      await serviceCredits.payForService(client, {
+        userId: req.user.id, serviceId: service_id,
+        amount: Math.abs(eff.price), ref: 'order-' + clientKey + '-' + req.user.id,
+      });
       const ins = await client.query(
         `INSERT INTO orders (user_id, service_id, status, data, documents, notes, price, idempotency_key)
          VALUES ($1, $2, 'new', $3, $4, $5, $6, $7) RETURNING *`,
@@ -436,9 +441,25 @@ router.get('/wallet', async (req, res) => {
       }
     } catch (_) {}
 
+    let svcCredits = [];
+    try {
+      const sc = await db.query(
+        `SELECT sc.service_id, COALESCE(s.name_bn, s.name) AS service_name,
+                SUM(sc.remaining) AS amount
+           FROM service_credits sc
+           JOIN services s ON s.id = sc.service_id
+          WHERE sc.user_id = $1 AND sc.remaining > 0
+            AND (sc.expires_at IS NULL OR sc.expires_at > NOW())
+          GROUP BY sc.service_id, s.name_bn, s.name`, [req.user.id]);
+      svcCredits = sc.rows.map((r) => ({
+        service_id: r.service_id, service_name: r.service_name, amount: Number(r.amount),
+      }));
+    } catch (_) { /* table arrives with migration 032; wallet must not fail without it */ }
+
     res.json({
       balance: Number(u.rows[0].balance),
       transactions: rows.rows,
+      service_credits: svcCredits,
       cashback,
       total: parseInt(total.rows[0].count, 10), page, limit,
     });
@@ -544,27 +565,13 @@ router.post('/wallet/coupon', async (req, res) => {
         err.statusCode = 403;
         throw err;
       }
-      // H-2 fix (2026-10-15): service_id scoping enforced — service-নির্দিষ্ট
-      // promo শুধু ওই service-এর গ্রাহক redeem করতে পারবে।
-      // Admin control: settings.cashback.require_service_order (default true).
-      // বন্ধ থাকলে ক্যাশব্যাক কুপনে আগের অর্ডারের শর্ত লাগবে না।
-      let requireSvcOrder = true;
-      if (coupon.service_id && coupon.type === 'cashback') {
-        const cs = await client.query(`SELECT value FROM settings WHERE key = 'cashback' LIMIT 1`);
-        const cv = (cs.rows[0] && cs.rows[0].value) || {};
-        if (cv.require_service_order === false) requireSvcOrder = false;
-      }
-      if (coupon.service_id && requireSvcOrder) {
-        const svc = await client.query(
-          `SELECT COUNT(*) AS c FROM orders
-           WHERE user_id = $1 AND service_id = $2 AND status NOT IN ('cancelled','refunded')`,
-          [req.user.id, coupon.service_id]);
-        if (!parseInt(svc.rows[0].c, 10)) {
-          const err = new Error('SERVICE_MISMATCH');
-          err.statusCode = 403;
-          throw err;
-        }
-      }
+      // Service scoping (owner rule, strict form, 2026-10-21): a
+      // service-scoped coupon no longer credits the spend-anywhere
+      // balance at all — its value becomes a service-locked credit
+      // (service_credits), spendable only on that one service. The
+      // old H-2 "must already have ordered the service" gate is
+      // retired: the lock is now structural, so the coupon stays
+      // usable for the customer's NEXT order of that service.
 
       const credit = Number(coupon.amount) > 0 ? Number(coupon.amount) : 0;
       let finalCredit = credit;
@@ -591,13 +598,33 @@ router.post('/wallet/coupon', async (req, res) => {
         throw err;
       }
 
-      await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
-        req.user.id, finalCredit, coupon.type, 'coupon-' + coupon.id,
-      ]);
+      let lockedServiceName = null;
+      if (coupon.service_id) {
+        const inserted = await serviceCredits.addServiceCredit(client, {
+          userId: req.user.id, serviceId: coupon.service_id,
+          amount: finalCredit, source: coupon.type, ref: 'coupon-' + coupon.id,
+          expiresAt: coupon.expires_at || null,
+        });
+        if (!inserted) {
+          const err = new Error('ALREADY_REDEEMED');
+          err.statusCode = 409;
+          throw err;
+        }
+        const sn = await client.query('SELECT name_bn, name FROM services WHERE id = $1', [coupon.service_id]);
+        if (sn.rows.length) lockedServiceName = sn.rows[0].name_bn || sn.rows[0].name;
+      } else {
+        await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
+          req.user.id, finalCredit, coupon.type, 'coupon-' + coupon.id,
+        ]);
+      }
       await client.query(`UPDATE coupons SET status = 'redeemed' WHERE id = $1`, [coupon.id]);
 
       const bal = await client.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
-      res.json({ ok: true, credited: finalCredit, balance: Number(bal.rows[0].balance) });
+      res.json({
+        ok: true, credited: finalCredit, balance: Number(bal.rows[0].balance),
+        service_locked: !!coupon.service_id,
+        service_name: lockedServiceName,
+      });
     });
   } catch (e) {
     safeLog('[user] coupon redeem error:', e.message);
