@@ -1,8 +1,8 @@
-// Route tests for manual-submission file flows + the unified /api/history.
+// Route tests for manual-submission file flows + /api/history.
 // Covers the 2026-10-21 gap: manual services had NO delivery-file path back
 // to the customer (admin could only set status/note) and no admin delete;
-// and the History section must aggregate ALL work kinds — orders (order),
-// manual submissions (manual) and BDRIS auto applications (bdris).
+// and History (per the owner's simplification) lists ONLY delivery files —
+// admin-uploaded files on orders + manual submissions — with no details.
 jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
 
 const express = require('express');
@@ -179,48 +179,47 @@ describe('DELETE /api/admin/manual/:id — admin delete with file cleanup', () =
   });
 });
 
-describe('GET /api/history — ALL work kinds in one list', () => {
-  test('orders + manual + BDRIS auto applications all appear, newest first, own data only', async () => {
+describe('GET /api/history — delivery files only, no work details', () => {
+  test('only orders/manual submissions WITH admin delivery files appear; customer files and detail fields stay out', async () => {
     db.__routeQuery([
       ['FROM orders o LEFT JOIN services', { rows: [
-        { id: 'o1', status: 'delivered', price: '150', data: {}, service_type: 'auto', service_engine: 'nid-replica', documents: JSON.stringify([{ filename: 'delivery-x.pdf', originalname: 'cert.pdf', uploaded_by: 'admin' }]), created_at: '2026-10-20T10:00:00Z', service_name: 'NID Replica', service_name_bn: 'এনআইডি রেপ্লিকা' },
-        { id: 'o2', status: 'completed', price: '200', data: { _manual_form: 'নাম: ...' }, service_type: 'manual', service_engine: null, documents: '[]', created_at: '2026-10-18T10:00:00Z', service_name: 'Manual Order', service_name_bn: 'ম্যানুয়াল অর্ডার' },
+        { id: 'o1', documents: JSON.stringify([
+          { filename: 'order-own.pdf', originalname: 'my-doc.pdf', uploaded_by: 'customer' },
+          { filename: 'delivery-x.pdf', originalname: 'cert.pdf', uploaded_by: 'admin' },
+        ]), created_at: '2026-10-20T10:00:00Z', service_name: 'Birth Certificate', service_name_bn: 'জন্ম সনদ' },
+        { id: 'o2', documents: JSON.stringify([
+          { filename: 'order-only-own.pdf', originalname: 'only-mine.pdf', uploaded_by: 'customer' },
+        ]), created_at: '2026-10-21T10:00:00Z', service_name: 'No Delivery Yet', service_name_bn: 'ডেলিভারি হয়নি' },
+        { id: 'o3', documents: JSON.stringify([
+          { filename: 'delivery-z.pdf', originalname: 'nid.pdf', uploaded_by: 'admin' },
+        ]), created_at: '2026-10-19T10:00:00Z', service_name: 'NID Replica', service_name_bn: 'এনআইডি রেপ্লিকা' },
       ] }],
-      ['FROM manual_submissions m LEFT JOIN services', { rows: [{ id: 'm1', status: 'completed', admin_note: 'ok', documents: [{ filename: 'manual-y.pdf', originalname: 'res.pdf', uploaded_by: 'admin' }], created_at: '2026-10-21T09:00:00Z', service_name: 'Manual Svc', service_name_bn: 'ম্যানুয়াল সেবা' }] }],
-      ['FROM bdris_applications', { rows: [{ id: 'b1', ack_no: '265530312', applicant_name: 'Test Name', created_at: '2026-10-19T08:00:00Z' }] }],
+      ['FROM manual_submissions m LEFT JOIN services', { rows: [
+        { id: 'm1', documents: [{ filename: 'manual-y.pdf', originalname: 'res.pdf', uploaded_by: 'admin' }], created_at: '2026-10-21T09:00:00Z', service_name: 'Manual Svc', service_name_bn: 'ম্যানুয়াল সেবা' },
+        { id: 'm2', documents: [{ filename: 'manual-own2.pdf', originalname: 'mine.pdf', uploaded_by: 'customer' }], created_at: '2026-10-21T11:00:00Z', service_name: 'Manual No Delivery', service_name_bn: 'ম্যানুয়াল ডেলিভারি হয়নি' },
+      ] }],
     ]);
     const r = await asUser(request(app()).get('/api/history')).expect(200);
     expect(r.body.ok).toBe(true);
-    expect(r.body.items).toHaveLength(4);
-    // newest first: manual sub (21st) → auto order (20th) → bdris (19th) → manual order (18th)
-    expect(r.body.items.map(i => i.id)).toEqual(['m1', 'o1', 'b1', 'o2']);
+    // o2 (no delivery file) and m2 (no delivery file) are excluded even
+    // though they are the newest records; newest-first among the rest.
+    expect(r.body.items.map(i => i.id)).toEqual(['m1', 'o1', 'o3']);
     const byId = Object.fromEntries(r.body.items.map(i => [i.id, i]));
-    // AUTO lens: BDRIS application + the engine-service (auto) order both appear
-    const autoItems = r.body.items.filter(i => (i.cats || []).includes('auto'));
-    expect(autoItems.map(i => i.id).sort()).toEqual(['b1', 'o1']);
-    // MANUAL lens: the manual submission + the manual-type order both appear
-    const manualItems = r.body.items.filter(i => (i.cats || []).includes('manual'));
-    expect(manualItems.map(i => i.id).sort()).toEqual(['m1', 'o2']);
-    // ORDER lens: both orders appear
-    const orderItems = r.body.items.filter(i => (i.cats || []).includes('order'));
-    expect(orderItems.map(i => i.id).sort()).toEqual(['o1', 'o2']);
-    // classification details
-    expect(byId.o1.service_type).toBe('auto');
-    expect(byId.o2.service_type).toBe('manual');
-    expect(byId.b1.cats).toEqual(['auto']);
-    expect(byId.m1.cats).toEqual(['manual']);
-    // order item: delivery file carries an owner download URL
+    // the order carries ONLY its delivery file, not the customer's upload
     expect(byId.o1.documents).toHaveLength(1);
-    expect(byId.o1.documents[0].url).toBe('/orders/o1/documents/delivery-x.pdf');
-    expect(byId.o1.documents[0].uploaded_by).toBe('admin');
-    // manual item: file URL points at the new customer download endpoint
+    expect(byId.o1.documents[0]).toMatchObject({ filename: 'delivery-x.pdf', url: '/orders/o1/documents/delivery-x.pdf' });
     expect(byId.m1.documents[0].url).toBe('/manual/m1/documents/manual-y.pdf');
-    // bdris (auto) item: application number present
-    expect(byId.b1.ack_no).toBe('265530312');
-    expect(byId.b1.status).toBe('submitted');
+    expect(byId.o3.documents[0].url).toBe('/orders/o3/documents/delivery-z.pdf');
+    // no detail fields leak into History items
+    for (const it of r.body.items) {
+      expect(it.status).toBeUndefined();
+      expect(it.price).toBeUndefined();
+      expect(it.ack_no).toBeUndefined();
+      expect(it.admin_note).toBeUndefined();
+    }
     // every source query was scoped to the caller
-    const scoped = db.query.mock.calls.filter(c => /FROM (orders|manual_submissions|bdris_applications)/.test(c[0]));
-    expect(scoped.length).toBeGreaterThanOrEqual(3);
+    const scoped = db.query.mock.calls.filter(c => /FROM (orders|manual_submissions)/.test(c[0]));
+    expect(scoped.length).toBeGreaterThanOrEqual(2);
     for (const c of scoped) expect(c[1][0]).toBe('u1');
   });
 

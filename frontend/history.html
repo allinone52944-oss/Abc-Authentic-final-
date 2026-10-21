@@ -19,24 +19,11 @@
     padding: 24px;
     box-shadow: var(--shadow-sm);
   }
-  .hist-filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
-  .hist-chip {
-    border:1px solid #cbd5e1; background:#fff; color:#334155;
-    padding:8px 14px; border-radius:999px; font-size:13px; font-weight:600; cursor:pointer;
-    font-family: inherit;
-  }
-  .hist-chip.on { background:#1e40af; border-color:#1e40af; color:#fff; }
   .hist-item { padding:14px 0; border-bottom:1px solid var(--border-light); }
   .hist-item:last-child { border-bottom:none; }
   .hist-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; }
   .hist-title { font-weight:700; color:var(--text-main); font-size:14px; }
   .hist-meta { color:#64748b; font-size:12px; margin-top:3px; line-height:1.6; }
-  .hist-badge {
-    font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px;
-    background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; white-space:nowrap;
-  }
-  .hist-badge.done { background:#f0fdf4; color:#15803d; border-color:#86efac; }
-  .hist-badge.bad { background:#fef2f2; color:#b91c1c; border-color:#fca5a5; }
   .hist-docs { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
   .hist-doc {
     display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
@@ -45,8 +32,6 @@
   }
   .hist-doc:hover { border-color:#2563eb; background:#eff6ff; }
   .hist-doc.delivery { border-color:#fde68a; background:#fffbeb; }
-  .hist-link { font-size:12px; font-weight:700; color:#2563eb; text-decoration:none; white-space:nowrap; }
-  .ack { font-family:monospace; background:#f1f5f9; padding:1px 6px; border-radius:6px; }
 </style>
 </head>
 <body>
@@ -73,17 +58,11 @@
     <div class="topbar">
       <div>
         <h2>📜 আমার ইতিহাস</h2>
-        <p>আপনার সব কাজ — অটো সেবা, ম্যানুয়াল আবেদন ও অর্ডার — এক জায়গায়, ফাইলসহ</p>
+        <p>আপনার ডেলিভারি পাওয়া ফাইলসমূহ — সব এক জায়গায়</p>
       </div>
     </div>
 
     <div class="card">
-      <div class="hist-filters" id="histFilters">
-        <button class="hist-chip on" data-f="all" onclick="setFilter('all')">সব</button>
-        <button class="hist-chip" data-f="auto" onclick="setFilter('auto')">⚡ অটো সেবা</button>
-        <button class="hist-chip" data-f="manual" onclick="setFilter('manual')">📝 ম্যানুয়াল</button>
-        <button class="hist-chip" data-f="order" onclick="setFilter('order')">📦 অর্ডার</button>
-      </div>
       <div id="histList" style="color:var(--text-muted); font-size:13px;">লোড হচ্ছে…</div>
     </div>
   </div>
@@ -104,59 +83,26 @@
 <script src="/js/app.js?v=17"></script>
 <script>
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function bn(n){ return Number(n||0).toLocaleString('bn-BD'); }
 
-const ST = {
-  new:'নতুন', pending:'অপেক্ষমান', received:'গৃহীত', processing:'প্রসেসিং',
-  registered:'নিবন্ধিত', completed:'সম্পন্ন', delivered:'ডেলিভার্ড',
-  failed:'ব্যর্থ', cancelled:'বাতিল', refunded:'রিফান্ডেড', rejected:'বাতিল',
-  submitted:'জমা হয়েছে'
-};
-const DONE = ['completed','delivered','submitted'];
-const BAD = ['failed','cancelled','refunded','rejected'];
-const ICON = { bdris:'⚡', manual:'📝', order:'📦' };
+const ICON = { manual:'📝', order:'📦' };
 
 let _items = [];
-let _filter = 'all';
-
-function setFilter(f){
-  _filter = f;
-  document.querySelectorAll('#histFilters .hist-chip').forEach(c => c.classList.toggle('on', c.dataset.f === f));
-  render();
-}
 
 function render(){
   const box = document.getElementById('histList');
-  const items = _items.filter(it => _filter === 'all' || (it.cats || [it.kind]).includes(_filter));
-  if(!items.length){
-    box.innerHTML = '<div style="padding:16px 0; color:#94a3b8;">এই তালিকায় এখনো কিছু নেই।</div>';
+  if(!_items.length){
+    box.innerHTML = '<div style="padding:16px 0; color:#94a3b8;">এখনো কোনো ডেলিভারি ফাইল পাননি। সেবা সম্পন্ন হলে ডেলিভারি ফাইল এখানে পাবেন।</div>';
     return;
   }
-  box.innerHTML = items.map((it) => {
-    const gi = _items.indexOf(it);
-    const badgeCls = DONE.includes(it.status) ? ' done' : (BAD.includes(it.status) ? ' bad' : '');
-    let meta = new Date(it.created_at).toLocaleString('bn-BD');
-    if(it.kind === 'bdris'){
-      meta += ' • আবেদন নং: <span class="ack">' + esc(it.ack_no || '') + '</span>';
-      if(it.applicant_name) meta += ' • আবেদনকারী: ' + esc(it.applicant_name);
-    }
-    if(it.kind === 'order' && it.price != null) meta += ' • মূল্য: ৳' + bn(it.price);
-    if(it.kind === 'order') meta += ' • ' + (it.service_type === 'manual' ? '📝 ম্যানুয়াল সেবা' : '⚡ অটো সেবা');
-    if(it.kind === 'manual' && it.admin_note) meta += '<br><span style="color:#1d4ed8;">💬 অ্যাডমিন নোট: ' + esc(it.admin_note) + '</span>';
+  box.innerHTML = _items.map((it, gi) => {
     const docs = (it.documents || []).map((d, di) =>
-      '<button class="hist-doc' + (d.uploaded_by === 'admin' ? ' delivery' : '') + '" onclick="dlHist(' + gi + ',' + di + ')">' +
-      (d.uploaded_by === 'admin' ? '🎁 ডেলিভারি: ' : '📎 ') + esc(d.originalname || d.filename) + ' ⬇️</button>'
+      '<button class="hist-doc delivery" onclick="dlHist(' + gi + ',' + di + ')">🎁 ' + esc(d.originalname || d.filename) + ' ⬇️</button>'
     ).join('');
-    let link = '';
-    if(it.kind === 'order') link = '<a class="hist-link" href="/order-detail.html?id=' + encodeURIComponent(it.id) + '">বিস্তারিত →</a>';
-    if(it.kind === 'bdris') link = '<a class="hist-link" href="/bdris-apply.html">আবেদন পেজ / আসল PDF →</a>';
-    if(it.kind === 'manual') link = '<a class="hist-link" href="/manual-submit.html">ম্যানুয়াল পেজ →</a>';
     return '<div class="hist-item">' +
       '<div class="hist-head"><div>' +
         '<div class="hist-title">' + (ICON[it.kind] || '📄') + ' ' + esc(it.title) + '</div>' +
-        '<div class="hist-meta">' + meta + '</div>' +
-      '</div><div style="display:flex;gap:10px;align-items:center;">' + link +
-        '<span class="hist-badge' + badgeCls + '">' + esc(ST[it.status] || it.status) + '</span></div></div>' +
+        '<div class="hist-meta">' + new Date(it.created_at).toLocaleString('bn-BD') + '</div>' +
+      '</div></div>' +
       (docs ? '<div class="hist-docs">' + docs + '</div>' : '') +
     '</div>';
   }).join('');
