@@ -4,9 +4,12 @@
 // Customer: POST /api/manual/submit (text + documents)
 //           GET  /api/manual/mine
 //           GET  /api/manual/template
+//           GET  /api/manual/:id/documents/:filename (own download)
 // Admin:    GET  /api/admin/manual
 //           GET  /api/admin/manual/:id
 //           PUT  /api/admin/manual/:id  (status / admin_note)
+//           POST /api/admin/manual/:id/delivery-docs (delivery file)
+//           DELETE /api/admin/manual/:id (submission + its files)
 //           GET  /api/admin/manual/:id/documents/:filename (download)
 // ============================================================
 const express = require('express');
@@ -43,6 +46,27 @@ const uploadDocs = multer({
     cb(null, true);
   },
 }).array('documents', 6);
+
+// Admin delivery file for a submission (single file, field "file") —
+// same storage/filter as customer uploads, lands in the same documents list
+// with uploaded_by: 'admin' so the customer can download it back.
+const uploadDelivery = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    const ext = (file.originalname.split('.').pop() || '').toLowerCase();
+    if (!['pdf', 'jpg', 'jpeg', 'png'].includes(ext)) return cb(new Error('FILE_TYPE_NOT_ALLOWED'));
+    cb(null, true);
+  },
+}).single('file');
+
+// manual_submissions.documents is JSONB: pg may hand back a parsed array
+// or (in mocks / older rows) a JSON string. Normalize to an array.
+function parseDocs(v) {
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string') { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch (_) { return []; } }
+  return [];
+}
 
 // Default sample template (used when admin hasn't saved one)
 const DEFAULT_TEMPLATE =
@@ -95,11 +119,12 @@ customerManual.get('/template', async (req, res) => {
   res.json({ template: await getTemplate() });
 });
 
-// GET /api/manual/mine — customer's own submissions
+// GET /api/manual/mine — customer's own submissions (with file list, so the
+// customer keeps both their own uploads and admin delivery files)
 customerManual.get('/mine', async (req, res) => {
   try {
     const r = await db.query(
-      `SELECT m.id, m.status, m.created_at, m.admin_note,
+      `SELECT m.id, m.status, m.created_at, m.admin_note, m.documents,
               s.name_bn AS service_name_bn, s.name AS service_name,
               jsonb_array_length(m.documents) AS doc_count
        FROM manual_submissions m
@@ -107,8 +132,29 @@ customerManual.get('/mine', async (req, res) => {
        WHERE m.user_id = $1 ORDER BY m.created_at DESC LIMIT 50`,
       [req.user.id]
     );
-    res.json({ list: r.rows });
+    const list = r.rows.map(m => ({
+      ...m,
+      documents: parseDocs(m.documents)
+        .filter(d => d && d.filename)
+        .map(d => ({ filename: d.filename, originalname: d.originalname || d.filename, uploaded_by: d.uploaded_by || 'customer' })),
+    }));
+    res.json({ list });
   } catch (e) { safeLog('[manual] mine error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+// GET /api/manual/:id/documents/:filename — customer download (owner only).
+// Serves both the customer's own uploads and admin delivery files.
+customerManual.get('/:id/documents/:filename', async (req, res) => {
+  try {
+    const fn = path.basename(req.params.filename);
+    const r = await db.query('SELECT documents FROM manual_submissions WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    const doc = parseDocs(r.rows[0].documents).find(d => d && path.basename(d.filename) === fn);
+    if (!doc) return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
+    const fp = path.join(UPLOAD_DIR, fn);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'FILE_MISSING' });
+    res.download(fp, doc.originalname || fn);
+  } catch (e) { safeLog('[manual] customer download error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });
 
 // POST /api/manual/submit — text + documents
@@ -235,6 +281,54 @@ adminManual.put('/:id', async (req, res) => {
     if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
     res.json({ ok: true, ...r.rows[0] });
   } catch (e) { safeLog('[manual] admin update error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
+// POST /api/admin/manual/:id/delivery-docs — admin attaches the result /
+// delivery file to a submission; the customer can then download it from
+// their own list (documents entry with uploaded_by: 'admin').
+adminManual.post('/:id/delivery-docs', (req, res) => {
+  uploadDelivery(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message || 'UPLOAD_FAILED' });
+    try {
+      if (!req.file) return res.status(400).json({ error: 'NO_FILE' });
+      const r = await db.query('SELECT documents FROM manual_submissions WHERE id = $1', [req.params.id]);
+      if (!r.rows.length) {
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+        return res.status(404).json({ error: 'NOT_FOUND' });
+      }
+      const docs = parseDocs(r.rows[0].documents);
+      docs.push({
+        filename: req.file.filename,
+        originalname: req.file.originalname,
+        size: req.file.size,
+        mimetype: req.file.mimetype,
+        uploaded_by: 'admin',
+        type: 'delivery',
+      });
+      await db.query('UPDATE manual_submissions SET documents = $1, updated_at = NOW() WHERE id = $2',
+        [JSON.stringify(docs), req.params.id]);
+      res.json({ ok: true, filename: req.file.filename });
+    } catch (e) { safeLog('[manual] delivery upload error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+  });
+});
+
+// DELETE /api/admin/manual/:id — remove a submission and its files.
+// Row first, files second: if the file cleanup fails only harmless
+// orphans remain; the reverse order could leave a live row whose
+// documents point at deleted files.
+adminManual.delete('/:id', async (req, res) => {
+  try {
+    const r = await db.query('SELECT documents FROM manual_submissions WHERE id = $1', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    const docs = parseDocs(r.rows[0].documents);
+    await db.query('DELETE FROM manual_submissions WHERE id = $1', [req.params.id]);
+    for (const d of docs) {
+      if (d && d.filename) {
+        try { fs.unlinkSync(path.join(UPLOAD_DIR, path.basename(d.filename))); } catch (_) {}
+      }
+    }
+    res.json({ ok: true });
+  } catch (e) { safeLog('[manual] admin delete error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });
 
 // GET /api/admin/manual/:id/documents/:filename — admin download

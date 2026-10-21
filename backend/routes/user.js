@@ -414,6 +414,84 @@ router.get('/orders/:id/documents/:filename', async (req, res) => {
   }
 });
 
+// GET /api/history — unified history: ALL of the customer's work in one
+// list (service orders + manual submissions + BDRIS auto applications),
+// newest first, each item carrying its files as owner-download URLs.
+// This is the one server-side place a customer can always find their
+// work and files again — phone/browser changes no longer lose them.
+router.get('/history', async (req, res) => {
+  try {
+    const uid = req.user.id;
+    const [orders, manual, bdris] = await Promise.all([
+      db.query(
+        `SELECT o.id, o.status, o.price, o.documents, o.data, o.created_at,
+                s.name AS service_name, s.name_bn AS service_name_bn,
+                s.type AS service_type, s.engine_id AS service_engine
+         FROM orders o LEFT JOIN services s ON s.id = o.service_id
+         WHERE o.user_id = $1 ORDER BY o.created_at DESC LIMIT 100`, [uid]),
+      db.query(
+        `SELECT m.id, m.status, m.admin_note, m.documents, m.created_at,
+                s.name AS service_name, s.name_bn AS service_name_bn
+         FROM manual_submissions m LEFT JOIN services s ON s.id = m.service_id
+         WHERE m.user_id = $1 ORDER BY m.created_at DESC LIMIT 100`, [uid]),
+      db.query(
+        `SELECT id, ack_no, applicant_name, created_at FROM bdris_applications
+         WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`, [uid]),
+    ]);
+    const docsOf = (raw, base) => safeJsonArray(raw)
+      .filter(d => d && d.filename)
+      .map(d => ({
+        filename: d.filename,
+        originalname: d.originalname || d.filename,
+        uploaded_by: d.uploaded_by || 'customer',
+        url: base + encodeURIComponent(d.filename),
+      }));
+    const items = [];
+    for (const o of orders.rows) {
+      // Same auto/manual rule the admin order filter uses: an order is
+      // manual when its service is manual-type or its data carries a
+      // filled manual form; every other order is an auto service order.
+      // Orders therefore belong to BOTH the 'order' lens and their
+      // auto/manual lens.
+      const dataText = typeof o.data === 'string' ? o.data : JSON.stringify(o.data || {});
+      const isManualOrder = o.service_type === 'manual' || dataText.includes('_manual_form');
+      items.push({
+        kind: 'order', id: o.id,
+        cats: isManualOrder ? ['order', 'manual'] : ['order', 'auto'],
+        service_type: isManualOrder ? 'manual' : 'auto',
+        title: o.service_name_bn || o.service_name || 'সেবা অর্ডার',
+        status: o.status, price: o.price != null ? Number(o.price) : null,
+        created_at: o.created_at,
+        documents: docsOf(o.documents, '/orders/' + o.id + '/documents/'),
+      });
+    }
+    for (const m of manual.rows) {
+      items.push({
+        kind: 'manual', id: m.id, cats: ['manual'],
+        title: m.service_name_bn || m.service_name || 'ম্যানুয়াল সেবা',
+        status: m.status, admin_note: m.admin_note || null,
+        created_at: m.created_at,
+        documents: docsOf(m.documents, '/manual/' + m.id + '/documents/'),
+      });
+    }
+    for (const b of bdris.rows) {
+      items.push({
+        kind: 'bdris', id: b.id, cats: ['auto'],
+        title: 'জন্ম নিবন্ধন আবেদন (অটো)',
+        status: 'submitted',
+        ack_no: b.ack_no, applicant_name: b.applicant_name || null,
+        created_at: b.created_at,
+        documents: [],
+      });
+    }
+    items.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    res.json({ ok: true, items: items.slice(0, 200) });
+  } catch (e) {
+    safeLog('[user] history error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 router.get('/wallet', async (req, res) => {
   try {
     const u = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);

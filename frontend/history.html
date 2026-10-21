@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/premium.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=2">
+<meta name="theme-color" content="#1e40af">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<title>আমার ইতিহাস - All In One</title>
+<style>
+  .card {
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-xl);
+    padding: 24px;
+    box-shadow: var(--shadow-sm);
+  }
+  .hist-filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+  .hist-chip {
+    border:1px solid #cbd5e1; background:#fff; color:#334155;
+    padding:8px 14px; border-radius:999px; font-size:13px; font-weight:600; cursor:pointer;
+    font-family: inherit;
+  }
+  .hist-chip.on { background:#1e40af; border-color:#1e40af; color:#fff; }
+  .hist-item { padding:14px 0; border-bottom:1px solid var(--border-light); }
+  .hist-item:last-child { border-bottom:none; }
+  .hist-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; }
+  .hist-title { font-weight:700; color:var(--text-main); font-size:14px; }
+  .hist-meta { color:#64748b; font-size:12px; margin-top:3px; line-height:1.6; }
+  .hist-badge {
+    font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px;
+    background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; white-space:nowrap;
+  }
+  .hist-badge.done { background:#f0fdf4; color:#15803d; border-color:#86efac; }
+  .hist-badge.bad { background:#fef2f2; color:#b91c1c; border-color:#fca5a5; }
+  .hist-docs { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .hist-doc {
+    display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
+    border:1px solid #e2e8f0; background:#f8fafc; color:#0f172a;
+    padding:6px 10px; border-radius:8px; cursor:pointer; font-family: inherit;
+  }
+  .hist-doc:hover { border-color:#2563eb; background:#eff6ff; }
+  .hist-doc.delivery { border-color:#fde68a; background:#fffbeb; }
+  .hist-link { font-size:12px; font-weight:700; color:#2563eb; text-decoration:none; white-space:nowrap; }
+  .ack { font-family:monospace; background:#f1f5f9; padding:1px 6px; border-radius:6px; }
+</style>
+</head>
+<body>
+<div class="desktop">
+  <div class="sidebar">
+    <div class="side-logo">
+      <div class="logo-icon">🔷</div>
+      <div>
+        <h2>All In One</h2>
+        <p>বিশ্বাস ও সেবার ঠিকানা</p>
+      </div>
+    </div>
+    <nav>
+      <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span> ড্যাশবোর্ড</div>
+      <div class="side-link" onclick="location.href='/services.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></span> সকল সেবা</div>
+      <div class="side-link" onclick="location.href='/orders.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span> আমার অর্ডার</div>
+      <div class="side-link on"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></span> ইতিহাস</div>
+      <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg></span> ওয়ালেট ও রিচার্জ</div>
+      <div class="side-link" onclick="location.href='/profile.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span> পার্সোনাল প্রোফাইল</div>
+    </nav>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <h2>📜 আমার ইতিহাস</h2>
+        <p>আপনার সব কাজ — অটো সেবা, ম্যানুয়াল আবেদন ও অর্ডার — এক জায়গায়, ফাইলসহ</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hist-filters" id="histFilters">
+        <button class="hist-chip on" data-f="all" onclick="setFilter('all')">সব</button>
+        <button class="hist-chip" data-f="auto" onclick="setFilter('auto')">⚡ অটো সেবা</button>
+        <button class="hist-chip" data-f="manual" onclick="setFilter('manual')">📝 ম্যানুয়াল</button>
+        <button class="hist-chip" data-f="order" onclick="setFilter('order')">📦 অর্ডার</button>
+      </div>
+      <div id="histList" style="color:var(--text-muted); font-size:13px;">লোড হচ্ছে…</div>
+    </div>
+  </div>
+</div>
+
+<button class="wa-fab" id="waFab" aria-label="WhatsApp-এ সাহায্য চান" title="WhatsApp-এ সরাসরি সাহায্য চান"><img src="/icons/whatsapp.svg" alt="WhatsApp"></button>
+
+<!-- Mobile Tabbar -->
+<div class="m-tabbar">
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/dashboard.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>হোম</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/services.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></div>সেবা</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/orders.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></div>অর্ডার</div>
+  <div class="m-tab on" tabindex="0" role="button"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></div>ইতিহাস</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/wallet.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg></div>ওয়ালেট</div>
+  <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
+</div>
+
+<script src="/js/app.js?v=17"></script>
+<script>
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function bn(n){ return Number(n||0).toLocaleString('bn-BD'); }
+
+const ST = {
+  new:'নতুন', pending:'অপেক্ষমান', received:'গৃহীত', processing:'প্রসেসিং',
+  registered:'নিবন্ধিত', completed:'সম্পন্ন', delivered:'ডেলিভার্ড',
+  failed:'ব্যর্থ', cancelled:'বাতিল', refunded:'রিফান্ডেড', rejected:'বাতিল',
+  submitted:'জমা হয়েছে'
+};
+const DONE = ['completed','delivered','submitted'];
+const BAD = ['failed','cancelled','refunded','rejected'];
+const ICON = { bdris:'⚡', manual:'📝', order:'📦' };
+
+let _items = [];
+let _filter = 'all';
+
+function setFilter(f){
+  _filter = f;
+  document.querySelectorAll('#histFilters .hist-chip').forEach(c => c.classList.toggle('on', c.dataset.f === f));
+  render();
+}
+
+function render(){
+  const box = document.getElementById('histList');
+  const items = _items.filter(it => _filter === 'all' || (it.cats || [it.kind]).includes(_filter));
+  if(!items.length){
+    box.innerHTML = '<div style="padding:16px 0; color:#94a3b8;">এই তালিকায় এখনো কিছু নেই।</div>';
+    return;
+  }
+  box.innerHTML = items.map((it) => {
+    const gi = _items.indexOf(it);
+    const badgeCls = DONE.includes(it.status) ? ' done' : (BAD.includes(it.status) ? ' bad' : '');
+    let meta = new Date(it.created_at).toLocaleString('bn-BD');
+    if(it.kind === 'bdris'){
+      meta += ' • আবেদন নং: <span class="ack">' + esc(it.ack_no || '') + '</span>';
+      if(it.applicant_name) meta += ' • আবেদনকারী: ' + esc(it.applicant_name);
+    }
+    if(it.kind === 'order' && it.price != null) meta += ' • মূল্য: ৳' + bn(it.price);
+    if(it.kind === 'order') meta += ' • ' + (it.service_type === 'manual' ? '📝 ম্যানুয়াল সেবা' : '⚡ অটো সেবা');
+    if(it.kind === 'manual' && it.admin_note) meta += '<br><span style="color:#1d4ed8;">💬 অ্যাডমিন নোট: ' + esc(it.admin_note) + '</span>';
+    const docs = (it.documents || []).map((d, di) =>
+      '<button class="hist-doc' + (d.uploaded_by === 'admin' ? ' delivery' : '') + '" onclick="dlHist(' + gi + ',' + di + ')">' +
+      (d.uploaded_by === 'admin' ? '🎁 ডেলিভারি: ' : '📎 ') + esc(d.originalname || d.filename) + ' ⬇️</button>'
+    ).join('');
+    let link = '';
+    if(it.kind === 'order') link = '<a class="hist-link" href="/order-detail.html?id=' + encodeURIComponent(it.id) + '">বিস্তারিত →</a>';
+    if(it.kind === 'bdris') link = '<a class="hist-link" href="/bdris-apply.html">আবেদন পেজ / আসল PDF →</a>';
+    if(it.kind === 'manual') link = '<a class="hist-link" href="/manual-submit.html">ম্যানুয়াল পেজ →</a>';
+    return '<div class="hist-item">' +
+      '<div class="hist-head"><div>' +
+        '<div class="hist-title">' + (ICON[it.kind] || '📄') + ' ' + esc(it.title) + '</div>' +
+        '<div class="hist-meta">' + meta + '</div>' +
+      '</div><div style="display:flex;gap:10px;align-items:center;">' + link +
+        '<span class="hist-badge' + badgeCls + '">' + esc(ST[it.status] || it.status) + '</span></div></div>' +
+      (docs ? '<div class="hist-docs">' + docs + '</div>' : '') +
+    '</div>';
+  }).join('');
+}
+
+async function dlHist(i, di){
+  const it = _items[i]; if(!it) return;
+  const d = (it.documents || [])[di]; if(!d) return;
+  try{
+    const r = await ABC.api(d.url);
+    if(!r.ok){ alert('ডাউনলোড ব্যর্থ হয়েছে'); return; }
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = d.originalname || d.filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  }catch(e){ alert('ডাউনলোড ব্যর্থ হয়েছে'); }
+}
+
+async function init(){
+  try{
+    const r = await ABC.api('/history');
+    if(!r.ok) throw new Error('load');
+    const d = await r.json();
+    _items = d.items || [];
+    render();
+  }catch(e){
+    document.getElementById('histList').innerHTML = '<div style="color:#b91c1c;">ইতিহাস লোড করা যায়নি। আবার চেষ্টা করুন।</div>';
+  }
+  try{
+    const me = await ABC.api('/auth/me');
+    if(me.ok){
+      const u = (await me.json()).user || {};
+      document.getElementById('waFab').onclick = () => {
+        window.open('https://wa.me/8801835414122?text=' + encodeURIComponent('আসসালামু আলাইকুম! আমি ' + u.name + ' (ফোন: ' + u.phone + ')। আমার ইতিহাস নিয়ে সাহায্য দরকার।'), '_blank');
+      };
+    }
+  }catch(e){}
+}
+
+init();
+</script>
+</body>
+</html>

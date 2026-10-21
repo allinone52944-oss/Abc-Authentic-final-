@@ -123,6 +123,7 @@
       <div class="side-link" onclick="location.href='/services.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></span> সকল সেবা</div>
       <div class="side-link on"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span> ম্যানুয়াল আবেদন</div>
       <div class="side-link" onclick="location.href='/orders.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span> আমার অর্ডার</div>
+      <div class="side-link" onclick="location.href='/history.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></span> ইতিহাস</div>
       <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg></span> ওয়ালেট ও রিচার্জ</div>
       <div class="side-link" onclick="location.href='/profile.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span> পার্সোনাল প্রোফাইল</div>
     </nav>
@@ -286,15 +287,36 @@ async function loadMine(){
     const list = d.list || [];
     if(!list.length){ document.getElementById('myList').innerHTML = '<div style="padding:12px 0; color:#94a3b8;">এখনো কোনো আবেদন জমা দেওয়া হয়নি।</div>'; return; }
     const stBn = { new:'🆕 নতুন', processing:'⏳ প্রসেসিং', completed:'✅ সম্পন্ন', rejected:'❌ বাতিল' };
-    document.getElementById('myList').innerHTML = list.map(m =>
-      '<div style="padding:12px 0; border-bottom:1px solid var(--border-light); font-size:13px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">' +
+    window._mineList = list;
+    document.getElementById('myList').innerHTML = list.map((m, mi) => {
+      const docs = (m.documents || []).map((d, di) =>
+        '<button onclick="dlMineDoc(' + mi + ',' + di + ')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;border:1px solid ' + (d.uploaded_by === 'admin' ? '#fde68a' : '#e2e8f0') + ';background:' + (d.uploaded_by === 'admin' ? '#fffbeb' : '#f8fafc') + ';color:#0f172a;padding:5px 9px;border-radius:8px;cursor:pointer;font-family:inherit;">' +
+        (d.uploaded_by === 'admin' ? '🎁 ডেলিভারি: ' : '📎 ') + esc(d.originalname || d.filename) + ' ⬇️</button>'
+      ).join('');
+      return '<div style="padding:12px 0; border-bottom:1px solid var(--border-light); font-size:13px;">' +
+      '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">' +
       '<div><b style="color:var(--text-main);">' + esc(m.service_name_bn||m.service_name||'ম্যানুয়াল সেবা') + '</b>' +
       '<div style="color:#64748b; font-size:12px; margin-top:2px;">' + new Date(m.created_at).toLocaleString('bn-BD') +
-      (m.doc_count ? ' • 📎 ' + m.doc_count + 'টি ডকুমেন্ট' : '') +
       (m.admin_note ? '<br><span style="color:var(--primary-700);">💬 অ্যাডমিন নোট: ' + esc(m.admin_note) + '</span>' : '') + '</div></div>' +
-      '<div><span class="st st-' + m.status + '">' + (stBn[m.status]||m.status) + '</span></div></div>'
-    ).join('');
+      '<div><span class="st st-' + m.status + '">' + (stBn[m.status]||m.status) + '</span></div></div>' +
+      (docs ? '<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">' + docs + '</div>' : '') +
+      '</div>';
+    }).join('');
   } catch(e){ document.getElementById('myList').innerHTML = '<div style="color:var(--danger);">আবেদনসমূহ লোড করা যায়নি</div>'; }
+}
+
+async function dlMineDoc(mi, di){
+  const m = (window._mineList || [])[mi]; if(!m) return;
+  const d = (m.documents || [])[di]; if(!d) return;
+  try{
+    const r = await ABC.api('/manual/' + m.id + '/documents/' + encodeURIComponent(d.filename));
+    if(!r.ok){ alert('ডাউনলোড ব্যর্থ হয়েছে'); return; }
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = d.originalname || d.filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  }catch(e){ alert('ডাউনলোড ব্যর্থ হয়েছে'); }
 }
 
 async function doSubmit(){

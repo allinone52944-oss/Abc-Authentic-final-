@@ -2461,8 +2461,9 @@ window.AdmManual = {
     const stBn = { new: '🆕 নতুন', processing: '⏳ প্রসেসিং', completed: '✅ সম্পন্ন', rejected: '❌ বাতিল' };
     const docs = (d.documents || []).map((doc, i) =>
       '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;">' +
-      '<span style="font-size:20px;">📎</span>' +
-      '<span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(doc.originalname || doc.filename) + '</span>' +
+      '<span style="font-size:20px;">' + (doc.uploaded_by === 'admin' ? '🎁' : '📎') + '</span>' +
+      '<span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(doc.originalname || doc.filename) +
+      (doc.uploaded_by === 'admin' ? ' <small style="color:#b45309;font-weight:700;">(ডেলিভারি)</small>' : ' <small style="color:var(--dim);">(গ্রাহকের)</small>') + '</span>' +
       '<button class="mini-btn" onclick="AdmManual.dlDoc(\'' + d.id + '\',\'' + esc(doc.filename) + '\')">⬇️</button></div>'
     ).join('');
     window._manualClean = d.clean_text || '';
@@ -2471,12 +2472,17 @@ window.AdmManual = {
       new Date(d.created_at).toLocaleString('bn-BD') + ' • ' + (stBn[d.status] || d.status) + '</div>' +
       MANUAL_CSS + (d.html || '') +
       (docs ? '<div style="margin-top:12px;"><div style="color:var(--gold);font-weight:700;margin-bottom:8px;">📎 ডকুমেন্ট</div>' + docs + '</div>' : '') +
+      '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
+      '<input type="file" id="mm_dfile" accept=".pdf,.jpg,.jpeg,.png" style="display:none;" onchange="AdmManual.uploadDelivery(\'' + d.id + '\', this)">' +
+      '<button class="mini-btn ok" onclick="document.getElementById(\'mm_dfile\').click()">🎁 ডেলিভারি ফাইল পাঠান</button>' +
+      '<small style="color:var(--dim);">ডেলিভারি ফাইল গ্রাহক তার ইতিহাস ও আবেদন তালিকা থেকে ডাউনলোড করতে পারবেন</small></div>' +
       '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">' +
       '<button class="btn" onclick="AdmManual.copyClean()">📋 কপি করুন</button>' +
       '<select id="mm_status" style="flex:1;min-width:120px;">' +
       Object.keys(stBn).map(s => '<option value="' + s + '"' + (d.status === s ? ' selected' : '') + '>' + stBn[s] + '</option>').join('') +
       '</select>' +
       '<button class="btn-secondary" onclick="AdmManual.setStatus(\'' + d.id + '\')">সংরক্ষণ</button>' +
+      '<button class="btn-secondary" style="color:#b91c1c;border-color:#fca5a5;" onclick="AdmManual.del(\'' + d.id + '\')">🗑️ আবেদন মুছুন</button>' +
       '</div>' +
       '<div class="field" style="margin-top:10px;"><label>অ্যাডমিন নোট</label>' +
       '<textarea id="mm_note" rows="2">' + esc(d.admin_note || '') + '</textarea></div>'
@@ -2517,6 +2523,30 @@ window.AdmManual = {
       document.body.appendChild(a); a.click();
       setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
     } catch (e) { alert('ডাউনলোড ব্যর্থ'); }
+  },
+  async uploadDelivery(id, input) {
+    const file = input && input.files && input.files[0];
+    if (!file) return;
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const r = await fetch('/api/admin/manual/' + id + '/delivery-docs', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + getAuthToken() },
+        body: fd
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { alert('❌ ডেলিভারি আপলোড ব্যর্থ: ' + (d.error || 'UNKNOWN')); return; }
+      alert('✅ ডেলিভারি ফাইল পাঠানো হয়েছে — গ্রাহক এখন ডাউনলোড করতে পারবেন');
+      this.view(id);
+    } catch (e) { alert('❌ ডেলিভারি আপলোড ব্যর্থ'); }
+  },
+  async del(id) {
+    if (!confirm('এই ম্যানুয়াল আবেদন ও এর সব ফাইল স্থায়ীভাবে মুছে যাবে। নিশ্চিত তো?')) return;
+    const r = await ABC.api('/admin/manual/' + id, { method: 'DELETE' });
+    if (!r.ok) { alert('মুছতে ব্যর্থ হয়েছে'); return; }
+    alert('🗑️ আবেদন মুছে ফেলা হয়েছে');
+    closeModal(); show('manual');
   },
   async tplForm() {
     const r = await ABC.api('/manual/template');
