@@ -145,10 +145,16 @@ router.post('/build', requireAuth, async (req, res) => {
     }
 
     if (serviceId) {
+      // The orders idempotency index (migration 019) is PARTIAL
+      // (WHERE idempotency_key IS NOT NULL), so the conflict target must
+      // repeat that predicate — without it PostgreSQL cannot infer the
+      // index and the insert errors out ("there is no unique or exclusion
+      // constraint matching the ON CONFLICT specification"), which is
+      // why no NID order was ever recorded in production.
       await db.query(
         `INSERT INTO orders (user_id, service_id, status, data, price, idempotency_key)
          VALUES ($1, $2, 'completed', $3, $4, $5)
-         ON CONFLICT (user_id, idempotency_key) DO NOTHING`,
+         ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
         [req.user.id, serviceId, JSON.stringify(fields || {}), price, 'nid-' + jobId]
       ).catch(e => safeLog('[nid-engine] order record insert error:', e.message));
     }
@@ -178,6 +184,10 @@ router.post('/build', requireAuth, async (req, res) => {
             });
             await db.query('UPDATE orders SET documents = $1 WHERE id = $2', [JSON.stringify(docs), ord.rows[0].id]);
           }
+        } else {
+          // Never skip silently — a missing order row is exactly how the
+          // partial-index insert failure hid in production for days.
+          safeLog('[nid-engine] delivery copy skipped: order row missing for job', jobId);
         }
       } catch (e) { safeLog('[nid-engine] delivery copy store error:', e.message); }
     }

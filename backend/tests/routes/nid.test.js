@@ -258,6 +258,33 @@ describe('POST /api/nid-engine/build — delivery copy stored for History', () =
     fs.unlinkSync(fp);
   });
 
+  test('order insert targets the PARTIAL idempotency index (migration 019)', async () => {
+    // Production regression: idx_orders_user_idem is created
+    // WHERE idempotency_key IS NOT NULL. A bare
+    // ON CONFLICT (user_id, idempotency_key) cannot infer a partial
+    // index — real PostgreSQL rejects it and the order is never
+    // recorded. The mock DB cannot reproduce that, so pin the SQL.
+    const pdfBytes = Buffer.from('%PDF-1.4 card');
+    adapter.buildCard.mockResolvedValue({ ok: true, pdfBuffer: pdfBytes });
+    let insertSql = null;
+    db.__routeQuery([
+      ['FROM services WHERE', { rows: [{ id: 10, price: 40 }] }],
+      ['FROM user_services WHERE', { rows: [] }],
+      ['FROM users WHERE', { rows: [{ balance: 100 }] }],
+      ['FROM transactions WHERE', { rows: [] }],
+      ['wallet_apply', { rows: [{ balance: 60 }] }],
+      ['INSERT INTO orders', (text) => { insertSql = text; return { rows: [] }; }],
+      ['SELECT id, documents FROM orders WHERE', { rows: [{ id: 'o9', documents: '[]' }] }],
+      ['UPDATE orders SET documents', { rows: [] }],
+    ]);
+    await withUser(request(app()).post('/api/nid-engine/build'))
+      .send({ jobId: 'j9', fields: { name: 'R' } }).expect(200);
+    expect(insertSql).toBeTruthy();
+    expect(insertSql).toMatch(/ON CONFLICT \(user_id, idempotency_key\) WHERE idempotency_key IS NOT NULL DO NOTHING/);
+    const fp = path.join(ORDERS_DIR, FN);
+    if (fs.existsSync(fp)) fs.unlinkSync(fp);
+  });
+
   test('retry does not duplicate the delivery file entry', async () => {
     const pdfBytes = Buffer.from('%PDF-1.4 card');
     adapter.buildCard.mockResolvedValue({ ok: true, pdfBuffer: pdfBytes });
