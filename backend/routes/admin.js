@@ -1355,6 +1355,15 @@ router.put('/coupons/:id', async (req, res) => {
   } catch (e) { safeLog('[admin] coupon update error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });
 
+router.delete('/coupons/:id', async (req, res) => {
+  try {
+    const r = await db.query('DELETE FROM coupons WHERE id = $1 RETURNING code', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    await logActivity(req.user.id, 'coupon.delete', { coupon_id: req.params.id, code: r.rows[0].code });
+    res.json({ ok: true });
+  } catch (e) { safeLog('[admin] coupon delete error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
 router.get('/banners', async (req, res) => {
   try {
     const rows = await db.query('SELECT * FROM banners ORDER BY created_at DESC');

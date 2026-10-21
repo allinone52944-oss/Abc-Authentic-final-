@@ -3458,6 +3458,7 @@ TABS.coupons = async () => {
           (isActive
             ? '<button class="mini-btn danger" onclick="AdmCp.set(\'' + c.id + '\',\'disabled\')">বন্ধ করুন</button>'
             : '<button class="mini-btn ok" onclick="AdmCp.set(\'' + c.id + '\',\'active\')">চালু করুন</button>') +
+          ' <button class="mini-btn danger" onclick="AdmCp.del(\'' + c.id + '\',\'' + esc(c.code) + '\')">🗑️ মুছুন</button>' +
         '</td>' +
       '</tr>';
     }
@@ -3498,6 +3499,12 @@ window.AdmCp = {
   },
   async set(id, status) {
     await ABC.api('/admin/coupons/' + id, { method: 'PUT', body: { status } });
+    show('coupons');
+  },
+  async del(id, code) {
+    if (!confirm('🗑️ কুপনটি স্থায়ীভাবে মুছে ফেলবেন?\n\n' + code + '\n\nমুছে ফেললে এই কোড আর কেউ ব্যবহার করতে পারবে না।')) return;
+    const r = await ABC.api('/admin/coupons/' + id, { method: 'DELETE' });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); alert('ব্যর্থ: ' + (d.error || r.status)); return; }
     show('coupons');
   },
 };

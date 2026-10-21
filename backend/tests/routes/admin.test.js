@@ -487,6 +487,18 @@ describe('coupons / banners / notices', () => {
     expect(r.body.error).toBe('INVALID_STATUS');
   });
 
+  test('DELETE /coupons/:id: happy → 200 with DELETE issued; missing → 404', async () => {
+    db.__routeQuery([['DELETE FROM coupons', { rows: [{ code: 'ABC-123' }] }]]);
+    const r = await withAdmin(request(app()).delete('/api/admin/coupons/c1')).expect(200);
+    expect(r.body.ok).toBe(true);
+    const q = db.query.mock.calls.find((c) => /DELETE FROM coupons/.test(c[0]));
+    expect(q).toBeTruthy();
+    expect(q[1]).toEqual(['c1']);
+    db.__reset();
+    db.__routeQuery([['DELETE FROM coupons', { rows: [] }]]);
+    await withAdmin(request(app()).delete('/api/admin/coupons/nope')).expect(404);
+  });
+
   test('banners: invalid type → 400; happy → 201; update nothing → 400; delete → 200', async () => {
     const r1 = await withAdmin(request(app()).post('/api/admin/banners'))
       .send({ type: 'nope', title: 'T' }).expect(400);
