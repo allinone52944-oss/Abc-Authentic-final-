@@ -291,7 +291,7 @@ const DEFAULT_META_TEMPLATES = {
   order_failed: 'abc_order_failed',
   order_cancelled: 'abc_order_cancelled',
   service_completed: 'abc_service_completed',
-  trxid_warning: 'abc_trxid_warning',
+  trxid_warning: 'abc_trxid_notice',
 };
 
 async function getMetaTemplates(db) {

@@ -274,13 +274,13 @@ describe('template-first dispatch (24h-window fix, 2026-10-21)', () => {
     expect(params).toEqual(['আসসালামু আলাইকুম Karim', 'এনআইডি কার্ড', 'abcdef12']);
   });
 
-  test('notifyDuplicateTrxid uses the abc_trxid_warning template', async () => {
+  test('notifyDuplicateTrxid uses the abc_trxid_notice template', async () => {
     global.fetch = okFetch();
     const db = notifyDb({ name: 'Karim', whatsapp: '01712345678', religion: 'islam' });
     const r = await wa.notifyDuplicateTrxid(db, 'u1', { trxid: 'TXDUP123', amount: 500 });
     expect(r.ok).toBe(true);
     const body = JSON.parse(global.fetch.mock.calls[0][1].body);
-    expect(body.template.name).toBe('abc_trxid_warning');
+    expect(body.template.name).toBe('abc_trxid_notice');
     const params = body.template.components[0].parameters.map((p) => p.text);
     expect(params).toEqual(['আসসালামু আলাইকুম Karim', 'TXDUP123']);
   });
