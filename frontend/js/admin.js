@@ -4057,6 +4057,7 @@ const AdmActivity = {
     show('activity');
   },
 };
+window.AdmActivity = AdmActivity;
 
 TABS.activity = async () => {
   const st = AdmActivity;
