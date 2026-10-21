@@ -579,6 +579,26 @@ describe('stats', () => {
     const r = await withAdmin(request(app()).get('/api/admin/activity-log')).expect(200);
     expect(r.body.total).toBe(1);
   });
+  test('GET /activity-log?prefix=auth. → filters by action family', async () => {
+    let countParams = null; let rowParams = null;
+    db.__routeQuery([
+      ['SELECT COUNT(*) FROM activity_log', (t, p) => { countParams = p; return { rows: [{ count: '2' }] }; }],
+      ['FROM activity_log a', (t, p) => { rowParams = p; return { rows: [{ id: 'l1', action: 'auth.login' }] }; }],
+    ]);
+    const r = await withAdmin(request(app()).get('/api/admin/activity-log?prefix=auth.')).expect(200);
+    expect(r.body.total).toBe(2);
+    expect(countParams).toContain('auth.%');
+    expect(rowParams).toContain('auth.%');
+  });
+  test('GET /activity-log?q= → searches actor name/phone', async () => {
+    let rowParams = null;
+    db.__routeQuery([
+      ['SELECT COUNT(*) FROM activity_log', { rows: [{ count: '1' }] }],
+      ['FROM activity_log a', (t, p) => { rowParams = p; return { rows: [{ id: 'l1' }] }; }],
+    ]);
+    await withAdmin(request(app()).get('/api/admin/activity-log?q=Rahim')).expect(200);
+    expect(rowParams).toContain('%Rahim%');
+  });
 });
 
 describe('settings (security: whatsapp token masking + rotation)', () => {

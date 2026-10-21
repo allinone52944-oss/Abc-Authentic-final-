@@ -3973,58 +3973,165 @@ window.AdmNt = {
   },
 };
 /* ---------------- ACTIVITY LOG ---------------- */
+/* ---------------- ACTIVITY LOG (লগ ট্যাব) ----------------
+   Labels for the REAL action names the backend writes
+   (auth.*, user.*, order.*, transaction.*, sms.*, …). The old
+   map used stale keys ('login', 'recharge_approve') that never
+   matched, so entries rendered as raw codes. */
+const ACT_LABELS = {
+  'auth.login': { label: '🔐 লগইন', cls: 'st-badge info' },
+  'auth.logout': { label: '🚪 লগআউট', cls: 'st-badge info' },
+  'auth.logout_all': { label: '🚪 সব ডিভাইস থেকে লগআউট', cls: 'st-badge info' },
+  'auth.register': { label: '🆕 নতুন রেজিস্ট্রেশন', cls: 'st-badge active' },
+  'auth.email_verified': { label: '✉️ ইমেইল যাচাই (নিজে)', cls: 'st-badge active' },
+  'user.create': { label: '👤 ইউজার তৈরি', cls: 'st-badge active' },
+  'user.update': { label: '✏️ ইউজার সম্পাদনা', cls: 'st-badge info' },
+  'user.delete': { label: '🗑️ ইউজার ডিলিট', cls: 'st-badge danger' },
+  'user.verify_email': { label: '✅ ইমেইল যাচাই (অ্যাডমিন)', cls: 'st-badge active' },
+  'user.unblock': { label: '🔓 লগইন আনব্লক', cls: 'st-badge active' },
+  'user.reset_password': { label: '🔑 পাসওয়ার্ড রিসেট (অ্যাডমিন)', cls: 'st-badge pending' },
+  'user.service_access': { label: '🎛️ সেবার অ্যাক্সেস বদল', cls: 'st-badge info' },
+  'user.service_pricing': { label: '🏷️ সেবার দাম বদল', cls: 'st-badge info' },
+  'order.status': { label: '📦 অর্ডার স্ট্যাটাস', cls: 'st-badge info' },
+  'order.delete': { label: '🗑️ অর্ডার ডিলিট', cls: 'st-badge danger' },
+  'order.support_message': { label: '💬 সাপোর্ট মেসেজ', cls: 'st-badge info' },
+  'transaction.approve': { label: '💰 লেনদেন অনুমোদন', cls: 'st-badge active' },
+  'transaction.reject': { label: '❌ লেনদেন বাতিল', cls: 'st-badge danger' },
+  'sms.auto_match': { label: '📩 SMS অটো-ম্যাচ', cls: 'st-badge active' },
+  'sms.manual_match': { label: '📩 SMS ম্যানুয়াল ম্যাচ', cls: 'st-badge active' },
+  'sms.amount_mismatch_cancel': { label: '⚠️ অঙ্ক অমিলে রিচার্জ বাতিল', cls: 'st-badge danger' },
+  'sms.amount_unverified_hold': { label: '⏸️ SMS হোল্ড (যাচাই হয়নি)', cls: 'st-badge pending' },
+  'sms.large_amount_hold': { label: '⏸️ SMS হোল্ড (বড় অঙ্ক)', cls: 'st-badge pending' },
+  'sms.ignore': { label: '🚫 SMS উপেক্ষা', cls: 'st-badge info' },
+  'sms.secret_reveal': { label: '🔓 SMS গোপন তথ্য দেখা', cls: 'st-badge pending' },
+  'settings.update': { label: '⚙️ সেটিংস আপডেট', cls: 'st-badge pending' },
+  'service.create': { label: '🛠️ সেবা তৈরি', cls: 'st-badge active' },
+  'service.update': { label: '🛠️ সেবা আপডেট', cls: 'st-badge info' },
+  'service.delete': { label: '🗑️ সেবা ডিলিট', cls: 'st-badge danger' },
+  'service.duplicate': { label: '🛠️ সেবার কপি', cls: 'st-badge info' },
+  'service.reorder': { label: '🛠️ সেবা সাজানো', cls: 'st-badge info' },
+  'service_category.create': { label: '🗂️ ক্যাটাগরি তৈরি', cls: 'st-badge active' },
+  'service_category.update': { label: '🗂️ ক্যাটাগরি আপডেট', cls: 'st-badge info' },
+  'service_category.delete': { label: '🗑️ ক্যাটাগরি ডিলিট', cls: 'st-badge danger' },
+  'service_category.reorder': { label: '🗂️ ক্যাটাগরি সাজানো', cls: 'st-badge info' },
+  'coupon.create': { label: '🎟️ কুপন তৈরি', cls: 'st-badge active' },
+  'coupon.update': { label: '🎟️ কুপন আপডেট', cls: 'st-badge info' },
+  'coupon.delete': { label: '🗑️ কুপন ডিলিট', cls: 'st-badge danger' },
+  'notice.create': { label: '📢 নোটিশ প্রকাশ', cls: 'st-badge active' },
+  'banner.create': { label: '🖼️ ব্যানার তৈরি', cls: 'st-badge active' },
+  'banner.delete': { label: '🗑️ ব্যানার ডিলিট', cls: 'st-badge danger' },
+  'invite.create': { label: '🔗 ইনভাইট তৈরি', cls: 'st-badge active' },
+  'invite.delete': { label: '🗑️ ইনভাইট ডিলিট', cls: 'st-badge danger' },
+  'invite.set_active': { label: '🔗 ইনভাইট চালু/বন্ধ', cls: 'st-badge info' },
+  'backup.trigger': { label: '💾 ব্যাকআপ', cls: 'st-badge info' },
+  'storage.delete': { label: '🗄️ ফাইল ডিলিট', cls: 'st-badge danger' },
+  'storage.delete_all': { label: '🗄️ সব ফাইল ডিলিট', cls: 'st-badge danger' },
+  'report.orders': { label: '📊 অর্ডার রিপোর্ট', cls: 'st-badge info' },
+  'report.transactions': { label: '📊 লেনদেন রিপোর্ট', cls: 'st-badge info' },
+  'bdris_application.delete': { label: '🗑️ BDRIS আবেদন ডিলিট', cls: 'st-badge danger' },
+};
+
+const AdmActivity = {
+  prefix: '', q: '', page: 1,
+  setPrefix(p) { this.prefix = p; this.page = 1; show('activity'); },
+  search() {
+    const el = document.getElementById('actQ');
+    this.q = el ? el.value.trim() : '';
+    this.page = 1;
+    show('activity');
+  },
+  go(d, totalPages) {
+    const np = this.page + d;
+    if (np < 1 || np > totalPages) return;
+    this.page = np;
+    show('activity');
+  },
+};
+
 TABS.activity = async () => {
-  const r = await ABC.api('/admin/activity-log?limit=50');
-  const d = await r.json();
-  const logs = (d && d.log) || [];
+  const st = AdmActivity;
+  const qs = '/admin/activity-log?limit=50&page=' + st.page +
+    (st.prefix ? '&prefix=' + encodeURIComponent(st.prefix) : '') +
+    (st.q ? '&q=' + encodeURIComponent(st.q) : '');
+  let logs = [], total = 0, loadErr = '';
+  try {
+    const r = await ABC.api(qs);
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((d && d.error) || 'FAILED');
+    logs = (d && d.log) || [];
+    total = (d && d.total) || 0;
+  } catch (e) {
+    loadErr = 'লগ লোড করা যায়নি — নেটওয়ার্ক/সার্ভার সমস্যা হতে পারে।';
+  }
+  const totalPages = Math.max(1, Math.ceil(total / 50));
 
-  const ACTION_MAP = {
-    'login': { label: '🔐 এডমিন লগইন', cls: 'st-badge info' },
-    'recharge_approve': { label: '💰 রিচার্জ অনুমোদন', cls: 'st-badge active' },
-    'recharge_reject': { label: '❌ রিচার্জ বাতিল', cls: 'st-badge danger' },
-    'order_update': { label: '📦 অর্ডার স্ট্যাটাস', cls: 'st-badge info' },
-    'order_deliver': { label: '🚚 ফাইল ডেলিভারি', cls: 'st-badge active' },
-    'settings_update': { label: '⚙️ সেটিংস আপডেট', cls: 'st-badge pending' },
-    'service_update': { label: '🛠️ সেবা আপডেট', cls: 'st-badge info' },
-    'notice_create': { label: '📢 নোটিশ প্রকাশ', cls: 'st-badge active' },
-    'notice_delete': { label: '🗑️ নোটিশ মোছা', cls: 'st-badge danger' },
-    'user_block': { label: '🚫 ইউজার ব্লক', cls: 'st-badge danger' }
-  };
+  const ACTION_MAP = ACT_LABELS;
 
+  const CHIPS = [
+    ['', 'সব'],
+    ['auth.', '🔐 লগইন ও যাচাই'],
+    ['user.', '👥 ইউজার'],
+    ['order.', '📦 অর্ডার'],
+    ['transaction.', '💰 লেনদেন'],
+    ['sms.', '📩 SMS'],
+  ];
   let html = '<div class="adm-page-head">' +
     '<div>' +
-      '<h2 class="adm-page-title">📜 এডমিন অডিট ও অ্যাক্টিভিটি লগ</h2>' +
-      '<p class="adm-page-sub">অ্যাডমিনদের দ্বারা পরিচালিত প্রতিটি সংবেদনশীল অপারেশনের অপরিবর্তনীয় অডিট ট্রেইল</p>' +
+      '<h2 class="adm-page-title">📜 কার্যকলাপের লগ</h2>' +
+      '<p class="adm-page-sub">কে কখন লগইন করল, কে কী করল — ইউজার ও অ্যাডমিন সবার কার্যক্রমের রেকর্ড</p>' +
     '</div>' +
     '<div class="adm-head-actions">' +
-      '<span class="st-badge info">সাম্প্রতিক রেকর্ড: ' + bn(logs.length) + '</span>' +
+      '<span class="st-badge info">মোট রেকর্ড: ' + bn(total) + '</span>' +
       '<button class="mini-btn" onclick="show(\'activity\')">🔄 রিফ্রেশ লগ</button>' +
     '</div>' +
+  '</div>' +
+  '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">' +
+    CHIPS.map(([p, label]) =>
+      '<button class="mini-btn" onclick="AdmActivity.setPrefix(\'' + p + '\')" style="' +
+      (st.prefix === p ? 'background:#2563eb;color:#fff;border-color:#2563eb;' : '') + '">' + label + '</button>'
+    ).join('') +
+  '</div>' +
+  '<div style="display:flex;gap:6px;margin-bottom:12px;">' +
+    '<input id="actQ" type="text" placeholder="নাম বা ফোন নম্বর দিয়ে খুঁজুন" value="' + esc(st.q) + '" ' +
+      'onkeydown="if(event.key===\'Enter\')AdmActivity.search()" ' +
+      'style="flex:1;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;">' +
+    '<button class="mini-btn" onclick="AdmActivity.search()">🔍 খুঁজুন</button>' +
   '</div>';
 
-  if (!logs.length) {
+  if (loadErr) {
+    html += '<div class="adm-empty-state">' +
+      '<div class="adm-empty-icon">⚠️</div>' +
+      '<div class="adm-empty-title">লগ লোড হয়নি</div>' +
+      '<div class="adm-empty-desc">' + esc(loadErr) + '</div>' +
+      '<button class="mini-btn" onclick="show(\'activity\')" style="margin-top:10px;">🔄 আবার চেষ্টা করুন</button>' +
+    '</div>';
+  } else if (!logs.length) {
     html += '<div class="adm-empty-state">' +
       '<div class="adm-empty-icon">📜</div>' +
-      '<div class="adm-empty-title">কোনো অডিট লগ রেকর্ড নেই</div>' +
-      '<div class="adm-empty-desc">এডমিন প্যানেলে পরিচালিত কোনো কার্যক্রম এখনো রেকর্ড হয়নি।</div>' +
+      '<div class="adm-empty-title">কোনো লগ রেকর্ড নেই</div>' +
+      '<div class="adm-empty-desc">এই ফিল্টারে কোনো কার্যক্রম পাওয়া যায়নি।</div>' +
     '</div>';
   } else {
     html += '<div class="adm-table-card">' +
       '<div style="overflow-x:auto;"><table class="adm-table">' +
       '<thead>' +
         '<tr><th>সময় ও তারিখ</th>' +
-        '<th>দায়িত্বপ্রাপ্ত এডমিন</th>' +
-        '<th>অপারেশন</th>' +
-        '<th>কার্যক্রমের বিবরণ</th></tr>' +
+        '<th>কে করেছে</th>' +
+        '<th>কার্যক্রম</th>' +
+        '<th>বিবরণ</th></tr>' +
       '</thead><tbody>';
 
+    const KEY_LABELS = { ip: '🌐 আইপি', user_id: 'ইউজার আইডি' };
     for (const a of logs) {
       const actInfo = ACTION_MAP[a.action] || { label: a.action, cls: 'st-badge info' };
       let detailsFormatted = '';
       try {
         if (typeof a.details === 'object' && a.details !== null) {
           detailsFormatted = Object.entries(a.details)
-            .map(([k, v]) => '<span style="display:inline-block; margin-right:8px; background:#f8fafc; padding:2px 6px; border-radius:4px; border:1px solid #e2e8f0;"><b>' + esc(k) + ':</b> ' + esc(String(v)) + '</span>')
+            .map(([k, v]) => {
+              const val = (v && typeof v === 'object') ? JSON.stringify(v).slice(0, 140) : String(v);
+              return '<span style="display:inline-block; margin-right:8px; background:#f8fafc; padding:2px 6px; border-radius:4px; border:1px solid #e2e8f0;"><b>' + esc(KEY_LABELS[k] || k) + ':</b> ' + esc(val) + '</span>';
+            })
             .join(' ');
         } else {
           detailsFormatted = esc(String(a.details || '-'));
@@ -4035,13 +4142,23 @@ TABS.activity = async () => {
 
       html += '<tr>' +
         '<td style="white-space:nowrap; font-size:12px; color:#64748b;">🕒 ' + new Date(a.created_at).toLocaleString('bn-BD') + '</td>' +
-        '<td style="font-weight:700; font-size:13px; color:#0f172a;">👤 ' + esc(a.admin_name || 'সুপার এডমিন') + '</td>' +
+        '<td style="font-weight:700; font-size:13px; color:#0f172a;">👤 ' + esc(a.admin_name || 'অজানা') +
+          (a.admin_phone ? '<div style="font-weight:400; font-size:11px; color:#64748b;">' + esc(a.admin_phone) + '</div>' : '') +
+        '</td>' +
         '<td><span class="' + actInfo.cls + '">' + actInfo.label + '</span></td>' +
-        '<td style="font-size:12px; color:#334155;">' + detailsFormatted + '</td>' +
+        '<td style="font-size:12px; color:#334155;">' + (detailsFormatted || '-') + '</td>' +
       '</tr>';
     }
 
-    html += '</tbody></table></div></div>';
+    html += '</tbody></table></div>';
+    if (totalPages > 1) {
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 4px;">' +
+        '<button class="mini-btn" ' + (st.page <= 1 ? 'disabled style="opacity:.4;"' : '') + ' onclick="AdmActivity.go(-1,' + totalPages + ')">◀ আগের</button>' +
+        '<span style="font-size:12px;color:#64748b;">পেজ ' + bn(st.page) + ' / ' + bn(totalPages) + '</span>' +
+        '<button class="mini-btn" ' + (st.page >= totalPages ? 'disabled style="opacity:.4;"' : '') + ' onclick="AdmActivity.go(1,' + totalPages + ')">পরের ▶</button>' +
+      '</div>';
+    }
+    html += '</div>';
   }
   content.innerHTML = html;
 };

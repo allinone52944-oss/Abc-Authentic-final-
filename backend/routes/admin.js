@@ -1470,11 +1470,30 @@ router.delete('/notices/:id', async (req, res) => {
 router.get('/activity-log', async (req, res) => {
   try {
     const { page, limit, offset } = pageParams(req);
-    const total = await db.query('SELECT COUNT(*) FROM activity_log');
+    // Filters for the admin লগ tab: ?prefix=auth. matches an action
+    // family (auth.* = লগইন/যাচাই, user.*, order.*, transaction.*,
+    // sms.*, settings.* …); ?q= searches the actor's name/phone.
+    const where = [];
+    const params = [];
+    const prefix = String(req.query.prefix || '').replace(/[^a-z0-9._-]/gi, '');
+    if (prefix) {
+      params.push(prefix.replace(/[%_]/g, '') + '%');
+      where.push(`a.action LIKE $${params.length}`);
+    }
+    const q = String(req.query.q || '').trim();
+    if (q) {
+      params.push('%' + q.replace(/[%_]/g, '') + '%');
+      where.push(`(u.name ILIKE $${params.length} OR u.phone ILIKE $${params.length})`);
+    }
+    const whereSql = where.length ? ' WHERE ' + where.join(' AND ') : '';
+    const total = await db.query(
+      `SELECT COUNT(*) FROM activity_log a
+       LEFT JOIN users u ON u.id = a.admin_id${whereSql}`, params);
     const rows = await db.query(
-      `SELECT a.*, u.name AS admin_name FROM activity_log a
-       LEFT JOIN users u ON u.id = a.admin_id
-       ORDER BY a.created_at DESC LIMIT $1 OFFSET $2`, [limit, offset]);
+      `SELECT a.*, u.name AS admin_name, u.phone AS admin_phone FROM activity_log a
+       LEFT JOIN users u ON u.id = a.admin_id${whereSql}
+       ORDER BY a.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limit, offset]);
     res.json({ log: rows.rows, total: parseInt(total.rows[0].count, 10), page, limit });
   } catch (e) { safeLog('[admin] activity error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });

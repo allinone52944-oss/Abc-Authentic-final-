@@ -16,7 +16,7 @@ const {
   requireAuth,
   checkPasswordStrength,
 } = require('../auth');
-const { safeLog } = require('../security');
+const { safeLog, getClientIp } = require('../security');
 const { validateInvite } = require('./invites');
 const push = require('../utils/push');
 
@@ -208,6 +208,8 @@ router.post('/register', async (req, res) => {
         emailSent = !!sent.ok;
       }
     } catch (e) { safeLog('[auth] verification email skipped:', e.message); }
+
+    logActivity(user.id, 'auth.register', { ip: getClientIp(req) }).catch(() => {});
 
     // Web Push: notify admins of new user registration (async, non-blocking)
     push.notifyNewUser(db, user).catch(() => {});
@@ -443,7 +445,9 @@ router.post('/login', async (req, res) => {
       [user.id]
     );
     const tokens = await issueTokens(user.id, user.role, user.token_version);
-    logActivity(user.id, 'auth.login', {}).catch(() => {});
+    // IP is recorded so the admin লগ tab can answer "কে, কোথা থেকে
+    // লগইন করল" (added 2026-10-21 at the owner's request).
+    logActivity(user.id, 'auth.login', { ip: getClientIp(req) }).catch(() => {});
     const fresh = await db.query('SELECT * FROM users WHERE id = $1', [user.id]);
     return res.json({ user: publicUser(fresh.rows[0]), ...tokens });
   } catch (e) {

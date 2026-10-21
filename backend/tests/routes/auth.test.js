@@ -52,6 +52,20 @@ describe('POST /api/auth/register — happy path', () => {
     expect(r.body.email_sent).toBe(false);
   });
 
+  test('registration is logged with the client IP (admin লগ tab)', async () => {
+    db.__routeQuery([
+      ...settingsHandlers(),
+      ['FROM users WHERE phone = $1 OR email', { rows: [] }],
+      ['INSERT INTO users', { rows: [{ id: 'u1', name: VALID.name, phone: VALID.phone, email: VALID.email, status: 'pending' }] }],
+    ]);
+    await request(app()).post('/api/auth/register')
+      .set('x-forwarded-for', '203.0.113.9')
+      .send(VALID).expect(201);
+    const ins = db.query.mock.calls.find((c) => /INSERT INTO activity_log/.test(c[0]) && c[1][1] === 'auth.register');
+    expect(ins).toBeDefined();
+    expect(JSON.parse(ins[1][2])).toEqual({ ip: '203.0.113.9' });
+  });
+
   test('registration OFF + valid invite → proceeds and consumes invite', async () => {
     db.__routeQuery([
       ...settingsHandlers({ enabled: false }),
@@ -173,6 +187,17 @@ describe('POST /api/auth/login', () => {
   test('missing credentials → 400 MISSING_CREDENTIALS', async () => {
     const r = await request(app()).post('/api/auth/login').send({}).expect(400);
     expect(r.body.error).toBe('MISSING_CREDENTIALS');
+  });
+
+  test('login is logged with the client IP (admin লগ tab)', async () => {
+    await request(app())
+      .post('/api/auth/login')
+      .set('x-forwarded-for', '203.0.113.9')
+      .send({ login: '01712345678', password: 'correct-password1' })
+      .expect(200);
+    const ins = db.query.mock.calls.find((c) => /INSERT INTO activity_log/.test(c[0]) && c[1][1] === 'auth.login');
+    expect(ins).toBeDefined();
+    expect(JSON.parse(ins[1][2])).toEqual({ ip: '203.0.113.9' });
   });
 
   test('unknown user → 401 INVALID_CREDENTIALS', async () => {
