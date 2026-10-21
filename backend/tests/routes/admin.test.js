@@ -599,6 +599,18 @@ describe('stats', () => {
     await withAdmin(request(app()).get('/api/admin/activity-log?q=Rahim')).expect(200);
     expect(rowParams).toContain('%Rahim%');
   });
+  test('DELETE /activity-log/old → prunes >30d rows and logs the prune itself', async () => {
+    let delSql = null; let logParams = null;
+    db.__routeQuery([
+      ['DELETE FROM activity_log', (t) => { delSql = t; return { rows: [], rowCount: 7 }; }],
+      ['INSERT INTO activity_log', (t, p) => { logParams = p; return { rows: [] }; }],
+    ]);
+    const r = await withAdmin(request(app()).delete('/api/admin/activity-log/old')).expect(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.deleted).toBe(7);
+    expect(delSql).toMatch(/30 days/);
+    expect(logParams[1]).toBe('activity.prune');
+  });
 });
 
 describe('settings (security: whatsapp token masking + rotation)', () => {

@@ -4029,6 +4029,7 @@ const ACT_LABELS = {
   'report.orders': { label: '📊 অর্ডার রিপোর্ট', cls: 'st-badge info' },
   'report.transactions': { label: '📊 লেনদেন রিপোর্ট', cls: 'st-badge info' },
   'bdris_application.delete': { label: '🗑️ BDRIS আবেদন ডিলিট', cls: 'st-badge danger' },
+  'activity.prune': { label: '🧹 পুরনো লগ পরিষ্কার', cls: 'st-badge pending' },
 };
 
 const AdmActivity = {
@@ -4044,6 +4045,15 @@ const AdmActivity = {
     const np = this.page + d;
     if (np < 1 || np > totalPages) return;
     this.page = np;
+    show('activity');
+  },
+  async prune() {
+    if (!confirm('৩০ দিনের বেশি পুরনো সব লগ মুছে যাবে। এই কাজ ফেরানো যাবে না।\n\nনিশ্চিত?')) return;
+    const r = await ABC.api('/admin/activity-log/old', { method: 'DELETE' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { alert('ব্যর্থ: ' + (d.error || 'UNKNOWN')); return; }
+    alert('✅ ' + bn(d.deleted || 0) + 'টি পুরনো লগ মোছা হয়েছে।\n(এই পরিষ্কারের রেকর্ডটি লগে থেকে যাবে)');
+    this.page = 1;
     show('activity');
   },
 };
@@ -4082,6 +4092,7 @@ TABS.activity = async () => {
     '</div>' +
     '<div class="adm-head-actions">' +
       '<span class="st-badge info">মোট রেকর্ড: ' + bn(total) + '</span>' +
+      '<button class="mini-btn" onclick="AdmActivity.prune()">🧹 পুরনো লগ পরিষ্কার (৩০ দিন+)</button>' +
       '<button class="mini-btn" onclick="show(\'activity\')">🔄 রিফ্রেশ লগ</button>' +
     '</div>' +
   '</div>' +

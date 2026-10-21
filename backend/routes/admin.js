@@ -1498,6 +1498,20 @@ router.get('/activity-log', async (req, res) => {
   } catch (e) { safeLog('[admin] activity error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });
 
+// DELETE /api/admin/activity-log/old — prune entries older than 30
+// days (owner-approved safe-cleanup design, 2026-10-21: no per-row
+// delete, so recent evidence can't be quietly erased; the prune
+// itself is logged and becomes part of the trail).
+router.delete('/activity-log/old', async (req, res) => {
+  try {
+    const r = await db.query(
+      `DELETE FROM activity_log WHERE created_at < NOW() - INTERVAL '30 days'`);
+    const deleted = r.rowCount || 0;
+    await logActivity(req.user.id, 'activity.prune', { deleted, older_than_days: 30 });
+    res.json({ ok: true, deleted });
+  } catch (e) { safeLog('[admin] activity prune error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
 router.get('/stats', async (req, res) => {
   try {
     const r = await db.query(`
