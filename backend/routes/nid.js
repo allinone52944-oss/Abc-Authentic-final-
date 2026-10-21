@@ -153,6 +153,35 @@ router.post('/build', requireAuth, async (req, res) => {
       ).catch(e => safeLog('[nid-engine] order record insert error:', e.message));
     }
 
+    // ডেলিভারি কপি: তৈরি PDF-টা অর্ডারের ডেলিভারি ফাইল হিসেবে সার্ভারে
+    // জমা থাকে — গ্রাহক ইতিহাস থেকে যেকোনো সময় আবার নামাতে পারবেন।
+    // জমা ব্যর্থ হলেও মূল PDF পাঠানো আটকায় না।
+    if (serviceId) {
+      try {
+        const ord = await db.query(
+          'SELECT id, documents FROM orders WHERE user_id = $1 AND idempotency_key = $2',
+          [req.user.id, 'nid-' + jobId]
+        );
+        if (ord.rows.length) {
+          const fn = 'delivery-nid-' + String(jobId).replace(/[^a-zA-Z0-9-]/g, '') + '.pdf';
+          let docs = [];
+          try { docs = JSON.parse(ord.rows[0].documents || '[]'); } catch (_) { docs = []; }
+          if (Array.isArray(docs) && !docs.some(d => d && d.filename === fn)) {
+            const fsx = require('fs');
+            const pathx = require('path');
+            const dir = '/opt/all-in-one-abc-authentic/uploads/orders';
+            fsx.mkdirSync(dir, { recursive: true });
+            fsx.writeFileSync(pathx.join(dir, fn), r.pdfBuffer);
+            docs.push({
+              type: 'delivery', filename: fn, originalname: 'nid-card.pdf',
+              uploaded_at: new Date().toISOString(), uploaded_by: 'admin',
+            });
+            await db.query('UPDATE orders SET documents = $1 WHERE id = $2', [JSON.stringify(docs), ord.rows[0].id]);
+          }
+        }
+      } catch (e) { safeLog('[nid-engine] delivery copy store error:', e.message); }
+    }
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename="nid-card.pdf"');
     res.setHeader('Content-Length', r.pdfBuffer.length);

@@ -416,13 +416,15 @@ router.get('/orders/:id/documents/:filename', async (req, res) => {
 
 // GET /api/history — delivery files only. Per the owner's design call
 // (2026-10-21) History keeps NO work details at all: just the files the
-// customer received as deliveries (admin-uploaded files on orders and
-// manual submissions), so a delivered file can always be found and
-// re-downloaded from one place, whatever phone/browser they use.
+// customer received as deliveries — admin-uploaded files on orders and
+// manual submissions, NID card PDFs stored on their orders, and stored
+// certificate / death-verify engine PDFs — so a delivered file can
+// always be found and re-downloaded from one place, whatever
+// phone/browser they use. (BDRIS applications stay out by his call.)
 router.get('/history', async (req, res) => {
   try {
     const uid = req.user.id;
-    const [orders, manual] = await Promise.all([
+    const [orders, manual, engineJobs] = await Promise.all([
       db.query(
         `SELECT o.id, o.documents, o.created_at,
                 s.name AS service_name, s.name_bn AS service_name_bn
@@ -433,6 +435,10 @@ router.get('/history', async (req, res) => {
                 s.name AS service_name, s.name_bn AS service_name_bn
          FROM manual_submissions m LEFT JOIN services s ON s.id = m.service_id
          WHERE m.user_id = $1 ORDER BY m.created_at DESC LIMIT 100`, [uid]),
+      db.query(
+        `SELECT id, engine_id, subject_name, filename, originalname, created_at
+         FROM engine_jobs
+         WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`, [uid]),
     ]);
     const deliveryDocs = (raw, base) => safeJsonArray(raw)
       .filter(d => d && d.filename && d.uploaded_by === 'admin')
@@ -458,6 +464,19 @@ router.get('/history', async (req, res) => {
         kind: 'manual', id: m.id,
         title: m.service_name_bn || m.service_name || 'ম্যানুয়াল সেবা',
         created_at: m.created_at, documents,
+      });
+    }
+    for (const j of engineJobs.rows) {
+      items.push({
+        kind: 'engine', id: j.id,
+        title: (j.engine_id === 'death-verify' ? 'মৃত্যু সনদ' : 'জন্ম সনদ (সার্টিফিকেট)') +
+          (j.subject_name ? ' — ' + j.subject_name : ''),
+        created_at: j.created_at,
+        documents: [{
+          filename: j.filename,
+          originalname: j.originalname || j.filename,
+          url: '/engine-jobs/' + j.id + '/file',
+        }],
       });
     }
     items.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));

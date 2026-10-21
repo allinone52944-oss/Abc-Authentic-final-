@@ -244,6 +244,20 @@ async function step3(){
   }catch(e){showErr(e.message||'সনদ তৈরি ব্যর্থ।');}
   busy('b3',false);
 }
+// তৈরি PDF-এর এক কপি সার্ভারে জমা হয় — ডেলিভারি ফাইল হিসেবে
+// গ্রাহকের ইতিহাসে থেকে যায়, যেকোনো ডিভাইস থেকে আবার নামানো যায়।
+function reportEngineJob(engineId, refNo, name, blob, fname){
+  try{
+    const fd=new FormData();
+    fd.append('file', blob, fname);
+    fd.append('engine_id', engineId);
+    fd.append('ref_no', refNo||'');
+    fd.append('name', name||'');
+    fd.append('idempotency_key', engineId+'-'+(refNo||Date.now()));
+    const token=sessionStorage.getItem('abc_access_token')||'';
+    fetch('/api/engine-jobs',{method:'POST',headers:{'Authorization':'Bearer '+token},body:fd}).catch(()=>{});
+  }catch(e){}
+}
 async function dlPdf(){
   busy('b4',true,'PDF তৈরি হচ্ছে…');
   try{
@@ -254,6 +268,7 @@ async function dlPdf(){
     a.href=URL.createObjectURL(blob);
     a.download='Certificate_'+S.brn+'.pdf';
     document.body.appendChild(a);a.click();a.remove();
+    reportEngineJob('bdris-certificate', S.brn, (S.record&&(S.record.nameEn||S.record.nameBn))||'', blob, 'Certificate_'+S.brn+'.pdf');
     showOk('PDF ডাউনলোড শুরু হয়েছে ✓');
   }catch(e){showErr(e.message||'PDF ব্যর্থ।');}
   busy('b4',false);

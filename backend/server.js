@@ -337,6 +337,11 @@ const { customerManual, adminManual } = require('./routes/manual');
 app.use('/api/manual', apiLimiter, customerManual);
 app.use('/api/admin/manual', apiLimiter, adminManual);
 
+// ---- Stored engine delivery copies (certificate / death-verify PDFs) --
+const { customerEngineJobs, adminEngineJobs } = require('./routes/engine-jobs');
+app.use('/api/engine-jobs', apiLimiter, customerEngineJobs);
+app.use('/api/admin/engine-jobs', apiLimiter, adminEngineJobs);
+
 // ---- Fallback: branded 404 (API -> JSON, pages -> 404.html) ----
 app.use('/api', (req, res) => {
   res.status(404).json({ error: 'NOT_FOUND' });

@@ -224,3 +224,55 @@ describe('POST /api/nid-engine/build', () => {
     expect(walletDebitCalled).toBe(false);
   });
 });
+
+describe('POST /api/nid-engine/build — delivery copy stored for History', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const ORDERS_DIR = '/opt/all-in-one-abc-authentic/uploads/orders';
+  const FN = 'delivery-nid-j9.pdf';
+
+  test('generated PDF is stored as the order delivery file', async () => {
+    const pdfBytes = Buffer.from('%PDF-1.4 card');
+    adapter.buildCard.mockResolvedValue({ ok: true, pdfBuffer: pdfBytes });
+    let updatedDocs = null;
+    db.__routeQuery([
+      ['FROM services WHERE', { rows: [{ id: 10, price: 40 }] }],
+      ['FROM user_services WHERE', { rows: [] }],
+      ['FROM users WHERE', { rows: [{ balance: 100 }] }],
+      ['FROM transactions WHERE', { rows: [] }],
+      ['wallet_apply', { rows: [{ balance: 60 }] }],
+      ['INSERT INTO orders', { rows: [] }],
+      ['SELECT id, documents FROM orders WHERE', { rows: [{ id: 'o9', documents: '[]' }] }],
+      ['UPDATE orders SET documents', (text, params) => { updatedDocs = params[0]; return { rows: [] }; }],
+    ]);
+    const r = await withUser(request(app()).post('/api/nid-engine/build'))
+      .send({ jobId: 'j9', fields: { name: 'R' } }).expect(200);
+    expect(r.headers['content-type']).toContain('application/pdf');
+    expect(updatedDocs).toBeTruthy();
+    const docs = JSON.parse(updatedDocs);
+    expect(docs).toHaveLength(1);
+    expect(docs[0]).toMatchObject({ filename: FN, uploaded_by: 'admin', type: 'delivery', originalname: 'nid-card.pdf' });
+    const fp = path.join(ORDERS_DIR, FN);
+    expect(fs.existsSync(fp)).toBe(true);
+    expect(fs.readFileSync(fp).toString()).toBe('%PDF-1.4 card');
+    fs.unlinkSync(fp);
+  });
+
+  test('retry does not duplicate the delivery file entry', async () => {
+    const pdfBytes = Buffer.from('%PDF-1.4 card');
+    adapter.buildCard.mockResolvedValue({ ok: true, pdfBuffer: pdfBytes });
+    let updateCalled = false;
+    db.__routeQuery([
+      ['FROM services WHERE', { rows: [{ id: 10, price: 40 }] }],
+      ['FROM user_services WHERE', { rows: [] }],
+      ['FROM users WHERE', { rows: [{ balance: 100 }] }],
+      ['FROM transactions WHERE', { rows: [{ id: 99 }] }],
+      ['INSERT INTO orders', { rows: [] }],
+      ['SELECT id, documents FROM orders WHERE', { rows: [{ id: 'o9', documents: JSON.stringify([{ filename: FN, uploaded_by: 'admin', type: 'delivery' }]) }] }],
+      ['UPDATE orders SET documents', () => { updateCalled = true; return { rows: [] }; }],
+    ]);
+    await withUser(request(app()).post('/api/nid-engine/build'))
+      .send({ jobId: 'j9', fields: { name: 'R' } }).expect(200);
+    expect(updateCalled).toBe(false);
+  });
+});

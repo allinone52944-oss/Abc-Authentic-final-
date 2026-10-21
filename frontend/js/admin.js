@@ -1577,8 +1577,11 @@ TABS.orders = async () => {
   html += '</tbody></table></div></div></div>';
   html += '<div class="card" style="margin-top:16px;"><h3>🕘 BDRIS আবেদনসমূহ (অটো সেবা)</h3>' +
     '<div id="admBdrisApps" class="s">⏳ লোড হচ্ছে…</div></div>';
+  html += '<div class="card" style="margin-top:16px;"><h3>🎓 Engine ডেলিভারি (সার্টিফিকেট / মৃত্যু সনদ)</h3>' +
+    '<div id="admEngineJobs" class="s">⏳ লোড হচ্ছে…</div></div>';
   content.innerHTML = html;
   AdmOrders.loadBdrisApps();
+  AdmOrders.loadEngineJobs();
 };
 
 window.AdmOrders = {
@@ -1604,6 +1607,30 @@ window.AdmOrders = {
     const r = await ABC.api('/admin/bdris-applications/' + id, { method: 'DELETE' });
     if (!r.ok) { alert('ডিলিট ব্যর্থ হয়েছে'); return; }
     AdmOrders.loadBdrisApps();
+  },
+  async loadEngineJobs() {
+    const box = document.getElementById('admEngineJobs');
+    if (!box) return;
+    const lbl = { 'bdris-certificate': 'জন্ম সনদ', 'death-verify': 'মৃত্যু সনদ' };
+    try {
+      const r = await ABC.api('/admin/engine-jobs');
+      const d = await r.json();
+      const jobs = d.jobs || [];
+      if (!jobs.length) { box.textContent = 'এখনো কোনো engine ডেলিভারি জমা হয়নি।'; return; }
+      box.innerHTML = '<div class="tw"><table><thead><tr><th>ধরন</th><th>নম্বর (BRN/DRN)</th><th>নাম</th><th>গ্রাহক</th><th>সময়</th><th></th></tr></thead><tbody>' +
+        jobs.map(j =>
+          '<tr><td>' + esc(lbl[j.engine_id] || j.engine_id) + '</td><td>' + esc(j.ref_no || '') + '</td><td>' + esc(j.subject_name || '') + '</td>' +
+          '<td>' + esc(j.user_name || '') + ' <span class="s">' + esc(j.user_phone || '') + '</span></td>' +
+          '<td class="s">' + new Date(j.created_at).toLocaleString('bn-BD') + '</td>' +
+          '<td><button class="mini-btn danger" onclick="AdmOrders.deleteEngineJob(' + jqAttr(j.id) + ')">🗑️ ডিলিট</button></td></tr>'
+        ).join('') + '</tbody></table></div>';
+    } catch (e) { box.textContent = 'লোড ব্যর্থ হয়েছে।'; }
+  },
+  async deleteEngineJob(id) {
+    if (!confirm('এই engine ডেলিভারির রেকর্ড ও ফাইল মুছে ফেলবেন? গ্রাহকের ইতিহাস থেকেও সরে যাবে।')) return;
+    const r = await ABC.api('/admin/engine-jobs/' + id, { method: 'DELETE' });
+    if (!r.ok) { alert('ডিলিট ব্যর্থ হয়েছে'); return; }
+    AdmOrders.loadEngineJobs();
   },
   copyData() {
     const t = TABS._viewRaw || '';
