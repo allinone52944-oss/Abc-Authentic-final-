@@ -2,7 +2,8 @@
 // verification). The gateway adapter is mocked — no real gateway
 // calls, no real money. Money rules under test:
 //   - wallet is charged ONLY on a gateway-verified match
-//   - no subject_ref → the gateway is never even called
+//   - subject_ref is OPTIONAL (owner's decision, 2026-10-21):
+//     QR + photo alone are enough to verify
 //   - a completed idempotency_key replays from the stored order
 jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
 jest.mock('../../../engines/qr-photo-verify/adapter', () => ({
@@ -54,6 +55,7 @@ beforeEach(() => {
   db.__reset();
   adapter.verify.mockReset();
   delete process.env.QR_GATEWAY_API_KEY;
+  if (qrRouter.__resetKeyCache) qrRouter.__resetKeyCache();
 });
 
 describe('GET /api/qr-verify/price', () => {
@@ -92,11 +94,26 @@ describe('POST /api/qr-verify/verify — guards before any gateway call', () => 
     expect(adapter.verify).not.toHaveBeenCalled();
   });
 
-  test('missing subject_ref → 400 SUBJECT_REF_REQUIRED, gateway not called (no spend)', async () => {
-    db.__routeQuery(baseRoutes());
-    const r = await postVerify(request(app()), { subject: null }).expect(400);
-    expect(r.body.error).toBe('SUBJECT_REF_REQUIRED');
-    expect(adapter.verify).not.toHaveBeenCalled();
+  test('no subject_ref → still verifies on QR + photo alone (optional field)', async () => {
+    let insertParams = null;
+    db.__routeQuery(baseRoutes([
+      ['FROM transactions WHERE', { rows: [] }],
+      ['wallet_apply', () => ({ rows: [{ balance: 150 }] })],
+      ['INSERT INTO orders', (text, params) => { insertParams = params; return { rows: [{ id: 'o11' }] }; }],
+      ['SELECT documents FROM orders', { rows: [{ documents: '[]' }] }],
+      ['UPDATE orders SET documents', { rows: [] }],
+    ]));
+    adapter.verify.mockResolvedValue({
+      ok: true, verified: true, message: 'Verification completed successfully',
+      charged: 30, remainingBalance: 440,
+    });
+    const r = await postVerify(request(app()), { subject: null, idem: 'idem-11' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, verified: true, charged: 50, orderId: 'o11' });
+    expect(adapter.verify).toHaveBeenCalledTimes(1);
+    // no subject was given → the order records subject_ref: null
+    expect(JSON.parse(insertParams[2]).subject_ref).toBeNull();
+    const fp = path.join(ORDERS_DIR, 'delivery-qr-idem-11.pdf');
+    if (fs.existsSync(fp)) fs.unlinkSync(fp);
   });
 
   test('access disabled → 403 SERVICE_ACCESS_DISABLED', async () => {

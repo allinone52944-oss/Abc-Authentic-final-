@@ -11,10 +11,10 @@
 //          receipt PDF (delivery document) are recorded, so
 //          the work shows up in the customer's History.
 //
-// The gateway returns no identity — subject_ref (the NID/ID of
-// the person being verified, typed by the customer) is the
-// identity the result is bound to. Without it the gateway is
-// never called, so no money is spent on an unbound check.
+// The gateway returns no identity. subject_ref is OPTIONAL
+// (owner's decision, 2026-10-21 — the form is just QR + photo);
+// when a client sends one it is recorded on the order + receipt,
+// otherwise the result is bound to nothing but the receipt.
 // ============================================================
 const express = require('express');
 const path = require('path');
@@ -85,6 +85,9 @@ async function getGatewayKey() {
   if (key) _keyCache = { at: Date.now(), key };
   return key;
 }
+// Test hook: lets route tests keep the key cache hermetic between
+// cases (never called in production).
+router.__resetKeyCache = () => { _keyCache = { at: 0, key: '' }; };
 
 router.get('/price', requireAuth, async (req, res) => {
   try {
@@ -124,7 +127,7 @@ function buildReceiptPdf({ subjectRef, price, ref, when }) {
       doc.font('bn').fontSize(12).fillColor('#111827');
       doc.text('ফলাফল: ✅ যাচাই সফল — ছবির ব্যক্তির সঙ্গে QR-এর মালিক মিলেছে');
       doc.moveDown(0.4);
-      doc.text('বিষয় (NID/আইডি): ' + subjectRef);
+      doc.text('বিষয় (NID/আইডি): ' + (subjectRef || '—'));
       doc.moveDown(0.4);
       doc.text('তারিখ ও সময়: ' + when);
       doc.moveDown(0.4);
@@ -146,13 +149,11 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
     if (!photoFile || !qrFile) {
       return res.status(400).json({ error: 'MISSING_FILES', message: 'ছবি ও QR — দুটোই দিতে হবে।' });
     }
+    // subject_ref is OPTIONAL (owner's decision, 2026-10-21: "শুধু
+    // QR আর photo দিলেই হবে"). When a client still sends one it is
+    // recorded on the order + receipt; when absent, the receipt
+    // shows '—' and the verification proceeds on QR + photo alone.
     const subjectRef = String((req.body && req.body.subject_ref) || '').trim().slice(0, 64);
-    if (!subjectRef) {
-      return res.status(400).json({
-        error: 'SUBJECT_REF_REQUIRED',
-        message: 'যার যাচাই করছেন তার NID নম্বর/আইডি দিন — পরিচয় ছাড়া যাচাই করা হবে না।',
-      });
-    }
     let idem = String((req.body && req.body.idempotency_key) || '').trim().slice(0, 80);
     if (!idem) idem = 'qr-' + crypto.randomUUID();
 
@@ -259,7 +260,7 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
          ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
          RETURNING id`,
         [req.user.id, serviceId,
-         JSON.stringify({ subject_ref: subjectRef, verified: true, gateway_charged: result.charged, gateway_balance: result.remainingBalance }),
+         JSON.stringify({ subject_ref: subjectRef || null, verified: true, gateway_charged: result.charged, gateway_balance: result.remainingBalance }),
          price, idem]
       ).catch((e) => { safeLog('[qr-verify] order insert error:', e.message); return null; });
       if (ins && ins.rows.length) {

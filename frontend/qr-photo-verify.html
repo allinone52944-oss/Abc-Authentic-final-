@@ -102,12 +102,7 @@
       <div class="ok" id="okBox"></div>
 
       <form id="vform">
-        <div class="field">
-          <label>১) যার যাচাই করছেন — তার NID নম্বর / আইডি *</label>
-          <input type="text" id="subjectRef" placeholder="যেমন: ব্যক্তির NID নম্বর" autocomplete="off">
-        </div>
-
-        <label style="display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px;">২) তার NID-এর QR কোডের ছবি *</label>
+        <label style="display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px;">১) তার NID-এর QR কোডের ছবি *</label>
         <label class="drop" id="qrDrop">
           <input type="file" id="qrFile" accept="image/*">
           <div>📷 QR-এর ছবি বেছে নিন</div>
@@ -115,7 +110,7 @@
           <div class="fname" id="qrName"></div>
         </label>
 
-        <label style="display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px;">৩) ব্যক্তির স্পষ্ট ছবি *</label>
+        <label style="display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px;">২) ব্যক্তির স্পষ্ট ছবি *</label>
         <label class="drop" id="photoDrop">
           <input type="file" id="photoFile" accept="image/*">
           <div>🧑 ছবি বেছে নিন</div>
@@ -179,10 +174,8 @@
 
   document.getElementById('vform').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const subject = document.getElementById('subjectRef').value.trim();
     const photo = document.getElementById('photoFile').files[0];
     const qr = document.getElementById('qrFile').files[0];
-    if (!subject) return showErr('⚠️ যার যাচাই করছেন তার NID নম্বর/আইডি দিন।');
     if (!qr) return showErr('⚠️ QR কোডের ছবি দিন।');
     if (!photo) return showErr('⚠️ ব্যক্তির ছবি দিন।');
 
@@ -199,7 +192,6 @@
     const fd = new FormData();
     fd.append('photo', photo);
     fd.append('qr_image', qr);
-    fd.append('subject_ref', subject);
     fd.append('idempotency_key', currentIdem);
 
     try {
