@@ -203,13 +203,13 @@ async function testConnection(db) {
 // (access_token is never returned to the client; see routes/admin.js)
 const DEFAULT_TEMPLATES = {
   order_completed_msg:
-    'আসসালামু আলাইকুম {name} 🎉\n' +
+    '{greeting} 🎉\n' +
     'আপনার {service_name} সেবাটি সফলভাবে সম্পন্ন হয়েছে ✅\n' +
     'অর্ডার নম্বর: {order_number}\n' +
     'ডেলিভারি ফাইলটি আপনার অ্যাকাউন্টের ইতিহাস (History) থেকে যেকোনো সময় আবার ডাউনলোড করতে পারবেন।\n' +
     'Abc Authentic-এর সঙ্গে থাকার জন্য আন্তরিক ধন্যবাদ।',
   recharge_approved_msg:
-    'আসসালামু আলাইকুম {name} 🌙\n' +
+    '{greeting}\n' +
     'আপনার ৳{amount} রিচার্জ সফলভাবে সম্পন্ন হয়েছে ✅\n' +
     'বর্তমান ওয়ালেট ব্যালেন্স: ৳{balance}\n' +
     'Abc Authentic-এ আস্থা রাখার জন্য আন্তরিক ধন্যবাদ।',
@@ -256,6 +256,19 @@ function renderTemplate(tpl, vars) {
   return String(tpl || '').replace(/\{(\w+)\}/g, (m, key) =>
     (vars && vars[key] !== undefined && vars[key] !== null) ? String(vars[key]) : m
   );
+}
+
+// Religion-aware greeting (users.religion: islam|hindu|buddhist|
+// christian|other). It travels INSIDE the first template variable so
+// one set of approved Meta templates greets everyone appropriately:
+// islam → আসসালামু আলাইকুম, hindu/buddhist → নমস্কার, else → শুভেচ্ছা.
+function greetingFor(user) {
+  const name = (user && user.name) || '';
+  const rel = String((user && user.religion) || '').trim().toLowerCase();
+  let word = 'শুভেচ্ছা';
+  if (rel === 'islam' || rel === 'muslim') word = 'আসসালামু আলাইকুম';
+  else if (rel === 'hindu' || rel === 'buddhist') word = 'নমস্কার';
+  return name ? word + ' ' + name : word;
 }
 
 // ---- Meta TEMPLATE delivery (the permanent fix for silent drops) --
@@ -323,18 +336,20 @@ async function dispatch(db, eventKey, user, { text, params }) {
 }
 
 // ---- Bengali message builders (defaults; admin templates override) --
-function orderCompletedMessage({ name, orderId, serviceName, status }) {
+function orderCompletedMessage({ name, greeting, orderId, serviceName, status }) {
   return renderTemplate(DEFAULT_TEMPLATES.order_completed_msg, {
     name: name || '',
+    greeting: greeting || name || '',
     order_number: String(orderId || '').slice(0, 8),
     service_name: serviceName || '',
     status: status || '',
   });
 }
 
-function rechargeApprovedMessage({ name, amount, newBalance }) {
+function rechargeApprovedMessage({ name, greeting, amount, newBalance }) {
   return renderTemplate(DEFAULT_TEMPLATES.recharge_approved_msg, {
     name: name || '',
+    greeting: greeting || name || '',
     amount: amount,
     balance: (newBalance !== undefined && newBalance !== null) ? newBalance : '',
   });
@@ -347,7 +362,7 @@ async function notifyOrderCompleted(db, order) {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
     if (!(await isNotifyEnabled(db, 'order_completed'))) return { ok: false, error: 'NOTIFY_OFF' };
     const u = await db.query(
-      'SELECT name, whatsapp FROM users WHERE id = $1', [order.user_id]
+      'SELECT name, whatsapp, religion FROM users WHERE id = $1', [order.user_id]
     );
     const user = u.rows[0];
     if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
@@ -361,13 +376,14 @@ async function notifyOrderCompleted(db, order) {
     const tpl = await getTemplates(db);
     const msg = renderTemplate(tpl.order_completed_msg, {
       name: user.name || '',
+      greeting: greetingFor(user),
       order_number: String(order.id || '').slice(0, 8),
       service_name: serviceName,
       status: order.status,
     });
     return dispatch(db, 'order_completed', user, {
       text: msg,
-      params: [user.name || '', serviceName, String(order.id || '').slice(0, 8)],
+      params: [greetingFor(user), serviceName, String(order.id || '').slice(0, 8)],
     });
   } catch (e) {
     safeLog('[whatsapp] notifyOrderCompleted failed:', e.message);
@@ -380,7 +396,7 @@ async function notifyOrderFailed(db, order) {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
     if (!(await isNotifyEnabled(db, 'order_failed'))) return { ok: false, error: 'NOTIFY_OFF' };
     const u = await db.query(
-      'SELECT name, whatsapp FROM users WHERE id = $1', [order.user_id]
+      'SELECT name, whatsapp, religion FROM users WHERE id = $1', [order.user_id]
     );
     const user = u.rows[0];
     if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
@@ -393,12 +409,12 @@ async function notifyOrderFailed(db, order) {
     } catch (_) {}
     const short = String(order.id || '').slice(0, 8);
     const msg =
-      `আসসালামু আলাইকুম ${user.name || ''},\n` +
+      `${greetingFor(user)}\n` +
       `দুঃখিত — আপনার ${serviceName} সেবাটি (অর্ডার নম্বর: ${short}) সম্পন্ন করা যায়নি।\n` +
       'কোনো টাকা কেটে থাকলে তা আপনার ওয়ালেটে ফেরত দেওয়া হয়েছে। সহায়তার জন্য আমাদের সাপোর্টে যোগাযোগ করুন।';
     return dispatch(db, 'order_failed', user, {
       text: msg,
-      params: [user.name || '', serviceName, short],
+      params: [greetingFor(user), serviceName, short],
     });
   } catch (e) {
     safeLog('[whatsapp] notifyOrderFailed failed:', e.message);
@@ -411,18 +427,18 @@ async function notifyOrderCancelled(db, order) {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
     if (!(await isNotifyEnabled(db, 'order_cancelled'))) return { ok: false, error: 'NOTIFY_OFF' };
     const u = await db.query(
-      'SELECT name, whatsapp FROM users WHERE id = $1', [order.user_id]
+      'SELECT name, whatsapp, religion FROM users WHERE id = $1', [order.user_id]
     );
     const user = u.rows[0];
     if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
     const short = String(order.id || '').slice(0, 8);
     const msg =
-      `আসসালামু আলাইকুম ${user.name || ''},\n` +
+      `${greetingFor(user)}\n` +
       `আপনার অর্ডার (নম্বর: ${short}) বাতিল করা হয়েছে।\n` +
       'কেটে নেওয়া টাকা আপনার ওয়ালেটে ফেরত দেওয়া হয়েছে।';
     return dispatch(db, 'order_cancelled', user, {
       text: msg,
-      params: [user.name || '', short],
+      params: [greetingFor(user), short],
     });
   } catch (e) {
     safeLog('[whatsapp] notifyOrderCancelled failed:', e.message);
@@ -435,19 +451,20 @@ async function notifyRechargeApproved(db, tx) {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
     if (!(await isNotifyEnabled(db, 'recharge_approved'))) return { ok: false, error: 'NOTIFY_OFF' };
     const u = await db.query(
-      'SELECT name, whatsapp, balance FROM users WHERE id = $1', [tx.user_id]
+      'SELECT name, whatsapp, balance, religion FROM users WHERE id = $1', [tx.user_id]
     );
     const user = u.rows[0];
     if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
     const tpl = await getTemplates(db);
     const msg = renderTemplate(tpl.recharge_approved_msg, {
       name: user.name || '',
+      greeting: greetingFor(user),
       amount: Number(tx.amount),
       balance: user.balance,
     });
     return dispatch(db, 'recharge_approved', user, {
       text: msg,
-      params: [user.name || '', Number(tx.amount), user.balance],
+      params: [greetingFor(user), Number(tx.amount), user.balance],
     });
   } catch (e) {
     safeLog('[whatsapp] notifyRechargeApproved failed:', e.message);
@@ -463,17 +480,17 @@ async function notifyRechargeMismatch(db, tx, smsAmount) {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
     if (!(await isNotifyEnabled(db, 'recharge_rejected'))) return { ok: false, error: 'NOTIFY_OFF' };
     const u = await db.query(
-      'SELECT name, whatsapp FROM users WHERE id = $1', [tx.user_id]
+      'SELECT name, whatsapp, religion FROM users WHERE id = $1', [tx.user_id]
     );
     const user = u.rows[0];
     if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
     const msg =
-      `আসসালামু আলাইকুম ${user.name || ''},\n` +
+      `${greetingFor(user)}\n` +
       `আপনার রিচার্জের অনুরোধে ৳${Number(tx.amount)} লেখা ছিল, কিন্তু প্রাপ্ত SMS অনুযায়ী এসেছে ৳${Number(smsAmount)} — পরিমাণে অমিল থাকায় অনুরোধটি বাতিল হয়েছে, টাকা যোগ হয়নি।\n` +
       'সঠিক পরিমাণ লিখে আবার চেষ্টা করুন।';
     return dispatch(db, 'recharge_mismatch', user, {
       text: msg,
-      params: [user.name || '', Number(tx.amount), Number(smsAmount)],
+      params: [greetingFor(user), Number(tx.amount), Number(smsAmount)],
     });
   } catch (e) {
     safeLog('[whatsapp] notifyRechargeMismatch failed:', e.message);
@@ -486,17 +503,17 @@ async function notifyRechargeRejected(db, tx) {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
     if (!(await isNotifyEnabled(db, 'recharge_rejected'))) return { ok: false, error: 'NOTIFY_OFF' };
     const u = await db.query(
-      'SELECT name, whatsapp FROM users WHERE id = $1', [tx.user_id]
+      'SELECT name, whatsapp, religion FROM users WHERE id = $1', [tx.user_id]
     );
     const user = u.rows[0];
     if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
     const msg =
-      `আসসালামু আলাইকুম ${user.name || ''},\n` +
+      `${greetingFor(user)}\n` +
       `দুঃখিত — আপনার ৳${Number(tx.amount)} রিচার্জের অনুরোধটি সম্পন্ন করা যায়নি ❌\n` +
       'তথ্য যাচাই করে আবার চেষ্টা করুন। প্রয়োজনে আমাদের সাপোর্টে যোগাযোগ করুন।';
     return dispatch(db, 'recharge_rejected', user, {
       text: msg,
-      params: [user.name || '', Number(tx.amount)],
+      params: [greetingFor(user), Number(tx.amount)],
     });
   } catch (e) {
     safeLog('[whatsapp] notifyRechargeRejected failed:', e.message);
@@ -513,19 +530,19 @@ async function notifyServiceCompleted(db, userId, serviceLabel) {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
     if (!(await isNotifyEnabled(db, 'service_completed'))) return { ok: false, error: 'NOTIFY_OFF' };
     const u = await db.query(
-      'SELECT name, whatsapp FROM users WHERE id = $1', [userId]
+      'SELECT name, whatsapp, religion FROM users WHERE id = $1', [userId]
     );
     const user = u.rows[0];
     if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
     const label = String(serviceLabel || 'সেবা');
     const text =
-      `আসসালামু আলাইকুম ${user.name || ''} 🎉\n` +
+      `${greetingFor(user)} 🎉\n` +
       `আপনার ${label} সফলভাবে সম্পন্ন হয়েছে ✅\n` +
       'ফাইলটি আপনার অ্যাকাউন্টের ইতিহাস (History) থেকে যেকোনো সময় আবার ডাউনলোড করতে পারবেন।\n' +
       'Abc Authentic-এর সঙ্গে থাকার জন্য আন্তরিক ধন্যবাদ।';
     return dispatch(db, 'service_completed', user, {
       text,
-      params: [user.name || '', label],
+      params: [greetingFor(user), label],
     });
   } catch (e) {
     safeLog('[whatsapp] notifyServiceCompleted failed:', e.message);
@@ -540,6 +557,7 @@ module.exports = {
   sendTextMessage,
   sendTemplateMessage,
   getMetaTemplates,
+  greetingFor,
   testConnection,
   renderTemplate,
   orderCompletedMessage,

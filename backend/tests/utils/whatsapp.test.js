@@ -210,7 +210,7 @@ describe('template-first dispatch (24h-window fix, 2026-10-21)', () => {
 
   test('notifyRechargeApproved sends the abc_recharge_approved TEMPLATE with positional params', async () => {
     global.fetch = okFetch();
-    const db = notifyDb({ name: 'Karim', whatsapp: '01712345678', balance: 550 });
+    const db = notifyDb({ name: 'Karim', whatsapp: '01712345678', balance: 550, religion: 'islam' });
     const r = await wa.notifyRechargeApproved(db, { id: 't1', user_id: 'u1', amount: 500 });
     expect(r.ok).toBe(true);
     expect(global.fetch).toHaveBeenCalledTimes(1);
@@ -219,7 +219,7 @@ describe('template-first dispatch (24h-window fix, 2026-10-21)', () => {
     expect(body.template.name).toBe('abc_recharge_approved');
     expect(body.template.language.code).toBe('bn');
     const params = body.template.components[0].parameters.map((p) => p.text);
-    expect(params).toEqual(['Karim', '500', '550']);
+    expect(params).toEqual(['আসসালামু আলাইকুম Karim', '500', '550']);
   });
 
   test('template failure falls back to free text (in-window users still reached)', async () => {
@@ -231,7 +231,7 @@ describe('template-first dispatch (24h-window fix, 2026-10-21)', () => {
       }
       return { ok: true, json: async () => ({ messages: [{ id: 'wamid.y' }] }) };
     });
-    const db = notifyDb({ name: 'Karim', whatsapp: '01712345678', balance: 550 });
+    const db = notifyDb({ name: 'Karim', whatsapp: '01712345678', balance: 550, religion: 'islam' });
     const r = await wa.notifyRechargeApproved(db, { id: 't1', user_id: 'u1', amount: 500 });
     expect(r.ok).toBe(true);
     expect(global.fetch).toHaveBeenCalledTimes(2);
@@ -243,13 +243,13 @@ describe('template-first dispatch (24h-window fix, 2026-10-21)', () => {
 
   test('notifyServiceCompleted sends abc_service_completed with [name, label]', async () => {
     global.fetch = okFetch();
-    const db = notifyDb({ name: 'Karim', whatsapp: '01712345678' });
+    const db = notifyDb({ name: 'Amit', whatsapp: '01712345678', religion: 'hindu' });
     const r = await wa.notifyServiceCompleted(db, 'u1', 'এনআইডি কার্ড');
     expect(r.ok).toBe(true);
     const body = JSON.parse(global.fetch.mock.calls[0][1].body);
     expect(body.template.name).toBe('abc_service_completed');
     const params = body.template.components[0].parameters.map((p) => p.text);
-    expect(params).toEqual(['Karim', 'এনআইডি কার্ড']);
+    expect(params).toEqual(['নমস্কার Amit', 'এনআইডি কার্ড']);
   });
 
   test('settings.whatsapp.meta_templates overrides the default template name', async () => {
@@ -265,12 +265,24 @@ describe('template-first dispatch (24h-window fix, 2026-10-21)', () => {
 
   test('notifyOrderCompleted sends abc_order_completed with bn service name', async () => {
     global.fetch = okFetch();
-    const db = notifyDb({ name: 'Karim', whatsapp: '01712345678' });
+    const db = notifyDb({ name: 'Karim', whatsapp: '01712345678', religion: 'islam' });
     const r = await wa.notifyOrderCompleted(db, { id: 'abcdef123456', user_id: 'u1', service_id: 's1' });
     expect(r.ok).toBe(true);
     const body = JSON.parse(global.fetch.mock.calls[0][1].body);
     expect(body.template.name).toBe('abc_order_completed');
     const params = body.template.components[0].parameters.map((p) => p.text);
-    expect(params).toEqual(['Karim', 'এনআইডি কার্ড', 'abcdef12']);
+    expect(params).toEqual(['আসসালামু আলাইকুম Karim', 'এনআইডি কার্ড', 'abcdef12']);
+  });
+});
+
+describe('greetingFor (religion-aware)', () => {
+  test('islam → আসসালামু আলাইকুম, hindu/buddhist → নমস্কার, else → শুভেচ্ছা', () => {
+    expect(wa.greetingFor({ name: 'Karim', religion: 'islam' })).toBe('আসসালামু আলাইকুম Karim');
+    expect(wa.greetingFor({ name: 'Amit', religion: 'hindu' })).toBe('নমস্কার Amit');
+    expect(wa.greetingFor({ name: 'Ratan', religion: 'buddhist' })).toBe('নমস্কার Ratan');
+    expect(wa.greetingFor({ name: 'John', religion: 'christian' })).toBe('শুভেচ্ছা John');
+    expect(wa.greetingFor({ name: 'X', religion: 'other' })).toBe('শুভেচ্ছা X');
+    expect(wa.greetingFor({ name: 'Y' })).toBe('শুভেচ্ছা Y');
+    expect(wa.greetingFor({ religion: 'islam' })).toBe('আসসালামু আলাইকুম');
   });
 });
