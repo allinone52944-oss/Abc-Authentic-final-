@@ -9,7 +9,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const db = require('../db');
 const { requireAuth, requireAdmin, hashPassword, verifyPassword } = require('../auth');
-const { safeLog, orderDocUpload } = require('../security');
+const { safeLog, orderDocUpload, safeJsonArray } = require('../security');
 const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
 
@@ -444,8 +444,7 @@ router.delete('/users/:id', async (req, res) => {
     try {
       const dr = await db.query('SELECT documents FROM orders WHERE user_id = $1', [id]);
       for (const row of dr.rows) {
-        let docs = [];
-        try { docs = JSON.parse(row.documents || '[]'); } catch (_) { safeLog('[admin] corrupt order documents JSON during user delete'); }
+        const docs = safeJsonArray(row.documents);
         for (const d of docs) {
           if (d && (d.path || d.filename)) docFiles.push(d.path || d.filename);
         }
@@ -803,8 +802,7 @@ router.post('/orders/:id/delivery-docs', orderDocUpload(db, 'delivery'), async (
     const ord = await db.query('SELECT * FROM orders WHERE id=$1', [orderId]);
     if (!ord.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
     const order = ord.rows[0];
-    let docs = [];
-    try { docs = JSON.parse(order.documents || '[]'); } catch (_) { safeLog('[admin] corrupt order documents JSON for order', req.params.id); }
+    const docs = safeJsonArray(order.documents);
     docs.push({
       type: req.body.doc_type || 'delivery',
       filename: req.file.filename,
@@ -827,8 +825,7 @@ router.get('/orders/:id/documents/:filename', async (req, res) => {
     const fn = require('path').basename(req.params.filename);
     const ord = await db.query('SELECT documents FROM orders WHERE id=$1', [orderId]);
     if (!ord.rows.length) return res.status(404).json({ error: 'ORDER_NOT_FOUND' });
-    let docs = [];
-    try { docs = JSON.parse(ord.rows[0].documents || '[]'); } catch (_) {}
+    const docs = safeJsonArray(ord.rows[0].documents);
     const doc = docs.find(d => d && require('path').basename(d.filename) === fn);
     if (!doc) return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
     const fp = require('path').join('/opt/all-in-one-abc-authentic/uploads/orders', fn);

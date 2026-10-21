@@ -8,7 +8,7 @@
 // ============================================================
 const express = require('express');
 const { requireAuth } = require('../auth');
-const { safeLog, uploadMiddleware } = require('../security');
+const { safeLog, uploadMiddleware, safeJsonArray } = require('../security');
 const db = require('../db');
 const serviceCredits = require('../lib/serviceCredits');
 const nidAdapter = require('../../engines/nid-replica/adapter');
@@ -170,9 +170,8 @@ router.post('/build', requireAuth, async (req, res) => {
         );
         if (ord.rows.length) {
           const fn = 'delivery-nid-' + String(jobId).replace(/[^a-zA-Z0-9-]/g, '') + '.pdf';
-          let docs = [];
-          try { docs = JSON.parse(ord.rows[0].documents || '[]'); } catch (_) { docs = []; }
-          if (Array.isArray(docs) && !docs.some(d => d && d.filename === fn)) {
+          const docs = safeJsonArray(ord.rows[0].documents);
+          if (!docs.some(d => d && d.filename === fn)) {
             const fsx = require('fs');
             const pathx = require('path');
             const dir = '/opt/all-in-one-abc-authentic/uploads/orders';

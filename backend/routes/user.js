@@ -375,8 +375,7 @@ router.post('/orders/:id/documents', orderDocUpload(db, 'order'), async (req, re
     if (!ord.rows.length) return res.status(404).json({ error: 'ORDER_NOT_FOUND' });
     if (!req.file) return res.status(400).json({ error: 'NO_FILE' });
     const order = ord.rows[0];
-    let docs = [];
-    try { docs = JSON.parse(order.documents || '[]'); } catch (_) { safeLog('[user] corrupt order documents JSON for order', orderId); }
+    const docs = safeJsonArray(order.documents);
     docs.push({
       type: docType,
       filename: req.file.filename,
@@ -400,8 +399,7 @@ router.get('/orders/:id/documents/:filename', async (req, res) => {
     const fn = require('path').basename(req.params.filename);
     const ord = await db.query('SELECT documents FROM orders WHERE id=$1 AND user_id=$2', [orderId, req.user.id]);
     if (!ord.rows.length) return res.status(404).json({ error: 'ORDER_NOT_FOUND' });
-    let docs = [];
-    try { docs = JSON.parse(ord.rows[0].documents || '[]'); } catch (_) { /* empty */ }
+    const docs = safeJsonArray(ord.rows[0].documents);
     const doc = docs.find(d => d && require('path').basename(d.filename) === fn);
     if (!doc) return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
     const fp = require('path').join('/opt/all-in-one-abc-authentic/uploads/orders', fn);

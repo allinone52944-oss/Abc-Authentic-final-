@@ -263,7 +263,26 @@ function orderDocUpload(db, kind) {
   };
 }
 
+// Parse a JSONB-or-text array column (e.g. orders.documents).
+// node-postgres returns JSONB columns as live JS arrays, so a bare
+// JSON.parse(value) throws on them and the catch silently yields []
+// — in production that made delivered files unfindable (downloads
+// 404'd and re-uploads wiped the list). Always read document lists
+// through this helper.
+function safeJsonArray(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string') {
+    try {
+      const p = JSON.parse(val);
+      if (Array.isArray(p)) return p;
+    } catch (_) {}
+  }
+  return [];
+}
+
 module.exports = {
+  safeJsonArray,
   secureHeaders,
   authLimiter,
   apiLimiter,
