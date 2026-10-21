@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/premium.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=2">
+<meta name="theme-color" content="#1e40af">
+<title>QR + ছবি যাচাই - All In One</title>
+<style>
+  .form-card {
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-xl);
+    padding: 24px;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 20px;
+    max-width: 640px;
+  }
+  .spin {
+    display: inline-block; width: 20px; height: 20px;
+    border: 3px solid rgba(37,99,235,0.25); border-top-color: var(--primary-600);
+    border-radius: 50%; animation: sp 0.8s linear infinite;
+    vertical-align: -4px; margin-right: 8px;
+  }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .err {
+    display: none; background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c;
+    padding: 12px 14px; border-radius: var(--r-md); margin-bottom: 14px; font-size: 14px;
+  }
+  .err.on { display: block; }
+  .ok {
+    display: none; background: #f0fdf4; border: 1px solid #86efac; color: #15803d;
+    padding: 14px; border-radius: var(--r-md); margin-bottom: 14px; font-size: 14px;
+  }
+  .ok.on { display: block; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+  .field input[type=text] {
+    width: 100%; padding: 11px 12px; border: 1px solid #cbd5e1; border-radius: 8px;
+    background: #ffffff; color: #0f172a; font-size: 15px; font-family: inherit;
+  }
+  .drop {
+    border: 2px dashed #93c5fd; border-radius: var(--r-xl); padding: 26px 16px;
+    text-align: center; background: #eff6ff; cursor: pointer; display: block;
+    transition: all 0.2s ease; margin-bottom: 16px;
+  }
+  .drop:hover { border-color: var(--primary-600); background: #dbeafe; }
+  .drop input { display: none; }
+  .drop img { max-width: 150px; max-height: 150px; border-radius: 8px; margin-top: 10px; }
+  .drop .fname { font-size: 12px; color: #475569; margin-top: 6px; word-break: break-all; }
+  .price-line {
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+    background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+    padding: 10px 14px; border-radius: var(--r-md); font-size: 13px; font-weight: 600;
+    margin-bottom: 18px;
+  }
+  .note { font-size: 12px; color: #64748b; margin-top: 10px; line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="desktop">
+  <div class="sidebar">
+    <div class="side-logo">
+      <div class="logo-icon">🔷</div>
+      <div>
+        <h2>All In One</h2>
+        <p>বিশ্বাস ও সেবার ঠিকানা</p>
+      </div>
+    </div>
+    <nav>
+      <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+      <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🧩</span> সকল সেবা</div>
+      <div class="side-link on"><span class="ico">🔍</span> QR + ছবি যাচাই</div>
+      <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
+      <div class="side-link" onclick="location.href='/history.html'"><span class="ico">🕘</span> ইতিহাস</div>
+      <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">👛</span> ওয়ালেট ও রিচার্জ</div>
+      <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> পার্সোনাল প্রোফাইল</div>
+    </nav>
+  </div>
+
+  <div class="main">
+    <div class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+      <div>
+        <h2>🔍 QR + ছবি যাচাই</h2>
+        <p>NID-এর QR কোড ও ব্যক্তির ছবি মিলিয়ে তাৎক্ষণিক যাচাই</p>
+      </div>
+      <div id="walletBadge" style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">
+        💳 ব্যালেন্স: ৳<span id="balVal">০</span>
+      </div>
+    </div>
+
+    <div class="form-card">
+      <div class="price-line">
+        <span>সেবা চার্জ: ৳<span id="priceVal">–</span> (শুধু যাচাই সফল হলেই কাটবে)</span>
+        <span>ব্যর্থ যাচাইয়ে চার্জ: ৳০</span>
+      </div>
+
+      <div class="err" id="errBox"></div>
+      <div class="ok" id="okBox"></div>
+
+      <form id="vform">
+        <div class="field">
+          <label>১) যার যাচাই করছেন — তার NID নম্বর / আইডি *</label>
+          <input type="text" id="subjectRef" placeholder="যেমন: ব্যক্তির NID নম্বর" autocomplete="off">
+        </div>
+
+        <label style="display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px;">২) তার NID-এর QR কোডের ছবি *</label>
+        <label class="drop" id="qrDrop">
+          <input type="file" id="qrFile" accept="image/*">
+          <div>📷 QR-এর ছবি বেছে নিন</div>
+          <img id="qrPrev" style="display:none" alt="">
+          <div class="fname" id="qrName"></div>
+        </label>
+
+        <label style="display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px;">৩) ব্যক্তির স্পষ্ট ছবি *</label>
+        <label class="drop" id="photoDrop">
+          <input type="file" id="photoFile" accept="image/*">
+          <div>🧑 ছবি বেছে নিন</div>
+          <img id="photoPrev" style="display:none" alt="">
+          <div class="fname" id="photoName"></div>
+        </label>
+
+        <button type="submit" class="btn btn-primary" id="goBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700;">
+          ✅ যাচাই করুন
+        </button>
+        <div class="note">
+          ℹ️ প্রতিটি QR কোড মাত্র একবার ব্যবহারযোগ্য — যাচাইয়ে ব্যর্থ হলে নতুন QR দিয়ে চেষ্টা করুন।
+          যাচাই সফল হলে রসিদটি আপনার <a href="/history.html">ইতিহাসে</a> সংরক্ষিত থাকবে।
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js?v=17"></script>
+<script>
+  const API = '/api/qr-verify';
+  const bn = (n) => String(n).replace(/\d/g, (d) => '০১২৩৪৫৬৭৮৯'[d]);
+  let currentIdem = null;
+
+  function showErr(msg) {
+    const e = document.getElementById('errBox');
+    e.textContent = msg; e.classList.add('on');
+    document.getElementById('okBox').classList.remove('on');
+  }
+  function showOk(html) {
+    const o = document.getElementById('okBox');
+    o.innerHTML = html; o.classList.add('on');
+    document.getElementById('errBox').classList.remove('on');
+  }
+  function bindDrop(inputId, prevId, nameId) {
+    const inp = document.getElementById(inputId);
+    inp.addEventListener('change', () => {
+      const f = inp.files && inp.files[0];
+      document.getElementById(nameId).textContent = f ? f.name : '';
+      const prev = document.getElementById(prevId);
+      if (f) { prev.src = URL.createObjectURL(f); prev.style.display = 'inline-block'; }
+      else prev.style.display = 'none';
+    });
+  }
+  bindDrop('qrFile', 'qrPrev', 'qrName');
+  bindDrop('photoFile', 'photoPrev', 'photoName');
+
+  async function loadPrice() {
+    try {
+      const r = await ABC.api(API + '/price');
+      if (r.status === 401) { location.href = '/login.html'; return; }
+      const d = await r.json();
+      if (d && d.ok) {
+        document.getElementById('priceVal').textContent = bn(d.price);
+        document.getElementById('balVal').textContent = bn(d.balance);
+        if (!d.allowed) showErr('⚠️ এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।');
+      }
+    } catch (e) { /* price line stays as-is */ }
+  }
+
+  document.getElementById('vform').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const subject = document.getElementById('subjectRef').value.trim();
+    const photo = document.getElementById('photoFile').files[0];
+    const qr = document.getElementById('qrFile').files[0];
+    if (!subject) return showErr('⚠️ যার যাচাই করছেন তার NID নম্বর/আইডি দিন।');
+    if (!qr) return showErr('⚠️ QR কোডের ছবি দিন।');
+    if (!photo) return showErr('⚠️ ব্যক্তির ছবি দিন।');
+
+    const btn = document.getElementById('goBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span>যাচাই হচ্ছে — কিছুটা সময় লাগতে পারে...';
+    document.getElementById('errBox').classList.remove('on');
+    document.getElementById('okBox').classList.remove('on');
+
+    if (!currentIdem) {
+      currentIdem = (crypto.randomUUID ? crypto.randomUUID()
+        : 'qr-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10));
+    }
+    const fd = new FormData();
+    fd.append('photo', photo);
+    fd.append('qr_image', qr);
+    fd.append('subject_ref', subject);
+    fd.append('idempotency_key', currentIdem);
+
+    try {
+      const r = await ABC.api(API + '/verify', { method: 'POST', body: fd, timeout: 150000 });
+      const d = await r.json().catch(() => ({}));
+      currentIdem = null; // definitive answer received — next attempt is a new one
+      if (r.ok && d.verified) {
+        let html = '✅ <b>যাচাই সফল!</b> ছবির ব্যক্তির সঙ্গে QR-এর মালিক মিলেছে।'
+          + '<br>চার্জ কাটা হয়েছে: ৳' + bn(d.charged || 0)
+          + (d.balance !== null && d.balance !== undefined ? ' · বর্তমান ব্যালেন্স: ৳' + bn(d.balance) : '');
+        if (d.receipt) {
+          html += '<br><a class="btn btn-secondary" style="display:inline-block; margin-top:10px; padding:9px 16px;" href="' + d.receipt + '">📄 রসিদ ডাউনলোড</a>';
+        }
+        showOk(html);
+        loadPrice();
+      } else {
+        showErr('❌ ' + (d.message || d.error || 'যাচাই সফল হয়নি — কোনো টাকা কাটা হয়নি।'));
+      }
+    } catch (err) {
+      // Network-level failure: keep the same idempotency key so a
+      // retry cannot double-charge if the first attempt landed.
+      showErr('❌ সংযোগে সমস্যা হয়েছে। আবার চেষ্টা করুন — একই চেষ্টায় দুবার চার্জ কাটবে না।');
+    }
+    btn.disabled = false;
+    btn.textContent = '✅ যাচাই করুন';
+  });
+
+  loadPrice();
+</script>
+</body>
+</html>

@@ -1539,6 +1539,21 @@ router.get('/settings', async (req, res) => {
         out.whatsapp = masked;
       }
     }
+    // Same treatment for the QR verification gateway key: clients
+    // only ever learn whether a key is stored, never the key.
+    if (out.qr_verify && typeof out.qr_verify === 'object') {
+      let qrVal = out.qr_verify;
+      if (typeof qrVal === 'string') {
+        try { qrVal = JSON.parse(qrVal); } catch (_) { qrVal = {}; }
+      }
+      if (qrVal && typeof qrVal === 'object') {
+        const masked = Object.assign({}, qrVal);
+        masked.api_key_set = !!masked.api_key || !!process.env.QR_GATEWAY_API_KEY;
+        masked.api_key_env = !!process.env.QR_GATEWAY_API_KEY && !masked.api_key;
+        delete masked.api_key;
+        out.qr_verify = masked;
+      }
+    }
     res.json(out);
   } catch (e) { safeLog('[admin] settings error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });
@@ -1582,6 +1597,50 @@ async function mergeWhatsappSetting(req, incoming) {
     out.access_token = existing.access_token; // preserve stored token
   } else {
     delete out.access_token;
+  }
+  return out;
+}
+
+// Merge an incoming settings.qr_verify object with the stored one.
+// Same protection as the WhatsApp token: the gateway API key is
+// only replaced when a non-empty, non-masked value is supplied
+// AND the admin's current password (body.admin_password) verifies.
+// Otherwise the stored key is preserved — it can never be blanked
+// or read via this endpoint. The api_key_set flag is never stored.
+async function mergeQrVerifySetting(req, incoming) {
+  const cur = await db.query("SELECT value FROM settings WHERE key = 'qr_verify'");
+  let existing = {};
+  if (cur.rows.length) {
+    const v = cur.rows[0].value;
+    try {
+      existing = (typeof v === 'string') ? JSON.parse(v) : (v || {});
+    } catch (_) { existing = {}; }
+  }
+  const out = Object.assign({}, incoming);
+  delete out.api_key_set;
+  delete out.api_key_env;
+  const incomingKey = typeof out.api_key === 'string' ? out.api_key.trim() : '';
+  const isNewKey = incomingKey !== '' && !incomingKey.startsWith('••••');
+  if (isNewKey) {
+    const pw = req.body && req.body.admin_password;
+    if (!pw) {
+      const err = new Error('WRONG_PASSWORD');
+      err.status = 403;
+      throw err;
+    }
+    const ur = await db.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
+    const hash = ur.rows[0] && ur.rows[0].password_hash;
+    const ok = hash ? await verifyPassword(String(pw), hash) : false;
+    if (!ok) {
+      const err = new Error('WRONG_PASSWORD');
+      err.status = 403;
+      throw err;
+    }
+    out.api_key = incomingKey;
+  } else if (existing.api_key) {
+    out.api_key = existing.api_key;
+  } else {
+    delete out.api_key;
   }
   return out;
 }
@@ -1632,7 +1691,7 @@ router.get('/backup', async (req, res) => {
 router.put('/settings', async (req, res) => {  try {
     const allowed = ['registration_enabled', 'maintenance_mode', 'file_upload',
                      'login_security', 'cashback', 'welcome_bonus', 'voice_greeting',
-                     'whatsapp', 'bdris_apply.pdf_price', 'recharge_numbers',
+                     'whatsapp', 'qr_verify', 'bdris_apply.pdf_price', 'recharge_numbers',
                      'ip_blocklist', 'session_timeout', 'manual_template'];
     const updated = [];
     for (const key of allowed) {
@@ -1641,6 +1700,14 @@ router.put('/settings', async (req, res) => {  try {
         if (key === 'whatsapp' && val && typeof val === 'object') {
           try {
             val = await mergeWhatsappSetting(req, val);
+          } catch (e) {
+            if (e.status === 403) return res.status(403).json({ error: 'WRONG_PASSWORD' });
+            throw e;
+          }
+        }
+        if (key === 'qr_verify' && val && typeof val === 'object') {
+          try {
+            val = await mergeQrVerifySetting(req, val);
           } catch (e) {
             if (e.status === 403) return res.status(403).json({ error: 'WRONG_PASSWORD' });
             throw e;

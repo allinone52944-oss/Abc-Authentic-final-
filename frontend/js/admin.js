@@ -2901,6 +2901,7 @@ window.AdmSvc = {
           '<option value="death-verify">মৃত্যুনিবন্ধন যাচাই ইঞ্জিন (Port 3104)</option>' +
           '<option value="nid-replica">এনআইডি রেপ্লিকা ইঞ্জিন</option>' +
           '<option value="bdris-apply">BDRIS অনলাইন আবেদন ইঞ্জিন (Port 3102)</option>' +
+          '<option value="qr-photo-verify">QR + ছবি যাচাই ইঞ্জিন (Gateway)</option>' +
         '</select></div>' +
         '<small style="color:#64748b;font-size:11px;">গ্রাহক অর্ডার প্লেস করলে ইঞ্জিন ব্যাকগ্রাউন্ডে স্বয়ংক্রিয়ভাবে প্রসেস করে রেজাল্ট প্রদান করবে।</small>' +
       '</div>' +
@@ -2966,6 +2967,7 @@ window.AdmSvc = {
           '<option value="death-verify"' + (s.engine_id === 'death-verify' ? ' selected' : '') + '>মৃত্যুনিবন্ধন যাচাই ইঞ্জিন (Port 3104)</option>' +
           '<option value="nid-replica"' + (s.engine_id === 'nid-replica' ? ' selected' : '') + '>এনআইডি রেপ্লিকা ইঞ্জিন</option>' +
           '<option value="bdris-apply"' + (s.engine_id === 'bdris-apply' ? ' selected' : '') + '>BDRIS অনলাইন আবেদন ইঞ্জিন (Port 3102)</option>' +
+          '<option value="qr-photo-verify"' + (s.engine_id === 'qr-photo-verify' ? ' selected' : '') + '>QR + ছবি যাচাই ইঞ্জিন (Gateway)</option>' +
         '</select></div>' +
       '</div>' +
       '<div id="esv_manualBox" style="display:' + (isManual ? 'block' : 'none') + ';background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin-bottom:14px;">' +
@@ -4179,6 +4181,9 @@ TABS.settings = async () => {
           '<input type="password" id="st_wa_token" value="" placeholder="নতুন token বসান (খালি রাখলে অপরিবর্তিত থাকবে)" autocomplete="new-password">' +
           '<div class="s" style="margin-top:4px;">' + (((s.whatsapp || {}).access_token_env) ? '✅ Token সেট আছে (ENV)' : ((s.whatsapp || {}).access_token_set ? '✅ Token সেট আছে' : '❌ Token সেট নেই')) + '</div></div>' +
           '<div class="field" style="margin-top:10px;"><button class="mini-btn" onclick="AdmWa.test()">🔗 Test WhatsApp Connection</button></div>' +
+          '<div class="field" style="margin-top:14px;"><label>🔐 QR + ছবি যাচাই — Gateway API Key (my-api.top, Password Protected)</label>' +
+          '<input type="password" id="st_qr_key" value="" placeholder="নতুন API key বসান (খালি রাখলে অপরিবর্তিত থাকবে)" autocomplete="new-password">' +
+          '<div class="s" style="margin-top:4px;">' + (((s.qr_verify || {}).api_key_env) ? '✅ Key সেট আছে (ENV)' : ((s.qr_verify || {}).api_key_set ? '✅ Key সেট আছে' : '❌ Key সেট নেই — QR যাচাই সেবা কাজ করবে না')) + '</div></div>' +
           ta('📩 অর্ডার সফল মেসেজ টেমপ্লেট', 'st_wa_order_msg', ((s.whatsapp || {}).order_completed_msg) || '', 'প্লেসহোল্ডার: {name} {order_number} {service_name}') +
           ta('📩 রিচার্জ সফল মেসেজ টেমপ্লেট', 'st_wa_recharge_msg', ((s.whatsapp || {}).recharge_approved_msg) || '', 'প্লেসহোল্ডার: {name} {amount} {balance}') +
         '</div>' +
@@ -4401,10 +4406,20 @@ window.AdmSt = {
         },
         voice_greeting: vg,
         whatsapp: waBody,
+        qr_verify: {},
       };
       if (newToken) {
         waBody.access_token = newToken;
         putBody.admin_password = admin_password;
+      }
+      const newQrKey = String(v('st_qr_key') || '').trim();
+      if (newQrKey) {
+        if (!putBody.admin_password) {
+          const pw2 = prompt('নতুন Gateway API key সংরক্ষণের জন্য অ্যাডমিন password দিন:');
+          if (!pw2) { alert('বাতিল হয়েছে — API key পরিবর্তন হয়নি'); return; }
+          putBody.admin_password = pw2;
+        }
+        putBody.qr_verify.api_key = newQrKey;
       }
       const resp = await ABC.api('/admin/settings', { method: 'PUT', body: putBody });
       const rd = await resp.json().catch(() => ({}));

@@ -1122,6 +1122,20 @@
             <span class="engine-btn">যাচাই করুন →</span>
           </div>
         </div>
+
+        <!-- Engine 5: QR Photo Verify -->
+        <div class="engine-card" onclick="location.href='/qr-photo-verify.html'">
+          <div class="engine-card-top">
+            <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #ecfdf5, #d1fae5);color:#047857;">🔍</div>
+            <span class="engine-tag" style="background:#d1fae5;color:#065f46;">মুখ যাচাই</span>
+          </div>
+          <h4>QR + ছবি যাচাই</h4>
+          <p>NID-এর QR কোড ও ব্যক্তির ছবি মিলিয়ে তাৎক্ষণিক পরিচয় যাচাই</p>
+          <div class="engine-card-footer">
+            <span class="engine-charge" id="engChargeQr">চার্জ: ৳৫০</span>
+            <span class="engine-btn">যাচাই করুন →</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1290,6 +1304,19 @@
         <div class="engine-card-footer">
           <span class="engine-charge" id="mEngChargeDeath">৳৫০</span>
           <span class="engine-btn">কপি →</span>
+        </div>
+      </div>
+
+      <!-- M Engine 5 -->
+      <div class="engine-card" onclick="location.href='/qr-photo-verify.html'">
+        <div class="engine-card-top">
+          <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #ecfdf5, #d1fae5);color:#047857;">🔍</div>
+          <span class="engine-tag" style="background:#d1fae5;color:#065f46;">যাচাই</span>
+        </div>
+        <h4>QR + ছবি যাচাই</h4>
+        <div class="engine-card-footer">
+          <span class="engine-charge" id="mEngChargeQr">৳৫০</span>
+          <span class="engine-btn">যাচাই →</span>
         </div>
       </div>
     </div>
@@ -1815,6 +1842,11 @@ async function loadServices() {
     if (deathSvc && deathSvc.price) {
       setText('engChargeDeath', 'চার্জ: ৳' + bnNum(deathSvc.price));
       setText('mEngChargeDeath', '৳' + bnNum(deathSvc.price));
+    }
+    const qrSvc = _allServices.find(s => s.engine_id === 'qr-photo-verify');
+    if (qrSvc && qrSvc.price) {
+      setText('engChargeQr', 'চার্জ: ৳' + bnNum(qrSvc.price));
+      setText('mEngChargeQr', '৳' + bnNum(qrSvc.price));
     }
 
     renderServiceGrid('popularServices', _allServices.slice(0, 4));

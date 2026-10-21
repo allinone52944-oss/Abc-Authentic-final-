@@ -285,6 +285,28 @@ try {
   safeLog('[engines] nid-replica not mounted:', e.message);
 }
 
+// ---- QR + Photo verification (gateway-backed, auth + strict limit) ---
+// The adapter (engines/qr-photo-verify/adapter.js) calls the NID
+// Secure Gateway (my-api.top) directly — no separate process.
+// Wallet is charged ONLY on a verified match (gateway success).
+//   GET  /api/qr-verify/price
+//   POST /api/qr-verify/verify (multipart photo + qr_image + subject_ref)
+const qrVerifyLimiter = rateLimit({
+  validate: { xForwardedForHeader: false },
+  windowMs: 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'RATE_LIMITED' },
+});
+try {
+  const qrVerifyRoutes = require('./routes/qr-verify');
+  app.use('/api/qr-verify', requireAuth, qrVerifyLimiter, qrVerifyRoutes);
+  safeLog('[engines] mounted qr-photo-verify at /api/qr-verify');
+} catch (e) {
+  safeLog('[engines] qr-photo-verify not mounted:', e.message);
+}
+
 // ---- BDRIS Apply engine (as-is bot, auth + strict limit) -------------
 // The engine folder is an as-is copy of Bdris-apply-v2-CLEAN-v23.zip
 // (BDRIS Auto-fill Bot v6: Express + Socket.IO + Playwright).
