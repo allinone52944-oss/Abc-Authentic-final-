@@ -15,8 +15,22 @@ const fs = require('fs');
 // Order document uploads: settings-driven via orderDocUpload(db, 'order') (H-12).
 // Filenames stay random (C-2: never embed req.params.id).
 const push = require('../utils/push');
+const wa = require('../utils/whatsapp');
 const { tryAutoMatchRecharge } = require('./sms');
 const serviceCredits = require('../lib/serviceCredits');
+
+// Fraud alerts (duplicate TrxID / amount mismatch at submit) notify
+// the attempter + admins at most once per user+trxid per hour, so a
+// scripted repeat cannot flood WhatsApp or the admin push channel.
+const fraudAlertSeen = new Map();
+function fraudAlertOnce(key) {
+  const now = Date.now();
+  const last = fraudAlertSeen.get(key);
+  if (last && now - last < 3600e3) return false;
+  fraudAlertSeen.set(key, now);
+  if (fraudAlertSeen.size > 500) fraudAlertSeen.clear();
+  return true;
+}
 
 const router = express.Router();
 router.use(requireAuth);
@@ -565,7 +579,15 @@ router.post('/wallet/recharge', async (req, res) => {
     }
     const dup = await db.query(
       'SELECT id FROM transactions WHERE trxid = $1 LIMIT 1', [String(trxid).trim()]);
-    if (dup.rows.length) return res.status(409).json({ error: 'DUP_TRXID' });
+    if (dup.rows.length) {
+      // Fraud attempt: warn the attempter (WhatsApp) + alert admins
+      // (push), throttled per user+trxid. The attempt itself is blocked.
+      if (fraudAlertOnce('dup:' + req.user.id + ':' + String(trxid).trim().toUpperCase())) {
+        wa.notifyDuplicateTrxid(db, req.user.id, { trxid: String(trxid).trim(), amount: amt }).catch(() => {});
+        push.notifyDuplicateTrxid(db, { trxid: String(trxid).trim(), amount: amt }, req.user.id).catch(() => {});
+      }
+      return res.status(409).json({ error: 'DUP_TRXID' });
+    }
 
     // Fraud guard: if an SMS with this TrxID already arrived, the reported
     // amount must equal it — tell the user immediately instead of at approval.
@@ -578,6 +600,13 @@ router.post('/wallet/recharge', async (req, res) => {
     if (smsArrived.rows.length) {
       const smsAmt = Number(smsArrived.rows[0].amount);
       if (Math.abs(smsAmt - amt) >= 0.005) {
+        // Same fraud family: tell the user on WhatsApp and the admins
+        // by push, throttled per user+trxid.
+        if (fraudAlertOnce('mm:' + req.user.id + ':' + String(trxid).trim().toUpperCase())) {
+          const attempt = { user_id: req.user.id, amount: amt, trxid: String(trxid).trim() };
+          wa.notifyRechargeMismatch(db, attempt, smsAmt).catch(() => {});
+          push.notifyAmountMismatch(db, attempt, smsAmt).catch(() => {});
+        }
         return res.status(409).json({ error: 'TRXID_AMOUNT_MISMATCH', sms_amount: smsAmt });
       }
     }

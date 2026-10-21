@@ -186,6 +186,23 @@ async function notifyNewRecharge(db, tx, userId) {
   }
 }
 
+// A recharge was attempted with an already-used TrxID (double-claim
+// of one payment). The attempt is blocked; admins are alerted.
+async function notifyDuplicateTrxid(db, attempt, userId) {
+  try {
+    const uname = await userLabel(db, userId);
+    return await notifyAdmins(
+      db,
+      '🚨 ডুপ্লিকেট TrxID-এ রিচার্জের চেষ্টা!',
+      `${uname}: ইতিমধ্যে ব্যবহৃত TrxID (${attempt.trxid || '—'}) দিয়ে আবার ৳${Number(attempt.amount || 0).toLocaleString('bn-BD')} রিচার্জের চেষ্টা করেছে। চেষ্টাটি আটকে দেওয়া হয়েছে।`,
+      '/admin.html'
+    );
+  } catch (e) {
+    safeLog('[push] notifyDuplicateTrxid failed:', e.message);
+    return { ok: false };
+  }
+}
+
 // Recharge cancelled because the SMS amount and the claimed amount disagree.
 async function notifyAmountMismatch(db, tx, smsAmount) {
   try {
@@ -262,6 +279,7 @@ module.exports = {
   notifyNewOrder,
   notifyNewRecharge,
   notifyAmountMismatch,
+  notifyDuplicateTrxid,
   notifyNewUser,
   notifyNewChatMessage,
   notifyUser,

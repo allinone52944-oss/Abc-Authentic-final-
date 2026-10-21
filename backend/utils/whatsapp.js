@@ -291,6 +291,7 @@ const DEFAULT_META_TEMPLATES = {
   order_failed: 'abc_order_failed',
   order_cancelled: 'abc_order_cancelled',
   service_completed: 'abc_service_completed',
+  trxid_warning: 'abc_trxid_warning',
 };
 
 async function getMetaTemplates(db) {
@@ -550,6 +551,33 @@ async function notifyServiceCompleted(db, userId, serviceLabel) {
   }
 }
 
+// Fraud guard: a recharge was attempted with an already-used TrxID
+// (one payment claimed twice). The attempt is blocked by the caller;
+// this warns the attempter on WhatsApp.
+async function notifyDuplicateTrxid(db, userId, attempt) {
+  try {
+    if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
+    if (!(await isNotifyEnabled(db, 'trxid_warning'))) return { ok: false, error: 'NOTIFY_OFF' };
+    const u = await db.query(
+      'SELECT name, whatsapp, religion FROM users WHERE id = $1', [userId]
+    );
+    const user = u.rows[0];
+    if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
+    const trxid = String((attempt && attempt.trxid) || '');
+    const text =
+      `${greetingFor(user)}\n` +
+      `⚠️ সতর্কবার্তা: এই TrxID (${trxid}) ইতিমধ্যে একবার ব্যবহার করা হয়েছে — একই পেমেন্ট দিয়ে দ্বিতীয়বার রিচার্জ করা যাবে না। আপনার চেষ্টাটি আটকে দেওয়া হয়েছে।\n` +
+      'বারবার এমন চেষ্টা করলে অ্যাকাউন্ট ব্লক করা হতে পারে। কোনো ভুল হয়ে থাকলে আমাদের সাপোর্টে যোগাযোগ করুন।';
+    return dispatch(db, 'trxid_warning', user, {
+      text,
+      params: [greetingFor(user), trxid],
+    });
+  } catch (e) {
+    safeLog('[whatsapp] notifyDuplicateTrxid failed:', e.message);
+    return { ok: false, error: 'FAILED' };
+  }
+}
+
 module.exports = {
   isConfigured,
   getConfig,
@@ -569,6 +597,7 @@ module.exports = {
   notifyRechargeMismatch,
   notifyRechargeRejected,
   notifyServiceCompleted,
+  notifyDuplicateTrxid,
 };
 // M-22 (2026-10-15): removed never-used exports (canSend, graphPost,
 // DEFAULT_TEMPLATES, getTemplates) — dead API surface. sendTemplateMessage
