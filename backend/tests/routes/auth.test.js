@@ -316,6 +316,34 @@ describe('PUT /api/auth/me', () => {
       .set('Authorization', 'Bearer ' + T()).send({ email: 'taken@x.co' }).expect(409);
     expect(r.body.error).toBe('EMAIL_TAKEN');
   });
+  // Regression (2026-10-21): profile.html always submits the email
+  // field — saving with the UNCHANGED email must not reset
+  // verification (it silently un-verified users on every save).
+  test('email unchanged → verification NOT reset', async () => {
+    let updText = null; let updParams = null;
+    db.__routeQuery([
+      ['SELECT email FROM users WHERE id', { rows: [{ email: 'old@x.co' }] }],
+      ['FROM users WHERE LOWER(email)', { rows: [] }],
+      ['UPDATE users SET', (text, params) => { updText = text; updParams = params; return { rows: [{ id: 'u1', email: 'old@x.co' }] }; }],
+    ]);
+    const r = await request(app()).put('/api/auth/me')
+      .set('Authorization', 'Bearer ' + T()).send({ name: 'Same Mail', email: 'old@x.co' }).expect(200);
+    expect(updText).not.toMatch(/email_verified/);
+    expect(updParams).not.toContain(false);
+    expect(r.body.user.verify_email_sent).toBeUndefined();
+  });
+  test('email changed → verification reset', async () => {
+    let updText = null; let updParams = null;
+    db.__routeQuery([
+      ['SELECT email FROM users WHERE id', { rows: [{ email: 'old@x.co' }] }],
+      ['FROM users WHERE LOWER(email)', { rows: [] }],
+      ['UPDATE users SET', (text, params) => { updText = text; updParams = params; return { rows: [{ id: 'u1', email: 'new@x.co' }] }; }],
+    ]);
+    await request(app()).put('/api/auth/me')
+      .set('Authorization', 'Bearer ' + T()).send({ email: 'new@x.co' }).expect(200);
+    expect(updText).toMatch(/email_verified/);
+    expect(updParams).toContain(false);
+  });
 });
 
 describe('POST /api/auth/change-password', () => {

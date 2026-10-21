@@ -134,6 +134,35 @@ describe('users', () => {
     db.__reset();
   });
 
+  // Regression (2026-10-21): the edit form always submits the email
+  // field — a save with the UNCHANGED email must not reset
+  // email_verified (it silently reverted admin one-click verifies).
+  test('PUT /users/:id with unchanged email → verification NOT reset', async () => {
+    let updText = null; let updParams = null;
+    db.__routeQuery([
+      ['SELECT * FROM users WHERE id', { rows: [{ id: 'u2', email: 'old@x.co', role: 'user', status: 'active' }] }],
+      ['SELECT id FROM users WHERE LOWER(email)', { rows: [] }],
+      ['UPDATE users SET', (text, params) => { updText = text; updParams = params; return { rows: [] }; }],
+      ['SELECT id, name, phone', { rows: [{ id: 'u2', email: 'old@x.co' }] }],
+    ]);
+    await withAdmin(request(app()).put('/api/admin/users/u2')).send({ email: 'old@x.co' }).expect(200);
+    expect(updText).not.toMatch(/email_verified/);
+    expect(updParams).not.toContain(false);
+  });
+
+  test('PUT /users/:id with changed email → verification reset', async () => {
+    let updText = null; let updParams = null;
+    db.__routeQuery([
+      ['SELECT * FROM users WHERE id', { rows: [{ id: 'u2', email: 'old@x.co', role: 'user', status: 'active' }] }],
+      ['SELECT id FROM users WHERE LOWER(email)', { rows: [] }],
+      ['UPDATE users SET', (text, params) => { updText = text; updParams = params; return { rows: [] }; }],
+      ['SELECT id, name, phone', { rows: [{ id: 'u2', email: 'new@x.co' }] }],
+    ]);
+    await withAdmin(request(app()).put('/api/admin/users/u2')).send({ email: 'new@x.co' }).expect(200);
+    expect(updText).toMatch(/email_verified/);
+    expect(updParams).toContain(false);
+  });
+
   test('DELETE /users/:id: self → 403; no confirm → 400; missing → 404; happy → 200', async () => {
     const r1 = await withAdmin(request(app()).delete('/api/admin/users/admin1?confirm=yes')).expect(403);
     expect(r1.body.error).toBe('ERR_CANNOT_DELETE_SELF');

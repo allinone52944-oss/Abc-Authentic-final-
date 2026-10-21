@@ -196,8 +196,18 @@ router.put('/users/:id', async (req, res) => {
         if (ex.rows.length) return res.status(400).json({ error: 'EMAIL_EXISTS' });
       }
       sets.push(`email = $${i++}`); params.push(em || null); changes.email = em;
-      // Reset verification when email changes
-      sets.push(`email_verified = $${i++}`); params.push(false);
+      // Reset verification ONLY when the address actually changes.
+      // The edit form always submits the email field, so resetting
+      // on mere presence silently un-verified users on any later
+      // save — e.g. an admin one-click verify followed by a form
+      // save left the user unverified (bug found 2026-10-21,
+      // production activity log: verify at 13:18 UTC, flag still
+      // false minutes later).
+      const curEm = (target.email || '').trim().toLowerCase();
+      if (em !== curEm) {
+        sets.push(`email_verified = $${i++}`); params.push(false);
+        changes.email_verified = false;
+      }
     }
     if (religion !== undefined) { sets.push(`religion = $${i++}`); params.push(religion); changes.religion = religion; }
     if (role !== undefined && ['admin', 'user'].includes(role)) {

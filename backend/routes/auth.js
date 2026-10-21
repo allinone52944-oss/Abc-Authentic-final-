@@ -561,6 +561,20 @@ router.put('/me', requireAuth, async (req, res) => {
     const params = [];
     let i = 1;
 
+    // The profile form ALWAYS submits the email field (even when the
+    // user changed something else), so "email present in body" must
+    // not be treated as "email changed". Verification is reset only
+    // when the address actually differs from the stored one —
+    // otherwise every profile save silently un-verified the user
+    // and their next login was blocked (bug found 2026-10-21).
+    let emailChanged = false;
+    if (email !== undefined) {
+      const cur = await db.query('SELECT email FROM users WHERE id = $1', [req.user.id]);
+      const currentEmail = (cur.rows.length && cur.rows[0].email)
+        ? String(cur.rows[0].email).trim().toLowerCase() : '';
+      emailChanged = String(email).trim().toLowerCase() !== currentEmail;
+    }
+
     if (name !== undefined) {
       if (String(name).trim().length < 2 || String(name).trim().length > 120) {
         return res.status(400).json({ error: 'INVALID_NAME' });
@@ -579,8 +593,10 @@ router.put('/me', requireAuth, async (req, res) => {
       );
       if (dup.rows.length) return res.status(409).json({ error: 'EMAIL_TAKEN' });
       sets.push(`email = $${i++}`); params.push(String(email).trim().toLowerCase());
-      // New email must be verified before next login.
-      sets.push(`email_verified = $${i++}`); params.push(false);
+      if (emailChanged) {
+        // New email must be verified before next login.
+        sets.push(`email_verified = $${i++}`); params.push(false);
+      }
     }
     if (religion !== undefined) {
       if (!validReligion(religion)) return res.status(400).json({ error: 'INVALID_RELIGION' });
@@ -603,7 +619,7 @@ router.put('/me', requireAuth, async (req, res) => {
     // Email was changed: send a fresh verification link for the new address.
     // Current session stays valid; next login requires verification.
     let verifySent = false;
-    if (email !== undefined && isConfigured()) {
+    if (emailChanged && isConfigured()) {
       try {
         const token = await createVerificationToken(updated.id, 24);
         const link = `${appBaseUrl()}/verify-email.html?token=${token}`;
@@ -612,7 +628,7 @@ router.put('/me', requireAuth, async (req, res) => {
       } catch (e) { safeLog('[auth] re-verification email skipped:', e.message); }
     }
     const out = publicUser(updated);
-    if (email !== undefined) out.verify_email_sent = verifySent;
+    if (emailChanged) out.verify_email_sent = verifySent;
     return res.json({ user: out });
   } catch (e) {
     safeLog('[auth] update me error:', e.message);
