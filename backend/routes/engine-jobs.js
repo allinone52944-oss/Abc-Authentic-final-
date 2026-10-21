@@ -16,6 +16,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const multer = require('multer');
 const db = require('../db');
+const wa = require('../utils/whatsapp');
 const { requireAuth, requireAdmin } = require('../auth');
 const { safeLog } = require('../security');
 
@@ -74,6 +75,9 @@ customerEngineJobs.post('/', (req, res) => {
         cleanup();
         return res.json({ ok: true, duplicate: true });
       }
+      // First stored copy of this document → WhatsApp confirmation.
+      wa.notifyServiceCompleted(db, req.user.id,
+        engineId === 'death-verify' ? 'মৃত্যু সনদ' : 'জন্ম সনদ (সার্টিফিকেট)').catch(() => {});
       res.status(201).json({ ok: true, id: r.rows[0].id });
     } catch (e) {
       cleanup();

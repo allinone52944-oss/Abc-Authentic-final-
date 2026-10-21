@@ -11,6 +11,7 @@ const { requireAuth } = require('../auth');
 const { safeLog, uploadMiddleware, safeJsonArray } = require('../security');
 const db = require('../db');
 const serviceCredits = require('../lib/serviceCredits');
+const wa = require('../utils/whatsapp');
 const nidAdapter = require('../../engines/nid-replica/adapter');
 
 const router = express.Router();
@@ -151,12 +152,18 @@ router.post('/build', requireAuth, async (req, res) => {
       // index and the insert errors out ("there is no unique or exclusion
       // constraint matching the ON CONFLICT specification"), which is
       // why no NID order was ever recorded in production.
-      await db.query(
+      const ins = await db.query(
         `INSERT INTO orders (user_id, service_id, status, data, price, idempotency_key)
          VALUES ($1, $2, 'completed', $3, $4, $5)
-         ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
+         ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+         RETURNING id`,
         [req.user.id, serviceId, JSON.stringify(fields || {}), price, 'nid-' + jobId]
-      ).catch(e => safeLog('[nid-engine] order record insert error:', e.message));
+      ).catch(e => { safeLog('[nid-engine] order record insert error:', e.message); return null; });
+      // First build of this job (a fresh order row) → WhatsApp
+      // confirmation. Re-downloads of the same job stay silent.
+      if (ins && ins.rows.length) {
+        wa.notifyServiceCompleted(db, req.user.id, 'এনআইডি কার্ড').catch(() => {});
+      }
     }
 
     // ডেলিভারি কপি: তৈরি PDF-টা অর্ডারের ডেলিভারি ফাইল হিসেবে সার্ভারে

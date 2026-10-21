@@ -18,6 +18,7 @@ const express = require('express');
 const crypto = require('crypto');
 const { requireAuth } = require('../auth');
 const { safeLog } = require('../security');
+const wa = require('../utils/whatsapp');
 const db = require('../db');
 
 const router = express.Router();
@@ -158,7 +159,11 @@ router.post('/applications', requireAuth, async (req, res) => {
        RETURNING id, ack_no, applicant_name, created_at`,
       [req.user.id, ackNo, name]
     );
-    if (r.rows.length) return res.status(201).json({ ok: true, application: r.rows[0] });
+    if (r.rows.length) {
+      // First record of this submission → WhatsApp confirmation.
+      wa.notifyServiceCompleted(db, req.user.id, 'জন্ম নিবন্ধন আবেদন').catch(() => {});
+      return res.status(201).json({ ok: true, application: r.rows[0] });
+    }
     const cur = await db.query(
       'SELECT id, ack_no, applicant_name, created_at FROM bdris_applications WHERE user_id = $1 AND ack_no = $2',
       [req.user.id, ackNo]

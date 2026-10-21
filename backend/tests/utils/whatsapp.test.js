@@ -185,3 +185,92 @@ describe('testConnection', () => {
     expect(r).toEqual({ ok: false, error: 'WHATSAPP_NOT_CONFIGURED' });
   });
 });
+
+describe('template-first dispatch (24h-window fix, 2026-10-21)', () => {
+  // Settings + user aware stub: settings reads return the whatsapp
+  // settings object, user reads return the given user.
+  function notifyDb(user, settingsExtra) {
+    const settings = Object.assign(
+      { enabled: true, phone_number_id: 'pid1', access_token: 'tok1' },
+      settingsExtra || {}
+    );
+    return {
+      query: jest.fn(async (text) => {
+        if (/settings/.test(text)) return { rows: [{ value: settings }] };
+        if (/FROM users/.test(text)) return { rows: [user] };
+        if (/FROM services/.test(text)) return { rows: [{ name: 'NID Card', name_bn: 'এনআইডি কার্ড' }] };
+        return { rows: [] };
+      }),
+    };
+  }
+  const okFetch = () => jest.fn(async () => ({
+    ok: true,
+    json: async () => ({ messages: [{ id: 'wamid.x' }] }),
+  }));
+
+  test('notifyRechargeApproved sends the abc_recharge_approved TEMPLATE with positional params', async () => {
+    global.fetch = okFetch();
+    const db = notifyDb({ name: 'Karim', whatsapp: '01712345678', balance: 550 });
+    const r = await wa.notifyRechargeApproved(db, { id: 't1', user_id: 'u1', amount: 500 });
+    expect(r.ok).toBe(true);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.type).toBe('template');
+    expect(body.template.name).toBe('abc_recharge_approved');
+    expect(body.template.language.code).toBe('bn');
+    const params = body.template.components[0].parameters.map((p) => p.text);
+    expect(params).toEqual(['Karim', '500', '550']);
+  });
+
+  test('template failure falls back to free text (in-window users still reached)', async () => {
+    let n = 0;
+    global.fetch = jest.fn(async () => {
+      n += 1;
+      if (n === 1) {
+        return { ok: false, status: 400, json: async () => ({ error: { message: '(#132001) Template does not exist' } }) };
+      }
+      return { ok: true, json: async () => ({ messages: [{ id: 'wamid.y' }] }) };
+    });
+    const db = notifyDb({ name: 'Karim', whatsapp: '01712345678', balance: 550 });
+    const r = await wa.notifyRechargeApproved(db, { id: 't1', user_id: 'u1', amount: 500 });
+    expect(r.ok).toBe(true);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    const second = JSON.parse(global.fetch.mock.calls[1][1].body);
+    expect(second.type).toBe('text');
+    expect(second.text.body).toContain('আসসালামু আলাইকুম Karim');
+    expect(second.text.body).toContain('৳500');
+  });
+
+  test('notifyServiceCompleted sends abc_service_completed with [name, label]', async () => {
+    global.fetch = okFetch();
+    const db = notifyDb({ name: 'Karim', whatsapp: '01712345678' });
+    const r = await wa.notifyServiceCompleted(db, 'u1', 'এনআইডি কার্ড');
+    expect(r.ok).toBe(true);
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.template.name).toBe('abc_service_completed');
+    const params = body.template.components[0].parameters.map((p) => p.text);
+    expect(params).toEqual(['Karim', 'এনআইডি কার্ড']);
+  });
+
+  test('settings.whatsapp.meta_templates overrides the default template name', async () => {
+    global.fetch = okFetch();
+    const db = notifyDb(
+      { name: 'Karim', whatsapp: '01712345678', balance: 10 },
+      { meta_templates: { recharge_approved: 'my_custom_tpl' } }
+    );
+    await wa.notifyRechargeApproved(db, { id: 't1', user_id: 'u1', amount: 100 });
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.template.name).toBe('my_custom_tpl');
+  });
+
+  test('notifyOrderCompleted sends abc_order_completed with bn service name', async () => {
+    global.fetch = okFetch();
+    const db = notifyDb({ name: 'Karim', whatsapp: '01712345678' });
+    const r = await wa.notifyOrderCompleted(db, { id: 'abcdef123456', user_id: 'u1', service_id: 's1' });
+    expect(r.ok).toBe(true);
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.template.name).toBe('abc_order_completed');
+    const params = body.template.components[0].parameters.map((p) => p.text);
+    expect(params).toEqual(['Karim', 'এনআইডি কার্ড', 'abcdef12']);
+  });
+});

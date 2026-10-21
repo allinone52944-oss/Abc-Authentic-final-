@@ -203,15 +203,16 @@ async function testConnection(db) {
 // (access_token is never returned to the client; see routes/admin.js)
 const DEFAULT_TEMPLATES = {
   order_completed_msg:
-    '🎉 অভিনন্দন! আপনার অর্ডারটি সফল হয়েছে\n' +
-    'অর্ডার #: {order_number}\n' +
-    'সার্ভিস: {service_name}\n' +
-    'ধন্যবাদ Abc Authentic-এর সাথে থাকার জন্য!',
+    'আসসালামু আলাইকুম {name} 🎉\n' +
+    'আপনার {service_name} সেবাটি সফলভাবে সম্পন্ন হয়েছে ✅\n' +
+    'অর্ডার নম্বর: {order_number}\n' +
+    'ডেলিভারি ফাইলটি আপনার অ্যাকাউন্টের ইতিহাস (History) থেকে যেকোনো সময় আবার ডাউনলোড করতে পারবেন।\n' +
+    'Abc Authentic-এর সঙ্গে থাকার জন্য আন্তরিক ধন্যবাদ।',
   recharge_approved_msg:
-    '✅ রিচার্জ সফল!\n' +
-    'পরিমাণ: ৳{amount}\n' +
-    'বর্তমান ব্যালেন্স: ৳{balance}\n' +
-    'ধন্যবাদ!',
+    'আসসালামু আলাইকুম {name} 🌙\n' +
+    'আপনার ৳{amount} রিচার্জ সফলভাবে সম্পন্ন হয়েছে ✅\n' +
+    'বর্তমান ওয়ালেট ব্যালেন্স: ৳{balance}\n' +
+    'Abc Authentic-এ আস্থা রাখার জন্য আন্তরিক ধন্যবাদ।',
 };
 
 // Check if a specific notification type is enabled (default: true)
@@ -257,6 +258,70 @@ function renderTemplate(tpl, vars) {
   );
 }
 
+// ---- Meta TEMPLATE delivery (the permanent fix for silent drops) --
+// Business-initiated free text only DELIVERS inside Meta's 24-hour
+// customer-service window. Outside it the Graph API still accepts the
+// request (we logged 'sent') but the message never reaches the phone.
+// Approved TEMPLATE messages are the only format Meta delivers
+// unconditionally, so every notification goes out as a template first.
+// Template names default to the built-ins below (create templates with
+// EXACTLY these names in WhatsApp Manager, language bn, category
+// Utility); settings.whatsapp.meta_templates can override per event.
+// If the template send fails (e.g. not yet approved), we fall back to
+// free text so users inside the 24h window are still reached, and the
+// log line says which path was taken.
+const DEFAULT_META_TEMPLATES = {
+  recharge_approved: 'abc_recharge_approved',
+  recharge_rejected: 'abc_recharge_rejected',
+  recharge_mismatch: 'abc_recharge_mismatch',
+  order_completed: 'abc_order_completed',
+  order_failed: 'abc_order_failed',
+  order_cancelled: 'abc_order_cancelled',
+  service_completed: 'abc_service_completed',
+};
+
+async function getMetaTemplates(db) {
+  const out = Object.assign({}, DEFAULT_META_TEMPLATES);
+  try {
+    const r = await db.query("SELECT value FROM settings WHERE key = 'whatsapp'");
+    if (r.rows.length) {
+      const v = typeof r.rows[0].value === 'string'
+        ? JSON.parse(r.rows[0].value)
+        : r.rows[0].value;
+      if (v && v.meta_templates && typeof v.meta_templates === 'object') {
+        for (const k of Object.keys(out)) {
+          if (typeof v.meta_templates[k] === 'string' && v.meta_templates[k].trim()) {
+            out[k] = v.meta_templates[k].trim();
+          }
+        }
+      }
+    }
+  } catch (_) { /* defaults stand */ }
+  return out;
+}
+
+async function dispatch(db, eventKey, user, { text, params }) {
+  const names = await getMetaTemplates(db);
+  const tplName = names[eventKey];
+  if (tplName) {
+    const components = (params && params.length)
+      ? [{
+          type: 'body',
+          parameters: params.map((t) => ({ type: 'text', text: String(t == null ? '' : t) })),
+        }]
+      : [];
+    const r = await sendTemplateMessage(user.whatsapp, tplName, 'bn', components, db);
+    if (r.ok) {
+      safeLog('[whatsapp]', eventKey, 'template -> sent');
+      return r;
+    }
+    safeLog('[whatsapp]', eventKey, 'template failed (' + r.error + '), falling back to text');
+  }
+  const r = await sendTextMessage(user.whatsapp, text, db);
+  safeLog('[whatsapp]', eventKey, 'text ->', r.ok ? 'sent' : r.error);
+  return r;
+}
+
 // ---- Bengali message builders (defaults; admin templates override) --
 function orderCompletedMessage({ name, orderId, serviceName, status }) {
   return renderTemplate(DEFAULT_TEMPLATES.order_completed_msg, {
@@ -289,9 +354,9 @@ async function notifyOrderCompleted(db, order) {
     let serviceName = '';
     try {
       const s = await db.query(
-        'SELECT name FROM services WHERE id = $1', [order.service_id]
+        'SELECT name, name_bn FROM services WHERE id = $1', [order.service_id]
       );
-      serviceName = (s.rows[0] && s.rows[0].name) || '';
+      serviceName = (s.rows[0] && (s.rows[0].name_bn || s.rows[0].name)) || '';
     } catch (_) { /* service name is optional */ }
     const tpl = await getTemplates(db);
     const msg = renderTemplate(tpl.order_completed_msg, {
@@ -300,9 +365,10 @@ async function notifyOrderCompleted(db, order) {
       service_name: serviceName,
       status: order.status,
     });
-    const r = await sendTextMessage(user.whatsapp, msg, db);
-    safeLog('[whatsapp] order notify', order.id, '->', r.ok ? 'sent' : r.error);
-    return r;
+    return dispatch(db, 'order_completed', user, {
+      text: msg,
+      params: [user.name || '', serviceName, String(order.id || '').slice(0, 8)],
+    });
   } catch (e) {
     safeLog('[whatsapp] notifyOrderCompleted failed:', e.message);
     return { ok: false, error: 'FAILED' };
@@ -321,14 +387,19 @@ async function notifyOrderFailed(db, order) {
     let serviceName = '';
     try {
       const s = await db.query(
-        'SELECT name FROM services WHERE id = $1', [order.service_id]
+        'SELECT name, name_bn FROM services WHERE id = $1', [order.service_id]
       );
-      serviceName = (s.rows[0] && s.rows[0].name) || '';
+      serviceName = (s.rows[0] && (s.rows[0].name_bn || s.rows[0].name)) || '';
     } catch (_) {}
-    const msg = `দুঃখিত ${user.name || ''}, আপনার অর্ডার #${String(order.id || '').slice(0, 8)} (${serviceName}) ব্যর্থ হয়েছে। অনুগ্রহ করে সাপোর্টে যোগাযোগ করুন।`;
-    const r = await sendTextMessage(user.whatsapp, msg, db);
-    safeLog('[whatsapp] order failed notify', order.id, '->', r.ok ? 'sent' : r.error);
-    return r;
+    const short = String(order.id || '').slice(0, 8);
+    const msg =
+      `আসসালামু আলাইকুম ${user.name || ''},\n` +
+      `দুঃখিত — আপনার ${serviceName} সেবাটি (অর্ডার নম্বর: ${short}) সম্পন্ন করা যায়নি।\n` +
+      'কোনো টাকা কেটে থাকলে তা আপনার ওয়ালেটে ফেরত দেওয়া হয়েছে। সহায়তার জন্য আমাদের সাপোর্টে যোগাযোগ করুন।';
+    return dispatch(db, 'order_failed', user, {
+      text: msg,
+      params: [user.name || '', serviceName, short],
+    });
   } catch (e) {
     safeLog('[whatsapp] notifyOrderFailed failed:', e.message);
     return { ok: false, error: 'FAILED' };
@@ -344,10 +415,15 @@ async function notifyOrderCancelled(db, order) {
     );
     const user = u.rows[0];
     if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
-    const msg = `প্রিয় ${user.name || ''}, আপনার অর্ডার #${String(order.id || '').slice(0, 8)} বাতিল করা হয়েছে। টাকা wallet-এ ফেরত দেওয়া হয়েছে।`;
-    const r = await sendTextMessage(user.whatsapp, msg, db);
-    safeLog('[whatsapp] order cancelled notify', order.id, '->', r.ok ? 'sent' : r.error);
-    return r;
+    const short = String(order.id || '').slice(0, 8);
+    const msg =
+      `আসসালামু আলাইকুম ${user.name || ''},\n` +
+      `আপনার অর্ডার (নম্বর: ${short}) বাতিল করা হয়েছে।\n` +
+      'কেটে নেওয়া টাকা আপনার ওয়ালেটে ফেরত দেওয়া হয়েছে।';
+    return dispatch(db, 'order_cancelled', user, {
+      text: msg,
+      params: [user.name || '', short],
+    });
   } catch (e) {
     safeLog('[whatsapp] notifyOrderCancelled failed:', e.message);
     return { ok: false, error: 'FAILED' };
@@ -369,9 +445,10 @@ async function notifyRechargeApproved(db, tx) {
       amount: Number(tx.amount),
       balance: user.balance,
     });
-    const r = await sendTextMessage(user.whatsapp, msg, db);
-    safeLog('[whatsapp] recharge notify', tx.id || '', '->', r.ok ? 'sent' : r.error);
-    return r;
+    return dispatch(db, 'recharge_approved', user, {
+      text: msg,
+      params: [user.name || '', Number(tx.amount), user.balance],
+    });
   } catch (e) {
     safeLog('[whatsapp] notifyRechargeApproved failed:', e.message);
     return { ok: false, error: 'FAILED' };
@@ -390,10 +467,14 @@ async function notifyRechargeMismatch(db, tx, smsAmount) {
     );
     const user = u.rows[0];
     if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
-    const msg = `দুঃখিত ${user.name || ''}, আপনার রিচার্জ রিকোয়েস্টে ৳${Number(tx.amount)} লেখা হয়েছিল, কিন্তু আপনার পাঠানো টাকার SMS এ ৳${Number(smsAmount)} এসেছে। রিকোয়েস্টটি বাতিল করা হয়েছে — টাকা যোগ হয়নি। সঠিক পরিমাণ লিখে আবার চেষ্টা করুন।`;
-    const r = await sendTextMessage(user.whatsapp, msg, db);
-    safeLog('[whatsapp] recharge mismatch notify', tx.id, '->', r.ok ? 'sent' : r.error);
-    return r;
+    const msg =
+      `আসসালামু আলাইকুম ${user.name || ''},\n` +
+      `আপনার রিচার্জের অনুরোধে ৳${Number(tx.amount)} লেখা ছিল, কিন্তু প্রাপ্ত SMS অনুযায়ী এসেছে ৳${Number(smsAmount)} — পরিমাণে অমিল থাকায় অনুরোধটি বাতিল হয়েছে, টাকা যোগ হয়নি।\n` +
+      'সঠিক পরিমাণ লিখে আবার চেষ্টা করুন।';
+    return dispatch(db, 'recharge_mismatch', user, {
+      text: msg,
+      params: [user.name || '', Number(tx.amount), Number(smsAmount)],
+    });
   } catch (e) {
     safeLog('[whatsapp] notifyRechargeMismatch failed:', e.message);
     return { ok: false, error: 'FAILED' };
@@ -409,12 +490,45 @@ async function notifyRechargeRejected(db, tx) {
     );
     const user = u.rows[0];
     if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
-    const msg = `দুঃখিত ${user.name || ''}, আপনার ৳${tx.amount} রিচার্জ রিকোয়েস্ট বাতিল করা হয়েছে। সঠিক তথ্য দিয়ে আবার চেষ্টা করুন।`;
-    const r = await sendTextMessage(user.whatsapp, msg, db);
-    safeLog('[whatsapp] recharge rejected notify', tx.id, '->', r.ok ? 'sent' : r.error);
-    return r;
+    const msg =
+      `আসসালামু আলাইকুম ${user.name || ''},\n` +
+      `দুঃখিত — আপনার ৳${Number(tx.amount)} রিচার্জের অনুরোধটি সম্পন্ন করা যায়নি ❌\n` +
+      'তথ্য যাচাই করে আবার চেষ্টা করুন। প্রয়োজনে আমাদের সাপোর্টে যোগাযোগ করুন।';
+    return dispatch(db, 'recharge_rejected', user, {
+      text: msg,
+      params: [user.name || '', Number(tx.amount)],
+    });
   } catch (e) {
     safeLog('[whatsapp] notifyRechargeRejected failed:', e.message);
+    return { ok: false, error: 'FAILED' };
+  }
+}
+
+// A standalone engine service finished (NID card built, BDRIS
+// application submitted, certificate / death-verify PDF issued).
+// One generic notifier so every service a customer takes from any
+// engine confirms back to them on WhatsApp.
+async function notifyServiceCompleted(db, userId, serviceLabel) {
+  try {
+    if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
+    if (!(await isNotifyEnabled(db, 'service_completed'))) return { ok: false, error: 'NOTIFY_OFF' };
+    const u = await db.query(
+      'SELECT name, whatsapp FROM users WHERE id = $1', [userId]
+    );
+    const user = u.rows[0];
+    if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
+    const label = String(serviceLabel || 'সেবা');
+    const text =
+      `আসসালামু আলাইকুম ${user.name || ''} 🎉\n` +
+      `আপনার ${label} সফলভাবে সম্পন্ন হয়েছে ✅\n` +
+      'ফাইলটি আপনার অ্যাকাউন্টের ইতিহাস (History) থেকে যেকোনো সময় আবার ডাউনলোড করতে পারবেন।\n' +
+      'Abc Authentic-এর সঙ্গে থাকার জন্য আন্তরিক ধন্যবাদ।';
+    return dispatch(db, 'service_completed', user, {
+      text,
+      params: [user.name || '', label],
+    });
+  } catch (e) {
+    safeLog('[whatsapp] notifyServiceCompleted failed:', e.message);
     return { ok: false, error: 'FAILED' };
   }
 }
@@ -424,6 +538,8 @@ module.exports = {
   getConfig,
   normalizeBdPhone,
   sendTextMessage,
+  sendTemplateMessage,
+  getMetaTemplates,
   testConnection,
   renderTemplate,
   orderCompletedMessage,
@@ -434,6 +550,9 @@ module.exports = {
   notifyRechargeApproved,
   notifyRechargeMismatch,
   notifyRechargeRejected,
+  notifyServiceCompleted,
 };
 // M-22 (2026-10-15): removed never-used exports (canSend, graphPost,
-// sendTemplateMessage, DEFAULT_TEMPLATES, getTemplates) — dead API surface.
+// DEFAULT_TEMPLATES, getTemplates) — dead API surface. sendTemplateMessage
+// and getMetaTemplates returned 2026-10-21: template delivery is now the
+// primary notification path (see dispatch above).
