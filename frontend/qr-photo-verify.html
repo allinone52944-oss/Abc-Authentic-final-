@@ -137,7 +137,7 @@
 
 <script src="/js/app.js?v=17"></script>
 <script>
-  const API = '/api/qr-verify';
+  const API = '/qr-verify'; // ABC.api() prepends '/api' itself
   const bn = (n) => String(n).replace(/\d/g, (d) => '০১২৩৪৫৬৭৮৯'[d]);
   let currentIdem = null;
 
