@@ -448,7 +448,7 @@ router.get('/history', async (req, res) => {
          FROM manual_submissions m LEFT JOIN services s ON s.id = m.service_id
          WHERE m.user_id = $1 ORDER BY m.created_at DESC LIMIT 100`, [uid]),
       db.query(
-        `SELECT id, engine_id, subject_name, filename, originalname, created_at
+        `SELECT id, engine_id, subject_name, filename, originalname, created_at, outcome
          FROM engine_jobs
          WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`, [uid]),
     ]);
@@ -482,7 +482,8 @@ router.get('/history', async (req, res) => {
       items.push({
         kind: 'engine', id: j.id,
         title: (j.engine_id === 'death-verify' ? 'মৃত্যু সনদ' : 'জন্ম সনদ (সার্টিফিকেট)') +
-          (j.subject_name ? ' — ' + j.subject_name : ''),
+          (j.subject_name ? ' — ' + j.subject_name : '') +
+          (j.outcome === 'failed' ? ' — ব্যর্থ' : ''),
         created_at: j.created_at,
         documents: [{
           filename: j.filename,

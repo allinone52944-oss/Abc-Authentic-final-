@@ -26,6 +26,7 @@ const db = require('../db');
 const serviceCredits = require('../lib/serviceCredits');
 const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
+const { buildReceiptPdf } = require('../lib/receiptPdf');
 const adapter = require('../../engines/qr-photo-verify/adapter');
 
 const router = express.Router();
@@ -112,101 +113,6 @@ function failureReasonBn(gatewayMessage) {
   return 'ছবির ব্যক্তির সঙ্গে QR-এর তথ্য মেলেনি';
 }
 
-// Premium receipt PDF (Bengali, pdfkit + bundled Noto Sans
-// Bengali) — one card design for both outcomes: a drawn seal
-// (green tick / red cross, vector-drawn so no glyph is missing
-// from the Bengali font), a details table and, on failure, a
-// bold "no charge taken" line. Approved sample design,
-// 2026-10-22.
-function buildReceiptPdf({ outcome, subjectRef, price, reason, ref, when }) {
-  return new Promise((resolve, reject) => {
-    try {
-      const PDFDocument = require('pdfkit');
-      const doc = new PDFDocument({ size: 'A4', margin: 48 });
-      const chunks = [];
-      doc.on('data', (c) => chunks.push(c));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.on('error', reject);
-      const fontReg = path.join(__dirname, '..', '..', 'assets', 'fonts', 'NotoSansBengali-Regular.ttf');
-      const fontBold = path.join(__dirname, '..', '..', 'assets', 'fonts', 'NotoSansBengali-Bold.ttf');
-      doc.registerFont('bn', fontReg);
-      doc.registerFont('bn-bold', fontBold);
-
-      const ok = outcome !== 'failed';
-      const accent = ok ? '#16a34a' : '#dc2626';
-      const X = 48; const W = 499;
-
-      // The bundled Noto Sans Bengali has NO Latin glyphs — any
-      // Latin run drawn in it prints as boxes (the old receipt's
-      // brand line + reference suffered exactly this). Latin-only
-      // values therefore go in pdfkit's built-in Helvetica, and
-      // mixed Bengali strings spell QR out in Bengali script.
-      const bnTxt = (s) => String(s == null ? '' : s).replace(/QR/g, 'কিউআর');
-      const valFont = (v, bold) => (/[A-Za-z]/.test(String(v))
-        ? (bold ? 'Helvetica-Bold' : 'Helvetica')
-        : (bold ? 'bn-bold' : 'bn'));
-      const whenBn = bnTxt(when).replace('AM', 'পূর্বাহ্ন').replace('PM', 'অপরাহ্ন');
-
-      // Header (brand name is Latin → Helvetica)
-      doc.font('Helvetica-Bold').fontSize(19).fillColor('#6f4e2e').text('Abc Authentic', X, 46, { width: 300 });
-      doc.font('bn').fontSize(10).fillColor('#6b7280')
-        .text('ডিজিটাল রসিদ', X, 52, { width: W, align: 'right' });
-      doc.strokeColor('#d6c9ae').lineWidth(1.4).moveTo(X, 82).lineTo(X + W, 82).stroke();
-
-      // Card
-      doc.roundedRect(X, 98, W, 272, 14).fillAndStroke('#fffdf8', '#d6c9ae');
-
-      // Seal (vector-drawn tick / cross inside a filled circle)
-      doc.circle(86, 148, 25).fill(accent);
-      doc.strokeColor('#ffffff').lineWidth(4.5).lineCap('round');
-      if (ok) {
-        doc.moveTo(75, 148).lineTo(83, 156).lineTo(98, 139).stroke();
-      } else {
-        doc.moveTo(77, 139).lineTo(95, 157).stroke();
-        doc.moveTo(95, 139).lineTo(77, 157).stroke();
-      }
-
-      // Title + subtitle
-      doc.font('bn-bold').fontSize(16.5).fillColor(accent)
-        .text(ok ? 'যাচাই সফল হয়েছে' : 'যাচাই সফল হয়নি', 126, 128, { width: 400 });
-      doc.font('bn').fontSize(11.5).fillColor('#374151')
-        .text(bnTxt(ok
-          ? 'ছবির ব্যক্তির সঙ্গে QR-এর মালিকের মিল পাওয়া গেছে।'
-          : ('কারণ: ' + (reason || 'ছবির ব্যক্তির সঙ্গে QR-এর তথ্য মেলেনি'))),
-          126, 154, { width: 398 });
-
-      // Divider inside the card
-      doc.strokeColor('#eadfc8').lineWidth(1).moveTo(72, 198).lineTo(523, 198).stroke();
-
-      // Details rows
-      const rows = [
-        ['বিষয় (আইডি)', subjectRef || '—', false],
-        ['তারিখ ও সময়', whenBn, false],
-        ['সেবা চার্জ', ok ? ('৳' + price) : '৳০ — কোনো টাকা কাটা হয়নি', true],
-        ['রেফারেন্স', ref, false],
-      ];
-      rows.forEach(([label, value, bold], i) => {
-        const y = 216 + i * 34;
-        doc.font('bn').fontSize(11).fillColor('#6b7280').text(label, 72, y, { width: 138 });
-        doc.font(valFont(value, bold)).fontSize(11.5)
-          .fillColor(bold ? accent : '#111827')
-          .text(String(value), 218, y, { width: 305 });
-      });
-
-      // Footer (all-Bengali wording — Latin would print as boxes)
-      doc.font('bn').fontSize(9.5).fillColor('#6b7280')
-        .text(bnTxt('এই রসিদটি স্বয়ংক্রিয়ভাবে তৈরি। যাচাইটি জাতীয় পরিচয়পত্র তথ্যভান্ডারের সঙ্গে মিলিয়ে সম্পন্ন হয়েছে। প্রতিটি QR শুধু একবারই ব্যবহারযোগ্য।'),
-          X, 392, { width: W });
-      if (!ok) {
-        doc.text(bnTxt('ব্যর্থ যাচাইয়ে কোনো চার্জ কাটা হয়নি — নতুন QR কোড সংগ্রহ করে আবার চেষ্টা করুন।'),
-          X, 424, { width: W });
-      }
-      doc.end();
-    } catch (e) { reject(e); }
-  });
-}
-
-// Store a receipt PDF as the order's delivery document, so it
 // appears in the customer's History like every other delivery.
 async function storeReceipt(orderId, fn, pdfArgs) {
   const pdf = await buildReceiptPdf(pdfArgs);
@@ -338,8 +244,14 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
             'একটি QR + ছবি যাচাই সফল হয়নি — কোনো চার্জ কাটা হয়নি।', '/admin.html').catch(() => {});
           try {
             receiptUrl = await storeReceipt(orderId, 'delivery-qr-failed-' + idemSlug + '.pdf', {
-              outcome: 'failed', subjectRef, price: 0, reason: reasonBn, ref: idem,
+              serviceLabel: 'QR + ছবি যাচাই', outcome: 'failed', reason: reasonBn,
+              subjectLabel: 'বিষয় (আইডি)', subjectValue: subjectRef,
+              chargeText: '৳০ — কোনো টাকা কাটা হয়নি', ref: idem,
               when: new Date().toLocaleString('bn-BD', { timeZone: 'Asia/Dhaka' }),
+              footers: [
+                'এই রসিদটি স্বয়ংক্রিয়ভাবে তৈরি। যাচাইটি জাতীয় পরিচয়পত্র তথ্যভান্ডারের সঙ্গে মিলিয়ে সম্পন্ন হয়েছে। প্রতিটি QR শুধু একবারই ব্যবহারযোগ্য।',
+                'ব্যর্থ যাচাইয়ে কোনো চার্জ কাটা হয়নি — নতুন QR কোড সংগ্রহ করে আবার চেষ্টা করুন।',
+              ],
             });
           } catch (e) { safeLog('[qr-verify] failure receipt store error:', e.message); }
         } else {
@@ -427,8 +339,14 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
       try {
         receiptUrl = await storeReceipt(orderId,
           'delivery-qr-' + idem.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 48) + '.pdf', {
-            outcome: 'success', subjectRef, price, ref: idem,
+            serviceLabel: 'QR + ছবি যাচাই', outcome: 'success',
+            successLine: 'ছবির ব্যক্তির সঙ্গে QR-এর মালিকের মিল পাওয়া গেছে।',
+            subjectLabel: 'বিষয় (আইডি)', subjectValue: subjectRef,
+            chargeText: '৳' + price, ref: idem,
             when: new Date().toLocaleString('bn-BD', { timeZone: 'Asia/Dhaka' }),
+            footers: [
+              'এই রসিদটি স্বয়ংক্রিয়ভাবে তৈরি। যাচাইটি জাতীয় পরিচয়পত্র তথ্যভান্ডারের সঙ্গে মিলিয়ে সম্পন্ন হয়েছে। প্রতিটি QR শুধু একবারই ব্যবহারযোগ্য।',
+            ],
           });
       } catch (e) { safeLog('[qr-verify] receipt store error:', e.message); }
     }

@@ -85,6 +85,7 @@
     </div>
     <div class="err" id="err"></div>
     <div class="ok" id="ok"></div>
+    <div id="failReceipt" style="display:none;margin:8px 0;"></div>
 
     <!-- STEP 1 -->
     <div class="wiz on" id="w1">
@@ -242,8 +243,8 @@ async function step2(){
       return '<div class="'+cls+'">'+lbl+'<input type="text" id="rec_'+f[0]+'" value="'+esc(f[2]||'')+'"></div>';
     }).join('')+'<div class="s full" style="color:var(--muted);font-size:12px;">✏️ সব তথ্য এডিট করা যাবে</div>';
     fields.forEach(f=>{const el=document.getElementById('rec_'+f[0]); if(el) el.oninput=()=>{S.record[f[0]]=el.value;};});
-    go(3);showOk('মৃত্যু তথ্য যাচাই সফল ✓');
-  }catch(e){showErr(e.message||'যাচাই ব্যর্থ।');}
+    go(3);showOk('মৃত্যু তথ্য যাচাই সফল ✓');hideFailReceipt();
+  }catch(e){showErr(e.message||'যাচাই ব্যর্থ।');reportEngineFailure('death-verify', S.drn, e.message);}
   busy('b2',false);
 }
 async function step3(){
@@ -259,6 +260,24 @@ async function step3(){
 }
 // তৈরি PDF-এর এক কপি সার্ভারে জমা হয় — ডেলিভারি ফাইল হিসেবে
 // গ্রাহকের ইতিহাসে থেকে যায়, যেকোনো ডিভাইস থেকে আবার নামানো যায়।
+// যাচাই ব্যর্থ হলে সার্ভারে রিপোর্ট যায় — ব্যর্থতার রসিদ
+// (ইতিহাসে থেকে যায়), WhatsApp বার্তা ও অ্যাডমিন push যায়।
+// একই সেশনে পরে সফল হলে সার্ভার ব্যর্থ রেকর্ডটি সরিয়ে দেয়।
+function reportEngineFailure(engineId, refNo, reason){
+  try{
+    const token=sessionStorage.getItem('abc_access_token')||'';
+    fetch('/api/engine-jobs/failure',{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({
+      engine_id:engineId, ref_no:refNo||'', name:'', reason:String(reason||'').slice(0,200),
+      idempotency_key:engineId+'-fail-'+(S.sessionId||Date.now())
+    })}).then(r=>r.json()).then(d=>{
+      if(d&&d.receipt){
+        const box=document.getElementById('failReceipt');
+        if(box){box.style.display='block';box.innerHTML='<a href="'+d.receipt+'" style="display:inline-block;padding:9px 16px;border:1px solid #d6c9ae;border-radius:8px;background:#fff7ed;color:#9a3412;font-weight:600;text-decoration:none;">📄 ব্যর্থতার রসিদ ডাউনলোড</a> <span style="color:#6b7280;font-size:12px;">কোনো টাকা কাটা হয়নি — রসিদটি ইতিহাসেও থাকবে</span>';}
+      }
+    }).catch(()=>{});
+  }catch(e){}
+}
+function hideFailReceipt(){const box=document.getElementById('failReceipt');if(box){box.style.display='none';box.innerHTML='';}}
 function reportEngineJob(engineId, refNo, name, blob, fname){
   try{
     const fd=new FormData();
@@ -266,7 +285,7 @@ function reportEngineJob(engineId, refNo, name, blob, fname){
     fd.append('engine_id', engineId);
     fd.append('ref_no', refNo||'');
     fd.append('name', name||'');
-    fd.append('idempotency_key', engineId+'-'+(refNo||Date.now()));
+    fd.append('idempotency_key', engineId+'-'+(S.sessionId||refNo||Date.now()));
     const token=sessionStorage.getItem('abc_access_token')||'';
     fetch('/api/engine-jobs',{method:'POST',headers:{'Authorization':'Bearer '+token},body:fd}).catch(()=>{});
   }catch(e){}
@@ -283,7 +302,7 @@ async function dlPdf(){
     document.body.appendChild(a);a.click();a.remove();
     reportEngineJob('death-verify', S.drn, (S.record&&(S.record.nameEn||S.record.nameBn))||'', blob, 'Death_Certificate_'+S.drn+'.pdf');
     showOk('PDF ডাউনলোড শুরু হয়েছে ✓');
-  }catch(e){showErr(e.message||'PDF ব্যর্থ।');}
+  }catch(e){showErr(e.message||'PDF ব্যর্থ।');reportEngineFailure('death-verify', S.drn, 'সনদ তৈরি ব্যর্থ');}
   busy('b4',false);
 }
 (async function init(){

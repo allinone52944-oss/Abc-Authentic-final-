@@ -1617,9 +1617,12 @@ window.AdmOrders = {
       const d = await r.json();
       const jobs = d.jobs || [];
       if (!jobs.length) { box.textContent = 'এখনো কোনো engine ডেলিভারি জমা হয়নি।'; return; }
-      box.innerHTML = '<div class="tw"><table><thead><tr><th>ধরন</th><th>নম্বর (BRN/DRN)</th><th>নাম</th><th>গ্রাহক</th><th>সময়</th><th></th></tr></thead><tbody>' +
+      box.innerHTML = '<div class="tw"><table><thead><tr><th>ধরন</th><th>নম্বর (BRN/DRN)</th><th>নাম</th><th>অবস্থা</th><th>গ্রাহক</th><th>সময়</th><th></th></tr></thead><tbody>' +
         jobs.map(j =>
           '<tr><td>' + esc(lbl[j.engine_id] || j.engine_id) + '</td><td>' + esc(j.ref_no || '') + '</td><td>' + esc(j.subject_name || '') + '</td>' +
+          '<td>' + (j.outcome === 'failed'
+            ? '<span style="color:#dc2626;font-weight:700;">❌ ব্যর্থ</span>' + (j.reason ? '<div class="s">' + esc(j.reason) + '</div>' : '')
+            : '<span style="color:#16a34a;font-weight:700;">✅ সম্পন্ন</span>') + '</td>' +
           '<td>' + esc(j.user_name || '') + ' <span class="s">' + esc(j.user_phone || '') + '</span></td>' +
           '<td class="s">' + new Date(j.created_at).toLocaleString('bn-BD') + '</td>' +
           '<td><button class="mini-btn danger" onclick="AdmOrders.deleteEngineJob(' + jqAttr(j.id) + ')">🗑️ ডিলিট</button></td></tr>'
