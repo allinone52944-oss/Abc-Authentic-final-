@@ -1,12 +1,20 @@
 // Route tests for backend/routes/auth.js.
 // DB is fully mocked (tests/helpers/mockDb.js). Tokens are REAL (auth.js).
 jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
+jest.mock('../../utils/whatsapp', () => ({
+  notifyWelcome: jest.fn().mockResolvedValue({ ok: true }),
+}));
+jest.mock('../../utils/push', () => ({
+  notifyNewUser: jest.fn().mockResolvedValue({ ok: true }),
+}));
 
 const express = require('express');
 const request = require('supertest');
 const db = require('../../db');
 const auth = require('../../auth');
 const authRouter = require('../../routes/auth');
+const wa = require('../../utils/whatsapp');
+const push = require('../../utils/push');
 
 function app() {
   const a = express();
@@ -34,7 +42,11 @@ function settingsHandlers(regEnabled = { enabled: true }) {
   ];
 }
 
-beforeEach(() => { db.__reset(); });
+beforeEach(() => {
+  db.__reset();
+  wa.notifyWelcome.mockClear();
+  push.notifyNewUser.mockClear();
+});
 
 describe('POST /api/auth/register — happy path', () => {
   test('201 with verify_email, no password hash leaked', async () => {
@@ -50,6 +62,10 @@ describe('POST /api/auth/register — happy path', () => {
     expect(JSON.stringify(r.body)).not.toContain('password_hash');
     // email not configured in tests → no verification token created
     expect(r.body.email_sent).toBe(false);
+    // the new customer is welcomed on WhatsApp; admins are pushed
+    expect(wa.notifyWelcome).toHaveBeenCalledTimes(1);
+    expect(wa.notifyWelcome.mock.calls[0][1]).toBe('u1');
+    expect(push.notifyNewUser).toHaveBeenCalledTimes(1);
   });
 
   test('registration is logged with the client IP (admin লগ tab)', async () => {

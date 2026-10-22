@@ -19,6 +19,7 @@ const {
 const { safeLog, getClientIp } = require('../security');
 const { validateInvite } = require('./invites');
 const push = require('../utils/push');
+const wa = require('../utils/whatsapp');
 
 // Best-effort activity log (H-8/M-8: auth events are audited too)
 async function logActivity(userId, action, details) {
@@ -213,6 +214,12 @@ router.post('/register', async (req, res) => {
 
     // Web Push: notify admins of new user registration (async, non-blocking)
     push.notifyNewUser(db, user).catch(() => {});
+
+    // Welcome the new customer on WhatsApp (template-first — a
+    // brand-new customer has no open 24h window, so until the
+    // abc_welcome template exists this lands only if a window
+    // happens to be open; never blocks registration).
+    wa.notifyWelcome(db, user.id).catch(() => {});
 
     return res.status(201).json({
       ok: true,

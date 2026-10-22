@@ -18,8 +18,21 @@ router.get('/vapid-public-key', (req, res) => {
 // POST /api/push/subscribe — save current user's subscription (auth)
 router.post('/subscribe', requireAuth, async (req, res) => {
   try {
+    // First-ever subscription for this user? Captured BEFORE the
+    // save so a welcome push goes out exactly once (when the
+    // customer first turns notifications on — at registration
+    // time they have no subscription to reach).
+    const before = await db.query(
+      'SELECT COUNT(*)::int AS c FROM push_subscriptions WHERE user_id = $1',
+      [req.user.id]
+    );
+    const firstEver = !before.rows.length || Number(before.rows[0].c) === 0;
     const r = await push.saveSubscription(db, req.user.id, req.body);
     if (!r.ok) return res.status(400).json({ error: r.error });
+    if (firstEver) {
+      push.notifyUser(db, req.user.id, '👋 Abc Authentic-এ স্বাগতম!',
+        'নোটিফিকেশন চালু হয়েছে — এখন থেকে সব সেবার ফলাফল সঙ্গে সঙ্গে এখানেই পাবেন।', '/dashboard.html').catch(() => {});
+    }
     res.json({ ok: true });
   } catch (e) {
     safeLog('[push] subscribe route error:', e.message);

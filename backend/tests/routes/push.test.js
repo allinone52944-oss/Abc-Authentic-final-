@@ -6,6 +6,7 @@ const request = require('supertest');
 const db = require('../../db');
 const auth = require('../../auth');
 const pushRouter = require('../../routes/push');
+const pushUtil = require('../../utils/push');
 
 function app() {
   const a = express();
@@ -46,6 +47,25 @@ describe('POST /api/push/subscribe', () => {
     expect(r.body).toEqual({ ok: true });
     const ins = db.query.mock.calls.find((c) => /INSERT INTO push_subscriptions/.test(c[0]));
     expect(ins[1][0]).toBe('u1');
+  });
+
+  test('first-ever subscription → one welcome push; later subscriptions → none', async () => {
+    const spy = jest.spyOn(pushUtil, 'notifyUser').mockResolvedValue({ ok: true });
+    try {
+      db.__routeQuery([
+        ['COUNT(*)::int AS c FROM push_subscriptions', { rows: [{ c: 0 }] }],
+      ]);
+      await withUser(request(app()).post('/api/push/subscribe')).send(GOOD_SUB).expect(200);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0][1]).toBe('u1');
+
+      spy.mockClear();
+      db.__routeQuery([
+        ['COUNT(*)::int AS c FROM push_subscriptions', { rows: [{ c: 1 }] }],
+      ]);
+      await withUser(request(app()).post('/api/push/subscribe')).send(GOOD_SUB).expect(200);
+      expect(spy).not.toHaveBeenCalled();
+    } finally { spy.mockRestore(); }
   });
 });
 
