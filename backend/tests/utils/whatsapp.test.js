@@ -276,13 +276,13 @@ describe('template-first dispatch (24h-window fix, 2026-10-21)', () => {
     expect(params).toEqual(['নমস্কার Amit', 'এনআইডি কার্ড']);
   });
 
-  test('notifyServiceFailed sends abc_service_failed with [greeting, label]', async () => {
+  test('notifyServiceFailed sends abc_verify_failed with [greeting, label]', async () => {
     global.fetch = okFetch();
     const db = notifyDb({ name: 'Karim', whatsapp: '01712345678', religion: 'islam' });
     const r = await wa.notifyServiceFailed(db, 'u1', 'QR + ছবি যাচাই', 'ছবির ব্যক্তির সঙ্গে QR-এর তথ্য মেলেনি');
     expect(r.ok).toBe(true);
     const body = JSON.parse(global.fetch.mock.calls[0][1].body);
-    expect(body.template.name).toBe('abc_service_failed');
+    expect(body.template.name).toBe('abc_verify_failed');
     const params = body.template.components[0].parameters.map((p) => p.text);
     expect(params).toEqual(['আসসালামু আলাইকুম Karim', 'QR + ছবি যাচাই']);
   });

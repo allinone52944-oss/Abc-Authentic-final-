@@ -291,7 +291,7 @@ const DEFAULT_META_TEMPLATES = {
   order_failed: 'abc_order_failed',
   order_cancelled: 'abc_order_cancelled',
   service_completed: 'abc_service_completed',
-  service_failed: 'abc_service_failed',
+  service_failed: 'abc_verify_failed',
   cashback_received: 'abc_cashback_received',
   welcome: 'abc_welcome',
   trxid_warning: 'abc_trxid_notice',
@@ -557,7 +557,7 @@ async function notifyServiceCompleted(db, userId, serviceLabel) {
 // Mirror of notifyServiceCompleted for a FAILED engine service
 // (e.g. a QR + photo verification that did not match). The
 // customer is told it failed, why, and — most importantly —
-// that no money was taken. Template: abc_service_failed.
+// that no money was taken. Template: abc_verify_failed (the first attempt, abc_service_failed, was rejected by Meta's automated review on 2026-10-22 with no reason shown; this name + a verification-framed body replaced it).
 async function notifyServiceFailed(db, userId, serviceLabel, reason, retryHint) {
   try {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
