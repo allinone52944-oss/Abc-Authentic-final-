@@ -2,12 +2,16 @@
 // Covers the security fix: client-supplied idempotency_key (≤64 chars)
 // builds a stable wallet ref instead of a fresh Date.now() each retry.
 jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
+jest.mock('../../utils/push', () => ({
+  notifyAdmins: jest.fn().mockResolvedValue({ ok: true }),
+}));
 
 const express = require('express');
 const request = require('supertest');
 const db = require('../../db');
 const auth = require('../../auth');
 const bdrisRouter = require('../../routes/bdris-apply');
+const push = require('../../utils/push');
 
 function app() {
   const a = express();
@@ -18,7 +22,7 @@ function app() {
 const token = () => auth.signAccess({ id: 'u1', role: 'user' });
 const withUser = (req) => req.set('Authorization', 'Bearer ' + token());
 
-beforeEach(() => { db.__reset(); });
+beforeEach(() => { db.__reset(); push.notifyAdmins.mockClear(); });
 
 // Charging now goes through lib/serviceCredits.payForService inside a
 // transaction: it needs the service id row and the locked user balance
@@ -191,8 +195,33 @@ describe('POST/GET/DELETE /api/bdris-apply/applications (আবেদনের �
     ]);
     const r = await withUser(request(app()).get('/api/bdris-apply/applications')).expect(200);
     expect(r.body.applications).toHaveLength(1);
+    // the customer's own list shows submitted applications only —
+    // failure records are an admin-side trace
+    const listQ = db.query.mock.calls.find((c) => /FROM bdris_applications/.test(c[0]) && !/DELETE/.test(c[0]));
+    expect(listQ[0]).toContain("status = 'submitted'");
     await withUser(request(app()).delete('/api/bdris-apply/applications/123')).expect(200);
     const del = db.query.mock.calls.find((c) => /DELETE FROM bdris_applications/.test(c[0]));
     expect(del[1]).toEqual(['u1', '123']); // always scoped to the caller
+  });
+
+  test('failure report → failed record with FAIL- marker + admin push', async () => {
+    db.__routeQuery([
+      ['INSERT INTO bdris_applications', { rows: [{ id: 'f1', created_at: 'x' }] }],
+    ]);
+    const r = await withUser(request(app()).post('/api/bdris-apply/applications/failure'))
+      .send({ name: 'টেস্ট আবেদনকারী', reason: 'সার্ভার ব্যস্ত' }).expect(201);
+    expect(r.body).toMatchObject({ ok: true, id: 'f1' });
+    const ins = db.query.mock.calls.find((c) => /INSERT INTO bdris_applications/.test(c[0]));
+    expect(ins[0]).toContain("'failed'");
+    expect(ins[1][0]).toBe('u1');
+    expect(ins[1][1]).toMatch(/^FAIL-[0-9A-F]{8}$/);
+    expect(ins[1][3]).toBe('সার্ভার ব্যস্ত');
+    expect(push.notifyAdmins).toHaveBeenCalledTimes(1);
+  });
+
+  test('failure report requires auth → 401', async () => {
+    await request(app()).post('/api/bdris-apply/applications/failure')
+      .send({ name: 'x', reason: 'y' }).expect(401);
+    expect(push.notifyAdmins).not.toHaveBeenCalled();
   });
 });

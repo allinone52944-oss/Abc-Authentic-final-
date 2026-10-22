@@ -19,6 +19,7 @@ const crypto = require('crypto');
 const { requireAuth } = require('../auth');
 const { safeLog } = require('../security');
 const wa = require('../utils/whatsapp');
+const push = require('../utils/push');
 const db = require('../db');
 
 const router = express.Router();
@@ -175,12 +176,45 @@ router.post('/applications', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/bdris-apply/applications/failure { name, reason } —
+// record a FINAL submission failure (premium flow, 2026-10-22).
+// The apply flow is retry-friendly by design, so the page only
+// reports the terminal case: an engine error during the final
+// OTP submission (excluding the wrong-OTP branch, which returns
+// to code entry). The record carries a generated FAIL- marker
+// instead of an ack number and is visible to the ADMIN only —
+// the customer's own list keeps submitted applications. The
+// admins also get a push. NOTE: the submit charge runs BEFORE
+// the portal submission, so this record deliberately makes no
+// claim about money either way — the admin checks the wallet.
+router.post('/applications/failure', requireAuth, async (req, res) => {
+  try {
+    const name = String((req.body && req.body.name) || '').trim().slice(0, 160);
+    const reason = String((req.body && req.body.reason) || '').trim().slice(0, 240) || 'জমা ব্যর্থ';
+    const marker = 'FAIL-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+    const r = await db.query(
+      `INSERT INTO bdris_applications (user_id, ack_no, applicant_name, status, failure_reason)
+       VALUES ($1, $2, $3, 'failed', $4)
+       RETURNING id, created_at`,
+      [req.user.id, marker, name, reason]
+    );
+    push.notifyAdmins(db, '❌ জন্ম নিবন্ধন আবেদন ব্যর্থ',
+      'চূড়ান্ত জমার সময় একটি আবেদন ব্যর্থ হয়েছে' + (name ? ' (' + name + ')' : '') + ': ' + reason,
+      '/admin.html').catch(() => {});
+    return res.status(201).json({ ok: true, id: r.rows[0] && r.rows[0].id });
+  } catch (e) {
+    safeLog('[bdris-apply] application failure record error:', e.message);
+    return res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 // GET /api/bdris-apply/applications — the customer's own records
+// (submitted applications only; failure records are admin-side)
 router.get('/applications', requireAuth, async (req, res) => {
   try {
     const r = await db.query(
       `SELECT id, ack_no, applicant_name, created_at FROM bdris_applications
-       WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`,
+       WHERE user_id = $1 AND status = 'submitted' ORDER BY created_at DESC LIMIT 50`,
       [req.user.id]
     );
     return res.json({ ok: true, applications: r.rows });

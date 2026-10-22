@@ -773,6 +773,19 @@ function reportAckToServer(a) {
     }).catch(() => {});
   } catch {}
 }
+function reportApplicationFailure(reason) {
+  // চূড়ান্ত জমা ব্যর্থ হলে সার্ভারে রেকর্ড হয় + অ্যাডমিন push পান —
+  // যাতে ব্যর্থ আবেদন কারো চোখের আড়ালে না থেকে যায়।
+  try {
+    const s1 = (S.d && S.d.s1) || {};
+    const nm = [s1.firstNameBn, s1.lastNameBn].filter(Boolean).join(' ');
+    fetch('/api/bdris-apply/applications/failure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
+      body: JSON.stringify({ name: nm, reason: String(reason || '').slice(0, 240) })
+    }).catch(() => {});
+  } catch {}
+}
 function addAck(a) {
   reportAckToServer(a);
   const l = getAcks();
@@ -2429,7 +2442,7 @@ function renderOtpCode() {
     { html: '✅ আবেদন জমা দিন', fn: () => {
         const otp = val();
         if (otp.length < 6) { note('⚠️ মোবাইলে আসা ৬ ডিজিটের কোডটি সম্পূর্ণ লিখুন', 'warn'); return; }
-        S.otpStage = 'submitting';
+        S.otpStage = 'submitting'; S._failReported = false;
         busy(true, '⏳ আবেদন জমা হচ্ছে… একটু অপেক্ষা করুন');
         // গার্ড আটকালে সোজা আগের স্ক্রিনে ফিরি — বাটন চিরতরে নিষ্ক্রিয় হয় না
         if (emitStep('SUBMIT_S4_OTP', { otp }) === false) { S.otpStage = 'code'; busy(false); }
@@ -2600,7 +2613,7 @@ function showPvOtp() {
   $('pvOtpGo').onclick = () => {
     const otp = val();
     if (otp.length < 6) { note('⚠️ মোবাইলে আসা ৬ ডিজিটের কোডটি সম্পূর্ণ লিখুন', 'warn'); return; }
-    S.otpStage = 'submitting';
+    S.otpStage = 'submitting'; S._failReported = false;
     busy(true, '⏳ আবেদন জমা হচ্ছে… একটু অপেক্ষা করুন');
     if (emitStep('SUBMIT_S4_OTP', { otp }) === false) { S.otpStage = 'code'; busy(false); }
   };
@@ -3552,6 +3565,12 @@ socket.on('BOT_STATUS', (d) => {
     const diedOp = S._waitingAck;
     const msg = String(d.message || 'সাময়িক সমস্যা হয়েছে');
     if (/চালু হয়নি|সংযোগ নেই/.test(msg)) { sessionLost(); return; }
+    // চূড়ান্ত জমার মুহূর্তের ব্যর্থতা — সার্ভারে রেকর্ড + অ্যাডমিন push।
+    // OTP-ভুলের শাখাটি বাদ (ওটা কোড বসানোর পর্দায় ফেরে, আবেদন মরে না)।
+    if (S.otpStage === 'submitting' && !/OTP|কোড/i.test(msg) && !S._failReported) {
+      S._failReported = true;
+      reportApplicationFailure(msg);
+    }
     if (diedOp) dropSent(diedOp); // ব্যর্থ ধাপ সাইটে যাওয়া গণ্য নয় — রিট্রাই আবার পাঠাবে
     opAbort();
     if (S.otpStage === 'submitting' && /OTP|কোড/i.test(msg)) {

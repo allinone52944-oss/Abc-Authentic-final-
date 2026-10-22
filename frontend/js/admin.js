@@ -1593,9 +1593,12 @@ window.AdmOrders = {
       const d = await r.json();
       const apps = d.applications || [];
       if (!apps.length) { box.textContent = 'এখনো কোনো BDRIS আবেদন জমা হয়নি।'; return; }
-      box.innerHTML = '<div class="tw"><table><thead><tr><th>আবেদন নম্বর</th><th>আবেদনকারী</th><th>গ্রাহক</th><th>সময়</th><th></th></tr></thead><tbody>' +
+      box.innerHTML = '<div class="tw"><table><thead><tr><th>আবেদন নম্বর</th><th>আবেদনকারী</th><th>অবস্থা</th><th>গ্রাহক</th><th>সময়</th><th></th></tr></thead><tbody>' +
         apps.map(a =>
-          '<tr><td>' + esc(a.ack_no) + '</td><td>' + esc(a.applicant_name || '') + '</td>' +
+          '<tr><td>' + esc(a.status === 'failed' ? '—' : a.ack_no) + '</td><td>' + esc(a.applicant_name || '') + '</td>' +
+          '<td>' + (a.status === 'failed'
+            ? '<span style="color:#dc2626;font-weight:700;">❌ ব্যর্থ</span>' + (a.failure_reason ? '<div class="s">' + esc(a.failure_reason) + '</div>' : '')
+            : '<span style="color:#16a34a;font-weight:700;">✅ জমা হয়েছে</span>') + '</td>' +
           '<td>' + esc(a.user_name || '') + ' <span class="s">' + esc(a.user_phone || '') + '</span></td>' +
           '<td class="s">' + new Date(a.created_at).toLocaleString('bn-BD') + '</td>' +
           '<td><button class="mini-btn danger" onclick="AdmOrders.deleteBdrisApp(' + jqAttr(a.id) + ')">🗑️ ডিলিট</button></td></tr>'

@@ -620,6 +620,7 @@ router.get('/bdris-applications', async (req, res) => {
   try {
     const r = await db.query(
       `SELECT a.id, a.ack_no, a.applicant_name, a.created_at,
+              a.status, a.failure_reason,
               u.name AS user_name, u.phone AS user_phone
          FROM bdris_applications a
          JOIN users u ON u.id = a.user_id
