@@ -293,6 +293,7 @@ const DEFAULT_META_TEMPLATES = {
   service_completed: 'abc_service_completed',
   service_failed: 'abc_service_failed',
   cashback_received: 'abc_cashback_received',
+  welcome: 'abc_welcome',
   trxid_warning: 'abc_trxid_notice',
 };
 
@@ -611,6 +612,36 @@ async function notifyDuplicateTrxid(db, userId, attempt) {
   }
 }
 
+// Welcome message for a brand-new customer (registration).
+// A new registrant has never messaged the business, so there is
+// no 24h window — this only ever reaches them via the template
+// ('abc_welcome'); the free-text fallback covers the rare case
+// where a window happens to be open already.
+async function notifyWelcome(db, userId) {
+  try {
+    if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
+    if (!(await isNotifyEnabled(db, 'welcome'))) return { ok: false, error: 'NOTIFY_OFF' };
+    const u = await db.query(
+      'SELECT name, whatsapp, religion FROM users WHERE id = $1', [userId]
+    );
+    const user = u.rows[0];
+    if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
+    const text =
+      `${greetingFor(user)}\n` +
+      'Abc Authentic-এ স্বাগতম! 🎉\n' +
+      'আপনার অ্যাকাউন্ট তৈরি হয়েছে। ওয়ালেটে রিচার্জ করে যেকোনো সেবা নিতে পারবেন।\n' +
+      'সহায়তা লাগলে এই নম্বরেই মেসেজ করুন।';
+    const sent = await dispatch(db, 'welcome', user, {
+      text, params: [greetingFor(user)],
+    });
+    if (!sent.ok) safeLog('[whatsapp] welcome notify not sent:', sent.error);
+    return sent;
+  } catch (e) {
+    safeLog('[whatsapp] notifyWelcome failed:', e.message);
+    return { ok: false, error: e.message };
+  }
+}
+
 // Cashback received (daily claim or per-recharge coupon). One
 // wording for both money shapes: plain wallet credit, or a
 // service-locked credit when the admin scoped cashback to one
@@ -638,8 +669,9 @@ async function notifyCashbackReceived(db, userId, { amount, code, serviceLocked,
       `${where}।\n` +
       `কুপন কোড: ${coupon}\n` +
       'Abc Authentic-এর সঙ্গে থাকার জন্য আন্তরিক ধন্যবাদ।';
-    const sent = await dispatch(db, user, 'cashback_received',
-      [greetingFor(user), amt, coupon], text);
+    const sent = await dispatch(db, 'cashback_received', user, {
+      text, params: [greetingFor(user), amt, coupon],
+    });
     if (!sent.ok) safeLog('[whatsapp] cashback notify not sent:', sent.error);
     return sent;
   } catch (e) {
@@ -669,6 +701,7 @@ module.exports = {
   notifyServiceCompleted,
   notifyServiceFailed,
   notifyCashbackReceived,
+  notifyWelcome,
   notifyDuplicateTrxid,
 };
 // M-22 (2026-10-15): removed never-used exports (canSend, graphPost,

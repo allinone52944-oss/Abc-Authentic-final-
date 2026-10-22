@@ -222,6 +222,30 @@ describe('template-first dispatch (24h-window fix, 2026-10-21)', () => {
     expect(params).toEqual(['আসসালামু আলাইকুম Karim', '500', '550']);
   });
 
+  test('notifyCashbackReceived sends the abc_cashback_received TEMPLATE with amount + code', async () => {
+    global.fetch = okFetch();
+    const db = notifyDb({ name: 'Karim', whatsapp: '01712345678', religion: 'islam' });
+    const r = await wa.notifyCashbackReceived(db, 'u1', { amount: 50, code: 'CB-20261022-AB12', kind: 'claim' });
+    expect(r.ok).toBe(true);
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.type).toBe('template');
+    expect(body.template.name).toBe('abc_cashback_received');
+    const params = body.template.components[0].parameters.map((p) => p.text);
+    expect(params).toEqual(['আসসালামু আলাইকুম Karim', '50', 'CB-20261022-AB12']);
+  });
+
+  test('notifyWelcome sends the abc_welcome TEMPLATE with just the greeting param', async () => {
+    global.fetch = okFetch();
+    const db = notifyDb({ name: 'Karim', whatsapp: '01712345678', religion: 'islam' });
+    const r = await wa.notifyWelcome(db, 'u1');
+    expect(r.ok).toBe(true);
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.type).toBe('template');
+    expect(body.template.name).toBe('abc_welcome');
+    const params = body.template.components[0].parameters.map((p) => p.text);
+    expect(params).toEqual(['আসসালামু আলাইকুম Karim']);
+  });
+
   test('template failure falls back to free text (in-window users still reached)', async () => {
     let n = 0;
     global.fetch = jest.fn(async () => {
