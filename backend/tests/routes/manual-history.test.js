@@ -4,6 +4,13 @@
 // and History (per the owner's simplification) lists ONLY delivery files —
 // admin-uploaded files on orders + manual submissions — with no details.
 jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
+jest.mock('../../utils/whatsapp', () => ({
+  notifyServiceCompleted: jest.fn().mockResolvedValue({ ok: true }),
+}));
+jest.mock('../../utils/push', () => ({
+  notifyAdmins: jest.fn().mockResolvedValue({ ok: true }),
+  notifyUser: jest.fn().mockResolvedValue({ ok: true }),
+}));
 
 const express = require('express');
 const request = require('supertest');
@@ -13,6 +20,8 @@ const db = require('../../db');
 const auth = require('../../auth');
 const { customerManual, adminManual } = require('../../routes/manual');
 const userRouter = require('../../routes/user');
+const wa = require('../../utils/whatsapp');
+const push = require('../../utils/push');
 
 const UPLOAD_DIR = '/opt/all-in-one-abc-authentic/uploads/manual';
 
@@ -29,7 +38,11 @@ const adminTok = () => auth.signAccess({ id: 'a1', role: 'admin' });
 const asUser = (r) => r.set('Authorization', 'Bearer ' + userTok());
 const asAdmin = (r) => r.set('Authorization', 'Bearer ' + adminTok());
 
-beforeEach(() => { db.__reset(); });
+beforeEach(() => {
+  db.__reset();
+  wa.notifyServiceCompleted.mockClear();
+  push.notifyUser.mockClear();
+});
 
 function putFile(name, content) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -230,5 +243,41 @@ describe('GET /api/history — delivery files only, no work details', () => {
 
   test('requires auth → 401', async () => {
     await request(app()).get('/api/history').expect(401);
+  });
+});
+
+describe('PUT /api/admin/manual/:id — outcome notifications on transition', () => {
+  function putHandlers(prevStatus, newStatus) {
+    return [
+      ['SELECT user_id, service_id, status FROM manual_submissions', { rows: [{ user_id: 'u1', service_id: 7, status: prevStatus }] }],
+      ['UPDATE manual_submissions SET', { rows: [{ id: 'm1', status: newStatus }] }],
+      ['SELECT name_bn, name FROM services', { rows: [{ name_bn: 'পাসপোর্ট সেবা', name: 'Passport' }] }],
+    ];
+  }
+
+  test('processing → completed: customer gets WhatsApp + push with the service label', async () => {
+    db.__routeQuery(putHandlers('processing', 'completed'));
+    const r = await asAdmin(request(app()).put('/api/admin/manual/m1'))
+      .send({ status: 'completed' }).expect(200);
+    expect(r.body.status).toBe('completed');
+    expect(wa.notifyServiceCompleted).toHaveBeenCalledTimes(1);
+    expect(wa.notifyServiceCompleted.mock.calls[0][2]).toBe('পাসপোর্ট সেবা');
+    expect(push.notifyUser).toHaveBeenCalledTimes(1);
+  });
+
+  test('re-save with the SAME status (note edit) → no re-notify', async () => {
+    db.__routeQuery(putHandlers('completed', 'completed'));
+    await asAdmin(request(app()).put('/api/admin/manual/m1'))
+      .send({ status: 'completed', admin_note: 'note' }).expect(200);
+    expect(wa.notifyServiceCompleted).not.toHaveBeenCalled();
+    expect(push.notifyUser).not.toHaveBeenCalled();
+  });
+
+  test('new → rejected: push only, no WhatsApp success wording anywhere', async () => {
+    db.__routeQuery(putHandlers('new', 'rejected'));
+    await asAdmin(request(app()).put('/api/admin/manual/m1'))
+      .send({ status: 'rejected' }).expect(200);
+    expect(push.notifyUser).toHaveBeenCalledTimes(1);
+    expect(wa.notifyServiceCompleted).not.toHaveBeenCalled();
   });
 });

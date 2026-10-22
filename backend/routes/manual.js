@@ -22,6 +22,7 @@ const { requireAuth, requireAdmin } = require('../auth');
 const { safeLog } = require('../security');
 const parser = require('../utils/manual-parser');
 const push = require('../utils/push');
+const wa = require('../utils/whatsapp');
 
 const UPLOAD_DIR = '/opt/all-in-one-abc-authentic/uploads/manual';
 
@@ -258,10 +259,18 @@ adminManual.get('/:id', async (req, res) => {
   } catch (e) { safeLog('[manual] admin detail error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });
 
-// PUT /api/admin/manual/:id — update status / admin_note
+// PUT /api/admin/manual/:id — update status / admin_note.
+// On a TRANSITION into completed/rejected the customer is told
+// (this flow previously notified nobody at all): completed →
+// WhatsApp + push, rejected → push. A re-save with the same
+// status (e.g. an admin_note edit) never re-notifies.
 adminManual.put('/:id', async (req, res) => {
   try {
     const { status, admin_note } = req.body || {};
+    const before = await db.query(
+      'SELECT user_id, service_id, status FROM manual_submissions WHERE id = $1',
+      [req.params.id]
+    );
     const sets = [];
     const params = [];
     let i = 1;
@@ -279,6 +288,22 @@ adminManual.put('/:id', async (req, res) => {
       params
     );
     if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    const prev = before.rows[0];
+    if (prev && status && status !== prev.status && (status === 'completed' || status === 'rejected')) {
+      if (status === 'completed') {
+        let label = 'ম্যানুয়াল সেবা';
+        try {
+          const sv = await db.query('SELECT name_bn, name FROM services WHERE id = $1', [prev.service_id]);
+          if (sv.rows.length) label = sv.rows[0].name_bn || sv.rows[0].name || label;
+        } catch (_) {}
+        wa.notifyServiceCompleted(db, prev.user_id, label).catch(() => {});
+        push.notifyUser(db, prev.user_id, '✅ আপনার সেবা সম্পন্ন!',
+          'আপনার ' + label + ' সম্পন্ন হয়েছে — ডেলিভারি ফাইলটি ইতিহাসে পাবেন।', '/history.html').catch(() => {});
+      } else {
+        push.notifyUser(db, prev.user_id, '❌ সেবার অনুরোধ সম্পন্ন হয়নি',
+          'দুঃখিত — আপনার ম্যানুয়াল সেবার অনুরোধটি সম্পন্ন করা যায়নি। সহায়তার জন্য সাপোর্টে যোগাযোগ করুন।', '/history.html').catch(() => {});
+      }
+    }
     res.json({ ok: true, ...r.rows[0] });
   } catch (e) { safeLog('[manual] admin update error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });

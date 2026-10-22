@@ -590,18 +590,24 @@ router.put('/orders/:id/status', async (req, res) => {
       order_id: req.params.id, from, status, admin_note: admin_note || null,
     });
 
-    // WhatsApp: order completed/delivered -> customer success message
-    // (async, non-blocking, never breaks the response)
+    // Customer notifications: WhatsApp + a web push to the
+    // customer's own devices (async, non-blocking, never breaks
+    // the response). The push matters while WhatsApp templates
+    // are pending: it is free, instant and window-independent.
     if (status === 'completed' || status === 'delivered') {
       wa.notifyOrderCompleted(db, r.rows[0]).catch(() => {});
+      push.notifyUser(db, r.rows[0].user_id, '✅ অর্ডার সম্পন্ন!',
+        'আপনার অর্ডারটি সম্পন্ন হয়েছে — ডেলিভারি ফাইলটি ইতিহাস থেকে ডাউনলোড করতে পারবেন।', '/orders.html').catch(() => {});
     }
-    // WhatsApp: order failed -> customer failure message
     if (status === 'failed') {
       wa.notifyOrderFailed(db, r.rows[0]).catch(() => {});
+      push.notifyUser(db, r.rows[0].user_id, '❌ অর্ডার সম্পন্ন হয়নি',
+        'দুঃখিত — আপনার অর্ডারটি সম্পন্ন করা যায়নি। বিস্তারিত দেখতে অর্ডার পেজে যান।', '/orders.html').catch(() => {});
     }
-    // WhatsApp: order cancelled -> customer cancellation message
     if (status === 'cancelled') {
       wa.notifyOrderCancelled(db, r.rows[0]).catch(() => {});
+      push.notifyUser(db, r.rows[0].user_id, 'অর্ডার বাতিল হয়েছে',
+        'আপনার অর্ডারটি বাতিল করা হয়েছে।', '/orders.html').catch(() => {});
     }
 
     res.json({ order: r.rows[0] });
@@ -1291,10 +1297,11 @@ router.put('/transactions/:id/approve', async (req, res) => {
     });
     await logActivity(req.user.id, 'transaction.approve', { tx_id: tx.id, amount: tx.amount });
 
-    // WhatsApp: recharge approved -> customer success message
-    // (async, non-blocking, never breaks the response)
+    // Customer notifications: recharge approved (WhatsApp + push)
     if (tx.type === 'recharge') {
       wa.notifyRechargeApproved(db, tx).catch(() => {});
+      push.notifyUser(db, tx.user_id, '✅ রিচার্জ সফল!',
+        '৳' + tx.amount + ' আপনার ওয়ালেটে যোগ হয়েছে।', '/wallet.html').catch(() => {});
     }
 
     res.json({ ok: true });
@@ -1314,8 +1321,12 @@ router.put('/transactions/:id/reject', async (req, res) => {
     );
     if (!r.rows.length) return res.status(400).json({ error: 'NOT_PENDING' });
     await logActivity(req.user.id, 'transaction.reject', { tx_id: req.params.id });
-    // WhatsApp: recharge rejected -> customer failure message
+    // Customer notifications: recharge rejected (WhatsApp + push)
     wa.notifyRechargeRejected(db, r.rows[0]).catch(() => {});
+    if (r.rows[0].type === 'recharge') {
+      push.notifyUser(db, r.rows[0].user_id, '❌ রিচার্জ সম্পন্ন হয়নি',
+        'দুঃখিত — আপনার ৳' + r.rows[0].amount + ' রিচার্জের অনুরোধটি সম্পন্ন করা যায়নি।', '/wallet.html').catch(() => {});
+    }
     res.json({ ok: true });
   } catch (e) {
     safeLog('[admin] reject error:', e.message);

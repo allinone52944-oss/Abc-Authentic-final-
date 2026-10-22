@@ -4,6 +4,7 @@
 jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
 jest.mock('../../utils/push', () => ({
   notifyAdmins: jest.fn().mockResolvedValue({ ok: true }),
+  notifyUser: jest.fn().mockResolvedValue({ ok: true }),
 }));
 
 const express = require('express');
@@ -22,7 +23,7 @@ function app() {
 const token = () => auth.signAccess({ id: 'u1', role: 'user' });
 const withUser = (req) => req.set('Authorization', 'Bearer ' + token());
 
-beforeEach(() => { db.__reset(); push.notifyAdmins.mockClear(); });
+beforeEach(() => { db.__reset(); push.notifyAdmins.mockClear(); push.notifyUser.mockClear(); });
 
 // Charging now goes through lib/serviceCredits.payForService inside a
 // transaction: it needs the service id row and the locked user balance
@@ -217,6 +218,7 @@ describe('POST/GET/DELETE /api/bdris-apply/applications (আবেদনের �
     expect(ins[1][1]).toMatch(/^FAIL-[0-9A-F]{8}$/);
     expect(ins[1][3]).toBe('সার্ভার ব্যস্ত');
     expect(push.notifyAdmins).toHaveBeenCalledTimes(1);
+    expect(push.notifyUser).toHaveBeenCalledTimes(1);
   });
 
   test('failure report requires auth → 401', async () => {

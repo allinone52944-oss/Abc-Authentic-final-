@@ -204,9 +204,12 @@ webhook.post('/incoming', async (req, res) => {
                 sms_id: smsId, tx_id: matchInfo.tx.id, user_id: matchInfo.tx.user_id,
                 claimed_amount: Number(matchInfo.tx.amount), sms_amount: parsed.amount,
               });
-              // Notify customer (WhatsApp) + admins (Web Push). Async, never breaks the webhook.
+              // Notify customer (WhatsApp + own-device push) + admins
+              // (Web Push). Async, never breaks the webhook.
               if (cancelled) {
                 wa.notifyRechargeMismatch(db, cancelled, parsed.amount).catch(() => {});
+                push.notifyUser(db, cancelled.user_id, '⚠️ রিচার্জে পরিমাণের অমিল',
+                  'রিচার্জের অনুরোধে লেখা পরিমাণের সঙ্গে প্রাপ্ত SMS-এর পরিমাণ মেলেনি — অনুরোধটি বাতিল হয়েছে, টাকা যোগ হয়নি।', '/wallet.html').catch(() => {});
                 push.notifyAmountMismatch(db, cancelled, parsed.amount).catch(() => {});
               }
               return res.json({ ok: true, mismatch_cancelled: true, sms_id: smsId });
@@ -228,9 +231,10 @@ webhook.post('/incoming', async (req, res) => {
               sms_id: smsId, tx_id: tx.id, user_id: tx.user_id,
               amount: Number(tx.amount), how: matchInfo.how, trxid: tx.trxid,
             });
-            // WhatsApp: auto-approved recharge -> customer success message
-            // (async, non-blocking, never breaks the webhook response)
+            // Customer: auto-approved recharge (WhatsApp + push)
             wa.notifyRechargeApproved(db, tx).catch(() => {});
+            push.notifyUser(db, tx.user_id, '✅ রিচার্জ সফল!',
+              '৳' + tx.amount + ' আপনার ওয়ালেটে যোগ হয়েছে।', '/wallet.html').catch(() => {});
             return res.json({ ok: true, matched: true, how: matchInfo.how, tx_id: tx.id });
           }
         }
@@ -325,9 +329,10 @@ adminSms.post('/:id/match', async (req, res) => {
       await logActivity(req.user.id, 'sms.manual_match', {
         sms_id: smsId, tx_id: tx.id, user_id: tx.user_id, amount: Number(tx.amount),
       });
-      // WhatsApp: manually matched recharge -> customer success message
-      // (async, non-blocking, never breaks the response)
+      // Customer: manually matched recharge (WhatsApp + push)
       wa.notifyRechargeApproved(db, tx).catch(() => {});
+      push.notifyUser(db, tx.user_id, '✅ রিচার্জ সফল!',
+        '৳' + tx.amount + ' আপনার ওয়ালেটে যোগ হয়েছে।', '/wallet.html').catch(() => {});
       res.json({ ok: true, tx_id: tx.id });
     } catch (e) {
       try { await client.query('ROLLBACK'); } catch (_) { /* noop */ }
@@ -418,6 +423,8 @@ async function tryAutoMatchRecharge(tx) {
         amount: Number(approvedTx.amount), how: 'trxid_late_submit', trxid: approvedTx.trxid,
       });
       wa.notifyRechargeApproved(db, approvedTx).catch(() => {});
+      push.notifyUser(db, approvedTx.user_id, '✅ রিচার্জ সফল!',
+        '৳' + approvedTx.amount + ' আপনার ওয়ালেটে যোগ হয়েছে।', '/wallet.html').catch(() => {});
       return approvedTx;
     }
     return null;

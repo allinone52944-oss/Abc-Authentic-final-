@@ -241,6 +241,8 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
           orderId = ins.rows[0].id;
           wa.notifyServiceFailed(db, req.user.id, 'QR + ছবি যাচাই', reasonBn,
             'নতুন QR কোড দিয়ে আবার চেষ্টা করুন। সহায়তা লাগলে আমাদের সাপোর্টে যোগাযোগ করুন।').catch(() => {});
+          push.notifyUser(db, req.user.id, '❌ QR যাচাই ব্যর্থ',
+            'আপনার QR + ছবি যাচাই সফল হয়নি — কোনো টাকা কাটা হয়নি। ব্যর্থতার রসিদটি ইতিহাসে পাবেন।', '/history.html').catch(() => {});
           push.notifyAdmins(db, '❌ QR যাচাই ব্যর্থ',
             'একটি QR + ছবি যাচাই সফল হয়নি — কোনো চার্জ কাটা হয়নি।', '/admin.html').catch(() => {});
           try {
@@ -321,6 +323,8 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
       if (ins && ins.rows.length) {
         orderId = ins.rows[0].id;
         wa.notifyServiceCompleted(db, req.user.id, 'QR + ছবি যাচাই').catch(() => {});
+        push.notifyUser(db, req.user.id, '✅ QR যাচাই সফল',
+          'আপনার QR + ছবি যাচাই সফল হয়েছে — রসিদটি ইতিহাসে পাবেন।', '/history.html').catch(() => {});
         push.notifyAdmins(db, '✅ QR যাচাই সফল',
           `একটি QR + ছবি যাচাই সফলভাবে সম্পন্ন হয়েছে — চার্জ ৳${price}।`, '/admin.html').catch(() => {});
       } else {

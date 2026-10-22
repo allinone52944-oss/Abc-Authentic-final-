@@ -15,6 +15,7 @@ jest.mock('../../utils/whatsapp', () => ({
 }));
 jest.mock('../../utils/push', () => ({
   notifyAdmins: jest.fn().mockResolvedValue({ ok: true }),
+  notifyUser: jest.fn().mockResolvedValue({ ok: true }),
 }));
 
 const express = require('express');
@@ -66,6 +67,7 @@ beforeEach(() => {
   wa.notifyServiceCompleted.mockClear();
   wa.notifyServiceFailed.mockClear();
   push.notifyAdmins.mockClear();
+  push.notifyUser.mockClear();
   delete process.env.QR_GATEWAY_API_KEY;
   if (qrRouter.__resetKeyCache) qrRouter.__resetKeyCache();
 });
@@ -223,6 +225,7 @@ describe('POST /api/qr-verify/verify — gateway outcomes', () => {
     // customer WhatsApp + admin push both fired exactly once
     expect(wa.notifyServiceFailed).toHaveBeenCalledTimes(1);
     expect(push.notifyAdmins).toHaveBeenCalledTimes(1);
+    expect(push.notifyUser).toHaveBeenCalledTimes(1);
     expect(wa.notifyServiceCompleted).not.toHaveBeenCalled();
   });
 
@@ -274,6 +277,7 @@ describe('POST /api/qr-verify/verify — gateway outcomes', () => {
     // customer WhatsApp + admin push both fired exactly once
     expect(wa.notifyServiceCompleted).toHaveBeenCalledTimes(1);
     expect(push.notifyAdmins).toHaveBeenCalledTimes(1);
+    expect(push.notifyUser).toHaveBeenCalledTimes(1);
     expect(wa.notifyServiceFailed).not.toHaveBeenCalled();
   });
 });

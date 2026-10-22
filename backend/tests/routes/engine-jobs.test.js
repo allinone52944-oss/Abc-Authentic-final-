@@ -10,6 +10,7 @@ jest.mock('../../utils/whatsapp', () => ({
 }));
 jest.mock('../../utils/push', () => ({
   notifyAdmins: jest.fn().mockResolvedValue({ ok: true }),
+  notifyUser: jest.fn().mockResolvedValue({ ok: true }),
 }));
 
 const express = require('express');
@@ -43,6 +44,7 @@ beforeEach(() => {
   wa.notifyServiceCompleted.mockClear();
   wa.notifyServiceFailed.mockClear();
   push.notifyAdmins.mockClear();
+  push.notifyUser.mockClear();
 });
 
 function dirCount() {
@@ -142,6 +144,7 @@ describe('POST /api/engine-jobs/failure — record a failed verification', () =>
     dropFile(insertParams[4]);
     expect(wa.notifyServiceFailed).toHaveBeenCalledTimes(1);
     expect(push.notifyAdmins).toHaveBeenCalledTimes(1);
+    expect(push.notifyUser).toHaveBeenCalledTimes(1);
     expect(wa.notifyServiceCompleted).not.toHaveBeenCalled();
   });
 

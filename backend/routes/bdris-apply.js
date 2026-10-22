@@ -161,8 +161,11 @@ router.post('/applications', requireAuth, async (req, res) => {
       [req.user.id, ackNo, name]
     );
     if (r.rows.length) {
-      // First record of this submission → WhatsApp confirmation.
+      // First record of this submission → customer confirmation
+      // (WhatsApp + own-device push).
       wa.notifyServiceCompleted(db, req.user.id, 'জন্ম নিবন্ধন আবেদন').catch(() => {});
+      push.notifyUser(db, req.user.id, '✅ আবেদন জমা হয়েছে',
+        'আপনার জন্ম নিবন্ধন আবেদনটি সফলভাবে জমা হয়েছে। আবেদন নম্বর: ' + ackNo, '/bdris-apply.html').catch(() => {});
       return res.status(201).json({ ok: true, application: r.rows[0] });
     }
     const cur = await db.query(
@@ -201,6 +204,8 @@ router.post('/applications/failure', requireAuth, async (req, res) => {
     push.notifyAdmins(db, '❌ জন্ম নিবন্ধন আবেদন ব্যর্থ',
       'চূড়ান্ত জমার সময় একটি আবেদন ব্যর্থ হয়েছে' + (name ? ' (' + name + ')' : '') + ': ' + reason,
       '/admin.html').catch(() => {});
+    push.notifyUser(db, req.user.id, '❌ আবেদন জমা ব্যর্থ',
+      'দুঃখিত — আপনার জন্ম নিবন্ধন আবেদনটি চূড়ান্ত জমার সময় ব্যর্থ হয়েছে। খসড়া থেকে আবার চেষ্টা করুন; সহায়তা লাগলে সাপোর্টে যোগাযোগ করুন।', '/bdris-apply.html').catch(() => {});
     return res.status(201).json({ ok: true, id: r.rows[0] && r.rows[0].id });
   } catch (e) {
     safeLog('[bdris-apply] application failure record error:', e.message);

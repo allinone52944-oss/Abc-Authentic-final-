@@ -585,6 +585,8 @@ router.post('/wallet/recharge', async (req, res) => {
       // (push), throttled per user+trxid. The attempt itself is blocked.
       if (fraudAlertOnce('dup:' + req.user.id + ':' + String(trxid).trim().toUpperCase())) {
         wa.notifyDuplicateTrxid(db, req.user.id, { trxid: String(trxid).trim(), amount: amt }).catch(() => {});
+        push.notifyUser(db, req.user.id, '⚠️ সতর্কবার্তা',
+          'এই TrxID দিয়ে আগেই একটি রিচার্জ সম্পন্ন হয়ে গেছে — একই TrxID দিয়ে দ্বিতীয়বার টাকা যোগ করা যায়নি।', '/wallet.html').catch(() => {});
         push.notifyDuplicateTrxid(db, { trxid: String(trxid).trim(), amount: amt }, req.user.id).catch(() => {});
       }
       return res.status(409).json({ error: 'DUP_TRXID' });
@@ -606,6 +608,8 @@ router.post('/wallet/recharge', async (req, res) => {
         if (fraudAlertOnce('mm:' + req.user.id + ':' + String(trxid).trim().toUpperCase())) {
           const attempt = { user_id: req.user.id, amount: amt, trxid: String(trxid).trim() };
           wa.notifyRechargeMismatch(db, attempt, smsAmt).catch(() => {});
+          push.notifyUser(db, req.user.id, '⚠️ রিচার্জে পরিমাণের অমিল',
+            'আপনার লেখা পরিমাণের সঙ্গে প্রাপ্ত SMS-এর পরিমাণ মেলেনি — টাকা যোগ হয়নি। সঠিক পরিমাণ লিখে আবার চেষ্টা করুন।', '/wallet.html').catch(() => {});
           push.notifyAmountMismatch(db, attempt, smsAmt).catch(() => {});
         }
         return res.status(409).json({ error: 'TRXID_AMOUNT_MISMATCH', sms_amount: smsAmt });

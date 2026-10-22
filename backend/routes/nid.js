@@ -131,6 +131,8 @@ router.post('/build', requireAuth, async (req, res) => {
         wa.notifyServiceFailed(db, req.user.id, 'এনআইডি কার্ড',
           'কার্ড তৈরি করা যায়নি',
           'কিছুক্ষণ পর আবার চেষ্টা করুন। সহায়তা লাগলে আমাদের সাপোর্টে যোগাযোগ করুন।').catch(() => {});
+        push.notifyUser(db, req.user.id, '❌ NID কার্ড তৈরি ব্যর্থ',
+          'আপনার NID কার্ডটি তৈরি করা যায়নি — কোনো টাকা কাটা হয়নি।', '/nid-replica.html').catch(() => {});
         push.notifyAdmins(db, '❌ NID কার্ড তৈরি ব্যর্থ',
           'একটি NID কার্ড তৈরি করা যায়নি (' + String(r.error || 'BUILD_ERROR') + ') — কোনো চার্জ কাটা হয়নি।', '/admin.html').catch(() => {});
       }
@@ -183,6 +185,8 @@ router.post('/build', requireAuth, async (req, res) => {
       // confirmation. Re-downloads of the same job stay silent.
       if (ins && ins.rows.length) {
         wa.notifyServiceCompleted(db, req.user.id, 'এনআইডি কার্ড').catch(() => {});
+        push.notifyUser(db, req.user.id, '✅ NID কার্ড তৈরি হয়েছে',
+          'আপনার NID কার্ডটি তৈরি হয়েছে — ইতিহাস থেকে যেকোনো সময় ডাউনলোড করতে পারবেন।', '/history.html').catch(() => {});
         push.notifyAdmins(db, '✅ NID কার্ড তৈরি হয়েছে',
           `একটি NID কার্ড সফলভাবে তৈরি হয়েছে — চার্জ ৳${price}।`, '/admin.html').catch(() => {});
       }
