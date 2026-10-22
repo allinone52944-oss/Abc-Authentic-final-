@@ -1,11 +1,19 @@
 // Route tests for backend/routes/cashback.js (daily cashback).
 jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
+jest.mock('../../utils/whatsapp', () => ({
+  notifyCashbackReceived: jest.fn().mockResolvedValue({ ok: true }),
+}));
+jest.mock('../../utils/push', () => ({
+  notifyUser: jest.fn().mockResolvedValue({ ok: true }),
+}));
 
 const express = require('express');
 const request = require('supertest');
 const db = require('../../db');
 const auth = require('../../auth');
 const cashbackRouter = require('../../routes/cashback');
+const wa = require('../../utils/whatsapp');
+const push = require('../../utils/push');
 
 function app() {
   const a = express();
@@ -26,7 +34,11 @@ function baseHandlers({ cashback = CASHBACK_ON, total = '500', redeemed = null }
   ];
 }
 
-beforeEach(() => { db.__reset(); });
+beforeEach(() => {
+  db.__reset();
+  wa.notifyCashbackReceived.mockClear();
+  push.notifyUser.mockClear();
+});
 
 describe('GET /api/cashback/today', () => {
   test('disabled config → amount 0, can_redeem false', async () => {
@@ -93,6 +105,10 @@ describe('POST /api/cashback/redeem', () => {
     const ins = db.__client.query.mock.calls.find((c) => /INSERT INTO daily_cashback_redemptions/.test(c[0]));
     expect(ins).toBeDefined();
     expect(JSON.parse(ins[1][6])).toEqual(['tx1']); // covered recharge ids frozen (migration 031)
+    // the customer hears about the win: WhatsApp + own-device push
+    expect(wa.notifyCashbackReceived).toHaveBeenCalledTimes(1);
+    expect(wa.notifyCashbackReceived.mock.calls[0][2]).toMatchObject({ amount: 50, kind: 'claim' });
+    expect(push.notifyUser).toHaveBeenCalledTimes(1);
   });
 
   test('claim covers ALL unclaimed recharges combined, not per-recharge', async () => {
@@ -111,6 +127,8 @@ describe('POST /api/cashback/redeem', () => {
     db.__routeQuery(redeemHandlers({ exist: { rows: [{ id: 'd1' }] } }));
     const r = await withUser(request(app()).post('/api/cashback/redeem')).expect(409);
     expect(r.body.error).toBe('ALREADY_REDEEMED_TODAY');
+    expect(wa.notifyCashbackReceived).not.toHaveBeenCalled();
+    expect(push.notifyUser).not.toHaveBeenCalled();
   });
 
   test('nothing to redeem → 400 NOTHING_TO_REDEEM', async () => {

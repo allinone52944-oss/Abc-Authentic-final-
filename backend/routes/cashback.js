@@ -19,6 +19,17 @@ const db = require('../db');
 const { requireAuth } = require('../auth');
 const { safeLog } = require('../security');
 const serviceCredits = require('../lib/serviceCredits');
+const wa = require('../utils/whatsapp');
+const push = require('../utils/push');
+
+// Tell the customer a cashback landed (premium flow, 2026-10-22):
+// WhatsApp + a web push to their own devices. Admins are NOT
+// pushed — claims are routine, customer-initiated wins.
+function notifyCashback(userId, { amount, code, serviceLocked, kind }) {
+  wa.notifyCashbackReceived(db, userId, { amount, code, serviceLocked, kind }).catch(() => {});
+  push.notifyUser(db, userId, '🎉 ক্যাশব্যাক পেয়েছেন!',
+    '৳' + amount + ' ক্যাশব্যাক — কোড: ' + code, '/wallet.html').catch(() => {});
+}
 
 const router = express.Router();
 router.use(requireAuth);
@@ -171,6 +182,10 @@ router.post('/redeem', async (req, res) => {
     });
 
     const bal = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
+    notifyCashback(req.user.id, {
+      amount: Number(out.amount), code: out.coupon_code,
+      serviceLocked: !!out.serviceLocked, kind: 'claim',
+    });
     res.json({
       ok: true,
       coupon_code: out.coupon_code,
@@ -281,6 +296,10 @@ router.post('/generate', async (req, res) => {
       return ins.rows[0];
     });
 
+    notifyCashback(req.user.id, {
+      amount: Number(out.amount), code: out.code,
+      serviceLocked: !!out.service_id, kind: 'coupon',
+    });
     res.status(201).json({
       ok: true,
       coupon: {

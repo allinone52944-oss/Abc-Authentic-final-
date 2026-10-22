@@ -292,6 +292,7 @@ const DEFAULT_META_TEMPLATES = {
   order_cancelled: 'abc_order_cancelled',
   service_completed: 'abc_service_completed',
   service_failed: 'abc_service_failed',
+  cashback_received: 'abc_cashback_received',
   trxid_warning: 'abc_trxid_notice',
 };
 
@@ -610,6 +611,43 @@ async function notifyDuplicateTrxid(db, userId, attempt) {
   }
 }
 
+// Cashback received (daily claim or per-recharge coupon). One
+// wording for both money shapes: plain wallet credit, or a
+// service-locked credit when the admin scoped cashback to one
+// service. Template-first ('abc_cashback_received'), free-text
+// fallback inside the 24h window.
+async function notifyCashbackReceived(db, userId, { amount, code, serviceLocked, kind } = {}) {
+  try {
+    if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
+    if (!(await isNotifyEnabled(db, 'cashback_received'))) return { ok: false, error: 'NOTIFY_OFF' };
+    const u = await db.query(
+      'SELECT name, whatsapp, religion FROM users WHERE id = $1', [userId]
+    );
+    const user = u.rows[0];
+    if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
+    const amt = String(Number(amount) || 0);
+    const coupon = String(code || '');
+    const where = kind === 'coupon'
+      ? 'কুপনটি ব্যবহারের সময় ছাড় পাবেন'
+      : serviceLocked
+        ? 'টাকাটি নির্দিষ্ট সেবার ক্রেডিট হিসেবে যোগ হয়েছে'
+        : 'টাকাটি আপনার ওয়ালেটে যোগ হয়েছে';
+    const text =
+      `${greetingFor(user)}\n` +
+      `অভিনন্দন! 🎉 আপনার ক্যাশব্যাক ৳${amt} পেয়েছেন ✅\n` +
+      `${where}।\n` +
+      `কুপন কোড: ${coupon}\n` +
+      'Abc Authentic-এর সঙ্গে থাকার জন্য আন্তরিক ধন্যবাদ।';
+    const sent = await dispatch(db, user, 'cashback_received',
+      [greetingFor(user), amt, coupon], text);
+    if (!sent.ok) safeLog('[whatsapp] cashback notify not sent:', sent.error);
+    return sent;
+  } catch (e) {
+    safeLog('[whatsapp] notifyCashbackReceived failed:', e.message);
+    return { ok: false, error: e.message };
+  }
+}
+
 module.exports = {
   isConfigured,
   getConfig,
@@ -630,6 +668,7 @@ module.exports = {
   notifyRechargeRejected,
   notifyServiceCompleted,
   notifyServiceFailed,
+  notifyCashbackReceived,
   notifyDuplicateTrxid,
 };
 // M-22 (2026-10-15): removed never-used exports (canSend, graphPost,
