@@ -647,7 +647,12 @@ async function doLogin() {
         localStorage.setItem('greeting_voice_rotation', String((vi + 1) % 3));
       }
     } catch (e) {}
-    const next = new URLSearchParams(location.search).get('next') || '/dashboard.html';
+    // An explicit ?next= always wins. Otherwise admins land on the admin
+    // panel (VoiceAlert + push subscription live there, so an admin sitting
+    // on the user dashboard got no voice alerts); everyone else lands on
+    // the user dashboard as before.
+    const explicitNext = new URLSearchParams(location.search).get('next');
+    const next = explicitNext || (d.user && d.user.role === 'admin' ? '/admin.html' : '/dashboard.html');
     location.href = next;
   } catch (e) {
     err.textContent = 'নেটওয়ার্ক সমস্যা';
