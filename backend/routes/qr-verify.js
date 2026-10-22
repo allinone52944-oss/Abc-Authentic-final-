@@ -25,6 +25,7 @@ const { safeLog, uploadMiddleware, safeJsonArray } = require('../security');
 const db = require('../db');
 const serviceCredits = require('../lib/serviceCredits');
 const wa = require('../utils/whatsapp');
+const push = require('../utils/push');
 const adapter = require('../../engines/qr-photo-verify/adapter');
 
 const router = express.Router();
@@ -101,8 +102,23 @@ router.get('/price', requireAuth, async (req, res) => {
   }
 });
 
-// Receipt PDF (Bengali, pdfkit + bundled Noto Sans Bengali).
-function buildReceiptPdf({ subjectRef, price, ref, when }) {
+// Bengali rendering of the gateway's failure message — the raw
+// gateway text is English/system-flavoured and never shown to
+// the customer as-is.
+function failureReasonBn(gatewayMessage) {
+  const m = String(gatewayMessage || '');
+  if (/record not found/i.test(m)) return 'QR-এর সঙ্গে মিলিয়ে কোনো রেকর্ড পাওয়া যায়নি';
+  if (/verification request failed/i.test(m)) return 'এই QRটি আগেই ব্যবহৃত হয়েছে বা এর মেয়াদ শেষ — নতুন QR লাগবে';
+  return 'ছবির ব্যক্তির সঙ্গে QR-এর তথ্য মেলেনি';
+}
+
+// Premium receipt PDF (Bengali, pdfkit + bundled Noto Sans
+// Bengali) — one card design for both outcomes: a drawn seal
+// (green tick / red cross, vector-drawn so no glyph is missing
+// from the Bengali font), a details table and, on failure, a
+// bold "no charge taken" line. Approved sample design,
+// 2026-10-22.
+function buildReceiptPdf({ outcome, subjectRef, price, reason, ref, when }) {
   return new Promise((resolve, reject) => {
     try {
       const PDFDocument = require('pdfkit');
@@ -116,30 +132,98 @@ function buildReceiptPdf({ subjectRef, price, ref, when }) {
       doc.registerFont('bn', fontReg);
       doc.registerFont('bn-bold', fontBold);
 
-      doc.font('bn-bold').fontSize(20).fillColor('#6f4e2e').text('Abc Authentic');
-      doc.moveDown(0.3);
-      doc.font('bn-bold').fontSize(15).fillColor('#111827').text('QR + ছবি যাচাই — রসিদ');
-      doc.moveDown(0.6);
-      doc.strokeColor('#d6c9ae').lineWidth(1)
-        .moveTo(48, doc.y).lineTo(547, doc.y).stroke();
-      doc.moveDown(0.8);
+      const ok = outcome !== 'failed';
+      const accent = ok ? '#16a34a' : '#dc2626';
+      const X = 48; const W = 499;
 
-      doc.font('bn').fontSize(12).fillColor('#111827');
-      doc.text('ফলাফল: ✅ যাচাই সফল — ছবির ব্যক্তির সঙ্গে QR-এর মালিক মিলেছে');
-      doc.moveDown(0.4);
-      doc.text('বিষয় (NID/আইডি): ' + (subjectRef || '—'));
-      doc.moveDown(0.4);
-      doc.text('তারিখ ও সময়: ' + when);
-      doc.moveDown(0.4);
-      doc.text('সেবা চার্জ: ৳' + price);
-      doc.moveDown(0.4);
-      doc.text('রেফারেন্স: ' + ref);
-      doc.moveDown(1.2);
-      doc.fontSize(10).fillColor('#6b7280')
-        .text('এই রসিদটি Abc Authentic থেকে স্বয়ংক্রিয়ভাবে তৈরি। যাচাইটি NID Secure Gateway দিয়ে সম্পন্ন হয়েছে। প্রতিটি QR শুধু একবারই ব্যবহারযোগ্য।');
+      // The bundled Noto Sans Bengali has NO Latin glyphs — any
+      // Latin run drawn in it prints as boxes (the old receipt's
+      // brand line + reference suffered exactly this). Latin-only
+      // values therefore go in pdfkit's built-in Helvetica, and
+      // mixed Bengali strings spell QR out in Bengali script.
+      const bnTxt = (s) => String(s == null ? '' : s).replace(/QR/g, 'কিউআর');
+      const valFont = (v, bold) => (/[A-Za-z]/.test(String(v))
+        ? (bold ? 'Helvetica-Bold' : 'Helvetica')
+        : (bold ? 'bn-bold' : 'bn'));
+      const whenBn = bnTxt(when).replace('AM', 'পূর্বাহ্ন').replace('PM', 'অপরাহ্ন');
+
+      // Header (brand name is Latin → Helvetica)
+      doc.font('Helvetica-Bold').fontSize(19).fillColor('#6f4e2e').text('Abc Authentic', X, 46, { width: 300 });
+      doc.font('bn').fontSize(10).fillColor('#6b7280')
+        .text('ডিজিটাল রসিদ', X, 52, { width: W, align: 'right' });
+      doc.strokeColor('#d6c9ae').lineWidth(1.4).moveTo(X, 82).lineTo(X + W, 82).stroke();
+
+      // Card
+      doc.roundedRect(X, 98, W, 272, 14).fillAndStroke('#fffdf8', '#d6c9ae');
+
+      // Seal (vector-drawn tick / cross inside a filled circle)
+      doc.circle(86, 148, 25).fill(accent);
+      doc.strokeColor('#ffffff').lineWidth(4.5).lineCap('round');
+      if (ok) {
+        doc.moveTo(75, 148).lineTo(83, 156).lineTo(98, 139).stroke();
+      } else {
+        doc.moveTo(77, 139).lineTo(95, 157).stroke();
+        doc.moveTo(95, 139).lineTo(77, 157).stroke();
+      }
+
+      // Title + subtitle
+      doc.font('bn-bold').fontSize(16.5).fillColor(accent)
+        .text(ok ? 'যাচাই সফল হয়েছে' : 'যাচাই সফল হয়নি', 126, 128, { width: 400 });
+      doc.font('bn').fontSize(11.5).fillColor('#374151')
+        .text(bnTxt(ok
+          ? 'ছবির ব্যক্তির সঙ্গে QR-এর মালিকের মিল পাওয়া গেছে।'
+          : ('কারণ: ' + (reason || 'ছবির ব্যক্তির সঙ্গে QR-এর তথ্য মেলেনি'))),
+          126, 154, { width: 398 });
+
+      // Divider inside the card
+      doc.strokeColor('#eadfc8').lineWidth(1).moveTo(72, 198).lineTo(523, 198).stroke();
+
+      // Details rows
+      const rows = [
+        ['বিষয় (আইডি)', subjectRef || '—', false],
+        ['তারিখ ও সময়', whenBn, false],
+        ['সেবা চার্জ', ok ? ('৳' + price) : '৳০ — কোনো টাকা কাটা হয়নি', true],
+        ['রেফারেন্স', ref, false],
+      ];
+      rows.forEach(([label, value, bold], i) => {
+        const y = 216 + i * 34;
+        doc.font('bn').fontSize(11).fillColor('#6b7280').text(label, 72, y, { width: 138 });
+        doc.font(valFont(value, bold)).fontSize(11.5)
+          .fillColor(bold ? accent : '#111827')
+          .text(String(value), 218, y, { width: 305 });
+      });
+
+      // Footer (all-Bengali wording — Latin would print as boxes)
+      doc.font('bn').fontSize(9.5).fillColor('#6b7280')
+        .text(bnTxt('এই রসিদটি স্বয়ংক্রিয়ভাবে তৈরি। যাচাইটি জাতীয় পরিচয়পত্র তথ্যভান্ডারের সঙ্গে মিলিয়ে সম্পন্ন হয়েছে। প্রতিটি QR শুধু একবারই ব্যবহারযোগ্য।'),
+          X, 392, { width: W });
+      if (!ok) {
+        doc.text(bnTxt('ব্যর্থ যাচাইয়ে কোনো চার্জ কাটা হয়নি — নতুন QR কোড সংগ্রহ করে আবার চেষ্টা করুন।'),
+          X, 424, { width: W });
+      }
       doc.end();
     } catch (e) { reject(e); }
   });
+}
+
+// Store a receipt PDF as the order's delivery document, so it
+// appears in the customer's History like every other delivery.
+async function storeReceipt(orderId, fn, pdfArgs) {
+  const pdf = await buildReceiptPdf(pdfArgs);
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  fs.writeFileSync(path.join(UPLOAD_DIR, fn), pdf);
+  const ord = await db.query('SELECT documents FROM orders WHERE id = $1', [orderId]);
+  const docs = safeJsonArray(ord.rows[0] && ord.rows[0].documents);
+  if (!docs.some((d) => d && d.filename === fn)) {
+    docs.push({
+      type: 'delivery', filename: fn,
+      originalname: pdfArgs.outcome === 'failed'
+        ? 'qr-verification-failed-receipt.pdf' : 'qr-verification-receipt.pdf',
+      uploaded_at: new Date().toISOString(), uploaded_by: 'admin',
+    });
+    await db.query('UPDATE orders SET documents = $1 WHERE id = $2', [JSON.stringify(docs), orderId]);
+  }
+  return '/api/orders/' + orderId + '/documents/' + fn;
 }
 
 router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) => {
@@ -157,20 +241,32 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
     let idem = String((req.body && req.body.idempotency_key) || '').trim().slice(0, 80);
     if (!idem) idem = 'qr-' + crypto.randomUUID();
 
-    // Retry of an already-completed verification → return the
+    // Retry of an already-recorded verification → return the
     // stored outcome; never call (or pay) the gateway twice.
+    // A FAILED attempt is recorded too (premium flow, 2026-10-22)
+    // — its replay returns the stored failure + receipt.
     const prev = await db.query(
-      'SELECT id, price, data, documents FROM orders WHERE user_id = $1 AND idempotency_key = $2',
+      'SELECT id, price, status, data, documents FROM orders WHERE user_id = $1 AND idempotency_key = $2',
       [req.user.id, idem]
     );
     if (prev.rows.length) {
       const docs = safeJsonArray(prev.rows[0].documents);
       const receipt = docs.find((d) => d && d.type === 'delivery');
+      const receiptUrl = receipt ? '/api/orders/' + prev.rows[0].id + '/documents/' + receipt.filename : null;
+      if (prev.rows[0].status === 'failed') {
+        return res.status(422).json({
+          error: 'NOT_VERIFIED', verified: false, duplicate: true,
+          message: 'যাচাই সফল হয়নি — কোনো টাকা কাটা হয়নি।',
+          charged: 0,
+          orderId: prev.rows[0].id,
+          receipt: receiptUrl,
+        });
+      }
       return res.json({
         ok: true, verified: true, duplicate: true,
         charged: Number(prev.rows[0].price) || 0,
         orderId: prev.rows[0].id,
-        receipt: receipt ? '/api/orders/' + prev.rows[0].id + '/documents/' + receipt.filename : null,
+        receipt: receiptUrl,
       });
     }
 
@@ -215,11 +311,57 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
       });
     }
     if (!result.verified) {
-      // Gateway itself charged 0 for this — the customer pays 0 too.
+      // Gateway itself charged 0 for this — the customer pays 0
+      // too. Premium flow (owner-approved sample, 2026-10-22):
+      // the failure is still a recorded outcome — a 'failed'
+      // order carrying a failure receipt (→ History), a
+      // WhatsApp notice to the customer and a push to the
+      // admins. Notifications fire only on the FIRST insert.
+      const reasonBn = failureReasonBn(result.message);
+      const idemSlug = idem.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 48);
+      let orderId = null;
+      let receiptUrl = null;
+      if (serviceId) {
+        const ins = await db.query(
+          `INSERT INTO orders (user_id, service_id, status, data, price, idempotency_key)
+           VALUES ($1, $2, 'failed', $3, 0, $4)
+           ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+           RETURNING id`,
+          [req.user.id, serviceId,
+           JSON.stringify({ subject_ref: subjectRef || null, verified: false, reason: String(result.message || '').slice(0, 200), gateway_charged: 0 }),
+           idem]
+        ).catch((e) => { safeLog('[qr-verify] failed-order insert error:', e.message); return null; });
+        if (ins && ins.rows.length) {
+          orderId = ins.rows[0].id;
+          wa.notifyServiceFailed(db, req.user.id, 'QR + ছবি যাচাই', reasonBn).catch(() => {});
+          push.notifyAdmins(db, '❌ QR যাচাই ব্যর্থ',
+            'একটি QR + ছবি যাচাই সফল হয়নি — কোনো চার্জ কাটা হয়নি।', '/admin.html').catch(() => {});
+          try {
+            receiptUrl = await storeReceipt(orderId, 'delivery-qr-failed-' + idemSlug + '.pdf', {
+              outcome: 'failed', subjectRef, price: 0, reason: reasonBn, ref: idem,
+              when: new Date().toLocaleString('bn-BD', { timeZone: 'Asia/Dhaka' }),
+            });
+          } catch (e) { safeLog('[qr-verify] failure receipt store error:', e.message); }
+        } else {
+          const again = await db.query(
+            'SELECT id, documents FROM orders WHERE user_id = $1 AND idempotency_key = $2',
+            [req.user.id, idem]
+          ).catch(() => null);
+          if (again && again.rows.length) {
+            orderId = again.rows[0].id;
+            const docs = safeJsonArray(again.rows[0].documents);
+            const receipt = docs.find((d) => d && d.type === 'delivery');
+            if (receipt) receiptUrl = '/api/orders/' + orderId + '/documents/' + receipt.filename;
+          }
+        }
+      }
       return res.status(422).json({
         error: 'NOT_VERIFIED',
-        message: 'যাচাই সফল হয়নি: ' + result.message + ' — কোনো টাকা কাটা হয়নি।',
+        verified: false,
+        message: 'যাচাই সফল হয়নি: ' + reasonBn + ' — কোনো টাকা কাটা হয়নি।',
+        charged: 0,
         gateway_charged: result.charged,
+        orderId, receipt: receiptUrl,
       });
     }
 
@@ -266,6 +408,8 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
       if (ins && ins.rows.length) {
         orderId = ins.rows[0].id;
         wa.notifyServiceCompleted(db, req.user.id, 'QR + ছবি যাচাই').catch(() => {});
+        push.notifyAdmins(db, '✅ QR যাচাই সফল',
+          `একটি QR + ছবি যাচাই সফলভাবে সম্পন্ন হয়েছে — চার্জ ৳${price}।`, '/admin.html').catch(() => {});
       } else {
         const again = await db.query(
           'SELECT id FROM orders WHERE user_id = $1 AND idempotency_key = $2',
@@ -275,28 +419,17 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
       }
     }
 
-    // Delivery copy: the receipt PDF lives on the order, so it
-    // appears in the customer's History like every other delivery.
+    // Delivery copy: the premium receipt PDF lives on the order,
+    // so it appears in the customer's History like every other
+    // delivery.
     let receiptUrl = null;
     if (orderId) {
       try {
-        const pdf = await buildReceiptPdf({
-          subjectRef, price, ref: idem,
-          when: new Date().toLocaleString('bn-BD', { timeZone: 'Asia/Dhaka' }),
-        });
-        const fn = 'delivery-qr-' + idem.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 48) + '.pdf';
-        fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-        fs.writeFileSync(path.join(UPLOAD_DIR, fn), pdf);
-        const ord = await db.query('SELECT documents FROM orders WHERE id = $1', [orderId]);
-        const docs = safeJsonArray(ord.rows[0] && ord.rows[0].documents);
-        if (!docs.some((d) => d && d.filename === fn)) {
-          docs.push({
-            type: 'delivery', filename: fn, originalname: 'qr-verification-receipt.pdf',
-            uploaded_at: new Date().toISOString(), uploaded_by: 'admin',
+        receiptUrl = await storeReceipt(orderId,
+          'delivery-qr-' + idem.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 48) + '.pdf', {
+            outcome: 'success', subjectRef, price, ref: idem,
+            when: new Date().toLocaleString('bn-BD', { timeZone: 'Asia/Dhaka' }),
           });
-          await db.query('UPDATE orders SET documents = $1 WHERE id = $2', [JSON.stringify(docs), orderId]);
-        }
-        receiptUrl = '/api/orders/' + orderId + '/documents/' + fn;
       } catch (e) { safeLog('[qr-verify] receipt store error:', e.message); }
     }
 

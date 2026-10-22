@@ -9,6 +9,13 @@ jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
 jest.mock('../../../engines/qr-photo-verify/adapter', () => ({
   verify: jest.fn(),
 }));
+jest.mock('../../utils/whatsapp', () => ({
+  notifyServiceCompleted: jest.fn().mockResolvedValue({ ok: true }),
+  notifyServiceFailed: jest.fn().mockResolvedValue({ ok: true }),
+}));
+jest.mock('../../utils/push', () => ({
+  notifyAdmins: jest.fn().mockResolvedValue({ ok: true }),
+}));
 
 const express = require('express');
 const request = require('supertest');
@@ -18,6 +25,8 @@ const db = require('../../db');
 const auth = require('../../auth');
 const qrRouter = require('../../routes/qr-verify');
 const adapter = require('../../../engines/qr-photo-verify/adapter');
+const wa = require('../../utils/whatsapp');
+const push = require('../../utils/push');
 
 function app() {
   const a = express();
@@ -54,6 +63,9 @@ function postVerify(req, { subject = 'NID-123', idem = 'idem-1', withFiles = tru
 beforeEach(() => {
   db.__reset();
   adapter.verify.mockReset();
+  wa.notifyServiceCompleted.mockClear();
+  wa.notifyServiceFailed.mockClear();
+  push.notifyAdmins.mockClear();
   delete process.env.QR_GATEWAY_API_KEY;
   if (qrRouter.__resetKeyCache) qrRouter.__resetKeyCache();
 });
@@ -179,19 +191,52 @@ describe('POST /api/qr-verify/verify — gateway outcomes', () => {
     expect(ordered).toBe(false);
   });
 
-  test('gateway says no match → 422 NOT_VERIFIED, no charge, no order', async () => {
-    let charged = false; let ordered = false;
+  test('gateway says no match → 422 NOT_VERIFIED, no charge, failed order + failure receipt + notifications', async () => {
+    let charged = false; let insertSql = null; let insertParams = null; let updatedDocs = null;
     db.__routeQuery(baseRoutes([
       ['wallet_apply', () => { charged = true; return { rows: [] }; }],
-      ['INSERT INTO orders', () => { ordered = true; return { rows: [] }; }],
+      ['INSERT INTO orders', (text, params) => { insertSql = text; insertParams = params; return { rows: [{ id: 'oF1' }] }; }],
+      ['SELECT documents FROM orders', { rows: [{ documents: '[]' }] }],
+      ['UPDATE orders SET documents', (text, params) => { updatedDocs = params[0]; return { rows: [] }; }],
     ]));
     adapter.verify.mockResolvedValue({
       ok: true, verified: false, message: 'Record not found', charged: 0, remainingBalance: 440,
     });
-    const r = await postVerify(request(app())).expect(422);
+    const r = await postVerify(request(app()), { idem: 'idem-f1' }).expect(422);
     expect(r.body.error).toBe('NOT_VERIFIED');
+    expect(r.body.charged).toBe(0);
+    expect(r.body.orderId).toBe('oF1');
+    // the customer sees a Bengali reason, never the raw gateway text
+    expect(r.body.message).toContain('কোনো রেকর্ড পাওয়া যায়নি');
     expect(charged).toBe(false);
-    expect(ordered).toBe(false);
+    // a FAILED order is recorded (no charge) with the failure receipt
+    expect(insertSql).toContain("'failed'");
+    expect(insertSql).toMatch(/ON CONFLICT \(user_id, idempotency_key\) WHERE idempotency_key IS NOT NULL DO NOTHING/);
+    expect(JSON.parse(insertParams[2]).verified).toBe(false);
+    expect(r.body.receipt).toContain('/api/orders/oF1/documents/delivery-qr-failed-idem-f1.pdf');
+    const docs = JSON.parse(updatedDocs);
+    expect(docs[0]).toMatchObject({ type: 'delivery', filename: 'delivery-qr-failed-idem-f1.pdf', originalname: 'qr-verification-failed-receipt.pdf' });
+    const fp = path.join(ORDERS_DIR, 'delivery-qr-failed-idem-f1.pdf');
+    expect(fs.existsSync(fp)).toBe(true);
+    expect(fs.readFileSync(fp).subarray(0, 5).toString()).toBe('%PDF-');
+    fs.unlinkSync(fp);
+    // customer WhatsApp + admin push both fired exactly once
+    expect(wa.notifyServiceFailed).toHaveBeenCalledTimes(1);
+    expect(push.notifyAdmins).toHaveBeenCalledTimes(1);
+    expect(wa.notifyServiceCompleted).not.toHaveBeenCalled();
+  });
+
+  test('duplicate idempotency_key of a FAILED attempt → stored 422 + receipt, gateway NOT called again', async () => {
+    db.__routeQuery([
+      ['FROM orders WHERE user_id', {
+        rows: [{ id: 'oF9', price: 0, status: 'failed', data: {}, documents: JSON.stringify([{ type: 'delivery', filename: 'delivery-qr-failed-idem-1.pdf' }]) }],
+      }],
+    ]);
+    const r = await postVerify(request(app())).expect(422);
+    expect(r.body).toMatchObject({ verified: false, duplicate: true, orderId: 'oF9', charged: 0 });
+    expect(r.body.receipt).toContain('delivery-qr-failed-idem-1.pdf');
+    expect(adapter.verify).not.toHaveBeenCalled();
+    expect(wa.notifyServiceFailed).not.toHaveBeenCalled();
   });
 
   test('verified → charge once + order (partial-index SQL) + receipt stored', async () => {
@@ -226,5 +271,9 @@ describe('POST /api/qr-verify/verify — gateway outcomes', () => {
     expect(fs.existsSync(fp)).toBe(true);
     expect(fs.readFileSync(fp).subarray(0, 5).toString()).toBe('%PDF-');
     fs.unlinkSync(fp);
+    // customer WhatsApp + admin push both fired exactly once
+    expect(wa.notifyServiceCompleted).toHaveBeenCalledTimes(1);
+    expect(push.notifyAdmins).toHaveBeenCalledTimes(1);
+    expect(wa.notifyServiceFailed).not.toHaveBeenCalled();
   });
 });
