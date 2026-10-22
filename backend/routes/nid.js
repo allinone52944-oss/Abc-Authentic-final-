@@ -12,6 +12,7 @@ const { safeLog, uploadMiddleware, safeJsonArray } = require('../security');
 const db = require('../db');
 const serviceCredits = require('../lib/serviceCredits');
 const wa = require('../utils/whatsapp');
+const push = require('../utils/push');
 const nidAdapter = require('../../engines/nid-replica/adapter');
 
 const router = express.Router();
@@ -74,7 +75,15 @@ router.post('/extract', requireAuth, pdfOnly, multerError, async (req, res) => {
       return res.status(400).json({ error: 'NO_FILE' });
     }
     const r = await nidAdapter.extractFields(req.file.buffer, req.user.id);
-    if (!r.ok) return res.status(422).json({ error: r.error });
+    if (!r.ok) {
+      // No charge exists at this stage and the customer is
+      // looking at the error on the page — a WhatsApp for every
+      // bad scan would spam retries. The admins get a push so a
+      // pattern of extract failures (engine trouble) is visible.
+      push.notifyAdmins(db, '⚠️ NID তথ্য তোলা ব্যর্থ',
+        'একটি NID PDF থেকে তথ্য তোলা যায়নি (' + String(r.error || 'EXTRACT_ERROR') + ')।', '/admin.html').catch(() => {});
+      return res.status(422).json({ error: r.error });
+    }
     res.json({ ok: true, jobId: r.jobId, fields: r.fields, images: r.images });
   } catch (e) {
     safeLog('[nid-engine] extract route error:', e.message);
@@ -114,6 +123,17 @@ router.post('/build', requireAuth, async (req, res) => {
     const r = await nidAdapter.buildCard(jobId, fields, images, req.user.id);
     if (!r.ok) {
       const status = r.error === 'JOB_NOT_FOUND' ? 404 : r.error === 'NOT_YOUR_JOB' ? 403 : 422;
+      // A real build failure (not a stale/foreign job id): the
+      // card is built BEFORE any charge, so no money was taken —
+      // tell the customer on WhatsApp and push the admins
+      // (premium failure flow, 2026-10-22).
+      if (status === 422) {
+        wa.notifyServiceFailed(db, req.user.id, 'এনআইডি কার্ড',
+          'কার্ড তৈরি করা যায়নি',
+          'কিছুক্ষণ পর আবার চেষ্টা করুন। সহায়তা লাগলে আমাদের সাপোর্টে যোগাযোগ করুন।').catch(() => {});
+        push.notifyAdmins(db, '❌ NID কার্ড তৈরি ব্যর্থ',
+          'একটি NID কার্ড তৈরি করা যায়নি (' + String(r.error || 'BUILD_ERROR') + ') — কোনো চার্জ কাটা হয়নি।', '/admin.html').catch(() => {});
+      }
       return res.status(status).json({ error: r.error });
     }
 
@@ -163,6 +183,8 @@ router.post('/build', requireAuth, async (req, res) => {
       // confirmation. Re-downloads of the same job stay silent.
       if (ins && ins.rows.length) {
         wa.notifyServiceCompleted(db, req.user.id, 'এনআইডি কার্ড').catch(() => {});
+        push.notifyAdmins(db, '✅ NID কার্ড তৈরি হয়েছে',
+          `একটি NID কার্ড সফলভাবে তৈরি হয়েছে — চার্জ ৳${price}।`, '/admin.html').catch(() => {});
       }
     }
 
@@ -204,6 +226,11 @@ router.post('/build', requireAuth, async (req, res) => {
     res.send(r.pdfBuffer);
   } catch (e) {
     safeLog('[nid-engine] build route error:', e.message);
+    // Admin-only alert: at this layer the charge state is not
+    // certain enough to word a customer message — an operator
+    // should look.
+    push.notifyAdmins(db, '⚠️ NID build সার্ভার ত্রুটি',
+      'NID build রাউটে সার্ভার ত্রুটি: ' + String(e.message || '').slice(0, 120), '/admin.html').catch(() => {});
     res.status(500).json({ error: 'BUILD_FAILED' });
   }
 });

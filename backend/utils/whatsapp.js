@@ -556,7 +556,7 @@ async function notifyServiceCompleted(db, userId, serviceLabel) {
 // (e.g. a QR + photo verification that did not match). The
 // customer is told it failed, why, and — most importantly —
 // that no money was taken. Template: abc_service_failed.
-async function notifyServiceFailed(db, userId, serviceLabel, reason) {
+async function notifyServiceFailed(db, userId, serviceLabel, reason, retryHint) {
   try {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
     if (!(await isNotifyEnabled(db, 'service_failed'))) return { ok: false, error: 'NOTIFY_OFF' };
@@ -566,12 +566,13 @@ async function notifyServiceFailed(db, userId, serviceLabel, reason) {
     const user = u.rows[0];
     if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
     const label = String(serviceLabel || 'সেবা');
-    const why = String(reason || 'ছবির ব্যক্তির সঙ্গে QR-এর তথ্য মেলেনি');
+    const why = String(reason || 'তথ্য মেলেনি');
+    const retry = String(retryHint || 'তথ্য ঠিক করে আবার চেষ্টা করুন। সহায়তা লাগলে আমাদের সাপোর্টে যোগাযোগ করুন।');
     const text =
       `${greetingFor(user)}\n` +
       `দুঃখিত — আপনার ${label} সফল হয়নি ❌\n` +
       `কারণ: ${why}\n` +
-      'কোনো টাকা কাটা হয়নি। নতুন QR কোড দিয়ে আবার চেষ্টা করুন। সহায়তা লাগলে আমাদের সাপোর্টে যোগাযোগ করুন।';
+      `কোনো টাকা কাটা হয়নি। ${retry}`;
     return dispatch(db, 'service_failed', user, {
       text,
       params: [greetingFor(user), label],

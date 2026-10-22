@@ -5,6 +5,13 @@ jest.mock('../../../engines/nid-replica/adapter', () => ({
   extractFields: jest.fn(),
   buildCard: jest.fn(),
 }));
+jest.mock('../../utils/whatsapp', () => ({
+  notifyServiceCompleted: jest.fn().mockResolvedValue({ ok: true }),
+  notifyServiceFailed: jest.fn().mockResolvedValue({ ok: true }),
+}));
+jest.mock('../../utils/push', () => ({
+  notifyAdmins: jest.fn().mockResolvedValue({ ok: true }),
+}));
 
 const express = require('express');
 const request = require('supertest');
@@ -12,6 +19,8 @@ const db = require('../../db');
 const auth = require('../../auth');
 const nidRouter = require('../../routes/nid');
 const adapter = require('../../../engines/nid-replica/adapter');
+const wa = require('../../utils/whatsapp');
+const push = require('../../utils/push');
 
 function app() {
   const a = express();
@@ -27,6 +36,9 @@ beforeEach(() => {
   db.__reset();
   adapter.extractFields.mockReset();
   adapter.buildCard.mockReset();
+  wa.notifyServiceCompleted.mockClear();
+  wa.notifyServiceFailed.mockClear();
+  push.notifyAdmins.mockClear();
 });
 
 describe('GET /api/nid-engine/price', () => {
@@ -107,6 +119,10 @@ describe('POST /api/nid-engine/extract', () => {
     const r = await withUser(request(app()).post('/api/nid-engine/extract'))
       .attach('pdf', PDF_BUF, 'form.pdf').expect(422);
     expect(r.body.error).toBe('BAD_PDF');
+    // admins are pushed (pattern visibility); the customer is
+    // NOT WhatsApp-spammed for a retryable bad scan
+    expect(push.notifyAdmins).toHaveBeenCalledTimes(1);
+    expect(wa.notifyServiceFailed).not.toHaveBeenCalled();
   });
 });
 
@@ -156,6 +172,9 @@ describe('POST /api/nid-engine/build', () => {
     const r = await withUser(request(app()).post('/api/nid-engine/build'))
       .send({ jobId: 'j1', fields: {} }).expect(404);
     expect(r.body.error).toBe('JOB_NOT_FOUND');
+    // a stale job id is a session error, not a service failure
+    expect(wa.notifyServiceFailed).not.toHaveBeenCalled();
+    expect(push.notifyAdmins).not.toHaveBeenCalled();
   });
 
   test('NOT_YOUR_JOB → 403', async () => {
@@ -178,6 +197,9 @@ describe('POST /api/nid-engine/build', () => {
     const r = await withUser(request(app()).post('/api/nid-engine/build'))
       .send({ jobId: 'j1', fields: {} }).expect(422);
     expect(r.body.error).toBe('RENDER_FAILED');
+    // a real build failure notifies the customer + the admins
+    expect(wa.notifyServiceFailed).toHaveBeenCalledTimes(1);
+    expect(push.notifyAdmins).toHaveBeenCalledTimes(1);
   });
 
   test('happy path with wallet debit and order creation → 200 application/pdf', async () => {

@@ -239,7 +239,8 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
         ).catch((e) => { safeLog('[qr-verify] failed-order insert error:', e.message); return null; });
         if (ins && ins.rows.length) {
           orderId = ins.rows[0].id;
-          wa.notifyServiceFailed(db, req.user.id, 'QR + ছবি যাচাই', reasonBn).catch(() => {});
+          wa.notifyServiceFailed(db, req.user.id, 'QR + ছবি যাচাই', reasonBn,
+            'নতুন QR কোড দিয়ে আবার চেষ্টা করুন। সহায়তা লাগলে আমাদের সাপোর্টে যোগাযোগ করুন।').catch(() => {});
           push.notifyAdmins(db, '❌ QR যাচাই ব্যর্থ',
             'একটি QR + ছবি যাচাই সফল হয়নি — কোনো চার্জ কাটা হয়নি।', '/admin.html').catch(() => {});
           try {

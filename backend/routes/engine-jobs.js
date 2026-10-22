@@ -133,7 +133,8 @@ customerEngineJobs.post('/failure', async (req, res) => {
       return res.status(500).json({ error: 'FAILED' });
     }
 
-    wa.notifyServiceFailed(db, req.user.id, SERVICE_LABELS[engineId], reasonBn).catch(() => {});
+    wa.notifyServiceFailed(db, req.user.id, SERVICE_LABELS[engineId], reasonBn,
+      'নম্বর ও তারিখ মিলিয়ে আবার চেষ্টা করুন। সহায়তা লাগলে আমাদের সাপোর্টে যোগাযোগ করুন।').catch(() => {});
     push.notifyAdmins(db, '❌ ' + SERVICE_LABELS[engineId] + ' ব্যর্থ',
       'একটি ' + SERVICE_LABELS[engineId] + ' ব্যর্থ হয়েছে — কোনো চার্জ কাটা হয়নি।', '/admin.html').catch(() => {});
     res.status(201).json({
