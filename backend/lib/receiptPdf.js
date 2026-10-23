@@ -14,7 +14,7 @@
 // ============================================================
 const path = require('path');
 
-function buildReceiptPdf({ serviceLabel, outcome, reason, successLine, subjectLabel, subjectValue, chargeText, ref, when, footers }) {
+function buildReceiptPdf({ serviceLabel, outcome, reason, successLine, subjectLabel, subjectValue, chargeText, ref, when, footers, noBrand }) {
   return new Promise((resolve, reject) => {
     try {
       const PDFDocument = require('pdfkit');
@@ -37,8 +37,12 @@ function buildReceiptPdf({ serviceLabel, outcome, reason, successLine, subjectLa
         : (bold ? 'bn-bold' : 'bn'));
       const whenBn = bnTxt(when).replace('AM', 'পূর্বাহ্ন').replace('PM', 'অপরাহ্ন');
 
-      // Header (brand name is Latin → Helvetica)
-      doc.font('Helvetica-Bold').fontSize(19).fillColor('#6f4e2e').text('Abc Authentic', X, 46, { width: 300 });
+      // Header (brand name is Latin → Helvetica). Land services
+      // pass noBrand — their documents carry no app name at all
+      // (owner's rule, 2026-10-23).
+      if (!noBrand) {
+        doc.font('Helvetica-Bold').fontSize(19).fillColor('#6f4e2e').text('Abc Authentic', X, 46, { width: 300 });
+      }
       doc.font('bn').fontSize(10).fillColor('#6b7280')
         .text('ডিজিটাল রসিদ', X, 52, { width: W, align: 'right' });
       doc.strokeColor('#d6c9ae').lineWidth(1.4).moveTo(X, 82).lineTo(X + W, 82).stroke();

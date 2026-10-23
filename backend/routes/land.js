@@ -313,6 +313,7 @@ async function notFound(req, res, mode, chk, idem, area) {
       notifyDone(req, mode, 0, true);
       try {
         const pdf = await buildReceiptPdf({
+          noBrand: true,
           serviceLabel: MODES[mode].label, outcome: 'failed',
           reason: 'সরকারি ভূমি রেকর্ডে এই তথ্যে কোনো খতিয়ান পাওয়া যায়নি',
           subjectLabel: 'মৌজা', subjectValue: area.mouza || '—',

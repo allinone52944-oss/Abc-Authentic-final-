@@ -73,10 +73,10 @@ function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdict
         verify: 'জমি যাচাই রিপোর্ট',
       };
 
-      // Header
-      doc.font('Helvetica-Bold').fontSize(19).fillColor('#6f4e2e').text('Abc Authentic', X, y, { width: 300 });
-      doc.font('bn').fontSize(10).fillColor('#6b7280').text('ভূমি সেবা', X, y + 6, { width: W, align: 'right' });
-      y += 34;
+      // Header — deliberately NO app/brand name (owner's rule:
+      // land reports circulate as neutral record summaries).
+      doc.font('bn').fontSize(10.5).fillColor('#6b7280').text('সরকারি ভূমি রেকর্ডের সারাংশ', X, y + 2, { width: W, align: 'right' });
+      y += 26;
       doc.strokeColor('#d6c9ae').lineWidth(1.4).moveTo(X, y).lineTo(X + W, y).stroke();
       y += 16;
       doc.font('bn-bold').fontSize(17).fillColor('#14532d').text(TITLES[kind] || TITLES.search, X, y, { width: W });
