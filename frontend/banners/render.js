@@ -121,8 +121,10 @@
     const rendered = await Promise.all(
       banners.map(async (b) => ({
         html: await render(b),
-        anim: b.anim || 'slide',
-        speed: b.speed || 30,
+        // API rows carry animation_type/animation_speed (DB column names);
+        // short aliases anim/speed are accepted for direct callers.
+        anim: b.animation_type || b.anim || 'slide',
+        speed: b.animation_speed != null ? b.animation_speed : (b.speed != null ? b.speed : 30),
       }))
     );
 
