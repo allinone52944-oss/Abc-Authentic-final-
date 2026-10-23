@@ -116,7 +116,8 @@ router.get('/geo/upazilas', requireAuth, async (req, res) => {
 // master survey list (for the KEY the index endpoint needs).
 async function offeredSurveys(districtBbs, upazilaBbs) {
   const [offered, all] = await Promise.all([
-    client.upazilaSurveys(districtBbs, upazilaBbs),
+    cached('usv:' + districtBbs + ':' + upazilaBbs, 10 * 60 * 1000,
+      () => client.upazilaSurveys(districtBbs, upazilaBbs)),
     cached('surveys', 60 * 60 * 1000, () => client.surveys()),
   ]);
   const keyById = new Map(all.map((s) => [Number(s.ID), s.KEY]));
@@ -154,6 +155,12 @@ async function jlEntry(districtBbs, upazilaBbs, surveyId, mouzaId) {
     () => client.jlNumbers(districtBbs, upazilaBbs, surveyId));
   return rows.find((j) => Number(j.MOUZA_ID) === Number(mouzaId)) || null;
 }
+
+/** Bengali digits → Latin. Customers naturally type ৮ — the
+ *  portal's records are keyed with Latin digits ('8'), so an
+ *  un-normalised Bengali number would silently find nothing. */
+const BN_DIGIT_MAP = { '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9' };
+const toEn = (s) => String(s == null ? '' : s).replace(/[০-৯]/g, (d) => BN_DIGIT_MAP[d]);
 
 function cleanArea(body) {
   const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
@@ -360,7 +367,7 @@ function idemOf(body, mode) {
 router.post('/search', requireAuth, async (req, res) => {
   try {
     const area = cleanArea(req.body || {});
-    const khatianNo = String((req.body || {}).khatian_no || '').trim().slice(0, 20);
+    const khatianNo = toEn(String((req.body || {}).khatian_no || '').trim().slice(0, 20));
     if (!area || !khatianNo) {
       return res.status(400).json({ error: 'BAD_INPUT', message: 'এলাকা ও খতিয়ান নম্বর — দুটোই লাগবে।' });
     }
@@ -433,11 +440,11 @@ router.post('/scan', requireAuth, async (req, res) => {
 router.post('/verify', requireAuth, async (req, res) => {
   try {
     const area = cleanArea(req.body || {});
-    const khatianNo = String((req.body || {}).khatian_no || '').trim().slice(0, 20);
+    const khatianNo = toEn(String((req.body || {}).khatian_no || '').trim().slice(0, 20));
     const claim = (req.body || {}).claim || {};
     const cOwner = String(claim.owner || '').trim().slice(0, 80);
-    const cDag = String(claim.dag || '').trim().slice(0, 20);
-    const cLand = String(claim.total_land || '').trim().slice(0, 20);
+    const cDag = toEn(String(claim.dag || '').trim().slice(0, 20));
+    const cLand = toEn(String(claim.total_land || '').trim().slice(0, 20));
     if (!area || !khatianNo || (!cOwner && !cDag && !cLand)) {
       return res.status(400).json({ error: 'BAD_INPUT', message: 'খতিয়ান নম্বর ও অন্তত একটি দাবি (মালিক / দাগ / জমি) লাগবে।' });
     }

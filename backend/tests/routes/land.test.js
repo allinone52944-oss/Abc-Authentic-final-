@@ -125,6 +125,14 @@ describe('POST /api/land/search', () => {
     expect(client.indexByKhatianNo).not.toHaveBeenCalled();
   });
 
+  test('Bengali-digit khatian number is normalised before the portal lookup', async () => {
+    portalFound();
+    const r = await withUser(request(app()).post('/api/land/search'))
+      .send({ ...AREA, khatian_no: '৮', idempotency_key: 't-search-bn' }).expect(200);
+    expect(r.body.ok).toBe(true);
+    expect(client.indexByKhatianNo).toHaveBeenCalledWith('RS', 238686, '8');
+  });
+
   test('bad area → 400', async () => {
     const r = await withUser(request(app()).post('/api/land/search'))
       .send({ khatian_no: '8' }).expect(400);
@@ -180,6 +188,15 @@ describe('POST /api/land/verify', () => {
       .expect(200);
     expect(r.body).toMatchObject({ ok: true, charged: 100 });
     expect(r.body.verdicts).toHaveLength(3);
+    expect(r.body.verdicts.every((v) => v.match)).toBe(true);
+  });
+
+  test('Bengali-digit claims are normalised (dag + land match)', async () => {
+    portalFound();
+    const r = await withUser(request(app()).post('/api/land/verify'))
+      .send({ ...AREA, khatian_no: '৮', claim: { dag: '১২৩৭', total_land: '০.০৫৪৪' }, idempotency_key: 't-verify-bn' })
+      .expect(200);
+    expect(r.body.verdicts).toHaveLength(2);
     expect(r.body.verdicts.every((v) => v.match)).toBe(true);
   });
 
