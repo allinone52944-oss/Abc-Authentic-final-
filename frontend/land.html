@@ -69,6 +69,7 @@
   .rec.total { background:linear-gradient(135deg,#fefce8,#fef3c7); border-color:#f59e0b88; text-align:center; font-size:16px; }
   .verdict { display:flex; justify-content:space-between; gap:8px; font-size:14px; padding:7px 0; border-bottom:1px dashed #e2e8f0; }
   .verdict .m { font-weight:800; }
+  .claim-toggle { font-size:13.5px; font-weight:700; color:#14532d; cursor:pointer; margin:2px 0 12px; user-select:none; }
   .dl-btn { display:inline-block; margin-top:14px; background:linear-gradient(135deg,#14532d,#16a34a); color:#fff !important; padding:12px 22px; border-radius:12px; font-weight:700; font-size:15px; text-decoration:none; box-shadow:0 6px 16px rgba(20,83,45,.3); border:none; cursor:pointer; font-family:inherit; }
 </style>
 </head>
@@ -157,10 +158,14 @@
         </div>
         <div id="pane-verify" style="display:none">
           <div class="field"><label>খতিয়ান নম্বর *</label><input type="text" id="fVKhatianNo" inputmode="numeric" placeholder="যেমন: ৮"></div>
-          <div class="field"><label>বিক্রেতার দাবি — মালিকের নাম</label><input type="text" id="fClaimOwner" placeholder="বিক্রেতা যা বলেছে"></div>
-          <div class="grid2">
-            <div class="field"><label>দাবি — দাগ নম্বর</label><input type="text" id="fClaimDag" inputmode="numeric" placeholder="যেমন: ১২৩৭"></div>
-            <div class="field"><label>দাবি — জমি (একর)</label><input type="text" id="fClaimLand" inputmode="decimal" placeholder="যেমন: 0.0544"></div>
+          <div class="note" style="margin:-4px 0 10px;">শুধু ঠিকানা আর খতিয়ান নম্বর দিলেই সরকারি রেকর্ডের পূর্ণ রিপোর্ট পাবেন।</div>
+          <div class="claim-toggle" id="claimToggle">➕ বিক্রেতার দাবিও মিলিয়ে দেখুন (ঐচ্ছিক)</div>
+          <div id="claimBox" style="display:none">
+            <div class="field"><label>বিক্রেতার দাবি — মালিকের নাম</label><input type="text" id="fClaimOwner" placeholder="বিক্রেতা যা বলেছে"></div>
+            <div class="grid2">
+              <div class="field"><label>দাবি — দাগ নম্বর</label><input type="text" id="fClaimDag" inputmode="numeric" placeholder="যেমন: ১২৩৭"></div>
+              <div class="field"><label>দাবি — জমি (একর)</label><input type="text" id="fClaimLand" inputmode="decimal" placeholder="যেমন: 0.0544"></div>
+            </div>
           </div>
         </div>
 
@@ -242,6 +247,12 @@
     $('result').innerHTML = '';
   }
   document.querySelectorAll('.mode-card').forEach((c) => c.addEventListener('click', () => setMode(c.dataset.mode)));
+  $('claimToggle').addEventListener('click', () => {
+    const box = $('claimBox');
+    const open = box.style.display !== 'none';
+    box.style.display = open ? 'none' : '';
+    $('claimToggle').textContent = (open ? '➕' : '➖') + ' বিক্রেতার দাবিও মিলিয়ে দেখুন (ঐচ্ছিক)';
+  });
 
   // ---------- cascade ----------
   function fillSelect(sel, items, placeholder, valFn, labelFn) {
@@ -345,8 +356,10 @@
     } else {
       body.khatian_no = $('fVKhatianNo').value.trim();
       body.claim = { owner: $('fClaimOwner').value.trim(), dag: $('fClaimDag').value.trim(), total_land: $('fClaimLand').value.trim() };
+      // No claim is fine — address + khatian number alone runs
+      // the check and returns the full record report (owner,
+      // 2026-10-23); the claim comparison is an optional extra.
       if (!body.khatian_no) { showErr('খতিয়ান নম্বর লিখুন।'); return; }
-      if (!body.claim.owner && !body.claim.dag && !body.claim.total_land) { showErr('অন্তত একটি দাবি বসান (মালিক / দাগ / জমি)।'); return; }
     }
     const btn = $('goBtn');
     btn.disabled = true;

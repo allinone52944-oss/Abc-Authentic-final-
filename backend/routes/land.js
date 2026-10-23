@@ -446,8 +446,11 @@ router.post('/verify', requireAuth, async (req, res) => {
     const cOwner = String(claim.owner || '').trim().slice(0, 80);
     const cDag = toEn(String(claim.dag || '').trim().slice(0, 20));
     const cLand = toEn(String(claim.total_land || '').trim().slice(0, 20));
-    if (!area || !khatianNo || (!cOwner && !cDag && !cLand)) {
-      return res.status(400).json({ error: 'BAD_INPUT', message: 'খতিয়ান নম্বর ও অন্তত একটি দাবি (মালিক / দাগ / জমি) লাগবে।' });
+    // Address + khatian number is the whole requirement (owner,
+    // 2026-10-23): the claim comparison is optional — no claim
+    // simply means the report carries the record alone.
+    if (!area || !khatianNo) {
+      return res.status(400).json({ error: 'BAD_INPUT', message: 'ঠিকানা ও খতিয়ান নম্বর লাগবে।' });
     }
     const idem = idemOf(req.body, 'verify');
     if (await replayIfExists(req, res, idem)) return;
@@ -480,7 +483,9 @@ router.post('/verify', requireAuth, async (req, res) => {
       { records: [record], verdicts },
       {
         kind: 'verify', area: { ...area }, records: [record], verdicts,
-        claimNote: 'মোট ' + verdicts.length + 'টি দাবির মধ্যে ' + matched + 'টি সরকারি রেকর্ডের সঙ্গে মিলেছে।',
+        claimNote: verdicts.length
+          ? 'মোট ' + verdicts.length + 'টি দাবির মধ্যে ' + matched + 'টি সরকারি রেকর্ডের সঙ্গে মিলেছে।'
+          : 'কোনো দাবি দেওয়া হয়নি — এই রিপোর্টে সরকারি রেকর্ডের পূর্ণ বিবরণ দেওয়া হলো।',
       },
       'delivery-land-verify-' + slug(idem) + '.pdf');
   } catch (e) {

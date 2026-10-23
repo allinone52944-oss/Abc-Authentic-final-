@@ -119,6 +119,23 @@ describe('mobile + PC layout', () => {
   });
 });
 
+describe('verify runs on address + khatian number alone', () => {
+  const html = read('frontend/land.html');
+  test('no forced-claim stop remains on the page', () => {
+    expect(html).not.toContain('অন্তত একটি দাবি বসান');
+  });
+  test('the claim section is optional and collapsed', () => {
+    expect(html).toContain('id="claimToggle"');
+    expect(html).toContain('id="claimBox" style="display:none"');
+    expect(html).toContain('বিক্রেতার দাবিও মিলিয়ে দেখুন (ঐচ্ছিক)');
+  });
+  test('backend no longer requires a claim either', () => {
+    const route = read('backend/routes/land.js');
+    expect(route).not.toContain('অন্তত একটি দাবি');
+    expect(route).toContain('কোনো দাবি দেওয়া হয়নি');
+  });
+});
+
 describe('backend wiring', () => {
   test('server mounts /api/land', () => {
     expect(read('backend/server.js')).toContain("app.use('/api/land'");

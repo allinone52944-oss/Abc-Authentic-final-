@@ -208,9 +208,19 @@ describe('POST /api/land/verify', () => {
     expect(r.body.verdicts[0].match).toBe(false);
   });
 
-  test('no claim at all → 400', async () => {
+  test('no claim at all → full record report, no verdicts (owner, 2026-10-23)', async () => {
+    portalFound();
     const r = await withUser(request(app()).post('/api/land/verify'))
-      .send({ ...AREA, khatian_no: '8', claim: {} }).expect(400);
+      .send({ ...AREA, khatian_no: '8', claim: {}, idempotency_key: 't-verify-noclaim' })
+      .expect(200);
+    expect(r.body).toMatchObject({ ok: true, charged: 100 });
+    expect(r.body.verdicts).toHaveLength(0);
+    expect(r.body.records).toHaveLength(1);
+  });
+
+  test('no khatian number → 400', async () => {
+    const r = await withUser(request(app()).post('/api/land/verify'))
+      .send({ ...AREA, claim: {} }).expect(400);
     expect(r.body.error).toBe('BAD_INPUT');
   });
 });
