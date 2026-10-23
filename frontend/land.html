@@ -19,6 +19,8 @@
   .badge { background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); color:#fef9c3; font-size:12px; font-weight:600; padding:4px 10px; border-radius:20px; }
   .spin { display:inline-block; width:20px; height:20px; border:3px solid rgba(255,255,255,.35); border-top-color:#fff; border-radius:50%; animation:sp .8s linear infinite; vertical-align:-4px; margin-right:8px; }
   @keyframes sp { to { transform: rotate(360deg); } }
+  .back-nav { display:inline-flex; align-items:center; gap:8px; color:var(--primary-700); font-weight:700; font-size:14px; cursor:pointer; margin-bottom:16px; padding:6px 14px; border-radius:var(--r-md); background:var(--primary-50); transition:all .15s ease; }
+  .back-nav:hover { background:var(--primary-100); }
   .err { display:none; background:#fef2f2; border:1px solid #fca5a5; color:#b91c1c; padding:12px 14px; border-radius:12px; margin-bottom:14px; font-size:14px; }
   .err.on { display:block; }
   .ok { display:none; background:#f0fdf4; border:1px solid #86efac; color:#15803d; padding:14px; border-radius:12px; margin-bottom:14px; font-size:14px; }
@@ -78,6 +80,7 @@
   </div>
 
   <div class="main">
+    <span class="back-nav" onclick="location.href='/services.html'">← সকল সেবায় ফিরুন</span>
     <div class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
       <div>
         <h2>🌾 ভূমি সেবা (খতিয়ান)</h2>

@@ -94,6 +94,14 @@ describe('catalog shows land ONCE (the duplicate complaint)', () => {
   });
 });
 
+describe('back navigation (owner: "back button nai")', () => {
+  test('land page carries the app-standard back-nav to the services list', () => {
+    const html = read('frontend/land.html');
+    expect(html).toContain('class="back-nav"');
+    expect(html).toContain("location.href='/services.html'\">← সকল সেবায় ফিরুন");
+  });
+});
+
 describe('backend wiring', () => {
   test('server mounts /api/land', () => {
     expect(read('backend/server.js')).toContain("app.use('/api/land'");
