@@ -200,6 +200,7 @@
   }
   function setMode(mode) {
     MODE = mode;
+    if (prices[mode] == null) loadPrice(mode);
     document.querySelectorAll('.mode-card').forEach((c) => c.classList.toggle('on', c.dataset.mode === mode));
     ['search', 'scan', 'verify'].forEach((m) => { $('pane-' + m).style.display = m === mode ? '' : 'none'; });
     $('priceVal').textContent = prices[mode] != null ? bn(prices[mode]) : '–';
@@ -338,8 +339,10 @@
   });
 
   loadDivisions();
-  loadPrice('search'); loadPrice('scan'); loadPrice('verify');
-  setMode('search');
+  setMode('search'); // loads the active mode's price itself
+  // The other two prices arrive a breath later — firing every
+  // call at once can collide with a token refresh on page open.
+  setTimeout(() => { loadPrice('scan'); loadPrice('verify'); }, 1500);
 </script>
 </body>
 </html>

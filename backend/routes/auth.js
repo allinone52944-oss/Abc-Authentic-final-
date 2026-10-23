@@ -464,12 +464,43 @@ router.post('/login', async (req, res) => {
 });
 
 // ---- POST /api/auth/refresh (rotate) --------------------------
+// Rotation leeway (2026-10-23): all tabs of a browser share ONE
+// refresh token (localStorage), while the access token lives per
+// tab (sessionStorage, 15 min). When the access token expires,
+// two open tabs (e.g. a polling admin/dashboard tab and the page
+// the user just opened) can present the SAME pre-rotation token
+// moments apart. Without leeway the second presentation is
+// indistinguishable from token theft, and the H-4 response below
+// revokes the user's ENTIRE chain — the "clicking around logs me
+// out" bug. A successful rotation is therefore remembered for
+// 30 s: re-presenting the just-rotated token inside the window
+// returns the same new pair (idempotent refresh — the standard
+// OAuth reuse leeway). Theft detection is unchanged for any
+// token outside the window.
+const ROTATION_LEEWAY_MS = 30 * 1000;
+const _rotationGrace = new Map(); // old token hash -> { tokens, at }
+function graceGet(hash) {
+  const g = _rotationGrace.get(hash);
+  if (!g) return null;
+  if (Date.now() - g.at > ROTATION_LEEWAY_MS) { _rotationGrace.delete(hash); return null; }
+  return g.tokens;
+}
+function gracePut(hash, tokens) {
+  const now = Date.now();
+  for (const [k, v] of _rotationGrace) {
+    if (now - v.at > ROTATION_LEEWAY_MS) _rotationGrace.delete(k);
+  }
+  _rotationGrace.set(hash, { tokens, at: now });
+}
+
 router.post('/refresh', async (req, res) => {
   try {
     const { refresh_token } = req.body || {};
     if (!refresh_token) return res.status(400).json({ error: 'MISSING_TOKEN' });
 
     const hash = hashRefreshToken(String(refresh_token));
+    const graced = graceGet(hash);
+    if (graced) return res.json(graced);
     // H-4 fix (2026-10-15): everything inside ONE transaction with FOR UPDATE —
     // concurrent refreshes can't both succeed; reuse of a rotated token = theft
     // → the whole token chain is revoked.
@@ -512,6 +543,7 @@ router.post('/refresh', async (req, res) => {
       );
       return { access_token, refresh_token: minted.token };
     });
+    gracePut(hash, tokens);
     return res.json(tokens);
   } catch (e) {
     safeLog('[auth] refresh error:', e.message);
@@ -818,5 +850,9 @@ router.post('/verify-otp', async (req, res) => {
     return res.status(500).json({ error: 'FAILED' });
   }
 });
+
+// Test hook: clears the rotation-leeway cache between cases
+// (never called in production).
+router.__resetRotationGrace = () => { _rotationGrace.clear(); };
 
 module.exports = router;

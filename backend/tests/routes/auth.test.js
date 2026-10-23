@@ -291,6 +291,40 @@ describe('POST /api/auth/refresh + /logout', () => {
     expect(revoke).toBeDefined();
   });
 
+  test('just-rotated token re-presented inside the leeway → same new pair, no theft response (concurrent-tabs fix)', async () => {
+    if (authRouter.__resetRotationGrace) authRouter.__resetRotationGrace();
+    db.__routeQuery([
+      ['FROM refresh_tokens rt', { rows: [{ id: 'rt1', user_id: 'u1', role: 'user', status: 'active' }] }],
+    ]);
+    const first = await request(app())
+      .post('/api/auth/refresh').send({ refresh_token: 'c'.repeat(96) }).expect(200);
+    // Second tab presents the SAME pre-rotation token a moment later:
+    // it must get the same rotated pair — NOT a chain-wide revoke.
+    db.__client.query.mockClear();
+    const second = await request(app())
+      .post('/api/auth/refresh').send({ refresh_token: 'c'.repeat(96) }).expect(200);
+    expect(second.body.refresh_token).toBe(first.body.refresh_token);
+    expect(second.body.access_token).toBe(first.body.access_token);
+    const chainRevoke = db.__client.query.mock.calls.find(
+      (c) => /UPDATE refresh_tokens SET revoked = TRUE WHERE user_id/.test(c[0])
+    );
+    expect(chainRevoke).toBeUndefined();
+  });
+
+  test('revoked token OUTSIDE any rotation leeway → theft response still revokes the whole chain', async () => {
+    if (authRouter.__resetRotationGrace) authRouter.__resetRotationGrace();
+    db.__routeQuery([
+      ['FROM refresh_tokens rt', { rows: [{ id: 'rt9', user_id: 'u1', role: 'user', status: 'active', revoked: true }] }],
+    ]);
+    const r = await request(app())
+      .post('/api/auth/refresh').send({ refresh_token: 'd'.repeat(96) }).expect(401);
+    expect(r.body.error).toBe('TOKEN_REUSED');
+    const chainRevoke = db.__client.query.mock.calls.find(
+      (c) => /UPDATE refresh_tokens SET revoked = TRUE WHERE user_id/.test(c[0])
+    );
+    expect(chainRevoke).toBeDefined();
+  });
+
   test('logout revokes and always returns ok', async () => {
     const r = await request(app())
       .post('/api/auth/logout').send({ refresh_token: 'b'.repeat(96) }).expect(200);
