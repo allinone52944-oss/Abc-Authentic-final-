@@ -102,6 +102,23 @@ describe('back navigation (owner: "back button nai")', () => {
   });
 });
 
+describe('mobile + PC layout', () => {
+  const html = read('frontend/land.html');
+  test('phones get compact side-by-side mode cards, not a tall stack', () => {
+    expect(html).not.toContain('.modes { grid-template-columns:1fr; }');
+    expect(html).toContain('.mode-card .d { display:none; }');
+  });
+  test('fields are 16px so iOS does not auto-zoom on focus', () => {
+    expect(html).toContain('font-size:16px; font-family:inherit');
+  });
+  test('long record values wrap instead of overflowing', () => {
+    expect(html).toContain('.rec .r span { min-width:0; overflow-wrap:anywhere; }');
+  });
+  test('the form card is centred on wide PC screens', () => {
+    expect(html).toContain('margin:0 auto 20px; max-width:680px');
+  });
+});
+
 describe('backend wiring', () => {
   test('server mounts /api/land', () => {
     expect(read('backend/server.js')).toContain("app.use('/api/land'");

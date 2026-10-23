@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#14532d">
 <title>ভূমি সেবা - All In One</title>
 <style>
-  .form-card { background:#fff; border:1px solid var(--border-light); border-radius:20px; padding:0 24px 24px; box-shadow:0 12px 32px rgba(15,23,42,.08); margin-bottom:20px; max-width:680px; overflow:hidden; }
+  .form-card { background:#fff; border:1px solid var(--border-light); border-radius:20px; padding:0 24px 24px; box-shadow:0 12px 32px rgba(15,23,42,.08); margin:0 auto 20px; max-width:680px; overflow:hidden; }
   .hero { margin:0 -24px 20px; padding:22px 24px 18px; background:linear-gradient(135deg,#052e16 0%,#14532d 55%,#166534 100%); color:#ecfdf5; position:relative; }
   .hero:after { content:''; position:absolute; inset:0; background:radial-gradient(circle at 85% 20%, rgba(250,204,21,.22) 0%, transparent 55%); pointer-events:none; }
   .hero h3 { margin:0 0 4px; font-size:19px; color:#fff; }
@@ -26,7 +26,20 @@
   .ok { display:none; background:#f0fdf4; border:1px solid #86efac; color:#15803d; padding:14px; border-radius:12px; margin-bottom:14px; font-size:14px; }
   .ok.on { display:block; }
   .modes { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:18px; }
-  @media (max-width:560px){ .modes { grid-template-columns:1fr; } }
+  /* Phones: keep the three modes side-by-side but compact —
+     stacking them full-width pushed the form far down the page.
+     Form padding tightens and fields go 16px (stops iOS zoom). */
+  @media (max-width:560px){
+    .form-card { padding:0 16px 18px; }
+    .hero { margin:0 -16px 16px; padding:18px 16px 14px; }
+    .modes { gap:8px; }
+    .mode-card { padding:10px 6px 9px; border-radius:13px; }
+    .mode-card .ic { width:40px; height:40px; font-size:20px; }
+    .mode-card .t { font-size:13px; margin-top:6px; }
+    .mode-card .p { font-size:12px; padding:1px 9px; margin-top:4px; }
+    .mode-card .d { display:none; }
+    .mode-card.on:after { width:17px; height:17px; font-size:10px; top:5px; right:6px; }
+  }
   .mode-card { position:relative; border:2px solid #e2e8f0; border-radius:16px; padding:18px 12px 14px; cursor:pointer; text-align:center; background:#fff; transition:all .18s ease; box-shadow:0 2px 8px rgba(15,23,42,.04); }
   .mode-card:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(15,23,42,.09); }
   .mode-card .ic { width:52px; height:52px; margin:0 auto; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:25px; background:linear-gradient(135deg,#f0fdf4,#dcfce7); box-shadow:inset 0 0 0 1px #bbf7d0; }
@@ -37,7 +50,7 @@
   .mode-card.on:after { content:'✓'; position:absolute; top:8px; right:10px; width:20px; height:20px; border-radius:50%; background:#16a34a; color:#fff; font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center; }
   .field { margin-bottom:14px; }
   .field label { display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px; }
-  .field select, .field input[type=text] { width:100%; padding:12px; border:1.5px solid #cbd5e1; border-radius:12px; background:#fff; color:#0f172a; font-size:15.5px; font-family:inherit; transition:border-color .15s, box-shadow .15s; }
+  .field select, .field input[type=text] { width:100%; padding:12px; border:1.5px solid #cbd5e1; border-radius:12px; background:#fff; color:#0f172a; font-size:16px; font-family:inherit; transition:border-color .15s, box-shadow .15s; }
   .field select:focus, .field input[type=text]:focus { outline:none; border-color:#16a34a; box-shadow:0 0 0 3px rgba(22,163,74,.15); }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   @media (max-width:560px){ .grid2 { grid-template-columns:1fr; } }
@@ -49,7 +62,8 @@
   .rec .rec-hd { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
   .rec .seal { width:34px; height:34px; border-radius:50%; background:#16a34a; color:#fff; font-size:17px; font-weight:800; display:flex; align-items:center; justify-content:center; flex:none; }
   .rec h4 { margin:0; color:#14532d; font-size:16px; }
-  .rec .r { display:flex; gap:8px; font-size:14.5px; padding:5px 0; border-bottom:1px dashed #eadfc8; }
+  .rec .r { display:flex; gap:8px; font-size:14.5px; padding:5px 0; border-bottom:1px dashed #eadfc8; flex-wrap:wrap; }
+  .rec .r span { min-width:0; overflow-wrap:anywhere; }
   .rec .r:last-child { border-bottom:none; }
   .rec .r b { color:#78716c; min-width:96px; font-weight:600; }
   .rec.total { background:linear-gradient(135deg,#fefce8,#fef3c7); border-color:#f59e0b88; text-align:center; font-size:16px; }
