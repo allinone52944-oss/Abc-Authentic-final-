@@ -92,6 +92,9 @@
     background: rgba(15, 23, 42, 0.88);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
+    padding: 24px 16px;
+    text-align: center;
+    box-sizing: border-box;
   }
   #cbOverlay.show { display: flex; }
   #cbOverlay .big { font-size: 64px; animation: pop 0.6s ease-out; }
@@ -100,8 +103,9 @@
     70% { transform: scale(1.25); }
     100% { transform: scale(1); }
   }
-  #cbOverlay .congrats { color: #fff; font-size: 30px; font-weight: 800; margin: 14px 0 6px; }
-  #cbOverlay .won { color: #fbbf24; font-size: 48px; font-weight: 800; }
+  #cbOverlay .congrats { color: #fff; font-size: clamp(22px, 6vw, 30px); font-weight: 800; margin: 14px 0 6px; }
+  #cbOverlay .won { color: #fbbf24; font-size: clamp(36px, 10vw, 48px); font-weight: 800; }
+  #cbOverlay .note { color: #fcd34d; font-size: 13px; line-height: 1.6; max-width: 420px; margin-top: 10px; }
   #cbOverlay .code { color: #94a3b8; font-size: 13px; margin-top: 10px; letter-spacing: 2px; }
   .coin {
     position: absolute;
@@ -311,10 +315,10 @@
   <div class="big">🎉</div>
   <div class="congrats" id="cbTitle">অভিনন্দন! ক্যাশব্যাক কুপন তৈরি হয়েছে!</div>
   <div class="won" id="cbWon">৳০</div>
-  <div class="code" id="cbCode" style="font-size:16px;color:#fef08a;font-weight:700;letter-spacing:1px;margin:8px 0 16px;"></div>
-  <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
-    <button class="btn" id="cbInstantBtn" style="background:linear-gradient(135deg,#059669,#10b981);color:#fff;font-weight:700;padding:12px 20px;">⚡ এখনই ওয়ালেটে যোগ করুন</button>
-    <button class="btn" id="cbCopyBtn" style="background:#ffffff;color:#1e293b;font-weight:700;padding:12px 20px;">📋 কোড কপি করুন</button>
+  <div class="code" id="cbCode" style="font-size:16px;color:#fef08a;font-weight:700;letter-spacing:1px;margin:8px 0 4px;"></div>
+  <div class="note" id="cbNote" style="display:none;"></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:16px;">
+    <button class="btn" id="cbCopyBtn" onclick="copyCelebrationCode()" style="background:#ffffff;color:#1e293b;font-weight:700;padding:12px 20px;">📋 কোড কপি করুন</button>
   </div>
   <div style="font-size:12px;color:#94a3b8;margin-top:16px;cursor:pointer;" onclick="document.getElementById('cbOverlay').classList.remove('show')">✕ বন্ধ করুন</div>
 </div>
@@ -580,12 +584,12 @@ async function claimDailyCashback(btnEl) {
       loadWallet();
       return;
     }
-    celebrate(Number(d.amount) || 0, d.coupon_code);
-    if (d.service_locked) {
-      alert('🔒 অভিনন্দন! আজকের ক্যাশব্যাক ৳' + bn(d.amount) + ' নির্দিষ্ট সেবার জন্য সংরক্ষিত ক্রেডিটে যোগ হয়েছে — শুধু ওই সেবা কিনলেই খরচ হবে।');
-    } else {
-      alert('🎉 অভিনন্দন! আজকের ক্যাশব্যাক ৳' + bn(d.amount) + ' আপনার ওয়ালেট ব্যালেন্সে যোগ হয়েছে!');
-    }
+    celebrate(Number(d.amount) || 0, d.coupon_code, {
+      title: 'অভিনন্দন! ক্যাশব্যাক কুপন তৈরি হয়েছে!',
+      note: d.service_locked
+        ? '🔒 এই ক্যাশব্যাক নির্দিষ্ট সেবার জন্য সংরক্ষিত ক্রেডিটে যোগ হয়েছে — শুধু ওই সেবা কিনলেই খরচ হবে।'
+        : '',
+    });
     loadWallet();
   } catch (e) {
     if (btnEl) { btnEl.disabled = false; btnEl.textContent = '🎁 আবার চেষ্টা করুন'; }
@@ -601,12 +605,12 @@ async function instantRedeemCode(code) {
     return;
   }
   loadWallet();
-  celebrate(Number(d.credited) || 0, code);
-  if (d.service_locked) {
-    alert('🔒 অভিনন্দন! ৳' + bn(d.credited) + ' শুধু "' + (d.service_name || 'নির্দিষ্ট সেবা') + '" সেবার জন্য সংরক্ষিত ক্রেডিট হিসেবে যোগ হয়েছে — এই টাকা শুধু ওই সেবা কিনলেই খরচ হবে।');
-  } else {
-    alert('🎉 অভিনন্দন! ৳' + bn(d.credited) + ' আপনার মূল ওয়ালেট ব্যালেন্সে যোগ হয়েছে!');
-  }
+  celebrate(Number(d.credited) || 0, code, {
+    title: 'অভিনন্দন! কুপন রিডিম সফল হয়েছে!',
+    note: d.service_locked
+      ? '🔒 এই টাকা শুধু "' + (d.service_name || 'নির্দিষ্ট সেবা') + '" সেবার জন্য সংরক্ষিত ক্রেডিট হিসেবে যোগ হয়েছে — শুধু ওই সেবা কিনলেই খরচ হবে।'
+      : '',
+  });
 }
 
 function copyCode(code) {
@@ -678,13 +682,38 @@ async function redeem(){
     : '🎉 ৳'+Number(d.credited).toLocaleString('bn-BD')+' ব্যালেন্সে যোগ হয়েছে!';
   document.getElementById('couponCode').value='';
   loadWallet();
-  celebrate(Number(d.credited)||0, code);
+  celebrate(Number(d.credited)||0, code, { title: 'অভিনন্দন! কুপন রিডিম সফল হয়েছে!' });
 }
 
-function celebrate(amount,code){
+let cbCurrentCode='';
+function fmtMoney(n){
+  return '৳'+Number(n||0).toLocaleString('bn-BD',{minimumFractionDigits:0,maximumFractionDigits:2});
+}
+function copyCelebrationCode(){
+  const btn=document.getElementById('cbCopyBtn');
+  const done=()=>{ if(btn){ const old=btn.textContent; btn.textContent='✅ কপি হয়েছে!'; setTimeout(()=>{btn.textContent=old;},1500); } };
+  if(!cbCurrentCode) return;
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(cbCurrentCode).then(done).catch(()=>{ prompt('কুপন কোডটি কপি করুন:', cbCurrentCode); });
+  } else {
+    prompt('কুপন কোডটি কপি করুন:', cbCurrentCode);
+  }
+}
+function celebrate(amount,code,opts){
   const ov=document.getElementById('cbOverlay');
   if(!ov) return;
-  document.getElementById('cbCode').textContent='কুপন কোড: '+code;
+  opts=opts||{};
+  cbCurrentCode=code||'';
+  document.getElementById('cbTitle').textContent=opts.title||'অভিনন্দন! ক্যাশব্যাক কুপন তৈরি হয়েছে!';
+  document.getElementById('cbCode').textContent=code?('কুপন কোড: '+code):'';
+  const noteEl=document.getElementById('cbNote');
+  if(noteEl){
+    if(opts.note){ noteEl.textContent=opts.note; noteEl.style.display='block'; }
+    else { noteEl.textContent=''; noteEl.style.display='none'; }
+  }
+  const copyBtn=document.getElementById('cbCopyBtn');
+  if(copyBtn) copyBtn.style.display=code?'':'none';
+  ov.querySelectorAll('.coin').forEach(c=>c.remove());
   ov.classList.add('show');
   for(let i=0;i<40;i++){
     const c=document.createElement('div');c.className='coin';
@@ -698,8 +727,9 @@ function celebrate(amount,code){
   const el=document.getElementById('cbWon');const t0=performance.now(),dur=1500;
   (function tick(t){
     const p=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-p,3);
-    el.textContent='৳'+Math.round(amount*e).toLocaleString('bn-BD');
+    el.textContent=fmtMoney(amount*e);
     if(p<1)requestAnimationFrame(tick);
+    else el.textContent=fmtMoney(amount);
   })(t0);
 }
 
