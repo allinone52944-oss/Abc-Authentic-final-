@@ -229,6 +229,27 @@ describe('api() — 401 + silent refresh', () => {
     expect(global.localStorage.getItem('abc_refresh_token')).toBe('new-ref');
   });
 
+  test('fresh tab: no access token anywhere, refresh token in localStorage → recovers instead of bouncing to login', async () => {
+    // sessionStorage is per-tab: a page opened in a NEW tab starts
+    // with NO access token, while the refresh token (localStorage)
+    // is shared. api() must still attempt the silent refresh.
+    global.localStorage.setItem('abc_refresh_token', 'tab-refresh');
+    const ABC = loadApp();
+    expect(ABC.getAccessToken()).toBeFalsy();
+    global.fetch.mockImplementation(async (url, opts) => {
+      if (url === '/api/auth/refresh') {
+        return okJson({ access_token: 'fresh-acc', refresh_token: 'fresh-ref' });
+      }
+      if (opts.headers['Authorization'] === 'Bearer fresh-acc') return okJson({ retried: true });
+      return errStatus(401); // first call carries no/stale auth
+    });
+    const r = await ABC.api('/orders');
+    expect(r.ok).toBe(true);
+    expect(global.fetch).toHaveBeenCalledTimes(3); // original, refresh, retry
+    expect(global.sessionStorage.getItem('abc_access_token')).toBe('fresh-acc');
+    expect(global.localStorage.getItem('abc_refresh_token')).toBe('fresh-ref');
+  });
+
   test('keeps the old refresh token when the refresh response omits it', async () => {
     const ABC = loadApp();
     ABC.setTokens('old-acc', 'keep-me');

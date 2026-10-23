@@ -157,8 +157,15 @@
       await new Promise(function (res) { setTimeout(res, 1000 * (_retry + 1)); });
       return api(path, opts, _retry + 1);
     }
-    if (r.status === 401 && accessToken) {
-      // Try one silent refresh (deduplicated), then retry
+    // 401 recovery: try one silent refresh (deduplicated), then
+    // retry. This must ALSO run when this tab has no access token
+    // at all (fresh tab/window — sessionStorage is per-tab) but a
+    // refresh token survives in localStorage; without it, opening
+    // any page in a new tab bounced straight to the login screen
+    // even though the user was still logged in (2026-10-23).
+    let _storedRefresh = null;
+    try { _storedRefresh = localStorage.getItem(LS_REFRESH); } catch (e) {}
+    if (r.status === 401 && (accessToken || _storedRefresh)) {
       let refreshed = false;
       try { refreshed = await refreshAccessDedup(); } catch (e) { refreshed = false; }
       if (refreshed) {
