@@ -65,6 +65,35 @@ describe('service-detail routing (the logout bug)', () => {
   });
 });
 
+describe('downloads go through the login (the NO_TOKEN bug)', () => {
+  // Delivery files are owner-only: a plain <a href> sends no
+  // login header and the server answers {"error":"NO_TOKEN"}.
+  // History downloads via ABC.api → blob; land.html must too.
+  const html = read('frontend/land.html');
+  test('receipt/report downloads use an authenticated blob fetch', () => {
+    expect(html).toContain('async function dlPdf(');
+    expect(html).toContain('URL.createObjectURL(blob)');
+    expect(html).toContain("dlPdf(\\'");
+  });
+  test('no raw receipt href remains', () => {
+    expect(html).not.toContain('href="\' + esc(r.receipt)');
+  });
+});
+
+describe('catalog shows land ONCE (the duplicate complaint)', () => {
+  const svcs = read('frontend/services.html');
+  test('services page collapses the three land engines into one card', () => {
+    expect(svcs).toContain('function groupLand(');
+    expect(svcs).toContain("LAND_ENGINES = ['land-search', 'land-scan', 'land-verify']");
+    expect(svcs).toContain('ALL_SERVICES = groupLand(services || [])');
+    expect(svcs).toContain("_landGroup: true");
+  });
+  test('the group card opens the single land page', () => {
+    expect(svcs).toContain("if (s._landGroup)");
+    expect(svcs).toContain("location.href=\\'/land.html\\'");
+  });
+});
+
 describe('backend wiring', () => {
   test('server mounts /api/land', () => {
     expect(read('backend/server.js')).toContain("app.use('/api/land'");

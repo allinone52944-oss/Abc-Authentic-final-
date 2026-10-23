@@ -53,7 +53,7 @@
   .rec.total { background:linear-gradient(135deg,#fefce8,#fef3c7); border-color:#f59e0b88; text-align:center; font-size:16px; }
   .verdict { display:flex; justify-content:space-between; gap:8px; font-size:14px; padding:7px 0; border-bottom:1px dashed #e2e8f0; }
   .verdict .m { font-weight:800; }
-  .dl-btn { display:inline-block; margin-top:14px; background:linear-gradient(135deg,#14532d,#16a34a); color:#fff !important; padding:12px 22px; border-radius:12px; font-weight:700; font-size:15px; text-decoration:none; box-shadow:0 6px 16px rgba(20,83,45,.3); }
+  .dl-btn { display:inline-block; margin-top:14px; background:linear-gradient(135deg,#14532d,#16a34a); color:#fff !important; padding:12px 22px; border-radius:12px; font-weight:700; font-size:15px; text-decoration:none; box-shadow:0 6px 16px rgba(20,83,45,.3); border:none; cursor:pointer; font-family:inherit; }
 </style>
 </head>
 <body>
@@ -180,6 +180,22 @@
     const data = await resp.json().catch(() => ({}));
     return { resp, data };
   }
+  // Delivery files sit behind login (owner-only endpoint) — a
+  // plain <a href> sends no login header and the server answers
+  // {"error":"NO_TOKEN"}. Download the History way: authenticated
+  // fetch → blob → save. (ABC.api adds '/api' itself.)
+  async function dlPdf(url, name) {
+    try {
+      const r = await ABC.api(String(url).replace(/^\/api/, ''));
+      if (!r.ok) { showErr('ডাউনলোড ব্যর্থ হয়েছে — আবার চেষ্টা করুন।'); return; }
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name || 'land-report.pdf';
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+    } catch (e) { showErr('ডাউনলোড ব্যর্থ হয়েছে — আবার চেষ্টা করুন।'); }
+  }
   async function loadPrice(mode) {
     try {
       const { data: r } = await apiJson(API + '/price?mode=' + mode);
@@ -292,7 +308,7 @@
       h += '</div>';
     }
     if (r.receipt) {
-      h += '<a class="dl-btn" href="' + esc(r.receipt) + '" target="_blank" rel="noopener">📄 রিপোর্ট (PDF) ডাউনলোড করুন</a>';
+      h += '<button type="button" class="dl-btn" onclick="dlPdf(\'' + esc(r.receipt) + '\', \'land-report.pdf\')">📄 রিপোর্ট (PDF) ডাউনলোড করুন</button>';
     }
     $('result').innerHTML = h;
   }
@@ -327,7 +343,7 @@
       } else {
         showErr(r.message || 'কোনো রেকর্ড পাওয়া যায়নি — কোনো টাকা কাটা হয়নি।');
         if (r.receipt) {
-          $('result').innerHTML = '<div style="margin-top:10px"><a href="' + esc(r.receipt) + '" target="_blank" rel="noopener">📄 রসিদ (PDF) দেখুন</a></div>';
+          $('result').innerHTML = '<div style="margin-top:10px"><button type="button" class="dl-btn" onclick="dlPdf(\'' + esc(r.receipt) + '\', \'land-receipt.pdf\')">📄 রসিদ (PDF) ডাউনলোড করুন</button></div>';
         }
       }
     } catch (e) {

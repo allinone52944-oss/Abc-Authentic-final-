@@ -244,7 +244,37 @@ function autoIcon(name){
   return '🛎️';
 }
 
+// The three land engines are ONE customer service (ভূমি সেবা)
+// with three modes on a single page — showing three separate
+// catalog cards for them was a duplicate (owner, 2026-10-23).
+// They collapse into a single group card that opens land.html
+// directly; the individual rows stay in Admin → Services for
+// pricing, and their detail pages keep working.
+const LAND_ENGINES = ['land-search', 'land-scan', 'land-verify'];
+function groupLand(list){
+  const lands = list.filter(s => LAND_ENGINES.includes(s.engine_id));
+  if (lands.length < 2) return list;
+  const rest = list.filter(s => !LAND_ENGINES.includes(s.engine_id));
+  const first = lands.find(s => s.engine_id === 'land-search') || lands[0];
+  const group = Object.assign({}, first, {
+    name: 'Land Services', name_bn: 'ভূমি সেবা (খতিয়ান)', icon: '🌾',
+    price: Math.min.apply(null, lands.map(s => Number(s.price) || 0)),
+    open: lands.some(s => s.open), _landGroup: true,
+  });
+  rest.splice(Math.min(list.indexOf(first), rest.length), 0, group);
+  return rest;
+}
+
 function card(s){
+  if (s._landGroup) {
+    return '<div class="svc-card" onclick="location.href=\'/land.html\'">' +
+      '<div class="svc-ico">🌾</div>' +
+      '<div class="svc-info"><h4>ভূমি সেবা (খতিয়ান)</h4>' +
+      '<div style="font-size:12px;color:#64748b;margin-top:2px;">খতিয়ান খোঁজ · নামে সন্ধান · জমি যাচাই</div>' +
+      '<div style="margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">' +
+      '<span class="ptype auto">⚡ স্বয়ংক্রিয়</span>' + (s.open ? '' : '<span class="ptype closed">সাময়িক বন্ধ</span>') + '</div></div>' +
+      '<div class="svc-pr">৳' + bnNum(s.price) + ' থেকে</div></div>';
+  }
   const closed = s.open ? '' : '<span class="ptype closed">সাময়িক বন্ধ</span>';
   const catName = s.category_name_bn || s.category_name;
   const catHtml = catName ? '<span class="cat-pill">📁 ' + esc(catName) + '</span>' : '';
@@ -392,12 +422,12 @@ async function init(){
   const r=await ABC.api('/services');
   if(!r.ok) return;
   const {services}=await r.json();
-  ALL_SERVICES = services || [];
+  ALL_SERVICES = groupLand(services || []);
   updateCounts();
 
   const map = {}; GROUPS = [];
   const uncat = { id:null, name:'অন্যান্য সেবা', icon:'📦', services:[], ord:999999 };
-  services.forEach(s => {
+  ALL_SERVICES.forEach(s => {
     if (s.category_id) {
       if (!map[s.category_id]) {
         map[s.category_id] = {
