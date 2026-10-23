@@ -1,0 +1,10 @@
+{
+  "id": "land-verify",
+  "name": "Land Claim Verification",
+  "name_bn": "জমি যাচাই রিপোর্ট",
+  "version": "1.0.0",
+  "entry": "index.js",
+  "capabilities": ["land-verify"],
+  "description": "Compares a seller's claim (owner, dag, total land) against the official DLRMS record and issues a match/mismatch report; charged only when the record is found",
+  "description_bn": "বিক্রেতার দাবি বনাম সরকারি রেকর্ড — মিল/অমিলের যাচাই রিপোর্ট; রেকর্ড পেলেই চার্জ"
+}

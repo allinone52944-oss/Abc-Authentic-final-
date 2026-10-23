@@ -307,6 +307,28 @@ try {
   safeLog('[engines] qr-photo-verify not mounted:', e.message);
 }
 
+// ---- Land services (DLRMS public channel, auth + limit) -------------
+// engines/land-core/client.js reads the official land record
+// through the portal's guest channel — no subprocess, no login.
+// Wallet is charged ONLY when a record is found.
+//   GET  /api/land/geo/* · GET /api/land/price?mode=
+//   POST /api/land/search · /api/land/scan · /api/land/verify
+const landLimiter = rateLimit({
+  validate: { xForwardedForHeader: false },
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'RATE_LIMITED' },
+});
+try {
+  const landRoutes = require('./routes/land');
+  app.use('/api/land', requireAuth, landLimiter, landRoutes);
+  safeLog('[engines] mounted land services at /api/land');
+} catch (e) {
+  safeLog('[engines] land services not mounted:', e.message);
+}
+
 // ---- BDRIS Apply engine (as-is bot, auth + strict limit) -------------
 // The engine folder is an as-is copy of Bdris-apply-v2-CLEAN-v23.zip
 // (BDRIS Auto-fill Bot v6: Express + Socket.IO + Playwright).

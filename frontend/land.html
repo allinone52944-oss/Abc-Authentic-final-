@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/premium.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=3">
+<meta name="theme-color" content="#14532d">
+<title>ভূমি সেবা - All In One</title>
+<style>
+  .form-card { background:#fff; border:1px solid var(--border-light); border-radius:20px; padding:0 24px 24px; box-shadow:0 12px 32px rgba(15,23,42,.08); margin-bottom:20px; max-width:680px; overflow:hidden; }
+  .hero { margin:0 -24px 20px; padding:22px 24px 18px; background:linear-gradient(135deg,#052e16 0%,#14532d 55%,#166534 100%); color:#ecfdf5; position:relative; }
+  .hero:after { content:''; position:absolute; inset:0; background:radial-gradient(circle at 85% 20%, rgba(250,204,21,.22) 0%, transparent 55%); pointer-events:none; }
+  .hero h3 { margin:0 0 4px; font-size:19px; color:#fff; }
+  .hero p { margin:0; font-size:13px; color:#bbf7d0; }
+  .badges { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; position:relative; z-index:1; }
+  .badge { background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); color:#fef9c3; font-size:12px; font-weight:600; padding:4px 10px; border-radius:20px; }
+  .spin { display:inline-block; width:20px; height:20px; border:3px solid rgba(255,255,255,.35); border-top-color:#fff; border-radius:50%; animation:sp .8s linear infinite; vertical-align:-4px; margin-right:8px; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .err { display:none; background:#fef2f2; border:1px solid #fca5a5; color:#b91c1c; padding:12px 14px; border-radius:12px; margin-bottom:14px; font-size:14px; }
+  .err.on { display:block; }
+  .ok { display:none; background:#f0fdf4; border:1px solid #86efac; color:#15803d; padding:14px; border-radius:12px; margin-bottom:14px; font-size:14px; }
+  .ok.on { display:block; }
+  .modes { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:18px; }
+  @media (max-width:560px){ .modes { grid-template-columns:1fr; } }
+  .mode-card { position:relative; border:2px solid #e2e8f0; border-radius:16px; padding:18px 12px 14px; cursor:pointer; text-align:center; background:#fff; transition:all .18s ease; box-shadow:0 2px 8px rgba(15,23,42,.04); }
+  .mode-card:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(15,23,42,.09); }
+  .mode-card .ic { width:52px; height:52px; margin:0 auto; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:25px; background:linear-gradient(135deg,#f0fdf4,#dcfce7); box-shadow:inset 0 0 0 1px #bbf7d0; }
+  .mode-card .t { font-weight:700; font-size:15.5px; color:#0f172a; margin-top:8px; }
+  .mode-card .p { display:inline-block; margin-top:6px; background:linear-gradient(135deg,#fef3c7,#fde68a); color:#92400e; font-size:13.5px; font-weight:800; padding:2px 12px; border-radius:20px; border:1px solid #f59e0b55; }
+  .mode-card .d { font-size:11.5px; color:#64748b; margin-top:7px; line-height:1.55; }
+  .mode-card.on { border-color:#14532d; background:linear-gradient(180deg,#f0fdf4,#ffffff); box-shadow:0 10px 24px rgba(20,83,45,.16); }
+  .mode-card.on:after { content:'✓'; position:absolute; top:8px; right:10px; width:20px; height:20px; border-radius:50%; background:#16a34a; color:#fff; font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center; }
+  .field { margin-bottom:14px; }
+  .field label { display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px; }
+  .field select, .field input[type=text] { width:100%; padding:12px; border:1.5px solid #cbd5e1; border-radius:12px; background:#fff; color:#0f172a; font-size:15.5px; font-family:inherit; transition:border-color .15s, box-shadow .15s; }
+  .field select:focus, .field input[type=text]:focus { outline:none; border-color:#16a34a; box-shadow:0 0 0 3px rgba(22,163,74,.15); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:560px){ .grid2 { grid-template-columns:1fr; } }
+  .price-line { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; background:linear-gradient(135deg,#fffbeb,#fef3c7); border:1px solid #f59e0b66; color:#92400e; padding:11px 14px; border-radius:12px; font-size:13px; font-weight:700; margin-bottom:18px; }
+  #goBtn { background:linear-gradient(135deg,#14532d,#16a34a) !important; border:none; border-radius:14px; box-shadow:0 8px 20px rgba(20,83,45,.35); letter-spacing:.2px; }
+  #goBtn:disabled { opacity:.75; }
+  .note { font-size:12px; color:#64748b; margin-top:10px; line-height:1.7; }
+  .rec { border:1.5px solid #d6c9ae; background:#fffdf8; border-radius:16px; padding:16px 18px; margin-top:14px; box-shadow:0 6px 18px rgba(111,78,46,.08); }
+  .rec .rec-hd { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .rec .seal { width:34px; height:34px; border-radius:50%; background:#16a34a; color:#fff; font-size:17px; font-weight:800; display:flex; align-items:center; justify-content:center; flex:none; }
+  .rec h4 { margin:0; color:#14532d; font-size:16px; }
+  .rec .r { display:flex; gap:8px; font-size:14.5px; padding:5px 0; border-bottom:1px dashed #eadfc8; }
+  .rec .r:last-child { border-bottom:none; }
+  .rec .r b { color:#78716c; min-width:96px; font-weight:600; }
+  .rec.total { background:linear-gradient(135deg,#fefce8,#fef3c7); border-color:#f59e0b88; text-align:center; font-size:16px; }
+  .verdict { display:flex; justify-content:space-between; gap:8px; font-size:14px; padding:7px 0; border-bottom:1px dashed #e2e8f0; }
+  .verdict .m { font-weight:800; }
+  .dl-btn { display:inline-block; margin-top:14px; background:linear-gradient(135deg,#14532d,#16a34a); color:#fff !important; padding:12px 22px; border-radius:12px; font-weight:700; font-size:15px; text-decoration:none; box-shadow:0 6px 16px rgba(20,83,45,.3); }
+</style>
+</head>
+<body>
+<div class="desktop">
+  <div class="sidebar">
+    <div class="side-logo">
+      <div class="logo-icon">🔷</div>
+      <div>
+        <h2>All In One</h2>
+        <p>বিশ্বাস ও সেবার ঠিকানা</p>
+      </div>
+    </div>
+    <nav>
+      <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+      <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🧩</span> সকল সেবা</div>
+      <div class="side-link on"><span class="ico">🌾</span> ভূমি সেবা</div>
+      <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
+      <div class="side-link" onclick="location.href='/history.html'"><span class="ico">🕘</span> ইতিহাস</div>
+      <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">👛</span> ওয়ালেট ও রিচার্জ</div>
+      <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> পার্সোনাল প্রোফাইল</div>
+    </nav>
+  </div>
+
+  <div class="main">
+    <div class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+      <div>
+        <h2>🌾 ভূমি সেবা (খতিয়ান)</h2>
+        <p>সরকারি ভূমি রেকর্ড থেকে সরাসরি — জরিপের ধরন নিজে খুঁজে নেবে</p>
+      </div>
+      <div style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">
+        💳 ব্যালেন্স: ৳<span id="balVal">০</span>
+      </div>
+    </div>
+
+    <div class="form-card">
+      <div class="hero">
+        <h3>সরকারি ভূমি রেকর্ড — সরাসরি আপনার হাতে</h3>
+        <p>কোনো অফিসে যাওয়া নয়, দালাল নয় — অফিসিয়াল রেকর্ড থেকেই রিপোর্ট</p>
+        <div class="badges">
+          <span class="badge">🏛️ সরকারি রেকর্ড থেকে সরাসরি</span>
+          <span class="badge">💸 রেকর্ড না পেলে ৳০</span>
+          <span class="badge">📄 PDF রিপোর্ট + ইতিহাসে সংরক্ষণ</span>
+        </div>
+      </div>
+      <div class="modes" id="modes">
+        <div class="mode-card on" data-mode="search">
+          <div class="ic">🔍</div><div class="t">খতিয়ান খোঁজ</div>
+          <div class="p">৳<span data-price="search">–</span></div>
+          <div class="d">নম্বর দিলেই মালিক, দাগ ও মোট জমি</div>
+        </div>
+        <div class="mode-card" data-mode="scan">
+          <div class="ic">👤</div><div class="t">নামে সন্ধান</div>
+          <div class="p">৳<span data-price="scan">–</span></div>
+          <div class="d">এক নামে পুরো মৌজার সব খতিয়ান</div>
+        </div>
+        <div class="mode-card" data-mode="verify">
+          <div class="ic">✅</div><div class="t">জমি যাচাই</div>
+          <div class="p">৳<span data-price="verify">–</span></div>
+          <div class="d">কেনার আগে দাবি বনাম রেকর্ড</div>
+        </div>
+      </div>
+
+      <div class="price-line">
+        <span>সেবা চার্জ: ৳<span id="priceVal">–</span> (শুধু রেকর্ড পেলেই কাটবে)</span>
+        <span>রেকর্ড না পেলে চার্জ: ৳০</span>
+      </div>
+
+      <div class="err" id="errBox"></div>
+      <div class="ok" id="okBox"></div>
+
+      <form id="lform">
+        <div class="grid2">
+          <div class="field"><label>বিভাগ *</label><select id="fDivision"><option value="">— বেছে নিন —</option></select></div>
+          <div class="field"><label>জেলা *</label><select id="fDistrict"><option value="">— আগে বিভাগ —</option></select></div>
+          <div class="field"><label>উপজেলা / থানা *</label><select id="fUpazila"><option value="">— আগে জেলা —</option></select></div>
+          <div class="field"><label>মৌজা *</label><select id="fMouza"><option value="">— আগে উপজেলা —</option></select></div>
+        </div>
+
+        <div id="pane-search">
+          <div class="field"><label>খতিয়ান নম্বর *</label><input type="text" id="fKhatianNo" inputmode="numeric" placeholder="যেমন: ৮"></div>
+        </div>
+        <div id="pane-scan" style="display:none">
+          <div class="field"><label>মালিকের নাম *</label><input type="text" id="fOwnerName" placeholder="যেমন: আকবর আলী"></div>
+        </div>
+        <div id="pane-verify" style="display:none">
+          <div class="field"><label>খতিয়ান নম্বর *</label><input type="text" id="fVKhatianNo" inputmode="numeric" placeholder="যেমন: ৮"></div>
+          <div class="field"><label>বিক্রেতার দাবি — মালিকের নাম</label><input type="text" id="fClaimOwner" placeholder="বিক্রেতা যা বলেছে"></div>
+          <div class="grid2">
+            <div class="field"><label>দাবি — দাগ নম্বর</label><input type="text" id="fClaimDag" inputmode="numeric" placeholder="যেমন: ১২৩৭"></div>
+            <div class="field"><label>দাবি — জমি (একর)</label><input type="text" id="fClaimLand" inputmode="decimal" placeholder="যেমন: 0.0544"></div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" id="goBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; background:#14532d;">
+          🔍 খুঁজুন
+        </button>
+        <div class="note">
+          ℹ️ রিপোর্ট (PDF) তৈরি হলে আপনার <a href="/history.html">ইতিহাসে</a> সংরক্ষিত থাকবে।
+          এই রিপোর্ট সরকারি রেকর্ডের তথ্যের সারাংশ — সার্টিফাইড কপি নয়।
+        </div>
+      </form>
+
+      <div id="result"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js?v=17"></script>
+<script>
+  const API = '/land'; // ABC.api() prepends '/api' itself
+  const BN = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
+  const bn = (v) => String(v == null ? '' : v).replace(/[0-9]/g, (d) => BN[Number(d)]);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  let MODE = 'search';
+  const prices = {};
+
+  const $ = (id) => document.getElementById(id);
+  function showErr(msg) { const b = $('errBox'); b.textContent = msg; b.classList.add('on'); $('okBox').classList.remove('on'); }
+  function showOk(msg) { const b = $('okBox'); b.textContent = msg; b.classList.add('on'); $('errBox').classList.remove('on'); }
+  function clearBoxes() { $('errBox').classList.remove('on'); $('okBox').classList.remove('on'); }
+
+  async function apiJson(path, opts) {
+    const resp = await ABC.api(path, opts);
+    const data = await resp.json().catch(() => ({}));
+    return { resp, data };
+  }
+  async function loadPrice(mode) {
+    try {
+      const { data: r } = await apiJson(API + '/price?mode=' + mode);
+      if (r && r.ok) {
+        prices[mode] = r.price;
+        document.querySelector('[data-price="' + mode + '"]').textContent = bn(r.price);
+        if (mode === MODE) {
+          $('priceVal').textContent = bn(r.price);
+          $('balVal').textContent = bn(r.balance);
+          updateBtn();
+        }
+      }
+    } catch (e) { /* price stays as-is */ }
+  }
+  function updateBtn() {
+    const labels = { search: '🔍 খুঁজুন', scan: '👤 সন্ধান করুন', verify: '✅ যাচাই করুন' };
+    $('goBtn').textContent = labels[MODE] + (prices[MODE] != null ? ' — ৳' + bn(prices[MODE]) : '');
+  }
+  function setMode(mode) {
+    MODE = mode;
+    document.querySelectorAll('.mode-card').forEach((c) => c.classList.toggle('on', c.dataset.mode === mode));
+    ['search', 'scan', 'verify'].forEach((m) => { $('pane-' + m).style.display = m === mode ? '' : 'none'; });
+    $('priceVal').textContent = prices[mode] != null ? bn(prices[mode]) : '–';
+    updateBtn();
+    clearBoxes();
+    $('result').innerHTML = '';
+  }
+  document.querySelectorAll('.mode-card').forEach((c) => c.addEventListener('click', () => setMode(c.dataset.mode)));
+
+  // ---------- cascade ----------
+  function fillSelect(sel, items, placeholder, valFn, labelFn) {
+    sel.innerHTML = '<option value="">' + placeholder + '</option>';
+    (items || []).forEach((it) => {
+      const o = document.createElement('option');
+      o.value = valFn(it); o.textContent = labelFn(it);
+      Object.assign(o.dataset, it._ds || {});
+      sel.appendChild(o);
+    });
+  }
+  async function loadDivisions() {
+    try {
+      const { data: r } = await apiJson(API + '/geo/divisions');
+      fillSelect($('fDivision'), r.items, '— বেছে নিন —', (d) => d.bbs, (d) => d.name);
+    } catch (e) { showErr('এলাকার তালিকা লোড হয়নি — পেজটি আবার লোড করুন।'); }
+  }
+  $('fDivision').addEventListener('change', async () => {
+    fillSelect($('fDistrict'), [], 'লোড হচ্ছে…', (d) => d.bbs, (d) => d.name);
+    fillSelect($('fUpazila'), [], '— আগে জেলা —', (d) => d.bbs, (d) => d.name);
+    fillSelect($('fMouza'), [], '— আগে উপজেলা —', (d) => d.mouza_id, (d) => d.name);
+    if (!$('fDivision').value) return;
+    const { data: r } = await apiJson(API + '/geo/districts?division=' + encodeURIComponent($('fDivision').value));
+    fillSelect($('fDistrict'), r.items, '— বেছে নিন —', (d) => d.bbs, (d) => d.name);
+  });
+  $('fDistrict').addEventListener('change', async () => {
+    fillSelect($('fUpazila'), [], 'লোড হচ্ছে…', (d) => d.bbs, (d) => d.name);
+    fillSelect($('fMouza'), [], '— আগে উপজেলা —', (d) => d.mouza_id, (d) => d.name);
+    if (!$('fDistrict').value) return;
+    const { data: r } = await apiJson(API + '/geo/upazilas?district=' + encodeURIComponent($('fDistrict').value));
+    fillSelect($('fUpazila'), r.items, '— বেছে নিন —', (d) => d.bbs, (d) => d.name);
+  });
+  $('fUpazila').addEventListener('change', async () => {
+    fillSelect($('fMouza'), [], 'লোড হচ্ছে…', (d) => d.mouza_id, (d) => d.name);
+    if (!$('fUpazila').value) return;
+    const q = 'district=' + encodeURIComponent($('fDistrict').value) + '&upazila=' + encodeURIComponent($('fUpazila').value);
+    const { data: sv } = await apiJson(API + '/geo/surveys?' + q);
+    if (!sv.items || !sv.items.length) { showErr('এই উপজেলায় কোনো জরিপের তথ্য পাওয়া যায়নি।'); return; }
+    const { data: r } = await apiJson(API + '/geo/mouzas?' + q + '&survey_id=' + encodeURIComponent(sv.items[0].id));
+    fillSelect($('fMouza'), r.items, '— বেছে নিন —',
+      (d) => d.mouza_id,
+      (d) => d.name);
+    $('fMouza').querySelectorAll('option').forEach((o, i) => {
+      if (i === 0) return;
+      const it = r.items[i - 1];
+      o.dataset.jl = it.jl; o.dataset.jl_id = it.jl_id;
+    });
+  });
+
+  function areaBody() {
+    const d = $('fDivision'), di = $('fDistrict'), u = $('fUpazila'), m = $('fMouza');
+    if (!d.value || !di.value || !u.value || !m.value) return null;
+    const mo = m.options[m.selectedIndex];
+    return {
+      division_bbs: d.value, district_bbs: di.value, upazila_bbs: u.value, mouza_id: m.value,
+      division_name: d.options[d.selectedIndex].textContent,
+      district_name: di.options[di.selectedIndex].textContent,
+      upazila_name: u.options[u.selectedIndex].textContent,
+      mouza_name: mo.textContent, jl_no: mo.dataset.jl || '',
+    };
+  }
+
+  function renderResult(r) {
+    let h = '';
+    (r.records || []).forEach((rec) => {
+      h += '<div class="rec"><div class="rec-hd"><div class="seal">✓</div><h4>খতিয়ান নং: ' + esc(bn(rec.KHATIAN_NO)) +
+        (rec._surveyName ? ' (জরিপ: ' + esc(rec._surveyName) + ')' : '') + '</h4></div>' +
+        '<div class="r"><b>মালিক</b><span>' + esc(rec.OWNERS || '—') + '</span></div>' +
+        '<div class="r"><b>দাগ নম্বর</b><span>' + esc(bn(rec.DAGS || '—')) + '</span></div>' +
+        '<div class="r"><b>জমির পরিমাণ</b><span>' + esc(bn(rec.TOTAL_LAND || '—')) + ' একর</span></div></div>';
+    });
+    if (r.totalLand != null) {
+      h += '<div class="rec total"><b>মোট জমি: ' + esc(bn(r.totalLand)) + ' একর</b></div>';
+    }
+    if (r.verdicts) {
+      h += '<div class="rec"><div class="rec-hd"><div class="seal">✓</div><h4 style="color:#0f172a">যাচাইয়ের ফল</h4></div>';
+      r.verdicts.forEach((v) => {
+        h += '<div class="verdict"><span>' + esc(v.label) + ': দাবি ' + esc(bn(v.claim)) + ' · রেকর্ড ' + esc(bn(v.record)) + '</span>' +
+          '<span class="m" style="color:' + (v.match ? '#16a34a' : '#dc2626') + '">' + (v.match ? 'মিলেছে' : 'মেলেনি') + '</span></div>';
+      });
+      h += '</div>';
+    }
+    if (r.receipt) {
+      h += '<a class="dl-btn" href="' + esc(r.receipt) + '" target="_blank" rel="noopener">📄 রিপোর্ট (PDF) ডাউনলোড করুন</a>';
+    }
+    $('result').innerHTML = h;
+  }
+
+  $('lform').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    clearBoxes();
+    const area = areaBody();
+    if (!area) { showErr('বিভাগ, জেলা, উপজেলা ও মৌজা — সবগুলো বেছে নিন।'); return; }
+    const body = { ...area, idempotency_key: 'land-' + MODE + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9) };
+    if (MODE === 'search') {
+      body.khatian_no = $('fKhatianNo').value.trim();
+      if (!body.khatian_no) { showErr('খতিয়ান নম্বর লিখুন।'); return; }
+    } else if (MODE === 'scan') {
+      body.owner_name = $('fOwnerName').value.trim();
+      if (!body.owner_name) { showErr('মালিকের নাম লিখুন।'); return; }
+    } else {
+      body.khatian_no = $('fVKhatianNo').value.trim();
+      body.claim = { owner: $('fClaimOwner').value.trim(), dag: $('fClaimDag').value.trim(), total_land: $('fClaimLand').value.trim() };
+      if (!body.khatian_no) { showErr('খতিয়ান নম্বর লিখুন।'); return; }
+      if (!body.claim.owner && !body.claim.dag && !body.claim.total_land) { showErr('অন্তত একটি দাবি বসান (মালিক / দাগ / জমি)।'); return; }
+    }
+    const btn = $('goBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span> সরকারি রেকর্ডে খোঁজা হচ্ছে…';
+    try {
+      const { resp, data: r } = await apiJson(API + '/' + MODE, { method: 'POST', body, timeout: 120000 });
+      if (resp.ok && r.ok) {
+        showOk('রেকর্ড পাওয়া গেছে — ৳' + bn(r.charged) + ' চার্জ হয়েছে। রিপোর্টটি ইতিহাসেও সংরক্ষিত আছে।');
+        if (r.balance != null) $('balVal').textContent = bn(r.balance);
+        renderResult(r);
+      } else {
+        showErr(r.message || 'কোনো রেকর্ড পাওয়া যায়নি — কোনো টাকা কাটা হয়নি।');
+        if (r.receipt) {
+          $('result').innerHTML = '<div style="margin-top:10px"><a href="' + esc(r.receipt) + '" target="_blank" rel="noopener">📄 রসিদ (PDF) দেখুন</a></div>';
+        }
+      }
+    } catch (e) {
+      showErr('সংযোগে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
+    } finally {
+      btn.disabled = false;
+      updateBtn();
+    }
+  });
+
+  loadDivisions();
+  loadPrice('search'); loadPrice('scan'); loadPrice('verify');
+  setMode('search');
+</script>
+</body>
+</html>

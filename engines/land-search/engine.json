@@ -1,0 +1,10 @@
+{
+  "id": "land-search",
+  "name": "Land Khatian Search",
+  "name_bn": "খতিয়ান খোঁজ",
+  "version": "1.0.0",
+  "entry": "index.js",
+  "capabilities": ["land-search"],
+  "description": "Khatian lookup on the official DLRMS land-record channel (guest access) — owner, dag numbers and total land by khatian number; charged only when a record is found",
+  "description_bn": "খতিয়ান নম্বর দিয়ে সরকারি ভূমি রেকর্ডে মালিক, দাগ ও মোট জমি — রেকর্ড পেলেই চার্জ"
+}

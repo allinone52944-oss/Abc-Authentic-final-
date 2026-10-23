@@ -2908,6 +2908,9 @@ window.AdmSvc = {
           '<option value="nid-replica">এনআইডি রেপ্লিকা ইঞ্জিন</option>' +
           '<option value="bdris-apply">BDRIS অনলাইন আবেদন ইঞ্জিন (Port 3102)</option>' +
           '<option value="qr-photo-verify">QR + ছবি যাচাই ইঞ্জিন (Gateway)</option>' +
+          '<option value="land-search">খতিয়ান খোঁজ ইঞ্জিন (DLRMS)</option>' +
+          '<option value="land-scan">নামে সম্পত্তি সন্ধান ইঞ্জিন (DLRMS)</option>' +
+          '<option value="land-verify">জমি যাচাই রিপোর্ট ইঞ্জিন (DLRMS)</option>' +
         '</select></div>' +
         '<small style="color:#64748b;font-size:11px;">গ্রাহক অর্ডার প্লেস করলে ইঞ্জিন ব্যাকগ্রাউন্ডে স্বয়ংক্রিয়ভাবে প্রসেস করে রেজাল্ট প্রদান করবে।</small>' +
       '</div>' +
@@ -2974,6 +2977,9 @@ window.AdmSvc = {
           '<option value="nid-replica"' + (s.engine_id === 'nid-replica' ? ' selected' : '') + '>এনআইডি রেপ্লিকা ইঞ্জিন</option>' +
           '<option value="bdris-apply"' + (s.engine_id === 'bdris-apply' ? ' selected' : '') + '>BDRIS অনলাইন আবেদন ইঞ্জিন (Port 3102)</option>' +
           '<option value="qr-photo-verify"' + (s.engine_id === 'qr-photo-verify' ? ' selected' : '') + '>QR + ছবি যাচাই ইঞ্জিন (Gateway)</option>' +
+          '<option value="land-search"' + (s.engine_id === 'land-search' ? ' selected' : '') + '>খতিয়ান খোঁজ ইঞ্জিন (DLRMS)</option>' +
+          '<option value="land-scan"' + (s.engine_id === 'land-scan' ? ' selected' : '') + '>নামে সম্পত্তি সন্ধান ইঞ্জিন (DLRMS)</option>' +
+          '<option value="land-verify"' + (s.engine_id === 'land-verify' ? ' selected' : '') + '>জমি যাচাই রিপোর্ট ইঞ্জিন (DLRMS)</option>' +
         '</select></div>' +
       '</div>' +
       '<div id="esv_manualBox" style="display:' + (isManual ? 'block' : 'none') + ';background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin-bottom:14px;">' +

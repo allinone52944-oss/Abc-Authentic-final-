@@ -1,0 +1,10 @@
+{
+  "id": "land-scan",
+  "name": "Land Owner Scan",
+  "name_bn": "নামে সম্পত্তি সন্ধান",
+  "version": "1.0.0",
+  "entry": "index.js",
+  "capabilities": ["land-scan"],
+  "description": "Scans a whole mouza index on the official DLRMS channel for every khatian recorded under one owner name, across all survey types, with a land total; charged only when at least one match is found",
+  "description_bn": "একটা নামে পুরো মৌজায় সব জরিপে খুঁজে সব খতিয়ান ও মোট জমির রিপোর্ট — মিল পেলেই চার্জ"
+}

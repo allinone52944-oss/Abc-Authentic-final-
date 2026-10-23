@@ -1136,6 +1136,20 @@
             <span class="engine-btn">যাচাই করুন →</span>
           </div>
         </div>
+
+        <!-- Engine 6: Land Services -->
+        <div class="engine-card" onclick="location.href='/land.html'">
+          <div class="engine-card-top">
+            <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #f0fdf4, #dcfce7);color:#14532d;">🌾</div>
+            <span class="engine-tag" style="background:#dcfce7;color:#14532d;">ভূমি রেকর্ড</span>
+          </div>
+          <h4>ভূমি সেবা (খতিয়ান)</h4>
+          <p>খতিয়ান খোঁজ, নামে সম্পত্তি সন্ধান ও জমি যাচাই রিপোর্ট — সরকারি রেকর্ড থেকে সরাসরি</p>
+          <div class="engine-card-footer">
+            <span class="engine-charge" id="engChargeLand">চার্জ: ৳২০ থেকে</span>
+            <span class="engine-btn">সেবা নিন →</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1317,6 +1331,19 @@
         <div class="engine-card-footer">
           <span class="engine-charge" id="mEngChargeQr">৳৫০</span>
           <span class="engine-btn">যাচাই →</span>
+        </div>
+      </div>
+
+      <!-- M Engine 6 -->
+      <div class="engine-card" onclick="location.href='/land.html'">
+        <div class="engine-card-top">
+          <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #f0fdf4, #dcfce7);color:#14532d;">🌾</div>
+          <span class="engine-tag" style="background:#dcfce7;color:#14532d;">ভূমি</span>
+        </div>
+        <h4>ভূমি সেবা (খতিয়ান)</h4>
+        <div class="engine-card-footer">
+          <span class="engine-charge" id="mEngChargeLand">৳২০ থেকে</span>
+          <span class="engine-btn">সেবা নিন →</span>
         </div>
       </div>
     </div>
@@ -1842,6 +1869,11 @@ async function loadServices() {
     if (deathSvc && deathSvc.price) {
       setText('engChargeDeath', 'চার্জ: ৳' + bnNum(deathSvc.price));
       setText('mEngChargeDeath', '৳' + bnNum(deathSvc.price));
+    }
+    const landSvc = _allServices.find(s => s.engine_id === 'land-search');
+    if (landSvc && landSvc.price) {
+      setText('engChargeLand', 'চার্জ: ৳' + bnNum(landSvc.price) + ' থেকে');
+      setText('mEngChargeLand', '৳' + bnNum(landSvc.price) + ' থেকে');
     }
     const qrSvc = _allServices.find(s => s.engine_id === 'qr-photo-verify');
     if (qrSvc && qrSvc.price) {
