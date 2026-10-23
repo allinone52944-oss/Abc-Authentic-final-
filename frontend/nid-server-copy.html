@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/premium.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=3">
+<meta name="theme-color" content="#14532d">
+<title>এনআইডি সার্ভার কপি - All In One</title>
+<style>
+  .form-card {
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-xl);
+    padding: 24px;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 20px;
+    max-width: 640px;
+  }
+  .spin {
+    display: inline-block; width: 20px; height: 20px;
+    border: 3px solid rgba(22,163,74,0.25); border-top-color: #16a34a;
+    border-radius: 50%; animation: sp 0.8s linear infinite;
+    vertical-align: -4px; margin-right: 8px;
+  }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .err {
+    display: none; background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c;
+    padding: 12px 14px; border-radius: var(--r-md); margin-bottom: 14px; font-size: 14px;
+  }
+  .err.on { display: block; }
+  .ok {
+    display: none; background: #f0fdf4; border: 1px solid #86efac; color: #15803d;
+    padding: 14px; border-radius: var(--r-md); margin-bottom: 14px; font-size: 14px;
+  }
+  .ok.on { display: block; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+  .field input[type=text], .field input[type=password] {
+    width: 100%; padding: 11px 12px; border: 1px solid #cbd5e1; border-radius: 8px;
+    background: #ffffff; color: #0f172a; font-size: 16px; font-family: inherit;
+  }
+  .price-line {
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+    background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+    padding: 10px 14px; border-radius: var(--r-md); font-size: 13px; font-weight: 600;
+    margin-bottom: 18px;
+  }
+  .note { font-size: 12px; color: #64748b; margin-top: 10px; line-height: 1.7; }
+  .captcha-box {
+    display: none; background: #f0fdf4; border: 1px solid #bbf7d0;
+    border-radius: var(--r-md); padding: 16px; margin-bottom: 6px; text-align: center;
+  }
+  .captcha-box.on { display: block; }
+  .captcha-box img {
+    max-width: 100%; height: auto; border: 1px solid #cbd5e1; border-radius: 8px;
+    background: #fff; margin-bottom: 12px;
+  }
+  .back-nav {
+    display: inline-flex; align-items: center; gap: 8px; color: var(--primary-700);
+    font-weight: 700; font-size: 14px; cursor: pointer; margin-bottom: 16px;
+    padding: 6px 14px; border-radius: var(--r-md); background: var(--primary-50);
+  }
+  .back-nav:hover { background: var(--primary-100); }
+</style>
+</head>
+<body>
+<div class="desktop">
+  <div class="sidebar">
+    <div class="side-logo">
+      <div class="logo-icon">🔷</div>
+      <div>
+        <h2>All In One</h2>
+        <p>বিশ্বাস ও সেবার ঠিকানা</p>
+      </div>
+    </div>
+    <nav>
+      <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+      <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🧩</span> সকল সেবা</div>
+      <div class="side-link on"><span class="ico">🪪</span> এনআইডি সার্ভার কপি</div>
+      <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
+      <div class="side-link" onclick="location.href='/history.html'"><span class="ico">🕘</span> ইতিহাস</div>
+      <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">👛</span> ওয়ালেট ও রিচার্জ</div>
+      <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> পার্সোনাল প্রোফাইল</div>
+    </nav>
+  </div>
+
+  <div class="main">
+    <span class="back-nav" onclick="location.href='/services.html'">← সকল সেবায় ফিরুন</span>
+    <div class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+      <div>
+        <h2>🪪 এনআইডি সার্ভার কপি</h2>
+        <p>NID পোর্টালের আইডি + পাসওয়ার্ড দিয়ে লগইন করে সরাসরি NID কার্ড (PDF)</p>
+      </div>
+      <div id="walletBadge" style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">
+        💳 ব্যালেন্স: ৳<span id="balVal">০</span>
+      </div>
+    </div>
+
+    <div class="form-card">
+      <div class="price-line">
+        <span>সেবা চার্জ: ৳<span id="priceVal">–</span> (প্রতিটি ডাউনলোডে কাটবে)</span>
+        <span>ব্যর্থ হলে চার্জ: ৳০</span>
+      </div>
+
+      <div class="err" id="errBox"></div>
+      <div class="ok" id="okBox"></div>
+
+      <form id="credForm" autocomplete="off">
+        <div class="field">
+          <label for="username">১) NID পোর্টালের আইডি (ইউজারনেম / NID নম্বর) *</label>
+          <input type="text" id="username" placeholder="পোর্টালের আইডি লিখুন" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="password">২) NID পোর্টালের পাসওয়ার্ড *</label>
+          <input type="password" id="password" placeholder="পোর্টালের পাসওয়ার্ড লিখুন" autocomplete="new-password">
+        </div>
+        <button type="submit" class="btn btn-primary" id="startBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700;">
+          🔐 ক্যাপচা আনুন
+        </button>
+      </form>
+
+      <div class="captcha-box" id="captchaBox">
+        <div style="font-size:13px; font-weight:600; color:#334155; margin-bottom:8px;">৩) ছবির লেখাটি হুবহু লিখুন</div>
+        <img id="captchaImg" alt="ক্যাপচা">
+        <div class="field" style="text-align:left;">
+          <input type="text" id="captchaText" placeholder="ক্যাপচার লেখা লিখুন" autocomplete="off">
+        </div>
+        <button type="button" class="btn btn-primary" id="goBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700;">
+          🔓 লগইন করুন
+        </button>
+      </div>
+
+      <div class="captcha-box" id="optionBox" style="background:#eff6ff; border-color:#bfdbfe;">
+        <div style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:4px;">✅ লগইন সফল হয়েছে</div>
+        <div id="holderLine" style="font-size:13px; color:#334155; margin-bottom:14px;"></div>
+        <div style="font-size:13px; font-weight:600; color:#334155; margin-bottom:10px;">কোনটি ডাউনলোড করবেন? (একটি বা দুটোই নিতে পারবেন)</div>
+        <button type="button" class="btn btn-primary" id="dlCardBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; margin-bottom:10px;">
+          🪪 NID কার্ড ডাউনলোড করুন
+        </button>
+        <button type="button" class="btn btn-primary" id="dlServerBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; background:linear-gradient(135deg,#1e40af,#2563eb);">
+          📄 সার্ভার কপি ডাউনলোড করুন
+        </button>
+        <p class="note" style="text-align:left;">প্রতিটি ডাউনলোডে সেবা চার্জ প্রযোজ্য — একই ডকুমেন্ট একই লগইনে আবার ডাউনলোড করলে দ্বিতীয়বার চার্জ কাটবে না।</p>
+      </div>
+
+      <p class="note">
+        🔒 আপনার পোর্টালের পাসওয়ার্ড আমাদের সার্ভারে সংরক্ষণ করা হয় না — শুধু এই একবারের লগইনের কাজে ব্যবহার হয়।<br>
+        ✅ লগইনের পর দুটি অপশন পাবেন — <b>NID কার্ড</b> ও <b>সার্ভার কপি</b>; যেটি লাগবে সেটি (বা দুটোই) ডাউনলোড করতে পারবেন। যেসব অ্যাকাউন্টে পোর্টালে সরাসরি ডাউনলোড আছে, সেখানে অফিসিয়াল কার্ডটিই সরাসরি পাবেন; ডাউনলোড না থাকলে (যেমন ২০১৯ সালের আগের NID) প্রোফাইলের তথ্য ও ছবি দিয়ে একই মানের কার্ড তৈরি করে দেওয়া হবে। ডকুমেন্ট তৈরি না হলে কোনো চার্জ কাটবে না।
+      </p>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js?v=18"></script>
+<script>
+  const API = '/nid-server-copy'; // ABC.api() prepends '/api' itself
+  const BN = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
+  const bn = (v) => String(v == null ? '' : v).replace(/[0-9]/g, (d) => BN[Number(d)]);
+  const $ = (id) => document.getElementById(id);
+  let SESSION = null;
+
+  const ERRMSG = {
+    MISSING_CREDENTIALS: 'আইডি ও পাসওয়ার্ড দুটোই দিন।',
+    INSUFFICIENT_BALANCE: 'পর্যাপ্ত ব্যালেন্স নেই — আগে ওয়ালেট রিচার্জ করুন।',
+    SERVICE_ACCESS_DISABLED: 'এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।',
+    PORTAL_UNREACHABLE: 'NID পোর্টালে এখন সংযোগ করা যাচ্ছে না — কিছুক্ষণ পর আবার চেষ্টা করুন।',
+    PORTAL_CHANGED: 'NID পোর্টালের লগইন পেজে পরিবর্তন এসেছে — আমরা বিষয়টি দেখছি। অনুগ্রহ করে পরে চেষ্টা করুন।',
+    CAPTCHA_NOT_FOUND: 'পোর্টালের ক্যাপচা পাওয়া যাচ্ছে না — কিছুক্ষণ পর আবার চেষ্টা করুন।',
+    SESSION_EXPIRED: 'সময় শেষ হয়ে গেছে — আবার আইডি-পাসওয়ার্ড দিয়ে শুরু করুন।',
+    JOB_EXPIRED: 'লগইনের সময়সীমা শেষ হয়ে গেছে — আবার আইডি-পাসওয়ার্ড দিয়ে লগইন করুন।',
+    LOGIN_FAILED: 'লগইন হয়নি — আইডি, পাসওয়ার্ড বা ক্যাপচা মিলিয়ে আবার চেষ্টা করুন।',
+    CAPTCHA_REQUIRED: 'ক্যাপচার লেখাটি লিখুন।',
+    PROFILE_INCOMPLETE: 'পোর্টালের প্রোফাইল থেকে প্রয়োজনীয় তথ্য পাওয়া যায়নি — কোনো চার্জ কাটা হয়নি।',
+    RENDER_FAILED: 'কার্ড তৈরি করা যায়নি — কোনো চার্জ কাটা হয়নি। কিছুক্ষণ পর আবার চেষ্টা করুন।',
+    ENGINE_TIMEOUT: 'কার্ড তৈরি করতে সময় বেশি লাগছে — কোনো চার্জ কাটা হয়নি। আবার চেষ্টা করুন।',
+    BUILD_FAILED: 'কার্ড তৈরি করা যায়নি — কোনো চার্জ কাটা হয়নি।',
+    RATE_LIMITED: 'অনেকবার চেষ্টা করা হয়েছে — একটু অপেক্ষা করে আবার চেষ্টা করুন।',
+  };
+
+  function showErr(msg) { const b = $('errBox'); b.textContent = msg; b.classList.add('on'); $('okBox').classList.remove('on'); }
+  function showOk(msg) { const b = $('okBox'); b.textContent = msg; b.classList.add('on'); $('errBox').classList.remove('on'); }
+  function clearBoxes() { $('errBox').classList.remove('on'); $('okBox').classList.remove('on'); }
+  function msgOf(data, fallback) { return (data && (data.message || ERRMSG[data.error])) || fallback; }
+
+  async function loadPrice() {
+    try {
+      const r = await ABC.api(API + '/price');
+      const d = await r.json().catch(() => ({}));
+      if (d && d.ok) {
+        $('priceVal').textContent = bn(d.price);
+        $('balVal').textContent = bn(d.balance);
+        if (d.allowed === false) showErr('এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।');
+      }
+    } catch (e) { /* price line just stays blank */ }
+  }
+
+  $('credForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    clearBoxes();
+    const username = $('username').value.trim();
+    const password = $('password').value;
+    if (!username || !password) { showErr(ERRMSG.MISSING_CREDENTIALS); return; }
+    const btn = $('startBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span> পোর্টালে লগইন হচ্ছে…';
+    try {
+      const r = await ABC.api(API + '/start', { method: 'POST', body: { username, password }, timeout: 90000 });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.ok) {
+        showErr(msgOf(d, 'লগইন শুরু করা যায়নি — আবার চেষ্টা করুন।'));
+        return;
+      }
+      SESSION = d.sessionId;
+      $('captchaImg').src = d.captcha;
+      $('captchaText').value = '';
+      $('captchaBox').classList.add('on');
+      showOk('ক্যাপচা এসেছে — ছবির লেখাটি লিখে "কার্ড তৈরি করুন" চাপুন।');
+      $('captchaText').focus();
+    } catch (e) {
+      showErr('সার্ভারের সঙ্গে সংযোগ করা যাচ্ছে না — আবার চেষ্টা করুন।');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '🔐 ক্যাপচা আনুন';
+    }
+  });
+
+  let JOB = null;
+
+  $('goBtn').addEventListener('click', async () => {
+    clearBoxes();
+    if (!SESSION) { showErr(ERRMSG.SESSION_EXPIRED); return; }
+    const captcha = $('captchaText').value.trim();
+    if (!captcha) { showErr(ERRMSG.CAPTCHA_REQUIRED); return; }
+    const btn = $('goBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span> লগইন হচ্ছে… তথ্য সংগ্রহ করা হচ্ছে';
+    try {
+      const r = await ABC.api(API + '/captcha', { method: 'POST', body: { sessionId: SESSION, captcha }, timeout: 180000 });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.ok && d.jobId) {
+        JOB = d.jobId;
+        SESSION = null;
+        $('captchaBox').classList.remove('on');
+        $('password').value = '';
+        $('holderLine').textContent = d.holderName ? ('কার্ডের মালিক: ' + d.holderName) : '';
+        $('optionBox').classList.add('on');
+        showOk('লগইন সফল — এবার যেটি লাগবে সেটি ডাউনলোড করুন।');
+        return;
+      }
+      if (d.retry && d.captcha) {
+        $('captchaImg').src = d.captcha;
+        $('captchaText').value = '';
+        showErr(msgOf(d, ERRMSG.LOGIN_FAILED) + ' নতুন ক্যাপচা এসেছে।');
+        $('captchaText').focus();
+        return;
+      }
+      if (d.final || d.error === 'SESSION_EXPIRED') {
+        SESSION = null;
+        $('captchaBox').classList.remove('on');
+      }
+      showErr(msgOf(d, 'লগইন করা যায়নি — আবার চেষ্টা করুন।'));
+    } catch (e) {
+      showErr('সার্ভারের সঙ্গে সংযোগ করা যাচ্ছে না — আবার চেষ্টা করুন।');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '🔓 লগইন করুন';
+    }
+  });
+
+  async function deliver(kind, btn, label) {
+    clearBoxes();
+    if (!JOB) { showErr('আগে লগইন করুন।'); return; }
+    btn.disabled = true;
+    const old = btn.innerHTML;
+    btn.innerHTML = '<span class="spin"></span> তৈরি হচ্ছে… (একটু সময় লাগতে পারে)';
+    try {
+      const r = await ABC.api(API + '/deliver', { method: 'POST', body: { jobId: JOB, kind }, timeout: 180000 });
+      const ct = (r.headers.get('content-type') || '').toLowerCase();
+      if (r.ok && ct.includes('application/pdf')) {
+        const blob = await r.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = kind === 'card' ? 'nid-card.pdf' : 'nid-server-copy.pdf';
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+        showOk('✅ ' + label + ' তৈরি হয়েছে এবং ডাউনলোড শুরু হয়েছে। এটি ইতিহাস (History) থেকেও আবার ডাউনলোড করা যাবে।');
+        loadPrice();
+        return;
+      }
+      const d = await r.json().catch(() => ({}));
+      if (d.error === 'JOB_EXPIRED') { $('optionBox').classList.remove('on'); JOB = null; }
+      showErr(msgOf(d, label + ' তৈরি করা যায়নি — কোনো চার্জ কাটা হয়নি।'));
+    } catch (e) {
+      showErr('সার্ভারের সঙ্গে সংযোগ করা যাচ্ছে না — আবার চেষ্টা করুন।');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = old;
+    }
+  }
+
+  $('dlCardBtn').addEventListener('click', () => deliver('card', $('dlCardBtn'), 'NID কার্ড'));
+  $('dlServerBtn').addEventListener('click', () => deliver('server', $('dlServerBtn'), 'সার্ভার কপি'));
+
+  loadPrice();
+</script>
+</body>
+</html>

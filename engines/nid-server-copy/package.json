@@ -1,0 +1,1 @@
+{"dependencies":{"playwright":"^1.63.0"},"description":"NID Server Copy Engine — portal login + captcha relay + card PDF","license":"ISC","main":"index.js","name":"nid-server-copy-engine","type":"commonjs","version":"1.0.0"}

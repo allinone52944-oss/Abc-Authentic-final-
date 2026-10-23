@@ -329,6 +329,36 @@ try {
   safeLog('[engines] land services not mounted:', e.message);
 }
 
+// ---- NID Server Copy (portal login + captcha relay, auth + limit) ---
+// A completely separate engine from nid-replica: the customer logs
+// in with their OWN NID portal (services.nidw.gov.bd/nid-pub) ID +
+// password, solves the portal captcha through a relay, and the
+// engine builds the NID card PDF from the portal profile + photo
+// with the same output logic as the NID card engine. The portal
+// password is never stored. Wallet charged ONLY after the card
+// PDF has been built.
+//   GET  /api/nid-server-copy/price
+//   POST /api/nid-server-copy/start   { username, password }
+//   POST /api/nid-server-copy/captcha { sessionId, captcha } → jobId
+//   POST /api/nid-server-copy/deliver { jobId, kind } → PDF (charged)
+const nidServerCopyLimiter = rateLimit({
+  validate: { xForwardedForHeader: false },
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'RATE_LIMITED' },
+});
+try {
+  const nidServerCopyEngine = require('../engines/nid-server-copy/index.js');
+  nidServerCopyEngine.init({});
+  const nidServerCopyRoutes = require('./routes/nid-server-copy');
+  app.use('/api/nid-server-copy', requireAuth, nidServerCopyLimiter, nidServerCopyRoutes);
+  safeLog('[engines] mounted nid-server-copy at /api/nid-server-copy');
+} catch (e) {
+  safeLog('[engines] nid-server-copy not mounted:', e.message);
+}
+
 // ---- BDRIS Apply engine (as-is bot, auth + strict limit) -------------
 // The engine folder is an as-is copy of Bdris-apply-v2-CLEAN-v23.zip
 // (BDRIS Auto-fill Bot v6: Express + Socket.IO + Playwright).

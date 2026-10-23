@@ -1109,6 +1109,20 @@
           </div>
         </div>
 
+        <!-- Engine: NID Server Copy -->
+        <div class="engine-card" onclick="location.href='/nid-server-copy.html'">
+          <div class="engine-card-top">
+            <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #f0fdf4, #dcfce7);color:#15803d;">🪪</div>
+            <span class="engine-tag" style="background:#dcfce7;color:#166534;">পোর্টাল লগইন</span>
+          </div>
+          <h4>এনআইডি সার্ভার কপি</h4>
+          <p>NID পোর্টালের আইডি-পাসওয়ার্ডে লগইন করে সরাসরি কার্ড — সব সালের NID</p>
+          <div class="engine-card-footer">
+            <span class="engine-charge" id="engChargeNidSc">চার্জ: ৳১৫০</span>
+            <span class="engine-btn">কার্ড নিন →</span>
+          </div>
+        </div>
+
         <!-- Engine 4: Death Verify -->
         <div class="engine-card" onclick="location.href='/death-verify.html'">
           <div class="engine-card-top">
@@ -1305,6 +1319,19 @@
         <div class="engine-card-footer">
           <span class="engine-charge" id="mEngChargeNid">৳৫০</span>
           <span class="engine-btn">প্রিন্ট →</span>
+        </div>
+      </div>
+
+      <!-- M Engine: NID Server Copy -->
+      <div class="engine-card" onclick="location.href='/nid-server-copy.html'">
+        <div class="engine-card-top">
+          <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #f0fdf4, #dcfce7);color:#15803d;">🪪</div>
+          <span class="engine-tag" style="background:#dcfce7;color:#166534;">লগইন</span>
+        </div>
+        <h4>এনআইডি সার্ভার কপি</h4>
+        <div class="engine-card-footer">
+          <span class="engine-charge" id="mEngChargeNidSc">৳১৫০</span>
+          <span class="engine-btn">কার্ড →</span>
         </div>
       </div>
 
@@ -1864,6 +1891,11 @@ async function loadServices() {
     if (nidSvc && nidSvc.price) {
       setText('engChargeNid', 'চার্জ: ৳' + bnNum(nidSvc.price));
       setText('mEngChargeNid', '৳' + bnNum(nidSvc.price));
+    }
+    const nidScSvc = _allServices.find(s => s.engine_id === 'nid-server-copy');
+    if (nidScSvc && nidScSvc.price) {
+      setText('engChargeNidSc', 'চার্জ: ৳' + bnNum(nidScSvc.price));
+      setText('mEngChargeNidSc', '৳' + bnNum(nidScSvc.price));
     }
     const deathSvc = _allServices.find(s => s.engine_id === 'death-verify');
     if (deathSvc && deathSvc.price) {
