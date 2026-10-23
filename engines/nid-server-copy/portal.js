@@ -19,7 +19,7 @@
 
 const crypto = require('crypto');
 
-const BASE = 'https://services.nidw.gov.bd/nid-pub';
+const BASE = process.env.NIDW_BASE || 'https://services.nidw.gov.bd/nid-pub';
 const SESSION_TTL_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 3;
 const NAV_TIMEOUT = 60000;
@@ -103,8 +103,65 @@ async function firstVisible(page, selectors) {
 async function captureCaptcha(page) {
   const img = await firstVisible(page, ['#captcha-image', 'img[src*="captcha" i]', 'img[id*="captcha" i]']);
   if (!img) return null;
+  // The captcha image is populated by the portal's JS after the
+  // form renders — wait until it actually carries pixels before
+  // screenshotting, otherwise the customer gets a blank box.
+  await page.waitForFunction(() => {
+    const el = document.querySelector('#captcha-image, img[src*="captcha" i], img[id*="captcha" i]');
+    return !!el && el.complete && el.naturalWidth > 0;
+  }, { timeout: 15000 }).catch(() => {});
   const buf = await img.screenshot();
   return 'data:image/png;base64,' + buf.toString('base64');
+}
+
+/** Diagnostics for when the portal does not behave as expected. */
+async function pageSnapshot(page) {
+  try {
+    const data = await page.evaluate(() => {
+      const inputs = [];
+      document.querySelectorAll('input').forEach((i) => {
+        inputs.push((i.getAttribute('name') || i.id || i.type || '?') + ':' + (i.offsetParent ? 'v' : 'h'));
+      });
+      return { title: document.title || '', inputs: inputs.slice(0, 20) };
+    });
+    return { url: page.url(), title: data.title, inputs: data.inputs };
+  } catch (_) {
+    return { url: page.url(), title: '', inputs: [] };
+  }
+}
+
+/**
+ * The portal's login form is rendered by its own JavaScript
+ * (ajax-login.js) some time AFTER domcontentloaded — the raw HTML
+ * shell contains only the captcha input. Wait for the username
+ * field to actually appear; if an announcement overlay or a
+ * login gate stands in the way, clear it and keep waiting.
+ */
+async function waitForLoginForm(page) {
+  const USER_SEL = 'input[name="username"], #username';
+  try {
+    await page.waitForSelector(USER_SEL, { state: 'visible', timeout: 20000 });
+    return true;
+  } catch (_) { /* form not rendered yet — try clearing gates */ }
+
+  // Announcement / notice overlay (the portal shows one often).
+  const closer = await firstVisible(page, ['#close-announcement', '.announcement .close', '[class*="notice"] .close', '[class*="notice"] button']);
+  if (closer) {
+    await closer.click().catch(() => {});
+    await page.waitForTimeout(800);
+  }
+  // A login link/tab that reveals the form.
+  const gate = await firstVisible(page, ['a[href*="login" i]', 'button:has-text("লগইন")', 'a:has-text("লগইন")', 'button:has-text("Login")', 'a:has-text("Login")']);
+  if (gate) {
+    await gate.click().catch(() => {});
+    await page.waitForTimeout(800);
+  }
+  try {
+    await page.waitForSelector(USER_SEL, { state: 'visible', timeout: 20000 });
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 async function refreshCaptcha(page) {
@@ -136,9 +193,11 @@ async function startSession(ownerId, username, password) {
     const page = await context.newPage();
     await page.goto(BASE + '/', { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
 
-    const userField = await firstVisible(page, ['input[name="username"]', '#username', 'input[type="text"]']);
-    const passField = await firstVisible(page, ['input[name="password"]', '#password', 'input[type="password"]']);
+    const formReady = await waitForLoginForm(page);
+    const userField = formReady ? await firstVisible(page, ['input[name="username"]', '#username', 'input[type="text"]']) : null;
+    const passField = formReady ? await firstVisible(page, ['input[name="password"]', '#password', 'input[type="password"]']) : null;
     if (!userField || !passField) {
+      console.warn('[nid-server-copy] login form not found:', JSON.stringify(await pageSnapshot(page)));
       await browser.close().catch(() => {});
       return { ok: false, error: 'PORTAL_CHANGED' };
     }
@@ -271,8 +330,10 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
   s.attempts += 1;
   const { page, context } = s;
   try {
+    await page.waitForSelector('input[name="captcha"], #captcha', { state: 'visible', timeout: 10000 }).catch(() => {});
     const capField = await firstVisible(page, ['input[name="captcha"]', '#captcha', 'input[placeholder*="captcha" i]']);
     if (!capField) {
+      console.warn('[nid-server-copy] captcha field not found:', JSON.stringify(await pageSnapshot(page)));
       await closeSession(s.id);
       return { ok: false, error: 'PORTAL_CHANGED' };
     }
@@ -360,4 +421,4 @@ function init() {
   }
 }
 
-module.exports = { init, getInfo, startSession, submitCaptcha, closeSession, getJob, BASE };
+module.exports = { init, getInfo, startSession, submitCaptcha, closeSession, getJob, BASE, waitForLoginForm, captureCaptcha };
