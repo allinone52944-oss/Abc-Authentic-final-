@@ -47,6 +47,24 @@ describe('dashboard + admin wiring', () => {
   });
 });
 
+describe('service-detail routing (the logout bug)', () => {
+  // service-detail.html sends every automated service to
+  // '/' + engine_id + '.html'. The land engines share land.html,
+  // so WITHOUT explicit overrides the buttons pointed at
+  // non-existent /land-search.html etc. — unknown .html paths
+  // fall back to the login page (looked like a forced logout).
+  const sd = read('frontend/service-detail.html');
+  test('each land engine maps to land.html with its mode', () => {
+    expect(sd).toContain("s.engine_id === 'land-search') { engineUrl = '/land.html?mode=search'");
+    expect(sd).toContain("s.engine_id === 'land-scan') { engineUrl = '/land.html?mode=scan'");
+    expect(sd).toContain("s.engine_id === 'land-verify') { engineUrl = '/land.html?mode=verify'");
+  });
+  test('land.html honours the ?mode= preselect', () => {
+    const html = read('frontend/land.html');
+    expect(html).toContain("new URLSearchParams(location.search).get('mode')");
+  });
+});
+
 describe('backend wiring', () => {
   test('server mounts /api/land', () => {
     expect(read('backend/server.js')).toContain("app.use('/api/land'");

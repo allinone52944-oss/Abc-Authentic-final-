@@ -339,7 +339,10 @@
   });
 
   loadDivisions();
-  setMode('search'); // loads the active mode's price itself
+  // Arriving from a service page preselects that service's mode
+  // (/land.html?mode=scan etc.); the cards remain switchable.
+  const _qm = new URLSearchParams(location.search).get('mode');
+  setMode(['search', 'scan', 'verify'].includes(_qm) ? _qm : 'search');
   // The other two prices arrive a breath later — firing every
   // call at once can collide with a token refresh on page open.
   setTimeout(() => { loadPrice('scan'); loadPrice('verify'); }, 1500);

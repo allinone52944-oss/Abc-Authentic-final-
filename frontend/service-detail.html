@@ -240,7 +240,15 @@ async function init(){
     // AUTOMATED ENGINE SERVICE: Single focused engine action
     let engineUrl = '/' + s.engine_id + '.html';
     let engineLabel = '⚡ সরাসরি ইঞ্জিন সেবা শুরু করুন →';
-    if (s.engine_id === 'bdris-certificate') engineLabel = '⚡ এখনই সনদ তৈরি করুন →';
+    // The three land services share ONE page (land.html) with a
+    // mode preselect — without these overrides the generic rule
+    // above sends customers to /land-search.html etc., which do
+    // not exist (unknown .html paths fall back to the login page,
+    // which looked exactly like a forced logout, 2026-10-23).
+    if (s.engine_id === 'land-search') { engineUrl = '/land.html?mode=search'; engineLabel = '⚡ এখনই খতিয়ান খুঁজুন →'; }
+    else if (s.engine_id === 'land-scan') { engineUrl = '/land.html?mode=scan'; engineLabel = '⚡ এখনই নামে সম্পত্তি সন্ধান করুন →'; }
+    else if (s.engine_id === 'land-verify') { engineUrl = '/land.html?mode=verify'; engineLabel = '⚡ এখনই জমি যাচাই করুন →'; }
+    else if (s.engine_id === 'bdris-certificate') engineLabel = '⚡ এখনই সনদ তৈরি করুন →';
     else if (s.engine_id === 'bdris-apply') engineLabel = '⚡ এখনই জন্ম নিবন্ধন আবেদন শুরু করুন →';
     else if (s.engine_id === 'death-verify') engineLabel = '⚡ এখনই মৃত্যু সনদ যাচাই করুন →';
     else if (s.engine_id === 'nid-replica') engineLabel = '⚡ এখনই NID তৈরি করুন →';
