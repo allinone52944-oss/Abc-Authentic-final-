@@ -46,6 +46,22 @@ describe('nid-server-copy.html', () => {
     expect(html).toContain("ct.includes('application/pdf')");
     expect(html).toContain('r.blob()');
   });
+  test('finished PDF OPENS in a new tab, not only saved (2026-10-24 video bug)', () => {
+    // The video showed downloads landing in the tray while no form ever
+    // opened on screen: blob <a download> never opens a viewer. deliver()
+    // must open the viewer tab inside the tap gesture (async window.open
+    // would be popup-blocked) and fall back to forced download only if blocked.
+    expect(html).toContain("window.open('', '_blank')");
+    expect(html).toContain('viewer.location = url');
+    expect(html).toContain('নতুন ট্যাবে ফর্মটি খুলেছে');
+    // fallback path kept: same filenames as before
+    expect(html).toContain("a.download = kind === 'card' ? 'nid-card.pdf' : 'nid-server-copy.pdf'");
+  });
+  test('success/error message scrolls into view (boxes sit above the panels)', () => {
+    expect(html).toContain('function scrollBoxIntoView()');
+    expect(html).toContain('scrollIntoView');
+    expect(html).toContain('নতুন ট্যাবে খুলবে');
+  });
 });
 
 describe('dashboard + admin + service-detail wiring', () => {

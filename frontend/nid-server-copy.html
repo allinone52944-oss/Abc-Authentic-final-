@@ -245,7 +245,7 @@
         </div>
         <div id="cardFormPanel" style="display:none;">
           <div style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:8px; text-align:center;">🪪 NID কার্ড ফর্ম</div>
-          <p class="note" style="text-align:left;">পোর্টালে ডাউনলোড থাকলে অফিসিয়াল কার্ডটিই সরাসরি পাবেন; না থাকলে প্রোফাইলের তথ্য ও ছবি দিয়ে একই মানের কার্ড তৈরি করে দেওয়া হবে। নিচের ডাউনলোড বাটনে চাপ দিলেই PDF তৈরি ও ডাউনলোড হবে।</p>
+          <p class="note" style="text-align:left;">পোর্টালে ডাউনলোড থাকলে অফিসিয়াল কার্ডটিই সরাসরি পাবেন; না থাকলে প্রোফাইলের তথ্য ও ছবি দিয়ে একই মানের কার্ড তৈরি করে দেওয়া হবে। নিচের বাটনে চাপ দিলেই PDF তৈরি হয়ে নতুন ট্যাবে খুলবে।</p>
           <button type="button" class="btn btn-primary" id="dlCardBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700;">
             কার্ড ডাউনলোড করুন
           </button>
@@ -255,7 +255,7 @@
         </div>
         <div id="serverFormPanel" style="display:none;">
           <div style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:8px; text-align:center;">📄 সার্ভার কপি ফর্ম</div>
-          <p class="note" style="text-align:left;">প্রোফাইলের পূর্ণ তথ্য, ছবি ও ঠিকানাসহ সার্ভার কপি — যাচাই ও দাখিলের কাজে ব্যবহারযোগ্য পূর্ণাঙ্গ কপি। নিচের ডাউনলোড বাটনে চাপ দিলেই PDF তৈরি ও ডাউনলোড হবে।</p>
+          <p class="note" style="text-align:left;">প্রোফাইলের পূর্ণ তথ্য, ছবি ও ঠিকানাসহ সার্ভার কপি — যাচাই ও দাখিলের কাজে ব্যবহারযোগ্য পূর্ণাঙ্গ কপি। নিচের বাটনে চাপ দিলেই PDF তৈরি হয়ে নতুন ট্যাবে খুলবে।</p>
           <button type="button" class="btn btn-primary" id="dlServerBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; background:linear-gradient(135deg,#1e40af,#2563eb);">
             সার্ভার কপি ডাউনলোড করুন
           </button>
@@ -316,6 +316,13 @@
   function showErr(msg) { const b = $('errBox'); b.textContent = msg; b.classList.add('on'); $('okBox').classList.remove('on'); }
   function showOk(msg) { const b = $('okBox'); b.textContent = msg; b.classList.add('on'); $('errBox').classList.remove('on'); }
   function clearBoxes() { $('errBox').classList.remove('on'); $('okBox').classList.remove('on'); }
+  // Success/error boxes sit above the form panels: after a download the
+  // user is scrolled down at the panel, so bring the message into view —
+  // otherwise a finished download looks like nothing happened.
+  function scrollBoxIntoView() {
+    const b = document.querySelector('.err.on, .ok.on');
+    if (b && b.scrollIntoView) b.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
   function msgOf(data, fallback) { return (data && (data.message || ERRMSG[data.error])) || fallback; }
 
   async function loadPrice() {
@@ -408,7 +415,12 @@
 
   async function deliver(kind, btn, label) {
     clearBoxes();
-    if (!JOB) { showErr('আগে লগইন করুন।'); return; }
+    if (!JOB) { showErr('আগে লগইন করুন।'); scrollBoxIntoView(); return; }
+    // Open the viewer tab NOW, inside the tap gesture: after the async
+    // fetch, window.open would be blocked as a popup. If the browser
+    // still blocks it, viewer stays null and we fall back to plain download.
+    let viewer = null;
+    try { viewer = window.open('', '_blank'); } catch (e) { viewer = null; }
     btn.disabled = true;
     const old = btn.innerHTML;
     btn.innerHTML = '<span class="spin"></span> তৈরি হচ্ছে… (একটু সময় লাগতে পারে)';
@@ -417,20 +429,32 @@
       const ct = (r.headers.get('content-type') || '').toLowerCase();
       if (r.ok && ct.includes('application/pdf')) {
         const blob = await r.blob();
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = kind === 'card' ? 'nid-card.pdf' : 'nid-server-copy.pdf';
-        document.body.appendChild(a); a.click();
-        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
-        showOk('✅ ' + label + ' তৈরি হয়েছে এবং ডাউনলোড শুরু হয়েছে। এটি ইতিহাস (History) থেকেও আবার ডাউনলোড করা যাবে।');
+        const url = URL.createObjectURL(blob);
+        let opened = false;
+        if (viewer && !viewer.closed) {
+          try { viewer.location = url; opened = true; } catch (e) { opened = false; }
+        }
+        if (opened) {
+          showOk('✅ ' + label + ' তৈরি হয়েছে — নতুন ট্যাবে ফর্মটি খুলেছে। ফাইলটি ইতিহাস (History) থেকেও আবার ডাউনলোড করা যাবে।');
+        } else {
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = kind === 'card' ? 'nid-card.pdf' : 'nid-server-copy.pdf';
+          document.body.appendChild(a); a.click();
+          setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 4000);
+          showOk('✅ ' + label + ' তৈরি হয়েছে এবং ডাউনলোড শুরু হয়েছে। এটি ইতিহাস (History) থেকেও আবার ডাউনলোড করা যাবে।');
+        }
+        scrollBoxIntoView();
         loadPrice();
         return;
       }
       const d = await r.json().catch(() => ({}));
       if (d.error === 'JOB_EXPIRED') { $('optionBox').classList.remove('on'); JOB = null; setStep(1); showOptions(); }
       showErr(msgOf(d, label + ' তৈরি করা যায়নি — কোনো চার্জ কাটা হয়নি।'));
+      scrollBoxIntoView();
     } catch (e) {
       showErr('সার্ভারের সঙ্গে সংযোগ করা যাচ্ছে না — আবার চেষ্টা করুন।');
+      scrollBoxIntoView();
     } finally {
       btn.disabled = false;
       btn.innerHTML = old;
