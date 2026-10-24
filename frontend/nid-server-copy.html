@@ -266,6 +266,7 @@
         <div id="cardFormPanel" style="display:none;">
           <div style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:8px; text-align:center;">🪪 NID কার্ড ফর্ম</div>
           <p class="note" style="text-align:left;">✏️ সব তথ্য এডিট করা যাবে — পোর্টালের তথ্য নিচে সাজানো আছে, ভুল থাকলে ঠিক করে তারপর ডাউনলোড করুন। পোর্টালে ডাউনলোড থাকলে অফিসিয়াল কার্ডটিই সরাসরি পাবেন (এডিট তখন প্রযোজ্য নয়); না থাকলে এডিট করা তথ্য, ছবি ও স্বাক্ষর দিয়েই কার্ড তৈরি হবে।</p>
+          <div id="cardOfficialNote" class="note" style="display:none; text-align:left;">✅ পোর্টালে আপনার কার্ড ডাউনলোড আছে — অফিসিয়াল কার্ডটিই সরাসরি পাবেন। এডিট, ছবি বা স্বাক্ষর এখানে প্রযোজ্য নয়।</div>
           <div id="cardEditFields"></div>
           <div id="cardPhotoSlot"></div>
           <div id="cardSignSlot"></div>
@@ -401,9 +402,13 @@
   // pre-filled, fully editable fields — the NID replica step-3 and
   // BDRIS certificate record-view pattern. Edits live in EDITS and
   // ride along with /deliver; the photo override rides as `photo`
-  // (absent = portal photo, null = no photo, data URL = new photo).
-  // No signature slot: the card/server-copy render pipeline takes
-  // photo only, so a signature control would have nowhere to go.
+  // (absent = portal photo, null = no photo, data URL = new photo);
+  // the card-only signature rides as `signature` (drawn or uploaded).
+  // When the portal itself offers the download (HAS_DOWNLOAD from
+  // /profile), the official PDF comes as-is — edits, photo and
+  // signature are ignored by design, so the card panel must NOT
+  // show those controls at all (showing them promises what the
+  // download cannot deliver — the 2026-10-24 live confusion).
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const EDIT_FIELDS = [
     ['Name(Bangla)', 'নাম (বাংলা)'], ['Name(English)', 'Name (English)'],
@@ -418,7 +423,7 @@
     ['Religion', 'ধর্ম'], ['NID Father', 'পিতার NID'], ['NID Mother', 'মাতার NID'],
   ];
   const ADDR_ORDER = ['holding', 'village', 'mouza', 'union_ward', 'post_office', 'postal_code', 'upozila', 'district', 'division', 'city_corp', 'rmo'];
-  let PROFILE = null, PORTAL_PHOTO = null, EDITS = {}, PHOTO_STATE = 'portal', PHOTO_DATA = null;
+  let PROFILE = null, PORTAL_PHOTO = null, HAS_DOWNLOAD = false, EDITS = {}, PHOTO_STATE = 'portal', PHOTO_DATA = null;
 
   function addrToString(addr) {
     if (addr == null) return '';
@@ -544,13 +549,25 @@
     pad.addEventListener('pointercancel', end);
   }
   function renderEditForm(kind) {
+    const note = $('cardOfficialNote');
+    if (kind === 'card' && HAS_DOWNLOAD) {
+      // Official PDF as-is: no edit/photo/signature controls, only
+      // the plain notice — otherwise the form promises edits the
+      // download cannot apply.
+      $('cardEditFields').innerHTML = '';
+      $('cardPhotoSlot').innerHTML = '';
+      $('cardSignSlot').innerHTML = '';
+      if (note) note.style.display = 'block';
+      return;
+    }
+    if (note) note.style.display = 'none';
     renderEditFields(kind === 'card' ? 'cardEditFields' : 'serverEditFields');
     renderPhotoSlot(kind === 'card' ? 'cardPhotoSlot' : 'serverPhotoSlot');
     if (kind === 'card') renderSignSlot();
   }
   function expireJob() {
     $('optionBox').classList.remove('on');
-    JOB = null; PROFILE = null; EDITS = {}; PHOTO_STATE = 'portal'; PHOTO_DATA = null;
+    JOB = null; PROFILE = null; HAS_DOWNLOAD = false; EDITS = {}; PHOTO_STATE = 'portal'; PHOTO_DATA = null;
     SIGN_STATE = 'none'; SIGN_DATA = null; PAD_OPEN = false;
     setStep(1); showOptions();
   }
@@ -567,6 +584,7 @@
       }
       PROFILE = d.fields || {};
       PORTAL_PHOTO = d.photo || null;
+      HAS_DOWNLOAD = !!d.hasDownload;
       return true;
     } catch (e) {
       showErr('সার্ভারের সঙ্গে সংযোগ করা যাচ্ছে না — আবার চেষ্টা করুন।');
@@ -605,7 +623,7 @@
       const d = await r.json().catch(() => ({}));
       if (r.ok && d.ok && d.jobId) {
         JOB = d.jobId;
-        PROFILE = null; EDITS = {}; PHOTO_STATE = 'portal'; PHOTO_DATA = null;
+        PROFILE = null; HAS_DOWNLOAD = false; EDITS = {}; PHOTO_STATE = 'portal'; PHOTO_DATA = null;
         SIGN_STATE = 'none'; SIGN_DATA = null; PAD_OPEN = false;
         SESSION = null;
         $('captchaBox').classList.remove('on');

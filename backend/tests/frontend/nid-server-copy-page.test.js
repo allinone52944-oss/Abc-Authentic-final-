@@ -83,6 +83,16 @@ describe('nid-server-copy.html', () => {
     expect(html).toContain('body.signature = SIGN_DATA');
     expect(html).toContain('INVALID_SIGNATURE');
   });
+  test('official-download card hides edit/photo/signature (2026-10-24 live confusion)', () => {
+    // /profile returns hasDownload, but the page used to discard it
+    // and showed edit/photo/signature controls even when the card
+    // would be the official PDF that ignores all three — the form
+    // promised what the download could not deliver.
+    expect(html).toContain('HAS_DOWNLOAD = !!d.hasDownload');
+    expect(html).toContain('id="cardOfficialNote"');
+    expect(html).toContain('অফিসিয়াল কার্ডটিই সরাসরি পাবেন');
+    expect(html).toContain("kind === 'card' && HAS_DOWNLOAD");
+  });
 });
 
 describe('dashboard + admin + service-detail wiring', () => {
