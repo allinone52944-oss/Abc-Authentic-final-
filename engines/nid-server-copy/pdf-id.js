@@ -66,4 +66,35 @@ function extractIdsFromPdf(pdfBuffer) {
   }
 }
 
-module.exports = { pickIds, extractIdsFromPdf, toLatinDigits };
+/**
+ * The holder's photo from the official card PDF — the
+ * authoritative source. Dashboard scraping once grabbed the EC
+ * emblem (a 1200x1200 "photo" with no hint of 'logo' in its URL)
+ * because it sorted by size; the card PDF's photo is the
+ * holder's own by construction.
+ */
+function extractPhotoFromPdf(pdfBuffer) {
+  if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer) || pdfBuffer.length < 1000) {
+    return null;
+  }
+  const tmp = path.join(os.tmpdir(), 'nidsc-' + crypto.randomUUID() + '.pdf');
+  const out = path.join(os.tmpdir(), 'nidsc-' + crypto.randomUUID() + '.png');
+  try {
+    fs.writeFileSync(tmp, pdfBuffer);
+    const r = spawnSync('python3', [path.join(__dirname, 'extract_card_photo.py'), tmp, out], {
+      timeout: 30000,
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    if (r.status !== 0 || !String(r.stdout || '').startsWith('OK')) return null;
+    const buf = fs.readFileSync(out);
+    return buf && buf.length > 1200 ? buf : null;
+  } catch (_) {
+    return null;
+  } finally {
+    try { fs.unlinkSync(tmp); } catch (_) { /* ignore */ }
+    try { fs.unlinkSync(out); } catch (_) { /* ignore */ }
+  }
+}
+
+module.exports = { pickIds, extractIdsFromPdf, extractPhotoFromPdf, toLatinDigits };

@@ -330,6 +330,8 @@ async function fetchDashboardPhoto(page, context) {
         nh: im.naturalHeight || 0,
         rw: im.clientWidth || 0,
         rh: im.clientHeight || 0,
+        alt: im.alt || '',
+        cls: (im.className && im.className.toString ? im.className.toString() : '') + ' ' + (im.id || ''),
       };
       if (src.startsWith('data:')) {
         const comma = src.indexOf(',');
@@ -361,8 +363,17 @@ async function fetchDashboardPhoto(page, context) {
     ((buf[0] === 0xff && buf[1] === 0xd8) || // JPEG
      (buf[0] === 0x89 && buf[1] === 0x50) || // PNG
      (buf[0] === 0x52 && buf[1] === 0x49));  // WEBP (RIFF)
+  // Score candidates: an image that LOOKS like a citizen photo
+  // (photo/citizen/profile in its URL, alt or class, or an
+  // inline data: image) beats any generic graphic. A bare
+  // size sort once picked the EC emblem (1200x1200, no 'logo'
+  // hint in its URL) over the real thumbnail — generic images
+  // are never accepted on size alone anymore.
+  const hinted = (i) => /photo|citizen|profile|picture|avatar|user/i.test(
+    (i.src || '') + ' ' + (i.alt || '') + ' ' + (i.cls || ''));
   const candidates = (info || [])
     .filter((i) => (i.kind === 'data' ? true : i.nw >= 30 && i.nh >= 30))
+    .filter((i) => i.kind === 'data' || hinted(i))
     .sort((a, b) => {
       const portrait = (i) => (i.nh >= i.nw ? 1 : 0);
       if (portrait(a) !== portrait(b)) return portrait(b) - portrait(a);
@@ -520,10 +531,17 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
       if (!probe['National ID'] && [10, 13, 17].includes(unameDigits.length) && !/^01\d{9}$/.test(unameDigits)) {
         pairs.push({ section: '', label: 'জাতীয় পরিচয়পত্র নম্বর', value: unameDigits });
       }
-      // Strongest fallback: the official card PDF the portal
-      // itself issued always carries the numbers in its text
-      // layer — even when the profile page's identity section
-      // renders nothing scrapable (the 2026-10-24 live case).
+      // Strongest fallbacks: the official card PDF the portal
+      // itself issued. Its photo is the holder's own (dashboard
+      // scraping once grabbed the EC emblem instead), and its
+      // text layer always carries the numbers — even when the
+      // profile page's identity section renders nothing
+      // scrapable (the 2026-10-24 live case).
+      if (downloadPdf) {
+        const { extractPhotoFromPdf } = require('./pdf-id');
+        const cardPhoto = extractPhotoFromPdf(downloadPdf);
+        if (cardPhoto) photo = { buffer: cardPhoto, width: 0, height: 0 };
+      }
       const mapped0 = buildInputData(pairs);
       if ((!mapped0['National ID'] || !mapped0['Pin']) && downloadPdf) {
         const { extractIdsFromPdf } = require('./pdf-id');
