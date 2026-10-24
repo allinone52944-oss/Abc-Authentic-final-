@@ -373,7 +373,13 @@ async function scrapeProfileDeep(page) {
     tabsClicked = await page.evaluate(() => {
       const KEY = /পরিচিতি|জাতীয়|ভোটার|পিন|তথ্য|প্রোফাইল|profile|identity|details/i;
       let n = 0;
-      document.querySelectorAll('button, a, [role="tab"], .tab, .accordion-title, [data-toggle="tab"], [data-toggle="collapse"]').forEach((el) => {
+      document.querySelectorAll('button, [role="tab"], .tab, .accordion-title, [data-toggle="tab"], [data-toggle="collapse"], a').forEach((el) => {
+        // Never follow a real link away from the profile page:
+        // only in-page tab/accordion controls may be clicked.
+        if (el.tagName === 'A') {
+          const href = (el.getAttribute('href') || '').trim();
+          if (href && !href.startsWith('#') && !href.toLowerCase().startsWith('javascript:')) return;
+        }
         const t = String(el.textContent || '').replace(/\s+/g, ' ').trim();
         if (t && t.length <= 60 && KEY.test(t)) {
           try { el.click(); n += 1; } catch (_) { /* ignore */ }
