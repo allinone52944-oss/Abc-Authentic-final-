@@ -146,6 +146,23 @@
     o.innerHTML = html; o.classList.add('on');
     document.getElementById('errBox').classList.remove('on');
   }
+  // Receipts live behind login (owner-only documents endpoint): a plain
+  // <a href> sends no login header and the server answers {"error":"NO_TOKEN"}.
+  // Download the History way: authenticated fetch → blob → save.
+  // (ABC.api adds '/api' itself.)
+  const qesc = (s) => String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  async function dlPdf(url, name) {
+    try {
+      const r = await ABC.api(String(url).replace(/^\/api/, ''));
+      if (!r.ok) { showErr('❌ ডাউনলোড ব্যর্থ হয়েছে — আবার চেষ্টা করুন।'); return; }
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name || 'qr-receipt.pdf';
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+    } catch (e) { showErr('❌ ডাউনলোড ব্যর্থ হয়েছে — আবার চেষ্টা করুন।'); }
+  }
   function bindDrop(inputId, prevId, nameId) {
     const inp = document.getElementById(inputId);
     inp.addEventListener('change', () => {
@@ -203,7 +220,7 @@
           + '<br>চার্জ কাটা হয়েছে: ৳' + bn(d.charged || 0)
           + (d.balance !== null && d.balance !== undefined ? ' · বর্তমান ব্যালেন্স: ৳' + bn(d.balance) : '');
         if (d.receipt) {
-          html += '<br><a class="btn btn-secondary" style="display:inline-block; margin-top:10px; padding:9px 16px;" href="' + d.receipt + '">📄 রসিদ ডাউনলোড</a>';
+          html += '<br><button type="button" class="btn btn-secondary" style="display:inline-block; margin-top:10px; padding:9px 16px;" onclick="dlPdf(\'' + qesc(d.receipt) + '\', \'qr-receipt.pdf\')">📄 রসিদ ডাউনলোড</button>';
         }
         showOk(html);
         loadPrice();
@@ -211,7 +228,7 @@
         let html = '❌ ' + (d.message || d.error || 'যাচাই সফল হয়নি — কোনো টাকা কাটা হয়নি।')
           + '<br><b>চার্জ: ৳০ — কোনো টাকা কাটা হয়নি</b>';
         if (d.receipt) {
-          html += '<br><a class="btn btn-secondary" style="display:inline-block; margin-top:10px; padding:9px 16px;" href="' + d.receipt + '">📄 ব্যর্থতার রসিদ</a>';
+          html += '<br><button type="button" class="btn btn-secondary" style="display:inline-block; margin-top:10px; padding:9px 16px;" onclick="dlPdf(\'' + qesc(d.receipt) + '\', \'qr-receipt-failed.pdf\')">📄 ব্যর্থতার রসিদ</button>';
         }
         showErr(html);
       }
