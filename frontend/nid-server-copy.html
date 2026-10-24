@@ -63,6 +63,32 @@
     background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;
     padding: 8px 12px; border-radius: 20px; font-size: 12.5px; font-weight: 600;
   }
+  /* Premium feel: motion + lift + glow */
+  @keyframes nscFadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes nscPop { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+  .hero { animation: nscFadeUp .45s ease both; }
+  .steps { animation: nscFadeUp .45s .08s ease both; }
+  .form-card { animation: nscFadeUp .45s .16s ease both; }
+  .hero-badge {
+    display: inline-block; background: rgba(255,215,0,0.18); border: 1px solid rgba(255,215,0,0.55);
+    color: #fef3c7; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-bottom: 10px;
+  }
+  .wallet-pill:hover { background: rgba(255,255,255,0.25); }
+  .step { transition: background .2s, border-color .2s, color .2s; }
+  .opt-card { transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
+  .opt-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--primary-300); }
+  .form-card .btn-primary { transition: transform .15s ease, box-shadow .2s ease, filter .2s ease; box-shadow: var(--shadow-sm); }
+  .form-card .btn-primary:hover { filter: brightness(1.06); box-shadow: var(--shadow-md); }
+  .form-card .btn-primary:active { transform: scale(0.98); }
+  .field input[type=text]:focus, .field input[type=password]:focus {
+    border-color: var(--primary-500); box-shadow: 0 0 0 3px rgba(37,99,235,0.15); outline: none;
+  }
+  .captcha-box.on { animation: nscPop .3s ease both; }
+  #cardFormPanel, #serverFormPanel { animation: nscFadeUp .35s ease both; }
+  @media (prefers-reduced-motion: reduce) {
+    .hero, .steps, .form-card, .captcha-box.on, #cardFormPanel, #serverFormPanel { animation: none; }
+    .opt-card, .form-card .btn-primary { transition: none; }
+  }
   @media (max-width: 640px) {
     .form-card { padding: 18px; }
     .hero { padding: 18px; }
@@ -145,6 +171,7 @@
     <div class="hero">
       <div class="hero-row">
         <div>
+          <span class="hero-badge">✦ প্রিমিয়াম সার্ভিস</span>
           <h2>🪪 এনআইডি সার্ভার কপি</h2>
           <p>NID পোর্টালের আইডি + পাসওয়ার্ড দিয়ে লগইন করে সরাসরি NID কার্ড ও সার্ভার কপি (PDF) ডাউনলোড করুন</p>
         </div>
@@ -197,24 +224,44 @@
       <div class="captcha-box" id="optionBox" style="background:#ffffff; border-color:#bfdbfe; text-align:left;">
         <div style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:4px; text-align:center;">✅ লগইন সফল হয়েছে</div>
         <div id="holderLine" style="font-size:13px; color:#334155; margin-bottom:14px; text-align:center;"></div>
-        <div style="font-size:13px; font-weight:600; color:#334155; margin-bottom:12px; text-align:center;">কোনটি ডাউনলোড করবেন? (একটি বা দুটোই নিতে পারবেন)</div>
-        <div class="opt-grid">
+        <div style="font-size:13px; font-weight:600; color:#334155; margin-bottom:12px; text-align:center;">কোনটির ফর্ম খুলবেন? (একটি বা দুটোই নিতে পারবেন)</div>
+        <div class="opt-grid" id="optGrid">
           <div class="opt-card">
             <div class="ico">🪪</div>
             <div class="t">NID কার্ড</div>
             <div class="d">পোর্টালে ডাউনলোড থাকলে অফিসিয়াল কার্ডটিই সরাসরি পাবেন; না থাকলে প্রোফাইলের তথ্য ও ছবি দিয়ে একই মানের কার্ড তৈরি করে দেওয়া হবে।</div>
-            <button type="button" class="btn btn-primary" id="dlCardBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700;">
-              কার্ড ডাউনলোড করুন
+            <button type="button" class="btn btn-primary" id="showCardFormBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700;">
+              কার্ড ফর্ম খুলুন →
             </button>
           </div>
           <div class="opt-card">
             <div class="ico">📄</div>
             <div class="t">সার্ভার কপি</div>
             <div class="d">প্রোফাইলের পূর্ণ তথ্য, ছবি ও ঠিকানাসহ সার্ভার কপি — যাচাই ও দাখিলের কাজে ব্যবহারযোগ্য পূর্ণাঙ্গ কপি।</div>
-            <button type="button" class="btn btn-primary" id="dlServerBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; background:linear-gradient(135deg,#1e40af,#2563eb);">
-              সার্ভার কপি ডাউনলোড করুন
+            <button type="button" class="btn btn-primary" id="showServerFormBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; background:linear-gradient(135deg,#1e40af,#2563eb);">
+              সার্ভার কপি ফর্ম খুলুন →
             </button>
           </div>
+        </div>
+        <div id="cardFormPanel" style="display:none;">
+          <div style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:8px; text-align:center;">🪪 NID কার্ড ফর্ম</div>
+          <p class="note" style="text-align:left;">পোর্টালে ডাউনলোড থাকলে অফিসিয়াল কার্ডটিই সরাসরি পাবেন; না থাকলে প্রোফাইলের তথ্য ও ছবি দিয়ে একই মানের কার্ড তৈরি করে দেওয়া হবে। নিচের ডাউনলোড বাটনে চাপ দিলেই PDF তৈরি ও ডাউনলোড হবে।</p>
+          <button type="button" class="btn btn-primary" id="dlCardBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700;">
+            কার্ড ডাউনলোড করুন
+          </button>
+          <button type="button" class="btn" id="backFromCardBtn" style="width:100%; padding:12px; font-size:14px; font-weight:600; margin-top:10px; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; border-radius:8px;">
+            ← দুটো অপশনে ফিরুন
+          </button>
+        </div>
+        <div id="serverFormPanel" style="display:none;">
+          <div style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:8px; text-align:center;">📄 সার্ভার কপি ফর্ম</div>
+          <p class="note" style="text-align:left;">প্রোফাইলের পূর্ণ তথ্য, ছবি ও ঠিকানাসহ সার্ভার কপি — যাচাই ও দাখিলের কাজে ব্যবহারযোগ্য পূর্ণাঙ্গ কপি। নিচের ডাউনলোড বাটনে চাপ দিলেই PDF তৈরি ও ডাউনলোড হবে।</p>
+          <button type="button" class="btn btn-primary" id="dlServerBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; background:linear-gradient(135deg,#1e40af,#2563eb);">
+            সার্ভার কপি ডাউনলোড করুন
+          </button>
+          <button type="button" class="btn" id="backFromServerBtn" style="width:100%; padding:12px; font-size:14px; font-weight:600; margin-top:10px; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; border-radius:8px;">
+            ← দুটো অপশনে ফিরুন
+          </button>
         </div>
         <p class="note" style="text-align:left;">প্রতিটি ডাউনলোডে সেবা চার্জ প্রযোজ্য — একই ডকুমেন্ট একই লগইনে আবার ডাউনলোড করলে দ্বিতীয়বার চার্জ কাটবে না।</p>
       </div>
@@ -335,7 +382,7 @@
         $('holderLine').textContent = d.holderName ? ('কার্ডের মালিক: ' + d.holderName) : '';
         $('optionBox').classList.add('on');
         setStep(3);
-        showOk('লগইন সফল — এবার যেটি লাগবে সেটি ডাউনলোড করুন।');
+        showOk('লগইন সফল — এবার যেটি লাগবে সেটির ফর্ম খুলুন, তারপর ডাউনলোড করুন।');
         return;
       }
       if (d.retry && d.captcha) {
@@ -380,7 +427,7 @@
         return;
       }
       const d = await r.json().catch(() => ({}));
-      if (d.error === 'JOB_EXPIRED') { $('optionBox').classList.remove('on'); JOB = null; setStep(1); }
+      if (d.error === 'JOB_EXPIRED') { $('optionBox').classList.remove('on'); JOB = null; setStep(1); showOptions(); }
       showErr(msgOf(d, label + ' তৈরি করা যায়নি — কোনো চার্জ কাটা হয়নি।'));
     } catch (e) {
       showErr('সার্ভারের সঙ্গে সংযোগ করা যাচ্ছে না — আবার চেষ্টা করুন।');
@@ -392,6 +439,24 @@
 
   $('dlCardBtn').addEventListener('click', () => deliver('card', $('dlCardBtn'), 'NID কার্ড'));
   $('dlServerBtn').addEventListener('click', () => deliver('server', $('dlServerBtn'), 'সার্ভার কপি'));
+
+  function showOptions() {
+    $('optGrid').style.display = '';
+    $('cardFormPanel').style.display = 'none';
+    $('serverFormPanel').style.display = 'none';
+  }
+  $('showCardFormBtn').addEventListener('click', () => {
+    $('optGrid').style.display = 'none';
+    $('serverFormPanel').style.display = 'none';
+    $('cardFormPanel').style.display = 'block';
+  });
+  $('showServerFormBtn').addEventListener('click', () => {
+    $('optGrid').style.display = 'none';
+    $('cardFormPanel').style.display = 'none';
+    $('serverFormPanel').style.display = 'block';
+  });
+  $('backFromCardBtn').addEventListener('click', showOptions);
+  $('backFromServerBtn').addEventListener('click', showOptions);
 
   loadPrice();
 </script>
