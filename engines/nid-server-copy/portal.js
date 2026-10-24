@@ -373,7 +373,7 @@ async function scrapeProfileDeep(page) {
     tabsClicked = await page.evaluate(() => {
       const KEY = /পরিচিতি|জাতীয়|ভোটার|পিন|তথ্য|প্রোফাইল|profile|identity|details/i;
       let n = 0;
-      document.querySelectorAll('button, [role="tab"], .tab, .accordion-title, [data-toggle="tab"], [data-toggle="collapse"], a').forEach((el) => {
+      document.querySelectorAll('button, [role="tab"], .tab, .accordion-title, [data-toggle="tab"], [data-toggle="collapse"], h2, h3, h4, .card-header, .panel-heading, [aria-expanded], a').forEach((el) => {
         // Never follow a real link away from the profile page:
         // only in-page tab/accordion controls may be clicked.
         if (el.tagName === 'A') {
@@ -625,6 +625,20 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
         if (deep.pairs.length > profilePairs.length) profilePairs = deep.pairs;
       }
     }
+    // Thin scrape (live 06:47 job: only 5 pairs, no name, no
+    // tabs clicked) — the main content may render late or
+    // behind section headers the first pass missed. Wait,
+    // scroll and re-harvest twice before giving up.
+    for (let attempt = 0; attempt < 2 && profilePairs.length < 10; attempt++) {
+      await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
+      await page.waitForTimeout(2500);
+      const again = await scrapeProfileDeep(page);
+      if (again.pairs.length > profilePairs.length) {
+        profilePairs = again.pairs;
+        deep = again;
+      }
+    }
     if (!photo) photo = await fetchDashboardPhoto(page, context);
     // Profile pairs first: buildInputData keeps the first value
     // per field, and the profile page is the authoritative source.
@@ -646,6 +660,7 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
       const { buildInputData, hasCoreData } = require('./profile-map');
       const mapped = buildInputData(pairs);
       console.warn('[nid-server-copy] job data: pairs=' + pairs.length,
+        'page=' + page.url(),
         'photo=' + Boolean(photo && photo.buffer),
         'frames=' + deep.frames, 'tabs=' + deep.tabsClicked,
         'core=' + hasCoreData(mapped),
