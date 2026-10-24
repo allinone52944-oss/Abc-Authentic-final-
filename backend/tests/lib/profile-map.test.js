@@ -50,6 +50,14 @@ describe('nid-server-copy profile-map label variants', () => {
     expect(hasCoreData(d)).toBe(true);
   });
 
+  test('ভোটার এরিয়া maps to Voter Area (live-log variant)', () => {
+    const d = buildInputData([
+      { label: 'ভোটার এরিয়া', value: 'চট্টগ্রাম-১' },
+      { label: 'নাম', value: 'করিম' },
+    ]);
+    expect(d['Voter Area']).toBe('চট্টগ্রাম-১');
+  });
+
   test('compound slash address labels map to address parts', () => {
     const d = buildInputData([
       { label: 'বাসা/হোল্ডিং', value: 'বাড়ী' },

@@ -652,7 +652,7 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
         'name=' + Boolean(mapped['Name(Bangla)'] || mapped['Name(English)']),
         'nid=' + Boolean(mapped['National ID'] || mapped['Pin']),
         'dob=' + Boolean(mapped['Date of Birth']),
-        'labels=' + pairs.map((p) => p.label).slice(0, 40).join('|').slice(0, 400));
+        'labels=' + pairs.map((p) => p.label).slice(0, 60).join('|').slice(0, 2000));
     } catch (_) { /* diagnostics only */ }
 
     await closeSession(s.id);

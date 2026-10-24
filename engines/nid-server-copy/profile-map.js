@@ -45,7 +45,7 @@ function fallbackField(label) {
   if (l.includes('ইংরেজি') && l.includes('নাম')) return 'Name(English)';
   if (l.includes('নাম') && !l.includes('পিতা') && !l.includes('মাতা')) return 'Name(Bangla)';
   if (l.includes('ভোটার') && (l.includes('নম্বর') || l.includes('নং'))) return 'Voter No';
-  if (l.includes('ভোটার') && (l.includes('এলাকা') || l.includes('অঞ্চল'))) return 'Voter Area';
+  if (l.includes('ভোটার') && (l.includes('এলাকা') || l.includes('অঞ্চল') || l.includes('এরিয়া'))) return 'Voter Area';
   if (l.includes('রক্ত')) return 'Blood Group';
   if (l.includes('লিঙ্গ')) return 'Gender';
   if (l.includes('পিন')) return 'Pin';
@@ -124,6 +124,7 @@ const FIELD_MAP = {
   'মাতার জাতীয় পরিচয়পত্র নম্বর': 'NID Mother',
   'mother nid': 'NID Mother',
   'ভোটার এলাকা': 'Voter Area',
+  'ভোটার এরিয়া': 'Voter Area',
   'voter area': 'Voter Area',
 };
 
