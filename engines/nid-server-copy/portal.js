@@ -412,6 +412,13 @@ async function fetchDashboardPhoto(page, context) {
       if (!src) return;
       const tag = (src.slice(0, 200) + ' ' + (im.alt || '') + ' ' + (im.className || '')).toString();
       if (skip.test(tag) && !/photo|citizen|nid/i.test(tag)) return;
+      let chrome = false;
+      let anc = im.parentElement;
+      while (anc) {
+        if (/^(HEADER|NAV|FOOTER)$/.test(anc.tagName)) { chrome = true; break; }
+        anc = anc.parentElement;
+      }
+      const rect = im.getBoundingClientRect ? im.getBoundingClientRect() : null;
       const item = {
         nw: im.naturalWidth || 0,
         nh: im.naturalHeight || 0,
@@ -419,6 +426,8 @@ async function fetchDashboardPhoto(page, context) {
         rh: im.clientHeight || 0,
         alt: im.alt || '',
         cls: (im.className && im.className.toString ? im.className.toString() : '') + ' ' + (im.id || ''),
+        top: rect ? Math.round(rect.top + (window.scrollY || 0)) : 0,
+        chrome,
       };
       if (src.startsWith('data:')) {
         const comma = src.indexOf(',');
@@ -450,28 +459,12 @@ async function fetchDashboardPhoto(page, context) {
     ((buf[0] === 0xff && buf[1] === 0xd8) || // JPEG
      (buf[0] === 0x89 && buf[1] === 0x50) || // PNG
      (buf[0] === 0x52 && buf[1] === 0x49));  // WEBP (RIFF)
-  // Score candidates: an image that LOOKS like a citizen photo
-  // (photo/citizen/profile in its URL, alt or class, or an
-  // inline data: image) beats any generic graphic. A bare
-  // size sort once picked the EC emblem (1200x1200, no 'logo'
-  // hint in its URL) over the real thumbnail — generic images
-  // are never accepted on size alone anymore.
-  const hinted = (i) => /photo|citizen|profile|picture|avatar|user/i.test(
-    (i.src || '') + ' ' + (i.alt || '') + ' ' + (i.cls || ''));
-  const candidates = (info || [])
-    .filter((i) => (i.kind === 'data' ? true : i.nw >= 30 && i.nh >= 30))
-    .filter((i) => i.kind === 'data' || hinted(i))
-    .sort((a, b) => {
-      const portrait = (i) => (i.nh >= i.nw ? 1 : 0);
-      if (portrait(a) !== portrait(b)) return portrait(b) - portrait(a);
-      return (b.nw * b.nh) - (a.nw * a.nh);
-    });
-  for (const c of candidates.slice(0, 4)) {
+  const tryCandidate = async (c) => {
     try {
       if (c.kind === 'data') {
         const body = Buffer.from(c.data, 'base64');
         if (isImage(body)) return { buffer: body, width: c.nw, height: c.nh };
-        continue;
+        return null;
       }
       const resp = await context.request.get(c.src, { timeout: 20000 }).catch(() => null);
       if (resp && resp.ok()) {
@@ -498,6 +491,41 @@ async function fetchDashboardPhoto(page, context) {
         if (isImage(body)) return { buffer: body, width: c.nw, height: c.nh };
       }
     } catch (_) { /* try next candidate */ }
+    return null;
+  };
+  // Tier 1: an image that LOOKS like a citizen photo
+  // (photo/citizen/profile in its URL, alt or class, or an
+  // inline data: image). A bare size sort once picked the EC
+  // emblem (1200x1200, no 'logo' hint in its URL) over the
+  // real thumbnail — generic images are never accepted on
+  // size alone anymore.
+  const hinted = (i) => /photo|citizen|profile|picture|avatar|user/i.test(
+    (i.src || '') + ' ' + (i.alt || '') + ' ' + (i.cls || ''));
+  const tier1 = (info || [])
+    .filter((i) => (i.kind === 'data' ? true : i.nw >= 30 && i.nh >= 30))
+    .filter((i) => i.kind === 'data' || hinted(i))
+    .sort((a, b) => {
+      const portrait = (i) => (i.nh >= i.nw ? 1 : 0);
+      if (portrait(a) !== portrait(b)) return portrait(b) - portrait(a);
+      return (b.nw * b.nh) - (a.nw * a.nh);
+    });
+  for (const c of tier1.slice(0, 4)) {
+    const hit = await tryCandidate(c);
+    if (hit) return hit;
+  }
+  // Tier 2 (last resort before a blank slot): a portrait image
+  // sitting in the page's content area — not the header/footer
+  // strip, not square like the emblem, moderate natural size.
+  // The portal's citizen photo does not always carry a hint
+  // in its URL, and a blank photo box is worse than a
+  // well-filtered guess.
+  const tier2 = (info || [])
+    .filter((i) => i.kind === 'url' && !i.chrome && typeof i.top === 'number' && i.top >= 100)
+    .filter((i) => i.nh >= i.nw * 1.1 && i.nw >= 80 && i.nw <= 900)
+    .sort((a, b) => (b.nw * b.nh) - (a.nw * a.nh));
+  for (const c of tier2.slice(0, 3)) {
+    const hit = await tryCandidate(c);
+    if (hit) return hit;
   }
   return null;
 }
