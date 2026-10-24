@@ -265,7 +265,7 @@
         </div>
         <div id="cardFormPanel" style="display:none;">
           <div style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:8px; text-align:center;">🪪 NID কার্ড ফর্ম</div>
-          <p class="note" style="text-align:left;">✏️ সব তথ্য এডিট করা যাবে — পোর্টালের তথ্য নিচে সাজানো আছে, ভুল থাকলে ঠিক করে তারপর ডাউনলোড করুন। পোর্টালে ডাউনলোড থাকলে অফিসিয়াল কার্ডটিই সরাসরি পাবেন (এডিট তখন প্রযোজ্য নয়); না থাকলে এডিট করা তথ্য, ছবি ও স্বাক্ষর দিয়েই কার্ড তৈরি হবে।</p>
+          <p class="note" id="cardFormNote" style="text-align:left;">কার্ডে যা ছাপা হয় শুধু সেটাই এখানে — নাম, পিতা-মাতা, জন্ম তারিখ, NID নম্বর, রক্তের গ্রুপ, জন্মস্থান, ঠিকানা, ছবি ও স্বাক্ষর। পোর্টালে ডাউনলোড থাকলে অফিসিয়াল কার্ডটিই সরাসরি পাবেন; না থাকলে এখানকার তথ্য, ছবি ও স্বাক্ষর দিয়েই কার্ড তৈরি হবে।</p>
           <div id="cardOfficialNote" class="note" style="display:none; text-align:left;">✅ পোর্টালে আপনার কার্ড ডাউনলোড আছে — অফিসিয়াল কার্ডটিই সরাসরি পাবেন। এডিট, ছবি বা স্বাক্ষর এখানে প্রযোজ্য নয়।</div>
           <div id="cardEditFields"></div>
           <div id="cardPhotoSlot"></div>
@@ -405,10 +405,11 @@
   // (absent = portal photo, null = no photo, data URL = new photo);
   // the card-only signature rides as `signature` (drawn or uploaded).
   // When the portal itself offers the download (HAS_DOWNLOAD from
-  // /profile), the official PDF comes as-is — edits, photo and
-  // signature are ignored by design, so the card panel must NOT
-  // show those controls at all (showing them promises what the
-  // download cannot deliver — the 2026-10-24 live confusion).
+  // /profile), the official PDF comes as-is — the card form stays
+  // beside the download as a read-only display of exactly the
+  // card-format fields (owner's premium rule, 2026-10-24), never
+  // as editable controls that promise what the official download
+  // cannot apply.
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const EDIT_FIELDS = [
     ['Name(Bangla)', 'নাম (বাংলা)'], ['Name(English)', 'Name (English)'],
@@ -421,6 +422,20 @@
     ['Birth Registration No', 'জন্ম নিবন্ধন নম্বর'], ['Mobile', 'মোবাইল'],
     ['TIN', 'টিন'], ['Occupation', 'পেশা'], ['Education', 'শিক্ষা'],
     ['Religion', 'ধর্ম'], ['NID Father', 'পিতার NID'], ['NID Mother', 'মাতার NID'],
+  ];
+  // NID CARD format: exactly what the card template prints
+  // (template.json field_specs + back-side address) — name
+  // (Bangla+English), father, mother, DOB, ID NO, blood group,
+  // birth place, present address. Plus photo + signature slots.
+  // Everything else in EDIT_FIELDS (PIN, voter, TIN, occupation,
+  // education, religion, parents' NIDs, permanent address, ...)
+  // belongs to the server-copy profile, NOT to the card — the
+  // card form must not carry it (owner's rule, 2026-10-24).
+  const CARD_FIELDS = [
+    ['Name(Bangla)', 'নাম (বাংলা)'], ['Name(English)', 'Name (English)'],
+    ['Father Name', 'পিতার নাম'], ['Mother Name', 'মাতার নাম'],
+    ['Date of Birth', 'জন্ম তারিখ'], ['National ID', 'জাতীয় পরিচয়পত্র নম্বর'],
+    ['Blood Group', 'রক্তের গ্রুপ'], ['Birth Place', 'জন্মস্থান'],
   ];
   const ADDR_ORDER = ['holding', 'village', 'mouza', 'union_ward', 'post_office', 'postal_code', 'upozila', 'district', 'division', 'city_corp', 'rmo'];
   let PROFILE = null, PORTAL_PHOTO = null, HAS_DOWNLOAD = false, EDITS = {}, PHOTO_STATE = 'portal', PHOTO_DATA = null;
@@ -437,18 +452,23 @@
     if (v == null) return '';
     return typeof v === 'string' ? v : addrToString(v);
   }
-  function renderEditFields(containerId) {
+  function renderEditFields(containerId, kind, editable) {
     const box = $(containerId);
     if (!box || !PROFILE) return;
+    const fields = kind === 'card' ? CARD_FIELDS : EDIT_FIELDS;
+    const ro = editable === false ? ' readonly' : '';
     let h = '<div class="edit-sec">👤 ব্যক্তিগত তথ্য</div>';
-    for (const [key, label] of EDIT_FIELDS) {
-      h += '<div class="field"><label>' + esc(label) + '</label><input type="text" data-edit-key="' + esc(key) + '" value="' + esc(fieldVal(key)) + '"></div>';
+    for (const [key, label] of fields) {
+      h += '<div class="field"><label>' + esc(label) + '</label><input type="text" data-edit-key="' + esc(key) + '" value="' + esc(fieldVal(key)) + '"' + ro + '></div>';
     }
     h += '<div class="edit-sec">🏠 ঠিকানা</div>';
-    h += '<div class="field"><label>বর্তমান ঠিকানা (পুরো)</label><textarea data-edit-key="Present Address">' + esc(fieldVal('Present Address')) + '</textarea></div>';
-    h += '<div class="field"><label>স্থায়ী ঠিকানা (পুরো)</label><textarea data-edit-key="Permanent Address">' + esc(fieldVal('Permanent Address')) + '</textarea></div>';
-    h += '<div class="note">✏️ সব তথ্য এডিট করা যাবে — বদলানো মানই ডাউনলোডে বসবে।</div>';
+    h += '<div class="field"><label>বর্তমান ঠিকানা (পুরো)</label><textarea data-edit-key="Present Address"' + ro + '>' + esc(fieldVal('Present Address')) + '</textarea></div>';
+    if (kind !== 'card') {
+      h += '<div class="field"><label>স্থায়ী ঠিকানা (পুরো)</label><textarea data-edit-key="Permanent Address">' + esc(fieldVal('Permanent Address')) + '</textarea></div>';
+    }
+    if (editable !== false) h += '<div class="note">✏️ সব তথ্য এডিট করা যাবে — বদলানো মানই ডাউনলোডে বসবে।</div>';
     box.innerHTML = h;
+    if (editable === false) return;
     box.querySelectorAll('[data-edit-key]').forEach((el) => {
       el.addEventListener('input', () => { EDITS[el.getAttribute('data-edit-key')] = el.value; });
     });
@@ -550,18 +570,24 @@
   }
   function renderEditForm(kind) {
     const note = $('cardOfficialNote');
+    const mainNote = $('cardFormNote');
     if (kind === 'card' && HAS_DOWNLOAD) {
-      // Official PDF as-is: no edit/photo/signature controls, only
-      // the plain notice — otherwise the form promises edits the
-      // download cannot apply.
-      $('cardEditFields').innerHTML = '';
+      // Official PDF as-is, but the form STAYS beside the download
+      // (owner's premium rule, 2026-10-24): the card-format fields
+      // as a read-only display of exactly what the card contains —
+      // nothing editable, so nothing is promised that the official
+      // download cannot apply. Photo/signature slots stay hidden:
+      // the official card already carries its own.
+      renderEditFields('cardEditFields', 'card', false);
       $('cardPhotoSlot').innerHTML = '';
       $('cardSignSlot').innerHTML = '';
       if (note) note.style.display = 'block';
+      if (mainNote) mainNote.style.display = 'none';
       return;
     }
     if (note) note.style.display = 'none';
-    renderEditFields(kind === 'card' ? 'cardEditFields' : 'serverEditFields');
+    if (mainNote) mainNote.style.display = 'block';
+    renderEditFields(kind === 'card' ? 'cardEditFields' : 'serverEditFields', kind, true);
     renderPhotoSlot(kind === 'card' ? 'cardPhotoSlot' : 'serverPhotoSlot');
     if (kind === 'card') renderSignSlot();
   }

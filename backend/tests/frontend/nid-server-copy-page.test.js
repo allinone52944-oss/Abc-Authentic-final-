@@ -83,15 +83,22 @@ describe('nid-server-copy.html', () => {
     expect(html).toContain('body.signature = SIGN_DATA');
     expect(html).toContain('INVALID_SIGNATURE');
   });
-  test('official-download card hides edit/photo/signature (2026-10-24 live confusion)', () => {
-    // /profile returns hasDownload, but the page used to discard it
-    // and showed edit/photo/signature controls even when the card
-    // would be the official PDF that ignores all three — the form
-    // promised what the download could not deliver.
-    expect(html).toContain('HAS_DOWNLOAD = !!d.hasDownload');
+  test('card form trimmed to NID-card format only; official card keeps it read-only beside download', () => {
+    // Owner's rule, 2026-10-24: the card form shows exactly what
+    // the card template prints (CARD_FIELDS + present address +
+    // photo + signature) — no PIN/voter/TIN/occupation/education/
+    // religion/parents-NID/permanent-address extras, which belong
+    // to the server-copy profile only. For an official download
+    // the form STAYS beside the download (premium) but read-only,
+    // so it displays the card's contents without promising edits
+    // the official PDF cannot apply.
+    expect(html).toContain('const CARD_FIELDS');
+    expect(html).toContain("kind === 'card' ? CARD_FIELDS : EDIT_FIELDS");
+    expect(html).toContain('id="cardFormNote"');
+    expect(html).toContain('কার্ডে যা ছাপা হয় শুধু সেটাই এখানে');
+    expect(html).toContain("renderEditFields('cardEditFields', 'card', false)");
     expect(html).toContain('id="cardOfficialNote"');
     expect(html).toContain('অফিসিয়াল কার্ডটিই সরাসরি পাবেন');
-    expect(html).toContain("kind === 'card' && HAS_DOWNLOAD");
   });
 });
 
