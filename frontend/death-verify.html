@@ -163,6 +163,23 @@ function busy(id,on,txt){
   if(on){b.dataset.t=b.innerHTML;b.innerHTML='<span class="spin"></span>'+(txt||'অপেক্ষা করুন…');b.disabled=true;}
   else{b.innerHTML=b.dataset.t||b.innerHTML;b.disabled=false;}
 }
+// ব্যর্থতার রসিদ owner-only endpoint-এ থাকে (header auth): plain <a href>
+// login header পাঠায় না, সার্ভার {"error":"NO_TOKEN"} দেয় — History-র
+// পদ্ধতিতে ABC.api fetch → blob → save। (ABC.api নিজে '/api' বসায়।)
+const _qesc=(s)=>String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+async function dlReceipt(url,name){
+  try{
+    const r=await ABC.api(String(url).replace(/^\/api/,''));
+    if(!r.ok){showErr('❌ ডাউনলোড ব্যর্থ হয়েছে — আবার চেষ্টা করুন।');return;}
+    const blob=await r.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=name||'receipt.pdf';
+    document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);
+  }catch(e){showErr('❌ ডাউনলোড ব্যর্থ হয়েছে — আবার চেষ্টা করুন।');}
+}
+
 function toDDMMYYYY(v){
   let s=String(v||'').trim().replace(/[.\/]/g,'-');
   // If already dd-mm-yyyy, keep as-is
@@ -272,7 +289,7 @@ function reportEngineFailure(engineId, refNo, reason){
     })}).then(r=>r.json()).then(d=>{
       if(d&&d.receipt){
         const box=document.getElementById('failReceipt');
-        if(box){box.style.display='block';box.innerHTML='<a href="'+d.receipt+'" style="display:inline-block;padding:9px 16px;border:1px solid #d6c9ae;border-radius:8px;background:#fff7ed;color:#9a3412;font-weight:600;text-decoration:none;">📄 ব্যর্থতার রসিদ ডাউনলোড</a> <span style="color:#6b7280;font-size:12px;">কোনো টাকা কাটা হয়নি — রসিদটি ইতিহাসেও থাকবে</span>';}
+        if(box){box.style.display='block';box.innerHTML='<button type="button" onclick="dlReceipt(\'+_qesc(d.receipt)+\',\'death-receipt-failed.pdf\')" style="display:inline-block;padding:9px 16px;border:1px solid #d6c9ae;border-radius:8px;background:#fff7ed;color:#9a3412;font-weight:600;text-decoration:none;cursor:pointer;">📄 ব্যর্থতার রসিদ ডাউনলোড</button> <span style="color:#6b7280;font-size:12px;">কোনো টাকা কাটা হয়নি — রসিদটি ইতিহাসেও থাকবে</span>';}
       }
     }).catch(()=>{});
   }catch(e){}
