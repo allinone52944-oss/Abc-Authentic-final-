@@ -14,10 +14,63 @@
     background: #ffffff;
     border: 1px solid var(--border-light);
     border-radius: var(--r-xl);
-    padding: 24px;
-    box-shadow: var(--shadow-sm);
+    padding: 28px;
+    box-shadow: var(--shadow-md);
     margin-bottom: 20px;
-    max-width: 640px;
+    max-width: 680px;
+  }
+  .hero {
+    background: linear-gradient(135deg, #0f2a5c, #1e40af 55%, #2563eb);
+    color: #ffffff;
+    border-radius: var(--r-xl);
+    padding: 22px 24px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-glow);
+    max-width: 680px;
+  }
+  .hero h2 { font-size: 22px; margin: 0 0 6px; }
+  .hero p { font-size: 13.5px; color: rgba(255,255,255,0.88); margin: 0; line-height: 1.7; }
+  .hero-row { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; }
+  .wallet-pill {
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    background: rgba(255,255,255,0.16); color: #ffffff; border: 1px solid rgba(255,255,255,0.35);
+    padding: 8px 14px; border-radius: 20px; font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  .steps { display: flex; gap: 8px; margin-bottom: 18px; max-width: 680px; }
+  .step {
+    flex: 1; display: flex; align-items: center; gap: 8px;
+    background: #ffffff; border: 1px solid var(--border-light); border-radius: var(--r-md);
+    padding: 10px 12px; font-size: 13px; font-weight: 700; color: var(--text-muted);
+  }
+  .step .num {
+    width: 24px; height: 24px; flex: none; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 50%; background: var(--bg-subtle); color: var(--text-muted); font-size: 13px;
+  }
+  .step.on { border-color: var(--primary-300); background: var(--primary-50); color: var(--primary-800); }
+  .step.on .num { background: var(--primary-600); color: #ffffff; }
+  .step.done { color: var(--status-success-text); }
+  .step.done .num { background: var(--status-success); color: #ffffff; }
+  .opt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .opt-card {
+    background: var(--bg-subtle); border: 1px solid var(--border-light); border-radius: var(--r-lg);
+    padding: 16px; text-align: center;
+  }
+  .opt-card .ico { font-size: 28px; margin-bottom: 6px; }
+  .opt-card .t { font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px; }
+  .opt-card .d { font-size: 12.5px; color: #475569; line-height: 1.7; margin-bottom: 12px; text-align: left; }
+  .trust-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .trust-chip {
+    background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;
+    padding: 8px 12px; border-radius: 20px; font-size: 12.5px; font-weight: 600;
+  }
+  @media (max-width: 640px) {
+    .form-card { padding: 18px; }
+    .hero { padding: 18px; }
+    .hero h2 { font-size: 19px; }
+    .steps { gap: 6px; }
+    .step { font-size: 12px; padding: 8px; }
+    .opt-grid { grid-template-columns: 1fr; }
+    .field input[type=text], .field input[type=password] { padding: 13px 12px; }
   }
   .spin {
     display: inline-block; width: 20px; height: 20px;
@@ -89,14 +142,22 @@
 
   <div class="main">
     <span class="back-nav" onclick="location.href='/services.html'">← সকল সেবায় ফিরুন</span>
-    <div class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-      <div>
-        <h2>🪪 এনআইডি সার্ভার কপি</h2>
-        <p>NID পোর্টালের আইডি + পাসওয়ার্ড দিয়ে লগইন করে সরাসরি NID কার্ড (PDF)</p>
+    <div class="hero">
+      <div class="hero-row">
+        <div>
+          <h2>🪪 এনআইডি সার্ভার কপি</h2>
+          <p>NID পোর্টালের আইডি + পাসওয়ার্ড দিয়ে লগইন করে সরাসরি NID কার্ড ও সার্ভার কপি (PDF) ডাউনলোড করুন</p>
+        </div>
+        <div id="walletBadge" class="wallet-pill" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">
+          💳 ব্যালেন্স: ৳<span id="balVal">০</span>
+        </div>
       </div>
-      <div id="walletBadge" style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">
-        💳 ব্যালেন্স: ৳<span id="balVal">০</span>
-      </div>
+    </div>
+
+    <div class="steps" id="stepsBar">
+      <div class="step on" id="step1"><span class="num">১</span> লগইন তথ্য</div>
+      <div class="step" id="step2"><span class="num">২</span> ক্যাপচা</div>
+      <div class="step" id="step3"><span class="num">৩</span> ডাউনলোড</div>
     </div>
 
     <div class="form-card">
@@ -133,16 +194,28 @@
         </button>
       </div>
 
-      <div class="captcha-box" id="optionBox" style="background:#eff6ff; border-color:#bfdbfe;">
-        <div style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:4px;">✅ লগইন সফল হয়েছে</div>
-        <div id="holderLine" style="font-size:13px; color:#334155; margin-bottom:14px;"></div>
-        <div style="font-size:13px; font-weight:600; color:#334155; margin-bottom:10px;">কোনটি ডাউনলোড করবেন? (একটি বা দুটোই নিতে পারবেন)</div>
-        <button type="button" class="btn btn-primary" id="dlCardBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; margin-bottom:10px;">
-          🪪 NID কার্ড ডাউনলোড করুন
-        </button>
-        <button type="button" class="btn btn-primary" id="dlServerBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; background:linear-gradient(135deg,#1e40af,#2563eb);">
-          📄 সার্ভার কপি ডাউনলোড করুন
-        </button>
+      <div class="captcha-box" id="optionBox" style="background:#ffffff; border-color:#bfdbfe; text-align:left;">
+        <div style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:4px; text-align:center;">✅ লগইন সফল হয়েছে</div>
+        <div id="holderLine" style="font-size:13px; color:#334155; margin-bottom:14px; text-align:center;"></div>
+        <div style="font-size:13px; font-weight:600; color:#334155; margin-bottom:12px; text-align:center;">কোনটি ডাউনলোড করবেন? (একটি বা দুটোই নিতে পারবেন)</div>
+        <div class="opt-grid">
+          <div class="opt-card">
+            <div class="ico">🪪</div>
+            <div class="t">NID কার্ড</div>
+            <div class="d">পোর্টালে ডাউনলোড থাকলে অফিসিয়াল কার্ডটিই সরাসরি পাবেন; না থাকলে প্রোফাইলের তথ্য ও ছবি দিয়ে একই মানের কার্ড তৈরি করে দেওয়া হবে।</div>
+            <button type="button" class="btn btn-primary" id="dlCardBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700;">
+              কার্ড ডাউনলোড করুন
+            </button>
+          </div>
+          <div class="opt-card">
+            <div class="ico">📄</div>
+            <div class="t">সার্ভার কপি</div>
+            <div class="d">প্রোফাইলের পূর্ণ তথ্য, ছবি ও ঠিকানাসহ সার্ভার কপি — যাচাই ও দাখিলের কাজে ব্যবহারযোগ্য পূর্ণাঙ্গ কপি।</div>
+            <button type="button" class="btn btn-primary" id="dlServerBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; background:linear-gradient(135deg,#1e40af,#2563eb);">
+              সার্ভার কপি ডাউনলোড করুন
+            </button>
+          </div>
+        </div>
         <p class="note" style="text-align:left;">প্রতিটি ডাউনলোডে সেবা চার্জ প্রযোজ্য — একই ডকুমেন্ট একই লগইনে আবার ডাউনলোড করলে দ্বিতীয়বার চার্জ কাটবে না।</p>
       </div>
 
@@ -150,6 +223,11 @@
         🔒 আপনার পোর্টালের পাসওয়ার্ড আমাদের সার্ভারে সংরক্ষণ করা হয় না — শুধু এই একবারের লগইনের কাজে ব্যবহার হয়।<br>
         ✅ লগইনের পর দুটি অপশন পাবেন — <b>NID কার্ড</b> ও <b>সার্ভার কপি</b>; যেটি লাগবে সেটি (বা দুটোই) ডাউনলোড করতে পারবেন। যেসব অ্যাকাউন্টে পোর্টালে সরাসরি ডাউনলোড আছে, সেখানে অফিসিয়াল কার্ডটিই সরাসরি পাবেন; ডাউনলোড না থাকলে (যেমন ২০১৯ সালের আগের NID) প্রোফাইলের তথ্য ও ছবি দিয়ে একই মানের কার্ড তৈরি করে দেওয়া হবে। ডকুমেন্ট তৈরি না হলে কোনো চার্জ কাটবে না।
       </p>
+      <div class="trust-strip">
+        <span class="trust-chip">🔒 পাসওয়ার্ড সংরক্ষণ হয় না</span>
+        <span class="trust-chip">✅ ব্যর্থ হলে চার্জ ৳০</span>
+        <span class="trust-chip">📥 History থেকে আবার ডাউনলোড</span>
+      </div>
     </div>
   </div>
 </div>
@@ -180,6 +258,14 @@
     RATE_LIMITED: 'অনেকবার চেষ্টা করা হয়েছে — একটু অপেক্ষা করে আবার চেষ্টা করুন।',
   };
 
+  function setStep(n) {
+    for (let i = 1; i <= 3; i++) {
+      const el = $('step' + i);
+      if (!el) continue;
+      el.classList.toggle('on', i === n);
+      el.classList.toggle('done', i < n);
+    }
+  }
   function showErr(msg) { const b = $('errBox'); b.textContent = msg; b.classList.add('on'); $('okBox').classList.remove('on'); }
   function showOk(msg) { const b = $('okBox'); b.textContent = msg; b.classList.add('on'); $('errBox').classList.remove('on'); }
   function clearBoxes() { $('errBox').classList.remove('on'); $('okBox').classList.remove('on'); }
@@ -217,7 +303,8 @@
       $('captchaImg').src = d.captcha;
       $('captchaText').value = '';
       $('captchaBox').classList.add('on');
-      showOk('ক্যাপচা এসেছে — ছবির লেখাটি লিখে "কার্ড তৈরি করুন" চাপুন।');
+      setStep(2);
+      showOk('ক্যাপচা এসেছে — ছবির লেখাটি লিখে "লগইন করুন" চাপুন।');
       $('captchaText').focus();
     } catch (e) {
       showErr('সার্ভারের সঙ্গে সংযোগ করা যাচ্ছে না — আবার চেষ্টা করুন।');
@@ -247,6 +334,7 @@
         $('password').value = '';
         $('holderLine').textContent = d.holderName ? ('কার্ডের মালিক: ' + d.holderName) : '';
         $('optionBox').classList.add('on');
+        setStep(3);
         showOk('লগইন সফল — এবার যেটি লাগবে সেটি ডাউনলোড করুন।');
         return;
       }
@@ -260,6 +348,7 @@
       if (d.final || d.error === 'SESSION_EXPIRED') {
         SESSION = null;
         $('captchaBox').classList.remove('on');
+        setStep(1);
       }
       showErr(msgOf(d, 'লগইন করা যায়নি — আবার চেষ্টা করুন।'));
     } catch (e) {
@@ -291,7 +380,7 @@
         return;
       }
       const d = await r.json().catch(() => ({}));
-      if (d.error === 'JOB_EXPIRED') { $('optionBox').classList.remove('on'); JOB = null; }
+      if (d.error === 'JOB_EXPIRED') { $('optionBox').classList.remove('on'); JOB = null; setStep(1); }
       showErr(msgOf(d, label + ' তৈরি করা যায়নি — কোনো চার্জ কাটা হয়নি।'));
     } catch (e) {
       showErr('সার্ভারের সঙ্গে সংযোগ করা যাচ্ছে না — আবার চেষ্টা করুন।');
