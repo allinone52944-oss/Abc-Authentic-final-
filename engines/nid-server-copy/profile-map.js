@@ -24,9 +24,44 @@ function cleanVal(s) {
   return String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Fallback for label variants the exact map does not list (the
+ * portal's wording varies: 'জাতীয় পরিচিতি নম্বর' vs
+ * 'জাতীয় পরিচয়পত্র নম্বর', 'নাম (বাংলা)' -> 'নাম বাংলা', …).
+ * Order matters: parent-NID labels must win over the generic
+ * NID rule, birth-place over date-of-birth.
+ */
+function fallbackField(label) {
+  const l = label || '';
+  const has = (...words) => words.every((w) => l.includes(w));
+  if (has('পিতা') && (l.includes('পরিচয়') || l.includes('এনআইডি') || l.includes('nid'))) return 'NID Father';
+  if (has('মাতা') && (l.includes('পরিচয়') || l.includes('এনআইডি') || l.includes('nid'))) return 'NID Mother';
+  if (l.includes('জাতীয় পরিচয়') || l.includes('জাতীয় পরিচিতি') || l.includes('এনআইডি') || l.includes('national id')) return 'National ID';
+  if (l.includes('জন্মস্থান') || l.includes('জন্ম স্থান') || l.includes('birth place')) return 'Birth Place';
+  if (has('জন্ম') && l.includes('তারিখ')) return 'Date of Birth';
+  if (has('পিতা') && l.includes('নাম')) return 'Father Name';
+  if (has('মাতা') && l.includes('নাম')) return 'Mother Name';
+  if ((l.includes('স্বামী') || l.includes('স্ত্রী')) && l.includes('নাম')) return 'Spouse Name';
+  if (l.includes('ইংরেজি') && l.includes('নাম')) return 'Name(English)';
+  if (l.includes('নাম') && !l.includes('পিতা') && !l.includes('মাতা')) return 'Name(Bangla)';
+  if (l.includes('ভোটার') && (l.includes('নম্বর') || l.includes('নং'))) return 'Voter No';
+  if (l.includes('ভোটার') && (l.includes('এলাকা') || l.includes('অঞ্চল'))) return 'Voter Area';
+  if (l.includes('রক্ত')) return 'Blood Group';
+  if (l.includes('লিঙ্গ')) return 'Gender';
+  if (l.includes('পিন')) return 'Pin';
+  if (l.includes('সিরিয়াল')) return 'Sl No';
+  if (l.includes('ফর্ম') && (l.includes('নম্বর') || l.includes('নং'))) return 'Form No';
+  if (l.includes('পেশা')) return 'Occupation';
+  if (l.includes('ধর্ম')) return 'Religion';
+  if (l.includes('মোবাইল')) return 'Mobile';
+  if (l.includes('জন্ম নিবন্ধন')) return 'Birth Registration No';
+  return null;
+}
+
 // Top-level (personal) fields: normalised label -> input_data key.
 const FIELD_MAP = {
   'নাম': 'Name(Bangla)',
+  'নাম বাংলা': 'Name(Bangla)',
   'name bangla': 'Name(Bangla)',
   'নাম ইংরেজি': 'Name(English)',
   'name english': 'Name(English)',
@@ -178,7 +213,7 @@ function buildInputData(pairs) {
       continue;
     }
 
-    const field = FIELD_MAP[label];
+    const field = FIELD_MAP[label] || fallbackField(label);
     if (field) {
       if (!data[field]) data[field] = value;
       continue;
@@ -205,4 +240,4 @@ function hasCoreData(data) {
   return Boolean(name && (nid || data['Date of Birth']));
 }
 
-module.exports = { buildInputData, hasCoreData, normLabel, FIELD_MAP, ADDR_MAP };
+module.exports = { buildInputData, hasCoreData, normLabel, FIELD_MAP, ADDR_MAP, fallbackField };

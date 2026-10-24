@@ -227,6 +227,30 @@ async function scrapeProfilePairs(page) {
   return page.evaluate(() => {
     const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
     const pairs = [];
+    const seen = new Set();
+    const push = (section, label, value) => {
+      label = clean(label);
+      value = clean(value);
+      if (!label || !value || label === value) return;
+      const key = label + '|' + value;
+      if (seen.has(key)) return;
+      seen.add(key);
+      pairs.push({ section: clean(section), label, value });
+    };
+    // A value cell may carry the data in a readonly/disabled form
+    // control instead of text — read the control's value then.
+    const valueOf = (el) => {
+      if (!el) return '';
+      const ctl = el.querySelector ? el.querySelector('input, textarea, select') : null;
+      if (ctl) {
+        if (ctl.tagName === 'SELECT') {
+          const opt = ctl.options && ctl.options[ctl.selectedIndex];
+          return clean((opt && opt.text) || ctl.value);
+        }
+        return clean(ctl.value);
+      }
+      return clean(el.textContent);
+    };
     const headingOf = (el) => {
       let node = el;
       for (let up = 0; up < 6 && node; up++) {
@@ -241,25 +265,32 @@ async function scrapeProfilePairs(page) {
       const section = headingOf(tbl);
       tbl.querySelectorAll('tr').forEach((tr) => {
         const cells = tr.querySelectorAll('th, td');
-        if (cells.length >= 2) {
-          const label = clean(cells[0].textContent);
-          const value = clean(cells[1].textContent);
-          if (label && value && label !== value) pairs.push({ section, label, value });
-        }
+        if (cells.length >= 2) push(section, clean(cells[0].textContent), valueOf(cells[1]));
       });
     });
     document.querySelectorAll('dl').forEach((dl) => {
       const section = headingOf(dl);
-      const dts = dl.querySelectorAll('dt');
-      dts.forEach((dt) => {
+      dl.querySelectorAll('dt').forEach((dt) => {
         const dd = dt.nextElementSibling;
-        if (dd && dd.tagName === 'DD') {
-          const label = clean(dt.textContent);
-          const value = clean(dd.textContent);
-          if (label && value) pairs.push({ section, label, value });
-        }
+        if (dd && dd.tagName === 'DD') push(section, clean(dt.textContent), valueOf(dd));
       });
     });
+    // Labelled form rows (Semantic UI .field and friends): a
+    // <label> plus a sibling container holding the value control.
+    document.querySelectorAll('.field, .form-group').forEach((row) => {
+      const lab = row.querySelector(':scope > label, :scope > .label');
+      if (!lab) return;
+      const holder = row.querySelector(':scope > .input, :scope > div, :scope > span');
+      if (holder && holder !== lab) push(headingOf(row), clean(lab.textContent), valueOf(holder));
+    });
+    // Last resort: "label: value" lines from the rendered text —
+    // catches any layout the structural passes missed.
+    const lines = String((document.body && document.body.innerText) || '').split('\n');
+    for (const raw of lines) {
+      const line = clean(raw);
+      const m = line.match(/^([^:]{2,42})\s*[:：]\s*(.+)$/);
+      if (m) push('', m[1], m[2]);
+    }
     return pairs;
   }).catch(() => []);
 }
@@ -371,9 +402,42 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
     // keep the data as a job — the customer picks what to
     // download (NID card and/or server copy) from here.
     const photo = await fetchDashboardPhoto(page, context);
+    const dashPairs = await scrapeProfilePairs(page);
     await page.goto(BASE + '/citizen-home/profile', { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT }).catch(() => {});
     await page.waitForTimeout(800);
-    const pairs = await scrapeProfilePairs(page);
+    let profilePairs = await scrapeProfilePairs(page);
+    if (profilePairs.length < 5) {
+      // The profile may live behind a menu link rather than the
+      // canonical URL — follow whatever profile link exists.
+      const href = await page.evaluate(() => {
+        const a = document.querySelector('a[href*="profile" i]');
+        return a ? a.href : '';
+      }).catch(() => '');
+      if (href && !page.url().includes(href)) {
+        await page.goto(href, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT }).catch(() => {});
+        await page.waitForTimeout(800);
+        const more = await scrapeProfilePairs(page);
+        if (more.length > profilePairs.length) profilePairs = more;
+      }
+    }
+    // Profile pairs first: buildInputData keeps the first value
+    // per field, and the profile page is the authoritative source.
+    const seenPair = new Set();
+    const pairs = [];
+    for (const p of [...profilePairs, ...dashPairs]) {
+      const k = String(p.label || '') + '|' + String(p.value || '');
+      if (!seenPair.has(k)) { seenPair.add(k); pairs.push(p); }
+    }
+    try {
+      const { buildInputData, hasCoreData } = require('./profile-map');
+      const mapped = buildInputData(pairs);
+      console.warn('[nid-server-copy] job data: pairs=' + pairs.length,
+        'core=' + hasCoreData(mapped),
+        'name=' + Boolean(mapped['Name(Bangla)'] || mapped['Name(English)']),
+        'nid=' + Boolean(mapped['National ID'] || mapped['Pin']),
+        'dob=' + Boolean(mapped['Date of Birth']),
+        'labels=' + pairs.map((p) => p.label).slice(0, 30).join('|').slice(0, 300));
+    } catch (_) { /* diagnostics only */ }
     await page.goto(BASE + '/citizen-home/', { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT }).catch(() => {});
     const downloadPdf = await tryOfficialDownload(page);
 
@@ -421,4 +485,4 @@ function init() {
   }
 }
 
-module.exports = { init, getInfo, startSession, submitCaptcha, closeSession, getJob, BASE, waitForLoginForm, captureCaptcha };
+module.exports = { init, getInfo, startSession, submitCaptcha, closeSession, getJob, BASE, waitForLoginForm, captureCaptcha, scrapeProfilePairs };
