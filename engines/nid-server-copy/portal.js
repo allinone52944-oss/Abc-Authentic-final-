@@ -399,6 +399,68 @@ async function scrapeProfileDeep(page) {
   return { pairs, frames, tabsClicked };
 }
 
+/**
+ * Crawl the citizen-home pages reachable from the dashboard.
+ * PIN / voter / serial numbers may live on a page other than
+ * the profile page (voter-info, services, application list…).
+ * Instead of guessing which page, visit every safe same-origin
+ * citizen-home link (GET only; logout/download/payment/submit
+ * links are never followed) and harvest each page's pairs.
+ * No clicks on these pages — only structural harvesting — so
+ * no action is ever triggered. Returns merged pairs plus a
+ * per-page summary (path:pairs:identity-fields-found) for the
+ * diagnostic log; paths and field names only, never values.
+ */
+async function crawlCitizenPages(page, baseUrl) {
+  const SKIP = /logout|signout|delete|remove|payment|pay|download|print|submit|verify|confirm/i;
+  await page.goto(baseUrl + '/citizen-home/', { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT }).catch(() => {});
+  await page.waitForTimeout(800);
+  const links = await page.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('a[href]').forEach((a) => {
+      try {
+        const u = new URL(a.getAttribute('href'), window.location.href);
+        if (u.origin !== window.location.origin) return;
+        if (!u.pathname.includes('citizen-home') && !u.pathname.includes('nid-pub')) return;
+        out.push(u.href);
+      } catch (_) { /* ignore */ }
+    });
+    return [...new Set(out)];
+  }).catch(() => []);
+  const pairs = [];
+  const seen = new Set();
+  const summary = [];
+  let visited = 0;
+  for (const href of links) {
+    if (visited >= 6) break;
+    if (SKIP.test(href)) continue;
+    if (href === baseUrl + '/citizen-home/' || href.endsWith('/citizen-home/profile')) continue;
+    visited += 1;
+    try {
+      await page.goto(href, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT }).catch(() => {});
+      await page.waitForLoadState('networkidle', { timeout: 6000 }).catch(() => {});
+      await page.waitForTimeout(800);
+      const pagePairs = [];
+      const mergePage = (more) => {
+        for (const pr of more || []) {
+          const k = String(pr.label || '') + '|' + String(pr.value || '');
+          if (!seen.has(k)) { seen.add(k); pagePairs.push(pr); pairs.push(pr); }
+        }
+      };
+      mergePage(await scrapeProfilePairs(page));
+      for (const frame of page.frames()) {
+        if (frame === page.mainFrame()) continue;
+        mergePage(await scrapeProfilePairs(frame));
+      }
+      const { buildInputData } = require('./profile-map');
+      const m = buildInputData(pagePairs);
+      const flags = ['Pin', 'Voter No', 'Sl No', 'Voter Area', 'Blood Group'].filter((k) => m[k]).join(',');
+      summary.push(new URL(href).pathname + ':' + pagePairs.length + (flags ? ':' + flags : ''));
+    } catch (_) { /* next page */ }
+  }
+  return { pairs, summary: summary.join('|').slice(0, 600) };
+}
+
 /** Find and fetch the citizen photo shown on the dashboard. */
 async function fetchDashboardPhoto(page, context) {
   // Let in-flight images finish — a photo <img> that has not
@@ -639,12 +701,21 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
         deep = again;
       }
     }
+    // Page crawl (no guessing about where PIN/voter live): the
+    // profile page is not the only citizen-home page. Visit
+    // every safe same-origin citizen-home link from the
+    // dashboard and harvest each page. GET only — logout,
+    // download, payment and submit links are never followed.
+    let crawl = { pairs: [], summary: '' };
+    try {
+      crawl = await crawlCitizenPages(page, BASE);
+    } catch (_) { /* crawl is best-effort */ }
     if (!photo) photo = await fetchDashboardPhoto(page, context);
     // Profile pairs first: buildInputData keeps the first value
     // per field, and the profile page is the authoritative source.
     const seenPair = new Set();
     const pairs = [];
-    for (const p of [...profilePairs, ...dashPairs]) {
+    for (const p of [...profilePairs, ...crawl.pairs, ...dashPairs]) {
       const k = String(p.label || '') + '|' + String(p.value || '');
       if (!seenPair.has(k)) { seenPair.add(k); pairs.push(p); }
     }
@@ -661,6 +732,7 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
       const mapped = buildInputData(pairs);
       console.warn('[nid-server-copy] job data: pairs=' + pairs.length,
         'page=' + page.url(),
+        'crawl=' + (crawl.summary || '-'),
         'photo=' + Boolean(photo && photo.buffer),
         'frames=' + deep.frames, 'tabs=' + deep.tabsClicked,
         'core=' + hasCoreData(mapped),
@@ -719,4 +791,4 @@ function init() {
   }
 }
 
-module.exports = { init, getInfo, startSession, submitCaptcha, closeSession, getJob, BASE, waitForLoginForm, captureCaptcha, scrapeProfilePairs, scrapeProfileDeep, fetchDashboardPhoto };
+module.exports = { init, getInfo, startSession, submitCaptcha, closeSession, getJob, BASE, waitForLoginForm, captureCaptcha, scrapeProfilePairs, scrapeProfileDeep, fetchDashboardPhoto, crawlCitizenPages };
