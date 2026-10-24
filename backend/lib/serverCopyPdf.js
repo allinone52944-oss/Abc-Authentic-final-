@@ -211,33 +211,48 @@ async function buildServerCopyPdf(data, photoBuffer) {
       .text(vt, VALUE_X, y + 6, { width: VALUE_W });
     y += 21;
   }
-  function truncateToLines(text, width, maxLines) {
-    // Word-wrap with the currently-set font; keep at most maxLines
-    // lines, ellipsising the tail so text can never spill over
-    // the next fixed section of the skeleton.
+  function wrapAllLines(text, width) {
+    // Word-wrap with the currently-set font/size; returns every
+    // line (no cap).
     const words = String(text).split(/\s+/).filter(Boolean);
     const lines = [];
     let cur = '';
     for (const w of words) {
       const trial = cur ? cur + ' ' + w : w;
       if (doc.widthOfString(trial) <= width || !cur) cur = trial;
-      else { lines.push(cur); cur = w; if (lines.length === maxLines) break; }
+      else { lines.push(cur); cur = w; }
     }
-    if (lines.length < maxLines && cur) lines.push(cur);
-    if (lines.length === maxLines) {
-      let last = lines[maxLines - 1];
-      while (last.length && doc.widthOfString(last + '…') > width) last = last.slice(0, -1);
-      lines[maxLines - 1] = last + '…';
-    }
-    return lines.join('\n');
+    if (cur) lines.push(cur);
+    return lines;
+  }
+  function ellipsise(line, width) {
+    let last = line;
+    while (last.length && doc.widthOfString(last + '…') > width) last = last.slice(0, -1);
+    return last + '…';
   }
   function addressBlock(title, addrText, maxLines) {
     sectionHeader(title);
     const text = addrText || NA;
     const drawn = setFont(doc, text, false);
-    doc.fillColor('#000000').fontSize(7);
-    const clipped = truncateToLines(drawn, 268, maxLines);
-    doc.text(clipped, RX, y + 1, { width: 268, lineGap: 1.3 });
+    doc.fillColor('#000000');
+    // Reference sample: address lines are 8pt (measured from its
+    // text layer) — a fixed small size rendered visibly smaller
+    // than the sample. Size logic: start at the sample's 8pt and
+    // step down only as far as needed for the whole address to
+    // fit its fixed box without truncation; ellipsis only as the
+    // last resort at the smallest size.
+    let lines = null;
+    for (const s of [8, 7.5, 7]) {
+      doc.fontSize(s);
+      const all = wrapAllLines(drawn, 268);
+      if (all.length <= maxLines) { lines = all; break; }
+    }
+    if (!lines) {
+      doc.fontSize(7);
+      lines = wrapAllLines(drawn, 268).slice(0, maxLines);
+      lines[maxLines - 1] = ellipsise(lines[maxLines - 1], 268);
+    }
+    doc.text(lines.join('\n'), RX, y + 1, { width: 268, lineGap: 1.4 });
     // The skeleton's next bar sits at a fixed position — the
     // caller resets y to that bar's measured top.
   }
