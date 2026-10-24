@@ -223,17 +223,22 @@ async function startSession(ownerId, username, password) {
   }
 }
 
-/** Scrape [{section, label, value}] pairs from the profile page. */
-async function scrapeProfilePairs(page) {
-  return page.evaluate(() => {
+/**
+ * Harvest [{section, label, value}] pairs from one document.
+ * Serialised into page/frame evaluate calls, so it must not
+ * close over module scope. The profile page is the ONLY data
+ * source for a server copy: some accounts have no card
+ * download at all, so mining the official PDF is not a
+ * substitute for reading the profile properly.
+ */
+function harvestPairs() {
     const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
     const pairs = [];
     const seen = new Set();
     // The portal prints placeholders for missing values ('--',
     // '-', 'N/A'). Treating one as data is worse than missing
-    // data: a '--' National ID looked "present", so every
-    // fallback (login name, official PDF) was skipped and the
-    // server copy printed '--' with a 'NID:--' QR.
+    // data: a '--' National ID looked "present" and the server
+    // copy printed '--' with a 'NID:--' QR.
     const PLACEHOLDERS = new Set(['--', '-', '—', '–', 'n/a', 'na', 'null', 'none']);
     const push = (section, label, value) => {
       label = clean(label);
@@ -315,8 +320,77 @@ async function scrapeProfilePairs(page) {
       const m = line.match(/^([^:]{2,42})\s*[:：]\s*(.+)$/);
       if (m) push('', m[1], m[2]);
     }
+    // Hidden form fields and page-embedded data: the identity
+    // numbers sometimes live in hidden inputs or a script JSON
+    // blob rather than visible table cells.
+    document.querySelectorAll('input').forEach((inp) => {
+      const nm = ((inp.name || '') + ' ' + (inp.id || '')).trim();
+      if (nm && /nid|national|পরিচয়|pin|voter|ভোটার/i.test(nm)) {
+        push('', nm, inp.value || '');
+      }
+    });
+    document.querySelectorAll('script').forEach((sc) => {
+      const txt = sc.textContent || '';
+      const re = /["']?(nid|national[_-]?id|pin|voter[_-]?no)["']?\s*[:=]\s*["']?(\d[\d ]{9,16}\d)["']?/gi;
+      let m;
+      while ((m = re.exec(txt)) !== null) {
+        push('', m[1], m[2]);
+      }
+    });
     return pairs;
-  }).catch(() => []);
+}
+
+/** Scrape pairs from one page or frame. */
+async function scrapeProfilePairs(target) {
+  return target.evaluate(harvestPairs).catch(() => []);
+}
+
+/**
+ * Deep profile harvest: the main document, every frame, and
+ * tab/accordion sections that only render after a click. The
+ * identity section never appeared in the plain scrape of the
+ * live profile page while personal/address sections did — so
+ * it is either collapsed, tabbed, or framed.
+ */
+async function scrapeProfileDeep(page) {
+  const seen = new Set();
+  const merge = (into, more) => {
+    for (const p of more || []) {
+      const k = String(p.label || '') + '|' + String(p.value || '');
+      if (!seen.has(k)) { seen.add(k); into.push(p); }
+    }
+  };
+  const pairs = [];
+  merge(pairs, await scrapeProfilePairs(page));
+  let frames = 0;
+  for (const frame of page.frames()) {
+    if (frame === page.mainFrame()) continue;
+    frames += 1;
+    merge(pairs, await scrapeProfilePairs(frame));
+  }
+  let tabsClicked = 0;
+  try {
+    tabsClicked = await page.evaluate(() => {
+      const KEY = /পরিচিতি|জাতীয়|ভোটার|পিন|তথ্য|প্রোফাইল|profile|identity|details/i;
+      let n = 0;
+      document.querySelectorAll('button, a, [role="tab"], .tab, .accordion-title, [data-toggle="tab"], [data-toggle="collapse"]').forEach((el) => {
+        const t = String(el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (t && t.length <= 60 && KEY.test(t)) {
+          try { el.click(); n += 1; } catch (_) { /* ignore */ }
+        }
+      });
+      return n;
+    }).catch(() => 0);
+  } catch (_) { /* ignore */ }
+  if (tabsClicked > 0) {
+    await page.waitForTimeout(1200);
+    merge(pairs, await scrapeProfilePairs(page));
+    for (const frame of page.frames()) {
+      if (frame === page.mainFrame()) continue;
+      merge(pairs, await scrapeProfilePairs(frame));
+    }
+  }
+  return { pairs, frames, tabsClicked };
 }
 
 /** Find and fetch the citizen photo shown on the dashboard. */
@@ -498,7 +572,11 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
     await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
     await page.waitForTimeout(1200);
-    let profilePairs = await scrapeProfilePairs(page);
+    // Deep harvest: plain scraping never surfaced the identity
+    // section on the live profile page, so also read frames and
+    // expand tabbed/collapsed sections.
+    let deep = await scrapeProfileDeep(page);
+    let profilePairs = deep.pairs;
     if (profilePairs.length < 5) {
       // The profile may live behind a menu link rather than the
       // canonical URL — follow whatever profile link exists.
@@ -509,8 +587,8 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
       if (href && !page.url().includes(href)) {
         await page.goto(href, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT }).catch(() => {});
         await page.waitForTimeout(800);
-        const more = await scrapeProfilePairs(page);
-        if (more.length > profilePairs.length) profilePairs = more;
+        deep = await scrapeProfileDeep(page);
+        if (deep.pairs.length > profilePairs.length) profilePairs = deep.pairs;
       }
     }
     if (!photo) photo = await fetchDashboardPhoto(page, context);
@@ -523,54 +601,24 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
       if (!seenPair.has(k)) { seenPair.add(k); pairs.push(p); }
     }
     await page.goto(BASE + '/citizen-home/', { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT }).catch(() => {});
+    // The official PDF is delivered as-is when the portal
+    // offers a download — it is NEVER mined for data: some
+    // accounts have no download at all, so the profile page is
+    // the only data source. (Owner's correction, 2026-10-24.)
     const downloadPdf = await tryOfficialDownload(page);
 
-    // The portal login name IS the holder's NID number on this
-    // portal. If the identity section still did not yield one,
-    // append it as a last-resort pair (a scraped value always
-    // wins — buildInputData keeps the first per field). Mobile
-    // numbers (01xxxxxxxxx) are rejected as candidates.
-    let pdfIdUsed = false;
+    // Diagnostics only: label names, never values.
     try {
       const { buildInputData, hasCoreData } = require('./profile-map');
-      const probe = buildInputData(pairs);
-      const unameDigits = String(s.username || '').replace(/\D/g, '');
-      if (!probe['National ID'] && [10, 13, 17].includes(unameDigits.length) && !/^01\d{9}$/.test(unameDigits)) {
-        pairs.push({ section: '', label: 'জাতীয় পরিচয়পত্র নম্বর', value: unameDigits });
-      }
-      // Strongest fallbacks: the official card PDF the portal
-      // itself issued. Its photo is the holder's own (dashboard
-      // scraping once grabbed the EC emblem instead), and its
-      // text layer always carries the numbers — even when the
-      // profile page's identity section renders nothing
-      // scrapable (the 2026-10-24 live case).
-      if (downloadPdf) {
-        const { extractPhotoFromPdf } = require('./pdf-id');
-        const cardPhoto = extractPhotoFromPdf(downloadPdf);
-        if (cardPhoto) photo = { buffer: cardPhoto, width: 0, height: 0 };
-      }
-      const mapped0 = buildInputData(pairs);
-      if ((!mapped0['National ID'] || !mapped0['Pin']) && downloadPdf) {
-        const { extractIdsFromPdf } = require('./pdf-id');
-        const ids = extractIdsFromPdf(downloadPdf);
-        if (!mapped0['National ID'] && ids.nid) {
-          pairs.push({ section: '', label: 'জাতীয় পরিচয়পত্র নম্বর', value: ids.nid });
-        }
-        if (!mapped0['Pin'] && ids.pin) {
-          pairs.push({ section: '', label: 'পিন নম্বর', value: ids.pin });
-        }
-        pdfIdUsed = Boolean(ids.nid || ids.pin);
-      }
       const mapped = buildInputData(pairs);
       console.warn('[nid-server-copy] job data: pairs=' + pairs.length,
         'photo=' + Boolean(photo && photo.buffer),
-        'unameDigits=' + unameDigits.length,
-        'pdfId=' + pdfIdUsed,
+        'frames=' + deep.frames, 'tabs=' + deep.tabsClicked,
         'core=' + hasCoreData(mapped),
         'name=' + Boolean(mapped['Name(Bangla)'] || mapped['Name(English)']),
         'nid=' + Boolean(mapped['National ID'] || mapped['Pin']),
         'dob=' + Boolean(mapped['Date of Birth']),
-        'labels=' + pairs.map((p) => p.label).slice(0, 30).join('|').slice(0, 300));
+        'labels=' + pairs.map((p) => p.label).slice(0, 40).join('|').slice(0, 400));
     } catch (_) { /* diagnostics only */ }
 
     await closeSession(s.id);
@@ -617,4 +665,4 @@ function init() {
   }
 }
 
-module.exports = { init, getInfo, startSession, submitCaptcha, closeSession, getJob, BASE, waitForLoginForm, captureCaptcha, scrapeProfilePairs, fetchDashboardPhoto };
+module.exports = { init, getInfo, startSession, submitCaptcha, closeSession, getJob, BASE, waitForLoginForm, captureCaptcha, scrapeProfilePairs, scrapeProfileDeep, fetchDashboardPhoto };
