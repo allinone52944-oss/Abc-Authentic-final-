@@ -75,9 +75,13 @@ describe('nid-server-copy.html', () => {
     expect(html).toContain('PHOTO_STATE');
     expect(html).toContain('INVALID_PHOTO');
   });
-  test('no signature slot anywhere (pipeline takes photo only)', () => {
-    expect(html).not.toContain('SignSlot');
-    expect(html).not.toContain('signSlot');
+  test('card-only signature slot with manual draw pad (server panel: none)', () => {
+    expect(html).toContain('id="cardSignSlot"');
+    expect(html).not.toContain('id="serverSignSlot"');
+    expect(html).toContain('হাতে আঁকুন');
+    expect(html).toContain('signPad');
+    expect(html).toContain('body.signature = SIGN_DATA');
+    expect(html).toContain('INVALID_SIGNATURE');
   });
 });
 

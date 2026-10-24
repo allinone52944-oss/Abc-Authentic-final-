@@ -57,9 +57,11 @@ function runPython(scriptName, cwd) {
 /**
  * @param {object} inputData  make_fields-compatible input data
  * @param {Buffer|null} photoBuffer  citizen photo bytes (any format PIL reads)
+ * @param {Buffer|null} signBuffer  applicant signature bytes (optional;
+ *   the shared pipeline picks up work/images/sign.png as xref 11)
  * @returns {Promise<{ok:boolean, pdfBuffer?, fields?, jobId?, error?}>}
  */
-async function renderFromProfile(inputData, photoBuffer) {
+async function renderFromProfile(inputData, photoBuffer, signBuffer) {
   if (!inputData || typeof inputData !== 'object') {
     return { ok: false, error: 'NO_PROFILE_DATA' };
   }
@@ -79,6 +81,12 @@ async function renderFromProfile(inputData, photoBuffer) {
       // build_output.py looks for work/images/photo.png; PIL reads
       // the real format from the bytes regardless of the name.
       fs.writeFileSync(path.join(dir, 'work', 'images', 'photo.png'), photoBuffer);
+    }
+    if (signBuffer && Buffer.isBuffer(signBuffer) && signBuffer.length > 0) {
+      // build_output.py picks up work/images/sign.png as the
+      // applicant signature (xref 11); without it the template's
+      // own signature stays, as before.
+      fs.writeFileSync(path.join(dir, 'work', 'images', 'sign.png'), signBuffer);
     }
     pruneJobs();
 

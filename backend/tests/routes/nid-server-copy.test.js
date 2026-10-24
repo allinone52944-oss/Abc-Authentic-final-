@@ -235,6 +235,33 @@ describe('POST /api/nid-server-copy/deliver with edits', () => {
     expect(walletCalls()).toHaveLength(0);
   });
 
+  test('card signature data URL → render called with decoded sign buffer', async () => {
+    engine.getJob.mockReturnValue({ ...JOB });
+    engine.renderFromProfile.mockResolvedValue({ ok: true, pdfBuffer: Buffer.from('%PDF-1.4 fake'), fields: {} });
+    await withUser(request(app()).post('/api/nid-server-copy/deliver'))
+      .send({ jobId: 'j1', kind: 'card', signature: 'data:image/png;base64,' + Buffer.from('hand-sign').toString('base64') }).expect(200);
+    const signBuf = engine.renderFromProfile.mock.calls[0][2];
+    expect(Buffer.isBuffer(signBuf)).toBe(true);
+    expect(signBuf.toString()).toBe('hand-sign');
+  });
+
+  test('invalid signature → 400 INVALID_SIGNATURE, renderer untouched, no charge', async () => {
+    engine.getJob.mockReturnValue({ ...JOB });
+    const r = await withUser(request(app()).post('/api/nid-server-copy/deliver'))
+      .send({ jobId: 'j1', kind: 'card', signature: 'not-a-data-url' }).expect(400);
+    expect(r.body.error).toBe('INVALID_SIGNATURE');
+    expect(engine.renderFromProfile).not.toHaveBeenCalled();
+    expect(walletCalls()).toHaveLength(0);
+  });
+
+  test('server copy ignores signature (still builds, still charges once)', async () => {
+    engine.getJob.mockReturnValue({ ...JOB });
+    await withUser(request(app()).post('/api/nid-server-copy/deliver'))
+      .send({ jobId: 'j1', kind: 'server', signature: 'data:image/png;base64,' + Buffer.from('hand-sign').toString('base64') }).expect(200);
+    expect(engine.renderFromProfile).not.toHaveBeenCalled();
+    expect(walletCalls()).toHaveLength(1);
+  });
+
   test('edits clearing core data → 422 PROFILE_INCOMPLETE, no charge', async () => {
     engine.getJob.mockReturnValue({ ...JOB });
     const r = await withUser(request(app()).post('/api/nid-server-copy/deliver'))

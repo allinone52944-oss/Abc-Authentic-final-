@@ -29,8 +29,10 @@
 // values. POST /profile returns the profile for the form (NO
 // charge — charging happens only at /deliver). /deliver accepts
 // optional `edits` (whitelisted field overrides) and `photo`
-// (data URL, or null = no photo). The official portal PDF path
-// ignores edits by design (the official document is as-is).
+// (data URL, or null = no photo) and, for the card only,
+// `signature` (hand-drawn or uploaded data URL -> sign.png in the
+// shared pipeline). The official portal PDF path ignores edits
+// by design (the official document is as-is).
 //
 // After login the customer gets TWO options (owner's flow,
 // 2026-10-23): the NID card and the server copy. Each "create"
@@ -227,14 +229,16 @@ function dataUrlToBuffer(dataUrl) {
  * @param {object} edits merged over the portal profile (whitelisted)
  * @param {Buffer|null|undefined} photoOverride undefined = portal
  *   photo, null = no photo, Buffer = uploaded photo
+ * @param {Buffer|null|undefined} signOverride card-only applicant
+ *   signature (drawn by hand or uploaded); server copy ignores it
  */
-async function buildDocument(job, kind, edits, photoOverride) {
+async function buildDocument(job, kind, edits, photoOverride, signOverride) {
   const photoBuf = photoOverride === undefined ? (job.photo ? job.photo.buffer : null) : photoOverride;
   if (kind === 'card') {
     // Owner's rule: directly downloadable -> the official portal
     // PDF as-is (edits cannot change an official document).
     // Not downloadable -> the NID card engine's output logic
-    // renders profile data + photo through its pipeline.
+    // renders profile data + photo + signature through its pipeline.
     if (job.downloadPdf) {
       return { ok: true, pdfBuffer: job.downloadPdf, fields: {}, via: 'download' };
     }
@@ -242,7 +246,8 @@ async function buildDocument(job, kind, edits, photoOverride) {
     if (!engine.profileMap.hasCoreData(inputData)) {
       return { ok: false, error: 'PROFILE_INCOMPLETE' };
     }
-    const r = await engine.renderFromProfile(inputData, photoBuf);
+    const signBuf = signOverride === undefined ? null : signOverride;
+    const r = await engine.renderFromProfile(inputData, photoBuf, signBuf);
     if (!r.ok) return { ok: false, error: r.error || 'RENDER_FAILED' };
     return { ok: true, pdfBuffer: r.pdfBuffer, fields: r.fields, via: 'profile' };
   }
@@ -282,7 +287,7 @@ router.post('/profile', requireAuth, async (req, res) => {
 
 router.post('/deliver', requireAuth, async (req, res) => {
   try {
-    const { jobId, kind, edits, photo } = req.body || {};
+    const { jobId, kind, edits, photo, signature } = req.body || {};
     if (!jobId || (kind !== 'card' && kind !== 'server')) {
       return res.status(400).json({ error: 'INVALID_REQUEST' });
     }
@@ -292,6 +297,8 @@ router.post('/deliver', requireAuth, async (req, res) => {
     }
     // Edit-form overrides: whitelisted fields only; photo absent =
     // portal photo, null = no photo, data URL = uploaded photo.
+    // Signature is card-only (hand-drawn or uploaded data URL);
+    // the server copy ignores it.
     const cleanEdits = sanitizeEdits(edits);
     let photoOverride;
     if (photo === undefined) photoOverride = undefined;
@@ -303,9 +310,17 @@ router.post('/deliver', requireAuth, async (req, res) => {
       }
       photoOverride = dec.buffer;
     }
+    let signOverride;
+    if (kind === 'card' && typeof signature === 'string') {
+      const dec = dataUrlToBuffer(signature);
+      if (!dec.ok) {
+        return res.status(400).json({ error: 'INVALID_SIGNATURE', message: 'স্বাক্ষরটি পড়া যায়নি — আবার এঁকে বা অন্য ছবি দিয়ে চেষ্টা করুন।' });
+      }
+      signOverride = dec.buffer;
+    }
 
     const kindLabel = kind === 'card' ? 'এনআইডি কার্ড' : 'এনআইডি সার্ভার কপি';
-    const built = await buildDocument(job, kind, cleanEdits, photoOverride);
+    const built = await buildDocument(job, kind, cleanEdits, photoOverride, signOverride);
     if (!built.ok) {
       wa.notifyServiceFailed(db, req.user.id, kindLabel,
         'তৈরি করা যায়নি',

@@ -97,6 +97,7 @@
     background: linear-gradient(180deg, #f8fafc, #ffffff); margin-bottom: 16px;
   }
   .photo-slot img { max-width: 150px; border-radius: 10px; border: 1px solid #cbd5e1; }
+  .sign-pad { width: 100%; height: 150px; border: 1px solid #cbd5e1; border-radius: 10px; background: #ffffff; touch-action: none; display: block; }
   .photo-slot .ph-btn {
     display: inline-block; padding: 9px 14px; font-size: 13px; font-weight: 700;
     background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 8px; cursor: pointer;
@@ -264,9 +265,10 @@
         </div>
         <div id="cardFormPanel" style="display:none;">
           <div style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:8px; text-align:center;">🪪 NID কার্ড ফর্ম</div>
-          <p class="note" style="text-align:left;">✏️ সব তথ্য এডিট করা যাবে — পোর্টালের তথ্য নিচে সাজানো আছে, ভুল থাকলে ঠিক করে তারপর ডাউনলোড করুন। পোর্টালে ডাউনলোড থাকলে অফিসিয়াল কার্ডটিই সরাসরি পাবেন (এডিট তখন প্রযোজ্য নয়); না থাকলে এডিট করা তথ্য ও ছবি দিয়েই কার্ড তৈরি হবে।</p>
+          <p class="note" style="text-align:left;">✏️ সব তথ্য এডিট করা যাবে — পোর্টালের তথ্য নিচে সাজানো আছে, ভুল থাকলে ঠিক করে তারপর ডাউনলোড করুন। পোর্টালে ডাউনলোড থাকলে অফিসিয়াল কার্ডটিই সরাসরি পাবেন (এডিট তখন প্রযোজ্য নয়); না থাকলে এডিট করা তথ্য, ছবি ও স্বাক্ষর দিয়েই কার্ড তৈরি হবে।</p>
           <div id="cardEditFields"></div>
           <div id="cardPhotoSlot"></div>
+          <div id="cardSignSlot"></div>
           <button type="button" class="btn btn-primary" id="dlCardBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700;">
             কার্ড ডাউনলোড করুন
           </button>
@@ -323,6 +325,7 @@
     CAPTCHA_REQUIRED: 'ক্যাপচার লেখাটি লিখুন।',
     PROFILE_INCOMPLETE: 'পোর্টালের প্রোফাইল থেকে প্রয়োজনীয় তথ্য পাওয়া যায়নি — কোনো চার্জ কাটা হয়নি।',
     INVALID_PHOTO: 'ছবিটি পড়া যায়নি — অন্য ছবি দিয়ে আবার চেষ্টা করুন।',
+    INVALID_SIGNATURE: 'স্বাক্ষরটি পড়া যায়নি — আবার এঁকে বা অন্য ছবি দিয়ে চেষ্টা করুন।',
     RENDER_FAILED: 'কার্ড তৈরি করা যায়নি — কোনো চার্জ কাটা হয়নি। কিছুক্ষণ পর আবার চেষ্টা করুন।',
     ENGINE_TIMEOUT: 'কার্ড তৈরি করতে সময় বেশি লাগছে — কোনো চার্জ কাটা হয়নি। আবার চেষ্টা করুন।',
     BUILD_FAILED: 'কার্ড তৈরি করা যায়নি — কোনো চার্জ কাটা হয়নি।',
@@ -476,13 +479,79 @@
     const rvEl = $(containerId + 'Revert');
     if (rvEl) rvEl.addEventListener('click', () => { PHOTO_STATE = 'portal'; PHOTO_DATA = null; renderPhotoSlot('cardPhotoSlot'); renderPhotoSlot('serverPhotoSlot'); });
   }
+  // Card-only signature slot: hand-drawn on a pad, or uploaded as an
+  // image. The portal has no signature to pre-fill, so the slot
+  // starts empty; a drawn/uploaded signature rides with /deliver
+  // (card only) and lands on the card via the pipeline's sign.png.
+  let SIGN_STATE = 'none', SIGN_DATA = null, PAD_OPEN = false, padHasStroke = false;
+  function renderSignSlot() {
+    const box = $('cardSignSlot');
+    if (!box) return;
+    let h = '<div class="photo-slot"><div style="font-size:13px;font-weight:700;color:#334155;margin-bottom:10px;">✍️ স্বাক্ষর (হাতে আঁকুন বা ছবি থেকে নিন)</div>';
+    if (PAD_OPEN) {
+      h += '<canvas id="signPad" class="sign-pad" width="320" height="150"></canvas><div style="height:10px;"></div>';
+      h += '<button type="button" class="ph-btn" id="signPadClear">🧹 মুছুন</button> ';
+      h += '<button type="button" class="ph-btn" id="signPadUse" style="background:#2563eb;color:#fff;border-color:#2563eb;">✅ স্বাক্ষর ব্যবহার করুন</button> ';
+      h += '<button type="button" class="ph-btn" id="signPadCancel">✕ বাতিল</button>';
+    } else if (SIGN_STATE === 'changed' && SIGN_DATA) {
+      h += '<img src="' + esc(SIGN_DATA) + '" alt="স্বাক্ষর"><div style="height:10px;"></div>';
+      h += '<button type="button" class="ph-btn" id="signDrawBtn">✏️ আবার আঁকুন</button> ';
+      h += '<label class="ph-btn">📷 ছবি বদলান<input type="file" accept="image/*" style="display:none;" id="signFileInput"></label> ';
+      h += '<button type="button" class="ph-btn danger" id="signRemoveBtn">🗑️ মুছুন</button>';
+    } else {
+      h += '<div style="font-size:24px;margin-bottom:4px;">✍️</div><div style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:10px;">স্বাক্ষর নেই</div>';
+      h += '<button type="button" class="ph-btn" id="signDrawBtn">✏️ হাতে আঁকুন</button> ';
+      h += '<label class="ph-btn">📷 ছবি থেকে নিন<input type="file" accept="image/*" style="display:none;" id="signFileInput"></label>';
+    }
+    h += '</div>';
+    box.innerHTML = h;
+    const pad = $('signPad');
+    if (pad) bindSignPad(pad);
+    const clearBtn = $('signPadClear');
+    if (clearBtn) clearBtn.addEventListener('click', () => { const c = $('signPad'); if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height); padHasStroke = false; });
+    const useBtn = $('signPadUse');
+    if (useBtn) useBtn.addEventListener('click', () => {
+      const c = $('signPad');
+      if (!c) return;
+      if (!padHasStroke) { PAD_OPEN = false; renderSignSlot(); return; }
+      SIGN_STATE = 'changed'; SIGN_DATA = c.toDataURL('image/png'); PAD_OPEN = false; renderSignSlot();
+    });
+    const cancelBtn = $('signPadCancel');
+    if (cancelBtn) cancelBtn.addEventListener('click', () => { PAD_OPEN = false; renderSignSlot(); });
+    const drawBtn = $('signDrawBtn');
+    if (drawBtn) drawBtn.addEventListener('click', () => { PAD_OPEN = true; renderSignSlot(); });
+    const fileEl = $('signFileInput');
+    if (fileEl) fileEl.addEventListener('change', () => {
+      const f = fileEl.files && fileEl.files[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = () => { SIGN_STATE = 'changed'; SIGN_DATA = r.result; PAD_OPEN = false; renderSignSlot(); };
+      r.readAsDataURL(f);
+    });
+    const rmBtn = $('signRemoveBtn');
+    if (rmBtn) rmBtn.addEventListener('click', () => { SIGN_STATE = 'none'; SIGN_DATA = null; renderSignSlot(); });
+  }
+  function bindSignPad(pad) {
+    padHasStroke = false;
+    const ctx = pad.getContext('2d');
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    let drawing = false, last = null;
+    const pos = (ev) => { const r = pad.getBoundingClientRect(); return { x: (ev.clientX - r.left) * (pad.width / r.width), y: (ev.clientY - r.top) * (pad.height / r.height) }; };
+    pad.addEventListener('pointerdown', (ev) => { ev.preventDefault(); if (pad.setPointerCapture) pad.setPointerCapture(ev.pointerId); drawing = true; last = pos(ev); padHasStroke = true; });
+    pad.addEventListener('pointermove', (ev) => { if (!drawing) return; ev.preventDefault(); const p = pos(ev); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p; });
+    const end = () => { drawing = false; last = null; };
+    pad.addEventListener('pointerup', end);
+    pad.addEventListener('pointercancel', end);
+  }
   function renderEditForm(kind) {
     renderEditFields(kind === 'card' ? 'cardEditFields' : 'serverEditFields');
     renderPhotoSlot(kind === 'card' ? 'cardPhotoSlot' : 'serverPhotoSlot');
+    if (kind === 'card') renderSignSlot();
   }
   function expireJob() {
     $('optionBox').classList.remove('on');
     JOB = null; PROFILE = null; EDITS = {}; PHOTO_STATE = 'portal'; PHOTO_DATA = null;
+    SIGN_STATE = 'none'; SIGN_DATA = null; PAD_OPEN = false;
     setStep(1); showOptions();
   }
   async function loadProfile() {
@@ -537,6 +606,7 @@
       if (r.ok && d.ok && d.jobId) {
         JOB = d.jobId;
         PROFILE = null; EDITS = {}; PHOTO_STATE = 'portal'; PHOTO_DATA = null;
+        SIGN_STATE = 'none'; SIGN_DATA = null; PAD_OPEN = false;
         SESSION = null;
         $('captchaBox').classList.remove('on');
         $('password').value = '';
@@ -582,6 +652,7 @@
       const body = { jobId: JOB, kind, edits: EDITS };
       if (PHOTO_STATE === 'changed') body.photo = PHOTO_DATA;
       else if (PHOTO_STATE === 'removed') body.photo = null;
+      if (kind === 'card' && SIGN_STATE === 'changed') body.signature = SIGN_DATA;
       const r = await ABC.api(API + '/deliver', { method: 'POST', body, timeout: 180000 });
       const ct = (r.headers.get('content-type') || '').toLowerCase();
       if (r.ok && ct.includes('application/pdf')) {
