@@ -60,7 +60,24 @@ describe('nid-server-copy.html', () => {
   test('success/error message scrolls into view (boxes sit above the panels)', () => {
     expect(html).toContain('function scrollBoxIntoView()');
     expect(html).toContain('scrollIntoView');
-    expect(html).toContain('নতুন ট্যাবে খুলবে');
+    expect(html).toContain('নতুন ট্যাবে ফর্মটি খুলেছে');
+  });
+  test('edit form: profile endpoint + fields + photo slots in both panels', () => {
+    expect(html).toContain("API + '/profile'");
+    expect(html).toContain('id="cardEditFields"');
+    expect(html).toContain('id="serverEditFields"');
+    expect(html).toContain('id="cardPhotoSlot"');
+    expect(html).toContain('id="serverPhotoSlot"');
+    expect(html).toContain('সব তথ্য এডিট করা যাবে');
+  });
+  test('deliver sends edits + photo override', () => {
+    expect(html).toContain('edits: EDITS');
+    expect(html).toContain('PHOTO_STATE');
+    expect(html).toContain('INVALID_PHOTO');
+  });
+  test('no signature slot anywhere (pipeline takes photo only)', () => {
+    expect(html).not.toContain('SignSlot');
+    expect(html).not.toContain('signSlot');
   });
 });
 

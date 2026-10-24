@@ -80,9 +80,28 @@
   .form-card .btn-primary { transition: transform .15s ease, box-shadow .2s ease, filter .2s ease; box-shadow: var(--shadow-sm); }
   .form-card .btn-primary:hover { filter: brightness(1.06); box-shadow: var(--shadow-md); }
   .form-card .btn-primary:active { transform: scale(0.98); }
-  .field input[type=text]:focus, .field input[type=password]:focus {
+  .field input[type=text]:focus, .field input[type=password]:focus, .field textarea:focus {
     border-color: var(--primary-500); box-shadow: 0 0 0 3px rgba(37,99,235,0.15); outline: none;
   }
+  .field textarea {
+    width: 100%; padding: 11px 12px; border: 1px solid #cbd5e1; border-radius: 8px;
+    background: #ffffff; color: #0f172a; font-size: 16px; font-family: inherit;
+    min-height: 64px; resize: vertical;
+  }
+  .edit-sec {
+    font-size: 13px; font-weight: 800; color: #0f172a; margin: 18px 0 12px;
+    padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;
+  }
+  .photo-slot {
+    border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; text-align: center;
+    background: linear-gradient(180deg, #f8fafc, #ffffff); margin-bottom: 16px;
+  }
+  .photo-slot img { max-width: 150px; border-radius: 10px; border: 1px solid #cbd5e1; }
+  .photo-slot .ph-btn {
+    display: inline-block; padding: 9px 14px; font-size: 13px; font-weight: 700;
+    background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 8px; cursor: pointer;
+  }
+  .photo-slot .ph-btn.danger { color: #b91c1c; }
   .captcha-box.on { animation: nscPop .3s ease both; }
   #cardFormPanel, #serverFormPanel { animation: nscFadeUp .35s ease both; }
   @media (prefers-reduced-motion: reduce) {
@@ -245,7 +264,9 @@
         </div>
         <div id="cardFormPanel" style="display:none;">
           <div style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:8px; text-align:center;">🪪 NID কার্ড ফর্ম</div>
-          <p class="note" style="text-align:left;">পোর্টালে ডাউনলোড থাকলে অফিসিয়াল কার্ডটিই সরাসরি পাবেন; না থাকলে প্রোফাইলের তথ্য ও ছবি দিয়ে একই মানের কার্ড তৈরি করে দেওয়া হবে। নিচের বাটনে চাপ দিলেই PDF তৈরি হয়ে নতুন ট্যাবে খুলবে।</p>
+          <p class="note" style="text-align:left;">✏️ সব তথ্য এডিট করা যাবে — পোর্টালের তথ্য নিচে সাজানো আছে, ভুল থাকলে ঠিক করে তারপর ডাউনলোড করুন। পোর্টালে ডাউনলোড থাকলে অফিসিয়াল কার্ডটিই সরাসরি পাবেন (এডিট তখন প্রযোজ্য নয়); না থাকলে এডিট করা তথ্য ও ছবি দিয়েই কার্ড তৈরি হবে।</p>
+          <div id="cardEditFields"></div>
+          <div id="cardPhotoSlot"></div>
           <button type="button" class="btn btn-primary" id="dlCardBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700;">
             কার্ড ডাউনলোড করুন
           </button>
@@ -255,7 +276,9 @@
         </div>
         <div id="serverFormPanel" style="display:none;">
           <div style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:8px; text-align:center;">📄 সার্ভার কপি ফর্ম</div>
-          <p class="note" style="text-align:left;">প্রোফাইলের পূর্ণ তথ্য, ছবি ও ঠিকানাসহ সার্ভার কপি — যাচাই ও দাখিলের কাজে ব্যবহারযোগ্য পূর্ণাঙ্গ কপি। নিচের বাটনে চাপ দিলেই PDF তৈরি হয়ে নতুন ট্যাবে খুলবে।</p>
+          <p class="note" style="text-align:left;">✏️ সব তথ্য এডিট করা যাবে — পোর্টালের তথ্য নিচে সাজানো আছে, ভুল থাকলে ঠিক করে তারপর ডাউনলোড করুন। এডিট করা তথ্য, ছবি ও ঠিকানাসহ পূর্ণাঙ্গ সার্ভার কপি তৈরি হবে।</p>
+          <div id="serverEditFields"></div>
+          <div id="serverPhotoSlot"></div>
           <button type="button" class="btn btn-primary" id="dlServerBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; background:linear-gradient(135deg,#1e40af,#2563eb);">
             সার্ভার কপি ডাউনলোড করুন
           </button>
@@ -299,6 +322,7 @@
     LOGIN_FAILED: 'লগইন হয়নি — আইডি, পাসওয়ার্ড বা ক্যাপচা মিলিয়ে আবার চেষ্টা করুন।',
     CAPTCHA_REQUIRED: 'ক্যাপচার লেখাটি লিখুন।',
     PROFILE_INCOMPLETE: 'পোর্টালের প্রোফাইল থেকে প্রয়োজনীয় তথ্য পাওয়া যায়নি — কোনো চার্জ কাটা হয়নি।',
+    INVALID_PHOTO: 'ছবিটি পড়া যায়নি — অন্য ছবি দিয়ে আবার চেষ্টা করুন।',
     RENDER_FAILED: 'কার্ড তৈরি করা যায়নি — কোনো চার্জ কাটা হয়নি। কিছুক্ষণ পর আবার চেষ্টা করুন।',
     ENGINE_TIMEOUT: 'কার্ড তৈরি করতে সময় বেশি লাগছে — কোনো চার্জ কাটা হয়নি। আবার চেষ্টা করুন।',
     BUILD_FAILED: 'কার্ড তৈরি করা যায়নি — কোনো চার্জ কাটা হয়নি।',
@@ -370,6 +394,135 @@
 
   let JOB = null;
 
+  // ---- Edit form (the owner's "form"): portal profile as labeled,
+  // pre-filled, fully editable fields — the NID replica step-3 and
+  // BDRIS certificate record-view pattern. Edits live in EDITS and
+  // ride along with /deliver; the photo override rides as `photo`
+  // (absent = portal photo, null = no photo, data URL = new photo).
+  // No signature slot: the card/server-copy render pipeline takes
+  // photo only, so a signature control would have nowhere to go.
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const EDIT_FIELDS = [
+    ['Name(Bangla)', 'নাম (বাংলা)'], ['Name(English)', 'Name (English)'],
+    ['Father Name', 'পিতার নাম'], ['Mother Name', 'মাতার নাম'],
+    ['Spouse Name', 'স্বামী/স্ত্রীর নাম'], ['Date of Birth', 'জন্ম তারিখ'],
+    ['Birth Place', 'জন্মস্থান'], ['Gender', 'লিঙ্গ'],
+    ['Blood Group', 'রক্তের গ্রুপ'], ['National ID', 'জাতীয় পরিচয়পত্র নম্বর'],
+    ['Pin', 'পিন'], ['Voter No', 'ভোটার নম্বর'], ['Voter Area', 'ভোটার এলাকা'],
+    ['Sl No', 'সিরিয়াল নম্বর'], ['Form No', 'ফর্ম নম্বর'],
+    ['Birth Registration No', 'জন্ম নিবন্ধন নম্বর'], ['Mobile', 'মোবাইল'],
+    ['TIN', 'টিন'], ['Occupation', 'পেশা'], ['Education', 'শিক্ষা'],
+    ['Religion', 'ধর্ম'], ['NID Father', 'পিতার NID'], ['NID Mother', 'মাতার NID'],
+  ];
+  const ADDR_ORDER = ['holding', 'village', 'mouza', 'union_ward', 'post_office', 'postal_code', 'upozila', 'district', 'division', 'city_corp', 'rmo'];
+  let PROFILE = null, PORTAL_PHOTO = null, EDITS = {}, PHOTO_STATE = 'portal', PHOTO_DATA = null;
+
+  function addrToString(addr) {
+    if (addr == null) return '';
+    if (typeof addr === 'string') return addr;
+    if (typeof addr !== 'object') return '';
+    return ADDR_ORDER.map((k) => addr[k]).filter((v) => v != null && String(v).trim() !== '').join(', ');
+  }
+  function fieldVal(key) {
+    if (Object.prototype.hasOwnProperty.call(EDITS, key)) return EDITS[key];
+    const v = PROFILE ? PROFILE[key] : undefined;
+    if (v == null) return '';
+    return typeof v === 'string' ? v : addrToString(v);
+  }
+  function renderEditFields(containerId) {
+    const box = $(containerId);
+    if (!box || !PROFILE) return;
+    let h = '<div class="edit-sec">👤 ব্যক্তিগত তথ্য</div>';
+    for (const [key, label] of EDIT_FIELDS) {
+      h += '<div class="field"><label>' + esc(label) + '</label><input type="text" data-edit-key="' + esc(key) + '" value="' + esc(fieldVal(key)) + '"></div>';
+    }
+    h += '<div class="edit-sec">🏠 ঠিকানা</div>';
+    h += '<div class="field"><label>বর্তমান ঠিকানা (পুরো)</label><textarea data-edit-key="Present Address">' + esc(fieldVal('Present Address')) + '</textarea></div>';
+    h += '<div class="field"><label>স্থায়ী ঠিকানা (পুরো)</label><textarea data-edit-key="Permanent Address">' + esc(fieldVal('Permanent Address')) + '</textarea></div>';
+    h += '<div class="note">✏️ সব তথ্য এডিট করা যাবে — বদলানো মানই ডাউনলোডে বসবে।</div>';
+    box.innerHTML = h;
+    box.querySelectorAll('[data-edit-key]').forEach((el) => {
+      el.addEventListener('input', () => { EDITS[el.getAttribute('data-edit-key')] = el.value; });
+    });
+  }
+  function currentPhoto() {
+    if (PHOTO_STATE === 'changed') return PHOTO_DATA;
+    if (PHOTO_STATE === 'removed') return null;
+    return PORTAL_PHOTO;
+  }
+  function renderPhotoSlot(containerId) {
+    const box = $(containerId);
+    if (!box) return;
+    const photo = currentPhoto();
+    const inputId = containerId + 'Input';
+    let h = '<div class="photo-slot"><div style="font-size:13px;font-weight:700;color:#334155;margin-bottom:10px;">👤 ছবি (পোর্টালের ছবি)</div>';
+    if (photo) h += '<img src="' + esc(photo) + '" alt="ছবি"><div style="height:10px;"></div>';
+    else h += '<div style="font-size:26px;margin-bottom:4px;">👤</div><div style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:10px;">ছবি নেই</div>';
+    h += '<label class="ph-btn">' + (photo ? '📷 ছবি বদলান' : '➕ ছবি যুক্ত করুন') + '<input type="file" accept="image/*" style="display:none;" id="' + inputId + '"></label> ';
+    if (photo) h += '<button type="button" class="ph-btn danger" id="' + containerId + 'Remove">🗑️ মুছুন</button> ';
+    if (PHOTO_STATE !== 'portal') h += '<button type="button" class="ph-btn" id="' + containerId + 'Revert">↩ পোর্টালের ছবি</button>';
+    h += '</div>';
+    box.innerHTML = h;
+    const fileEl = $(inputId);
+    if (fileEl) fileEl.addEventListener('change', () => {
+      const f = fileEl.files && fileEl.files[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = () => { PHOTO_STATE = 'changed'; PHOTO_DATA = r.result; renderPhotoSlot('cardPhotoSlot'); renderPhotoSlot('serverPhotoSlot'); };
+      r.readAsDataURL(f);
+    });
+    const rmEl = $(containerId + 'Remove');
+    if (rmEl) rmEl.addEventListener('click', () => { PHOTO_STATE = 'removed'; PHOTO_DATA = null; renderPhotoSlot('cardPhotoSlot'); renderPhotoSlot('serverPhotoSlot'); });
+    const rvEl = $(containerId + 'Revert');
+    if (rvEl) rvEl.addEventListener('click', () => { PHOTO_STATE = 'portal'; PHOTO_DATA = null; renderPhotoSlot('cardPhotoSlot'); renderPhotoSlot('serverPhotoSlot'); });
+  }
+  function renderEditForm(kind) {
+    renderEditFields(kind === 'card' ? 'cardEditFields' : 'serverEditFields');
+    renderPhotoSlot(kind === 'card' ? 'cardPhotoSlot' : 'serverPhotoSlot');
+  }
+  function expireJob() {
+    $('optionBox').classList.remove('on');
+    JOB = null; PROFILE = null; EDITS = {}; PHOTO_STATE = 'portal'; PHOTO_DATA = null;
+    setStep(1); showOptions();
+  }
+  async function loadProfile() {
+    if (!JOB) return false;
+    try {
+      const r = await ABC.api(API + '/profile', { method: 'POST', body: { jobId: JOB }, timeout: 180000 });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.ok) {
+        if (d.error === 'JOB_EXPIRED') expireJob();
+        showErr(msgOf(d, 'প্রোফাইল আনা যায়নি — আবার চেষ্টা করুন।'));
+        scrollBoxIntoView();
+        return false;
+      }
+      PROFILE = d.fields || {};
+      PORTAL_PHOTO = d.photo || null;
+      return true;
+    } catch (e) {
+      showErr('সার্ভারের সঙ্গে সংযোগ করা যাচ্ছে না — আবার চেষ্টা করুন।');
+      scrollBoxIntoView();
+      return false;
+    }
+  }
+  async function openFormPanel(kind) {
+    clearBoxes();
+    const btn = kind === 'card' ? $('showCardFormBtn') : $('showServerFormBtn');
+    if (!PROFILE) {
+      btn.disabled = true;
+      const old = btn.innerHTML;
+      btn.innerHTML = '<span class="spin"></span> প্রোফাইল আনা হচ্ছে…';
+      const ok = await loadProfile();
+      btn.disabled = false;
+      btn.innerHTML = old;
+      if (!ok) return;
+    }
+    renderEditForm(kind);
+    $('optGrid').style.display = 'none';
+    if (kind === 'card') { $('serverFormPanel').style.display = 'none'; $('cardFormPanel').style.display = 'block'; }
+    else { $('cardFormPanel').style.display = 'none'; $('serverFormPanel').style.display = 'block'; }
+  }
+
   $('goBtn').addEventListener('click', async () => {
     clearBoxes();
     if (!SESSION) { showErr(ERRMSG.SESSION_EXPIRED); return; }
@@ -383,6 +536,7 @@
       const d = await r.json().catch(() => ({}));
       if (r.ok && d.ok && d.jobId) {
         JOB = d.jobId;
+        PROFILE = null; EDITS = {}; PHOTO_STATE = 'portal'; PHOTO_DATA = null;
         SESSION = null;
         $('captchaBox').classList.remove('on');
         $('password').value = '';
@@ -425,7 +579,10 @@
     const old = btn.innerHTML;
     btn.innerHTML = '<span class="spin"></span> তৈরি হচ্ছে… (একটু সময় লাগতে পারে)';
     try {
-      const r = await ABC.api(API + '/deliver', { method: 'POST', body: { jobId: JOB, kind }, timeout: 180000 });
+      const body = { jobId: JOB, kind, edits: EDITS };
+      if (PHOTO_STATE === 'changed') body.photo = PHOTO_DATA;
+      else if (PHOTO_STATE === 'removed') body.photo = null;
+      const r = await ABC.api(API + '/deliver', { method: 'POST', body, timeout: 180000 });
       const ct = (r.headers.get('content-type') || '').toLowerCase();
       if (r.ok && ct.includes('application/pdf')) {
         const blob = await r.blob();
@@ -449,7 +606,7 @@
         return;
       }
       const d = await r.json().catch(() => ({}));
-      if (d.error === 'JOB_EXPIRED') { $('optionBox').classList.remove('on'); JOB = null; setStep(1); showOptions(); }
+      if (d.error === 'JOB_EXPIRED') expireJob();
       showErr(msgOf(d, label + ' তৈরি করা যায়নি — কোনো চার্জ কাটা হয়নি।'));
       scrollBoxIntoView();
     } catch (e) {
@@ -469,16 +626,8 @@
     $('cardFormPanel').style.display = 'none';
     $('serverFormPanel').style.display = 'none';
   }
-  $('showCardFormBtn').addEventListener('click', () => {
-    $('optGrid').style.display = 'none';
-    $('serverFormPanel').style.display = 'none';
-    $('cardFormPanel').style.display = 'block';
-  });
-  $('showServerFormBtn').addEventListener('click', () => {
-    $('optGrid').style.display = 'none';
-    $('cardFormPanel').style.display = 'none';
-    $('serverFormPanel').style.display = 'block';
-  });
+  $('showCardFormBtn').addEventListener('click', () => openFormPanel('card'));
+  $('showServerFormBtn').addEventListener('click', () => openFormPanel('server'));
   $('backFromCardBtn').addEventListener('click', showOptions);
   $('backFromServerBtn').addEventListener('click', showOptions);
 

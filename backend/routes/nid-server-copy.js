@@ -22,6 +22,16 @@
 //                                   → application/pdf (charged per
 //                                     kind, once per job+kind)
 //
+// EDIT FORM (owner's "form", like the NID replica step 3 and the
+// BDRIS certificate record view): after login the customer gets
+// the portal profile as an editable form — every field editable,
+// photo changeable — and the download is built from the EDITED
+// values. POST /profile returns the profile for the form (NO
+// charge — charging happens only at /deliver). /deliver accepts
+// optional `edits` (whitelisted field overrides) and `photo`
+// (data URL, or null = no photo). The official portal PDF path
+// ignores edits by design (the official document is as-is).
+//
 // After login the customer gets TWO options (owner's flow,
 // 2026-10-23): the NID card and the server copy. Each "create"
 // click builds that document and charges for it. Card rule:
@@ -162,30 +172,87 @@ router.post('/captcha', requireAuth, async (req, res) => {
   }
 });
 
-/** Build one document ('card' | 'server') from a collected job. */
-async function buildDocument(job, kind) {
+// Whitelist for edit-form overrides: only these profile keys may be
+// changed from the frontend; anything else in `edits` is dropped.
+const EDITABLE_FIELDS = [
+  'Name(Bangla)', 'Name(English)', 'Father Name', 'Mother Name',
+  'Spouse Name', 'Date of Birth', 'Birth Place', 'Gender',
+  'Blood Group', 'National ID', 'Pin', 'Voter No', 'Voter Area',
+  'Sl No', 'Form No', 'Birth Registration No', 'Mobile', 'TIN',
+  'Occupation', 'Education', 'Religion', 'NID Father', 'NID Mother',
+  'Present Address', 'Permanent Address',
+];
+
+function sanitizeEdits(edits) {
+  const out = {};
+  if (!edits || typeof edits !== 'object' || Array.isArray(edits)) return out;
+  for (const key of EDITABLE_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(edits, key)) {
+      const v = edits[key];
+      if (v == null) continue;
+      out[key] = String(v).slice(0, 500);
+    }
+  }
+  return out;
+}
+
+function sniffPhotoMime(buf) {
+  if (!buf || buf.length < 4) return 'image/jpeg';
+  if (buf[0] === 0xff && buf[1] === 0xd8) return 'image/jpeg';
+  if (buf[0] === 0x89 && buf[1] === 0x50) return 'image/png';
+  if (buf[0] === 0x47 && buf[1] === 0x49) return 'image/gif';
+  if (buf[0] === 0x52 && buf[1] === 0x49) return 'image/webp';
+  return 'image/jpeg';
+}
+
+function photoToDataUrl(photo) {
+  if (!photo || !photo.buffer || !Buffer.isBuffer(photo.buffer) || !photo.buffer.length) return null;
+  return 'data:' + sniffPhotoMime(photo.buffer) + ';base64,' + photo.buffer.toString('base64');
+}
+
+// Uploaded photo (data URL) -> Buffer, or { ok: false } when invalid.
+function dataUrlToBuffer(dataUrl) {
+  if (typeof dataUrl !== 'string') return { ok: false };
+  const m = /^data:image\/(jpeg|png|webp|gif);base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+  if (!m) return { ok: false };
+  try {
+    const buf = Buffer.from(m[2], 'base64');
+    if (!buf.length || buf.length > 5 * 1024 * 1024) return { ok: false };
+    return { ok: true, buffer: buf };
+  } catch (_) { return { ok: false }; }
+}
+
+/**
+ * Build one document ('card' | 'server') from a collected job.
+ * @param {object} edits merged over the portal profile (whitelisted)
+ * @param {Buffer|null|undefined} photoOverride undefined = portal
+ *   photo, null = no photo, Buffer = uploaded photo
+ */
+async function buildDocument(job, kind, edits, photoOverride) {
+  const photoBuf = photoOverride === undefined ? (job.photo ? job.photo.buffer : null) : photoOverride;
   if (kind === 'card') {
     // Owner's rule: directly downloadable -> the official portal
-    // PDF as-is. Not downloadable -> the NID card engine's output
-    // logic renders profile data + photo through its pipeline.
+    // PDF as-is (edits cannot change an official document).
+    // Not downloadable -> the NID card engine's output logic
+    // renders profile data + photo through its pipeline.
     if (job.downloadPdf) {
       return { ok: true, pdfBuffer: job.downloadPdf, fields: {}, via: 'download' };
     }
-    const inputData = engine.profileMap.buildInputData(job.pairs || []);
+    const inputData = { ...engine.profileMap.buildInputData(job.pairs || []), ...edits };
     if (!engine.profileMap.hasCoreData(inputData)) {
       return { ok: false, error: 'PROFILE_INCOMPLETE' };
     }
-    const r = await engine.renderFromProfile(inputData, job.photo ? job.photo.buffer : null);
+    const r = await engine.renderFromProfile(inputData, photoBuf);
     if (!r.ok) return { ok: false, error: r.error || 'RENDER_FAILED' };
     return { ok: true, pdfBuffer: r.pdfBuffer, fields: r.fields, via: 'profile' };
   }
   // Server copy: EC report layout, all profile fields filled.
-  const inputData = engine.profileMap.buildInputData(job.pairs || []);
+  const inputData = { ...engine.profileMap.buildInputData(job.pairs || []), ...edits };
   if (!engine.profileMap.hasCoreData(inputData)) {
     return { ok: false, error: 'PROFILE_INCOMPLETE' };
   }
   try {
-    const pdfBuffer = await buildServerCopyPdf(inputData, job.photo ? job.photo.buffer : null);
+    const pdfBuffer = await buildServerCopyPdf(inputData, photoBuf);
     if (!pdfBuffer || pdfBuffer.length < 500) return { ok: false, error: 'RENDER_FAILED' };
     return { ok: true, pdfBuffer, fields: inputData, via: 'server-copy' };
   } catch (e) {
@@ -194,9 +261,28 @@ async function buildDocument(job, kind) {
   }
 }
 
+// Edit-form data for a collected job. NO charge here — the profile
+// is the customer's own portal data, fetched at login.
+router.post('/profile', requireAuth, async (req, res) => {
+  try {
+    const { jobId } = req.body || {};
+    if (!jobId) return res.status(400).json({ error: 'INVALID_REQUEST' });
+    const job = engine.getJob(jobId, req.user.id);
+    if (!job) return res.status(410).json({ error: 'JOB_EXPIRED' });
+    const fields = engine.profileMap.buildInputData(job.pairs || []);
+    if (!engine.profileMap.hasCoreData(fields)) {
+      return res.status(422).json({ error: 'PROFILE_INCOMPLETE' });
+    }
+    res.json({ ok: true, fields, photo: photoToDataUrl(job.photo), hasDownload: !!job.downloadPdf });
+  } catch (e) {
+    safeLog('[nid-server-copy] profile error:', e.message);
+    res.status(500).json({ error: 'BUILD_FAILED' });
+  }
+});
+
 router.post('/deliver', requireAuth, async (req, res) => {
   try {
-    const { jobId, kind } = req.body || {};
+    const { jobId, kind, edits, photo } = req.body || {};
     if (!jobId || (kind !== 'card' && kind !== 'server')) {
       return res.status(400).json({ error: 'INVALID_REQUEST' });
     }
@@ -204,9 +290,22 @@ router.post('/deliver', requireAuth, async (req, res) => {
     if (!job) {
       return res.status(410).json({ error: 'JOB_EXPIRED' });
     }
+    // Edit-form overrides: whitelisted fields only; photo absent =
+    // portal photo, null = no photo, data URL = uploaded photo.
+    const cleanEdits = sanitizeEdits(edits);
+    let photoOverride;
+    if (photo === undefined) photoOverride = undefined;
+    else if (photo === null) photoOverride = null;
+    else {
+      const dec = dataUrlToBuffer(photo);
+      if (!dec.ok) {
+        return res.status(400).json({ error: 'INVALID_PHOTO', message: 'ছবিটি পড়া যায়নি — অন্য ছবি দিয়ে আবার চেষ্টা করুন।' });
+      }
+      photoOverride = dec.buffer;
+    }
 
     const kindLabel = kind === 'card' ? 'এনআইডি কার্ড' : 'এনআইডি সার্ভার কপি';
-    const built = await buildDocument(job, kind);
+    const built = await buildDocument(job, kind, cleanEdits, photoOverride);
     if (!built.ok) {
       wa.notifyServiceFailed(db, req.user.id, kindLabel,
         'তৈরি করা যায়নি',

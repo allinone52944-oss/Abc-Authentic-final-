@@ -159,6 +159,91 @@ describe('POST /api/nid-server-copy/captcha', () => {
   });
 });
 
+describe('POST /api/nid-server-copy/profile (edit-form data, free)', () => {
+  const JOB = { id: 'j1', ownerId: 'u1', pairs: CORE_PAIRS, photo: null, downloadPdf: null, createdAt: Date.now() };
+
+  test('missing jobId → 400', async () => {
+    await withUser(request(app()).post('/api/nid-server-copy/profile')).send({}).expect(400);
+  });
+
+  test('expired job → 410 JOB_EXPIRED', async () => {
+    engine.getJob.mockReturnValue(null);
+    const r = await withUser(request(app()).post('/api/nid-server-copy/profile'))
+      .send({ jobId: 'gone' }).expect(410);
+    expect(r.body.error).toBe('JOB_EXPIRED');
+  });
+
+  test('incomplete profile → 422 PROFILE_INCOMPLETE, no charge', async () => {
+    engine.getJob.mockReturnValue({ ...JOB, pairs: [] });
+    const r = await withUser(request(app()).post('/api/nid-server-copy/profile'))
+      .send({ jobId: 'j1' }).expect(422);
+    expect(r.body.error).toBe('PROFILE_INCOMPLETE');
+    expect(walletCalls()).toHaveLength(0);
+  });
+
+  test('ok → mapped fields + photo data URL + hasDownload, no charge', async () => {
+    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.from('fake-photo')]);
+    engine.getJob.mockReturnValue({ ...JOB, photo: { buffer: jpeg }, downloadPdf: Buffer.from('%PDF-1.4 official') });
+    const r = await withUser(request(app()).post('/api/nid-server-copy/profile'))
+      .send({ jobId: 'j1' }).expect(200);
+    expect(r.body.fields['Name(Bangla)']).toBe('মোঃ পরীক্ষা রহমান');
+    expect(r.body.fields['National ID']).toBe('1234567890');
+    expect(r.body.photo).toMatch(/^data:image\/jpeg;base64,/);
+    expect(r.body.hasDownload).toBe(true);
+    expect(walletCalls()).toHaveLength(0);
+  });
+});
+
+describe('POST /api/nid-server-copy/deliver with edits', () => {
+  const JOB = { id: 'j1', ownerId: 'u1', pairs: CORE_PAIRS, photo: null, downloadPdf: null, createdAt: Date.now() };
+
+  test('card render uses edited values, unknown keys dropped', async () => {
+    engine.getJob.mockReturnValue({ ...JOB });
+    engine.renderFromProfile.mockResolvedValue({ ok: true, pdfBuffer: Buffer.from('%PDF-1.4 fake'), fields: {} });
+    await withUser(request(app()).post('/api/nid-server-copy/deliver'))
+      .send({ jobId: 'j1', kind: 'card', edits: { 'Name(Bangla)': 'এডিট করা নাম', HACK: 'x' } }).expect(200);
+    const input = engine.renderFromProfile.mock.calls[0][0];
+    expect(input['Name(Bangla)']).toBe('এডিট করা নাম');
+    expect(input.HACK).toBeUndefined();
+    expect(walletCalls()).toHaveLength(1);
+  });
+
+  test('photo null → render called with no photo', async () => {
+    engine.getJob.mockReturnValue({ ...JOB, photo: { buffer: Buffer.from('portal-photo') } });
+    engine.renderFromProfile.mockResolvedValue({ ok: true, pdfBuffer: Buffer.from('%PDF-1.4 fake'), fields: {} });
+    await withUser(request(app()).post('/api/nid-server-copy/deliver'))
+      .send({ jobId: 'j1', kind: 'card', photo: null }).expect(200);
+    expect(engine.renderFromProfile.mock.calls[0][1]).toBeNull();
+  });
+
+  test('photo data URL → render called with decoded buffer', async () => {
+    engine.getJob.mockReturnValue({ ...JOB });
+    engine.renderFromProfile.mockResolvedValue({ ok: true, pdfBuffer: Buffer.from('%PDF-1.4 fake'), fields: {} });
+    await withUser(request(app()).post('/api/nid-server-copy/deliver'))
+      .send({ jobId: 'j1', kind: 'card', photo: 'data:image/png;base64,' + Buffer.from('new-photo').toString('base64') }).expect(200);
+    const buf = engine.renderFromProfile.mock.calls[0][1];
+    expect(Buffer.isBuffer(buf)).toBe(true);
+    expect(buf.toString()).toBe('new-photo');
+  });
+
+  test('invalid photo → 400 INVALID_PHOTO, renderer untouched, no charge', async () => {
+    engine.getJob.mockReturnValue({ ...JOB });
+    const r = await withUser(request(app()).post('/api/nid-server-copy/deliver'))
+      .send({ jobId: 'j1', kind: 'card', photo: 'data:text/plain;base64,xxx' }).expect(400);
+    expect(r.body.error).toBe('INVALID_PHOTO');
+    expect(engine.renderFromProfile).not.toHaveBeenCalled();
+    expect(walletCalls()).toHaveLength(0);
+  });
+
+  test('edits clearing core data → 422 PROFILE_INCOMPLETE, no charge', async () => {
+    engine.getJob.mockReturnValue({ ...JOB });
+    const r = await withUser(request(app()).post('/api/nid-server-copy/deliver'))
+      .send({ jobId: 'j1', kind: 'card', edits: { 'Name(Bangla)': '', 'Name(English)': '' } }).expect(422);
+    expect(r.body.error).toBe('PROFILE_INCOMPLETE');
+    expect(walletCalls()).toHaveLength(0);
+  });
+});
+
 describe('POST /api/nid-server-copy/deliver', () => {
   const JOB = { id: 'j1', ownerId: 'u1', pairs: CORE_PAIRS, photo: null, downloadPdf: null, createdAt: Date.now() };
 
