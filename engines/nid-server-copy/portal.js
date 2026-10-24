@@ -404,7 +404,12 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
     const photo = await fetchDashboardPhoto(page, context);
     const dashPairs = await scrapeProfilePairs(page);
     await page.goto(BASE + '/citizen-home/profile', { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT }).catch(() => {});
-    await page.waitForTimeout(800);
+    // Sections of this page render progressively — wait for the
+    // network to settle and scroll through, or the first
+    // (identity) section can still be empty at scrape time.
+    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
+    await page.waitForTimeout(1200);
     let profilePairs = await scrapeProfilePairs(page);
     if (profilePairs.length < 5) {
       // The profile may live behind a menu link rather than the
@@ -428,8 +433,18 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
       const k = String(p.label || '') + '|' + String(p.value || '');
       if (!seenPair.has(k)) { seenPair.add(k); pairs.push(p); }
     }
+    // The portal login name IS the holder's NID number on this
+    // portal. If the identity section still did not yield one,
+    // append it as a last-resort pair (a scraped value always
+    // wins — buildInputData keeps the first per field). Mobile
+    // numbers (01xxxxxxxxx) are rejected as candidates.
     try {
       const { buildInputData, hasCoreData } = require('./profile-map');
+      const probe = buildInputData(pairs);
+      const unameDigits = String(s.username || '').replace(/\D/g, '');
+      if (!probe['National ID'] && [10, 13, 17].includes(unameDigits.length) && !/^01\d{9}$/.test(unameDigits)) {
+        pairs.push({ section: '', label: 'জাতীয় পরিচয়পত্র নম্বর', value: unameDigits });
+      }
       const mapped = buildInputData(pairs);
       console.warn('[nid-server-copy] job data: pairs=' + pairs.length,
         'core=' + hasCoreData(mapped),
