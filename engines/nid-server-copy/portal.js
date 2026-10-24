@@ -229,10 +229,17 @@ async function scrapeProfilePairs(page) {
     const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
     const pairs = [];
     const seen = new Set();
+    // The portal prints placeholders for missing values ('--',
+    // '-', 'N/A'). Treating one as data is worse than missing
+    // data: a '--' National ID looked "present", so every
+    // fallback (login name, official PDF) was skipped and the
+    // server copy printed '--' with a 'NID:--' QR.
+    const PLACEHOLDERS = new Set(['--', '-', '—', '–', 'n/a', 'na', 'null', 'none']);
     const push = (section, label, value) => {
       label = clean(label);
       value = clean(value);
       if (!label || !value || label === value) return;
+      if (PLACEHOLDERS.has(value.toLowerCase())) return;
       const key = label + '|' + value;
       if (seen.has(key)) return;
       seen.add(key);

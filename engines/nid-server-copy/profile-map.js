@@ -213,10 +213,12 @@ function buildInputData(pairs) {
   let presentStr = '';
   let permanentStr = '';
 
+  const PLACEHOLDERS = new Set(['--', '-', '—', '–', 'n/a', 'na', 'null', 'none']);
   for (const p of Array.isArray(pairs) ? pairs : []) {
     const label = normLabel(p && p.label);
     const value = cleanVal(p && p.value);
     if (!label || !value) continue;
+    if (PLACEHOLDERS.has(value.toLowerCase())) continue;
     const kind = sectionKind(p && p.section);
 
     // A whole address given as one string under an address heading.

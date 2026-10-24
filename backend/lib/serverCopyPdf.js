@@ -153,22 +153,19 @@ async function buildServerCopyPdf(data, photoBuffer) {
     .text('Submit', 376, 135.5, { width: 31, align: 'center' });
 
   // ---- Left column: photo, name, QR (sample placements) ----------
-  // Photo box in the reference: x131.8..197.2, y202.4..275.7 —
-  // the photo always fills that exact box (cover-crop, centred),
-  // whatever the source photo's aspect ratio is.
+  // Photo box in the reference: x131.8..197.2, y202.4..275.7.
+  // The whole photo must fit inside the box (contain, centred):
+  // a cover-crop cut the headroom off portrait photos whose
+  // aspect differs from the box ("photo kete jasse", 2026-10-24).
   if (photoBuffer && Buffer.isBuffer(photoBuffer) && photoBuffer.length > 500) {
     try {
       const box = { x: 132, y: 202, w: 65, h: 73 };
       const sz = imageSize(photoBuffer);
       if (sz && sz.w > 0 && sz.h > 0) {
-        const scale = Math.max(box.w / sz.w, box.h / sz.h);
+        const scale = Math.min(box.w / sz.w, box.h / sz.h);
         const dw = sz.w * scale;
         const dh = sz.h * scale;
-        doc.save();
-        doc.rect(box.x, box.y, box.w, box.h);
-        doc.clip();
         doc.image(photoBuffer, box.x + (box.w - dw) / 2, box.y + (box.h - dh) / 2, { width: dw, height: dh });
-        doc.restore();
       } else {
         doc.image(photoBuffer, box.x, box.y, { width: box.w, height: box.h });
       }

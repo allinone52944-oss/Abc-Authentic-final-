@@ -79,6 +79,23 @@ describe('nid-server-copy profile-map label variants', () => {
     expect(d['Permanent Address'].district).toBe('চট্টগ্রাম');
   });
 
+  test('portal placeholders (--, N/A) are dropped, not treated as data', () => {
+    const d = buildInputData([
+      { label: 'জাতীয় পরিচয়পত্র নম্বর', value: '--' },
+      { label: 'নাম (বাংলা)', value: 'মোঃ করিম' },
+      { label: 'জন্ম তারিখ', value: '1990-01-01' },
+      { label: 'পিন নম্বর', value: 'N/A' },
+      { label: 'স্বামী/স্ত্রীর নাম', value: '--' },
+    ]);
+    // A '--' National ID used to look "present", which silently
+    // disabled every fallback (login name, official PDF) and
+    // printed '--' with a 'NID:--' QR (2026-10-24 live case).
+    expect(d['National ID']).toBeUndefined();
+    expect(d['Pin']).toBeUndefined();
+    expect(d['Spouse Name']).toBeUndefined();
+    expect(hasCoreData(d)).toBe(true);
+  });
+
   test('missing core fields still fail hasCoreData', () => {
     const d = buildInputData([{ label: 'পেশা', value: 'কৃষক' }]);
     expect(hasCoreData(d)).toBe(false);
