@@ -504,11 +504,15 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
       const k = String(p.label || '') + '|' + String(p.value || '');
       if (!seenPair.has(k)) { seenPair.add(k); pairs.push(p); }
     }
+    await page.goto(BASE + '/citizen-home/', { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT }).catch(() => {});
+    const downloadPdf = await tryOfficialDownload(page);
+
     // The portal login name IS the holder's NID number on this
     // portal. If the identity section still did not yield one,
     // append it as a last-resort pair (a scraped value always
     // wins — buildInputData keeps the first per field). Mobile
     // numbers (01xxxxxxxxx) are rejected as candidates.
+    let pdfIdUsed = false;
     try {
       const { buildInputData, hasCoreData } = require('./profile-map');
       const probe = buildInputData(pairs);
@@ -516,17 +520,33 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
       if (!probe['National ID'] && [10, 13, 17].includes(unameDigits.length) && !/^01\d{9}$/.test(unameDigits)) {
         pairs.push({ section: '', label: 'জাতীয় পরিচয়পত্র নম্বর', value: unameDigits });
       }
+      // Strongest fallback: the official card PDF the portal
+      // itself issued always carries the numbers in its text
+      // layer — even when the profile page's identity section
+      // renders nothing scrapable (the 2026-10-24 live case).
+      const mapped0 = buildInputData(pairs);
+      if ((!mapped0['National ID'] || !mapped0['Pin']) && downloadPdf) {
+        const { extractIdsFromPdf } = require('./pdf-id');
+        const ids = extractIdsFromPdf(downloadPdf);
+        if (!mapped0['National ID'] && ids.nid) {
+          pairs.push({ section: '', label: 'জাতীয় পরিচয়পত্র নম্বর', value: ids.nid });
+        }
+        if (!mapped0['Pin'] && ids.pin) {
+          pairs.push({ section: '', label: 'পিন নম্বর', value: ids.pin });
+        }
+        pdfIdUsed = Boolean(ids.nid || ids.pin);
+      }
       const mapped = buildInputData(pairs);
       console.warn('[nid-server-copy] job data: pairs=' + pairs.length,
         'photo=' + Boolean(photo && photo.buffer),
+        'unameDigits=' + unameDigits.length,
+        'pdfId=' + pdfIdUsed,
         'core=' + hasCoreData(mapped),
         'name=' + Boolean(mapped['Name(Bangla)'] || mapped['Name(English)']),
         'nid=' + Boolean(mapped['National ID'] || mapped['Pin']),
         'dob=' + Boolean(mapped['Date of Birth']),
         'labels=' + pairs.map((p) => p.label).slice(0, 30).join('|').slice(0, 300));
     } catch (_) { /* diagnostics only */ }
-    await page.goto(BASE + '/citizen-home/', { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT }).catch(() => {});
-    const downloadPdf = await tryOfficialDownload(page);
 
     await closeSession(s.id);
 
