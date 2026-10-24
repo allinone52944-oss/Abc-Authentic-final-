@@ -50,6 +50,35 @@ describe('nid-server-copy profile-map label variants', () => {
     expect(hasCoreData(d)).toBe(true);
   });
 
+  test('compound slash address labels map to address parts', () => {
+    const d = buildInputData([
+      { label: 'বাসা/হোল্ডিং', value: 'বাড়ী' },
+      { label: 'গ্রাম/রাস্তা', value: 'শ্রীপুর' },
+      { label: 'মৌজা/মহল্লা', value: '-' },
+      { label: 'ইউনিয়ন/ওয়ার্ড', value: 'শ্রীপুর-খরনদ্বীপ' },
+      { label: 'ডাকঘর', value: 'শ্রীপুর - 4364' },
+      { label: 'উপজেলা', value: 'বোয়ালখালী' },
+    ]);
+    const p = d['Present Address'];
+    expect(p.holding).toBe('বাড়ী');
+    expect(p.village).toBe('শ্রীপুর');
+    expect(p.union_ward).toBe('শ্রীপুর-খরনদ্বীপ');
+    expect(p.post_office).toBe('শ্রীপুর - 4364');
+    expect(p.upozila).toBe('বোয়ালখালী');
+  });
+
+  test('a second address block without headings fills the permanent address', () => {
+    const block = (post) => ([
+      { label: 'ডাকঘর', value: post },
+      { label: 'উপজেলা', value: 'বোয়ালখালী' },
+      { label: 'জেলা', value: 'চট্টগ্রাম' },
+    ]);
+    const d = buildInputData([...block('ক - 1000'), ...block('খ - 2000')]);
+    expect(d['Present Address'].post_office).toBe('ক - 1000');
+    expect(d['Permanent Address'].post_office).toBe('খ - 2000');
+    expect(d['Permanent Address'].district).toBe('চট্টগ্রাম');
+  });
+
   test('missing core fields still fail hasCoreData', () => {
     const d = buildInputData([{ label: 'পেশা', value: 'কৃষক' }]);
     expect(hasCoreData(d)).toBe(false);

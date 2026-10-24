@@ -260,12 +260,28 @@ async function scrapeProfilePairs(page) {
         const h = node.querySelector(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > .card-header, :scope > legend, :scope > caption');
         if (h && clean(h.textContent)) return clean(h.textContent);
       }
+      // The section title may be a preceding sibling block (the
+      // portal prints address titles as standalone headers).
+      let sib = el.previousElementSibling;
+      for (let n = 0; n < 3 && sib; n++) {
+        const t = clean(sib.textContent);
+        if (t && t.length <= 60) return t;
+        sib = sib.previousElementSibling;
+      }
       return '';
     };
     document.querySelectorAll('table').forEach((tbl) => {
-      const section = headingOf(tbl);
-      tbl.querySelectorAll('tr').forEach((tr) => {
+      let section = headingOf(tbl);
+      if (tbl.caption && clean(tbl.caption.textContent)) section = clean(tbl.caption.textContent);
+      tbl.querySelectorAll('tr').forEach((tr, idx) => {
         const cells = tr.querySelectorAll('th, td');
+        // A lone first-row cell is the section title printed
+        // inside the table, not a data row.
+        if (idx === 0 && cells.length === 1) {
+          const t = clean(cells[0].textContent);
+          if (t && t.length <= 60) section = t;
+          return;
+        }
         if (cells.length >= 2) push(section, clean(cells[0].textContent), valueOf(cells[1]));
       });
     });

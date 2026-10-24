@@ -171,6 +171,29 @@ const ADDR_MAP = {
   'municipality': 'city_corp',
 };
 
+/**
+ * Address-label fallback: the portal writes compound labels
+ * with slashes — 'বাসা/হোল্ডিং', 'গ্রাম/রাস্তা', 'মৌজা/মহল্লা',
+ * 'ইউনিয়ন/ওয়ার্ড' — which normalise to two-word keys the
+ * exact map does not list (first live outputs silently lost
+ * exactly those parts, keeping only single-word labels).
+ */
+function addrFallback(label) {
+  const l = label || '';
+  if (l.includes('বাসা') || l.includes('হোল্ডিং')) return 'holding';
+  if (l.includes('গ্রাম') || l.includes('রাস্তা')) return 'village';
+  if (l.includes('মৌজা') || l.includes('মহল্লা')) return 'mouza';
+  if (l.includes('ইউনিয়ন') || l.includes('ওয়ার্ড')) return 'union_ward';
+  if (l.includes('ডাকঘর')) return 'post_office';
+  if (l.includes('পোস্ট') && l.includes('কোড')) return 'postal_code';
+  if (l.includes('উপজেলা') || l.includes('থানা')) return 'upozila';
+  if (l.includes('জেলা')) return 'district';
+  if (l.includes('বিভাগ')) return 'division';
+  if (l.includes('সিটি') || l.includes('পৌরসভা')) return 'city_corp';
+  if (l.includes('আরএমও')) return 'rmo';
+  return null;
+}
+
 function sectionKind(section) {
   const s = normLabel(section);
   if (!s) return null;
@@ -206,10 +229,22 @@ function buildInputData(pairs) {
       continue;
     }
 
-    if (kind) {
-      const key = ADDR_MAP[label];
-      const target = kind === 'Present Address' ? present : permanent;
-      if (key && !target[key]) target[key] = value;
+    const addrKey = ADDR_MAP[label] || addrFallback(label);
+    if (addrKey) {
+      if (kind === 'Permanent Address') {
+        if (!permanent[addrKey]) permanent[addrKey] = value;
+      } else if (kind === 'Present Address') {
+        if (!present[addrKey]) present[addrKey] = value;
+      } else if (!present[addrKey]) {
+        present[addrKey] = value;
+      } else if (!permanent[addrKey]) {
+        // No section heading was captured for the address
+        // tables: the portal prints present first, permanent
+        // second — a repeated address key belongs to the
+        // permanent block (previously it was dropped, leaving
+        // the permanent address permanently empty).
+        permanent[addrKey] = value;
+      }
       continue;
     }
 
@@ -218,10 +253,6 @@ function buildInputData(pairs) {
       if (!data[field]) data[field] = value;
       continue;
     }
-    // Address sub-fields appearing without a section heading still
-    // belong to the present address on this portal's layout.
-    const addrKey = ADDR_MAP[label];
-    if (addrKey && !present[addrKey]) present[addrKey] = value;
   }
 
   if (presentStr) data['Present Address'] = presentStr;
@@ -240,4 +271,4 @@ function hasCoreData(data) {
   return Boolean(name && (nid || data['Date of Birth']));
 }
 
-module.exports = { buildInputData, hasCoreData, normLabel, FIELD_MAP, ADDR_MAP, fallbackField };
+module.exports = { buildInputData, hasCoreData, normLabel, FIELD_MAP, ADDR_MAP, fallbackField, addrFallback };
