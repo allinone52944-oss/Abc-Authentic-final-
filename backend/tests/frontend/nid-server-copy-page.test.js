@@ -100,6 +100,21 @@ describe('nid-server-copy.html', () => {
     expect(html).toContain('id="cardOfficialNote"');
     expect(html).toContain('অফিসিয়াল কার্ডটিই সরাসরি পাবেন');
   });
+  test('form + download side-by-side in two columns on wide screens (pasapasi)', () => {
+    // Owner's rule, 2026-10-24: the form column and the download
+    // column sit side by side (grid) on wide screens, stacked on
+    // narrow ones. Both panels share the structure: fields left,
+    // photo/signature + download + back right (sticky).
+    expect(html).toContain('class="nsc-cols"');
+    expect(html).toContain('class="nsc-col-form"');
+    expect(html).toContain('class="nsc-col-dl"');
+    expect(html).toContain('grid-template-columns: 1.15fr 1fr');
+    expect(html).toContain('position: sticky; top: 16px');
+    const cardPanel = html.split('id="cardFormPanel"')[1].split('id="serverFormPanel"')[0];
+    expect(cardPanel).toContain('id="cardEditFields"');
+    expect(cardPanel.indexOf('id="cardEditFields"')).toBeLessThan(cardPanel.indexOf('id="dlCardBtn"'));
+    expect(cardPanel.indexOf('nsc-col-dl')).toBeLessThan(cardPanel.indexOf('id="dlCardBtn"'));
+  });
 });
 
 describe('dashboard + admin + service-detail wiring', () => {

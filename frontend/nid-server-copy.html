@@ -103,6 +103,15 @@
     background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 8px; cursor: pointer;
   }
   .photo-slot .ph-btn.danger { color: #b91c1c; }
+  /* Two-column form + download (owner's pasapasi rule, 2026-10-24):
+     wide screens: fields left, photo/signature + download right
+     (sticky, so the button stays visible beside a long form);
+     narrow screens: single column, same order as before. */
+  .nsc-cols { display: block; }
+  @media (min-width: 720px) {
+    .nsc-cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 20px; align-items: start; }
+    .nsc-col-dl { position: sticky; top: 16px; }
+  }
   .captcha-box.on { animation: nscPop .3s ease both; }
   #cardFormPanel, #serverFormPanel { animation: nscFadeUp .35s ease both; }
   @media (prefers-reduced-motion: reduce) {
@@ -266,28 +275,40 @@
         <div id="cardFormPanel" style="display:none;">
           <div style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:8px; text-align:center;">🪪 NID কার্ড ফর্ম</div>
           <p class="note" id="cardFormNote" style="text-align:left;">কার্ডে যা ছাপা হয় শুধু সেটাই এখানে — নাম, পিতা-মাতা, জন্ম তারিখ, NID নম্বর, রক্তের গ্রুপ, জন্মস্থান, ঠিকানা, ছবি ও স্বাক্ষর। পোর্টালে ডাউনলোড থাকলে অফিসিয়াল কার্ডটিই সরাসরি পাবেন; না থাকলে এখানকার তথ্য, ছবি ও স্বাক্ষর দিয়েই কার্ড তৈরি হবে।</p>
-          <div id="cardOfficialNote" class="note" style="display:none; text-align:left;">✅ পোর্টালে আপনার কার্ড ডাউনলোড আছে — অফিসিয়াল কার্ডটিই সরাসরি পাবেন। এডিট, ছবি বা স্বাক্ষর এখানে প্রযোজ্য নয়।</div>
-          <div id="cardEditFields"></div>
-          <div id="cardPhotoSlot"></div>
-          <div id="cardSignSlot"></div>
-          <button type="button" class="btn btn-primary" id="dlCardBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700;">
-            কার্ড ডাউনলোড করুন
-          </button>
-          <button type="button" class="btn" id="backFromCardBtn" style="width:100%; padding:12px; font-size:14px; font-weight:600; margin-top:10px; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; border-radius:8px;">
-            ← দুটো অপশনে ফিরুন
-          </button>
+          <div class="nsc-cols">
+            <div class="nsc-col-form">
+              <div id="cardEditFields"></div>
+            </div>
+            <div class="nsc-col-dl">
+              <div id="cardOfficialNote" class="note" style="display:none; text-align:left;">✅ পোর্টালে আপনার কার্ড ডাউনলোড আছে — অফিসিয়াল কার্ডটিই সরাসরি পাবেন। এডিট, ছবি বা স্বাক্ষর এখানে প্রযোজ্য নয়।</div>
+              <div id="cardPhotoSlot"></div>
+              <div id="cardSignSlot"></div>
+              <button type="button" class="btn btn-primary" id="dlCardBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700;">
+                কার্ড ডাউনলোড করুন
+              </button>
+              <button type="button" class="btn" id="backFromCardBtn" style="width:100%; padding:12px; font-size:14px; font-weight:600; margin-top:10px; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; border-radius:8px;">
+                ← দুটো অপশনে ফিরুন
+              </button>
+            </div>
+          </div>
         </div>
         <div id="serverFormPanel" style="display:none;">
           <div style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:8px; text-align:center;">📄 সার্ভার কপি ফর্ম</div>
           <p class="note" style="text-align:left;">✏️ সব তথ্য এডিট করা যাবে — পোর্টালের তথ্য নিচে সাজানো আছে, ভুল থাকলে ঠিক করে তারপর ডাউনলোড করুন। এডিট করা তথ্য, ছবি ও ঠিকানাসহ পূর্ণাঙ্গ সার্ভার কপি তৈরি হবে।</p>
-          <div id="serverEditFields"></div>
-          <div id="serverPhotoSlot"></div>
-          <button type="button" class="btn btn-primary" id="dlServerBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; background:linear-gradient(135deg,#1e40af,#2563eb);">
-            সার্ভার কপি ডাউনলোড করুন
-          </button>
-          <button type="button" class="btn" id="backFromServerBtn" style="width:100%; padding:12px; font-size:14px; font-weight:600; margin-top:10px; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; border-radius:8px;">
-            ← দুটো অপশনে ফিরুন
-          </button>
+          <div class="nsc-cols">
+            <div class="nsc-col-form">
+              <div id="serverEditFields"></div>
+            </div>
+            <div class="nsc-col-dl">
+              <div id="serverPhotoSlot"></div>
+              <button type="button" class="btn btn-primary" id="dlServerBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; background:linear-gradient(135deg,#1e40af,#2563eb);">
+                সার্ভার কপি ডাউনলোড করুন
+              </button>
+              <button type="button" class="btn" id="backFromServerBtn" style="width:100%; padding:12px; font-size:14px; font-weight:600; margin-top:10px; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; border-radius:8px;">
+                ← দুটো অপশনে ফিরুন
+              </button>
+            </div>
+          </div>
         </div>
         <p class="note" style="text-align:left;">প্রতিটি ডাউনলোডে সেবা চার্জ প্রযোজ্য — একই ডকুমেন্ট একই লগইনে আবার ডাউনলোড করলে দ্বিতীয়বার চার্জ কাটবে না।</p>
       </div>
