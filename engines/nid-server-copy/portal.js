@@ -213,6 +213,7 @@ async function startSession(ownerId, username, password) {
     const id = crypto.randomUUID();
     sessions.set(id, {
       id, ownerId, browser, context, page,
+      username: user,
       createdAt: Date.now(), attempts: 0,
     });
     return { ok: true, sessionId: id, captcha };
@@ -297,37 +298,90 @@ async function scrapeProfilePairs(page) {
 
 /** Find and fetch the citizen photo shown on the dashboard. */
 async function fetchDashboardPhoto(page, context) {
+  // Let in-flight images finish — a photo <img> that has not
+  // loaded yet reports naturalWidth 0 and used to be skipped.
+  await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
   const info = await page.evaluate(() => {
     const out = [];
+    const skip = /logo|icon|flag|emblem|banner|sprite|loading/i;
     document.querySelectorAll('img').forEach((im) => {
       const src = im.currentSrc || im.src || '';
-      if (!src || src.startsWith('data:')) return;
-      out.push({
-        src,
+      if (!src) return;
+      const tag = (src.slice(0, 200) + ' ' + (im.alt || '') + ' ' + (im.className || '')).toString();
+      if (skip.test(tag) && !/photo|citizen|nid/i.test(tag)) return;
+      const item = {
         nw: im.naturalWidth || 0,
         nh: im.naturalHeight || 0,
         rw: im.clientWidth || 0,
         rh: im.clientHeight || 0,
-      });
+      };
+      if (src.startsWith('data:')) {
+        const comma = src.indexOf(',');
+        if (comma > 0) { item.kind = 'data'; item.data = src.slice(comma + 1); }
+      } else {
+        item.kind = 'url';
+        item.src = src;
+      }
+      if (item.kind) out.push(item);
+    });
+    // The photo may be a CSS background on a portrait box rather
+    // than an <img> at all.
+    document.querySelectorAll('div, span, a, td').forEach((el) => {
+      const cs = window.getComputedStyle ? getComputedStyle(el) : null;
+      const bg = cs && cs.backgroundImage;
+      if (!bg || bg === 'none') return;
+      const m = /url\(["']?(https?:[^"')]+)["']?\)/.exec(bg);
+      if (!m || skip.test(m[1])) return;
+      const w = el.clientWidth || 0;
+      const h = el.clientHeight || 0;
+      if (w >= 30 && h >= 30 && h >= w * 0.8) {
+        out.push({ kind: 'url', src: m[1], nw: w * 2, nh: h * 2, rw: w, rh: h, bg: true });
+      }
     });
     return out;
   }).catch(() => []);
 
+  const isImage = (buf) => buf && buf.length > 1200 &&
+    ((buf[0] === 0xff && buf[1] === 0xd8) || // JPEG
+     (buf[0] === 0x89 && buf[1] === 0x50) || // PNG
+     (buf[0] === 0x52 && buf[1] === 0x49));  // WEBP (RIFF)
   const candidates = (info || [])
-    .filter((i) => i.nw >= 80 && i.nh >= 80 && !/logo|icon|flag|emblem/i.test(i.src))
+    .filter((i) => (i.kind === 'data' ? true : i.nw >= 30 && i.nh >= 30))
     .sort((a, b) => {
-      const portrait = (i) => (i.nh > i.nw ? 1 : 0);
+      const portrait = (i) => (i.nh >= i.nw ? 1 : 0);
       if (portrait(a) !== portrait(b)) return portrait(b) - portrait(a);
       return (b.nw * b.nh) - (a.nw * a.nh);
     });
-  for (const c of candidates.slice(0, 3)) {
+  for (const c of candidates.slice(0, 4)) {
     try {
-      const resp = await context.request.get(c.src, { timeout: 20000 });
-      if (resp.ok()) {
+      if (c.kind === 'data') {
+        const body = Buffer.from(c.data, 'base64');
+        if (isImage(body)) return { buffer: body, width: c.nw, height: c.nh };
+        continue;
+      }
+      const resp = await context.request.get(c.src, { timeout: 20000 }).catch(() => null);
+      if (resp && resp.ok()) {
         const body = await resp.body();
-        if (body && body.length > 2000) {
-          return { buffer: body, width: c.nw, height: c.nh };
-        }
+        if (isImage(body)) return { buffer: body, width: c.nw, height: c.nh };
+      }
+      // Retry from inside the page (carries the page's own
+      // headers/cookies if the bare request was refused).
+      const b64 = await page.evaluate(async (u) => {
+        try {
+          const r = await fetch(u, { credentials: 'include' });
+          if (!r.ok) return '';
+          const buf = await r.arrayBuffer();
+          let bin = '';
+          const bytes = new Uint8Array(buf);
+          for (let i = 0; i < bytes.length; i += 8192) {
+            bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+          }
+          return btoa(bin);
+        } catch (_) { return ''; }
+      }, c.src).catch(() => '');
+      if (b64) {
+        const body = Buffer.from(b64, 'base64');
+        if (isImage(body)) return { buffer: body, width: c.nw, height: c.nh };
       }
     } catch (_) { /* try next candidate */ }
   }
@@ -401,7 +455,7 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
     // Logged in. Collect everything, then close the browser and
     // keep the data as a job — the customer picks what to
     // download (NID card and/or server copy) from here.
-    const photo = await fetchDashboardPhoto(page, context);
+    let photo = await fetchDashboardPhoto(page, context);
     const dashPairs = await scrapeProfilePairs(page);
     await page.goto(BASE + '/citizen-home/profile', { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT }).catch(() => {});
     // Sections of this page render progressively — wait for the
@@ -425,6 +479,7 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
         if (more.length > profilePairs.length) profilePairs = more;
       }
     }
+    if (!photo) photo = await fetchDashboardPhoto(page, context);
     // Profile pairs first: buildInputData keeps the first value
     // per field, and the profile page is the authoritative source.
     const seenPair = new Set();
@@ -447,6 +502,7 @@ async function submitCaptcha(sessionId, ownerId, captchaText) {
       }
       const mapped = buildInputData(pairs);
       console.warn('[nid-server-copy] job data: pairs=' + pairs.length,
+        'photo=' + Boolean(photo && photo.buffer),
         'core=' + hasCoreData(mapped),
         'name=' + Boolean(mapped['Name(Bangla)'] || mapped['Name(English)']),
         'nid=' + Boolean(mapped['National ID'] || mapped['Pin']),
@@ -500,4 +556,4 @@ function init() {
   }
 }
 
-module.exports = { init, getInfo, startSession, submitCaptcha, closeSession, getJob, BASE, waitForLoginForm, captureCaptcha, scrapeProfilePairs };
+module.exports = { init, getInfo, startSession, submitCaptcha, closeSession, getJob, BASE, waitForLoginForm, captureCaptcha, scrapeProfilePairs, fetchDashboardPhoto };
