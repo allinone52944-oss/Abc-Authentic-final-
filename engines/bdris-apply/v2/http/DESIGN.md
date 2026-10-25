@@ -78,6 +78,51 @@ only up to a successful SUBMIT (success page).
 | Office lookup query/payload shapes | UNVERIFIED | helpers take caller-supplied params verbatim and return JSON as-is |
 | Success-page application-number format | UNVERIFIED | `parseSuccessPage()` checks only the phrase + print link |
 
+## Zone/ward list fix (2026-10-25, NOT live-verified)
+
+Production HEAD 424f355 showed the birthplace form degrading
+paurasavaUnion to a text input and leaving Ward empty for Dhaka
+South City Corporation, and reselecting did not help. Root cause,
+from code (not a guess):
+- Frontend `fetchAddrOpts` timed out at 25s, the backend executor
+  at 30s, and the Playwright navigator's worst case is 3 parents x
+  (10s waitForOptions + 0.5s) + 5 x 1.2s retries = 37.5s, so a slow
+  site AJAX guarantees the frontend gives up first.
+- Every backend failure (executor timeout, parent-not-found,
+  session) was collapsed to `[]` by the socket handler
+  (`Array.isArray(opts) ? opts : []`) and the frontend
+  (`Array.isArray(r) ? r : []`), then `geoLoad` degraded the field
+  to a text input — a typed zone never triggers a ward load, so
+  Ward stayed empty with no visible error.
+
+Fix (in `services/HttpGeoService.js`, `services/AddressService.js`,
+`server.js`, `frontend/bdris-apply.html`):
+- Zone/ward are fetched over the HTTP geo API FIRST
+  (`HttpGeoService`: bootstrap, walk division -> district ->
+  cityCorp(type 8)/upazila(type 3) by nameBn following
+  targetGeoOrder, then cityCorp zone = parent=cityCorp, order 5,
+  type 6, ward=true; upazila zone = types 4+5 merged; ward =
+  parent=zone, order 5, type 6, ward=true, then the zone list's
+  target order with type 13). Playwright remains the fallback.
+- Failures now THROW (`ZONE_WARD_FETCH_FAILED`) and propagate as
+  `{ok:false, error}` through the socket handler to the frontend,
+  which keeps the select, marks it as an error, and shows a banner
+  instead of degrading to text. Degrading is kept only for other
+  levels, where typing does not block a child level.
+- Frontend timeout is now 40000ms, deliberately longer than the
+  backend executor's 30000ms, so a backend error reaches the
+  frontend instead of the frontend timing out first.
+- No hardcoded zone/ward data anywhere; empty results are never
+  cached (client GeoCache and AddressService cache both refuse
+  empty, and HttpGeoService throws on empty).
+- UNPROVEN LIVE: the HTTP bootstrap may still be blocked by TSPD
+  (fetch has no browser to pass the challenge). If it is, the
+  Playwright fallback runs and the frontend shows an error instead
+  of a silent degrade — that error, not a silent empty list, is
+  the live signal to check next. The ward-after-zone type-13
+  attempt is also unproven live; the order-5/type-6/ward=true
+  attempt is the mock-verified pattern.
+
 ## What is needed to finish (in order)
 
 1. Live run: one real app-driven application through the HTTP path

@@ -9,6 +9,7 @@
  */
 
 const { BdrisNavigator } = require('./BdrisNavigator');
+const { HttpGeoService } = require('./HttpGeoService');
 
 // 2026-10-25 geo cache: zone/ward তালিকা engine-এর live fetch থেকে
 // আসা ফলই শুধু ক্যাশে থাকে (কখনো hardcoded/static নয় — সেই স্থায়ী
@@ -36,9 +37,23 @@ function geoCacheSet(key, opts) {
 }
 
 class AddressService {
-  constructor(navigator) {
-    this.navigator = navigator; // BdrisNavigator instance
+  constructor(navigator, opts = {}) {
+    this.navigator = navigator || null; // BdrisNavigator instance, or null for HTTP-only use
     this.staticCache = null;
+    // Injectable for tests: opts.httpGeo (instance) or opts.httpGeoFactory.
+    // Production default is a lazy HttpGeoService (no Playwright page).
+    this.httpGeo = opts.httpGeo || null;
+    this.httpGeoFactory = opts.httpGeoFactory || null;
+  }
+
+  async _getHttpGeo() {
+    if (this.httpGeo) return this.httpGeo;
+    if (this.httpGeoFactory) {
+      this.httpGeo = await this.httpGeoFactory();
+      return this.httpGeo;
+    }
+    this.httpGeo = new HttpGeoService();
+    return this.httpGeo;
   }
 
   async loadStaticData() {
@@ -91,15 +106,59 @@ class AddressService {
    * - zone/ward: always engine (realtime from BDRIS, never hardcoded)
    */
   async getOptions(level, parents = {}, form = 'birth') {
-    // Zone/ward MUST come from engine (user requirement: realtime, no hardcode)
-    // — cache-এ থাকা ফলও engine-এর live fetch থেকেই আসা, কখনো static নয়।
+    // Zone/ward MUST come from a live fetch (user requirement: realtime,
+    // no hardcode) — cache holds only non-empty live results.
+    // 2026-10-25 fix: HTTP geo FIRST, Playwright second. The Playwright
+    // cascade's worst case (3 parents x 10s + 5 x 1.2s retries = 37.5s)
+    // exceeds the frontend 25s timeout and the executor 30s timeout,
+    // so it could never reliably return a zone list on a slow site,
+    // and every failure was then hidden as []. HTTP is direct JSON
+    // and fits the timeout in the normal case. If HTTP fails (e.g.
+    // TSPD blocks a fetch bootstrap — unproven live), Playwright is
+    // still tried. If BOTH fail, this THROWS instead of returning [],
+    // so the frontend can show an error and a retry instead of
+    // silently degrading paurasavaUnion to a text input that can
+    // never unlock Ward.
     if (level === 'zone' || level === 'ward') {
       const key = geoCacheKey(level, parents, form);
       const cached = geoCacheGet(key);
       if (cached) return cached;
-      const opts = await this.navigator.getAddressOptions(level, parents, form);
-      geoCacheSet(key, opts);
-      return opts;
+      let httpError = null;
+      try {
+        const httpGeo = await this._getHttpGeo();
+        const res = level === 'zone'
+          ? await httpGeo.getZoneOptions(parents, form)
+          : await httpGeo.getWardOptions(parents, form);
+        if (Array.isArray(res.options) && res.options.length) {
+          geoCacheSet(key, res.options);
+          return res.options;
+        }
+        httpError = new Error('HttpGeo: empty result');
+      } catch (e) {
+        httpError = e;
+      }
+      let pwError = null;
+      if (this.navigator) {
+        try {
+          const opts = await this.navigator.getAddressOptions(level, parents, form);
+          if (Array.isArray(opts) && opts.length) {
+            geoCacheSet(key, opts);
+            return opts;
+          }
+          pwError = new Error('Playwright: empty result');
+        } catch (e) {
+          pwError = e;
+        }
+      } else {
+        pwError = new Error('Playwright: no navigator (HTTP-only mode)');
+      }
+      const err = new Error(
+        `Zone/ward fetch failed (level=${level}): HTTP: ${httpError ? httpError.message : 'unknown'}; Playwright: ${pwError ? pwError.message : 'unknown'}`,
+      );
+      err.code = 'ZONE_WARD_FETCH_FAILED';
+      err.httpError = httpError;
+      err.playwrightError = pwError;
+      throw err;
     }
 
     // Others: try static first
@@ -108,8 +167,13 @@ class AddressService {
     if (staticOpts.length) return staticOpts;
 
     // Fallback to engine
+    if (!this.navigator) throw new Error('AddressService: no navigator for non-zone/ward fallback');
     return await this.navigator.getAddressOptions(level, parents, form);
   }
 }
 
-module.exports = { AddressService };
+function clearGeoCache() {
+  GEO_CACHE.clear();
+}
+
+module.exports = { AddressService, clearGeoCache, geoCacheKey };

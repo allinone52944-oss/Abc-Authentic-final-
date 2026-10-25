@@ -123,23 +123,23 @@ class GeoCache {
     this.map = new Map();
   }
 
-  key(parentGeoId, geoOrder, geoType, ward) {
-    return [String(parentGeoId), String(geoOrder), String(geoType), ward ? 'ward' : ''].join('|');
+  key(parentGeoId, geoOrder, geoType, ward, geoGroup = 'birthPlace') {
+    return [String(geoGroup || 'birthPlace'), String(parentGeoId), String(geoOrder), String(geoType), ward ? 'ward' : ''].join('|');
   }
 
-  get(parentGeoId, geoOrder, geoType, ward) {
-    const hit = this.map.get(this.key(parentGeoId, geoOrder, geoType, ward));
+  get(parentGeoId, geoOrder, geoType, ward, geoGroup = 'birthPlace') {
+    const hit = this.map.get(this.key(parentGeoId, geoOrder, geoType, ward, geoGroup));
     if (!hit) return null;
     if (Date.now() - hit.at > this.ttlMs) {
-      this.map.delete(this.key(parentGeoId, geoOrder, geoType, ward));
+      this.map.delete(this.key(parentGeoId, geoOrder, geoType, ward, geoGroup));
       return null;
     }
     return hit.entries;
   }
 
-  set(parentGeoId, geoOrder, geoType, ward, entries) {
+  set(parentGeoId, geoOrder, geoType, ward, entries, geoGroup = 'birthPlace') {
     if (!Array.isArray(entries) || entries.length === 0) return; // never cache empty
-    this.map.set(this.key(parentGeoId, geoOrder, geoType, ward), { entries, at: Date.now() });
+    this.map.set(this.key(parentGeoId, geoOrder, geoType, ward, geoGroup), { entries, at: Date.now() });
   }
 
   clear() {
@@ -232,15 +232,15 @@ class BdrisHttpClient {
    * One geo-cascade step. Returns {entries, targetGeoOrder, geoOrder, geoType, geoGroup}.
    * entries are normalised to {id, nameEn, nameBn, geoLevelId, geoCode, parentGeoId}.
    */
-  async getGeo(parentGeoId, geoOrder, geoType, { ward = false } = {}) {
+  async getGeo(parentGeoId, geoOrder, geoType, { ward = false, geoGroup = 'birthPlace' } = {}) {
     if (parentGeoId === undefined || parentGeoId === null || parentGeoId === '') {
       throw err('PARENT_REQUIRED', 'getGeo requires parentGeoId (taken from the previous step).');
     }
-    const cached = this.geoCache.get(parentGeoId, geoOrder, geoType, ward);
+    const cached = this.geoCache.get(parentGeoId, geoOrder, geoType, ward, geoGroup);
     if (cached) return { entries: cached, cached: true };
 
     const qs = new URLSearchParams({
-      geoGroup: 'birthPlace',
+      geoGroup: geoGroup || 'birthPlace',
       geoOrder: String(geoOrder),
       geoType: String(geoType),
     });
@@ -258,7 +258,7 @@ class BdrisHttpClient {
       geoCode: o.geoCode,
       parentGeoId: o.parentGeoId,
     }));
-    this.geoCache.set(parentGeoId, geoOrder, geoType, ward, entries);
+    this.geoCache.set(parentGeoId, geoOrder, geoType, ward, entries, geoGroup);
     return {
       entries,
       cached: false,
@@ -281,11 +281,11 @@ class BdrisHttpClient {
    * @param {Array<{geoType:number, nameBn:string, ward?:boolean}>} opts.steps
    * @returns {Promise<Array<{step, chosen, targetGeoOrder}>>}
    */
-  async walkGeoChain({ firstParentId, firstGeoOrder, steps }) {
+  async walkGeoChain({ firstParentId, firstGeoOrder, steps, geoGroup = 'birthPlace' }) {
     if (firstParentId === undefined || firstParentId === null || firstParentId === '') {
       throw err(
         'FIRST_PARENT_REQUIRED',
-        'walkGeoChain requires explicit firstParentId: the first-parent source is unproven (observed chains start at 4, page script shows bangladeshId=null) and must not be guessed.',
+        'walkGeoChain requires explicit firstParentId (for a Bangladesh chain this is "1", bangladeshId from the pasted form source) and must not be guessed.',
       );
     }
     if (!Array.isArray(steps) || steps.length === 0) {
@@ -295,7 +295,7 @@ class BdrisHttpClient {
     let parent = firstParentId;
     let order = firstGeoOrder;
     for (const step of steps) {
-      const res = await this.getGeo(parent, order, step.geoType, { ward: !!step.ward });
+      const res = await this.getGeo(parent, order, step.geoType, { ward: !!step.ward, geoGroup: step.geoGroup || geoGroup });
       const chosen = res.entries.find((e) => e.nameBn === step.nameBn);
       if (!chosen) {
         throw err(

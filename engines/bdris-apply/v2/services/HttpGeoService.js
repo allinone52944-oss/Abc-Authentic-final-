@@ -1,0 +1,230 @@
+/**
+ * HttpGeoService — zone/ward lists over the BDRIS HTTP geo API,
+ * with NO Playwright page involved.
+ *
+ * Why this exists (2026-10-25, production HEAD 424f355):
+ * The birthplace form degraded paurasavaUnion to a text input and
+ * left Ward empty for Dhaka South City Corporation, and reselecting
+ * did not help. The Playwright path for zone/ward is:
+ *   frontend fetchAddrOpts 25s timeout
+ *   < backend executor 30s timeout
+ *   < navigator worst case: 3 parents x (10s waitForOptions + 0.5s)
+ *     + 5 x 1.2s target retries = 37.5s
+ * so a slow site AJAX guarantees the frontend gives up first, and
+ * every backend failure (timeout, parent-not-found, session) was
+ * collapsed to [] by the socket handler + frontend Array.isArray
+ * check, then silently degraded to text — a text zone can never
+ * unlock Ward. The HTTP geo API is direct JSON (bootstrap + a
+ * handful of GETs, no page render, no 10s waits), so it fits the
+ * frontend timeout in the normal case. It is NOT live-proven yet:
+ * TSPD/bot protection may still block a fetch-based bootstrap, so
+ * every failure here must fall back to the Playwright path in
+ * AddressService, never be hidden and never be cached when empty.
+ *
+ * Proven API facts used here (pasted form source + DESIGN.md):
+ *  - first parent bangladeshId = "1", first order = 1, type 1 = division
+ *  - follow response targetGeoOrder, never order+1
+ *  - cityCorp: order 3, type 8; its next level is order 5, type 6,
+ *    ward=true (WardInCityCorp = the zone list for a city corp)
+ *  - upazila: order 3, type 3; its next level is paurasava (type 4)
+ *    and union (type 5) — both are merged for the paurasavaUnion
+ *    field, because that field holds both kinds
+ *  - ward under a zone (cityCorp branch): the mock-verified pattern
+ *    is parent=zoneId, order 5, type 6, ward=true; a second attempt
+ *    uses the zone list's own targetGeoOrder with type 13
+ *    (paurasavaUnionWard) before giving up to Playwright
+ *  - names are matched on nameBn, with the same Bengali normaliser
+ *    as BdrisNavigator (decomposed characters, ZWJ/ZWNJ, spaces)
+ *  - NEVER hardcoded zone/ward data; NEVER cache an empty result
+ *    (the client's GeoCache already refuses empty, and this module
+ *    throws on empty instead of returning [])
+ */
+
+'use strict';
+
+const { BdrisHttpClient } = require('../http/client');
+
+const GEO_GROUP_BY_FORM = {
+  birth: 'birthPlace',
+  perm: 'permAddr',
+  prsnt: 'prsntAddr',
+};
+
+function normalizeBn(text) {
+  return String(text || '')
+    .replace(/[\u09DC]/g, '\u09A1\u09BC')
+    .replace(/[\u09DD]/g, '\u09A2\u09BC')
+    .replace(/[\u09DF]/g, '\u09AF\u09BC')
+    .replace(/[\u0981\u200C\u200D]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function findByName(entries, name) {
+  const want = normalizeBn(name);
+  if (!want) return null;
+  return entries.find((e) => normalizeBn(e.nameBn) === want)
+    || entries.find((e) => {
+      const n = normalizeBn(e.nameBn);
+      return n && (n.includes(want) || want.includes(n));
+    })
+    || null;
+}
+
+function toOptions(entries) {
+  const seen = new Set();
+  const out = [];
+  for (const e of entries || []) {
+    const name = String(e.nameBn || e.nameEn || '').trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push({ id: e.id, name });
+  }
+  return out;
+}
+
+class HttpGeoService {
+  constructor(opts = {}) {
+    this.client = opts.client || null;
+    this.clientFactory = opts.clientFactory || null;
+    this.base = opts.base || 'https://bdris.gov.bd';
+    this._bootstrapPromise = null;
+  }
+
+  async _getClient() {
+    if (this.client) return this.client;
+    if (this.clientFactory) {
+      this.client = await this.clientFactory();
+      return this.client;
+    }
+    this.client = new BdrisHttpClient({ base: this.base });
+    return this.client;
+  }
+
+  async ensureBootstrapped() {
+    const client = await this._getClient();
+    if (client.bootstrapped) return client;
+    if (!this._bootstrapPromise) {
+      this._bootstrapPromise = (async () => {
+        await client.bootstrap();
+        return client;
+      })().catch((e) => {
+        this._bootstrapPromise = null;
+        // A failed bootstrap must not poison later calls: drop the
+        // client so the next call builds a fresh session+token.
+        this.client = null;
+        throw e;
+      });
+    }
+    return this._bootstrapPromise;
+  }
+
+  geoGroupFor(form) {
+    return GEO_GROUP_BY_FORM[form] || 'birthPlace';
+  }
+
+  /**
+   * Walk division -> district -> upazila/cityCorp by nameBn.
+   * Returns {upazilaEntry, upazilaTargetOrder, isCityCorp}.
+   * Throws GEO_NOT_FOUND / GEO_EMPTY with a clear reason — never [].
+   */
+  async walkToUpazila(parents, form) {
+    const client = await this.ensureBootstrapped();
+    const geoGroup = this.geoGroupFor(form);
+    const divisionName = parents.division || '';
+    const districtName = parents.district || '';
+    const upazilaName = parents.upazila || '';
+    if (!divisionName || !districtName || !upazilaName) {
+      const e = new Error('HttpGeo: division, district and upazila names are all required');
+      e.code = 'GEO_PARENTS_MISSING';
+      throw e;
+    }
+    const divRes = await client.getGeo('1', 1, 1, { geoGroup });
+    if (!divRes.entries.length) throw Object.assign(new Error('HttpGeo: division list is empty'), { code: 'GEO_EMPTY' });
+    const division = findByName(divRes.entries, divisionName);
+    if (!division) throw Object.assign(new Error(`HttpGeo: division not found: ${divisionName}`), { code: 'GEO_NOT_FOUND' });
+    const distRes = await client.getGeo(division.id, divRes.targetGeoOrder, 2, { geoGroup });
+    if (!distRes.entries.length) throw Object.assign(new Error('HttpGeo: district list is empty'), { code: 'GEO_EMPTY' });
+    const district = findByName(distRes.entries, districtName);
+    if (!district) throw Object.assign(new Error(`HttpGeo: district not found: ${districtName}`), { code: 'GEO_NOT_FOUND' });
+    // City corp first (the reported failure), then upazila, then cantonment.
+    for (const geoType of [8, 3, 7]) {
+      const res = await client.getGeo(district.id, distRes.targetGeoOrder, geoType, { geoGroup });
+      const entry = findByName(res.entries, upazilaName);
+      if (entry) {
+        return { upazilaEntry: entry, upazilaTargetOrder: res.targetGeoOrder, isCityCorp: geoType === 8 };
+      }
+    }
+    throw Object.assign(new Error(`HttpGeo: upazila/city-corp not found: ${upazilaName}`), { code: 'GEO_NOT_FOUND' });
+  }
+
+  async getZoneOptions(parents, form = 'birth') {
+    const client = await this.ensureBootstrapped();
+    const geoGroup = this.geoGroupFor(form);
+    const { upazilaEntry, upazilaTargetOrder, isCityCorp } = await this.walkToUpazila(parents, form);
+    let entries = [];
+    let zoneTargetOrder = null;
+    if (isCityCorp) {
+      const res = await client.getGeo(upazilaEntry.id, upazilaTargetOrder, 6, { ward: true, geoGroup });
+      entries = res.entries;
+      zoneTargetOrder = res.targetGeoOrder;
+    } else {
+      // Paurasava (4) + union (5) merged: the paurasavaUnion field
+      // holds both kinds under one upazila.
+      const merged = [];
+      for (const geoType of [4, 5]) {
+        const res = await client.getGeo(upazilaEntry.id, upazilaTargetOrder, geoType, { geoGroup });
+        if (zoneTargetOrder === null) zoneTargetOrder = res.targetGeoOrder;
+        merged.push(...res.entries);
+      }
+      entries = merged;
+    }
+    const options = toOptions(entries);
+    if (!options.length) {
+      throw Object.assign(new Error('HttpGeo: zone list is empty'), { code: 'GEO_EMPTY' });
+    }
+    return { options, zoneTargetOrder, upazilaEntry, isCityCorp };
+  }
+
+  async getWardOptions(parents, form = 'birth') {
+    const client = await this.ensureBootstrapped();
+    const geoGroup = this.geoGroupFor(form);
+    const zoneName = parents.zone || '';
+    if (!zoneName) {
+      const e = new Error('HttpGeo: zone name is required for ward');
+      e.code = 'GEO_PARENTS_MISSING';
+      throw e;
+    }
+    const { options: zoneOptions, zoneTargetOrder, isCityCorp } = await this.getZoneOptions(parents, form);
+    const zoneEntry = zoneOptions.find((o) => normalizeBn(o.name) === normalizeBn(zoneName))
+      || zoneOptions.find((o) => {
+        const n = normalizeBn(o.name);
+        const w = normalizeBn(zoneName);
+        return n && (n.includes(w) || w.includes(n));
+      });
+    if (!zoneEntry) {
+      throw Object.assign(new Error(`HttpGeo: zone not found: ${zoneName}`), { code: 'GEO_NOT_FOUND' });
+    }
+    // CityCorp branch, mock-verified pattern first: parent=zone,
+    // order 5, type 6, ward=true. Then the zone list's own target
+    // order with type 13. First non-empty list wins; empty is never
+    // returned as a success.
+    const attempts = [];
+    if (isCityCorp) attempts.push([5, 6, true]);
+    if (zoneTargetOrder) attempts.push([zoneTargetOrder, 13, false]);
+    if (isCityCorp) attempts.push([zoneTargetOrder || 5, 6, true]);
+    attempts.push([7, 13, false]);
+    const seenAttempts = new Set();
+    for (const [order, geoType, ward] of attempts) {
+      const key = `${order}|${geoType}|${ward}`;
+      if (seenAttempts.has(key)) continue;
+      seenAttempts.add(key);
+      const res = await client.getGeo(zoneEntry.id, order, geoType, { ward, geoGroup });
+      const options = toOptions(res.entries);
+      if (options.length) return { options };
+    }
+    throw Object.assign(new Error('HttpGeo: ward list is empty'), { code: 'GEO_EMPTY' });
+  }
+}
+
+module.exports = { HttpGeoService, normalizeBn, GEO_GROUP_BY_FORM };

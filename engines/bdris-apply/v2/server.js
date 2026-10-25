@@ -130,24 +130,30 @@ class BdrisEngineV2 {
   }
 
   registerCommands() {
-    // GET_ADDRESS_OPTIONS — replaces fragile mirror logic
+    // GET_ADDRESS_OPTIONS — HTTP geo first, Playwright second.
+    // 2026-10-25 zone fix: AddressService tries the HTTP geo API
+    // first (no Playwright page needed, fits the frontend timeout)
+    // and only then the Playwright cascade. It THROWS on empty
+    // instead of returning [], so a failure is visible upstream
+    // instead of collapsing to a text input that can never unlock
+    // Ward. The session page is therefore only required for the
+    // Playwright fallback, not for the HTTP path.
     this.executor.register('GET_ADDRESS_OPTIONS',
       async (params, ctx) => {
         const { level, parents = {}, form = 'birth' } = params;
         const session = ctx.session;
 
-        if (!session?.page) {
-          throw new Error('No active session');
-        }
-
-        const nav = new BdrisNavigator(session.page);
+        const nav = session?.page ? new BdrisNavigator(session.page) : null;
         const addrService = new AddressService(nav);
 
-        // Ensure we're on the form
-        const url = session.page.url();
-        if (!url.includes('bdris.gov.bd')) {
-          ctx.emit('PROGRESS', '⏳ BDRIS ফর্ম লোড হচ্ছে...');
-          await nav.gotoForm();
+        // Ensure we're on the form — only for the Playwright fallback;
+        // the HTTP path does not need the page at all.
+        if (nav) {
+          const url = session.page.url();
+          if (!url.includes('bdris.gov.bd')) {
+            ctx.emit('PROGRESS', '⏳ BDRIS ফর্ম লোড হচ্ছে...');
+            await nav.gotoForm();
+          }
         }
 
         const options = await addrService.getOptions(level, parents, form);
@@ -489,9 +495,26 @@ class BdrisEngineV2 {
             emit: (ev, payload) => socket.emit(ev, payload),
             socket,
           });
-          // v1 compat: frontend expects raw array (Array.isArray check)
-          const opts = result?.options || result;
-          if (callback) callback(Array.isArray(opts) ? opts : []);
+          // 2026-10-25 zone fix: NEVER collapse a failure to [].
+          // The old code returned [] for every ok:false result
+          // (timeout, parent-not-found, session), and the frontend
+          // then degraded paurasavaUnion to a text input — hiding
+          // the real error and making Ward unreachable. Now an
+          // executor failure is passed through as {ok:false, error}
+          // so the frontend can show it and offer a retry; only a
+          // genuine ok:true result returns the raw options array
+          // (v1 compat with the frontend's array check).
+          if (callback) {
+            if (result && result.ok === false) {
+              callback({ ok: false, error: result.error || result.message || 'GET_ADDRESS_OPTIONS_FAILED' });
+            } else if (Array.isArray(result?.options)) {
+              callback(result.options);
+            } else if (Array.isArray(result)) {
+              callback(result);
+            } else {
+              callback({ ok: false, error: 'GET_ADDRESS_OPTIONS_BAD_RESPONSE' });
+            }
+          }
         } catch (e) {
           if (callback) callback({ ok: false, error: e.message });
         }

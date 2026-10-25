@@ -329,3 +329,31 @@ describe('session-start speed fix (2026-10-25)', () => {
     expect(html).not.toMatch(/৩০–৫০ সেকেন্ড লাগতে পারে/);
   });
 });
+
+describe('zone/ward failure visibility (2026-10-25 zone fix)', () => {
+  test('fetchAddrOpts returns {options, error} instead of collapsing failures to []', () => {
+    expect(html).toMatch(/function fetchAddrOpts\(level, parents, tmo, form\)/);
+    expect(html).toMatch(/res\(\{ options: \[\], error: 'timeout' \}\)/);
+    expect(html).toMatch(/r\.ok === false/);
+  });
+
+  test('fetchAddrOpts timeout is longer than the backend executor timeout (40000 > 30000)', () => {
+    expect(html).toMatch(/fetchAddrOpts\(lvl, parents, 40000, form\)/);
+    expect(html).not.toMatch(/fetchAddrOpts\(lvl, parents, 25000, form\)/);
+  });
+
+  test('geoLoad does NOT degrade paurasavaUnion/ward to a text input on empty, it shows an error banner and keeps the select', () => {
+    const m = html.match(/async function geoLoad\(k, Ls, data, wantOv\) \{([\s\S]*?)\nasync function geoMirror/);
+    expect(m).not.toBeNull();
+    expect(m[1]).toMatch(/showBanner\('err', 'অঞ্চলের তালিকা আসেনি/);
+    expect(m[1]).toMatch(/setGeoState\(k, Ls, 'error'\)/);
+    // The degradeToText call must not be on the zone/ward empty path:
+    // geoLoad's only remaining degradeToText is for other levels, after the zone/ward early return.
+    const zoneBranch = m[1].split("if (k === 'paurasavaUnion' || k === 'ward')")[1].split('} else {')[0];
+    expect(zoneBranch).not.toMatch(/degradeToText/);
+  });
+
+  test('geoLoad hides the zone error banner on a successful zone/ward load', () => {
+    expect(html).toMatch(/if \(k === 'paurasavaUnion' \|\| k === 'ward'\) hideBanner\(\)/);
+  });
+});

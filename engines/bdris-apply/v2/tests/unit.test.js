@@ -259,9 +259,16 @@ describe('SessionManager warm page (2026-10-25)', () => {
 describe('AddressService geo cache (2026-10-25)', () => {
   it('caches live zone/ward results, never empty results, and keys by parents', async () => {
     const { AddressService } = require('../services/AddressService');
+    // 2026-10-25 zone fix: AddressService now tries HTTP first, so
+    // tests inject a failing httpGeo stub (no live contact) and the
+    // Playwright navigator is the fallback under test. Empty/failed
+    // results now THROW (ZONE_WARD_FETCH_FAILED) instead of
+    // returning [], so the frontend can show an error instead of
+    // degrading to a text input that can never unlock Ward.
+    const failingHttp = { getZoneOptions: async () => { throw new Error('HttpGeo: test stub'); }, getWardOptions: async () => { throw new Error('HttpGeo: test stub'); } };
     let calls = 0;
     const nav = { getAddressOptions: async () => { calls++; return [{ id: '1', name: 'ওয়ার্ড - 1' }]; } };
-    const svc = new AddressService(nav);
+    const svc = new AddressService(nav, { httpGeo: failingHttp });
     const parents = { division: 'ঢাকা', district: 'ঢাকা', upazila: 'ঢাকা উত্তর সিটি কর্পোরেশন', zone: 'অঞ্চল - ১' };
     await svc.getOptions('ward', parents, 'birth');
     await svc.getOptions('ward', parents, 'birth');
@@ -269,9 +276,9 @@ describe('AddressService geo cache (2026-10-25)', () => {
     await svc.getOptions('ward', { ...parents, zone: 'অঞ্চল - ২' }, 'birth');
     assert.strictEqual(calls, 2, 'different parents must miss cache');
     const navEmpty = { getAddressOptions: async () => { calls++; return []; } };
-    const svc2 = new AddressService(navEmpty);
-    await svc2.getOptions('ward', { ...parents, zone: 'অঞ্চল - ৯' }, 'birth');
-    await svc2.getOptions('ward', { ...parents, zone: 'অঞ্চল - ৯' }, 'birth');
+    const svc2 = new AddressService(navEmpty, { httpGeo: failingHttp });
+    await assert.rejects(() => svc2.getOptions('ward', { ...parents, zone: 'অঞ্চল - ৯' }, 'birth'));
+    await assert.rejects(() => svc2.getOptions('ward', { ...parents, zone: 'অঞ্চল - ৯' }, 'birth'));
     assert.strictEqual(calls, 4, 'empty results must never be cached');
   });
 });

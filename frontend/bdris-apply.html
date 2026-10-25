@@ -1653,12 +1653,26 @@ function fetchOpts(selector, tmo) {
 }
 // PERMANENT FIX (2026-10-17): Engine-এর dedicated address endpoint ব্যবহার করো —
 // mirror logic-এর race condition ও state drift স্থায়ীভাবে দূর হয়।
+// 2026-10-25 zone fix: NEVER collapse a failure to [] here. The old
+// code returned [] on timeout AND on {ok:false, error}, and geoLoad
+// then degraded paurasavaUnion to a text input — hiding the real
+// error and making Ward unreachable (a typed zone never triggers a
+// ward load). Now the result carries {options, error} so geoLoad can
+// show the failure and keep the select for a retry. Timeout is
+// 40000ms, deliberately LONGER than the backend executor's 30000ms,
+// so the backend's own timeout/error reaches the frontend instead of
+// the frontend giving up first at 25000ms (the old race).
 function fetchAddrOpts(level, parents, tmo, form) {
   return new Promise((res) => {
     let done = false;
-    const t = setTimeout(() => { if (!done) { done = true; res([]); } }, tmo || 25000);
+    const t = setTimeout(() => { if (!done) { done = true; res({ options: [], error: 'timeout' }); } }, tmo || 40000);
     socket.emit('GET_ADDRESS_OPTIONS', { level, parents, form: form || 'birth' }, (r) => {
-      if (!done) { done = true; clearTimeout(t); res(Array.isArray(r) ? r : []); }
+      if (!done) { done = true; clearTimeout(t);
+        if (Array.isArray(r)) res({ options: r, error: null });
+        else if (r && Array.isArray(r.options)) res({ options: r.options, error: null });
+        else if (r && r.ok === false) res({ options: [], error: r.error || r.message || 'error' });
+        else res({ options: [], error: 'bad-response' });
+      }
     });
   });
 }
@@ -1761,7 +1775,22 @@ async function geoLoad(k, Ls, data, wantOv) {
       // Form নির্ণয়: UI id prefix থেকে (g_=birth, sp_=perm, pr_=prsnt)
       const uiId = L.ui || '';
       const form = uiId.startsWith('sp_') ? 'perm' : (uiId.startsWith('pr_') ? 'prsnt' : 'birth');
-      opts = await fetchAddrOpts(lvl, parents, 25000, form);
+      const addrRes = await fetchAddrOpts(lvl, parents, 40000, form);
+      opts = addrRes.options || [];
+      // 2026-10-25 zone fix: a failed zone/ward fetch must NOT degrade
+      // to a text input. A typed zone never triggers a ward load, so
+      // degrading silently strands the user with an empty Ward and
+      // no way forward. Keep the select, mark it as an error, and
+      // show a visible message; re-selecting the parent retries.
+      // (Degrading is still kept below for OTHER levels, where
+      // typing does not block a child level.)
+      if (!opts.length) {
+        setGeoState(k, Ls, 'error');
+        // showBanner, not note(): geoChanged calls noteOff() right
+        // after geoLoad, which would erase a note() immediately.
+        showBanner('err', 'অঞ্চলের তালিকা আসেনি — উপরের ঘরটা আবার বাছুন');
+        return;
+      }
       // zone-এর জন্য WardInCityCorp থেকে এলে fromAlt সেট করো (label-এর জন্য)
       if (lvl === 'zone' && opts.length) {
         // Engine দুটো selector-ই check করে, যেটায় পায় সেটা ফেরত দেয়
@@ -1794,6 +1823,7 @@ async function geoLoad(k, Ls, data, wantOv) {
   }
   fillSelOpts(L.ui, opts, want);
   setGeoState(k, Ls, 'loaded');
+  if (k === 'paurasavaUnion' || k === 'ward') hideBanner();
   const lblEl = $(L.ui + '_lbl');
   if (lblEl) lblEl.textContent = (k === 'paurasavaUnion' && fromAlt) ? 'ওয়ার্ড/অঞ্চল' : L.lbl;
 }
