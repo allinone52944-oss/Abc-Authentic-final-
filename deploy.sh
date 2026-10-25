@@ -41,8 +41,8 @@ if [ ! -d node_modules ] || [ package.json -nt node_modules/.last-install ]; the
   touch node_modules/.last-install
 fi
 
-# Install engine dependencies for ALL engines (bdris-apply, bdris-certificate, death-verify, nid-replica)
-for ENGINE in bdris-apply birth-final death-final nid-replica nid-server-copy; do
+# Install engine dependencies for ALL engines (bdris-apply, birth-final, death-final, nid-replica, nid-server-copy, land-scan, land-search, land-verify, qr-photo-verify)
+for ENGINE in bdris-apply birth-final death-final nid-replica nid-server-copy land-scan land-search land-verify qr-photo-verify; do
   cd "$APP_DIR/engines/$ENGINE"
   if [ -f package.json ]; then
     if [ ! -d node_modules ] || [ package.json -nt node_modules/.last-install ]; then
