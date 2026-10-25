@@ -233,8 +233,8 @@ try {
 // ---- Death verify engine (as-is DRN tool, auth + strict limit) ------
 // The engine folder is an as-is copy of Death-Verify-Engine.zip.
 // death-verify-server.js is a raw Node http server (not Express); the
-// adapter (engines/death-verify/index.js) spawns it as a subprocess on
-// 127.0.0.1:3001 and reverse-proxies /api/death-engine/* to it, so the
+// adapter (engines/death-final/index.js) spawns it as a subprocess on
+// 127.0.0.1:3104 and reverse-proxies /api/death-engine/* to it, so the
 // existing engine API endpoints are used as-is:
 //   GET  /api/captcha → POST /api/solve-captcha → POST /api/verify
 //   {sessionId, drn, dod DD/MM/YYYY, captcha} → POST /api/preview | /api/pdf

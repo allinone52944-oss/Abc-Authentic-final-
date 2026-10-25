@@ -3,7 +3,7 @@
  * Proxy adapter for Birth Engine (birth-final, standalone on 127.0.0.1:3000).
  * Forwards /api/bdris-engine/* to the standalone engine.
  *
- * H-10 fix (2026-10-15): init() now spawns engines/bdris-certificate/server.js
+ * H-10 fix (2026-10-15): init() now spawns engines/birth-final/server.js
  * as a subprocess (like bdris-apply does) — previously nothing started the
  * standalone server, so /api/bdris-engine/* returned 503 on a fresh deploy.
  * node_modules are auto-installed on first run.
@@ -13,7 +13,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
-const ENGINE_PORT = 3000;
+const ENGINE_PORT = parseInt(process.env.BIRTH_ENGINE_PORT || '3000', 10);
 
 let _proc = null;
 let _installing = false;
@@ -32,8 +32,8 @@ function init() {
       cwd: __dirname,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    npm.stdout.on('data', (d) => console.log('[bdris-certificate:npm]', String(d).slice(0, 200)));
-    npm.stderr.on('data', (d) => console.error('[bdris-certificate:npm]', String(d).slice(0, 200)));
+    npm.stdout.on('data', (d) => console.log('[birth-final:npm]', String(d).slice(0, 200)));
+    npm.stderr.on('data', (d) => console.error('[birth-final:npm]', String(d).slice(0, 200)));
     npm.on('close', (code) => {
       _installing = false;
       if (code === 0) { console.log('[birth-final] npm install done — starting engine'); startEngine(); }
@@ -53,7 +53,7 @@ function startEngine() {
   const serverJs = path.join(__dirname, 'server.js');
   _proc = spawn(process.execPath, [serverJs], {
     cwd: __dirname,
-    env: Object.assign({}, process.env),
+    env: Object.assign({}, process.env, { BIRTH_ENGINE_PORT: String(ENGINE_PORT) }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   _proc.stdout.on('data', (d) => {
@@ -61,7 +61,7 @@ function startEngine() {
     if (/running on port|listening/i.test(s)) console.log('[birth-final] engine up:', s.trim().slice(0, 120));
   });
   _proc.stderr.on('data', (d) => {
-    console.error('[bdris-certificate:engine]', String(d).slice(0, 500));
+    console.error('[birth-final:engine]', String(d).slice(0, 500));
   });
   _proc.on('exit', (code) => {
     console.error('[birth-final] engine exited with code', code);
