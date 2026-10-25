@@ -299,3 +299,83 @@ describe('AddressService HTTP budget (2026-10-25 proven budget fix)', () => {
     );
   });
 });
+
+describe('HttpGeoService CSRF seed fallbacks (live banner 2026-10-26: no meta _csrf)', () => {
+  // Fake page whose evaluate() really runs the extraction function
+  // against a stub document — this tests the extraction itself, not
+  // a canned return value. No live contact, no token values: the
+  // tokens below are test fixtures, not session tokens.
+  function domPage({ metaToken, metaHeader, inlineToken, hiddenToken, pageUrl }) {
+    return {
+      context: () => ({ cookies: async () => [{ name: 'TS01', value: 'browser-session' }] }),
+      url: () => pageUrl || 'https://bdris.gov.bd/br/application',
+      evaluate: async (fn) => {
+        const prevDoc = global.document;
+        const hadCsrf = Object.prototype.hasOwnProperty.call(global, 'csrf');
+        const prevCsrf = global.csrf;
+        global.document = {
+          querySelector: (sel) => {
+            if (sel === 'meta[name="_csrf"]') return metaToken ? { content: metaToken } : null;
+            if (sel === 'meta[name="_csrf_headerName"]') return metaHeader ? { content: metaHeader } : null;
+            if (sel === 'input[name="_csrf"]') return hiddenToken ? { value: hiddenToken } : null;
+            return null;
+          },
+        };
+        if (inlineToken !== undefined) global.csrf = inlineToken;
+        else delete global.csrf;
+        try { return await fn(); } finally {
+          global.document = prevDoc;
+          if (hadCsrf) global.csrf = prevCsrf; else delete global.csrf;
+        }
+      },
+    };
+  }
+  function unbootstrappedClient() {
+    return {
+      bootstrapped: false,
+      seeded: null,
+      seedFromBrowser({ cookies, csrfToken, csrfHeaderName }) {
+        if (!csrfToken) throw new Error('BOOTSTRAP_NO_CSRF');
+        this.bootstrapped = true;
+        this.seeded = { cookies, csrfToken, csrfHeaderName };
+      },
+    };
+  }
+
+  it('seeds from the inline csrf variable when meta _csrf is absent (util.js fallback)', async () => {
+    const client = unbootstrappedClient();
+    const httpGeo = new HttpGeoService({ client });
+    const ok = await httpGeo.seedFromPage(domPage({ inlineToken: 'inline-fixture-token' }));
+    assert.strictEqual(ok, true);
+    assert.strictEqual(client.seeded.csrfToken, 'inline-fixture-token');
+    assert.strictEqual(client.seeded.csrfHeaderName, 'X-CSRF-TOKEN');
+  });
+
+  it('seeds from the hidden _csrf field when meta and inline are both absent', async () => {
+    const client = unbootstrappedClient();
+    const httpGeo = new HttpGeoService({ client });
+    const ok = await httpGeo.seedFromPage(domPage({ hiddenToken: 'hidden-fixture-token' }));
+    assert.strictEqual(ok, true);
+    assert.strictEqual(client.seeded.csrfToken, 'hidden-fixture-token');
+  });
+
+  it('still prefers meta _csrf over inline and hidden when all three are present', async () => {
+    const client = unbootstrappedClient();
+    const httpGeo = new HttpGeoService({ client });
+    const ok = await httpGeo.seedFromPage(domPage({
+      metaToken: 'meta-fixture-token', metaHeader: 'X-CSRF-TOKEN',
+      inlineToken: 'inline-fixture-token', hiddenToken: 'hidden-fixture-token',
+    }));
+    assert.strictEqual(ok, true);
+    assert.strictEqual(client.seeded.csrfToken, 'meta-fixture-token');
+  });
+
+  it('fails with a page-state error naming all three sources and the actual page URL when none are present', async () => {
+    const client = unbootstrappedClient();
+    const httpGeo = new HttpGeoService({ client });
+    const ok = await httpGeo.seedFromPage(domPage({ pageUrl: 'https://bdris.gov.bd/other-page' }));
+    assert.strictEqual(ok, false);
+    assert.match(httpGeo.lastSeedError.message, /meta _csrf: no, inline csrf: no, hidden _csrf field: no/);
+    assert.match(httpGeo.lastSeedError.message, /https:\/\/bdris\.gov\.bd\/other-page/);
+  });
+});

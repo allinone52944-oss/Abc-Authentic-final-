@@ -147,14 +147,23 @@ class BdrisEngineV2 {
         const nav = session?.page ? new BdrisNavigator(session.page) : null;
         const addrService = new AddressService(nav);
 
-        // Ensure we're on the form — only for the Playwright fallback;
-        // the HTTP path does not need the page at all.
+        // Ensure we're on the form page BEFORE the HTTP seed, so
+        // the seed reads CSRF from the form page itself instead of
+        // whatever page the session happens to sit on. The old
+        // check skipped navigation for ANY bdris.gov.bd URL, so a
+        // session page on a non-form BDRIS page seeded from a page
+        // with no meta _csrf (live banner 2026-10-26) and then ran
+        // the cascade against missing selects. ensureFormPage()
+        // navigates only when the page is actually not the form;
+        // a failure here is swallowed on purpose so AddressService
+        // still runs and surfaces its own named diagnostic (HTTP
+        // page-state error + Playwright form-not-loaded error)
+        // instead of this handler throwing a bare navigation error.
         if (nav) {
-          const url = session.page.url();
-          if (!url.includes('bdris.gov.bd')) {
-            ctx.emit('PROGRESS', '⏳ BDRIS ফর্ম লোড হচ্ছে...');
-            await nav.gotoForm();
-          }
+          try {
+            const check = await nav.ensureFormPage(form);
+            if (check.navigated) ctx.emit('PROGRESS', '⏳ BDRIS ফর্ম লোড হচ্ছে...');
+          } catch (e) { /* AddressService surfaces the diagnostic */ }
         }
 
         const options = await addrService.getOptions(level, parents, form);

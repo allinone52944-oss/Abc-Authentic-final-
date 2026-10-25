@@ -201,9 +201,11 @@ class BdrisHttpClient {
    * that challenge, so its cookies + page CSRF are the only session
    * a fetch-based geo call can use. cookies are Playwright-format
    * {name, value} entries (or a Cookie header string); the CSRF
-   * token comes from the page's meta _csrf (same source bootstrap()
-   * parses). After seeding, bootstrapped is true and no form-GET
-   * bootstrap is ever attempted for this client.
+   * token comes from the page (meta _csrf first, then the form's
+   * inline `csrf` variable, then the hidden `_csrf` field — the
+   * same order the form's own util.js uses; see HttpGeoService
+   * seedFromPage). After seeding, bootstrapped is true and no
+   * form-GET bootstrap is ever attempted for this client.
    */
   seedFromBrowser({ cookies = [], csrfToken = null, csrfHeaderName = null } = {}) {
     const list = Array.isArray(cookies)
@@ -216,7 +218,7 @@ class BdrisHttpClient {
       if (c && c.name) this.jar.cookies.set(c.name, c.value);
     }
     if (!csrfToken) {
-      throw err('BOOTSTRAP_NO_CSRF', 'Browser page has no meta _csrf token; cannot build API headers.');
+      throw err('BOOTSTRAP_NO_CSRF', 'Browser page has no CSRF token (meta _csrf, inline csrf and hidden _csrf field all absent); cannot build API headers.');
     }
     this.csrfToken = csrfToken;
     if (csrfHeaderName) this.csrfHeaderName = csrfHeaderName;

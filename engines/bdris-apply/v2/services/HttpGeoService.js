@@ -110,13 +110,27 @@ class HttpGeoService {
 
   /**
    * Seed the geo client from a warm Playwright page (its cookies +
-   * page meta _csrf) instead of a standalone fetch bootstrap.
+   * page CSRF) instead of a standalone fetch bootstrap.
    * Returns true when the client is ready for geo calls, false
    * otherwise (lastSeedError names why). A false result means the
    * caller must NOT fall back to a bare fetch bootstrap — the live
    * banner of 2026-10-26 proved a bare fetch form-GET is blocked
    * with 403, so a bare bootstrap cannot succeed. An already
    * bootstrapped client (tests, or a previous seed) needs no page.
+   *
+   * CSRF sources, in the form's own util.js order (proven from the
+   * pasted form source, 2026-10-25): (1) meta _csrf /
+   * _csrf_headerName, (2) the inline `csrf` variable with header
+   * X-CSRF-TOKEN, (3) the hidden input[name="_csrf"] field (the
+   * form's own submit field). The previous code read ONLY (1), so
+   * the live banner of 2026-10-26 read "Browser page has no meta
+   * _csrf token" on a warm page that carries its token inline —
+   * seeding never reached the geo call at all. This method does
+   * NOT navigate: if the page is not the form page, it fails with
+   * a page-state error naming the actual page URL, and navigation
+   * is left to the Playwright path (BdrisNavigator.ensureFormPage),
+   * which owns page movement and must not hijack a mid-flow page
+   * from inside a seed attempt.
    */
   async seedFromPage(page) {
     const client = await this._getClient();
@@ -132,13 +146,52 @@ class HttpGeoService {
     try {
       const ctx = typeof page.context === 'function' ? page.context() : (page._context || null);
       const cookies = ctx && typeof ctx.cookies === 'function' ? await ctx.cookies() : [];
-      const meta = typeof page.evaluate === 'function'
-        ? await page.evaluate(() => ({
-          token: (document.querySelector('meta[name="_csrf"]') || {}).content || null,
-          headerName: (document.querySelector('meta[name="_csrf_headerName"]') || {}).content || null,
-        }))
+      const extracted = typeof page.evaluate === 'function'
+        ? await page.evaluate(() => {
+          const meta = document.querySelector('meta[name="_csrf"]');
+          const metaHeader = document.querySelector('meta[name="_csrf_headerName"]');
+          let token = (meta && meta.content) || null;
+          let headerName = (metaHeader && metaHeader.content) || null;
+          let source = token ? 'meta' : null;
+          if (!token) {
+            // Inline `csrf` (util.js fallback, header X-CSRF-TOKEN).
+            // A top-level `const csrf` is not a window property, so
+            // try the identifier itself as well as window.csrf.
+            let inline = null;
+            try { inline = (typeof window !== 'undefined' && window.csrf) || null; } catch (e) { /* next */ }
+            if (!inline) {
+              try { inline = (typeof csrf !== 'undefined') ? csrf : null; } catch (e) { /* next */ }
+            }
+            if (inline && typeof inline === 'object') inline = inline.token || inline.value || null;
+            if (typeof inline === 'string' && inline) {
+              token = inline; headerName = 'X-CSRF-TOKEN'; source = 'inline';
+            }
+          }
+          if (!token) {
+            const hidden = document.querySelector('input[name="_csrf"]');
+            if (hidden && hidden.value) {
+              token = hidden.value; headerName = headerName || 'X-CSRF-TOKEN'; source = 'hidden';
+            }
+          }
+          let pageUrl = null;
+          try { pageUrl = location.href; } catch (e) { /* unknown */ }
+          return { token, headerName, source, pageUrl };
+        })
         : {};
-      client.seedFromBrowser({ cookies, csrfToken: meta.token, csrfHeaderName: meta.headerName });
+      // Older test doubles return only {token, headerName}; accept them.
+      const token = extracted.token || null;
+      const headerName = extracted.headerName || (token ? 'X-CSRF-TOKEN' : null);
+      let pageUrl = extracted.pageUrl || null;
+      if (!pageUrl && typeof page.url === 'function') {
+        try { pageUrl = page.url(); } catch (e) { /* unknown */ }
+      }
+      if (!token) {
+        this.lastSeedError = new Error(
+          `HttpGeo: Browser page has no CSRF token (meta _csrf: no, inline csrf: no, hidden _csrf field: no) on page ${pageUrl || 'unknown'}; cannot build API headers.`,
+        );
+        return false;
+      }
+      client.seedFromBrowser({ cookies, csrfToken: token, csrfHeaderName: headerName });
       this.lastSeedError = null;
       return true;
     } catch (e) {

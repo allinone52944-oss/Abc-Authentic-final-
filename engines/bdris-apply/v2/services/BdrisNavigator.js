@@ -72,6 +72,72 @@ class BdrisNavigator {
     return sel;
   }
 
+  // State of the first existing select in a selector list: whether
+  // the element exists at all, how many raw options it has, and how
+  // many survive the same placeholder filter getOptions() applies.
+  // Distinguishes "select missing" from "select present but
+  // placeholder-only" — the two states the old code collapsed into
+  // one empty list, which is why the live banner could only say
+  // "options present: 0" without saying why.
+  async getSelectState(selector) {
+    return await this.page.evaluate((sel) => {
+      const selectors = sel.split(',').map(s => s.trim());
+      for (const s of selectors) {
+        const el = document.querySelector(s);
+        if (!el) continue;
+        const raw = el.options ? el.options.length : 0;
+        const filtered = Array.from(el.options || []).filter(o => {
+          const v = (o.value || '').trim();
+          const t = (o.text || '').trim();
+          return v && v !== '-1' && v !== '' && t && !/নির্বাচন করুন/i.test(t);
+        }).length;
+        return { exists: true, rawCount: raw, filteredCount: filtered };
+      }
+      return { exists: false, rawCount: 0, filteredCount: 0 };
+    }, selector).catch(() => ({ exists: false, rawCount: 0, filteredCount: 0 }));
+  }
+
+  // Guarantee the page is the form page before a cascade runs.
+  // Proven defect (live banner 2026-10-26, division options 0):
+  // server.js skipped gotoForm whenever the session URL merely
+  // contained "bdris.gov.bd" — a warm page on ANY BDRIS page
+  // (not /br/application) therefore ran the cascade against
+  // selects that do not exist there, and every parent failed with
+  // options present: 0. This check is cheap on the common path
+  // (one URL read + one selector evaluate when already on the
+  // form) and only navigates when the page is actually not the
+  // form. Test doubles without url()/goto() are left alone:
+  // formPresent is null and the caller proceeds to its own
+  // diagnostic instead of throwing here.
+  async ensureFormPage(form = 'birth') {
+    const sel = this.getSelectors(form);
+    if (typeof this.page.url !== 'function') {
+      return { navigated: false, pageUrl: null, formPresent: null };
+    }
+    let url = null;
+    try { url = this.page.url(); } catch (e) { /* unknown */ }
+    if (url && url.includes('/br/application')) {
+      const state = await this.getSelectState(sel.division);
+      if (state.exists) return { navigated: false, pageUrl: url, formPresent: true };
+    }
+    if (typeof this.page.goto !== 'function') {
+      return { navigated: false, pageUrl: url, formPresent: false };
+    }
+    try {
+      await this.page.goto(`${BDRIS_BASE}/br/application`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 20000,
+      });
+    } catch (e) { /* selector check below decides */ }
+    if (typeof this.page.waitForSelector === 'function') {
+      await this.page.waitForSelector(sel.division, { timeout: 3000 }).catch(() => {});
+    }
+    let newUrl = url;
+    try { newUrl = this.page.url(); } catch (e) { /* unknown */ }
+    const after = await this.getSelectState(sel.division);
+    return { navigated: true, pageUrl: newUrl, formPresent: after.exists };
+  }
+
   async getOptions(selector) {
     return await this.page.evaluate((sel) => {
       const selectors = sel.split(',').map(s => s.trim());
@@ -157,6 +223,11 @@ class BdrisNavigator {
    * stuck-level detection gets slower in the absolute worst case.
    * The waitForOptions DEFAULT (10000ms) is unchanged — the submit
    * flow passes its own explicit timeouts and is untouched by this.
+   * ensureFormPage() below adds no cost on the common path (the
+   * page is already the form: one URL read + one selector
+   * evaluate); only a non-form page pays a navigation, which the
+   * old code skipped entirely and then failed instantly with a
+   * misleading options-present: 0.
    */
   async getAddressOptions(level, parents = {}, form = 'birth') {
     const sel = this.getSelectors(form);
@@ -167,26 +238,54 @@ class BdrisNavigator {
       throw new Error(`Invalid level: ${level}`);
     }
 
+    // Form page first (proven defect, live banner 2026-10-26):
+    // the old server.js check skipped navigation for ANY
+    // bdris.gov.bd URL, so a session page that was not on
+    // /br/application ran the cascade against selects that do not
+    // exist there. If the form still is not loaded after the
+    // navigation attempt, say so by name instead of letting the
+    // first parent fail with a bare options-present: 0.
+    const formCheck = await this.ensureFormPage(form);
+    if (formCheck.formPresent === false) {
+      throw new Error(`Playwright: form page not loaded (division select missing) on ${formCheck.pageUrl || 'unknown page'}; cannot run cascade`);
+    }
+    const pageUrl = formCheck.pageUrl;
+
     // Country first (proven defect, live banner 2026-10-26):
     // the old code attempted the first parent (division) with NO
     // wait and NO country selection, while the submit cascade
     // (StepHandler._fillAddressSection) selects country first and
     // then waits for the child list. gotoForm() only waits for the
-    // division SELECTOR to exist, not for its options, and
-    // server.js skips gotoForm entirely when the page URL is
-    // already bdris.gov.bd (warm/mid-flow page). A warm page that
-    // never had country selected therefore has a placeholder-only
-    // division select, and the first selectOption failed instantly
-    // with: Parent option not found: division="ঢাকা". Fix: if the
-    // division list starts empty, select country ("বাংলাদেশ", the
-    // same candidate the submit path uses) and wait for the
-    // division list before touching any parent. When options are
-    // already present this costs one extra evaluate and no wait.
+    // division SELECTOR to exist, not for its options. A warm page
+    // that never had country selected therefore has a
+    // placeholder-only division select, and the first selectOption
+    // failed instantly with: Parent option not found:
+    // division="ঢাকা". Fix: if the division list starts empty,
+    // select country ("বাংলাদেশ", the same candidate the submit
+    // path uses) and wait for the division list before touching
+    // any parent. When options are already present this costs
+    // two evaluates and no wait.
+    //
+    // Second proven gap in the same block (live banner after
+    // 1884319, still options present: 0): the old code IGNORED
+    // selectOption's boolean, so a failed country selection —
+    // country select missing, or no "বাংলাদেশ" option on that
+    // page state — was invisible and the division parent error
+    // took the blame. Now a division list that stays empty after
+    // country selection throws naming the country state itself
+    // (select present, options present, selection succeeded) and
+    // the page, so the next banner distinguishes a country
+    // failure from a division-population failure.
     if (sel.country) {
-      const divOpts = await this.getOptions(sel.division).catch(() => []);
-      if (!divOpts.length) {
-        await this.selectOption(sel.country, 'বাংলাদেশ');
+      const countryBefore = await this.getSelectState(sel.country);
+      const divBefore = await this.getSelectState(sel.division);
+      if (!divBefore.filteredCount) {
+        const countryDone = await this.selectOption(sel.country, 'বাংলাদেশ');
         await this.waitForOptions(sel.division, 5000);
+        const divAfter = await this.getSelectState(sel.division);
+        if (!divAfter.filteredCount) {
+          throw new Error(`Playwright: division list still empty after country selection (country select present: ${countryBefore.exists}, country options present: ${countryBefore.filteredCount}, country selection succeeded: ${countryDone}, division options present: ${divAfter.filteredCount}, page: ${pageUrl || 'unknown'})`);
+        }
       }
     }
 

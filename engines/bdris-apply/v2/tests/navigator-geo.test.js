@@ -119,7 +119,7 @@ describe('BdrisNavigator.getAddressOptions country-first (live case 2026-10-26)'
     assert.deepStrictEqual(opts.map((o) => o.name), ['অঞ্চল - ১', 'অঞ্চল - ২']);
   });
 
-  it('reports options present: 0 when the division list stays empty even after country', async () => {
+  it('names the country state when the division list stays empty even after country (country option missing)', async () => {
     const page = makePage({
       countryOptions: placeholder(),
       divisionOptions: placeholder(),
@@ -128,9 +128,47 @@ describe('BdrisNavigator.getAddressOptions country-first (live case 2026-10-26)'
     const nav = new BdrisNavigator(page);
     await assert.rejects(
       () => nav.getAddressOptions('zone', parents, 'birth'),
-      (e) => /Parent option not found: division="ঢাকা"/.test(e.message)
-        && /options present: 0/.test(e.message),
+      (e) => /division list still empty after country selection/.test(e.message)
+        && /country selection succeeded: false/.test(e.message)
+        && /country options present: 0/.test(e.message)
+        && /division options present: 0/.test(e.message),
     );
+  });
+
+  it('names a successful country selection when division still never populates', async () => {
+    const page = makePage({
+      countryOptions: placeholder().concat([{ value: '1', text: 'বাংলাদেশ' }]),
+      divisionOptions: placeholder(),
+      cascade: {}, // country selects, but nothing populates division
+    });
+    const nav = new BdrisNavigator(page);
+    await assert.rejects(
+      () => nav.getAddressOptions('zone', parents, 'birth'),
+      (e) => /division list still empty after country selection/.test(e.message)
+        && /country selection succeeded: true/.test(e.message)
+        && /division options present: 0/.test(e.message),
+    );
+  });
+
+  it('navigates to the form page when the session page is on a non-form BDRIS page, then succeeds', async () => {
+    const inner = makePage({
+      countryOptions: placeholder().concat([{ value: '1', text: 'বাংলাদেশ' }]),
+      divisionOptions: placeholder(),
+      cascade,
+    });
+    let currentUrl = 'https://bdris.gov.bd/other-page';
+    let gotoCalls = 0;
+    const page = {
+      ...inner,
+      url: () => currentUrl,
+      goto: async (u) => { gotoCalls++; currentUrl = u; },
+      waitForSelector: async () => {},
+    };
+    const nav = new BdrisNavigator(page);
+    const opts = await nav.getAddressOptions('zone', parents, 'birth');
+    assert.strictEqual(gotoCalls, 1, 'a non-form page must navigate to /br/application before the cascade');
+    assert.strictEqual(currentUrl, 'https://bdris.gov.bd/br/application');
+    assert.deepStrictEqual(opts.map((o) => o.name), ['অঞ্চল - ১', 'অঞ্চল - ২']);
   });
 
   it('distinguishes a real name mismatch (options present > 0) from an empty list', async () => {
