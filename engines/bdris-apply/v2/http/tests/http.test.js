@@ -33,8 +33,10 @@ const state = {
   uploadHits: 0,
   uploadBody: '',
   otpQueries: [],
+  otpBodies: [],
   officeQueries: [],
   verifyHits: 0,
+  verifyQueries: [],
   verifyBodies: [],
   submitHits: 0,
   submitBodies: [],
@@ -48,9 +50,10 @@ function completeApplication(overrides = {}) {
     cityCorpUpazila: 'ঢাকা দক্ষিণ সিটি কর্পোরেশন', paurasavaUnion: 'অঞ্চল - ১',
     ward: 'ওয়ার্ড - ১', postOfficeBn: 'ঢাকা', postOfficeEn: 'Dhaka',
     villageBn: 'মহল্লা', villageEn: 'Moholla', houseRoadBn: 'বাসা ১', houseRoadEn: 'House 1',
+    locationId: '700', en: 'House 1, Moholla, Dhaka', bn: 'বাসা ১, মহল্লা, ঢাকা',
   });
   return {
-    person: { firstNameBn: 'আবদুল', lastNameBn: 'করিম', firstNameEn: 'Abdul', lastNameEn: 'Karim', dob: '2020-01-15', gender: 'পুরুষ' },
+    person: { firstNameBn: 'আবদুল', lastNameBn: 'করিম', firstNameEn: 'Abdul', lastNameEn: 'Karim', dob: '2020-01-15', gender: 'পুরুষ', thChild: '১ম' },
     father: { brn: '', dob: '1990-05-01', nameBn: 'আবদুল হামিদ', nameEn: 'Abdul Hamid', nationality: 'বাংলাদেশী' },
     mother: { brn: '', dob: '1992-03-01', nameBn: 'ফাতেমা', nameEn: 'Fatema', nationality: 'বাংলাদেশী' },
     birthPlace: addr('ঢাকা'),
@@ -105,6 +108,19 @@ before(async () => {
   server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://mock');
     const rot = `TS01=rotated-${state.geoHits + state.uploadHits + 1}; Path=/; Max-Age=30`;
+    if (url.pathname === '/br/application' && req.method === 'POST') {
+      // Final submit: the form's own POST (multipart). Success shape
+      // only — phrase + print link; no application number invented.
+      state.submitHits += 1;
+      const chunks = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => {
+        state.submitBodies.push(Buffer.concat(chunks).toString('utf8'));
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(`<html><body>${SUCCESS_PHRASE} <a href="${PRINT_PATH}">print</a></body></html>`);
+      });
+      return;
+    }
     if (url.pathname === '/br/application') {
       res.writeHead(200, {
         'Content-Type': 'text/html',
@@ -152,10 +168,15 @@ before(async () => {
       });
       return;
     }
-    if (url.pathname === '/api/otp/sent') {
+    if (url.pathname === '/api/otp/sent' && req.method === 'POST') {
       state.otpQueries.push(url.search);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ code: 'MESSAGE_SENT', message: 'mock message', success: true, payload: null }));
+      const chunks = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => {
+        state.otpBodies.push(Buffer.concat(chunks).toString('utf8'));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ code: 'MESSAGE_SENT', message: 'mock message', success: true, payload: null }));
+      });
       return;
     }
     if (url.pathname === '/api/office/find-by-geo-id') {
@@ -166,25 +187,13 @@ before(async () => {
     }
     if (url.pathname === '/api/otp/verify' && req.method === 'POST') {
       state.verifyHits += 1;
+      state.verifyQueries.push(url.search);
       const chunks = [];
       req.on('data', (c) => chunks.push(c));
       req.on('end', () => {
         state.verifyBodies.push(Buffer.concat(chunks).toString('utf8'));
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, verified: true }));
-      });
-      return;
-    }
-    if (url.pathname === '/api/br/application/register' && req.method === 'POST') {
-      state.submitHits += 1;
-      const chunks = [];
-      req.on('data', (c) => chunks.push(c));
-      req.on('end', () => {
-        state.submitBodies.push(Buffer.concat(chunks).toString('utf8'));
-        // Mock success page: only the VERIFIED shape — phrase + print link.
-        // No application number is invented here (format unverified).
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(`<html><body>${SUCCESS_PHRASE} <a href="${PRINT_PATH}">print</a></body></html>`);
+        res.end(JSON.stringify({ success: true, data: { isVerified: true } }));
       });
       return;
     }
@@ -367,10 +376,16 @@ describe('document upload', () => {
 });
 
 describe('OTP send + office helpers', () => {
-  it('sends appType + the verified param names and returns MESSAGE_SENT with null payload', async () => {
+  it('POSTs appType + the verified param names in query and the six name fields in body, returns MESSAGE_SENT with null payload', async () => {
     const c = await bootstrappedClient();
     state.otpQueries.length = 0;
-    const res = await c.otpSend({ phone: 'mock-phone', applicantName: 'mock-name' });
+    state.otpBodies.length = 0;
+    const res = await c.otpSend({
+      phone: 'mock-phone', applicantName: 'mock-name',
+      person: { firstNameBn: 'আবদুল', lastNameBn: 'করিম', firstNameEn: 'Abdul', lastNameEn: 'Karim' },
+      father: { nameBn: 'আবদুল হামিদ', nameEn: 'Abdul Hamid' },
+      mother: { nameBn: 'ফাতেমা', nameEn: 'Fatema' },
+    });
     assert.strictEqual(res.code, 'MESSAGE_SENT');
     assert.strictEqual(res.success, true);
     assert.strictEqual(res.payload, null);
@@ -379,6 +394,10 @@ describe('OTP send + office helpers', () => {
     assert.strictEqual(q.get('phone'), 'mock-phone');
     assert.strictEqual(q.get('applicantName'), 'mock-name');
     assert.ok(q.has('officeId') && q.has('applicantDob') && q.has('officeAddressType'));
+    const body = state.otpBodies[0] || '';
+    assert.match(body, /personInfoForBirth\.personNameBn/);
+    assert.match(body, /personInfoForBirth\.father\.personNameEn/);
+    assert.match(body, /personInfoForBirth\.mother\.personNameBn/);
   });
 
   it('office helper calls the verified URL with caller-supplied params (shape unverified)', async () => {
@@ -389,45 +408,48 @@ describe('OTP send + office helpers', () => {
   });
 });
 
-describe('CANDIDATE submit payload builder (StepHandler field map)', () => {
-  it('covers every field StepHandler fills for a complete application', () => {
+describe('Form-submit payload builder (pasted form source field names)', () => {
+  it('covers every field the form itself carries for a complete application', () => {
     const p = buildSubmitPayload(completeApplication());
-    // Person (S1): split + joined names, DOB, gender.
+    // Person (S1): split + joined names, DOB, child number, gender enum.
     assert.strictEqual(p['personInfoForBirth.personFirstNameBn'], 'আবদুল');
     assert.strictEqual(p['personInfoForBirth.personLastNameEn'], 'Karim');
     assert.strictEqual(p['personInfoForBirth.personNameBn'], 'আবদুল করিম');
     assert.strictEqual(p['personInfoForBirth.personNameEn'], 'Abdul Karim');
-    assert.strictEqual(p['personInfoForBirth.personDob'], '2020-01-15');
-    assert.strictEqual(p['personInfoForBirth.personGender'], 'পুরুষ');
-    // Parents (S2): BRN, DOB, names, nationality.
+    assert.strictEqual(p['personInfoForBirth.personBirthDate'], '2020-01-15');
+    assert.strictEqual(p['personInfoForBirth.thChild'], '১ম');
+    assert.strictEqual(p['personInfoForBirth.gender'], 'MALE');
+    assert.strictEqual(p.religion, 'NOT_APPLICABLE');
+    // Parents (S2): BRN, DOB, names, numeric nationality.
     assert.strictEqual(p['personInfoForBirth.father.personNameBn'], 'আবদুল হামিদ');
     assert.strictEqual(p['personInfoForBirth.father.personBirthDate'], '1990-05-01');
     assert.strictEqual(p['personInfoForBirth.mother.personNameEn'], 'Fatema');
-    assert.strictEqual(p['personInfoForBirth.mother.personNationality'], 'বাংলাদেশী');
-    // Addresses (S2B): all three sections, full suffix set.
+    assert.strictEqual(p['personInfoForBirth.mother.personNationality'], '1');
+    // Addresses (S2B): all three sections, full suffix set incl. LocationId/En/Bn.
     assert.strictEqual(p.birthPlaceDiv, 'ঢাকা');
     assert.strictEqual(p.birthPlaceCityCorpCantOrUpazila, 'ঢাকা দক্ষিণ সিটি কর্পোরেশন');
     assert.strictEqual(p.birthPlacePaurasavaOrUnion, 'অঞ্চল - ১');
     assert.strictEqual(p.birthPlaceVilAreaTownBn, 'মহল্লা');
+    assert.strictEqual(p.birthPlaceLocationId, '700');
+    assert.strictEqual(p.birthPlaceEn, 'House 1, Moholla, Dhaka');
     assert.strictEqual(p.permAddrPostOfcEn, 'Dhaka');
     assert.strictEqual(p.prsntAddrHouseRoadBn, 'বাসা ১');
-    // Documents/contact/OTP (S3 + S4Prep + S4): relation, name, declaration, phone, otp.
+    // Basis/documents/contact/OTP: office type mapped, attachments = ids.
+    assert.strictEqual(p.officeAddressType, 'BIRTHPLACE');
+    assert.strictEqual(p.officeId, 'mock-office');
+    assert.strictEqual(p.geoLocationId, '700');
     assert.strictEqual(p.relationWithApplicant, 'FATHER');
     assert.strictEqual(p.applicantName, 'Abdul Hamid');
     assert.strictEqual(p.declaration, true);
     assert.strictEqual(p.phone, 'mock-phone');
     assert.strictEqual(p.email, 'mock@example.com');
-    assert.strictEqual(p.officeAddressType, 'BIRTH');
     assert.strictEqual(p.otp, '123456');
-    assert.strictEqual(p.documents.length, 2);
-    assert.deepStrictEqual(p.documents.map((d) => d.attachmentType), [40, 41]);
-    assert.strictEqual(p.documents[0].url, '/admin/doc/40');
-    assert.strictEqual(p.documents[1].id, 41);
+    assert.deepStrictEqual(p.attachments, [40, 41]);
   });
 
   it('joins a first-name-only applicant to the first name alone (1-name rule)', () => {
     const p = buildSubmitPayload(completeApplication({
-      person: { firstNameBn: 'আবদুল', lastNameBn: '', firstNameEn: 'Abdul', lastNameEn: '', dob: '2020-01-15' },
+      person: { firstNameBn: 'আবদুল', lastNameBn: '', firstNameEn: 'Abdul', lastNameEn: '', dob: '2020-01-15', gender: 'পুরুষ', thChild: '১ম' },
     }));
     assert.strictEqual(p['personInfoForBirth.personNameBn'], 'আবদুল');
     assert.strictEqual(p['personInfoForBirth.personNameEn'], 'Abdul');
@@ -444,7 +466,7 @@ describe('CANDIDATE submit payload builder (StepHandler field map)', () => {
     );
   });
 
-  it('submitApplication sends the candidate payload and accepts only the verified success shape', async () => {
+  it('submitApplication POSTs the form itself (multipart) and accepts only the verified success shape', async () => {
     const c = await bootstrappedClient();
     state.submitBodies.length = 0;
     const before = state.submitHits;
@@ -452,10 +474,11 @@ describe('CANDIDATE submit payload builder (StepHandler field map)', () => {
     assert.strictEqual(out.success, true);
     assert.strictEqual(out.hasPrintLink, true);
     assert.strictEqual(state.submitHits, before + 1);
-    const sent = JSON.parse(state.submitBodies.at(-1));
-    assert.strictEqual(sent['personInfoForBirth.personNameBn'], 'আবদুল করিম');
-    assert.strictEqual(sent.relationWithApplicant, 'FATHER');
-    assert.strictEqual(sent.documents.length, 2);
+    const sent = state.submitBodies.at(-1);
+    assert.match(sent, /personInfoForBirth\.personNameBn/);
+    assert.match(sent, /relationWithApplicant/);
+    assert.match(sent, /name="attachments"/);
+    assert.match(sent, /name="_csrf"/);
   });
 
   it('submitApplication with a missing field never hits the server', async () => {
@@ -469,17 +492,18 @@ describe('CANDIDATE submit payload builder (StepHandler field map)', () => {
   });
 });
 
-describe('CANDIDATE OTP-verify builder + request', () => {
-  it('reuses the verified otpSend context and adds otp', () => {
+describe('OTP-verify query builder + request (source-proven shape)', () => {
+  it('builds query params (otp + context + geoLocationId) with an empty body', () => {
     const p = buildVerifyPayload({
       phone: 'mock-phone', applicantName: 'mock-name', applicantDob: '2020-01-15',
-      officeAddressType: 'BIRTH', otp: '123456',
+      officeAddressType: 'BIRTH', birthPlaceLocationId: '700', otp: '123456',
     });
     assert.strictEqual(p.appType, 'BIRTH_REGISTRATION_APPLICATION');
     assert.strictEqual(p.phone, 'mock-phone');
     assert.strictEqual(p.applicantName, 'mock-name');
     assert.strictEqual(p.applicantDob, '2020-01-15');
-    assert.strictEqual(p.officeAddressType, 'BIRTH');
+    assert.strictEqual(p.officeAddressType, 'BIRTHPLACE');
+    assert.strictEqual(p.geoLocationId, '700');
     assert.strictEqual(p.otp, '123456');
   });
 
@@ -491,16 +515,18 @@ describe('CANDIDATE OTP-verify builder + request', () => {
     assert.strictEqual(state.verifyHits, before);
   });
 
-  it('verifyOtp POSTs the candidate payload to /api/otp/verify and returns its JSON', async () => {
+  it('verifyOtp POSTs query params to /api/otp/verify with an empty body and requires isVerified', async () => {
     const c = await bootstrappedClient();
     state.verifyBodies.length = 0;
+    state.verifyQueries.length = 0;
     const res = await c.verifyOtp({ phone: 'mock-phone', otp: '123456' });
     assert.strictEqual(res.success, true);
-    assert.strictEqual(res.verified, true);
-    const sent = JSON.parse(state.verifyBodies.at(-1));
-    assert.strictEqual(sent.otp, '123456');
-    assert.strictEqual(sent.phone, 'mock-phone');
-    assert.strictEqual(sent.appType, 'BIRTH_REGISTRATION_APPLICATION');
+    assert.strictEqual(res.data.isVerified, true);
+    assert.strictEqual(state.verifyBodies.at(-1), '');
+    const q = new URLSearchParams(state.verifyQueries.at(-1));
+    assert.strictEqual(q.get('otp'), '123456');
+    assert.strictEqual(q.get('phone'), 'mock-phone');
+    assert.strictEqual(q.get('appType'), 'BIRTH_REGISTRATION_APPLICATION');
   });
 });
 

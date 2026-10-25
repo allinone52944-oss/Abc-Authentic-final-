@@ -15,35 +15,32 @@
  *    the response's targetGeoOrder (NEVER order+1) and using the chosen
  *    entry's id as the next parent. Names are matched on nameBn.
  *  - Document upload to POST /admin/doc/upload (multipart, types 40/41).
- *  - OTP send over GET /api/otp/sent (no token/id is returned).
+ *  - OTP send over POST /api/otp/sent (query = otpSend context, body
+ *    = the six person/parent name fields; no token/id is returned).
+ *  - OTP verify over POST /api/otp/verify (query params, empty body;
+ *    success = data.isVerified === true).
+ *  - Final submit as the form's OWN POST to /br/application
+ *    (multipart/form-data, every form field + `attachments` hidden
+ *    ids + _csrf) — the verified page flow after a successful
+ *    verify (or directly for a mission application). The page script
+ *    also contains /api/br/application/register, but that URL is NOT
+ *    used by this form's verified flow, so this module no longer
+ *    submits to it; where register is actually used is UNRESOLVED.
  *
- * What this module does NOT have verified (see DESIGN.md):
- *  - OTP verify (/api/otp/verify): URL verified, but the request
- *    method + params are UNOBSERVED. verifyOtp() therefore sends a
- *    CANDIDATE request (POST, the otpSend context + otp) built by
- *    buildVerifyPayload(), and fails loudly on a bad response.
- *  - Final submit (/api/br/application/register): URL verified, but
- *    the request method + payload field list are UNOBSERVED.
- *    submitApplication() therefore sends a CANDIDATE payload built by
- *    buildSubmitPayload() — flat form-field names taken verbatim from
- *    the Playwright v2 StepHandler field map (personInfoForBirth.*,
- *    birthPlace*, permAddr*, prsntAddr*, relationWithApplicant,
- *    applicantName, declaration, email, phone, otp) plus the upload
- *    references (types 40/41) — as JSON over POST, and parses only
- *    the verified success-page shape.
- *  CANDIDATE means derived, not live-captured: never present these
- *  two requests as verified. Until one live capture confirms the
- *  real method + field list, the Playwright v2 path remains the
- *  fallback for verify+submit if the candidate is rejected live.
- *  Hybrid today = HTTP for geo/docs/OTP-send, candidate HTTP (with
- *  Playwright fallback) for verify+submit. Never claim realtime
- *  live speed — no live call has been made from this module.
+ * What is STILL source-derived, not live-captured (see DESIGN.md):
+ *  - The exact form-submit field VALUES for a few fields whose page
+ *    option values were not in the pasted source (e.g. declaration
+ *    checkbox value, officeAddr group fields): buildSubmitPayload()
+ *    sends the field NAMES from the pasted form source, with those
+ *    few values marked as the best available mapping, and the
+ *    Playwright v2 path remains the fallback if the server rejects
+ *    the form submit live. Never claim realtime live speed — no
+ *    live call has been made from this module.
  *
- * Also UNPROVEN: the first parent id of the geo chain (observed chains
- * start at parent 4, while the page script shows bangladeshId=null).
- * walkGeoChain() therefore REQUIRES firstParentId as an explicit caller
- * input and refuses to run without it. The value 4 is NOT hardcoded
- * anywhere in this module as a fact.
+ * First parent: the pasted page source shows bangladeshId = "1",
+ * so a Bangladesh division chain starts at parent 1. walkGeoChain()
+ * still REQUIRES firstParentId as an explicit caller input and
+ * refuses to run without it — "1" is documented, not defaulted.
  *
  * Node built-ins only (global fetch/FormData/Blob). No new npm deps.
  * Never contacts a live host in tests — tests use a local mock server.
@@ -58,7 +55,10 @@ const OTP_SENT_PATH = '/api/otp/sent';
 const OFFICE_BY_GEO_PATH = '/api/office/find-by-geo-id';
 const OFFICE_PROJECTION_PATH = '/api/office/find-office-geo-projection-by-geo-id';
 const VERIFY_PATH = '/api/otp/verify';
-const SUBMIT_PATH = '/api/br/application/register';
+// Present in the page script but NOT used by this form's verified
+// flow (which submits the form itself); kept for reference only.
+const REGISTER_PATH = '/api/br/application/register';
+const SUBMIT_PATH = FORM_PATH;
 const PRINT_PATH = '/admin/br/application/print';
 const SUCCESS_PHRASE = 'আবেদনপত্রটি সফল ভাবে সাবমিট করা হয়েছে';
 
@@ -375,11 +375,17 @@ class BdrisHttpClient {
   }
 
   /**
-   * OTP send. Query params are the verified names; appType is fixed.
-   * The response carries no token/id (payload is null) — verify must
-   * therefore reuse the same applicant/phone context (unverified step).
+   * OTP send — source-proven shape (pasted form page inline handler):
+   * POST /api/otp/sent, query = the otpSend context (appType, phone,
+   * email, officeId, personUbrn + applicantInfo: relation,
+   * applicantName, applicantBrn, applicantDob, officeAddressType),
+   * body = only the six person/parent name fields
+   * (buildOtpSendBody). The response carries no token/id (payload
+   * is null) — verify must therefore reuse the same context plus
+   * the geoLocationId derived from officeAddressType.
    */
-  async otpSend({ phone = '', email = '', officeId = '', personUbrn = '', relation = '', applicantName = '', applicantBrn = '', applicantDob = '', officeAddressType = '' } = {}) {
+  async otpSend(data = {}) {
+    const { phone = '', email = '', officeId = '', personUbrn = '', relation = '', applicantName = '', applicantBrn = '', applicantDob = '', officeAddressType = '' } = data;
     const qs = new URLSearchParams({
       appType: 'BIRTH_REGISTRATION_APPLICATION',
       phone,
@@ -390,9 +396,16 @@ class BdrisHttpClient {
       applicantName,
       applicantBrn,
       applicantDob,
-      officeAddressType,
+      officeAddressType: mapOfficeAddressType(officeAddressType),
     });
-    const res = await this.request(`${OTP_SENT_PATH}?${qs.toString()}`, { headers: this.apiHeaders() });
+    const body = buildOtpSendBody(data);
+    const form = new FormData();
+    for (const [k, v] of Object.entries(body)) form.append(k, v);
+    const res = await this.request(`${OTP_SENT_PATH}?${qs.toString()}`, {
+      method: 'POST',
+      headers: this.apiHeaders(),
+      body: form,
+    });
     if (!res.ok || !res.json) {
       throw err('OTP_SEND_FAILED', `OTP send returned status ${res.status}.`);
     }
@@ -400,45 +413,56 @@ class BdrisHttpClient {
   }
 
   /**
-   * CANDIDATE OTP-verify request (DERIVED, NOT live-captured).
-   * Derivation: the verified otpSend param names (appType, phone,
-   * email, officeId, personUbrn, relation, applicantName, applicantBrn,
-   * applicantDob, officeAddressType) plus the OTP code itself, which
-   * the Playwright flow types into the single input#otp / name="otp"
-   * field. The live verify may carry a subset or different names —
-   * that is exactly what one live capture must confirm. Method POST
-   * is likewise candidate (a code check with a body is not a GET).
+   * OTP verify — source-proven shape (pasted form page inline
+   * handler): POST /api/otp/verify, query params only, EMPTY body.
+   * Query: otp, appType, personUbrn, phone, geoLocationId (the
+   * office group's LocationId: birthPlaceLocationId when
+   * officeAddressType is BIRTHPLACE, permAddrLocationId when
+   * PERMANENT), email, officeId + applicantInfo (relation,
+   * applicantName, applicantBrn, applicantDob, officeAddressType).
+   * Success = data.isVerified === true in the response.
    * Throws OTP_REQUIRED / OTP_BAD_FORMAT instead of guessing.
    */
   async verifyOtp(data = {}) {
-    const payload = buildVerifyPayload(data);
-    const res = await this.request(VERIFY_PATH, {
+    const qs = buildVerifyQuery(data);
+    const res = await this.request(`${VERIFY_PATH}?${qs.toString()}`, {
       method: 'POST',
-      headers: this.apiHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(payload),
+      headers: this.apiHeaders(),
     });
     if (!res.ok) {
       throw err('VERIFY_FAILED', `OTP verify returned status ${res.status}.`);
     }
-    return res.json !== null ? res.json : { ok: res.ok, text: res.text };
+    const json = res.json !== null ? res.json : { ok: res.ok, text: res.text };
+    if (json && json.data && json.data.isVerified !== true && json.isVerified !== true && json.verified !== true && json.success !== true) {
+      throw err('VERIFY_NOT_VERIFIED', 'OTP verify response does not report isVerified === true.');
+    }
+    return json;
   }
 
   /**
-   * CANDIDATE final submit (DERIVED, NOT live-captured).
-   * Sends buildSubmitPayload(data) as JSON over POST to
-   * /api/br/application/register with the verified API headers.
-   * The response is accepted ONLY in the verified success shape:
-   * HTML containing the Bengali success phrase (plus print link if
-   * present), or JSON with success === true. Anything else throws
-   * SUBMIT_NOT_SUCCESS / SUBMIT_BAD_RESPONSE — never a silent pass.
-   * No application number is extracted (format unverified).
+   * Final submit — the form's OWN POST (source-proven page flow):
+   * multipart/form-data to /br/application with every field from
+   * buildSubmitPayload() + one `attachments` field per uploaded
+   * document id + _csrf. The response is accepted ONLY in the
+   * verified success shape: HTML containing the Bengali success
+   * phrase (plus print link if present), or JSON with
+   * success === true. Anything else throws SUBMIT_NOT_SUCCESS /
+   * SUBMIT_BAD_RESPONSE — never a silent pass. No application
+   * number is extracted (format unverified).
    */
   async submitApplication(data = {}) {
     const payload = buildSubmitPayload(data);
+    const form = new FormData();
+    for (const [k, v] of Object.entries(payload)) {
+      if (k === 'attachments') continue;
+      form.append(k, String(v));
+    }
+    for (const id of payload.attachments || []) form.append('attachments', String(id));
+    form.append('_csrf', this.csrfToken);
     const res = await this.request(SUBMIT_PATH, {
       method: 'POST',
-      headers: this.apiHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(payload),
+      headers: this.apiHeaders(),
+      body: form,
     });
     if (!res.ok) {
       throw err('SUBMIT_BAD_RESPONSE', `Submit returned status ${res.status}.`);
@@ -455,37 +479,38 @@ class BdrisHttpClient {
 }
 
 /**
- * CANDIDATE submit payload builder (pure, no I/O).
+ * Form-submit payload builder (pure, no I/O).
  *
- * Derivation, field by field, from the Playwright v2 StepHandler
- * field map — the site's own form field names, copied verbatim:
- *  - Person (submitS1): personInfoForBirth.personFirstNameBn /
+ * Field NAMES from the pasted form page source (2026-10-25),
+ * flat dotted names, for the form's own POST to /br/application:
+ *  - Person: personInfoForBirth.personFirstNameBn /
  *    personLastNameBn / personFirstNameEn / personLastNameEn, plus
  *    the joined personNameBn / personNameEn (site join rule: first +
  *    ' ' + last; a first-name-only applicant joins to the first name
- *    alone — the standing 1-name rule), personDob, personGender.
- *  - Parents (submitS2, base personInfoForBirth.father./mother.):
- *    ubrn, personBirthDate, personNameBn, personNameEn,
- *    personNationality. Pre-2013 applicants leave ubrn empty, per
- *    the live-verified 2013 rule — the builder keeps an empty string
- *    rather than inventing a value.
- *  - Addresses (submitS2B, prefixes birthPlace / permAddr / prsntAddr):
+ *    alone — the standing 1-name rule), personBirthDate, thChild,
+ *    gender (MALE/FEMALE/THIRD_GENDER), religionOther, personNid,
+ *    plus hidden religion=NOT_APPLICABLE.
+ *  - Parents (base personInfoForBirth.father./mother.): id, ubrn,
+ *    personBirthDate, personNameBn, personNameEn, passportNumber,
+ *    personNationality (numeric; 1 = Bangladeshi). Pre-2013
+ *    applicants leave ubrn empty, per the live-verified 2013 rule.
+ *  - Addresses (prefixes birthPlace / permAddr / prsntAddr):
  *    Country, Div, Dist, CityCorpCantOrUpazila, PaurasavaOrUnion,
- *    WardInCityCorp, WardInPaurasavaOrUnion, PostOfc, PostOfcEn,
- *    PostCode, VilAreaTownBn, VilAreaTownEn, HouseRoadBn, HouseRoadEn.
- *    PostCode is carried only if supplied (the visible form usually
- *    hides it). Copy flags copyBirthPlaceToPermAddr /
- *    copyPermAddrToPrsntAddr are carried when the caller sets them.
- *  - Documents (submitS3): relationWithApplicant (FATHER/MOTHER/
- *    SELF/...), applicantName, declaration, plus `documents`: the
- *    upload references from uploadDocument() — one entry per
- *    mandatory type 40 and 41 ({attachmentType, attachmentTypeId,
- *    url, id}). The upload itself is verified; how the register call
- *    references the uploads is CANDIDATE.
- *  - Contact (submitS4Prep): email, phone, officeAddressType,
- *    officeAddrCountry, officeId (from the office lookup step).
- *  - OTP (submitS4): otp — the single code field.
- *  - Basis (submitS0): addressType (BIRTH | PERMANENT), default BIRTH.
+ *    WardInCityCorp, Area, WardInPaurasavaOrUnion, City, PostOfc,
+ *    PostOfcEn, PostCode, VilAreaTownBn, VilAreaTownEn, HouseRoadBn,
+ *    HouseRoadEn, LocationId, En, Bn. PostCode is carried only if
+ *    supplied. The old copy flags are NOT form fields and are dropped.
+ *  - Documents: `attachments` = the uploaded file ids for types 40
+ *    and 41 (the form's hidden `attachments` inputs), NOT a JSON
+ *    documents array. The upload itself is verified.
+ *  - Basis/contact: officeAddressType (BIRTHPLACE/PERMANENT/MISSION),
+ *    officeId, geoLocationId (office group's LocationId),
+ *    relationWithApplicant, applicantBrn, applicantDob,
+ *    applicantName, declaration, email, phone, otp.
+ *  Still CANDIDATE in one respect: this builder has never been
+ *  run live against bdris.gov.bd, so a live rejection still falls
+ *  back to Playwright. Field names above are source-proven; the
+ *  live run is what remains.
  *
  * Input shape: canonical keys (person, father, mother, birthPlace,
  * permAddr, prsntAddr, relation, applicantName, declaration, email,
@@ -519,6 +544,8 @@ function buildSubmitPayload(data = {}) {
   const firstEn = req(person.firstNameEn, 'person.firstNameEn');
   const lastEn = person.lastNameEn;
   const dob = req(person.dob, 'person.dob');
+  req(person.thChild, 'person.thChild');
+  req(person.gender, 'person.gender');
   // Joined names follow the site rule: first + ' ' + last, or the
   // first name alone for a 1-name applicant (never a doubled name).
   const joinName = (first, last) => {
@@ -545,8 +572,10 @@ function buildSubmitPayload(data = {}) {
       [`${prefix}Dist`]: str(addr.district),
       [`${prefix}CityCorpCantOrUpazila`]: str(addr.cityCorpUpazila),
       [`${prefix}PaurasavaOrUnion`]: str(addr.paurasavaUnion),
-      [`${prefix}WardInCityCorp`]: str(addr.wardInCityCorp || addr.paurasavaUnion),
+      [`${prefix}WardInCityCorp`]: str(addr.wardInCityCorp),
+      [`${prefix}Area`]: str(addr.area),
       [`${prefix}WardInPaurasavaOrUnion`]: str(addr.ward),
+      [`${prefix}City`]: str(addr.city),
       [`${prefix}PostOfc`]: str(addr.postOfficeBn || addr.postBn),
       [`${prefix}PostOfcEn`]: str(addr.postOfficeEn || addr.postEn),
       [`${prefix}PostCode`]: str(addr.postCode),
@@ -554,6 +583,9 @@ function buildSubmitPayload(data = {}) {
       [`${prefix}VilAreaTownEn`]: str(addr.villageEn || addr.vilEn),
       [`${prefix}HouseRoadBn`]: str(addr.houseRoadBn || addr.houseBn),
       [`${prefix}HouseRoadEn`]: str(addr.houseRoadEn || addr.houseEn),
+      [`${prefix}LocationId`]: str(addr.locationId),
+      [`${prefix}En`]: str(addr.en),
+      [`${prefix}Bn`]: str(addr.bn),
     };
   };
   const birthFields = addressFields(birthPlace, 'birthPlace', 'birthPlace');
@@ -589,66 +621,139 @@ function buildSubmitPayload(data = {}) {
     throw err('MISSING_SUBMIT_FIELD', `Cannot build submit payload, missing required fields: ${missing.join(', ')}`);
   }
 
+  const officeType = mapOfficeAddressType(data.officeAddressType || (data.s4prep && data.s4prep.officeAddressType) || data.addressType);
+  const geoLocationId = officeType === 'PERMANENT'
+    ? str(permAddr.locationId || data.permGeoLocationId)
+    : str(birthPlace.locationId || data.birthGeoLocationId || data.geoLocationId);
+  const attachmentIds = [docsByType.get(40), docsByType.get(41)].map((d) => d.id);
   return {
-    addressType: data.addressType || 'BIRTH',
+    officeAddressType: officeType,
+    officeId: str(data.officeId || (data.s4prep && data.s4prep.officeId)),
+    geoLocationId,
     'personInfoForBirth.personFirstNameBn': str(firstBn),
     'personInfoForBirth.personLastNameBn': str(lastBn),
     'personInfoForBirth.personFirstNameEn': str(firstEn),
     'personInfoForBirth.personLastNameEn': str(lastEn),
     'personInfoForBirth.personNameBn': joinName(firstBn, lastBn),
     'personInfoForBirth.personNameEn': joinName(firstEn, lastEn),
-    'personInfoForBirth.personDob': str(dob),
-    'personInfoForBirth.personGender': str(person.gender),
+    'personInfoForBirth.personBirthDate': str(dob),
+    'personInfoForBirth.thChild': str(person.thChild),
+    'personInfoForBirth.gender': mapGender(person.gender),
+    'personInfoForBirth.religionOther': str(person.religionOther),
+    'personInfoForBirth.personNid': str(person.nid || person.personNid),
+    religion: 'NOT_APPLICABLE',
+    'personInfoForBirth.father.id': str(father.id),
     'personInfoForBirth.father.ubrn': str(father.brn),
     'personInfoForBirth.father.personBirthDate': str(father.dob),
     'personInfoForBirth.father.personNameBn': str(father.nameBn),
     'personInfoForBirth.father.personNameEn': str(father.nameEn),
-    'personInfoForBirth.father.personNationality': str(father.nationality || 'বাংলাদেশী'),
+    'personInfoForBirth.father.passportNumber': str(father.passportNumber),
+    'personInfoForBirth.father.personNationality': mapNationality(father.nationality),
+    'personInfoForBirth.mother.id': str(mother.id),
     'personInfoForBirth.mother.ubrn': str(mother.brn),
     'personInfoForBirth.mother.personBirthDate': str(mother.dob),
     'personInfoForBirth.mother.personNameBn': str(mother.nameBn),
     'personInfoForBirth.mother.personNameEn': str(mother.nameEn),
-    'personInfoForBirth.mother.personNationality': str(mother.nationality || 'বাংলাদেশী'),
+    'personInfoForBirth.mother.passportNumber': str(mother.passportNumber),
+    'personInfoForBirth.mother.personNationality': mapNationality(mother.nationality),
     ...birthFields,
     ...permFields,
     ...presFields,
-    copyBirthPlaceToPermAddr: !!(data.permCopy || s2b.permCopy),
-    copyPermAddrToPrsntAddr: !!(data.presCopy || s2b.presCopy),
     relationWithApplicant: str(relation),
+    applicantBrn: str(data.applicantBrn || person.brn),
+    applicantDob: str(data.applicantDob || dob),
     applicantName: str(applicantName),
     declaration: data.declaration !== undefined ? !!data.declaration : true,
     email: str(data.email || (data.s4prep && data.s4prep.email)),
     phone: str(phone),
-    officeAddressType: str(data.officeAddressType || (data.s4prep && data.s4prep.officeAddressType)),
-    officeAddrCountry: str(data.officeAddrCountry || 'বাংলাদেশ'),
-    officeId: str(data.officeId),
-    documents: [docsByType.get(40), docsByType.get(41)],
     otp: String(otp).replace(/\D/g, ''),
+    attachments: attachmentIds,
+  };
+}
+
+/** Map the app's Bengali gender labels to the form's enum values. */
+function mapGender(v) {
+  const s = String(v || '').trim();
+  if (s === 'পুরুষ' || s === 'MALE') return 'MALE';
+  if (s === 'মহিলা' || s === 'FEMALE') return 'FEMALE';
+  if (s === 'তৃতীয় লিঙ্গ' || s === 'THIRD_GENDER') return 'THIRD_GENDER';
+  return s;
+}
+
+/** Map the app's nationality label to the form's numeric option value. */
+function mapNationality(v) {
+  const s = String(v === undefined || v === null ? '' : v).trim();
+  if (s === '' || s === 'বাংলাদেশী') return '1';
+  if (/^\d+$/.test(s)) return s;
+  return s;
+}
+
+/** Map legacy BIRTH/PERMANENT to the form's officeAddressType values. */
+function mapOfficeAddressType(v) {
+  const s = String(v || '').trim().toUpperCase();
+  if (s === 'BIRTH' || s === 'BIRTHPLACE') return 'BIRTHPLACE';
+  if (s === 'PERMANENT') return 'PERMANENT';
+  if (s === 'MISSION') return 'MISSION';
+  return s;
+}
+
+/**
+ * OTP-send body builder (pure, no I/O) — source-proven: only the
+ * six person/parent name fields. Accepts the canonical shape
+ * (person/father/mother) or the flat joined names.
+ */
+function buildOtpSendBody(data = {}) {
+  const person = data.person || data.s1 || {};
+  const s2 = data.s2 || {};
+  const father = data.father || s2.father || {};
+  const mother = data.mother || s2.mother || {};
+  const joinName = (first, last) => {
+    const f = String(first || '').trim();
+    const l = String(last || '').trim();
+    return l ? `${f} ${l}` : f;
+  };
+  return {
+    'personInfoForBirth.personNameBn': String(person.personNameBn || joinName(person.firstNameBn, person.lastNameBn)),
+    'personInfoForBirth.personNameEn': String(person.personNameEn || joinName(person.firstNameEn, person.lastNameEn)),
+    'personInfoForBirth.father.personNameBn': String(father.personNameBn || father.nameBn || ''),
+    'personInfoForBirth.father.personNameEn': String(father.personNameEn || father.nameEn || ''),
+    'personInfoForBirth.mother.personNameBn': String(mother.personNameBn || mother.nameBn || ''),
+    'personInfoForBirth.mother.personNameEn': String(mother.personNameEn || mother.nameEn || ''),
   };
 }
 
 /**
- * CANDIDATE OTP-verify payload builder (pure, no I/O).
- * Reuses the VERIFIED otpSend param names and adds `otp`.
- * Method + exact param set are CANDIDATE until live-confirmed.
+ * OTP-verify query builder (pure, no I/O) — source-proven shape:
+ * POST /api/otp/verify with query params only, empty body.
+ * geoLocationId is derived from officeAddressType: BIRTHPLACE uses
+ * the birth-place LocationId, PERMANENT uses the permanent
+ * LocationId; a caller-supplied geoLocationId wins when present.
  */
 function buildVerifyPayload(data = {}) {
   const otp = String(data.otp || '').replace(/\D/g, '');
   if (!otp) throw err('OTP_REQUIRED', 'verifyOtp requires data.otp.');
   if (!/^\d{6}$/.test(otp)) throw err('OTP_BAD_FORMAT', 'OTP must be 6 digits.');
+  const officeType = mapOfficeAddressType(data.officeAddressType);
+  const geoLocationId = String(data.geoLocationId || '')
+    || (officeType === 'PERMANENT' ? String(data.permAddrLocationId || data.permLocationId || '') : String(data.birthPlaceLocationId || data.birthLocationId || ''));
   return {
+    otp,
     appType: 'BIRTH_REGISTRATION_APPLICATION',
+    personUbrn: String(data.personUbrn || ''),
     phone: String(data.phone || ''),
+    geoLocationId,
     email: String(data.email || ''),
     officeId: String(data.officeId || ''),
-    personUbrn: String(data.personUbrn || ''),
     relation: String(data.relation || ''),
     applicantName: String(data.applicantName || ''),
     applicantBrn: String(data.applicantBrn || ''),
     applicantDob: String(data.applicantDob || ''),
-    officeAddressType: String(data.officeAddressType || ''),
-    otp,
+    officeAddressType: officeType,
   };
+}
+
+function buildVerifyQuery(data = {}) {
+  return new URLSearchParams(buildVerifyPayload(data));
 }
 
 /**
@@ -671,11 +776,17 @@ module.exports = {
   parseSuccessPage,
   buildSubmitPayload,
   buildVerifyPayload,
+  buildOtpSendBody,
+  buildVerifyQuery,
+  mapGender,
+  mapNationality,
+  mapOfficeAddressType,
   FORM_PATH,
   GEO_PATH,
   UPLOAD_PATH,
   OTP_SENT_PATH,
   VERIFY_PATH,
+  REGISTER_PATH,
   SUBMIT_PATH,
   PRINT_PATH,
   SUCCESS_PHRASE,

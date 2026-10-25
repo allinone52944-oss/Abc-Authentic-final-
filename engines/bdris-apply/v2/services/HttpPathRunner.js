@@ -6,15 +6,14 @@
  * when explicitly enabled, with the existing Playwright path as the
  * live default and as fallback.
  *
- * CANDIDATE — READ FIRST: the submit and OTP-verify payloads sent here
- * are CANDIDATE (derived from the Playwright v2 StepHandler field map,
- * NOT live-captured; see v2/http/DESIGN.md). Every log line and every
- * response from this module carries that label, and this path must
- * never be described as realtime until one live capture confirms the
- * real submit method/field list and verify params. Scope is only up
- * to a successful SUBMIT + success page; office registration is out
- * of scope and is never conflated with the /api/br/application/register
- * submit call (that path name is the submit API, not office registration).
+ * CANDIDATE — READ FIRST: the submit/verify shapes sent here follow
+ * the pasted form page source (2026-10-25: form POST to
+ * /br/application, OTP verify as query-param POST), but they have
+ * NOT been run live (see v2/http/DESIGN.md). Every log line and
+ * every response from this module carries that label, and this path
+ * must never be described as realtime until one live run confirms
+ * it. Scope is only up to a successful SUBMIT + success page;
+ * office registration is out of scope entirely.
  *
  * Safety rules (deliberate, do not weaken):
  *  - Charge gate first, identical to Playwright submitS4: when a JWT
@@ -66,7 +65,7 @@
 const { BdrisHttpClient } = require('../http/client');
 const { verifyChargeToken } = require('./StepHandler');
 
-const HTTP_CANDIDATE_LABEL = 'CANDIDATE (submit/verify payloads derived from StepHandler, NOT live-verified)';
+const HTTP_CANDIDATE_LABEL = 'CANDIDATE (submit/verify shapes from the pasted form source, NOT live-verified)';
 const HTTP_BASE = 'https://bdris.gov.bd';
 
 function isHttpPathEnabled(env = process.env) {
@@ -174,6 +173,13 @@ function normalizeChainInput(data = {}) {
     applicantBrn: String(data.applicantBrn || person.brn || s1.brn || ''),
     applicantDob: String(person.dob || ''),
     officeAddressType: String(canonical.officeAddressType || ''),
+    // OTP-send body needs the six names; verify needs the office
+    // group's LocationId (derived from officeAddressType in client).
+    person: canonical.person,
+    father: canonical.father,
+    mother: canonical.mother,
+    birthPlaceLocationId: String(canonical.birthPlace.locationId || ''),
+    permAddrLocationId: String(canonical.permAddr.locationId || ''),
   };
   const uploadFiles = data.docs || data.uploadFiles || null;
   const documentRefs = data.documents || s3.documents || null;
@@ -321,7 +327,7 @@ async function runHttpChain(opts = {}) {
 
     // 4. OTP send (verified params).
     currentStep = 'otp-send';
-    candidateLog(log, 'otp-send', 'GET /api/otp/sent with applicant/phone/office context');
+    candidateLog(log, 'otp-send', 'POST /api/otp/sent with applicant/phone/office context + six name fields');
     const sent = await client.otpSend(norm.otpContext);
     if (sent && sent.success !== undefined && sent.success !== true) {
       throw Object.assign(new Error(`OTP send rejected: ${sent.code || 'unknown'}`), { code: 'OTP_SEND_FAILED' });
@@ -330,13 +336,13 @@ async function runHttpChain(opts = {}) {
 
     // 5. OTP verify (CANDIDATE payload).
     currentStep = 'verify';
-    candidateLog(log, 'verify', 'POST /api/otp/verify — CANDIDATE payload (otpSend context + otp)');
+    candidateLog(log, 'verify', 'POST /api/otp/verify — query params, empty body (otpSend context + otp + geoLocationId)');
     await client.verifyOtp({ ...norm.otpContext, otp: norm.otp });
     stepsDone.push('verify');
 
     // 6. Final submit (CANDIDATE payload; scope ends at success page).
     currentStep = 'submit';
-    candidateLog(log, 'submit', 'POST /api/br/application/register — CANDIDATE payload; scope ends at success page, office registration is out of scope');
+    candidateLog(log, 'submit', 'POST /br/application — the form itself, multipart, scope ends at success page, office registration is out of scope');
     const submitInput = { ...norm.canonical, documents: refs, otp: norm.otp };
     const submitted = await client.submitApplication(submitInput);
     stepsDone.push('submit');

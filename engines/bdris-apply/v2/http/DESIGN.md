@@ -1,16 +1,18 @@
 # BDRIS HTTP-first client — design note (first version, partial)
 
-Status: **CANDIDATE-COMPLETE, NOT LIVE-VERIFIED.** This module covers
-the verified HTTP steps (session, geo, documents, OTP send) plus
-**candidate** implementations of OTP verify and final submit
-(`buildVerifyPayload()` / `buildSubmitPayload()` in `client.js`).
-Candidate = derived from the Playwright v2 StepHandler field map, not
-from a live capture of the two requests. Until one live capture
-confirms the real method + field list, the Playwright v2 path (page
-pool, live-verified ~5s session-ready) remains the LIVE path, and
-this HTTP path is OPT-IN ONLY (env `BDRIS_HTTP_PATH=on`; default
-OFF, safe-by-default, senior decision 2026-10-25) — it must not be
-called realtime in production.
+Status: **SOURCE-CORRECTED 2026-10-25, NOT LIVE-VERIFIED.** This module
+covers the verified HTTP steps (session, geo, documents) plus OTP
+send / OTP verify / final submit in the shapes proven by the pasted
+form page source (2026-10-25 evening): OTP send = POST with query
+context + six name fields in the body; OTP verify = POST with query
+params and an empty body (`isVerified === true` on success); final
+submit = the form's OWN multipart POST to `/br/application`
+(`attachments` hidden ids + `_csrf`). Field NAMES are now
+source-proven, but NO live run has happened yet, so the Playwright
+v2 path (page pool, live-verified ~5s session-ready) remains the
+LIVE path, and this HTTP path is OPT-IN ONLY (env
+`BDRIS_HTTP_PATH=on`; default OFF, safe-by-default, senior decision
+2026-10-25) — it must not be called realtime in production.
 
 ## Hybrid fallback, in words
 
@@ -61,33 +63,29 @@ only up to a successful SUBMIT (success page).
 | Upload endpoint, multipart fields (`attachmentType`, `attachmentSubType=-1`, `_csrf`, `files`), types 40/41 | VERIFIED | Network capture |
 | Upload response shape (`files[0].url/id/attachmentTypeId`, `size: null`, `deleteType: DELETE`) | VERIFIED | samples for types 40 and 41 |
 | Upload size limit ≤ 2MB, JPG/PNG | VERIFIED (caller contract) | existing engine rule |
-| OTP send endpoint + param names (`appType`, `phone`, `email`, `officeId`, `personUbrn`, `relation`, `applicantName`, `applicantBrn`, `applicantDob`, `officeAddressType`) | VERIFIED | Network capture (names only) |
+| OTP send: POST `/api/otp/sent`, query = (`appType`, `phone`, `email`, `officeId`, `personUbrn`, `relation`, `applicantName`, `applicantBrn`, `applicantDob`, `officeAddressType`), body = six name fields | SOURCE-PROVEN | pasted form page inline handler (2026-10-25) — supersedes the earlier GET note |
 | OTP send response (`MESSAGE_SENT`, `success: true`, `payload: null` — no token/id) | VERIFIED | capture |
-| Submit URL `/api/br/application/register` (+ `/api/application/receive` also present in page script) | URL VERIFIED | form page inline script |
-| OTP verify URL `/api/otp/verify` (+ `/api/otp/sent-email` variant) | URL VERIFIED | form page inline script |
+| OTP verify: POST `/api/otp/verify`, query params only, empty body; success = `data.isVerified === true`; `geoLocationId` = birth-place LocationId (BIRTHPLACE) or permanent LocationId (PERMANENT) | SOURCE-PROVEN | pasted form page inline handler (2026-10-25) |
+| Final submit: the form's OWN multipart POST to `/br/application` (all form fields + `attachments` ids + `_csrf`), after verify (or directly for mission) | SOURCE-PROVEN | pasted form page inline handler (2026-10-25) |
+| `/api/br/application/register` (+ `/api/application/receive`) present in page script | URL ONLY — NOT used by this form's verified flow | form page inline script; where register is used is UNRESOLVED |
 | Office lookup URLs (`/api/office/find-by-geo-id`, `/api/office/find-office-geo-projection-by-geo-id`) | URL ONLY VERIFIED | form page inline script |
 | Success page shape (phrase, application number, office, masked mobile, print link `/admin/br/application/print`, deadline date) | VERIFIED | success page |
 | TSPD layer (`/TSPD/?type=…`, WebGL-shader fingerprint code) | VERIFIED AS BOT PROTECTION, NOT FORM LOGIC | challenge page + `fpdefs`; engine handles the session it establishes, never parses the obfuscated code |
-| Submit method + payload field list | **CANDIDATE — DERIVED, NOT LIVE-CAPTURED** | `buildSubmitPayload()`: POST (candidate method) with flat StepHandler field names (`personInfoForBirth.*`, `birthPlace*`, `permAddr*`, `prsntAddr*`, `relationWithApplicant`, `applicantName`, `declaration`, `email`, `phone`, `otp`, `officeId`, `officeAddressType`) + upload refs 40/41. Missing required fields throw `MISSING_SUBMIT_FIELD` (never a silent guess). |
-| OTP verify request params (+ method) | **CANDIDATE — DERIVED, NOT LIVE-CAPTURED** | `buildVerifyPayload()`: POST (candidate method) with the verified otpSend param names + `otp`. Missing/non-6-digit OTP throws `OTP_REQUIRED` / `OTP_BAD_FORMAT`. |
+| Submit field list (names) | **SOURCE-PROVEN names, NOT LIVE-RUN** | `buildSubmitPayload()`: flat form names (`personInfoForBirth.*` incl. `personBirthDate`, `thChild`, `gender`, `father./mother.` id/ubrn/personBirthDate/personNameBn/personNameEn/passportNumber/personNationality, `birthPlace*/permAddr*/prsntAddr*` incl. `LocationId/En/Bn/Area/City`, `officeAddressType`, `officeId`, `geoLocationId`, `relationWithApplicant`, `applicantBrn/Dob/Name`, `declaration`, `email`, `phone`, `otp`) + `attachments` ids. Missing required fields throw `MISSING_SUBMIT_FIELD` (never a silent guess). |
+| OTP verify request params (+ method) | **SOURCE-PROVEN shape, NOT LIVE-RUN** | `buildVerifyPayload()`: POST query params + empty body. Missing/non-6-digit OTP throws `OTP_REQUIRED` / `OTP_BAD_FORMAT`. |
 | Submit/verify transport (headers, cookies, CSRF) | VERIFIED (same as every other API call) | `apiHeaders()` — cookies, CSRF header, XHR, referer, `client: bris` |
-| **First-parent source** (observed chains start at parent 4; page script shows `bangladeshId=null`) | **UNPROVEN** | `walkGeoChain()` requires explicit `firstParentId`; `4` is not hardcoded as a fact |
+| **First-parent source** | **SOURCE-PROVEN: `bangladeshId = "1"`** | pasted page source (2026-10-25); a Bangladesh division chain starts at parent 1. `walkGeoChain()` still requires explicit `firstParentId` (no default). |
 | Office lookup query/payload shapes | UNVERIFIED | helpers take caller-supplied params verbatim and return JSON as-is |
 | Success-page application-number format | UNVERIFIED | `parseSuccessPage()` checks only the phrase + print link |
 
 ## What is needed to finish (in order)
 
-1. Live confirmation: the request method and payload field **names**
-   for `/api/br/application/register` and the request method and
-   parameter **names** for `/api/otp/verify`, from ONE live capture
-   (names only — no values, cookies, tokens, or personal data).
-   Compare them field by field with `buildSubmitPayload()` /
-   `buildVerifyPayload()`; correct any mismatch, re-run the mock
-   tests, and only then drop the CANDIDATE label for the confirmed
-   fields.
-2. First-parent source: where the chain's first `parentGeoId` comes
-   from (page script, first geo call, or a fixed bootstrap value —
-   whichever is actually observed, not assumed).
+1. Live run: one real app-driven application through the HTTP path
+   (opt-in only), compared with the names-only log line from the
+   Playwright path (field names only — no values, cookies, tokens,
+   or personal data). Correct any mismatch, re-run the mock tests,
+   and only then drop the CANDIDATE label.
+2. ~~First-parent source — RESOLVED 2026-10-25: `bangladeshId = "1"`.~~
 3. Only then: frontend wiring for `SUBMIT_HTTP_CHAIN` (the engine
    integration already exists, but it has NO live caller yet — see
    below), deploy, and measure a real session end-to-end
