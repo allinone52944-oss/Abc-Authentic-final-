@@ -216,7 +216,7 @@ async function health() {
     if (mode === 'oracle') {
         try {
             await ensureTable();
-            return { mode, ok: true, degraded, connStr: CONN_STR };
+            return { mode, ok: true, degraded };
         } catch (e) {
             markDegraded(e);
             return { mode, ok: true, degraded: true, fallback: 'file', error: e.message };
