@@ -1075,7 +1075,7 @@ function renderHome() {
   els('[data-orig]').forEach(b => b.onclick = async () => {
     const ackNo = b.dataset.orig;
     b.disabled = true; b.textContent = '⏳ চার্জ হচ্ছে…';
-    const token = await charge('pdf');
+    const token = await charge('pdf', ackNo ? 'pdf-' + ackNo : null);
     if (!token) { b.disabled = false; b.textContent = '⬇️ আসল PDF'; return; }
     b.textContent = '⏳ PDF আসছে…';
     S._origAutoDl = ackNo;
@@ -1258,6 +1258,7 @@ function openDraft(draftId) {
     if (!res || !res.ok || !res.draft) { note('খসড়া খোলা যায়নি — আবার চেষ্টা করুন', 'err'); return; }
     const dr = res.draft;
     S.draftId = dr.draftId || draftId;
+    try { var savedKey = localStorage.getItem('bdris_submit_key_for_' + S.draftId); if (savedKey) S._submitKey = savedKey; } catch (e) {}
     S.mode = dr.mode === 'auto' ? 'auto' : 'manual';
     const savedDocs = Array.isArray(dr.docs) ? dr.docs : [];
     S.d = {
@@ -1416,7 +1417,10 @@ function docsMetaOf(docs) {
 }
 function saveDraft(uiStep, cb) {
   socket.emit('SAVE_DRAFT', draftPayload(uiStep), (r) => {
-    if (r && r.ok) { S.draftId = r.draftId; updDraftsCnt(); }
+    if (r && r.ok) {
+      S.draftId = r.draftId; updDraftsCnt();
+      try { if (S._submitKey) localStorage.setItem('bdris_submit_key_for_' + r.draftId, S._submitKey); } catch (e) {}
+    }
     if (cb) cb(r);
   });
 }
@@ -3654,12 +3658,37 @@ $('logoutBtn').onclick = async () => {
     try { return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY) || ''; }
     catch (e) { return ''; }
   }
-  async function charge(kind) {
+  // 2026-10-25 double-charge fix: OTP/PDF retry must NOT deduct again.
+  // A stable idempotency key per application flow (draftId, else a
+  // session key) is sent with every charge call, and a successful
+  // charge token is cached for 25 min (token expiry is 30 min) so a
+  // retry in the same flow reuses it instead of charging again.
+  // The server also returns the existing token (charged: 0) when the
+  // same key is seen again, so a retry after a reload still cannot
+  // double-charge. Charge order is unchanged: submit before OTP,
+  // pdf before FETCH_ORIGINAL, HMAC token verified server-side.
+  function submitChargeKey() {
+    if (S.draftId) return 'draft-' + S.draftId + '-submit';
+    try {
+      var k = sessionStorage.getItem('bdris_submit_key');
+      if (!k) {
+        k = 'flow-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+        sessionStorage.setItem('bdris_submit_key', k);
+      }
+      S._submitKey = k;
+      return k;
+    } catch (e) { return S._submitKey || 'flow-' + Date.now(); }
+  }
+  function cachedSubmitToken() {
+    if (S._submitTok && S._submitTokAt && (Date.now() - S._submitTokAt) < 25 * 60 * 1000) return S._submitTok;
+    return null;
+  }
+  async function charge(kind, idempotencyKey) {
     try {
       var r = await fetch('/api/bdris-apply/charge/' + kind, {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
-        body: '{}'
+        body: JSON.stringify(idempotencyKey ? { idempotency_key: idempotencyKey } : {})
       });
       var d = await r.json().catch(function () { return {}; });
       if (r.status === 402 || d.error === 'INSUFFICIENT_BALANCE') {
@@ -3681,8 +3710,13 @@ $('logoutBtn').onclick = async () => {
     var orig = emitStep;
     window.emitStep = async function (op, payload, onAckExtra) {
       if (op === 'SUBMIT_S4_OTP') {
-        var tok = await charge('submit');
-        if (!tok) return false;
+        var tok = cachedSubmitToken();
+        if (!tok) {
+          tok = await charge('submit', submitChargeKey());
+          if (!tok) return false;
+          S._submitTok = tok; S._submitTokAt = Date.now();
+          try { if (S.draftId) localStorage.setItem('bdris_submit_key_for_' + S.draftId, submitChargeKey()); } catch (e) {}
+        }
         payload = Object.assign({}, payload, { _chargeToken: tok });
       }
       return orig.call(this, op, payload, onAckExtra);
@@ -3694,8 +3728,22 @@ $('logoutBtn').onclick = async () => {
     socket.emit = function (ev) {
       var args = Array.prototype.slice.call(arguments, 1);
       if (ev === 'FETCH_ORIGINAL') {
-        charge('pdf').then(function (tok) {
+        // Caller already charged and attached a token (recent-list
+        // original-PDF button) — charging again here would double-pay.
+        if (args[0] && typeof args[0] === 'object' && args[0]._chargeToken) {
+          return origEmit.apply(null, [ev].concat(args));
+        }
+        var ackNo = (args[0] && typeof args[0] === 'object') ? (args[0].ack || '') : '';
+        var pdfKey = ackNo ? 'pdf-' + ackNo : null;
+        S._pdfTok = S._pdfTok || {};
+        var cached = pdfKey && S._pdfTok[pdfKey] && (Date.now() - S._pdfTok[pdfKey].at) < 25 * 60 * 1000 ? S._pdfTok[pdfKey].tok : null;
+        if (cached) {
+          if (args[0] && typeof args[0] === 'object') args[0]._chargeToken = cached;
+          return origEmit.apply(null, [ev].concat(args));
+        }
+        charge('pdf', pdfKey).then(function (tok) {
           if (!tok) return;
+          if (pdfKey) S._pdfTok[pdfKey] = { tok: tok, at: Date.now() };
           if (args[0] && typeof args[0] === 'object') args[0]._chargeToken = tok;
           origEmit.apply(null, [ev].concat(args));
         });

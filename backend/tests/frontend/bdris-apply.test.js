@@ -207,3 +207,38 @@ describe('address book dropdowns (2026-10-15)', () => {
     expect(m[1]).toMatch(/সেভ হচ্ছে না/);
   });
 });
+
+describe('double-charge fix (2026-10-25)', () => {
+  test('charge() sends a client idempotency_key instead of an empty body', () => {
+    expect(html).toMatch(/async function charge\(kind, idempotencyKey\)/);
+    expect(html).toMatch(/idempotency_key: idempotencyKey/);
+  });
+
+  test('submit charge key is stable per flow: draftId, else a sessionStorage key', () => {
+    expect(html).toMatch(/function submitChargeKey\(\)/);
+    expect(html).toMatch(/if \(S\.draftId\) return 'draft-' \+ S\.draftId \+ '-submit'/);
+    expect(html).toMatch(/sessionStorage\.getItem\('bdris_submit_key'\)/);
+  });
+
+  test('OTP submit reuses a fresh cached token instead of charging again', () => {
+    expect(html).toMatch(/function cachedSubmitToken\(\)/);
+    expect(html).toMatch(/25 \* 60 \* 1000/);
+    expect(html).toMatch(/var tok = cachedSubmitToken\(\);/);
+    expect(html).toMatch(/S\._submitTok = tok; S\._submitTokAt = Date\.now\(\)/);
+  });
+
+  test('PDF charge uses a stable key per ack and caches the token per ack', () => {
+    expect(html).toMatch(/var pdfKey = ackNo \? 'pdf-' \+ ackNo : null/);
+    expect(html).toMatch(/S\._pdfTok\[pdfKey\] = \{ tok: tok, at: Date\.now\(\) \}/);
+  });
+
+  test('FETCH_ORIGINAL with an existing token is NOT charged again by the shim', () => {
+    expect(html).toMatch(/if \(args\[0\] && typeof args\[0\] === 'object' && args\[0\]\._chargeToken\)/);
+    expect(html).toMatch(/charge\('pdf', ackNo \? 'pdf-' \+ ackNo : null\)/);
+  });
+
+  test('draft save remembers the submit key and draft open restores it', () => {
+    expect(html).toMatch(/bdris_submit_key_for_' \+ r\.draftId/);
+    expect(html).toMatch(/bdris_submit_key_for_' \+ S\.draftId/);
+  });
+});

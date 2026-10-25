@@ -95,6 +95,17 @@ router.post('/charge/submit', requireAuth, async (req, res) => {
     res.json({ ok: true, charged: r.charged, newBalance: r.newBalance, chargeToken: mintChargeToken(req.user.id, 'submit', ref) });
   } catch (e) {
     safeLog('[bdris-apply] submit charge error:', e.message);
+    // 2026-10-25 double-charge fix: a retry with the same
+    // idempotency_key (OTP retry, network retry after a deduction,
+    // draft resume) must NOT deduct again — it already paid once.
+    // payForService throws DUPLICATE_TRANSACTION before any
+    // deduction, so returning the token for the same ref is safe
+    // and lets the OTP submit proceed instead of blocking it.
+    if (/DUPLICATE_TRANSACTION/.test(e.message)) {
+      const clientKey = (req.body && req.body.idempotency_key) ? String(req.body.idempotency_key).slice(0, 64) : Date.now();
+      const ref = 'bdris-apply-submit-' + clientKey + '-' + req.user.id;
+      return res.json({ ok: true, charged: 0, alreadyCharged: true, message: 'আগে চার্জ হয়ে গেছে — আবার কাটা হয়নি', chargeToken: mintChargeToken(req.user.id, 'submit', ref) });
+    }
     if (/INSUFFICIENT_BALANCE/.test(e.message)) {
       return res.status(402).json({
         error: 'INSUFFICIENT_BALANCE',
@@ -120,6 +131,12 @@ router.post('/charge/pdf', requireAuth, async (req, res) => {
     res.json({ ok: true, charged: r.charged, newBalance: r.newBalance, chargeToken: mintChargeToken(req.user.id, 'pdf', ref) });
   } catch (e) {
     safeLog('[bdris-apply] pdf charge error:', e.message);
+    // 2026-10-25 double-charge fix: same rule as submit above.
+    if (/DUPLICATE_TRANSACTION/.test(e.message)) {
+      const clientKey = (req.body && req.body.idempotency_key) ? String(req.body.idempotency_key).slice(0, 64) : Date.now();
+      const ref = 'bdris-apply-pdf-' + clientKey + '-' + req.user.id;
+      return res.json({ ok: true, charged: 0, alreadyCharged: true, message: 'আগে চার্জ হয়ে গেছে — আবার কাটা হয়নি', chargeToken: mintChargeToken(req.user.id, 'pdf', ref) });
+    }
     if (/INSUFFICIENT_BALANCE/.test(e.message)) {
       return res.status(402).json({
         error: 'INSUFFICIENT_BALANCE',

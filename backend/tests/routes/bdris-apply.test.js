@@ -98,6 +98,19 @@ describe('POST /api/bdris-apply/charge/submit', () => {
     expect(ref).toBe('bdris-apply-submit-' + 'k'.repeat(64) + '-u1');
   });
 
+  test('2026-10-25 double-charge fix: same key again → no new deduction, token returned', async () => {
+    db.__routeQuery([
+      ['FROM services WHERE engine_id', { rows: [{ price: '100' }] }],
+      ['FROM transactions', { rows: [{ 1: 1 }] }],
+    ]);
+    const r = await withUser(request(app()).post('/api/bdris-apply/charge/submit'))
+      .send({ idempotency_key: 'dup-key-1' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, charged: 0, alreadyCharged: true });
+    expect(typeof r.body.chargeToken).toBe('string');
+    expect(r.body.chargeToken.length).toBeGreaterThan(20);
+    expect(db.__client.query.mock.calls.filter((c) => /wallet_apply/.test(c[0]))).toHaveLength(0);
+  });
+
   test('insufficient balance → 402 INSUFFICIENT_BALANCE (Bengali message)', async () => {
     db.__routeQuery([
       ['FROM services WHERE engine_id', { rows: [{ price: '100' }] }],
