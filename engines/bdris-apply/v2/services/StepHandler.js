@@ -41,6 +41,59 @@ function verifyChargeToken(tok, userId, kind, secretOverride) {
   } catch { return false; }
 }
 
+// ── Single-use submit tokens (2026-10-26, A-to-Z audit) ──
+// A charge token is v1.<uid>.<kind>.<ref>.<ts>.<mac> with a 30-minute
+// window, but nothing stopped the SAME token submitting a SECOND,
+// different application within that window (backend idempotency only
+// prevents a second CHARGE, not a second submit). Consumption is
+// therefore recorded ONLY at the clean success point (submitS4's
+// ok:true/completed return, HTTP chain's ok:true return) — never on
+// attempt — so an OTP retry after a failed submit keeps its token.
+// Store is process-local (the engine is one subprocess): an engine
+// restart clears it, which is a documented residual, not a silent
+// bypass — the 30-minute window still bounds any replay.
+// PDF tokens are deliberately NOT consumed: re-downloading one's own
+// already-paid PDF (e.g. from History) is legitimate, and the pdf
+// token's ref is ack-bound via the frontend shim (pdf-<ack>).
+const _consumedSubmitTokens = new Map(); // token -> expiry epoch ms
+function _pruneConsumedSubmitTokens(now) {
+  for (const [t, exp] of _consumedSubmitTokens) if (exp <= now) _consumedSubmitTokens.delete(t);
+  while (_consumedSubmitTokens.size > 5000) {
+    _consumedSubmitTokens.delete(_consumedSubmitTokens.keys().next().value);
+  }
+}
+function isSubmitTokenConsumed(tok) {
+  if (!tok) return false;
+  _pruneConsumedSubmitTokens(Date.now());
+  return _consumedSubmitTokens.has(String(tok));
+}
+// Returns false if the token was already consumed (caller must NOT
+// treat that as a success-path failure — the gate already rejects
+// consumed tokens before any attempt, so this only fires on a
+// concurrent double-submit race, where the submission itself has
+// already happened once).
+function consumeSubmitToken(tok) {
+  const p = String(tok || '').split('.');
+  const ts = parseInt(p[4], 10);
+  if (!ts) return false;
+  const now = Date.now();
+  _pruneConsumedSubmitTokens(now);
+  if (_consumedSubmitTokens.has(String(tok))) return false;
+  _consumedSubmitTokens.set(String(tok), ts + 30 * 60 * 1000);
+  return true;
+}
+
+// কততম সন্তান — v1 thChildSite (live-verified): frontend "৩য়" → সাইট
+// অপশন "৩" (বাংলা সংখ্যা, 1–11)। v2 এতদিন thChild আদৌ বসাত না।
+function thChildSite(v) {
+  const m = bnToArab(bnNorm(v)).match(/(\d{1,2})/);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    if (n >= 1 && n <= 11) return String(n).replace(/[0-9]/g, d => '০১২৩৪৫৬৭৮৯'[+d]);
+  }
+  return v;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Pure helpers — copied faithfully from v1 (engines/bdris-apply/server.js)
 // ═══════════════════════════════════════════════════════════════
@@ -562,15 +615,36 @@ class StepHandler {
       }
     } catch (e) { /* read-back is diagnostic; fill errors already counted */ }
 
-    // DOB
+    // DOB — v1 live-verified pattern (2026-10-10/11), NOT v2's old
+    // '#personDob' + fillInput(raw ISO): 'personDob' appears NOWHERE
+    // else in the repo (no v1, frontend, or site evidence), while the
+    // site's masked date field is #personBirthDate /
+    // personInfoForBirth.personBirthDate, typed DD/MM/YYYY char-by-char
+    // with exact read-back (v1: fill() "মান খেয়ে ফেলে" on masked
+    // fields). Parents already use this exact pattern in v2 (S2).
     if (data.dob) {
-      keep(await this.fillInput('#personDob, input[name*="personDob"]',
-        data.dob, 'জন্ম তারিখ'));
+      keep(await this._typeMaskedDate(
+        ['#personBirthDate', 'input[name="personInfoForBirth.personBirthDate"]'],
+        isoToBdFormat(data.dob), 'জন্ম তারিখ'));
+      // ৪৫+ দিন বয়সে সাইট "অ্যাটাচমেন্ট অ্যাভেইলেবিলিটি চেক" modal
+      // দেখায় (v1 S1) — না সামলালে পরের ক্লিক আটকায়। Frontend
+      // SUBMIT_S1-এ docsAvailable: true পাঠায় (manual + auto দুটোতেই)।
+      const modal = await this._handleAttachmentModal(data.docsAvailable !== false);
+      if (!modal.ok) failed.push({ field: 'কাগজপত্র', reason: modal.reason });
     }
 
-    // Gender, child number
+    // Gender + child number — v1 live-verified selectors. v2's old
+    // '#personGender' / name*="personGender" appears NOWHERE else in
+    // the repo; the site field is #gender / personInfoForBirth.gender.
+    // thChild was a required frontend field ('*' — ১ম..১১তম) that v2
+    // S1 dropped entirely despite its own "child number" comment.
+    if (data.thChild) {
+      keep(await this.selectDropdown(
+        ['#thChild', 'select[name="personInfoForBirth.thChild"]'].join(', '),
+        'কততম সন্তান', thChildSite(data.thChild)));
+    }
     if (data.gender) {
-      keep(await this.selectDropdown('#personGender, select[name*="personGender"]',
+      keep(await this.selectDropdown('#gender, select[name="personInfoForBirth.gender"]',
         'লিঙ্গ', data.gender));
     }
 
@@ -1296,16 +1370,31 @@ class StepHandler {
     }
     // C-1 fix (2026-10-15): server-side charge enforcement — frontend-এর charge
     // ছাড়া সরাসরি emit করলেও টাকা না কেটে সাবমিট হবে না।
+    // Fail-CLOSED (2026-10-26, A-to-Z audit): the old `if (secret)` made
+    // a missing secret silently skip the gate. That cannot happen in
+    // production — backend/auth.js refuses to start without JWT_SECRET,
+    // the adapter spawns this engine with the backend's full env
+    // (engines/bdris-apply/index.js), and backend mints with JWT_SECRET
+    // while this checks ABC_JWT_SECRET || JWT_SECRET — and free services
+    // still get a minted ('free') token, so fail-closed blocks nobody
+    // legitimate. verifyChargeToken already returns false on empty
+    // secret, so dropping the guard is the whole change here.
     const secret = getJwtSecret();
-    if (secret) {
-      if (!verifyChargeToken(data._chargeToken, this.userId, 'submit', secret)) {
-        this.progress('❌ পেমেন্ট যাচাই হয়নি — পেজ রিফ্রেশ করে আবার চেষ্টা করুন।');
-        return {
-          ok: false, blocked: true,
-          message: '❌ পেমেন্ট যাচাই হয়নি — পেজ রিফ্রেশ করে আবার চেষ্টা করুন।',
-          failed: [{ field: 'পেমেন্ট', reason: 'চার্জ টোকেন যাচাই হয়নি' }],
-        };
-      }
+    if (!verifyChargeToken(data._chargeToken, this.userId, 'submit', secret)) {
+      this.progress('❌ পেমেন্ট যাচাই হয়নি — পেজ রিফ্রেশ করে আবার চেষ্টা করুন।');
+      return {
+        ok: false, blocked: true,
+        message: '❌ পেমেন্ট যাচাই হয়নি — পেজ রিফ্রেশ করে আবার চেষ্টা করুন।',
+        failed: [{ field: 'পেমেন্ট', reason: 'চার্জ টোকেন যাচাই হয়নি' }],
+      };
+    }
+    if (isSubmitTokenConsumed(data._chargeToken)) {
+      this.progress('❌ এই পেমেন্টে ইতিমধ্যে একটি আবেদন জমা হয়েছে — নতুন করে চার্জ করে আবার চেষ্টা করুন।');
+      return {
+        ok: false, blocked: true,
+        message: '❌ এই পেমেন্টে ইতিমধ্যে একটি আবেদন জমা হয়েছে — নতুন করে চার্জ করে আবার চেষ্টা করুন।',
+        failed: [{ field: 'পেমেন্ট', reason: 'চার্জ টোকেন ইতিমধ্যে ব্যবহৃত' }],
+      };
     }
     // v1 appData-equivalent for cinno / copy-PDF / original-rec
     const fd = {
@@ -1570,6 +1659,11 @@ class StepHandler {
     let originalRec = null;
     try { originalRec = buildOriginalRec(fd, ackNum); } catch { /* ঐচ্ছিক */ }
 
+    // Clean success point ONLY: the token is consumed here, after the
+    // site accepted the submission (sawSuccess + ack above) — never on
+    // attempt, so OTP retries after a failed submit keep their token.
+    consumeSubmitToken(data._chargeToken);
+
     return {
       ok: true, completed: true, step: 7, blocked: false,
       message: '🎉 BDRIS আবেদন সফলভাবে জমা হয়েছে!',
@@ -1666,6 +1760,33 @@ class StepHandler {
 
   // mask-যুক্ত তারিখ ঘর: fill() মান খেয়ে ফেলে — ক্লিক করে অক্ষর ধরে টাইপ +
   // EXACT read-back, ৩ বার পর্যন্ত। (2026-10-11 live)
+  // Attachment-availability modal — ported from v1 handleAttachmentModal
+  // (live-verified): the site shows it after DOB when the applicant is
+  // 45+ days old (i.e. nearly every applicant). Shown + docs available
+  // -> click "আমার কাছে এই ডকুমেন্টগুলি আছে"; shown + docs not
+  // available -> fail honestly instead of stalling on Next. No modal
+  // text -> no-op. v2 previously had no handling at all.
+  async _handleAttachmentModal(docsAvailable = true) {
+    let text = '';
+    try {
+      text = await this.page.evaluate(() => (document.body ? (document.body.innerText || '') : ''));
+    } catch { return { ok: true, shown: false }; }
+    if (!/অ্যাটাচমেন্ট অ্যাভেইলেবিলিটি চেক/.test(text)) return { ok: true, shown: false };
+    if (!docsAvailable) {
+      return { ok: false, shown: true, reason: 'প্রয়োজনীয় ডকুমেন্ট হাতে নেই — BDRIS এগোতে দেবে না' };
+    }
+    const btn = await this._waitVisible(['button:has-text("আমার কাছে এই ডকুমেন্টগুলি আছে")'], 8000);
+    if (!btn) {
+      return { ok: false, shown: true, reason: 'কাগজপত্র সংক্রান্ত বার্তার "আছে" বাটন পাওয়া যায়নি — আবার চেষ্টা করুন' };
+    }
+    const clicked = await btn.click({ timeout: 6000 }).then(() => true).catch(() => false);
+    if (!clicked) {
+      return { ok: false, shown: true, reason: 'কাগজপত্র সংক্রান্ত বার্তার বাটনে ক্লিক হয়নি — আবার চেষ্টা করুন' };
+    }
+    await this.page.waitForTimeout(1200).catch(() => {});
+    return { ok: true, shown: true };
+  }
+
   async _typeMaskedDate(selectors, dobF, label) {
     const list = Array.isArray(selectors) ? selectors : [selectors];
     const el = await this._waitVisible(list);
@@ -2025,4 +2146,4 @@ class StepHandler {
   }
 }
 
-module.exports = { StepHandler, verifyChargeToken, bnToArab };
+module.exports = { StepHandler, verifyChargeToken, bnToArab, thChildSite, consumeSubmitToken, isSubmitTokenConsumed };

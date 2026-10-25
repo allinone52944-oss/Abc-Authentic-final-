@@ -63,7 +63,7 @@
 'use strict';
 
 const { BdrisHttpClient } = require('../http/client');
-const { verifyChargeToken, bnToArab } = require('./StepHandler');
+const { verifyChargeToken, bnToArab, consumeSubmitToken, isSubmitTokenConsumed } = require('./StepHandler');
 
 const HTTP_CANDIDATE_LABEL = 'CANDIDATE (submit/verify shapes from the pasted form source, NOT live-verified)';
 const HTTP_BASE = 'https://bdris.gov.bd';
@@ -240,13 +240,17 @@ async function runHttpChain(opts = {}) {
   const baseResult = { path: 'http', candidate: true, candidateLabel: HTTP_CANDIDATE_LABEL };
 
   // ── Gate (identical to Playwright submitS4; never bypassed) ──
-  if (secret) {
-    if (!verifyChargeToken(data._chargeToken, userId, 'submit', secret)) {
-      candidateLog(log, 'gate', 'CHARGE_REQUIRED — charge token did not verify; chain blocked, no HTTP attempt, no Playwright fallback');
-      return { ...baseResult, ok: false, blocked: true, error: 'CHARGE_REQUIRED', message: '❌ পেমেন্ট যাচাই হয়নি — পেজ রিফ্রেশ করে আবার চেষ্টা করুন।' };
-    }
-  } else {
-    candidateLog(log, 'gate', 'no JWT secret configured — charge gate skipped, same as Playwright without a secret');
+  // Fail-CLOSED (2026-10-26, A-to-Z audit): see submitS4 — backend
+  // cannot start without JWT_SECRET and the adapter passes the full
+  // env to the engine, so a missing secret is misconfiguration, not
+  // a free pass. verifyChargeToken returns false on empty secret.
+  if (!verifyChargeToken(data._chargeToken, userId, 'submit', secret)) {
+    candidateLog(log, 'gate', 'CHARGE_REQUIRED — charge token did not verify; chain blocked, no HTTP attempt, no Playwright fallback');
+    return { ...baseResult, ok: false, blocked: true, error: 'CHARGE_REQUIRED', message: '❌ পেমেন্ট যাচাই হয়নি — পেজ রিফ্রেশ করে আবার চেষ্টা করুন।' };
+  }
+  if (isSubmitTokenConsumed(data._chargeToken)) {
+    candidateLog(log, 'gate', 'CHARGE_TOKEN_CONSUMED — token already used for a successful submit; chain blocked');
+    return { ...baseResult, ok: false, blocked: true, error: 'CHARGE_TOKEN_CONSUMED', message: '❌ এই পেমেন্টে ইতিমধ্যে একটি আবেদন জমা হয়েছে — নতুন করে চার্জ করে আবার চেষ্টা করুন।' };
   }
 
   const norm = normalizeChainInput(data);
@@ -348,6 +352,9 @@ async function runHttpChain(opts = {}) {
     stepsDone.push('submit');
 
     candidateLog(log, 'done', `HTTP chain complete (steps: ${stepsDone.join(', ')}); success accepted only on the verified success shape`);
+    // Clean success point ONLY (same rule as submitS4): consume here,
+    // never on attempt, so retries after a failed chain keep the token.
+    consumeSubmitToken(data._chargeToken);
     return {
       ...baseResult, ok: true, success: true, hasPrintLink: !!submitted.hasPrintLink,
       steps: stepsDone, ackNumber: null, // never extracted: format unverified

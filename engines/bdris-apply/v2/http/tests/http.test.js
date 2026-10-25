@@ -570,8 +570,8 @@ function runnerInput(overrides = {}) {
   });
 }
 
-function validChargeToken(userId, secret) {
-  const head = `v1.${userId}.submit.ref-1.${Date.now()}`;
+function validChargeToken(userId, secret, ref = 'ref-1') {
+  const head = `v1.${userId}.submit.${ref}.${Date.now()}`;
   const mac = nodeCrypto.createHmac('sha256', secret).update(head).digest('hex');
   return `${head}.${mac}`;
 }
@@ -608,7 +608,9 @@ describe('HttpPathRunner (HTTP primary, Playwright fallback)', () => {
     const badChain = mockGeoChain();
     badChain.steps = [{ geoType: 1, nameBn: 'নেই' }];
     const out = await runHttpChain({
-      data: runnerInput({ geoChain: badChain }),
+      data: runnerInput({ geoChain: badChain, _chargeToken: validChargeToken('user-1', 'test-secret', 'ref-geo') }),
+      userId: 'user-1',
+      secret: 'test-secret',
       client,
       playwrightRunner: async () => { stubCalls += 1; return { ok: true, completed: true }; },
       log: (m) => logs.push(String(m)),
@@ -626,7 +628,7 @@ describe('HttpPathRunner (HTTP primary, Playwright fallback)', () => {
     const client = new BdrisHttpClient({ base });
     const badChain = mockGeoChain();
     badChain.steps = [{ geoType: 1, nameBn: 'নেই' }];
-    const out = await runHttpChain({ data: runnerInput({ geoChain: badChain }), client, log: () => {} });
+    const out = await runHttpChain({ data: runnerInput({ geoChain: badChain, _chargeToken: validChargeToken('user-1', 'test-secret', 'ref-norunner') }), userId: 'user-1', secret: 'test-secret', client, log: () => {} });
     assert.strictEqual(out.ok, false);
     assert.strictEqual(out.fallback, true);
     assert.strictEqual(out.httpStep, 'geo');
@@ -664,7 +666,9 @@ describe('HttpPathRunner (HTTP primary, Playwright fallback)', () => {
       submitApplication: async () => { throw new Error('socket hangup'); }, // no .code: outcome unknown
     };
     const out = await runHttpChain({
-      data: completeApplication(),
+      data: completeApplication({ _chargeToken: validChargeToken('user-1', 'test-secret', 'ref-unknown') }),
+      userId: 'user-1',
+      secret: 'test-secret',
       client: fakeClient,
       playwrightRunner: async () => { stubCalls += 1; return { ok: true }; },
       log: () => {},

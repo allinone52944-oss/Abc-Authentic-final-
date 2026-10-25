@@ -230,11 +230,16 @@ class BdrisEngineV2 {
         const data = params || {};
         const userId = ctx.socket?.abcUser?.id || null;
 
+        // Fail-CLOSED (2026-10-26, A-to-Z audit): same proof as
+        // submitS4 — backend cannot start without JWT_SECRET and the
+        // adapter spawns this engine with the backend's full env, so a
+        // missing secret here is a misconfiguration, not a free pass.
+        // verifyChargeToken already returns false on empty secret.
+        // PDF tokens are NOT single-use consumed (re-downloading one's
+        // own paid PDF is legitimate; see StepHandler).
         const secret = process.env.ABC_JWT_SECRET || process.env.JWT_SECRET || '';
-        if (secret) {
-          if (!verifyChargeToken(data._chargeToken, userId, 'pdf', secret)) {
-            throw new Error('CHARGE_REQUIRED');
-          }
+        if (!verifyChargeToken(data._chargeToken, userId, 'pdf', secret)) {
+          throw new Error('CHARGE_REQUIRED');
         }
 
         const ack = String(data.ack || data.ackId || '').replace(/\D/g, '');
