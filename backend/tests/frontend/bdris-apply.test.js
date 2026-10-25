@@ -243,6 +243,35 @@ describe('double-charge fix (2026-10-25)', () => {
   });
 });
 
+describe('header back button must not use browser history (2026-10-25)', () => {
+  test('header "← ফিরে যান" button does not call history.back()', () => {
+    // Live-verified 2026-10-25 (deploy d069316): history.back() landed
+    // on login.html, because after the login redirect the previous
+    // history entry IS login.html — and login.html's doLogin() success
+    // path leaves its submit button disabled with "⏳ যাচাই করা হচ্ছে..."
+    // text, so the restored page looked stuck on verifying. The session
+    // itself was never lost (direct return to bdris-apply.html worked).
+    expect(html).not.toMatch(/history\.back\(\)/);
+  });
+
+  test('header back button returns to the in-app home view, not login', () => {
+    // The button keeps its label and style but is wired in script scope
+    // (like brandHome) to renderHome() — the same target every other
+    // in-page back button uses — so it never leaves the page, never
+    // touches login.html, and never logs the user out.
+    expect(html).toMatch(/<button id="topBackBtn"[^>]*>← ফিরে যান<\/button>/);
+    expect(html).toMatch(/\$\('topBackBtn'\)\.onclick = \(\) => renderHome\(\);/);
+    const wiring = html.match(/\$\('topBackBtn'\)\.onclick = \(\) => renderHome\(\);/);
+    expect(wiring).not.toBeNull();
+    // The wiring itself must not navigate anywhere (no location.href).
+    expect(html.slice(html.indexOf("$('topBackBtn')"), html.indexOf("$('topBackBtn')") + 60)).not.toMatch(/location\.href/);
+  });
+
+  test('no inline history.back handler remains anywhere on the page', () => {
+    expect(html).not.toMatch(/onclick="history\.back\(\)"/);
+  });
+});
+
 describe('session-start speed fix (2026-10-25)', () => {
   test('startSession timeout is 60s, not 30s (production START→READY measured 35–41s)', () => {
     const m = html.match(/S\._startT = setTimeout\(\(\) => \{[\s\S]*?\}, (\d+)\)/);

@@ -128,6 +128,44 @@ gate-block, outcome-unknown, flag) and `v2/tests/unit.test.js`
 (flag/label/normalizer). Nothing here was pushed, deployed, or
 sent to live bdris.gov.bd.
 
+## Probe vs execution contract (2026-10-25 fix — read before wiring)
+
+What the disabled branch actually did before this fix (confirmed
+from code, not assumed): when `BDRIS_HTTP_PATH` was not opted in,
+`SUBMIT_HTTP_CHAIN` logged "running Playwright directly", AWAITED
+the full Playwright chain (S0→S4, including submit) via the
+session's page, and returned `{...playwrightResult,
+httpPath:'disabled'}` — and threw if there was no browser session
+at all. A frontend "probe, then run the old flow if disabled"
+would therefore have double-executed Playwright. That behaviour
+is gone, on purpose, and is a contract change: any caller that
+relied on disabled-means-Playwright-runs must be updated.
+
+- `HTTP_PATH_STATUS` (new, non-destructive probe): returns ONLY
+  `{httpPath:'enabled'|'disabled', enabled, ready:true,
+  candidate:true, candidateLabel}`. It never starts a session,
+  sends OTP, uploads, submits, runs Playwright, logs, emits, or
+  changes any state, and needs no session. `ready:true` means
+  ONLY that the engine process answered the probe — not that
+  bdris.gov.bd or a session is ready. Wiring rule: call the probe
+  FIRST, with no `_commandId` (the executor caches by
+  `_commandId`, so a reused id would return a stale status).
+- `SUBMIT_HTTP_CHAIN` when disabled (default): returns
+  `{ok:false, httpPath:'disabled', disabled:true,
+  error:'HTTP_PATH_DISABLED', candidate:true, candidateLabel,
+  message}` WITHOUT executing anything — no Playwright, no
+  charge-gate check, no HTTP. The CALLER (the existing frontend
+  Playwright flow) remains responsible for running Playwright
+  itself. When enabled, behaviour is unchanged (full chain,
+  charge gate first, fallback rules unchanged, candidate label
+  unchanged).
+- Still open (NOT implemented here, must not be guessed):
+  (a) submit-only HTTP that reuses an already-sent OTP and
+  already-uploaded docs instead of re-sending OTP; (b) an ack
+  reference in the HTTP success result usable by `showDone()`;
+  (c) live capture (names only) confirming the real submit
+  method/field list and verify params; (d) first-parent source.
+
 ## Files
 
 - `client.js` — `BdrisHttpClient`, `CookieJar`, `GeoCache`,

@@ -37,7 +37,7 @@ const { BdrisNavigator } = require('./services/BdrisNavigator');
 const { AddressService } = require('./services/AddressService');
 const { StepHandler, verifyChargeToken } = require('./services/StepHandler');
 const { OriginalFetcher } = require('./services/OriginalFetcher');
-const { runHttpChain, isHttpPathEnabled, HTTP_CANDIDATE_LABEL } = require('./services/HttpPathRunner');
+const { runSubmitHttpChain, getHttpPathStatus } = require('./services/HttpPathRunner');
 
 class BdrisEngineV2 {
   constructor(io, options = {}) {
@@ -244,14 +244,38 @@ class BdrisEngineV2 {
       );
     }
 
+    // ── HTTP_PATH_STATUS: non-destructive probe (no session needed) ──
+    // Returns ONLY {httpPath, enabled, ready, candidate, candidateLabel}.
+    // It never starts a session, sends OTP, uploads, submits, runs
+    // Playwright, or changes any state, and it never logs or emits.
+    // Frontend wiring rule: call this FIRST, with no _commandId
+    // (the executor caches by _commandId, so a reused id would
+    // return a stale status). If it says disabled, the frontend
+    // runs its existing Playwright flow itself — it must NOT call
+    // SUBMIT_HTTP_CHAIN expecting it to run Playwright.
+    // `ready: true` means only that the engine process answered
+    // the probe, not that bdris.gov.bd or a session is ready.
+    this.executor.register('HTTP_PATH_STATUS',
+      async () => getHttpPathStatus(),
+      { timeoutMs: 5000 }
+    );
+
     // ── SUBMIT_HTTP_CHAIN: HTTP-first full chain (opt-in only) ──
-    // Runs bootstrap → geo (if a geoChain spec is supplied) → upload
-    // 40/41 → OTP send → verify → submit via BdrisHttpClient, behind
-    // the SAME charge-token gate Playwright submitS4 enforces (the
-    // runner blocks on a bad token before any HTTP attempt). On any
-    // HTTP failure the runner falls back to the Playwright steps
-    // below for this session and logs the step + reason; a submit
-    // whose outcome is unknown never auto-retries (see HttpPathRunner).
+    // CONTRACT (2026-10-25 probe fix — read before wiring):
+    //  * Disabled (default): returns {ok:false, httpPath:'disabled',
+    //    error:'HTTP_PATH_DISABLED'} WITHOUT executing anything —
+    //    no Playwright, no charge-gate check, no HTTP. The CALLER
+    //    (existing frontend Playwright flow) runs Playwright itself.
+    //    Before this fix the disabled branch AWAITED the full
+    //    Playwright chain, so a frontend probe-then-old-flow would
+    //    have double-executed; that behaviour is gone, on purpose.
+    //  * Enabled: bootstrap → geo (if a geoChain spec is supplied)
+    //    → upload 40/41 → OTP send → verify → submit via
+    //    BdrisHttpClient, behind the SAME charge-token gate
+    //    Playwright submitS4 enforces. On HTTP failure the runner
+    //    falls back to the Playwright steps below for this session
+    //    and logs step + reason; a submit whose outcome is unknown
+    //    never auto-retries (see HttpPathRunner).
     // Submit/verify payloads are CANDIDATE until a live capture
     // confirms them — the label is on every log line and response.
     // Env: BDRIS_HTTP_PATH=on (or 1/true/yes/enabled) OPTS IN to the
@@ -269,6 +293,10 @@ class BdrisEngineV2 {
 
         // Playwright adapter: the existing step path, split from the
         // combined draft exactly as the per-step commands receive it.
+        // NOTE: constructing this closure executes nothing — the
+        // adapter body runs only if runSubmitHttpChain invokes it,
+        // which the disabled branch never does (proven by test:
+        // a counting fake adapter stays at 0 calls when disabled).
         const playwrightRunner = session?.page ? async (data) => {
           const nav = new BdrisNavigator(session.page);
           const handler = new StepHandler(nav, {
@@ -298,14 +326,7 @@ class BdrisEngineV2 {
           return { ok: true, path: 'playwright', completed: true };
         } : null;
 
-        if (!isHttpPathEnabled()) {
-          this.log(`[HTTP-CANDIDATE] http-path disabled (opt-in BDRIS_HTTP_PATH=on not set) — running Playwright directly — ${HTTP_CANDIDATE_LABEL}`);
-          if (!playwrightRunner) throw new Error('HTTP_PATH_DISABLED and no browser session for Playwright fallback');
-          const r = await playwrightRunner(params);
-          return { ...r, httpPath: 'disabled', candidate: true, candidateLabel: HTTP_CANDIDATE_LABEL };
-        }
-
-        return runHttpChain({
+        return runSubmitHttpChain({
           data: params,
           userId,
           secret,

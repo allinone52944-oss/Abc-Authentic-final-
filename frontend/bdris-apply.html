@@ -403,7 +403,7 @@ input.bad, select.bad{border-color:var(--err); box-shadow:0 0 0 3px rgba(251,113
 <body>
 <div class="wrap">
   <div class="topbar">
-    <button onclick="history.back()" style="background:none;border:1px solid #2563eb;color:#2563eb;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:14px;">← ফিরে যান</button>
+    <button id="topBackBtn" style="background:none;border:1px solid #2563eb;color:#2563eb;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:14px;">← ফিরে যান</button>
     <div class="brand" id="brandHome">
       <div class="blogo">জ</div>
       <div>
@@ -3631,6 +3631,16 @@ updDraftsCnt();
 $('draftsBtn').onclick = () => renderDrafts();
 $('addrBtn').onclick = () => renderAddrBook(null, () => renderHome());
 $('brandHome').onclick = () => renderHome();
+// Back-button fix (2026-10-25): the header "← ফিরে যান" button used to
+// call the browser-history back step. After a login redirect the previous
+// history entry IS login.html, so "back" landed on a frozen login page whose
+// submit button was left disabled with "⏳ যাচাই করা হচ্ছে..." text by
+// login.html's doLogin() success path (it navigates away without ever
+// restoring the button, and login.html has no already-logged-in redirect
+// or pageshow restore). In-app back must never touch browser history:
+// like every other back button on this page it returns to the in-app
+// home view, leaving the session untouched and the user logged in.
+$('topBackBtn').onclick = () => renderHome();
 $('logoutBtn').onclick = async () => {
   try {
     const rt = localStorage.getItem('abc_refresh_token');

@@ -78,6 +78,65 @@ function isHttpPathEnabled(env = process.env) {
   return ['on', '1', 'true', 'yes', 'enabled'].includes(raw);
 }
 
+/**
+ * Non-destructive status probe (HTTP_PATH_STATUS). Pure function:
+ * it reads only the enable flag and returns a status object. It
+ * NEVER starts a session, sends OTP, uploads, submits, runs
+ * Playwright, or changes any state — it does not even create an
+ * HTTP client. Callers must not attach a dedup _commandId to the
+ * probe (the executor caches by _commandId), or they will get a
+ * stale cached status instead of a fresh one.
+ *
+ * `ready: true` means ONLY that the engine process answered this
+ * probe. It says nothing about bdris.gov.bd reachability, a
+ * browser session, or a form page — those are live state the
+ * probe deliberately never touches.
+ */
+function getHttpPathStatus(env = process.env) {
+  const enabled = isHttpPathEnabled(env);
+  return {
+    httpPath: enabled ? 'enabled' : 'disabled',
+    enabled,
+    ready: true,
+    candidate: true,
+    candidateLabel: HTTP_CANDIDATE_LABEL,
+  };
+}
+
+/**
+ * SUBMIT_HTTP_CHAIN entry point, separated from execution so the
+ * disabled branch can never double-execute (2026-10-25 fix).
+ *
+ * BEFORE this fix, the server's disabled branch AWAITED the full
+ * Playwright chain (S0→S4, including submit) and then returned
+ * {...playwrightResult, httpPath:'disabled'}. A frontend "probe,
+ * then run the old flow if disabled" would therefore have run
+ * Playwright twice: once inside this command, once in the old flow.
+ *
+ * NOW: when HTTP is disabled this function returns immediately
+ * with httpPath:'disabled' and NEVER invokes playwrightRunner,
+ * NEVER checks the charge gate, and NEVER touches HTTP or a
+ * browser. The CALLER — the existing frontend Playwright flow —
+ * remains responsible for running Playwright itself. When HTTP is
+ * enabled, behaviour is unchanged: runHttpChain with the charge
+ * gate first, Playwright fallback on HTTP failure, candidate
+ * label everywhere, and no fallback on unknown submit outcome.
+ */
+async function runSubmitHttpChain(opts = {}) {
+  if (!isHttpPathEnabled(opts.env)) {
+    return {
+      ok: false,
+      httpPath: 'disabled',
+      disabled: true,
+      error: 'HTTP_PATH_DISABLED',
+      candidate: true,
+      candidateLabel: HTTP_CANDIDATE_LABEL,
+      message: 'HTTP path is disabled (opt-in BDRIS_HTTP_PATH=on not set) — this command executed nothing; the caller runs the existing Playwright flow itself.',
+    };
+  }
+  return runHttpChain(opts);
+}
+
 /** Accept draft shape or canonical shape; return canonical + extras. */
 function normalizeChainInput(data = {}) {
   const s1 = data.s1 || {};
@@ -295,4 +354,4 @@ async function runHttpChain(opts = {}) {
   }
 }
 
-module.exports = { runHttpChain, normalizeChainInput, isHttpPathEnabled, isFallbackSafe, HTTP_CANDIDATE_LABEL, HTTP_BASE };
+module.exports = { runHttpChain, runSubmitHttpChain, getHttpPathStatus, normalizeChainInput, isHttpPathEnabled, isFallbackSafe, HTTP_CANDIDATE_LABEL, HTTP_BASE };

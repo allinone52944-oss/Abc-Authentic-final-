@@ -517,7 +517,7 @@ describe('success-page parsing (later step)', () => {
 
 // ---- HttpPathRunner integration (mock server only, no browser) ----
 const nodeCrypto = require('node:crypto');
-const { runHttpChain, isHttpPathEnabled, HTTP_CANDIDATE_LABEL } = require('../../services/HttpPathRunner');
+const { runHttpChain, runSubmitHttpChain, getHttpPathStatus, isHttpPathEnabled, HTTP_CANDIDATE_LABEL } = require('../../services/HttpPathRunner');
 
 function mockGeoChain() {
   return {
@@ -647,6 +647,44 @@ describe('HttpPathRunner (HTTP primary, Playwright fallback)', () => {
     assert.strictEqual(out.ok, false);
     assert.strictEqual(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
     assert.strictEqual(out.httpStep, 'submit');
+  });
+
+  it('HTTP_PATH_STATUS probe is state-free and disabled runSubmitHttpChain hits no HTTP and no Playwright', async () => {
+    const status1 = getHttpPathStatus({ BDRIS_HTTP_PATH: 'off' });
+    const status2 = getHttpPathStatus({ BDRIS_HTTP_PATH: 'off' });
+    assert.deepStrictEqual(status1, status2);
+    assert.strictEqual(status1.httpPath, 'disabled');
+    assert.strictEqual(status1.ready, true);
+    assert.strictEqual(status1.candidateLabel, HTTP_CANDIDATE_LABEL);
+    let stubCalls = 0;
+    const submitBefore = state.submitHits;
+    const out = await runSubmitHttpChain({
+      data: runnerInput(),
+      env: { BDRIS_HTTP_PATH: 'off' },
+      playwrightRunner: async () => { stubCalls += 1; return { ok: true }; },
+    });
+    assert.strictEqual(stubCalls, 0, 'disabled chain must not run Playwright');
+    assert.strictEqual(state.submitHits, submitBefore, 'disabled chain must not hit the submit endpoint either');
+    assert.strictEqual(out.httpPath, 'disabled');
+    assert.strictEqual(out.error, 'HTTP_PATH_DISABLED');
+  });
+
+  it('enabled runSubmitHttpChain delegates to the full HTTP chain (mock server, no browser)', async () => {
+    const client = new BdrisHttpClient({ base });
+    const submitBefore = state.submitHits;
+    const out = await runSubmitHttpChain({
+      data: runnerInput({ _chargeToken: validChargeToken('user-1', 'test-secret') }),
+      userId: 'user-1',
+      secret: 'test-secret',
+      env: { BDRIS_HTTP_PATH: 'on' },
+      client,
+      playwrightRunner: async () => { throw new Error('fallback must not run on success'); },
+      log: () => {},
+    });
+    assert.strictEqual(out.ok, true);
+    assert.strictEqual(out.path, 'http');
+    assert.strictEqual(out.candidate, true);
+    assert.strictEqual(state.submitHits, submitBefore + 1);
   });
 
   it('isHttpPathEnabled defaults OFF (opt-in only) and honours on/off values', () => {

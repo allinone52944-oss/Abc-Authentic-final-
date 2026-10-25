@@ -372,7 +372,51 @@ describe('BrowserManager warm pool (2026-10-25)', () => {
 });
 
 // HttpPathRunner flag + candidate label (no browser, no network)
-const { isHttpPathEnabled, HTTP_CANDIDATE_LABEL, normalizeChainInput } = require('../services/HttpPathRunner');
+const { isHttpPathEnabled, HTTP_CANDIDATE_LABEL, normalizeChainInput, getHttpPathStatus, runSubmitHttpChain } = require('../services/HttpPathRunner');
+
+// Probe-vs-execution contract (2026-10-25 fix): HTTP_PATH_STATUS
+// must be state-free, and a disabled SUBMIT_HTTP_CHAIN must execute
+// NOTHING — before this fix its disabled branch awaited the full
+// Playwright chain, so a frontend probe-then-old-flow would double.
+describe('HttpPathStatus probe + disabled SUBMIT_HTTP_CHAIN contract', () => {
+  it('probe is state-free: identical twice, env object untouched, no client/session needed', () => {
+    const env = { BDRIS_HTTP_PATH: 'off' };
+    const before = { ...env };
+    const a = getHttpPathStatus(env);
+    const b = getHttpPathStatus(env);
+    assert.deepStrictEqual(a, b, 'probe must be deterministic and side-effect-free');
+    assert.deepStrictEqual(env, before, 'probe must not mutate its env input');
+    assert.strictEqual(a.httpPath, 'disabled');
+    assert.strictEqual(a.enabled, false);
+    assert.strictEqual(a.ready, true, 'ready means only that the engine process answered the probe');
+    assert.strictEqual(a.candidate, true);
+    assert.strictEqual(a.candidateLabel, HTTP_CANDIDATE_LABEL);
+    const on = getHttpPathStatus({ BDRIS_HTTP_PATH: 'on' });
+    assert.strictEqual(on.httpPath, 'enabled');
+    assert.strictEqual(on.enabled, true);
+  });
+
+  it('disabled SUBMIT_HTTP_CHAIN executes nothing: fake Playwright adapter stays at 0 calls, even with no adapter', async () => {
+    let calls = 0;
+    const out = await runSubmitHttpChain({
+      data: { s1: {} },
+      env: {},
+      playwrightRunner: async () => { calls += 1; return { ok: true, completed: true }; },
+    });
+    assert.strictEqual(calls, 0, 'disabled chain must never invoke the Playwright adapter');
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.httpPath, 'disabled');
+    assert.strictEqual(out.disabled, true);
+    assert.strictEqual(out.error, 'HTTP_PATH_DISABLED');
+    assert.strictEqual(out.candidate, true);
+    assert.strictEqual(out.candidateLabel, HTTP_CANDIDATE_LABEL);
+    // Old code threw 'HTTP_PATH_DISABLED and no browser session' here;
+    // the new contract returns the disabled signal with no adapter at all.
+    const noAdapter = await runSubmitHttpChain({ data: {}, env: { BDRIS_HTTP_PATH: '' } });
+    assert.strictEqual(noAdapter.httpPath, 'disabled');
+    assert.strictEqual(noAdapter.error, 'HTTP_PATH_DISABLED');
+  });
+});
 
 describe('HttpPathRunner flag/label', () => {
   it('defaults to Playwright (HTTP opt-in only) and labels every path candidate', () => {
