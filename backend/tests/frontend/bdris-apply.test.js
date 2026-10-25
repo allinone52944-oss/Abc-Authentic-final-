@@ -254,21 +254,61 @@ describe('header back button must not use browser history (2026-10-25)', () => {
     expect(html).not.toMatch(/history\.back\(\)/);
   });
 
-  test('header back button returns to the in-app home view, not login', () => {
-    // The button keeps its label and style but is wired in script scope
-    // (like brandHome) to renderHome() — the same target every other
-    // in-page back button uses — so it never leaves the page, never
-    // touches login.html, and never logs the user out.
+  test('header back button returns to the entry page, not login, not history', () => {
+    // Corrected 2026-10-25 to the user's logic ("back = where you came
+    // from"): the button is wired to goBackToEntry(), which navigates
+    // to the entry page recorded on load, falling back to the in-app
+    // start screen only when no entry page is known. It never leaves
+    // via history and never targets login.html.
     expect(html).toMatch(/<button id="topBackBtn"[^>]*>← ফিরে যান<\/button>/);
-    expect(html).toMatch(/\$\('topBackBtn'\)\.onclick = \(\) => renderHome\(\);/);
-    const wiring = html.match(/\$\('topBackBtn'\)\.onclick = \(\) => renderHome\(\);/);
-    expect(wiring).not.toBeNull();
-    // The wiring itself must not navigate anywhere (no location.href).
-    expect(html.slice(html.indexOf("$('topBackBtn')"), html.indexOf("$('topBackBtn')") + 60)).not.toMatch(/location\.href/);
+    expect(html).toMatch(/\$\('topBackBtn'\)\.onclick = \(\) => goBackToEntry\(\);/);
+    expect(html).toMatch(/function goBackToEntry\(\)/);
+    expect(html).toMatch(/sessionStorage\.getItem\('bdris_apply_entry'\)/);
+    expect(html).toMatch(/rememberEntry\(\)/);
   });
 
   test('no inline history.back handler remains anywhere on the page', () => {
     expect(html).not.toMatch(/onclick="history\.back\(\)"/);
+  });
+});
+
+describe('entry-page logic for the back button (2026-10-25, real run)', () => {
+  // Extract the pure helper from the real page and run it — not just
+  // a regex presence check.
+  let entryUrlFromReferrer;
+  beforeAll(() => {
+    const m = html.match(/function entryUrlFromReferrer\(referrer, currentHref\) \{[\s\S]*?\n\}/);
+    expect(m).not.toBeNull();
+    entryUrlFromReferrer = eval('(' + m[0].replace(/^function entryUrlFromReferrer/, 'function') + ')');
+  });
+
+  test('dashboard entry is accepted', () => {
+    expect(entryUrlFromReferrer('https://abc-authentic.store/dashboard.html', 'https://abc-authentic.store/bdris-apply.html'))
+      .toBe('https://abc-authentic.store/dashboard.html');
+  });
+
+  test('service-detail entry (with query) is accepted', () => {
+    expect(entryUrlFromReferrer('https://abc-authentic.store/service-detail.html?id=x', 'https://abc-authentic.store/bdris-apply.html'))
+      .toBe('https://abc-authentic.store/service-detail.html?id=x');
+  });
+
+  test('login.html entry is rejected (login redirect must not become "back")', () => {
+    expect(entryUrlFromReferrer('https://abc-authentic.store/login.html?next=%2Fbdris-apply.html', 'https://abc-authentic.store/bdris-apply.html'))
+      .toBeNull();
+  });
+
+  test('cross-origin referrer is rejected', () => {
+    expect(entryUrlFromReferrer('https://example.com/page.html', 'https://abc-authentic.store/bdris-apply.html'))
+      .toBeNull();
+  });
+
+  test('same-page referrer (reload) is rejected, so a reload cannot overwrite the entry', () => {
+    expect(entryUrlFromReferrer('https://abc-authentic.store/bdris-apply.html', 'https://abc-authentic.store/bdris-apply.html'))
+      .toBeNull();
+  });
+
+  test('empty referrer is rejected', () => {
+    expect(entryUrlFromReferrer('', 'https://abc-authentic.store/bdris-apply.html')).toBeNull();
   });
 });
 

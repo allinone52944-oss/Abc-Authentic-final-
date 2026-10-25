@@ -3625,22 +3625,69 @@ socket.on('BOT_STATUS', (d) => {
   }
 });
 
+/* ═══════════ entry-aware back (user's logic, 2026-10-25) ═══════════
+ * "Back" means: return to the page the user came FROM to reach this
+ * page — not the apply page's own start screen, not the site dashboard
+ * by assumption, and NEVER login.html. The old history-back call failed
+ * exactly here: after a login redirect the previous history entry IS
+ * login.html, whose doLogin() success path leaves its button disabled
+ * with "⏳ যাচাই করা হচ্ছে..." text, so back looked stuck. The
+ * 2026-10-25 renderHome() fix removed the stuck-login symptom but
+ * returned to the wrong place (the apply page's own start screen).
+ * This version records the real entry page on load (document.referrer,
+ * same origin only, login.html and same-page reloads ignored, kept in
+ * sessionStorage for this tab only) and the header back button goes
+ * there. If no entry page is known (direct visit, or entry lost to a
+ * login redirect whose referrer is login.html), it falls back to the
+ * in-app start screen — never to login.html, never to history. */
+function entryUrlFromReferrer(referrer, currentHref) {
+  try {
+    if (!referrer) return null;
+    const r = new URL(referrer, currentHref);
+    const c = new URL(currentHref);
+    if (r.origin !== c.origin) return null;
+    if (r.pathname === '/login.html') return null;
+    if (r.pathname === c.pathname) return null;
+    return r.href;
+  } catch (e) { return null; }
+}
+function rememberEntry() {
+  try {
+    let u = null;
+    try {
+      const from = new URLSearchParams(location.search).get('from');
+      if (from) u = entryUrlFromReferrer(from, location.href);
+    } catch (e) {}
+    if (!u) u = entryUrlFromReferrer(document.referrer, location.href);
+    if (u) sessionStorage.setItem('bdris_apply_entry', u);
+  } catch (e) {}
+}
+function goBackToEntry() {
+  try {
+    const u = sessionStorage.getItem('bdris_apply_entry');
+    if (u) { location.href = u; return; }
+  } catch (e) {}
+  renderHome();
+}
+
 /* ═══════════ init ═══════════ */
+rememberEntry();
 renderHome();
 updDraftsCnt();
 $('draftsBtn').onclick = () => renderDrafts();
 $('addrBtn').onclick = () => renderAddrBook(null, () => renderHome());
 $('brandHome').onclick = () => renderHome();
-// Back-button fix (2026-10-25): the header "← ফিরে যান" button used to
-// call the browser-history back step. After a login redirect the previous
-// history entry IS login.html, so "back" landed on a frozen login page whose
-// submit button was left disabled with "⏳ যাচাই করা হচ্ছে..." text by
-// login.html's doLogin() success path (it navigates away without ever
-// restoring the button, and login.html has no already-logged-in redirect
-// or pageshow restore). In-app back must never touch browser history:
-// like every other back button on this page it returns to the in-app
-// home view, leaving the session untouched and the user logged in.
-$('topBackBtn').onclick = () => renderHome();
+// Back-button fix (2026-10-25, corrected same day to the user's logic):
+// the header "← ফিরে যান" button used to call the browser-history back
+// step. After a login redirect the previous history entry IS login.html,
+// so "back" landed on a frozen login page whose submit button was left
+// disabled with "⏳ যাচাই করা হচ্ছে..." text by login.html's doLogin()
+// success path. The first fix (renderHome()) removed that symptom but
+// returned to the wrong place. Correct logic: go back to the page the
+// user came FROM (recorded on load by rememberEntry()), falling back
+// to the in-app start screen only when no entry page is known. It never
+// touches browser history and never goes to login.html.
+$('topBackBtn').onclick = () => goBackToEntry();
 $('logoutBtn').onclick = async () => {
   try {
     const rt = localStorage.getItem('abc_refresh_token');
