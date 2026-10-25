@@ -175,7 +175,14 @@ class HttpGeoService {
           }
           let pageUrl = null;
           try { pageUrl = location.href; } catch (e) { /* unknown */ }
-          return { token, headerName, source, pageUrl };
+          // Form-content fact for the error: a page with a form
+          // element but no token is a different failure from a
+          // stub/challenge page with no form element at all.
+          let formElement = false;
+          try {
+            formElement = !!(document.querySelector('form#birth_application_form') || document.querySelector('form'));
+          } catch (e) { /* unknown */ }
+          return { token, headerName, source, pageUrl, formElement };
         })
         : {};
       // Older test doubles return only {token, headerName}; accept them.
@@ -187,7 +194,7 @@ class HttpGeoService {
       }
       if (!token) {
         this.lastSeedError = new Error(
-          `HttpGeo: Browser page has no CSRF token (meta _csrf: no, inline csrf: no, hidden _csrf field: no) on page ${pageUrl || 'unknown'}; cannot build API headers.`,
+          `HttpGeo: Browser page has no CSRF token (meta _csrf: no, inline csrf: no, hidden _csrf field: no) on page ${pageUrl || 'unknown'} (form content: ${extracted.formElement ? 'yes' : 'no'}); cannot build API headers.`,
         );
         return false;
       }

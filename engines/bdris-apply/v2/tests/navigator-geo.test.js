@@ -185,3 +185,124 @@ describe('BdrisNavigator.getAddressOptions country-first (live case 2026-10-26)'
     );
   });
 });
+
+describe('BdrisNavigator page-state classification (live banner 2026-10-26: /br/application with no token and no division select)', () => {
+  // Fake page whose DOM state is fully controlled: form element,
+  // per-form division presence, token presence, title/body. No live
+  // contact, no personal data. Reproduces the exact live banner:
+  // page URL is the form URL, yet no CSRF token and no division
+  // select — i.e. no form content at all, not a name mismatch.
+  function makeStatePage({ url0, formElement, title, bodyText, meta, hidden, divisions, flipTo }) {
+    let state = {
+      formElement: !!formElement, title: title || '', bodyText: bodyText || '',
+      meta: !!meta, hidden: !!hidden,
+      divisions: { birth: false, perm: false, prsnt: false, ...(divisions || {}) },
+    };
+    let currentUrl = url0;
+    const placeholderOpt = [{ value: '', text: '--- নির্বাচন করুন ---' }];
+    const nodeFor = (sel) => {
+      if (sel === 'form#birth_application_form' || sel === 'form') return state.formElement ? {} : null;
+      if (sel === 'meta[name="_csrf"]') return state.meta ? { content: 'fixture' } : null;
+      if (sel === 'input[name="_csrf"]') return state.hidden ? { value: 'fixture' } : null;
+      if (sel.includes('birthPlaceDiv')) return state.divisions.birth ? { options: placeholderOpt } : null;
+      if (sel.includes('permAddrDiv')) return state.divisions.perm ? { options: placeholderOpt } : null;
+      if (sel.includes('prsntAddrDiv')) return state.divisions.prsnt ? { options: placeholderOpt } : null;
+      return null;
+    };
+    const page = {
+      gotoCalls: 0,
+      url: () => currentUrl,
+      goto: async (u) => {
+        page.gotoCalls++;
+        currentUrl = u;
+        if (flipTo) {
+          state = {
+            formElement: !!flipTo.formElement, title: flipTo.title || '', bodyText: flipTo.bodyText || '',
+            meta: !!flipTo.meta, hidden: !!flipTo.hidden,
+            divisions: { birth: false, perm: false, prsnt: false, ...(flipTo.divisions || {}) },
+          };
+        }
+      },
+      waitForSelector: async () => {},
+      waitForTimeout: async () => {},
+      waitForFunction: async (fn, arg) => {
+        const prev = global.document;
+        global.document = documentStub;
+        try { return !!fn(arg); } finally { global.document = prev; }
+      },
+      evaluate: async (fn, arg) => {
+        const prev = global.document;
+        global.document = documentStub;
+        try { return await fn(arg); } finally { global.document = prev; }
+      },
+    };
+    const documentStub = {
+      get title() { return state.title; },
+      body: { get innerText() { return state.bodyText; } },
+      querySelector: nodeFor,
+    };
+    return page;
+  }
+
+  const permParents = { division: 'ঢাকা', district: 'ঢাকা', upazila: 'ঢাকা দক্ষিণ সিটি কর্পোরেশন', zone: '' };
+
+  it('a stub page at /br/application throws "form content not loaded" naming form element and divisions, and a second check does not re-navigate', async () => {
+    const page = makeStatePage({
+      url0: 'https://bdris.gov.bd/br/application',
+      formElement: false, title: '', bodyText: '',
+      meta: false, hidden: false, divisions: {},
+    });
+    const nav = new BdrisNavigator(page);
+    const first = await nav.ensureFormPage('perm');
+    assert.strictEqual(first.formPresent, false);
+    assert.strictEqual(page.gotoCalls, 1, 'a content-less page must be reloaded once, not once per check');
+    const second = await nav.ensureFormPage('perm');
+    assert.strictEqual(second.formPresent, false);
+    assert.strictEqual(page.gotoCalls, 1, 'memoized check must not pay a second navigation');
+    await assert.rejects(
+      () => nav.getAddressOptions('zone', permParents, 'perm'),
+      (e) => /form content not loaded/.test(e.message)
+        && /form element: false/.test(e.message)
+        && /birth=false perm=false prsnt=false/.test(e.message),
+    );
+  });
+
+  it('a real form page with birth present but perm missing throws "section not rendered" and does not navigate', async () => {
+    const page = makeStatePage({
+      url0: 'https://bdris.gov.bd/br/application',
+      formElement: true, title: 'Birth Registration', bodyText: 'form content here',
+      meta: true, hidden: true, divisions: { birth: true, perm: false, prsnt: false },
+    });
+    const nav = new BdrisNavigator(page);
+    await assert.rejects(
+      () => nav.getAddressOptions('zone', permParents, 'perm'),
+      (e) => /section not rendered/.test(e.message)
+        && /birth=true perm=false/.test(e.message),
+    );
+    assert.strictEqual(page.gotoCalls, 0, 'a real form page must not be reloaded to find a section it does not render');
+  });
+
+  it('a stub page that becomes the form on reload is classified as form-present after one navigation', async () => {
+    const page = makeStatePage({
+      url0: 'https://bdris.gov.bd/br/application',
+      formElement: false, divisions: {},
+      flipTo: { formElement: true, title: 'Birth Registration', meta: true, hidden: true, divisions: { birth: true, perm: true, prsnt: true } },
+    });
+    const nav = new BdrisNavigator(page);
+    const check = await nav.ensureFormPage('perm');
+    assert.strictEqual(check.formPresent, true);
+    assert.strictEqual(page.gotoCalls, 1);
+  });
+
+  it('gotoForm throws instead of reporting a false ready when the loaded page has no form content', async () => {
+    const page = makeStatePage({
+      url0: 'https://bdris.gov.bd/br/application',
+      formElement: false, divisions: {},
+    });
+    const nav = new BdrisNavigator(page);
+    await assert.rejects(
+      () => nav.gotoForm(),
+      (e) => /form content not loaded/.test(e.message),
+    );
+  });
+});

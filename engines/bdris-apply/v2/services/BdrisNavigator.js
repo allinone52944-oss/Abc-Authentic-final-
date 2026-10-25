@@ -64,6 +64,29 @@ class BdrisNavigator {
       SELECTORS.birth.division,
       { timeout: 15000 }
     ).catch(() => {});
+    // Proven defect (live banner 2026-10-26, page at /br/application
+    // with no CSRF token and no division select): the old gotoForm
+    // swallowed the selector wait and returned success for ANY page
+    // at that URL — including a bot-challenge/stub page or a page
+    // whose JS never rendered the form — and warmUp then pooled
+    // that page, so every later geo call inherited a page with no
+    // form content. Verify real form content now: a form element,
+    // any address division, or a CSRF token. If none is present,
+    // throw with the page state instead of reporting a false
+    // ready — warmUp's catch already skips pooling on throw, and
+    // INIT_SESSION's catch already reports SESSION_ERROR.
+    // Pages without evaluate() (test doubles) keep the old behaviour.
+    if (typeof this.page.evaluate === 'function') {
+      const state = await this.getPageState().catch(() => null);
+      if (state && !state.formContent) {
+        throw new Error(
+          `Playwright: form content not loaded on ${BDRIS_BASE}/br/application ` +
+          `(form element: ${state.formElement}, page title: "${String(state.title || '').slice(0, 80)}", ` +
+          `body text length: ${state.bodyTextLength}, divisions present: ` +
+          `birth=${state.divisions.birth} perm=${state.divisions.perm} prsnt=${state.divisions.prsnt})`,
+        );
+      }
+    }
   }
 
   getSelectors(form) {
@@ -97,18 +120,93 @@ class BdrisNavigator {
     }, selector).catch(() => ({ exists: false, rawCount: 0, filteredCount: 0 }));
   }
 
+  // Full structural page state, for diagnostics only: no field
+  // values, no body text, only presence facts and lengths. This is
+  // what distinguishes the three live cases that all used to look
+  // alike: (a) a bot-challenge/stub page at the form URL (no form
+  // element, no token, no division), (b) a real form page whose
+  // requested address section is not rendered (form element and/or
+  // token present, some divisions present, requested one missing),
+  // (c) a slow render (content appears after a wait/reload).
+  async getPageState() {
+    const divisionSels = {
+      birth: SELECTORS.birth.division,
+      perm: SELECTORS.perm.division,
+      prsnt: SELECTORS.prsnt.division,
+    };
+    return await this.page.evaluate((divSels) => {
+      const exists = (selList) => {
+        for (const s of String(selList).split(',').map(x => x.trim())) {
+          try { if (document.querySelector(s)) return true; } catch (e) { /* next */ }
+        }
+        return false;
+      };
+      const divisions = {};
+      for (const [k, v] of Object.entries(divSels)) divisions[k] = exists(v);
+      const formElement = !!(document.querySelector('form#birth_application_form') || document.querySelector('form'));
+      const hasMetaCsrf = !!document.querySelector('meta[name="_csrf"]');
+      const hasHiddenCsrf = !!document.querySelector('input[name="_csrf"]');
+      let title = '';
+      try { title = document.title || ''; } catch (e) { /* unknown */ }
+      let bodyTextLength = 0;
+      try { bodyTextLength = (document.body && document.body.innerText ? document.body.innerText.length : 0); } catch (e) { /* unknown */ }
+      return {
+        formElement, hasMetaCsrf, hasHiddenCsrf, title, bodyTextLength, divisions,
+        formContent: formElement || hasMetaCsrf || hasHiddenCsrf ||
+          divisions.birth || divisions.perm || divisions.prsnt,
+      };
+    }, divisionSels).catch(() => ({
+      formElement: false, hasMetaCsrf: false, hasHiddenCsrf: false,
+      title: '', bodyTextLength: 0,
+      divisions: { birth: false, perm: false, prsnt: false }, formContent: false,
+    }));
+  }
+
+  // Poll (bounded iterations, so test doubles with an instant
+  // waitForTimeout still terminate) until any form content appears.
+  async waitForFormContent(maxIterations = 30) {
+    for (let i = 0; i < maxIterations; i++) {
+      const state = await this.getPageState();
+      if (state.formContent) return state;
+      if (typeof this.page.waitForTimeout === 'function') {
+        await this.page.waitForTimeout(500);
+      }
+    }
+    return await this.getPageState();
+  }
+
+  // Human-readable one-line summary of a page state, for errors.
+  static describePageState(state) {
+    if (!state) return 'unknown';
+    const d = state.divisions || {};
+    return `form element: ${state.formElement}, page title: "${String(state.title || '').slice(0, 80)}", ` +
+      `body text length: ${state.bodyTextLength}, divisions present: ` +
+      `birth=${!!d.birth} perm=${!!d.perm} prsnt=${!!d.prsnt}, ` +
+      `CSRF: meta=${!!state.hasMetaCsrf} hidden=${!!state.hasHiddenCsrf}`;
+  }
+
   // Guarantee the page is the form page before a cascade runs.
-  // Proven defect (live banner 2026-10-26, division options 0):
-  // server.js skipped gotoForm whenever the session URL merely
-  // contained "bdris.gov.bd" — a warm page on ANY BDRIS page
-  // (not /br/application) therefore ran the cascade against
-  // selects that do not exist there, and every parent failed with
-  // options present: 0. This check is cheap on the common path
-  // (one URL read + one selector evaluate when already on the
-  // form) and only navigates when the page is actually not the
-  // form. Test doubles without url()/goto() are left alone:
-  // formPresent is null and the caller proceeds to its own
-  // diagnostic instead of throwing here.
+  // Proven defects, from code + the live banner of 2026-10-26
+  // (page at /br/application with no CSRF token and no division
+  // select):
+  //  (1) The old check judged "form" by URL + ONE select only, and
+  //      waited just 3s after a domcontentloaded reload. A
+  //      challenge/stub page at the same URL, or a slow JS render,
+  //      therefore failed with a bare "division select missing"
+  //      that said nothing about whether ANY form content existed.
+  //  (2) It never distinguished "no form content at all" from
+  //      "real form page, requested section not rendered" — for
+  //      the permanent-address case the second is a different
+  //      failure (the Playwright cascade cannot read a section
+  //      that is not in the page, whatever the URL says).
+  // This version classifies by full page state, waits for content
+  // (up to ~15s of 500ms polls) instead of a single 3s selector
+  // wait, and memoizes per page URL + form so the server handler
+  // and the cascade do not each pay a fresh 15s wait (which would
+  // together breach the 30s executor budget). Test doubles
+  // without url()/goto() are left alone: formPresent is null and
+  // the caller proceeds to its own diagnostic instead of
+  // throwing here.
   async ensureFormPage(form = 'birth') {
     const sel = this.getSelectors(form);
     if (typeof this.page.url !== 'function') {
@@ -116,26 +214,59 @@ class BdrisNavigator {
     }
     let url = null;
     try { url = this.page.url(); } catch (e) { /* unknown */ }
-    if (url && url.includes('/br/application')) {
-      const state = await this.getSelectState(sel.division);
-      if (state.exists) return { navigated: false, pageUrl: url, formPresent: true };
+    const memoKey = `${url || ''}|${form}`;
+    if (this._formCheckMemo && this._formCheckMemo.key === memoKey) {
+      return this._formCheckMemo.result;
     }
+    const classify = (state, navigated, pageUrl) => {
+      const requestedExists = !!(state.divisions && state.divisions[form]);
+      let formPresent;
+      if (requestedExists) formPresent = true;
+      else if (state.formContent) formPresent = 'section-missing';
+      else formPresent = false;
+      const result = { navigated, pageUrl, formPresent, pageState: state };
+      this._formCheckMemo = { key: memoKey, result };
+      return result;
+    };
+    // Already on the form URL: check content first (cheap path).
+    if (url && url.includes('/br/application')) {
+      const state = await this.getPageState();
+      if (state.formContent) {
+        return classify(state, false, url);
+      }
+      // No form content at all: reload once and wait for content.
+      if (typeof this.page.goto === 'function') {
+        try {
+          await this.page.goto(`${BDRIS_BASE}/br/application`, {
+            waitUntil: 'domcontentloaded',
+            timeout: 20000,
+          });
+        } catch (e) { /* state check below decides */ }
+        const after = await this.waitForFormContent();
+        let newUrl = url;
+        try { newUrl = this.page.url(); } catch (e) { /* unknown */ }
+        return classify(after, true, newUrl);
+      }
+      return classify(state, false, url);
+    }
+    // Not on the form URL at all: navigate, then wait for content.
     if (typeof this.page.goto !== 'function') {
-      return { navigated: false, pageUrl: url, formPresent: false };
+      const state = await this.getPageState().catch(() => null);
+      return { navigated: false, pageUrl: url, formPresent: false, pageState: state };
     }
     try {
       await this.page.goto(`${BDRIS_BASE}/br/application`, {
         waitUntil: 'domcontentloaded',
         timeout: 20000,
       });
-    } catch (e) { /* selector check below decides */ }
+    } catch (e) { /* state check below decides */ }
     if (typeof this.page.waitForSelector === 'function') {
       await this.page.waitForSelector(sel.division, { timeout: 3000 }).catch(() => {});
     }
+    const after = await this.waitForFormContent();
     let newUrl = url;
     try { newUrl = this.page.url(); } catch (e) { /* unknown */ }
-    const after = await this.getSelectState(sel.division);
-    return { navigated: true, pageUrl: newUrl, formPresent: after.exists };
+    return classify(after, true, newUrl);
   }
 
   async getOptions(selector) {
@@ -247,7 +378,10 @@ class BdrisNavigator {
     // first parent fail with a bare options-present: 0.
     const formCheck = await this.ensureFormPage(form);
     if (formCheck.formPresent === false) {
-      throw new Error(`Playwright: form page not loaded (division select missing) on ${formCheck.pageUrl || 'unknown page'}; cannot run cascade`);
+      throw new Error(`Playwright: form content not loaded on ${formCheck.pageUrl || 'unknown page'} (${BdrisNavigator.describePageState(formCheck.pageState)}); cannot run cascade`);
+    }
+    if (formCheck.formPresent === 'section-missing') {
+      throw new Error(`Playwright: requested address section not rendered on the form page (form=${form}, ${BdrisNavigator.describePageState(formCheck.pageState)}); the Playwright cascade cannot read a section that is not in the page`);
     }
     const pageUrl = formCheck.pageUrl;
 

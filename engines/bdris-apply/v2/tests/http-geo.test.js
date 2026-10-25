@@ -379,3 +379,48 @@ describe('HttpGeoService CSRF seed fallbacks (live banner 2026-10-26: no meta _c
     assert.match(httpGeo.lastSeedError.message, /https:\/\/bdris\.gov\.bd\/other-page/);
   });
 });
+
+describe('HttpGeoService seed form-content fact (live banner 2026-10-26: /br/application, no token, no select)', () => {
+  // Same extraction shape as the CSRF describe above, plus a form
+  // element flag: a page WITH a form element but no token is a
+  // different failure from a stub page with no form element.
+  function domPage({ formElement, pageUrl }) {
+    return {
+      context: () => ({ cookies: async () => [{ name: 'TS01', value: 'browser-session' }] }),
+      url: () => pageUrl || 'https://bdris.gov.bd/br/application',
+      evaluate: async (fn) => {
+        const prevDoc = global.document;
+        global.document = {
+          querySelector: (sel) => {
+            if (sel === 'form#birth_application_form' || sel === 'form') return formElement ? {} : null;
+            return null;
+          },
+        };
+        try { return await fn(); } finally { global.document = prevDoc; }
+      },
+    };
+  }
+  function unbootstrappedClient() {
+    return {
+      bootstrapped: false,
+      seedFromBrowser({ csrfToken }) {
+        if (!csrfToken) throw new Error('BOOTSTRAP_NO_CSRF');
+        this.bootstrapped = true;
+      },
+    };
+  }
+
+  it('a form page with no token reports "form content: yes", unlike a stub page', async () => {
+    const httpGeo = new HttpGeoService({ client: unbootstrappedClient() });
+    const ok = await httpGeo.seedFromPage(domPage({ formElement: true }));
+    assert.strictEqual(ok, false);
+    assert.match(httpGeo.lastSeedError.message, /form content: yes/);
+  });
+
+  it('a stub page with no form element reports "form content: no"', async () => {
+    const httpGeo = new HttpGeoService({ client: unbootstrappedClient() });
+    const ok = await httpGeo.seedFromPage(domPage({ formElement: false }));
+    assert.strictEqual(ok, false);
+    assert.match(httpGeo.lastSeedError.message, /form content: no/);
+  });
+});
