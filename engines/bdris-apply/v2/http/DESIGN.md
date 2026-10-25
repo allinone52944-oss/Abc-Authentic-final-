@@ -1,10 +1,16 @@
 # BDRIS HTTP-first client — design note (first version, partial)
 
-Status: **PARTIAL, NOT COMPLETE.** This module covers the verified HTTP
-steps (session, geo, documents, OTP send). It does **not** cover OTP
-verify or final submit, because their request shapes are still unobserved
-(see below). Until those are observed, the current Playwright v2 path
-remains the fallback for exactly those two steps.
+Status: **CANDIDATE-COMPLETE, NOT LIVE-VERIFIED.** This module covers
+the verified HTTP steps (session, geo, documents, OTP send) plus
+**candidate** implementations of OTP verify and final submit
+(`buildVerifyPayload()` / `buildSubmitPayload()` in `client.js`).
+Candidate = derived from the Playwright v2 StepHandler field map, not
+from a live capture of the two requests. Until one live capture
+confirms the real method + field list, the Playwright v2 path (page
+pool, live-verified ~5s session-ready) remains the LIVE path, and
+this HTTP path is OPT-IN ONLY (env `BDRIS_HTTP_PATH=on`; default
+OFF, safe-by-default, senior decision 2026-10-25) — it must not be
+called realtime in production.
 
 ## Hybrid fallback, in words
 
@@ -15,10 +21,12 @@ User flow
    │   division → district → zone → ward, via targetGeoOrder
    ├─ Document upload (40, 41) ──► HTTP client (this module)
    ├─ OTP send ───────────────────► HTTP client (this module)
-   ├─ OTP verify ─────────────────► Playwright v2 (fallback, NOT here)
-   │   reason: /api/otp/verify params unobserved
-   └─ Final submit ───────────────► Playwright v2 (fallback, NOT here)
-       reason: /api/br/application/register method + payload unobserved
+   ├─ OTP verify ─────────────────► HTTP client, CANDIDATE (POST, otpSend
+   │   context + otp; see buildVerifyPayload) — Playwright v2 fallback
+   │   if the live server rejects the candidate
+   └─ Final submit ───────────────► HTTP client, CANDIDATE (POST, flat
+       StepHandler field names + upload refs 40/41; see
+       buildSubmitPayload) — Playwright v2 fallback if rejected live
        outcome: success page (phrase + print link, see client.js)
 ```
 
@@ -60,27 +68,65 @@ only up to a successful SUBMIT (success page).
 | Office lookup URLs (`/api/office/find-by-geo-id`, `/api/office/find-office-geo-projection-by-geo-id`) | URL ONLY VERIFIED | form page inline script |
 | Success page shape (phrase, application number, office, masked mobile, print link `/admin/br/application/print`, deadline date) | VERIFIED | success page |
 | TSPD layer (`/TSPD/?type=…`, WebGL-shader fingerprint code) | VERIFIED AS BOT PROTECTION, NOT FORM LOGIC | challenge page + `fpdefs`; engine handles the session it establishes, never parses the obfuscated code |
-| **Submit method + payload field list** | **UNOBSERVED — DO NOT GUESS** | `submitApplication()` throws `NOT_IMPLEMENTED_SUBMIT_PAYLOAD` |
-| **OTP verify request params (+ method)** | **UNOBSERVED — DO NOT GUESS** | `verifyOtp()` throws `NOT_IMPLEMENTED_VERIFY_PARAMS` |
+| Submit method + payload field list | **CANDIDATE — DERIVED, NOT LIVE-CAPTURED** | `buildSubmitPayload()`: POST (candidate method) with flat StepHandler field names (`personInfoForBirth.*`, `birthPlace*`, `permAddr*`, `prsntAddr*`, `relationWithApplicant`, `applicantName`, `declaration`, `email`, `phone`, `otp`, `officeId`, `officeAddressType`) + upload refs 40/41. Missing required fields throw `MISSING_SUBMIT_FIELD` (never a silent guess). |
+| OTP verify request params (+ method) | **CANDIDATE — DERIVED, NOT LIVE-CAPTURED** | `buildVerifyPayload()`: POST (candidate method) with the verified otpSend param names + `otp`. Missing/non-6-digit OTP throws `OTP_REQUIRED` / `OTP_BAD_FORMAT`. |
+| Submit/verify transport (headers, cookies, CSRF) | VERIFIED (same as every other API call) | `apiHeaders()` — cookies, CSRF header, XHR, referer, `client: bris` |
 | **First-parent source** (observed chains start at parent 4; page script shows `bangladeshId=null`) | **UNPROVEN** | `walkGeoChain()` requires explicit `firstParentId`; `4` is not hardcoded as a fact |
 | Office lookup query/payload shapes | UNVERIFIED | helpers take caller-supplied params verbatim and return JSON as-is |
 | Success-page application-number format | UNVERIFIED | `parseSuccessPage()` checks only the phrase + print link |
 
 ## What is needed to finish (in order)
 
-1. Submit: the request method and payload field **names** for
-   `/api/br/application/register` (names only — no values, cookies,
-   tokens, or personal data).
-2. Verify: the request method and parameter **names** for
-   `/api/otp/verify` (same rule: names only).
-3. First-parent source: where the chain's first `parentGeoId` comes
+1. Live confirmation: the request method and payload field **names**
+   for `/api/br/application/register` and the request method and
+   parameter **names** for `/api/otp/verify`, from ONE live capture
+   (names only — no values, cookies, tokens, or personal data).
+   Compare them field by field with `buildSubmitPayload()` /
+   `buildVerifyPayload()`; correct any mismatch, re-run the mock
+   tests, and only then drop the CANDIDATE label for the confirmed
+   fields.
+2. First-parent source: where the chain's first `parentGeoId` comes
    from (page script, first geo call, or a fixed bootstrap value —
    whichever is actually observed, not assumed).
-4. Only then: implement `verifyOtp()` and `submitApplication()` in
-   `client.js`, add mock-server tests for both against the observed
-   shapes, and re-check the hybrid diagram above. Until step 1–2 land,
-   do not describe this HTTP path as complete, and do not remove the
-   Playwright fallback.
+3. Only then: frontend wiring for `SUBMIT_HTTP_CHAIN` (the engine
+   integration already exists, but it has NO live caller yet — see
+   below), deploy, and measure a real session end-to-end
+   (bootstrap → geo → upload → OTP send → verify → submit) in
+   seconds. Until steps 1 and 3 land, do not describe this HTTP
+   path as complete or realtime, and do not remove the Playwright
+   fallback.
+
+## Engine integration (2026-10-25, uncommitted, NOT live-verified)
+
+`v2/services/HttpPathRunner.js` + the `SUBMIT_HTTP_CHAIN` executor
+command in `v2/server.js` wire this client into the engine as an
+OPT-IN path only (env `BDRIS_HTTP_PATH`, default OFF since
+2026-10-25, safe-by-default: `on`/`1`/`true`/`yes`/`enabled` enable
+it; unset, empty, `off`/`0`/`false`/`no`/`disabled`, or any other
+value runs Playwright directly). Opt-in rationale: the submit/verify
+payloads are candidate (derived, not live-captured), so an
+unproven path must never become the live default by accident —
+the proven Playwright pool path (live-verified ~5s session-ready)
+stays the live path until a live capture confirms the candidates.
+The runner accepts the
+same combined draft the Playwright path receives (s1/s2/s2b/s3/
+s4prep/otp/_chargeToken/docs) or the canonical shape, enforces the
+SAME charge-token gate as Playwright submitS4 before any HTTP
+attempt (a bad token blocks with no fallback, so payment can never
+be bypassed), and falls back to the Playwright steps on any HTTP
+failure, logging step + reason with the CANDIDATE label. One safety
+exception: a submit with NO server response (outcome unknown) never
+auto-retries via Playwright, to avoid a duplicate submission — it
+returns SUBMIT_OUTCOME_UNKNOWN for a manual check. Frontend wiring
+for `SUBMIT_HTTP_CHAIN` is STILL PENDING (frontend files untouched
+here), so the live UI does not call this command yet — this
+engine-default change alone changes NO live behaviour, because
+there is no live caller for the command; the command is reachable
+today only via ENGINE_COMMAND. Tests:
+`v2/http/tests/http.test.js` (runner: success, geo-fallback,
+gate-block, outcome-unknown, flag) and `v2/tests/unit.test.js`
+(flag/label/normalizer). Nothing here was pushed, deployed, or
+sent to live bdris.gov.bd.
 
 ## Files
 

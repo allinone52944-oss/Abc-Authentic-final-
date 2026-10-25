@@ -37,6 +37,7 @@ const { BdrisNavigator } = require('./services/BdrisNavigator');
 const { AddressService } = require('./services/AddressService');
 const { StepHandler, verifyChargeToken } = require('./services/StepHandler');
 const { OriginalFetcher } = require('./services/OriginalFetcher');
+const { runHttpChain, isHttpPathEnabled, HTTP_CANDIDATE_LABEL } = require('./services/HttpPathRunner');
 
 class BdrisEngineV2 {
   constructor(io, options = {}) {
@@ -242,6 +243,79 @@ class BdrisEngineV2 {
         { timeoutMs }
       );
     }
+
+    // ── SUBMIT_HTTP_CHAIN: HTTP-first full chain (opt-in only) ──
+    // Runs bootstrap → geo (if a geoChain spec is supplied) → upload
+    // 40/41 → OTP send → verify → submit via BdrisHttpClient, behind
+    // the SAME charge-token gate Playwright submitS4 enforces (the
+    // runner blocks on a bad token before any HTTP attempt). On any
+    // HTTP failure the runner falls back to the Playwright steps
+    // below for this session and logs the step + reason; a submit
+    // whose outcome is unknown never auto-retries (see HttpPathRunner).
+    // Submit/verify payloads are CANDIDATE until a live capture
+    // confirms them — the label is on every log line and response.
+    // Env: BDRIS_HTTP_PATH=on (or 1/true/yes/enabled) OPTS IN to the
+    // HTTP path; default OFF (safe-by-default, candidate payloads
+    // unproven). Unset/empty/off/0/false/no/disabled/unknown all
+    // disable it. Frontend wiring for this command is still pending
+    // (frontend files are out of scope here), so the live UI does
+    // not call this command yet; the command is reachable today
+    // only via ENGINE_COMMAND like every other command.
+    this.executor.register('SUBMIT_HTTP_CHAIN',
+      async (params, ctx) => {
+        const session = ctx.session;
+        const userId = ctx.socket?.abcUser?.id || null;
+        const secret = process.env.ABC_JWT_SECRET || process.env.JWT_SECRET || '';
+
+        // Playwright adapter: the existing step path, split from the
+        // combined draft exactly as the per-step commands receive it.
+        const playwrightRunner = session?.page ? async (data) => {
+          const nav = new BdrisNavigator(session.page);
+          const handler = new StepHandler(nav, {
+            emit: (ev, msg) => ctx.emit(ev, msg),
+            userId,
+          });
+          const d = data || {};
+          const steps = [
+            ['submitS0', { addressType: d.addressType || 'BIRTH' }],
+            ['submitS1', d.s1 || d.person || {}],
+            ['submitS2', { ...(d.s2 || {}), applicantDob: (d.s1 || {}).dob || d.applicantDob }],
+            ['submitS2B', d.s2b || {}],
+            ['submitS3', { ...(d.s3 || {}), docs: d.docs || (d.s3 || {}).docs || [], s1: d.s1, applicantDob: (d.s1 || {}).dob || d.applicantDob }],
+            ['submitS4Prep', { ...(d.s4prep || {}), s1: d.s1 }],
+            ['submitS4', {
+              otp: d.otp, _chargeToken: d._chargeToken,
+              s1: d.s1, s2: d.s2, s2b: d.s2b, s3: d.s3, s4prep: d.s4prep,
+              applicantDob: (d.s1 || {}).dob || d.applicantDob,
+            }],
+          ];
+          for (const [method, stepParams] of steps) {
+            const r = await handler[method](stepParams);
+            if (!r || r.ok === false) {
+              return { ...r, ok: false, path: 'playwright', failedStep: method };
+            }
+          }
+          return { ok: true, path: 'playwright', completed: true };
+        } : null;
+
+        if (!isHttpPathEnabled()) {
+          this.log(`[HTTP-CANDIDATE] http-path disabled (opt-in BDRIS_HTTP_PATH=on not set) — running Playwright directly — ${HTTP_CANDIDATE_LABEL}`);
+          if (!playwrightRunner) throw new Error('HTTP_PATH_DISABLED and no browser session for Playwright fallback');
+          const r = await playwrightRunner(params);
+          return { ...r, httpPath: 'disabled', candidate: true, candidateLabel: HTTP_CANDIDATE_LABEL };
+        }
+
+        return runHttpChain({
+          data: params,
+          userId,
+          secret,
+          playwrightRunner,
+          log: (...a) => this.log(...a),
+          emit: (ev, msg) => ctx.emit(ev, msg),
+        });
+      },
+      { timeoutMs: 180000 }
+    );
   }
 
   setupSocketHandlers() {

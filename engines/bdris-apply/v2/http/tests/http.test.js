@@ -18,6 +18,8 @@ const {
   BdrisHttpClient,
   GeoCache,
   parseSuccessPage,
+  buildSubmitPayload,
+  buildVerifyPayload,
   SUCCESS_PHRASE,
   PRINT_PATH,
 } = require('../client');
@@ -32,7 +34,43 @@ const state = {
   uploadBody: '',
   otpQueries: [],
   officeQueries: [],
+  verifyHits: 0,
+  verifyBodies: [],
+  submitHits: 0,
+  submitBodies: [],
 };
+
+// A complete application in the builders' canonical input shape. All
+// values are mock fixtures; field NAMES come from the StepHandler map.
+function completeApplication(overrides = {}) {
+  const addr = (division) => ({
+    country: 'বাংলাদেশ', division, district: 'ঢাকা',
+    cityCorpUpazila: 'ঢাকা দক্ষিণ সিটি কর্পোরেশন', paurasavaUnion: 'অঞ্চল - ১',
+    ward: 'ওয়ার্ড - ১', postOfficeBn: 'ঢাকা', postOfficeEn: 'Dhaka',
+    villageBn: 'মহল্লা', villageEn: 'Moholla', houseRoadBn: 'বাসা ১', houseRoadEn: 'House 1',
+  });
+  return {
+    person: { firstNameBn: 'আবদুল', lastNameBn: 'করিম', firstNameEn: 'Abdul', lastNameEn: 'Karim', dob: '2020-01-15', gender: 'পুরুষ' },
+    father: { brn: '', dob: '1990-05-01', nameBn: 'আবদুল হামিদ', nameEn: 'Abdul Hamid', nationality: 'বাংলাদেশী' },
+    mother: { brn: '', dob: '1992-03-01', nameBn: 'ফাতেমা', nameEn: 'Fatema', nationality: 'বাংলাদেশী' },
+    birthPlace: addr('ঢাকা'),
+    permAddr: addr('ঢাকা'),
+    prsntAddr: addr('ঢাকা'),
+    relation: 'FATHER',
+    applicantName: 'Abdul Hamid',
+    declaration: true,
+    email: 'mock@example.com',
+    phone: 'mock-phone',
+    officeAddressType: 'BIRTH',
+    officeId: 'mock-office',
+    documents: [
+      { attachmentType: 40, attachmentTypeId: 40, url: '/admin/doc/40', id: 40 },
+      { attachmentType: 41, attachmentTypeId: 41, url: '/admin/doc/41', id: 41 },
+    ],
+    otp: '123456',
+    ...overrides,
+  };
+}
 
 function geoResponse(parent, order, type, ward) {
   // Canned chain: division -> district -> zone (jump!) -> ward.
@@ -126,6 +164,31 @@ before(async () => {
       res.end(JSON.stringify({ ok: true, echo: url.search }));
       return;
     }
+    if (url.pathname === '/api/otp/verify' && req.method === 'POST') {
+      state.verifyHits += 1;
+      const chunks = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => {
+        state.verifyBodies.push(Buffer.concat(chunks).toString('utf8'));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, verified: true }));
+      });
+      return;
+    }
+    if (url.pathname === '/api/br/application/register' && req.method === 'POST') {
+      state.submitHits += 1;
+      const chunks = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => {
+        state.submitBodies.push(Buffer.concat(chunks).toString('utf8'));
+        // Mock success page: only the VERIFIED shape — phrase + print link.
+        // No application number is invented here (format unverified).
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(`<html><body>${SUCCESS_PHRASE} <a href="${PRINT_PATH}">print</a></body></html>`);
+      });
+      return;
+    }
+
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'not found in mock' }));
   });
@@ -326,15 +389,118 @@ describe('OTP send + office helpers', () => {
   });
 });
 
-describe('NOT_IMPLEMENTED stubs (honesty constraint)', () => {
-  it('verifyOtp throws naming /api/otp/verify and the missing params', async () => {
-    const c = await bootstrappedClient();
-    await assert.rejects(() => c.verifyOtp(), (e) => e.code === 'NOT_IMPLEMENTED_VERIFY_PARAMS' && /\/api\/otp\/verify/.test(e.message));
+describe('CANDIDATE submit payload builder (StepHandler field map)', () => {
+  it('covers every field StepHandler fills for a complete application', () => {
+    const p = buildSubmitPayload(completeApplication());
+    // Person (S1): split + joined names, DOB, gender.
+    assert.strictEqual(p['personInfoForBirth.personFirstNameBn'], 'আবদুল');
+    assert.strictEqual(p['personInfoForBirth.personLastNameEn'], 'Karim');
+    assert.strictEqual(p['personInfoForBirth.personNameBn'], 'আবদুল করিম');
+    assert.strictEqual(p['personInfoForBirth.personNameEn'], 'Abdul Karim');
+    assert.strictEqual(p['personInfoForBirth.personDob'], '2020-01-15');
+    assert.strictEqual(p['personInfoForBirth.personGender'], 'পুরুষ');
+    // Parents (S2): BRN, DOB, names, nationality.
+    assert.strictEqual(p['personInfoForBirth.father.personNameBn'], 'আবদুল হামিদ');
+    assert.strictEqual(p['personInfoForBirth.father.personBirthDate'], '1990-05-01');
+    assert.strictEqual(p['personInfoForBirth.mother.personNameEn'], 'Fatema');
+    assert.strictEqual(p['personInfoForBirth.mother.personNationality'], 'বাংলাদেশী');
+    // Addresses (S2B): all three sections, full suffix set.
+    assert.strictEqual(p.birthPlaceDiv, 'ঢাকা');
+    assert.strictEqual(p.birthPlaceCityCorpCantOrUpazila, 'ঢাকা দক্ষিণ সিটি কর্পোরেশন');
+    assert.strictEqual(p.birthPlacePaurasavaOrUnion, 'অঞ্চল - ১');
+    assert.strictEqual(p.birthPlaceVilAreaTownBn, 'মহল্লা');
+    assert.strictEqual(p.permAddrPostOfcEn, 'Dhaka');
+    assert.strictEqual(p.prsntAddrHouseRoadBn, 'বাসা ১');
+    // Documents/contact/OTP (S3 + S4Prep + S4): relation, name, declaration, phone, otp.
+    assert.strictEqual(p.relationWithApplicant, 'FATHER');
+    assert.strictEqual(p.applicantName, 'Abdul Hamid');
+    assert.strictEqual(p.declaration, true);
+    assert.strictEqual(p.phone, 'mock-phone');
+    assert.strictEqual(p.email, 'mock@example.com');
+    assert.strictEqual(p.officeAddressType, 'BIRTH');
+    assert.strictEqual(p.otp, '123456');
+    assert.strictEqual(p.documents.length, 2);
+    assert.deepStrictEqual(p.documents.map((d) => d.attachmentType), [40, 41]);
+    assert.strictEqual(p.documents[0].url, '/admin/doc/40');
+    assert.strictEqual(p.documents[1].id, 41);
   });
 
-  it('submitApplication throws naming /api/br/application/register and the missing payload', async () => {
+  it('joins a first-name-only applicant to the first name alone (1-name rule)', () => {
+    const p = buildSubmitPayload(completeApplication({
+      person: { firstNameBn: 'আবদুল', lastNameBn: '', firstNameEn: 'Abdul', lastNameEn: '', dob: '2020-01-15' },
+    }));
+    assert.strictEqual(p['personInfoForBirth.personNameBn'], 'আবদুল');
+    assert.strictEqual(p['personInfoForBirth.personNameEn'], 'Abdul');
+    assert.ok(!p['personInfoForBirth.personNameBn'].includes('আবদুল আবদুল'));
+  });
+
+  it('fails loudly listing every missing required field, guessing nothing', () => {
+    assert.throws(
+      () => buildSubmitPayload(completeApplication({ person: { firstNameBn: '', dob: '' }, documents: [] })),
+      (e) => e.code === 'MISSING_SUBMIT_FIELD'
+        && /person\.firstNameBn/.test(e.message)
+        && /documents\[40\]/.test(e.message)
+        && /documents\[41\]/.test(e.message),
+    );
+  });
+
+  it('submitApplication sends the candidate payload and accepts only the verified success shape', async () => {
     const c = await bootstrappedClient();
-    await assert.rejects(() => c.submitApplication(), (e) => e.code === 'NOT_IMPLEMENTED_SUBMIT_PAYLOAD' && /\/api\/br\/application\/register/.test(e.message));
+    state.submitBodies.length = 0;
+    const before = state.submitHits;
+    const out = await c.submitApplication(completeApplication());
+    assert.strictEqual(out.success, true);
+    assert.strictEqual(out.hasPrintLink, true);
+    assert.strictEqual(state.submitHits, before + 1);
+    const sent = JSON.parse(state.submitBodies.at(-1));
+    assert.strictEqual(sent['personInfoForBirth.personNameBn'], 'আবদুল করিম');
+    assert.strictEqual(sent.relationWithApplicant, 'FATHER');
+    assert.strictEqual(sent.documents.length, 2);
+  });
+
+  it('submitApplication with a missing field never hits the server', async () => {
+    const c = await bootstrappedClient();
+    const before = state.submitHits;
+    await assert.rejects(
+      () => c.submitApplication(completeApplication({ documents: [] })),
+      (e) => e.code === 'MISSING_SUBMIT_FIELD',
+    );
+    assert.strictEqual(state.submitHits, before);
+  });
+});
+
+describe('CANDIDATE OTP-verify builder + request', () => {
+  it('reuses the verified otpSend context and adds otp', () => {
+    const p = buildVerifyPayload({
+      phone: 'mock-phone', applicantName: 'mock-name', applicantDob: '2020-01-15',
+      officeAddressType: 'BIRTH', otp: '123456',
+    });
+    assert.strictEqual(p.appType, 'BIRTH_REGISTRATION_APPLICATION');
+    assert.strictEqual(p.phone, 'mock-phone');
+    assert.strictEqual(p.applicantName, 'mock-name');
+    assert.strictEqual(p.applicantDob, '2020-01-15');
+    assert.strictEqual(p.officeAddressType, 'BIRTH');
+    assert.strictEqual(p.otp, '123456');
+  });
+
+  it('refuses to verify without a 6-digit OTP', async () => {
+    const c = await bootstrappedClient();
+    const before = state.verifyHits;
+    await assert.rejects(() => c.verifyOtp({ phone: 'x' }), (e) => e.code === 'OTP_REQUIRED');
+    await assert.rejects(() => c.verifyOtp({ otp: '123' }), (e) => e.code === 'OTP_BAD_FORMAT');
+    assert.strictEqual(state.verifyHits, before);
+  });
+
+  it('verifyOtp POSTs the candidate payload to /api/otp/verify and returns its JSON', async () => {
+    const c = await bootstrappedClient();
+    state.verifyBodies.length = 0;
+    const res = await c.verifyOtp({ phone: 'mock-phone', otp: '123456' });
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.verified, true);
+    const sent = JSON.parse(state.verifyBodies.at(-1));
+    assert.strictEqual(sent.otp, '123456');
+    assert.strictEqual(sent.phone, 'mock-phone');
+    assert.strictEqual(sent.appType, 'BIRTH_REGISTRATION_APPLICATION');
   });
 });
 
@@ -346,5 +512,160 @@ describe('success-page parsing (later step)', () => {
     const no = parseSuccessPage('<html>some other page</html>');
     assert.strictEqual(no.success, false);
     assert.strictEqual(no.hasPrintLink, false);
+  });
+});
+
+// ---- HttpPathRunner integration (mock server only, no browser) ----
+const nodeCrypto = require('node:crypto');
+const { runHttpChain, isHttpPathEnabled, HTTP_CANDIDATE_LABEL } = require('../../services/HttpPathRunner');
+
+function mockGeoChain() {
+  return {
+    firstParentId: '100',
+    firstGeoOrder: 1,
+    steps: [
+      { geoType: 1, nameBn: 'ঢাকা' },
+      { geoType: 2, nameBn: 'ঢাকা' },
+      { geoType: 8, nameBn: 'অঞ্চল - ১' },
+      { geoType: 6, nameBn: 'ওয়ার্ড - ১', ward: true },
+    ],
+  };
+}
+
+function runnerInput(overrides = {}) {
+  const b64 = Buffer.from('fake-jpeg-bytes').toString('base64');
+  return completeApplication({
+    docs: [
+      { name: 'doc40.jpg', mimeType: 'image/jpeg', base64: b64, docType: '40' },
+      { name: 'doc41.jpg', mimeType: 'image/jpeg', base64: b64, docType: '41' },
+    ],
+    geoChain: mockGeoChain(),
+    ...overrides,
+  });
+}
+
+function validChargeToken(userId, secret) {
+  const head = `v1.${userId}.submit.ref-1.${Date.now()}`;
+  const mac = nodeCrypto.createHmac('sha256', secret).update(head).digest('hex');
+  return `${head}.${mac}`;
+}
+
+describe('HttpPathRunner (HTTP primary, Playwright fallback)', () => {
+  it('runs the full chain against mocks and returns candidate-labelled success', async () => {
+    const logs = [];
+    const client = new BdrisHttpClient({ base });
+    const submitBefore = state.submitHits;
+    const out = await runHttpChain({
+      data: runnerInput({ _chargeToken: validChargeToken('user-1', 'test-secret') }),
+      userId: 'user-1',
+      secret: 'test-secret',
+      client,
+      playwrightRunner: async () => { throw new Error('fallback must not run on success'); },
+      log: (m) => logs.push(String(m)),
+    });
+    assert.strictEqual(out.ok, true);
+    assert.strictEqual(out.path, 'http');
+    assert.strictEqual(out.candidate, true);
+    assert.strictEqual(out.candidateLabel, HTTP_CANDIDATE_LABEL);
+    assert.strictEqual(out.hasPrintLink, true);
+    assert.strictEqual(out.ackNumber, null, 'no application number is ever extracted (format unverified)');
+    assert.deepStrictEqual(out.steps, ['bootstrap', 'geo', 'upload', 'otp-send', 'verify', 'submit']);
+    assert.strictEqual(state.submitHits, submitBefore + 1);
+    assert.ok(logs.length > 0 && logs.every((l) => l.includes('CANDIDATE')), 'every HTTP-path log line carries CANDIDATE');
+    assert.ok(logs.some((l) => /submit/.test(l) && /CANDIDATE/.test(l)));
+  });
+
+  it('falls back to Playwright on a geo failure, naming the step and reason', async () => {
+    const logs = [];
+    let stubCalls = 0;
+    const client = new BdrisHttpClient({ base });
+    const badChain = mockGeoChain();
+    badChain.steps = [{ geoType: 1, nameBn: 'নেই' }];
+    const out = await runHttpChain({
+      data: runnerInput({ geoChain: badChain }),
+      client,
+      playwrightRunner: async () => { stubCalls += 1; return { ok: true, completed: true }; },
+      log: (m) => logs.push(String(m)),
+    });
+    assert.strictEqual(stubCalls, 1, 'Playwright fallback must run on HTTP geo failure');
+    assert.strictEqual(out.path, 'playwright');
+    assert.strictEqual(out.httpFallback, true);
+    assert.strictEqual(out.httpStep, 'geo');
+    assert.match(out.httpReason, /GEO_NOT_FOUND|No geo entry/);
+    assert.strictEqual(out.candidate, true);
+    assert.ok(logs.some((l) => l.includes('HTTP_PATH_FALLBACK') && l.includes('step=geo')));
+  });
+
+  it('returns fallback:true (no browser launch) when no Playwright runner is provided', async () => {
+    const client = new BdrisHttpClient({ base });
+    const badChain = mockGeoChain();
+    badChain.steps = [{ geoType: 1, nameBn: 'নেই' }];
+    const out = await runHttpChain({ data: runnerInput({ geoChain: badChain }), client, log: () => {} });
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.fallback, true);
+    assert.strictEqual(out.httpStep, 'geo');
+  });
+
+  it('blocks on a bad charge token before any HTTP attempt and never falls back', async () => {
+    const client = new BdrisHttpClient({ base });
+    const submitBefore = state.submitHits;
+    const verifyBefore = state.verifyHits;
+    let stubCalls = 0;
+    const out = await runHttpChain({
+      data: runnerInput({ _chargeToken: 'v1.user-1.submit.ref-1.1.deadbeef' }),
+      userId: 'user-1',
+      secret: 'test-secret',
+      client,
+      playwrightRunner: async () => { stubCalls += 1; return { ok: true }; },
+      log: () => {},
+    });
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.blocked, true);
+    assert.strictEqual(out.error, 'CHARGE_REQUIRED');
+    assert.strictEqual(stubCalls, 0, 'charge gate must never be bypassed via fallback');
+    assert.strictEqual(state.submitHits, submitBefore);
+    assert.strictEqual(state.verifyHits, verifyBefore);
+  });
+
+  it('suppresses Playwright fallback when the submit outcome is unknown (no server response)', async () => {
+    let stubCalls = 0;
+    const fakeClient = {
+      bootstrap: async () => ({}),
+      walkGeoChain: async () => [{ chosen: { id: 1 } }],
+      uploadDocument: async () => ({ attachmentTypeId: 40, url: '/admin/doc/123', id: 123 }),
+      otpSend: async () => ({ success: true, code: 'MESSAGE_SENT', payload: null }),
+      verifyOtp: async () => ({ success: true }),
+      submitApplication: async () => { throw new Error('socket hangup'); }, // no .code: outcome unknown
+    };
+    const out = await runHttpChain({
+      data: completeApplication(),
+      client: fakeClient,
+      playwrightRunner: async () => { stubCalls += 1; return { ok: true }; },
+      log: () => {},
+    });
+    assert.strictEqual(stubCalls, 0, 'unknown submit outcome must never auto-retry via Playwright (double-submit risk)');
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
+    assert.strictEqual(out.httpStep, 'submit');
+  });
+
+  it('isHttpPathEnabled defaults OFF (opt-in only) and honours on/off values', () => {
+    const saved = process.env.BDRIS_HTTP_PATH;
+    try {
+      delete process.env.BDRIS_HTTP_PATH;
+      assert.strictEqual(isHttpPathEnabled(), false, 'default behaviour is Playwright (HTTP opt-in only)');
+      process.env.BDRIS_HTTP_PATH = '';
+      assert.strictEqual(isHttpPathEnabled(), false, 'empty value must disable');
+      for (const v of ['on', '1', 'true', 'yes', 'enabled', 'ON', ' True ']) {
+        process.env.BDRIS_HTTP_PATH = v;
+        assert.strictEqual(isHttpPathEnabled(), true, `BDRIS_HTTP_PATH=${v} must enable`);
+      }
+      for (const v of ['off', '0', 'false', 'no', 'disabled', 'banana']) {
+        process.env.BDRIS_HTTP_PATH = v;
+        assert.strictEqual(isHttpPathEnabled(), false, `BDRIS_HTTP_PATH=${v} must disable`);
+      }
+    } finally {
+      if (saved === undefined) delete process.env.BDRIS_HTTP_PATH; else process.env.BDRIS_HTTP_PATH = saved;
+    }
   });
 });

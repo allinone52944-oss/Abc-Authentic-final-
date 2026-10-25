@@ -370,3 +370,40 @@ describe('BrowserManager warm pool (2026-10-25)', () => {
     assert.strictEqual(bm.takeWarmPage(), null);
   });
 });
+
+// HttpPathRunner flag + candidate label (no browser, no network)
+const { isHttpPathEnabled, HTTP_CANDIDATE_LABEL, normalizeChainInput } = require('../services/HttpPathRunner');
+
+describe('HttpPathRunner flag/label', () => {
+  it('defaults to Playwright (HTTP opt-in only) and labels every path candidate', () => {
+    const saved = process.env.BDRIS_HTTP_PATH;
+    try {
+      delete process.env.BDRIS_HTTP_PATH;
+      assert.strictEqual(isHttpPathEnabled(), false, 'unset must not enable the candidate HTTP path');
+      process.env.BDRIS_HTTP_PATH = 'on';
+      assert.strictEqual(isHttpPathEnabled(), true);
+      process.env.BDRIS_HTTP_PATH = 'off';
+      assert.strictEqual(isHttpPathEnabled(), false);
+      assert.match(HTTP_CANDIDATE_LABEL, /CANDIDATE/);
+      assert.match(HTTP_CANDIDATE_LABEL, /NOT live-verified/);
+    } finally {
+      if (saved === undefined) delete process.env.BDRIS_HTTP_PATH; else process.env.BDRIS_HTTP_PATH = saved;
+    }
+  });
+
+  it('normalizes the Playwright draft shape into canonical HTTP input', () => {
+    const n = normalizeChainInput({
+      s1: { firstNameBn: 'আবদুল', firstNameEn: 'Abdul', dob: '2020-01-15', birth: { division: 'ঢাকা' } },
+      s2: { father: { nameBn: 'আবদুল হামিদ' } },
+      s2b: { perm: { division: 'ঢাকা' }, pres: { division: 'ঢাকা' } },
+      s3: { relation: 'FATHER' },
+      s4prep: { phone: 'mock-phone' },
+      otp: '123456',
+    });
+    assert.strictEqual(n.canonical.person.firstNameBn, 'আবদুল');
+    assert.strictEqual(n.canonical.birthPlace.division, 'ঢাকা');
+    assert.strictEqual(n.canonical.permAddr.division, 'ঢাকা');
+    assert.strictEqual(n.otpContext.phone, 'mock-phone');
+    assert.strictEqual(n.otp, '123456');
+  });
+});
