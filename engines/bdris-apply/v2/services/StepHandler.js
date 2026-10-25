@@ -473,31 +473,83 @@ class StepHandler {
    * Step 0: Select application basis (জন্মস্থান / স্থায়ী ঠিকানা)
    */
   async submitS0(data = {}) {
-    const { addressType = 'BIRTH' } = data;
+    // D1 (senior audit 2026-10-26): the old code clicked #aBirth/#aPerm,
+    // which are OUR OWN frontend page cards (frontend/bdris-apply.html),
+    // NOT site selectors, and clicked #brOfficeSelectionNextBtn, which
+    // appears nowhere else in the repo. The site's real controls, ported
+    // faithfully from v1 applyS0Core (engines/bdris-apply/server.js):
+    // radios #officeBirthplace/#officePermanent, i.e.
+    // input[name="officeAddressType"][value="BIRTHPLACE"|"PERMANENT"],
+    // embassy checkbox #bdMissionCheckbox, and the generic "পরবর্তী"
+    // button via _clickNextAndWait with the S1 anchor (v1's clickNextAndWait
+    // uses exactly that anchor for S0 — no site Next-button id exists).
+    // Value alignment: the frontend sends BIRTHPLACE and the HTTP layer
+    // maps BIRTH->BIRTHPLACE, but the old S0 default was 'BIRTH' and it
+    // used the raw value to pick a card id. Canonicalise here so any
+    // legacy 'BIRTH' caller still selects the BIRTHPLACE radio.
+    const raw = String(data.addressType || 'BIRTHPLACE').toUpperCase();
+    const addressType = raw === 'PERMANENT' ? 'PERMANENT' : 'BIRTHPLACE';
+    const embassy = !!data.embassy;
     this.progress('🔄 ধাপ ১: আবেদনের ভিত্তি নির্বাচন...');
 
-    // Select the basis radio/card
-    const basisId = addressType === 'PERMANENT' ? '#aPerm' : '#aBirth';
-    await this.page.click(basisId).catch(() => {});
-
-    // Click next
-    await this.page.click('#brOfficeSelectionNextBtn, button:has-text("পরবর্তী")')
-      .catch(async () => {
-        // Fallback: try by text
-        await this.page.evaluate(() => {
-          const btns = Array.from(document.querySelectorAll('button'));
-          const next = btns.find(b => /পরবর্তী/.test(b.textContent));
-          if (next) next.click();
+    // Embassy off: clear the mission checkbox first (v1 LIVE_FIELD:
+    // unchecking it makes the site itself return to BIRTHPLACE), so the
+    // basis radio selected next is not overridden by a stale mission state.
+    if (!embassy) {
+      const cbOff = await this._waitVisible(['#bdMissionCheckbox'], 3000);
+      if (cbOff) {
+        const isChecked = await this.page.evaluate(() => {
+          const cb = document.querySelector('#bdMissionCheckbox');
+          return cb ? !!cb.checked : false;
+        }).catch(() => false);
+        if (isChecked) await cbOff.uncheck().catch(async () => {
+          await this._robustClick(cbOff, 'embassy checkbox off');
         });
-      });
+      }
+    }
 
-    await this.page.waitForTimeout(2000);
-    // D4: the old code returned success unconditionally, even on a
-    // stub page with no basis radio — the same false-ready pattern
-    // gotoForm used to have. Verify the person section actually
-    // appeared before reporting success.
+    // Select the basis radio (v1 applyS0Core, 6s wait, no reload here:
+    // session creation already guarantees a verified form page).
+    const radioId = addressType === 'PERMANENT' ? '#officePermanent' : '#officeBirthplace';
+    const radio = await this._waitVisible(
+      [radioId, `input[name="officeAddressType"][value="${addressType}"]`], 6000);
+    if (!radio) {
+      return { ok: false, step: 1, failed: [{ field: 'আবেদনের ভিত্তি', reason: 'radio বাটন পাওয়া যায়নি' }] };
+    }
+    await radio.check().catch(async () => { await this._robustClick(radio, 'basis radio'); });
+    const radioChecked = await this.page.evaluate(({ id, val }) => {
+      const byId = document.querySelector(id);
+      if (byId) return !!byId.checked;
+      const byVal = document.querySelector(`input[name="officeAddressType"][value="${val}"]`);
+      return byVal ? !!byVal.checked : true;
+    }, { id: radioId, val: addressType }).catch(() => true);
+    if (!radioChecked) {
+      return { ok: false, step: 1, failed: [{ field: 'আবেদনের ভিত্তি', reason: 'radio বাটন নির্বাচন হয়নি' }] };
+    }
+
+    // Embassy on: check the mission checkbox after the basis radio
+    // (v1 applyS0Core order). The site itself then switches the radio
+    // to #officeBDMission (v1 LIVE_FIELD comment), so the basis radio
+    // is NOT re-asserted after this point.
+    if (embassy) {
+      const cb = await this._waitVisible(['#bdMissionCheckbox'], 5000);
+      if (!cb) {
+        return { ok: false, step: 1, failed: [{ field: 'দূতাবাস অপশন', reason: 'দূতাবাস চেকবক্স পাওয়া যায়নি' }] };
+      }
+      await cb.check().catch(async () => { await this._robustClick(cb, 'embassy checkbox'); });
+    }
+
+    // Next via the shared pattern (v1: generic "পরবর্তী" + S1 anchor).
+    // _clickNextAndWait returns ok:true even if the anchor never
+    // appears, so the advance check below (ce2cd3c) is the honest gate.
+    const nxt = await this._clickNextAndWait('পরবর্তী (ধাপ ১)', {
+      nextAnchor: ['#personFirstNameBn', 'input[name="personInfoForBirth.personFirstNameBn"]'],
+    });
+    if (!nxt.ok) {
+      return { ok: false, step: 1, failed: [{ field: nxt.field, reason: nxt.reason }] };
+    }
     const advanced = await this._waitVisible(
-      ['#personFirstNameBn', 'input[name*="personFirstNameBn"]'], 8000);
+      ['#personFirstNameBn', 'input[name="personInfoForBirth.personFirstNameBn"]'], 8000);
     if (!advanced) {
       return { ok: false, step: 1, failed: [{ field: 'আবেদনের ভিত্তি', reason: 'পরের ধাপ আসেনি — পাতা/সেশন যাচাই করুন' }] };
     }

@@ -380,7 +380,7 @@ class BdrisEngineV2 {
           });
           const d = data || {};
           const steps = [
-            ['submitS0', { addressType: d.addressType || 'BIRTH' }],
+            ['submitS0', { addressType: d.addressType || 'BIRTHPLACE' }],
             ['submitS1', d.s1 || d.person || {}],
             ['submitS2', { ...(d.s2 || {}), applicantDob: (d.s1 || {}).dob || d.applicantDob }],
             ['submitS2B', d.s2b || {}],

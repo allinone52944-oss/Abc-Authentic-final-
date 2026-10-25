@@ -158,7 +158,7 @@ function normalizeChainInput(data = {}) {
     officeAddressType: data.officeAddressType || s4prep.officeAddressType,
     officeAddrCountry: data.officeAddrCountry || s4prep.officeAddrCountry,
     officeId: data.officeId || s4prep.officeId,
-    addressType: data.addressType || 'BIRTH',
+    addressType: data.addressType || 'BIRTHPLACE',
     otp: data.otp,
   };
   // OTP-send/verify context (verified param names, see client.js).
