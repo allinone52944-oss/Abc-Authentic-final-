@@ -3327,7 +3327,11 @@ function otpPrepAck(d) {
 }
 
 /* ═══════════ session প্রস্তুতি (নাগরিক কখনো আটকাবে না) ═══════════ */
-// Permanent (2026-10-15): S.starting deadlock fix — READY না এলে 30s-এ timeout,
+// Permanent (2026-10-15): S.starting deadlock fix — READY না এলে timeout,
+// 2026-10-25 speed fix: প্রোডাকশনে START→READY ৩৫–৪১ সেকেন্ড মাপা গেছে,
+// অথচ আগের timeout ছিল ৩০ সেকেন্ড — ইঞ্জিন রেডি হওয়ার আগেই ইউজারকে
+// "আবার চেষ্টা করুন" দেখাত, আর আবার চাপলে কাজ শুরু থেকে হতো।
+// তাই timeout ৬০ সেকেন্ড, আর শুরুতেই সৎ সময়-প্রত্যাশা জানানো হয়।
 // reconnect-এ queue থাকলে session আবার চাওয়া হয়।
 function ensureReady(cb) {
   if (S.ready) { cb(); return; }
@@ -3336,7 +3340,7 @@ function ensureReady(cb) {
 }
 function startSession() {
   S.starting = true;
-  note('⏳ সংযোগ প্রস্তুত হচ্ছে… (একটু অপেক্ষা করুন)', 'warn');
+  note('⏳ BDRIS ফর্ম লোড হচ্ছে… (৩৫–৪০ সেকেন্ড লাগতে পারে, একটু অপেক্ষা করুন)', 'warn');
   socket.emit('START_BDRIS_SESSION');
   // READY না এলে আটকে থাকবে না — timeout-এ flag ছেড়ে দিই, পরের ensureReady আবার চেষ্টা করবে
   clearTimeout(S._startT);
@@ -3345,7 +3349,7 @@ function startSession() {
       S.starting = false;
       note('⚠️ সংযোগ প্রস্তুত হতে দেরি হচ্ছে — আবার চেষ্টা করুন', 'warn');
     }
-  }, 30000);
+  }, 60000);
   if (S._startT.unref) S._startT.unref();
 }
 function onSessionReady() {

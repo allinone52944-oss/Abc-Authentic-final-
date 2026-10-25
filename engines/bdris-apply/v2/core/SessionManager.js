@@ -23,7 +23,13 @@ class SessionManager {
 
   async create(userId, metadata = {}) {
     const sessionId = this.generateId();
-    const page = await this.browserManager.newPage();
+    // 2026-10-25 warm-up: warm page থাকলে সেটাই নাও — নতুন পেজ +
+    // form-load এর খরচ বাঁচে। না থাকলে আগের মতো নতুন পেজ।
+    let page = null;
+    if (typeof this.browserManager.takeWarmPage === 'function') {
+      page = this.browserManager.takeWarmPage();
+    }
+    if (!page) page = await this.browserManager.newPage();
 
     const session = {
       id: sessionId,

@@ -75,6 +75,22 @@ class BdrisEngineV2 {
     console.log(`[engine-v2 ${ts}]`, ...args);
   }
 
+  // 2026-10-25 warm-up: engine চালু হলেই Chromium + BDRIS ফর্ম আগে
+  // থেকে লোড করে রাখা হয়, যাতে প্রথম গ্রাহক ৩৫–৪১ সেকেন্ডের
+  // launch + form-load খরচ না দেয়। ব্যর্থ হলে চুপচাপ বাদ —
+  // প্রথম সেশন আগের মতোই নিজে পেজ বানিয়ে কাজ করবে, কখনো ভাঙবে না।
+  async warmUp() {
+    try {
+      const page = await this.browserManager.newPage();
+      const nav = new BdrisNavigator(page);
+      await nav.gotoForm();
+      this.browserManager.setWarmPage(page);
+      this.log('Warm-up ready: Chromium + BDRIS form pre-loaded for first session');
+    } catch (e) {
+      this.log('Warm-up skipped (first session will launch normally):', e.message);
+    }
+  }
+
   registerCommands() {
     // GET_ADDRESS_OPTIONS — replaces fragile mirror logic
     this.executor.register('GET_ADDRESS_OPTIONS',
@@ -611,6 +627,8 @@ if (require.main === module) {
 
   server.listen(PORT, '127.0.0.1', () => {
     console.log(`[bdris-apply-v2] listening on 127.0.0.1:${PORT}`);
+    // Non-blocking: warm-up must never delay listen / health.
+    engine.warmUp();
   });
 
   process.on('unhandledRejection', (e) => {

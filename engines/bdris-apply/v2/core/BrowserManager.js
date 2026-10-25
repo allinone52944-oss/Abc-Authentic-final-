@@ -26,6 +26,11 @@ class BrowserManager {
     };
     this.healthCheckInterval = null;
     this.onStateChange = options.onStateChange || (() => {});
+    // 2026-10-25 warm-up: engine startup-এ আগেই Chromium + BDRIS ফর্ম
+    // লোড করা পেজ। প্রথম সেশন এটা নিলে launch + form-load খরচ
+    // আর দিতে হয় না। পেজটি anonymous public ফর্ম — কোনো ইউজার
+    // ডেটা এতে থাকে না, তাই প্রথম সেশনে দেওয়া নিরাপদ.
+    this.warmPage = null;
   }
 
   setState(newState) {
@@ -67,6 +72,20 @@ class BrowserManager {
       ...options,
     });
     return context;
+  }
+
+  setWarmPage(page) {
+    this.warmPage = page || null;
+  }
+
+  // Returns the warm page once, or null (caller then creates a fresh page).
+  // A closed warm page is never handed out.
+  takeWarmPage() {
+    const page = this.warmPage || null;
+    this.warmPage = null;
+    if (!page) return null;
+    try { if (typeof page.isClosed === 'function' && page.isClosed()) return null; } catch (e) { return null; }
+    return page;
   }
 
   async newPage(contextOptions = {}) {

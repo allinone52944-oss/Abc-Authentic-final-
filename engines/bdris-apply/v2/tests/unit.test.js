@@ -221,3 +221,57 @@ describe('OriginalFetcher (no browser)', () => {
 });
 
 console.log('All v2 unit tests passed!');
+
+// 2026-10-25 speed fixes: warm page adoption + geo cache (no browser needed)
+describe('SessionManager warm page (2026-10-25)', () => {
+  it('adopts a warm page instead of creating a new one', async () => {
+    const { SessionManager } = require('../core/SessionManager');
+    const warm = { url: () => 'https://bdris.gov.bd/br/application', isClosed: () => false };
+    let newPageCalls = 0;
+    const mockBrowser = {
+      newPage: async () => { newPageCalls++; return { url: () => '', isClosed: () => false }; },
+      closePage: async () => {},
+      takeWarmPage: () => warm,
+    };
+    const sm = new SessionManager({ browserManager: mockBrowser, sessionTimeoutMs: 60000 });
+    const s = await sm.create('user-1');
+    assert.strictEqual(s.page, warm);
+    assert.strictEqual(newPageCalls, 0);
+    await sm.destroy(s.id);
+    await sm.closeAll();
+  });
+
+  it('falls back to a new page when no warm page exists', async () => {
+    const { SessionManager } = require('../core/SessionManager');
+    let newPageCalls = 0;
+    const mockBrowser = {
+      newPage: async () => { newPageCalls++; return { url: () => '', isClosed: () => false }; },
+      closePage: async () => {},
+    };
+    const sm = new SessionManager({ browserManager: mockBrowser, sessionTimeoutMs: 60000 });
+    const s = await sm.create('user-1');
+    assert.strictEqual(newPageCalls, 1);
+    await sm.destroy(s.id);
+    await sm.closeAll();
+  });
+});
+
+describe('AddressService geo cache (2026-10-25)', () => {
+  it('caches live zone/ward results, never empty results, and keys by parents', async () => {
+    const { AddressService } = require('../services/AddressService');
+    let calls = 0;
+    const nav = { getAddressOptions: async () => { calls++; return [{ id: '1', name: 'ওয়ার্ড - 1' }]; } };
+    const svc = new AddressService(nav);
+    const parents = { division: 'ঢাকা', district: 'ঢাকা', upazila: 'ঢাকা উত্তর সিটি কর্পোরেশন', zone: 'অঞ্চল - ১' };
+    await svc.getOptions('ward', parents, 'birth');
+    await svc.getOptions('ward', parents, 'birth');
+    assert.strictEqual(calls, 1, 'second identical call must hit cache');
+    await svc.getOptions('ward', { ...parents, zone: 'অঞ্চল - ২' }, 'birth');
+    assert.strictEqual(calls, 2, 'different parents must miss cache');
+    const navEmpty = { getAddressOptions: async () => { calls++; return []; } };
+    const svc2 = new AddressService(navEmpty);
+    await svc2.getOptions('ward', { ...parents, zone: 'অঞ্চল - ৯' }, 'birth');
+    await svc2.getOptions('ward', { ...parents, zone: 'অঞ্চল - ৯' }, 'birth');
+    assert.strictEqual(calls, 4, 'empty results must never be cached');
+  });
+});

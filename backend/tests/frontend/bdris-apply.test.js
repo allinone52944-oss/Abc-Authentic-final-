@@ -242,3 +242,16 @@ describe('double-charge fix (2026-10-25)', () => {
     expect(html).toMatch(/bdris_submit_key_for_' \+ S\.draftId/);
   });
 });
+
+describe('session-start speed fix (2026-10-25)', () => {
+  test('startSession timeout is 60s, not 30s (production START→READY measured 35–41s)', () => {
+    const m = html.match(/S\._startT = setTimeout\(\(\) => \{[\s\S]*?\}, (\d+)\)/);
+    expect(m).not.toBeNull();
+    expect(Number(m[1])).toBeGreaterThanOrEqual(60000);
+  });
+
+  test('startSession shows an honest load-time expectation, not a generic wait', () => {
+    expect(html).toMatch(/BDRIS ফর্ম লোড হচ্ছে/);
+    expect(html).toMatch(/৩৫–৪০ সেকেন্ড/);
+  });
+});
