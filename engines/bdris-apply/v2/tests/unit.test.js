@@ -275,3 +275,98 @@ describe('AddressService geo cache (2026-10-25)', () => {
     assert.strictEqual(calls, 4, 'empty results must never be cached');
   });
 });
+
+// 2026-10-25 speed fix: warm page POOL (fake pages, no Chromium)
+describe('BrowserManager warm pool (2026-10-25)', () => {
+  const { BrowserManager } = require('../core/BrowserManager');
+
+  function fakePage(id) {
+    let closed = false;
+    let closeCalls = 0;
+    return {
+      id,
+      isClosed: () => closed,
+      close: () => { closed = true; closeCalls++; },
+      get closeCalls() { return closeCalls; },
+      forceClose: () => { closed = true; },
+    };
+  }
+
+  it('hands out pages FIFO', () => {
+    const bm = new BrowserManager();
+    const a = fakePage('a'), b = fakePage('b'), c = fakePage('c');
+    bm.setWarmPage(a); bm.setWarmPage(b); bm.setWarmPage(c);
+    assert.strictEqual(bm.takeWarmPage(), a);
+    assert.strictEqual(bm.takeWarmPage(), b);
+    assert.strictEqual(bm.takeWarmPage(), c);
+    assert.strictEqual(bm.warmPoolSize(), 0);
+  });
+
+  it('skips closed pages, never hands one out', () => {
+    const bm = new BrowserManager();
+    const a = fakePage('a'), b = fakePage('b'), c = fakePage('c');
+    bm.setWarmPage(a); bm.setWarmPage(b); bm.setWarmPage(c);
+    b.forceClose();
+    assert.strictEqual(bm.takeWarmPage(), a);
+    assert.strictEqual(bm.takeWarmPage(), c, 'closed middle page must be skipped');
+    assert.strictEqual(bm.takeWarmPage(), null);
+  });
+
+  it('enforces the cap and closes the excess page instead of leaking it', () => {
+    const bm = new BrowserManager();
+    const pages = [];
+    for (let i = 0; i < 6; i++) pages.push(fakePage('p' + i));
+    for (const p of pages) bm.setWarmPage(p);
+    assert.strictEqual(bm.warmPoolSize(), 5, 'pool must not exceed the cap of 5');
+    assert.strictEqual(pages[5].closeCalls, 1, 'excess page must be closed, not leaked');
+    for (let i = 0; i < 5; i++) assert.strictEqual(bm.takeWarmPage(), pages[i]);
+    assert.strictEqual(bm.takeWarmPage(), null);
+  });
+
+  it('returns null when empty and does not fire the replenish hook', () => {
+    const bm = new BrowserManager();
+    let calls = 0;
+    bm.onWarmPageTaken = () => { calls++; };
+    assert.strictEqual(bm.takeWarmPage(), null);
+    assert.strictEqual(calls, 0, 'empty take must not trigger replenish');
+  });
+
+  it('fires the replenish hook exactly once per successful take', () => {
+    const bm = new BrowserManager();
+    let calls = 0;
+    bm.onWarmPageTaken = () => { calls++; };
+    bm.setWarmPage(fakePage('a')); bm.setWarmPage(fakePage('b'));
+    bm.takeWarmPage();
+    assert.strictEqual(calls, 1);
+    bm.takeWarmPage();
+    assert.strictEqual(calls, 2);
+    bm.takeWarmPage(); // empty now
+    assert.strictEqual(calls, 2, 'empty take must not add a call');
+  });
+
+  it('swallows replenish hook errors so session creation never breaks', () => {
+    const bm = new BrowserManager();
+    bm.onWarmPageTaken = () => { throw new Error('replenish boom'); };
+    const a = fakePage('a');
+    bm.setWarmPage(a);
+    assert.strictEqual(bm.takeWarmPage(), a);
+  });
+
+  it('setWarmPage(null) is safe and changes nothing', () => {
+    const bm = new BrowserManager();
+    bm.setWarmPage(null);
+    assert.strictEqual(bm.warmPoolSize(), 0);
+    bm.setWarmPage(fakePage('a'));
+    bm.setWarmPage(null);
+    assert.strictEqual(bm.warmPoolSize(), 1);
+  });
+
+  it('setWarmPage never pools an already-closed page', () => {
+    const bm = new BrowserManager();
+    const dead = fakePage('dead');
+    dead.forceClose();
+    bm.setWarmPage(dead);
+    assert.strictEqual(bm.warmPoolSize(), 0);
+    assert.strictEqual(bm.takeWarmPage(), null);
+  });
+});

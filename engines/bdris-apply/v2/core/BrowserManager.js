@@ -26,11 +26,17 @@ class BrowserManager {
     };
     this.healthCheckInterval = null;
     this.onStateChange = options.onStateChange || (() => {});
-    // 2026-10-25 warm-up: engine startup-এ আগেই Chromium + BDRIS ফর্ম
-    // লোড করা পেজ। প্রথম সেশন এটা নিলে launch + form-load খরচ
-    // আর দিতে হয় না। পেজটি anonymous public ফর্ম — কোনো ইউজার
-    // ডেটা এতে থাকে না, তাই প্রথম সেশনে দেওয়া নিরাপদ.
-    this.warmPage = null;
+    // 2026-10-25 warm-up pool: engine startup-এ আগেই Chromium + BDRIS
+    // ফর্ম লোড করা কয়েকটি পেজ পুলে থাকে। সেশন এখান থেকে নিলে
+    // launch + form-load খরচ আর দিতে হয় না। প্রতিটি পুল-পেজ
+    // anonymous public ফর্ম — কোনো ইউজার ডেটা এতে থাকে না, তাই
+    // সেশনে দেওয়া নিরাপদ। নেওয়া পেজ পুলে আর ফেরে না।
+    this.warmPool = [];
+    // Max pool size (server fills up to BDRIS_WARM_POOL_SIZE, clamp 1..5).
+    this.maxWarmPoolSize = 5;
+    // Replenish hook: invoked non-blocking on every successful take.
+    // The server sets this to refill one page; never awaited here.
+    this.onWarmPageTaken = null;
   }
 
   setState(newState) {
@@ -74,18 +80,58 @@ class BrowserManager {
     return context;
   }
 
+  // Push a fresh pre-loaded page onto the pool (FIFO). Kept for
+  // existing callers: setWarmPage(null) is safe, and pages beyond the
+  // cap are closed instead of leaked. A closed page is never pooled.
   setWarmPage(page) {
-    this.warmPage = page || null;
+    if (!page) return;
+    try { if (typeof page.isClosed === 'function' && page.isClosed()) return; } catch (e) { return; }
+    if (this.warmPool.length >= this.maxWarmPoolSize) {
+      try {
+        if (typeof page.close === 'function') {
+          const r = page.close();
+          if (r && typeof r.catch === 'function') r.catch(() => {});
+        }
+      } catch (e) { /* excess page dropped, never leaked into the pool */ }
+      return;
+    }
+    this.warmPool.push(page);
   }
 
-  // Returns the warm page once, or null (caller then creates a fresh page).
-  // A closed warm page is never handed out.
+  // Drop closed pages silently; used by warmPoolSize() so it never
+  // counts a page that can no longer be handed out.
+  _purgeClosedWarmPages() {
+    this.warmPool = this.warmPool.filter((page) => {
+      try { return !(typeof page.isClosed === 'function' && page.isClosed()); }
+      catch (e) { return false; }
+    });
+  }
+
+  warmPoolSize() {
+    this._purgeClosedWarmPages();
+    return this.warmPool.length;
+  }
+
+  // Returns the oldest pooled page once, or null (caller then creates
+  // a fresh page). A closed page is skipped, never handed out. On a
+  // successful take only, the replenish hook fires non-blocking and
+  // its errors are swallowed so session creation never breaks.
   takeWarmPage() {
-    const page = this.warmPage || null;
-    this.warmPage = null;
-    if (!page) return null;
-    try { if (typeof page.isClosed === 'function' && page.isClosed()) return null; } catch (e) { return null; }
-    return page;
+    while (this.warmPool.length > 0) {
+      const page = this.warmPool.shift();
+      let closed = false;
+      try { closed = typeof page.isClosed === 'function' && page.isClosed(); }
+      catch (e) { closed = true; }
+      if (closed) continue;
+      if (typeof this.onWarmPageTaken === 'function') {
+        try {
+          const r = this.onWarmPageTaken();
+          if (r && typeof r.catch === 'function') r.catch(() => {});
+        } catch (e) { /* replenish must never break session creation */ }
+      }
+      return page;
+    }
+    return null;
   }
 
   async newPage(contextOptions = {}) {

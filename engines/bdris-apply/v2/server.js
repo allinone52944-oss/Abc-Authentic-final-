@@ -75,19 +75,56 @@ class BdrisEngineV2 {
     console.log(`[engine-v2 ${ts}]`, ...args);
   }
 
-  // 2026-10-25 warm-up: engine চালু হলেই Chromium + BDRIS ফর্ম আগে
-  // থেকে লোড করে রাখা হয়, যাতে প্রথম গ্রাহক ৩৫–৪১ সেকেন্ডের
-  // launch + form-load খরচ না দেয়। ব্যর্থ হলে চুপচাপ বাদ —
-  // প্রথম সেশন আগের মতোই নিজে পেজ বানিয়ে কাজ করবে, কখনো ভাঙবে না।
+  // 2026-10-25 warm-up pool: engine চালু হলেই Chromium + BDRIS ফর্ম
+  // আগে থেকে লোড করা পেজের একটি পুল (BDRIS_WARM_POOL_SIZE, ডিফল্ট ৩,
+  // সীমা ১..৫) তৈরি হয়, যাতে প্রথম কয়েকজন গ্রাহককেই ৩৫–৪১ সেকেন্ডের
+  // launch + form-load খরচ দিতে না হয় — আগের একটিমাত্র warm পেজে
+  // শুধু প্রথম সেশনই বাঁচত, পরের সবাই পুরো খরচ দিত। পুলের নিয়ম:
+  // প্রতিটি পেজ fresh browser context-এ anonymous public ফর্ম মাত্র,
+  // কোনো ইউজার ডেটা থাকে না; সেশনে নেওয়া পেজ পুলে আর ফেরে না
+  // (SessionManager.destroy তা বন্ধ করে দেয়), আর নেওয়ার সঙ্গে
+  // সঙ্গে একটি করে নতুন পেজ দিয়ে পুল ভরা হয়। ব্যর্থ হলে চুপচাপ
+  // বাদ — সেশন আগের মতোই নিজে পেজ বানিয়ে কাজ করবে, কখনো ভাঙবে না।
   async warmUp() {
+    const raw = parseInt(process.env.BDRIS_WARM_POOL_SIZE || '3', 10);
+    const target = Number.isNaN(raw) ? 3 : Math.min(5, Math.max(1, raw));
+    this.warmPoolTarget = target;
+    this._replenishingWarmPool = false;
+    // Replenish on take: one fresh page per handed-out page, guarded
+    // against concurrent replenishes inside replenishWarmPool().
+    this.browserManager.onWarmPageTaken = () => { void this.replenishWarmPool(); };
+    for (let i = 0; i < target; i++) {
+      if (this.browserManager.warmPoolSize() >= target) break;
+      try {
+        const page = await this.browserManager.newPage();
+        const nav = new BdrisNavigator(page);
+        await nav.gotoForm();
+        this.browserManager.setWarmPage(page);
+      } catch (e) {
+        this.log('Warm-up page skipped (sessions will launch normally):', e.message);
+      }
+    }
+    this.log(`Warm-up pool ready: ${this.browserManager.warmPoolSize()}/${target} pages pre-loaded`);
+  }
+
+  // Refill exactly one page after a take. Concurrent calls are skipped
+  // (flag guard) — a take that arrives mid-replenish simply waits for
+  // the next take to trigger its own refill. Failures are silent-ish:
+  // logged at the existing level, never thrown to session creation.
+  async replenishWarmPool() {
+    if (this._replenishingWarmPool) return;
+    if (this.browserManager.warmPoolSize() >= (this.warmPoolTarget || 3)) return;
+    this._replenishingWarmPool = true;
     try {
       const page = await this.browserManager.newPage();
       const nav = new BdrisNavigator(page);
       await nav.gotoForm();
       this.browserManager.setWarmPage(page);
-      this.log('Warm-up ready: Chromium + BDRIS form pre-loaded for first session');
+      this.log(`Warm-up pool replenished: ${this.browserManager.warmPoolSize()} pages`);
     } catch (e) {
-      this.log('Warm-up skipped (first session will launch normally):', e.message);
+      this.log('Warm-up replenish skipped:', e.message);
+    } finally {
+      this._replenishingWarmPool = false;
     }
   }
 
