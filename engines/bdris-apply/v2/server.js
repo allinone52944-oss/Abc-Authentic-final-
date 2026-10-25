@@ -208,6 +208,13 @@ class BdrisEngineV2 {
         const url = session.page.url();
         if (!url.includes('bdris.gov.bd')) {
           await nav.gotoForm();
+        } else {
+          // A stub page at the form URL used to pass this check
+          // (URL-contains only). Verify content; a stub is not ready.
+          const state = await nav.getPageState().catch(() => null);
+          if (state && !state.formContent) {
+            await nav.gotoForm();
+          }
         }
         return { ready: true };
       },
@@ -272,11 +279,34 @@ class BdrisEngineV2 {
           const handler = new StepHandler(nav, {
             emit: (ev, msg) => ctx.emit(ev, msg),
             userId: ctx.socket?.abcUser?.id || null,
+            // D6: handlers were stateless across steps (new instance
+            // per command, never passed singleName/applicantDob), so
+            // S3/S4Prep/S4 lost them. Carry them on the session.
+            singleName: session.singleName || null,
+            applicantDob: session.applicantDob || null,
           });
           if (typeof handler[methodName] !== 'function') {
             throw new Error(`StepHandler.${methodName} not implemented`);
           }
-          const result = await handler[methodName](params);
+          // D5: the frontend attaches ctx {s0,s1,s2,s2b} to every
+          // emit, but no handler ever read it — S3's applicant
+          // name fell back to the literal 'Applicant', S3's
+          // pre-2013 SELF rule was dead, and S4Prep/S4 cinno +
+          // original-record were dead. Merge ctx (and the session's
+          // stored ctx from earlier steps) without overwriting
+          // explicit step fields.
+          const ctxData = params.ctx || session.formCtx || null;
+          if (params.ctx) session.formCtx = params.ctx;
+          const merged = { ...params };
+          if (ctxData) {
+            if (!merged.s1 && ctxData.s1) merged.s1 = ctxData.s1;
+            if (!merged.s2 && ctxData.s2) merged.s2 = ctxData.s2;
+            if (!merged.s2b && ctxData.s2b) merged.s2b = ctxData.s2b;
+            if (!merged.applicantDob && ctxData.s1 && ctxData.s1.dob) merged.applicantDob = ctxData.s1.dob;
+          }
+          const result = await handler[methodName](merged);
+          if (handler.singleName) session.singleName = handler.singleName;
+          if (handler.applicantDob) session.applicantDob = handler.applicantDob;
           // Map to legacy STEP_CHANGE_ACK shape for frontend compat
           return result;
         },
@@ -401,6 +431,25 @@ class BdrisEngineV2 {
       this.log(`Connected: ${socket.id}`);
       let sessionId = null;
 
+      // G7: a reused session must be verified, not trusted. A page
+      // that degraded to a stub after creation used to be returned
+      // as READY with no check at all (INIT reuse, START reuse,
+      // ENSURE_READY URL-contains check). One cheap getPageState
+      // evaluate: form content present -> reuse; absent -> destroy
+      // and fall through to fresh creation. Test doubles without
+      // evaluate() keep the old behaviour (cannot verify).
+      const verifyReusedSession = async (sid) => {
+        const sess = sid ? this.sessionManager.get(sid) : null;
+        if (!sess?.page || typeof sess.page.evaluate !== 'function') return true;
+        try {
+          const nav = new BdrisNavigator(sess.page);
+          const state = await nav.getPageState();
+          if (state && state.formContent) return true;
+        } catch (e) { /* treat as unverifiable -> destroy below */ }
+        await this.sessionManager.destroy(sid).catch(() => {});
+        return false;
+      };
+
       // Authenticate (from JWT or standalone)
       const userId = socket.abcUser?.id || null;
 
@@ -410,13 +459,18 @@ class BdrisEngineV2 {
         try {
           socket.emit('BOT_STATUS', { status: 'LOADING', message: '⏳ সংযোগ প্রস্তুত হচ্ছে...' });
           // Session তৈরি বা reuse (INIT_SESSION-এর logic)
+          if (sessionId && !(await verifyReusedSession(sessionId))) sessionId = null;
           let sid = sessionId;
           if (!sid) {
             if (userId) {
               const existing = this.sessionManager.findByUser(userId);
               if (existing) {
-                sid = existing.id;
-                this.sessionManager.touch(sid);
+                if (await verifyReusedSession(existing.id)) {
+                  sid = existing.id;
+                  this.sessionManager.touch(sid);
+                } else {
+                  sid = null;
+                }
               }
             }
             if (!sid) {
@@ -448,16 +502,21 @@ class BdrisEngineV2 {
 
       socket.on('INIT_SESSION', async (data = {}, callback) => {
         try {
-          // Same-user takeover: reuse existing session
+          // Same-user takeover: reuse existing session, but only
+          // if it still has form content (G7) — a stub reuse is
+          // destroyed and falls through to fresh creation below.
           if (userId) {
             const existing = this.sessionManager.findByUser(userId);
             if (existing) {
-              sessionId = existing.id;
-              this.sessionManager.touch(sessionId);
-              this.log(`Session reused: ${sessionId} (user ${userId})`);
-              if (callback) callback({ ok: true, sessionId, reused: true });
-              socket.emit('SESSION_READY', { sessionId });
-              return;
+              if (await verifyReusedSession(existing.id)) {
+                sessionId = existing.id;
+                this.sessionManager.touch(sessionId);
+                this.log(`Session reused: ${sessionId} (user ${userId})`);
+                if (callback) callback({ ok: true, sessionId, reused: true });
+                socket.emit('SESSION_READY', { sessionId });
+                return;
+              }
+              sessionId = null;
             }
           }
 
@@ -664,6 +723,12 @@ class BdrisEngineV2 {
               failed: result.failed || [],
               blocked: result.blocked || undefined,
               ok: result.ok,
+              // Previously dropped: S4_PREP's fresh-session resumable
+              // path was dead because the frontend never saw it and
+              // rendered the OTP screen as if a code had been sent.
+              resumable: result.resumable || undefined,
+              otpSent: result.otpSent,
+              relationBn: result.relationBn,
             });
             // S4 completion → BOT_STATUS/COMPLETED for frontend
             if (evName === 'SUBMIT_S4_OTP' && result.ok && result.completed) {

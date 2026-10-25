@@ -441,3 +441,18 @@ describe('zone/ward failure visibility (2026-10-25 zone fix)', () => {
     expect(html).toMatch(/if \(k === 'paurasavaUnion' \|\| k === 'ward'\) hideBanner\(\)/);
   });
 });
+
+describe('Bengali-digit mobile numbers (live error 2026-10-26)', () => {
+  test('collectStep6, collectAuto and status login normalize Bengali digits before the 01 rule', () => {
+    // bnDigits() already existed in the same file but was never
+    // applied to phone fields: [^\\d] stripped Bengali digits
+    // entirely, so a Bengali-typed number failed as "".
+    expect(html).toMatch(/S\.d\.phone = bnDigits\(\$\('c_phone'\)/);
+    expect(html).toMatch(/S\.d\.phone = bnDigits\(\$\('a_phone'\)/);
+    expect(html).toMatch(/const mobileEmail = bnDigits\(\$\('st_mobile'\)/);
+  });
+
+  test('the 11-digit / 01-start rule itself is unchanged', () => {
+    expect(html).toMatch(/\/\^01\\d\{9\}\$\//);
+  });
+});

@@ -1139,7 +1139,7 @@ function statusOpen() {
   const userType = $('st_type') ? $('st_type').value : 'BANGLADESH';
   const username = ($('st_user') ? $('st_user').value : '').trim();
   const password = $('st_pass') ? $('st_pass').value : '';
-  const mobileEmail = ($('st_mobile') ? $('st_mobile').value : '').trim();
+  const mobileEmail = bnDigits($('st_mobile') ? $('st_mobile').value : '').trim();
   if (!username || !password) { note('⚠️ ব্যবহারকারীর নাম ও পাসওয়ার্ড দুটোই লিখুন', 'warn'); return; }
   if (userType === 'MISSION') {
     if (!/^\S+@\S+\.\S+$/.test(mobileEmail)) { note('⚠️ দূতাবাস/মিশন অ্যাকাউন্টের জন্য সঠিক ইমেইল লিখুন', 'warn'); return; }
@@ -2452,7 +2452,7 @@ function renderStep6() {
   ]);
 }
 function collectStep6() {
-  S.d.phone = ($('c_phone') ? $('c_phone').value : '').replace(/[^\d]/g, '');
+  S.d.phone = bnDigits($('c_phone') ? $('c_phone').value : '').replace(/\D/g, '');
   S.d.email = ($('c_email') ? $('c_email').value : '').trim();
   return { email: S.d.email, phone: S.d.phone };
 }
@@ -3177,7 +3177,7 @@ function collectAuto() {
     perm: ($('sp_same') ? $('sp_same').checked : false) ? null : readAddrFields('sp'),
     pres: ($('rp_same') ? $('rp_same').checked : false) ? null : readAddrFields('rp')
   };
-  S.d.phone = ($('a_phone').value || '').replace(/[^\d]/g, '');
+  S.d.phone = bnDigits($('a_phone').value || '').replace(/\D/g, '');
   S.d.email = ($('a_email').value || '').trim();
   return S.d;
 }

@@ -117,7 +117,8 @@ class BdrisNavigator {
           const link = links.find((a) => {
             try {
               const h = a.getAttribute ? (a.getAttribute('href') || '') : '';
-              return h === '/br/application' || h.endsWith('/br/application');
+              const path = h.split('?')[0].split('#')[0];
+              return path === 'br/application' || path === '/br/application' || path.endsWith('/br/application');
             } catch (e) { return false; }
           });
           if (!link) return false;
@@ -150,10 +151,11 @@ class BdrisNavigator {
       timeout: 30000,
     }).catch((e) => { this._gotoError = e; return null; });
     this._recordNavigation(resp);
-    // Wait for form to be interactive
+    // The poll below follows, so a long pre-poll selector wait is
+    // pure waste (G4): keep only a 3s head start, then poll.
     await this.page.waitForSelector(
       SELECTORS.birth.division,
-      { timeout: 15000 }
+      { timeout: 3000 }
     ).catch(() => {});
     // Proven defect (live banner 2026-10-26, page at /br/application
     // with no CSRF token and no division select): the old gotoForm
@@ -415,17 +417,18 @@ class BdrisNavigator {
                 this._recordNavigation(resp);
               } catch (e) { /* state check below decides */ }
             }
-            // Short direct poll (5s), then the in-site path
-            // (homepage -> real link, 8s goto + 5s poll) instead
+            // Short direct poll (3s), then the in-site path
+            // (homepage -> real link, 5s goto + 3s poll) instead
             // of a long direct poll: total fresh attempt stays
-            // ~28s worst, inside the geo executor budget, and a
-            // deep-link gate gets a real alternative instead of
-            // another direct reload of the same stub.
-            const after = await this.waitForFormContent(10);
+            // ~21s worst, so fresh attempt + 8s HTTP geo stays
+            // ~29s, inside the 30s geo executor budget (G1: the
+            // old ~28s fresh attempt + 8s HTTP = 36s breached it,
+            // and the executor race discarded the result at 30s).
+            const after = await this.waitForFormContent(6);
             let newUrl = url;
             try { newUrl = this.page.url(); } catch (e) { /* unknown */ }
             if (after.formContent) return classify(after, true, newUrl);
-            const via = await this.gotoFormViaSite(8000, 10).catch(() => null);
+            const via = await this.gotoFormViaSite(5000, 6).catch(() => null);
             if (via && via.state && via.state.formContent) {
               let viaUrl = newUrl;
               try { viaUrl = this.page.url(); } catch (e) { /* unknown */ }
@@ -439,16 +442,18 @@ class BdrisNavigator {
           }
         } catch (e) { /* fall through to the reload path below */ }
       }
-      // No form content at all: reload once and wait for content.
+      // No form content at all: reload once and wait for content,
+      // capped so this branch alone cannot breach the 30s executor
+      // budget (G3: was 20s goto + 15s poll = 35s).
       if (typeof this.page.goto === 'function') {
         try {
           const resp = await this.page.goto(`${BDRIS_BASE}/br/application`, {
             waitUntil: 'domcontentloaded',
-            timeout: 20000,
+            timeout: 10000,
           });
           this._recordNavigation(resp);
         } catch (e) { /* state check below decides */ }
-        const after = await this.waitForFormContent();
+        const after = await this.waitForFormContent(20);
         let newUrl = url;
         try { newUrl = this.page.url(); } catch (e) { /* unknown */ }
         return classify(after, true, newUrl);
@@ -463,14 +468,14 @@ class BdrisNavigator {
     try {
       const resp = await this.page.goto(`${BDRIS_BASE}/br/application`, {
         waitUntil: 'domcontentloaded',
-        timeout: 20000,
+        timeout: 10000,
       });
       this._recordNavigation(resp);
     } catch (e) { /* state check below decides */ }
     if (typeof this.page.waitForSelector === 'function') {
       await this.page.waitForSelector(sel.division, { timeout: 3000 }).catch(() => {});
     }
-    const after = await this.waitForFormContent();
+    const after = await this.waitForFormContent(20);
     let newUrl = url;
     try { newUrl = this.page.url(); } catch (e) { /* unknown */ }
     return classify(after, true, newUrl);

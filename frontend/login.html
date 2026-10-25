@@ -653,6 +653,11 @@ async function doLogin() {
     // the user dashboard as before.
     const explicitNext = new URLSearchParams(location.search).get('next');
     const next = explicitNext || (d.user && d.user.role === 'admin' ? '/admin.html' : '/dashboard.html');
+    // Success path used to leave the button disabled: on browser-back /
+    // BFCache restore the page came back frozen ("⏳ যাচাই করা হচ্ছে...").
+    // Re-enable before navigating, and reset again on pageshow.
+    btn.disabled = false;
+    btn.textContent = 'লগইন করুন →';
     location.href = next;
   } catch (e) {
     err.textContent = 'নেটওয়ার্ক সমস্যা';
@@ -660,6 +665,11 @@ async function doLogin() {
     btn.textContent = 'লগইন করুন →';
   }
 }
+
+window.addEventListener('pageshow', () => {
+  const btn = document.getElementById('lg_btn');
+  if (btn) { btn.disabled = false; btn.textContent = 'লগইন করুন →'; }
+});
 
 const REG_ERRORS = {
   'INVALID_NAME': 'নাম কমপক্ষে ২ ও সর্বোচ্চ ১২০ অক্ষরের হতে হবে',

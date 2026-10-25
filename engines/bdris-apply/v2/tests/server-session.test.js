@@ -153,3 +153,23 @@ describe('server session: failed gotoForm must not leave a reusable stub session
     assert.strictEqual(patched.creates, 2, 'second START must create a fresh session');
   });
 });
+
+describe('server session: a degraded reused session must not be reported READY (G7)', () => {
+  it('INIT_SESSION destroys a stub session found via findByUser and creates a fresh one instead of reusing it', async () => {
+    const { engine, connectionCb } = makeEngine();
+    const socket = makeSocket('u1');
+    connectionCb(socket);
+    const patched = patchCreate(engine, ['form']);
+    // A session that was healthy at creation but degraded to a stub.
+    engine.sessionManager.sessions.set('sess_stub', {
+      id: 'sess_stub', userId: 'u1', page: makePage('stub'),
+      createdAt: Date.now(), lastActivity: Date.now(), metadata: {}, state: 'ACTIVE',
+    });
+    let cbArg = null;
+    await socket.handlers['INIT_SESSION']({}, (arg) => { cbArg = arg; });
+    assert.strictEqual(cbArg.ok, true, 'INIT must succeed on the fresh page');
+    assert.strictEqual(cbArg.reused, false, 'the stub session must not be reused');
+    assert.deepStrictEqual(patched.destroyed, ['sess_stub'], 'stub session must be destroyed');
+    assert.strictEqual(patched.creates, 1, 'a fresh session must be created');
+  });
+});

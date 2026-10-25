@@ -34,17 +34,22 @@ class BrowserManager {
   constructor(options = {}) {
     this.browser = null;
     this.state = 'IDLE'; // IDLE | STARTING | READY | ERROR | STOPPING
+    // Hardened defaults are non-overridable: a caller passing stock
+    // options must not silently unharden a session page (G5).
+    const callerLaunch = options.launchOptions || {};
+    const callerArgs = Array.isArray(callerLaunch.args) ? callerLaunch.args : [];
     this.launchOptions = {
       headless: true,
-      args: [
+      ...callerLaunch,
+      args: [...new Set([
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
         // v1 launch flag, restored for session pages (see above).
         '--disable-blink-features=AutomationControlled',
-      ],
-      ...options.launchOptions,
+        ...callerArgs,
+      ])],
     };
     this.healthCheckInterval = null;
     this.onStateChange = options.onStateChange || (() => {});
@@ -97,14 +102,15 @@ class BrowserManager {
     const browser = await this.launch();
     // Session pages (warm pool, session creation, geo fresh page)
     // all come through here, so the hardened defaults apply to
-    // every one of them. Caller options win, so OriginalFetcher's
-    // own identical settings are unaffected.
+    // every one of them. UA/locale are non-overridable (OriginalFetcher
+    // passes identical values, so it is unaffected); other options
+    // (e.g. viewport) may still be overridden by the caller.
     const context = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
+      ...options,
+      viewport: options.viewport || { width: 1280, height: 800 },
       locale: SESSION_LOCALE,
       userAgent: SESSION_USER_AGENT,
       ignoreHTTPSErrors: true,
-      ...options,
     });
     return context;
   }

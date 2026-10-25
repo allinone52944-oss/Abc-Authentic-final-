@@ -392,7 +392,7 @@ function buildOriginalRec(fd, ackNum) {
     appId: String(ackNum),
     date: isoToBdFormat(String(A.dob || '')),
     nameEn: uniq[0],
-    mobileNo: String(S4.phone || '').replace(/[^\d]/g, ''),
+    mobileNo: bnToArab(S4.phone).replace(/\D/g, ''),
     email: String(S4.email || '').trim(),
   };
   if (uniq.length > 1) rec.altNameEn = uniq.slice(1);
@@ -439,6 +439,15 @@ class StepHandler {
       });
 
     await this.page.waitForTimeout(2000);
+    // D4: the old code returned success unconditionally, even on a
+    // stub page with no basis radio — the same false-ready pattern
+    // gotoForm used to have. Verify the person section actually
+    // appeared before reporting success.
+    const advanced = await this._waitVisible(
+      ['#personFirstNameBn', 'input[name*="personFirstNameBn"]'], 8000);
+    if (!advanced) {
+      return { ok: false, step: 1, failed: [{ field: 'আবেদনের ভিত্তি', reason: 'পরের ধাপ আসেনি — পাতা/সেশন যাচাই করুন' }] };
+    }
     this.progress('✔ আবেদনের ভিত্তি নির্বাচন সম্পন্ন');
     return { ok: true, step: 1 };
   }
@@ -509,15 +518,49 @@ class StepHandler {
       if (!r.ok && !r.skipped) failed.push({ field: r.field, reason: r.reason });
     };
 
-    // Names
+    // Names — D2: parents already go through transitName (S2), but
+    // the applicant went raw, violating the FINAL RULE (any name
+    // form must proceed). Use transitName here too, and verify the
+    // exact read-back (fillInput's own check passes on any
+    // non-empty value, even a site-mangled one).
     keep(await this.fillInput('#personFirstNameBn, input[name*="personFirstNameBn"]',
-      data.firstNameBn, 'নামের প্রথম অংশ (বাংলা)'));
+      transitName(data.firstNameBn), 'নামের প্রথম অংশ (বাংলা)'));
     keep(await this.fillInput('#personLastNameBn, input[name*="personLastNameBn"]',
-      data.lastNameBn, 'নামের শেষ অংশ (বাংলা)'));
+      transitName(data.lastNameBn), 'নামের শেষ অংশ (বাংলা)'));
     keep(await this.fillInput('#personFirstNameEn, input[name*="personFirstNameEn"]',
-      data.firstNameEn, 'First Name (English)'));
+      transitName(data.firstNameEn), 'First Name (English)'));
     keep(await this.fillInput('#personLastNameEn, input[name*="personLastNameEn"]',
-      data.lastNameEn, 'Last Name (English)'));
+      transitName(data.lastNameEn), 'Last Name (English)'));
+    // ১-নাম নিয়ম (v1 থেকে): শেষ-নামে অক্ষর না থাকলে single ফ্ল্যাগ,
+    // ঘর খালি রাখি এবং required-রুল শিথিল করি।
+    const singleBn = !hasLetters(transitName(data.lastNameBn));
+    const singleEn = !hasLetters(transitName(data.lastNameEn));
+    this.singleName = (singleBn || singleEn) ? { bn: singleBn, en: singleEn } : null;
+    if (this.singleName) {
+      await relaxEmptyLast(this.page, this.singleName).catch(() => {});
+    }
+    try {
+      const rb = await this.page.evaluate(() => {
+        const g = (id, namePart) => {
+          let el = document.querySelector(id);
+          if (!el) el = document.querySelector(`input[name*="${namePart}"]`);
+          return el ? String(el.value || '') : '';
+        };
+        return {
+          fBn: g('#personFirstNameBn', 'personFirstNameBn'), lBn: g('#personLastNameBn', 'personLastNameBn'),
+          fEn: g('#personFirstNameEn', 'personFirstNameEn'), lEn: g('#personLastNameEn', 'personLastNameEn'),
+        };
+      });
+      const checks = [
+        ['নামের প্রথম অংশ (বাংলা)', rb.fBn, transitName(data.firstNameBn)],
+        ['First Name (English)', rb.fEn, transitName(data.firstNameEn)],
+      ];
+      if (!singleBn) checks.push(['নামের শেষ অংশ (বাংলা)', rb.lBn, transitName(data.lastNameBn)]);
+      if (!singleEn) checks.push(['Last Name (English)', rb.lEn, transitName(data.lastNameEn)]);
+      for (const [label, actual, want] of checks) {
+        if (want && actual !== want) failed.push({ field: label, reason: 'সাইটে নাম ঠিকমতো বসেনি — আবার চেষ্টা করুন' });
+      }
+    } catch (e) { /* read-back is diagnostic; fill errors already counted */ }
 
     // DOB
     if (data.dob) {
@@ -532,8 +575,38 @@ class StepHandler {
     }
 
     this.progress('🔄 ধাপ ২: জন্মস্থানের ঠিকানা...');
-    // Birth address (using AddressService via navigator)
-    // ... address fields ...
+    // D1: the old code had only a placeholder comment here and
+    // returned ok:true with the birthplace section never filled
+    // and no Next click — while the UI reported step 2 done.
+    // Fill it with the same section helper S2B uses (prefix
+    // 'birthPlace', live-verified field naming), re-check + refill
+    // once like S2B, then advance to the parents section.
+    if (data.division || data.district || data.vilBn) {
+      await this._fillAddressSection('birthPlace', data, failed);
+      const bpFilled = async () => this.page.evaluate(() => {
+        const val = (n) => { const e = document.querySelector(`select[name="${n}"]`); return e && e.offsetParent !== null ? String(e.value || '') : 'x'; };
+        const txt = (n) => { const e = document.querySelector(`input[name="${n}"]`); return e && e.offsetParent !== null ? String(e.value || '').trim() : 'x'; };
+        if (!val('birthPlaceDiv') || !val('birthPlaceDist') || !val('birthPlaceCityCorpCantOrUpazila')) return false;
+        if (!txt('birthPlaceVilAreaTownBn') || !txt('birthPlacePostOfc')) return false;
+        return true;
+      }).catch(() => true);
+      if (data.division && !(await bpFilled())) {
+        this.progress('⏳ জন্মস্থানের কিছু ঘর খালি থেকে গেছে — আবার বসানো হচ্ছে…');
+        await this._fillAddressSection('birthPlace', data, failed);
+      }
+      const nxt1 = await this._clickNextAndWait('পরবর্তী (ধাপ ২)', {
+        nextAnchor: ['#fatherBrn', 'input[name="personInfoForBirth.father.ubrn"]'],
+      });
+      if (!nxt1.ok) failed.push({ field: nxt1.field, reason: nxt1.reason });
+      else {
+        const parentsHere = await this._waitVisible(
+          ['#fatherBrn', 'input[name="personInfoForBirth.father.ubrn"]'], 5000);
+        if (!parentsHere) {
+          const b = await this._detectValidationBlock(null);
+          failed.push({ field: 'পরবর্তী (ধাপ ২)', reason: (b.blocked && b.reason) || 'সাইট পরের ধাপে যায়নি — তথ্য মিলিয়ে আবার চেষ্টা করুন' });
+        }
+      }
+    }
 
     if (failed.length) {
       return { ok: false, failed, message: `${failed.length}টি ফিল্ড পূরণ হয়নি` };
@@ -1012,7 +1085,24 @@ class StepHandler {
           message: '🔄 তথ্য আবার বসিয়ে ওটিপি পাঠানো হবে — একটু অপেক্ষা করুন।',
         };
       }
-      failed.push({ field: 'যোগাযোগ ধাপ', reason: 'পেজ পাওয়া যায়নি' });
+      // "পেজ পাওয়া যায়নি" was a mislabel: it only meant neither
+      // contact nor start anchors were visible in 15s. Classify the
+      // actual page state (presence only, no values) so the next
+      // failure names its cause: docs step, stub page, or hidden fields.
+      const probe = await this.page.evaluate(() => {
+        const vis = (s) => { const e = document.querySelector(s); return !!(e && e.offsetParent !== null); };
+        return {
+          contact: vis('#email') || vis('#phone'),
+          docs: vis('input[name="relationWithApplicant"]') || vis('input[name="files"]'),
+          start: vis('#officeBirthplace'),
+          form: !!document.querySelector('form'),
+          bodyLen: (document.body ? (document.body.innerText || '').length : 0),
+        };
+      }).catch(() => ({ contact: false, docs: false, start: false, form: false, bodyLen: -1 }));
+      const where = probe.docs ? 'কাগজপত্রের ধাপেই আছে (পরবর্তী চাপা হয়নি/আটকেছে)'
+        : (!probe.form && probe.bodyLen >= 0 && probe.bodyLen < 100 ? 'খালি/স্টাব পাতা'
+        : probe.form ? 'ফরম আছে কিন্তু যোগাযোগের ঘর দেখা যাচ্ছে না' : 'কোনো ধাপের ঘরই দেখা যাচ্ছে না');
+      failed.push({ field: 'যোগাযোগ ধাপ', reason: `পেজ পাওয়া যায়নি (${where})` });
     }
     if (anchor && data.email) {
       const r = await this._typeInto(['#email', 'input[name="email"]'], data.email, 'ইমেইল', {});
@@ -1020,7 +1110,7 @@ class StepHandler {
     }
     if (anchor && data.phone) {
       const r = await this._typeInto(['#phone', 'input[name="phone"]', 'input[type="tel"]'],
-        data.phone, 'মোবাইল নম্বর', { required: true });
+        bnToArab(data.phone), 'মোবাইল নম্বর', { required: true });
       if (!r.ok) failed.push({ field: r.field, reason: r.reason });
       // সাইটের getPhone() সরাসরি #phone.value পড়ে — intl-tel-input স্পেস/ড্যাশ বসালে
       // digitOrPlus/length রুল ফেল করে validateForm() চুপচাপ আটকায় (2026-10-11)।
@@ -1029,7 +1119,7 @@ class StepHandler {
         const el = document.querySelector('#phone');
         if (!el) return { raw: '', clean: '' };
         const raw = String(el.value || '');
-        const clean = raw.replace(/[^\d+]/g, '');
+        const clean = raw.replace(/[০-৯]/g, d => '০১২৩৪৫৬৭৮৯'.indexOf(d)).replace(/[^\d+]/g, '');
         if (clean !== raw) {
           el.value = clean;
           el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1038,7 +1128,7 @@ class StepHandler {
         return { raw, clean };
       }).catch(() => ({ raw: '', clean: '' }));
       if (!/\d{4,}/.test(String(normPhone.clean).replace(/[^\d]/g, ''))) {
-        await this._typeInto(['#phone', 'input[name="phone"]'], String(data.phone).replace(/\D/g, ''),
+        await this._typeInto(['#phone', 'input[name="phone"]'], bnToArab(data.phone).replace(/\D/g, ''),
           'মোবাইল নম্বর (পুনঃলিখন)', { typeCharByChar: true });
       }
     }
@@ -1935,4 +2025,4 @@ class StepHandler {
   }
 }
 
-module.exports = { StepHandler, verifyChargeToken };
+module.exports = { StepHandler, verifyChargeToken, bnToArab };

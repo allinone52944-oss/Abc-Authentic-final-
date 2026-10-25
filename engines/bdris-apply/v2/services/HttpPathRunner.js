@@ -63,7 +63,7 @@
 'use strict';
 
 const { BdrisHttpClient } = require('../http/client');
-const { verifyChargeToken } = require('./StepHandler');
+const { verifyChargeToken, bnToArab } = require('./StepHandler');
 
 const HTTP_CANDIDATE_LABEL = 'CANDIDATE (submit/verify shapes from the pasted form source, NOT live-verified)';
 const HTTP_BASE = 'https://bdris.gov.bd';
@@ -154,7 +154,7 @@ function normalizeChainInput(data = {}) {
     applicantName: data.applicantName || s3.applicantName,
     declaration: data.declaration !== undefined ? data.declaration : s3.declaration,
     email: data.email || s4prep.email,
-    phone: data.phone || s4prep.phone,
+    phone: bnToArab(data.phone || s4prep.phone),
     officeAddressType: data.officeAddressType || s4prep.officeAddressType,
     officeAddrCountry: data.officeAddrCountry || s4prep.officeAddrCountry,
     officeId: data.officeId || s4prep.officeId,

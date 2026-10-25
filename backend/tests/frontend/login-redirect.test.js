@@ -24,3 +24,12 @@ test('login redirect: admin default is /admin.html, customer default is /dashboa
   // No bare "everyone to dashboard" fallback may remain.
   expect(src).not.toContain("get('next') || '/dashboard.html'");
 });
+
+test('login: success path re-enables the button and pageshow resets it (BFCache frozen-button fix)', () => {
+  // doLogin() used to leave #lg_btn disabled on the success path;
+  // returning to the page (browser back / BFCache) showed it frozen
+  // at "⏳ যাচাই করা হচ্ছে...".
+  expect(src).toMatch(/btn\.disabled = false;\s*\n\s*btn\.textContent = 'লগইন করুন →';\s*\n\s*location\.href = next;/);
+  expect(src).toMatch(/window\.addEventListener\('pageshow'/);
+  expect(src).toMatch(/btn\.disabled = false; btn\.textContent = 'লগইন করুন →';/);
+});

@@ -93,7 +93,7 @@ describe('BrowserManager hardened session context (v1 settings, 2026-10-26)', ()
     assert.ok(bm.launchOptions.args.includes('--disable-blink-features=AutomationControlled'));
   });
 
-  it('newContext defaults to the hardened settings, caller options still win', async () => {
+  it('newContext defaults to the hardened settings; UA/locale are non-overridable, other options still win', async () => {
     const bm = new BrowserManager();
     let captured = null;
     bm.launch = async () => ({ newContext: async (opts) => { captured = opts; return {}; } });
@@ -102,8 +102,12 @@ describe('BrowserManager hardened session context (v1 settings, 2026-10-26)', ()
     assert.strictEqual(captured.userAgent, SESSION_USER_AGENT);
     assert.strictEqual(captured.ignoreHTTPSErrors, true);
     assert.deepStrictEqual(captured.viewport, { width: 1280, height: 800 });
-    await bm.newContext({ locale: 'en-US' });
-    assert.strictEqual(captured.locale, 'en-US');
+    // G5 (A-to-Z audit): a caller passing stock UA/locale must not
+    // silently unharden a session page, but viewport still wins.
+    await bm.newContext({ locale: 'en-US', userAgent: 'stock', viewport: { width: 800, height: 600 } });
+    assert.strictEqual(captured.locale, 'bn-BD');
+    assert.strictEqual(captured.userAgent, SESSION_USER_AGENT);
+    assert.deepStrictEqual(captured.viewport, { width: 800, height: 600 });
   });
 });
 
