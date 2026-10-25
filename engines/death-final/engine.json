@@ -1,18 +1,10 @@
 {
-  "capabilities": [
-    "captcha",
-    "verify",
-    "certificate-pdf",
-    "certificate-html"
-  ],
-  "config": {
-    "gemini_api_key_env": "GEMINI_API_KEY",
-    "python_required": true
-  },
+  "capabilities": ["captcha", "verify", "certificate-pdf", "certificate-html"],
+  "config": {"gemini_api_key_env": "GEMINI_API_KEY", "python_required": true},
   "description": "BDRIS death record verification (DRN + death date) + A4 death certificate PDF generation (everify.bdris.gov.bd UDRN)",
   "description_bn": "BDRIS মৃত্যু তথ্য যাচাই (DRN + মৃত্যু তারিখ) + A4 মৃত্যু সনদ PDF তৈরি",
   "entry": "index.js",
-  "id": "death-verify",
+  "id": "death-final",
   "name": "Death Record Verify",
   "name_bn": "মৃত্যু নিবন্ধন যাচাই",
   "version": "1.0.0",

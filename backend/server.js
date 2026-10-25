@@ -222,12 +222,12 @@ const bdrisEngineLimiter = rateLimit({
 try {
   // NOTE: require index.js explicitly — the engine's own package.json
   // points "main" at its Studio server.js; the adapter is index.js.
-  const bdrisEngine = require('../engines/bdris-certificate/index.js');
+  const bdrisEngine = require('../engines/birth-final/index.js');
   bdrisEngine.init({});
   app.use('/api/bdris-engine', requireAuth, bdrisEngineLimiter, bdrisEngine.getApp());
-  safeLog('[engines] mounted bdris-certificate at /api/bdris-engine');
+  safeLog('[engines] mounted birth-final at /api/bdris-engine');
 } catch (e) {
-  safeLog('[engines] bdris-certificate not mounted:', e.message);
+  safeLog('[engines] birth-final not mounted:', e.message);
 }
 
 // ---- Death verify engine (as-is DRN tool, auth + strict limit) ------
@@ -250,12 +250,12 @@ const deathEngineLimiter = rateLimit({
   message: { error: 'RATE_LIMITED' },
 });
 try {
-  const deathEngine = require('../engines/death-verify/index.js');
+  const deathEngine = require('../engines/death-final/index.js');
   deathEngine.init({});
   app.use('/api/death-engine', requireAuth, deathEngineLimiter, deathEngine.getApp());
-  safeLog('[engines] mounted death-verify at /api/death-engine');
+  safeLog('[engines] mounted death-final at /api/death-engine');
 } catch (e) {
-  safeLog('[engines] death-verify not mounted:', e.message);
+  safeLog('[engines] death-final not mounted:', e.message);
 }
 
 // ---- NID replica engine (as-is kit, auth + strict limit) -------------

@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Proxy adapter for Birth Engine (standalone on 127.0.0.1:3000).
+ * Proxy adapter for Birth Engine (birth-final, standalone on 127.0.0.1:3000).
  * Forwards /api/bdris-engine/* to the standalone engine.
  *
  * H-10 fix (2026-10-15): init() now spawns engines/bdris-certificate/server.js
@@ -22,11 +22,11 @@ function init() {
   if (_proc || _installing) return;
   const serverJs = path.join(__dirname, 'server.js');
   if (!fs.existsSync(serverJs)) {
-    console.error('[bdris-certificate] server.js not found, engine not started');
+    console.error('[birth-final] server.js not found, engine not started');
     return;
   }
   if (!fs.existsSync(path.join(__dirname, 'node_modules'))) {
-    console.log('[bdris-certificate] node_modules missing — auto-installing (first run, may take a few minutes)...');
+    console.log('[birth-final] node_modules missing — auto-installing (first run, may take a few minutes)...');
     _installing = true;
     const npm = spawn('npm', ['install', '--no-audit', '--no-fund', '--omit=dev'], {
       cwd: __dirname,
@@ -36,12 +36,12 @@ function init() {
     npm.stderr.on('data', (d) => console.error('[bdris-certificate:npm]', String(d).slice(0, 200)));
     npm.on('close', (code) => {
       _installing = false;
-      if (code === 0) { console.log('[bdris-certificate] npm install done — starting engine'); startEngine(); }
-      else console.error('[bdris-certificate] npm install failed with code', code, '— will retry on next init');
+      if (code === 0) { console.log('[birth-final] npm install done — starting engine'); startEngine(); }
+      else console.error('[birth-final] npm install failed with code', code, '— will retry on next init');
     });
     npm.on('error', (e) => {
       _installing = false;
-      console.error('[bdris-certificate] npm spawn failed:', e.message);
+      console.error('[birth-final] npm spawn failed:', e.message);
     });
     return;
   }
@@ -58,13 +58,13 @@ function startEngine() {
   });
   _proc.stdout.on('data', (d) => {
     const s = String(d);
-    if (/running on port|listening/i.test(s)) console.log('[bdris-certificate] engine up:', s.trim().slice(0, 120));
+    if (/running on port|listening/i.test(s)) console.log('[birth-final] engine up:', s.trim().slice(0, 120));
   });
   _proc.stderr.on('data', (d) => {
     console.error('[bdris-certificate:engine]', String(d).slice(0, 500));
   });
   _proc.on('exit', (code) => {
-    console.error('[bdris-certificate] engine exited with code', code);
+    console.error('[birth-final] engine exited with code', code);
     _proc = null;
   });
 }
