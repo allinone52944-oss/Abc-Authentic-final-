@@ -130,14 +130,15 @@ class BdrisEngineV2 {
   }
 
   registerCommands() {
-    // GET_ADDRESS_OPTIONS — HTTP geo first, Playwright second.
-    // 2026-10-25 zone fix: AddressService tries the HTTP geo API
-    // first (no Playwright page needed, fits the frontend timeout)
-    // and only then the Playwright cascade. It THROWS on empty
+    // GET_ADDRESS_OPTIONS — session-seeded HTTP geo first,
+    // Playwright second. 2026-10-26: the HTTP geo client is seeded
+    // from the session page's cookies + page CSRF (a bare fetch
+    // bootstrap is proven blocked with 403), so the session page
+    // is now needed for BOTH paths: seeding HTTP, and the
+    // Playwright cascade fallback. AddressService THROWS on empty
     // instead of returning [], so a failure is visible upstream
     // instead of collapsing to a text input that can never unlock
-    // Ward. The session page is therefore only required for the
-    // Playwright fallback, not for the HTTP path.
+    // Ward.
     this.executor.register('GET_ADDRESS_OPTIONS',
       async (params, ctx) => {
         const { level, parents = {}, form = 'birth' } = params;

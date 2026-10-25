@@ -142,8 +142,9 @@ class AddressService {
   async getOptions(level, parents = {}, form = 'birth') {
     // Zone/ward MUST come from a live fetch (user requirement: realtime,
     // no hardcode) — cache holds only non-empty live results.
-    // 2026-10-25 fix: HTTP geo FIRST, Playwright second, both inside
-    // one budget: HTTP capped at httpTimeoutMs (default 8000ms) +
+    // 2026-10-25 fix, re-shaped 2026-10-26: session-seeded HTTP geo
+    // FIRST, Playwright second, both inside one budget: HTTP capped
+    // at httpTimeoutMs (default 8000ms) +
     // Playwright worst case 20100ms = 28100ms < executor 30000ms
     // (server.js) < frontend 40000ms. Before this, the Playwright
     // worst case alone was 3 x (10000+500) + 5 x 1200 = 37500ms and
@@ -161,26 +162,43 @@ class AddressService {
       const cached = geoCacheGet(key);
       if (cached) return cached;
       let httpError = null;
-      // HTTP runs under a budget (see constructor): without it, a
-      // hung fetch could consume the whole 30s executor budget and
-      // the Playwright fallback below would never start. On budget
-      // expiry the fallback still runs; the timeout is recorded in
-      // httpError so the composed error names it.
+      // Session-seeded HTTP only (live banner 2026-10-26 proved a
+      // bare fetch bootstrap is blocked with 403, so it is never
+      // attempted in production anymore). Order: seed the HTTP geo
+      // client from the warm Playwright session's cookies + page
+      // CSRF, then run geo over that session, then Playwright
+      // cascade. If there is no session to seed from, HTTP is
+      // skipped entirely and the Playwright cascade runs alone.
+      // A test double without seedFromPage is treated as already
+      // seeded (tests inject a bootstrapped mock client); that
+      // branch exists only for tests, never for production.
+      // HTTP still runs under a budget (see constructor): without
+      // it, a hung fetch could consume the whole 30s executor
+      // budget and the Playwright fallback below would never start.
+      // On budget expiry the fallback still runs; the timeout is
+      // recorded in httpError so the composed error names it.
       try {
         const httpGeo = await this._getHttpGeo();
-        const attempt = level === 'zone'
-          ? httpGeo.getZoneOptions(parents, form)
-          : httpGeo.getWardOptions(parents, form);
-        const raced = await withBudget(attempt, this.httpTimeoutMs, 'HttpGeo');
-        if (raced.timeout) {
-          httpError = new Error(`HttpGeo: timed out after ${this.httpTimeoutMs}ms (HTTP budget; Playwright fallback running next)`);
-        } else if (!raced.ok) {
-          httpError = raced.error;
-        } else if (Array.isArray(raced.value.options) && raced.value.options.length) {
-          geoCacheSet(key, raced.value.options);
-          return raced.value.options;
-        } else {
-          httpError = new Error('HttpGeo: empty result');
+        let seeded = true;
+        if (typeof httpGeo.seedFromPage === 'function') {
+          seeded = await httpGeo.seedFromPage(this.navigator ? this.navigator.page : null);
+          if (!seeded) httpError = httpGeo.lastSeedError || new Error('HttpGeo: session seeding failed');
+        }
+        if (seeded) {
+          const attempt = level === 'zone'
+            ? httpGeo.getZoneOptions(parents, form)
+            : httpGeo.getWardOptions(parents, form);
+          const raced = await withBudget(attempt, this.httpTimeoutMs, 'HttpGeo');
+          if (raced.timeout) {
+            httpError = new Error(`HttpGeo: timed out after ${this.httpTimeoutMs}ms (HTTP budget; Playwright fallback running next)`);
+          } else if (!raced.ok) {
+            httpError = raced.error;
+          } else if (Array.isArray(raced.value.options) && raced.value.options.length) {
+            geoCacheSet(key, raced.value.options);
+            return raced.value.options;
+          } else {
+            httpError = new Error('HttpGeo: empty result');
+          }
         }
       } catch (e) {
         httpError = e;

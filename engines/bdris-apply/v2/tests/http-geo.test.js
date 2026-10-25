@@ -124,6 +124,73 @@ describe('AddressService HTTP-first with Playwright fallback', () => {
   });
 });
 
+describe('AddressService session-seeded HTTP (live banner 2026-10-26: bare fetch 403)', () => {
+  // Mock client in the real BdrisHttpClient shape: starts
+  // unbootstrapped, becomes bootstrapped only via seedFromBrowser
+  // (browser cookies + page CSRF), never via a fetch bootstrap.
+  function seededMockClient() {
+    const base = mockClient();
+    base.bootstrapped = false;
+    base.geoCalls = 0;
+    const origGetGeo = base.getGeo.bind(base);
+    base.getGeo = async (...args) => { base.geoCalls++; return origGetGeo(...args); };
+    base.seedFromBrowser = function ({ cookies, csrfToken }) {
+      if (!csrfToken) throw new Error('BOOTSTRAP_NO_CSRF');
+      this.bootstrapped = true;
+      this.seeded = { cookies, csrfToken };
+    };
+    return base;
+  }
+  function fakePage() {
+    return {
+      context: () => ({ cookies: async () => [{ name: 'TS01', value: 'browser-session' }] }),
+      evaluate: async () => ({ token: 'page-csrf', headerName: 'X-CSRF-TOKEN' }),
+    };
+  }
+
+  it('seeds HTTP from the warm Playwright page and never calls the navigator on success', async () => {
+    const client = seededMockClient();
+    const httpGeo = new HttpGeoService({ client });
+    let navCalls = 0;
+    const nav = {
+      page: fakePage(),
+      getAddressOptions: async () => { navCalls++; return [{ id: 'x', name: 'stale' }]; },
+    };
+    const svc = new AddressService(nav, { httpGeo });
+    const opts = await svc.getOptions('zone', cityCorpParents, 'birth');
+    assert.deepStrictEqual(opts.map((o) => o.name), ['অঞ্চল - ১', 'অঞ্চল - ২']);
+    assert.strictEqual(navCalls, 0, 'Playwright cascade must not run when seeded HTTP succeeds');
+    assert.strictEqual(client.seeded.csrfToken, 'page-csrf');
+    assert.strictEqual(client.seeded.cookies[0].name, 'TS01');
+  });
+
+  it('with no warm session, bare fetch is NEVER attempted: geo is not called at all', async () => {
+    const client = seededMockClient();
+    const httpGeo = new HttpGeoService({ client });
+    const nav = { getAddressOptions: async () => [] }; // no .page
+    const svc = new AddressService(nav, { httpGeo });
+    await assert.rejects(
+      () => svc.getOptions('zone', cityCorpParents, 'birth'),
+      (e) => e.code === 'ZONE_WARD_FETCH_FAILED'
+        && /no warm Playwright session/.test(e.message),
+    );
+    assert.strictEqual(client.geoCalls, 0, 'a bare fetch bootstrap would have called geo; it must not happen');
+  });
+
+  it('seeded HTTP failure still falls back to the Playwright cascade', async () => {
+    const client = seededMockClient();
+    client.getGeo = async () => { throw new Error('Geo call returned status 403'); };
+    const httpGeo = new HttpGeoService({ client });
+    const nav = {
+      page: fakePage(),
+      getAddressOptions: async () => [{ id: '9', name: 'অঞ্চল - ৯' }],
+    };
+    const svc = new AddressService(nav, { httpGeo });
+    const opts = await svc.getOptions('zone', cityCorpParents, 'birth');
+    assert.deepStrictEqual(opts.map((o) => o.name), ['অঞ্চল - ৯']);
+  });
+});
+
 describe('AddressService HTTP budget (2026-10-25 proven budget fix)', () => {
   it('defaults the HTTP budget to 8000ms', () => {
     const svc = new AddressService(null, {});

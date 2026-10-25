@@ -1,6 +1,8 @@
 /**
- * HttpGeoService — zone/ward lists over the BDRIS HTTP geo API,
- * with NO Playwright page involved.
+ * HttpGeoService — zone/ward lists over the BDRIS HTTP geo API.
+ * Since 2026-10-26 the geo client is seeded from a warm Playwright
+ * page (seedFromPage): a bare fetch bootstrap is proven blocked
+ * with 403, so it is never attempted from AddressService anymore.
  *
  * Why this exists (2026-10-25, production HEAD 424f355):
  * The birthplace form degraded paurasavaUnion to a text input and
@@ -89,6 +91,7 @@ class HttpGeoService {
     this.clientFactory = opts.clientFactory || null;
     this.base = opts.base || 'https://bdris.gov.bd';
     this._bootstrapPromise = null;
+    this.lastSeedError = null;
   }
 
   async _getClient() {
@@ -99,6 +102,45 @@ class HttpGeoService {
     }
     this.client = new BdrisHttpClient({ base: this.base });
     return this.client;
+  }
+
+  /**
+   * Seed the geo client from a warm Playwright page (its cookies +
+   * page meta _csrf) instead of a standalone fetch bootstrap.
+   * Returns true when the client is ready for geo calls, false
+   * otherwise (lastSeedError names why). A false result means the
+   * caller must NOT fall back to a bare fetch bootstrap — the live
+   * banner of 2026-10-26 proved a bare fetch form-GET is blocked
+   * with 403, so a bare bootstrap cannot succeed. An already
+   * bootstrapped client (tests, or a previous seed) needs no page.
+   */
+  async seedFromPage(page) {
+    const client = await this._getClient();
+    if (client.bootstrapped) return true;
+    if (typeof client.seedFromBrowser !== 'function') {
+      this.lastSeedError = new Error('HttpGeo: client cannot be seeded from a browser session');
+      return false;
+    }
+    if (!page) {
+      this.lastSeedError = new Error('HttpGeo: no warm Playwright session to seed from (bare fetch proven 403, not attempted)');
+      return false;
+    }
+    try {
+      const ctx = typeof page.context === 'function' ? page.context() : (page._context || null);
+      const cookies = ctx && typeof ctx.cookies === 'function' ? await ctx.cookies() : [];
+      const meta = typeof page.evaluate === 'function'
+        ? await page.evaluate(() => ({
+          token: (document.querySelector('meta[name="_csrf"]') || {}).content || null,
+          headerName: (document.querySelector('meta[name="_csrf_headerName"]') || {}).content || null,
+        }))
+        : {};
+      client.seedFromBrowser({ cookies, csrfToken: meta.token, csrfHeaderName: meta.headerName });
+      this.lastSeedError = null;
+      return true;
+    } catch (e) {
+      this.lastSeedError = e;
+      return false;
+    }
   }
 
   async ensureBootstrapped() {

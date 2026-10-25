@@ -21,6 +21,7 @@ const SELECTORS = {
     ward: '#birthPlaceWardInPaurasavaOrUnion, select[name="birthPlaceWardInPaurasavaOrUnion"]',
   },
   perm: {
+    country: '#permAddrCountry, select[name="permAddrCountry"]',
     division: '#permAddrDiv, select[name="permAddrDiv"]',
     district: '#permAddrDist, select[name="permAddrDist"]',
     upazila: '#permAddrCityCorpCantOrUpazila, select[name="permAddrCityCorpCantOrUpazila"]',
@@ -28,6 +29,7 @@ const SELECTORS = {
     ward: '#permAddrWardInPaurasavaOrUnion, select[name="permAddrWardInPaurasavaOrUnion"]',
   },
   prsnt: {
+    country: '#prsntAddrCountry, select[name="prsntAddrCountry"]',
     division: '#prsntAddrDiv, select[name="prsntAddrDiv"]',
     district: '#prsntAddrDist, select[name="prsntAddrDist"]',
     upazila: '#prsntAddrCityCorpCantOrUpazila, select[name="prsntAddrCityCorpCantOrUpazila"]',
@@ -143,17 +145,18 @@ class BdrisNavigator {
    * Get address options for a level, setting up parent cascade
    * This is the core method that replaces the fragile mirror logic
    *
-   * Budget note (2026-10-25, proven from the code's own timeouts):
+   * Budget note (2026-10-25, proven from the code's own timeouts,
+   * re-balanced 2026-10-26 for the country-first step below):
    * this runs inside the 30s GET_ADDRESS_OPTIONS executor budget
-   * AFTER an up-to-8s HTTP attempt (AddressService), so its worst
-   * case must stay under ~20s: 3 parents x (5000ms wait + 500ms
-   * sleep) + 3 x 1200ms target retries = 20100ms. The old values
-   * (10000ms waits, 5 retries = 37500ms worst) alone exceeded the
-   * whole executor budget, so a slow cascade could never return.
-   * The waits resolve immediately when options are already present;
-   * only stuck-level detection gets faster. The waitForOptions
-   * DEFAULT (10000ms) is unchanged — the submit flow passes its
-   * own explicit timeouts and is untouched by this.
+   * AFTER an up-to-8s HTTP attempt (AddressService). Worst case:
+   * HTTP 8000ms + country wait 5000ms (only when the division list
+   * starts empty) + 3 parents x (3000ms wait + 500ms sleep) +
+   * 3 x 1200ms target retries = 8000 + 5000 + 10500 + 3600 =
+   * 27100ms < 30000ms executor < 40000ms frontend. The waits
+   * resolve immediately when options are already present; only
+   * stuck-level detection gets slower in the absolute worst case.
+   * The waitForOptions DEFAULT (10000ms) is unchanged — the submit
+   * flow passes its own explicit timeouts and is untouched by this.
    */
   async getAddressOptions(level, parents = {}, form = 'birth') {
     const sel = this.getSelectors(form);
@@ -162,6 +165,29 @@ class BdrisNavigator {
 
     if (targetIdx < 0) {
       throw new Error(`Invalid level: ${level}`);
+    }
+
+    // Country first (proven defect, live banner 2026-10-26):
+    // the old code attempted the first parent (division) with NO
+    // wait and NO country selection, while the submit cascade
+    // (StepHandler._fillAddressSection) selects country first and
+    // then waits for the child list. gotoForm() only waits for the
+    // division SELECTOR to exist, not for its options, and
+    // server.js skips gotoForm entirely when the page URL is
+    // already bdris.gov.bd (warm/mid-flow page). A warm page that
+    // never had country selected therefore has a placeholder-only
+    // division select, and the first selectOption failed instantly
+    // with: Parent option not found: division="ঢাকা". Fix: if the
+    // division list starts empty, select country ("বাংলাদেশ", the
+    // same candidate the submit path uses) and wait for the
+    // division list before touching any parent. When options are
+    // already present this costs one extra evaluate and no wait.
+    if (sel.country) {
+      const divOpts = await this.getOptions(sel.division).catch(() => []);
+      if (!divOpts.length) {
+        await this.selectOption(sel.country, 'বাংলাদেশ');
+        await this.waitForOptions(sel.division, 5000);
+      }
     }
 
     // Set up parent cascade
@@ -175,13 +201,18 @@ class BdrisNavigator {
 
       const done = await this.selectOption(pSel, pValue);
       if (!done) {
-        throw new Error(`Parent option not found: ${pLevel}="${pValue}"`);
+        // Name the options actually present, so the next live
+        // banner distinguishes "list empty" (0) from "list present
+        // but name mismatched" (>0) instead of both looking alike.
+        const present = await this.getOptions(pSel).catch(() => []);
+        throw new Error(`Parent option not found: ${pLevel}="${pValue}" (options present: ${present.length})`);
       }
 
-      // Wait for child to populate (budget: see method note — 5000ms,
-      // not 10000ms, so the cascade fits the executor budget)
+      // Wait for child to populate (3000ms, not 5000ms, so the
+      // added country step above keeps the cascade inside the
+      // executor budget; waits resolve immediately on populate)
       if (cSel) {
-        await this.waitForOptions(cSel, 5000);
+        await this.waitForOptions(cSel, 3000);
       }
       await this.page.waitForTimeout(500);
     }

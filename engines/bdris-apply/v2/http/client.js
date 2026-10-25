@@ -193,6 +193,37 @@ class BdrisHttpClient {
     return { status: res.status, ok: res.ok, text, json, headers: res.headers };
   }
 
+  /**
+   * Seed this client from a warm Playwright browser session instead
+   * of a standalone fetch bootstrap. Proven need (live banner
+   * 2026-10-26): a bare fetch GET of the form page is blocked with
+   * 403 (bot protection), while the browser session already passed
+   * that challenge, so its cookies + page CSRF are the only session
+   * a fetch-based geo call can use. cookies are Playwright-format
+   * {name, value} entries (or a Cookie header string); the CSRF
+   * token comes from the page's meta _csrf (same source bootstrap()
+   * parses). After seeding, bootstrapped is true and no form-GET
+   * bootstrap is ever attempted for this client.
+   */
+  seedFromBrowser({ cookies = [], csrfToken = null, csrfHeaderName = null } = {}) {
+    const list = Array.isArray(cookies)
+      ? cookies
+      : String(cookies || '').split(';').map((p) => p.trim()).filter(Boolean).map((p) => {
+        const eq = p.indexOf('=');
+        return eq > 0 ? { name: p.slice(0, eq).trim(), value: p.slice(eq + 1).trim() } : null;
+      }).filter(Boolean);
+    for (const c of list) {
+      if (c && c.name) this.jar.cookies.set(c.name, c.value);
+    }
+    if (!csrfToken) {
+      throw err('BOOTSTRAP_NO_CSRF', 'Browser page has no meta _csrf token; cannot build API headers.');
+    }
+    this.csrfToken = csrfToken;
+    if (csrfHeaderName) this.csrfHeaderName = csrfHeaderName;
+    this.bootstrapped = true;
+    return { cookies: this.jar.size() };
+  }
+
   /** Headers every BDRIS API call must carry (verified). */
   apiHeaders(extra = {}) {
     if (!this.bootstrapped) {
