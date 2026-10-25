@@ -506,7 +506,17 @@ class BdrisEngineV2 {
           // (v1 compat with the frontend's array check).
           if (callback) {
             if (result && result.ok === false) {
-              callback({ ok: false, error: result.error || result.message || 'GET_ADDRESS_OPTIONS_FAILED' });
+              // 2026-10-25: the executor returns a generic error CODE
+              // ('EXECUTION_FAILED'/'TIMEOUT') plus the detailed
+              // message (e.g. the ZONE_WARD_FETCH_FAILED text naming
+              // the HTTP reason AND the Playwright reason). The old
+              // line sent ONLY the code, so the frontend — and the
+              // user — could never tell a timeout from a bootstrap
+              // failure from a parent-not-found, and every live
+              // symptom looked identical. Keep the code, but also
+              // forward the message; the frontend patch prefers it
+              // for the banner. Nothing else in this shape changes.
+              callback({ ok: false, error: result.error || result.message || 'GET_ADDRESS_OPTIONS_FAILED', message: result.message || result.error || 'GET_ADDRESS_OPTIONS_FAILED' });
             } else if (Array.isArray(result?.options)) {
               callback(result.options);
             } else if (Array.isArray(result)) {

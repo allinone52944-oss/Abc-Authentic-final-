@@ -142,6 +142,18 @@ class BdrisNavigator {
   /**
    * Get address options for a level, setting up parent cascade
    * This is the core method that replaces the fragile mirror logic
+   *
+   * Budget note (2026-10-25, proven from the code's own timeouts):
+   * this runs inside the 30s GET_ADDRESS_OPTIONS executor budget
+   * AFTER an up-to-8s HTTP attempt (AddressService), so its worst
+   * case must stay under ~20s: 3 parents x (5000ms wait + 500ms
+   * sleep) + 3 x 1200ms target retries = 20100ms. The old values
+   * (10000ms waits, 5 retries = 37500ms worst) alone exceeded the
+   * whole executor budget, so a slow cascade could never return.
+   * The waits resolve immediately when options are already present;
+   * only stuck-level detection gets faster. The waitForOptions
+   * DEFAULT (10000ms) is unchanged — the submit flow passes its
+   * own explicit timeouts and is untouched by this.
    */
   async getAddressOptions(level, parents = {}, form = 'birth') {
     const sel = this.getSelectors(form);
@@ -166,16 +178,17 @@ class BdrisNavigator {
         throw new Error(`Parent option not found: ${pLevel}="${pValue}"`);
       }
 
-      // Wait for child to populate
+      // Wait for child to populate (budget: see method note — 5000ms,
+      // not 10000ms, so the cascade fits the executor budget)
       if (cSel) {
-        await this.waitForOptions(cSel, 10000);
+        await this.waitForOptions(cSel, 5000);
       }
       await this.page.waitForTimeout(500);
     }
 
-    // Get target options with retry
+    // Get target options with retry (budget: 3 retries, see method note)
     let options = await this.getOptions(sel[level]);
-    for (let i = 0; i < 5 && !options.length; i++) {
+    for (let i = 0; i < 3 && !options.length; i++) {
       await this.page.waitForTimeout(1200);
       options = await this.getOptions(sel[level]);
     }

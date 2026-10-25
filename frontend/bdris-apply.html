@@ -11,6 +11,23 @@ try{if(window.CSS&&CSS.supports('-webkit-text-security','disc')){var swapPw=func
 (function() {
   const token = sessionStorage.getItem('abc_access_token') || localStorage.getItem('abc_access_token');
   if (!token) {
+    // Back-button entry preservation (2026-10-25): this redirect to
+    // login.html destroys document.referrer — after login the return
+    // load's referrer IS login.html, which rememberEntry() rejects, so
+    // the true origin would be lost and the header back button would
+    // fall back to re-rendering the start screen. Preserve the origin
+    // now, under the same rules rememberEntry() uses (same origin
+    // only, never login.html, never this page itself). sessionStorage
+    // survives the login round-trip (login.html never clears it).
+    try {
+      const r = document.referrer;
+      if (r) {
+        const ru = new URL(r, location.href), cu = new URL(location.href);
+        if (ru.origin === cu.origin && ru.pathname !== '/login.html' && ru.pathname !== cu.pathname) {
+          sessionStorage.setItem('bdris_apply_entry', r);
+        }
+      }
+    } catch (e) {}
     location.href = '/login.html?next=' + encodeURIComponent(location.pathname);
   }
 })();
@@ -1670,7 +1687,7 @@ function fetchAddrOpts(level, parents, tmo, form) {
       if (!done) { done = true; clearTimeout(t);
         if (Array.isArray(r)) res({ options: r, error: null });
         else if (r && Array.isArray(r.options)) res({ options: r.options, error: null });
-        else if (r && r.ok === false) res({ options: [], error: r.error || r.message || 'error' });
+        else if (r && r.ok === false) res({ options: [], error: r.message || r.error || 'error' });
         else res({ options: [], error: 'bad-response' });
       }
     });
@@ -1788,7 +1805,7 @@ async function geoLoad(k, Ls, data, wantOv) {
         setGeoState(k, Ls, 'error');
         // showBanner, not note(): geoChanged calls noteOff() right
         // after geoLoad, which would erase a note() immediately.
-        showBanner('err', 'অঞ্চলের তালিকা আসেনি — উপরের ঘরটা আবার বাছুন');
+        showBanner('err', 'অঞ্চলের তালিকা আসেনি (' + esc(addrRes.error || 'error') + ') — উপরের ঘরটা আবার বাছুন');
         return;
       }
       // zone-এর জন্য WardInCityCorp থেকে এলে fromAlt সেট করো (label-এর জন্য)
@@ -3674,7 +3691,11 @@ socket.on('BOT_STATUS', (d) => {
  * sessionStorage for this tab only) and the header back button goes
  * there. If no entry page is known (direct visit, or entry lost to a
  * login redirect whose referrer is login.html), it falls back to the
- * in-app start screen — never to login.html, never to history. */
+ * in-app start screen — except when that screen is already showing,
+ * where re-rendering it would visibly go nowhere: then it falls back
+ * to the app hub (/dashboard.html). Never to login.html, never to
+ * history. The login redirect itself now also preserves the origin in
+ * the head guard, before the redirect destroys document.referrer. */
 function entryUrlFromReferrer(referrer, currentHref) {
   try {
     if (!referrer) return null;
@@ -3702,6 +3723,14 @@ function goBackToEntry() {
     const u = sessionStorage.getItem('bdris_apply_entry');
     if (u) { location.href = u; return; }
   } catch (e) {}
+  // Proven no-op case (2026-10-25): no entry is known (direct visit, or
+  // a login redirect whose referrer is login.html) AND the start screen
+  // is already showing — renderHome() would re-render the identical
+  // screen, so the press visibly goes nowhere. Fall back to the app hub
+  // (/dashboard.html — the default landing login.html itself uses for
+  // non-admin users), never login.html. Other views keep the existing
+  // renderHome() fallback, which does change the screen there.
+  if (S.view === 'home') { location.href = '/dashboard.html'; return; }
   renderHome();
 }
 

@@ -123,3 +123,42 @@ describe('AddressService HTTP-first with Playwright fallback', () => {
     assert.strictEqual(calls, 2, 'failed/empty results must never be cached');
   });
 });
+
+describe('AddressService HTTP budget (2026-10-25 proven budget fix)', () => {
+  it('defaults the HTTP budget to 8000ms', () => {
+    const svc = new AddressService(null, {});
+    assert.strictEqual(svc.httpTimeoutMs, 8000);
+  });
+
+  it('a hung HTTP attempt does NOT starve the Playwright fallback', async () => {
+    // Never-resolving HTTP geo: without a budget this getOptions
+    // would hang until the 30s executor TIMEOUT and the fallback
+    // would never run. With the injected 50ms budget it must fall
+    // through to the navigator immediately.
+    const hungHttp = {
+      getZoneOptions: () => new Promise(() => {}),
+      getWardOptions: () => new Promise(() => {}),
+    };
+    const nav = { getAddressOptions: async () => [{ id: '9', name: 'অঞ্চল - ৯' }] };
+    const svc = new AddressService(nav, { httpGeo: hungHttp, httpTimeoutMs: 50 });
+    const t0 = Date.now();
+    const opts = await svc.getOptions('zone', cityCorpParents, 'birth');
+    assert.deepStrictEqual(opts.map((o) => o.name), ['অঞ্চল - ৯']);
+    assert.ok(Date.now() - t0 < 5000, 'budget cut must return in well under the executor timeout');
+  });
+
+  it('a hung HTTP attempt + empty Playwright composes an error naming the budget timeout', async () => {
+    const hungHttp = {
+      getZoneOptions: () => new Promise(() => {}),
+      getWardOptions: () => new Promise(() => {}),
+    };
+    const navEmpty = { getAddressOptions: async () => [] };
+    const svc = new AddressService(navEmpty, { httpGeo: hungHttp, httpTimeoutMs: 50 });
+    await assert.rejects(
+      () => svc.getOptions('zone', cityCorpParents, 'birth'),
+      (e) => e.code === 'ZONE_WARD_FETCH_FAILED'
+        && /timed out after 50ms/.test(e.message)
+        && /Playwright: .*empty/.test(e.message),
+    );
+  });
+});

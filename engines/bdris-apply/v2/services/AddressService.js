@@ -36,6 +36,28 @@ function geoCacheSet(key, opts) {
   GEO_CACHE.set(key, { opts: opts.slice(), at: Date.now() });
 }
 
+/**
+ * Race a promise against a budget. Never rejects: resolves
+ * {timeout:true} on budget expiry, {ok:true,value} / {ok:false,error}
+ * otherwise. The loser promise is settled (not left to reject
+ * unhandled) by the .then() wrapping below.
+ */
+async function withBudget(promise, ms, label) {
+  let timer = null;
+  const settled = promise.then(
+    (value) => ({ ok: true, value }),
+    (error) => ({ ok: false, error }),
+  );
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve({ timeout: true, label }), ms);
+  });
+  try {
+    return await Promise.race([settled, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 class AddressService {
   constructor(navigator, opts = {}) {
     this.navigator = navigator || null; // BdrisNavigator instance, or null for HTTP-only use
@@ -44,6 +66,18 @@ class AddressService {
     // Production default is a lazy HttpGeoService (no Playwright page).
     this.httpGeo = opts.httpGeo || null;
     this.httpGeoFactory = opts.httpGeoFactory || null;
+    // PROVEN budget (2026-10-25, code arithmetic — not a live guess):
+    // GET_ADDRESS_OPTIONS executor = 30000ms (server.js), frontend =
+    // 40000ms. The HTTP fetch path has NO timeout of its own
+    // (http/client.js request/bootstrap/getGeo), so a hung bootstrap
+    // could eat the whole 30s and the Playwright fallback would never
+    // even start. Bounding HTTP at 8000ms guarantees the fallback
+    // still gets ~20s, and the trimmed Playwright worst case
+    // (3 x (5000+500) + 3 x 1200 = 20100ms, BdrisNavigator) fits:
+    // 8000 + 20100 = 28100 < 30000 < 40000. The budget only cuts a
+    // slow/hung HTTP attempt; a healthy HTTP round (a few seconds)
+    // is untouched, and a budget cut still tries Playwright after.
+    this.httpTimeoutMs = opts.httpTimeoutMs || 8000;
   }
 
   async _getHttpGeo() {
@@ -108,32 +142,46 @@ class AddressService {
   async getOptions(level, parents = {}, form = 'birth') {
     // Zone/ward MUST come from a live fetch (user requirement: realtime,
     // no hardcode) — cache holds only non-empty live results.
-    // 2026-10-25 fix: HTTP geo FIRST, Playwright second. The Playwright
-    // cascade's worst case (3 parents x 10s + 5 x 1.2s retries = 37.5s)
-    // exceeds the frontend 25s timeout and the executor 30s timeout,
-    // so it could never reliably return a zone list on a slow site,
-    // and every failure was then hidden as []. HTTP is direct JSON
-    // and fits the timeout in the normal case. If HTTP fails (e.g.
-    // TSPD blocks a fetch bootstrap — unproven live), Playwright is
-    // still tried. If BOTH fail, this THROWS instead of returning [],
-    // so the frontend can show an error and a retry instead of
-    // silently degrading paurasavaUnion to a text input that can
-    // never unlock Ward.
+    // 2026-10-25 fix: HTTP geo FIRST, Playwright second, both inside
+    // one budget: HTTP capped at httpTimeoutMs (default 8000ms) +
+    // Playwright worst case 20100ms = 28100ms < executor 30000ms
+    // (server.js) < frontend 40000ms. Before this, the Playwright
+    // worst case alone was 3 x (10000+500) + 5 x 1200 = 37500ms and
+    // HTTP had no timeout at all, so a slow site or hung fetch
+    // guaranteed an executor TIMEOUT before the fallback could ever
+    // return — that budget impossibility is proven from the code's
+    // own timeout values, whatever the live site did on the day.
+    // If HTTP fails (e.g. TSPD blocks a fetch bootstrap — unproven
+    // live, NOT assumed here), Playwright is still tried. If BOTH
+    // fail, this THROWS instead of returning [], so the frontend
+    // can show an error and a retry instead of silently degrading
+    // paurasavaUnion to a text input that can never unlock Ward.
     if (level === 'zone' || level === 'ward') {
       const key = geoCacheKey(level, parents, form);
       const cached = geoCacheGet(key);
       if (cached) return cached;
       let httpError = null;
+      // HTTP runs under a budget (see constructor): without it, a
+      // hung fetch could consume the whole 30s executor budget and
+      // the Playwright fallback below would never start. On budget
+      // expiry the fallback still runs; the timeout is recorded in
+      // httpError so the composed error names it.
       try {
         const httpGeo = await this._getHttpGeo();
-        const res = level === 'zone'
-          ? await httpGeo.getZoneOptions(parents, form)
-          : await httpGeo.getWardOptions(parents, form);
-        if (Array.isArray(res.options) && res.options.length) {
-          geoCacheSet(key, res.options);
-          return res.options;
+        const attempt = level === 'zone'
+          ? httpGeo.getZoneOptions(parents, form)
+          : httpGeo.getWardOptions(parents, form);
+        const raced = await withBudget(attempt, this.httpTimeoutMs, 'HttpGeo');
+        if (raced.timeout) {
+          httpError = new Error(`HttpGeo: timed out after ${this.httpTimeoutMs}ms (HTTP budget; Playwright fallback running next)`);
+        } else if (!raced.ok) {
+          httpError = raced.error;
+        } else if (Array.isArray(raced.value.options) && raced.value.options.length) {
+          geoCacheSet(key, raced.value.options);
+          return raced.value.options;
+        } else {
+          httpError = new Error('HttpGeo: empty result');
         }
-        httpError = new Error('HttpGeo: empty result');
       } catch (e) {
         httpError = e;
       }

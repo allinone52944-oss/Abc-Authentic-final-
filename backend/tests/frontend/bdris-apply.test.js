@@ -330,6 +330,90 @@ describe('session-start speed fix (2026-10-25)', () => {
   });
 });
 
+describe('header back button no-op on home with unknown entry (2026-10-25, proven cause)', () => {
+  // Proven chain (code, not guesswork):
+  //  bdris-apply.html head guard: no token -> /login.html?next=<pathname>
+  //  login.html: explicit ?next= wins -> back to /bdris-apply.html, so
+  //  the return load's document.referrer IS login.html
+  //  entryUrlFromReferrer: pathname '/login.html' -> null, so
+  //  rememberEntry() stores nothing -> goBackToEntry() fell back to
+  //  renderHome() -> on the start screen (the init renderHome() view)
+  //  that re-renders the identical screen: the press visibly goes
+  //  nowhere. These tests execute the real goBackToEntry() with stubs.
+  let goBackToEntry;
+  beforeAll(() => {
+    const m = html.match(/function goBackToEntry\(\) \{[\s\S]*?\n\}/);
+    expect(m).not.toBeNull();
+    goBackToEntry = m[0];
+  });
+
+  function runGoBack({ storedEntry, view }) {
+    const store = { v: storedEntry === undefined ? null : storedEntry };
+    const sessionStorage = { getItem: () => store.v, setItem: (k, v) => { store.v = v; } };
+    const location = { href: 'https://abc-authentic.store/bdris-apply.html' };
+    const S = { view };
+    let homeCalls = 0;
+    const renderHome = () => { homeCalls++; };
+    // eslint-disable-next-line no-eval
+    const fn = eval('(' + goBackToEntry.replace(/^function goBackToEntry/, 'function') + ')');
+    fn();
+    return { href: location.href, homeCalls };
+  }
+
+  test('stored entry wins: navigates to the entry page, home not re-rendered', () => {
+    const r = runGoBack({ storedEntry: 'https://abc-authentic.store/dashboard.html', view: 'home' });
+    expect(r.href).toBe('https://abc-authentic.store/dashboard.html');
+    expect(r.homeCalls).toBe(0);
+  });
+
+  test('no entry + already on home: leaves to /dashboard.html, does NOT re-render home', () => {
+    const r = runGoBack({ storedEntry: null, view: 'home' });
+    expect(r.href).toBe('/dashboard.html');
+    expect(r.homeCalls).toBe(0);
+  });
+
+  test('no entry + mid-flow view: existing renderHome() fallback is unchanged', () => {
+    const r = runGoBack({ storedEntry: null, view: 'flow' });
+    expect(r.href).toBe('https://abc-authentic.store/bdris-apply.html');
+    expect(r.homeCalls).toBe(1);
+  });
+
+  test('no-entry fallback never targets login.html', () => {
+    const r = runGoBack({ storedEntry: null, view: 'home' });
+    expect(r.href).not.toMatch(/login\.html/);
+  });
+});
+
+describe('login redirect must not destroy the back entry (2026-10-25)', () => {
+  // The head guard runs BEFORE the redirect to login.html, while
+  // document.referrer is still the true origin page, and login.html
+  // never clears sessionStorage — so a preserved entry survives the
+  // round-trip, and rememberEntry() must not overwrite it with the
+  // login.html referrer of the return load.
+  test('head guard preserves a same-origin non-login referrer before redirecting', () => {
+    const head = html.slice(0, 4000);
+    expect(head).toMatch(/location\.href = '\/login\.html\?next='/);
+    expect(head).toMatch(/sessionStorage\.setItem\('bdris_apply_entry', r\)/);
+    expect(head).toMatch(/ru\.origin === cu\.origin/);
+    expect(head).toMatch(/ru\.pathname !== '\/login\.html'/);
+    expect(head).toMatch(/ru\.pathname !== cu\.pathname/);
+  });
+
+  test('rememberEntry keeps a preserved entry when the return referrer is login.html', () => {
+    const entryFn = html.match(/function entryUrlFromReferrer\(referrer, currentHref\) \{[\s\S]*?\n\}/);
+    const remFn = html.match(/function rememberEntry\(\) \{[\s\S]*?\n\}/);
+    expect(entryFn).not.toBeNull();
+    expect(remFn).not.toBeNull();
+    const store = { v: 'https://abc-authentic.store/service-detail.html?id=x' };
+    const sessionStorage = { getItem: () => store.v, setItem: (k, v) => { store.v = v; } };
+    const location = { search: '', href: 'https://abc-authentic.store/bdris-apply.html' };
+    const document = { referrer: 'https://abc-authentic.store/login.html?next=%2Fbdris-apply.html' };
+    // eslint-disable-next-line no-eval
+    eval(entryFn[0] + '\n' + remFn[0] + '\nrememberEntry();');
+    expect(store.v).toBe('https://abc-authentic.store/service-detail.html?id=x');
+  });
+});
+
 describe('zone/ward failure visibility (2026-10-25 zone fix)', () => {
   test('fetchAddrOpts returns {options, error} instead of collapsing failures to []', () => {
     expect(html).toMatch(/function fetchAddrOpts\(level, parents, tmo, form\)/);
