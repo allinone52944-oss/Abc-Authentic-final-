@@ -29,7 +29,7 @@ function fontsCss() {
 require('node:tls').DEFAULT_MAX_VERSION = 'TLSv1.2';
 
 const app = express();
-const port = 3000;
+const port = parseInt(process.env.BIRTH_ENGINE_PORT || '3000', 10);
 
 app.use(cors());
 app.use(bodyParser.json({ limit: '10mb' }));
@@ -1075,7 +1075,7 @@ app.post('/generate-pdf', async (req, res) => {
 
         browser = await puppeteer.launch({
             headless: true,
-            executablePath: '/usr/bin/google-chrome',
+            executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome',
             // same rendering flags as the audited CLI renders (build.cmd)
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu',
                    '--disable-dev-shm-usage', '--disable-lcd-text', '--force-color-profile=srgb']
