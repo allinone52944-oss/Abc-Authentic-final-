@@ -304,6 +304,7 @@ class BdrisEngineV2 {
           if (params.ctx) session.formCtx = params.ctx;
           const merged = { ...params };
           if (ctxData) {
+            if (!merged.s0 && ctxData.s0) merged.s0 = ctxData.s0;
             if (!merged.s1 && ctxData.s1) merged.s1 = ctxData.s1;
             if (!merged.s2 && ctxData.s2) merged.s2 = ctxData.s2;
             if (!merged.s2b && ctxData.s2b) merged.s2b = ctxData.s2b;

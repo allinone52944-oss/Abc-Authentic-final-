@@ -92,8 +92,9 @@ describe('charge gate fail-closed (HTTP path)', () => {
 });
 
 // ---- Fake page for submitS1 (names + DOB + thChild + gender only;
-// no division/district/village, so the birth-address block and the
-// Next click are skipped by the code itself) ----
+// no division/district/village, so submitS1 now fails honestly for
+// the missing birth address (submit-debug 2026-10-26) — the selector
+// assertions below still prove the DOB/thChild/gender behaviour) ----
 function makeS1Page({ modalText = '' } = {}) {
   const values = { personBirthDate: '' };
   const requestedLocators = [];
@@ -184,7 +185,11 @@ describe('submitS1 selectors (v1 live-verified)', () => {
       firstNameBn: 'আবদুল', lastNameBn: 'করিম', firstNameEn: 'Abdul', lastNameEn: 'Karim',
       dob: '2020-01-15', gender: 'পুরুষ', thChild: '৩য়',
     });
-    assert.strictEqual(out.ok, true, JSON.stringify(out.failed || out));
+    // Selectors must still be filled, but the step itself is an
+    // honest failure: no birth address was supplied, so it cannot
+    // claim step 2 complete (submit-debug 2026-10-26).
+    assert.strictEqual(out.ok, false, 'missing birth address must not be ok:true');
+    assert.ok((out.failed || []).some((f) => /জন্মস্থানের ঠিকানা/.test(f.field || '')));
     assert.strictEqual(values.personBirthDate, '15/01/2020', 'DOB must be DD/MM/YYYY in the masked field');
     assert.strictEqual(selects['#thChild'].value, '৩');
     assert.strictEqual(selects['#gender'].value, 'পুরুষ');

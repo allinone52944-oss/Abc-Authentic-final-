@@ -94,6 +94,22 @@ function thChildSite(v) {
   return v;
 }
 
+// Application-number extraction for the SUBMIT success gate
+// (2026-10-26, submit-debug): only a LABELLED number
+// ("আবেদনপত্র নম্বর : ...") or a 17-digit number counts as success
+// proof. The old generic 7–12-digit fallback could match any number
+// on the page (a phone fragment, a year, a code) and falsely mark a
+// failed submit as COMPLETED, so it is deliberately NOT here. The
+// labelled form is the live-verified shape (2026-10-11: the number
+// sits in the lower panel, not in the success banner).
+function extractAckNumber(bodyText) {
+  const body = String(bodyText || '');
+  let m = body.match(/আবেদন(?:পত্র)?\s*নম্বর\s*[:：]?\s*([\d\u09E6-\u09EF]{4,20})/);
+  if (m) return m[1];
+  m = body.match(/\b\d{17}\b/);
+  return m ? m[0] : '';
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Pure helpers — copied faithfully from v1 (engines/bdris-apply/server.js)
 // ═══════════════════════════════════════════════════════════════
@@ -487,9 +503,12 @@ class StepHandler {
     // maps BIRTH->BIRTHPLACE, but the old S0 default was 'BIRTH' and it
     // used the raw value to pick a card id. Canonicalise here so any
     // legacy 'BIRTH' caller still selects the BIRTHPLACE radio.
-    const raw = String(data.addressType || 'BIRTHPLACE').toUpperCase();
+    // Submit-debug: a ctx-only caller (resume/replay) carries the
+    // basis inside data.s0, not as flat fields — read both, so a
+    // PERMANENT basis in ctx cannot silently become BIRTHPLACE.
+    const raw = String((data.s0 && data.s0.addressType) || data.addressType || 'BIRTHPLACE').toUpperCase();
     const addressType = raw === 'PERMANENT' ? 'PERMANENT' : 'BIRTHPLACE';
-    const embassy = !!data.embassy;
+    const embassy = !!((data.embassy !== undefined && data.embassy !== null) ? data.embassy : (data.s0 && data.s0.embassy));
     this.progress('🔄 ধাপ ১: আবেদনের ভিত্তি নির্বাচন...');
 
     // Embassy off: clear the mission checkbox first (v1 LIVE_FIELD:
@@ -701,13 +720,21 @@ class StepHandler {
     }
 
     this.progress('🔄 ধাপ ২: জন্মস্থানের ঠিকানা...');
-    // D1: the old code had only a placeholder comment here and
-    // returned ok:true with the birthplace section never filled
-    // and no Next click — while the UI reported step 2 done.
-    // Fill it with the same section helper S2B uses (prefix
-    // 'birthPlace', live-verified field naming), re-check + refill
-    // once like S2B, then advance to the parents section.
-    if (data.division || data.district || data.vilBn) {
+    // Submit-debug (2026-10-26): the old code skipped the whole
+    // address block AND the Next click when no division/district/
+    // village was supplied, yet still returned ok:true step 2 —
+    // the UI then advanced while the site was still on the person
+    // section, and the next step failed on the wrong page with a
+    // misleading step. The frontend already validates division/
+    // district/village before sending S1, so a real application
+    // always carries them; a missing address is an honest failure
+    // here, never a success. Names-only callers must not use
+    // submitS1 as a step-completion probe.
+    if (!(data.division || data.district || data.vilBn)) {
+      failed.push({ field: 'জন্মস্থানের ঠিকানা', reason: 'জন্মস্থানের ঠিকানা (বিভাগ/জেলা/গ্রাম) দেওয়া হয়নি — ঠিকানা ছাড়া ধাপ ২ সম্পন্ন নয়' });
+      return { ok: false, failed, message: `${failed.length}টি ফিল্ড পূরণ হয়নি` };
+    }
+    {
       await this._fillAddressSection('birthPlace', data, failed);
       const bpFilled = async () => this.page.evaluate(() => {
         const val = (n) => { const e = document.querySelector(`select[name="${n}"]`); return e && e.offsetParent !== null ? String(e.value || '') : 'x'; };
@@ -715,16 +742,48 @@ class StepHandler {
         if (!val('birthPlaceDiv') || !val('birthPlaceDist') || !val('birthPlaceCityCorpCantOrUpazila')) return false;
         if (!txt('birthPlaceVilAreaTownBn') || !txt('birthPlacePostOfc')) return false;
         return true;
-      }).catch(() => true);
+      }).catch(() => false);
       if (data.division && !(await bpFilled())) {
         this.progress('⏳ জন্মস্থানের কিছু ঘর খালি থেকে গেছে — আবার বসানো হচ্ছে…');
         await this._fillAddressSection('birthPlace', data, failed);
       }
+      // v1-proven (applyS1Core): the address cascade's partial
+      // re-render can empty the names filled above (live 2026-10-11),
+      // so re-verify them here and refill any letter-bearing name
+      // that the cascade cleared, before clicking Next.
+      try {
+        const rbAfter = await this.page.evaluate(() => {
+          const g = (id, namePart) => {
+            let el = document.querySelector(id);
+            if (!el) el = document.querySelector(`input[name*="${namePart}"]`);
+            return el ? String(el.value || '') : '';
+          };
+          return {
+            fBn: g('#personFirstNameBn', 'personFirstNameBn'), lBn: g('#personLastNameBn', 'personLastNameBn'),
+            fEn: g('#personFirstNameEn', 'personFirstNameEn'), lEn: g('#personLastNameEn', 'personLastNameEn'),
+          };
+        });
+        const recheck = [
+          ['#personFirstNameBn, input[name*="personFirstNameBn"]', transitName(data.firstNameBn), 'নামের প্রথম অংশ (বাংলা)', rbAfter.fBn],
+          ['#personLastNameBn, input[name*="personLastNameBn"]', transitName(data.lastNameBn), 'নামের শেষ অংশ (বাংলা)', rbAfter.lBn],
+          ['#personFirstNameEn, input[name*="personFirstNameEn"]', transitName(data.firstNameEn), 'First Name (English)', rbAfter.fEn],
+          ['#personLastNameEn, input[name*="personLastNameEn"]', transitName(data.lastNameEn), 'Last Name (English)', rbAfter.lEn],
+        ];
+        for (const [sel, want, label, actual] of recheck) {
+          if (want && !actual) keep(await this.fillInput(sel, want, label + ' (আবার বসানো হলো)'));
+        }
+      } catch { /* re-verify is best-effort; Next validation is the gate */ }
       const nxt1 = await this._clickNextAndWait('পরবর্তী (ধাপ ২)', {
         nextAnchor: ['#fatherBrn', 'input[name="personInfoForBirth.father.ubrn"]'],
       });
       if (!nxt1.ok) failed.push({ field: nxt1.field, reason: nxt1.reason });
       else {
+        // v1-proven (applyS1Core modal2): the attachment modal can
+        // appear AFTER the Next click too, not only after DOB. If it
+        // is covering the page, the parents anchor will never appear
+        // — dismiss it first, then re-check the anchor.
+        const modalAfter = await this._handleAttachmentModal(data.docsAvailable !== false);
+        if (!modalAfter.ok) failed.push({ field: 'কাগজপত্র', reason: modalAfter.reason });
         const parentsHere = await this._waitVisible(
           ['#fatherBrn', 'input[name="personInfoForBirth.father.ubrn"]'], 5000);
         if (!parentsHere) {
@@ -844,7 +903,19 @@ class StepHandler {
         failed: [], verifyStatus,
       };
     }
-    if (nxt.ok && !pre2013) {
+    // Submit-debug (2026-10-26): the old tail returned ok:true
+    // for pre-2013 callers even when the site had NOT advanced
+    // (the !pre2013 branch was the only not-advanced failure, and
+    // the final fall-through returned ok on an empty failed list).
+    // A slow transition gets one more 3s re-check, then not-advanced
+    // is an honest failure for every caller — the UI must not
+    // advance to the address step while the site is still on parents.
+    if (nxt.ok && !advanced) {
+      await this.page.waitForTimeout(3000);
+      advanced = !(await this._waitVisible(
+        ['#fatherBrn', 'input[name="personInfoForBirth.father.ubrn"]'], 1500));
+    }
+    if (nxt.ok && !advanced) {
       // এগোয়নি — verifyStatus থেকে নির্দিষ্ট কারণ বানাই
       const bad = Object.entries(verifyStatus).filter(([, v]) => v === false).map(([k]) => (k === 'father' ? 'পিতা' : 'মাতা'));
       const unclear = Object.entries(verifyStatus).filter(([, v]) => v === null).map(([k]) => (k === 'father' ? 'পিতা' : 'মাতা'));
@@ -924,7 +995,7 @@ class StepHandler {
       if (!val(p + 'Div') || !val(p + 'Dist') || !val(p + 'CityCorpCantOrUpazila')) return false;
       if (!txt(p + 'VilAreaTownBn') || !txt(p + 'PostOfc')) return false;
       return true;
-    }, pre).catch(() => true);
+    }, pre).catch(() => false);
     for (const [pre, rec, cp] of [['permAddr', data.perm, data.permCopy], ['prsntAddr', data.pres, data.presCopy]]) {
       if (rec && !cp && !(await addrFilled(pre))) {
         this.progress('⏳ ঠিকানার কিছু ঘর খালি থেকে গেছে — আবার বসানো হচ্ছে…');
@@ -1457,7 +1528,12 @@ class StepHandler {
     };
     this.progress('🔄 কোড বসানো হচ্ছে...');
     const otp = String(data.otp || '').replace(/\D/g, '');
-    if (otp.length < 6) {
+    // Submit-debug (2026-10-26): the old check accepted 7+ digit
+    // input and typed it into the 6-digit masked OTP field, where
+    // the site would truncate/reject it and fail with a generic
+    // message. An OTP is exactly 6 digits — anything else is a
+    // wrong user input and fails here, clearly, before any submit.
+    if (otp.length !== 6) {
       this.progress('❌ কোডটি ৬ ডিজিটের — মোবাইলে আসা পুরো কোডটি লিখুন।');
       return { ok: false, message: '❌ কোডটি ৬ ডিজিটের — মোবাইলে আসা পুরো কোডটি লিখুন।' };
     }
@@ -1585,13 +1661,14 @@ class StepHandler {
     }
 
     // লাইভ 2026-10-11: সাফল্যের banner-এ নম্বর থাকে না — নম্বর থাকে নিচের প্যানেলে
-    // ("আবেদনপত্র নম্বর : 265370215")। তাই পুরো পাতার টেক্সট থেকেও নম্বর খোঁজা হয়।
+    // ("আবেদনপত্র নম্বর : 265370215")। তাই পুরো পাতার টেক্সট থেকেও নম্বর খোঁজা হয় —
+    // কিন্তু শুধু লেবেল-যুক্ত বা ১৭-ডিজিট নম্বরই সাফল্যের প্রমাণ (extractAckNumber);
+    // যেকোনো ৭–১২ ডিজিটের সংখ্যা আর প্রমাণ নয়।
     try {
       const liveNum = await this.page.evaluate(() => {
         const body = document.body.innerText || '';
         let m = body.match(/আবেদন(?:পত্র)?\s*নম্বর\s*[:：]?\s*([\d\u09E6-\u09EF]{4,20})/);
         if (!m) m = body.match(/\b\d{17}\b/);
-        if (!m) m = body.match(/\b\d{7,12}\b/);
         return m ? (m[1] || m[0]) : '';
       }).catch(() => '');
       if (liveNum) {
@@ -2198,4 +2275,4 @@ class StepHandler {
   }
 }
 
-module.exports = { StepHandler, verifyChargeToken, bnToArab, thChildSite, consumeSubmitToken, isSubmitTokenConsumed };
+module.exports = { StepHandler, verifyChargeToken, bnToArab, thChildSite, consumeSubmitToken, isSubmitTokenConsumed, extractAckNumber };
