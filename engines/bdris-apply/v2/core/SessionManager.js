@@ -8,6 +8,12 @@
  * - No shared state between sessions
  */
 
+// Names-only submit/verify request logging (alternative path 2,
+// 2026-10-25): warm-pool pages bypass BrowserManager.newPage, so
+// attach here too. attach() is idempotent (marker on the page), so a
+// page already carrying the listener is left alone. OFF by default.
+const { attachRequestNameLog } = require('../services/RequestNameLog');
+
 class SessionManager {
   constructor(options = {}) {
     this.sessions = new Map(); // sessionId -> session
@@ -30,6 +36,9 @@ class SessionManager {
       page = this.browserManager.takeWarmPage();
     }
     if (!page) page = await this.browserManager.newPage();
+    // Belt-and-braces attach for warm-pool pages (no-op when OFF,
+    // no-op when already attached, failures swallowed).
+    attachRequestNameLog(page);
 
     const session = {
       id: sessionId,

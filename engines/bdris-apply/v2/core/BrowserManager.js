@@ -9,6 +9,11 @@
  */
 
 const { chromium } = require('playwright');
+// Names-only submit/verify request logging (alternative path 2,
+// 2026-10-25): attaches to every fresh page here, so warm-pool pages
+// (created via newPage) and session pages both carry it. OFF by
+// default; attach is fail-open and never blocks page creation.
+const { attachRequestNameLog } = require('../services/RequestNameLog');
 
 class BrowserManager {
   constructor(options = {}) {
@@ -139,6 +144,9 @@ class BrowserManager {
     const page = await context.newPage();
     // Store context for cleanup
     page._context = context;
+    // Names-only logging: no-op unless BDRIS_REQUEST_NAME_LOG=on;
+    // failures are swallowed inside attach, never thrown here.
+    attachRequestNameLog(page);
     return page;
   }
 

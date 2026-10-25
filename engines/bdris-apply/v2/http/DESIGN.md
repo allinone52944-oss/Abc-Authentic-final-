@@ -96,6 +96,54 @@ only up to a successful SUBMIT (success page).
    path as complete or realtime, and do not remove the Playwright
    fallback.
 
+## Names-only request logging — alternative path 2 (2026-10-25, NOT live-verified)
+
+The 2026-10-25 manual capture failed because DevTools "Keep log"
+was off: navigation to the success page cleared the submit request
+from the Network list. This logger removes that failure mode for
+the NEXT application that runs through OUR app (not manual
+bdris.gov.bd): the Playwright engine itself records the wire
+details server-side, so no DevTools work is needed from the user
+and a navigation cannot erase the log.
+
+- Module: `v2/services/RequestNameLog.js`, wired into
+  `v2/core/BrowserManager.newPage()` (covers fresh and warm-pool
+  pages) and `v2/core/SessionManager.create()` (covers warm pages
+  taken from the pool; attach is idempotent via a page marker).
+- Enable: env `BDRIS_REQUEST_NAME_LOG=on` (or `1`/`true`/`yes`/
+  `enabled`). Default OFF (safe-by-default, same pattern as
+  `BDRIS_HTTP_PATH`); unset/empty/unknown values are OFF. This
+  flag is independent of `BDRIS_HTTP_PATH` — it logs the
+  Playwright path's submit/verify requests, which is exactly the
+  evidence the HTTP candidate needs.
+- Log file: `v2/request-name-log.jsonl` (one JSON line per
+  matching request), overridable with
+  `BDRIS_REQUEST_NAME_LOG_FILE`. The engine previously had no
+  file log (stdout only), so this is the dedicated location.
+- What it records (NAMES ONLY): timestamp, URL path (query
+  VALUES stripped, parameter NAMES only; digit runs in
+  non-canonical paths masked to `:id`), HTTP method, content-type
+  media type only, and payload FIELD NAMES only (recursive keys
+  for JSON, field names for form/multipart; leaf values replaced
+  by null = "present, value omitted"). Matched requests:
+  `bdris.gov.bd` paths `/api/br/application/register`,
+  `/api/otp/verify`, `/api/application/receive`, plus any
+  bdris.gov.bd path containing `register`, `verify`, or
+  `receive`.
+- What it NEVER records: cookies, Authorization/CSRF/token
+  headers, OTP values, phone numbers, personal names, dates of
+  birth, addresses, application numbers, document file contents,
+  or document URLs carrying ids. If a value cannot be proven
+  safe, it is dropped, not truncated.
+- Fail-open: logging never blocks, alters, retries, or
+  double-submits the application flow; every logging failure is
+  swallowed and reported only via the onError callback.
+- Tests: `v2/tests/request-name-log.test.js` (mock
+  page/request objects only — no browser, no login, no OTP,
+  no real application). Until a real app-driven application
+  writes a log line, the candidate submit/verify payloads stay
+  CANDIDATE and nothing here proves the wire format.
+
 ## Engine integration (2026-10-25, uncommitted, NOT live-verified)
 
 `v2/services/HttpPathRunner.js` + the `SUBMIT_HTTP_CHAIN` executor
