@@ -9,6 +9,21 @@
  */
 
 const { chromium } = require('playwright');
+
+// Hardened session-page context settings (2026-10-26 senior
+// investigation, live banner: /br/application stub, body length
+// 44). These values are NOT invented: they are copied verbatim
+// from v1's live-verified browser (engines/bdris-apply/server.js,
+// 2026-10-11) and from v2's own OriginalFetcher worker pages
+// (services/OriginalFetcher.js), which already used them — while
+// v2 session/geo pages launched with stock headless-Playwright
+// defaults (no user-agent, no locale), the single largest proven
+// difference between a page the gate serves the form to and the
+// page it serves a stub to. No new fingerprinting, no CAPTCHA
+// handling, no challenge bypass: only settings this codebase
+// already ships.
+const SESSION_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+const SESSION_LOCALE = 'bn-BD';
 // Names-only submit/verify request logging (alternative path 2,
 // 2026-10-25): attaches to every fresh page here, so warm-pool pages
 // (created via newPage) and session pages both carry it. OFF by
@@ -26,6 +41,8 @@ class BrowserManager {
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
+        // v1 launch flag, restored for session pages (see above).
+        '--disable-blink-features=AutomationControlled',
       ],
       ...options.launchOptions,
     };
@@ -78,8 +95,15 @@ class BrowserManager {
 
   async newContext(options = {}) {
     const browser = await this.launch();
+    // Session pages (warm pool, session creation, geo fresh page)
+    // all come through here, so the hardened defaults apply to
+    // every one of them. Caller options win, so OriginalFetcher's
+    // own identical settings are unaffected.
     const context = await browser.newContext({
       viewport: { width: 1280, height: 800 },
+      locale: SESSION_LOCALE,
+      userAgent: SESSION_USER_AGENT,
+      ignoreHTTPSErrors: true,
       ...options,
     });
     return context;
@@ -197,4 +221,4 @@ class BrowserManager {
   }
 }
 
-module.exports = { BrowserManager };
+module.exports = { BrowserManager, SESSION_USER_AGENT, SESSION_LOCALE };

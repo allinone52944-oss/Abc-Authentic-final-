@@ -50,6 +50,87 @@ class BdrisNavigator {
     this.createFreshPage = typeof opts.createFreshPage === 'function'
       ? opts.createFreshPage : null;
     this._freshPageUsed = false;
+    // Last navigation diagnostics (safe only: status, final URL,
+    // content-type, redirect count — never body text, never field
+    // values, never cookie/token values). Every page.goto() in
+    // this file records here; getPageState() attaches a snapshot
+    // so any error built from describePageState() carries it.
+    this.lastNavigation = null;
+    this.lastSiteNavigation = null;
+  }
+
+  // Record a goto() response, if the page returns one (real
+  // Playwright does; test doubles return undefined and are left
+  // alone). Redirect count walks the request's redirectedFrom
+  // chain, guarded at every step.
+  _recordNavigation(resp, slot = 'lastNavigation') {
+    if (!resp || typeof resp.status !== 'function') return;
+    let status = null; let finalUrl = null; let contentType = null; let redirectCount = 0;
+    try { status = resp.status(); } catch (e) { /* unknown */ }
+    try { finalUrl = typeof resp.url === 'function' ? resp.url() : null; } catch (e) { /* unknown */ }
+    try {
+      const headers = typeof resp.headers === 'function' ? resp.headers() : {};
+      contentType = headers['content-type'] || headers['Content-Type'] || null;
+    } catch (e) { /* unknown */ }
+    try {
+      let req = typeof resp.request === 'function' ? resp.request() : null;
+      while (req && typeof req.redirectedFrom === 'function' && req.redirectedFrom()) {
+        redirectCount++;
+        req = req.redirectedFrom();
+        if (redirectCount > 20) break;
+      }
+    } catch (e) { /* unknown */ }
+    this[slot] = { status, finalUrl, contentType, redirectCount };
+  }
+
+  static describeNavigation(nav) {
+    if (!nav) return 'unknown';
+    return `status=${nav.status}, final URL=${nav.finalUrl || 'unknown'}, ` +
+      `redirects=${nav.redirectCount}, content-type=${nav.contentType || 'unknown'}`;
+  }
+
+  // In-site navigation to the form (2026-10-26 senior
+  // investigation): OriginalFetcher._openPrintForm proved, on
+  // another BDRIS page, that a direct deep goto is WAF-blocked
+  // ("Please type on browser") while homepage -> real-link click
+  // works. No homepage link to /br/application is proven in
+  // code, so this is a FALLBACK, not the primary attempt: it
+  // only runs after a direct goto yields a stub. It goes to the
+  // homepage, clicks the first anchor whose href is (or ends
+  // with) /br/application — an evaluate click, so a collapsed
+  // nav dropdown does not need a hover — then polls for form
+  // content. Returns { foundLink, state }; never throws.
+  async gotoFormViaSite(homepageTimeout = 15000, pollIterations = 20) {
+    try {
+      const resp = await this.page.goto(`${BDRIS_BASE}/`, {
+        waitUntil: 'domcontentloaded',
+        timeout: homepageTimeout,
+      });
+      this._recordNavigation(resp, 'lastSiteNavigation');
+    } catch (e) { /* state check below decides */ }
+    let foundLink = false;
+    if (typeof this.page.evaluate === 'function') {
+      foundLink = await this.page.evaluate(() => {
+        try {
+          const links = document.querySelectorAll
+            ? Array.from(document.querySelectorAll('a[href]')) : [];
+          const link = links.find((a) => {
+            try {
+              const h = a.getAttribute ? (a.getAttribute('href') || '') : '';
+              return h === '/br/application' || h.endsWith('/br/application');
+            } catch (e) { return false; }
+          });
+          if (!link) return false;
+          try { link.click(); } catch (e) { return false; }
+          return true;
+        } catch (e) { return false; }
+      }).catch(() => false);
+    }
+    const state = await this.waitForFormContent(pollIterations);
+    this.lastSiteNavigation = {
+      ...(this.lastSiteNavigation || {}), foundLink,
+    };
+    return { foundLink, state };
   }
 
   // Normalize Bengali text for matching
@@ -64,10 +145,11 @@ class BdrisNavigator {
   }
 
   async gotoForm() {
-    await this.page.goto(`${BDRIS_BASE}/br/application`, {
+    const resp = await this.page.goto(`${BDRIS_BASE}/br/application`, {
       waitUntil: 'domcontentloaded',
       timeout: 30000,
-    });
+    }).catch((e) => { this._gotoError = e; return null; });
+    this._recordNavigation(resp);
     // Wait for form to be interactive
     await this.page.waitForSelector(
       SELECTORS.birth.division,
@@ -85,14 +167,34 @@ class BdrisNavigator {
     // ready — warmUp's catch already skips pooling on throw, and
     // INIT_SESSION's catch already reports SESSION_ERROR.
     // Pages without evaluate() (test doubles) keep the old behaviour.
+    //
+    // 2026-10-26 senior investigation, two further defects fixed
+    // here: (a) the bba3e7e version checked form content ONCE, so
+    // a slow render — or a challenge page that completes after
+    // domcontentloaded — became a hard connection failure
+    // ("সংযোগ তৈরি হয়নি") instead of getting a chance; now it
+    // polls waitForFormContent() for a bounded ~15s first.
+    // (b) If the direct goto still yields a stub, try the
+    // in-site path (homepage -> real /br/application link click,
+    // the OriginalFetcher-proven pattern) before throwing, so a
+    // deep-link gate does not end the session by itself.
     if (typeof this.page.evaluate === 'function') {
-      const state = await this.getPageState().catch(() => null);
+      let state = await this.waitForFormContent(30).catch(() => null);
+      let viaSite = null;
+      if (state && !state.formContent) {
+        viaSite = await this.gotoFormViaSite().catch(() => null);
+        if (viaSite && viaSite.state && viaSite.state.formContent) return;
+        state = (viaSite && viaSite.state) || state;
+      }
       if (state && !state.formContent) {
         throw new Error(
           `Playwright: form content not loaded on ${BDRIS_BASE}/br/application ` +
-          `(form element: ${state.formElement}, page title: "${String(state.title || '').slice(0, 80)}", ` +
-          `body text length: ${state.bodyTextLength}, divisions present: ` +
-          `birth=${state.divisions.birth} perm=${state.divisions.perm} prsnt=${state.divisions.prsnt})`,
+          `(${BdrisNavigator.describePageState(state)}; navigation: ` +
+          `${BdrisNavigator.describeNavigation(this.lastNavigation)}; ` +
+          `in-site navigation: ${viaSite
+            ? (viaSite.foundLink ? 'link clicked, still no form content'
+              : 'no /br/application link found on homepage')
+            : 'not attempted'})`,
         );
       }
     }
@@ -143,7 +245,7 @@ class BdrisNavigator {
       perm: SELECTORS.perm.division,
       prsnt: SELECTORS.prsnt.division,
     };
-    return await this.page.evaluate((divSels) => {
+    const raw = await this.page.evaluate((divSels) => {
       const exists = (selList) => {
         for (const s of String(selList).split(',').map(x => x.trim())) {
           try { if (document.querySelector(s)) return true; } catch (e) { /* next */ }
@@ -159,39 +261,75 @@ class BdrisNavigator {
       try { title = document.title || ''; } catch (e) { /* unknown */ }
       let bodyTextLength = 0;
       try { bodyTextLength = (document.body && document.body.innerText ? document.body.innerText.length : 0); } catch (e) { /* unknown */ }
+      // Safe diagnostics only (2026-10-26 investigation): counts,
+      // never text or values. scriptCount separates a bare error
+      // page from a challenge page that loads scripts; cookieCount
+      // (count only, never names/values) shows whether the page
+      // even received a session. Old test doubles lack scripts /
+      // cookie, so both default to 0.
+      let scriptCount = 0;
+      try { scriptCount = document.scripts ? document.scripts.length : 0; } catch (e) { /* unknown */ }
+      let cookieCount = 0;
+      try {
+        const c = document.cookie || '';
+        cookieCount = c ? c.split(';').map(s => s.trim()).filter(Boolean).length : 0;
+      } catch (e) { /* unknown */ }
       return {
         formElement, hasMetaCsrf, hasHiddenCsrf, title, bodyTextLength, divisions,
+        scriptCount, cookieCount,
         formContent: formElement || hasMetaCsrf || hasHiddenCsrf ||
           divisions.birth || divisions.perm || divisions.prsnt,
       };
     }, divisionSels).catch(() => ({
       formElement: false, hasMetaCsrf: false, hasHiddenCsrf: false,
-      title: '', bodyTextLength: 0,
+      title: '', bodyTextLength: 0, scriptCount: 0, cookieCount: 0,
       divisions: { birth: false, perm: false, prsnt: false }, formContent: false,
     }));
+    // Attach the last navigation snapshot (status / final URL /
+    // redirects / content-type) so describePageState() can name
+    // it without a separate channel.
+    raw.navigation = this.lastNavigation || null;
+    return raw;
   }
 
   // Poll (bounded iterations, so test doubles with an instant
   // waitForTimeout still terminate) until any form content appears.
+  // Also records whether the body length changed across the poll:
+  // a changing length means the page is still rendering (slow
+  // render), an unchanged 44 means a persistent stub — the two
+  // cases the old single snapshot could not separate.
   async waitForFormContent(maxIterations = 30) {
+    let firstLength = null;
     for (let i = 0; i < maxIterations; i++) {
       const state = await this.getPageState();
-      if (state.formContent) return state;
+      if (firstLength === null) firstLength = state.bodyTextLength;
+      if (state.formContent) {
+        state.contentChanged = firstLength !== state.bodyTextLength;
+        return state;
+      }
       if (typeof this.page.waitForTimeout === 'function') {
         await this.page.waitForTimeout(500);
       }
     }
-    return await this.getPageState();
+    const final = await this.getPageState();
+    final.contentChanged = firstLength !== null && firstLength !== final.bodyTextLength;
+    return final;
   }
 
   // Human-readable one-line summary of a page state, for errors.
   static describePageState(state) {
     if (!state) return 'unknown';
     const d = state.divisions || {};
-    return `form element: ${state.formElement}, page title: "${String(state.title || '').slice(0, 80)}", ` +
+    let out = `form element: ${state.formElement}, page title: "${String(state.title || '').slice(0, 80)}", ` +
       `body text length: ${state.bodyTextLength}, divisions present: ` +
       `birth=${!!d.birth} perm=${!!d.perm} prsnt=${!!d.prsnt}, ` +
       `CSRF: meta=${!!state.hasMetaCsrf} hidden=${!!state.hasHiddenCsrf}`;
+    if (typeof state.scriptCount === 'number') out += `, scripts: ${state.scriptCount}`;
+    if (typeof state.cookieCount === 'number') out += `, cookies: ${state.cookieCount}`;
+    if (typeof state.contentChanged === 'boolean') out += `, content changed during poll: ${state.contentChanged}`;
+    if (state.navigation) out += `, navigation: ${BdrisNavigator.describeNavigation(state.navigation)}`;
+    if (state.siteNavigation) out += `, in-site navigation: ${state.siteNavigation}`;
+    return out;
   }
 
   // Guarantee the page is the form page before a cascade runs.
@@ -270,15 +408,33 @@ class BdrisNavigator {
             this.page = fresh;
             if (typeof this.page.goto === 'function') {
               try {
-                await this.page.goto(`${BDRIS_BASE}/br/application`, {
+                const resp = await this.page.goto(`${BDRIS_BASE}/br/application`, {
                   waitUntil: 'domcontentloaded',
                   timeout: 10000,
                 });
+                this._recordNavigation(resp);
               } catch (e) { /* state check below decides */ }
             }
-            const after = await this.waitForFormContent(20);
+            // Short direct poll (5s), then the in-site path
+            // (homepage -> real link, 8s goto + 5s poll) instead
+            // of a long direct poll: total fresh attempt stays
+            // ~28s worst, inside the geo executor budget, and a
+            // deep-link gate gets a real alternative instead of
+            // another direct reload of the same stub.
+            const after = await this.waitForFormContent(10);
             let newUrl = url;
             try { newUrl = this.page.url(); } catch (e) { /* unknown */ }
+            if (after.formContent) return classify(after, true, newUrl);
+            const via = await this.gotoFormViaSite(8000, 10).catch(() => null);
+            if (via && via.state && via.state.formContent) {
+              let viaUrl = newUrl;
+              try { viaUrl = this.page.url(); } catch (e) { /* unknown */ }
+              return classify(via.state, true, viaUrl);
+            }
+            after.siteNavigation = via
+              ? (via.foundLink ? 'link clicked, still no form content'
+                : 'no /br/application link found on homepage')
+              : 'not attempted';
             return classify(after, true, newUrl);
           }
         } catch (e) { /* fall through to the reload path below */ }
@@ -286,10 +442,11 @@ class BdrisNavigator {
       // No form content at all: reload once and wait for content.
       if (typeof this.page.goto === 'function') {
         try {
-          await this.page.goto(`${BDRIS_BASE}/br/application`, {
+          const resp = await this.page.goto(`${BDRIS_BASE}/br/application`, {
             waitUntil: 'domcontentloaded',
             timeout: 20000,
           });
+          this._recordNavigation(resp);
         } catch (e) { /* state check below decides */ }
         const after = await this.waitForFormContent();
         let newUrl = url;
@@ -304,10 +461,11 @@ class BdrisNavigator {
       return { navigated: false, pageUrl: url, formPresent: false, pageState: state };
     }
     try {
-      await this.page.goto(`${BDRIS_BASE}/br/application`, {
+      const resp = await this.page.goto(`${BDRIS_BASE}/br/application`, {
         waitUntil: 'domcontentloaded',
         timeout: 20000,
       });
+      this._recordNavigation(resp);
     } catch (e) { /* state check below decides */ }
     if (typeof this.page.waitForSelector === 'function') {
       await this.page.waitForSelector(sel.division, { timeout: 3000 }).catch(() => {});
