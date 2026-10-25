@@ -3340,7 +3340,7 @@ function ensureReady(cb) {
 }
 function startSession() {
   S.starting = true;
-  note('⏳ BDRIS ফর্ম লোড হচ্ছে… (৩৫–৪০ সেকেন্ড লাগতে পারে, একটু অপেক্ষা করুন)', 'warn');
+  note('⏳ BDRIS ফর্ম লোড হচ্ছে… (কয়েক সেকেন্ড লাগতে পারে, একটু অপেক্ষা করুন)', 'warn');
   socket.emit('START_BDRIS_SESSION');
   // READY না এলে আটকে থাকবে না — timeout-এ flag ছেড়ে দিই, পরের ensureReady আবার চেষ্টা করবে
   clearTimeout(S._startT);

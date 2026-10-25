@@ -252,6 +252,11 @@ describe('session-start speed fix (2026-10-25)', () => {
 
   test('startSession shows an honest load-time expectation, not a generic wait', () => {
     expect(html).toMatch(/BDRIS ফর্ম লোড হচ্ছে/);
-    expect(html).toMatch(/৩৫–৪০ সেকেন্ড/);
+    // Live-verified 2026-10-25: pool session ready at the first 5s
+    // check (<=5s), so the start message must not claim 35-40s (or
+    // the 30-50s wording seen live) any more — "a few seconds" only.
+    expect(html).toMatch(/কয়েক সেকেন্ড লাগতে পারে/);
+    expect(html).not.toMatch(/৩৫–৪০ সেকেন্ড লাগতে পারে/);
+    expect(html).not.toMatch(/৩০–৫০ সেকেন্ড লাগতে পারে/);
   });
 });
