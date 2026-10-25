@@ -85,8 +85,19 @@ function fileRead() {
 }
 
 function fileWrite(map) {
-    fs.mkdirSync(path.dirname(FILE_PATH), { recursive: true });
-    fs.writeFileSync(FILE_PATH, JSON.stringify(map, null, 2));
+    // Atomic write: write to a unique temp file in the same directory, then
+    // rename over records.json. A crash mid-write can no longer leave a
+    // half-written JSON file; readers always see the old or the new file.
+    const dir = path.dirname(FILE_PATH);
+    fs.mkdirSync(dir, { recursive: true });
+    const tmp = path.join(dir, '.records.' + process.pid + '.' + Date.now() + '.' + Math.random().toString(36).slice(2) + '.tmp');
+    try {
+        fs.writeFileSync(tmp, JSON.stringify(map, null, 2));
+        fs.renameSync(tmp, FILE_PATH);
+    } catch (e) {
+        try { fs.unlinkSync(tmp); } catch (_) {}
+        throw e;
+    }
 }
 
 async function saveRecord(rec) {
