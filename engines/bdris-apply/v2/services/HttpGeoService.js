@@ -26,8 +26,12 @@
  * Proven API facts used here (pasted form source + DESIGN.md):
  *  - first parent bangladeshId = "1", first order = 1, type 1 = division
  *  - follow response targetGeoOrder, never order+1
- *  - cityCorp: order 3, type 8; its next level is order 5, type 6,
- *    ward=true (WardInCityCorp = the zone list for a city corp)
+ *  - cityCorp zone call (PROVEN 2026-10-26 by the user-supplied live
+ *    request URL): parent=cityCorp id, order 3, type 8, ward=true —
+ *    e.g. /5689?ward=true&geoGroup=birthPlace&geoOrder=3&geoType=8
+ *    returns the 10 zones (geoLevelId 6) with targetGeoOrder 5.
+ *    The old call used type 6 here and was wrong; order 3 and
+ *    ward=true were already correct.
  *  - upazila: order 3, type 3; its next level is paurasava (type 4)
  *    and union (type 5) — both are merged for the paurasavaUnion
  *    field, because that field holds both kinds
@@ -207,7 +211,11 @@ class HttpGeoService {
     let entries = [];
     let zoneTargetOrder = null;
     if (isCityCorp) {
-      const res = await client.getGeo(upazilaEntry.id, upazilaTargetOrder, 6, { ward: true, geoGroup });
+      // Proven live URL (2026-10-26): /5689?ward=true&geoGroup=birthPlace
+      // &geoOrder=3&geoType=8 — the zone call uses the PARENT cityCorp
+      // type 8, not the child zone type 6. Order (upazilaTargetOrder = 3)
+      // and ward=true were already correct.
+      const res = await client.getGeo(upazilaEntry.id, upazilaTargetOrder, 8, { ward: true, geoGroup });
       entries = res.entries;
       zoneTargetOrder = res.targetGeoOrder;
     } else {

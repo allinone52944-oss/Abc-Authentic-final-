@@ -23,9 +23,11 @@ function mockClient() {
   const table = [
     geo('1', 1, 1, false, [{ id: 4, nameBn: 'ঢাকা', nameEn: 'DHAKA' }], 2),
     geo(4, 2, 2, false, [{ id: 30, nameBn: 'ঢাকা', nameEn: 'DHAKA' }], 3),
-    geo(30, 3, 8, false, [{ id: 300, nameBn: 'ঢাকা দক্ষিণ সিটি কর্পোরেশন', nameEn: 'DHAKA SOUTH' }], 5),
+    geo(30, 3, 8, false, [{ id: 300, nameBn: 'ঢাকা দক্ষিণ সিটি কর্পোরেশন', nameEn: 'DHAKA SOUTH' }], 3),
     geo(30, 3, 3, false, [{ id: 310, nameBn: 'সাভার', nameEn: 'SAVAR' }], 4),
-    geo(300, 5, 6, true, [{ id: 400, nameBn: 'অঞ্চল - ১' }, { id: 401, nameBn: 'অঞ্চল - ২' }], 6),
+    // Proven live zone URL (2026-10-26): parent cityCorp id, order 3,
+    // type 8 (parent type), ward=true — NOT type 6.
+    geo(300, 3, 8, true, [{ id: 400, nameBn: 'অঞ্চল - ১' }, { id: 401, nameBn: 'অঞ্চল - ২' }], 5),
     geo(400, 5, 6, true, [{ id: 500, nameBn: 'ওয়ার্ড - ১' }], 6),
     geo(310, 4, 4, false, [{ id: 320, nameBn: 'সাভার পৌরসভা' }], 7),
     geo(310, 4, 5, false, [{ id: 321, nameBn: 'সাভার ইউনিয়ন' }], 7),
@@ -188,6 +190,74 @@ describe('AddressService session-seeded HTTP (live banner 2026-10-26: bare fetch
     const svc = new AddressService(nav, { httpGeo });
     const opts = await svc.getOptions('zone', cityCorpParents, 'birth');
     assert.deepStrictEqual(opts.map((o) => o.name), ['অঞ্চল - ৯']);
+  });
+});
+
+describe('Proven live zone/ward URLs (2026-10-26, public geo data)', () => {
+  // Fake client keyed to the exact live chain, not to the old mock
+  // table: division 4 -> district 25 -> cityCorp 5689 (Dhaka South).
+  // Zone fixture = the 10 zones from the live Sample B response.
+  const liveZones = [
+    { id: 5690, nameBn: 'অঞ্চল - ১, নগর ভবন' },
+    { id: 5975, nameBn: 'অঞ্চল - ১০' },
+    { id: 5691, nameBn: 'অঞ্চল - ২, খিলগাঁও' },
+    { id: 5692, nameBn: 'অঞ্চল - ৩, আজিমপুর' },
+    { id: 5693, nameBn: 'অঞ্চল - ৪, নগর ভবন' },
+    { id: 5694, nameBn: 'অঞ্চল - ৫, সায়েদাবাদ' },
+    { id: 5971, nameBn: 'অঞ্চল - ৬' },
+    { id: 5972, nameBn: 'অঞ্চল - ৭' },
+    { id: 5973, nameBn: 'অঞ্চল - ৮' },
+    { id: 5974, nameBn: 'অঞ্চল - ৯' },
+  ];
+  function liveClient() {
+    const calls = [];
+    const table = [
+      { parent: '1', order: 1, type: 1, ward: false, entries: [{ id: 4, nameBn: 'ঢাকা' }], target: 2 },
+      { parent: '4', order: 2, type: 2, ward: false, entries: [{ id: 25, nameBn: 'ঢাকা' }], target: 3 },
+      { parent: '25', order: 3, type: 8, ward: false, entries: [{ id: 5689, nameBn: 'ঢাকা দক্ষিণ সিটি কর্পোরেশন' }], target: 3 },
+      // The proven zone call: /5689?ward=true&geoGroup=birthPlace&geoOrder=3&geoType=8
+      { parent: '5689', order: 3, type: 8, ward: true, entries: liveZones, target: 5 },
+      // The proven ward calls: /5692 and /5972, order 5, type 6, ward=true
+      { parent: '5692', order: 5, type: 6, ward: true, entries: [{ id: 1, nameBn: 'ওয়ার্ড - ১' }], target: 5 },
+      { parent: '5972', order: 5, type: 6, ward: true, entries: [{ id: 1, nameBn: 'ওয়ার্ড - ১' }], target: 5 },
+    ];
+    return {
+      calls,
+      bootstrapped: true,
+      async getGeo(parentGeoId, geoOrder, geoType, opts = {}) {
+        calls.push({ parent: String(parentGeoId), order: geoOrder, type: geoType, ward: !!opts.ward, geoGroup: opts.geoGroup });
+        const row = table.find((r) => r.parent === String(parentGeoId) && r.order === geoOrder && r.type === geoType && r.ward === !!opts.ward);
+        if (!row) return { entries: [], targetGeoOrder: geoOrder + 1, geoOrder, geoType, geoGroup: opts.geoGroup };
+        return { entries: row.entries, targetGeoOrder: row.target, geoOrder, geoType, geoGroup: opts.geoGroup };
+      },
+    };
+  }
+  const liveParents = { division: 'ঢাকা', district: 'ঢাকা', upazila: 'ঢাকা দক্ষিণ সিটি কর্পোরেশন', zone: '' };
+
+  it('zone call is exactly (5689, order 3, type 8, ward=true) and returns all 10 live zones', async () => {
+    const client = liveClient();
+    const svc = new HttpGeoService({ client });
+    const res = await svc.getZoneOptions(liveParents, 'birth');
+    assert.strictEqual(res.options.length, 10);
+    assert.deepStrictEqual(res.options.map((o) => o.id), [5690, 5975, 5691, 5692, 5693, 5694, 5971, 5972, 5973, 5974]);
+    assert.ok(client.calls.some((c) => c.parent === '5689' && c.order === 3 && c.type === 8 && c.ward === true),
+      'zone call must be parent 5689, order 3, type 8, ward=true (proven live URL)');
+    assert.ok(!client.calls.some((c) => c.parent === '5689' && c.type === 6),
+      'the old type-6 zone call must never be made for the cityCorp branch');
+    assert.strictEqual(res.zoneTargetOrder, 5);
+  });
+
+  it('ward call stays exactly (zone id, order 5, type 6, ward=true) for Zone-3 and Zone-7', async () => {
+    const client = liveClient();
+    const svc = new HttpGeoService({ client });
+    await svc.getWardOptions({ ...liveParents, zone: 'অঞ্চল - ৩, আজিমপুর' }, 'birth');
+    assert.ok(client.calls.some((c) => c.parent === '5692' && c.order === 5 && c.type === 6 && c.ward === true),
+      'ward call for Zone-3 must be /5692?ward=true&geoOrder=5&geoType=6');
+    const client2 = liveClient();
+    const svc2 = new HttpGeoService({ client: client2 });
+    await svc2.getWardOptions({ ...liveParents, zone: 'অঞ্চল - ৭' }, 'birth');
+    assert.ok(client2.calls.some((c) => c.parent === '5972' && c.order === 5 && c.type === 6 && c.ward === true),
+      'ward call for Zone-7 must be /5972?ward=true&geoOrder=5&geoType=6');
   });
 });
 
