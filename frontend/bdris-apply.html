@@ -1834,12 +1834,17 @@ async function geoChanged(k, Ls, data) {
   if (!label) return;
   note('⏳ ঠিকানার তালিকা আনা হচ্ছে…', 'info');
   const next = Ls[idx + 1];
-  /* Mirror আগে, fetch পরে — sequential (race condition fix)।
-     Parallel-এ fetch করলে আসল সাইটে dropdown populate হওয়ার আগেই
-     খালি option আসে। সিটি কর্পোরেশন + ইউনিয়ন→ওয়ার্ড — সব ক্ষেত্রে। */
-  try { await geoMirror(k, Ls); } catch (e) {}
+  /* PROTOTYPE FIX (2026-10-25): পরের তালিকা আগে, মিরর পেছনে।
+     পুরনো sequential নিয়মে (mirror আগে, fetch পরে) প্রতিটা ধাপে
+     মিনিট লাগত — ব্যবহারকারী সামনে এগোতে পারত না।
+     Static তালিকা সাইটের dropdown-এর ওপর নির্ভর করে না, তাই
+     static/zone-endpoint থেকে পরের তালিকা সাথে সাথে আনা নিরাপদ;
+     মিরর (আসল সাইটে নির্বাচন মেলানো) ব্যাকগ্রাউন্ডে চলবে, UI
+     আটকাবে না। চূড়ান্ত জমার সময় ধাপগুলো আবার lockstep-এ
+     সাইটে বসে, তাই entry-mirror বাদ গেলেও জমা আটকাবে না। */
   if (next) await geoLoad(next.k, Ls, data);
   noteOff();
+  try { await geoMirror(k, Ls); } catch (e) {}
 }
 let _warmRunning = false;
 async function warmFromData() {
