@@ -10,7 +10,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
-const CE = require('./cert-engine-standalone.js');
+let CE; try { CE = require('../shared/cert-engine-standalone.js'); } catch (_) { CE = require('./cert-engine-standalone.js'); }
 
 // everify.bdris.gov.bd-er TLS 1.3 handshake kichu network-e bhange
 // ("bad ecpoint") — tai shob HTTPS call TLS 1.2 diye.
@@ -755,7 +755,8 @@ function findPython() {
 
 async function solveCaptchaLocal(captchaB64, mimeType) {
     // solve_local.py: opencv geometry + ddddocr ensemble, fully offline.
-    const script = path.join(__dirname, 'solve_local.py');
+    const sharedScript = path.join(__dirname, '..', 'shared', 'solve_local.py');
+    const script = fs.existsSync(sharedScript) ? sharedScript : path.join(__dirname, 'solve_local.py');
     if (!fs.existsSync(script)) return null;
     const pyCmd = findPython();
     if (!pyCmd) return null;

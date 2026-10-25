@@ -216,7 +216,8 @@ function findPython() {
 }
 
 async function solveCaptchaLocal(captchaB64, mimeType) {
-    const script = path.join(__dirname, 'solve_local.py');
+    const sharedScript = path.join(__dirname, '..', 'shared', 'solve_local.py');
+    const script = fs.existsSync(sharedScript) ? sharedScript : path.join(__dirname, 'solve_local.py');
     if (!fs.existsSync(script)) return null;
     const pyCmd = findPython();
     if (!pyCmd) return null;
