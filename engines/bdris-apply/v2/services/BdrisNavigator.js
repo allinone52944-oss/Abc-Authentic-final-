@@ -39,8 +39,17 @@ const SELECTORS = {
 };
 
 class BdrisNavigator {
-  constructor(page) {
+  constructor(page, opts = {}) {
     this.page = page;
+    // Optional fresh-page factory (wired only by the server geo
+    // handler, which owns the browser and the session): async () =>
+    // a brand-new page. Used once per navigator when the current
+    // page is a content-less stub at the form URL — see
+    // ensureFormPage. Test doubles and all other callers omit it
+    // and keep the old reload behaviour.
+    this.createFreshPage = typeof opts.createFreshPage === 'function'
+      ? opts.createFreshPage : null;
+    this._freshPageUsed = false;
   }
 
   // Normalize Bengali text for matching
@@ -233,6 +242,46 @@ class BdrisNavigator {
       const state = await this.getPageState();
       if (state.formContent) {
         return classify(state, false, url);
+      }
+      // Proven defect (live banner after bba3e7e, page at
+      // /br/application with form element false, title '', body
+      // length 44, no divisions, no token): the session page was a
+      // content-less stub, and every later geo call reloaded THAT
+      // SAME page in THAT SAME context and re-inherited the stub
+      // — while the session itself survived every failed load
+      // (see server.js: a failed gotoForm left the session in the
+      // map, and the next INIT reused it without re-navigating).
+      // Reloading a stale stub cannot fix a stale stub. When the
+      // server wires a fresh-page factory, try ONE fresh page
+      // instead of the reload: it replaces the reload+poll cost
+      // (goto 20s + 15s poll) with a bounded fresh attempt (goto
+      // 10s + 10s poll), so the geo path stays inside the 30s
+      // executor budget. If the factory throws, or the fresh page
+      // is also a stub, fall through / classify as before — the
+      // banner then names the fresh page's state, not a timeout.
+      // The flag guarantees at most one fresh attempt per
+      // navigator, so a second ensureFormPage call (handler, then
+      // cascade, same instance, memo shared) cannot loop.
+      if (typeof this.createFreshPage === 'function' && !this._freshPageUsed) {
+        this._freshPageUsed = true;
+        try {
+          const fresh = await this.createFreshPage();
+          if (fresh) {
+            this.page = fresh;
+            if (typeof this.page.goto === 'function') {
+              try {
+                await this.page.goto(`${BDRIS_BASE}/br/application`, {
+                  waitUntil: 'domcontentloaded',
+                  timeout: 10000,
+                });
+              } catch (e) { /* state check below decides */ }
+            }
+            const after = await this.waitForFormContent(20);
+            let newUrl = url;
+            try { newUrl = this.page.url(); } catch (e) { /* unknown */ }
+            return classify(after, true, newUrl);
+          }
+        } catch (e) { /* fall through to the reload path below */ }
       }
       // No form content at all: reload once and wait for content.
       if (typeof this.page.goto === 'function') {

@@ -306,3 +306,107 @@ describe('BdrisNavigator page-state classification (live banner 2026-10-26: /br/
     );
   });
 });
+
+describe('BdrisNavigator fresh-page retry (live banner after bba3e7e: stub page at /br/application, body length 44)', () => {
+  // Minimal state page: form element, token presence, per-form
+  // division presence, title/body. A goto() can flip it to a form
+  // page, modelling a fresh page (or a slow render) that does
+  // render after navigation. No live contact, no personal data.
+  function makeStatePage({ formElement, title, bodyText, meta, hidden, divisions, flipTo }) {
+    let state = {
+      formElement: !!formElement, title: title || '', bodyText: bodyText || '',
+      meta: !!meta, hidden: !!hidden,
+      divisions: { birth: false, perm: false, prsnt: false, ...(divisions || {}) },
+    };
+    let currentUrl = 'https://bdris.gov.bd/br/application';
+    const page = {
+      gotoCalls: 0,
+      url: () => currentUrl,
+      goto: async (u) => {
+        page.gotoCalls++;
+        currentUrl = u;
+        if (flipTo) {
+          state = {
+            formElement: !!flipTo.formElement, title: flipTo.title || '', bodyText: flipTo.bodyText || '',
+            meta: !!flipTo.meta, hidden: !!flipTo.hidden,
+            divisions: { birth: false, perm: false, prsnt: false, ...(flipTo.divisions || {}) },
+          };
+        }
+      },
+      waitForSelector: async () => {},
+      waitForTimeout: async () => {},
+      evaluate: async (fn, arg) => {
+        const prev = global.document;
+        global.document = documentStub;
+        try { return await fn(arg); } finally { global.document = prev; }
+      },
+    };
+    const documentStub = {
+      get title() { return state.title; },
+      body: { get innerText() { return state.bodyText; } },
+      querySelector: (sel) => {
+        if (sel === 'form#birth_application_form' || sel === 'form') return state.formElement ? {} : null;
+        if (sel === 'meta[name="_csrf"]') return state.meta ? { content: 'fixture' } : null;
+        if (sel === 'input[name="_csrf"]') return state.hidden ? { value: 'fixture' } : null;
+        if (sel.includes('birthPlaceDiv')) return state.divisions.birth ? { options: [{ value: '', text: '--- নির্বাচন করুন ---' }] } : null;
+        if (sel.includes('permAddrDiv')) return state.divisions.perm ? { options: [{ value: '', text: '--- নির্বাচন করুন ---' }] } : null;
+        if (sel.includes('prsntAddrDiv')) return state.divisions.prsnt ? { options: [{ value: '', text: '--- নির্বাচন করুন ---' }] } : null;
+        return null;
+      },
+    };
+    return page;
+  }
+
+  const stub44 = () => makeStatePage({
+    formElement: false, title: '', bodyText: 'x'.repeat(44),
+    meta: false, hidden: false, divisions: {},
+  });
+  const formPage = () => makeStatePage({
+    formElement: true, title: 'Birth Registration', bodyText: 'form content here',
+    meta: true, hidden: true, divisions: { birth: true, perm: true, prsnt: true },
+  });
+
+  it('a stub page with a factory swaps to a fresh form page instead of reloading the stub', async () => {
+    const stale = stub44();
+    const fresh = formPage();
+    let factoryCalls = 0;
+    const nav = new BdrisNavigator(stale, {
+      createFreshPage: async () => { factoryCalls++; return fresh; },
+    });
+    const check = await nav.ensureFormPage('perm');
+    assert.strictEqual(check.formPresent, true);
+    assert.strictEqual(factoryCalls, 1, 'fresh page must be tried exactly once');
+    assert.strictEqual(nav.page, fresh, 'navigator must swap to the fresh page');
+    assert.strictEqual(stale.gotoCalls, 0, 'the stale stub page must not be reloaded');
+  });
+
+  it('a fresh page that renders only after navigation (slow render) is found by the fresh attempt', async () => {
+    const stale = stub44();
+    const fresh = makeStatePage({
+      formElement: false, title: '', bodyText: 'x'.repeat(44),
+      meta: false, hidden: false, divisions: {},
+      flipTo: { formElement: true, title: 'Birth Registration', meta: true, hidden: true, divisions: { birth: true, perm: true, prsnt: true } },
+    });
+    const nav = new BdrisNavigator(stale, {
+      createFreshPage: async () => fresh,
+    });
+    const check = await nav.ensureFormPage('perm');
+    assert.strictEqual(check.formPresent, true);
+    assert.strictEqual(fresh.gotoCalls, 1, 'fresh page must navigate to the form URL');
+  });
+
+  it('a fresh page that is also a stub classifies false and does not try a second fresh page', async () => {
+    const stale = stub44();
+    const freshStub = stub44();
+    let factoryCalls = 0;
+    const nav = new BdrisNavigator(stale, {
+      createFreshPage: async () => { factoryCalls++; return freshStub; },
+    });
+    const first = await nav.ensureFormPage('perm');
+    assert.strictEqual(first.formPresent, false);
+    assert.strictEqual(factoryCalls, 1);
+    const second = await nav.ensureFormPage('perm');
+    assert.strictEqual(second.formPresent, false);
+    assert.strictEqual(factoryCalls, 1, 'no second fresh attempt on a re-check');
+  });
+});

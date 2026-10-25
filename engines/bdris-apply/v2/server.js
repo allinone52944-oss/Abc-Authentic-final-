@@ -148,7 +148,27 @@ class BdrisEngineV2 {
         const { level, parents = {}, form = 'birth' } = params;
         const session = ctx.session;
 
-        const nav = session?.page ? new BdrisNavigator(session.page) : null;
+        // Fresh-page factory for the stub case (live banner after
+        // bba3e7e: session page at /br/application with no form
+        // content at all). ensureFormPage() uses it ONCE instead
+        // of reloading the same stale page: the old page is
+        // closed, a brand-new page becomes the session page, and
+        // the navigator swaps to it. If the fresh page is also a
+        // stub, ensureFormPage classifies it as false and the
+        // cascade surfaces that state — no second fresh attempt,
+        // no loop. Callers without a browser (tests) pass no
+        // factory and keep the old reload behaviour.
+        const nav = session?.page ? new BdrisNavigator(session.page, {
+          createFreshPage: async () => {
+            const oldPage = session.page;
+            const fresh = await this.browserManager.newPage();
+            session.page = fresh;
+            if (oldPage) {
+              await this.browserManager.closePage(oldPage).catch(() => {});
+            }
+            return fresh;
+          },
+        }) : null;
         const addrService = new AddressService(nav);
 
         // Ensure we're on the form page BEFORE the HTTP seed, so
@@ -403,7 +423,19 @@ class BdrisEngineV2 {
               const sess = await this.sessionManager.create(userId, { socketId: socket.id });
               sid = sess.id;
               const nav = new BdrisNavigator(sess.page);
-              await nav.gotoForm();
+              // Proven trap (live stub page reused forever): a
+              // gotoForm failure must NOT leave this session in
+              // the map — the next START/INIT would find it via
+              // findByUser and reuse it as READY without ever
+              // re-navigating, so every later geo call inherits
+              // the same stub page. Destroy it; the next attempt
+              // creates a fresh page instead.
+              try {
+                await nav.gotoForm();
+              } catch (e) {
+                await this.sessionManager.destroy(sid).catch(() => {});
+                throw e;
+              }
             }
             sessionId = sid;
           }
@@ -438,7 +470,19 @@ class BdrisEngineV2 {
           // Navigate to BDRIS form
           const nav = new BdrisNavigator(session.page);
           socket.emit('PROGRESS', '⏳ BDRIS ফর্ম লোড হচ্ছে...');
-          await nav.gotoForm();
+          // Proven trap (see START_BDRIS_SESSION above): on a
+          // gotoForm failure, destroy this session and clear the
+          // closure id — otherwise the failed session stays in
+          // the map, the next INIT reuses it via findByUser
+          // without re-navigating, and every later geo call
+          // inherits the same stub page.
+          try {
+            await nav.gotoForm();
+          } catch (e) {
+            await this.sessionManager.destroy(sessionId).catch(() => {});
+            sessionId = null;
+            throw e;
+          }
 
           this.log(`Session created: ${sessionId} (user ${userId})`);
           if (callback) callback({ ok: true, sessionId, reused: false });
@@ -494,7 +538,16 @@ class BdrisEngineV2 {
               const sess = await this.sessionManager.create(userId, { socketId: socket.id });
               sid = sess.id;
               const nav0 = new BdrisNavigator(sess.page);
-              await nav0.gotoForm();
+              // Proven trap (see START_BDRIS_SESSION above):
+              // destroy on gotoForm failure so the next call
+              // creates a fresh page instead of reusing this stub
+              // via findByUser.
+              try {
+                await nav0.gotoForm();
+              } catch (e) {
+                await this.sessionManager.destroy(sid).catch(() => {});
+                throw e;
+              }
             }
             sessionId = sid;
           }
