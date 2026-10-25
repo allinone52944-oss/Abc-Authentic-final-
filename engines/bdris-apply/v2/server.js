@@ -310,9 +310,22 @@ class BdrisEngineV2 {
             if (!merged.s2b && ctxData.s2b) merged.s2b = ctxData.s2b;
             if (!merged.applicantDob && ctxData.s1 && ctxData.s1.dob) merged.applicantDob = ctxData.s1.dob;
           }
+          // Debug-2 (2026-10-26): contact carry (see StepHandler
+          // submitS4Prep). The S4_OTP payload has no phone/email,
+          // so without this submitS4's buildOriginalRec always
+          // returned null (empty mobileNo). Explicit s4prep fields
+          // win; session contact fills only the gaps.
+          if (session.contact) {
+            const sp = (merged.s4prep && typeof merged.s4prep === 'object') ? merged.s4prep : {};
+            merged.s4prep = {
+              email: sp.email || session.contact.email || '',
+              phone: sp.phone || session.contact.phone || '',
+            };
+          }
           const result = await handler[methodName](merged);
           if (handler.singleName) session.singleName = handler.singleName;
           if (handler.applicantDob) session.applicantDob = handler.applicantDob;
+          if (handler.contact && (handler.contact.email || handler.contact.phone)) session.contact = handler.contact;
           // Map to legacy STEP_CHANGE_ACK shape for frontend compat
           return result;
         },
@@ -738,6 +751,16 @@ class BdrisEngineV2 {
             });
             // S4 completion → BOT_STATUS/COMPLETED for frontend
             if (evName === 'SUBMIT_S4_OTP' && result.ok && result.completed) {
+              // Debug-2 (2026-10-26): v1 saved the original-PDF
+              // record into the shared index at submit success
+              // (origIndexPut) so the later FETCH_ORIGINAL {ack}
+              // could find it; v2 built originalRec but NEVER
+              // saved it (saveRec had zero production callers),
+              // so every post-submit FETCH_ORIGINAL died with
+              // NO_RECORD. Persist it here, mirroring v1.
+              if (result.originalRec && result.ackNum) {
+                try { if (this.originalFetcher) this.originalFetcher.saveRec(result.ackNum, result.originalRec); } catch { /* ঐচ্ছিক */ }
+              }
               socket.emit('BOT_STATUS', {
                 status: 'COMPLETED',
                 ackId: result.ackId,

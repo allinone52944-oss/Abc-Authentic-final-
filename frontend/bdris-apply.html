@@ -2696,6 +2696,13 @@ function showDone(d, restore) {
   S.otpStage = 'done'; S.pvMode = false;
   S.photo = d.screenshot || S.photo || null;
   S.pdf = d.pdf || S.pdf || null;
+  // Debug-2 (2026-10-26): COMPLETED.original is the original-PDF
+  // RECORD object ({appId, date, nameEn, mobileNo}), never a URL —
+  // v1 sent a URL string here. Only a string may render the direct
+  // download button; a record object must neither become a
+  // "[object Object]" link nor block the bgPdf FETCH_ORIGINAL fetch
+  // below (which is the path that returns a real URL).
+  const origUrl = (typeof d.original === 'string' && d.original) ? d.original : null;
   const s1 = S.d.s1 || {};
   const nm = [s1.firstNameBn, s1.lastNameBn].filter(Boolean).join(' ') || 'আবেদন';
   let no = '';
@@ -2731,8 +2738,8 @@ function showDone(d, restore) {
       '<p class="hint">📄 PDF তৈরি হতে একটু সময় লাগে — তৈরি হলেই নিজে থেকে নেমে যাবে।</p>' +
       '<div class="copyrow2">' +
         (no ? '<button class="btn" id="akCopy">📋 নম্বর কপি</button>' : '') +
-        (d.original ? '<button class="btn" id="akOrig">⬇️ আসল PDF (এখনই নামান)</button>' : '') +
-        (!d.original ? '<button class="btn ghost" id="akOrigPend" disabled>⏳ PDF তৈরি হচ্ছে…</button>' : '') +
+        (origUrl ? '<button class="btn" id="akOrig">⬇️ আসল PDF (এখনই নামান)</button>' : '') +
+        (!origUrl ? '<button class="btn ghost" id="akOrigPend" disabled>⏳ PDF তৈরি হচ্ছে…</button>' : '') +
         (S.pdf ? '<button class="btn ghost" id="akPdf">⬇️ PDF কপি নামান</button>' : '') +
       '</div>' +
     '</div>' +
@@ -2742,10 +2749,10 @@ function showDone(d, restore) {
   );
   const c = $('akCopy'); if (c) c.onclick = () => copyText(no);
   const p = $('akPdf'); if (p) p.onclick = () => { dlBase64(S.pdf.name || 'bdris-application.pdf', S.pdf.base64); note('⬇️ PDF কপি নামছে…', 'ok'); };
-  const og = $('akOrig'); if (og) og.onclick = () => { downloadOriginal(d.original, no); };
+  const og = $('akOrig'); if (og) og.onclick = () => { downloadOriginal(origUrl, no); };
   // bot পেছনে PDF তৈরি করে রাখে — পেজ খুলতেই fetch শুরু, ready হলেই auto-download
   (function bgPdf() {
-    const el = $('akOrigPend'); if (!el || d.original) return;
+    const el = $('akOrigPend'); if (!el || origUrl) return;
     const key = String(no || '').replace(/\D/g, '');
     if (!key) return;
     if (ORIG_READY[key]) {
@@ -3333,7 +3340,13 @@ function chainAck(d) {
     return;
   }
   hideFail();
-  S.d.uiStep = parseInt(d.step, 10) || S.d.uiStep || (o.step || S.d.uiStep);
+  // Debug-2 (2026-10-26): uiStep is a SCREEN number (advanceAndSend
+  // and manualStepAck both use the OPS step: S0 done -> screen 2,
+  // S1 done -> screen 3), but the engine returns SITE-step numbers
+  // (S0 -> 1, S1 -> 2). Preferring the engine step made an auto-chain
+  // draft saved after S0/S1 resume one screen too early. Use the OPS
+  // step, exactly like manualStepAck already does.
+  if (o.step) S.d.uiStep = Math.max(S.d.uiStep || 0, o.step);
   if (S.draftId) saveDraft(S.d.uiStep, () => {});
   const p = $('pr' + c.k); if (p) { p.className = 'prow done'; const t = p.querySelector('.pt'); if (t) t.textContent = 'সম্পন্ন'; const dt = p.querySelector('.pdot'); if (dt) dt.textContent = '✓'; }
   c.k++;
@@ -3838,7 +3851,15 @@ $('logoutBtn').onclick = async () => {
         var tok = cachedSubmitToken();
         if (!tok) {
           tok = await charge('submit', submitChargeKey());
-          if (!tok) return false;
+          // Debug-2 (2026-10-26): this wrapper is async, so callers'
+          // `emitStep(...) === false` checks can NEVER see this
+          // false (they get a Promise) — before this fix a failed
+          // charge left the UI on "জমা হচ্ছে…" with buttons disabled
+          // until the 90s busy watchdog, and otpStage stuck on
+          // 'submitting'. The wrapper must recover itself: release
+          // the buttons and put the OTP screen back to 'code' so
+          // the user can retry immediately (charge() already alerted).
+          if (!tok) { busy(false); if (S.otpStage === 'submitting') S.otpStage = 'code'; return false; }
           S._submitTok = tok; S._submitTokAt = Date.now();
           try { if (S.draftId) localStorage.setItem('bdris_submit_key_for_' + S.draftId, submitChargeKey()); } catch (e) {}
         }

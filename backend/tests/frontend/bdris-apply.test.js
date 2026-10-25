@@ -456,3 +456,28 @@ describe('Bengali-digit mobile numbers (live error 2026-10-26)', () => {
     expect(html).toMatch(/\/\^01\\d\{9\}\$\//);
   });
 });
+
+describe('Debug-2 (2026-10-26): original-PDF record type, chain uiStep, charge-failure recovery', () => {
+  test('showDone treats COMPLETED.original as a URL only when it is a string (v2 sends a record object, v1 sent a URL)', () => {
+    expect(html).toMatch(/const origUrl = \(typeof d\.original === 'string'/);
+    expect(html).toMatch(/downloadOriginal\(origUrl, no\)/);
+    expect(html).not.toMatch(/downloadOriginal\(d\.original, no\)/);
+  });
+
+  test('chainAck uses the OPS screen step for uiStep, not the engine site-step number', () => {
+    // Engine S0 -> step 1 and S1 -> step 2, but uiStep is a screen
+    // number (S0 done -> screen 2, S1 done -> screen 3); manualStepAck
+    // already used the OPS step. The old engine-step preference made
+    // auto-chain drafts resume one screen too early.
+    expect(html).toMatch(/if \(o\.step\) S\.d\.uiStep = Math\.max\(S\.d\.uiStep \|\| 0, o\.step\)/);
+    expect(html).not.toMatch(/S\.d\.uiStep = parseInt\(d\.step, 10\)/);
+  });
+
+  test('charge shim recovers itself on a failed submit charge (callers cannot see an async false)', () => {
+    // wrapEmitStep is async: `emitStep(...) === false` at the call
+    // sites is always false-negative (a Promise). On !tok the wrapper
+    // must release the buttons and reset otpStage itself, or the UI
+    // sat on "জমা হচ্ছে…" until the 90s busy watchdog.
+    expect(html).toMatch(/if \(!tok\) \{ busy\(false\); if \(S\.otpStage === 'submitting'\) S\.otpStage = 'code'; return false; \}/);
+  });
+});

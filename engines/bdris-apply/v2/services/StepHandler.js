@@ -1258,6 +1258,17 @@ class StepHandler {
       this.progress('❌ সংযোগ নেই — আবার চেষ্টা করুন।');
       return { ok: false, message: '❌ সংযোগ নেই — আবার চেষ্টা করুন।' };
     }
+    // Debug-2 (2026-10-26): S4Prep is the ONLY step that ever sees
+    // the contact (frontend sends {email, phone} flat here, and the
+    // S4_OTP payload carries only {otp} + ctx {s0,s1,s2,s2b} — no
+    // phone/email at all). Without carrying it, submitS4's
+    // buildOriginalRec always got an empty s4prep, mobileNo was
+    // empty, and originalRec was always null — so the post-submit
+    // original-PDF path could never work. The server copies
+    // this.contact onto the session (like singleName/applicantDob)
+    // and merges it into S4's s4prep; the handler itself never
+    // stores it anywhere else.
+    this.contact = { email: String(data.email || '').trim(), phone: String(data.phone || '').trim() };
     // v1 appData-equivalent for cinno / probe-autofix
     const fd = {
       s1: data.s1 || {},
