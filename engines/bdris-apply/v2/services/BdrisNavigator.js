@@ -643,7 +643,13 @@ class BdrisNavigator {
         // banner distinguishes "list empty" (0) from "list present
         // but name mismatched" (>0) instead of both looking alike.
         const present = await this.getOptions(pSel).catch(() => []);
-        throw new Error(`Parent option not found: ${pLevel}="${pValue}" (options present: ${present.length})`);
+        // Diagnostic (2026-10-26, live banner): a count alone cannot
+        // tell a real-name mismatch from a wrong-parent cascade, so
+        // name the options the site actually has (public geo names
+        // only, capped). The "Parent option not found" prefix and
+        // the count are kept verbatim for existing tests/logs.
+        const presentNames = present.slice(0, 12).map(o => o.name).join(', ');
+        throw new Error(`Parent option not found: ${pLevel}="${pValue}" (options present: ${present.length}${presentNames ? ` — site-এ আছে: ${presentNames}` : ''})`);
       }
 
       // Wait for child to populate (3000ms, not 5000ms, so the
