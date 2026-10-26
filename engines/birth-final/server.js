@@ -541,32 +541,41 @@ function normalizeBdrisData(data) {
         // a sentence-final period is punctuation, never part of the address
         cleaned = cleaned.replace(/[.。]+$/, '').trim();
         const parts = cleaned.split(',').map(x => x.trim()).filter(Boolean);
-        out.office1 = parts.length ? parts[0] : cleaned;
+        // PERMANENT office rule: office1 is the FULL table office name, never
+        // truncated to the first comma part (e.g. "Zone - 8, Dhaka South City
+        // Corporation", not just "Zone - 8"). office2 is the location, set
+        // below from the NB location when present, else from the table rest.
+        out.office1 = cleaned;
         out.office2 = parts.length > 1 ? parts.slice(1).join(', ') : '';
     }
 
-    // Separate NB/location cell (office NAME was in the table, location here):
-    // use its location as office2 ONLY when the table value had no comma of its
-    // own. Never overrides an existing office2. Title-cased like the rest.
+    // Separate NB/location cell: office2 is the NB location. Drop the NB
+    // first token ONLY if it equals office1's first comma part (e.g. NB
+    // "Zone - 8, Dhaka South City Corporation, Dhaka" with office1
+    // "Zone - 8, Dhaka South City Corporation" -> "Dhaka South City
+    // Corporation, Dhaka"). Otherwise keep the full NB location.
+    // NB sets office2 when it is empty, or when it extends the table
+    // office2; a wholly different NB location never overrides the table.
     // Single-token location + no office1 -> office1 (kokhono data harabe na).
     if (out.officeLocationRaw) {
-        if (!out.office2) {
-            const lm = String(out.officeLocationRaw).match(/location of the register office\s*:?\s*([\s\S]+)$/i);
-            if (lm) {
-                let loc = String(lm[1]).split(/[.。]\s*(https?:|everify|www\.)/i)[0].replace(/[.。]+$/, '').trim();
-                const lp = loc.split(',').map(x => x.trim()).filter(Boolean);
-                if (lp.length > 1) {
-                    if (out.office1) {
-                        // office1 table theke ache — puro location-i office2
-                        // (lp.slice(1) korle "Raozan" token harie jeto)
-                        out.office2 = titleCase(lp.slice(1).join(', '));
-                    } else {
-                        out.office2 = titleCase(lp.slice(1).join(', '));
-                        out.office1 = titleCase(lp[0]);
+        const lm = String(out.officeLocationRaw).match(/location of the register office\s*:?\s*([\s\S]+)$/i);
+        if (lm) {
+            let loc = String(lm[1]).split(/[.。]\s*(https?:|everify|www\.)/i)[0].replace(/[.。]+$/, '').trim();
+            const lp = loc.split(',').map(x => x.trim()).filter(Boolean);
+            if (lp.length > 1) {
+                if (out.office1) {
+                    const firstPart = String(out.office1).split(',')[0].trim().toLowerCase();
+                    const locParts = firstPart === lp[0].toLowerCase() ? lp.slice(1) : lp;
+                    const cand = titleCase(locParts.join(', '));
+                    if (!out.office2 || cand.toLowerCase() === String(out.office2).toLowerCase() || cand.toLowerCase().startsWith(String(out.office2).toLowerCase() + ', ')) {
+                        out.office2 = cand;
                     }
-                } else if (lp.length === 1 && !out.office1) {
+                } else if (!out.office2) {
+                    out.office2 = titleCase(lp.slice(1).join(', '));
                     out.office1 = titleCase(lp[0]);
                 }
+            } else if (lp.length === 1 && !out.office1) {
+                out.office1 = titleCase(lp[0]);
             }
         }
         delete out.officeLocationRaw;
