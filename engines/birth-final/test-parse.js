@@ -3,16 +3,22 @@ const path = require('path');
 const SRC = process.argv[2] || path.join(__dirname, 'server.js');
 const lines = fs.readFileSync(SRC, 'utf8').split(/\r?\n/);
 // extractTdTexts (275) .. line before normalizeBdrisData (431) -> 1-based
+const failSlice = (label) => { console.error('test-parse: ' + label + ' not found in ' + SRC); process.exit(2); };
 const s = lines.findIndex(l => /^function extractTdTexts/.test(l));
 const n = lines.findIndex(l => /^function normalizeBdrisData/.test(l));
+if (s < 0) failSlice('function extractTdTexts');
+if (n < 0) failSlice('function normalizeBdrisData');
 let e = n + 1;
 while (e < lines.length && !/^(function |const |let |var |app\.|module\.|exports)/.test(lines[e])) e++;
+if (e <= s) failSlice('extractTdTexts slice is empty');
 const code = lines.slice(s, e).join('\n');
 eval(code);
 
 // render slice: const esc .. end of buildCertificateHtml -> CASE 13 title-case
 const rs = lines.findIndex(l => /^const esc =/.test(l));
 const rb = lines.findIndex(l => /^function buildCertificateHtml/.test(l));
+if (rs < 0) failSlice('const esc');
+if (rb < 0) failSlice('function buildCertificateHtml');
 let re = rb + 1;
 while (re < lines.length && !/^(function |const |let |var |app\.|module\.|exports)/.test(lines[re])) re++;
 eval(lines.slice(rs, re).join('\n'));

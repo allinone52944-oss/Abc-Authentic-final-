@@ -2,10 +2,14 @@
 const path = require('path');
 const SRC = process.argv[2] || path.join(__dirname, 'death-verify-server.js');
 const lines = fs.readFileSync(SRC, 'utf8').split(/\r?\n/);
+const failSlice = (label) => { console.error('test-parse: ' + label + ' not found in ' + SRC); process.exit(2); };
 const a = lines.findIndex(l => /^function extractRows/.test(l));
 const b = lines.findIndex(l => /^function normalizeBdrisData/.test(l));
+if (a < 0) failSlice('function extractRows');
+if (b < 0) failSlice('function normalizeBdrisData');
 let c = b + 1;
 while (c < lines.length && !/^(function |const |let |var |app\.|module\.|exports)/.test(lines[c])) c++;
+if (c <= a) failSlice('extractRows slice is empty');
 eval(lines.slice(a, c).join('\n'));
 
 let pass = 0, fail = 0;
