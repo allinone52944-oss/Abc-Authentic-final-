@@ -745,7 +745,7 @@ app.post('/api/records', async (req, res) => {
         const number = String(body.number || '').trim();
         if (!number) return res.status(400).json({ success: false, error: 'number is required' });
         const built = await engine.build({ number, url: body.url });
-        await store.saveRecord({
+        const saved = await store.saveRecord({
             number,
             name: body.name || null,
             key: built.key,
@@ -753,8 +753,10 @@ app.post('/api/records', async (req, res) => {
             keySource: built.keySource,
             payload: body.data || body.payload || {}
         });
+        // saveRecord already returns the real destination; store.mode is only
+        // the configured mode, so it lies when Oracle degraded to file.
         res.json({ success: true, number, key: built.key, keySource: built.keySource,
-                   code: built.code, verifyUrl: built.verifyUrl, savedTo: store.mode });
+                   code: built.code, verifyUrl: built.verifyUrl, savedTo: saved.savedTo });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
