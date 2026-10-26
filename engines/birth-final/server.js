@@ -764,7 +764,7 @@ app.post('/api/records', async (req, res) => {
 
 app.get('/api/records', async (req, res) => {
     try {
-        res.json({ success: true, mode: store.mode, records: await store.listRecords(req.query.limit) });
+        res.json({ success: true, mode: store.effectiveMode(), records: await store.listRecords(req.query.limit) });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }

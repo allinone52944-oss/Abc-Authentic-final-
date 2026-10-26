@@ -225,4 +225,10 @@ async function health() {
     return { mode, ok: true, file: FILE_PATH };
 }
 
-module.exports = { saveRecord, getRecord, listRecords, health, mode };
+// Effective storage actually in use right now: saveRecord's file fallback
+// uses exactly this same expression, so GET /api/records must not report
+// the configured mode when Oracle has degraded to file.
+function effectiveMode() {
+    return degraded ? 'file (oracle-down fallback)' : mode;
+}
+module.exports = { saveRecord, getRecord, listRecords, health, mode, effectiveMode };
