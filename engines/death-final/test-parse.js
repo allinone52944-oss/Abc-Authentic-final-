@@ -133,7 +133,7 @@ console.log('CASE 8 dedupe (registrationOffice removed from response)');
     <tr><td>30/09/2026</td><td>Bagoan Union Parishad, Raozan, Chattogram</td><td>05/10/2026</td></tr></table>`;
   const d = normalizeBdrisData(mapBirthResultData(html));
   show('dedupe', d);
-  eq('office1', d.office1, 'Bagoan Union Parishad');
+  eq('office1', d.office1, 'Bagoan Union Parishad, Raozan, Chattogram'); // office1 = FULL office name (permanent rule)
   eq('office2', d.office2, 'Raozan, Chattogram');
   if (d.registrationOffice === undefined) pass++;
   else { fail++; console.log('  FAIL registrationOffice still in output: ' + JSON.stringify(d.registrationOffice)); }

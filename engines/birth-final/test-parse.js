@@ -221,7 +221,7 @@ console.log('CASE 12 dedupe (registrationOffice removed from response)');
     brn: '1234567890123456', dob: '01 January 2020'
   });
   show('dedupe', d);
-  eq('office1', d.office1, 'Bagoan Union Parishad');
+  eq('office1', d.office1, 'Bagoan Union Parishad, Raozan, Chattogram'); // office1 = FULL office name (permanent rule)
   eq('office2', d.office2, 'Raozan, Chattogram');
   if (d.registrationOffice === undefined) pass++;
   else { fail++; console.log('  FAIL registrationOffice still in output: ' + JSON.stringify(d.registrationOffice)); }
