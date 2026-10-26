@@ -269,7 +269,12 @@ class BdrisEngineV2 {
       ['SUBMIT_S2', 'submitS2', 120000],
       ['SUBMIT_S2B', 'submitS2B', 120000],
       ['SUBMIT_S3_DOCS', 'submitS3', 180000],
-      ['SUBMIT_S4_PREP', 'submitS4Prep', 120000],
+      // S4Prep replay (2026-10-26, permanent fix): one docs-Next or a
+      // full S0-S3 catch-up plus OTP evidence can exceed the old 120s
+      // cap on a slow site, so raise it to 300s. The frontend guard
+      // refreshes on every PROGRESS event, so a long replay does not
+      // trip the 75s frontend op guard while the engine is working.
+      ['SUBMIT_S4_PREP', 'submitS4Prep', 300000],
       ['SUBMIT_S4_OTP', 'submitS4', 120000],
     ];
 
@@ -322,7 +327,17 @@ class BdrisEngineV2 {
               phone: sp.phone || session.contact.phone || '',
             };
           }
+          // S4Prep replay docs (2026-10-26, permanent fix): the S3
+          // step's docs are the only docs the session ever sees, so
+          // remember them, and hand them to a later S4Prep that
+          // arrives without docs (same-session replay). A resumed
+          // draft's S4Prep carries its own docs from the frontend,
+          // which win over the session copy.
+          if (cmdName === 'SUBMIT_S4_PREP' && (!merged.docs || !merged.docs.length) && session.docs && session.docs.length) {
+            merged.docs = session.docs;
+          }
           const result = await handler[methodName](merged);
+          if (cmdName === 'SUBMIT_S3_DOCS' && merged.docs && merged.docs.length) session.docs = merged.docs;
           if (handler.singleName) session.singleName = handler.singleName;
           if (handler.applicantDob) session.applicantDob = handler.applicantDob;
           if (handler.contact && (handler.contact.email || handler.contact.phone)) session.contact = handler.contact;
@@ -747,6 +762,7 @@ class BdrisEngineV2 {
               // rendered the OTP screen as if a code had been sent.
               resumable: result.resumable || undefined,
               otpSent: result.otpSent,
+              code: result.code || undefined,
               relationBn: result.relationBn,
             });
             // S4 completion → BOT_STATUS/COMPLETED for frontend

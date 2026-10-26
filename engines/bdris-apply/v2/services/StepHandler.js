@@ -1249,6 +1249,95 @@ class StepHandler {
   }
 
   /**
+   * S4Prep replay (2026-10-26, permanent fix): detect the BDRIS site step
+   * once, using v1-style anchors ported from engines/bdris-apply/server.js
+   * detectSiteStep (6=contact, 5=docs, 4=perm-addr, 3=parents, 2=person,
+   * 1=office, 0=unknown). Returns { step, probe } where probe is the
+   * presence-only page state (no values) used for honest failure text.
+   */
+  async _detectSiteStep() {
+    const probe = await this.page.evaluate(() => {
+      const vis = (sels) => {
+        for (const s of sels) {
+          try {
+            const e = document.querySelector(s);
+            if (e && e.offsetParent !== null && e.getClientRects().length) return true;
+          } catch { /* next */ }
+        }
+        return false;
+      };
+      const steps = [
+        [6, ['#email', 'input[name="email"]', '#phone', 'input[name="phone"]']],
+        [5, ['input[name="relationWithApplicant"]', 'input[name="files"]', '#filesInput']],
+        [4, ['select[name="permAddrDiv"]', 'input[name="copyBirthPlaceToPermAddr"]', '#permFields']],
+        [3, ['#fatherBrn', 'input[name="personInfoForBirth.father.ubrn"]']],
+        [2, ['#personFirstNameBn', 'input[name="personInfoForBirth.personFirstNameBn"]', '#personBirthDate']],
+        [1, ['#officeBirthplace', 'input[name="officeAddressType"]']],
+      ];
+      let step = 0;
+      for (const [n, sels] of steps) if (vis(sels)) { step = n; break; }
+      const any = (s) => {
+        try { const e = document.querySelector(s); return !!(e && e.offsetParent !== null); }
+        catch { return false; }
+      };
+      return {
+        step, contact: any('#email') || any('#phone'),
+        docs: any('input[name="relationWithApplicant"]') || any('input[name="files"]'),
+        start: any('#officeBirthplace'), form: !!document.querySelector('form'),
+        bodyLen: document.body ? (document.body.innerText || '').length : 0,
+      };
+    }).catch(() => ({ step: 0, contact: false, docs: false, start: false, form: false, bodyLen: -1 }));
+    return { step: probe.step || 0, probe };
+  }
+
+  /**
+   * S4Prep replay (2026-10-26, permanent fix): run AT MOST ONCE per
+   * submitS4Prep call, and only to REACH the contact step — never to
+   * click the OTP button, verify an OTP, or submit. Docs step (5):
+   * press Next only; docs already on the site are NOT re-uploaded.
+   * Unknown / steps 1-4: catch up from session formCtx (s0/s1/s2/s2b)
+   * through S3, using the same step methods the normal chain uses.
+   * Returns { ok, replayed } or { ok:false, reason, failed }.
+   */
+  async _replayToContact(siteStep, data = {}) {
+    if (siteStep === 6) {
+      return { ok: false, reason: 'যোগাযোগ ধাপ চেনা গেছে কিন্তু ঘর দৃশ্যমান নয় — পরবর্তী চাপলে ধাপ ছেড়ে যাবে' };
+    }
+    if (siteStep === 5) {
+      this.progress('🔄 কাগজপত্রের ধাপে আছে — পরবর্তী চেপে যোগাযোগে যাওয়া হচ্ছে (কাগজ আবার আপলোড নয়)…');
+      const nxt = await this._clickNextAndWait('পরবর্তী (ধাপ ৪)');
+      if (!nxt.ok) return { ok: false, reason: nxt.reason || 'পরবর্তী বাটন পাওয়া যায়নি' };
+      return { ok: true, replayed: 'docs-next' };
+    }
+    const plan = {
+      0: ['submitS0', 'submitS1', 'submitS2', 'submitS2B', 'submitS3'],
+      1: ['submitS0', 'submitS1', 'submitS2', 'submitS2B', 'submitS3'],
+      2: ['submitS1', 'submitS2', 'submitS2B', 'submitS3'],
+      3: ['submitS2', 'submitS2B', 'submitS3'],
+      4: ['submitS2B', 'submitS3'],
+    }[siteStep];
+    if (!plan) return { ok: false, reason: `চেনা যায়নি এমন সাইট ধাপ (${siteStep})` };
+    const ctx = data || {};
+    for (const method of plan) {
+      let args;
+      if (method === 'submitS0') args = ctx.s0 || {};
+      else if (method === 'submitS1') args = { ...(ctx.s1 || {}), docsAvailable: true };
+      else if (method === 'submitS2') args = { ...(ctx.s2 || {}), applicantDob: (ctx.s1 && ctx.s1.dob) || this.applicantDob };
+      else if (method === 'submitS2B') args = ctx.s2b || {};
+      else args = {
+        relation: data.relation, docs: data.docs || (data.s3 && data.s3.docs) || [],
+        s1: ctx.s1 || {}, applicantDob: (ctx.s1 && ctx.s1.dob) || this.applicantDob,
+      };
+      this.progress(`🔄 ধাপ আবার বসানো হচ্ছে: ${method}…`);
+      const r = await this[method](args);
+      if (!r || r.ok === false) {
+        return { ok: false, reason: (r && r.message) || `${method} ব্যর্থ`, failed: r && r.failed };
+      }
+    }
+    return { ok: true, replayed: 'catch-up' };
+  }
+
+  /**
    * Step 4-prep: Contact info (email/phone) + "ওটিপি পাঠান" button
    * Migrated from v1 SUBMIT_S4_PREP (server.js) — selectors/timing preserved.
    * v1 appData-equivalents come from data + constructor options.
@@ -1280,12 +1369,17 @@ class StepHandler {
     let otpSent = false;
 
     this.progress('🔄 যোগাযোগের তথ্য বসানো হচ্ছে...');
-    const anchor = await this._waitVisible(['#email', 'input[name="email"]', '#phone', 'input[name="phone"]'], 12000);
+    const CONTACT_ANCHORS = ['#email', 'input[name="email"]', '#phone', 'input[name="phone"]'];
+    let anchor = await this._waitVisible(CONTACT_ANCHORS, 12000);
+    let s4prepReplay = null;
     if (!anchor) {
-      // সেশন নতুন করে তৈরি হয়েছে কি না — সাইট ধাপ ১-এ থাকলে UI চেইন রিপ্লে করবে
-      const atStart = await this._waitVisible(
-        ['#officeBirthplace', 'input[name="officeAddressType"]', 'select[name="officeAddrCountry"]'], 3000);
-      if (atStart) {
+      // Permanent fix (2026-10-26): do NOT fail immediately. Detect
+      // the site step once and replay AT MOST ONCE to reach contact.
+      // Only when there is no formCtx at all do we keep the old
+      // resumable path (fresh session, UI chain replay).
+      const det = await this._detectSiteStep();
+      const hasCtx = !!(data.s0 || data.s1 || data.s2 || data.s2b);
+      if (det.step === 1 && !hasCtx) {
         resumable = true;
         this.progress('🔄 নতুন সেশন — তথ্যগুলো আবার বসিয়ে ওটিপি পাঠানো হবে…');
         return {
@@ -1293,24 +1387,41 @@ class StepHandler {
           message: '🔄 তথ্য আবার বসিয়ে ওটিপি পাঠানো হবে — একটু অপেক্ষা করুন।',
         };
       }
+      const replay = await this._replayToContact(det.step, data);
+      s4prepReplay = { siteStep: det.step, ok: replay.ok, replayed: replay.replayed || null, reason: replay.reason || null };
+      if (replay.ok) {
+        anchor = await this._waitVisible(CONTACT_ANCHORS, 12000);
+      } else {
+        // A step failure can still leave the page on contact (flaky
+        // advance check) — one short re-check before failing honestly.
+        anchor = await this._waitVisible(CONTACT_ANCHORS, 3000);
+      }
+    }
+    if (!anchor) {
       // "পেজ পাওয়া যায়নি" was a mislabel: it only meant neither
       // contact nor start anchors were visible in 15s. Classify the
       // actual page state (presence only, no values) so the next
       // failure names its cause: docs step, stub page, or hidden fields.
-      const probe = await this.page.evaluate(() => {
-        const vis = (s) => { const e = document.querySelector(s); return !!(e && e.offsetParent !== null); };
-        return {
-          contact: vis('#email') || vis('#phone'),
-          docs: vis('input[name="relationWithApplicant"]') || vis('input[name="files"]'),
-          start: vis('#officeBirthplace'),
-          form: !!document.querySelector('form'),
-          bodyLen: (document.body ? (document.body.innerText || '').length : 0),
-        };
-      }).catch(() => ({ contact: false, docs: false, start: false, form: false, bodyLen: -1 }));
+      // Machine-readable code for the frontend: branch on this, never
+      // on the Bengali reason text.
+      const probe = (s4prepReplay && (await this._detectSiteStep().catch(() => null))?.probe)
+        || await this.page.evaluate(() => {
+          const vis = (s) => { const e = document.querySelector(s); return !!(e && e.offsetParent !== null); };
+          return {
+            contact: vis('#email') || vis('#phone'),
+            docs: vis('input[name="relationWithApplicant"]') || vis('input[name="files"]'),
+            start: vis('#officeBirthplace'),
+            form: !!document.querySelector('form'),
+            bodyLen: (document.body ? (document.body.innerText || '').length : 0),
+          };
+        }).catch(() => ({ contact: false, docs: false, start: false, form: false, bodyLen: -1 }));
       const where = probe.docs ? 'কাগজপত্রের ধাপেই আছে (পরবর্তী চাপা হয়নি/আটকেছে)'
         : (!probe.form && probe.bodyLen >= 0 && probe.bodyLen < 100 ? 'খালি/স্টাব পাতা'
         : probe.form ? 'ফরম আছে কিন্তু যোগাযোগের ঘর দেখা যাচ্ছে না' : 'কোনো ধাপের ঘরই দেখা যাচ্ছে না');
-      failed.push({ field: 'যোগাযোগ ধাপ', reason: `পেজ পাওয়া যায়নি (${where})` });
+      failed.push({ field: 'যোগাযোগ ধাপ', reason: `পেজ পাওয়া যায়নি (${where})`, code: 'CONTACT_ANCHORS_MISSING' });
+      if (s4prepReplay && !s4prepReplay.ok && s4prepReplay.reason) {
+        failed.push({ field: 'পুনঃচেষ্টা', reason: s4prepReplay.reason, code: 'S4PREP_REPLAY_FAILED' });
+      }
     }
     if (anchor && data.email) {
       const r = await this._typeInto(['#email', 'input[name="email"]'], data.email, 'ইমেইল', {});
@@ -1446,6 +1557,11 @@ class StepHandler {
     return {
       ok: failed.length === 0,
       step: 6, otpSent, resumable,
+      // Machine-readable failure code (frontend branches on this):
+      // CONTACT_ANCHORS_MISSING = contact anchors still missing after
+      // at most one replay; absent on success and on other failures.
+      code: !anchor ? 'CONTACT_ANCHORS_MISSING' : undefined,
+      s4prepReplay,
       message: otpSent ? '📲 ওটিপি পাঠানো হয়েছে! কোডটি বসিয়ে জমা দিন।'
         : `⚠️ ওটিপি পাঠানো যায়নি — ${failed.length}টি কারণে।`,
       failed,

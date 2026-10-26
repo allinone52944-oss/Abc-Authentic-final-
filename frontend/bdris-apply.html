@@ -1445,9 +1445,46 @@ function saveDraft(uiStep, cb) {
    ব্যবহারকারী পিছনে গিয়ে তথ্য বদলে আবার “পরবর্তী” চাপলে কেবল সেই এক ধাপই আবার
    যায় (resendFrom) — ব্যাকএন্ড নিজে সাইটকে সঠিক ধাপে ফিরিয়ে নেয়, বট কখনো
    নিজে নিজে পুরো চেইন চালায় না (১০০% লকস্টেপ)। */
+/* Partial hash of a doc's base64 (first + last 4k chars, djb2) — the
+   signature must distinguish same name/type with DIFFERENT content
+   without comparing (or storing in the signature) the full base64. */
+function docsPartialHash(b64) {
+  const s = String(b64 || '');
+  const sample = s.slice(0, 4096) + '|' + s.slice(-4096);
+  let h = 5381;
+  for (let i = 0; i < sample.length; i++) h = (((h << 5) + h) + sample.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
 function docsMetaSig(payload) {
   const docs = (payload && payload.docs) || [];
-  return JSON.stringify({ rel: (payload && payload.relation) || '', d: docs.map(x => [x && x.name, x && x.docType]) });
+  return JSON.stringify({ rel: (payload && payload.relation) || '', d: docs.map(x => [x && x.name, x && x.docType, Math.round((String(x && x.base64 || '').length * 3) / 4), docsPartialHash(x && x.base64)]) });
+}
+/* Documents-return recovery (2026-10-26, permanent fix): the old banner
+   sent the user to step 5 and asked them to re-add documents, but the
+   documents step has NO control to re-select saved draft documents —
+   only a remove button and a new-file picker — so the recovery was
+   ineffective. If the draft already holds base64 for both types 40
+   and 41, resend SUBMIT_S3_DOCS directly from the saved docs (the
+   engine re-uploads them to the site; the user uploads nothing).
+   Only when base64 is missing for a type do we send the user to
+   step 5 to upload. A successful S3 ack while _docsReturnPending is
+   set chains into SUBMIT_S4_PREP (see manualStepAck) — that chain
+   is still started by the user's single banner click, not by the bot. */
+function docsReadyForResend() {
+  const docs = S.d.docs || [];
+  return ['40', '41'].every(t => docs.some(d => String(d.docType) === t && d.base64));
+}
+function documentsReturnAction() {
+  hideBanner();
+  if (docsReadyForResend()) {
+    dropSent('SUBMIT_S3_DOCS'); dropSent('SUBMIT_S4_PREP');
+    S.d.docsDone = false; S._docsReturnPending = true;
+    note('⏳ থাকা কাগজ আবার সাইটে পাঠানো হচ্ছে…', 'info');
+    emitStep('SUBMIT_S3_DOCS', payloadFor('SUBMIT_S3_DOCS'));
+  } else {
+    goStep(5);
+    note('📎 ২টি কাগজ যোগ করে “পরবর্তী →” চাপুন — বাকি ধাপগুলো সাইটে নিজে থেকেই বসবে', 'info');
+  }
 }
 function stepChanged(op, payload) {
   const prev = S._sentP && S._sentP[op];
@@ -2467,19 +2504,27 @@ function sendOtp() {
   if (bad.length) { showFail(bad); note('⚠️ যোগাযোগের তথ্য ঠিক করুন', 'warn'); return; }
   hideFail();
   if (S.draftId) saveDraft(6, () => {});
-  renderOtpCode();
+  // Permanent fix (2026-10-26): 'code sent' is NOT shown here. The
+  // OTP view opens in 'sending' state; only an otpSent:true ack flips
+  // it to 'sent' (see manualStepAck / otpPrepAck). The old code
+  // rendered 'sent' before the server had confirmed anything, which
+  // is why the page claimed delivery while no SMS ever arrived.
+  renderOtpCode(false);
   busy(true, '📲 কোড পাঠানো হচ্ছে…'); // ডাবল-চাপ আটকায় (কোড-স্ক্রিনের বাটনগুলো তৈরি হওয়ার পরে)
   // গার্ড আটকালে (আগের ধাপ তখনো সাইটে যাচ্ছে) সাথে সাথে বাটন ছেড়ে দিই —
   // নইলে নোটে “আবার চাপুন” লেখা থাকলেও বাটন নিষ্ক্রিয় থেকে চিরতরে আটকে যায়
-  if (emitStep('SUBMIT_S4_PREP', { email: S.d.email, phone: S.d.phone }) === false) busy(false);
+  if (emitStep('SUBMIT_S4_PREP', payloadFor('SUBMIT_S4_PREP')) === false) busy(false);
 }
-function renderOtpCode() {
+/* sent=false (default) = 'sending' text; sent=true = 'code sent' text.
+   Only call with true after an otpSent:true ack — never before. */
+function renderOtpCode(sent) {
+  sent = sent === true;
   setView('flow'); S.otpStage = 'code'; renderStepper(5); hideFail();
   const ph = S.d.phone || '';
   const tail = ph.length >= 4 ? ph.slice(-4) : ph;
   showBody(
     '<div class="sec"><div class="sub-h"><span class="snum">🔐</span> কোড বসান</div>' +
-    '<p class="hint">' + esc(tail) + '-এ শেষ হওয়া নম্বরে কোড পাঠানো হয়েছে। না এলে “আবার কোড পাঠান” চাপুন। <b>কোড কারও সাথে শেয়ার করবেন না।</b></p></div>' +
+    '<p class="hint" id="otpSentHint">' + esc(tail) + '-এ শেষ হওয়া নম্বরে ' + (sent ? 'কোড পাঠানো হয়েছে। না এলে “আবার কোড পাঠান” চাপুন।' : 'কোড পাঠানো হচ্ছে… কোড এলে নিচের ঘরে বসান।') + ' <b>কোড কারও সাথে শেয়ার করবেন না।</b></p></div>' +
     '<div class="otpboxes">' + [0,1,2,3,4,5].map(i => '<input class="otpbox" id="ob' + i + '" inputmode="numeric" maxlength="1" autocomplete="one-time-code">').join('') + '</div>'
   );
   const boxes = els('.otpbox');
@@ -2509,8 +2554,10 @@ function renderOtpCode() {
       } },
     { html: '📲 আবার কোড পাঠান', cls: 'ghost', fn: () => {
         // কখনো আটকে না থাকেন — ওয়েটশিটা ওয়ালা ধাপ আবারই চালানো যায়
+        // Re-send also goes back to 'sending' until its own ack.
+        renderOtpCode(false);
         busy(true, '⏳ আবার কোড পাঠানো হচ্ছে…');
-        if (emitStep('SUBMIT_S4_PREP', { email: S.d.email || '', phone: S.d.phone || '' }) === false) busy(false);
+        if (emitStep('SUBMIT_S4_PREP', payloadFor('SUBMIT_S4_PREP')) === false) busy(false);
       } },
     { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => saveDraft(6, () => { note('✔ খসড়ায় রাখা হয়েছে — যেকোনো সময় OTP দিয়ে শেষ করতে পারবেন', 'ok'); setTimeout(renderDrafts, 700); }) },
     { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => goStep(6) }
@@ -2652,7 +2699,7 @@ function showPvOtp() {
     S.d.phone = np;
     const af = $('a_phone'); if (af) af.value = np; // অটো ফর্মের ঘরটাও মিলিয়ে রাখি
     busy(true, '⏳ নতুন নম্বরে কোড পাঠানো হচ্ছে…');
-    if (emitStep('SUBMIT_S4_PREP', { email: S.d.email || '', phone: np }) === false) busy(false);
+    if (emitStep('SUBMIT_S4_PREP', { email: S.d.email || '', phone: np, docs: S.d.docs || [] }) === false) busy(false);
   };
   const boxes = [0, 1, 2, 3, 4, 5].map(i => $('pvob' + i));
   const val = () => boxes.map(b => (b.value || '').replace(/\D/g, '')).join('');
@@ -2679,7 +2726,7 @@ function showPvOtp() {
   };
   $('pvOtpRe').onclick = () => {
     busy(true, '⏳ আবার কোড পাঠানো হচ্ছে…');
-    if (emitStep('SUBMIT_S4_PREP', { email: S.d.email || '', phone: S.d.phone || '' }) === false) busy(false);
+    if (emitStep('SUBMIT_S4_PREP', payloadFor('SUBMIT_S4_PREP')) === false) busy(false);
   };
   sec.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -3251,7 +3298,7 @@ function submitAuto() {
 }
 function autoPrep() {
   busy(true, '⏳ ওটিপি পাঠানো হচ্ছে…');
-  emitStep('SUBMIT_S4_PREP', { email: S.d.email || '', phone: S.d.phone || '' });
+  emitStep('SUBMIT_S4_PREP', payloadFor('SUBMIT_S4_PREP'));
 }
 function fillDemo() {
   const set = (id, v) => { const e = $(id); if (e) e.value = v; };
@@ -3286,7 +3333,12 @@ function payloadFor(op) {
   if (op === 'SUBMIT_S2') return Object.assign({}, S.d.s2, { applicantDob: S.d.s1.dob });
   if (op === 'SUBMIT_S2B') return Object.assign({}, S.d.s2b);
   if (op === 'SUBMIT_S3_DOCS') return { relation: S.d.relation || defaultRelation(), docs: S.d.docs || [] };
-  if (op === 'SUBMIT_S4_PREP') return { email: S.d.email || '', phone: S.d.phone || '' };
+  // S4Prep also carries docs: the engine's S4Prep replay catches up
+  // through S3 when the site is behind, and S3 cannot upload without
+  // the draft docs. The frontend is the only source on a resumed
+  // draft (the engine session never saw S3 in that session), so the
+  // docs travel with S4Prep too — same payload size class as S3.
+  if (op === 'SUBMIT_S4_PREP') return { email: S.d.email || '', phone: S.d.phone || '', docs: S.d.docs || [] };
   return {};
 }
 function runChain(ops, onDone, title) {
@@ -3387,8 +3439,16 @@ function otpPrepAck(d) {
     return;
   }
   hideFail();
-  note('📲 কোড পাঠানো হয়েছে — মোবাইলে এসেছে কি না দেখুন', 'ok');
-  renderOtpCode();
+  // Permanent fix (2026-10-26): 'sent' only on an otpSent:true ack.
+  // An ok ack without otpSent is not delivery proof — stay in
+  // 'sending' state instead of claiming the code was sent.
+  if (d.otpSent === true) {
+    note('📲 কোড পাঠানো হয়েছে — মোবাইলে এসেছে কি না দেখুন', 'ok');
+    renderOtpCode(true);
+  } else {
+    note('⏳ কোড পাঠানো হচ্ছে…', 'info');
+    renderOtpCode(false);
+  }
 }
 
 /* ═══════════ session প্রস্তুতি (নাগরিক কখনো আটকাবে না) ═══════════ */
@@ -3463,14 +3523,15 @@ function manualStepAck(d) {
     opAbort();
     if (op === 'SUBMIT_S4_OTP') { note('🔄 সংযোগ নতুন — আবার কোড পাঠিয়ে জমা দিতে হবে', 'warn'); if (S.otpStage !== 'code') renderOtpCode(); return; }
     if (op === 'SUBMIT_S4_PREP') {
-      // নতুন সেশনে সাইট ধাপ ১-এ ফিরে গেছে — কাগজপত্র ছাড়া ওটিপি-ধাপে ফেরা যায় না
-      // (ধাপ ৫-এর “পরবর্তী”তেই ব্যাকএন্ড বাকি ধাপগুলো সাইটে নিজে সাজিয়ে দেয়), তাই সেখানেই ফিরিয়ে নিই
+      // নতুন সেশনে সাইট ধাপ ১-এ ফিরে গেছে — কাগজপত্র ছাড়া ওটিপি-ধাপে ফেরা যায় না।
+      // Recovery is the documents-return action: saved docs are
+      // resent directly when present; only missing docs go to step 5.
       dropSent('SUBMIT_S3_DOCS'); // পুরনো রেকর্ড বাতিল — একই ছবি আবার দিলেও যেন সাইটে যায়
       note('🔄 সংযোগ নতুন — কাগজপত্রের ধাপ থেকে আবার এগোনো দরকার', 'warn');
-      showBanner('warn', '⚠️ নতুন সংযোগ হয়েছে — আপনার তথ্য সব হাতেই আছে। কাগজপত্রের ধাপ থেকে আবার এগোলেই বাকিটা নিজে থেকে বসে যাবে।', () => {
-        hideBanner(); goStep(5);
-        note('📎 ২টি কাগজ আবার যোগ করে “পরবর্তী →” চাপুন — বাকি ধাপগুলো সাইটে নিজে থেকেই বসবে', 'info');
-      }, '📎 কাগজপত্রে ফিরুন');
+      showBanner('warn', docsReadyForResend()
+        ? '⚠️ নতুন সংযোগ হয়েছে — থাকা কাগজ আবার সাইটে পাঠিয়ে যোগাযোগে ফেরানো হচ্ছে।'
+        : '⚠️ নতুন সংযোগ হয়েছে — আপনার তথ্য সব হাতেই আছে। কাগজপত্রের ধাপ থেকে আবার এগোলেই বাকিটা নিজে থেকে বসে যাবে।',
+        documentsReturnAction, docsReadyForResend() ? '📎 কাগজ আবার পাঠান' : '📎 কাগজপত্রে ফিরুন');
       return;
     }
     const rp = op ? payloadFor(op) : null;
@@ -3488,19 +3549,23 @@ function manualStepAck(d) {
   }
   if (d.blocked || failed.length) {
     if (staleAck) { if (op) dropSent(op); return; } // পুরনো ধাপের ব্যর্থতা — মেরামত চলছে, নীরব থাকি
+    if (op === 'SUBMIT_S3_DOCS' && S._docsReturnPending) S._docsReturnPending = false; // recovery chain aborted — do not chain on a later S3 ack
     if (failed.length) showFail(failed.map(x => (x.field ? x.field + ' — ' : '') + (x.reason || 'সমস্যা হয়েছে')));
     note('⚠️ ' + san(d.message || 'কিছু মিলছে না — ঠিক করে আবার চেষ্টা করুন'), 'warn');
     if (op) dropSent(op); // ব্যর্থ ধাপ সাইটে যাওয়া গণ্য নয় — রিট্রাই আবার পাঠাবে
     opAbort();
     busy(false); // আটকে গেলে বাটন আবার চালু — নইলে রিট্রাই/খসড়া কিছুই চাপা যায় না
-    // সাইট যোগাযোগ ধাপে নেই (মাঝপথে/চেনা যায়নি) — রিট্রাই করলে আবার একই ফল আসবে;
-    // কাগজপত্রের ধাপ থেকে এগোলেই ensureAligned পুরো পথ সাজিয়ে যোগাযোগে পৌঁছে দেয়
-    if (op === 'SUBMIT_S4_PREP' && failed.some(x => /পেজ পাওয়া যায়নি/.test(x.reason || ''))) {
+    // সাইট যোগাযোগ ধাপে নেই — branch on the machine-readable code
+    // the engine returns, NEVER on the Bengali reason text (the old
+    // regex broke whenever the reason wording changed). Retrying
+    // S4Prep gives the same result; the documents-return action
+    // resends the saved docs directly when present.
+    if (op === 'SUBMIT_S4_PREP' && failed.some(x => x && x.code === 'CONTACT_ANCHORS_MISSING')) {
       dropSent('SUBMIT_S3_DOCS'); // পুরনো রেকর্ড বাতিল — একই ছবি আবার দিলেও যেন সাইটে যায়
-      showBanner('warn', '⚠️ সাইট এখন যোগাযোগের ধাপে নেই — কাগজপত্রের ধাপ থেকে আবার এগোলেই বাকিটা নিজে থেকে বসে যাবে।', () => {
-        hideBanner(); goStep(5);
-        note('📎 ২টি কাগজ আবার যোগ করে “পরবর্তী →” চাপুন — বাকি ধাপগুলো সাইটে নিজে থেকেই বসবে', 'info');
-      }, '📎 কাগজপত্রে ফিরুন');
+      showBanner('warn', docsReadyForResend()
+        ? '⚠️ সাইট এখন যোগাযোগের ধাপে নেই — থাকা কাগজ আবার সাইটে পাঠিয়ে যোগাযোগে ফেরানো হচ্ছে।'
+        : '⚠️ সাইট এখন যোগাযোগের ধাপে নেই — কাগজপত্রের ধাপ থেকে আবার এগোলেই বাকিটা নিজে থেকে বসে যাবে।',
+        documentsReturnAction, docsReadyForResend() ? '📎 কাগজ আবার পাঠান' : '📎 কাগজপত্রে ফিরুন');
       return;
     }
     // পরের ধাপ ইউজার নিজে চাপলে ব্যাকএন্ডের ensureAligned সাইটকে মেরামত করে নেবে —
@@ -3522,10 +3587,26 @@ function manualStepAck(d) {
     const oi = OPS.findIndex(o => o.op === op);
     if (oi >= 0) S.d.uiStep = Math.max(S.d.uiStep || 0, OPS[oi].step || 0);
   }
+  // Documents-return chain: the S3 resend succeeded, so (on the
+  // user's single banner click) move on to the contact step's OTP
+  // send instead of leaving the user on a dead OTP view.
+  if (op === 'SUBMIT_S3_DOCS' && S._docsReturnPending && !staleAck) {
+    S._docsReturnPending = false;
+    note('✔ কাগজ সাইটে পৌঁছেছে — এখন যোগাযোগের ধাপে কোড পাঠানো হচ্ছে…', 'info');
+    emitStep('SUBMIT_S4_PREP', payloadFor('SUBMIT_S4_PREP'));
+    return;
+  }
   if (op === 'SUBMIT_S4_PREP') {
-    note('📲 কোড পাঠানো হয়েছে — মোবাইলে এসেছে কি না দেখুন', 'ok');
-    if (S.otpStage !== 'code') { if (S.pvMode && S.mode === 'auto') showPvOtp(); else renderOtpCode(); }
-    else busy(false);
+    // 'sent' only on an otpSent:true ack (see sendOtp comment).
+    if (d.otpSent === true) {
+      note('📲 কোড পাঠানো হয়েছে — মোবাইলে এসেছে কি না দেখুন', 'ok');
+      if (S.otpStage !== 'code') { if (S.pvMode && S.mode === 'auto') showPvOtp(); else renderOtpCode(true); }
+      else { const h = document.getElementById('otpSentHint'); if (h) h.innerHTML = esc((S.d.phone || '').slice(-4)) + '-এ শেষ হওয়া নম্বরে কোড পাঠানো হয়েছে। না এলে “আবার কোড পাঠান” চাপুন। <b>কোড কারও সাথে শেয়ার করবেন না।</b>'; else renderOtpCode(true); busy(false); }
+    } else {
+      note('⏳ কোড পাঠানো হচ্ছে…', 'info');
+      if (S.otpStage !== 'code') renderOtpCode(false);
+      else busy(false);
+    }
     return;
   }
   if (op === 'SUBMIT_S4_OTP') return;
