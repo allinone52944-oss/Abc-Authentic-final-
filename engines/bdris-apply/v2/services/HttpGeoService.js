@@ -69,7 +69,7 @@ function normalizeBn(text) {
 function findByName(entries, name) {
   const want = normalizeBn(name);
   if (!want) return null;
-  const loose = (t) => normalizeBn(t).replace(/[\.\-\u2010-\u2015]/g, '').replace(/\s+/g, '');
+  const loose = (t) => normalizeBn(t).replace(/[\.\-\u2010-\u2015,\u0964]/g, '').replace(/\s+/g, '');
   const wantLoose = loose(name);
   return entries.find((e) => normalizeBn(e.nameBn) === want)
     || entries.find((e) => {
@@ -320,6 +320,19 @@ class HttpGeoService {
         const n = normalizeBn(o.name);
         const w = normalizeBn(zoneName);
         return n && (n.includes(w) || w.includes(n));
+      })
+      // 2026-10-27 follow-up: this lookup did NOT use findByName, so
+      // it missed the dot-match loose layer entirely. Same loose key
+      // here (dots, dashes, commas, danda, spaces stripped), so the
+      // HTTP ward path matches spelling variants like the Playwright
+      // path does. Note: for Cox's Bazar Sadar the HTTP path still
+      // fails earlier (getZoneOptions returns empty), so this alone
+      // does not fix that chain — the Playwright path must match.
+      || zoneOptions.find((o) => {
+        const loose = (t) => normalizeBn(t).replace(/[\.\-\u2010-\u2015,\u0964]/g, '').replace(/\s+/g, '');
+        const n = loose(o.name);
+        const w = loose(zoneName);
+        return n && w && (n === w || n.includes(w) || w.includes(n));
       });
     if (!zoneEntry) {
       throw Object.assign(new Error(`HttpGeo: zone not found: ${zoneName}`), { code: 'GEO_NOT_FOUND' });
