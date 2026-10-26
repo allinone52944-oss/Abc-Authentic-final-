@@ -112,12 +112,14 @@ describe('BrowserManager hardened session context (v1 settings, 2026-10-26)', ()
 });
 
 describe('BdrisNavigator gotoForm: poll + in-site navigation + diagnostics', () => {
-  it('a slow render found within the poll resolves, and the direct-goto response is recorded', async () => {
+  it('a slow render found via the homepage route resolves, without a direct-goto stub first', async () => {
+    // Homepage-first (2026-10-26): the form is reached via the
+    // homepage link, so there is no direct-goto navigation to
+    // record; the homepage route itself must have found the link.
     const page = makePage({ slowRenderAfter: 2 });
     const nav = new BdrisNavigator(page);
     await nav.gotoForm();
-    assert.strictEqual(nav.lastNavigation.status, 403);
-    assert.strictEqual(nav.lastNavigation.finalUrl, 'https://bdris.gov.bd/br/application');
+    assert.strictEqual(nav.lastSiteNavigation.foundLink, true);
   });
 
   it('a persistent stub throws naming the navigation and the failed in-site attempt', async () => {
@@ -147,7 +149,9 @@ describe('BdrisNavigator gotoForm: poll + in-site navigation + diagnostics', () 
     assert.strictEqual(state.cookieCount, 2);
     const text = BdrisNavigator.describePageState(state);
     assert.match(text, /scripts: 2, cookies: 2/);
-    assert.match(text, /navigation: status=403/);
+    // Homepage-first: no direct goto happened, so there is no
+    // direct navigation to describe; the form itself must be present.
+    assert.strictEqual(state.formContent, true);
   });
 
   it('contentChanged distinguishes a changing page from a persistent 44-char stub', async () => {

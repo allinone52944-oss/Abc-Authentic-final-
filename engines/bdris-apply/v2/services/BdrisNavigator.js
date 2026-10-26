@@ -146,60 +146,53 @@ class BdrisNavigator {
   }
 
   async gotoForm() {
-    const resp = await this.page.goto(`${BDRIS_BASE}/br/application`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
-    }).catch((e) => { this._gotoError = e; return null; });
-    this._recordNavigation(resp);
-    // The poll below follows, so a long pre-poll selector wait is
-    // pure waste (G4): keep only a 3s head start, then poll.
-    await this.page.waitForSelector(
-      SELECTORS.birth.division,
-      { timeout: 3000 }
-    ).catch(() => {});
-    // Proven defect (live banner 2026-10-26, page at /br/application
-    // with no CSRF token and no division select): the old gotoForm
-    // swallowed the selector wait and returned success for ANY page
-    // at that URL — including a bot-challenge/stub page or a page
-    // whose JS never rendered the form — and warmUp then pooled
-    // that page, so every later geo call inherited a page with no
-    // form content. Verify real form content now: a form element,
-    // any address division, or a CSRF token. If none is present,
-    // throw with the page state instead of reporting a false
-    // ready — warmUp's catch already skips pooling on throw, and
-    // INIT_SESSION's catch already reports SESSION_ERROR.
-    // Pages without evaluate() (test doubles) keep the old behaviour.
-    //
-    // 2026-10-26 senior investigation, two further defects fixed
-    // here: (a) the bba3e7e version checked form content ONCE, so
-    // a slow render — or a challenge page that completes after
-    // domcontentloaded — became a hard connection failure
-    // ("সংযোগ তৈরি হয়নি") instead of getting a chance; now it
-    // polls waitForFormContent() for a bounded ~15s first.
-    // (b) If the direct goto still yields a stub, try the
-    // in-site path (homepage -> real /br/application link click,
-    // the OriginalFetcher-proven pattern) before throwing, so a
-    // deep-link gate does not end the session by itself.
+    // Homepage-first (2026-10-26, live-proven): a direct deep link to
+    // /br/application always yields a stub page (live test: only the
+    // "type on browser" instruction, no form, even after reload),
+    // while the same URL reached via the homepage's Birth
+    // Registration link renders the real form. The old order tried
+    // the direct link first and only fell back to the homepage
+    // after a full poll, wasting every session's first attempt on
+    // a page that can never be the form. Try the homepage route
+    // first; keep the direct link only as a fallback, and still
+    // throw (never report a false ready) if neither yields form
+    // content. Pages without evaluate() (test doubles) keep the
+    // old direct-only behaviour, exactly as before.
     if (typeof this.page.evaluate === 'function') {
+      const firstVia = await this.gotoFormViaSite().catch(() => null);
+      if (firstVia && firstVia.state && firstVia.state.formContent) return;
+      const resp = await this.page.goto(`${BDRIS_BASE}/br/application`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      }).catch((e) => { this._gotoError = e; return null; });
+      this._recordNavigation(resp);
+      await this.page.waitForSelector(
+        SELECTORS.birth.division,
+        { timeout: 3000 }
+      ).catch(() => {});
       let state = await this.waitForFormContent(30).catch(() => null);
-      let viaSite = null;
-      if (state && !state.formContent) {
-        viaSite = await this.gotoFormViaSite().catch(() => null);
-        if (viaSite && viaSite.state && viaSite.state.formContent) return;
-        state = (viaSite && viaSite.state) || state;
-      }
       if (state && !state.formContent) {
         throw new Error(
           `Playwright: form content not loaded on ${BDRIS_BASE}/br/application ` +
           `(${BdrisNavigator.describePageState(state)}; navigation: ` +
           `${BdrisNavigator.describeNavigation(this.lastNavigation)}; ` +
-          `in-site navigation: ${viaSite
-            ? (viaSite.foundLink ? 'link clicked, still no form content'
+          `in-site navigation: ${firstVia
+            ? (firstVia.foundLink ? 'link clicked, still no form content'
               : 'no /br/application link found on homepage')
             : 'not attempted'})`,
         );
       }
+      return;
     }
+    const resp = await this.page.goto(`${BDRIS_BASE}/br/application`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000,
+    }).catch((e) => { this._gotoError = e; return null; });
+    this._recordNavigation(resp);
+    await this.page.waitForSelector(
+      SELECTORS.birth.division,
+      { timeout: 3000 }
+    ).catch(() => {});
   }
 
   getSelectors(form) {
