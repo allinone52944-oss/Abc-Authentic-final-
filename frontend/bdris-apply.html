@@ -1792,9 +1792,13 @@ function setGeoState(k, Ls, state) {
   if (state === 'loading') {
     node.innerHTML = '<option value="">লোড হচ্ছে…</option>';
   } else if (state === 'idle' || state === 'empty') {
-    if (node.options.length === 0 || /লোড হচ্ছে/.test(node.options[0]?.text || '')) {
-      node.innerHTML = '<option value="">--- নির্বাচন করুন ---</option>';
-    }
+    // Demo-proven (2026-10-26): the old guard only cleared when the
+    // select was empty or still loading, so a parent change left the
+    // PREVIOUS branch's options visible (e.g. Savar wards after
+    // switching to DNCC) until the next load overwrote them. Idle
+    // means "no selection yet", so always reset to the placeholder;
+    // fillSelOpts overwrites it again when real options arrive.
+    node.innerHTML = '<option value="">--- নির্বাচন করুন ---</option>';
   }
   // 'loaded' state-এ fillSelOpts ইতিমধ্যে options বসিয়েছে
   // 'error' state-এ dropdown-এ retry option দেখাও
@@ -3552,7 +3556,19 @@ function manualStepAck(d) {
   if (d.blocked || failed.length) {
     if (staleAck) { if (op) dropSent(op); return; } // পুরনো ধাপের ব্যর্থতা — মেরামত চলছে, নীরব থাকি
     if (op === 'SUBMIT_S3_DOCS' && S._docsReturnPending) S._docsReturnPending = false; // recovery chain aborted — do not chain on a later S3 ack
-    if (failed.length) showFail(failed.map(x => (x.field ? x.field + ' — ' : '') + (x.reason || 'সমস্যা হয়েছে')));
+    // Demo-proven (2026-10-26): UI advances instantly (advanceAndSend
+    // calls goStep before the engine ack), so a failed ack for an
+    // earlier step used to paint that step's errors as the CURRENT
+    // step's fail panel (step-3 parent errors sitting on the step-4
+    // screen, with no hint they belong to the earlier step). The
+    // errors must still be shown — hiding them would leave the user
+    // with only a generic retry that re-sends the same failing data.
+    // So when the user has already moved past that op's screen, keep
+    // showFail but label the panel as the EARLIER step's errors.
+    const _oi = op ? OPS.findIndex(o => o.op === op) : -1;
+    const _opStep = _oi >= 0 ? (OPS[_oi].step || 0) : 0;
+    const _late = !!(_opStep && (S.d.uiStep || 0) >= _opStep);
+    if (failed.length) showFail((_late ? ['আগের ধাপ (' + (OPS[_oi].label || op) + ') থেকে এসেছে — সেই ধাপে ফিরে ঠিক করুন'] : []).concat(failed.map(x => (x.field ? x.field + ' — ' : '') + (x.reason || 'সমস্যা হয়েছে'))));
     note('⚠️ ' + san(d.message || 'কিছু মিলছে না — ঠিক করে আবার চেষ্টা করুন'), 'warn');
     if (op) dropSent(op); // ব্যর্থ ধাপ সাইটে যাওয়া গণ্য নয় — রিট্রাই আবার পাঠাবে
     opAbort();
