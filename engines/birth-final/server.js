@@ -550,7 +550,8 @@ function normalizeBdrisData(data) {
     }
 
     // Separate NB/location cell: office2 is the NB location. Drop the NB
-    // first token ONLY if it equals office1's first comma part (e.g. NB
+    // first token if it repeats office1: exact match, or (3+ tokens and)
+    // office1's first part starts with it (e.g. NB
     // "Zone - 8, Dhaka South City Corporation, Dhaka" with office1
     // "Zone - 8, Dhaka South City Corporation" -> "Dhaka South City
     // Corporation, Dhaka"). Otherwise keep the full NB location.
@@ -565,7 +566,16 @@ function normalizeBdrisData(data) {
             if (lp.length > 1) {
                 if (out.office1) {
                     const firstPart = String(out.office1).split(',')[0].trim().toLowerCase();
-                    const locParts = firstPart === lp[0].toLowerCase() ? lp.slice(1) : lp;
+                    const firstTok = lp[0].toLowerCase();
+                    // Drop the NB first token when it repeats office1: exact match,
+                    // or (NB has 3+ tokens and) office1's first part starts with it
+                    // (e.g. office1 "Bagoan Union Parishad" + NB "Bagoan, Raozan,
+                    // Chattogram" -> "Raozan, Chattogram"). The 3+ guard keeps a
+                    // 2-token NB intact (e.g. office1 "Raozan Union Parishad" +
+                    // NB "Raozan, Chattogram" stays "Raozan, Chattogram").
+                    const dropFirst = firstPart === firstTok ||
+                        (lp.length > 2 && firstPart.startsWith(firstTok + ' '));
+                    const locParts = dropFirst ? lp.slice(1) : lp;
                     const cand = titleCase(locParts.join(', '));
                     if (!out.office2 || cand.toLowerCase() === String(out.office2).toLowerCase() || cand.toLowerCase().startsWith(String(out.office2).toLowerCase() + ', ')) {
                         out.office2 = cand;
