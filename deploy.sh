@@ -22,7 +22,14 @@ LAST_RESTARTED=""
 [ -f "$STATE_FILE" ] && LAST_RESTARTED=$(cat "$STATE_FILE" 2>/dev/null || echo "")
 
 if [ "$LOCAL" = "$REMOTE" ] && [ "$LOCAL" = "$LAST_RESTARTED" ]; then
-  exit 0
+  # Silent exit only if the service is actually running. A service that
+  # died after a successful deploy must NOT be hidden by this exit —
+  # otherwise no later deploy ever restarts it.
+  _SYS="$(command -v systemctl 2>/dev/null || echo /bin/systemctl)"
+  if sudo -n "$_SYS" is-active abc-authentic.service >/dev/null 2>&1; then
+    exit 0
+  fi
+  echo "$(date): Code already at $LOCAL but service is not active — retrying restart..." >>"$LOG"
 fi
 
 if [ "$LOCAL" != "$REMOTE" ]; then
@@ -89,8 +96,11 @@ if sudo -n "$SYSTEMCTL" is-active abc-authentic.service >/dev/null 2>&1; then
     exit 1
   fi
 else
-  echo "$(date): Service not active, skipping restart" >>"$LOG"
-  echo "$LOCAL" > "$STATE_FILE" 2>/dev/null || true
+  # Do NOT write STATE_FILE and do NOT log Deploy complete here: the
+  # service never restarted, so the next run must retry instead of
+  # exiting silently on a false "already restarted" state.
+  echo "$(date): ERROR: Service not active — deploy NOT complete, restart will be retried on next run" >>"$LOG"
+  exit 1
 fi
 
 echo "$(date): Deploy complete: $REMOTE" >>"$LOG"
