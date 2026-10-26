@@ -644,8 +644,8 @@ app.post('/api/verify', async (req, res) => {
             body
         });
         const html = await r.text();
-        // Shob verify-e page save — parse fail korle structure dekhe fix kora jabe.
-        // (builder app theke last-result.html niye bug report korte parben)
+        // Verify page save — shudhu fail korle thake (structure dekhe fix kora jabe).
+        // Success-e niche file-ta delete hoy, jate shofol record-er personal page disk-e pore na thake.
         try { require('fs').writeFileSync(require('path').join(__dirname, 'last-result.html'), html); } catch (_) {}
 
         if (/error in data retr/i.test(html)) {
@@ -705,6 +705,8 @@ app.post('/api/verify', async (req, res) => {
         const miss = ['registrationDate', 'issuanceDate', 'office1', 'office2']
             .filter(k => !data[k]);
         if (miss.length) data.missingFields = miss;
+        // Success: last-result.html rakha dorkar nei — data frontend-e geche.
+        try { require('fs').unlinkSync(require('path').join(__dirname, 'last-result.html')); } catch (_) {}
         res.json({ success: true, data });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });

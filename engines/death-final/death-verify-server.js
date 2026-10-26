@@ -976,7 +976,7 @@ async function routeVerify(req, res) {
         });
         const html = await r.text();
 
-        // debug copy: structure dekhar jonno
+        // debug copy: shudhu fail korle thake — success-e niche delete hoy
         try { fs.writeFileSync(path.join(__dirname, '_last-result.html'), html); } catch (_) {}
 
         if (html.includes('Captcha is not valid') || html.includes('Does not match'))
@@ -1035,6 +1035,8 @@ async function routeVerify(req, res) {
             .filter(k => !data[k]);
         if (miss.length) data.missingFields = miss;
 
+        // Success: _last-result.html rakha dorkar nei — data frontend-e geche.
+        try { fs.unlinkSync(path.join(__dirname, '_last-result.html')); } catch (_) {}
         return json(res, 200, { success: true, data });
     } catch (e) {
         json(res, 500, { success: false, error: e.message });
