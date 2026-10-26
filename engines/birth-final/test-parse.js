@@ -247,6 +247,34 @@ console.log('CASE 13 address title-case (small + ALL CAPS input)');
   if (ok2) pass++; else { fail++; console.log('  FAIL caps input title-case: ' + (h2.includes(want) ? 'leftover' : 'missing')); }
 }
 
+// ---- 14) NB union-name first token dropped (live union case) ------------------
+console.log('CASE 14 NB union-name first token');
+{
+  const html = `<table>
+    <tr><th>Date of Registration</th><th>Registration Office</th><th>Date of Issuance</th></tr>
+    <tr><td>30 September 2026</td><td>Bagoan Union Parishad</td><td>05 October 2026</td></tr>
+  </table>
+  <p>NB: Some note. Location of the Register office : Bagoan, Raozan, Chattogram. everify</p>`;
+  const tds = extractTdTexts(html);
+  if (!tds.some(t => /location of the register office/i.test(t))) {
+    const m = String(html).replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ')
+      .match(/location of the register office\s*:?\s*([^.]{2,200})/i);
+    if (m) tds.push('Location of the Register office: ' + m[1].trim());
+  }
+  const d = normalizeBdrisData(mapResultData(tds));
+  eq('office1', d.office1, 'Bagoan Union Parishad');
+  eq('office2', d.office2, 'Raozan, Chattogram');
+  // 2-token NB guard: Raozan Union Parishad + Raozan, Chattogram stays full
+  const d2 = normalizeBdrisData({
+    registrationOffice: 'Raozan Union Parishad',
+    officeLocationRaw: 'Location of the Register office : Raozan, Chattogram.',
+    brn: '1234567890123456', dob: '01 January 2020'
+  });
+  eq('office2-2tok', d2.office2, 'Raozan, Chattogram');
+}
+
+
 console.log(`\nRESULT pass=${pass} fail=${fail}`);
 process.exit(fail ? 1 : 0);
 

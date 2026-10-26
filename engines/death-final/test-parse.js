@@ -143,6 +143,25 @@ console.log('CASE 8 dedupe (registrationOffice removed from response)');
   else { fail++; console.log('  FAIL registrationOffice still in output: ' + JSON.stringify(d.registrationOffice)); }
 }
 
+// CASE 9: NB union-name first token dropped (live union case)
+console.log('CASE 9 NB union-name first token');
+{
+  const html = `<table><tr><th>Date of Registration</th><th>Registration Office</th><th>Issuance Date</th></tr>
+    <tr><td>30 September 2026</td><td>Bagoan Union Parishad</td><td>05 October 2026</td></tr></table>
+   <p>NB: note. Location of the Register office : Bagoan, Raozan, Chattogram. everify</p>`;
+  const d = normalizeBdrisData(mapBirthResultData(html));
+  eq('office1', d.office1, 'Bagoan Union Parishad');
+  eq('office2', d.office2, 'Raozan, Chattogram');
+  // 2-token NB guard: Raozan Union Parishad + Raozan, Chattogram stays full
+  const d2 = normalizeBdrisData({
+    registrationOffice: 'Raozan Union Parishad',
+    officeLocationRaw: 'Location of the Register office : Raozan, Chattogram.',
+    brn: '1234567890123456', dod: '01 January 2020'
+  });
+  eq('office2-2tok', d2.office2, 'Raozan, Chattogram');
+}
+
+
 console.log(`\nRESULT pass=${pass} fail=${fail}`);
 process.exit(fail ? 1 : 0);
 
