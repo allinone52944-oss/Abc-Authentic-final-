@@ -676,7 +676,14 @@ app.post('/api/verify', async (req, res) => {
                 .replace(/<[^>]+>/g, ' ')
                 .replace(/&nbsp;/gi, ' ')
                 .replace(/\s+/g, ' ')
-                .match(/location of the register office\s*:?\s*([^.]{2,200})/i);
+                // 2026-10-27: [^.] broke locations starting with a dotted
+                // abbreviation (e.g. "P.M. KHALI, ...") — the first dot ended
+                // the capture, so no fallback cell was pushed and office2
+                // stayed empty even though the location IS on the page.
+                // Capture up to the footer boilerplate marker instead;
+                // normalizeBdrisData already splits at ". everify"/http/www
+                // and strips trailing dots, so trailing junk is cleaned there.
+                .match(/location of the register office\s*:?\s*((?:(?!\.\s*(?:everify|https?:|www\.)).){2,300})/i);
             if (m) tds.push('Location of the Register office: ' + m[1].trim());
         }
         const data = normalizeBdrisData(mapResultData(tds));
