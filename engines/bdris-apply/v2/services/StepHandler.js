@@ -957,6 +957,19 @@ class StepHandler {
     };
 
     this.progress('🔄 ঠিকানার ধাপ: স্থায়ী ও বর্তমান ঠিকানা...');
+    // ঠিকানা সত্যিই ভরা আছে কি না — কপি-চেকবক্সের পরেও যাচাই করি।
+    // আগে কপি-শাখায় কোনো যাচাই ছিল না: চেকবক্স না পাওয়া গেলে
+    // চুপচাপ কিছুই হতো না, আর চেক করলেও সাইট কপি না করলে
+    // বর্তমান ঠিকানা খালিই থেকে যেত — তারপর Next-এ সাইট
+    // "খালি" বলত। এখন কপি না হলে সরাসরি বসানো হয়, তাতেও
+    // না হলে failed-এ ধরা পড়ে, চুপচাপ Next-এ যাওয়া হয় না।
+    const addrFilled = async (pre) => this.page.evaluate((p) => {
+      const val = (n) => { const e = document.querySelector(`select[name="${n}"]`); return e && e.offsetParent !== null ? String(e.value || '') : 'x'; };
+      const txt = (n) => { const e = document.querySelector(`input[name="${n}"]`); return e && e.offsetParent !== null ? String(e.value || '').trim() : 'x'; };
+      if (!val(p + 'Div') || !val(p + 'Dist') || !val(p + 'CityCorpCantOrUpazila')) return false;
+      if (!txt(p + 'VilAreaTownBn') || !txt(p + 'PostOfc')) return false;
+      return true;
+    }, pre).catch(() => false);
     // স্থায়ী ঠিকানা
     // Permanent (2026-10-15): data থাকলে flag উপেক্ষা করে fill করি — ভুল
     // permCopy=true-তে copy-box চেক করলে ব্যবহারকারীর আলাদা ঠিকানা মুছে যায়।
@@ -966,11 +979,21 @@ class StepHandler {
       await this._fillAddressSection('permAddr', data.perm, failed);
     } else {
       const cb1 = await findCopyBox('জন্মস্থানের ঠিকানা ও স্থায়ী ঠিকানা একই', 'copyBirthPlaceToPermAddr');
-      if (cb1) {
+      if (!cb1) {
+        failed.push({ field: 'স্থায়ী ঠিকানা', reason: 'জন্মস্থান থেকে কপির চেকবক্স সাইটে পাওয়া যায়নি' });
+      } else {
         const checked = await cb1.isChecked().catch(() => false);
         if (!checked) await cb1.check().catch(async () => { await cb1.click(); });
         await this.page.waitForTimeout(1200);
-        this.progress('✔ স্থায়ী ঠিকানা: জন্মস্থান থেকে কপি');
+        if (!(await addrFilled('permAddr'))) {
+          const src = await this._readAddressFromPage('birthPlace');
+          if (src.division || src.district || src.vilBn) {
+            this.progress('⏳ কপি হয়নি — জন্মস্থান থেকে স্থায়ী ঠিকানা সরাসরি বসানো হচ্ছে…');
+            await this._fillAddressSection('permAddr', src, failed);
+          }
+        }
+        if (await addrFilled('permAddr')) this.progress('✔ স্থায়ী ঠিকানা: জন্মস্থান থেকে কপি');
+        else failed.push({ field: 'স্থায়ী ঠিকানা', reason: 'জন্মস্থান থেকে কপি হয়নি — স্থায়ী ঠিকানা খালি আছে' });
       }
     }
     // বর্তমান ঠিকানা
@@ -980,22 +1003,27 @@ class StepHandler {
       await this._fillAddressSection('prsntAddr', data.pres, failed);
     } else {
       const cb2 = await findCopyBox('স্থায়ী ঠিকানা ও বর্তমান ঠিকানা একই', 'copyPermAddrToPrsntAddr');
-      if (cb2) {
+      if (!cb2) {
+        failed.push({ field: 'বর্তমান ঠিকানা', reason: 'স্থায়ী ঠিকানা থেকে কপির চেকবক্স সাইটে পাওয়া যায়নি' });
+      } else {
         const checked = await cb2.isChecked().catch(() => false);
         if (!checked) await cb2.check().catch(async () => { await cb2.click(); });
         await this.page.waitForTimeout(800);
-        this.progress('✔ বর্তমান ঠিকানা: স্থায়ী ঠিকানা থেকে কপি');
+        if (!(await addrFilled('prsntAddr'))) {
+          const src = (data.perm && (data.perm.division || data.perm.district || data.perm.vilBn))
+            ? data.perm
+            : await this._readAddressFromPage('permAddr');
+          if (src.division || src.district || src.vilBn) {
+            this.progress('⏳ কপি হয়নি — স্থায়ী ঠিকানা থেকে বর্তমান ঠিকানা সরাসরি বসানো হচ্ছে…');
+            await this._fillAddressSection('prsntAddr', src, failed);
+          }
+        }
+        if (await addrFilled('prsntAddr')) this.progress('✔ বর্তমান ঠিকানা: স্থায়ী ঠিকানা থেকে কপি');
+        else failed.push({ field: 'বর্তমান ঠিকানা', reason: 'স্থায়ী ঠিকানা থেকে কপি হয়নি — বর্তমান ঠিকানা খালি আছে' });
       }
     }
 
-    // ঠিকানা সত্যিই ভরা আছে কি না — partial re-render-এ খালি থাকলে আবার বসাই
-    const addrFilled = async (pre) => this.page.evaluate((p) => {
-      const val = (n) => { const e = document.querySelector(`select[name="${n}"]`); return e && e.offsetParent !== null ? String(e.value || '') : 'x'; };
-      const txt = (n) => { const e = document.querySelector(`input[name="${n}"]`); return e && e.offsetParent !== null ? String(e.value || '').trim() : 'x'; };
-      if (!val(p + 'Div') || !val(p + 'Dist') || !val(p + 'CityCorpCantOrUpazila')) return false;
-      if (!txt(p + 'VilAreaTownBn') || !txt(p + 'PostOfc')) return false;
-      return true;
-    }, pre).catch(() => false);
+    // partial re-render-এ খালি থাকলে আবার বসাই (যাচাই উপরে আছে)
     for (const [pre, rec, cp] of [['permAddr', data.perm, data.permCopy], ['prsntAddr', data.pres, data.presCopy]]) {
       if (rec && !cp && !(await addrFilled(pre))) {
         this.progress('⏳ ঠিকানার কিছু ঘর খালি থেকে গেছে — আবার বসানো হচ্ছে…');
@@ -2325,6 +2353,41 @@ class StepHandler {
   // ── ঠিকানা cascade (BDRIS logic): যেকোনো section-এ বসানো যায় ──
   // prefix: 'birthPlace' | 'permAddr' | 'prsntAddr'  (live-verified 2026-10-10)
   // NOTE: BDRIS-এ পোস্ট কোডের ঘর নেই — d.postCode থাকলেও বসানো হয় না।
+  // সাইটের পেজ থেকে একটি ঠিকানা সেকশনের মান পড়া: সিলেক্টের
+  // নির্বাচিত অপশনের লেখা + ইনপুটের মান। কপি-চেকবক্স কাজ না
+  // করলে এই মান দিয়েই লক্ষ্য সেকশন সরাসরি বসানো হয়।
+  async _readAddressFromPage(prefix) {
+    return this.page.evaluate((pre) => {
+      const selText = (n) => {
+        const e = document.querySelector(`select[name="${pre}${n}"]`);
+        if (!e || !e.options || e.selectedIndex < 0) return '';
+        const t = String(e.options[e.selectedIndex].text || '').trim();
+        return /^---/.test(t) ? '' : t;
+      };
+      const inp = (n) => {
+        const e = document.querySelector(`input[name="${pre}${n}"]`);
+        return e ? String(e.value || '').trim() : '';
+      };
+      const cityWard = selText('WardInCityCorp');
+      const union = selText('PaurasavaOrUnion');
+      return {
+        country: selText('Country') || 'বাংলাদেশ',
+        division: selText('Div'),
+        district: selText('Dist'),
+        cityCorpUpazila: selText('CityCorpCantOrUpazila'),
+        paurasavaUnion: cityWard || union,
+        ward: selText('WardInPaurasavaOrUnion'),
+        postOfficeBn: inp('PostOfc'),
+        postOfficeEn: inp('PostOfcEn'),
+        postCode: inp('PostCode'),
+        villageBn: inp('VilAreaTownBn'),
+        villageEn: inp('VilAreaTownEn'),
+        houseRoadBn: inp('HouseRoadBn'),
+        houseRoadEn: inp('HouseRoadEn'),
+      };
+    }, prefix).catch(() => ({}));
+  }
+
   async _fillAddressSection(prefix, d, failed) {
     const keep = (r) => { if (r && !r.ok && !r.skipped) failed.push({ field: r.field, reason: r.reason }); };
     // দেশ আগে বসাই — কোনো সেকশনে খালি থাকলে সাইট "পরবর্তী"-তে আটকায় (2026-10-11)
