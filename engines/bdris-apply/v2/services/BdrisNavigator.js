@@ -511,6 +511,19 @@ class BdrisNavigator {
           Array.from(node.options).find(o => {
             const t = norm(o.text);
             return t && (t.includes(w) || w.includes(t));
+          }) ||
+          // Live-proven 2026-10-26 (Cox's Bazar): the site lists a zone
+          // as "P.M. Khali" (dots + space) while the frontend list
+          // offers "PMKhali" — exact and includes matching both fail
+          // because dots/spaces are kept by norm(). Compare a loose
+          // key with dots, dashes and spaces stripped, so such
+          // spelling variants match. This only ADDS matches after
+          // the stricter checks fail; it never overrides them.
+          Array.from(node.options).find(o => {
+            const loose = (t) => norm(t).replace(/[\.\-\u2010-\u2015]/g, '').replace(/\s+/g, '');
+            const t = loose(o.text);
+            const wl = loose(want);
+            return t && wl && (t === wl || t.includes(wl) || wl.includes(t));
           });
         if (opt) {
           node.value = opt.value;

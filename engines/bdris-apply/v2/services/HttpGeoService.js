@@ -69,10 +69,19 @@ function normalizeBn(text) {
 function findByName(entries, name) {
   const want = normalizeBn(name);
   if (!want) return null;
+  const loose = (t) => normalizeBn(t).replace(/[\.\-\u2010-\u2015]/g, '').replace(/\s+/g, '');
+  const wantLoose = loose(name);
   return entries.find((e) => normalizeBn(e.nameBn) === want)
     || entries.find((e) => {
       const n = normalizeBn(e.nameBn);
       return n && (n.includes(want) || want.includes(n));
+    })
+    // Same live-proven dot/space spelling variant as the Playwright
+    // path: "P.M. Khali" vs "PMKhali" must match here too, or the
+    // HTTP ward fetch fails even when the zone list is present.
+    || entries.find((e) => {
+      const n = loose(e.nameBn);
+      return n && wantLoose && (n === wantLoose || n.includes(wantLoose) || wantLoose.includes(n));
     })
     || null;
 }
