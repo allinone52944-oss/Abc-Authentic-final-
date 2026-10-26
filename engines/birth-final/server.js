@@ -648,6 +648,10 @@ app.post('/api/verify', async (req, res) => {
         // (builder app theke last-result.html niye bug report korte parben)
         try { require('fs').writeFileSync(require('path').join(__dirname, 'last-result.html'), html); } catch (_) {}
 
+        if (/error in data retr/i.test(html)) {
+            return res.json({ success: false, error: 'BDRIS error: Error in Data retrieving. Please retry another time.' });
+        }
+
         if (html.includes('No record found') || html.includes('Captcha is not valid') || html.includes('Does not match')) {
             return res.json({ success: false, error: 'Data not found or captcha wrong. Fetch a new captcha and try again.' });
         }

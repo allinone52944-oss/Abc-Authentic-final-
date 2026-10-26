@@ -983,6 +983,8 @@ async function routeVerify(req, res) {
             return json(res, 200, { success: false, error: 'Captcha bhul — notun captcha anun abar cheshta korun.' });
         if (html.includes('No record found'))
             return json(res, 200, { success: false, error: 'Ei death number + tarikhe kono record pawa jayni.' });
+        if (/error in data retr/i.test(html))
+            return json(res, 200, { success: false, error: 'BDRIS error: Error in Data retrieving. Please retry another time.' });
 
         const data = normalizeBdrisData(mapResultData(html));
         data.recordType = 'death';
