@@ -520,7 +520,7 @@ class BdrisNavigator {
           // spelling variants match. This only ADDS matches after
           // the stricter checks fail; it never overrides them.
           Array.from(node.options).find(o => {
-            const loose = (t) => norm(t).replace(/[\.\-\u2010-\u2015]/g, '').replace(/\s+/g, '');
+            const loose = (t) => norm(t).replace(/[\.\-\u2010-\u2015,\u0964]/g, '').replace(/\s+/g, '');
             const t = loose(o.text);
             const wl = loose(want);
             return t && wl && (t === wl || t.includes(wl) || wl.includes(t));
