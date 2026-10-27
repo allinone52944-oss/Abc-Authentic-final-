@@ -377,4 +377,96 @@ async function runHttpChain(opts = {}) {
   }
 }
 
-module.exports = { runHttpChain, runSubmitHttpChain, getHttpPathStatus, normalizeChainInput, isHttpPathEnabled, isFallbackSafe, HTTP_CANDIDATE_LABEL, HTTP_BASE };
+/**
+ * Stage A probe (2026-10-27): READ-ONLY verification of the direct
+ * path's front half — session-seeded client, bootstrap skip, geo
+ * chain, office lookups — and it STOPS before upload/OTP/submit.
+ *
+ * Safety properties (pinned by tests):
+ *  - Never builds a bare client: opts.client is required; without
+ *    it the probe returns NO_SEEDED_CLIENT and touches nothing.
+ *  - Never bootstraps: an unseeded client returns NOT_SEEDED and
+ *    touches nothing (bare fetch form-GET is proven 403).
+ *  - Never uploads, sends/verifies OTP, or submits: those client
+ *    methods are never called (test fakes throw if called).
+ *  - No charge gate: the probe performs no chargeable action, so
+ *    no charge token is needed or checked. This is deliberate and
+ *    safe ONLY because the probe cannot submit anything.
+ *  - Office params are caller-supplied verbatim (shapes unverified);
+ *    nothing is invented. Each attempted step records its own
+ *    result; a failed step does not hide earlier steps' results.
+ *  - Not gated on BDRIS_HTTP_PATH: like GET_ADDRESS_OPTIONS (also
+ *    read-only seeded HTTP), the probe is flag-independent. The
+ *    SUBMIT path keeps its own opt-in flag.
+ *
+ * @param {object} opts
+ * @param {object} opts.client - session-seeded BdrisHttpClient (required)
+ * @param {object} [opts.geoChain] - walkGeoChain spec (firstParentId,
+ *   firstGeoOrder, steps); skipped when absent
+ * @param {object} [opts.officeParams] - verbatim params for
+ *   findOfficeByGeoId; skipped when absent
+ * @param {object} [opts.officeProjectionParams] - verbatim params for
+ *   findOfficeGeoProjectionByGeoId; skipped when absent
+ * @param {function} [opts.log] - log fn (default: console.log)
+ */
+async function runStageAProbe(opts = {}) {
+  const log = opts.log || ((...a) => console.log(...a));
+  const baseResult = { path: 'http-probe', stage: 'A', candidate: true, candidateLabel: HTTP_CANDIDATE_LABEL, stoppedBefore: 'upload' };
+  const client = opts.client || null;
+  if (!client) {
+    return { ...baseResult, ok: false, error: 'NO_SEEDED_CLIENT', message: 'Stage A probe needs a session-seeded client; it never builds a bare one.' };
+  }
+  if (!client.bootstrapped) {
+    return { ...baseResult, ok: false, error: 'NOT_SEEDED', message: 'Client is not seeded from a browser session; the probe refuses a bare bootstrap (proven 403).' };
+  }
+  candidateLog(log, 'bootstrap', 'skipped — client already seeded from browser session');
+  const steps = ['bootstrap-skipped'];
+  const results = { bootstrap: 'skipped-seeded' };
+  let allOk = true;
+
+  if (opts.geoChain) {
+    try {
+      const chain = await client.walkGeoChain(opts.geoChain);
+      steps.push('geo');
+      results.geo = {
+        ok: true,
+        steps: chain.map((c) => ({ nameBn: c.step.nameBn, geoType: c.step.geoType, chosenId: c.chosen.id, chosenNameBn: c.chosen.nameBn, targetGeoOrder: c.targetGeoOrder })),
+      };
+    } catch (e) {
+      allOk = false;
+      results.geo = { ok: false, error: e.code || 'GEO_FAILED', message: e.message };
+    }
+  } else {
+    results.geo = { ok: null, skipped: 'no geoChain spec supplied' };
+  }
+
+  if (opts.officeParams) {
+    try {
+      const office = await client.findOfficeByGeoId(opts.officeParams);
+      steps.push('office');
+      results.office = { ok: true, response: office };
+    } catch (e) {
+      allOk = false;
+      results.office = { ok: false, error: e.code || 'OFFICE_FAILED', message: e.message };
+    }
+  } else {
+    results.office = { ok: null, skipped: 'no officeParams supplied' };
+  }
+
+  if (opts.officeProjectionParams) {
+    try {
+      const proj = await client.findOfficeGeoProjectionByGeoId(opts.officeProjectionParams);
+      steps.push('office-projection');
+      results.officeProjection = { ok: true, response: proj };
+    } catch (e) {
+      allOk = false;
+      results.officeProjection = { ok: false, error: e.code || 'OFFICE_FAILED', message: e.message };
+    }
+  } else {
+    results.officeProjection = { ok: null, skipped: 'no officeProjectionParams supplied' };
+  }
+
+  return { ...baseResult, ok: allOk, steps, results };
+}
+
+module.exports = { runHttpChain, runSubmitHttpChain, runStageAProbe, getHttpPathStatus, normalizeChainInput, isHttpPathEnabled, isFallbackSafe, HTTP_CANDIDATE_LABEL, HTTP_BASE };

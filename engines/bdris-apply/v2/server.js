@@ -37,7 +37,7 @@ const { BdrisNavigator } = require('./services/BdrisNavigator');
 const { AddressService } = require('./services/AddressService');
 const { StepHandler, verifyChargeToken } = require('./services/StepHandler');
 const { OriginalFetcher } = require('./services/OriginalFetcher');
-const { runSubmitHttpChain, getHttpPathStatus } = require('./services/HttpPathRunner');
+const { runSubmitHttpChain, runStageAProbe, getHttpPathStatus, HTTP_CANDIDATE_LABEL } = require('./services/HttpPathRunner');
 const { HttpGeoService } = require('./services/HttpGeoService');
 
 class BdrisEngineV2 {
@@ -363,6 +363,40 @@ class BdrisEngineV2 {
     this.executor.register('HTTP_PATH_STATUS',
       async () => getHttpPathStatus(),
       { timeoutMs: 5000 }
+    );
+
+    // ── HTTP_PROBE_STAGE_A: read-only Stage A probe (2026-10-27) ──
+    // Seed → bootstrap-skip → geo chain → office lookups, then STOP.
+    // Never uploads, never sends/verifies OTP, never submits, never
+    // checks a charge token (no chargeable action happens). Not
+    // gated on BDRIS_HTTP_PATH (read-only, like GET_ADDRESS_OPTIONS).
+    // Seeding uses the same seedFromPage path as the gate fix; when
+    // seeding fails it returns the seed error and attempts NO bare
+    // bootstrap (proven 403).
+    this.executor.register('HTTP_PROBE_STAGE_A',
+      async (params, ctx) => {
+        const session = ctx.session;
+        const probeBase = { path: 'http-probe', stage: 'A', candidate: true, candidateLabel: HTTP_CANDIDATE_LABEL };
+        if (!session?.page) {
+          return { ...probeBase, ok: false, error: 'NO_SESSION_PAGE', message: 'Stage A probe needs a warm browser session page to seed from.' };
+        }
+        let httpClient = null;
+        try {
+          const geo = new HttpGeoService();
+          if (await geo.seedFromPage(session.page)) httpClient = geo.client;
+          else return { ...probeBase, ok: false, error: 'SEED_FAILED', message: geo.lastSeedError ? geo.lastSeedError.message : 'unknown' };
+        } catch (e) {
+          return { ...probeBase, ok: false, error: 'SEED_FAILED', message: e.message };
+        }
+        return runStageAProbe({
+          client: httpClient,
+          geoChain: params?.geoChain || null,
+          officeParams: params?.officeParams || null,
+          officeProjectionParams: params?.officeProjectionParams || null,
+          log: (...a) => this.log(...a),
+        });
+      },
+      { timeoutMs: 120000 }
     );
 
     // ── SUBMIT_HTTP_CHAIN: HTTP-first full chain (opt-in only) ──
