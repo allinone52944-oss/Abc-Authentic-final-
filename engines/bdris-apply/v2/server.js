@@ -393,6 +393,11 @@ class BdrisEngineV2 {
           geoChain: params?.geoChain || null,
           officeParams: params?.officeParams || null,
           officeProjectionParams: params?.officeProjectionParams || null,
+          // 2026-10-27 flag-forward fix: the frontend script-probe
+          // button emits {scriptProbe:true}, but this call previously
+          // dropped the flag, so runStageAProbe never ran its script
+          // step and the button returned a plain-probe result.
+          scriptProbe: params?.scriptProbe || false,
           log: (...a) => this.log(...a),
         });
       },
