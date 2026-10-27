@@ -434,8 +434,23 @@ function mapResultData(tds) {
         }
 
         // 3) NB footer: "Location of the Register office : A, B, C. everify..."
+        // Robustness layers (2026-10-27): the live HTML sometimes splits
+        // the label and the value into separate cells. A label-only cell
+        // ("Location of the Register office :") would otherwise leave
+        // office2 empty even though the value sits in the next cell, so
+        // append the next non-empty, non-label cell when the label cell
+        // itself carries no location value.
         if (/location of the register office/i.test(text) && !data.officeLocationRaw) {
             data.officeLocationRaw = text;
+            const afterLabel = String(text).replace(/^.*location of the register office\s*:?\s*/i, '').replace(/[^A-Za-z0-9,\s]/g, '').trim();
+            if (!afterLabel) {
+                for (let j = i + 1; j < cells.length; j++) {
+                    const v = String(cells[j] || '').trim();
+                    if (!v || isLabel(j)) continue;
+                    data.officeLocationRaw = text + ' ' + v;
+                    break;
+                }
+            }
         }
 
         // 4) pair cells: label at i -> value i+1, Bn value i-1 (layout unchanged)
@@ -562,6 +577,12 @@ function normalizeBdrisData(data) {
         const lm = String(out.officeLocationRaw).match(/location of the register office\s*:?\s*([\s\S]+)$/i);
         if (lm) {
             let loc = String(lm[1]).split(/[.。]\s*(https?:|everify|www\.)/i)[0].replace(/[.。]+$/, '').trim();
+            // Footer junk that can trail the location when no everify
+            // marker precedes it (e.g. "© 2026 - Developed and maintained
+            // by ...") — a real location never contains these, so strip
+            // from the first such marker onward instead of showing junk
+            // as part of office2.
+            loc = loc.split(/©/)[0].replace(/developed and maintained.*$/i, '').replace(/is the official website.*$/i, '').trim().replace(/[.。]+$/, '').trim();
             const lp = loc.split(',').map(x => x.trim()).filter(Boolean);
             if (lp.length > 1) {
                 if (out.office1) {
