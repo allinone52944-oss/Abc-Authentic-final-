@@ -496,7 +496,9 @@ function normalizeBdrisData(data) {
     const out = { ...data };
 
     // Strip stray artifacts: backticks, quotes from API data
-    const clean = (s) => String(s || '').replace(/[`'"‘’“”]/g, '').trim();
+    // Apostrophes inside a word are genuine (Cox's Bazar) — strip only
+    // stray quotes/backticks and apostrophes NOT between two letters.
+    const clean = (s) => String(s || '').replace(/[`"‘’“”]/g, '').replace(/(?<![A-Za-z])'|'(?![A-Za-z])/g, '').trim();
     for (const k of Object.keys(out)) {
         if (typeof out[k] === 'string') out[k] = clean(out[k]);
     }
@@ -594,8 +596,10 @@ function normalizeBdrisData(data) {
                     // Chattogram" -> "Raozan, Chattogram"). The 3+ guard keeps a
                     // 2-token NB intact (e.g. office1 "Raozan Union Parishad" +
                     // NB "Raozan, Chattogram" stays "Raozan, Chattogram").
+                    const looseKey = (t) => String(t || '').toLowerCase().replace(/[\.\-\u2010-\u2015,\u0964]/g, '').replace(/\s+/g, '');
                     const dropFirst = firstPart === firstTok ||
-                        (lp.length > 2 && firstPart.startsWith(firstTok + ' '));
+                        looseKey(firstPart) === looseKey(firstTok) ||
+                        (lp.length > 2 && (firstPart.startsWith(firstTok + ' ') || looseKey(firstPart).startsWith(looseKey(firstTok))));
                     const locParts = dropFirst ? lp.slice(1) : lp;
                     const cand = titleCase(locParts.join(', '));
                     if (!out.office2 || cand.toLowerCase() === String(out.office2).toLowerCase() || cand.toLowerCase().startsWith(String(out.office2).toLowerCase() + ', ')) {
