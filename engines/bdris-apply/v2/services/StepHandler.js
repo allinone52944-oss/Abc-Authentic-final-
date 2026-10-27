@@ -663,6 +663,11 @@ class StepHandler {
     if (this.singleName) {
       await relaxEmptyLast(this.page, this.singleName).catch(() => {});
     }
+    // Diagnostics (2026-10-27): the ack's failed[] carries only field+reason,
+    // so a later panel can never say WHAT the site held. Record the first
+    // read-back (want vs got) for exactly the checked fields; attached to
+    // every S1 return below, ignored by the frontend panel logic.
+    let nameCheck = [];
     try {
       const rb = await this.page.evaluate(() => {
         const g = (id, namePart) => {
@@ -681,6 +686,7 @@ class StepHandler {
       ];
       if (!singleBn) checks.push(['নামের শেষ অংশ (বাংলা)', rb.lBn, transitName(data.lastNameBn)]);
       if (!singleEn) checks.push(['Last Name (English)', rb.lEn, transitName(data.lastNameEn)]);
+      nameCheck = checks.map(([label, actual, want]) => ({ field: label, want, got: actual }));
       for (const [label, actual, want] of checks) {
         if (want && actual !== want) failed.push({ field: label, reason: 'সাইটে নাম ঠিকমতো বসেনি — আবার চেষ্টা করুন' });
       }
@@ -732,7 +738,7 @@ class StepHandler {
     // submitS1 as a step-completion probe.
     if (!(data.division || data.district || data.vilBn)) {
       failed.push({ field: 'জন্মস্থানের ঠিকানা', reason: 'জন্মস্থানের ঠিকানা (বিভাগ/জেলা/গ্রাম) দেওয়া হয়নি — ঠিকানা ছাড়া ধাপ ২ সম্পন্ন নয়' });
-      return { ok: false, failed, message: `${failed.length}টি ফিল্ড পূরণ হয়নি` };
+      return { ok: false, failed, message: `${failed.length}টি ফিল্ড পূরণ হয়নি`, nameCheck };
     }
     {
       await this._fillAddressSection('birthPlace', data, failed);
@@ -806,11 +812,11 @@ class StepHandler {
     }
 
     if (failed.length) {
-      return { ok: false, failed, message: `${failed.length}টি ফিল্ড পূরণ হয়নি` };
+      return { ok: false, failed, message: `${failed.length}টি ফিল্ড পূরণ হয়নি`, nameCheck };
     }
 
     this.progress('✔ ধাপ ২ সম্পন্ন');
-    return { ok: true, step: 2 };
+    return { ok: true, step: 2, nameCheck };
   }
 
   /**
