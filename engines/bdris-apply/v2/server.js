@@ -745,6 +745,55 @@ class BdrisEngineV2 {
         }
       });
 
+      // Stage A probe direct (2026-10-27): the frontend button emits
+      // HTTP_PROBE_STAGE_A directly (ack callback, like
+      // GET_ADDRESS_OPTIONS). Without this handler the emit reached
+      // NO listener — the ack never fired and the button timed out
+      // with zero server log lines (live demo 2026-10-27). The
+      // executor registration alone does not route socket events.
+      socket.on('HTTP_PROBE_STAGE_A', async (data = {}, callback) => {
+        try {
+          // Ensure session exists (direct, not via self-emit)
+          if (!sessionId) {
+            let sid = null;
+            if (userId) {
+              const existing = this.sessionManager.findByUser(userId);
+              if (existing) { sid = existing.id; this.sessionManager.touch(sid); }
+            }
+            if (!sid) {
+              const sess = await this.sessionManager.create(userId, { socketId: socket.id });
+              sid = sess.id;
+              const nav0 = new BdrisNavigator(sess.page);
+              // Same proven trap as GET_ADDRESS_OPTIONS: destroy on
+              // gotoForm failure so the next call creates a fresh
+              // page instead of reusing a stub via findByUser.
+              try {
+                await nav0.gotoForm();
+              } catch (e) {
+                await this.sessionManager.destroy(sid).catch(() => {});
+                throw e;
+              }
+            }
+            sessionId = sid;
+          }
+          const session = this.sessionManager.get(sessionId);
+          if (!session) {
+            if (callback) callback({ ok: false, error: 'SESSION_EXPIRED' });
+            return;
+          }
+          this.sessionManager.touch(sessionId);
+          const result = await this.executor.execute('HTTP_PROBE_STAGE_A', data, {
+            session,
+            emit: (ev, payload) => socket.emit(ev, payload),
+            socket,
+          });
+          // The probe result shape is already the ack shape.
+          if (callback) callback(result);
+        } catch (e) {
+          if (callback) callback({ ok: false, error: e.message });
+        }
+      });
+
       // Legacy compatibility: FETCH_ORIGINAL direct
       // Frontend socket.emit('FETCH_ORIGINAL', {ack, _chargeToken}) করে আর
       // BOT_STATUS/ORIGINAL_PDF event-এর অপেক্ষা করে — সেই shape বজায় রাখা হলো।
