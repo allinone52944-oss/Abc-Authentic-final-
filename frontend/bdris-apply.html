@@ -2609,6 +2609,13 @@ function renderStep6() {
     { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep6(); saveDraft(6, () => note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে যেকোনো সময় কোড দিয়ে শেষ করতে পারবেন', 'ok')); } },
     { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => goStep(5) }
   ]);
+  // লাইভ-সেভ (2026-10-28): টাইপের সাথে সাথে S.d.phone আপডেট — আগে S.d.phone
+  // শুধু collectStep6-এ (কোড পাঠান/খসড়া) আপডেট হতো, তাই "ঠিক করুন" চেপে অন্য
+  // ধাপে গিয়ে ফিরে এলে renderStep6 পুরনো S.d.phone বসিয়ে লেখা নম্বর চুপচাপ
+  // মুছে দিত, আর "কোড পাঠান" খালি ঘরে ফেল করতো। ইনপুটের লেখা বদলানো হয় না
+  // (কার্সর সমস্যা এড়াতে) — শুধু S.d আপডেট হয়, sendOtp-এর যাচাই আগের মতোই।
+  const cp = $('c_phone');
+  if (cp) cp.oninput = () => { S.d.phone = bnDigits(cp.value || '').replace(/\D/g, ''); };
 }
 function collectStep6() {
   S.d.phone = bnDigits($('c_phone') ? $('c_phone').value : '').replace(/\D/g, '');
