@@ -227,7 +227,7 @@ async function step2(){
   if(!ans){showErr('ক্যাপচা উত্তর লিখুন।');return;}
   busy('b2',true,'BDRIS যাচাই চলছে… (৩০-৬০ সেকেন্ড লাগতে পারে)');
   try{
-    const r=await ABC.api(API+'/api/verify',{method:'POST',body:{sessionId:S.sessionId,brn:S.brn,dob:S.dob,captcha:ans}});
+    const r=await ABC.api(API+'/api/verify',{method:'POST',body:{sessionId:S.sessionId,brn:S.brn,dob:S.dob,captcha:ans},timeout:60000});
     const j=await r.json();
     if(!j.success)throw new Error(j.error||'যাচাই ব্যর্থ');
     S.record=j.data;

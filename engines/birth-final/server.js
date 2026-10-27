@@ -506,6 +506,21 @@ function normalizeBdrisData(data) {
     const titleCase = (s) => String(s || '').toLowerCase()
         .split(/(\s+)/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
 
+    // --- HTML entities: BDRIS raw HTML encodes apostrophes as &#39;.
+    // The NB-footer fallback regex captures raw HTML, unlike the table
+    // cells which extractTdTexts already decodes — so without this,
+    // office2 kept the literal text "Cox&#39;s ..." and the frontend
+    // esc() escaped the & again, showing the entity on screen.
+    // Decode BEFORE the comma split (2026-10-27).
+    const decodeEntities = (s) => String(s || '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n));
+
     // --- Date: "29 September 2026" -> "29/09/2026" ---
     const months = { january: '01', february: '02', march: '03', april: '04', may: '05', june: '06', july: '07', august: '08', september: '09', october: '10', november: '11', december: '12' };
     const toDDMMYYYY = (s) => {
@@ -579,6 +594,7 @@ function normalizeBdrisData(data) {
         const lm = String(out.officeLocationRaw).match(/location of the register office\s*:?\s*([\s\S]+)$/i);
         if (lm) {
             let loc = String(lm[1]).split(/[.。]\s*(https?:|everify|www\.)/i)[0].replace(/[.。]+$/, '').trim();
+            loc = decodeEntities(loc);
             // Footer junk that can trail the location when no everify
             // marker precedes it (e.g. "© 2026 - Developed and maintained
             // by ...") — a real location never contains these, so strip
