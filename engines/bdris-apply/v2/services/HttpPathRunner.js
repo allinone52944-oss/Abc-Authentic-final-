@@ -492,20 +492,30 @@ async function runStageAProbe(opts = {}) {
       // (method, params) must be read from the source, not guessed.
       const form = await client.fetchFormPageText();
       const pageMatches = extractOfficeMatches(form.text);
+      // Call-site grep (2026-10-27): the live form page defines the
+      // office URLs as findOfficeByParentGeoIdRestUrl /
+      // findOfficeGeoProjectionByParentGeoIdRestUrl constants, but the
+      // URL strings alone do not show HOW they are called (method,
+      // params). Grep the page and the bundles for the constant names
+      // too, so the actual call site surfaces with context.
+      const pageCallMatches = extractOfficeCallMatches(form.text);
       const scripts = [];
-      const srcs = extractScriptSrcs(form.text, client.base || '').slice(0, 5);
+      // Up to 15 bundles (was 5): the live page's first 5 srcs are
+      // libraries (jquery, bootstrap, ...) with no office matches —
+      // the app code using the constants lives in later bundles.
+      const srcs = extractScriptSrcs(form.text, client.base || '').slice(0, 15);
       for (const src of srcs) {
         try {
           const bundle = await client.fetchPageText(src);
           const capped = bundle.bodyLength > 500000;
           const text = capped ? bundle.text.slice(0, 500000) : bundle.text;
-          scripts.push({ url: src, status: bundle.status, ok: bundle.ok, bodyLength: bundle.bodyLength, truncated: capped, matches: extractOfficeMatches(text) });
+          scripts.push({ url: src, status: bundle.status, ok: bundle.ok, bodyLength: bundle.bodyLength, truncated: capped, matches: extractOfficeMatches(text), callMatches: extractOfficeCallMatches(text) });
         } catch (e) {
           scripts.push({ url: src, ok: false, error: e.code || 'SCRIPT_FETCH_FAILED', message: e.message });
         }
       }
       steps.push('script');
-      results.script = { ok: form.ok, page: { url: form.url, status: form.status, contentType: form.contentType, bodyLength: form.bodyLength }, pageMatches, scripts };
+      results.script = { ok: form.ok, page: { url: form.url, status: form.status, contentType: form.contentType, bodyLength: form.bodyLength }, pageMatches, pageCallMatches, scripts };
       if (!form.ok) allOk = false;
     } catch (e) {
       allOk = false;
@@ -523,6 +533,26 @@ function extractOfficeMatches(text, maxMatches = 5, context = 400) {
   const out = [];
   if (!text) return out;
   const re = /find-by-geo-id|find-office-geo-projection-by-geo-id/gi;
+  let m;
+  while (out.length < maxMatches && (m = re.exec(text)) !== null) {
+    const start = Math.max(0, m.index - context);
+    const end = Math.min(text.length, m.index + m[0].length + context);
+    out.push({ at: m.index, match: m[0], context: text.slice(start, end) });
+    if (m.index === re.lastIndex) re.lastIndex++;
+  }
+  return out;
+}
+
+// Call-site grep for the script probe (pure, tested): same +-context
+// shape as extractOfficeMatches, but matching the JS constant names
+// the live form page uses (findOfficeByParentGeoIdRestUrl /
+// findOfficeGeoProjectionByParentGeoIdRestUrl) instead of the URL
+// strings — so the actual call (method, params) surfaces, not just
+// the definition. Capped so a huge page cannot flood the ack.
+function extractOfficeCallMatches(text, maxMatches = 5, context = 400) {
+  const out = [];
+  if (!text) return out;
+  const re = /findOfficeByParentGeoIdRestUrl|findOfficeGeoProjectionByParentGeoIdRestUrl/gi;
   let m;
   while (out.length < maxMatches && (m = re.exec(text)) !== null) {
     const start = Math.max(0, m.index - context);
@@ -555,4 +585,4 @@ function extractScriptSrcs(html, base = '') {
   return srcs;
 }
 
-module.exports = { runHttpChain, runSubmitHttpChain, runStageAProbe, getHttpPathStatus, normalizeChainInput, isHttpPathEnabled, isFallbackSafe, HTTP_CANDIDATE_LABEL, HTTP_BASE, extractOfficeMatches, extractScriptSrcs };
+module.exports = { runHttpChain, runSubmitHttpChain, runStageAProbe, getHttpPathStatus, normalizeChainInput, isHttpPathEnabled, isFallbackSafe, HTTP_CANDIDATE_LABEL, HTTP_BASE, extractOfficeMatches, extractOfficeCallMatches, extractScriptSrcs };
