@@ -2641,7 +2641,12 @@ function sendOtp() {
    Only call with true after an otpSent:true ack — never before. */
 function renderOtpCode(sent) {
   sent = sent === true;
-  setView('flow'); S.otpStage = 'code'; renderStepper(5); hideFail();
+  // পুরনো এরর পরিষ্কার (2026-10-28): OTP পর্দায় ঢুকলেই আগের ধাপের ব্যানার/
+  // failBox/নোট মুছে যায় — নইলে পুরনো লেখা OTP পর্দার ওপর স্থায়ীভাবে বসে থাকে।
+  // নতুন এরর এর পরেও নিজের fail পথ দিয়ে আবার দেখাবে — এটা শুধু পুরনো ডিসপ্লে মোছে,
+  // কোনো লজিক/স্টেট/সকেট বদলায় না। (তাজা নোট যাতে না মোছে, সেজন্য নোট-আগে-রেন্ডার
+  // কলারগুলো নোট-পরে-রেন্ডার করা হয়েছে — দেখুন otpPrepAck/manualStepAck।)
+  setView('flow'); S.otpStage = 'code'; renderStepper(5); hideFail(); hideBanner(); noteOff();
   const ph = S.d.phone || '';
   const tail = ph.length >= 4 ? ph.slice(-4) : ph;
   showBody(
@@ -3565,8 +3570,9 @@ function otpPrepAck(d) {
   // An ok ack without otpSent is not delivery proof — stay in
   // 'sending' state instead of claiming the code was sent.
   if (d.otpSent === true) {
-    note('📲 কোড পাঠানো হয়েছে — মোবাইলে এসেছে কি না দেখুন', 'ok');
+    // নোট রেন্ডারের পরে — নইলে renderOtpCode-এর noteOff() তাজা নোট মুছে দিত
     renderOtpCode(true);
+    note('📲 কোড পাঠানো হয়েছে — মোবাইলে এসেছে কি না দেখুন', 'ok');
   } else {
     note('⏳ কোড পাঠানো হচ্ছে…', 'info');
     renderOtpCode(false);
@@ -3643,7 +3649,7 @@ function manualStepAck(d) {
     // লকস্টেপ: নতুন সেশন মানেই বট নিজে পুরো চেইন চালাবে না — ইউজারের সেই ক্লিকের ধাপটিই
     // (এক চাপে) আবার পাঠানোর সুযোগ দিই; ব্যাকএন্ডের ensureAligned আগের ধাপগুলো নিজে সাজায়
     opAbort();
-    if (op === 'SUBMIT_S4_OTP') { note('🔄 সংযোগ নতুন — আবার কোড পাঠিয়ে জমা দিতে হবে', 'warn'); if (S.otpStage !== 'code') renderOtpCode(); return; }
+    if (op === 'SUBMIT_S4_OTP') { if (S.otpStage !== 'code') renderOtpCode(); note('🔄 সংযোগ নতুন — আবার কোড পাঠিয়ে জমা দিতে হবে', 'warn'); return; }
     if (op === 'SUBMIT_S4_PREP') {
       // নতুন সেশনে সাইট ধাপ ১-এ ফিরে গেছে — কাগজপত্র ছাড়া ওটিপি-ধাপে ফেরা যায় না।
       // Recovery is the documents-return action: saved docs are
@@ -3733,9 +3739,10 @@ function manualStepAck(d) {
   if (op === 'SUBMIT_S4_PREP') {
     // 'sent' only on an otpSent:true ack (see sendOtp comment).
     if (d.otpSent === true) {
-      note('📲 কোড পাঠানো হয়েছে — মোবাইলে এসেছে কি না দেখুন', 'ok');
       if (S.otpStage !== 'code') { if (S.pvMode && S.mode === 'auto') showPvOtp(); else renderOtpCode(true); }
       else { const h = document.getElementById('otpSentHint'); if (h) h.innerHTML = esc((S.d.phone || '').slice(-4)) + '-এ শেষ হওয়া নম্বরে কোড পাঠানো হয়েছে। না এলে “আবার কোড পাঠান” চাপুন। <b>কোড কারও সাথে শেয়ার করবেন না।</b>'; else renderOtpCode(true); busy(false); }
+      // নোট রেন্ডারের পরে — নইলে renderOtpCode-এর noteOff() তাজা নোট মুছে দিত
+      note('📲 কোড পাঠানো হয়েছে — মোবাইলে এসেছে কি না দেখুন', 'ok');
     } else {
       note('⏳ কোড পাঠানো হচ্ছে…', 'info');
       if (S.otpStage !== 'code') renderOtpCode(false);
