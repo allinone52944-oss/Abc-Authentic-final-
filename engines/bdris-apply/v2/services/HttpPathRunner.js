@@ -484,7 +484,75 @@ async function runStageAProbe(opts = {}) {
     results.officeProjection = { ok: null, skipped: 'no officeProjectionParams supplied' };
   }
 
+  if (opts.scriptProbe) {
+    try {
+      // Read the form page's OWN script: the office URLs are known
+      // only from that script, and the guessed GET+?geoId= call
+      // returned the HTML shell — so the real call convention
+      // (method, params) must be read from the source, not guessed.
+      const form = await client.fetchFormPageText();
+      const pageMatches = extractOfficeMatches(form.text);
+      const scripts = [];
+      const srcs = extractScriptSrcs(form.text, client.base || '').slice(0, 5);
+      for (const src of srcs) {
+        try {
+          const bundle = await client.fetchPageText(src);
+          const capped = bundle.bodyLength > 500000;
+          const text = capped ? bundle.text.slice(0, 500000) : bundle.text;
+          scripts.push({ url: src, status: bundle.status, ok: bundle.ok, bodyLength: bundle.bodyLength, truncated: capped, matches: extractOfficeMatches(text) });
+        } catch (e) {
+          scripts.push({ url: src, ok: false, error: e.code || 'SCRIPT_FETCH_FAILED', message: e.message });
+        }
+      }
+      steps.push('script');
+      results.script = { ok: form.ok, page: { url: form.url, status: form.status, contentType: form.contentType, bodyLength: form.bodyLength }, pageMatches, scripts };
+      if (!form.ok) allOk = false;
+    } catch (e) {
+      allOk = false;
+      results.script = { ok: false, error: e.code || 'SCRIPT_FAILED', message: e.message };
+    }
+  }
+
   return { ...baseResult, ok: allOk, steps, results };
 }
 
-module.exports = { runHttpChain, runSubmitHttpChain, runStageAProbe, getHttpPathStatus, normalizeChainInput, isHttpPathEnabled, isFallbackSafe, HTTP_CANDIDATE_LABEL, HTTP_BASE };
+// Office-call grep for the script probe (pure, tested): each match
+// carries +-context so the call convention is visible, not just the
+// URL string. Capped so a huge page cannot flood the ack.
+function extractOfficeMatches(text, maxMatches = 5, context = 400) {
+  const out = [];
+  if (!text) return out;
+  const re = /find-by-geo-id|find-office-geo-projection-by-geo-id/gi;
+  let m;
+  while (out.length < maxMatches && (m = re.exec(text)) !== null) {
+    const start = Math.max(0, m.index - context);
+    const end = Math.min(text.length, m.index + m[0].length + context);
+    out.push({ at: m.index, match: m[0], context: text.slice(start, end) });
+    if (m.index === re.lastIndex) re.lastIndex++;
+  }
+  return out;
+}
+
+// Same-origin <script src> list for the script probe (pure, tested):
+// relative paths kept, absolute URLs kept only on the same base,
+// third-party / data: / blob: skipped, duplicates removed.
+function extractScriptSrcs(html, base = '') {
+  const srcs = [];
+  const seen = new Set();
+  if (!html) return srcs;
+  const re = /<script[^>]*\ssrc=["']([^"']+)["']/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const src = (m[1] || '').trim();
+    if (!src || seen.has(src)) continue;
+    seen.add(src);
+    if (/^https?:\/\//i.test(src)) {
+      if (base && src.startsWith(base)) srcs.push(src.slice(base.length) || '/');
+    } else if (!src.startsWith('data:') && !src.startsWith('blob:')) {
+      srcs.push(src.startsWith('/') ? src : `/${src}`);
+    }
+  }
+  return srcs;
+}
+
+module.exports = { runHttpChain, runSubmitHttpChain, runStageAProbe, getHttpPathStatus, normalizeChainInput, isHttpPathEnabled, isFallbackSafe, HTTP_CANDIDATE_LABEL, HTTP_BASE, extractOfficeMatches, extractScriptSrcs };
