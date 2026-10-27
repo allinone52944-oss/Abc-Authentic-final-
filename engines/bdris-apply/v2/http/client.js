@@ -475,7 +475,9 @@ class BdrisHttpClient {
    * applicantName, applicantBrn, applicantDob, officeAddressType),
    * body = only the six person/parent name fields
    * (buildOtpSendBody). The response carries no token/id (payload
-   * is null) — verify must therefore reuse the same context plus
+   * is null) — LIVE-CONFIRMED 2026-10-27 (Stage C user run):
+   * {code: 'MESSAGE_SENT', success: true, payload: null}.
+   * Verify must therefore reuse the same context plus
    * the geoLocationId derived from officeAddressType.
    */
   async otpSend(data = {}) {
@@ -484,7 +486,8 @@ class BdrisHttpClient {
       appType: 'BIRTH_REGISTRATION_APPLICATION',
       phone,
       email,
-      officeId,
+      // LIVE-CONFIRMED 2026-10-27 (Stage C): officeId 0 when empty.
+      officeId: officeId || '0',
       personUbrn,
       relation,
       applicantName,
@@ -514,7 +517,10 @@ class BdrisHttpClient {
    * officeAddressType is BIRTHPLACE, permAddrLocationId when
    * PERMANENT), email, officeId + applicantInfo (relation,
    * applicantName, applicantBrn, applicantDob, officeAddressType).
-   * Success = data.isVerified === true in the response.
+   * Success = top-level isVerified === true in the response
+   * (LIVE-CONFIRMED 2026-10-27, Stage C user run; data.isVerified
+   * also accepted). officeId defaults to '0' when empty (same
+   * live proof; no /api/office/* lookup is performed).
    * Throws OTP_REQUIRED / OTP_BAD_FORMAT instead of guessing.
    */
   async verifyOtp(data = {}) {
@@ -527,7 +533,15 @@ class BdrisHttpClient {
       throw err('VERIFY_FAILED', `OTP verify returned status ${res.status}.`);
     }
     const json = res.json !== null ? res.json : { ok: res.ok, text: res.text };
-    if (json && json.data && json.data.isVerified !== true && json.isVerified !== true && json.verified !== true && json.success !== true) {
+    // Strict success check (fixed 2026-10-28, found by the final-
+    // wiring tests): the old check required json.data to exist
+    // before testing anything, so a response WITHOUT a data
+    // wrapper — including {isVerified: false} — passed as
+    // verified. Now any one true signal verifies, and anything
+    // else throws; a failed verify must never reach submit.
+    const verified = !!json && (json.isVerified === true || json.verified === true || json.success === true
+      || (json.data && json.data.isVerified === true));
+    if (!verified) {
       throw err('VERIFY_NOT_VERIFIED', 'OTP verify response does not report isVerified === true.');
     }
     return json;
@@ -717,12 +731,13 @@ function buildSubmitPayload(data = {}) {
 
   const officeType = mapOfficeAddressType(data.officeAddressType || (data.s4prep && data.s4prep.officeAddressType) || data.addressType);
   const geoLocationId = officeType === 'PERMANENT'
-    ? str(permAddr.locationId || data.permGeoLocationId)
+    ? str(permAddr.locationId || data.permGeoLocationId || data.geoLocationId)
     : str(birthPlace.locationId || data.birthGeoLocationId || data.geoLocationId);
   const attachmentIds = [docsByType.get(40), docsByType.get(41)].map((d) => d.id);
   return {
     officeAddressType: officeType,
-    officeId: str(data.officeId || (data.s4prep && data.s4prep.officeId)),
+    // LIVE-CONFIRMED 2026-10-27 (Stage C): officeId 0 when empty.
+    officeId: str(data.officeId || (data.s4prep && data.s4prep.officeId)) || '0',
     geoLocationId,
     'personInfoForBirth.personFirstNameBn': str(firstBn),
     'personInfoForBirth.personLastNameBn': str(lastBn),
@@ -837,7 +852,7 @@ function buildVerifyPayload(data = {}) {
     phone: String(data.phone || ''),
     geoLocationId,
     email: String(data.email || ''),
-    officeId: String(data.officeId || ''),
+    officeId: String(data.officeId || '0'),
     relation: String(data.relation || ''),
     applicantName: String(data.applicantName || ''),
     applicantBrn: String(data.applicantBrn || ''),
