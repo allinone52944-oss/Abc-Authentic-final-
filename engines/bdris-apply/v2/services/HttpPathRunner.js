@@ -499,6 +499,12 @@ async function runStageAProbe(opts = {}) {
       // params). Grep the page and the bundles for the constant names
       // too, so the actual call site surfaces with context.
       const pageCallMatches = extractOfficeCallMatches(form.text);
+      // getOfficeId grep (2026-10-27): the uploaded OTP/office log
+      // proves officeId comes from a page function getOfficeId()
+      // (empty → 0) — but not what that function does inside. Grep
+      // the page and the bundles for its definition/body, so the
+      // derivation (geo? stored value? always 0?) surfaces.
+      const pageFnMatches = extractGetOfficeIdMatches(form.text);
       const scripts = [];
       // Up to 15 bundles (was 5): the live page's first 5 srcs are
       // libraries (jquery, bootstrap, ...) with no office matches —
@@ -509,13 +515,13 @@ async function runStageAProbe(opts = {}) {
           const bundle = await client.fetchPageText(src);
           const capped = bundle.bodyLength > 500000;
           const text = capped ? bundle.text.slice(0, 500000) : bundle.text;
-          scripts.push({ url: src, status: bundle.status, ok: bundle.ok, bodyLength: bundle.bodyLength, truncated: capped, matches: extractOfficeMatches(text), callMatches: extractOfficeCallMatches(text) });
+          scripts.push({ url: src, status: bundle.status, ok: bundle.ok, bodyLength: bundle.bodyLength, truncated: capped, matches: extractOfficeMatches(text), callMatches: extractOfficeCallMatches(text), fnMatches: extractGetOfficeIdMatches(text) });
         } catch (e) {
           scripts.push({ url: src, ok: false, error: e.code || 'SCRIPT_FETCH_FAILED', message: e.message });
         }
       }
       steps.push('script');
-      results.script = { ok: form.ok, page: { url: form.url, status: form.status, contentType: form.contentType, bodyLength: form.bodyLength }, pageMatches, pageCallMatches, scripts };
+      results.script = { ok: form.ok, page: { url: form.url, status: form.status, contentType: form.contentType, bodyLength: form.bodyLength }, pageMatches, pageCallMatches, pageFnMatches, scripts };
       if (!form.ok) allOk = false;
     } catch (e) {
       allOk = false;
@@ -563,6 +569,24 @@ function extractOfficeCallMatches(text, maxMatches = 5, context = 400) {
   return out;
 }
 
+// getOfficeId grep for the script probe (pure, tested): same
+// +-context shape, matching the page function name getOfficeId —
+// so its definition/body (and its call sites) surface with context.
+// Capped so a huge page cannot flood the ack.
+function extractGetOfficeIdMatches(text, maxMatches = 5, context = 400) {
+  const out = [];
+  if (!text) return out;
+  const re = /getOfficeId/gi;
+  let m;
+  while (out.length < maxMatches && (m = re.exec(text)) !== null) {
+    const start = Math.max(0, m.index - context);
+    const end = Math.min(text.length, m.index + m[0].length + context);
+    out.push({ at: m.index, match: m[0], context: text.slice(start, end) });
+    if (m.index === re.lastIndex) re.lastIndex++;
+  }
+  return out;
+}
+
 // Same-origin <script src> list for the script probe (pure, tested):
 // relative paths kept, absolute URLs kept only on the same base,
 // third-party / data: / blob: skipped, duplicates removed.
@@ -585,4 +609,4 @@ function extractScriptSrcs(html, base = '') {
   return srcs;
 }
 
-module.exports = { runHttpChain, runSubmitHttpChain, runStageAProbe, getHttpPathStatus, normalizeChainInput, isHttpPathEnabled, isFallbackSafe, HTTP_CANDIDATE_LABEL, HTTP_BASE, extractOfficeMatches, extractOfficeCallMatches, extractScriptSrcs };
+module.exports = { runHttpChain, runSubmitHttpChain, runStageAProbe, getHttpPathStatus, normalizeChainInput, isHttpPathEnabled, isFallbackSafe, HTTP_CANDIDATE_LABEL, HTTP_BASE, extractOfficeMatches, extractOfficeCallMatches, extractGetOfficeIdMatches, extractScriptSrcs };
