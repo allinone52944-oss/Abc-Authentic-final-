@@ -1989,7 +1989,15 @@ async function warmFromData() {
       const want = data[L.k];
       const node = $(L.ui);
       if (!node) { setGeoState(L.k, GEO_LEVELS, 'error'); continue; }
-      if (!want) { setGeoState(L.k, GEO_LEVELS, 'idle'); break; }
+      // Phase 2 (2026-10-27): do NOT reset to idle here. The previous
+      // level's geoLoad (or divFillP for division) has JUST loaded
+      // this level's options; setGeoState('idle') wipes them back to
+      // the placeholder, so step-2 first paint showed an empty
+      // division list until the country was toggled (a toggle goes
+      // through geoChanged, which never runs this loop). Breaking
+      // without wiping keeps the freshly loaded options; geoChanged
+      // still clears downstream levels on a real parent change.
+      if (!want) { break; }
       if (node.tagName === 'SELECT') {
         if (!setSelByText(L.ui, want)) {
           // Option এখনো আসেনি — level reload করে আবার চেষ্টা

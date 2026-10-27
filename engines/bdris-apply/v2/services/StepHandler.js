@@ -773,6 +773,10 @@ class StepHandler {
           if (want && !actual) keep(await this.fillInput(sel, want, label + ' (আবার বসানো হলো)'));
         }
       } catch { /* re-verify is best-effort; Next validation is the gate */ }
+      // Phase 2: first-read-back name misses re-validated HERE
+      // (pre-Next) — after Next the person fields may be gone, so
+      // a post-Next read-back would see '' and drop nothing.
+      await this._dropStaleNameFailures(data, failed);
       const nxt1 = await this._clickNextAndWait('পরবর্তী (ধাপ ২)', {
         nextAnchor: ['#fatherBrn', 'input[name="personInfoForBirth.father.ubrn"]'],
       });
@@ -793,6 +797,10 @@ class StepHandler {
           // Site নিশ্চিতভাবে পরের ধাপে — প্রথম fill-এর ক্ষণস্থায়ী
           // miss-গুলো stale; page থেকে আবার যাচাই করে বাদ দাও।
           await this._dropStaleAddressFailures('birthPlace', data, failed);
+          // Phase 2: same re-validation for names — a no-op if the
+          // person fields are gone from the page, a catch for late
+          // settles if the form keeps its sections in the DOM.
+          await this._dropStaleNameFailures(data, failed);
         }
       }
     }
@@ -2461,6 +2469,64 @@ class StepHandler {
     if (dropped) {
       failed.splice(0, failed.length, ...kept);
       this.progress(`↻ ধাপ ২: ${dropped}টি পুরনো ভুল বাদ দেওয়া হলো (সাইটে ঠিকমতো বসেছে)`);
+    }
+    return dropped;
+  }
+
+  // Phase 2 (2026-10-27): S1 stale name-fail fix — the name
+  // counterpart of _dropStaleAddressFailures. The FIRST read-back
+  // in submitS1 uses strict equality (actual !== want), while
+  // fillInput's own check passes on ANY non-empty value — so a
+  // site-mangled or cascade-cleared name that is later present in
+  // equivalent form still leaves a 'সাইটে নাম ঠিকমতো বসেনি' entry
+  // in the S1 ack, which the optimistic UI then paints as a late
+  // panel on step 4. Names are re-validated BEFORE Next (unlike
+  // addresses, which are re-checked after the parents anchor):
+  // after Next the person fields may no longer be on the page, so
+  // a post-Next read-back would see '' and drop nothing. Only the
+  // exact read-back reason is dropped, and only on strict loose
+  // equality (dots/dashes/commas/danda/spaces stripped, same key
+  // as addresses) — a genuine mismatch (wrong name, near-miss,
+  // empty field) is KEPT, because that is a real data-quality
+  // issue, not display staleness. A pure case difference is also
+  // kept (conservative, no evidence the site re-cases names).
+  async _dropStaleNameFailures(data, failed) {
+    const NAME_MAP = [
+      ['নামের প্রথম অংশ (বাংলা)', 'personFirstNameBn', data.firstNameBn],
+      ['নামের শেষ অংশ (বাংলা)', 'personLastNameBn', data.lastNameBn],
+      ['First Name (English)', 'personFirstNameEn', data.firstNameEn],
+      ['Last Name (English)', 'personLastNameEn', data.lastNameEn],
+    ];
+    const actual = await this.page.evaluate(() => {
+      const g = (id, namePart) => {
+        let el = document.querySelector(id);
+        if (!el) el = document.querySelector(`input[name*="${namePart}"]`);
+        return el ? String(el.value || '') : '';
+      };
+      return {
+        personFirstNameBn: g('#personFirstNameBn', 'personFirstNameBn'),
+        personLastNameBn: g('#personLastNameBn', 'personLastNameBn'),
+        personFirstNameEn: g('#personFirstNameEn', 'personFirstNameEn'),
+        personLastNameEn: g('#personLastNameEn', 'personLastNameEn'),
+      };
+    }).catch(() => null);
+    if (!actual) return 0;
+    const loose = (s) => String(s || '').replace(/[\.\-\u2010-\u2015,\u0964]/g, '').replace(/\s+/g, '');
+    const READBACK_REASON = 'সাইটে নাম ঠিকমতো বসেনি — আবার চেষ্টা করুন';
+    const kept = [];
+    let dropped = 0;
+    for (const f of failed) {
+      const m = NAME_MAP.find(([lbl]) => lbl === f.field);
+      if (!m || f.reason !== READBACK_REASON) { kept.push(f); continue; }
+      const [, key, rawWant] = m;
+      const want = transitName(rawWant);
+      const got = actual[key] || '';
+      if (want && got && loose(got) === loose(want)) { dropped++; continue; }
+      kept.push(f);
+    }
+    if (dropped) {
+      failed.splice(0, failed.length, ...kept);
+      this.progress(`↻ ধাপ ২: ${dropped}টি পুরনো নামের ভুল বাদ দেওয়া হলো (সাইটে ঠিকমতো বসেছে)`);
     }
     return dropped;
   }
