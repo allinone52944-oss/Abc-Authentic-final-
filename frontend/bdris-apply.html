@@ -442,6 +442,12 @@ input.bad, select.bad{border-color:var(--err); box-shadow:0 0 0 3px rgba(251,113
     <div class="btnrow" id="btnRow"></div>
     <div class="livenote" id="liveNote"></div>
     <div class="failbox" id="failBox"></div>
+    <details class="guide-det"><summary>🔬 Stage A প্রোব (ডায়াগনস্টিক)</summary><div class="gbody">
+      <p>সরাসরি পথের সামনের অর্ধেক যাচাই করে — সিড + ভূগোল + অফিস খোঁজা। আপলোড, OTP বা সাবমিট করে না, আবেদনের তথ্যে হাত দেয় না। জন্মস্থানের বর্তমান সিলেকশন থেকে ভূগোল-চেইন বানায় (উপজেলা-পথ; ইউনিয়ন না মিললে পৌরসভা দিয়ে আবার চেষ্টা করে)। অফিস geoId দিলে অফিস খোঁজাও চেষ্টা করে (প্যারামিটার-নাম এখনো অযাচাই)।</p>
+      <div><button class="btn" id="probeBtn">▶ প্রোব চালান</button>
+      <input id="probeOfficeGeoId" placeholder="অফিস geoId (ঐচ্ছিক)" style="margin-left:8px;padding:6px"></div>
+      <pre id="probeOut" style="white-space:pre-wrap;word-break:break-all;margin-top:8px">এখনো চালানো হয়নি।</pre>
+    </div></details>
   </main>
 
   <div class="footer">
@@ -1740,6 +1746,66 @@ function fetchAddrOpts(level, parents, tmo, form) {
     });
   });
 }
+/* ── Stage A probe trigger (2026-10-27) ──
+   Direct socket emit like fetchAddrOpts (ack callback, 60 s timeout) —
+   deliberately NOT through the step queue: the probe is not a form
+   step, touches no S.d, no draft, no navigation, and never uploads,
+   sends/verifies OTP, or submits. Chain built from the CURRENT
+   birthplace selects (upazila path: division→1, district→2,
+   upazila→3, paurasavaUnion→5, ward→6 + ward:true). If the union
+   step (type 5) misses, retry once with paurasava (type 4) — the
+   only two documented types for that level — and show both
+   attempts. With no birthplace selection and no office geoId the
+   probe still runs and proves seed + bootstrap-skip alone. Office
+   param name `geoId` is a first guess, NOT verified — a failure
+   there is diagnostic, not a button bug. */
+function probeChainFromBirthplace() {
+  const selText = (id) => {
+    const e = $(id);
+    return e && e.tagName === 'SELECT' && e.value && e.selectedOptions && e.selectedOptions[0] ? e.selectedOptions[0].text : '';
+  };
+  const steps = [];
+  const div = selText('g_div'); if (div) steps.push({ geoType: 1, nameBn: div });
+  const dist = selText('g_dist'); if (dist) steps.push({ geoType: 2, nameBn: dist });
+  const cc = selText('g_cc'); if (cc) steps.push({ geoType: 3, nameBn: cc });
+  const pu = selText('g_pu'); if (pu) steps.push({ geoType: 5, nameBn: pu });
+  const ward = selText('g_ward'); if (ward) steps.push({ geoType: 6, nameBn: ward, ward: true });
+  return steps.length ? { firstParentId: '1', firstGeoOrder: 1, steps } : null;
+}
+function emitProbeOnce(payload, cb) {
+  let done = false;
+  const t = setTimeout(() => { if (!done) { done = true; cb(null); } }, 60000);
+  socket.emit('HTTP_PROBE_STAGE_A', payload, (r) => {
+    if (!done) { done = true; clearTimeout(t); cb(r); }
+  });
+}
+function runStageAProbeBtn() {
+  const out = $('probeOut'); const btn = $('probeBtn');
+  if (!out || !btn) return;
+  if (!socket || !socket.connected) { out.textContent = 'সার্ভারের সাথে সংযোগ নেই — পেজ রিফ্রেশ করে আবার চেষ্টা করুন।'; return; }
+  const officeGeoId = ($('probeOfficeGeoId') ? $('probeOfficeGeoId').value : '').trim();
+  const officePart = officeGeoId ? { officeParams: { geoId: officeGeoId }, officeProjectionParams: { geoId: officeGeoId } } : {};
+  btn.disabled = true;
+  out.textContent = '⏳ প্রোব চলছে… (সিড + ভূগোল + অফিস, আপলোড/OTP/সাবমিট নয়)';
+  const show = (r) => {
+    btn.disabled = false;
+    out.textContent = r ? JSON.stringify(r, null, 2) : '⌛ সময় শেষ (৬০ সেকেন্ড) — সার্ভার উত্তর দেয়নি।';
+  };
+  const firstChain = probeChainFromBirthplace();
+  const firstPayload = Object.assign({}, officePart, firstChain ? { geoChain: firstChain } : {});
+  emitProbeOnce(firstPayload, (r) => {
+    if (!r || !r.results || !r.results.geo || r.results.geo.error !== 'GEO_NOT_FOUND' || !firstChain) { show(r); return; }
+    const retrySteps = firstChain.steps.map((s) => (s.geoType === 5 ? Object.assign({}, s, { geoType: 4 }) : s));
+    if (!retrySteps.some((s, i) => s.geoType !== firstChain.steps[i].geoType)) { show(r); return; }
+    out.textContent = 'ইউনিয়ন (type 5) মেলেনি — পৌরসভা (type 4) দিয়ে আবার চেষ্টা হচ্ছে…';
+    const retryPayload = Object.assign({}, officePart, { geoChain: Object.assign({}, firstChain, { steps: retrySteps }) });
+    emitProbeOnce(retryPayload, (r2) => {
+      btn.disabled = false;
+      out.textContent = 'প্রথম চেষ্টা (type 5):\n' + JSON.stringify(r, null, 2) + '\n\nদ্বিতীয় চেষ্টা (type 4):\n' + (r2 ? JSON.stringify(r2, null, 2) : '⌛ সময় শেষ (৬০ সেকেন্ড) — সার্ভার উত্তর দেয়নি।');
+    });
+  });
+}
+try { const pb = $('probeBtn'); if (pb) pb.addEventListener('click', runStageAProbeBtn); } catch (e) {}
 function mirrorSelect(sel, label, childSel, value) {
   return new Promise((res) => {
     let done = false;
