@@ -1797,7 +1797,7 @@ function runStageAProbeBtn() {
     if (!r || !r.results || !r.results.geo || r.results.geo.error !== 'GEO_NOT_FOUND' || !firstChain) { show(r); return; }
     const retrySteps = firstChain.steps.map((s) => (s.geoType === 5 ? Object.assign({}, s, { geoType: 4 }) : s));
     if (!retrySteps.some((s, i) => s.geoType !== firstChain.steps[i].geoType)) { show(r); return; }
-    out.textContent = 'ইউনিয়ন (type 5) মেলেনি — পৌরসভা (type 4) দিয়ে আবার চেষ্টা হচ্ছে…';
+    out.textContent = 'প্রথম চেষ্টা মেলেনি — পৌরসভা (type 4) দিয়ে আবার চেষ্টা হচ্ছে…';
     const retryPayload = Object.assign({}, officePart, { geoChain: Object.assign({}, firstChain, { steps: retrySteps }) });
     emitProbeOnce(retryPayload, (r2) => {
       btn.disabled = false;
