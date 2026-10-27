@@ -278,15 +278,7 @@ function extractTdTexts(html) {
         .replace(/<script[\s\S]*?<\/script>/gi, ' ')
         .replace(/<style[\s\S]*?<\/style>/gi, ' ')
         .replace(/<!--[\s\S]*?-->/g, ' ');
-    const unesc = (s) => String(s)
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/&nbsp;/gi, ' ')
-        .replace(/&amp;/gi, '&')
-        .replace(/&lt;/gi, '<')
-        .replace(/&gt;/gi, '>')
-        .replace(/&quot;/gi, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n))
+    const unesc = (s) => decodeHtmlEntities(String(s).replace(/<[^>]+>/g, ' '))
         .replace(/\s+/g, ' ')
         .trim();
 
@@ -306,10 +298,43 @@ function extractTdTexts(html) {
             .replace(/&nbsp;/gi, ' ')
             .replace(/&amp;/gi, '&')
             .split(SEP)
-            .map(s => s.replace(/\s+/g, ' ').trim())
+            .map(s => decodeHtmlEntities(s).replace(/\s+/g, ' ').trim())
             .filter(Boolean);
     }
     return cells;
+}
+
+// PERMANENT (2026-10-27): BDRIS theke asa SOB lekhar ekmatro entity decoder.
+// Age decoder chhilo chhorano (cell path-e chhilo, div path-e ar footer
+// fallback-e chhilo na) — tai notun record-e notun kore entity dekha dito.
+// Ekhon theke sob entry point ei ektai function byabohar kore.
+function decodeHtmlEntities(s) {
+    return String(s || '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n));
+}
+
+// NB footer (<p>/<div>-e, table-r baire) theke office location cell.
+// Age handler-e inline regex chhilo; ekhon namkora function, jate sthayi
+// test-e sorasori chalano jay. Capture-e entity age thekei decode hoy.
+// 2026-10-27: [^.] broke locations starting with a dotted abbreviation
+// (e.g. "P.M. KHALI, ...") — capture up to the footer boilerplate marker
+// instead; normalizeBdrisData already splits there and strips trailing dots.
+function extractNbFooterLocation(html) {
+    const m = String(html || '')
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .match(/location of the register office\s*:?\s*((?:(?!\.\s*(?:everify|https?:|www\.)).){2,300})/i);
+    if (!m) return null;
+    return 'Location of the Register office: ' + decodeHtmlEntities(m[1]).trim();
 }
 
 // Tolerant label normalize: markup/space/case/punctuation drift jeneo match koro.
@@ -506,20 +531,8 @@ function normalizeBdrisData(data) {
     const titleCase = (s) => String(s || '').toLowerCase()
         .split(/(\s+)/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
 
-    // --- HTML entities: BDRIS raw HTML encodes apostrophes as &#39;.
-    // The NB-footer fallback regex captures raw HTML, unlike the table
-    // cells which extractTdTexts already decodes — so without this,
-    // office2 kept the literal text "Cox&#39;s ..." and the frontend
-    // esc() escaped the & again, showing the entity on screen.
-    // Decode BEFORE the comma split (2026-10-27).
-    const decodeEntities = (s) => String(s || '')
-        .replace(/&nbsp;/gi, ' ')
-        .replace(/&amp;/gi, '&')
-        .replace(/&lt;/gi, '<')
-        .replace(/&gt;/gi, '>')
-        .replace(/&quot;/gi, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n));
+    // PERMANENT: decode ekhon shudhu top-level decodeHtmlEntities-e;
+    // normalize-e alada copy rakha hoy na.
 
     // --- Date: "29 September 2026" -> "29/09/2026" ---
     const months = { january: '01', february: '02', march: '03', april: '04', may: '05', june: '06', july: '07', august: '08', september: '09', october: '10', november: '11', december: '12' };
@@ -594,7 +607,7 @@ function normalizeBdrisData(data) {
         const lm = String(out.officeLocationRaw).match(/location of the register office\s*:?\s*([\s\S]+)$/i);
         if (lm) {
             let loc = String(lm[1]).split(/[.。]\s*(https?:|everify|www\.)/i)[0].replace(/[.。]+$/, '').trim();
-            loc = decodeEntities(loc);
+            loc = decodeHtmlEntities(loc);
             // Footer junk that can trail the location when no everify
             // marker precedes it (e.g. "© 2026 - Developed and maintained
             // by ...") — a real location never contains these, so strip
@@ -710,22 +723,12 @@ app.post('/api/verify', async (req, res) => {
         const tds = extractTdTexts(html);
         // NB footer table-r baire (<p>/<div>) hole td-th parse-e ashe na —
         // pura html theke office location niche nao, nahole office2 khali thake.
+        // NB footer table-r baire (<p>/<div>) hole td-th parse-e ashe na —
+        // pura html theke office location niche nao, nahole office2 khali thake.
+        // PERMANENT: namkora extractNbFooterLocation (upore) — entity decode-soho.
         if (!tds.some(t => /location of the register office/i.test(t))) {
-            const m = String(html)
-                .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-                .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-                .replace(/<[^>]+>/g, ' ')
-                .replace(/&nbsp;/gi, ' ')
-                .replace(/\s+/g, ' ')
-                // 2026-10-27: [^.] broke locations starting with a dotted
-                // abbreviation (e.g. "P.M. KHALI, ...") — the first dot ended
-                // the capture, so no fallback cell was pushed and office2
-                // stayed empty even though the location IS on the page.
-                // Capture up to the footer boilerplate marker instead;
-                // normalizeBdrisData already splits at ". everify"/http/www
-                // and strips trailing dots, so trailing junk is cleaned there.
-                .match(/location of the register office\s*:?\s*((?:(?!\.\s*(?:everify|https?:|www\.)).){2,300})/i);
-            if (m) tds.push('Location of the Register office: ' + m[1].trim());
+            const fb = extractNbFooterLocation(html);
+            if (fb) tds.push(fb);
         }
         const data = normalizeBdrisData(mapResultData(tds));
 
