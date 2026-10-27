@@ -394,6 +394,7 @@ class OriginalFetcher {
       if (hit) {
         const buf = Buffer.from(hit.b64, 'base64');
         const file = 'bdris-original-' + this.keyOf(rec.appId) + '.pdf';
+        fs.mkdirSync(this.frontendDir, { recursive: true }); // ডিরেক্টরি না থাকলে লেখা ব্যর্থ হতো (ENOENT)
         fs.writeFileSync(path.join(this.frontendDir, file), buf);
         try {
           fs.mkdirSync(this.archiveDir, { recursive: true });
