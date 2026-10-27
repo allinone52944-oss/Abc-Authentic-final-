@@ -16,6 +16,7 @@
  */
 
 const crypto = require('crypto');
+const path = require('path');
 const { BrowserManager } = require('./core/BrowserManager');
 
 function verifyJwtHS256(token, secret) {
@@ -65,6 +66,10 @@ class BdrisEngineV2 {
     // চলমান আবেদন-সেশনে হাত দেয় না।
     this.originalFetcher = new OriginalFetcher({
       browserManager: this.browserManager,
+      // আসল PDF-এর ফাইল সার্ভ করা frontend ডিরেক্টরিতে লিখতে হবে (backend
+      // এখান থেকেই static serve করে)। ডিফল্ট engines/frontend পথটি dead —
+      // সেখানে লিখলে URL 404 হয়, ডাউনলোড করা ফাইল খোলা যায় না (2026-10-28)।
+      frontendDir: path.join(__dirname, '..', '..', '..', 'frontend'),
       log: (...a) => this.log(...a),
     });
 

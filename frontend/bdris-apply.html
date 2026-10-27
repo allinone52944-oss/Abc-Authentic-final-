@@ -2683,6 +2683,10 @@ function renderOtpCode(sent) {
         if (otp.length < 6) { note('⚠️ মোবাইলে আসা ৬ ডিজিটের কোডটি সম্পূর্ণ লিখুন', 'warn'); return; }
         S.otpStage = 'submitting'; S._failReported = false;
         busy(true, '⏳ আবেদন জমা হচ্ছে… একটু অপেক্ষা করুন');
+        // এলোমেলো-এরর ফিক্স (2026-10-28): জমা চাপলেই আগের ধাপের পুরনো
+        // এরর-লেখা মুছবে — DONE আসতে দেরি হলেও পুরনো লেখা জমার উপর
+        // বসে থাকবে না; জমায় নতুন এরর এলে fail পথ আবার দেখাবে।
+        hideFail(); hideBanner(); noteOff();
         // গার্ড আটকালে সোজা আগের স্ক্রিনে ফিরি — বাটন চিরতরে নিষ্ক্রিয় হয় না
         if (emitStep('SUBMIT_S4_OTP', { otp }) === false) { S.otpStage = 'code'; busy(false); }
       } },
@@ -3720,7 +3724,7 @@ function manualStepAck(d) {
     const rp = (op && op !== 'SUBMIT_S4_OTP') ? payloadFor(op) : null;
     if (rp) {
       showBanner('warn', '⚠️ একটি ধাপে সমস্যা হয়েছে — ঠিক করা দরকার।', () => {
-        hideBanner(); note('⏳ আবার পাঠানো হচ্ছে…', 'info'); emitStep(op, rp);
+        hideBanner(); hideFail(); note('⏳ আবার পাঠানো হচ্ছে…', 'info'); emitStep(op, rp);
       }, op === 'SUBMIT_S4_PREP' ? 'আবার কোড পাঠান' : 'আবার চেষ্টা করুন');
     }
     return;
