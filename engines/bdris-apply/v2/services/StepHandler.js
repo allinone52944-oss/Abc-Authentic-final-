@@ -812,6 +812,12 @@ class StepHandler {
     }
 
     if (failed.length) {
+      // TEMPORARY capture (2026-10-27): the browser agent cannot inspect
+      // websocket acks, so the S1 nameCheck values are unreachable from
+      // the page. Log them server-side for one demo capture round, then
+      // REMOVE this line — it must not stay for real applications.
+      // (Precedent: S3-FATHER-VALUES logging in this file.)
+      console.log('S1-NAMECHECK', JSON.stringify(nameCheck));
       return { ok: false, failed, message: `${failed.length}টি ফিল্ড পূরণ হয়নি`, nameCheck };
     }
 
