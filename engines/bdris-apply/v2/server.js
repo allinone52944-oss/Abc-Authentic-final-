@@ -917,6 +917,30 @@ class BdrisEngineV2 {
         }
       });
 
+      // Phase 1 (2026-10-27): value-first DOM mirror — frontend
+      // geoMirror already sends {selector, label, value, childSelector}
+      // but v2 had no handler, so mirrors died in a 14s timeout and
+      // geoChanged swallowed it. Ported from the old server's
+      // SELECT_DOM_OPTION (value first, then label fallback).
+      socket.on('SELECT_DOM_OPTION', async (data = {}, callback) => {
+        try {
+          if (!sessionId) { if (callback) callback({ error: 'Bot not ready' }); return; }
+          const session = this.sessionManager.get(sessionId);
+          if (!session || !session.page) { if (callback) callback({ error: 'Bot not ready' }); return; }
+          this.sessionManager.touch(sessionId);
+          const nav = new BdrisNavigator(session.page);
+          const { selector, label, childSelector, value } = data || {};
+          let done = false;
+          if (value) done = await nav.selectOption(selector, '', { value });
+          if (!done && label) done = await nav.selectOption(selector, label);
+          if (!done) { if (callback) callback({ error: `Option not found: ${label}` }); return; }
+          if (childSelector) await nav.waitForOptions(childSelector, 10000).catch(() => {});
+          if (callback) callback({ success: true });
+        } catch (e) {
+          if (callback) callback({ error: 'অপশন বাছা যায়নি — আবার চেষ্টা করুন' });
+        }
+      });
+
       socket.on('disconnect', async () => {
         this.log(`Disconnected: ${socket.id}`);
         // Don't destroy session immediately — allow reconnection

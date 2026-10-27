@@ -789,6 +789,10 @@ class StepHandler {
         if (!parentsHere) {
           const b = await this._detectValidationBlock(null);
           failed.push({ field: 'পরবর্তী (ধাপ ২)', reason: (b.blocked && b.reason) || 'সাইট পরের ধাপে যায়নি — তথ্য মিলিয়ে আবার চেষ্টা করুন' });
+        } else {
+          // Site নিশ্চিতভাবে পরের ধাপে — প্রথম fill-এর ক্ষণস্থায়ী
+          // miss-গুলো stale; page থেকে আবার যাচাই করে বাদ দাও।
+          await this._dropStaleAddressFailures('birthPlace', data, failed);
         }
       }
     }
@@ -2104,7 +2108,7 @@ class StepHandler {
 
   // v1 selectByLabel-এর candidate-loop সেমান্টিক্স: candidates ক্রমানুসারে চেষ্টা,
   // প্রথম মিললেই থামো। সফল হলে 1100ms অপেক্ষা (cascade timing)।
-  async _selectFirstMatch(selector, candidates, label) {
+  async _selectFirstMatch(selector, candidates, label, value) {
     const cands = (Array.isArray(candidates) ? candidates : [candidates]).filter(c => c && String(c).trim());
     if (!cands.length) {
       this.progress(`⊘ ${label}: মান দেওয়া হয়নি, এড়িয়ে যাওয়া হলো`);
@@ -2115,6 +2119,16 @@ class StepHandler {
       const reason = `${label} ঘর পাওয়া যায়নি`;
       this.progress(`⚠ ${reason}`);
       return { ok: false, field: label, reason };
+    }
+    // Phase 1 (2026-10-27): value-first (geo id) — spelling-proof.
+    // Falls through to the text candidates below when absent.
+    if (value != null && String(value) !== '') {
+      const byVal = await this.navigator.selectOptionByValue(selector, String(value));
+      if (byVal) {
+        await this.page.waitForTimeout(1100);
+        this.progress(`✔ ${label} (আইডি দিয়ে মিলেছে)`);
+        return { ok: true };
+      }
     }
     for (const cand of cands) {
       const done = await this.navigator.selectOption(selector, cand);
@@ -2388,6 +2402,69 @@ class StepHandler {
     }, prefix).catch(() => ({}));
   }
 
+  // Phase 1 (2026-10-27): S1 stale-fail fix (S2-র advance-নিয়মের আদলে)।
+  // Site পরের ধাপে গেছে (parents anchor দেখা গেছে) অথচ failed[]-এ
+  // প্রথম _fillAddressSection-এর ক্ষণস্থায়ী miss রয়ে গেছে — UI
+  // আগেই এগিয়ে গেছে বলে late ack-এ পুরনো ভুল প্যানেল দেখায়।
+  // শুধু ঠিকানা-ফিল্ডগুলো page থেকে আবার পড়ে যাচাই করি: যেটা
+  // এখন ঠিকমতো বসেছে সেটা বাদ, আসলেই ভুলটা থাকে।
+  async _dropStaleAddressFailures(prefix, data, failed) {
+    const FIELD_MAP = [
+      ['দেশ', 'Country', null, data.country || 'বাংলাদেশ', false],
+      ['বিভাগ', 'Div', null, data.division, false],
+      ['জেলা', 'Dist', null, data.district, false],
+      ['সিটি কর্পোরেশন/উপজেলা', 'CityCorpCantOrUpazila', null, data.cityCorpUpazila, false],
+      ['অঞ্চল', 'WardInCityCorp', 'PaurasavaOrUnion', data.paurasavaUnion, false],
+      ['পৌরসভা/ইউনিয়ন', 'PaurasavaOrUnion', null, data.paurasavaUnion, false],
+      ['ওয়ার্ড', 'WardInPaurasavaOrUnion', 'WardInCityCorp', data.ward, false],
+      ['ডাকঘর (বাংলা)', 'PostOfc', null, data.postOfficeBn || data.postBn, true],
+      ['ডাকঘর (ইংরেজি)', 'PostOfcEn', null, data.postOfficeEn || data.postEn, true],
+      ['পোস্ট কোড', 'PostCode', null, data.postCode, true],
+      ['গ্রাম/পাড়া/মহল্লা', 'VilAreaTownBn', null, data.villageBn || data.vilBn, true],
+      ['গ্রাম/পাড়া/মহল্লা (ইংরেজি)', 'VilAreaTownEn', null, data.villageEn || data.vilEn, true],
+      ['বাসা ও সড়ক (বাংলা)', 'HouseRoadBn', null, data.houseRoadBn || data.houseBn, true],
+      ['বাসা ও সড়ক (ইংরেজি)', 'HouseRoadEn', null, data.houseRoadEn || data.houseEn, true],
+    ];
+    const actual = await this.page.evaluate((pre) => {
+      const out = {};
+      const selText = (n) => {
+        const e = document.querySelector(`select[name="${pre}${n}"]`);
+        if (!e || !e.options || e.selectedIndex < 0) return '';
+        const t = String(e.options[e.selectedIndex].text || '').trim();
+        return /^---/.test(t) ? '' : t;
+      };
+      const inp = (n) => {
+        const e = document.querySelector(`input[name="${pre}${n}"]`);
+        return e ? String(e.value || '').trim() : '';
+      };
+      for (const n of ['Country', 'Div', 'Dist', 'CityCorpCantOrUpazila', 'WardInCityCorp', 'PaurasavaOrUnion', 'WardInPaurasavaOrUnion']) out['S:' + n] = selText(n);
+      for (const n of ['PostOfc', 'PostOfcEn', 'PostCode', 'VilAreaTownBn', 'VilAreaTownEn', 'HouseRoadBn', 'HouseRoadEn']) out['I:' + n] = inp(n);
+      return out;
+    }, prefix).catch(() => null);
+    if (!actual) return 0;
+    // Strict loose equality only (dots/dashes/commas/danda/spaces
+    // stripped) — includes-matching would wrongly drop real mismatches
+    // (e.g. want "ওয়ার্ড - 7", got "ওয়ার্ড - 71").
+    const loose = (s) => String(s || '').replace(/[\.\-\u2010-\u2015,\u0964]/g, '').replace(/\s+/g, '');
+    const kept = [];
+    let dropped = 0;
+    for (const f of failed) {
+      const m = FIELD_MAP.find(([lbl]) => lbl === f.field);
+      if (!m) { kept.push(f); continue; }
+      const [, primary, alt, want, isInput] = m;
+      if (!want) { kept.push(f); continue; }
+      const got = isInput ? (actual['I:' + primary] || '')
+        : (actual['S:' + primary] || (alt ? actual['S:' + alt] || '' : ''));
+      if (got && loose(got) === loose(want)) { dropped++; continue; }
+      kept.push(f);
+    }
+    if (dropped) {
+      failed.splice(0, failed.length, ...kept);
+      this.progress(`↻ ধাপ ২: ${dropped}টি পুরনো ভুল বাদ দেওয়া হলো (সাইটে ঠিকমতো বসেছে)`);
+    }
+    return dropped;
+  }
+
   async _fillAddressSection(prefix, d, failed) {
     const keep = (r) => { if (r && !r.ok && !r.skipped) failed.push({ field: r.field, reason: r.reason }); };
     // দেশ আগে বসাই — কোনো সেকশনে খালি থাকলে সাইট "পরবর্তী"-তে আটকায় (2026-10-11)
@@ -2398,13 +2475,13 @@ class StepHandler {
       }
       return false;
     }, countrySels).catch(() => false);
-    if (hasCountry) keep(await this._selectFirstMatch(countrySels, [d.country || 'বাংলাদেশ'], 'দেশ'));
-    keep(await this._selectFirstMatch([`#${prefix}Div`, `select[name="${prefix}Div"]`], [d.division], 'বিভাগ'));
+    if (hasCountry) keep(await this._selectFirstMatch(countrySels, [d.country || 'বাংলাদেশ'], 'দেশ', d.countryId));
+    keep(await this._selectFirstMatch([`#${prefix}Div`, `select[name="${prefix}Div"]`], [d.division], 'বিভাগ', d.divisionId));
     await this.navigator.waitForOptions(`select[name="${prefix}Dist"]`, 8000);
-    keep(await this._selectFirstMatch([`#${prefix}Dist`, `select[name="${prefix}Dist"]`], [d.district], 'জেলা'));
+    keep(await this._selectFirstMatch([`#${prefix}Dist`, `select[name="${prefix}Dist"]`], [d.district], 'জেলা', d.districtId));
     await this.navigator.waitForOptions(`select[name="${prefix}CityCorpCantOrUpazila"]`, 8000);
     keep(await this._selectFirstMatch([`#${prefix}CityCorpCantOrUpazila`, `select[name="${prefix}CityCorpCantOrUpazila"]`],
-      [d.cityCorpUpazila], 'সিটি কর্পোরেশন/উপজেলা'));
+      [d.cityCorpUpazila], 'সিটি কর্পোরেশন/উপজেলা', d.cityCorpUpazilaId));
     // ── অঞ্চল/পৌরসভা-ইউনিয়ন + ওয়ার্ড (live-verified 2026-10-11, ঢাকা দক্ষিণ সিটি কর্পোরেশন) ──
     // সিটি কর্পোরেশন-ধাঁচ: PaurasavaOrUnion select খালি থাকে; "অঞ্চল - ৭" আসে WardInCityCorp
     // select-এ; অঞ্চল বাছলে ওয়ার্ড ("ওয়ার্ড - 71") লোড হয় WardInPaurasavaOrUnion select-এ।
@@ -2426,23 +2503,23 @@ class StepHandler {
         zonePath = (await this.navigator.waitForOptions(`select[name="${prefix}WardInCityCorp"]`, 5000)) && (await hasOpts(cityWard));
       }
       if (zonePath) {
-        keep(await this._selectFirstMatch(cityWard, unionCandidates(d.paurasavaUnion), 'অঞ্চল'));
+        keep(await this._selectFirstMatch(cityWard, unionCandidates(d.paurasavaUnion), 'অঞ্চল', d.paurasavaUnionId));
       } else {
         if (!(await hasOpts(unionSlot))) await this.navigator.waitForOptions(`select[name="${prefix}PaurasavaOrUnion"]`, 8000);
-        keep(await this._selectFirstMatch(unionSlot, unionCandidates(d.paurasavaUnion), 'পৌরসভা/ইউনিয়ন'));
+        keep(await this._selectFirstMatch(unionSlot, unionCandidates(d.paurasavaUnion), 'পৌরসভা/ইউনিয়ন', d.paurasavaUnionId));
       }
     }
     if (d.ward) {
       if (cityCorp) {
         // অঞ্চল বাছার পর ওয়ার্ড-তালিকা অ্যাসিন্ক আসে — অপেক্ষা করে বসাই
         if (!(await hasOpts(unionWard))) await this.navigator.waitForOptions(`select[name="${prefix}WardInPaurasavaOrUnion"]`, 8000);
-        if (await hasOpts(unionWard)) keep(await this._selectFirstMatch(unionWard, wardCandidates(d.ward), 'ওয়ার্ড'));
-        else if (await hasOpts(cityWard)) keep(await this._selectFirstMatch(cityWard, wardCandidates(d.ward), 'ওয়ার্ড'));
+        if (await hasOpts(unionWard)) keep(await this._selectFirstMatch(unionWard, wardCandidates(d.ward), 'ওয়ার্ড', d.wardId));
+        else if (await hasOpts(cityWard)) keep(await this._selectFirstMatch(cityWard, wardCandidates(d.ward), 'ওয়ার্ড', d.wardId));
         else keep({ ok: false, field: 'ওয়ার্ড', reason: `"${d.ward}" অপশনের তালিকা আসেনি` });
       } else {
         if (!(await hasOpts(unionWard))) await this.navigator.waitForOptions(`select[name="${prefix}WardInPaurasavaOrUnion"]`, 6000);
-        if (await hasOpts(unionWard)) keep(await this._selectFirstMatch(unionWard, wardCandidates(d.ward), 'ওয়ার্ড'));
-        else if (await hasOpts(cityWard)) keep(await this._selectFirstMatch(cityWard, wardCandidates(d.ward), 'ওয়ার্ড'));
+        if (await hasOpts(unionWard)) keep(await this._selectFirstMatch(unionWard, wardCandidates(d.ward), 'ওয়ার্ড', d.wardId));
+        else if (await hasOpts(cityWard)) keep(await this._selectFirstMatch(cityWard, wardCandidates(d.ward), 'ওয়ার্ড', d.wardId));
         else keep({ ok: false, field: 'ওয়ার্ড', reason: `"${d.ward}" অপশনের তালিকা আসেনি` });
       }
     }

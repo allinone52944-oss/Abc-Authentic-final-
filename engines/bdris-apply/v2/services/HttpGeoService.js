@@ -279,6 +279,7 @@ class HttpGeoService {
     const { upazilaEntry, upazilaTargetOrder, isCityCorp } = await this.walkToUpazila(parents, form);
     let entries = [];
     let zoneTargetOrder = null;
+    const typeCounts = {};
     if (isCityCorp) {
       // Proven live URL (2026-10-26): /5689?ward=true&geoGroup=birthPlace
       // &geoOrder=3&geoType=8 — the zone call uses the PARENT cityCorp
@@ -294,13 +295,19 @@ class HttpGeoService {
       for (const geoType of [4, 5]) {
         const res = await client.getGeo(upazilaEntry.id, upazilaTargetOrder, geoType, { geoGroup });
         if (zoneTargetOrder === null) zoneTargetOrder = res.targetGeoOrder;
+        typeCounts[geoType] = res.entries.length;
         merged.push(...res.entries);
       }
       entries = merged;
     }
     const options = toOptions(entries);
     if (!options.length) {
-      throw Object.assign(new Error('HttpGeo: zone list is empty'), { code: 'GEO_EMPTY' });
+      // Phase 1 diagnostics only (success path unchanged): Cox's Bazar
+      // Sadar-এ walk সফল অথচ 4+5 খালি — কারণ শনাক্ত করতে id/order/
+      // per-type count error-এ জুড়ে দাও (public geo ids/names only)।
+      const detail = `upazilaId=${upazilaEntry.id}, order=${upazilaTargetOrder}, rawEntries=${entries.length}`
+        + (isCityCorp ? '' : `, type4=${typeCounts[4] || 0}, type5=${typeCounts[5] || 0}`);
+      throw Object.assign(new Error(`HttpGeo: zone list is empty (${detail})`), { code: 'GEO_EMPTY' });
     }
     return { options, zoneTargetOrder, upazilaEntry, isCityCorp };
   }

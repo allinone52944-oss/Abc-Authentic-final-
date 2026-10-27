@@ -614,10 +614,14 @@ let GEO_DATA = null, GEO_PROM = null;
 function loadGeoData() {
   if (GEO_DATA) return Promise.resolve(GEO_DATA);
   if (!GEO_PROM) {
+    // Phase 1 (2026-10-27): a failed first fetch used to poison the
+    // whole page session (GEO_PROM cached null, never retried) — the
+    // step-2 division list then stayed empty until a country toggle.
+    // Reset on null so the next call retries instead.
     GEO_PROM = fetch('bd-geo.json?v=2', { cache: 'force-cache' })
       .then(r => (r && r.ok) ? r.json() : null)
-      .then(j => { GEO_DATA = j || null; return GEO_DATA; })
-      .catch(() => null);
+      .then(j => { GEO_DATA = j || null; if (!GEO_DATA) GEO_PROM = null; return GEO_DATA; })
+      .catch(() => { GEO_PROM = null; return null; });
   }
   return GEO_PROM;
 }
@@ -1026,6 +1030,12 @@ function readAddrFields(prefix, prev) {
       v = e.tagName === 'SELECT'
         ? (e.value && e.selectedOptions && e.selectedOptions[0] ? e.selectedOptions[0].text : '')
         : String(e.value || '').trim();
+      // Phase 1: engine-এর value-first selection-এর জন্য option id-ও
+      // পাঠাই (নাম শুধু পাঠালে বানান ভ্যারিয়েন্টে মেলে না)।
+      if (e.tagName === 'SELECT') {
+        if (e.value) o[k + 'Id'] = e.value;
+        else if (prev && prev[k + 'Id']) o[k + 'Id'] = prev[k + 'Id'];
+      }
     }
     // পিছনে-এসে দ্রুত “পরবর্তী” চাপলে cascade এখনো ফেরত আসেনি — খালি DOM পুরনো ভালো মান মুছবে না
     if (!v && prev && prev[k]) v = String(prev[k] || '');
@@ -1875,6 +1885,15 @@ async function geoLoad(k, Ls, data, wantOv) {
       setGeoState(k, Ls, 'loaded');
       return;
     }
+    // Phase 1: static-covered level (division/district/upazila) কখনো
+    // text-এ degrade নয় — select + retry affordance রাখো। Typed
+    // parent দিয়ে child list আসে না, তাই degrade করলে ব্যবহারকারী
+    // আটকে যেত। অন্য level-এর পুরনো আচরণ অপরিবর্তিত।
+    if (k === 'division' || k === 'district' || k === 'cityCorpUpazila') {
+      setGeoState(k, Ls, 'error');
+      showBanner('err', 'ঠিকানার তালিকা আসেনি — উপরের ঘরটা আবার বাছলে চেষ্টা হবে');
+      return;
+    }
     setGeoState(k, Ls, 'empty');
     degradeToText(L.ui, L.lbl, want);
     return;
@@ -1951,7 +1970,12 @@ async function warmFromData() {
       if (divNode && divNode.tagName === 'SELECT' && divNode.options.length <= 1) {
         await geoLoad('division', GEO_LEVELS, data);
       }
-    } catch (e) {}
+      // Phase 1: silent swallow নয় — division আসলেই খালি থাকলে
+      // banner দেখাও, যাতে ব্যবহারকারী বুঝে আবার চেষ্টা করতে পারে।
+      if (divNode && divNode.tagName === 'SELECT' && divNode.options.length <= 1) {
+        showBanner('err', 'বিভাগের তালিকা আসেনি — উপরের ঘরটা আবার বাছলে চেষ্টা হবে');
+      }
+    } catch (e) { showBanner('err', 'বিভাগের তালিকা লোডে সমস্যা — উপরের ঘরটা আবার বাছলে চেষ্টা হবে'); }
   })();
   try {
     const withTimeout = (p, ms) => Promise.race([p, new Promise(r => setTimeout(r, ms))]);
@@ -2100,6 +2124,9 @@ function collectStep2() {
     // খালি DOM আগের ভালো মান মুছে না ফেলে (নইলে সাইটে অসম্পূর্ণ তথ্য গিয়ে ধাপ আটকে যায়)
     if (!v) v = String(prev[L.k] || '');
     g[L.k] = v;
+    // Phase 1: engine-এর value-first selection-এর জন্য option id-ও রাখো।
+    if (n && n.tagName === 'SELECT' && n.value) g[L.k + 'Id'] = n.value;
+    else if (prev[L.k + 'Id']) g[L.k + 'Id'] = prev[L.k + 'Id'];
   });
   S.d.s1 = {
     firstNameBn: ($('s1_f_bn').value || '').trim(),
@@ -2112,6 +2139,8 @@ function collectStep2() {
     country: g.country || 'বাংলাদেশ',
     division: g.division, district: g.district, cityCorpUpazila: g.cityCorpUpazila,
     paurasavaUnion: g.paurasavaUnion, ward: g.ward,
+    countryId: g.countryId, divisionId: g.divisionId, districtId: g.districtId,
+    cityCorpUpazilaId: g.cityCorpUpazilaId, paurasavaUnionId: g.paurasavaUnionId, wardId: g.wardId,
     postBn: $('g_postBn') ? $('g_postBn').value.trim() : '', postEn: $('g_postEn') ? $('g_postEn').value.trim() : '',
     vilBn: $('g_vilBn') ? $('g_vilBn').value.trim() : '', vilEn: $('g_vilEn') ? $('g_vilEn').value.trim() : '',
     houseBn: $('g_houseBn') ? $('g_houseBn').value.trim() : '', houseEn: $('g_houseEn') ? $('g_houseEn').value.trim() : ''
