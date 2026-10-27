@@ -442,9 +442,20 @@ async function runStageAProbe(opts = {}) {
 
   if (opts.officeParams) {
     try {
-      const office = await client.findOfficeByGeoId(opts.officeParams);
-      steps.push('office');
-      results.office = { ok: true, response: office };
+      // Raw method preferred (live client): records URL, status,
+      // content-type, body length + preview, so a null response can
+      // be told apart from an empty body vs an HTML page. Older
+      // test doubles without the raw method keep the old shape.
+      if (typeof client.findOfficeByGeoIdRaw === 'function') {
+        const raw = await client.findOfficeByGeoIdRaw(opts.officeParams);
+        steps.push('office');
+        results.office = { ok: raw.ok, response: raw.json, url: raw.url, status: raw.status, contentType: raw.contentType, bodyLength: raw.bodyLength, bodyPreview: raw.bodyPreview };
+        if (!raw.ok) allOk = false;
+      } else {
+        const office = await client.findOfficeByGeoId(opts.officeParams);
+        steps.push('office');
+        results.office = { ok: true, response: office };
+      }
     } catch (e) {
       allOk = false;
       results.office = { ok: false, error: e.code || 'OFFICE_FAILED', message: e.message };
@@ -455,9 +466,16 @@ async function runStageAProbe(opts = {}) {
 
   if (opts.officeProjectionParams) {
     try {
-      const proj = await client.findOfficeGeoProjectionByGeoId(opts.officeProjectionParams);
-      steps.push('office-projection');
-      results.officeProjection = { ok: true, response: proj };
+      if (typeof client.findOfficeGeoProjectionByGeoIdRaw === 'function') {
+        const raw = await client.findOfficeGeoProjectionByGeoIdRaw(opts.officeProjectionParams);
+        steps.push('office-projection');
+        results.officeProjection = { ok: raw.ok, response: raw.json, url: raw.url, status: raw.status, contentType: raw.contentType, bodyLength: raw.bodyLength, bodyPreview: raw.bodyPreview };
+        if (!raw.ok) allOk = false;
+      } else {
+        const proj = await client.findOfficeGeoProjectionByGeoId(opts.officeProjectionParams);
+        steps.push('office-projection');
+        results.officeProjection = { ok: true, response: proj };
+      }
     } catch (e) {
       allOk = false;
       results.officeProjection = { ok: false, error: e.code || 'OFFICE_FAILED', message: e.message };

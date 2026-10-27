@@ -372,6 +372,41 @@ class BdrisHttpClient {
   }
 
   /**
+   * Probe-only raw office lookup (2026-10-27): the same request as
+   * officeGet, but returns the raw response shape instead of just
+   * the parsed JSON, so a live probe can distinguish "empty body"
+   * from "HTML page served with 200" from "JSON null" — the three
+   * cases officeGet collapses to a bare null. NEVER used by the
+   * submit chain: officeGet keeps its strict contract there.
+   * Does not throw on HTTP status (the probe records it); only a
+   * network failure propagates. No cookies, tokens or headers are
+   * included in the returned record.
+   */
+  async officeGetRaw(path, params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    const url = qs ? `${path}?${qs}` : path;
+    const res = await this.request(url, { headers: this.apiHeaders() });
+    const contentType = typeof res.headers?.get === 'function' ? res.headers.get('content-type') : null;
+    return {
+      url,
+      status: res.status,
+      ok: res.ok,
+      contentType,
+      bodyLength: res.text ? res.text.length : 0,
+      bodyPreview: res.text ? res.text.slice(0, 300) : '',
+      json: res.json,
+    };
+  }
+
+  async findOfficeByGeoIdRaw(params = {}) {
+    return this.officeGetRaw(OFFICE_BY_GEO_PATH, params);
+  }
+
+  async findOfficeGeoProjectionByGeoIdRaw(params = {}) {
+    return this.officeGetRaw(OFFICE_PROJECTION_PATH, params);
+  }
+
+  /**
    * Document upload. attachmentType must be 40 or 41; attachmentSubType
    * is always -1; _csrf goes both as a form field and as a header.
    * Returns {url, id, attachmentTypeId, name, thumbnailUrl, deleteUrl}
