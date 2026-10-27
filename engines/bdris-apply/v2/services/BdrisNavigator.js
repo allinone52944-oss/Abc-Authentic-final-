@@ -493,9 +493,16 @@ class BdrisNavigator {
     }, selector);
   }
 
-  async selectOption(selector, label) {
+  async selectOption(selector, label, opts = {}) {
+    // Phase 1 (2026-10-27): _selectFirstMatch passes selector ARRAYS
+    // (selectDropdown joins with ', ' — the codebase convention), but
+    // the evaluate below does sel.split(',') — an array crashed every
+    // address fill with "sel.split is not a function". Existing tests
+    // stubbed selectOption, so the suite never caught it. Join here.
+    const selArg = Array.isArray(selector) ? selector.join(', ') : selector;
+    const value = opts && opts.value != null && String(opts.value) !== '' ? String(opts.value) : null;
     const normalized = BdrisNavigator.normalize(label);
-    return await this.page.evaluate(({ sel, want }) => {
+    return await this.page.evaluate(({ sel, want, val }) => {
       const norm = (t) => String(t || '')
         .replace(/[\u09DC]/g, '\u09A1\u09BC')
         .replace(/[\u09DD]/g, '\u09A2\u09BC')
@@ -506,6 +513,20 @@ class BdrisNavigator {
       for (const s of selectors) {
         const node = document.querySelector(s);
         if (!node) continue;
+        // Phase 1 (2026-10-27): value-first — site option values are
+        // BDRIS geo ids, immune to spelling variants (jha vs ja).
+        // A given value wins or fails honestly; label logic below
+        // runs ONLY when no value was given.
+        if (val != null) {
+          const byVal = Array.from(node.options).find(o => o.value === val);
+          if (byVal) {
+            node.value = byVal.value;
+            node.dispatchEvent(new Event('input', { bubbles: true }));
+            node.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+          }
+          continue;
+        }
         const w = norm(want);
         const opt = Array.from(node.options).find(o => norm(o.text) === w) ||
           Array.from(node.options).find(o => {
@@ -533,7 +554,14 @@ class BdrisNavigator {
         }
       }
       return false;
-    }, { sel: selector, want: label });
+    }, { sel: selArg, want: label, val: value });
+  }
+
+  // Value-only selection (mirror path + _selectFirstMatch value attempt).
+  // Returns false (never falls back to label) when the value is absent.
+  async selectOptionByValue(selector, value) {
+    if (value == null || String(value) === '') return false;
+    return this.selectOption(selector, '', { value: String(value) });
   }
 
   async waitForOptions(selector, timeoutMs = 10000) {
