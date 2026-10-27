@@ -1581,21 +1581,34 @@ class StepHandler {
       }
     }
     // ── "ওটিপি পাঠান" ক্লিক + সত্যিকারের প্রমাণ ──
+    // OTP-SEND-NET (2026-10-28): the site can fail a send SILENTLY — click ok,
+    // no toast, no countdown, button still visible (5× live 2026-10-28) — and
+    // the engine previously had no visibility past the click. So the send is
+    // now wrapped in a one-shot network tap: the send response (path + status
+    // ONLY — query and body are never logged) is recorded, and a non-2xx
+    // send, or no send request at all, is surfaced in the failure reason.
     if (anchor) {
       const sendBtn = await this._waitVisible(['button:has-text("ওটিপি পাঠান")'], 10000);
       if (!sendBtn) {
         failed.push({ field: 'ওটিপি পাঠান', reason: 'বাটন পাওয়া যায়নি' });
       } else {
+        const net = this._tapOtpSendNet();
         const clickedOk = await this._robustClick(sendBtn, 'ওটিপি পাঠান', 8000);
         console.log('S4-SENDOTP-CLICK:', clickedOk ? 'ok' : 'fail');
-        const ev = await this._waitOtpEvidence(30000);
+        let ev;
+        try {
+          ev = await this._waitOtpEvidence(30000);
+        } finally {
+          net.detach();
+        }
+        console.log('OTP-SEND-NET:', JSON.stringify(net.seen).slice(0, 400));
         if (ev.ok) {
           otpSent = true;
           // সাইট কী বলল (মোবাইল/ইমেইল কোথায় পাঠাল) — operator log-এর জন্য
           if (ev.note) console.log('OTP-SITE-MSG:', ev.note);
           this.progress('📲 কোড পাঠানো হয়েছে — হাতে আসা কোড নিচে বসান');
         } else {
-          failed.push({ field: 'ওটিপি পাঠান', reason: ev.reason });
+          failed.push({ field: 'ওটিপি পাঠান', reason: this._otpSendFailReason(net.seen, ev.reason) });
         }
       }
     }
@@ -1613,6 +1626,45 @@ class StepHandler {
       failed,
       blocked: failed.length > 0,
     };
+  }
+
+  /**
+   * OTP-SEND-NET (2026-10-28): one-shot network tap for the OTP send.
+   * Records every otp-ish response seen while attached as { path, status }
+   * — the URL path WITHOUT the query (the query carries the phone number
+   * and must never be logged) and never the body. Detached by the caller
+   * after the evidence wait, so repeated resends cannot accumulate taps.
+   * Safe on pages without on/off (returns an empty, no-op tap).
+   */
+  _tapOtpSendNet() {
+    const seen = [];
+    const tap = (res) => {
+      try {
+        const u = new URL(res.url());
+        if (!/otp/i.test(u.pathname)) return;
+        seen.push({ path: u.pathname, status: res.status() });
+      } catch (_) { /* non-URL response — ignore */ }
+    };
+    if (this.page && typeof this.page.on === 'function') this.page.on('response', tap);
+    return {
+      seen,
+      detach: () => {
+        if (this.page && typeof this.page.off === 'function') this.page.off('response', tap);
+      },
+    };
+  }
+
+  /**
+   * OTP-SEND-NET (2026-10-28): map network evidence + the evidence-wait
+   * reason to the user-facing failure reason. A non-2xx send names its
+   * status; no send request at all says so plainly; otherwise the
+   * evidence-wait reason stands unchanged.
+   */
+  _otpSendFailReason(netSeen, evReason) {
+    const bad = (netSeen || []).find((r) => r.status < 200 || r.status >= 300);
+    if (bad) return `সাইটের সেন্ড-জবাব: ${bad.status} — ${evReason}`;
+    if (!netSeen || netSeen.length === 0) return `ক্লিকের পর সাইট কোনো সেন্ড-রিকোয়েস্টই পাঠায়নি — ${evReason}`;
+    return evReason;
   }
 
   /**
