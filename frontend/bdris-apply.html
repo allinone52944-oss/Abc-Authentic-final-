@@ -1747,7 +1747,7 @@ function fetchAddrOpts(level, parents, tmo, form) {
   });
 }
 /* ── Stage A probe trigger (2026-10-27) ──
-   Direct socket emit like fetchAddrOpts (ack callback, 60 s timeout) —
+   Direct socket emit like fetchAddrOpts (ack callback, 120 s timeout) —
    deliberately NOT through the step queue: the probe is not a form
    step, touches no S.d, no draft, no navigation, and never uploads,
    sends/verifies OTP, or submits. Chain built from the CURRENT
@@ -1774,7 +1774,7 @@ function probeChainFromBirthplace() {
 }
 function emitProbeOnce(payload, cb) {
   let done = false;
-  const t = setTimeout(() => { if (!done) { done = true; cb(null); } }, 60000);
+  const t = setTimeout(() => { if (!done) { done = true; cb(null); } }, 120000);
   socket.emit('HTTP_PROBE_STAGE_A', payload, (r) => {
     if (!done) { done = true; clearTimeout(t); cb(r); }
   });
@@ -1789,7 +1789,7 @@ function runStageAProbeBtn() {
   out.textContent = '⏳ প্রোব চলছে… (সিড + ভূগোল + অফিস, আপলোড/OTP/সাবমিট নয়)';
   const show = (r) => {
     btn.disabled = false;
-    out.textContent = r ? JSON.stringify(r, null, 2) : '⌛ সময় শেষ (৬০ সেকেন্ড) — সার্ভার উত্তর দেয়নি।';
+    out.textContent = r ? JSON.stringify(r, null, 2) : '⌛ সময় শেষ (১২০ সেকেন্ড) — সার্ভার উত্তর দেয়নি।';
   };
   const firstChain = probeChainFromBirthplace();
   const firstPayload = Object.assign({}, officePart, firstChain ? { geoChain: firstChain } : {});
@@ -1801,7 +1801,7 @@ function runStageAProbeBtn() {
     const retryPayload = Object.assign({}, officePart, { geoChain: Object.assign({}, firstChain, { steps: retrySteps }) });
     emitProbeOnce(retryPayload, (r2) => {
       btn.disabled = false;
-      out.textContent = 'প্রথম চেষ্টা (type 5):\n' + JSON.stringify(r, null, 2) + '\n\nদ্বিতীয় চেষ্টা (type 4):\n' + (r2 ? JSON.stringify(r2, null, 2) : '⌛ সময় শেষ (৬০ সেকেন্ড) — সার্ভার উত্তর দেয়নি।');
+      out.textContent = 'প্রথম চেষ্টা (type 5):\n' + JSON.stringify(r, null, 2) + '\n\nদ্বিতীয় চেষ্টা (type 4):\n' + (r2 ? JSON.stringify(r2, null, 2) : '⌛ সময় শেষ (১২০ সেকেন্ড) — সার্ভার উত্তর দেয়নি।');
     });
   });
 }
