@@ -136,6 +136,41 @@ describe('verify runs on address + khatian number alone', () => {
   });
 });
 
+describe('mouza-value mode (land-mouza-value)', () => {
+  test('land.html has the mouza card, pane, setMode entry and price loading', () => {
+    const html = read('frontend/land.html');
+    expect(html).toContain('data-mode="mouza"');
+    expect(html).toContain('মৌজা মূল্য');
+    expect(html).toContain('id="pane-mouza"');
+    expect(html).toContain("'search', 'scan', 'verify', 'mouza'");
+    expect(html).toContain("loadPrice('mouza')");
+    expect(html).toContain("API + '/' + MODE");
+  });
+  test('service-detail maps land-mouza-value to the shared land page (no separate page)', () => {
+    const sd = read('frontend/service-detail.html');
+    expect(sd).toContain("s.engine_id === 'land-mouza-value') { engineUrl = '/land.html?mode=mouza'");
+    expect(sd).not.toContain('/land-mouza-value.html');
+  });
+  test('engine manifest exists for land-mouza-value', () => {
+    const m = JSON.parse(read('engines/land-mouza-value/engine.json'));
+    expect(m.id).toBe('land-mouza-value');
+    expect(m.name_bn).toBe('মৌজা মূল্য রিপোর্ট');
+  });
+  test('backend route + PDF carry the mouza mode and the honesty lines, with no source branding', () => {
+    const route = read('backend/routes/land.js');
+    expect(route).toContain("mouza: { engineId: 'land-mouza-value'");
+    expect(route).toContain("router.post('/mouza'");
+    expect(route).toContain('সার্টিফাইড কপি নয়');
+    const pdf = read('backend/lib/landReportPdf.js');
+    expect(pdf).toContain("mouza: 'মৌজা মূল্য রিপোর্ট'");
+    expect(pdf).toContain('মালিকানা / স্বত্ব / দখলের প্রমাণ নয়');
+    for (const f of [route, pdf, read('frontend/land.html')]) {
+      expect(f).not.toContain('jomibaba');
+      expect(f).not.toContain('amarvumi');
+    }
+  });
+});
+
 describe('backend wiring', () => {
   test('server mounts /api/land', () => {
     expect(read('backend/server.js')).toContain("app.use('/api/land'");
@@ -146,6 +181,12 @@ describe('backend wiring', () => {
       expect(sql).toContain("'" + id + "'");
       expect(sql).toContain("WHERE NOT EXISTS (SELECT 1 FROM services WHERE engine_id = '" + id + "')");
     }
+  });
+  test('migration 042 seeds the mouza-value service idempotently', () => {
+    const sql = read('database/migrations/042_land_mouza_value.sql');
+    expect(sql).toContain("'land-mouza-value'");
+    expect(sql).toContain("WHERE NOT EXISTS (SELECT 1 FROM services WHERE engine_id = 'land-mouza-value')");
+    expect(sql).toContain("'active'");
   });
   test('engine manifests exist for the three engines', () => {
     for (const id of ['land-search', 'land-scan', 'land-verify']) {

@@ -44,7 +44,10 @@ const AREA = {
   division_name: 'ঢাকা', district_name: 'ঢাকা', upazila_name: 'মিরপুর রাজস্ব সার্কেল',
   mouza_name: 'মিরপুর', jl_no: '33',
 };
-const PRICES = { 'land-search': { id: 31, price: 20 }, 'land-scan': { id: 32, price: 50 }, 'land-verify': { id: 33, price: 100 } };
+const PRICES = { 'land-search': { id: 31, price: 20 }, 'land-scan': { id: 32, price: 50 }, 'land-verify': { id: 33, price: 100 },
+  // Fixture only for the mouza route tests — NOT a decided
+  // service price (the admin price decision is still open).
+  'land-mouza-value': { id: 34, price: 30 } };
 
 function baseRoutes(extra = []) {
   return [
@@ -150,6 +153,69 @@ describe('POST /api/land/search', () => {
       .send({ ...AREA, khatian_no: '8', idempotency_key: 't-search-1' }).expect(200);
     expect(r.body).toMatchObject({ ok: true, duplicate: true, charged: 20, orderId: 'o9' });
     expect(client.indexByKhatianNo).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/land/mouza', () => {
+  // Generic sample values only — no real customer or land data.
+  const MOUZA_BODY = {
+    ...AREA,
+    office_name: 'নমুনা সাব-রেজিস্ট্রি অফিস',
+    schedule_version: '2025-2026',
+    declared_price: '1500000',
+    lines: [
+      { mouza: 'নমুনা মৌজা', class: 'নাল', rate: '100000', amount: '10', unit: 'shatangsho' },
+      { mouza: 'নমুনা মৌজা', class: 'বাগান', rate: '60000', amount: '5', unit: 'shatangsho', oldRate: '50000' },
+    ],
+  };
+  test('mouza price endpoint → 200 (fixture price)', async () => {
+    const r = await withUser(request(app()).get('/api/land/price?mode=mouza')).expect(200);
+    expect(r.body).toMatchObject({ ok: true, mode: 'mouza', price: 30, balance: 500, serviceId: 34 });
+  });
+  test('valid lines → 200, total 1300000, deed basis = max(total, declared)', async () => {
+    const r = await withUser(request(app()).post('/api/land/mouza'))
+      .send({ ...MOUZA_BODY, idempotency_key: 't-mouza-1' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, charged: 30, orderId: 'o1', totalMinimum: 1300000, deedBasis: 1500000 });
+    expect(r.body.lines).toHaveLength(2);
+    expect(r.body.breakdown).toMatchObject({ 'নাল': 1000000, 'বাগান': 300000 });
+    expect(r.body.lines[1]).toMatchObject({ oldRate: 50000, oldValue: 250000, delta: 50000 });
+  });
+  test('katha conversion: 10 katha at 100000 = 1650000', async () => {
+    const r = await withUser(request(app()).post('/api/land/mouza'))
+      .send({ ...MOUZA_BODY, declared_price: '', lines: [{ mouza: 'নমুনা মৌজা', class: 'নাল', rate: '100000', amount: '10', unit: 'katha' }], idempotency_key: 't-mouza-katha' }).expect(200);
+    expect(r.body).toMatchObject({ totalMinimum: 1650000, deedBasis: 1650000 });
+  });
+  test('no lines → 400, wallet untouched, no charge', async () => {
+    const r = await withUser(request(app()).post('/api/land/mouza'))
+      .send({ ...MOUZA_BODY, lines: [], idempotency_key: 't-mouza-bad' }).expect(400);
+    expect(r.body.error).toBe('BAD_INPUT');
+    const walletCalls = db.__client.query.mock.calls.filter((c) => String(c[0]).includes('wallet_apply'));
+    expect(walletCalls).toHaveLength(0);
+  });
+  test('unknown class → 400', async () => {
+    const r = await withUser(request(app()).post('/api/land/mouza'))
+      .send({ ...MOUZA_BODY, lines: [{ mouza: 'নমুনা মৌজা', class: 'অজানা', rate: '1000', amount: '1', unit: 'shatangsho' }], idempotency_key: 't-mouza-class' }).expect(400);
+    expect(r.body.error).toBe('BAD_INPUT');
+  });
+  test('insufficient balance → 402, wallet untouched', async () => {
+    db.__routeQuery(baseRoutes([['FROM users WHERE', { rows: [{ balance: 5 }] }]]));
+    const r = await withUser(request(app()).post('/api/land/mouza'))
+      .send({ ...MOUZA_BODY, idempotency_key: 't-mouza-402' }).expect(402);
+    expect(r.body.error).toBe('INSUFFICIENT_BALANCE');
+    const walletCalls = db.__client.query.mock.calls.filter((c) => String(c[0]).includes('wallet_apply'));
+    expect(walletCalls).toHaveLength(0);
+  });
+  test('replay of a completed key → stored outcome, no new charge', async () => {
+    db.__routeQuery(baseRoutes([
+      ['status, data, documents FROM orders', {
+        rows: [{ id: 'o9', price: 30, status: 'completed', data: JSON.stringify({ lines: [{ mouza: 'নমুনা মৌজা' }], totalMinimum: 1300000, deedBasis: 1500000 }), documents: '[]' }],
+      }],
+    ]));
+    const r = await withUser(request(app()).post('/api/land/mouza'))
+      .send({ ...MOUZA_BODY, idempotency_key: 't-mouza-1' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, duplicate: true, charged: 30, orderId: 'o9', totalMinimum: 1300000 });
+    const walletCalls = db.__client.query.mock.calls.filter((c) => String(c[0]).includes('wallet_apply'));
+    expect(walletCalls).toHaveLength(0);
   });
 });
 

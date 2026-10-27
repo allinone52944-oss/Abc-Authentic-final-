@@ -13,6 +13,14 @@
 //                               all survey types (engine land-scan)
 //   POST /api/land/verify       claim vs record report
 //                               (engine land-verify)
+//   POST /api/land/mouza        mouza-value report (engine
+//                               land-mouza-value): rates are
+//                               entered by the shopkeeper from a
+//                               schedule they have checked —
+//                               automated schedule lookup is
+//                               NOT built (endpoints unmapped,
+//                               never guessed); the engine only
+//                               calculates, checks and reports.
 //
 // Money discipline (same as QR verify): the wallet is charged
 // ONLY when a record is actually found; "not found" records a
@@ -34,6 +42,7 @@ const push = require('../utils/push');
 const { buildReceiptPdf } = require('../lib/receiptPdf');
 const { buildLandReportPdf } = require('../lib/landReportPdf');
 const client = require('../../engines/land-core/client');
+const { calcMouzaReport } = require('../../engines/land-mouza-value/calc');
 
 const router = express.Router();
 const UPLOAD_DIR = '/opt/all-in-one-abc-authentic/uploads/orders';
@@ -42,6 +51,7 @@ const MODES = {
   search: { engineId: 'land-search', label: 'খতিয়ান খোঁজ' },
   scan: { engineId: 'land-scan', label: 'নামে সম্পত্তি সন্ধান' },
   verify: { engineId: 'land-verify', label: 'জমি যাচাই রিপোর্ট' },
+  mouza: { engineId: 'land-mouza-value', label: 'মৌজা মূল্য রিপোর্ট' },
 };
 
 // ---------- pricing (per engine, same rules as qr-verify) ----------
@@ -231,6 +241,8 @@ async function replayIfExists(req, res, idem) {
       ok: true, duplicate: true, charged: Number(row.price) || 0, orderId: row.id,
       receipt: receiptUrl, records: data.records || [], totalLand: data.totalLand || null,
       verdicts: data.verdicts || null,
+      lines: data.lines || null, totalMinimum: data.totalMinimum || null,
+      deedBasis: data.deedBasis || null, breakdown: data.breakdown || null,
     });
   }
   return true;
@@ -355,6 +367,7 @@ async function succeed(req, res, mode, chk, idem, area, payload, pdfArgs, pdfNam
     ok: true, charged: chk.price, orderId, receipt: receiptUrl,
     balance: u2.rows[0] ? Number(u2.rows[0].balance) : null,
     records: payload.records || [], totalLand: payload.totalLand || null, verdicts: payload.verdicts || null,
+    ...(payload.extra || {}),
   });
 }
 
@@ -491,6 +504,81 @@ router.post('/verify', requireAuth, async (req, res) => {
   } catch (e) {
     safeLog('[land] verify error:', e.message);
     res.status(500).json({ error: 'VERIFY_FAILED' });
+  }
+});
+
+// ---------- POST /mouza ----------
+// Mouza-value report (engine land-mouza-value). No portal is
+// called here: the shopkeeper enters each line's rate from the
+// schedule they have checked (automated schedule lookup is a
+// future step — its endpoints are unmapped and never guessed).
+// Charge discipline is the same as the other land services:
+// a valid report is charged; invalid input is 400 with NO
+// charge and no order. The report PDF carries the mandatory
+// honesty lines — সার্টিফাইড কপি নয়, মালিকানা / স্বত্ব /
+// দখলের প্রমাণ নয়, বাজারমূল্য নয়, চূড়ান্ত দলিল বিল নয়;
+// deed fee/tax percentages are NOT quoted as official rates.
+router.post('/mouza', requireAuth, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const area = cleanArea(body);
+    if (!area) {
+      return res.status(400).json({ error: 'BAD_INPUT', message: 'বিভাগ, জেলা, উপজেলা ও মৌজা — সবগুলো বেছে নিন।' });
+    }
+    const officeName = String(body.office_name || '').trim().slice(0, 80);
+    const scheduleVersion = String(body.schedule_version || '2025-2026').trim().slice(0, 40) || '2025-2026';
+    const oldScheduleVersion = body.old_schedule_version
+      ? String(body.old_schedule_version).trim().slice(0, 40) : null;
+    const rawLines = Array.isArray(body.lines) ? body.lines : [];
+    const lines = rawLines.map((l) => ({
+      mouza: String((l && l.mouza) || '').trim() || area.mouza,
+      class: String((l && l.class) || '').trim(),
+      rate: Number(toEn(String((l && l.rate) ?? ''))),
+      amount: Number(toEn(String((l && l.amount) ?? ''))),
+      unit: String((l && l.unit) || 'shatangsho'),
+      oldRate: (l && l.oldRate !== undefined && l.oldRate !== null && String(l.oldRate) !== '')
+        ? Number(toEn(String(l.oldRate))) : undefined,
+    }));
+    let calc;
+    try {
+      calc = calcMouzaReport({
+        lines,
+        declaredPrice: (body.declared_price === undefined || body.declared_price === null || String(body.declared_price) === '')
+          ? null : Number(toEn(String(body.declared_price))),
+        scheduleVersion, oldScheduleVersion,
+      });
+    } catch (e) {
+      return res.status(400).json({ error: 'BAD_INPUT', message: 'অন্তত একটি সঠিক লাইন লাগবে — মৌজা, শ্রেণি, হার ও পরিমাণ ঠিক করে বসান।' });
+    }
+    const idem = idemOf(body, 'mouza');
+    if (await replayIfExists(req, res, idem)) return;
+    const chk = await precheck(req, res, 'mouza');
+    if (!chk) return;
+    const payload = {
+      records: calc.lines,
+      lines: calc.lines,
+      totalMinimum: calc.totalMinimum,
+      deedBasis: calc.deedBasis,
+      breakdown: calc.breakdown,
+      scheduleVersion: calc.scheduleVersion,
+      extra: {
+        lines: calc.lines, totalMinimum: calc.totalMinimum, deedBasis: calc.deedBasis,
+        declaredPrice: calc.declaredPrice, breakdown: calc.breakdown,
+        scheduleVersion: calc.scheduleVersion, hasOldComparison: calc.hasOldComparison,
+      },
+    };
+    return succeed(req, res, 'mouza', chk, idem, area, payload,
+      {
+        kind: 'mouza', area: { ...area, officeName },
+        lines: calc.lines, totalMinimum: calc.totalMinimum, deedBasis: calc.deedBasis,
+        declaredPrice: calc.declaredPrice, breakdown: calc.breakdown,
+        scheduleVersion: calc.scheduleVersion, oldScheduleVersion: calc.oldScheduleVersion,
+        hasOldComparison: calc.hasOldComparison, checks: calc.checks,
+      },
+      'delivery-land-mouza-' + slug(idem) + '.pdf');
+  } catch (e) {
+    safeLog('[land] mouza error:', e.message);
+    res.status(500).json({ error: 'MOUZA_FAILED' });
   }
 });
 

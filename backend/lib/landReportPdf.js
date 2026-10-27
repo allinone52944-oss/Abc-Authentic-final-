@@ -24,7 +24,9 @@ function landText(totalLand) {
   return toBn(v) + ' একর (' + toBn(shot) + ' শতাংশ)';
 }
 
-function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdicts, claimNote }) {
+function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdicts, claimNote,
+  lines, totalMinimum, deedBasis, declaredPrice, breakdown, scheduleVersion,
+  oldScheduleVersion, hasOldComparison, checks }) {
   return new Promise((resolve, reject) => {
     try {
       const PDFDocument = require('pdfkit');
@@ -71,11 +73,17 @@ function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdict
         search: 'খতিয়ান তথ্য রিপোর্ট',
         scan: 'নামে সম্পত্তি সন্ধান রিপোর্ট',
         verify: 'জমি যাচাই রিপোর্ট',
+        mouza: 'মৌজা মূল্য রিপোর্ট',
       };
 
-      // Header — deliberately NO app/brand name (owner's rule:
-      // land reports circulate as neutral record summaries).
-      doc.font('bn').fontSize(10.5).fillColor('#6b7280').text('সরকারি ভূমি রেকর্ডের সারাংশ', X, y + 2, { width: W, align: 'right' });
+      // Header — deliberately NO app/brand name, NO source name,
+      // NO link, NO watermark (owner's customer-document rules
+      // for the mouza report; the same neutrality is kept for
+      // the other land reports). For mouza the header must NOT
+      // claim a government-record source: rates are entered by
+      // the shopkeeper from a schedule they have checked.
+      doc.font('bn').fontSize(10.5).fillColor('#6b7280').text(
+        kind === 'mouza' ? 'মৌজা মূল্য রিপোর্ট' : 'সরকারি ভূমি রেকর্ডের সারাংশ', X, y + 2, { width: W, align: 'right' });
       y += 26;
       doc.strokeColor('#d6c9ae').lineWidth(1.4).moveTo(X, y).lineTo(X + W, y).stroke();
       y += 16;
@@ -92,6 +100,11 @@ function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdict
         row('জেলা', area.district || '—');
         row('উপজেলা / থানা', area.upazila || '—');
         row('মৌজা', (area.mouza || '—') + (area.jl ? ' (জে. এল. নং: ' + area.jl + ')' : ''));
+        if (area.officeName) row('সাব-রেজিস্ট্রার অফিস', area.officeName);
+      }
+      if (kind === 'mouza') {
+        row('তালিকার সংস্করণ', scheduleVersion || '2025-2026');
+        if (oldScheduleVersion) row('পুরনো তালিকার সংস্করণ', oldScheduleVersion);
       }
       divider();
 
@@ -114,7 +127,51 @@ function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdict
         divider();
       }
 
+      if (kind === 'mouza') {
+        const mlines = Array.isArray(lines) ? lines : [];
+        heading('ইনপুট ও লাইন ধরে হিসাব (' + toBn(mlines.length) + 'টি লাইন)');
+        mlines.forEach((l, i) => {
+          ensure(104);
+          doc.font('bn-bold').fontSize(12).fillColor('#14532d')
+            .text((i + 1) + '. ' + (l.mouza || '—') + ' — ' + (l.class || '—'), X, y, { width: W });
+          y += 21;
+          row('শতাংশপ্রতি হার', toBn(l.rate) + ' টাকা');
+          row('পরিমাণ', toBn(l.qtyShatangsho) + ' শতাংশ'
+            + (l.unit && l.unit !== 'shatangsho' ? ' (' + toBn(l.amount) + ' ' + (l.unit === 'katha' ? 'কাঠা' : 'বিঘা') + ')' : ''));
+          row('লাইন মূল্য', toBn(l.value) + ' টাকা', { bold: true });
+          if (l.oldRate !== undefined) {
+            row('পুরনো হার / পুরনো মূল্য', toBn(l.oldRate) + ' টাকা / ' + toBn(l.oldValue) + ' টাকা'
+              + ' (পার্থক্য: ' + toBn(l.delta) + ' টাকা)');
+          }
+          if (i < mlines.length - 1) divider();
+        });
+        divider();
+        heading('মোট ও ভিত্তি');
+        row('মোট সর্বনিম্ন মূল্য', toBn(totalMinimum) + ' টাকা', { bold: true, color: '#14532d' });
+        if (declaredPrice !== null && declaredPrice !== undefined) {
+          row('ঘোষিত দাম', toBn(declaredPrice) + ' টাকা');
+        }
+        row('দলিলের ভিত্তি (বেশিটা)', toBn(deedBasis) + ' টাকা', { bold: true, color: '#14532d' });
+        divider();
+        heading('শ্রেণিভিত্তিক ভাগ');
+        Object.entries(breakdown || {}).forEach(([k, v]) => row(k, toBn(v) + ' টাকা'));
+        divider();
+        heading('যাচাই');
+        (checks || []).forEach((c) => {
+          ensure(28);
+          doc.font('bn').fontSize(10.5).fillColor('#374151').text('• ' + c, X, y, { width: W });
+          y += 24;
+        });
+        if (!hasOldComparison) {
+          ensure(28);
+          doc.font('bn').fontSize(10.5).fillColor('#374151')
+            .text('• পুরনো বনাম নতুন হারের তুলনা দেওয়া হয়নি — দুটো তালিকার হারই দেওয়া থাকলে তবেই তুলনা দেখানো হয়।', X, y, { width: W });
+          y += 24;
+        }
+      }
+
       const list = Array.isArray(records) ? records : [];
+      if (kind !== 'mouza') {
       heading(kind === 'scan' ? 'পাওয়া খতিয়ানসমূহ (' + toBn(list.length) + 'টি)' : 'খতিয়ানের তথ্য');
       list.forEach((r, i) => {
         ensure(104);
@@ -126,6 +183,7 @@ function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdict
         row('জমির পরিমাণ', landText(r.TOTAL_LAND));
         if (i < list.length - 1) divider();
       });
+      }
 
       if (kind === 'scan' && list.length) {
         divider();
@@ -134,7 +192,12 @@ function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdict
 
       y += 10;
       divider();
-      const footers = [
+      const footers = kind === 'mouza' ? [
+        'সীমা (পরিষ্কার করে): এই রিপোর্ট সার্টিফাইড কপি নয়, মালিকানা / স্বত্ব / দখলের প্রমাণ নয়, বাজারমূল্য নয়, চূড়ান্ত দলিল বিল নয়।',
+        'হারগুলো দোকানদারের যাচাই করা তালিকা থেকে বসানো হয়েছে; স্বয়ংক্রিয় তালিকা-খোঁজা এখনো তৈরি হয়নি। দলিল করার আগে শ্রেণি, পরিমাণ ও বর্তমান তালিকা সাব-রেজিস্ট্রার অফিসে মিলিয়ে নিন।',
+        'দলিলের ফি / করের হার এখানে সরকারি হার হিসেবে ধরা হয়নি — সেগুলো অফিস থেকে নিশ্চিত করে হিসাব করতে হবে।',
+        'যাচাই তালিকা: (১) শ্রেণি ঠিক আছে কিনা, (২) পরিমাণ ঠিক আছে কিনা, (৩) বর্তমান তালিকার সংস্করণ ঠিক আছে কিনা, (৪) সাব-রেজিস্ট্রার অফিসে হার মিলেছে কিনা।',
+      ] : [
         'তথ্য সূত্র: ভূমি মন্ত্রণালয়ের ডিজিটাল ভূমি রেকর্ড পোর্টালের সরকারি রেকর্ড।',
         'দ্রষ্টব্য: এই রিপোর্টটি তথ্যের সারাংশ — এটি সরকারি সার্টিফাইড কপি নয়। অফিসিয়াল কাজে (নামজারি, ঋণ, আদালত) সার্টিফাইড কপি প্রয়োজন হবে।',
       ];

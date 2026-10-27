@@ -25,7 +25,7 @@
   .err.on { display:block; }
   .ok { display:none; background:#f0fdf4; border:1px solid #86efac; color:#15803d; padding:14px; border-radius:12px; margin-bottom:14px; font-size:14px; }
   .ok.on { display:block; }
-  .modes { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:18px; }
+  .modes { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
   /* Phones: keep the three modes side-by-side but compact —
      stacking them full-width pushed the form far down the page.
      Form padding tightens and fields go 16px (stops iOS zoom). */
@@ -132,6 +132,11 @@
           <div class="p">৳<span data-price="verify">–</span></div>
           <div class="d">কেনার আগে দাবি বনাম রেকর্ড</div>
         </div>
+        <div class="mode-card" data-mode="mouza">
+          <div class="ic">📋</div><div class="t">মৌজা মূল্য</div>
+          <div class="p">৳<span data-price="mouza">–</span></div>
+          <div class="d">হার × জমি = সর্বনিম্ন মূল্য রিপোর্ট</div>
+        </div>
       </div>
 
       <div class="price-line">
@@ -167,6 +172,37 @@
               <div class="field"><label>দাবি — জমি (একর)</label><input type="text" id="fClaimLand" inputmode="decimal" placeholder="যেমন: 0.0544"></div>
             </div>
           </div>
+        </div>
+
+        <div id="pane-mouza" style="display:none">
+          <div class="note" style="margin:0 0 12px; font-size:13.5px; color:#92400e; background:#fffbeb; border:1px solid #f59e0b66; padding:10px 12px; border-radius:12px;">
+            ⚠️ এই রিপোর্ট সার্টিফাইড কপি নয়, মালিকানা বা দখলের প্রমাণ নয়, বাজারমূল্য নয়, চূড়ান্ত দলিল বিল নয়।
+            হারগুলো দোকানদার যাচাই করা তালিকা থেকে বসাবেন — স্বয়ংক্রিয় তালিকা-খোঁজা এখনো তৈরি হয়নি।
+            দলিলের আগে শ্রেণি, পরিমাণ ও বর্তমান তালিকা সাব-রেজিস্ট্রার অফিসে মিলিয়ে নিন।
+            চার্জ শুধু রিপোর্ট তৈরি হলেই কাটবে; লাইন ভুল হলে কোনো চার্জ নয়।
+          </div>
+          <div class="field"><label>সাব-রেজিস্ট্রার অফিস (ঐচ্ছিক)</label><input type="text" id="fOfficeName" placeholder="যেমন: সদর সাব-রেজিস্ট্রি অফিস"></div>
+          <div class="grid2">
+            <div class="field"><label>তালিকার সংস্করণ *</label><input type="text" id="fScheduleVersion" value="2025-2026"></div>
+            <div class="field"><label>ঘোষিত দাম (টাকা, ঐচ্ছিক)</label><input type="text" id="fDeclaredPrice" inputmode="decimal" placeholder="খালি থাকলে শুধু সর্বনিম্ন মূল্যই ভিত্তি"></div>
+          </div>
+          <div class="field"><label>লাইন যোগ করুন — মৌজা, শ্রেণি, হার, পরিমাণ</label></div>
+          <div class="grid2">
+            <div class="field"><label>মৌজা</label><input type="text" id="mLineMouza" placeholder="খালি থাকলে উপরের মৌজা ধরা হবে"></div>
+            <div class="field"><label>শ্রেণি</label><select id="mLineClass">
+              <option>নাল</option><option>বাড়ী</option><option>ভিটা</option>
+              <option>বাগান</option><option>পুকুর</option><option>ডোবা</option><option>বাণিজ্যিক</option>
+            </select></div>
+            <div class="field"><label>শতাংশপ্রতি হার (টাকা) *</label><input type="text" id="mLineRate" inputmode="decimal" placeholder="যেমন: 100000"></div>
+            <div class="field"><label>পরিমাণ *</label><input type="text" id="mLineAmount" inputmode="decimal" placeholder="যেমন: 10"></div>
+            <div class="field"><label>একক</label><select id="mLineUnit">
+              <option value="shatangsho">শতাংশ</option><option value="katha">কাঠা (১ = ১.৬৫ শতাংশ)</option><option value="bigha">বিঘা (১ = ৩৩ শতাংশ)</option>
+            </select></div>
+            <div class="field"><label>পুরনো হার (ঐচ্ছিক — তুলনার জন্য)</label><input type="text" id="mLineOldRate" inputmode="decimal" placeholder="খালি থাকলে তুলনা দেখানো হবে না"></div>
+          </div>
+          <button type="button" class="btn" id="mAddLineBtn" style="padding:10px 18px;">➕ লাইন যোগ করুন</button>
+          <div id="mLinesBox" style="margin-top:12px;"></div>
+          <div class="note" id="mTotalNote" style="font-size:14px; font-weight:700; color:#14532d;"></div>
         </div>
 
         <button type="submit" class="btn btn-primary" id="goBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; background:#14532d;">
@@ -233,14 +269,14 @@
     } catch (e) { /* price stays as-is */ }
   }
   function updateBtn() {
-    const labels = { search: '🔍 খুঁজুন', scan: '👤 সন্ধান করুন', verify: '✅ যাচাই করুন' };
+    const labels = { search: '🔍 খুঁজুন', scan: '👤 সন্ধান করুন', verify: '✅ যাচাই করুন', mouza: '📋 রিপোর্ট তৈরি করুন' };
     $('goBtn').textContent = labels[MODE] + (prices[MODE] != null ? ' — ৳' + bn(prices[MODE]) : '');
   }
   function setMode(mode) {
     MODE = mode;
     if (prices[mode] == null) loadPrice(mode);
     document.querySelectorAll('.mode-card').forEach((c) => c.classList.toggle('on', c.dataset.mode === mode));
-    ['search', 'scan', 'verify'].forEach((m) => { $('pane-' + m).style.display = m === mode ? '' : 'none'; });
+    ['search', 'scan', 'verify', 'mouza'].forEach((m) => { $('pane-' + m).style.display = m === mode ? '' : 'none'; });
     $('priceVal').textContent = prices[mode] != null ? bn(prices[mode]) : '–';
     updateBtn();
     clearBoxes();
@@ -315,7 +351,65 @@
     };
   }
 
+  // ---------- mouza lines (client preview only; the server
+  // recomputes every line — the preview never decides money) --
+  const MOUZA_LINES = [];
+  const MOUZA_FACTORS = { shatangsho: 1, katha: 1.65, bigha: 33 };
+  function renderMouzaLines() {
+    let total = 0;
+    let h = '';
+    MOUZA_LINES.forEach((l, i) => {
+      const qty = l.amount * (MOUZA_FACTORS[l.unit] || 1);
+      const val = l.rate * qty;
+      total += val;
+      h += '<div class="r"><b>' + esc(l.mouza || '—') + ' · ' + esc(l.class) + '</b><span>' +
+        bn(l.rate) + ' × ' + bn(qty) + ' = ' + bn(val) + ' টাকা' +
+        ' <a href="#" onclick="MOUZA_LINES.splice(' + i + ',1);renderMouzaLines();return false;">মুছুন</a></span></div>';
+    });
+    $('mLinesBox').innerHTML = h ? '<div class="rec">' + h + '</div>' : '';
+    $('mTotalNote').textContent = MOUZA_LINES.length
+      ? 'প্রাক্কলিত মোট সর্বনিম্ন মূল্য: ' + bn(Math.round(total * 100) / 100) + ' টাকা (সার্ভার আবার হিসাব করবে)'
+      : '';
+  }
+  $('mAddLineBtn').addEventListener('click', () => {
+    const rate = Number($('mLineRate').value.trim());
+    const amount = Number($('mLineAmount').value.trim());
+    const oldRateRaw = $('mLineOldRate').value.trim();
+    if (!(rate >= 0) || !(amount > 0)) { showErr('হার ও পরিমাণ ঠিক করে বসান।'); return; }
+    MOUZA_LINES.push({
+      mouza: $('mLineMouza').value.trim(),
+      class: $('mLineClass').value,
+      rate: rate, amount: amount, unit: $('mLineUnit').value,
+      oldRate: oldRateRaw === '' ? undefined : Number(oldRateRaw),
+    });
+    clearBoxes();
+    renderMouzaLines();
+  });
+
   function renderResult(r) {
+    if (r.lines) {
+      let h = '<div class="rec"><div class="rec-hd"><div class="seal">✓</div><h4>মৌজা মূল্য রিপোর্ট</h4></div>';
+      r.lines.forEach((l) => {
+        h += '<div class="r"><b>' + esc(l.mouza) + ' · ' + esc(l.class) + '</b><span>' +
+          bn(l.rate) + ' × ' + bn(l.qtyShatangsho) + ' শতাংশ = ' + bn(l.value) + ' টাকা</span></div>';
+      });
+      h += '</div>';
+      if (r.breakdown) {
+        h += '<div class="rec"><div class="rec-hd"><div class="seal">✓</div><h4 style="color:#0f172a">শ্রেণিভিত্তিক ভাগ</h4></div>';
+        Object.entries(r.breakdown).forEach(([k, v]) => {
+          h += '<div class="verdict"><span>' + esc(k) + '</span><span class="m">' + bn(v) + ' টাকা</span></div>';
+        });
+        h += '</div>';
+      }
+      h += '<div class="rec total"><b>মোট সর্বনিম্ন মূল্য: ' + bn(r.totalMinimum) +
+        ' টাকা · দলিলের ভিত্তি: ' + bn(r.deedBasis) + ' টাকা</b>' +
+        '<div class="note">এটি সার্টিফাইড কপি নয়, মালিকানার প্রমাণ নয়, বাজারমূল্য নয়, চূড়ান্ত দলিল বিল নয়। দলিলের আগে সাব-রেজিস্ট্রার অফিসে মিলিয়ে নিন।</div></div>';
+      if (r.receipt) {
+        h += '<button type="button" class="dl-btn" onclick="dlPdf(\'' + esc(r.receipt) + '\', \'mouza-value-report.pdf\')">📄 রিপোর্ট (PDF) ডাউনলোড করুন</button>';
+      }
+      $('result').innerHTML = h;
+      return;
+    }
     let h = '';
     (r.records || []).forEach((rec) => {
       h += '<div class="rec"><div class="rec-hd"><div class="seal">✓</div><h4>খতিয়ান নং: ' + esc(bn(rec.KHATIAN_NO)) +
@@ -353,6 +447,15 @@
     } else if (MODE === 'scan') {
       body.owner_name = $('fOwnerName').value.trim();
       if (!body.owner_name) { showErr('মালিকের নাম লিখুন।'); return; }
+    } else if (MODE === 'mouza') {
+      if (!MOUZA_LINES.length) { showErr('অন্তত একটি লাইন যোগ করুন।'); return; }
+      body.lines = MOUZA_LINES.map((l) => ({
+        mouza: l.mouza || area.mouza_name, class: l.class, rate: l.rate,
+        amount: l.amount, unit: l.unit, oldRate: l.oldRate,
+      }));
+      body.office_name = $('fOfficeName').value.trim();
+      body.schedule_version = $('fScheduleVersion').value.trim() || '2025-2026';
+      body.declared_price = $('fDeclaredPrice').value.trim();
     } else {
       body.khatian_no = $('fVKhatianNo').value.trim();
       body.claim = { owner: $('fClaimOwner').value.trim(), dag: $('fClaimDag').value.trim(), total_land: $('fClaimLand').value.trim() };
@@ -367,7 +470,9 @@
     try {
       const { resp, data: r } = await apiJson(API + '/' + MODE, { method: 'POST', body, timeout: 120000 });
       if (resp.ok && r.ok) {
-        showOk('রেকর্ড পাওয়া গেছে — ৳' + bn(r.charged) + ' চার্জ হয়েছে। রিপোর্টটি ইতিহাসেও সংরক্ষিত আছে।');
+        showOk(MODE === 'mouza'
+          ? 'মৌজা মূল্য রিপোর্ট তৈরি — ৳' + bn(r.charged) + ' চার্জ হয়েছে। রিপোর্টটি ইতিহাসেও সংরক্ষিত আছে।'
+          : 'রেকর্ড পাওয়া গেছে — ৳' + bn(r.charged) + ' চার্জ হয়েছে। রিপোর্টটি ইতিহাসেও সংরক্ষিত আছে।');
         if (r.balance != null) $('balVal').textContent = bn(r.balance);
         renderResult(r);
       } else {
@@ -388,10 +493,10 @@
   // Arriving from a service page preselects that service's mode
   // (/land.html?mode=scan etc.); the cards remain switchable.
   const _qm = new URLSearchParams(location.search).get('mode');
-  setMode(['search', 'scan', 'verify'].includes(_qm) ? _qm : 'search');
-  // The other two prices arrive a breath later — firing every
+  setMode(['search', 'scan', 'verify', 'mouza'].includes(_qm) ? _qm : 'search');
+  // The other prices arrive a breath later — firing every
   // call at once can collide with a token refresh on page open.
-  setTimeout(() => { loadPrice('scan'); loadPrice('verify'); }, 1500);
+  setTimeout(() => { loadPrice('scan'); loadPrice('verify'); loadPrice('mouza'); }, 1500);
 </script>
 </body>
 </html>
