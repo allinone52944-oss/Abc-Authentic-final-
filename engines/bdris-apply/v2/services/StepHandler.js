@@ -812,12 +812,6 @@ class StepHandler {
     }
 
     if (failed.length) {
-      // TEMPORARY capture (2026-10-27): the browser agent cannot inspect
-      // websocket acks, so the S1 nameCheck values are unreachable from
-      // the page. Log them server-side for one demo capture round, then
-      // REMOVE this line — it must not stay for real applications.
-      // (Precedent: S3-FATHER-VALUES logging in this file.)
-      console.log('S1-NAMECHECK', JSON.stringify(nameCheck));
       return { ok: false, failed, message: `${failed.length}টি ফিল্ড পূরণ হয়নি`, nameCheck };
     }
 
@@ -2497,11 +2491,13 @@ class StepHandler {
   // after Next the person fields may no longer be on the page, so
   // a post-Next read-back would see '' and drop nothing. Only the
   // exact read-back reason is dropped, and only on strict loose
-  // equality (dots/dashes/commas/danda/spaces stripped, same key
-  // as addresses) — a genuine mismatch (wrong name, near-miss,
+  // equality (dots/dashes/commas/danda/spaces stripped, case-insensitive,
+  // same key as addresses) — a genuine mismatch (wrong name, near-miss,
   // empty field) is KEPT, because that is a real data-quality
-  // issue, not display staleness. A pure case difference is also
-  // kept (conservative, no evidence the site re-cases names).
+  // issue, not display staleness. A pure case difference is DROPPED:
+  // live journal capture 2026-10-27 proved the site itself uppercases
+  // English names (want Demo/Test, site holds DEMO/TEST), so case
+  // alone is display form, not a different name.
   async _dropStaleNameFailures(data, failed) {
     const NAME_MAP = [
       ['নামের প্রথম অংশ (বাংলা)', 'personFirstNameBn', data.firstNameBn],
@@ -2523,7 +2519,7 @@ class StepHandler {
       };
     }).catch(() => null);
     if (!actual) return 0;
-    const loose = (s) => String(s || '').replace(/[\.\-\u2010-\u2015,\u0964]/g, '').replace(/\s+/g, '');
+    const loose = (s) => String(s || '').replace(/[\.\-\u2010-\u2015,\u0964]/g, '').replace(/\s+/g, '').toLowerCase();
     const READBACK_REASON = 'সাইটে নাম ঠিকমতো বসেনি — আবার চেষ্টা করুন';
     const kept = [];
     let dropped = 0;
