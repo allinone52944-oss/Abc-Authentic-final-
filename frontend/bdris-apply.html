@@ -443,9 +443,10 @@ input.bad, select.bad{border-color:var(--err); box-shadow:0 0 0 3px rgba(251,113
     <div class="livenote" id="liveNote"></div>
     <div class="failbox" id="failBox"></div>
     <details class="guide-det"><summary>🔬 Stage A প্রোব (ডায়াগনস্টিক)</summary><div class="gbody">
-      <p>সরাসরি পথের সামনের অর্ধেক যাচাই করে — সিড + ভূগোল + অফিস খোঁজা। আপলোড, OTP বা সাবমিট করে না, আবেদনের তথ্যে হাত দেয় না। জন্মস্থানের বর্তমান সিলেকশন থেকে ভূগোল-চেইন বানায় (উপজেলা-পথ; ইউনিয়ন না মিললে পৌরসভা দিয়ে আবার চেষ্টা করে)। অফিস geoId দিলে অফিস খোঁজাও চেষ্টা করে (প্যারামিটার-নাম এখনো অযাচাই)।</p>
+      <p>সরাসরি পথের সামনের অর্ধেক যাচাই করে — সিড + ভূগোল + অফিস খোঁজা। আপলোড, OTP বা সাবমিট করে না, আবেদনের তথ্যে হাত দেয় না। জন্মস্থানের বর্তমান সিলেকশন থেকে ভূগোল-চেইন বানায় (উপজেলা-পথ; ইউনিয়ন না মিললে পৌরসভা দিয়ে আবার চেষ্টা করে)। অফিস geoId দিলে অফিস খোঁজাও চেষ্টা করে (প্যারামিটার-নাম এখনো অযাচাই)। স্ক্রিপ্ট প্রোব বোতাম ফরম পেজের নিজের স্ক্রিপ্ট পড়ে অফিস-কলের আসল নিয়ম খোঁজে।</p>
       <div><button class="btn" id="probeBtn">▶ প্রোব চালান</button>
-      <input id="probeOfficeGeoId" placeholder="অফিস geoId (ঐচ্ছিক)" style="margin-left:8px;padding:6px"></div>
+      <input id="probeOfficeGeoId" placeholder="অফিস geoId (ঐচ্ছিক)" style="margin-left:8px;padding:6px">
+      <button class="btn" id="scriptProbeBtn" style="margin-left:8px">🔍 স্ক্রিপ্ট প্রোব</button></div>
       <pre id="probeOut" style="white-space:pre-wrap;word-break:break-all;margin-top:8px">এখনো চালানো হয়নি।</pre>
     </div></details>
   </main>
@@ -1805,7 +1806,19 @@ function runStageAProbeBtn() {
     });
   });
 }
+function runScriptProbeBtn() {
+  const out = $('probeOut'); const btn = $('scriptProbeBtn');
+  if (!out || !btn) return;
+  if (!socket || !socket.connected) { out.textContent = 'সার্ভারের সাথে সংযোগ নেই — পেজ রিফ্রেশ করে আবার চেষ্টা করুন।'; return; }
+  btn.disabled = true;
+  out.textContent = '⏳ স্ক্রিপ্ট প্রোব চলছে… (ফরম পেজ + স্ক্রিপ্টে অফিস-কল খোঁজা, আপলোড/OTP/সাবমিট নয়)';
+  emitProbeOnce({ scriptProbe: true }, (r) => {
+    btn.disabled = false;
+    out.textContent = r ? JSON.stringify(r, null, 2) : '⌛ সময় শেষ (১২০ সেকেন্ড) — সার্ভার উত্তর দেয়নি।';
+  });
+}
 try { const pb = $('probeBtn'); if (pb) pb.addEventListener('click', runStageAProbeBtn); } catch (e) {}
+try { const sb = $('scriptProbeBtn'); if (sb) sb.addEventListener('click', runScriptProbeBtn); } catch (e) {}
 function mirrorSelect(sel, label, childSel, value) {
   return new Promise((res) => {
     let done = false;

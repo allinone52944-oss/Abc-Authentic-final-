@@ -402,6 +402,24 @@ class BdrisHttpClient {
     return this.officeGetRaw(OFFICE_BY_GEO_PATH, params);
   }
 
+  /**
+   * Probe-only raw page fetch (2026-10-27): GET a same-origin path
+   * with the SEEDED session — apiHeaders throws NOT_BOOTSTRAPPED
+   * when unseeded, so a bare fetch is never attempted here.
+   * Returns {url, status, ok, contentType, bodyLength, text} and
+   * never throws on HTTP status; only a network failure propagates.
+   * Used by the script probe to read the form page's own script.
+   */
+  async fetchPageText(path) {
+    const res = await this.request(path, { headers: this.apiHeaders() });
+    const contentType = typeof res.headers?.get === 'function' ? res.headers.get('content-type') : null;
+    return { url: path, status: res.status, ok: res.ok, contentType, bodyLength: res.text ? res.text.length : 0, text: res.text || '' };
+  }
+
+  async fetchFormPageText() {
+    return this.fetchPageText(FORM_PATH);
+  }
+
   async findOfficeGeoProjectionByGeoIdRaw(params = {}) {
     return this.officeGetRaw(OFFICE_PROJECTION_PATH, params);
   }
