@@ -136,6 +136,23 @@ async function runSubmitHttpChain(opts = {}) {
   return runHttpChain(opts);
 }
 
+/**
+ * Finest selected geo level's id (pure, tested): the frontend draft
+ * carries per-level *Id fields (divisionId … wardId, Phase 1) but no
+ * locationId. The address's LocationId is its finest selected
+ * level's id — ward first, then union, upazila, district, division.
+ * INFERRED (not live-proven): the live run proved only that
+ * geoLocationId is the address's LocationId; which level's id that
+ * is for a ward/union address is confirmed by the live test, and an
+ * explicit locationId/geoLocationId always overrides this fallback.
+ */
+function finestAddressId(addr = {}) {
+  for (const k of ['wardId', 'paurasavaUnionId', 'cityCorpUpazilaId', 'districtId', 'divisionId']) {
+    if (addr[k] !== undefined && addr[k] !== null && String(addr[k]) !== '') return String(addr[k]);
+  }
+  return '';
+}
+
 /** Accept draft shape or canonical shape; return canonical + extras. */
 function normalizeChainInput(data = {}) {
   const s1 = data.s1 || {};
@@ -157,16 +174,30 @@ function normalizeChainInput(data = {}) {
     phone: bnToArab(data.phone || s4prep.phone),
     officeAddressType: data.officeAddressType || s4prep.officeAddressType,
     officeAddrCountry: data.officeAddrCountry || s4prep.officeAddrCountry,
-    officeId: data.officeId || s4prep.officeId,
+    // LIVE-CONFIRMED 2026-10-27 (Stage C, user-run real application):
+    // the page sends officeId 0 when getOfficeId() is empty, and the
+    // server accepts it — so an absent officeId defaults to '0',
+    // never ''. No /api/office/* lookup is needed or performed.
+    officeId: data.officeId || s4prep.officeId || '0',
     addressType: data.addressType || 'BIRTHPLACE',
     otp: data.otp,
   };
+  // LocationId fallback: the draft's address objects carry *Id
+  // fields but no locationId (see finestAddressId). Copy, never
+  // mutate the caller's objects, so submit + verify both see it.
+  for (const key of ['birthPlace', 'permAddr']) {
+    const a = canonical[key] || {};
+    canonical[key] = { ...a, locationId: a.locationId || finestAddressId(a) || '' };
+  }
   // OTP-send/verify context (verified param names, see client.js).
   const person = canonical.person;
   const otpContext = {
     phone: canonical.phone || '',
     email: canonical.email || '',
-    officeId: canonical.officeId || '',
+    officeId: canonical.officeId || '0',
+    // Explicit caller geoLocationId wins in buildVerifyPayload; else
+    // the officeAddressType derivation uses the LocationIds above.
+    geoLocationId: String(data.geoLocationId || ''),
     personUbrn: String(data.personUbrn || person.brn || s1.brn || ''),
     relation: String(canonical.relation || ''),
     applicantName: String(canonical.applicantName || ''),
@@ -304,6 +335,12 @@ async function runHttpChain(opts = {}) {
     currentStep = 'geo';
     if (norm.geoChain) {
       candidateLog(log, 'geo', 'walking caller-supplied geo chain (firstParentId explicit, targetGeoOrder followed)');
+      // NOTE (final wiring): the walked chain's ids are NOT copied
+      // into the OTP/submit locationIds here — the chain's address
+      // (birthplace vs permanent) is caller-defined, so copying its
+      // final id to the wrong address would send a wrong
+      // geoLocationId. LocationIds come from the draft's *Ids
+      // (finestAddressId) or an explicit geoLocationId override.
       const chain = await client.walkGeoChain(norm.geoChain);
       stepsDone.push('geo');
       emit('HTTP_GEO', { steps: chain.length });
@@ -609,4 +646,4 @@ function extractScriptSrcs(html, base = '') {
   return srcs;
 }
 
-module.exports = { runHttpChain, runSubmitHttpChain, runStageAProbe, getHttpPathStatus, normalizeChainInput, isHttpPathEnabled, isFallbackSafe, HTTP_CANDIDATE_LABEL, HTTP_BASE, extractOfficeMatches, extractOfficeCallMatches, extractGetOfficeIdMatches, extractScriptSrcs };
+module.exports = { runHttpChain, runSubmitHttpChain, runStageAProbe, getHttpPathStatus, normalizeChainInput, finestAddressId, isHttpPathEnabled, isFallbackSafe, HTTP_CANDIDATE_LABEL, HTTP_BASE, extractOfficeMatches, extractOfficeCallMatches, extractGetOfficeIdMatches, extractScriptSrcs };
