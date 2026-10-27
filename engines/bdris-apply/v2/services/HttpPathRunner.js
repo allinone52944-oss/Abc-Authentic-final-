@@ -285,10 +285,20 @@ async function runHttpChain(opts = {}) {
 
   let currentStep = 'bootstrap';
   try {
-    // 1. Bootstrap (verified session + CSRF + cookie jar).
-    candidateLog(log, 'bootstrap', 'GET form page for session + CSRF');
-    await client.bootstrap();
-    stepsDone.push('bootstrap');
+    // 1. Bootstrap (verified session + CSRF + cookie jar) — SKIPPED
+    // when the caller already seeded the client from a warm browser
+    // session (seedFromBrowser sets bootstrapped=true). A bare fetch
+    // form-GET is proven blocked with 403, so re-bootstrapping a
+    // seeded client would break the very session it was given.
+    // Unseeded clients (and test doubles without the flag) keep the
+    // old behaviour: bootstrap runs.
+    if (client.bootstrapped) {
+      candidateLog(log, 'bootstrap', 'skipped — client already seeded from browser session');
+    } else {
+      candidateLog(log, 'bootstrap', 'GET form page for session + CSRF');
+      await client.bootstrap();
+      stepsDone.push('bootstrap');
+    }
 
     // 2. Geo chain — only when the caller supplies an explicit spec.
     currentStep = 'geo';

@@ -38,6 +38,7 @@ const { AddressService } = require('./services/AddressService');
 const { StepHandler, verifyChargeToken } = require('./services/StepHandler');
 const { OriginalFetcher } = require('./services/OriginalFetcher');
 const { runSubmitHttpChain, getHttpPathStatus } = require('./services/HttpPathRunner');
+const { HttpGeoService } = require('./services/HttpGeoService');
 
 class BdrisEngineV2 {
   constructor(io, options = {}) {
@@ -430,10 +431,30 @@ class BdrisEngineV2 {
           return { ok: true, path: 'playwright', completed: true };
         } : null;
 
+        // Session-seeded HTTP client (gate fix 2026-10-27): seed from
+        // the warm session page's cookies + CSRF, exactly like
+        // GET_ADDRESS_OPTIONS does for geo. When seeding fails (no
+        // warm page, or the page is not the form page), pass no
+        // client and keep the old behaviour — bare bootstrap will
+        // 403 and the chain falls back to Playwright, as before.
+        // seedFromPage never navigates, so it cannot hijack a
+        // mid-flow page from inside this command.
+        let httpClient = null;
+        if (session?.page) {
+          try {
+            const geo = new HttpGeoService();
+            if (await geo.seedFromPage(session.page)) httpClient = geo.client;
+            else this.log('HTTP seed skipped:', geo.lastSeedError ? geo.lastSeedError.message : 'unknown');
+          } catch (e) {
+            this.log('HTTP seed failed:', e.message);
+          }
+        }
+
         return runSubmitHttpChain({
           data: params,
           userId,
           secret,
+          client: httpClient,
           playwrightRunner,
           log: (...a) => this.log(...a),
           emit: (ev, msg) => ctx.emit(ev, msg),
