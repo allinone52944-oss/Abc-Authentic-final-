@@ -13,7 +13,9 @@
  *    /v1/api/geo/parentGeoIdWithGeoGroupAndGeoOrder/{parentGeoId}
  *    ?geoGroup=birthPlace&geoOrder=N&geoType=M[&ward=true], following
  *    the response's targetGeoOrder (NEVER order+1) and using the chosen
- *    entry's id as the next parent. Names are matched on nameBn.
+ *    entry's id as the next parent. Names are matched with the
+ *    shared loose matcher (v2/http/geoMatch.js), identical to the
+ *    working path — never strict equality (live-proven 2026-10-27).
  *  - Document upload to POST /admin/doc/upload (multipart, types 40/41).
  *  - OTP send over POST /api/otp/sent (query = otpSend context, body
  *    = the six person/parent name fields; no token/id is returned).
@@ -47,6 +49,11 @@
  */
 
 'use strict';
+
+// Shared matcher (2026-10-27): walkGeoChain must match geo names
+// exactly like the working path — strict equality failed live at
+// step 1 ("চট্টগ্রাম" vs the list's actual division name).
+const { findGeoEntry } = require('./geoMatch');
 
 const FORM_PATH = '/br/application';
 const GEO_PATH = '/v1/api/geo/parentGeoIdWithGeoGroupAndGeoOrder';
@@ -303,7 +310,8 @@ class BdrisHttpClient {
   }
 
   /**
-   * Walk a geo chain by nameBn. Each step picks one entry by exact nameBn;
+   * Walk a geo chain by nameBn. Each step picks one entry with the
+   * shared loose matcher (exact, substring, dot/dash/space-stripped);
    * the next parent is that entry's id and the next order is the previous
    * response's targetGeoOrder — never order+1.
    *
@@ -329,7 +337,7 @@ class BdrisHttpClient {
     let order = firstGeoOrder;
     for (const step of steps) {
       const res = await this.getGeo(parent, order, step.geoType, { ward: !!step.ward, geoGroup: step.geoGroup || geoGroup });
-      const chosen = res.entries.find((e) => e.nameBn === step.nameBn);
+      const chosen = findGeoEntry(res.entries, step.nameBn);
       if (!chosen) {
         throw err(
           'GEO_NOT_FOUND',

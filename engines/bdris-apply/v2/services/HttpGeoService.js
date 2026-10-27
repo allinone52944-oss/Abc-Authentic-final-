@@ -49,42 +49,15 @@
 'use strict';
 
 const { BdrisHttpClient } = require('../http/client');
+// Shared matcher (2026-10-27): the working path and the probe chain
+// must match geo names identically — see v2/http/geoMatch.js.
+const { normalizeBn, findGeoEntry: findByName } = require('../http/geoMatch');
 
 const GEO_GROUP_BY_FORM = {
   birth: 'birthPlace',
   perm: 'permAddr',
   prsnt: 'prsntAddr',
 };
-
-function normalizeBn(text) {
-  return String(text || '')
-    .replace(/[\u09DC]/g, '\u09A1\u09BC')
-    .replace(/[\u09DD]/g, '\u09A2\u09BC')
-    .replace(/[\u09DF]/g, '\u09AF\u09BC')
-    .replace(/[\u0981\u200C\u200D]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function findByName(entries, name) {
-  const want = normalizeBn(name);
-  if (!want) return null;
-  const loose = (t) => normalizeBn(t).replace(/[\.\-\u2010-\u2015,\u0964]/g, '').replace(/\s+/g, '');
-  const wantLoose = loose(name);
-  return entries.find((e) => normalizeBn(e.nameBn) === want)
-    || entries.find((e) => {
-      const n = normalizeBn(e.nameBn);
-      return n && (n.includes(want) || want.includes(n));
-    })
-    // Same live-proven dot/space spelling variant as the Playwright
-    // path: "P.M. Khali" vs "PMKhali" must match here too, or the
-    // HTTP ward fetch fails even when the zone list is present.
-    || entries.find((e) => {
-      const n = loose(e.nameBn);
-      return n && wantLoose && (n === wantLoose || n.includes(wantLoose) || wantLoose.includes(n));
-    })
-    || null;
-}
 
 function toOptions(entries) {
   const seen = new Set();
