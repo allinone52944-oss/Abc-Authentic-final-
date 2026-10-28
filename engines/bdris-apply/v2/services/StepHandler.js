@@ -1592,9 +1592,11 @@ class StepHandler {
     // OTP-SEND-NET (2026-10-28): the site can fail a send SILENTLY — click ok,
     // no toast, no countdown, button still visible (5× live 2026-10-28) — and
     // the engine previously had no visibility past the click. So the send is
-    // now wrapped in a one-shot network tap: the send response (path + status
-    // ONLY — query and body are never logged) is recorded, and a non-2xx
-    // send, or no send request at all, is surfaced in the failure reason.
+    // now wrapped in a one-shot network tap: the send response (path + status,
+    // plus — for a non-2xx ONLY — the site's own error code/message string,
+    // truncated; the request query and the full body are never logged) is
+    // recorded, and a non-2xx send, or no send request at all, is surfaced
+    // in the failure reason.
     if (anchor) {
       const sendBtn = await this._waitVisible(['button:has-text("ওটিপি পাঠান")'], 10000);
       if (!sendBtn) {
@@ -1640,17 +1642,33 @@ class StepHandler {
    * OTP-SEND-NET (2026-10-28): one-shot network tap for the OTP send.
    * Records every otp-ish response seen while attached as { path, status }
    * — the URL path WITHOUT the query (the query carries the phone number
-   * and must never be logged) and never the body. Detached by the caller
-   * after the evidence wait, so repeated resends cannot accumulate taps.
-   * Safe on pages without on/off (returns an empty, no-op tap).
+   * and must never be logged). For a non-2xx ONLY, the response body's
+   * error message is also captured via _otpSendBodyMsg (the site's own
+   * code/message string, truncated; the full body is never kept, and the
+   * payload field — which could carry anything — is never read).
+   * Detached by the caller after the evidence wait, so repeated resends
+   * cannot accumulate taps. Safe on pages without on/off (returns an
+   * empty, no-op tap). The body read is best-effort: a missing or
+   * unreadable body leaves the entry as path + status alone.
+   * OTP-SEND-BODY (2026-10-28): live 400s on /api/otp/sent carry the
+   * site's reason only in the response body — status alone cannot name
+   * it — so the tap now keeps that message for non-2xx responses.
    */
   _tapOtpSendNet() {
     const seen = [];
-    const tap = (res) => {
+    const tap = async (res) => {
       try {
         const u = new URL(res.url());
         if (!/otp/i.test(u.pathname)) return;
-        seen.push({ path: u.pathname, status: res.status() });
+        const entry = { path: u.pathname, status: res.status() };
+        seen.push(entry);
+        if (entry.status < 200 || entry.status >= 300) {
+          try {
+            const txt = typeof res.text === 'function' ? await res.text() : '';
+            const msg = this._otpSendBodyMsg(txt);
+            if (msg) entry.msg = msg;
+          } catch (_) { /* body unreadable — status alone still stands */ }
+        }
       } catch (_) { /* non-URL response — ignore */ }
     };
     if (this.page && typeof this.page.on === 'function') this.page.on('response', tap);
@@ -1663,14 +1681,44 @@ class StepHandler {
   }
 
   /**
+   * OTP-SEND-BODY (2026-10-28): extract ONLY the site's own error
+   * wording from a non-2xx send response body. The known send shape is
+   * { code, message, success, payload } — message (else code) is the
+   * server's reason string and carries no OTP or phone number. The
+   * payload field is never read. Plain-text bodies are kept as-is.
+   * Everything is whitespace-collapsed and truncated to 200 chars.
+   * Returns '' when nothing safe and usable is present.
+   */
+  _otpSendBodyMsg(txt) {
+    if (!txt || typeof txt !== 'string') return '';
+    const clean = (s) => s.replace(/\s+/g, ' ').trim().slice(0, 200);
+    try {
+      const j = JSON.parse(txt);
+      if (typeof j === 'string') return clean(j);
+      if (j && typeof j === 'object') {
+        const m = typeof j.message === 'string' ? j.message
+          : (typeof j.code === 'string' ? j.code : '');
+        return m.trim() ? clean(m) : '';
+      }
+      return '';
+    } catch (_) { /* not JSON — plain text below */ }
+    return clean(txt);
+  }
+
+  /**
    * OTP-SEND-NET (2026-10-28): map network evidence + the evidence-wait
    * reason to the user-facing failure reason. A non-2xx send names its
-   * status; no send request at all says so plainly; otherwise the
-   * evidence-wait reason stands unchanged.
+   * status — and, when the tap captured one, the site's own error
+   * message instead of the generic evidence reason; no send request at
+   * all says so plainly; otherwise the evidence-wait reason stands
+   * unchanged.
    */
   _otpSendFailReason(netSeen, evReason) {
     const bad = (netSeen || []).find((r) => r.status < 200 || r.status >= 300);
-    if (bad) return `সাইটের সেন্ড-জবাব: ${bad.status} — ${evReason}`;
+    if (bad) {
+      if (bad.msg) return `সাইটের সেন্ড-জবাব: ${bad.status} — ${bad.msg}`;
+      return `সাইটের সেন্ড-জবাব: ${bad.status} — ${evReason}`;
+    }
     if (!netSeen || netSeen.length === 0) return `ক্লিকের পর সাইট কোনো সেন্ড-রিকোয়েস্টই পাঠায়নি — ${evReason}`;
     return evReason;
   }
