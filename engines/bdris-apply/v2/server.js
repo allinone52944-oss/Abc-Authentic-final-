@@ -1136,8 +1136,17 @@ if (require.main === module) {
   });
 
   const server = http.createServer(app);
+  // PING-TIMEOUT FIX (2026-10-28): socket.io defaults allow only 20s for a
+  // pong after each 25s ping. Background tabs (timer throttling) and slow
+  // networks stall longer than that, so the server declared 'ping timeout'
+  // and dropped live sessions mid-application. 60s keeps dead-connection
+  // detection finite (~85s worst case) while surviving stalls/throttling
+  // bursts; the 25s ping interval is unchanged so middleboxes still see
+  // regular traffic.
   const io = new Server(server, {
     cors: { origin: true, credentials: true },
+    pingInterval: 25000,
+    pingTimeout: 60000,
   });
 
   const engine = new BdrisEngineV2(io, {});
