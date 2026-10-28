@@ -1019,6 +1019,30 @@ class BdrisEngineV2 {
         if (sessionId) this.sessionManager.touch(sessionId);
       });
 
+      // QTRACE DIAGNOSTIC (2026-10-28): ব্রাউজারের সারি-ঘটনা জার্নালে —
+      // আচরণ নয়, শুধু লগ। ক্লায়েন্ট শুধু অপের নাম/সংখ্যা/বুলিয়ান পাঠায়;
+      // এখানেও শুধু সেই সাদা ক্ষেত্রগুলোই ছাপা হয়, আর কিছু নয়।
+      socket.on('CLIENT_TRACE', (d = {}) => {
+        try {
+          if (!d || typeof d !== 'object') return;
+          const ev = typeof d.ev === 'string' ? d.ev.slice(0, 24) : '';
+          if (!ev) return;
+          const op = typeof d.op === 'string' ? d.op.slice(0, 24) : '';
+          const parts = ['CLIENT-TRACE:', ev];
+          if (op) parts.push(op);
+          if (typeof d.q === 'number') parts.push('q=' + d.q);
+          if (typeof d.failed === 'number') parts.push('failed=' + d.failed);
+          if (typeof d.ready === 'boolean') parts.push('ready=' + d.ready);
+          if (typeof d.conn === 'boolean') parts.push('conn=' + d.conn);
+          if (typeof d.busy === 'boolean') parts.push('busy=' + d.busy);
+          if (typeof d.saved === 'boolean') parts.push('saved=' + d.saved);
+          if (typeof d.repump === 'boolean') parts.push('repump=' + d.repump);
+          if (typeof d.blocked === 'boolean') parts.push('blocked=' + d.blocked);
+          if (typeof d.dropped === 'string' && d.dropped) parts.push('dropped=' + d.dropped.slice(0, 120));
+          console.log(parts.join(' '));
+        } catch (e) {}
+      });
+
       socket.on('GET_DOM_OPTIONS', async (selector, callback) => {
         try {
           if (!sessionId) { if (callback) callback([]); return; }
