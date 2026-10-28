@@ -3706,7 +3706,26 @@ function onSessionReady() {
 function sessionLost() {
   S.ready = false; S.starting = false;
   busy(false);
+  // FAILQ-LOST-SEND FIX (2026-10-28): opAbort() সারি চুপচাপ মুছে দিত —
+  // সারিতে বসা SUBMIT_S4_PREP (কখনো সাইট ছোঁয়নি) হারিয়ে যেত, অথচ
+  // পর্দা 'sending' দেখাতো (live-proven 2026-10-28: ঠিকানা-অপের
+  // টাইমআউট-ack-এর failure branch-এ একইভাবে মরেছে)। চলন্ত অপটাই
+  // S4_PREP না হলে বাঁচানো প্রেপ সারিতে ফিরিয়ে দিই — সংযোগ ফিরলে
+  // READY-যন্ত্র (handleFreshReady / _readyQ) আবার পাঠাবে; চলন্ত
+  // অপটাই S4_PREP হলে আবার পাঠাই না (সার্ভারে জম্বি চলতে পারে —
+  // ডাবল-সেন্ডের ভয়) — সত্যি ফেল দেখাই। অন্য সারিবদ্ধ অপও
+  // চুপচাপ নয় — সত্যি ফেল হিসেবে জানাই।
+  const _lostInFlight = S._waitingAck;
+  const _lostSavedPrep = takeQueuedPrep();
+  const _lostDropped = (S._opQ || []).map(j => j.op);
   opAbort();
+  if (_lostSavedPrep && _lostInFlight !== 'SUBMIT_S4_PREP') {
+    (S._opQ = S._opQ || []).push(_lostSavedPrep);
+    pumpOpQ(); // ready false হলে ensureReady-তে অপেক্ষা করবে, READY এলে চলবে
+  }
+  const _lostFailed = _lostDropped.slice();
+  if (_lostSavedPrep && _lostInFlight === 'SUBMIT_S4_PREP') _lostFailed.push('SUBMIT_S4_PREP');
+  if (_lostFailed.length) showFail(_lostFailed.map(op => opLabel(op) + ' — সংযোগ হারানোয় পাঠানো যায়নি'));
   showBanner('warn', '⚠️ সংযোগটি একটু দুর্বল হয়ে গেছে — আপনার তথ্য নিরাপদে আছে। “আবার চেষ্টা করুন” চাপলেই বাকিটা এগিয়ে যাবে।', () => retrySession(), 'আবার চেষ্টা করুন');
   note('⏸️ সংযোগ প্রস্তুত করা দরকার', 'warn');
 }
@@ -3770,6 +3789,16 @@ function manualStepAck(d) {
   if (d.blocked || failed.length) {
     if (staleAck) { if (op) dropSent(op); return; } // পুরনো ধাপের ব্যর্থতা — মেরামত চলছে, নীরব থাকি
     if (op === 'SUBMIT_S3_DOCS' && S._docsReturnPending) S._docsReturnPending = false; // recovery chain aborted — do not chain on a later S3 ack
+    // FAILQ-LOST-SEND FIX (2026-10-28): নিচের opAbort() সারি চুপচাপ
+    // মুছে দিত — সারিতে বসা SUBMIT_S4_PREP (কখনো সাইট ছোঁয়নি)
+    // হারিয়ে যেত (live-proven 2026-10-28: ঠিকানা-অপের টাইমআউট-ack
+    // এসেই সেন্ডটাকে এভাবে মেরেছে; opFinish-এর ৮০ মিলিসেকেন্ড পরের
+    // পাম্প চলার আগেই সারি খালি হয়ে যেত)। তাই opAbort-এর আগেই
+    // বাঁচাই; ব্যর্থ অপটাই S4_PREP হলে আবার পাঠাই না (সার্ভারে জম্বি
+    // চলতে পারে — ডাবল-সেন্ডের ভয়) — সত্যি ফেল দেখাই।
+    const _failSavedPrep = takeQueuedPrep();
+    const _failDropped = (S._opQ || []).map(j => j.op);
+    const _failWillRepump = !!(_failSavedPrep && op !== 'SUBMIT_S4_PREP' && S.ready && socket.connected);
     // Demo-proven (2026-10-26): UI advances instantly (advanceAndSend
     // calls goStep before the engine ack), so a failed ack for an
     // earlier step used to paint that step's errors as the CURRENT
@@ -3782,11 +3811,13 @@ function manualStepAck(d) {
     const _oi = op ? OPS.findIndex(o => o.op === op) : -1;
     const _opStep = _oi >= 0 ? (OPS[_oi].step || 0) : 0;
     const _late = !!(_opStep && (S.d.uiStep || 0) >= _opStep);
-    if (failed.length) showFail((_late ? ['আগের ধাপ (' + (OPS[_oi].label || op) + ') থেকে এসেছে — সেই ধাপে ফিরে ঠিক করুন'] : []).concat(failed.map(x => (x.field ? x.field + ' — ' : '') + (x.reason || 'সমস্যা হয়েছে'))));
+    const _failLines = (_late ? ['আগের ধাপ (' + (OPS[_oi].label || op) + ') থেকে এসেছে — সেই ধাপে ফিরে ঠিক করুন'] : []).concat(failed.map(x => (x.field ? x.field + ' — ' : '') + (x.reason || 'সমস্যা হয়েছে'))).concat(_failDropped.map(o => opLabel(o) + ' — ব্যর্থতার কারণে পাঠানো যায়নি')).concat((_failSavedPrep && !_failWillRepump) ? ['কোড পাঠানো — ব্যর্থতার কারণে পাঠানো যায়নি'] : []);
+    if (_failLines.length) showFail(_failLines);
     note('⚠️ ' + san(d.message || 'কিছু মিলছে না — ঠিক করে আবার চেষ্টা করুন'), 'warn');
     if (op) dropSent(op); // ব্যর্থ ধাপ সাইটে যাওয়া গণ্য নয় — রিট্রাই আবার পাঠাবে
     opAbort();
     busy(false); // আটকে গেলে বাটন আবার চালু — নইলে রিট্রাই/খসড়া কিছুই চাপা যায় না
+    if (_failWillRepump) { (S._opQ = S._opQ || []).push(_failSavedPrep); pumpOpQ(); }
     // সাইট যোগাযোগ ধাপে নেই — branch on the machine-readable code
     // the engine returns, NEVER on the Bengali reason text (the old
     // regex broke whenever the reason wording changed). Retrying
