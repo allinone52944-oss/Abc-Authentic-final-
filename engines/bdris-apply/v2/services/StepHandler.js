@@ -1425,6 +1425,12 @@ class StepHandler {
     this.progress('🔄 যোগাযোগের তথ্য বসানো হচ্ছে...');
     const CONTACT_ANCHORS = ['#email', 'input[name="email"]', '#phone', 'input[name="phone"]'];
     let anchor = await this._waitVisible(CONTACT_ANCHORS, 12000);
+    // S4PREP silent-timeout fix (2026-10-28): journal stage lines.
+    // progress() is socket-only, so a pre-send replay in progress
+    // was journal-invisible — a hang left no trace at all. Every
+    // stage below logs one line (step numbers / ok-fail only, never
+    // form values, names, or phone numbers).
+    console.log('S4PREP-ANCHOR:', anchor ? 'found' : 'missing');
     let s4prepReplay = null;
     if (!anchor) {
       // Permanent fix (2026-10-26): do NOT fail immediately. Detect
@@ -1432,6 +1438,7 @@ class StepHandler {
       // Only when there is no formCtx at all do we keep the old
       // resumable path (fresh session, UI chain replay).
       const det = await this._detectSiteStep();
+      console.log('S4PREP-DETECT: step=' + det.step);
       const hasCtx = !!(data.s0 || data.s1 || data.s2 || data.s2b);
       if (det.step === 1 && !hasCtx) {
         resumable = true;
@@ -1441,7 +1448,9 @@ class StepHandler {
           message: '🔄 তথ্য আবার বসিয়ে ওটিপি পাঠানো হবে — একটু অপেক্ষা করুন।',
         };
       }
+      console.log('S4PREP-REPLAY: start step=' + det.step);
       const replay = await this._replayToContact(det.step, data);
+      console.log('S4PREP-REPLAY:', replay.ok ? 'ok ' + (replay.replayed || '') : 'fail ' + (replay.reason || ''));
       s4prepReplay = { siteStep: det.step, ok: replay.ok, replayed: replay.replayed || null, reason: replay.reason || null };
       if (replay.ok) {
         anchor = await this._waitVisible(CONTACT_ANCHORS, 12000);
@@ -1452,6 +1461,7 @@ class StepHandler {
       }
     }
     if (!anchor) {
+      console.log('S4PREP-ANCHORS-MISSING');
       // "পেজ পাওয়া যায়নি" was a mislabel: it only meant neither
       // contact nor start anchors were visible in 15s. Classify the
       // actual page state (presence only, no values) so the next

@@ -60,12 +60,20 @@ class CommandExecutor {
       return response;
     } catch (e) {
       if (e.code === 'COMMAND_TIMEOUT') {
+        // S4PREP silent-timeout fix (2026-10-28): a timeout used to
+        // leave zero journal trace — the op died silently while the
+        // frontend showed 'sending' forever. Log every timeout
+        // (command + window only, never params: a submit payload
+        // can carry a phone number).
+        console.log(`EXECUTOR-TIMEOUT: ${commandName} after ${timeoutMs}ms`);
         return {
           ok: false,
           error: 'TIMEOUT',
           message: `${commandName} timed out after ${timeoutMs}ms`,
         };
       }
+      // Same silence rule for failures: command + code only.
+      console.log(`EXECUTOR-FAILED: ${commandName} ${e.code || 'ERROR'}`);
       return {
         ok: false,
         error: 'EXECUTION_FAILED',

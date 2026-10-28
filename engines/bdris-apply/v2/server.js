@@ -34,6 +34,7 @@ function verifyJwtHS256(token, secret) {
 }
 const { SessionManager } = require('./core/SessionManager');
 const { CommandExecutor } = require('./core/CommandExecutor');
+const { toStepAck, shouldDropSession } = require('./core/stepAck');
 const { BdrisNavigator } = require('./services/BdrisNavigator');
 const { AddressService } = require('./services/AddressService');
 const { StepHandler, verifyChargeToken } = require('./services/StepHandler');
@@ -871,21 +872,24 @@ class BdrisEngineV2 {
               emit: (ev, payload) => socket.emit(ev, payload),
               socket,
             });
+            // S4PREP silent-timeout fix (2026-10-28): never forward
+            // a failure (above all a TIMEOUT) with an empty failed
+            // list — manualStepAck's failure branch requires
+            // d.blocked || failed.length, so an empty list made the
+            // timeout masquerade as the OTP 'sending' view. And a
+            // timed-out op's page is untrusted (withTimeout never
+            // cancels the underlying work, and sessions are reused
+            // across reloads), so drop the session: the next op
+            // bootstraps a fresh page instead of fighting a zombie.
+            const ack = toStepAck(result);
+            if (shouldDropSession(result) && sessionId) {
+              const dropped = sessionId;
+              sessionId = null;
+              await this.sessionManager.destroy(dropped).catch(() => {});
+              console.log(`SESSION-DROPPED-TIMEOUT: ${evName}`);
+            }
             // v1 shape: {step, message, failed, blocked}
-            socket.emit('STEP_CHANGE_ACK', {
-              step: result.step || 0,
-              message: result.message || '',
-              failed: result.failed || [],
-              blocked: result.blocked || undefined,
-              ok: result.ok,
-              // Previously dropped: S4_PREP's fresh-session resumable
-              // path was dead because the frontend never saw it and
-              // rendered the OTP screen as if a code had been sent.
-              resumable: result.resumable || undefined,
-              otpSent: result.otpSent,
-              code: result.code || undefined,
-              relationBn: result.relationBn,
-            });
+            socket.emit('STEP_CHANGE_ACK', ack);
             // S4 completion → BOT_STATUS/COMPLETED for frontend
             if (evName === 'SUBMIT_S4_OTP' && result.ok && result.completed) {
               // Debug-2 (2026-10-26): v1 saved the original-PDF
