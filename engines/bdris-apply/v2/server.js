@@ -42,6 +42,83 @@ const { OriginalFetcher, STEP_LABELS } = require('./services/OriginalFetcher');
 const { runSubmitHttpChain, runStageAProbe, getHttpPathStatus, HTTP_CANDIDATE_LABEL } = require('./services/HttpPathRunner');
 const { HttpGeoService } = require('./services/HttpGeoService');
 
+// S4Prep-area fix (2026-10-28, items 4/22): the per-step dispatch
+// merge, extracted verbatim (plus the relation fill) so tests can
+// prove it without driving a socket. Explicit step fields win;
+// ctx (this emit, or the session's stored ctx) fills the gaps;
+// the session contact fills s4prep email/phone gaps; a S4Prep
+// without docs inherits the session's S3 docs. Relation fill:
+// the frontend sends relation on S3 and (now) on S4Prep + ctx,
+// but the merge never carried it, so catch-up submitS3 got
+// relation: undefined and skipped the relation radio entirely
+// (StepHandler.js if (data.relation) gate). Order: explicit
+// params.relation, then ctx, then the session copy stored at
+// S3/S4Prep — the same precedence shape as contact/docs.
+function mergeStepParams(params = {}, session = {}, cmdName = '') {
+  const ctxData = params.ctx || session.formCtx || null;
+  if (params.ctx) session.formCtx = params.ctx;
+  const merged = { ...params };
+  if (ctxData) {
+    if (!merged.s0 && ctxData.s0) merged.s0 = ctxData.s0;
+    if (!merged.s1 && ctxData.s1) merged.s1 = ctxData.s1;
+    if (!merged.s2 && ctxData.s2) merged.s2 = ctxData.s2;
+    if (!merged.s2b && ctxData.s2b) merged.s2b = ctxData.s2b;
+    if (!merged.applicantDob && ctxData.s1 && ctxData.s1.dob) merged.applicantDob = ctxData.s1.dob;
+    if (!merged.relation && ctxData.relation) merged.relation = ctxData.relation;
+  }
+  if (!merged.relation && session.relation) merged.relation = session.relation;
+  if (session.contact) {
+    const sp = (merged.s4prep && typeof merged.s4prep === 'object') ? merged.s4prep : {};
+    merged.s4prep = {
+      email: sp.email || session.contact.email || '',
+      phone: sp.phone || session.contact.phone || '',
+    };
+  }
+  if (cmdName === 'SUBMIT_S4_PREP' && (!merged.docs || !merged.docs.length) && session.docs && session.docs.length) {
+    merged.docs = session.docs;
+  }
+  return merged;
+}
+
+// S4Prep-area fix (2026-10-28, items 4/24): the HTTP-chain
+// Playwright fallback's step plan, extracted so tests can prove
+// it carries the same context the per-step dispatch merge
+// carries. Before this, the fallback handler was built with only
+// {emit, userId} (no singleName/applicantDob) and its submitS4Prep
+// got only {s4prep, s1} — so a catch-up replay inside the fallback
+// was impossible (no s0/s2/s2b, no docs, no relation, no contact).
+// The plan below mirrors the merge: explicit draft fields win;
+// the session copy (contact/docs/relation/singleName/applicantDob)
+// fills only the gaps. Behaviour for a complete draft is
+// unchanged — every added field is a fallback, never an override.
+function buildPlaywrightFallbackPlan(d = {}, session = {}) {
+  const s4c = { ...(d.s4prep || {}) };
+  s4c.email = s4c.email || (session.contact && session.contact.email) || '';
+  s4c.phone = s4c.phone || (session.contact && session.contact.phone) || '';
+  const relation = d.relation || (d.s3 && d.s3.relation) || session.relation;
+  const docs = d.docs || (d.s3 && d.s3.docs) || session.docs || [];
+  const applicantDob = (d.s1 && d.s1.dob) || d.applicantDob || session.applicantDob;
+  return {
+    handlerOptions: {
+      singleName: session.singleName || null,
+      applicantDob: session.applicantDob || null,
+    },
+    steps: [
+      ['submitS0', { ...(d.s0 || {}), addressType: (d.s0 && d.s0.addressType) || d.addressType || 'BIRTHPLACE' }],
+      ['submitS1', d.s1 || d.person || {}],
+      ['submitS2', { ...(d.s2 || {}), applicantDob }],
+      ['submitS2B', d.s2b || {}],
+      ['submitS3', { ...(d.s3 || {}), docs: d.docs || (d.s3 || {}).docs || [], s1: d.s1, applicantDob, relation }],
+      ['submitS4Prep', { ...s4c, s0: d.s0, s1: d.s1, s2: d.s2, s2b: d.s2b, docs, relation }],
+      ['submitS4', {
+        otp: d.otp, _chargeToken: d._chargeToken,
+        s1: d.s1, s2: d.s2, s2b: d.s2b, s3: d.s3, s4prep: s4c,
+        applicantDob,
+      }],
+    ],
+  };
+}
+
 class BdrisEngineV2 {
   constructor(io, options = {}) {
     this.io = io;
@@ -318,40 +395,19 @@ class BdrisEngineV2 {
           // pre-2013 SELF rule was dead, and S4Prep/S4 cinno +
           // original-record were dead. Merge ctx (and the session's
           // stored ctx from earlier steps) without overwriting
-          // explicit step fields.
-          const ctxData = params.ctx || session.formCtx || null;
-          if (params.ctx) session.formCtx = params.ctx;
-          const merged = { ...params };
-          if (ctxData) {
-            if (!merged.s0 && ctxData.s0) merged.s0 = ctxData.s0;
-            if (!merged.s1 && ctxData.s1) merged.s1 = ctxData.s1;
-            if (!merged.s2 && ctxData.s2) merged.s2 = ctxData.s2;
-            if (!merged.s2b && ctxData.s2b) merged.s2b = ctxData.s2b;
-            if (!merged.applicantDob && ctxData.s1 && ctxData.s1.dob) merged.applicantDob = ctxData.s1.dob;
-          }
-          // Debug-2 (2026-10-26): contact carry (see StepHandler
-          // submitS4Prep). The S4_OTP payload has no phone/email,
-          // so without this submitS4's buildOriginalRec always
-          // returned null (empty mobileNo). Explicit s4prep fields
-          // win; session contact fills only the gaps.
-          if (session.contact) {
-            const sp = (merged.s4prep && typeof merged.s4prep === 'object') ? merged.s4prep : {};
-            merged.s4prep = {
-              email: sp.email || session.contact.email || '',
-              phone: sp.phone || session.contact.phone || '',
-            };
-          }
-          // S4Prep replay docs (2026-10-26, permanent fix): the S3
-          // step's docs are the only docs the session ever sees, so
-          // remember them, and hand them to a later S4Prep that
-          // arrives without docs (same-session replay). A resumed
-          // draft's S4Prep carries its own docs from the frontend,
-          // which win over the session copy.
-          if (cmdName === 'SUBMIT_S4_PREP' && (!merged.docs || !merged.docs.length) && session.docs && session.docs.length) {
-            merged.docs = session.docs;
-          }
+          // explicit step fields. (The merge lives in
+          // mergeStepParams above, S4Prep-area fix 2026-10-28, so
+          // tests can prove it; the relation fill there is item 22,
+          // and the S4Prep docs/contact fills are the 2026-10-26
+          // Debug-2 / replay-docs rules, moved verbatim.)
+          const merged = mergeStepParams(params, session, cmdName);
           const result = await handler[methodName](merged);
           if (cmdName === 'SUBMIT_S3_DOCS' && merged.docs && merged.docs.length) session.docs = merged.docs;
+          // S4Prep-area fix (2026-10-28, item 22): remember the
+          // relation the same way docs are remembered, so a later
+          // S4Prep in this session replays with the radio even
+          // when its own payload lacks one.
+          if ((cmdName === 'SUBMIT_S3_DOCS' || cmdName === 'SUBMIT_S4_PREP') && merged.relation) session.relation = merged.relation;
           if (handler.singleName) session.singleName = handler.singleName;
           if (handler.applicantDob) session.applicantDob = handler.applicantDob;
           if (handler.contact && (handler.contact.email || handler.contact.phone)) session.contact = handler.contact;
@@ -456,24 +512,19 @@ class BdrisEngineV2 {
         // a counting fake adapter stays at 0 calls when disabled).
         const playwrightRunner = session?.page ? async (data) => {
           const nav = new BdrisNavigator(session.page);
+          // S4Prep-area fix (2026-10-28, items 4/24): the step plan
+          // lives in buildPlaywrightFallbackPlan above, so the
+          // fallback carries the same context the per-step dispatch
+          // merge carries (s0/s1/s2/s2b, docs, contact, relation,
+          // singleName, applicantDob) and a catch-up replay inside
+          // submitS4Prep is possible here too.
+          const plan = buildPlaywrightFallbackPlan(data || {}, session);
           const handler = new StepHandler(nav, {
             emit: (ev, msg) => ctx.emit(ev, msg),
             userId,
+            ...plan.handlerOptions,
           });
-          const d = data || {};
-          const steps = [
-            ['submitS0', { addressType: d.addressType || 'BIRTHPLACE' }],
-            ['submitS1', d.s1 || d.person || {}],
-            ['submitS2', { ...(d.s2 || {}), applicantDob: (d.s1 || {}).dob || d.applicantDob }],
-            ['submitS2B', d.s2b || {}],
-            ['submitS3', { ...(d.s3 || {}), docs: d.docs || (d.s3 || {}).docs || [], s1: d.s1, applicantDob: (d.s1 || {}).dob || d.applicantDob }],
-            ['submitS4Prep', { ...(d.s4prep || {}), s1: d.s1 }],
-            ['submitS4', {
-              otp: d.otp, _chargeToken: d._chargeToken,
-              s1: d.s1, s2: d.s2, s2b: d.s2b, s3: d.s3, s4prep: d.s4prep,
-              applicantDob: (d.s1 || {}).dob || d.applicantDob,
-            }],
-          ];
+          const steps = plan.steps;
           for (const [method, stepParams] of steps) {
             const r = await handler[method](stepParams);
             if (!r || r.ok === false) {
@@ -856,6 +907,17 @@ class BdrisEngineV2 {
               const nav0 = new BdrisNavigator(sess.page);
               await nav0.gotoForm();
             } catch (e) {
+              // S4Prep-area fix (2026-10-28, item 6): mirror the
+              // destroy-on-failure in INIT/START/GET_ADDRESS/PROBE.
+              // Without this, a failed/stub page stayed ACTIVE and
+              // the next step ran on that broken page. The session
+              // was just created above, so destroy it and clear the
+              // closure id; the next op auto-inits fresh instead.
+              if (sessionId) {
+                const failedId = sessionId;
+                sessionId = null;
+                await this.sessionManager.destroy(failedId).catch(() => {});
+              }
               socket.emit('STEP_CHANGE_ACK', { step: 0, failed: [{ reason: e.message }] });
               return;
             }
@@ -1116,7 +1178,7 @@ class BdrisEngineV2 {
   }
 }
 
-module.exports = { BdrisEngineV2 };
+module.exports = { BdrisEngineV2, mergeStepParams, buildPlaywrightFallbackPlan };
 
 // ── Bootstrap: standalone subprocess entry point ──
 // Adapter (index.js) এই file-কে subprocess হিসেবে spawn করে।

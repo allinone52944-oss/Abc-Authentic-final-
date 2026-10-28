@@ -1629,7 +1629,10 @@ function emitStep(op, payload, onAckExtra) {
   // Permanent (2026-10-15): block নয়, queue — UI instant, engine background-এ sequential
   // ব্যাকএন্ডের ensureAligned-যন্ত্রকে সব ধাপের তথ্য দিই (সাইট ধাপ হারালে/পিছিয়ে
   // গেলে নিজে থেকে মেরামত করতে পারে) — রেকর্ড-তুলনায় ctx বাদ যায়
-  payload = Object.assign({}, payload, { ctx: { s0: S.d.s0, s1: S.d.s1, s2: S.d.s2, s2b: S.d.s2b } });
+  // S4Prep-area fix (2026-10-28, item 22): ctx carries relation too,
+  // so the server merge can fill a S4Prep whose own payload lacks
+  // one (same source as the S3/S4Prep payloads).
+  payload = Object.assign({}, payload, { ctx: { s0: S.d.s0, s1: S.d.s1, s2: S.d.s2, s2b: S.d.s2b, relation: S.d.relation || defaultRelation() } });
   // OPQUEUE-LOST-SEND FIX: একই অপ সারিতে থাকলে ডুপ্লিকেট নয় — নতুন
   // পেলোড দিয়ে পুরনোটা বদলাই (রিসেটে বাঁচানো S4_PREP + ইউজারের আবার
   // চাপা — দুটো মিলে ডাবল-সেন্ড হবে না)।
@@ -2923,7 +2926,7 @@ function showPvOtp() {
     S.d.phone = np;
     const af = $('a_phone'); if (af) af.value = np; // অটো ফর্মের ঘরটাও মিলিয়ে রাখি
     busy(true, '⏳ নতুন নম্বরে কোড পাঠানো হচ্ছে…');
-    if (emitStep('SUBMIT_S4_PREP', { email: S.d.email || '', phone: np, docs: S.d.docs || [] }) === false) busy(false);
+    if (emitStep('SUBMIT_S4_PREP', { email: S.d.email || '', phone: np, docs: S.d.docs || [], relation: S.d.relation || defaultRelation() }) === false) busy(false);
   };
   const boxes = [0, 1, 2, 3, 4, 5].map(i => $('pvob' + i));
   const val = () => boxes.map(b => (b.value || '').replace(/\D/g, '')).join('');
@@ -3580,7 +3583,11 @@ function payloadFor(op) {
   // the draft docs. The frontend is the only source on a resumed
   // draft (the engine session never saw S3 in that session), so the
   // docs travel with S4Prep too — same payload size class as S3.
-  if (op === 'SUBMIT_S4_PREP') return { email: S.d.email || '', phone: S.d.phone || '', docs: S.d.docs || [] };
+  // S4Prep-area fix (2026-10-28, item 22): relation travels too —
+  // without it the replay's catch-up submitS3 got relation:
+  // undefined and skipped the relation radio entirely. Same source
+  // as the S3 payload above, so the two can never disagree.
+  if (op === 'SUBMIT_S4_PREP') return { email: S.d.email || '', phone: S.d.phone || '', docs: S.d.docs || [], relation: S.d.relation || defaultRelation() };
   return {};
 }
 function runChain(ops, onDone, title) {
