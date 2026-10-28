@@ -2934,15 +2934,57 @@ function directFallbackToBotSend() {
   busy(true, '📲 কোড পাঠানো হচ্ছে…');
   emitStep('SUBMIT_S4_PREP', payloadFor('SUBMIT_S4_PREP'));
 }
-function directSend() {
+/* ═══════════ DIRECT HTTP BYPASS (2026-10-29) ═══════════
+   The direct chain already runs server-side; only its TRIGGER
+   rode the dying socket (socket.emit ENGINE_COMMAND). A plain
+   HTTP POST survives socket death: short request/response, no
+   long-lived connection. The response JSON feeds the EXISTING
+   ack handlers unchanged, so all response-shape handling is
+   identical to the socket path. A fetch failure NEVER falls
+   back to a socket emit — the socket is the known-flaky path.
+   Timeout 90000ms: below the adapter HTTP proxy's 120s kill
+   (so the client times out cleanly instead of a destroyed
+   connection), far above normal work (send = one POST, seconds;
+   submit = verify + submit, tens of seconds at most). A timeout
+   on submit means outcome-unknown handling, which is the safe
+   behavior by construction (never a retry). */
+const DIRECT_HTTP_TIMEOUT_MS = 90000;
+async function directHttpPost(payload) {
+  // Returns {acked:true, r} on ANY usable JSON body (any HTTP
+  // status — the ack handlers own shape handling), else
+  // {acked:false} (network error, timeout, or unparseable body).
+  // The backend mount authenticates via the Authorization header;
+  // v2 re-verifies the same JWT from the body to derive userId
+  // (the adapter strips Authorization before proxying to v2).
+  const sig = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(DIRECT_HTTP_TIMEOUT_MS) : undefined;
+  try {
+    const r = await fetch('/api/bdris-apply/http-chain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + curAccessToken() },
+      body: JSON.stringify(payload),
+      signal: sig,
+    });
+    const d = await r.json().catch(() => null);
+    if (d && typeof d === 'object') return { acked: true, r: d };
+    return { acked: false };
+  } catch (e) { return { acked: false }; }
+}
+async function directSend() {
   // Truthful display: NO OTP view before server proof — only a
   // transient busy note. The view renders on a sent-proof ack.
+  // DIRECT HTTP BYPASS: fetch replaces the socket emit entirely
+  // (no directAckStart — arming a slot no socket ack will ever
+  // resolve would cause a spurious fallback on the next
+  // disconnect/fresh-READY). Send phase never uploads, so the
+  // base64 docs are stripped from the POST (the server never
+  // reads them in send phase); the submit phase keeps full docs.
   busy(true, '📲 কোড পাঠানো হচ্ছে…');
   const payload = Object.assign({}, directCtx(), { phase: 'send', uiDirect: true });
-  directAckStart('send');
-  socket.emit('ENGINE_COMMAND', { command: 'SUBMIT_HTTP_CHAIN', params: payload }, (r) => {
-    if (directAckResolve()) directSendAck(r);
-  });
+  delete payload.docs;
+  if (payload.s3) payload.s3 = { relation: payload.s3.relation };
+  const posted = await directHttpPost(Object.assign({}, payload, { _authToken: curAccessToken() }));
+  if (!posted.acked) { directFallbackToBotSend(); return; }
+  directSendAck(posted.r);
 }
 function directSendAck(r) {
   busy(false);
@@ -2990,10 +3032,14 @@ async function directSubmit(otp) {
   const tok = await getTok();
   if (!tok) { busy(false); S.otpStage = 'code'; return; } // charge() already alerted
   const payload = Object.assign({}, directCtx(), { phase: 'submit', uiDirect: true, otp: otp, _chargeToken: tok });
-  directAckStart('submit');
-  socket.emit('ENGINE_COMMAND', { command: 'SUBMIT_HTTP_CHAIN', params: payload }, (r) => {
-    if (directAckResolve()) directSubmitAck(r, otp);
-  });
+  // DIRECT HTTP BYPASS: fetch replaces the socket emit entirely
+  // (no directAckStart — see directSend). Full docs are kept:
+  // the submit phase uploads from data.docs. A fetch failure
+  // means outcome-unknown handling — NEVER a bot submit, NEVER
+  // a socket emit, NEVER a retry (a submit may already exist).
+  const posted = await directHttpPost(Object.assign({}, payload, { _authToken: curAccessToken() }));
+  if (!posted.acked) { directSubmitUnknown(); return; }
+  directSubmitAck(posted.r, otp);
 }
 function directSubmitAck(r, otp) {
   busy(false);
