@@ -2805,8 +2805,9 @@ function directAckStart(kind) {
 }
 function directAckClear() {
   // Silent clear: the phase died with the flow (home, draft,
-  // pause, session lost, fresh reset, DONE) — no fallback fires
-  // after the user already left. A fired slot is already null.
+  // pause, session lost, DONE) — no fallback fires after the user
+  // already left. A fired slot is already null. (Fresh-READY no
+  // longer clears: see DIRECT ACK FRESHREADY in handleFreshReady.)
   const tk = S._directPending;
   S._directPending = null;
   if (tk && tk.timer) { try { clearTimeout(tk.timer); } catch (e) {} }
@@ -4329,8 +4330,29 @@ function handleFreshReady(d) {
   if (failedOps.length) showFail(failedOps.map(op => opLabel(op) + ' — সংযোগ নতুন হওয়ায় পাঠানো যায়নি'));
   note('🔄 সংযোগ নতুন — ধাপ ১ থেকে আবার সাজানো হবে (তথ্য আপনার হাতেই আছে)', 'info');
   S._directOtp = false; // DIRECT-PATH WIRING: fresh session — the OTP view's direct phase dies with the reset
-  directAckClear(); // DIRECT ACK TIMEOUT: the disconnect trigger already fired any fallback; this is a no-op safety
+  // DIRECT ACK FRESHREADY (2026-10-29): a direct call clicked while the
+  // socket was ALREADY dead arms a slot whose emit dies silently — the
+  // disconnect trigger ran before the slot existed, so it fired nothing,
+  // and clearing here would kill the 150s timer before it can fire.
+  // Take the slot exactly once and dispatch like the timeout/disconnect
+  // paths — but never double a bot send the restore above already owns:
+  // when a queued/held prep was repumped/restored, or a bot send is in
+  // flight (loud-failed above, zombie risk), the send is already owned
+  // and no second S4_PREP is queued. A late ack after firing is ignored
+  // by directAckResolve, as on the other paths.
+  const _freshDirectKind = directAckFire();
+  const _freshDirectFallback = _freshDirectKind === 'send' && inFlight !== 'SUBMIT_S4_PREP' && !repumped && !heldRestored;
+  if (_freshDirectFallback) directFallbackToBotSend();
   goStep(1);
+  // DIRECT ACK FRESHREADY (2026-10-29): post-reset note/fail must land
+  // AFTER goStep(1) — goStep clears fail + notes, so anything placed
+  // before it is wiped. The fallback note is shown only when a fallback
+  // was actually queued; a skipped send is covered by the restored
+  // prep's own ack (OTP view on proof) or the loud fail above. A
+  // submit-kind slot never emits a bot submit — the check-first
+  // message is the whole handling.
+  if (_freshDirectFallback) note('🔄 সংযোগ নতুন হওয়ায় সরাসরি পাঠানো যায়নি — বট দিয়ে আবার পাঠানো হচ্ছে', 'info');
+  else if (_freshDirectKind === 'submit') directSubmitUnknown();
   return true;
 }
 socket.on('BOT_STATUS', (d) => {
