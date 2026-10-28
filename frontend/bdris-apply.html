@@ -2994,6 +2994,17 @@ function directSendAck(r) {
     // Disabled, unseeded, or pre-submit failure — bot owns it.
     if (r && r.httpPath === 'disabled') S.httpPathEnabled = false;
     directFallbackToBotSend();
+    // DIRECT OTP BODY (2026-10-29): the direct failure reason was
+    // swallowed here — surface the site's own wording as a warning
+    // note (NOT a fail box: the bot fallback may still succeed).
+    // Placed AFTER the fallback call: renderOtpCode inside it calls
+    // noteOff(), so an earlier note would be wiped. 'warn' because
+    // note() drops 'info' in silent mode. Only when the chain
+    // actually supplied a reason — other fallback shapes keep their
+    // previous silent behavior.
+    if (r && typeof r.httpReason === 'string' && r.httpReason.trim()) {
+      note('সরাসরি পাঠানো যায়নি — সাইটের জবাব: ' + r.httpReason.trim(), 'warn');
+    }
     return;
   }
   if (r.ok === true && r.sent === true) {

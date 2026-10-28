@@ -80,6 +80,22 @@ function err(code, message) {
   return e;
 }
 
+// DIRECT OTP BODY (2026-10-29): mirror the bot path's
+// _otpSendBodyMsg rule (StepHandler.js, JSON branch) for the direct
+// chain. A non-2xx OTP-send body carries the site's own reason
+// wording in {message} else {code}. Only those two fields are ever
+// read — never payload, phone, names, or any other field.
+// Whitespace is collapsed and the wording is capped at 200 chars.
+// Returns '' when nothing safe and usable is present, so the caller
+// keeps the exact previous status-only message.
+function otpSendBodyWording(json) {
+  if (!json || typeof json !== 'object') return '';
+  const m = typeof json.message === 'string' ? json.message
+    : (typeof json.code === 'string' ? json.code : '');
+  if (!m.trim()) return '';
+  return m.replace(/\s+/g, ' ').trim().slice(0, 200);
+}
+
 /** Minimal live cookie jar: name -> value, updated from Set-Cookie. */
 class CookieJar {
   constructor() {
@@ -504,7 +520,17 @@ class BdrisHttpClient {
       body: form,
     });
     if (!res.ok || !res.json) {
-      throw err('OTP_SEND_FAILED', `OTP send returned status ${res.status}.`);
+      // DIRECT OTP BODY (2026-10-29): a non-ok response body names
+      // the site's own reason (message else code, ≤200 chars) — the
+      // old message carried only the status, so a 400 never said
+      // whether it meant duplicate or payload. Non-JSON bodies and
+      // bodies without a wording keep the exact previous message;
+      // an ok response without JSON keeps it too (wording is read
+      // for non-ok responses only).
+      const wording = !res.ok ? otpSendBodyWording(res.json) : '';
+      throw err('OTP_SEND_FAILED', wording
+        ? `OTP send returned status ${res.status}: ${wording}.`
+        : `OTP send returned status ${res.status}.`);
     }
     return res.json; // {code, message, success, payload}
   }
