@@ -1556,17 +1556,65 @@ function resendFrom(op) {
    অর্থাৎ ইউজার থামলে বটও থামে, ইউজারের আগে কখনো এগোয় না (১০০% লকস্টেপ) */
 /* অপ আটকে গেলে (ack হারিয়ে গেলে) নিজে থেকে ছেড়ে দিই — ইউজার যেন কখনো আটকা না পড়ে।
    সার্ভার থেকে জীবিত-খবর (BOT_STATUS) এলে সময় রিফ্রেশ হয়, তাই চলন্ত অপ কখনো ভুলে বাতিল হয় না */
-function guardOpBusy() {
-  if (!(S._opBusy || S._waitingAck)) return false;
-  const t0 = S._opStartedAt || 0;
-  if (!t0 || Date.now() - t0 > 75000) { opAbort(); return false; }
-  return true;
+/* OPQUEUE-LOST-SEND FIX (2026-10-28): দুইবার প্রমাণিত — S4_PREP সারিতে
+   বসে/রিসেটে মুছে গেছে, অথচ পর্দা মিথ্যা 'sending' দেখিয়েছে। কারণ:
+   (1) fresh-READY রিসেট opAbort() দিয়ে সারি চুপচাপ মুছে দিত;
+   (2) guardOpBusy কোথাও ডাকা হতো না — মরা কোড।
+   নিয়ম: সারিতে বসা S4_PREP (যা কখনো সাইট ছোঁয়নি) চুপচাপ মুছবে না —
+   রিসেট/স্টল থেকে বাঁচিয়ে আবার পাঠানো হবে; চলন্ত অপ আটকালে সত্যি
+   ফেল দেখাবে, মিথ্যা 'sending' নয়। চলন্ত অপটাই S4_PREP হলে
+   আবার পাঠানো হবে না (সার্ভারে জম্বি চলতে পারে — ডাবল-সেন্ডের ভয়),
+   তখনও সত্যি ফেল দেখাবে। */
+function takeQueuedPrep() {
+  const q = S._opQ || [];
+  const prep = q.filter(j => j.op === 'SUBMIT_S4_PREP');
+  S._opQ = q.filter(j => j.op !== 'SUBMIT_S4_PREP');
+  return prep.length ? prep[prep.length - 1] : null;
 }
+function opLabel(op) {
+  const o = OPS.find(x => x.op === op);
+  if (o) return o.label;
+  if (op === 'SUBMIT_S4_PREP') return 'কোড পাঠানো';
+  if (op === 'SUBMIT_S4_OTP') return 'কোড জমা দেওয়া';
+  return op;
+}
+function guardOpBusy() {
+  const busyStuck = (S._opBusy || S._waitingAck) && S._opStartedAt && Date.now() - S._opStartedAt > 150000;
+  const waitStuck = S._pumpWait && S._pumpSince && Date.now() - S._pumpSince > 150000;
+  if (!busyStuck && !waitStuck) return !!(S._opBusy || S._waitingAck);
+  // ১৫০ সেকেন্ড: ~৯০ সেকেন্ডের ধীর ক্যাসকেড-নীরবতাও যাতে সুস্থ অপকে
+  // ভুলে না কাটে; BOT_STATUS জীবিত-খবর এলে _opStartedAt রিফ্রেশ হয়,
+  // তাই চলন্ত অপ এই সীমা ছোঁবে না (মূল guardOpBusy-র নকশাই)।
+  const stuck = S._waitingAck;
+  const savedPrep = takeQueuedPrep();
+  const dropped = (S._opQ || []).map(j => j.op);
+  opAbort();
+  let repumped = false;
+  if (savedPrep && stuck !== 'SUBMIT_S4_PREP' && S.ready && socket.connected) {
+    (S._opQ = S._opQ || []).push(savedPrep);
+    pumpOpQ();
+    repumped = true;
+  }
+  const failedOps = dropped.slice();
+  if (stuck) failedOps.unshift(stuck);
+  if (savedPrep && !repumped) failedOps.push('SUBMIT_S4_PREP');
+  if (failedOps.length) showFail(failedOps.map(op => opLabel(op) + ' — সার্ভারের জবাব আসেনি'));
+  note('⚠️ সংযোগ হারিয়েছে — আটকে থাকা কাজটি পাঠানো যায়নি, আবার চেষ্টা করুন', 'warn');
+  busy(false);
+  return false;
+}
+// OPQUEUE-LOST-SEND FIX: আটকে-থাকা অপের জন্য আসল ওয়াচডগ — guardOpBusy
+// আগে কোথাও ডাকা হতো না (মরা কোড), তাই ৩০ সেকেন্ড পরপর টাইমারে চালাই।
+setInterval(() => { try { guardOpBusy(); } catch (e) {} }, 30000);
 function emitStep(op, payload, onAckExtra) {
   // Permanent (2026-10-15): block নয়, queue — UI instant, engine background-এ sequential
   // ব্যাকএন্ডের ensureAligned-যন্ত্রকে সব ধাপের তথ্য দিই (সাইট ধাপ হারালে/পিছিয়ে
   // গেলে নিজে থেকে মেরামত করতে পারে) — রেকর্ড-তুলনায় ctx বাদ যায়
   payload = Object.assign({}, payload, { ctx: { s0: S.d.s0, s1: S.d.s1, s2: S.d.s2, s2b: S.d.s2b } });
+  // OPQUEUE-LOST-SEND FIX: একই অপ সারিতে থাকলে ডুপ্লিকেট নয় — নতুন
+  // পেলোড দিয়ে পুরনোটা বদলাই (রিসেটে বাঁচানো S4_PREP + ইউজারের আবার
+  // চাপা — দুটো মিলে ডাবল-সেন্ড হবে না)।
+  S._opQ = (S._opQ || []).filter(j => j.op !== op);
   (S._opQ = S._opQ || []).push({ op, payload });
   pumpOpQ();
   return true;
@@ -1576,7 +1624,8 @@ function pumpOpQ() {
   if (!S.ready) {
     if (S._pumpWait) return;
     S._pumpWait = true;
-    ensureReady(() => { S._pumpWait = false; pumpOpQ(); });
+    S._pumpSince = Date.now();
+    ensureReady(() => { S._pumpWait = false; S._pumpSince = 0; pumpOpQ(); });
     return;
   }
   const job = S._opQ.shift();
@@ -1611,7 +1660,7 @@ function opFinish() {
 }
 function opAbort() {
   S._opQ = []; S._opBusy = false; S._waitingAck = null; S._slowShown = false;
-  clearTimeout(S._opSlowT); S._pumpWait = false;
+  clearTimeout(S._opSlowT); S._pumpWait = false; S._pumpSince = 0;
 }
 /* ম্যানুয়াল মোড: লিখে/ক্লিক করলেই পরের ধাপ — সাইট-সিঙ্ক পিছনে, কিন্তু
    একসাথে একটাই অপ (লকস্টেপ); আগেরটা চলাকালীন এলে সারিতে না বসিয়ে থামি */
@@ -3807,6 +3856,39 @@ socket.on('STEP_CHANGE_ACK', (d) => {
   // নইলে _opBusy/_waitingAck আটকে থেকে পরের ক্লিকগুলো চিরতরে “এক মুহূর্ত পরে” বলে ফিরে যায়
   opFinish();
 });
+/* OPQUEUE-LOST-SEND FIX (2026-10-28): fresh-READY রিসেটে সারি চুপচাপ
+   মুছে যেত — সারিতে বসা SUBMIT_S4_PREP (যা কখনো সাইট ছোঁয়নি) হারিয়ে
+   যেত, অথচ পর্দা 'sending' দেখাতো। এখন: S4_PREP বাঁচিয়ে রিসেটের পর
+   আবার পাঠাই (চলন্ত অপটাই S4_PREP হলে আবার পাঠাই না — সার্ভারে জম্বি
+   চলতে পারে, ডাবল-সেন্ডের ভয় — তখনও সত্যি ফেল দেখাই); অন্য সারিবদ্ধ
+   অপ চুপচাপ নয় — সত্যি ফেল হিসেবে জানাই। true = fresh-কেস সামলানো
+   হয়েছে (কলার 'সংযোগ প্রস্তুত!' নোট দেখাবে না)। */
+function handleFreshReady(d) {
+  if (!(d.fresh && S.view === 'flow' && S.d && (S.d.uiStep || 0) > 0)) return false;
+  // cold start: প্রথম ধাপের অপ এখনো পাঠানোই হয়নি (queue-তে বসে সেশনের অপেক্ষা) —
+  // তখন bounce করলে ব্যবহারকারীর ক্লিক বৃথা যায়; queue আগে চলতে দিই
+  const pendingUnsent = (S._opQ || []).length > 0 && !S._sentAny;
+  if (pendingUnsent) return true;
+  // সাইটের সেশন সত্যিই নতুন (আগের ধাপগুলো সাইটে হারিয়ে গেছে) — UI ধাপ ১ থেকে সাজাই
+  const inFlight = S._waitingAck;
+  const savedPrep = takeQueuedPrep();
+  const dropped = (S._opQ || []).map(j => j.op);
+  S.d.uiStep = 0;
+  resetSent(); // সাইট খালি — ধাপ-রেকর্ডও খালি
+  opAbort();
+  let repumped = false;
+  if (savedPrep && inFlight !== 'SUBMIT_S4_PREP' && S.ready) {
+    (S._opQ = S._opQ || []).push(savedPrep);
+    pumpOpQ();
+    repumped = true;
+  }
+  const failedOps = dropped.slice();
+  if (savedPrep && !repumped) failedOps.push('SUBMIT_S4_PREP');
+  if (failedOps.length) showFail(failedOps.map(op => opLabel(op) + ' — সংযোগ নতুন হওয়ায় পাঠানো যায়নি'));
+  note('🔄 সংযোগ নতুন — ধাপ ১ থেকে আবার সাজানো হবে (তথ্য আপনার হাতেই আছে)', 'info');
+  goStep(1);
+  return true;
+}
 socket.on('BOT_STATUS', (d) => {
   d = (d && typeof d === 'object') ? d : {};
   const st = d.status;
@@ -3816,19 +3898,7 @@ socket.on('BOT_STATUS', (d) => {
     S.ready = true; S.starting = false;
     clearTimeout(S._startT);
     hideBanner();
-    if (d.fresh && S.view === 'flow' && S.d && (S.d.uiStep || 0) > 0) {
-      // cold start: প্রথম ধাপের অপ এখনো পাঠানোই হয়নি (queue-তে বসে সেশনের অপেক্ষা) —
-      // তখন bounce করলে ব্যবহারকারীর ক্লিক বৃথা যায়; queue আগে চলতে দিই
-      const pendingUnsent = (S._opQ || []).length > 0 && !S._sentAny;
-      if (!pendingUnsent) {
-        // সাইটের সেশন সত্যিই নতুন (আগের ধাপগুলো সাইটে হারিয়ে গেছে) — UI ধাপ ১ থেকে সাজাই
-        S.d.uiStep = 0;
-        resetSent(); // সাইট খালি — ধাপ-রেকর্ডও খালি
-        opAbort();
-        note('🔄 সংযোগ নতুন — ধাপ ১ থেকে আবার সাজানো হবে (তথ্য আপনার হাতেই আছে)', 'info');
-        goStep(1);
-      }
-    } else {
+    if (!handleFreshReady(d)) {
       note('✅ সংযোগ প্রস্তুত!', 'ok');
     }
     const q = S._readyQ || []; S._readyQ = [];
