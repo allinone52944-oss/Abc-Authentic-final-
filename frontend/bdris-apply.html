@@ -2342,15 +2342,25 @@ function submitStep3() {
 
 /* ═══════════ step 4: স্থায়ী ও বর্তমান ঠিকানা ═══════════ */
 function collectStep4() {
-  // Permanent (2026-10-15): checkbox না পেলে default FALSE — "copy" হলো
-  // destructive action, element missing হলে কখনোই copy ধরা যাবে না।
-  const permCopy = $('sp_same') ? $('sp_same').checked : false;
-  const presCopy = $('rp_same') ? $('rp_same').checked : false;
+  // PRESCOPY-PRESERVE FIX (2026-10-28): a collect running while the
+  // Step 4 form is not on screen (no sp_same/rp_same in the DOM —
+  // e.g. a re-collect during a later step or an edit round-trip)
+  // must PRESERVE the recorded copy/fields instead of defaulting to
+  // FALSE + empty. The old default destroyed a ticked same-as-permanent
+  // copy on the live 2026-10-28 run: the preview showed '—' for the
+  // present address and the Step 4 return showed the box unticked
+  // with all fields empty, although the box had been ticked. Keeping
+  // the previous state is not inventing a copy — it refuses to destroy
+  // one that was recorded from a real on-screen read. On Step 4 the
+  // elements are present and the read is unchanged.
   const prev = S.d.s2b || {};
+  const spEl = $('sp_same'), rpEl = $('rp_same');
+  const permCopy = spEl ? spEl.checked : !!prev.permCopy;
+  const presCopy = rpEl ? rpEl.checked : !!prev.presCopy;
   S.d.s2b = {
     permCopy, presCopy,
-    perm: permCopy ? null : readAddrFields('sp', prev.perm || {}),
-    pres: presCopy ? null : readAddrFields('rp', prev.pres || {})
+    perm: permCopy ? null : (spEl ? readAddrFields('sp', prev.perm || {}) : (prev.perm || {})),
+    pres: presCopy ? null : (rpEl ? readAddrFields('rp', prev.pres || {}) : (prev.pres || {}))
   };
   return S.d.s2b;
 }
@@ -3394,12 +3404,20 @@ function collectAuto() {
     houseBn: ($('a_houseBn').value || '').trim(), houseEn: ($('a_houseEn').value || '').trim()
   };
   S.d.s2 = { father: readPersonAuto('af'), mother: readPersonAuto('am') };
+  // PRESCOPY-PRESERVE FIX (2026-10-28): same rule as collectStep4 —
+  // a collect running while the address form is not on screen must
+  // preserve the recorded copy/fields instead of defaulting to
+  // false + empty (which wiped a ticked same-as-permanent copy on the
+  // live 2026-10-28 run: preview showed '—', Step 4 return empty).
+  const prevB = S.d.s2b || {};
+  const spElA = $('sp_same'), rpElA = $('rp_same');
+  const permCopyA = spElA ? spElA.checked : !!prevB.permCopy;
+  const presCopyA = rpElA ? rpElA.checked : !!prevB.presCopy;
   S.d.s2b = {
-    // Permanent (2026-10-15): null-safe — checkbox না পেলে copy=false (destructive default নয়)
-    permCopy: $('sp_same') ? $('sp_same').checked : false,
-    presCopy: $('rp_same') ? $('rp_same').checked : false,
-    perm: ($('sp_same') ? $('sp_same').checked : false) ? null : readAddrFields('sp'),
-    pres: ($('rp_same') ? $('rp_same').checked : false) ? null : readAddrFields('rp')
+    permCopy: permCopyA,
+    presCopy: presCopyA,
+    perm: permCopyA ? null : (spElA ? readAddrFields('sp') : (prevB.perm || {})),
+    pres: presCopyA ? null : (rpElA ? readAddrFields('rp') : (prevB.pres || {}))
   };
   S.d.phone = bnDigits($('a_phone').value || '').replace(/\D/g, '');
   S.d.email = ($('a_email').value || '').trim();
