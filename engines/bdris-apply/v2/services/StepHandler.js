@@ -527,12 +527,20 @@ class StepHandler {
       }
     }
 
-    // Select the basis radio (v1 applyS0Core, 6s wait, no reload here:
-    // session creation already guarantees a verified form page).
+    // Select the basis radio (v1 applyS0Core, no reload here).
+    // S0-RADIO-SETTLE (2026-10-28): the form's first step renders LATE —
+    // probe 2026-10-28 found 0 controls right after the homepage link and
+    // the full step only by 25s — so the wait is 30s, not 6s. A 6s wait on
+    // a cold load expires before the radios render and fails with exactly
+    // 'radio বাটন পাওয়া যায়নি'. 30s stays well inside the frontend's 90s
+    // busy watchdog, and _waitVisible returns early when the radio appears,
+    // so warm pages pay nothing extra.
     const radioId = addressType === 'PERMANENT' ? '#officePermanent' : '#officeBirthplace';
     const radio = await this._waitVisible(
-      [radioId, `input[name="officeAddressType"][value="${addressType}"]`], 6000);
+      [radioId, `input[name="officeAddressType"][value="${addressType}"]`], 30000);
     if (!radio) {
+      const seen = await this._visibleFirstStepControls();
+      console.log('S0-NO-RADIO:', JSON.stringify(seen).slice(0, 400));
       return { ok: false, step: 1, failed: [{ field: 'আবেদনের ভিত্তি', reason: 'radio বাটন পাওয়া যায়নি' }] };
     }
     await radio.check().catch(async () => { await this._robustClick(radio, 'basis radio'); });
@@ -2061,6 +2069,31 @@ class StepHandler {
       await this.page.waitForTimeout(350);
     }
     return null;
+  }
+
+  /**
+   * S0-RADIO-SETTLE (2026-10-28): visible first-step control descriptors
+   * for the radio-not-found diagnostic — tag + type + id + name ONLY.
+   * Values and text are never read (they could carry personal data), and
+   * hidden elements are skipped. Never throws: any failure yields [].
+   */
+  async _visibleFirstStepControls() {
+    try {
+      const seen = await this.page.evaluate(() => {
+        const out = [];
+        document.querySelectorAll('input, button').forEach((el) => {
+          if (el.offsetParent === null) return;
+          const tag = (el.tagName || '').toLowerCase();
+          const type = el.getAttribute('type') || '';
+          if (tag === 'input' && type !== 'radio' && type !== 'checkbox') return;
+          out.push({ tag, type, id: el.id || '', name: el.getAttribute('name') || '' });
+        });
+        return out.slice(0, 20);
+      });
+      return Array.isArray(seen) ? seen : [];
+    } catch (_) {
+      return [];
+    }
   }
 
   // Playwright-এর viewport-চেক মাঝে মাঝে modal-বাটনে "element is outside of the
