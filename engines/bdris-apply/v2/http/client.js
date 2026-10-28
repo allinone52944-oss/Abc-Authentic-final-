@@ -96,6 +96,41 @@ function otpSendBodyWording(json) {
   return m.replace(/\s+/g, ' ').trim().slice(0, 200);
 }
 
+// DIRECT SEND SINGLE-NAME TEST (2026-10-29): TEST-ONLY diagnostic.
+// The bot path bridges single names at the gate: when the last name
+// has no letters, the gate gets the first name's form in the last
+// slot (StepHandler buildCinnos: last = first when gate &&
+// !hasLetters(last)), while the final joined record is NEVER
+// doubled. The direct send has no such bridge — whether
+// /api/otp/sent requires a two-word applicantName is UNPROVEN, and
+// this test decides it. These helpers gate ONLY the OTP-send
+// request (otpSend's query applicantName + buildOtpSendBody's six
+// fields). Submit (buildSubmitPayload), verify (buildVerifyPayload),
+// and the charge gate are untouched, so the final record keeps the
+// true single name. Remove this block if the live test refutes it.
+function sendHasLetters(s) {
+  return /[A-Za-z\u0980-\u09FF]/.test(String(s || ''));
+}
+// Split-name gate (applicant Bn/En): last part without letters →
+// first + ' ' + first; a last part WITH letters joins unchanged
+// (byte-identical to the previous joinName for that case).
+function gateSendJoinName(first, last) {
+  const f = String(first || '').trim();
+  const l = String(last || '').trim();
+  if (!sendHasLetters(l)) return f ? `${f} ${f}` : f;
+  return l ? `${f} ${l}` : f;
+}
+// Single-field gate (father/mother nameBn/nameEn, or an explicitly
+// joined name): one token with letters → token + ' ' + token;
+// anything already two-part, or letterless, goes out verbatim.
+function gateSendSingleField(name) {
+  const raw = String(name || '');
+  const t = raw.trim();
+  if (!t || !sendHasLetters(t)) return raw;
+  if (t.split(/\s+/).length === 1) return `${t} ${t}`;
+  return raw;
+}
+
 /** Minimal live cookie jar: name -> value, updated from Set-Cookie. */
 class CookieJar {
   constructor() {
@@ -498,6 +533,20 @@ class BdrisHttpClient {
    */
   async otpSend(data = {}) {
     const { phone = '', email = '', officeId = '', personUbrn = '', relation = '', applicantName = '', applicantBrn = '', applicantDob = '', officeAddressType = '' } = data;
+    // DIRECT SEND SINGLE-NAME TEST (2026-10-29): gate the send
+    // query's applicantName the same way as the body names. The
+    // person's En split is authoritative when present; when the
+    // person carries no En split at all, a single-token explicit
+    // applicantName is gated on its own. Anything else goes out
+    // verbatim — the submit/verify applicantName is untouched.
+    const personForGate = data.person || data.s1 || {};
+    let sendApplicantName = applicantName;
+    if (sendHasLetters(personForGate.firstNameEn) && !sendHasLetters(personForGate.lastNameEn)) {
+      const f = String(personForGate.firstNameEn).trim();
+      sendApplicantName = `${f} ${f}`;
+    } else if (!personForGate.firstNameEn && !personForGate.lastNameEn) {
+      sendApplicantName = gateSendSingleField(applicantName);
+    }
     const qs = new URLSearchParams({
       appType: 'BIRTH_REGISTRATION_APPLICATION',
       phone,
@@ -506,7 +555,7 @@ class BdrisHttpClient {
       officeId: officeId || '0',
       personUbrn,
       relation,
-      applicantName,
+      applicantName: sendApplicantName,
       applicantBrn,
       applicantDob,
       officeAddressType: mapOfficeAddressType(officeAddressType),
@@ -842,18 +891,19 @@ function buildOtpSendBody(data = {}) {
   const s2 = data.s2 || {};
   const father = data.father || s2.father || {};
   const mother = data.mother || s2.mother || {};
-  const joinName = (first, last) => {
-    const f = String(first || '').trim();
-    const l = String(last || '').trim();
-    return l ? `${f} ${l}` : f;
-  };
+  // DIRECT SEND SINGLE-NAME TEST (2026-10-29): the six send-body
+  // fields carry the gate form for single names (see the helpers
+  // above). An explicitly joined name is gated as a single field;
+  // a split name is gated on its last part. Two-part names go out
+  // byte-identical to before. Submit's builder is a separate
+  // joinName and is untouched.
   return {
-    'personInfoForBirth.personNameBn': String(person.personNameBn || joinName(person.firstNameBn, person.lastNameBn)),
-    'personInfoForBirth.personNameEn': String(person.personNameEn || joinName(person.firstNameEn, person.lastNameEn)),
-    'personInfoForBirth.father.personNameBn': String(father.personNameBn || father.nameBn || ''),
-    'personInfoForBirth.father.personNameEn': String(father.personNameEn || father.nameEn || ''),
-    'personInfoForBirth.mother.personNameBn': String(mother.personNameBn || mother.nameBn || ''),
-    'personInfoForBirth.mother.personNameEn': String(mother.personNameEn || mother.nameEn || ''),
+    'personInfoForBirth.personNameBn': String(person.personNameBn ? gateSendSingleField(person.personNameBn) : gateSendJoinName(person.firstNameBn, person.lastNameBn)),
+    'personInfoForBirth.personNameEn': String(person.personNameEn ? gateSendSingleField(person.personNameEn) : gateSendJoinName(person.firstNameEn, person.lastNameEn)),
+    'personInfoForBirth.father.personNameBn': String(gateSendSingleField(father.personNameBn || father.nameBn || '')),
+    'personInfoForBirth.father.personNameEn': String(gateSendSingleField(father.personNameEn || father.nameEn || '')),
+    'personInfoForBirth.mother.personNameBn': String(gateSendSingleField(mother.personNameBn || mother.nameBn || '')),
+    'personInfoForBirth.mother.personNameEn': String(gateSendSingleField(mother.personNameEn || mother.nameEn || '')),
   };
 }
 
