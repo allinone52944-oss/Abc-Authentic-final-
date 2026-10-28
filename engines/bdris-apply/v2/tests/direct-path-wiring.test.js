@@ -349,7 +349,16 @@ describe('frontend directCtx: recorded state, never DOM re-collect', () => {
     assert.match(html, /if \(directHttpEnabled\(\) && S\._directOtp\) \{ directSend\(\); return; \}/);
     assert.match(html, /probeHttpPath\(\);/);
     assert.match(html, /command: 'HTTP_PATH_STATUS'/);
-    assert.match(html, /command: 'SUBMIT_HTTP_CHAIN'/);
+    // DIRECT HTTP BYPASS (2026-10-29): the trigger is a plain HTTP
+    // POST now, not a socket emit — the old 'SUBMIT_HTTP_CHAIN'
+    // socket command string is gone from the frontend by design
+    // (the v2 executor command itself is unchanged; the route
+    // invokes it server-side). The trigger must be the fetch POST.
+    assert.match(html, /\/api\/bdris-apply\/http-chain/);
+    assert.match(extractFn('directSend'), /directHttpPost\(/);
+    assert.match(extractFn('directSubmit'), /directHttpPost\(/);
+    assert.doesNotMatch(extractFn('directSend'), /socket\.emit/);
+    assert.doesNotMatch(extractFn('directSubmit'), /socket\.emit/);
     assert.match(html, /window\.abcDirectSubmitToken/);
   });
 

@@ -39,7 +39,7 @@ const { BdrisNavigator } = require('./services/BdrisNavigator');
 const { AddressService } = require('./services/AddressService');
 const { StepHandler, verifyChargeToken } = require('./services/StepHandler');
 const { OriginalFetcher, STEP_LABELS } = require('./services/OriginalFetcher');
-const { runSubmitHttpChain, runStageAProbe, getHttpPathStatus, HTTP_CANDIDATE_LABEL } = require('./services/HttpPathRunner');
+const { runSubmitHttpChain, runStageAProbe, getHttpPathStatus, isHttpPathEnabled, HTTP_CANDIDATE_LABEL } = require('./services/HttpPathRunner');
 const { HttpGeoService } = require('./services/HttpGeoService');
 
 // S4Prep-area fix (2026-10-28, items 4/22): the per-step dispatch
@@ -505,7 +505,10 @@ class BdrisEngineV2 {
     this.executor.register('SUBMIT_HTTP_CHAIN',
       async (params, ctx) => {
         const session = ctx.session;
-        const userId = ctx.socket?.abcUser?.id || null;
+        // DIRECT HTTP BYPASS (2026-10-29): the HTTP route injects
+        // ctx.userId from its own verified JWT (no socket); the
+        // socket path keeps working unchanged (ctx.userId unset).
+        const userId = ctx.userId || ctx.socket?.abcUser?.id || null;
         const secret = process.env.ABC_JWT_SECRET || process.env.JWT_SECRET || '';
 
         // Playwright adapter: the existing step path, split from the
@@ -1203,6 +1206,86 @@ class BdrisEngineV2 {
       commands: this.executor.getRegisteredCommands(),
     };
   }
+
+  // DIRECT HTTP BYPASS (2026-10-29): plain-HTTP trigger for the
+  // direct chain — the SAME executor call the socket
+  // ENGINE_COMMAND handler makes, so response shapes cannot drift.
+  // The browser socket dies every few minutes (transport close);
+  // a short POST survives it, and the chain itself already runs
+  // server-side. Auth is two-layer: the backend mount already
+  // enforced its JWT + rate limit before proxying, and this route
+  // re-verifies the same JWT (body _authToken, same id precedence
+  // as io.use) to derive userId — the charge gate binds tokens to
+  // that id, so a client-supplied userId is never trusted, and the
+  // token itself is never logged. Returns {status, body} so tests
+  // can call it without HTTP.
+  async handleHttpChainRequest(body = {}) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return { status: 400, body: { ok: false, error: 'BAD_REQUEST', message: 'Request body must be a JSON object.' } };
+    }
+    const secret = process.env.ABC_JWT_SECRET || process.env.JWT_SECRET || '';
+    const tokenPayload = verifyJwtHS256(body._authToken, secret);
+    const userId = tokenPayload ? (tokenPayload.id || tokenPayload.sub || tokenPayload.userId) : null;
+    if (!userId) {
+      return { status: 401, body: { ok: false, error: 'UNAUTHORIZED', message: 'Valid access token required.' } };
+    }
+    // Fresh execution only: a replayed _commandId would return a
+    // cached result (e.g. a stale sent-proof without sending), and
+    // a client _timeoutMs must not stretch the executor window.
+    const params = { ...body };
+    delete params._authToken;
+    delete params._commandId;
+    delete params._timeoutMs;
+    // Server-side flag, never a client guess (the executor handler
+    // enforces it again as a second layer). Shape is verbatim the
+    // runSubmitHttpChain disabled return, so the frontend's
+    // existing disabled → bot-fallback branch handles it.
+    if (!isHttpPathEnabled()) {
+      return { status: 200, body: {
+        ok: false, httpPath: 'disabled', disabled: true, error: 'HTTP_PATH_DISABLED',
+        candidate: true, candidateLabel: HTTP_CANDIDATE_LABEL,
+        message: 'HTTP path is disabled (opt-in BDRIS_HTTP_PATH=on not set) — this command executed nothing; the caller runs the existing Playwright flow itself.',
+      } };
+    }
+    const session = this.sessionManager.findByUser(userId);
+    if (!session) {
+      return { status: 200, body: { ok: false, error: 'NO_SESSION', message: 'Session not initialized' } };
+    }
+    this.sessionManager.touch(session.id);
+    // Progress/DONE events (e.g. the Playwright fallback's
+    // COMPLETED) go to the session's socket when one is alive —
+    // best-effort only: a dead socket drops them silently, exactly
+    // as a dead socket drops the socket path's own events.
+    const engine = this;
+    const emit = (ev, msg) => {
+      try {
+        const sid = session.metadata && session.metadata.socketId;
+        if (sid && engine.io) engine.io.to(sid).emit(ev, msg);
+      } catch {}
+    };
+    try {
+      const result = await this.executor.execute('SUBMIT_HTTP_CHAIN', params, {
+        session, emit, userId, socket: null,
+      });
+      return { status: 200, body: result };
+    } catch (e) {
+      return { status: 500, body: { ok: false, error: 'EXECUTION_FAILED', message: (e && e.message) || 'Command execution failed' } };
+    }
+  }
+
+  // DIRECT HTTP BYPASS (2026-10-29): POST /http-chain, reached
+  // externally as /api/bdris-apply/http-chain through the backend
+  // mount (requireAuth + rate limit) and the adapter proxy.
+  setupHttpRoutes(app) {
+    app.post('/http-chain', async (req, res) => {
+      try {
+        const r = await this.handleHttpChainRequest(req.body);
+        res.status(r.status).json(r.body);
+      } catch {
+        res.status(500).json({ ok: false, error: 'EXECUTION_FAILED' });
+      }
+    });
+  }
 }
 
 module.exports = { BdrisEngineV2, mergeStepParams, buildPlaywrightFallbackPlan };
@@ -1240,6 +1323,8 @@ if (require.main === module) {
 
   const engine = new BdrisEngineV2(io, {});
   // setupSocketHandlers() constructor-এই call হয়
+  // DIRECT HTTP BYPASS (2026-10-29): plain-HTTP trigger route.
+  engine.setupHttpRoutes(app);
 
   server.listen(PORT, '127.0.0.1', () => {
     console.log(`[bdris-apply-v2] listening on 127.0.0.1:${PORT}`);
