@@ -37,7 +37,7 @@ const { CommandExecutor } = require('./core/CommandExecutor');
 const { BdrisNavigator } = require('./services/BdrisNavigator');
 const { AddressService } = require('./services/AddressService');
 const { StepHandler, verifyChargeToken } = require('./services/StepHandler');
-const { OriginalFetcher } = require('./services/OriginalFetcher');
+const { OriginalFetcher, STEP_LABELS } = require('./services/OriginalFetcher');
 const { runSubmitHttpChain, runStageAProbe, getHttpPathStatus, HTTP_CANDIDATE_LABEL } = require('./services/HttpPathRunner');
 const { HttpGeoService } = require('./services/HttpGeoService');
 
@@ -257,7 +257,14 @@ class BdrisEngineV2 {
         }
         if (!rec) throw new Error('NO_RECORD');
 
-        const job = await this.originalFetcher.ensureOriginal(rec);
+        // PREMIUM-PROGRESS (2026-10-28): ফেচের লাইভ ধাপ ফ্রন্টএন্ডে —
+        // শুধু ধাপের নাম + লেখা, কোনো ব্যক্তিগত তথ্য নয়। ctx.emit
+        // না থাকলে চুপচাপ এগোয় (ফেচ থামবে না)।
+        const job = await this.originalFetcher.ensureOriginal(rec, (step) => {
+          try {
+            if (ctx.emit) ctx.emit('BOT_STATUS', { status: 'ORIGINAL_PDF_PROGRESS', ackId: ack, step, label: STEP_LABELS[step] || step });
+          } catch { /* progress-এর ভুল ফেচ থামাবে না */ }
+        });
         const r = job.result || {};
         if (!r.ok) throw new Error(r.err || 'FETCH_FAILED');
         return { ok: true, url: r.url, bytes: r.bytes || 0, ackId: this.originalFetcher.keyOf(rec.appId) };

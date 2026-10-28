@@ -36,6 +36,16 @@ const DEFAULT_ROUNDS_PER_WORKER = 3;
 const DEFAULT_JOB_TTL_MS = 30 * 60 * 1000;
 const MIN_PDF_BYTES = 8000;
 
+// PREMIUM-PROGRESS (2026-10-28): ফেচের লাইভ ধাপ — শুধু ধাপের নাম +
+// দেখানোর লেখা; কোনো ব্যক্তিগত তথ্য (নম্বর/নাম/ফোন) কখনো এতে যায় না।
+// সার্ভার step + label পাঠায়, ফ্রন্টএন্ড শুধু দেখায়।
+const STEP_LABELS = {
+  'print-page': '🖨️ প্রিন্ট পেজ খুলছে…',
+  'captcha': '🔤 ক্যাপচা মিলছে…',
+  'search': '🔍 রেকর্ড খোঁজা হচ্ছে…',
+  'pdf': '📄 PDF বানানো হচ্ছে…',
+};
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const jitter = (a, b) => a + Math.floor(Math.random() * Math.max(1, b - a));
 
@@ -179,12 +189,26 @@ class OriginalFetcher {
     } catch { return false; }
   }
 
+  // PREMIUM-PROGRESS: ধাপ একবারই সব listener-কে জানাও (একাধিক
+  // worker একই ধাপে পৌঁছলেও স্প্যাম নয়; join করা কলারও ধাপ পায়)।
+  _progress(job, step) {
+    if (!job || !job.listeners || !STEP_LABELS[step]) return;
+    if (!job.stepsSeen) job.stepsSeen = new Set();
+    if (job.stepsSeen.has(step)) return;
+    job.stepsSeen.add(step);
+    for (const cb of [...job.listeners]) {
+      try { cb(step); } catch { /* listener-এর ভুল job থামাবে না */ }
+    }
+  }
+
   /**
    * আসল PDF নিশ্চিত করো — cache → চলমান job-এ join → নতুন job।
    * সবসময় settle হয় (v1-এর hanging bug এখানে fix)।
+   * onProgress(step) — লাইভ ধাপ (cache-hit-এ ডাকা হয় না, কারণ
+   * সেখানে অপেক্ষাই নেই — সাথে সাথে ফেরত)।
    * @returns Promise<job> — job.result = { ok, url, bytes, ... }
    */
-  async ensureOriginal(rec) {
+  async ensureOriginal(rec, onProgress) {
     const key = this.keyOf(rec && rec.appId);
     if (!key) throw new Error('MISSING_APPID');
 
@@ -193,10 +217,12 @@ class OriginalFetcher {
 
     let job = this.jobs.get(key);
     if (job && job.status === 'running') {
+      if (typeof onProgress === 'function') job.listeners.add(onProgress);
       return job.promise; // একই appId-র চলমান job-এ join
     }
 
-    job = { status: 'running', result: null, startedAt: Date.now(), done: false, promise: null };
+    job = { status: 'running', result: null, startedAt: Date.now(), done: false, promise: null, listeners: new Set(), stepsSeen: new Set() };
+    if (typeof onProgress === 'function') job.listeners.add(onProgress);
     this.jobs.set(key, job);
 
     job.promise = this._runWithTimeout(rec, job)
@@ -332,6 +358,7 @@ class OriginalFetcher {
       for (let round = 1; round <= this.roundsPerWorker; round++) {
         if (job.done || Date.now() > deadline) return null;
         const nameEn = variants[(wid + round - 1) % variants.length];
+        this._progress(job, 'print-page');
         try { await this._openPrintForm(page); }
         catch (e) {
           this.log('W' + wid, 'open-fail', String(e.message || e).split('\n')[0].slice(0, 80));
@@ -339,6 +366,7 @@ class OriginalFetcher {
           continue;
         }
         await this._fillForm(page, { ...rec, nameEn }).catch(() => {});
+        this._progress(job, 'captcha');
         const cap = await this._readCaptchaReady(page);
         if (!cap) { this.log('W' + wid, 'captcha-miss round', round); continue; }
         const gray = Buffer.from(cap.grayB64, 'base64');
@@ -351,6 +379,7 @@ class OriginalFetcher {
         if (!base.data) { this.log('W' + wid, 'no-appType'); await sleep(800); continue; }
         this.log('W' + wid, 'round', round, 'name=' + nameEn.slice(0, 24), 'cands(' + cands.length + '):', cands.slice(0, 4).join(','));
         let mintFails = 0;
+        this._progress(job, 'search');
         for (const c of cands) {
           if (job.done || Date.now() > deadline) return null;
           const m = await this._runOp(page, 'mint', [{ fields: { ...base, captchaAns: c } }]);
@@ -392,6 +421,7 @@ class OriginalFetcher {
       await Promise.all(workers);
       const hit = results.find((r) => r && r.b64 && this._validPdf(Buffer.from(r.b64, 'base64')));
       if (hit) {
+        this._progress(job, 'pdf');
         const buf = Buffer.from(hit.b64, 'base64');
         const file = 'bdris-original-' + this.keyOf(rec.appId) + '.pdf';
         fs.mkdirSync(this.frontendDir, { recursive: true }); // ডিরেক্টরি না থাকলে লেখা ব্যর্থ হতো (ENOENT)
@@ -425,4 +455,4 @@ class OriginalFetcher {
   }
 }
 
-module.exports = { OriginalFetcher };
+module.exports = { OriginalFetcher, STEP_LABELS };
