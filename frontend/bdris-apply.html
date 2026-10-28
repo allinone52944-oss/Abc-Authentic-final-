@@ -567,7 +567,7 @@ setInterval(() => { try { if (socket.connected) socket.emit('KEEPALIVE'); } catc
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && socket.connected) { try { socket.emit('KEEPALIVE'); } catch {} }
 });
-socket.on('disconnect', () => { S.ready = false; S.starting = false; clearTimeout(S._startT); });
+socket.on('disconnect', () => { S.ready = false; S.starting = false; clearTimeout(S._startT); directAckOnDisconnect(); });
 
 const S = {
   mode: null,        // 'auto' | 'manual'
@@ -1056,6 +1056,7 @@ function readAddrFields(prefix, prev) {
 function renderHome() {
   S._heldPrep = null; // leaving the flow — a parked send must not follow the user home
   S._directOtp = false; // DIRECT-PATH WIRING: the direct OTP phase dies with the flow
+  directAckClear(); // DIRECT ACK TIMEOUT: no fallback after leaving the flow
   setView('home'); renderStepper(-1); hideFail(); hideBanner(); noteOff();
   clearBtns();
   const acks = getAcks();
@@ -1304,6 +1305,7 @@ function renderDrafts() {
 function openDraft(draftId) {
   S._heldPrep = null; // switching application context — the old flow's parked send dies here
   S._directOtp = false; // DIRECT-PATH WIRING: a new draft is never a direct OTP view
+  directAckClear(); // DIRECT ACK TIMEOUT: no fallback after switching drafts
   busy(true, 'খসড়া প্রস্তুত হচ্ছে…');
   socket.emit('LOAD_DRAFT', draftId, (res) => {
     busy(false);
@@ -2766,6 +2768,111 @@ function collectStep6() {
    proof there is only a transient busy note — never a 'sending'
    view that can stick forever. A failed send shows the site's
    message and frees the buttons on the contact step. */
+/* ═══════════ DIRECT ACK TIMEOUT (2026-10-29) ═══════════
+   Live-proven gap (2026-10-29 ~00:19): the first direct send died
+   at the socket — transport closes bracketed the send, the
+   ENGINE_COMMAND emit went into a dying socket, its ack callback
+   never fired, the server chain never started, and nothing fell
+   back: no bot send, no fail message, only a stuck busy note.
+   Root cause: socket.emit ack callbacks have NO timeout under the
+   frontend's default io() options, so a dead socket strands the
+   call forever. This slot closes it: every direct call arms one
+   timer + one disconnect trigger, and a fired flag makes the
+   outcome exactly-once (a late ack after firing is ignored, never
+   double-sends or double-renders).
+   Timer value 150000ms: it matches the codebase's own stuck-op
+   definition (guardOpBusy stalls at 150s), sits below the
+   SUBMIT_HTTP_CHAIN executor window (180s) so a hung chain is
+   caught client-side before the server's own timeout ack (which
+   never arrives when the socket is dead), and sits far above
+   normal send-phase work (warm-page seed = ms, one otpSend POST
+   = seconds; the site's own OTP-evidence window is 30s) — a
+   single-POST BDRIS response beyond 150s is hung, not merely
+   slow. A rare false-fire is bounded: send → one extra OTP send
+   (no submit, no charge); submit → the check-first message, never
+   a retry. */
+const DIRECT_ACK_TIMEOUT_MS = 150000;
+function directAckStart(kind) {
+  // Arm (or re-arm) the pending-direct slot. Re-arming clears any
+  // previous timer first, so two direct calls can never leave two
+  // live timers behind. Called BEFORE the emit, so even a
+  // synchronously throwing emit still gets its fallback via timer.
+  directAckClear();
+  const tk = { kind: kind, fired: false, timer: null };
+  tk.timer = setTimeout(() => { directAckTimeout(); }, DIRECT_ACK_TIMEOUT_MS);
+  S._directPending = tk;
+  return tk;
+}
+function directAckClear() {
+  // Silent clear: the phase died with the flow (home, draft,
+  // pause, session lost, fresh reset, DONE) — no fallback fires
+  // after the user already left. A fired slot is already null.
+  const tk = S._directPending;
+  S._directPending = null;
+  if (tk && tk.timer) { try { clearTimeout(tk.timer); } catch (e) {} }
+}
+function directAckResolve() {
+  // Ack arrival: proceed ONLY if a live, unfired slot exists.
+  // A late ack after timeout/disconnect finds no slot (or a fired
+  // one) and is ignored completely — no double-send, no
+  // double-render, no resurrection of a dead phase.
+  const tk = S._directPending;
+  if (!tk || tk.fired) return false;
+  directAckClear();
+  return true;
+}
+function directAckFire() {
+  // Take the slot exactly once (timer, disconnect, or flush) and
+  // return its kind, or null when nothing is pending. The timer
+  // is cleared here; the caller's dispatch owns what happens next.
+  const tk = S._directPending;
+  if (!tk || tk.fired) return null;
+  tk.fired = true;
+  if (tk.timer) { try { clearTimeout(tk.timer); } catch (e) {} }
+  S._directPending = null;
+  return tk.kind;
+}
+function directAckTimeout() {
+  const kind = directAckFire();
+  if (!kind) return;
+  if (kind === 'send') {
+    // Pre-submit failure → the queued bot send owns it (ordered,
+    // page-safe; its own ack handling proves or fails it). This
+    // is the same path every other pre-submit direct failure
+    // already takes — only the trigger is new. The note goes
+    // AFTER the fallback: its renderOtpCode clears notes first.
+    directFallbackToBotSend();
+    note('🔄 সরাসরি পাঠানোয় জবাব আসেনি — বট দিয়ে আবার পাঠানো হচ্ছে', 'info');
+  } else {
+    directSubmitUnknown();
+  }
+}
+function directAckOnDisconnect() {
+  // Socket already known dead — do NOT wait out the timer. Same
+  // dispatch as the timeout: send → bot fallback, submit →
+  // check-first unknown handling. Runs before any reconnect READY,
+  // so the fallback prep is queued while the socket is down and
+  // the existing held/queued-prep restore carries it onto the
+  // fresh session (FAILQ-save machinery, untouched here).
+  const kind = directAckFire();
+  if (!kind) return;
+  if (kind === 'send') {
+    directFallbackToBotSend();
+    note('🔄 সংযোগ ছিঁড়ে যাওয়ায় সরাসরি পাঠানো যায়নি — বট দিয়ে আবার পাঠানো হচ্ছে', 'info');
+  } else {
+    directSubmitUnknown();
+  }
+}
+function directSubmitUnknown(msg) {
+  // The EXACT SUBMIT_OUTCOME_UNKNOWN handling, shared by the ack
+  // branch and the timeout/disconnect paths: never auto-retry (a
+  // submit may already exist server-side), the user checks first,
+  // and a later deliberate submit goes via bot (the OTP button
+  // gate needs S._directOtp, cleared here).
+  busy(false);
+  S._directOtp = false; S.otpStage = 'code';
+  showFail([san(msg || 'সাবমিটের ফল জানা যায়নি — আবেদন হয়েছে কিনা যাচাই করে আবার চেষ্টা করুন')]);
+}
 function directHttpEnabled() { return S.httpPathEnabled === true; }
 function probeHttpPath() {
   // No _commandId: the executor caches by _commandId, so a reused
@@ -2831,8 +2938,9 @@ function directSend() {
   // transient busy note. The view renders on a sent-proof ack.
   busy(true, '📲 কোড পাঠানো হচ্ছে…');
   const payload = Object.assign({}, directCtx(), { phase: 'send', uiDirect: true });
+  directAckStart('send');
   socket.emit('ENGINE_COMMAND', { command: 'SUBMIT_HTTP_CHAIN', params: payload }, (r) => {
-    directSendAck(r);
+    if (directAckResolve()) directSendAck(r);
   });
 }
 function directSendAck(r) {
@@ -2881,8 +2989,9 @@ async function directSubmit(otp) {
   const tok = await getTok();
   if (!tok) { busy(false); S.otpStage = 'code'; return; } // charge() already alerted
   const payload = Object.assign({}, directCtx(), { phase: 'submit', uiDirect: true, otp: otp, _chargeToken: tok });
+  directAckStart('submit');
   socket.emit('ENGINE_COMMAND', { command: 'SUBMIT_HTTP_CHAIN', params: payload }, (r) => {
-    directSubmitAck(r, otp);
+    if (directAckResolve()) directSubmitAck(r, otp);
   });
 }
 function directSubmitAck(r, otp) {
@@ -2901,8 +3010,9 @@ function directSubmitAck(r, otp) {
   if (r.error === 'SUBMIT_OUTCOME_UNKNOWN') {
     // NEVER auto-retry: the submit may already exist. The user
     // checks first; a later deliberate submit goes via bot.
-    S._directOtp = false; S.otpStage = 'code';
-    showFail([san(r.message || 'সাবমিটের ফল জানা যায়নি — আবেদন হয়েছে কিনা যাচাই করে আবার চেষ্টা করুন')]);
+    // (Body shared with the timeout/disconnect path — see
+    // directSubmitUnknown; the ack branch keeps busy(false) above.)
+    directSubmitUnknown(r.message);
     return;
   }
   if (r.httpFallback === true) {
@@ -3912,6 +4022,7 @@ function abortChain() {
   opAbort();
   S._heldPrep = null; // user chose to pause in a draft — no auto-resend of the parked send
   S._directOtp = false; // DIRECT-PATH WIRING: pausing kills the direct OTP phase too
+  directAckClear(); // DIRECT ACK TIMEOUT: no fallback after pausing to draft
   S._staleAcks = 0;
   saveDraft(S.d.uiStep || 0, () => { note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে পরে চালু করুন', 'ok'); setTimeout(renderHome, 500); });
 }
@@ -3986,6 +4097,7 @@ function onSessionReady() {
 function sessionLost() {
   S.ready = false; S.starting = false;
   S._directOtp = false; // DIRECT-PATH WIRING: session lost — the direct OTP phase dies with it
+  directAckClear(); // DIRECT ACK TIMEOUT: no fallback after session loss
   busy(false);
   // FAILQ-LOST-SEND FIX (2026-10-28): opAbort() সারি চুপচাপ মুছে দিত —
   // সারিতে বসা SUBMIT_S4_PREP (কখনো সাইট ছোঁয়নি) হারিয়ে যেত, অথচ
@@ -4217,6 +4329,7 @@ function handleFreshReady(d) {
   if (failedOps.length) showFail(failedOps.map(op => opLabel(op) + ' — সংযোগ নতুন হওয়ায় পাঠানো যায়নি'));
   note('🔄 সংযোগ নতুন — ধাপ ১ থেকে আবার সাজানো হবে (তথ্য আপনার হাতেই আছে)', 'info');
   S._directOtp = false; // DIRECT-PATH WIRING: fresh session — the OTP view's direct phase dies with the reset
+  directAckClear(); // DIRECT ACK TIMEOUT: the disconnect trigger already fired any fallback; this is a no-op safety
   goStep(1);
   return true;
 }
@@ -4318,6 +4431,7 @@ socket.on('BOT_STATUS', (d) => {
     opAbort();
     S._heldPrep = null; // submitted — a parked send must never resurrect after DONE
     S._directOtp = false; // DIRECT-PATH WIRING: submitted — no direct phase survives DONE
+    directAckClear(); // DIRECT ACK TIMEOUT: no fallback after DONE
     S.otpStage = 'done';
     showDone(d);
     return;
