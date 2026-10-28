@@ -1054,6 +1054,7 @@ function readAddrFields(prefix, prev) {
 
 /* ═══════════ home view ═══════════ */
 function renderHome() {
+  S._heldPrep = null; // leaving the flow — a parked send must not follow the user home
   setView('home'); renderStepper(-1); hideFail(); hideBanner(); noteOff();
   clearBtns();
   const acks = getAcks();
@@ -1300,6 +1301,7 @@ function renderDrafts() {
   });
 }
 function openDraft(draftId) {
+  S._heldPrep = null; // switching application context — the old flow's parked send dies here
   busy(true, 'খসড়া প্রস্তুত হচ্ছে…');
   socket.emit('LOAD_DRAFT', draftId, (res) => {
     busy(false);
@@ -1575,7 +1577,7 @@ function traceQ(ev, op, info) {
     if (typeof socket === 'undefined' || !socket || !socket.connected) return;
     const d = { ev: String(ev).slice(0, 24), op: op ? String(op).slice(0, 24) : '' };
     if (info && typeof info === 'object') {
-      for (const k of ['q', 'busy', 'ready', 'conn', 'repump', 'saved', 'failed', 'blocked']) {
+      for (const k of ['q', 'busy', 'ready', 'conn', 'repump', 'saved', 'failed', 'blocked', 'held']) {
         if (k in info) d[k] = info[k];
       }
       if (Array.isArray(info.dropped)) d.dropped = info.dropped.map(x => String(x).slice(0, 24)).slice(0, 6).join(',');
@@ -1633,6 +1635,9 @@ function emitStep(op, payload, onAckExtra) {
   // so the server merge can fill a S4Prep whose own payload lacks
   // one (same source as the S3/S4Prep payloads).
   payload = Object.assign({}, payload, { ctx: { s0: S.d.s0, s1: S.d.s1, s2: S.d.s2, s2b: S.d.s2b, relation: S.d.relation || defaultRelation() } });
+  // FAILQSAVE FIX: a manual S4_PREP click supersedes any held copy —
+  // otherwise the held copy could later double-send beside this one.
+  if (op === 'SUBMIT_S4_PREP') S._heldPrep = null;
   // OPQUEUE-LOST-SEND FIX: একই অপ সারিতে থাকলে ডুপ্লিকেট নয় — নতুন
   // পেলোড দিয়ে পুরনোটা বদলাই (রিসেটে বাঁচানো S4_PREP + ইউজারের আবার
   // চাপা — দুটো মিলে ডাবল-সেন্ড হবে না)।
@@ -1653,6 +1658,7 @@ function pumpOpQ() {
     return;
   }
   const job = S._opQ.shift();
+  if (job.op === 'SUBMIT_S4_PREP') S._heldPrep = null; // the queue's copy is the live send now — a held copy would be stale
   S._opBusy = true;
   S._waitingAck = job.op;
   S._opStartedAt = Date.now();
@@ -1684,9 +1690,33 @@ function opFinish() {
   setTimeout(pumpOpQ, 80);
 }
 function opAbort() {
-  traceQ('ABORT', S._waitingAck, { q: (S._opQ || []).length, busy: !!S._opBusy });
+  traceQ('ABORT', S._waitingAck, { q: (S._opQ || []).length, busy: !!S._opBusy, held: !!S._heldPrep });
+  // FAILQSAVE FIX (2026-10-28): a foreign abort (server ERROR, stale
+  // ack, chain/view abort) used to wipe a QUEUED, never-emitted
+  // S4_PREP silently — the queue was its only copy, and the later
+  // fresh-READY found nothing to re-pump. Hold it instead; it is
+  // restored only by the fresh-READY / READY recovery paths, and
+  // cleared by a new manual send, by leaving the flow, or by
+  // submission. An IN-FLIGHT S4_PREP is never held: its outcome is
+  // unknown (zombie risk) and the fresh-READY path fails it loudly.
+  if (S._waitingAck !== 'SUBMIT_S4_PREP') {
+    const held = (S._opQ || []).filter(j => j.op === 'SUBMIT_S4_PREP');
+    if (held.length) S._heldPrep = held[held.length - 1];
+  }
   S._opQ = []; S._opBusy = false; S._waitingAck = null; S._slowShown = false;
   clearTimeout(S._opSlowT); S._pumpWait = false; S._pumpSince = 0;
+}
+// FAILQSAVE FIX: the single restore path for a held (never-emitted)
+// S4_PREP. Goes through emitStep, so it gets a fresh ctx and a normal
+// ENQUEUE + EMIT trace pair — the next journal grep can prove it.
+// Never restores while a send is in flight (zombie rule); callers
+// also guard, this is defense in depth. Returns true on restore.
+function restoreHeldPrep() {
+  const held = S._heldPrep || null;
+  if (!held || S._waitingAck === 'SUBMIT_S4_PREP') return false;
+  S._heldPrep = null;
+  emitStep(held.op, held.payload);
+  return true;
 }
 /* ম্যানুয়াল মোড: লিখে/ক্লিক করলেই পরের ধাপ — সাইট-সিঙ্ক পিছনে, কিন্তু
    একসাথে একটাই অপ (লকস্টেপ); আগেরটা চলাকালীন এলে সারিতে না বসিয়ে থামি */
@@ -3662,6 +3692,7 @@ function chainAck(d) {
 function abortChain() {
   S.chain = null;
   opAbort();
+  S._heldPrep = null; // user chose to pause in a draft — no auto-resend of the parked send
   S._staleAcks = 0;
   saveDraft(S.d.uiStep || 0, () => { note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে পরে চালু করুন', 'ok'); setTimeout(renderHome, 500); });
 }
@@ -3936,6 +3967,7 @@ function handleFreshReady(d) {
   // সাইটের সেশন সত্যিই নতুন (আগের ধাপগুলো সাইটে হারিয়ে গেছে) — UI ধাপ ১ থেকে সাজাই
   const inFlight = S._waitingAck;
   const savedPrep = takeQueuedPrep();
+  const heldPrep = S._heldPrep || null;
   const dropped = (S._opQ || []).map(j => j.op);
   S.d.uiStep = 0;
   resetSent(); // সাইট খালি — ধাপ-রেকর্ডও খালি
@@ -3946,9 +3978,22 @@ function handleFreshReady(d) {
     pumpOpQ();
     repumped = true;
   }
-  traceQ('FRESHREADY', inFlight, { saved: !!savedPrep, repump: repumped, dropped: dropped });
+  // FAILQSAVE FIX (2026-10-28): two gaps closed. (1) A prep held by an
+  // earlier foreign opAbort (never emitted — its only copy is
+  // _heldPrep) is restored through restoreHeldPrep when the in-flight
+  // op is not itself a send. (2) An IN-FLIGHT S4_PREP at fresh-READY
+  // is never re-pumped (outcome unknown — zombie risk) but must not
+  // die silently either: it is reported as a loud failure, so the OTP
+  // view's 'sending' lie ends and the user can deliberately re-send.
+  // A held copy is cleared in that case — a stale copy must never
+  // resurrect beside the failed send.
+  let heldRestored = false;
+  if (!repumped && heldPrep && inFlight !== 'SUBMIT_S4_PREP' && S.ready) heldRestored = restoreHeldPrep();
+  if (inFlight === 'SUBMIT_S4_PREP') S._heldPrep = null;
+  traceQ('FRESHREADY', inFlight, { saved: !!savedPrep, repump: repumped || heldRestored, held: !!heldPrep, dropped: dropped });
   const failedOps = dropped.slice();
   if (savedPrep && !repumped) failedOps.push('SUBMIT_S4_PREP');
+  if (inFlight === 'SUBMIT_S4_PREP') failedOps.push('SUBMIT_S4_PREP');
   if (failedOps.length) showFail(failedOps.map(op => opLabel(op) + ' — সংযোগ নতুন হওয়ায় পাঠানো যায়নি'));
   note('🔄 সংযোগ নতুন — ধাপ ১ থেকে আবার সাজানো হবে (তথ্য আপনার হাতেই আছে)', 'info');
   goStep(1);
@@ -3965,6 +4010,12 @@ socket.on('BOT_STATUS', (d) => {
     hideBanner();
     if (!handleFreshReady(d)) {
       note('✅ সংযোগ প্রস্তুত!', 'ok');
+      // FAILQSAVE FIX: same held-prep recovery for a non-fresh READY
+      // (session survived, but a foreign abort wiped the queue while
+      // the socket was down). Strict guards: mid-flow view, idle
+      // queue, nothing in flight — otherwise the held copy stays
+      // parked (a new manual send / leaving the flow clears it).
+      if (S._heldPrep && S.view === 'flow' && (S.d.uiStep || 0) > 0 && !S._waitingAck && !(S._opQ || []).length) restoreHeldPrep();
     }
     const q = S._readyQ || []; S._readyQ = [];
     q.forEach(f => { try { f(); } catch (e) { console.error(e); } });
@@ -4041,6 +4092,7 @@ socket.on('BOT_STATUS', (d) => {
   if (st === 'COMPLETED') {
     busy(false);
     opAbort();
+    S._heldPrep = null; // submitted — a parked send must never resurrect after DONE
     S.otpStage = 'done';
     showDone(d);
     return;
