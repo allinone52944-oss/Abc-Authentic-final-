@@ -199,6 +199,7 @@ input.bad, select.bad{border-color:var(--err); box-shadow:0 0 0 3px rgba(251,113
 .hero .htitle{color:#ffffff}
 .hero .htitle .gold{background:none; -webkit-background-clip:initial; background-clip:initial; color:#ffffff}
 .hero .hsub{color:#dbeafe}
+.hero .sitesms{font-size:19px; font-weight:600; color:#ffffff; line-height:1.5; margin:14px auto 0; max-width:540px}
 .hero .hpill{background:rgba(255,255,255,.15); color:#ffffff; border-color:rgba(255,255,255,.35)}
 .hpill{display:inline-block; font-size:12px; color:var(--gold); border:1px solid var(--line);
   border-radius:99px; padding:5px 14px; margin-bottom:14px; background:rgba(37,99,235,.07)}
@@ -1106,16 +1107,29 @@ function renderHome() {
     note('✔ সাম্প্রতিক আবেদন মুছে ফেলা হয়েছে', 'ok');
   });
   // আসল PDF (2026-10-17): recent list থেকেও original PDF আনা যাবে
+  // PREMIUM-RESET (2026-10-28): চার্জ-কল না-ফিরলে (2026-10-28 লাইভ:
+  // সার্ভারে চার্জ সফল, তবু বোতাম 'চার্জ হচ্ছে…'-তে চিরকাল আটকে)
+  // বোতাম যাতে সব পথে ফেরে — emit-এ না পৌঁছলে finally রিসেট করে;
+  // emit-এর পর আগের 30s রিসেট + ORIGINAL_PDF handler-ই দায়িত্বে থাকে।
+  // charge() নিজে alert দেয়, তাই !token-এ আলাদা note নয়।
   els('[data-orig]').forEach(b => b.onclick = async () => {
     const ackNo = b.dataset.orig;
     b.disabled = true; b.textContent = '⏳ চার্জ হচ্ছে…';
-    const token = await charge('pdf', ackNo ? 'pdf-' + ackNo : null);
-    if (!token) { b.disabled = false; b.textContent = '⬇️ আসল PDF'; return; }
-    b.textContent = '⏳ PDF আসছে…';
-    S._origAutoDl = ackNo;
-    socket.emit('FETCH_ORIGINAL', { ack: ackNo, _chargeToken: token });
-    // Ready হলে auto-download হবে (ORIGINAL_PDF handler দেখে)
-    setTimeout(() => { b.disabled = false; b.textContent = '⬇️ আসল PDF'; }, 30000);
+    let emitted = false;
+    try {
+      const token = await charge('pdf', ackNo ? 'pdf-' + ackNo : null);
+      if (!token) return;
+      b.textContent = '⏳ PDF আসছে…';
+      S._origAutoDl = ackNo;
+      emitted = true;
+      socket.emit('FETCH_ORIGINAL', { ack: ackNo, _chargeToken: token });
+      // Ready হলে auto-download হবে (ORIGINAL_PDF handler দেখে)
+      setTimeout(() => { b.disabled = false; b.textContent = '⬇️ আসল PDF'; }, 30000);
+    } catch (e) {
+      note('চার্জ/পাঠাতে সমস্যা — আবার চেষ্টা করুন', 'err');
+    } finally {
+      if (!emitted) { b.disabled = false; b.textContent = '⬇️ আসল PDF'; }
+    }
   });
 }
 
@@ -2875,6 +2889,18 @@ function autoPreview() {
 }
 
 /* ═══════════ success ═══════════ */
+/* PREMIUM-DONE (2026-10-28): সাবমিটের ব্যানার প্রিমিয়াম নয় — মেইন
+   সাইটের নিজের সাফল্য-মেসেজটাই (submitS4-এর ackText) দেখাবে। সাইটের
+   টেক্সটে আইকন-ফন্টের আবর্জনা (যেমন leading 'check_circle') আর
+   ইংরেজি 'Success,' ডুপ্লিকেশন থাকতে পারে — সেগুলো ছেঁটে পরিষ্কার
+   মেসেজ ফেরত দেয়; নম্বর/আসল মেসেজ কখনো বদলায় না। খালি হলে ''। */
+function cleanSiteSms(t) {
+  var s = String(t || '').replace(/\s+/g, ' ').trim();
+  s = s.replace(/^(check_circle|check-circle|check|done_all|done)[\s,:\-]*/i, '');
+  if (/[\u0980-\u09FF]/.test(s)) s = s.replace(/^Success[\s,:\-]*/i, '');
+  return s.slice(0, 300);
+}
+
 function showDone(d, restore) {
   d = d || {};
   S._done = d; // প্রিভিউ থেকে ফেরার সময় আবার দেখানোর জন্য
@@ -2907,6 +2933,10 @@ function showDone(d, restore) {
     if (S.draftId) { socket.emit('DELETE_DRAFT', S.draftId, () => {}); S.draftId = null; }
     updDraftsCnt();
   }
+  // PREMIUM-DONE: সাইটের নিজের মেসেজ থাকলে সেটাই মূল ডিসপ্লে (ব্যানার নয়);
+  // ফলব্যাক-বাক্য বা খালি হলে আগের ব্যানারই থাকে।
+  const rawSms = String(d.ackId || '').trim();
+  const siteSms = (rawSms && rawSms !== 'BDRIS পোর্টালে সফলভাবে জমা হয়েছে.') ? cleanSiteSms(rawSms) : '';
   setView('done'); hideFail(); hideBanner(); noteOff();
   $('stepper').className = 'stepper hidden';
   showBody(
@@ -2914,11 +2944,13 @@ function showDone(d, restore) {
       '<span class="hbean" style="top:60%;right:7%;animation-delay:-4s">✨</span>' +
       '<div class="tickpop">✅</div>' +
       '<div class="hpill">আবেদন সম্পন্ন</div>' +
-      '<h1 class="htitle"><span class="gold">আবেদন সফলভাবে জমা হয়েছে!</span></h1>' +
+      (siteSms
+        ? '<div class="sitesms">' + esc(siteSms) + '</div>'
+        : '<h1 class="htitle"><span class="gold">আবেদন সফলভাবে জমা হয়েছে!</span></h1>') +
       (no
         ? '<div class="ackhero"><div class="lbl">আপনার আবেদন নম্বর</div><div class="acknum" id="ackNum">' + esc(no) + '</div></div>'
         : '<p class="hsub">জমা হয়েছে — তবে নম্বরটি পেজ থেকে পড়া যায়নি। নিচের পেজের ছবিতে নম্বরটি দেখে নিন।</p>') +
-      (d.ackId && String(d.ackId).trim() !== no ? '<p class="hsub">“' + esc(String(d.ackId).trim().slice(0, 200)) + '”</p>' : '') +
+      (d.ackId && !siteSms && String(d.ackId).trim() !== no ? '<p class="hsub">“' + esc(String(d.ackId).trim().slice(0, 200)) + '”</p>' : '') +
       '<p class="hsub">' + esc(nm) + ' — নম্বরটি এখনই কপি করে রেখে দিন।</p>' +
       '<p class="hint">📄 PDF তৈরি হতে একটু সময় লাগে — তৈরি হলেই নিজে থেকে নেমে যাবে।</p>' +
       '<div class="copyrow2">' +
@@ -3817,6 +3849,14 @@ socket.on('BOT_STATUS', (d) => {
     note(san(d.message || 'প্রক্রিয়া চলছে…'), lv);
     return;
   }
+  // PREMIUM-PROGRESS (2026-10-28): ফেচের লাইভ ধাপ — DONE-এর pending
+  // বোতামে ধাপের লেখা বসে (চুপচাপ ১ মিনিট নয়); বোতাম না থাকলে note।
+  if (st === 'ORIGINAL_PDF_PROGRESS') {
+    const pl = san(d.label || '⏳ PDF তৈরি হচ্ছে…');
+    const el = $('akOrigPend');
+    if (el) el.textContent = pl; else note(pl, 'info');
+    return;
+  }
   if (st === 'ORIGINAL_PDF') {
     const ono = String(d.ackId || '').replace(/\D/g, '');
     const u = d.ok && d.original ? d.original : null;
@@ -4056,10 +4096,17 @@ $('logoutBtn').onclick = async () => {
   }
   async function charge(kind, idempotencyKey) {
     try {
+      // PREMIUM-RESET (2026-10-28): timeout-ছাড়া fetch চিরকাল ঝুলতে পারে
+      // (2026-10-28 লাইভ: সার্ভারে চার্জ সফল, তবু ক্লায়েন্ট কখনো ফেরেনি) —
+      // চার্জ ডিবি-কাজ মিলিসেকেন্ডের, তাই 30s উদার সীমা। টাইমআউট হলে
+      // catch → null → বোতাম ফেরে + রিট্রাইয়ে DUPLICATE সাথে সাথে টোকেন দেয়।
+      // এটা বোতাম-লুকানো টাইমার নয়: ব্যর্থতা alert-এ দেখায়, রিট্রাই খোলা থাকে।
+      var sig = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(30000) : undefined;
       var r = await fetch('/api/bdris-apply/charge/' + kind, {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
-        body: JSON.stringify(idempotencyKey ? { idempotency_key: idempotencyKey } : {})
+        body: JSON.stringify(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+        signal: sig
       });
       var d = await r.json().catch(function () { return {}; });
       if (r.status === 402 || d.error === 'INSUFFICIENT_BALANCE') {
