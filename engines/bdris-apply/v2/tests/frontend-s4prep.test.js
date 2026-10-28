@@ -65,7 +65,10 @@ describe('frontend S4Prep: branch on machine-readable code, not Bengali text', (
 
 describe('frontend S4Prep payload carries docs for replay', () => {
   it('payloadFor(SUBMIT_S4_PREP) includes the draft docs', () => {
-    assert.match(html, /if \(op === 'SUBMIT_S4_PREP'\) return \{ email: S\.d\.email \|\| '', phone: S\.d\.phone \|\| '', docs: S\.d\.docs \|\| \[\] \}/);
+    assert.match(html, /if \(op === 'SUBMIT_S4_PREP'\) return \{ email: S\.d\.email \|\| '', phone: S\.d\.phone \|\| '', docs: S\.d\.docs \|\| \[\], relation: S\.d\.relation \|\| defaultRelation\(\) \}/);
+  });
+  it('payloadFor(SUBMIT_S4_PREP) includes the relation for replay (item 22)', () => {
+    assert.match(html, /if \(op === 'SUBMIT_S4_PREP'\) return \{[^}]*relation: S\.d\.relation \|\| defaultRelation\(\) \}/);
   });
   it('S4Prep emits use payloadFor (so docs travel), not a docs-less literal', () => {
     assert.match(html, /emitStep\('SUBMIT_S4_PREP', payloadFor\('SUBMIT_S4_PREP'\)\)/);
