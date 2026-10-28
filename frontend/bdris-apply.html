@@ -1055,6 +1055,7 @@ function readAddrFields(prefix, prev) {
 /* ═══════════ home view ═══════════ */
 function renderHome() {
   S._heldPrep = null; // leaving the flow — a parked send must not follow the user home
+  S._directOtp = false; // DIRECT-PATH WIRING: the direct OTP phase dies with the flow
   setView('home'); renderStepper(-1); hideFail(); hideBanner(); noteOff();
   clearBtns();
   const acks = getAcks();
@@ -1302,6 +1303,7 @@ function renderDrafts() {
 }
 function openDraft(draftId) {
   S._heldPrep = null; // switching application context — the old flow's parked send dies here
+  S._directOtp = false; // DIRECT-PATH WIRING: a new draft is never a direct OTP view
   busy(true, 'খসড়া প্রস্তুত হচ্ছে…');
   socket.emit('LOAD_DRAFT', draftId, (res) => {
     busy(false);
@@ -2743,6 +2745,206 @@ function collectStep6() {
 }
 
 /* ═══════════ OTP — প্রিভিউ পর্দা থেকেই পাঠানো হয় ═══════════ */
+/* ═══════════ DIRECT-PATH WIRING (2026-10-28) ═══════════
+   The Step 6 send through the HTTP chain (SUBMIT_HTTP_CHAIN via
+   ENGINE_COMMAND), in two phases — send now, submit after the
+   user types the OTP — instead of bot SUBMIT_S4_PREP/S4_OTP.
+   Enable mechanism: S.httpPathEnabled is learned ONLY from the
+   server (HTTP_PATH_STATUS probe on every BOT_STATUS READY,
+   which reads the BDRIS_HTTP_PATH env) — never from a client-side
+   guess. Anything but an explicit true means the bot path.
+   Seeded session: the engine seeds the HTTP client from the warm
+   browser page's cookies + CSRF (the browser stays the session
+   carrier, exactly as the bot path uses it); a failed seed fails
+   fast (SEED_FAILED) instead of a bare bootstrap (proven 403).
+   Fallback rules (never weakened): any pre-submit HTTP failure
+   falls back to the queued bot ops; an unknown submit outcome
+   (SUBMIT_OUTCOME_UNKNOWN) never auto-retries — the user must
+   check before retrying, or a blind retry could double-submit.
+   Truthful display (the day's core lesson): the OTP view renders
+   as 'sent' ONLY on a sent-proof ack from the server. Before
+   proof there is only a transient busy note — never a 'sending'
+   view that can stick forever. A failed send shows the site's
+   message and frees the buttons on the contact step. */
+function directHttpEnabled() { return S.httpPathEnabled === true; }
+function probeHttpPath() {
+  // No _commandId: the executor caches by _commandId, so a reused
+  // id would return a stale status. Any failure (no session,
+  // expired session, lost callback) leaves the flag non-true, and
+  // the bot path runs — the safe default.
+  try {
+    socket.emit('ENGINE_COMMAND', { command: 'HTTP_PATH_STATUS', params: {} }, (r) => {
+      S.httpPathEnabled = !!(r && r.enabled === true);
+    });
+  } catch (e) { S.httpPathEnabled = false; }
+}
+function directCtx() {
+  // RECORDED state only — never collectStep4/collectAuto here.
+  // At Step 6 the Step 4 elements are absent, and re-collecting
+  // from absent elements destroys the recorded copy state
+  // (prescopy bug: {presCopy, pres} wiped to empty). S.d.s2b as
+  // recorded already carries permCopy/presCopy + perm/pres (null
+  // when ticked); the server resolves ticked copies to their
+  // source records. Birthplace geo comes from S.d.s1's own geo
+  // fields (+ *Ids) — buildSubmitPayload reads data.birthPlace
+  // only, it never derives birthplace from s1. Names flow raw
+  // (no cleaning here): single names and backtick marks reach the
+  // builder untouched; the server carries singleBn/singleEn +
+  // hasCinno flags for a future bridge, but changes NO payload
+  // today — the live test decides API acceptance.
+  const s1 = S.d.s1 || {};
+  const s0 = S.d.s0 || {};
+  const birthPlace = {
+    division: s1.division, district: s1.district, cityCorpUpazila: s1.cityCorpUpazila,
+    paurasavaUnion: s1.paurasavaUnion, ward: s1.ward,
+    divisionId: s1.divisionId, districtId: s1.districtId, cityCorpUpazilaId: s1.cityCorpUpazilaId,
+    paurasavaUnionId: s1.paurasavaUnionId, wardId: s1.wardId,
+    postBn: s1.postBn, postEn: s1.postEn, vilBn: s1.vilBn, vilEn: s1.vilEn,
+    houseBn: s1.houseBn, houseEn: s1.houseEn,
+  };
+  const applicantNameEn = [s1.firstNameEn, s1.lastNameEn].filter(Boolean).join(' ');
+  return {
+    s0: s0, s1: s1, s2: S.d.s2 || {}, s2b: S.d.s2b || {},
+    s3: { relation: S.d.relation || defaultRelation(), docs: S.d.docs || [] },
+    s4prep: { email: S.d.email || '', phone: S.d.phone || '' },
+    docs: S.d.docs || [],
+    birthPlace: birthPlace,
+    relation: S.d.relation || defaultRelation(),
+    applicantName: applicantNameEn,
+    email: S.d.email || '', phone: S.d.phone || '',
+    addressType: s0.addressType || 'BIRTHPLACE',
+    officeAddressType: s0.addressType || 'BIRTHPLACE',
+  };
+}
+function directFallbackToBotSend() {
+  // Pre-submit direct failure → the queued bot send owns it
+  // (ordered, page-safe). On the OTP view already, do NOT
+  // re-render (that would wipe typed boxes) — the bot ack
+  // updates the hint on proof, as it always has.
+  S._directOtp = false;
+  if (S.otpStage !== 'code') renderOtpCode(false);
+  busy(true, '📲 কোড পাঠানো হচ্ছে…');
+  emitStep('SUBMIT_S4_PREP', payloadFor('SUBMIT_S4_PREP'));
+}
+function directSend() {
+  // Truthful display: NO OTP view before server proof — only a
+  // transient busy note. The view renders on a sent-proof ack.
+  busy(true, '📲 কোড পাঠানো হচ্ছে…');
+  const payload = Object.assign({}, directCtx(), { phase: 'send', uiDirect: true });
+  socket.emit('ENGINE_COMMAND', { command: 'SUBMIT_HTTP_CHAIN', params: payload }, (r) => {
+    directSendAck(r);
+  });
+}
+function directSendAck(r) {
+  busy(false);
+  if (!r || r.httpPath === 'disabled' || r.error === 'HTTP_PATH_DISABLED'
+    || r.error === 'NO_SESSION' || r.error === 'SESSION_EXPIRED'
+    || r.error === 'SEED_FAILED' || r.fallback === true) {
+    // Disabled, unseeded, or pre-submit failure — bot owns it.
+    if (r && r.httpPath === 'disabled') S.httpPathEnabled = false;
+    directFallbackToBotSend();
+    return;
+  }
+  if (r.ok === true && r.sent === true) {
+    // Server proof of sent — ONLY now claim delivery.
+    S._directOtp = true;
+    if (S.otpStage === 'code') {
+      // Re-send: update the hint in place, never re-render (typed
+      // boxes must survive).
+      const h = document.getElementById('otpSentHint');
+      if (h) h.innerHTML = esc((S.d.phone || '').slice(-4)) + '-এ শেষ হওয়া নম্বরে কোড পাঠানো হয়েছে। না এলে “আবার কোড পাঠান” চাপুন। <b>কোড কারও সাথে শেয়ার করবেন না।</b>';
+    } else {
+      renderOtpCode(true);
+    }
+    return;
+  }
+  // Anything else: truthful failure, no stuck 'sending' view.
+  S._directOtp = false;
+  const msg = (r && (r.message || r.httpReason)) || 'কোড পাঠানো যায়নি';
+  showFail([san(msg)]);
+  note('⚠️ কোড পাঠানো যায়নি — আবার চেষ্টা করুন', 'warn');
+}
+async function directSubmit(otp) {
+  busy(true, '⏳ আবেদন জমা হচ্ছে… একটু অপেক্ষা করুন');
+  S.otpStage = 'submitting'; S._failReported = false;
+  hideFail(); hideBanner(); noteOff();
+  // Submit-90 charge, exactly like the bot path: same
+  // /charge/submit call + idempotency + token cache (see the
+  // charge shim). The engine gate verifies the token server-side.
+  const getTok = window.abcDirectSubmitToken;
+  if (typeof getTok !== 'function') {
+    // Shim missing — the bot submit charges via its own wrapper.
+    S._directOtp = false;
+    emitStep('SUBMIT_S4_OTP', { otp: otp });
+    return;
+  }
+  const tok = await getTok();
+  if (!tok) { busy(false); S.otpStage = 'code'; return; } // charge() already alerted
+  const payload = Object.assign({}, directCtx(), { phase: 'submit', uiDirect: true, otp: otp, _chargeToken: tok });
+  socket.emit('ENGINE_COMMAND', { command: 'SUBMIT_HTTP_CHAIN', params: payload }, (r) => {
+    directSubmitAck(r, otp);
+  });
+}
+function directSubmitAck(r, otp) {
+  busy(false);
+  if (!r) { S.otpStage = 'code'; showFail(['সার্ভারের জবাব আসেনি']); return; }
+  if (r.httpPath === 'disabled' || r.error === 'HTTP_PATH_DISABLED'
+    || r.error === 'NO_SESSION' || r.error === 'SESSION_EXPIRED'
+    || r.fallback === true) {
+    // Disabled, session gone, or no runner — bot submit owns it
+    // (its charge wrapper attaches the submit token).
+    if (r.httpPath === 'disabled') S.httpPathEnabled = false;
+    S._directOtp = false;
+    emitStep('SUBMIT_S4_OTP', { otp: otp });
+    return;
+  }
+  if (r.error === 'SUBMIT_OUTCOME_UNKNOWN') {
+    // NEVER auto-retry: the submit may already exist. The user
+    // checks first; a later deliberate submit goes via bot.
+    S._directOtp = false; S.otpStage = 'code';
+    showFail([san(r.message || 'সাবমিটের ফল জানা যায়নি — আবেদন হয়েছে কিনা যাচাই করে আবার চেষ্টা করুন')]);
+    return;
+  }
+  if (r.httpFallback === true) {
+    if (r.ok === true) {
+      // The runner already ran the Playwright fallback, and
+      // submitS4 itself emitted BOT_STATUS COMPLETED — that event
+      // owns the DONE display, so nothing more is rendered here.
+      S._directOtp = false;
+      return;
+    }
+    // Fallback failed definitively — retry goes via bot.
+    S._directOtp = false; S.otpStage = 'code';
+    showFail([san(r.httpReason || ('Playwright fallback failed at ' + (r.failedStep || 'submit')))]);
+    return;
+  }
+  if (r.blocked === true) {
+    // Charge gate refused server-side (e.g. stale token) — drop
+    // the cached token so the next attempt re-charges instead of
+    // replaying the dead one.
+    S._submitTok = null; S._submitTokAt = 0;
+    S.otpStage = 'code';
+    showFail([san(r.message || 'পেমেন্ট যাচাই হয়নি')]);
+    return;
+  }
+  if (r.ok === true && r.path === 'http') {
+    // Pure-HTTP success → the SAME DONE screen as the bot path
+    // (showDone + its original-PDF pending button + ORIG_READY
+    // cache + charge-10 fetch are untouched and shared). KNOWN
+    // GAP, stated not hidden: the HTTP submit returns no ack
+    // number today (its success-page ack format is unverified),
+    // so DONE shows the existing 'number not read' text and the
+    // original-PDF button has no key until the live test
+    // confirms the ack format — then only the ackId mapping
+    // below needs the number, no new flow.
+    S._directOtp = false;
+    showDone({ ackId: '', screenshot: null, pdf: null, original: null });
+    return;
+  }
+  // Any other failure: truthful, buttons freed, OTP view kept.
+  S._directOtp = false; S.otpStage = 'code';
+  showFail([san((r && (r.message || r.httpReason)) || 'জমা হয়নি — আবার চেষ্টা করুন')]);
+}
 function sendOtp() {
   collectStep6();
   const bad = [];
@@ -2752,6 +2954,12 @@ function sendOtp() {
   if (bad.length) { showFail(bad); note('⚠️ যোগাযোগের তথ্য ঠিক করুন', 'warn'); return; }
   hideFail();
   if (S.draftId) saveDraft(6, () => {});
+  // DIRECT-PATH WIRING (2026-10-28): server-gated direct send —
+  // when enabled, the Step 6 send goes through the HTTP chain
+  // (phased: send now, submit after the OTP) instead of bot
+  // SUBMIT_S4_PREP. The direct path never renders 'sending'
+  // before server proof (see directSend).
+  if (directHttpEnabled()) { directSend(); return; }
   // Permanent fix (2026-10-26): 'code sent' is NOT shown here. The
   // OTP view opens in 'sending' state; only an otpSent:true ack flips
   // it to 'sent' (see manualStepAck / otpPrepAck). The old code
@@ -2800,6 +3008,11 @@ function renderOtpCode(sent) {
     { html: '✅ আবেদন জমা দিন', fn: () => {
         const otp = val();
         if (otp.length < 6) { note('⚠️ মোবাইলে আসা ৬ ডিজিটের কোডটি সম্পূর্ণ লিখুন', 'warn'); return; }
+        // DIRECT-PATH WIRING (2026-10-28): an OTP view reached via
+        // the direct send submits via the HTTP submit phase (the
+        // submit-90 charge is taken inside directSubmit, same
+        // /charge/submit call + idempotency as the bot path).
+        if (directHttpEnabled() && S._directOtp) { directSubmit(otp); return; }
         S.otpStage = 'submitting'; S._failReported = false;
         busy(true, '⏳ আবেদন জমা হচ্ছে… একটু অপেক্ষা করুন');
         // এলোমেলো-এরর ফিক্স (2026-10-28): জমা চাপলেই আগের ধাপের পুরনো
@@ -2810,6 +3023,11 @@ function renderOtpCode(sent) {
         if (emitStep('SUBMIT_S4_OTP', { otp }) === false) { S.otpStage = 'code'; busy(false); }
       } },
     { html: '📲 আবার কোড পাঠান', cls: 'ghost', fn: () => {
+        // DIRECT-PATH WIRING (2026-10-28): a direct OTP view
+        // re-sends through the HTTP send phase (truthful display:
+        // the hint flips to 'sent' only on server proof, and typed
+        // boxes are never re-rendered away).
+        if (directHttpEnabled() && S._directOtp) { directSend(); return; }
         // কখনো আটকে না থাকেন — ওয়েটশিটা ওয়ালা ধাপ আবারই চালানো যায়
         // Re-send also goes back to 'sending' until its own ack.
         renderOtpCode(false);
@@ -3693,6 +3911,7 @@ function abortChain() {
   S.chain = null;
   opAbort();
   S._heldPrep = null; // user chose to pause in a draft — no auto-resend of the parked send
+  S._directOtp = false; // DIRECT-PATH WIRING: pausing kills the direct OTP phase too
   S._staleAcks = 0;
   saveDraft(S.d.uiStep || 0, () => { note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে পরে চালু করুন', 'ok'); setTimeout(renderHome, 500); });
 }
@@ -3766,6 +3985,7 @@ function onSessionReady() {
 }
 function sessionLost() {
   S.ready = false; S.starting = false;
+  S._directOtp = false; // DIRECT-PATH WIRING: session lost — the direct OTP phase dies with it
   busy(false);
   // FAILQ-LOST-SEND FIX (2026-10-28): opAbort() সারি চুপচাপ মুছে দিত —
   // সারিতে বসা SUBMIT_S4_PREP (কখনো সাইট ছোঁয়নি) হারিয়ে যেত, অথচ
@@ -3996,6 +4216,7 @@ function handleFreshReady(d) {
   if (inFlight === 'SUBMIT_S4_PREP') failedOps.push('SUBMIT_S4_PREP');
   if (failedOps.length) showFail(failedOps.map(op => opLabel(op) + ' — সংযোগ নতুন হওয়ায় পাঠানো যায়নি'));
   note('🔄 সংযোগ নতুন — ধাপ ১ থেকে আবার সাজানো হবে (তথ্য আপনার হাতেই আছে)', 'info');
+  S._directOtp = false; // DIRECT-PATH WIRING: fresh session — the OTP view's direct phase dies with the reset
   goStep(1);
   return true;
 }
@@ -4008,6 +4229,9 @@ socket.on('BOT_STATUS', (d) => {
     S.ready = true; S.starting = false;
     clearTimeout(S._startT);
     hideBanner();
+    // DIRECT-PATH WIRING (2026-10-28): learn the direct flag from
+    // the server on every READY (env-gated, never a client guess).
+    probeHttpPath();
     if (!handleFreshReady(d)) {
       note('✅ সংযোগ প্রস্তুত!', 'ok');
       // FAILQSAVE FIX: same held-prep recovery for a non-fresh READY
@@ -4093,6 +4317,7 @@ socket.on('BOT_STATUS', (d) => {
     busy(false);
     opAbort();
     S._heldPrep = null; // submitted — a parked send must never resurrect after DONE
+    S._directOtp = false; // DIRECT-PATH WIRING: submitted — no direct phase survives DONE
     S.otpStage = 'done';
     showDone(d);
     return;
@@ -4383,6 +4608,20 @@ $('logoutBtn').onclick = async () => {
       }
     } catch (e) { /* silent */ }
   }
+  // DIRECT-PATH WIRING (2026-10-28): the HTTP submit phase charges
+  // exactly like SUBMIT_S4_OTP — same /charge/submit call, same
+  // idempotency key, same 25-min token cache, same alerts. Exposed
+  // so the direct submit caller can attach _chargeToken to its
+  // ENGINE_COMMAND params; the engine gate verifies it server-side.
+  window.abcDirectSubmitToken = async function () {
+    var tok = cachedSubmitToken();
+    if (tok) return tok;
+    tok = await charge('submit', submitChargeKey());
+    if (!tok) return null;
+    S._submitTok = tok; S._submitTokAt = Date.now();
+    try { if (S.draftId) localStorage.setItem('bdris_submit_key_for_' + S.draftId, submitChargeKey()); } catch (e) {}
+    return tok;
+  };
   wrapEmitStep();
   wrapSocketEmit();
   showPrices();

@@ -153,7 +153,22 @@ function finestAddressId(addr = {}) {
   return '';
 }
 
-/** Accept draft shape or canonical shape; return canonical + extras. */
+/**
+ * Is an address record empty? Every geo + postal field blank/absent.
+ * Used only for the ticked-copy guard: a ticked copy whose SOURCE
+ * is empty must fail loudly, never submit as an empty address.
+ * Field list covers both naming variants (readAddrFields' postBn/
+ * vilBn/houseBn and the test/canonical postOfficeBn/villageBn/
+ * houseRoadBn forms).
+ */
+function isAddrEmpty(addr = {}) {
+  if (!addr || typeof addr !== 'object') return true;
+  const fields = ['division', 'district', 'cityCorpUpazila', 'paurasavaUnion', 'ward',
+    'postBn', 'postEn', 'postOfficeBn', 'postOfficeEn',
+    'vilBn', 'vilEn', 'villageBn', 'villageEn',
+    'houseBn', 'houseEn', 'houseRoadBn', 'houseRoadEn'];
+  return fields.every((k) => addr[k] === undefined || addr[k] === null || String(addr[k]).trim() === '');
+}
 function normalizeChainInput(data = {}) {
   const s1 = data.s1 || {};
   const s2 = data.s2 || {};
@@ -182,10 +197,51 @@ function normalizeChainInput(data = {}) {
     addressType: data.addressType || 'BIRTHPLACE',
     otp: data.otp,
   };
+  // DIRECT-PATH WIRING (2026-10-28): same-address copy resolution.
+  // Tick semantics, carried from the bot path: a ticked copy REUSES
+  // the source record — permCopy → birthplace, presCopy → permanent
+  // (after perm resolution). The copy BUTTON writes values into
+  // pres directly (presCopy false), so it needs no resolution.
+  // A ticked copy whose SOURCE is empty resolves to an empty record
+  // and sets copySourceEmpty — the chain then fails loudly at the
+  // 'address' step (bot fallback) instead of submitting an empty
+  // address. Nothing is invented: only recorded flags + recorded
+  // records are used; the frontend ctx builder never re-reads DOM.
+  const s2bIn = data.s2b || {};
+  const birthRec = canonical.birthPlace || {};
+  let permRec = canonical.permAddr || {};
+  let presRec = canonical.prsntAddr || {};
+  if (s2bIn.permCopy) permRec = { ...birthRec };
+  if (s2bIn.presCopy) presRec = { ...permRec };
+  canonical.permAddr = permRec;
+  canonical.prsntAddr = presRec;
+  canonical.copyFlags = { permCopy: !!s2bIn.permCopy, presCopy: !!s2bIn.presCopy };
+  // DIRECT-PATH WIRING (2026-10-28): name-logic flags carried, NOT
+  // consumed. singleBn/singleEn = the bot rule (last name has no
+  // letters); hasCinno = a backtick mark present in any of the
+  // three names. The payload builders (joinName) are UNCHANGED:
+  // single names join to the first name alone (never doubled) and
+  // backticks pass through raw — whether the API accepts them is
+  // the live test's question, and a bridge (if needed) can read
+  // these flags without re-plumbing. Caller-supplied nameFlags win.
+  const hasLetters = (s) => /[A-Za-z\u0980-\u09FF]/.test(String(s || ''));
+  const hasBacktick = (s) => String(s || '').includes('`');
+  const personN = canonical.person || {};
+  const fatherN = canonical.father || {};
+  const motherN = canonical.mother || {};
+  canonical.nameFlags = data.nameFlags || {
+    singleBn: !hasLetters(personN.lastNameBn),
+    singleEn: !hasLetters(personN.lastNameEn),
+    hasCinno: [personN.firstNameBn, personN.lastNameBn, personN.firstNameEn, personN.lastNameEn,
+      fatherN.nameBn, fatherN.nameEn, motherN.nameBn, motherN.nameEn].some(hasBacktick),
+  };
+  canonical.singleName = data.singleName || null;
   // LocationId fallback: the draft's address objects carry *Id
   // fields but no locationId (see finestAddressId). Copy, never
   // mutate the caller's objects, so submit + verify both see it.
-  for (const key of ['birthPlace', 'permAddr']) {
+  // (prsntAddr included: buildSubmitPayload sends its LocationId
+  // too, and the old birth+perm-only loop left it blank.)
+  for (const key of ['birthPlace', 'permAddr', 'prsntAddr']) {
     const a = canonical[key] || {};
     canonical[key] = { ...a, locationId: a.locationId || finestAddressId(a) || '' };
   }
@@ -217,11 +273,19 @@ function normalizeChainInput(data = {}) {
   return {
     canonical,
     otpContext,
-    uploadFiles: Array.isArray(uploadFiles) ? uploadFiles : null,
+    // DIRECT-PATH WIRING: an EMPTY file list is not a file list —
+    // without this, docs: [] (a draft with no files attached yet)
+    // shadowed valid documentRefs and the upload step failed with
+    // MISSING_DOCUMENTS despite refs being present. Truly missing
+    // docs still fail at the upload step, unchanged.
+    uploadFiles: (Array.isArray(uploadFiles) && uploadFiles.length) ? uploadFiles : null,
     documentRefs: Array.isArray(documentRefs) ? documentRefs : null,
     geoChain: data.geoChain || null,
     otp: data.otp,
     chargeToken: data._chargeToken,
+    // DIRECT-PATH WIRING: true when a ticked copy's source record
+    // is empty — runHttpChain fails loudly at 'address' on this.
+    copySourceEmpty: (s2bIn.permCopy && isAddrEmpty(permRec)) || (s2bIn.presCopy && isAddrEmpty(presRec)),
   };
 }
 
@@ -259,6 +323,15 @@ function candidateLog(log, step, message) {
  *   when absent, a fallback need is returned instead of executed
  * @param {function} [opts.log] - log fn (default: console.log)
  * @param {function} [opts.emit] - progress emit fn (optional)
+ * @param {string} [opts.phase] - DIRECT-PATH WIRING (2026-10-28):
+ *   'send' = OTP send only (no charge gate, no verify/submit;
+ *   returns sent proof; Playwright fallback is the CALLER's job —
+ *   pass no playwrightRunner for this phase) or 'submit' =
+ *   verify + submit (charge gate first, OTP send skipped — the
+ *   send phase already sent it). Absent = the full chain, as before.
+ * @param {boolean} [opts.noBareBootstrap] - DIRECT-PATH WIRING:
+ *   when true and no client/factory was injected, fail with
+ *   SEED_FAILED instead of building a bare client (proven 403).
  */
 async function runHttpChain(opts = {}) {
   const log = opts.log || ((...a) => console.log(...a));
@@ -267,6 +340,9 @@ async function runHttpChain(opts = {}) {
   const userId = opts.userId || null;
   const secret = opts.secret !== undefined ? opts.secret
     : (process.env.ABC_JWT_SECRET || process.env.JWT_SECRET || '');
+  // DIRECT-PATH WIRING: the UI calls the chain in two phases so
+  // the OTP the user types can arrive between send and submit.
+  const phase = opts.phase || null;
 
   const baseResult = { path: 'http', candidate: true, candidateLabel: HTTP_CANDIDATE_LABEL };
 
@@ -275,13 +351,20 @@ async function runHttpChain(opts = {}) {
   // cannot start without JWT_SECRET and the adapter passes the full
   // env to the engine, so a missing secret is misconfiguration, not
   // a free pass. verifyChargeToken returns false on empty secret.
-  if (!verifyChargeToken(data._chargeToken, userId, 'submit', secret)) {
-    candidateLog(log, 'gate', 'CHARGE_REQUIRED — charge token did not verify; chain blocked, no HTTP attempt, no Playwright fallback');
-    return { ...baseResult, ok: false, blocked: true, error: 'CHARGE_REQUIRED', message: '❌ পেমেন্ট যাচাই হয়নি — পেজ রিফ্রেশ করে আবার চেষ্টা করুন।' };
-  }
-  if (isSubmitTokenConsumed(data._chargeToken)) {
-    candidateLog(log, 'gate', 'CHARGE_TOKEN_CONSUMED — token already used for a successful submit; chain blocked');
-    return { ...baseResult, ok: false, blocked: true, error: 'CHARGE_TOKEN_CONSUMED', message: '❌ এই পেমেন্টে ইতিমধ্যে একটি আবেদন জমা হয়েছে — নতুন করে চার্জ করে আবার চেষ্টা করুন।' };
+  // DIRECT-PATH WIRING: the send phase is NOT chargeable (the
+  // submit charge precedes submit, as on the bot path), so it
+  // skips the gate; the submit phase keeps it, unchanged.
+  if (phase !== 'send') {
+    if (!verifyChargeToken(data._chargeToken, userId, 'submit', secret)) {
+      candidateLog(log, 'gate', 'CHARGE_REQUIRED — charge token did not verify; chain blocked, no HTTP attempt, no Playwright fallback');
+      return { ...baseResult, ok: false, blocked: true, error: 'CHARGE_REQUIRED', message: '❌ পেমেন্ট যাচাই হয়নি — পেজ রিফ্রেশ করে আবার চেষ্টা করুন।' };
+    }
+    if (isSubmitTokenConsumed(data._chargeToken)) {
+      candidateLog(log, 'gate', 'CHARGE_TOKEN_CONSUMED — token already used for a successful submit; chain blocked');
+      return { ...baseResult, ok: false, blocked: true, error: 'CHARGE_TOKEN_CONSUMED', message: '❌ এই পেমেন্টে ইতিমধ্যে একটি আবেদন জমা হয়েছে — নতুন করে চার্জ করে আবার চেষ্টা করুন।' };
+    }
+  } else {
+    candidateLog(log, 'gate', 'skipped — send phase is not chargeable (charge precedes submit, as on the bot path)');
   }
 
   const norm = normalizeChainInput(data);
@@ -316,6 +399,18 @@ async function runHttpChain(opts = {}) {
 
   let currentStep = 'bootstrap';
   try {
+    // DIRECT-PATH WIRING (2026-10-28): pre-step guards — fail
+    // before any HTTP leaves. A ticked copy with an empty source
+    // must never become an empty submitted address, and a UI
+    // direct call must run SEEDED (bare fetch is proven 403).
+    currentStep = 'address';
+    if (norm.copySourceEmpty) {
+      throw Object.assign(new Error('Copy-source address is empty (ticked same-address copy with an empty source address)'), { code: 'COPY_SOURCE_EMPTY' });
+    }
+    currentStep = 'bootstrap';
+    if (opts.noBareBootstrap && !opts.client && typeof opts.clientFactory !== 'function') {
+      throw Object.assign(new Error('No session-seeded client: bare bootstrap is refused for the UI direct path'), { code: 'SEED_FAILED' });
+    }
     // 1. Bootstrap (verified session + CSRF + cookie jar) — SKIPPED
     // when the caller already seeded the client from a warm browser
     // session (seedFromBrowser sets bootstrapped=true). A bare fetch
@@ -332,8 +427,12 @@ async function runHttpChain(opts = {}) {
     }
 
     // 2. Geo chain — only when the caller supplies an explicit spec.
+    // DIRECT-PATH WIRING: the send phase needs no geo walk
+    // (otpContext derives LocationIds from the draft *Ids).
     currentStep = 'geo';
-    if (norm.geoChain) {
+    if (phase === 'send') {
+      candidateLog(log, 'geo', 'skipped — send phase needs no geo walk');
+    } else if (norm.geoChain) {
       candidateLog(log, 'geo', 'walking caller-supplied geo chain (firstParentId explicit, targetGeoOrder followed)');
       // NOTE (final wiring): the walked chain's ids are NOT copied
       // into the OTP/submit locationIds here — the chain's address
@@ -349,8 +448,14 @@ async function runHttpChain(opts = {}) {
     }
 
     // 3. Document uploads (mandatory types 40 and 41).
+    // DIRECT-PATH WIRING: uploads belong to the submit phase —
+    // the send phase must not upload (it would double-upload when
+    // the submit phase runs with the same files).
     currentStep = 'upload';
     let refs = null;
+    if (phase === 'send') {
+      candidateLog(log, 'upload', 'skipped — uploads belong to the submit phase');
+    } else {
     if (norm.uploadFiles) {
       const uploaded = [];
       for (const d of norm.uploadFiles) {
@@ -375,15 +480,35 @@ async function runHttpChain(opts = {}) {
       throw Object.assign(new Error('Both mandatory document types 40 and 41 are required'), { code: 'MISSING_DOCUMENTS' });
     }
     stepsDone.push('upload');
+    }
 
     // 4. OTP send (verified params).
     currentStep = 'otp-send';
-    candidateLog(log, 'otp-send', 'POST /api/otp/sent with applicant/phone/office context + six name fields');
-    const sent = await client.otpSend(norm.otpContext);
-    if (sent && sent.success !== undefined && sent.success !== true) {
-      throw Object.assign(new Error(`OTP send rejected: ${sent.code || 'unknown'}`), { code: 'OTP_SEND_FAILED' });
+    let sent = null;
+    if (phase !== 'submit') {
+      candidateLog(log, 'otp-send', 'POST /api/otp/sent with applicant/phone/office context + six name fields');
+      sent = await client.otpSend(norm.otpContext);
+      if (sent && sent.success !== undefined && sent.success !== true) {
+        throw Object.assign(new Error(`OTP send rejected: ${sent.code || 'unknown'}`), { code: 'OTP_SEND_FAILED' });
+      }
+      stepsDone.push('otp-send');
+    } else {
+      candidateLog(log, 'otp-send', 'skipped — the send phase already sent the OTP');
     }
-    stepsDone.push('otp-send');
+
+    // DIRECT-PATH WIRING: the send phase ends here — verify and
+    // submit need the user's typed OTP, which arrives with the
+    // submit phase. Returning now keeps 'sent' as server proof
+    // (code/message) without touching verify, submit, or the charge.
+    if (phase === 'send') {
+      candidateLog(log, 'done', 'send phase complete (OTP sent, proof returned); verify + submit await the submit phase');
+      return {
+        ...baseResult, ok: true, sent: true,
+        sendCode: sent ? sent.code : null,
+        sendMessage: sent ? sent.message : null,
+        steps: stepsDone,
+      };
+    }
 
     // 5. OTP verify (CANDIDATE payload).
     currentStep = 'verify';
@@ -646,4 +771,4 @@ function extractScriptSrcs(html, base = '') {
   return srcs;
 }
 
-module.exports = { runHttpChain, runSubmitHttpChain, runStageAProbe, getHttpPathStatus, normalizeChainInput, finestAddressId, isHttpPathEnabled, isFallbackSafe, HTTP_CANDIDATE_LABEL, HTTP_BASE, extractOfficeMatches, extractOfficeCallMatches, extractGetOfficeIdMatches, extractScriptSrcs };
+module.exports = { runHttpChain, runSubmitHttpChain, runStageAProbe, getHttpPathStatus, normalizeChainInput, finestAddressId, isAddrEmpty, isHttpPathEnabled, isFallbackSafe, HTTP_CANDIDATE_LABEL, HTTP_BASE, extractOfficeMatches, extractOfficeCallMatches, extractGetOfficeIdMatches, extractScriptSrcs };
