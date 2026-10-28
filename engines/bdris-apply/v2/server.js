@@ -1090,8 +1090,11 @@ class BdrisEngineV2 {
         }
       });
 
-      socket.on('disconnect', async () => {
-        this.log(`Disconnected: ${socket.id}`);
+      socket.on('disconnect', async (reason) => {
+        // DISCONNECT-REASON DIAGNOSTIC (2026-10-28): socket.io passes the
+        // disconnect reason — log it so the next drop names its own cause
+        // (parser rejection vs ping timeout vs transport error).
+        this.log(`Disconnected: ${socket.id} reason=${reason}`);
         // Don't destroy session immediately — allow reconnection
         // Session will expire via timeout if not reused
       });
