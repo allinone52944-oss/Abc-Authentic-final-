@@ -422,7 +422,8 @@ class BdrisEngineV2 {
     // Returns ONLY {httpPath, enabled, ready, candidate, candidateLabel}.
     // It never starts a session, sends OTP, uploads, submits, runs
     // Playwright, or changes any state, and it never logs or emits.
-    // Frontend wiring rule: call this FIRST, with no _commandId
+    // Frontend wiring (DIRECT-PATH WIRING 2026-10-28): the UI
+    // probes this on every READY, with no _commandId
     // (the executor caches by _commandId, so a reused id would
     // return a stale status). If it says disabled, the frontend
     // runs its existing Playwright flow itself — it must NOT call
@@ -494,10 +495,13 @@ class BdrisEngineV2 {
     // Env: BDRIS_HTTP_PATH=on (or 1/true/yes/enabled) OPTS IN to the
     // HTTP path; default OFF (safe-by-default, candidate payloads
     // unproven). Unset/empty/off/0/false/no/disabled/unknown all
-    // disable it. Frontend wiring for this command is still pending
-    // (frontend files are out of scope here), so the live UI does
-    // not call this command yet; the command is reachable today
-    // only via ENGINE_COMMAND like every other command.
+    // disable it. DIRECT-PATH WIRING (2026-10-28): the live UI
+    // calls this command via ENGINE_COMMAND in two phases —
+    // phase 'send' (OTP send only, no charge gate, no in-runner
+    // Playwright fallback; the frontend falls back to queued bot
+    // S4_PREP) and phase 'submit' (charge gate, verify, submit,
+    // in-runner Playwright fallback). The frontend learns the flag
+    // from HTTP_PATH_STATUS on READY, never from a client guess.
     this.executor.register('SUBMIT_HTTP_CHAIN',
       async (params, ctx) => {
         const session = ctx.session;
@@ -510,7 +514,14 @@ class BdrisEngineV2 {
         // adapter body runs only if runSubmitHttpChain invokes it,
         // which the disabled branch never does (proven by test:
         // a counting fake adapter stays at 0 calls when disabled).
-        const playwrightRunner = session?.page ? async (data) => {
+        // DIRECT-PATH WIRING (2026-10-28): the UI send phase must
+        // never run Playwright itself — its fallback is the queued
+        // bot S4_PREP owned by the frontend (ordered, page-safe).
+        // The submit/full phases keep the in-runner Playwright
+        // fallback (pre-submit failure → bot; unknown submit
+        // outcome → suppressed, see HttpPathRunner).
+        const phase = params.phase || null;
+        const playwrightRunner = (phase === 'send') ? null : (session?.page ? async (data) => {
           const nav = new BdrisNavigator(session.page);
           // S4Prep-area fix (2026-10-28, items 4/24): the step plan
           // lives in buildPlaywrightFallbackPlan above, so the
@@ -532,7 +543,7 @@ class BdrisEngineV2 {
             }
           }
           return { ok: true, path: 'playwright', completed: true };
-        } : null;
+        } : null);
 
         // Session-seeded HTTP client (gate fix 2026-10-27): seed from
         // the warm session page's cookies + CSRF, exactly like
@@ -559,8 +570,24 @@ class BdrisEngineV2 {
           secret,
           client: httpClient,
           playwrightRunner,
+          phase,
+          // DIRECT-PATH WIRING: a UI direct call must run SEEDED —
+          // a failed seed fails fast (SEED_FAILED → bot fallback)
+          // instead of attempting a bare bootstrap (proven 403).
+          noBareBootstrap: !!params.uiDirect,
           log: (...a) => this.log(...a),
           emit: (ev, msg) => ctx.emit(ev, msg),
+        }).then(async (chainResult) => {
+          // DIRECT-PATH WIRING: mirror the legacy SUBMIT handler's
+          // originalRec save — a Playwright-fallback submit's
+          // originalRec would otherwise never be persisted, and the
+          // later FETCH_ORIGINAL {ack} would die with NO_RECORD
+          // (the v2 bug the legacy handler fixed). A pure-HTTP
+          // success has no ackNum/originalRec, so nothing saves.
+          if (chainResult && chainResult.httpFallback && chainResult.originalRec && chainResult.ackNum) {
+            try { if (this.originalFetcher) this.originalFetcher.saveRec(chainResult.ackNum, chainResult.originalRec); } catch { /* ঐচ্ছিক */ }
+          }
+          return chainResult;
         });
       },
       { timeoutMs: 180000 }
