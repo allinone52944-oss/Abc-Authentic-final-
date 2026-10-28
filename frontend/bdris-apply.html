@@ -1565,6 +1565,24 @@ function resendFrom(op) {
    ফেল দেখাবে, মিথ্যা 'sending' নয়। চলন্ত অপটাই S4_PREP হলে
    আবার পাঠানো হবে না (সার্ভারে জম্বি চলতে পারে — ডাবল-সেন্ডের ভয়),
    তখনও সত্যি ফেল দেখাবে। */
+/* QTRACE DIAGNOSTIC (2026-10-28): সারির গতিবিধি সার্ভার-জার্নালে দেখা
+   যাবে — আচরণ বদলায় না, শুধু লগ। পাঠানো হয় কেবল ঘটনার নাম, অপের
+   নাম, সারির দৈর্ঘ্য, সংখ্যা আর বুলিয়ান — পেলোড, ফোন, নাম, ঠিকানা
+   কখনো নয়। সকেট বিচ্ছিন্ন থাকলে চুপচাপ বাদ (থ্রো নয়); সার্ভারের
+   হ্যান্ডলারও শুধু এই সাদা ক্ষেত্রগুলোই ছাপে। */
+function traceQ(ev, op, info) {
+  try {
+    if (typeof socket === 'undefined' || !socket || !socket.connected) return;
+    const d = { ev: String(ev).slice(0, 24), op: op ? String(op).slice(0, 24) : '' };
+    if (info && typeof info === 'object') {
+      for (const k of ['q', 'busy', 'ready', 'conn', 'repump', 'saved', 'failed', 'blocked']) {
+        if (k in info) d[k] = info[k];
+      }
+      if (Array.isArray(info.dropped)) d.dropped = info.dropped.map(x => String(x).slice(0, 24)).slice(0, 6).join(',');
+    }
+    socket.emit('CLIENT_TRACE', d);
+  } catch (e) {}
+}
 function takeQueuedPrep() {
   const q = S._opQ || [];
   const prep = q.filter(j => j.op === 'SUBMIT_S4_PREP');
@@ -1599,6 +1617,7 @@ function guardOpBusy() {
   if (stuck) failedOps.unshift(stuck);
   if (savedPrep && !repumped) failedOps.push('SUBMIT_S4_PREP');
   if (failedOps.length) showFail(failedOps.map(op => opLabel(op) + ' — সার্ভারের জবাব আসেনি'));
+  traceQ('WATCHDOG', stuck, { repump: repumped, dropped: dropped });
   note('⚠️ সংযোগ হারিয়েছে — আটকে থাকা কাজটি পাঠানো যায়নি, আবার চেষ্টা করুন', 'warn');
   busy(false);
   return false;
@@ -1616,6 +1635,7 @@ function emitStep(op, payload, onAckExtra) {
   // চাপা — দুটো মিলে ডাবল-সেন্ড হবে না)।
   S._opQ = (S._opQ || []).filter(j => j.op !== op);
   (S._opQ = S._opQ || []).push({ op, payload });
+  traceQ('ENQUEUE', op, { q: S._opQ.length, busy: !!S._opBusy, ready: !!S.ready });
   pumpOpQ();
   return true;
 }
@@ -1625,6 +1645,7 @@ function pumpOpQ() {
     if (S._pumpWait) return;
     S._pumpWait = true;
     S._pumpSince = Date.now();
+    traceQ('PUMPWAIT', (S._opQ[0] || {}).op, { q: S._opQ.length });
     ensureReady(() => { S._pumpWait = false; S._pumpSince = 0; pumpOpQ(); });
     return;
   }
@@ -1637,6 +1658,7 @@ function pumpOpQ() {
   job.opId = job.op + '#' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   job.payload = Object.assign({}, job.payload, { _opId: job.opId });
   socket.emit(job.op, job.payload);
+  traceQ('EMIT', job.op, { q: S._opQ.length });
   // ধাপ-রেকর্ড: কোন ধাপে সাইটে ঠিক কী তথ্য গেছে (ফিরে-সম্পাদনার রিপ্লে-বিচারে লাগে)
   const oi = OPS.findIndex(o => o.op === job.op);
   if (oi >= 0) {
@@ -1659,6 +1681,7 @@ function opFinish() {
   setTimeout(pumpOpQ, 80);
 }
 function opAbort() {
+  traceQ('ABORT', S._waitingAck, { q: (S._opQ || []).length, busy: !!S._opBusy });
   S._opQ = []; S._opBusy = false; S._waitingAck = null; S._slowShown = false;
   clearTimeout(S._opSlowT); S._pumpWait = false; S._pumpSince = 0;
 }
@@ -3718,6 +3741,7 @@ function sessionLost() {
   const _lostInFlight = S._waitingAck;
   const _lostSavedPrep = takeQueuedPrep();
   const _lostDropped = (S._opQ || []).map(j => j.op);
+  traceQ('SESSLOST', _lostInFlight, { saved: !!_lostSavedPrep, dropped: _lostDropped });
   opAbort();
   if (_lostSavedPrep && _lostInFlight !== 'SUBMIT_S4_PREP') {
     (S._opQ = S._opQ || []).push(_lostSavedPrep);
@@ -3746,6 +3770,7 @@ function retrySession() {
 /* ═══════════ STEP_CHANGE_ACK রাউটিং ═══════════ */
 function manualStepAck(d) {
   const op = S._waitingAck;
+  traceQ('ACK', op, { q: (S._opQ || []).length, failed: Array.isArray(d.failed) ? d.failed.length : 0, blocked: !!d.blocked });
   // সেশন-নতুন হওয়ার মেরামতে বাতিল-হওয়া পুরনো ধাপের ack এলে চুপচাপ গিলে ফেলি
   const staleAck = (S._staleAcks || 0) > 0 && (Date.now() - (S._staleAcksAt || 0)) < 180000;
   if ((S._staleAcks || 0) > 0) S._staleAcks--;
@@ -3799,6 +3824,7 @@ function manualStepAck(d) {
     const _failSavedPrep = takeQueuedPrep();
     const _failDropped = (S._opQ || []).map(j => j.op);
     const _failWillRepump = !!(_failSavedPrep && op !== 'SUBMIT_S4_PREP' && S.ready && socket.connected);
+    traceQ('FAILQ', op, { saved: !!_failSavedPrep, repump: _failWillRepump, ready: !!S.ready, conn: !!(typeof socket !== 'undefined' && socket && socket.connected), dropped: _failDropped });
     // Demo-proven (2026-10-26): UI advances instantly (advanceAndSend
     // calls goStep before the engine ack), so a failed ack for an
     // earlier step used to paint that step's errors as the CURRENT
@@ -3913,6 +3939,7 @@ function handleFreshReady(d) {
     pumpOpQ();
     repumped = true;
   }
+  traceQ('FRESHREADY', inFlight, { saved: !!savedPrep, repump: repumped, dropped: dropped });
   const failedOps = dropped.slice();
   if (savedPrep && !repumped) failedOps.push('SUBMIT_S4_PREP');
   if (failedOps.length) showFail(failedOps.map(op => opLabel(op) + ' — সংযোগ নতুন হওয়ায় পাঠানো যায়নি'));
