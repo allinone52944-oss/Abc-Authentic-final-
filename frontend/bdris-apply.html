@@ -1055,6 +1055,7 @@ function readAddrFields(prefix, prev) {
 /* ═══════════ home view ═══════════ */
 function renderHome() {
   setView('home'); renderStepper(-1); hideFail(); hideBanner(); noteOff();
+  S._passedOps = {}; // STALE-BANNER FIX: home = flow over, old passes void
   clearBtns();
   const acks = getAcks();
   const ackHtml = acks.length ? ('<div class="sec"><div class="sub-h"><span class="snum">🕘</span> সাম্প্রতিক আবেদন</div>' +
@@ -1318,6 +1319,7 @@ function openDraft(draftId) {
       email: dr.email || '', phone: dr.phone || ''
     };
     resetSent(); // খসড়া চালু মানে চেইন শুরু থেকেই যাবে — ধাপ-রেকর্ড নতুন
+    S._passedOps = {}; // STALE-BANNER FIX: new draft = new flow, old passes void
     renderResume();
   });
 }
@@ -3719,6 +3721,13 @@ function manualStepAck(d) {
     if ('mother' in d.verifyStatus) S.verify.mother = d.verifyStatus.mother;
   }
   if (d.blocked || failed.length) {
+    // STALE-BANNER FIX (2026-10-28): this step already PASSED in this session
+    // (recorded in the success branch below) — a late/duplicate failure ack
+    // for it is stale display, not a current block. Suppress it entirely:
+    // no fail panel, no warn note, no retry banner, and NO dropSent (the
+    // step DID land — dropping would allow a duplicate re-send). Steps that
+    // have NOT passed keep their failure display with the _late label.
+    if (op && S._passedOps && S._passedOps[op]) { opAbort(); busy(false); return; }
     if (staleAck) { if (op) dropSent(op); return; } // পুরনো ধাপের ব্যর্থতা — মেরামত চলছে, নীরব থাকি
     if (op === 'SUBMIT_S3_DOCS' && S._docsReturnPending) S._docsReturnPending = false; // recovery chain aborted — do not chain on a later S3 ack
     // Demo-proven (2026-10-26): UI advances instantly (advanceAndSend
@@ -3763,6 +3772,11 @@ function manualStepAck(d) {
   }
   hideBanner();
   hideFail();
+  // STALE-BANNER FIX (2026-10-28): record this session's pass (stale acks
+  // excluded) — a later failure ack for this op is then recognised as
+  // stale display and suppressed above. Recorded for SUBMIT_S4_OTP too,
+  // before its early return below.
+  if (op && !staleAck) { (S._passedOps = S._passedOps || {})[op] = true; }
   // সফল ack → এই ধাপ সাইটে বসে গেছে: uiStep এগোই। ফলে পেছনে গিয়ে তথ্য না বদলে
   // “পরবর্তী” চাপলে সাইটে আবার পাঠানো হয় না — শুধু UI এগোয় (ডুপ্লিকেট নয়)।
   // (stale ack — নতুন সেশনের পুরনো উত্তর — গণনায় ধরা হয় না)
@@ -3824,6 +3838,7 @@ socket.on('BOT_STATUS', (d) => {
         // সাইটের সেশন সত্যিই নতুন (আগের ধাপগুলো সাইটে হারিয়ে গেছে) — UI ধাপ ১ থেকে সাজাই
         S.d.uiStep = 0;
         resetSent(); // সাইট খালি — ধাপ-রেকর্ডও খালি
+        S._passedOps = {}; // STALE-BANNER FIX: site session new, old passes void
         opAbort();
         note('🔄 সংযোগ নতুন — ধাপ ১ থেকে আবার সাজানো হবে (তথ্য আপনার হাতেই আছে)', 'info');
         goStep(1);
