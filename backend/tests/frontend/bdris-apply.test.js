@@ -79,20 +79,29 @@ describe('submit handler idempotency (fix #4)', () => {
   });
 });
 
-describe('address copy flags (fix #6, 2026-10-15)', () => {
-  test('collectStep4 defaults copy flags to FALSE when checkbox missing', () => {
-    // Destructive default (true) caused all 3 addresses to merge into 1
-    expect(html).toMatch(/\$\('sp_same'\)\s*\?\s*\$\('sp_same'\)\.checked\s*:\s*false/);
-    expect(html).toMatch(/\$\('rp_same'\)\s*\?\s*\$\('rp_same'\)\.checked\s*:\s*false/);
+describe('address copy flags (fix #6, 2026-10-15, superseded off-screen by FINAL-PACK prescopy 2026-10-29)', () => {
+  test('collectStep4 reads the live checkbox on-screen, preserves the recorded flag off-screen', () => {
+    // 2026-10-15 rule kept on-screen: element present -> its checked value.
+    // Off-screen the 2026-10-15 default-FALSE destroyed a ticked copy on
+    // the live 2026-10-28 run (preview '—', Step 4 return empty), so the
+    // FINAL-PACK prescopy rule preserves the recorded flag instead.
+    // The old "defaults to FALSE when missing" assertion is therefore
+    // intentionally replaced; final-pack.test.js executes both cases.
+    expect(html).toMatch(/spEl \? spEl\.checked : !!prev\.permCopy/);
+    expect(html).toMatch(/rpEl \? rpEl\.checked : !!prev\.presCopy/);
     expect(html).not.toMatch(/\$\('sp_same'\)\s*\?\s*\$\('sp_same'\)\.checked\s*:\s*true/);
   });
 
   test('auto collectAuto is null-safe on copy checkboxes', () => {
     // Was: $('sp_same').checked — throws if element missing, leaving s2b empty
-    // which made the engine check all copy boxes
-    const m = html.match(/S\.d\.s2b\s*=\s*\{([\s\S]*?)\n\s*\};\n\s*S\.d\.phone/);
+    // which made the engine check all copy boxes. Null-safety is kept;
+    // the missing-element value is now the preserved flag (FINAL-PACK
+    // prescopy), not a hard FALSE — see final-pack.test.js execution tests.
+    const autoSrc = html.slice(html.indexOf('function collectAuto'));
+    expect(autoSrc).toMatch(/const permCopyA = spElA \? spElA\.checked : !!prevB\.permCopy;/);
+    const m = autoSrc.match(/S\.d\.s2b\s*=\s*\{([\s\S]*?)\n\s*\};/);
     expect(m).not.toBeNull();
-    expect(m[1]).toMatch(/\$\('sp_same'\)\s*\?/);
+    expect(m[1]).toMatch(/permCopy: permCopyA/);
   });
 });
 
