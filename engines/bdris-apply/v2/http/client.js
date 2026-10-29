@@ -114,6 +114,22 @@ function isPre2013Direct(iso) {
   if (!iso) return false;
   return String(iso).slice(0, 10) < '2013-01-01';
 }
+// Family/180-days direct-path helpers (2026-10-29 follow-up):
+// the site's family validation is triggered by the parent linkage,
+// so the same names-only site rule the bot uses applies here —
+// ubrn empty, names + nationality + DOB untouched, draft BRN
+// retained. The direct family trigger itself is UNPROVEN (direct
+// submit has never been live-run); this only mirrors the rule so a
+// family-worded rejection can be retried once names-only instead
+// of failing outright. No direct family-verify call is invented.
+const DIRECT_FAMILY_NOTE = 'সাইটের পারিবারিক নিয়ম: পিতামাতার BRN ছাড়াই (নাম + জাতীয়তা দিয়ে) এগোনো হয়েছে — BRN ড্রাফটে রাখা আছে।';
+function isFamilyRejectionText(t) {
+  return /180|difference of age/i.test(String(t || ''));
+}
+function familyRejectionMarker(res) {
+  const hay = [res && res.text, res && res.json && JSON.stringify(res.json)].filter(Boolean).join(' ');
+  return isFamilyRejectionText(hay) ? '[family: 180-days]' : '';
+}
 function parentBrnDirectDecision(data = {}) {
   const s2 = data.s2 || {};
   const father = data.father || s2.father || {};
@@ -124,19 +140,24 @@ function parentBrnDirectDecision(data = {}) {
   // খালি, শুধু আইডি কার্ড (types 40/41, আগেই বাধ্যতামূলক)
   // প্রমাণ হিসেবে যায়। কোনো BRN বানানো হয় না।
   const brnExempt = isParentBrnExemptDirect(applicantDob);
+  // Family advance (2026-10-29 follow-up): the caller sets
+  // _familyNamesOnly only after a family-worded rejection, or
+  // when the session already advanced names-only on the bot path.
+  const familyNamesOnly = !!data._familyNamesOnly;
   const fatherGiven = normalizeDirectBrn(father.brn);
   const motherGiven = normalizeDirectBrn(mother.brn);
-  const withheld = brnExempt && !!(fatherGiven || motherGiven);
+  const withheld = (brnExempt || familyNamesOnly) && !!(fatherGiven || motherGiven);
   return {
     brnExempt,
-    fatherUbrn: brnExempt ? '' : fatherGiven,
-    motherUbrn: brnExempt ? '' : motherGiven,
+    familyNamesOnly,
+    fatherUbrn: (brnExempt || familyNamesOnly) ? '' : fatherGiven,
+    motherUbrn: (brnExempt || familyNamesOnly) ? '' : motherGiven,
     withheldBySiteRule: withheld,
-    note: withheld
-      ? (isPre2013Direct(applicantDob)
+    note: !withheld ? null
+      : familyNamesOnly && !brnExempt ? DIRECT_FAMILY_NOTE
+      : (isPre2013Direct(applicantDob)
         ? '২০১৩-পূর্ব নিয়ম: পিতামাতার BRN সাইটে পাঠানো হয়নি, ড্রাফটে আছে।'
-        : '২০১৩ সালের নিয়ম: পিতামাতার BRN ছাড়াই (শুধু মা-বাবার আইডি কার্ড দিয়ে) এগোনো হয়েছে।')
-      : null,
+        : '২০১৩ সালের নিয়ম: পিতামাতার BRN ছাড়াই (শুধু মা-বাবার আইডি কার্ড দিয়ে) এগোনো হয়েছে।'),
   };
 }
 // Direct submit rejection wording (2026-10-29, point 6): mirror
@@ -158,8 +179,9 @@ function submitRejectionField(res) {
 function submitRejectionWording(res) {
   const wording = res && res.json ? otpSendBodyWording(res.json) : '';
   const field = submitRejectionField(res);
-  if (!wording && !field) return '';
-  return [wording, field ? `[field: ${field}]` : ''].filter(Boolean).join(' ');
+  const marker = familyRejectionMarker(res);
+  if (!wording && !field && !marker) return '';
+  return [wording, field ? `[field: ${field}]` : '', marker].filter(Boolean).join(' ');
 }
 
 // DIRECT SEND SINGLE-NAME TEST (2026-10-29): TEST-ONLY diagnostic.
@@ -725,8 +747,9 @@ class BdrisHttpClient {
     const parsed = parseSuccessPage(res.text);
     if (!parsed.success) {
       const field = submitRejectionField(res);
-      throw err('SUBMIT_NOT_SUCCESS', field
-        ? `Submit response contains neither success:true JSON nor the verified success phrase. [field: ${field}]`
+      const extra = [field ? `[field: ${field}]` : '', familyRejectionMarker(res)].filter(Boolean).join(' ');
+      throw err('SUBMIT_NOT_SUCCESS', extra
+        ? `Submit response contains neither success:true JSON nor the verified success phrase. ${extra}`
         : 'Submit response contains neither success:true JSON nor the verified success phrase.');
     }
     return { success: true, hasPrintLink: parsed.hasPrintLink, json: res.json };
@@ -1040,6 +1063,9 @@ module.exports = {
   isParentBrnExemptDirect,
   submitRejectionWording,
   submitRejectionField,
+  isFamilyRejectionText,
+  familyRejectionMarker,
+  DIRECT_FAMILY_NOTE,
   buildVerifyPayload,
   buildOtpSendBody,
   buildVerifyQuery,

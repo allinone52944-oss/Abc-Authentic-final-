@@ -102,6 +102,7 @@ function buildPlaywrightFallbackPlan(d = {}, session = {}) {
     handlerOptions: {
       singleName: session.singleName || null,
       applicantDob: session.applicantDob || null,
+      familyNamesOnly: session.familyNamesOnly || false,
     },
     steps: [
       ['submitS0', { ...(d.s0 || {}), addressType: (d.s0 && d.s0.addressType) || d.addressType || 'BIRTHPLACE' }],
@@ -385,6 +386,7 @@ class BdrisEngineV2 {
             // S3/S4Prep/S4 lost them. Carry them on the session.
             singleName: session.singleName || null,
             applicantDob: session.applicantDob || null,
+            familyNamesOnly: session.familyNamesOnly || false,
           });
           if (typeof handler[methodName] !== 'function') {
             throw new Error(`StepHandler.${methodName} not implemented`);
@@ -410,6 +412,10 @@ class BdrisEngineV2 {
           if ((cmdName === 'SUBMIT_S3_DOCS' || cmdName === 'SUBMIT_S4_PREP') && merged.relation) session.relation = merged.relation;
           if (handler.singleName) session.singleName = handler.singleName;
           if (handler.applicantDob) session.applicantDob = handler.applicantDob;
+          // Family advance persistence (2026-10-29 follow-up): a
+          // later step command in this session must not re-fill
+          // the BRN that already triggered the family error.
+          if (handler.familyNamesOnly) session.familyNamesOnly = true;
           if (handler.contact && (handler.contact.email || handler.contact.phone)) session.contact = handler.contact;
           // Map to legacy STEP_CHANGE_ACK shape for frontend compat
           return result;
