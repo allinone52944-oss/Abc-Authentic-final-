@@ -26,6 +26,18 @@ describe('calcMouzaReport', () => {
     expect(r.lines[0].qtyShatangsho).toBe(16.5);
     expect(r.lines[1].qtyShatangsho).toBe(33);
   });
+  test('unit conversion: gonda 2', () => {
+    const r = calcMouzaReport({
+      lines: [
+        { mouza: 'নমুনা মৌজা', class: 'নাল', rate: 100000, amount: 10, unit: 'gonda' },
+      ],
+    });
+    expect(r.lines[0].qtyShatangsho).toBe(20);
+    expect(r.lines[0].value).toBe(2000000);
+    expect(() => calcMouzaReport({
+      lines: [{ mouza: 'নমুনা মৌজা', class: 'নাল', rate: 1, amount: 1, unit: 'kani' }],
+    })).toThrow();
+  });
   test('old-vs-new comparison only when an old rate is supplied', () => {
     const withOld = calcMouzaReport({
       lines: [{ mouza: 'নমুনা মৌজা', class: 'নাল', rate: 60000, amount: 5, unit: 'shatangsho', oldRate: 50000 }],

@@ -11,7 +11,10 @@
 // the arithmetic, and breaks the total down by class.
 // ============================================================
 const CLASSES = ['নাল', 'বাড়ী', 'ভিটা', 'বাগান', 'পুকুর', 'ডোবা', 'বাণিজ্যিক'];
-const UNIT_FACTORS = { shatangsho: 1, katha: 1.65, bigha: 33 };
+// Unit factors in shatangsho. Gonda follows the same rounding convention
+// as the other factors (864 sq ft ≈ 1.98 shatangsho, used as 2, just as
+// katha uses 1.65 and bigha uses 33); the report states the factors used.
+const UNIT_FACTORS = { shatangsho: 1, katha: 1.65, bigha: 33, gonda: 2 };
 
 function round2(n) { return Math.round(n * 100) / 100; }
 
@@ -20,7 +23,7 @@ function round2(n) { return Math.round(n * 100) / 100; }
  * lines: [{ mouza, class, rate, amount, unit, oldRate? }]
  *   rate: taka per shatangsho (entered from the checked schedule)
  *   amount: land amount in the given unit
- *   unit: 'shatangsho' | 'katha' | 'bigha' (user-correctable)
+ *   unit: 'shatangsho' | 'katha' | 'bigha' | 'gonda' (user-correctable)
  *   oldRate: optional rate from an older schedule, for comparison
  * Returns { lines, totalMinimum, deedBasis, breakdown, checks,
  *           hasOldComparison, valid } — throws on bad input.
@@ -80,7 +83,7 @@ function calcMouzaReport(input) {
       ? String(input.oldScheduleVersion).trim().slice(0, 40) : null,
     checks: [
       'যোগফল পুনরায় যোগ করে মিলিয়ে দেখা হয়েছে: ' + totalMinimum + ' = ' + reAdd,
-      'একক রূপান্তর: ১ কাঠা = ১.৬৫ শতাংশ, ১ বিঘা = ৩৩ শতাংশ (গ্রাহক সংশোধন করতে পারেন)',
+      'একক রূপান্তর: ১ কাঠা = ১.৬৫ শতাংশ, ১ বিঘা = ৩৩ শতাংশ, ১ গন্ডা = ২ শতাংশ (গ্রাহক সংশোধন করতে পারেন)',
       'প্রতিটি লাইনে হার ও পরিমাণ দেওয়া হয়েছে; হার না পাওয়া লাইন শূন্য ধরা হয়নি',
     ],
     valid: reAdd === totalMinimum,

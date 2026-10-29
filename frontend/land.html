@@ -196,10 +196,11 @@
             <div class="field"><label>শতাংশপ্রতি হার (টাকা) *</label><input type="text" id="mLineRate" inputmode="decimal" placeholder="যেমন: 100000"></div>
             <div class="field"><label>পরিমাণ *</label><input type="text" id="mLineAmount" inputmode="decimal" placeholder="যেমন: 10"></div>
             <div class="field"><label>একক</label><select id="mLineUnit">
-              <option value="shatangsho">শতাংশ</option><option value="katha">কাঠা (১ = ১.৬৫ শতাংশ)</option><option value="bigha">বিঘা (১ = ৩৩ শতাংশ)</option>
+              <option value="shatangsho">শতাংশ</option><option value="katha">কাঠা (১ = ১.৬৫ শতাংশ)</option><option value="bigha">বিঘা (১ = ৩৩ শতাংশ)</option><option value="gonda">গন্ডা (১ = ২ শতাংশ)</option>
             </select></div>
             <div class="field"><label>পুরনো হার (ঐচ্ছিক — তুলনার জন্য)</label><input type="text" id="mLineOldRate" inputmode="decimal" placeholder="খালি থাকলে তুলনা দেখানো হবে না"></div>
           </div>
+          <div id="mUnitHint" style="font-size:13.5px;color:#14532d;min-height:19px;margin-bottom:6px;"></div>
           <button type="button" class="btn" id="mAddLineBtn" style="padding:10px 18px;">➕ লাইন যোগ করুন</button>
           <div id="mLinesBox" style="margin-top:12px;"></div>
           <div class="note" id="mTotalNote" style="font-size:14px; font-weight:700; color:#14532d;"></div>
@@ -354,7 +355,18 @@
   // ---------- mouza lines (client preview only; the server
   // recomputes every line — the preview never decides money) --
   const MOUZA_LINES = [];
-  const MOUZA_FACTORS = { shatangsho: 1, katha: 1.65, bigha: 33 };
+  const MOUZA_FACTORS = { shatangsho: 1, katha: 1.65, bigha: 33, gonda: 2 };
+  // Live unit hint: show the shatangsho conversion before the line is
+  // added, so the shopkeeper can check it at a glance.
+  function updateMouzaUnitHint() {
+    const hint = $('mUnitHint');
+    if (!hint) return;
+    const amount = Number($('mLineAmount').value.trim());
+    const unit = $('mLineUnit').value;
+    if (!(amount > 0) || !MOUZA_FACTORS[unit]) { hint.textContent = ''; return; }
+    const qty = Math.round(amount * MOUZA_FACTORS[unit] * 100) / 100;
+    hint.textContent = '= ' + bn(qty) + ' শতাংশ';
+  }
   function renderMouzaLines() {
     let total = 0;
     let h = '';
@@ -371,6 +383,8 @@
       ? 'প্রাক্কলিত মোট সর্বনিম্ন মূল্য: ' + bn(Math.round(total * 100) / 100) + ' টাকা (সার্ভার আবার হিসাব করবে)'
       : '';
   }
+  $('mLineAmount').addEventListener('input', updateMouzaUnitHint);
+  $('mLineUnit').addEventListener('change', updateMouzaUnitHint);
   $('mAddLineBtn').addEventListener('click', () => {
     const rate = Number($('mLineRate').value.trim());
     const amount = Number($('mLineAmount').value.trim());
@@ -384,6 +398,7 @@
     });
     clearBoxes();
     renderMouzaLines();
+    updateMouzaUnitHint();
   });
 
   function renderResult(r) {
