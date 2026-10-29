@@ -206,6 +206,98 @@ function parentBrnSubmitAction(errs, applicantDob) {
   if (list.some((t) => isFamilyErrorText(t))) return 'family-names-only';
   return 'surface-only';
 }
+// ═══ Single-name pattern, mirrored for parent-verify — and where it breaks ═══
+// Single-name pattern as found in code (never guessed):
+//   (1) Detect from given data — submitS1: last name letterless
+//       (transitName + hasLetters) → singleName {bn, en}.
+//   (2) Relax the page validator only — relaxEmptyLast removes the
+//       required attribute + jQuery validator required rules for the
+//       last-name fields, in-page session only; the field stays EMPTY.
+//   (3) Gate-pass with TRUE given data only — fillDoubledLast puts
+//       the first name's transit form in the letterless last field,
+//       only when the site blocks; S4PREP/S4 retry it once, flagged
+//       gatePassedNames.
+//   (4) Final record truth — buildCinnos: single flag → the joined
+//       personName is the first name ONCE, never doubled, whatever
+//       the gate-pass put on the page; direct path joins first alone.
+//   (5) Advance proof — fields gone / site advanced; quiet proceed.
+// Chain trace (age → verify → applicant-subject), code-proven:
+//   S1: the applicant (child) DOB is typed → the site computes the
+//   age bracket off that DOB as held on ITS page (mock s1next:
+//   PRE2013 = DOB < 2013-01-01; Verify buttons hidden iff pre-2013,
+//   else shown; StepHandler guards the same race via
+//   _readSiteApplicantDob). S2: the verified subjects are the
+//   PARENTS' records (personInfoForBirth.father./mother.ubrn), NOT
+//   the child — verifyParent / _clickVerify set verified[who] only
+//   on a registry hit for that parent's own BRN, and the site Next
+//   gate requires verified.father && verified.mother (mock s2next),
+//   else the .text-danger "not verified" text that
+//   _detectValidationBlock surfaces with the field name.
+//   "Applicant himself not in the application": in the page data
+//   model personInfoForBirth is the child being registered; the
+//   filing applicant is not the verify subject. So a gate-pass
+//   cannot borrow the child's DOB/name or the filer's identity to
+//   satisfy a parent's verification — there is no second true
+//   value belonging to the same subject that can fill the verify
+//   slot, unlike first-name → last-name slot. That is exactly
+//   where the pattern breaks (step 3): the verify gate slot is
+//   registry-derived boolean state, not a validator rule and not a
+//   text field. Deleting validator rules (relaxParentBrnGate) cannot
+//   change it, and setting verified=true via page.evaluate would
+//   manufacture a verification the registry never gave — forbidden
+//   here, and it would falsify the final payload's implicit claim.
+//   Mirrorable steps are therefore (1) detect as a distinct class,
+//   (2) relax the required rules that are relaxable (already done
+//   pre-fill for exempt applicants; the exempt-only gate on
+//   _relaxParentBrnGate is deliberately NOT bypassed here),
+//   (4) final-record truth — the direct final payload already
+//   carries fatherUbrn/motherUbrn '' whenever no BRN was given, in
+//   EVERY bracket (parentBrnDirectDecision) — and (5) advance proof
+//   (fields gone = stale text, not a block). Step (3) is replaced
+//   by an honest channel decision: bot page stops, classified, and
+//   the BRN-free route is the applicant's own direct channel, where
+//   the SERVER decides on empty ubrn + true names + ID-card
+//   documents (server acceptance still UNPROVEN — never assumed).
+//   This classifier/decision is re-implemented here from the live
+//   panel text + _detectValidationBlock; it is NOT cherry-picked
+//   from branch fix-bdris-parentverify-channel, whose honest-
+//   failure behaviour for the genuinely unpassable case is kept.
+function isParentVerifyStateError(text) {
+  const t = String(text || '');
+  if (isFamilyErrorText(t)) return false;
+  if (!/verif/i.test(t)) return false;
+  return /father|mother|পিতা|মাতা|ubrn/i.test(t);
+}
+const PARENT_VERIFY_GATE_BREAK =
+  'Verify গেট রেজিস্ট্রি-স্টেট, ভ্যালিডেটর-রুল নয় — কোনো দেওয়া সত্য মান (নাম/ID কার্ড) verified ফ্ল্যাগের জায়গা নিতে পারে না; ফ্ল্যাগ বসানো মানে রেজিস্ট্রি-যাচাই বানানো, যা করা হবে না।';
+function parentVerifyPatternDecision(input = {}) {
+  const siteError = input.siteError || '';
+  if (!isParentVerifyStateError(siteError)) return null;
+  const father = input.father || {};
+  const mother = input.mother || {};
+  const brnGiven = !!(normalizeBrn(father.brn) || normalizeBrn(mother.brn));
+  const namesPresent = [father.nameBn, father.nameEn, mother.nameBn, mother.nameEn]
+    .some((v) => hasLetters(transitName(v)));
+  if (brnGiven) {
+    return {
+      isVerifyState: true, gatePassable: false, gateBreakReason: PARENT_VERIFY_GATE_BREAK,
+      channel: 'verify-again', finalFatherUbrn: '', finalMotherUbrn: '',
+      note: 'দেওয়া BRN-টি সাইটের Verify-তে পাওয়া যায়নি — সঠিক ১৭ ডিজিটের BRN + জন্ম তারিখ দিয়ে আবার Verify করতে হবে; BRN বানানো হবে না।',
+    };
+  }
+  if (!namesPresent) {
+    return {
+      isVerifyState: true, gatePassable: false, gateBreakReason: PARENT_VERIFY_GATE_BREAK,
+      channel: null, finalFatherUbrn: '', finalMotherUbrn: '',
+      note: 'পিতামাতার নামই দেওয়া হয়নি — নাম ছাড়া BRN-free পথও খোলা যাবে না।',
+    };
+  }
+  return {
+    isVerifyState: true, gatePassable: false, gateBreakReason: PARENT_VERIFY_GATE_BREAK,
+    channel: 'direct-brn-free', finalFatherUbrn: '', finalMotherUbrn: '',
+    note: 'BRN ছাড়াই এগোনোর পথ আবেদনকারীর নিজের direct চ্যানেল — সেখানে ubrn খালি + সঠিক নাম + মা-বাবার ID কার্ড যাবে, সার্ভার সিদ্ধান্ত নেবে, অফিসার ID কার্ড দেখে verify করবেন। Bot পেজে verified বানানো হবে না।',
+  };
+}
 // ওয়ার্ড: "৩নং" / "3" / "ওয়ার্ড-৩" → ["ওয়ার্ড - 3", ...] candidate list
 function wardCandidates(raw) {
   const t = bnNorm(raw);
@@ -1098,6 +1190,7 @@ class StepHandler {
     // (পেজে পড়ে থাকা পুরনো "not verified" টেক্সটে আর বিভ্রান্ত হই না)
     const nxt = await this._clickNextAndWait('পরবর্তী (ধাপ ৩)');
     let siteError = null;
+    let verifyStateDecision = null;
     if (!nxt.ok) {
       failed.push({ field: nxt.field, reason: nxt.reason });
     } else {
@@ -1151,6 +1244,35 @@ class StepHandler {
           // না গেলে success-এর ভান করা হবে না। শুধু চিহ্ন রাখি।
           this._familyAttempted = true;
         }
+      } else if (chk.blocked && isParentVerifyStateError(chk.reason)) {
+        // Single-name pattern, mirrored for parent-verify — placed
+        // BEFORE the 2013-gate relax-and-retry branch, for EVERY
+        // bracket (no brnExempt condition): verify-state text used
+        // to fall into that branch merely because it contains
+        // "ubrn", and the relax + Next retry deterministically
+        // re-failed, because a validator relax cannot change the
+        // registry-derived verified flags. Pattern steps applied:
+        // (1) detect as a distinct class (above); (2) required-rule
+        // relax is already the pre-fill relax for exempt applicants
+        // and is NOT extended here (the exempt-only gate on
+        // _relaxParentBrnGate is deliberately kept); (3) gate-pass
+        // is NOT attempted — see parentVerifyPatternDecision: no
+        // true given value maps to the verified flag, so setting
+        // it would manufacture a verification; (4) final record
+        // stays BRN-free (decision.final*Ubrn === ''); (5) advance
+        // proof: parents fields gone = stale text, not a block.
+        // No second Next is clicked here (tests assert exactly 1
+        // Next call); the false "fill the field and retry" line is
+        // replaced by the decision note below.
+        if (await this._parentsFieldsGone()) {
+          // সাইট আগেই এগিয়ে গেছে — পড়ে থাকা verify-বার্তায় আটকানো নয়।
+        } else {
+          verifyStateDecision = parentVerifyPatternDecision({
+            siteError: chk.reason,
+            father: (data.father || {}), mother: (data.mother || {}),
+          });
+          siteError = chk.reason;
+        }
       } else if (chk.blocked && brnExempt && /ubrn|personBirthDate/i.test(chk.reason)) {
         // 2013-gate relax-and-retry: the site's in-page validator
         // re-asserted the ubrn/personBirthDate required rules
@@ -1184,6 +1306,22 @@ class StepHandler {
       } else if (chk.blocked) {
         siteError = chk.reason;
       }
+    }
+    if (verifyStateDecision) {
+      // Classified verify-state failure — never the generic
+      // "fill the field and retry" line, which is impossible when
+      // no parent BRN exists. Site text preserved verbatim in
+      // reason; the decision (channel + BRN-free final record)
+      // rides on the ack for the next, applicant-channel step.
+      const msg = '❌ ' + siteError;
+      this.progress(msg);
+      return {
+        ok: false, step: 3, blocked: true, reason: siteError,
+        message: msg + ' — ' + verifyStateDecision.note,
+        failed: [...failed, { field: 'পরবর্তী (ধাপ ৩)', reason: siteError }], verifyStatus, brnNote,
+        parentVerifyUnverified: true, parentVerifyCode: 'PARENT_VERIFY_UNVERIFIED',
+        parentVerifyPattern: verifyStateDecision,
+      };
     }
     if (siteError) {
       const msg = '❌ ' + siteError;
@@ -3294,4 +3432,4 @@ class StepHandler {
   }
 }
 
-module.exports = { StepHandler, verifyChargeToken, bnToArab, thChildSite, consumeSubmitToken, isSubmitTokenConsumed, extractAckNumber, normalizeBrn, brnWarning, isFamilyErrorText, parentBrnSubmitAction, isParentBrnExempt, parentBrnExemptNote, PARENT_BRN_PRE2013_NOTE, PARENT_BRN_2013_NOTE, PARENT_BRN_FAMILY_NOTE, relaxParentBrnGate, parseSiteDateToIso, PARENT_GATE_FIELDS };
+module.exports = { StepHandler, verifyChargeToken, bnToArab, thChildSite, consumeSubmitToken, isSubmitTokenConsumed, extractAckNumber, normalizeBrn, brnWarning, isFamilyErrorText, parentBrnSubmitAction, isParentBrnExempt, parentBrnExemptNote, PARENT_BRN_PRE2013_NOTE, PARENT_BRN_2013_NOTE, PARENT_BRN_FAMILY_NOTE, relaxParentBrnGate, parseSiteDateToIso, PARENT_GATE_FIELDS, isParentVerifyStateError, parentVerifyPatternDecision, PARENT_VERIFY_GATE_BREAK };
