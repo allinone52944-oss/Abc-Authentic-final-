@@ -2911,6 +2911,7 @@ window.AdmSvc = {
           '<option value="land-search">খতিয়ান খোঁজ ইঞ্জিন (DLRMS)</option>' +
           '<option value="land-scan">নামে সম্পত্তি সন্ধান ইঞ্জিন (DLRMS)</option>' +
           '<option value="land-verify">জমি যাচাই রিপোর্ট ইঞ্জিন (DLRMS)</option>' +
+          '<option value="land-mouza-value">মৌজা মূল্য রিপোর্ট ইঞ্জিন</option>' +
           '<option value="nid-server-copy">এনআইডি সার্ভার কপি ইঞ্জিন (Portal Login)</option>' +
         '</select></div>' +
         '<small style="color:#64748b;font-size:11px;">গ্রাহক অর্ডার প্লেস করলে ইঞ্জিন ব্যাকগ্রাউন্ডে স্বয়ংক্রিয়ভাবে প্রসেস করে রেজাল্ট প্রদান করবে।</small>' +
@@ -2981,6 +2982,7 @@ window.AdmSvc = {
           '<option value="land-search"' + (s.engine_id === 'land-search' ? ' selected' : '') + '>খতিয়ান খোঁজ ইঞ্জিন (DLRMS)</option>' +
           '<option value="land-scan"' + (s.engine_id === 'land-scan' ? ' selected' : '') + '>নামে সম্পত্তি সন্ধান ইঞ্জিন (DLRMS)</option>' +
           '<option value="land-verify"' + (s.engine_id === 'land-verify' ? ' selected' : '') + '>জমি যাচাই রিপোর্ট ইঞ্জিন (DLRMS)</option>' +
+          '<option value="land-mouza-value"' + (s.engine_id === 'land-mouza-value' ? ' selected' : '') + '>মৌজা মূল্য রিপোর্ট ইঞ্জিন</option>' +
           '<option value="nid-server-copy"' + (s.engine_id === 'nid-server-copy' ? ' selected' : '') + '>এনআইডি সার্ভার কপি ইঞ্জিন (Portal Login)</option>' +
         '</select></div>' +
       '</div>' +
