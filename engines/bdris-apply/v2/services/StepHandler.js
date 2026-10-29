@@ -1419,14 +1419,66 @@ class StepHandler {
   async submitS3(data = {}) {
     const failed = [];
     this.progress('🔄 ধাপ ৪: প্রত্যয়ন ও কাগজপত্র...');
-    const anchor = await this._waitVisible(['input[name="relationWithApplicant"]', 'input[name="files"]'], 10000);
+    let anchor = await this._waitVisible(['input[name="relationWithApplicant"]', 'input[name="files"]'], 10000);
     if (!anchor) {
-      this.progress('❌ প্রত্যয়ন/ডকুমেন্ট পেজ খোলা নেই — আগের ধাপ শেষ করে আবার চেষ্টা করুন।');
-      return {
-        ok: false, step: 4, blocked: true,
-        message: '❌ ডকুমেন্ট পেজ পাওয়া যায়নি',
-        failed: [{ field: 'ডকুমেন্ট পেজ', reason: 'প্রত্যয়ন/ডকুমেন্ট পেজ খোলা নেই' }],
-      };
+      // DOCPAGE FIX (2026-10-29): do NOT fail immediately like before.
+      // The old code treated "anchors not visible in 10s" as "document
+      // page not open", even when the site page was merely one step
+      // behind (address step after an S2B timeout, slow cascade, or
+      // socket-death replay) — while the engine UI already showed
+      // the documents as present, because those are draft uploads,
+      // not site uploads. S4Prep already solved the same problem for
+      // the contact step (detect site step + replay at most once);
+      // mirror that pattern here, but with pre-docs catch-up only:
+      // calling _replayToContact would recurse into submitS3 itself
+      // and, after the inner call's Next, leave this call with no
+      // docs anchor to find. So catch up with S0/S1/S2/S2B only,
+      // then continue with THIS call's upload below.
+      console.log('S3-ANCHOR: missing');
+      const det = await this._detectSiteStep().catch(() => ({ step: 0, probe: {} }));
+      console.log('S3-DETECT: step=' + det.step);
+      if (det.step === 6) {
+        // Site already past docs: the documents are on the site in
+        // this session. Failing here would block a preview whose
+        // documents are genuinely present — recognise, don't invent.
+        this.progress('✔ কাগজপত্রের ধাপ সাইটে ইতিমধ্যে পার হয়ে গেছে — আবার আপলোড নয়।');
+        return { ok: true, step: 6, message: '✅ প্রত্যয়ন ও ডকুমেন্ট সাইটে ইতিমধ্যে সম্পন্ন', failed: [], docsAlreadyOnSite: true };
+      }
+      let replay = null;
+      if (det.step === 5) {
+        // Probe sees docs elements but they are not Playwright-
+        // visible yet (Angular re-render settling): wait once more.
+        anchor = await this._waitVisible(['input[name="relationWithApplicant"]', 'input[name="files"]'], 15000);
+      } else {
+        replay = await this._catchUpToDocs(det.step, data);
+        console.log('S3-REPLAY:', replay.ok ? 'ok' : 'fail ' + (replay.reason || ''));
+        anchor = await this._waitVisible(
+          ['input[name="relationWithApplicant"]', 'input[name="files"]'],
+          replay.ok ? 12000 : 3000,
+        );
+      }
+      if (!anchor) {
+        // Classify the actual page state (presence only, no values),
+        // like S4Prep does — never again just "page not open".
+        const probe = (await this._detectSiteStep().catch(() => null))?.probe || det.probe || {};
+        const where = probe.docs ? 'কাগজপত্রের ধাপেই আছে কিন্তু ঘর দৃশ্যমান নয়'
+          : det.step === 4 ? 'সাইট এখনো ঠিকানার ধাপে আছে'
+          : det.step === 3 ? 'সাইট এখনো পিতামাতার ধাপে আছে'
+          : det.step === 2 ? 'সাইট এখনো ব্যক্তির ধাপে আছে'
+          : det.step === 1 ? 'সাইট এখনো শুরুর ধাপে আছে'
+          : (!probe.form && probe.bodyLen >= 0 && probe.bodyLen < 100 ? 'খালি/স্টাব পাতা'
+          : probe.form ? 'ফরম আছে কিন্তু ডকুমেন্ট ঘর দেখা যাচ্ছে না' : 'কোনো ধাপের ঘরই দেখা যাচ্ছে না');
+        const failList = [{ field: 'ডকুমেন্ট পেজ', reason: `পেজ পাওয়া যায়নি (${where})`, code: 'DOCS_ANCHORS_MISSING' }];
+        if (replay && !replay.ok && replay.reason) {
+          failList.push({ field: 'পুনঃচেষ্টা', reason: replay.reason, code: 'S3_REPLAY_FAILED' });
+        }
+        this.progress('❌ ডকুমেন্ট পেজ পাওয়া যায়নি — ' + where + '।');
+        return {
+          ok: false, step: 4, blocked: true,
+          message: '❌ ডকুমেন্ট পেজ পাওয়া যায়নি',
+          failed: failList,
+        };
+      }
     }
 
     // আবেদনকারী কে (relation radio) — ১৮+ বয়সী ব্যক্তির জন্য সাইট পিতা/মাতা-রেডিও
@@ -1636,6 +1688,53 @@ class StepHandler {
       };
     }).catch(() => ({ step: 0, contact: false, docs: false, start: false, form: false, bodyLen: -1 }));
     return { step: probe.step || 0, probe };
+  }
+
+  /**
+   * DOCPAGE FIX (2026-10-29): pre-docs catch-up only, used by submitS3
+   * when the docs anchors are missing. Unlike _replayToContact, this
+   * NEVER calls submitS3 itself: the caller is submitS3, and after an
+   * inner S3's Next the outer call would find no docs anchor left.
+   * Runs at most the steps before docs, once, from the merged ctx
+   * (data.s0/s1/s2/s2b, as mergeStepParams supplies). The submitS2
+   * verify-uncertain exception mirrors _replayToContact point 7
+   * (2026-10-29): if the parents fields are gone, the site advanced
+   * and uncertainty alone must not stop the catch-up. No document
+   * is invented, uploaded twice, or claimed present here — the
+   * caller's upload below is still the only upload.
+   * Returns { ok } or { ok:false, reason, failed }.
+   */
+  async _catchUpToDocs(siteStep, data = {}) {
+    const plan = {
+      0: ['submitS0', 'submitS1', 'submitS2', 'submitS2B'],
+      1: ['submitS0', 'submitS1', 'submitS2', 'submitS2B'],
+      2: ['submitS1', 'submitS2', 'submitS2B'],
+      3: ['submitS2', 'submitS2B'],
+      4: ['submitS2B'],
+    }[siteStep];
+    if (!plan) return { ok: false, reason: `চেনা যায়নি এমন সাইট ধাপ (${siteStep})` };
+    const ctx = data || {};
+    for (const method of plan) {
+      let args;
+      if (method === 'submitS0') args = ctx.s0 || {};
+      else if (method === 'submitS1') args = { ...(ctx.s1 || {}), docsAvailable: true };
+      else if (method === 'submitS2') args = { ...(ctx.s2 || {}), applicantDob: (ctx.s1 && ctx.s1.dob) || this.applicantDob };
+      else args = ctx.s2b || {};
+      this.progress(`🔄 ধাপ আবার বসানো হচ্ছে: ${method}…`);
+      const r = await this[method](args);
+      if (!r || r.ok === false) {
+        if (method === 'submitS2' && r && r.verifyUncertain) {
+          let stillThere = null;
+          try { stillThere = await this._waitVisible(['#fatherBrn', 'input[name="personInfoForBirth.father.ubrn"]'], 1500); } catch { stillThere = null; }
+          if (!stillThere) {
+            this.progress('⚠ ধাপ ৩ পুনরায় বসানোয় যাচাই-ফল অনিশ্চিত ছিল, কিন্তু সাইট এগিয়ে গেছে — এগোনো হচ্ছে।');
+            continue;
+          }
+        }
+        return { ok: false, reason: (r && r.message) || `${method} ব্যর্থ`, failed: r && r.failed };
+      }
+    }
+    return { ok: true };
   }
 
   /**
