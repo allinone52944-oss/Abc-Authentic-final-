@@ -96,6 +96,72 @@ function otpSendBodyWording(json) {
   return m.replace(/\s+/g, ' ').trim().slice(0, 200);
 }
 
+// Parent-BRN direct-path helpers (2026-10-29, points 1+6): the
+// bot path's rules, mirrored on the direct path. Digit
+// normalisation only (Bengali → Arabic, spaces/dashes stripped);
+// parent NAMES are passed through verbatim, never altered.
+// Pre-2013 applicants send ubrn empty (the bot's live-verified
+// site rule) — the draft's BRN is untouched, only the payload
+// omits it, and parentBrnDirectDecision reports the withholding.
+function normalizeDirectBrn(v) {
+  return String(v || '').replace(/[০-৯]/g, (d) => String('০১২৩৪৫৬৭৮৯'.indexOf(d))).replace(/[\s\-]/g, '');
+}
+function isParentBrnExemptDirect(iso) {
+  if (!iso) return false;
+  return String(iso).slice(0, 10) < '2014-01-01';
+}
+function isPre2013Direct(iso) {
+  if (!iso) return false;
+  return String(iso).slice(0, 10) < '2013-01-01';
+}
+function parentBrnDirectDecision(data = {}) {
+  const s2 = data.s2 || {};
+  const father = data.father || s2.father || {};
+  const mother = data.mother || s2.mother || {};
+  const person = data.person || data.s1 || {};
+  const applicantDob = data.applicantDob || person.dob || '';
+  // 2013-rule (2026-10-29): pre-2013 + পুরো 2013 সাল — ubrn
+  // খালি, শুধু আইডি কার্ড (types 40/41, আগেই বাধ্যতামূলক)
+  // প্রমাণ হিসেবে যায়। কোনো BRN বানানো হয় না।
+  const brnExempt = isParentBrnExemptDirect(applicantDob);
+  const fatherGiven = normalizeDirectBrn(father.brn);
+  const motherGiven = normalizeDirectBrn(mother.brn);
+  const withheld = brnExempt && !!(fatherGiven || motherGiven);
+  return {
+    brnExempt,
+    fatherUbrn: brnExempt ? '' : fatherGiven,
+    motherUbrn: brnExempt ? '' : motherGiven,
+    withheldBySiteRule: withheld,
+    note: withheld
+      ? (isPre2013Direct(applicantDob)
+        ? '২০১৩-পূর্ব নিয়ম: পিতামাতার BRN সাইটে পাঠানো হয়নি, ড্রাফটে আছে।'
+        : '২০১৩ সালের নিয়ম: পিতামাতার BRN ছাড়াই (শুধু মা-বাবার আইডি কার্ড দিয়ে) এগোনো হয়েছে।')
+      : null,
+  };
+}
+// Direct submit rejection wording (2026-10-29, point 6): mirror
+// the OTP-send rule — a non-2xx body's message/code IS the site's
+// own reason. If the response names a parent field
+// (father.ubrn / mother.ubrn / ubrn), only that FIELD NAME is
+// appended — never a value, never the request payload. The
+// fallback to the bot path on a definitive rejection is the
+// chain's existing behaviour (HttpPathRunner fail()); this helper
+// only makes the reason truthful. A rejected submit is never
+// resent to force it through.
+function submitRejectionField(res) {
+  const hay = [res && res.text, res && res.json && JSON.stringify(res.json)].filter(Boolean).join(' ');
+  if (/father\.ubrn/i.test(hay)) return 'father.ubrn';
+  if (/mother\.ubrn/i.test(hay)) return 'mother.ubrn';
+  if (/\bubrn\b/i.test(hay)) return 'ubrn';
+  return '';
+}
+function submitRejectionWording(res) {
+  const wording = res && res.json ? otpSendBodyWording(res.json) : '';
+  const field = submitRejectionField(res);
+  if (!wording && !field) return '';
+  return [wording, field ? `[field: ${field}]` : ''].filter(Boolean).join(' ');
+}
+
 // DIRECT SEND SINGLE-NAME TEST (2026-10-29): TEST-ONLY diagnostic.
 // The bot path bridges single names at the gate: when the last name
 // has no letters, the gate gets the first name's form in the last
@@ -648,14 +714,20 @@ class BdrisHttpClient {
       body: form,
     });
     if (!res.ok) {
-      throw err('SUBMIT_BAD_RESPONSE', `Submit returned status ${res.status}.`);
+      const wording = submitRejectionWording(res);
+      throw err('SUBMIT_BAD_RESPONSE', wording
+        ? `Submit returned status ${res.status}: ${wording}.`
+        : `Submit returned status ${res.status}.`);
     }
     if (res.json && res.json.success === true) {
       return { success: true, hasPrintLink: false, json: res.json };
     }
     const parsed = parseSuccessPage(res.text);
     if (!parsed.success) {
-      throw err('SUBMIT_NOT_SUCCESS', 'Submit response contains neither success:true JSON nor the verified success phrase.');
+      const field = submitRejectionField(res);
+      throw err('SUBMIT_NOT_SUCCESS', field
+        ? `Submit response contains neither success:true JSON nor the verified success phrase. [field: ${field}]`
+        : 'Submit response contains neither success:true JSON nor the verified success phrase.');
     }
     return { success: true, hasPrintLink: parsed.hasPrintLink, json: res.json };
   }
@@ -675,8 +747,9 @@ class BdrisHttpClient {
  *    plus hidden religion=NOT_APPLICABLE.
  *  - Parents (base personInfoForBirth.father./mother.): id, ubrn,
  *    personBirthDate, personNameBn, personNameEn, passportNumber,
- *    personNationality (numeric; 1 = Bangladeshi). Pre-2013
- *    applicants leave ubrn empty, per the live-verified 2013 rule.
+ *    personNationality (numeric; 1 = Bangladeshi). Pre-2013 and
+ *    2013 applicants leave ubrn empty (pre-2013: live-verified
+ *    2013 rule; 2013: 2026-10-29 ID-card-only rule).
  *  - Addresses (prefixes birthPlace / permAddr / prsntAddr):
  *    Country, Div, Dist, CityCorpCantOrUpazila, PaurasavaOrUnion,
  *    WardInCityCorp, Area, WardInPaurasavaOrUnion, City, PostOfc,
@@ -797,6 +870,7 @@ function buildSubmitPayload(data = {}) {
   if (!docsByType.has(40)) missing.push('documents[40]');
   if (!docsByType.has(41)) missing.push('documents[41]');
 
+  const brnDecision = parentBrnDirectDecision(data);
   const otp = req(data.otp, 'otp');
   if (otp && !/^\d{6}$/.test(String(otp).replace(/\D/g, ''))) missing.push('otp (must be 6 digits)');
 
@@ -827,14 +901,14 @@ function buildSubmitPayload(data = {}) {
     'personInfoForBirth.personNid': str(person.nid || person.personNid),
     religion: 'NOT_APPLICABLE',
     'personInfoForBirth.father.id': str(father.id),
-    'personInfoForBirth.father.ubrn': str(father.brn),
+    'personInfoForBirth.father.ubrn': str(brnDecision.fatherUbrn),
     'personInfoForBirth.father.personBirthDate': str(father.dob),
     'personInfoForBirth.father.personNameBn': str(father.nameBn),
     'personInfoForBirth.father.personNameEn': str(father.nameEn),
     'personInfoForBirth.father.passportNumber': str(father.passportNumber),
     'personInfoForBirth.father.personNationality': mapNationality(father.nationality),
     'personInfoForBirth.mother.id': str(mother.id),
-    'personInfoForBirth.mother.ubrn': str(mother.brn),
+    'personInfoForBirth.mother.ubrn': str(brnDecision.motherUbrn),
     'personInfoForBirth.mother.personBirthDate': str(mother.dob),
     'personInfoForBirth.mother.personNameBn': str(mother.nameBn),
     'personInfoForBirth.mother.personNameEn': str(mother.nameEn),
@@ -960,6 +1034,12 @@ module.exports = {
   GeoCache,
   parseSuccessPage,
   buildSubmitPayload,
+  parentBrnDirectDecision,
+  normalizeDirectBrn,
+  isPre2013Direct,
+  isParentBrnExemptDirect,
+  submitRejectionWording,
+  submitRejectionField,
   buildVerifyPayload,
   buildOtpSendBody,
   buildVerifyQuery,
