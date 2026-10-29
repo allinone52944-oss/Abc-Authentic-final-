@@ -1078,9 +1078,10 @@ function renderHome() {
   S._directOtp = false; // DIRECT-PATH WIRING: the direct OTP phase dies with the flow
   directAckClear(); // DIRECT ACK TIMEOUT: no fallback after leaving the flow
   setView('home'); renderStepper(-1); hideFail(); hideBanner(); noteOff();
+  S._passedOps = {}; // FINAL-PACK stale-banner: home = flow over, old passes void
   clearBtns();
   const acks = getAcks();
-  const ackHtml = acks.length ? ('<div class="sec"><div class="sub-h"><span class="snum">🕘</span> সাম্প্রতিক আবেদন</div>' +
+  const ackHtml = acks.length ? ('<div class="sec" id="recentSec"><div class="sub-h"><span class="snum">🕘</span> সাম্প্রতিক আবেদন</div>' +
     acks.slice(0, 3).map(a => '<div class="draft-card"><div class="di">🎫</div><div><div class="dt">' + esc(a.name || 'আবেদন') + '</div>' +
       '<div class="ds">নম্বর: ' + esc(a.no) + ' • ' + esc(fmtTime(a.at)) + '</div></div>' +
       '<div class="da"><button class="btn small" data-copy="' + esc(a.no) + '">📋 নম্বর কপি</button>' +
@@ -1135,6 +1136,62 @@ function renderHome() {
   // বোতাম যাতে সব পথে ফেরে — emit-এ না পৌঁছলে finally রিসেট করে;
   // emit-এর পর আগের 30s রিসেট + ORIGINAL_PDF handler-ই দায়িত্বে থাকে।
   // charge() নিজে alert দেয়, তাই !token-এ আলাদা note নয়।
+  // FINAL-PACK (2026-10-29): submitted applications also live
+  // server-side (POST /api/bdris-apply/applications at submit), but
+  // the home list above reads ONLY browser-local acks — so the same
+  // account on another browser showed an empty history. Merge the
+  // server's own records (GET, already exists, never called before)
+  // into the same list: local entries keep their PDF-copy button,
+  // server-only entries get number-copy + original-PDF (re-fetchable
+  // by charge from any browser — the real deliverable) + server
+  // delete. Local numbers win on duplicates. Fetch failure is
+  // fail-open: the local list simply stays as it was, no error spam.
+  try {
+    fetch('/api/bdris-apply/applications', { headers: { 'Authorization': 'Bearer ' + getToken() } })
+      .then(r => r.json().catch(() => null))
+      .then(d => {
+        const rows = (d && d.ok && Array.isArray(d.applications)) ? d.applications : [];
+        const localNos = new Set(getAcks().map(a => String(a.no)));
+        const extra = rows.filter(x => x && x.ack_no && !localNos.has(String(x.ack_no)));
+        if (!extra.length) return;
+        let sec = $('recentSec');
+        if (!sec) {
+          sec = document.createElement('div');
+          sec.className = 'sec'; sec.id = 'recentSec';
+          sec.innerHTML = '<div class="sub-h"><span class="snum">🕘</span> সাম্প্রতিক আবেদন</div>';
+          $('stepBody').appendChild(sec);
+        }
+        sec.insertAdjacentHTML('beforeend', extra.map(x => '<div class="draft-card"><div class="di">🎫</div><div><div class="dt">' + esc(x.applicant_name || 'আবেদন') + '</div>' +
+          '<div class="ds">নম্বর: ' + esc(x.ack_no) + ' • ' + esc(fmtTime(x.created_at)) + ' • সার্ভার রেকর্ড</div></div>' +
+          '<div class="da"><button class="btn small" data-srvcopy="' + esc(x.ack_no) + '">📋 নম্বর কপি</button>' +
+          '<button class="btn small" data-srvorig="' + esc(x.ack_no) + '">⬇️ আসল PDF</button>' +
+          '<button class="btn danger small" data-srvdel="' + esc(x.ack_no) + '">🗑️ মুছুন</button></div></div>').join(''));
+        els('[data-srvcopy]').forEach(b => b.onclick = () => copyText(b.dataset.srvcopy));
+        els('[data-srvorig]').forEach(b => b.onclick = async () => {
+          const ackNo = b.dataset.srvorig;
+          b.disabled = true; b.textContent = '⏳ চার্জ হচ্ছে…';
+          let emitted = false;
+          try {
+            const token = await charge('pdf', ackNo ? 'pdf-' + ackNo : null);
+            if (!token) return;
+            b.textContent = '⏳ PDF আসছে…';
+            S._origAutoDl = ackNo;
+            emitted = true;
+            socket.emit('FETCH_ORIGINAL', { ack: ackNo, _chargeToken: token });
+            setTimeout(() => { b.disabled = false; b.textContent = '⬇️ আসল PDF'; }, 30000);
+          } catch (e) {
+            note('চার্জ/পাঠাতে সমস্যা — আবার চেষ্টা করুন', 'err');
+          } finally {
+            if (!emitted) { b.disabled = false; b.textContent = '⬇️ আসল PDF'; }
+          }
+        });
+        els('[data-srvdel]').forEach(b => b.onclick = () => {
+          if (!confirm('এই আবেদনটি সার্ভার রেকর্ড থেকে মুছবেন?')) return;
+          fetch('/api/bdris-apply/applications/' + encodeURIComponent(b.dataset.srvdel), { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getToken() } })
+            .then(() => renderHome()).catch(() => renderHome());
+        });
+      }).catch(() => {});
+  } catch {}
   els('[data-orig]').forEach(b => b.onclick = async () => {
     const ackNo = b.dataset.orig;
     b.disabled = true; b.textContent = '⏳ চার্জ হচ্ছে…';
@@ -1344,6 +1401,7 @@ function openDraft(draftId) {
       email: dr.email || '', phone: dr.phone || ''
     };
     resetSent(); // খসড়া চালু মানে চেইন শুরু থেকেই যাবে — ধাপ-রেকর্ড নতুন
+    S._passedOps = {}; // FINAL-PACK stale-banner: new draft = new flow, old passes void
     renderResume();
   });
 }
@@ -1427,7 +1485,19 @@ function renderAddrBook(pickFn, backFn) {
   loadAddrList();
 }
 function loadAddrList() {
+  // FINAL-PACK: the list used to sit on "coming…" forever when the
+  // socket answer never arrived. A 15s watchdog only replaces the
+  // loading text with a retry button — it touches no data.
+  let addrDone = false;
+  setTimeout(() => {
+    if (addrDone) return;
+    const l = $('addrList'); if (!l || !/তালিকা আসছে/.test(l.innerHTML)) return;
+    l.innerHTML = '<div class="draft-card"><div class="di">📭</div><div><div class="dt">তালিকা আসেনি — সংযোগ দেখে আবার চেষ্টা করুন</div></div>' +
+      '<div class="da"><button class="btn small" id="addrRetry">↻ আবার চেষ্টা</button></div></div>';
+    const rb = $('addrRetry'); if (rb) rb.onclick = () => loadAddrList();
+  }, 15000);
   socket.emit('LIST_ADDRESSES', (r) => {
+    addrDone = true;
     const l = $('addrList'); if (!l) return;
     const list = (r && r.addresses) || [];
     if (!list.length) {
@@ -1490,9 +1560,22 @@ function docsMetaOf(docs) {
   return (docs || []).map(x => ({ name: x.name, mimeType: x.mimeType, docType: x.docType, base64: x.base64 || null }));
 }
 function saveDraft(uiStep, cb) {
+  // FINAL-PACK: a SAVE_DRAFT whose socket ack never arrives (dead
+  // socket at save time) used to fail silently — the user believed
+  // the draft was saved and a later reload lost the step. The
+  // watchdog only WARNS (throttled: once until a save succeeds
+  // again); it never invents data, never retries in a loop, and
+  // never double-calls cb — the next navigation save is the retry.
+  let done = false;
+  const wd = setTimeout(() => {
+    if (done || S._draftSaveWarned) return;
+    S._draftSaveWarned = true;
+    note('⚠️ খসড়া সেভ হয়নি (সংযোগ নেই) — সংযোগ ফিরলে “খসড়ায় রাখুন” চাপুন বা পরের ধাপে যান', 'warn');
+  }, 10000);
   socket.emit('SAVE_DRAFT', draftPayload(uiStep), (r) => {
+    done = true; clearTimeout(wd);
     if (r && r.ok) {
-      S.draftId = r.draftId; updDraftsCnt();
+      S.draftId = r.draftId; updDraftsCnt(); S._draftSaveWarned = false;
       try { if (S._submitKey) localStorage.setItem('bdris_submit_key_for_' + r.draftId, S._submitKey); } catch (e) {}
     }
     if (cb) cb(r);
@@ -2338,13 +2421,14 @@ function renderStep2() {
         if (rec[k] !== undefined) S.d.s1[k] = rec[k];
       });
       renderStep2();
+      if (S.draftId) saveDraft(2, () => {});
       note('✔ ঠিকানা বসানো হয়েছে', 'ok');
     }, () => renderStep2());
   };
   setBtns([
     { html: 'পরবর্তী →', fn: () => submitStep2() },
     { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep2(); saveDraft(2, () => note('✔ খসড়ায় রাখা হয়েছে', 'ok')); } },
-    { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => goStep(1) }
+    { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => { collectStep2(); if (S.draftId) saveDraft(1, () => {}); goStep(1); } }
   ]);
 }
 function collectStep2() {
@@ -2442,7 +2526,7 @@ function renderStep3() {
   setBtns([
     { html: 'পরবর্তী →', fn: () => submitStep3() },
     { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep3(); saveDraft(3, () => note('✔ খসড়ায় রাখা হয়েছে', 'ok')); } },
-    { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => goStep(2) }
+    { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => { collectStep3(); if (S.draftId) saveDraft(2, () => {}); goStep(2); } }
   ]);
 }
 function readPerson(p) {
@@ -2480,15 +2564,25 @@ function submitStep3() {
 
 /* ═══════════ step 4: স্থায়ী ও বর্তমান ঠিকানা ═══════════ */
 function collectStep4() {
-  // Permanent (2026-10-15): checkbox না পেলে default FALSE — "copy" হলো
-  // destructive action, element missing হলে কখনোই copy ধরা যাবে না।
-  const permCopy = $('sp_same') ? $('sp_same').checked : false;
-  const presCopy = $('rp_same') ? $('rp_same').checked : false;
+  // FINAL-PACK (2026-10-29, folded from fix-bdris-prescopy): a collect
+  // running while the Step 4 form is not on screen (no sp_same/rp_same
+  // in the DOM — e.g. a re-collect during a later step or an edit
+  // round-trip) must PRESERVE the recorded copy/fields instead of
+  // defaulting to FALSE + empty. The old default destroyed a ticked
+  // same-as copy on the live 2026-10-28 run: the preview showed '—'
+  // for the present address and the Step 4 return showed the box
+  // unticked with all fields empty, although the box had been ticked.
+  // Keeping the previous state is not inventing a copy — it refuses
+  // to destroy one recorded from a real on-screen read. On Step 4
+  // the elements are present and the read is unchanged.
   const prev = S.d.s2b || {};
+  const spEl = $('sp_same'), rpEl = $('rp_same');
+  const permCopy = spEl ? spEl.checked : !!prev.permCopy;
+  const presCopy = rpEl ? rpEl.checked : !!prev.presCopy;
   S.d.s2b = {
     permCopy, presCopy,
-    perm: permCopy ? null : readAddrFields('sp', prev.perm || {}),
-    pres: presCopy ? null : readAddrFields('rp', prev.pres || {})
+    perm: permCopy ? null : (spEl ? readAddrFields('sp', prev.perm || {}) : (prev.perm || {})),
+    pres: presCopy ? null : (rpEl ? readAddrFields('rp', prev.pres || {}) : (prev.pres || {}))
   };
   return S.d.s2b;
 }
@@ -2598,7 +2692,7 @@ function renderStep4() {
   if ($('spFromBirth')) $('spFromBirth').onclick = () => fillPrefixFromBirth('sp');
   if ($('spBook')) $('spBook').onclick = () => {
     collectStep4();
-    renderAddrBook((rec) => { S.d.s2b.perm = Object.assign({}, rec); renderStep4(); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderStep4());
+    renderAddrBook((rec) => { S.d.s2b.perm = Object.assign({}, rec); S.d.s2b.permCopy = false; renderStep4(); if (S.draftId) saveDraft(4, () => {}); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderStep4());
   };
   if ($('rpFromPerm')) $('rpFromPerm').onclick = () => {
     fillPrefixFrom('rp', readAddrFields('sp', (S.d.s2b && S.d.s2b.perm) || {}));
@@ -2606,12 +2700,12 @@ function renderStep4() {
   };
   if ($('rpBook')) $('rpBook').onclick = () => {
     collectStep4();
-    renderAddrBook((rec) => { S.d.s2b.pres = Object.assign({}, rec); renderStep4(); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderStep4());
+    renderAddrBook((rec) => { S.d.s2b.pres = Object.assign({}, rec); S.d.s2b.presCopy = false; renderStep4(); if (S.draftId) saveDraft(4, () => {}); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderStep4());
   };
   setBtns([
     { html: 'পরবর্তী →', fn: () => submitStep4() },
     { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep4(); saveDraft(4, () => note('✔ খসড়ায় রাখা হয়েছে', 'ok')); } },
-    { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => goStep(3) }
+    { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => { collectStep4(); if (S.draftId) saveDraft(3, () => {}); goStep(3); } }
   ]);
 }
 function submitStep4() {
@@ -2723,7 +2817,7 @@ function renderStep5() {
   setBtns([
     { html: 'পরবর্তী →', fn: () => submitStep5() },
     { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => saveDraft(5, () => note('✔ খসড়ায় রাখা হয়েছে — ছবিসহই জমা থাকল', 'ok')) },
-    { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => goStep(4) }
+    { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => { if (S.draftId) saveDraft(4, () => {}); goStep(4); } }
   ]);
 }
 function submitStep5() {
@@ -2759,7 +2853,7 @@ function renderStep6() {
   setBtns([
     { html: '📲 কোড পাঠান', fn: () => sendOtp() },
     { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep6(); saveDraft(6, () => note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে যেকোনো সময় কোড দিয়ে শেষ করতে পারবেন', 'ok')); } },
-    { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => goStep(5) }
+    { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => { collectStep6(); if (S.draftId) saveDraft(5, () => {}); goStep(5); } }
   ]);
   // লাইভ-সেভ (2026-10-28): টাইপের সাথে সাথে S.d.phone আপডেট — আগে S.d.phone
   // শুধু collectStep6-এ (কোড পাঠান/খসড়া) আপডেট হতো, তাই "ঠিক করুন" চেপে অন্য
@@ -2768,6 +2862,10 @@ function renderStep6() {
   // (কার্সর সমস্যা এড়াতে) — শুধু S.d আপডেট হয়, sendOtp-এর যাচাই আগের মতোই।
   const cp = $('c_phone');
   if (cp) cp.oninput = () => { S.d.phone = bnDigits(cp.value || '').replace(/\D/g, ''); };
+  // FINAL-PACK: same live-save for email — it had the same re-render
+  // wipe as phone (collectStep6-only), only smaller in impact.
+  const ce = $('c_email');
+  if (ce) ce.oninput = () => { S.d.email = (ce.value || '').trim(); };
 }
 function collectStep6() {
   S.d.phone = bnDigits($('c_phone') ? $('c_phone').value : '').replace(/\D/g, '');
@@ -3536,6 +3634,22 @@ function showDone(d, restore) {
     S._origAutoDl = key;
     socket.emit('FETCH_ORIGINAL', { ack: key });
     el.onclick = () => { note('⏳ PDF তৈরি হচ্ছে — হয়ে গেলেই নেমে যাবে', 'info'); socket.emit('FETCH_ORIGINAL', { ack: key }); };
+    // FINAL-PACK: the fetch progress label (e.g. the print-page step)
+    // used to stick forever when the socket died mid-fetch — no
+    // result event ever arrives to replace it. This watchdog only
+    // RE-LABELS the button to a retry state after 120s without any
+    // ORIGINAL_PDF outcome for this ack: it cancels nothing, retries
+    // nothing by itself, and a later real result still wins through
+    // the ORIGINAL_PDF handler above (which sets _origDone).
+    setTimeout(() => {
+      const done = S._origDone && S._origDone[key];
+      const still = $('akOrigPend');
+      if (!done && still && S._origAutoDl === key) {
+        still.disabled = false; still.style.opacity = '';
+        still.textContent = '⬇️ আসল PDF আবার আনুন';
+        still.onclick = () => { note('⏳ আসল কপি আনা হচ্ছে…', 'info'); socket.emit('FETCH_ORIGINAL', { ack: key }); };
+      }
+    }, 120000);
   })();
   setBtns([
     { html: '🏠 নতুন আবেদন', fn: () => location.reload() },
@@ -3861,9 +3975,9 @@ function renderAuto() {
   $('sp_same').onchange = toggle;
   $('rp_same').onchange = toggle;
   $('spFromBirth').onclick = () => fillPrefixFromBirth('sp');
-  $('spBook').onclick = () => { collectAuto(); renderAddrBook((rec) => { S.d.s2b.perm = Object.assign({}, rec); renderAuto(); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
+  $('spBook').onclick = () => { collectAuto(); renderAddrBook((rec) => { S.d.s2b.perm = Object.assign({}, rec); S.d.s2b.permCopy = false; renderAuto(); if (S.draftId) saveDraft(S.d.uiStep || 0, () => {}); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
   $('rpFromPerm').onclick = () => { fillPrefixFrom('rp', readAddrFields('sp')); note('✔ স্থায়ী ঠিকানা থেকে বসানো হয়েছে', 'ok'); };
-  $('rpBook').onclick = () => { collectAuto(); renderAddrBook((rec) => { S.d.s2b.pres = Object.assign({}, rec); renderAuto(); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
+  $('rpBook').onclick = () => { collectAuto(); renderAddrBook((rec) => { S.d.s2b.pres = Object.assign({}, rec); S.d.s2b.presCopy = false; renderAuto(); if (S.draftId) saveDraft(S.d.uiStep || 0, () => {}); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
   // Auto mode জন্মস্থানে ঠিকানা বই (2026-10-17)
   const abb = $('aBirthBook'); if (abb) abb.onclick = () => {
     collectAuto();
@@ -3953,12 +4067,20 @@ function collectAuto() {
     houseBn: ($('a_houseBn').value || '').trim(), houseEn: ($('a_houseEn').value || '').trim()
   };
   S.d.s2 = { father: readPersonAuto('af'), mother: readPersonAuto('am') };
+  // FINAL-PACK (2026-10-29, folded from fix-bdris-prescopy): same
+  // preserve rule as collectStep4 — an off-screen collect must keep
+  // the recorded copy/fields instead of defaulting to false + empty
+  // (which also wiped an address-book pick applied while the address
+  // form was not on screen, since the pick sets fields, not flags).
+  const prevB = S.d.s2b || {};
+  const spElA = $('sp_same'), rpElA = $('rp_same');
+  const permCopyA = spElA ? spElA.checked : !!prevB.permCopy;
+  const presCopyA = rpElA ? rpElA.checked : !!prevB.presCopy;
   S.d.s2b = {
-    // Permanent (2026-10-15): null-safe — checkbox না পেলে copy=false (destructive default নয়)
-    permCopy: $('sp_same') ? $('sp_same').checked : false,
-    presCopy: $('rp_same') ? $('rp_same').checked : false,
-    perm: ($('sp_same') ? $('sp_same').checked : false) ? null : readAddrFields('sp'),
-    pres: ($('rp_same') ? $('rp_same').checked : false) ? null : readAddrFields('rp')
+    permCopy: permCopyA,
+    presCopy: presCopyA,
+    perm: permCopyA ? null : (spElA ? readAddrFields('sp') : (prevB.perm || {})),
+    pres: presCopyA ? null : (rpElA ? readAddrFields('rp') : (prevB.pres || {}))
   };
   S.d.phone = bnDigits($('a_phone').value || '').replace(/\D/g, '');
   S.d.email = ($('a_email').value || '').trim();
@@ -4314,6 +4436,14 @@ function manualStepAck(d) {
   // shown, never silent — the draft still holds the given BRN.
   if (d.brnNote) note(d.brnNote, 'warn');
   if (d.blocked || failed.length) {
+    // FINAL-PACK stale-banner (folded from fix-bdris-stale-banner): this
+    // step already PASSED in this session (recorded in the success
+    // branch below) — a late/duplicate failure ack for it is stale
+    // display, not a current block. Suppress it entirely: no fail
+    // panel, no warn note, no retry banner, and NO dropSent (the step
+    // DID land — dropping would allow a duplicate re-send). Steps
+    // that have NOT passed keep their failure display.
+    if (op && S._passedOps && S._passedOps[op]) { opAbort(); busy(false); return; }
     if (staleAck) { if (op) dropSent(op); return; } // পুরনো ধাপের ব্যর্থতা — মেরামত চলছে, নীরব থাকি
     if (op === 'SUBMIT_S3_DOCS' && S._docsReturnPending) S._docsReturnPending = false; // recovery chain aborted — do not chain on a later S3 ack
     // FAILQ-LOST-SEND FIX (2026-10-28): নিচের opAbort() সারি চুপচাপ
@@ -4371,6 +4501,12 @@ function manualStepAck(d) {
   }
   hideBanner();
   hideFail();
+  // FINAL-PACK stale-banner: record this session's pass (stale acks
+  // excluded) — a later failure ack for this op is then recognised
+  // as stale display and suppressed above. Recorded here, before the
+  // SUBMIT_S4_PREP / SUBMIT_S4_OTP early returns below, so both are
+  // covered.
+  if (op && !staleAck) { (S._passedOps = S._passedOps || {})[op] = true; }
   // সফল ack → এই ধাপ সাইটে বসে গেছে: uiStep এগোই। ফলে পেছনে গিয়ে তথ্য না বদলে
   // “পরবর্তী” চাপলে সাইটে আবার পাঠানো হয় না — শুধু UI এগোয় (ডুপ্লিকেট নয়)।
   // (stale ack — নতুন সেশনের পুরনো উত্তর — গণনায় ধরা হয় না)
@@ -4435,6 +4571,7 @@ function handleFreshReady(d) {
   const dropped = (S._opQ || []).map(j => j.op);
   S.d.uiStep = 0;
   resetSent(); // সাইট খালি — ধাপ-রেকর্ডও খালি
+  S._passedOps = {}; // FINAL-PACK stale-banner: site session truly new, old passes void (also covers the BOT_STATUS fresh-READY path, which routes through handleFreshReady)
   opAbort();
   let repumped = false;
   if (savedPrep && inFlight !== 'SUBMIT_S4_PREP' && S.ready) {
@@ -4536,6 +4673,10 @@ socket.on('BOT_STATUS', (d) => {
   if (st === 'ORIGINAL_PDF') {
     const ono = String(d.ackId || '').replace(/\D/g, '');
     const u = d.ok && d.original ? d.original : null;
+    // FINAL-PACK: mark any outcome for this ack, so the DONE-page
+    // pending watchdog below knows a result arrived (success or
+    // failure — the failure branch already sets its own retry text).
+    if (ono) { (S._origDone = S._origDone || {})[ono] = true; }
     if (ono && u) ORIG_READY[ono] = u;
     const el = $('akOrigPend');
     if (u) {
@@ -4847,7 +4988,22 @@ $('logoutBtn').onclick = async () => {
           return origEmit.apply(null, [ev].concat(args));
         }
         charge('pdf', pdfKey).then(function (tok) {
-          if (!tok) return;
+          // FINAL-PACK: a failed charge used to leave the DONE-page
+          // pending button promising an auto-download that would
+          // never come (no emit, so no ORIGINAL_PDF event ever
+          // arrives to reset it). charge() already alerted; here the
+          // pending button gets its terminal retry state instead of
+          // sticking on "being prepared" forever.
+          if (!tok) {
+            const pend = $('akOrigPend');
+            if (pend) {
+              pend.disabled = false; pend.style.opacity = '';
+              pend.textContent = '⬇️ আসল PDF আবার আনুন';
+              const k = ackNo;
+              pend.onclick = () => { note('⏳ আসল কপি আনা হচ্ছে…', 'info'); if (k) socket.emit('FETCH_ORIGINAL', { ack: k }); };
+            }
+            return;
+          }
           if (pdfKey) S._pdfTok[pdfKey] = { tok: tok, at: Date.now() };
           if (args[0] && typeof args[0] === 'object') args[0]._chargeToken = tok;
           origEmit.apply(null, [ev].concat(args));
