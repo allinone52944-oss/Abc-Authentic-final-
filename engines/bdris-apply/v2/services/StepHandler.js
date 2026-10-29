@@ -141,6 +141,14 @@ function isPre2013(iso) {
   if (!iso) return false;
   return String(iso).slice(0, 10) < '2013-01-01';
 }
+// Parent-BRN exemption (2026-10-29 rule): pre-2013 AND the whole
+// 2013 year advance on the parents' ID cards only, WITHOUT a
+// parent BRN — just as a single name advances. 2014+ still needs
+// the BRN. No BRN is ever invented for an exempt year.
+function isParentBrnExempt(iso) {
+  if (!iso) return false;
+  return String(iso).slice(0, 10) < '2014-01-01';
+}
 // বাংলা লেবেল normalization (live-verified 2026-10-10):
 // পেজে "রাজবাড়ী" (ড় = U+09DC) আসে, টাইপ করা মানে "রাজবাড়ী" (ড় = ড+়) হতে পারে।
 // NFKC + ড়→ড় একরূপ + ZWJ/ZWNJ বাদ → select মিলিয়ে নেওয়া যায়।
@@ -153,6 +161,50 @@ function bnNorm(s) {
 }
 function bnToArab(s) {
   return String(s || '').replace(/[০-৯]/g, d => '০১২৩৪৫৬৭৮৯'.indexOf(d));
+}
+// Parent-BRN non-block helpers (2026-10-29, permanent):
+// normalizeBrn — Bengali digits → Arabic, spaces/dashes stripped.
+// The VALUE is never invented or replaced: normalisation only
+// removes digit-script/spacing noise so a correct BRN cannot look
+// wrong to the registry lookup. Names are never touched here.
+function normalizeBrn(v) {
+  return bnToArab(String(v || '')).replace(/[\s\-]/g, '');
+}
+// brnWarning — warning text, never a block: empty or 17 digits → ''.
+function brnWarning(v) {
+  const n = normalizeBrn(v);
+  if (!n) return '';
+  return /^\d{17}$/.test(n) ? '' : 'BRN ১৭ ডিজিটের হওয়া উচিত — দেওয়া নম্বরটি মিলিয়ে দেখুন';
+}
+// isFamilyErrorText — the site's family-validation wording only
+// (180-days / age-difference). Used to pick the names-only branch,
+// never to rewrite a name or a BRN.
+function isFamilyErrorText(t) {
+  return /180|difference of age/i.test(String(t || ''));
+}
+const PARENT_BRN_PRE2013_NOTE = '২০১৩-পূর্ব নিয়ম: পিতামাতার BRN সাইটে পাঠানো হয়নি — ড্রাফটে রাখা আছে।';
+const PARENT_BRN_2013_NOTE = '২০১৩ সালের নিয়ম: পিতামাতার BRN ছাড়াই (শুধু মা-বাবার আইডি কার্ড দিয়ে) এগোনো হয়েছে।';
+function parentBrnExemptNote(iso) {
+  if (isPre2013(iso)) return PARENT_BRN_PRE2013_NOTE;
+  if (isParentBrnExempt(iso)) return PARENT_BRN_2013_NOTE;
+  return null;
+}
+const PARENT_BRN_FAMILY_NOTE = 'সাইটের পারিবারিক নিয়ম: পিতামাতার BRN ছাড়াই (নাম + জাতীয়তা দিয়ে) এগোনো হয়েছে — BRN ড্রাফটে রাখা আছে।';
+// parentBrnSubmitAction — pure decision for the submit-time branch
+// (point 8): 'brn-exempt-names-only' | 'family-names-only' |
+// 'surface-only' | null (no parent-BRN error at all). Names are
+// never altered by this decision; the names-only attempts only
+// clear the BRN field, exactly like the pre-2013 site rule.
+function parentBrnSubmitAction(errs, applicantDob) {
+  const list = Array.isArray(errs) ? errs : [];
+  // A family/180-days text IS a parent-BRN error by itself (the
+  // family validation is triggered by the parent linkage), even
+  // when the text names no ubrn field.
+  const hit = list.some((t) => /ubrn|পিতা|মাতা/i.test(t) || (/verify/i.test(t) && /father|mother/i.test(t)) || isFamilyErrorText(t));
+  if (!hit) return null;
+  if (isParentBrnExempt(applicantDob)) return 'brn-exempt-names-only';
+  if (list.some((t) => isFamilyErrorText(t))) return 'family-names-only';
+  return 'surface-only';
 }
 // ওয়ার্ড: "৩নং" / "3" / "ওয়ার্ড-৩" → ["ওয়ার্ড - 3", ...] candidate list
 function wardCandidates(raw) {
@@ -848,22 +900,44 @@ class StepHandler {
     // বাধ্যতামূলক ধরে সাইট "not verified [father.ubrn]" দিয়ে আটকেছিল।
     // তাই: BRN থাকলে বসাই + Verify চেষ্টা (বাটন না থাকলে নীরব skip); না থাকলে site-ই শেষ কথা।
     const dobIso = data.applicantDob || this.applicantDob;
-    const pre2013 = isPre2013(dobIso);
+    // 2013-rule (2026-10-29): pre-2013 + পুরো 2013 সাল — BRN
+    // ছাড়াই, শুধু আইডি কার্ডে এগোবে। 2014+ আগের মতো।
+    const brnExempt = isParentBrnExempt(dobIso);
     if (dobIso) this.applicantDob = dobIso; // v1: appData.applicantDob update — later steps use it
+    // Parent-BRN non-block (2026-10-29, point 4): applicant DOB
+    // missing হলে ২০১৩-নিয়ম অনুমান করা যাবে না — post-2013
+    // ধরে BRN চাওয়া ভুল হবে। তাই স্পষ্ট কারণ-সহ থামি;
+    // এটা BRN-অনুমানের ব্লক নয়, DOB-অনুপস্থিতির নির্ণয়।
+    if (!dobIso) {
+      const dobReason = 'আবেদনকারীর জন্ম তারিখ পাওয়া যায়নি — ২০১৩-পূর্ব/পর নিয়ম ঠিক করা যাচ্ছে না, তাই পিতামাতার BRN চাওয়া হচ্ছে না। জন্ম তারিখ ঠিক করে আবার চেষ্টা করুন।';
+      this.progress('❌ ' + dobReason);
+      return { ok: false, step: 3, blocked: true, reason: dobReason, message: '❌ ' + dobReason, failed: [{ field: 'আবেদনকারীর জন্ম তারিখ', reason: dobReason }], verifyStatus, applicantDobMissing: true };
+    }
+    let brnNote = null;
 
     const fillParent = async (p, who, verifyIndex) => {
       const base = `personInfoForBirth.${p}.`;
       const brnSel = [`#${p}Brn`, `input[name="${base}ubrn"]`];
       const dobSel = [`#${p}BirthDate`, `input[name="${base}personBirthDate"]`];
-      const brn = String((data[p] || {}).brn || '').trim();
-      if (pre2013) {
-        // ২০১৩-এর আগের জন্মে পিতামাতার BRN ঐচ্ছিক (live-verified 2026-10-11) — আর BRN
-        // বসালে সাইট রেজিস্ট্রি-লিংক ধরে ফ্যামিলি-ভ্যালিডেশন চালায় ("Difference of age
-        // among children needs to be at least 180 days") → নাগরিক আটকে যায়।
-        // তাই pre-২০১৩-তে BRN ঘর খালি রাখি — নাম + জাতীয়তাই যথেষ্ট।
+      // Parent-BRN non-block (2026-10-29, point 1): বাংলা ডিজিট
+      // → আরবি, স্পেস/ড্যাশ বাদ — নইলে সঠিক BRN-ও রেজিস্ট্রি-
+      // লুকআপে ভুল দেখাতে পারে। নাম এখানে ছোঁয়া হয় না।
+      const brn = normalizeBrn((data[p] || {}).brn);
+      if (brnExempt) {
+        // ছাড়প্রাপ্ত জন্মসালে (pre-২০১৩ live-verified 2026-10-11;
+        // ২০১৩ সাল 2026-10-29 নিয়ম) পিতামাতার BRN ঐচ্ছিক — আর
+        // BRN বসালে সাইট রেজিস্ট্রি-লিংক ধরে ফ্যামিলি-ভ্যালিডেশন
+        // চালায় ("Difference of age among children needs to be
+        // at least 180 days") → নাগরিক আটকে যায়। তাই ছাড়ের
+        // সালে BRN ঘর খালি রাখি — নাম + আইডি কার্ডই যথেষ্ট,
+        // কোনো BRN বানানো হয় না।
         const brnEl = await this._waitVisible(brnSel, 2500);
         if (brnEl) await brnEl.fill('').catch(() => {});
-        verifyStatus[p] = 'skipped-pre2013';
+        verifyStatus[p] = isPre2013(dobIso) ? 'skipped-pre2013' : 'skipped-2013';
+        // ছাড়ের নিয়ম থাকল, নীরবতা গেল (point 4): সাইটে BRN
+        // না পাঠানোর কথা progress + ack-এর brnNote-এ জানানো
+        // হয়। ড্রাফটের BRN বদলায় না, শুধু সাইট-ফর্মে যায় না।
+        if (!brnNote) { brnNote = parentBrnExemptNote(dobIso); this.progress('ℹ️ ' + brnNote); }
       } else {
         keep(await this._typeInto(brnSel, brn, `${who}-এর BRN`, { required: true }));
       }
@@ -872,12 +946,22 @@ class StepHandler {
       }
       keep(await this._typeInto([`#${p}NameBn`, `input[name="${base}personNameBn"]`], transitName((data[p] || {}).nameBn), `${who}-এর নাম (বাংলা)`, { required: true }));
       keep(await this._typeInto([`#${p}NameEn`, `input[name="${base}personNameEn"]`], transitName((data[p] || {}).nameEn), `${who}-এর নাম (English)`, { required: true }));
-      if (!pre2013 && brn) {
+      if (!brnExempt && brn) {
         // Verify (BRN+DOB+নাম পূরণের পর); বাটন না থাকলে নীরব skip
         const v = await this._clickVerify(verifyIndex, who, { quietMissing: true });
         verifyStatus[p] = v.verified;
         if (v.verified === false) {
-          failed.push({ field: `${who}-এর BRN যাচাই`, reason: 'রেজিস্ট্রিতে BRN পাওয়া যায়নি — সঠিক ১৭ ডিজিটের BRN ও জন্ম তারিখ দিন' });
+          // Parent-BRN non-block (2026-10-29, points 2+3): Verify-ফল
+          // একা কখনো failed-এ যাবে না — সাইটের পরের ধাপই চূড়ান্ত
+          // বিচারক। আগে এখানকার failed-এন্ট্রিই না-এগোনো টেইলে
+          // BRN-ব্লক বানাত। এখন landed মান একবার মিলিয়ে দেখি
+          // (উপস্থিতি-মাত্র লগে, মান নয়): ঘর খালি থাকলে একবার
+          // আবার বসাই, বসে থাকলে Verify-কে আর ঘাঁটাই না।
+          const landed = await this._readParentLanded(p);
+          console.log(`PARENT-BRN-LANDED ${p} brn=${landed.brn === null ? 'unknown' : (landed.brn ? 'present' : 'empty')} dob=${landed.dob === null ? 'unknown' : (landed.dob ? 'present' : 'empty')}`);
+          if (landed.brn === '') keep(await this._typeInto(brnSel, brn, `${who}-এর BRN`, { required: true }));
+          if (landed.dob === '' && data[p] && data[p].dob) keep(await this._typeMaskedDate(dobSel, isoToBdFormat(data[p].dob), `${who}-এর জন্ম তারিখ`));
+          this.progress(`⚠ ${who}-এর BRN যাচাইয়ে রেজিস্ট্রিতে পাওয়া যায়নি — সাইটের পরের ধাপই চূড়ান্ত সিদ্ধান্ত নেবে, Verify-ফল একা আটকাবে না।`);
         }
       }
       keep(await this._selectFirstMatch([`#${p}Nationality`, `select[name="${base}personNationality"]`],
@@ -900,19 +984,50 @@ class StepHandler {
     // পরবর্তী — সাইট সত্যিই এগিয়েছে কিনা সেটাই চূড়ান্ত প্রমাণ
     // (পেজে পড়ে থাকা পুরনো "not verified" টেক্সটে আর বিভ্রান্ত হই না)
     const nxt = await this._clickNextAndWait('পরবর্তী (ধাপ ৩)');
+    let siteError = null;
     if (!nxt.ok) {
       failed.push({ field: nxt.field, reason: nxt.reason });
     } else {
-      const chk = await this._detectValidationBlock(null);
+      let chk = await this._detectValidationBlock(null);
       if (chk.blocked) {
-        const msg = '❌ ' + chk.reason;
-        this.progress(msg);
-        return {
-          ok: false, step: 3, blocked: true, reason: chk.reason,
-          message: msg + ' — ঘরটি পূরণ করে আবার চেষ্টা করুন।',
-          failed: [...failed, { field: 'পরবর্তী (ধাপ ৩)', reason: chk.reason }], verifyStatus,
-        };
+        // Stale-text re-check (2026-10-29, point 2): আগের চেষ্টার
+        // পড়ে থাকা ভুল-বার্তায় নতুন সঠিক তথ্য আটকাবে না — একটু
+        // থিতিয়ে আবার দেখি; তবু blocked থাকলেই সেটা আসল ব্লক।
+        try { await this.page.waitForTimeout(1200); } catch { /* no-op */ }
+        chk = await this._detectValidationBlock(null);
       }
+      if (chk.blocked && isFamilyErrorText(chk.reason)) {
+        // পারিবারিক (180-days) শাখা (2026-10-29, point 5): একই
+        // BRN-ভরা ফর্ম আবার চাপা নয় — নাম + জাতীয়তা-মাত্র
+        // সাইট-নিয়মের চেষ্টা, BRN ঘর খালি করে। নাম এখানে
+        // বদলানো হয় না; এগোলে BRN ড্রাফটেই থাকে, নোট-সহ
+        // জানানো হয়; না এগোলে সাইটের আসল বার্তাই ফেরে।
+        this.progress('ℹ️ সাইটের পারিবারিক নিয়ম দেখা যাচ্ছে — BRN ছাড়াই (নাম + জাতীয়তা দিয়ে) একবার চেষ্টা করা হচ্ছে…');
+        await this._clearParentBrnFields();
+        const nxt2 = await this._clickNextAndWait('পরবর্তী (ধাপ ৩ — পারিবারিক নিয়ম)');
+        if (nxt2.ok) {
+          const chk2 = await this._detectValidationBlock(null);
+          if (!chk2.blocked) {
+            brnNote = PARENT_BRN_FAMILY_NOTE;
+            this.progress('ℹ️ ' + PARENT_BRN_FAMILY_NOTE);
+          } else {
+            siteError = chk2.reason;
+          }
+        } else {
+          siteError = nxt2.reason || chk.reason;
+        }
+      } else if (chk.blocked) {
+        siteError = chk.reason;
+      }
+    }
+    if (siteError) {
+      const msg = '❌ ' + siteError;
+      this.progress(msg);
+      return {
+        ok: false, step: 3, blocked: true, reason: siteError,
+        message: msg + ' — ঘরটি পূরণ করে আবার চেষ্টা করুন।',
+        failed: [...failed, { field: 'পরবর্তী (ধাপ ৩)', reason: siteError }], verifyStatus, brnNote,
+      };
     }
     // parents ঘর আর নেই = সাইট নিশ্চিতভাবে পরের ধাপে → verify-নেগেটিভ মিথ্যা, বাদ
     let advanced = false;
@@ -926,7 +1041,7 @@ class StepHandler {
       return {
         ok: true, step: 4, blocked: false,
         message: '✅ ধাপ ৩ সম্পন্ন! স্থায়ী ও বর্তমান ঠিকানা দিন।',
-        failed: [], verifyStatus,
+        failed: [], verifyStatus, brnNote,
       };
     }
     // Submit-debug (2026-10-26): the old tail returned ok:true
@@ -942,22 +1057,21 @@ class StepHandler {
         ['#fatherBrn', 'input[name="personInfoForBirth.father.ubrn"]'], 1500));
     }
     if (nxt.ok && !advanced) {
-      // এগোয়নি — verifyStatus থেকে নির্দিষ্ট কারণ বানাই
-      const bad = Object.entries(verifyStatus).filter(([, v]) => v === false).map(([k]) => (k === 'father' ? 'পিতা' : 'মাতা'));
-      const unclear = Object.entries(verifyStatus).filter(([, v]) => v === null).map(([k]) => (k === 'father' ? 'পিতা' : 'মাতা'));
-      const reason = bad.length
-        ? `BDRIS এগোতে দিচ্ছে না — ${bad.join('/')}-এর BRN verify হয়নি। সঠিক BRN ও জন্ম তারিখ দিয়ে Verify চাপুন।`
-        : unclear.length
-          ? `BDRIS এগোতে দিচ্ছে না — ${unclear.join('/')}-এর verify-ফল নিশ্চিত হয়নি। Verify চেপে আবার চেষ্টা করুন।`
-          : 'BDRIS এগোতে দিচ্ছে না — পিতামাতার তথ্য/যাচাইয়ে সমস্যা। তথ্য মিলিয়ে আবার চেষ্টা করুন।';
+      // এগোয়নি — কারণ আর verifyStatus থেকে বানানো নয়
+      // (2026-10-29, point 2): Verify-ফল একা ব্লকের কারণ হতে
+      // পারে না। সাইটের তাজা ভুল-বার্তা আগেই siteError-এ ধরা
+      // হয়েছে; এখানে এলে নতুন বার্তা আসেনি — সত্যিটাই বলি।
+      // verifyUncertain শুধু রিপ্লে-র জন্য চিহ্ন (point 7)।
+      const verifyUncertain = Object.values(verifyStatus).some((v) => v === false || v === null);
+      const reason = 'BDRIS এগোতে দিচ্ছে না — সাইটের নতুন কোনো ভুল-বার্তা পাওয়া যায়নি। পিতামাতার তথ্য (BRN, জন্ম তারিখ, নাম) মিলিয়ে আবার চেষ্টা করুন।';
       this.progress('❌ ' + reason);
-      return { ok: false, step: 3, blocked: true, reason, message: '❌ ' + reason, failed, verifyStatus };
+      return { ok: false, step: 3, blocked: true, reason, message: '❌ ' + reason, failed, verifyStatus, verifyUncertain, brnNote };
     }
 
     return {
       ok: failed.length === 0, step: 4, blocked: false,
       message: `⚠️ ধাপ ৩ শেষ — ${failed.length}টি সমস্যা।`,
-      failed, verifyStatus,
+      failed, verifyStatus, brnNote,
     };
   }
 
@@ -1385,6 +1499,18 @@ class StepHandler {
       this.progress(`🔄 ধাপ আবার বসানো হচ্ছে: ${method}…`);
       const r = await this[method](args);
       if (!r || r.ok === false) {
+        // Replay non-block (2026-10-29, point 7): ধাপ ৩-এ
+        // Verify-অনিশ্চয়তা একা রিপ্লে আটকাবে না — সাইট আসলেই
+        // এগিয়ে গিয়ে থাকলে (পিতামাতার ঘর আর নেই) সেটাই
+        // প্রমাণ, এগিয়ে যাই। ঘর এখনো থাকলে আসল ব্লক, থামি।
+        if (method === 'submitS2' && r && r.verifyUncertain) {
+          let stillThere = null;
+          try { stillThere = await this._waitVisible(['#fatherBrn', 'input[name="personInfoForBirth.father.ubrn"]'], 1500); } catch { stillThere = null; }
+          if (!stillThere) {
+            this.progress('⚠ ধাপ ৩ পুনরায় বসানোয় যাচাই-ফল অনিশ্চিত ছিল, কিন্তু সাইট এগিয়ে গেছে — এগোনো হচ্ছে।');
+            continue;
+          }
+        }
         return { ok: false, reason: (r && r.message) || `${method} ব্যর্থ`, failed: r && r.failed };
       }
     }
@@ -1922,6 +2048,40 @@ class StepHandler {
       post = await clickSubmit(true);
       this.progress(post.succ ? '✔ সাবমিট গৃহীত হয়েছে' : '⚠ সাইটের উত্তর এখনো আসেনি — অপেক্ষা করা হচ্ছে…');
     }
+    // Parent-BRN parallel branch (2026-10-29, point 8) — cinno /
+    // single-name রিট্রাইগুলো ছোঁয়া হয়নি; এটা তার পাশে
+    // আলাদা শাখা। সাবমিট-ভুলে ubrn/পিতা/মাতা থাকলে landed
+    // মান একবার মিলিয়ে দেখি (উপস্থিতি-মাত্র লগে)। শুধু
+    // ২০১৩-পূর্ব বা পারিবারিক-ভুলের ক্ষেত্রে সাইট-নিয়মের
+    // নাম-মাত্র চেষ্টা (BRN ঘর খালি করে, cinno-স্নিক-সহ আবার
+    // সাবমিট — নাম বদলানো হয় না); অন্য ক্ষেত্রে BRN
+    // বদলানো/আবার পাঠানো নয়, সাইটের আসল ভুল-বার্তাই
+    // নিচের ব্যর্থতায় ফিরবে। একই rejected সাবমিট জোর করে
+    // আবার পাঠানো হয় না।
+    let s4BrnNote = null;
+    const s4BrnAction = parentBrnSubmitAction(post.errs, fd.s1.dob || data.applicantDob || this.applicantDob);
+    if (!post.succ && s4BrnAction && s4BrnAction !== 'surface-only') {
+      const landedF = await this._readParentLanded('father');
+      const landedM = await this._readParentLanded('mother');
+      console.log(`S4-PARENT-BRN-LANDED father-brn=${landedF.brn === null ? 'unknown' : (landedF.brn ? 'present' : 'empty')} mother-brn=${landedM.brn === null ? 'unknown' : (landedM.brn ? 'present' : 'empty')}`);
+      const noteS4 = s4BrnAction === 'brn-exempt-names-only' ? (parentBrnExemptNote(fd.s1.dob || data.applicantDob || this.applicantDob) || PARENT_BRN_PRE2013_NOTE) : PARENT_BRN_FAMILY_NOTE;
+      this.progress('🔁 পিতামাতার BRN-ভুলে সাইট-নিয়মের চেষ্টা — BRN ছাড়াই (নাম দিয়ে) আবার সাবমিট করা হচ্ছে…');
+      await this._clearParentBrnFields();
+      const otpNow3 = await this.page.evaluate(() => {
+        const el = document.querySelector('#otp, input[name="otp"]');
+        return el ? el.value : '';
+      }).catch(() => '');
+      if (!String(otpNow3 || '').replace(/\D/g, '')) {
+        await this._typeInto(otpSels, otp, 'OTP কোড', { required: true, typeCharByChar: true });
+      }
+      post = await clickSubmit(true);
+      if (post.succ) {
+        s4BrnNote = noteS4;
+        this.progress('✔ সাবমিট গৃহীত হয়েছে (' + noteS4 + ')');
+      } else {
+        this.progress('⚠ সাইটের উত্তর এখনো আসেনি — অপেক্ষা করা হচ্ছে…');
+      }
+    }
     this.progress('⏳ সাইটের উত্তর আসার অপেক্ষায়...');
 
     let ackText = '';
@@ -2072,6 +2232,7 @@ class StepHandler {
     this.emit('BOT_STATUS', {
       status: 'COMPLETED', message: '🎉 BDRIS আবেদন সফলভাবে জমা হয়েছে!',
       level: 'ok', ackId: ackText || 'BDRIS পোর্টালে সফলভাবে জমা হয়েছে.', screenshot, pdf, original: null,
+      brnNote: s4BrnNote || undefined,
     });
 
     // আসল PDF prefetch-এর জন্য rec — fetch subsystem (FETCH_ORIGINAL migration)
@@ -2091,6 +2252,7 @@ class StepHandler {
       pdf: pdf ? { name: pdf.name, bytes: pdf.base64.length } : null,
       originalRec,
       failed: [],
+      brnNote: s4BrnNote || undefined,
     };
   }
   // ═══════════════════════════════════════════════════════════════
@@ -2298,6 +2460,43 @@ class StepHandler {
     const reason = `"${label}" অপশনের মান পাওয়া যায়নি`;
     this.progress(`⚠ ${reason}`);
     return { ok: false, field: label, reason };
+  }
+
+  // Parent-BRN landed re-read (2026-10-29, point 3): ঘরে কী
+  // বসেছে শুধু উপস্থিতি-মাত্র জানি — মান কখনো লগে বা
+  // রেজাল্টে যায় না (নাম/BRN-মান লগ করা নিষেধ)।
+  async _readParentLanded(p) {
+    const sels = {
+      brn: [`#${p}Brn`, `input[name="personInfoForBirth.${p}.ubrn"]`],
+      dob: [`#${p}BirthDate`, `input[name="personInfoForBirth.${p}.personBirthDate"]`],
+    };
+    try {
+      const vals = await this.page.evaluate((s) => {
+        const out = {};
+        for (const [k, list] of Object.entries(s)) {
+          let v = null;
+          for (const sel of list) { const el = document.querySelector(sel); if (el) { v = el.value || ''; break; } }
+          out[k] = v;
+        }
+        return out;
+      }, sels);
+      return {
+        brn: vals && typeof vals.brn === 'string' ? vals.brn : null,
+        dob: vals && typeof vals.dob === 'string' ? vals.dob : null,
+      };
+    } catch {
+      return { brn: null, dob: null };
+    }
+  }
+
+  // Parent-BRN site-rule clear (2026-10-29, points 5+8): শুধু
+  // BRN ঘর খালি করে — নাম/জাতীয়তা/জন্ম তারিখ ছোঁয়া হয় না,
+  // ড্রাফটের BRN-ও বদলায় না (সাইট-ফর্ম থেকেই শুধু সরে)।
+  async _clearParentBrnFields() {
+    for (const pp of ['father', 'mother']) {
+      const el = await this._waitVisible([`#${pp}Brn`, `input[name="personInfoForBirth.${pp}.ubrn"]`], 2500).catch(() => null);
+      if (el) await el.fill('').catch(() => {});
+    }
   }
 
   async _clickVerify(index, who, opts = {}) {
@@ -2759,4 +2958,4 @@ class StepHandler {
   }
 }
 
-module.exports = { StepHandler, verifyChargeToken, bnToArab, thChildSite, consumeSubmitToken, isSubmitTokenConsumed, extractAckNumber };
+module.exports = { StepHandler, verifyChargeToken, bnToArab, thChildSite, consumeSubmitToken, isSubmitTokenConsumed, extractAckNumber, normalizeBrn, brnWarning, isFamilyErrorText, parentBrnSubmitAction, isParentBrnExempt, parentBrnExemptNote, PARENT_BRN_PRE2013_NOTE, PARENT_BRN_2013_NOTE, PARENT_BRN_FAMILY_NOTE };

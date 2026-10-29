@@ -855,6 +855,26 @@ function updDraftsCnt() {
 function bnDigits(s) {
   return String(s || '').replace(/[০-৯]/g, (d) => String('০১২৩৪৫৬৭৮৯'.indexOf(d)));
 }
+// Parent-BRN intake (2026-10-29, point 1): Bengali digits → Arabic,
+// spaces/dashes stripped. The value is never invented or replaced;
+// a non-17 result is a WARNING, never a block. Names untouched.
+function normalizeBrnField(v) {
+  return String(v || '').replace(/[০-৯]/g, (d) => String('০১২৩৪৫৬৭৮৯'.indexOf(d))).replace(/[\s\-]/g, '');
+}
+function brnFieldWarning(v) {
+  const n = normalizeBrnField(v);
+  if (!n) return '';
+  return /^\d{17}$/.test(n) ? '' : 'BRN ১৭ ডিজিটের হওয়া উচিত — দেওয়া নম্বরটি মিলিয়ে দেখুন';
+}
+function parentBrnWarnings() {
+  const out = [];
+  const s2 = (S.d && S.d.s2) || {};
+  [['father', 'পিতা'], ['mother', 'মাতা']].forEach(([p, who]) => {
+    const w = brnFieldWarning((s2[p] || {}).brn);
+    if (w) out.push(who + ' — ' + w);
+  });
+  return out;
+}
 function dobDisplay(iso) {
   const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return m ? m[3] + '/' + m[2] + '/' + m[1] : '';
@@ -1735,6 +1755,9 @@ function advanceAndSend(n, op, payload) {
   return emitStep(op, payload) !== false;
 }
 function isPre2013Client(iso) { return !!iso && String(iso) < '2013-01-01'; }
+// 2013-rule (2026-10-29): pre-2013 + পুরো 2013 সাল — parent BRN
+// ছাড়াই, শুধু আইডি কার্ডে এগোবে। কোনো BRN বানানো হয় না।
+function isParentBrnExemptClient(iso) { return !!iso && String(iso) < '2014-01-01'; }
 
 /* ═══════════ live sync: UI → main server (real site) ═══════════ */
 function bnNormJs(s) {
@@ -2389,16 +2412,18 @@ function renderStep3() {
   setView('flow');
   const s2 = S.d.s2 || {}; const f = s2.father || {}, m = s2.mother || {};
   const pre = isPre2013Client(S.d.s1.dob);
+  const brnExempt = isParentBrnExemptClient(S.d.s1.dob);
   const vf = S.verify.father, vm = S.verify.mother;
   const badge = (v) => v === true ? '<span class="vbadge ok">✔ যাচাই সফল</span>' :
     v === false ? '<span class="vbadge warn">✖ যাচাই হয়নি</span>' :
     v === 'skipped-pre2013' ? '<span class="vbadge warn">২০১৩-পূর্ব — প্রয়োজন নেই</span>' :
+    v === 'skipped-2013' ? '<span class="vbadge warn">২০১৩ সাল — BRN প্রয়োজন নেই</span>' :
     '<span class="vbadge wait">যাচাই বাকি</span>';
   const person = (p, o, v) => (
     '<div class="addrwrap"><div class="ah"><span class="t">' + (p === 'father' ? 'পিতার তথ্য' : 'মাতার তথ্য') + '</span>' + badge(v) + '</div>' +
     '<div class="row2">' +
-      '<div class="fld"><label>জন্ম নিবন্ধন নম্বর (BRN) ' + (pre ? '' : '<b>*</b>') + '</label><input type="text" id="' + p + '_brn" value="' + esc(o.brn || '') + '" placeholder="১৭ ডিজিটের নম্বর"></div>' +
-      dobFieldHtml(p + '_dob', 'জন্ম তারিখ (খ্রিঃ)', o.dob, !pre) +
+      '<div class="fld"><label>জন্ম নিবন্ধন নম্বর (BRN) ' + (brnExempt ? '' : '<b>*</b>') + '</label><input type="text" id="' + p + '_brn" value="' + esc(o.brn || '') + '" placeholder="১৭ ডিজিটের নম্বর"></div>' +
+      dobFieldHtml(p + '_dob', 'জন্ম তারিখ (খ্রিঃ)', o.dob, !brnExempt) +
       '<div class="fld"><label>নাম (বাংলায়) <b>*</b></label><input type="text" id="' + p + '_bn" value="' + esc(o.nameBn || '') + '"></div>' +
       '<div class="fld"><label>নাম (English) <b>*</b></label><input type="text" id="' + p + '_en" value="' + esc(o.nameEn || '') + '"></div>' +
       '<div class="fld"><label>জাতীয়তা</label><select id="' + p + '_nat">' +
@@ -2408,7 +2433,9 @@ function renderStep3() {
     '<div class="sec"><div class="sub-h"><span class="snum">৩</span> পিতামাতার তথ্য</div>' +
     (pre
       ? '<p class="hint">২০১৩-এর আগে জন্ম — পিতামাতার জন্ম নিবন্ধন নম্বর না থাকলেও এগোনো যাবে (নাম অবশ্যই লাগবে)।</p>'
-      : '<p class="hint">পিতামাতার ১৭ ডিজিটের জন্ম নিবন্ধন নম্বর ও জন্ম তারিখ দিন — নম্বর মিললে যাচাই হয়ে যাবে।</p>') +
+      : (brnExempt
+        ? '<p class="hint">২০১৩ সালে জন্ম — পিতামাতার BRN লাগবে না, শুধু মা-বাবার আইডি কার্ডই যথেষ্ট (নাম অবশ্যই লাগবে)।</p>'
+        : '<p class="hint">পিতামাতার ১৭ ডিজিটের জন্ম নিবন্ধন নম্বর ও জন্ম তারিখ দিন — নম্বর মিললে যাচাই হয়ে যাবে।</p>')) +
     '</div>' +
     person('father', f, vf) + person('mother', m, vm)
   );
@@ -2420,7 +2447,7 @@ function renderStep3() {
 }
 function readPerson(p) {
   return {
-    brn: ($(p + '_brn').value || '').trim(),
+    brn: normalizeBrnField($(p + '_brn').value || ''),
     dob: readDobIso(p + '_dob'),
     nameBn: ($(p + '_bn').value || '').trim(),
     nameEn: ($(p + '_en').value || '').trim(),
@@ -2435,17 +2462,19 @@ function submitStep3() {
     if (stepChanged('SUBMIT_S2', payloadFor('SUBMIT_S2'))) { resendFrom('SUBMIT_S2'); return; }
     goStep(4); return;
   }
-  const pre = isPre2013Client(S.d.s1.dob);
+  const brnExempt = isParentBrnExemptClient(S.d.s1.dob);
   const bad = [];
   [['father', 'পিতা'], ['mother', 'মাতা']].forEach(([p, who]) => {
     const o = S.d.s2[p];
     if (!o.nameBn) { bad.push(who + '-এর নাম (বাংলায়)'); $(p + '_bn').classList.add('bad'); }
     if (!o.nameEn) { bad.push(who + '-এর নাম (English)'); $(p + '_en').classList.add('bad'); }
-    if (!pre && !o.brn) { bad.push(who + '-এর BRN'); $(p + '_brn').classList.add('bad'); }
-    if (!pre && !o.dob) { bad.push(who + '-এর জন্ম তারিখ (DD/MM/YYYY)'); $(p + '_dob').classList.add('bad'); }
+    if (!brnExempt && !o.brn) { bad.push(who + '-এর BRN'); $(p + '_brn').classList.add('bad'); }
+    if (!brnExempt && !o.dob) { bad.push(who + '-এর জন্ম তারিখ (DD/MM/YYYY)'); $(p + '_dob').classList.add('bad'); }
   });
   if (bad.length) { showFail(bad); note('⚠️ কিছু ঘর পূরণ করুন', 'warn'); return; }
   hideFail();
+  const brnWarn = parentBrnWarnings();
+  if (brnWarn.length) note('⚠️ ' + brnWarn.join(' — '), 'warn');
   advanceAndSend(4, 'SUBMIT_S2', Object.assign({}, S.d.s2, { applicantDob: S.d.s1.dob }));
 }
 
@@ -3548,7 +3577,7 @@ function parsePastedData(raw, d) {
   if (basis) d.s0.addressType = basis;
   // দুই-ব্লক টেমপ্লেটে (জন্মস্থান হেডার আছে) প্রথম ব্লক = স্থায়ী; নইলে ভিত্তি অনুযায়ী
   let state = hasBirthHdr ? 'perm' : (d.s0.addressType === 'PERMANENT' && basis ? 'perm' : 'birth');
-  let n = 0, miss = 0, permN = 0;
+  let n = 0, miss = 0, permN = 0, brnWarn = false;
   for (let L of lines) {
     L = String(L).trim();
     if (!L) continue;
@@ -3612,7 +3641,11 @@ function parsePastedData(raw, d) {
     if ((v = g(/^জন্ম\s*নিবন্ধন\s*নাম্বার\s*\/\s*এনআইডি\s*[:ঃ\-–—.\s]*(.*)$/)) !== null
       || (v = g(/^জন্ম\s*নিবন্ধন\s*নাম্বার\s*[:ঃ\-–—.\s]*(.*)$/)) !== null) {
       const dd = bnDigits(v).replace(/\D/g, '');
-      if ((state === 'father' || state === 'mother') && dd.length === 17) { (state === 'father' ? f : m).brn = dd; n++; }
+      // Parent-BRN paste (2026-10-29, point 1): the number is kept
+      // as given (digits-normalised) even when it is not 17 digits
+      // — silently dropping it used to manufacture a downstream
+      // missing-BRN block. A non-17 value raises brnWarn instead.
+      if (state === 'father' || state === 'mother') { (state === 'father' ? f : m).brn = dd; n++; if (dd.length !== 17) brnWarn = true; }
       continue;
     }
     // মোবাইল → যোগাযোগ ঘরে
@@ -3643,7 +3676,7 @@ function parsePastedData(raw, d) {
     if (/[:ঃ]/.test(L)) miss++;
   }
   if (permN > 0) z.permCopy = false;
-  return { n: n, miss: miss };
+  return { n: n, miss: miss, brnWarn: brnWarn };
 }
 function applyPaste() {
   const raw = ($('pasteBox') || {}).value || '';
@@ -3652,7 +3685,7 @@ function applyPaste() {
   const r = parsePastedData(raw, S.d);
   S._pasteRaw = raw;
   renderAuto();
-  note(r.n ? ('📥 ' + r.n + 'টি তথ্য বসে গেছে — সব ঘর একবার দেখে নিয়ে ছবি যোগ করুন' + (r.miss ? ' (আর ' + r.miss + 'টি লাইন চেনা যায়নি)' : ''))
+  note(r.n ? ('📥 ' + r.n + 'টি তথ্য বসে গেছে — সব ঘর একবার দেখে নিয়ে ছবি যোগ করুন' + (r.miss ? ' (আর ' + r.miss + 'টি লাইন চেনা যায়নি)' : '') + (r.brnWarn ? ' — ⚠️ পিতা/মাতার BRN ১৭ ডিজিট নয়, মিলিয়ে দেখুন' : ''))
     : '⚠️ কিছুই চেনা যায়নি — তথ্যটা একবার মিলিয়ে দেখুন', r.n ? 'ok' : 'warn');
 }
 /* ═══════════ পেস্টের নমুনা ফরম্যাট (2026-10-13) — বোতাম চাপলেই বক্সে বসে ═══════════ */
@@ -3849,12 +3882,13 @@ function renderAuto() {
 }
 function personAuto(p, lbl, o) {
   const pre = isPre2013Client((S.d.s1 || {}).dob);
+  const brnExempt = isParentBrnExemptClient((S.d.s1 || {}).dob);
   const fldI = (id, l, val, ph, req) => '<div class="fld"><label>' + esc(l) + (req ? ' <b>*</b>' : '') + '</label>' +
     '<input type="text" id="' + id + '" value="' + esc(val || '') + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + '></div>';
   return '<div class="addrwrap"><div class="ah"><span class="t">' + esc(lbl) + 'র তথ্য</span>' +
-    (pre ? '<span class="vbadge warn">২০১৩-পূর্ব — BRN ছাড়াও হবে</span>' : '') + '</div><div class="row2">' +
-    fldI(p + '_brn', 'জন্ম নিবন্ধন নম্বর (BRN)', o.brn, '১৭ ডিজিটের নম্বর', !pre) +
-    dobFieldHtml(p + '_dob', 'জন্ম তারিখ (খ্রিঃ)', o.dob, !pre) +
+    (pre ? '<span class="vbadge warn">২০১৩-পূর্ব — BRN ছাড়াও হবে</span>' : (brnExempt ? '<span class="vbadge warn">২০১৩ সাল — BRN ছাড়াই, আইডি কার্ডই যথেষ্ট</span>' : '')) + '</div><div class="row2">' +
+    fldI(p + '_brn', 'জন্ম নিবন্ধন নম্বর (BRN)', o.brn, '১৭ ডিজিটের নম্বর', !brnExempt) +
+    dobFieldHtml(p + '_dob', 'জন্ম তারিখ (খ্রিঃ)', o.dob, !brnExempt) +
     fldI(p + '_bn', 'নাম (বাংলায়)', o.nameBn, '', true) +
     fldI(p + '_en', 'নাম (English)', o.nameEn, '', true) +
     '<div class="fld"><label>জাতীয়তা</label>' + autoSel(p + '_nat', FB.nationality, o.nationality || 'বাংলাদেশী') + '</div>' +
@@ -3862,7 +3896,7 @@ function personAuto(p, lbl, o) {
 }
 function readPersonAuto(p) {
   return {
-    brn: ($(p + '_brn').value || '').trim(),
+    brn: normalizeBrnField($(p + '_brn').value || ''),
     dob: readDobIso(p + '_dob'),
     nameBn: ($(p + '_bn').value || '').trim(),
     nameEn: ($(p + '_en').value || '').trim(),
@@ -3913,13 +3947,13 @@ function validateAuto() {
   if (!s1.postEn) { bad.push('ডাকঘর (English)'); mark('a_postEn'); }
   if (!s1.vilBn) { bad.push('গ্রাম / পাড়া / মহল্লা'); mark('a_vilBn'); }
   if (!s1.vilEn) { bad.push('গ্রাম / Area (English)'); mark('a_vilEn'); }
-  const pre = isPre2013Client(s1.dob);
+  const brnExempt = isParentBrnExemptClient(s1.dob);
   [['af', 'পিতা'], ['am', 'মাতা']].forEach(([p, who]) => {
     const o = p === 'af' ? s2.father : s2.mother;
     if (!o.nameBn) { bad.push(who + '-এর নাম (বাংলায়)'); mark(p + '_bn'); }
     if (!o.nameEn) { bad.push(who + '-এর নাম (English)'); mark(p + '_en'); }
-    if (!pre && !o.brn) { bad.push(who + '-এর BRN'); mark(p + '_brn'); }
-    if (!pre && !o.dob) { bad.push(who + '-এর জন্ম তারিখ (DD/MM/YYYY)'); mark(p + '_dob'); }
+    if (!brnExempt && !o.brn) { bad.push(who + '-এর BRN'); mark(p + '_brn'); }
+    if (!brnExempt && !o.dob) { bad.push(who + '-এর জন্ম তারিখ (DD/MM/YYYY)'); mark(p + '_dob'); }
   });
   const need = (o, who, pf) => ['division', 'district', 'cityCorpUpazila', 'paurasavaUnion', 'ward', 'postBn', 'postEn', 'vilBn', 'vilEn'].forEach(k => {
     if (!o[k]) { bad.push(who + ' — ' + ({ division: 'বিভাগ', district: 'জেলা', cityCorpUpazila: 'উপজেলা', paurasavaUnion: 'ইউনিয়ন', ward: 'ওয়ার্ড', postBn: 'ডাকঘর (বাংলা)', postEn: 'ডাকঘর (English)', vilBn: 'গ্রাম/পাড়া', vilEn: 'গ্রাম (English)' }[k])); mark(pf + '_' + k); }
@@ -3948,6 +3982,8 @@ function submitAuto() {
     return;
   }
   hideFail();
+  const brnWarnAuto = parentBrnWarnings();
+  if (brnWarnAuto.length) note('⚠️ ' + brnWarnAuto.join(' — '), 'warn');
   ensureReady(() => {
     // Permanent (2026-10-15): submit-এর আগে খসড়া auto-save — manual "খসড়ায় রাখুন"
     // না চাপলেও draft থাকবে। Save না হলে (3s timeout) submit আটকাবে না।
@@ -4239,6 +4275,10 @@ function manualStepAck(d) {
     if ('father' in d.verifyStatus) S.verify.father = d.verifyStatus.father;
     if ('mother' in d.verifyStatus) S.verify.mother = d.verifyStatus.mother;
   }
+  // Parent-BRN site-rule note (2026-10-29, points 4+5): a BRN
+  // withheld from the site form by the pre-2013 or family rule is
+  // shown, never silent — the draft still holds the given BRN.
+  if (d.brnNote) note(d.brnNote, 'warn');
   if (d.blocked || failed.length) {
     if (staleAck) { if (op) dropSent(op); return; } // পুরনো ধাপের ব্যর্থতা — মেরামত চলছে, নীরব থাকি
     if (op === 'SUBMIT_S3_DOCS' && S._docsReturnPending) S._docsReturnPending = false; // recovery chain aborted — do not chain on a later S3 ack
