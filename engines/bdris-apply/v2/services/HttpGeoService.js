@@ -113,8 +113,46 @@ class HttpGeoService {
    * is left to the Playwright path (BdrisNavigator.ensureFormPage),
    * which owns page movement and must not hijack a mid-flow page
    * from inside a seed attempt.
+   *
+   * Seed-stability fix (live journal 2026-10-29 09:24:56 UTC, twice):
+   * seeding failed with 'page.evaluate: Execution context was
+   * destroyed, most likely because of a navigation', then the UI
+   * direct call fell back with 'No session-seeded client: bare
+   * bootstrap is refused'. The session was not missing — the seed
+   * ran while the page was navigating. So seedFromPage retries
+   * ONCE, and only on a destroyed execution context: it first
+   * waits for the page to settle (waitForLoadState('domcontentloaded')
+   * when the page offers it; test doubles without it retry
+   * immediately), then re-runs the full seed (fresh cookies +
+   * fresh CSRF extraction) on the settled context. Any other
+   * failure — no warm page, no CSRF token, a non-navigation
+   * error — still fails fast with no retry, and a bare bootstrap
+   * is never attempted. A second destroyed context also fails
+   * fast; the retry is exactly one, never a loop.
    */
   async seedFromPage(page) {
+    const first = await this._seedFromPageOnce(page);
+    if (first) return true;
+    if (!page) return false;
+    if (!this._isDestroyedContextError(this.lastSeedError)) return false;
+    await this._waitForSettledPage(page);
+    return this._seedFromPageOnce(page);
+  }
+
+  _isDestroyedContextError(err) {
+    return !!(err && /Execution context was destroyed/.test(String(err.message || err)));
+  }
+
+  async _waitForSettledPage(page) {
+    if (page && typeof page.waitForLoadState === 'function') {
+      try { await page.waitForLoadState('domcontentloaded', { timeout: 10000 }); } catch (e) { /* retry decides */ }
+    }
+    // No waitForLoadState (test doubles, older page objects): the
+    // retry below still re-runs the full seed on the new context;
+    // no sleep is used as a substitute for a settled page.
+  }
+
+  async _seedFromPageOnce(page) {
     const client = await this._getClient();
     if (client.bootstrapped) return true;
     if (typeof client.seedFromBrowser !== 'function') {
