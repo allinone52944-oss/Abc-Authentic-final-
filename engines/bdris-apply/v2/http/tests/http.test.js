@@ -392,7 +392,10 @@ describe('OTP send + office helpers', () => {
     const q = new URLSearchParams(state.otpQueries[0]);
     assert.strictEqual(q.get('appType'), 'BIRTH_REGISTRATION_APPLICATION');
     assert.strictEqual(q.get('phone'), 'mock-phone');
-    assert.strictEqual(q.get('applicantName'), 'mock-name');
+    // DIRECT BRN-FREE ROUTE: send query carries the transit
+    // (typed) name — the fixture's hyphen is stripped, as the
+    // bot's transitName does for typed fields.
+    assert.strictEqual(q.get('applicantName'), 'mockname');
     assert.ok(q.has('officeId') && q.has('applicantDob') && q.has('officeAddressType'));
     const body = state.otpBodies[0] || '';
     assert.match(body, /personInfoForBirth\.personNameBn/);
@@ -500,7 +503,8 @@ describe('OTP-verify query builder + request (source-proven shape)', () => {
     });
     assert.strictEqual(p.appType, 'BIRTH_REGISTRATION_APPLICATION');
     assert.strictEqual(p.phone, 'mock-phone');
-    assert.strictEqual(p.applicantName, 'mock-name');
+    // DIRECT BRN-FREE ROUTE: verify carries the transit name too.
+    assert.strictEqual(p.applicantName, 'mockname');
     assert.strictEqual(p.applicantDob, '2020-01-15');
     assert.strictEqual(p.officeAddressType, 'BIRTHPLACE');
     assert.strictEqual(p.geoLocationId, '700');
