@@ -145,7 +145,7 @@
 <script src="/js/app.js?v=18"></script>
 <script>
 const API='/death-engine';
-let S={sessionId:null,drn:'',dod:'',record:null};
+let S={sessionId:null,drn:'',dod:'',record:null,attemptKey:null};
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function codOther(sel){const other=document.getElementById(sel.id+'_other');const isOther=(sel.value==='Other'||sel.value==='অন্যান্য');other.style.display=isOther?'block':'none';if(isOther){S.record[sel.id.replace('rec_','')]=other.value;}else{S.record[sel.id.replace('rec_','')]=sel.value;other.value='';}}
 function showErr(m){const e=document.getElementById('err');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),6000);}
@@ -206,6 +206,10 @@ async function step1(retry){
     const j=await r.json();
     if(!j.success)throw new Error(j.error||'ক্যাপচা আসেনি');
     S.sessionId=j.sessionId;
+    // চার্জ গেটের চেষ্টা-কী (2026-10-30): এক চেষ্টার verify→preview→PDF
+    // সবাই একই কী পাঠায়, তাই রিট্রাইয়ে দুবার চার্জ হয় না; নতুন
+    // ক্যাপচা মানেই নতুন চেষ্টা, নতুন কী, নতুন চার্জ হতে পারে।
+    S.attemptKey=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():'att-'+Date.now()+'-'+Math.random().toString(36).slice(2);
     document.getElementById('capImg').src=j.image;
     document.getElementById('capAns').value='';
     go(2);
@@ -228,9 +232,9 @@ async function step2(){
   if(!ans){showErr('ক্যাপচা উত্তর লিখুন।');return;}
   busy('b2',true,'BDRIS যাচাই চলছে… (১৫-৪০ সেকেন্ড লাগতে পারে)');
   try{
-    const r=await ABC.api(API+'/api/verify',{method:'POST',body:{sessionId:S.sessionId,drn:S.drn,dod:S.dod,captcha:ans}});
+    const r=await ABC.api(API+'/api/verify',{method:'POST',body:{sessionId:S.sessionId,drn:S.drn,dod:S.dod,captcha:ans,idempotency_key:S.attemptKey}});
     const j=await r.json();
-    if(!j.success)throw new Error(j.error||'যাচাই ব্যর্থ');
+    if(!j.success)throw new Error(j.message||j.error||'যাচাই ব্যর্থ');
     S.record=j.data;
     S.record=j.data;
     const d=j.data;
@@ -268,9 +272,9 @@ async function step2(){
 async function step3(){
   busy('b3',true,'সনদ তৈরি হচ্ছে…');
   try{
-    const r=await ABC.api(API+'/api/preview',{method:'POST',body:S.record});
+    const r=await ABC.api(API+'/api/preview',{method:'POST',body:Object.assign({},S.record,{idempotency_key:S.attemptKey})});
     const j=await r.json();
-    if(!j.success)throw new Error('প্রিভিউ ব্যর্থ');
+    if(!j.success)throw new Error(j.message||j.error||'প্রিভিউ ব্যর্থ');
     document.getElementById('certFrame').srcdoc=j.html;
     go(4);
   }catch(e){showErr(e.message||'সনদ তৈরি ব্যর্থ।');}
@@ -311,7 +315,8 @@ function reportEngineJob(engineId, refNo, name, blob, fname){
 async function dlPdf(){
   busy('b4',true,'PDF তৈরি হচ্ছে…');
   try{
-    const r=await ABC.api(API+'/api/pdf',{method:'POST',body:S.record,timeout:60000});
+    const r=await ABC.api(API+'/api/pdf',{method:'POST',body:Object.assign({},S.record,{idempotency_key:S.attemptKey}),timeout:60000});
+    if(r.status===402){let m='চার্জ সম্পন্ন হয়নি — আবার যাচাই করুন।';try{const ej=await r.json();m=ej.message||ej.error||m;}catch(e2){}throw new Error(m);}
     if(!r.ok)throw new Error('PDF তৈরি ব্যর্থ');
     const blob=await r.blob();
     const a=document.createElement('a');

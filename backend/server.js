@@ -211,6 +211,9 @@ app.use('/api/invite', apiLimiter, publicInvites);
 // as-is. Auth required: captcha/verify hit the live BDRIS portal.
 const { rateLimit } = require('express-rate-limit');
 const { requireAuth } = require('./auth');
+// Charge gate for the paid certificate engines (2026-10-30 audit item 3):
+// verify is charged on success only, preview/PDF need a charged attempt.
+const { chargeGate } = require('./lib/engineChargeGate');
 const bdrisEngineLimiter = rateLimit({
   validate: { xForwardedForHeader: false },
   windowMs: 60 * 1000,
@@ -224,7 +227,8 @@ try {
   // points "main" at its Studio server.js; the adapter is index.js.
   const bdrisEngine = require('../engines/birth-final/index.js');
   bdrisEngine.init({});
-  app.use('/api/bdris-engine', requireAuth, bdrisEngineLimiter, bdrisEngine.getApp());
+  app.use('/api/bdris-engine', requireAuth, bdrisEngineLimiter,
+    chargeGate('bdris-certificate', 'birth', '/api/bdris-engine'), bdrisEngine.getApp());
   safeLog('[engines] mounted birth-final at /api/bdris-engine');
 } catch (e) {
   safeLog('[engines] birth-final not mounted:', e.message);
@@ -252,7 +256,8 @@ const deathEngineLimiter = rateLimit({
 try {
   const deathEngine = require('../engines/death-final/index.js');
   deathEngine.init({});
-  app.use('/api/death-engine', requireAuth, deathEngineLimiter, deathEngine.getApp());
+  app.use('/api/death-engine', requireAuth, deathEngineLimiter,
+    chargeGate('death-verify', 'death', '/api/death-engine'), deathEngine.getApp());
   safeLog('[engines] mounted death-final at /api/death-engine');
 } catch (e) {
   safeLog('[engines] death-final not mounted:', e.message);
