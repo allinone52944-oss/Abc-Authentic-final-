@@ -529,6 +529,7 @@ class StepHandler {
     // v1 appData equivalents — explicit, no globals
     this.applicantDob = options.applicantDob || null; // applicant DOB ISO (2013-rule)
     this.singleName = options.singleName || null;     // 1-name relax data
+    this.familyNamesOnly = options.familyNamesOnly || false; // family/180 advance already taken in this session
     this.gatePassedNames = options.gatePassedNames || false; // 1-name gate passed (S1)
     this.userId = options.userId || null;             // charge-token verification (S4)
   }
@@ -914,6 +915,20 @@ class StepHandler {
       return { ok: false, step: 3, blocked: true, reason: dobReason, message: '❌ ' + dobReason, failed: [{ field: 'আবেদনকারীর জন্ম তারিখ', reason: dobReason }], verifyStatus, applicantDobMissing: true };
     }
     let brnNote = null;
+    // Family advance persistence (2026-10-29 follow-up): the same
+    // handler re-runs submitS2 during replay, and the session may
+    // carry the flag across step commands (server.js). A second
+    // run must NOT re-fill the BRN that already triggered the
+    // family error — it starts names-only, exactly like the
+    // advance that already succeeded once. Names/DOB/nationality
+    // are still filled; only the BRN field is skipped.
+    if (data.familyNamesOnly) this.familyNamesOnly = true;
+    // Seeded run (replay / later step command): the family note
+    // is attached only at the advanced-success return below, never
+    // at fill time — a seeded run that then fails must not carry
+    // an "এগোনো হয়েছে" note it never earned.
+    const familySeeded = !!this.familyNamesOnly;
+    this._familyAttempted = false;
 
     const fillParent = async (p, who, verifyIndex) => {
       const base = `personInfoForBirth.${p}.`;
@@ -923,7 +938,8 @@ class StepHandler {
       // → আরবি, স্পেস/ড্যাশ বাদ — নইলে সঠিক BRN-ও রেজিস্ট্রি-
       // লুকআপে ভুল দেখাতে পারে। নাম এখানে ছোঁয়া হয় না।
       const brn = normalizeBrn((data[p] || {}).brn);
-      if (brnExempt) {
+      const familyAdvance = !!this.familyNamesOnly;
+      if (brnExempt || familyAdvance) {
         // ছাড়প্রাপ্ত জন্মসালে (pre-২০১৩ live-verified 2026-10-11;
         // ২০১৩ সাল 2026-10-29 নিয়ম) পিতামাতার BRN ঐচ্ছিক — আর
         // BRN বসালে সাইট রেজিস্ট্রি-লিংক ধরে ফ্যামিলি-ভ্যালিডেশন
@@ -933,11 +949,13 @@ class StepHandler {
         // কোনো BRN বানানো হয় না।
         const brnEl = await this._waitVisible(brnSel, 2500);
         if (brnEl) await brnEl.fill('').catch(() => {});
-        verifyStatus[p] = isPre2013(dobIso) ? 'skipped-pre2013' : 'skipped-2013';
+        verifyStatus[p] = brnExempt
+          ? (isPre2013(dobIso) ? 'skipped-pre2013' : 'skipped-2013')
+          : 'skipped-family';
         // ছাড়ের নিয়ম থাকল, নীরবতা গেল (point 4): সাইটে BRN
         // না পাঠানোর কথা progress + ack-এর brnNote-এ জানানো
         // হয়। ড্রাফটের BRN বদলায় না, শুধু সাইট-ফর্মে যায় না।
-        if (!brnNote) { brnNote = parentBrnExemptNote(dobIso); this.progress('ℹ️ ' + brnNote); }
+        if (!brnNote && brnExempt) { brnNote = parentBrnExemptNote(dobIso); this.progress('ℹ️ ' + brnNote); }
       } else {
         keep(await this._typeInto(brnSel, brn, `${who}-এর BRN`, { required: true }));
       }
@@ -946,8 +964,9 @@ class StepHandler {
       }
       keep(await this._typeInto([`#${p}NameBn`, `input[name="${base}personNameBn"]`], transitName((data[p] || {}).nameBn), `${who}-এর নাম (বাংলা)`, { required: true }));
       keep(await this._typeInto([`#${p}NameEn`, `input[name="${base}personNameEn"]`], transitName((data[p] || {}).nameEn), `${who}-এর নাম (English)`, { required: true }));
-      if (!brnExempt && brn) {
+      if (!brnExempt && !familyAdvance && brn) {
         // Verify (BRN+DOB+নাম পূরণের পর); বাটন না থাকলে নীরব skip
+        // Family advance-এ Verify নেই — BRN ছাড়া যাচাইয়ের কিছু নেই।
         const v = await this._clickVerify(verifyIndex, who, { quietMissing: true });
         verifyStatus[p] = v.verified;
         if (v.verified === false) {
@@ -997,24 +1016,46 @@ class StepHandler {
         chk = await this._detectValidationBlock(null);
       }
       if (chk.blocked && isFamilyErrorText(chk.reason)) {
-        // পারিবারিক (180-days) শাখা (2026-10-29, point 5): একই
-        // BRN-ভরা ফর্ম আবার চাপা নয় — নাম + জাতীয়তা-মাত্র
-        // সাইট-নিয়মের চেষ্টা, BRN ঘর খালি করে। নাম এখানে
-        // বদলানো হয় না; এগোলে BRN ড্রাফটেই থাকে, নোট-সহ
-        // জানানো হয়; না এগোলে সাইটের আসল বার্তাই ফেরে।
-        this.progress('ℹ️ সাইটের পারিবারিক নিয়ম দেখা যাচ্ছে — BRN ছাড়াই (নাম + জাতীয়তা দিয়ে) একবার চেষ্টা করা হচ্ছে…');
-        await this._clearParentBrnFields();
-        const nxt2 = await this._clickNextAndWait('পরবর্তী (ধাপ ৩ — পারিবারিক নিয়ম)');
-        if (nxt2.ok) {
-          const chk2 = await this._detectValidationBlock(null);
-          if (!chk2.blocked) {
-            brnNote = PARENT_BRN_FAMILY_NOTE;
-            this.progress('ℹ️ ' + PARENT_BRN_FAMILY_NOTE);
-          } else {
-            siteError = chk2.reason;
-          }
+        // পারিবারিক (180-days) ADVANCE শাখা (2026-10-29 follow-up):
+        // আগের একবারের চেষ্টা এখনো আটকাতে পারত তিনভাবে —
+        // (a) সাইট এগিয়ে গেলেও পড়ে থাকা family-বার্তা chk2-কে
+        // blocked দেখাত, (b) names-only Next-এর wait ব্যর্থ হলেও
+        // সাইট আসলে এগিয়ে যেত, (c) BRN ঘর আসলে খালি হয়েছিল
+        // কিনা কেউ যাচাই করত না। তাই: এগোনোই চূড়ান্ত প্রমাণ —
+        // পিতামাতার ঘর আর নেই মানেই advance, বার্তা যাই থাকুক।
+        // নাম + জাতীয়তা ছাড়া কিছু বদলানো হয় না; এগোলে BRN
+        // ড্রাফটেই থাকে, নোট-সহ জানানো হয়; না এগোলে সাইটের
+        // আসল বার্তাই ফেরে — advance-এর মিথ্যা দাবি নয়।
+        let familyAttempted = false;
+        if (await this._parentsFieldsGone()) {
+          // সাইট আগেই এগিয়ে গেছে — পড়ে থাকা বার্তায় আটকানো নয়।
+          familyAttempted = true;
         } else {
-          siteError = nxt2.reason || chk.reason;
+          this.progress('ℹ️ সাইটের পারিবারিক নিয়ম দেখা যাচ্ছে — BRN ছাড়াই (নাম + জাতীয়তা দিয়ে) চেষ্টা করা হচ্ছে…');
+          const cleared = await this._clearParentBrnFields();
+          if (!cleared) this.progress('⚠ BRN ঘর পুরোপুরি খালি হয়নি — তবু পরবর্তী চেষ্টা করা হচ্ছে…');
+          const nxt2 = await this._clickNextAndWait('পরবর্তী (ধাপ ৩ — পারিবারিক নিয়ম)');
+          if (nxt2.ok) {
+            // chk2-তেও stale re-check: পড়ে থাকা বার্তা যেন
+            // names-only সাফল্যকে ব্লক বানাতে না পারে।
+            try { await this.page.waitForTimeout(1200); } catch { /* no-op */ }
+            const chk2 = await this._detectValidationBlock(null);
+            if (!chk2.blocked || await this._parentsFieldsGone()) {
+              familyAttempted = true;
+            } else {
+              siteError = chk2.reason;
+            }
+          } else if (await this._parentsFieldsGone()) {
+            // Next-এর wait ব্যর্থ, কিন্তু সাইট এগিয়ে গেছে।
+            familyAttempted = true;
+          } else {
+            siteError = nxt2.reason || chk.reason;
+          }
+        }
+        if (familyAttempted) {
+          // নোট এখানে নয়, নিচের advanced-প্রমাণে: ঘর সত্যিই
+          // না গেলে success-এর ভান করা হবে না। শুধু চিহ্ন রাখি।
+          this._familyAttempted = true;
         }
       } else if (chk.blocked) {
         siteError = chk.reason;
@@ -1037,11 +1078,18 @@ class StepHandler {
         ['#fatherBrn', 'input[name="personInfoForBirth.father.ubrn"]'], 1500));
     }
     if (advanced) {
+      // Family advance-এর নোট শুধু এখানে, প্রমাণের পরে:
+      // ঘর সত্যিই গেছে মানেই advance, তার আগে নয়।
+      if (this._familyAttempted || familySeeded) {
+        brnNote = PARENT_BRN_FAMILY_NOTE;
+        this.familyNamesOnly = true;
+        this.progress('ℹ️ ' + PARENT_BRN_FAMILY_NOTE);
+      }
       await this._dismissNotices();
       return {
         ok: true, step: 4, blocked: false,
         message: '✅ ধাপ ৩ সম্পন্ন! স্থায়ী ও বর্তমান ঠিকানা দিন।',
-        failed: [], verifyStatus, brnNote,
+        failed: [], verifyStatus, brnNote, familyNamesOnly: !!this.familyNamesOnly,
       };
     }
     // Submit-debug (2026-10-26): the old tail returned ok:true
@@ -2489,14 +2537,39 @@ class StepHandler {
     }
   }
 
-  // Parent-BRN site-rule clear (2026-10-29, points 5+8): শুধু
-  // BRN ঘর খালি করে — নাম/জাতীয়তা/জন্ম তারিখ ছোঁয়া হয় না,
-  // ড্রাফটের BRN-ও বদলায় না (সাইট-ফর্ম থেকেই শুধু সরে)।
-  async _clearParentBrnFields() {
-    for (const pp of ['father', 'mother']) {
-      const el = await this._waitVisible([`#${pp}Brn`, `input[name="personInfoForBirth.${pp}.ubrn"]`], 2500).catch(() => null);
-      if (el) await el.fill('').catch(() => {});
+  // Parents fields gone = site advanced past parents (the same
+  // proof the Step-3 tail uses). Used by the family advance branch
+  // so a leftover error text cannot block an advanced page.
+  async _parentsFieldsGone() {
+    try {
+      return !(await this._waitVisible(
+        ['#fatherBrn', 'input[name="personInfoForBirth.father.ubrn"]'], 1500));
+    } catch {
+      return false;
     }
+  }
+
+  // Parent-BRN site-rule clear (2026-10-29, points 5+8; 2026-10-29
+  // family-advance follow-up): শুধু BRN ঘর খালি করে — নাম/
+  // জাতীয়তা/জন্ম তারিখ ছোঁয়া হয় না, ড্রাফটের BRN-ও বদলায় না
+  // (সাইট-ফর্ম থেকেই শুধু সরে)। Returns true only when both BRN
+  // fields are actually empty afterwards (or gone — the page
+  // advanced); a silent failed fill no longer passes as cleared.
+  // Presence only in logs, never values.
+  async _clearParentBrnFields() {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      for (const pp of ['father', 'mother']) {
+        const el = await this._waitVisible([`#${pp}Brn`, `input[name="personInfoForBirth.${pp}.ubrn"]`], 2500).catch(() => null);
+        if (el) await el.fill('').catch(() => {});
+      }
+      const landedF = await this._readParentLanded('father');
+      const landedM = await this._readParentLanded('mother');
+      const fClear = landedF.brn === '' || landedF.brn === null;
+      const mClear = landedM.brn === '' || landedM.brn === null;
+      console.log(`FAMILY-BRN-CLEARED attempt=${attempt} father=${landedF.brn === null ? 'unknown' : (fClear ? 'empty' : 'present')} mother=${landedM.brn === null ? 'unknown' : (mClear ? 'empty' : 'present')}`);
+      if (fClear && mClear) return true;
+    }
+    return false;
   }
 
   async _clickVerify(index, who, opts = {}) {

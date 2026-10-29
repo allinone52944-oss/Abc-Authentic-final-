@@ -520,7 +520,28 @@ async function runHttpChain(opts = {}) {
     currentStep = 'submit';
     candidateLog(log, 'submit', 'POST /br/application — the form itself, multipart, scope ends at success page, office registration is out of scope');
     const submitInput = { ...norm.canonical, documents: refs, otp: norm.otp };
-    const submitted = await client.submitApplication(submitInput);
+    let submitted;
+    let familyAdvance = false;
+    try {
+      submitted = await client.submitApplication(submitInput);
+    } catch (e) {
+      // Family/180-days ADVANCE (2026-10-29 follow-up): the direct
+      // path previously had no family branch at all — a family
+      // rejection failed the chain outright. Mirror the bot rule:
+      // on a DEFINITIVE server rejection (err.code present, the
+      // same rule isFallbackSafe uses for bot fallback) whose
+      // wording carries the family marker, retry ONCE names-only
+      // (ubrn empty, names + nationality + DOB untouched, draft
+      // BRN retained). Never on an unknown outcome (no code:
+      // network/timeout) — that application may already exist,
+      // and a retry could double-submit. If the retry also fails,
+      // its exact error is what fail() reports below.
+      const familyRejection = !!(e && e.code && /\[family: 180-days\]/.test(String(e.message || '')));
+      if (!familyRejection) throw e;
+      candidateLog(log, 'submit', 'family/180-days rejection — retrying once names-only (ubrn empty, names unchanged)');
+      submitted = await client.submitApplication({ ...submitInput, _familyNamesOnly: true });
+      familyAdvance = true;
+    }
     stepsDone.push('submit');
 
     candidateLog(log, 'done', `HTTP chain complete (steps: ${stepsDone.join(', ')}); success accepted only on the verified success shape`);
@@ -531,6 +552,8 @@ async function runHttpChain(opts = {}) {
       ...baseResult, ok: true, success: true, hasPrintLink: !!submitted.hasPrintLink,
       steps: stepsDone, ackNumber: null, // never extracted: format unverified
       message: '✅ HTTP পথে সাবমিট সফল (প্রার্থী পে-লোড — লাইভ নিশ্চিতকরণ বাকি)।',
+      familyNamesOnly: familyAdvance,
+      familyNote: familyAdvance ? 'সাইটের পারিবারিক নিয়ম: পিতামাতার BRN ছাড়াই (নাম + জাতীয়তা দিয়ে) এগোনো হয়েছে — BRN ড্রাফটে রাখা আছে।' : null,
     };
   } catch (e) {
     // currentStep is set before each stage, so a skipped geo step
