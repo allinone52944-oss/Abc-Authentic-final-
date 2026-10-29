@@ -40,6 +40,16 @@
  * evidence (names only) that would prove it. Until a real
  * app-driven application writes a log line, the candidate submit /
  * verify payloads stay CANDIDATE.
+ *
+ * 2026-10-29 evidence branch: /api/otp/sent is covered, and its
+ * entries additionally carry queryParamsPresence (param name +
+ * empty/valued flag, never the value), so a bot-path send capture
+ * can be compared against the direct send's always-emitted params.
+ * A DOB wire FORMAT cannot be read from this log by design (values
+ * are stripped); that candidate stays unproven by this logger.
+ * The logger only sees engine Playwright pages (BrowserManager /
+ * SessionManager attach); a send run in a plain user browser
+ * outside the engine is not captured by it.
  */
 
 'use strict';
@@ -51,10 +61,17 @@ const ON_VALUES = new Set(['on', '1', 'true', 'yes', 'enabled']);
 
 // Canonical submit/verify endpoints. Their paths carry no ids, so the
 // full path is safe to record verbatim.
+// 2026-10-29 evidence branch: /api/otp/sent added so a bot-path OTP
+// send is captured names-only like submit/verify. The direct send's
+// 500 'Invalid Operation' cannot be explained without the site
+// handler's own send shape (which params it omits vs sends empty,
+// its body content-type), and the repo previously had no capture
+// for this endpoint at all. The logger still records NAMES ONLY.
 const CANONICAL_PATHS = new Set([
   '/api/br/application/register',
   '/api/otp/verify',
   '/api/application/receive',
+  '/api/otp/sent',
 ]);
 
 const KEYWORD_PATHS = ['register', 'verify', 'receive'];
@@ -125,6 +142,31 @@ function queryParamNames(urlString) {
       if (!names.includes(name)) names.push(name);
     }
     return names;
+  } catch (e) {
+    return [];
+  }
+}
+
+// Query-param PRESENCE for /api/otp/sent only: one entry per distinct
+// param name, with `empty: true` when the param is present with an
+// empty value and `empty: false` when it carries any value. The value
+// itself is never recorded — only whether one exists. This is the
+// discriminator the direct-send investigation needs: the direct send
+// always emits every param (empty ones as `param=`), while the site
+// handler may omit empty params entirely, and a names-only list
+// cannot tell those two cases apart. Other paths keep their exact
+// previous entry shape (no presence field is added for them).
+function queryParamPresence(urlString) {
+  try {
+    const u = new URL(urlString);
+    const seen = new Set();
+    const out = [];
+    for (const [name, value] of u.searchParams.entries()) {
+      if (seen.has(name)) continue;
+      seen.add(name);
+      out.push({ name, empty: value === '' });
+    }
+    return out;
   } catch (e) {
     return [];
   }
@@ -263,13 +305,17 @@ function buildLogEntry(request) {
     if (typeof bodyText !== 'string') bodyText = bodyText === null || bodyText === undefined ? null : String(bodyText);
 
     const body = extractBodyFieldNames(bodyText, mediaType);
+    const entryPath = safePath(url);
     return {
       ts: new Date().toISOString(),
       source: 'bdris-request-name-log',
       candidate: true,
       method: method ? String(method).toUpperCase() : null,
-      path: safePath(url),
+      path: entryPath,
       queryParams: queryParamNames(url),
+      // Presence (empty vs valued) only for the otp/sent endpoint;
+      // every other path keeps its previous entry shape exactly.
+      ...(entryPath === '/api/otp/sent' ? { queryParamsPresence: queryParamPresence(url) } : {}),
       contentType: mediaType,
       bodyKind: body.kind,
       bodyFields: body.fields,
@@ -351,6 +397,7 @@ module.exports = {
   matchesSubmitRequest,
   safePath,
   queryParamNames,
+  queryParamPresence,
   keysOnly,
   multipartFieldNames,
   extractBodyFieldNames,

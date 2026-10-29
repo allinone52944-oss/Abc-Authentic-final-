@@ -16,6 +16,7 @@ const {
   isRequestNameLogEnabled,
   matchesSubmitRequest,
   safePath,
+  queryParamPresence,
   buildLogEntry,
   createRequestNameLogger,
 } = require('../services/RequestNameLog');
@@ -252,5 +253,104 @@ describe('logger wiring (fail-open, idempotent)', () => {
     assert.strictEqual(lines.length, 1);
     assert.strictEqual(logger.attach({}), false); // page without .on
     assert.strictEqual(logger.attach(null), false);
+  });
+});
+
+describe('otp/sent evidence coverage (2026-10-29 branch)', () => {
+  const SEND_URL = 'https://bdris.gov.bd/api/otp/sent';
+
+  it('matches /api/otp/sent and keeps its path verbatim', () => {
+    assert.strictEqual(matchesSubmitRequest(SEND_URL), true);
+    assert.strictEqual(safePath(SEND_URL), '/api/otp/sent');
+  });
+
+  it('records empty-param presence distinctly from valued and omitted params, values never logged', () => {
+    // Fake values only: a filled param, an empty param, and one param
+    // omitted entirely. The entry must show the first two and not the third.
+    const url = SEND_URL
+      + '?sampleFilled=FAKE_PHONE_VALUE&sampleEmpty=&sampleOther=FAKE_NAME_VALUE';
+    const entry = buildLogEntry(fakeRequest({
+      url,
+      headers: { 'content-type': 'multipart/form-data; boundary=----FakeBoundary2' },
+      body: [
+        '------FakeBoundary2',
+        'Content-Disposition: form-data; name="sampleBodyField"',
+        '',
+        'FAKE_BODY_VALUE',
+        '------FakeBoundary2--',
+      ].join('\r\n'),
+    }));
+    assert.ok(entry);
+    assert.strictEqual(entry.path, '/api/otp/sent');
+    assert.deepStrictEqual(entry.queryParams, ['sampleFilled', 'sampleEmpty', 'sampleOther']);
+    assert.deepStrictEqual(entry.queryParamsPresence, [
+      { name: 'sampleFilled', empty: false },
+      { name: 'sampleEmpty', empty: true },
+      { name: 'sampleOther', empty: false },
+    ]);
+    assert.deepStrictEqual(queryParamPresence(url), entry.queryParamsPresence);
+    // An omitted param simply never appears: rebuild without sampleEmpty.
+    const omitted = buildLogEntry(fakeRequest({
+      url: SEND_URL + '?sampleFilled=FAKE_PHONE_VALUE&sampleOther=FAKE_NAME_VALUE',
+      headers: {},
+      body: null,
+    }));
+    assert.deepStrictEqual(omitted.queryParamsPresence, [
+      { name: 'sampleFilled', empty: false },
+      { name: 'sampleOther', empty: false },
+    ]);
+    const text = JSON.stringify(entry) + JSON.stringify(omitted);
+    assert.ok(!text.includes('FAKE_PHONE_VALUE'));
+    assert.ok(!text.includes('FAKE_NAME_VALUE'));
+    assert.ok(!text.includes('FAKE_BODY_VALUE'));
+    assert.ok(!text.includes('FakeBoundary2'));
+    assert.deepStrictEqual(entry.bodyFields, ['sampleBodyField']);
+    assert.strictEqual(entry.contentType, 'multipart/form-data');
+  });
+
+  it('otp/sent body field names only: no name, phone, BRN, DOB or OTP value leaks', () => {
+    const entry = buildLogEntry(fakeRequest({
+      url: SEND_URL + '?samplePhone=01000000000',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'sampleOtp=999999&sampleDob=2000-01-01&sampleBrn=1234567890',
+    }));
+    assert.deepStrictEqual(entry.bodyFields, ['sampleOtp', 'sampleDob', 'sampleBrn']);
+    const text = JSON.stringify(entry);
+    assert.ok(!text.includes('01000000000'));
+    assert.ok(!text.includes('999999'));
+    assert.ok(!text.includes('2000-01-01'));
+    assert.ok(!text.includes('1234567890'));
+  });
+
+  it('other paths keep their exact previous entry shape (no presence field)', () => {
+    const entry = buildLogEntry(fakeRequest({
+      url: REGISTER_URL + '?sampleParam=FAKE_VALUE&sampleEmpty=',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sampleField: 'FAKE_VALUE' }),
+    }));
+    assert.ok(entry);
+    assert.strictEqual('queryParamsPresence' in entry, false);
+    assert.deepStrictEqual(entry.queryParams, ['sampleParam', 'sampleEmpty']);
+    assert.deepStrictEqual(entry.bodyFields, { sampleField: null });
+    assert.ok(!JSON.stringify(entry).includes('FAKE_VALUE'));
+  });
+
+  it('enabled logger writes the otp/sent names-only line and ignores unrelated paths', () => {
+    const lines = [];
+    const logger = createRequestNameLogger({ enabled: true, write: (l) => lines.push(l) });
+    logger.handleRequest(fakeRequest({
+      url: SEND_URL + '?sampleFilled=FAKE_VALUE&sampleEmpty=',
+      headers: { 'content-type': 'multipart/form-data; boundary=----FakeBoundary3' },
+      body: '------FakeBoundary3\r\nContent-Disposition: form-data; name="sampleField"\r\n\r\nFAKE_VALUE\r\n------FakeBoundary3--',
+    }));
+    assert.strictEqual(lines.length, 1);
+    const parsed = JSON.parse(lines[0]);
+    assert.strictEqual(parsed.path, '/api/otp/sent');
+    assert.deepStrictEqual(parsed.queryParamsPresence, [
+      { name: 'sampleFilled', empty: false },
+      { name: 'sampleEmpty', empty: true },
+    ]);
+    assert.ok(!lines[0].includes('FAKE_VALUE'));
+    assert.ok(!lines[0].includes('FakeBoundary3'));
   });
 });
