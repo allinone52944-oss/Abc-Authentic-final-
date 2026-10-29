@@ -2953,6 +2953,22 @@ function directCtx() {
     officeAddressType: s0.addressType || 'BIRTHPLACE',
   };
 }
+function isDefinitiveBrnFreeSendFailure(r) {
+  // DIRECT 500 DIAGNOSTIC (2026-10-29): DEFINITIVE means the BDRIS
+  // server itself answered the send with a status + wording, e.g.
+  // 'OTP send returned status 500: Invalid Operation, ...'.
+  // NOT definitive: no server answer (timeout/disconnect), seed or
+  // session failures, a disabled path, or any other step — those
+  // keep the bot fallback, which may legitimately succeed there.
+  // r.brnFree is the chain's own routing marker (HttpPathRunner
+  // routeInfo, carried on the ack); r.httpReason carries status +
+  // server wording only (otpSendBodyWording: message else code,
+  // ≤200 chars, field names only, never a value).
+  return !!(r && r.fallback === true && r.brnFree === true
+    && r.httpStep === 'otp-send'
+    && typeof r.httpReason === 'string'
+    && /^OTP send returned status \d+:/.test(r.httpReason.trim()));
+}
 function directFallbackToBotSend() {
   // Pre-submit direct failure → the queued bot send owns it
   // (ordered, page-safe). On the OTP view already, do NOT
@@ -3022,6 +3038,24 @@ function directSendAck(r) {
     || r.error === 'SEED_FAILED' || r.fallback === true) {
     // Disabled, unseeded, or pre-submit failure — bot owns it.
     if (r && r.httpPath === 'disabled') S.httpPathEnabled = false;
+    // DIRECT 500 DIAGNOSTIC (2026-10-29): a definitive direct send
+    // failure on a BRN-free filing must NOT run the bot replay —
+    // the replay dies on the parents-verify gate (twice live:
+    // S3-REPLAY and S4PREP-REPLAY, parents not verified) and buries
+    // the direct reason under gate errors. Surface the direct
+    // reason in the fail panel on the preview view instead, with
+    // NO SUBMIT_S4_PREP emit and NO OTP-view render. A deliberate
+    // user re-press of 'কোড পাঠান' still re-runs directSend
+    // (unchanged); only the AUTOMATIC replay is suppressed, and
+    // only for this exact shape — every other failure keeps the
+    // previous fallback behaviour.
+    if (isDefinitiveBrnFreeSendFailure(r)) {
+      busy(false); S._directOtp = false;
+      showFail([san('সরাসরি পাঠানো যায়নি — সাইটের জবাব: ' + r.httpReason.trim()),
+        san('বট replay চালানো হয়নি — BRN-free filing-এ bot page verified parent BRN চায়, তাই replay পাস করতে পারবে না।')]);
+      note('⚠️ সরাসরি send-এর জবাবই diagnosis — bot replay-এর gate-এরর নয়', 'warn');
+      return;
+    }
     directFallbackToBotSend();
     // DIRECT OTP BODY (2026-10-29): the direct failure reason was
     // swallowed here — surface the site's own wording as a warning
