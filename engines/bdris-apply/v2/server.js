@@ -42,6 +42,64 @@ const { OriginalFetcher, STEP_LABELS } = require('./services/OriginalFetcher');
 const { runSubmitHttpChain, runStageAProbe, getHttpPathStatus, isHttpPathEnabled, HTTP_CANDIDATE_LABEL } = require('./services/HttpPathRunner');
 const { HttpGeoService } = require('./services/HttpGeoService');
 
+// ── HTTP-CHAIN IDEMPOTENCY GUARD (2026-10-30, double-emit root fix) ──
+// Journal proof (2026-10-30, UTC): ONE user send press produced TWO
+// identical HTTP-chain runs in the same second (send twice → two
+// different OTP SMS), the submit phase also ran twice (charge hit
+// DUPLICATE_TRANSACTION), and a bot SUBMIT_S4_OTP op was enqueued
+// twice. The chain itself logs once per run (this.log is a single
+// console.log per call), so the duplication is at REQUEST level —
+// two POSTs / two chain runs in one process — not a double log
+// line. The exact trigger (double-click vs trigger+resend vs proxy
+// double-forward) is NOT proven, so this guard is server-side and
+// trigger-agnostic: it keys on what the request IS, not how it
+// arrived.
+//  * In-flight: a second identical phase while the first still runs
+//    WAITS for the first run and returns its result — the chain
+//    (send / verify / submit / charge-gate) executes exactly once.
+//  * Completed: a clearly successful result (ok === true) is cached
+//    briefly (TTL below) and replayed for an identical repeat —
+//    no second SMS, no second submit, no second charge attempt.
+//  * Failed / blocked / fallback / OUTCOME_UNKNOWN results are
+//    NEVER cached: a deliberate user retry after a failure always
+//    runs fresh, and OUTCOME_UNKNOWN handling is untouched (an
+//    unknown result has ok === false, so it can never be replayed
+//    as a success).
+// Key: [userId, phase, phone, applicantName, applicantDob, otp,
+// docs fingerprint] — otp only for non-send phases (a submit retry
+// with a NEW otp is a different attempt and must run); docs enter
+// only as (type, base64 length) pairs, never content. The key is
+// NEVER logged: it carries phone/name/DOB. Payload data, names,
+// backtick/cinno, single-name, charge-token and QR logic are
+// untouched — this guard only decides whether an identical chain
+// runs again. The charge token is deliberately NOT in the key: a
+// token refresh between two duplicate POSTs must not break dedup,
+// and the charge gate still runs exactly once (inside the single
+// chain execution).
+// Deliberate-resend note: the TTL below (30s) covers duplicates
+// from ONE user action (same-second in the journal); a deliberate
+// resend minutes later passes through and sends fresh. Within the
+// TTL, an identical filing identity replays the first success —
+// that is the intended anti-double-file behaviour, not a bug.
+const HTTP_CHAIN_DEDUP_TTL_MS = 30000;
+const HTTP_CHAIN_DEDUP_MAX_KEYS = 500;
+function httpChainGuardKey(userId, params = {}) {
+  const s1 = params.s1 && typeof params.s1 === 'object' ? params.s1 : {};
+  const s3 = params.s3 && typeof params.s3 === 'object' ? params.s3 : {};
+  const s4prep = params.s4prep && typeof params.s4prep === 'object' ? params.s4prep : {};
+  const phase = params.phase || 'full';
+  const phone = params.phone || s4prep.phone || '';
+  const applicantName = params.applicantName || s3.applicantName
+    || [s1.firstNameEn, s1.lastNameEn].filter(Boolean).join(' ') || '';
+  const applicantDob = s1.dob || params.applicantDob || '';
+  const otp = phase === 'send' ? '' : (params.otp || '');
+  const docsFp = Array.isArray(params.docs)
+    ? params.docs.map((d) => [(d && d.docType) || '', String((d && d.base64) || '').length]).join('|')
+    : '';
+  return JSON.stringify([String(userId || ''), String(phase), String(phone),
+    String(applicantName), String(applicantDob), String(otp), docsFp]);
+}
+
 // S4Prep-area fix (2026-10-28, items 4/22): the per-step dispatch
 // merge, extracted verbatim (plus the relation fill) so tests can
 // prove it without driving a socket. Explicit step fields win;
@@ -1269,14 +1327,52 @@ class BdrisEngineV2 {
         if (sid && engine.io) engine.io.to(sid).emit(ev, msg);
       } catch {}
     };
-    try {
-      const result = await this.executor.execute('SUBMIT_HTTP_CHAIN', params, {
-        session, emit, userId, socket: null,
-      });
-      return { status: 200, body: result };
-    } catch (e) {
-      return { status: 500, body: { ok: false, error: 'EXECUTION_FAILED', message: (e && e.message) || 'Command execution failed' } };
+    // IDEMPOTENCY GUARD (2026-10-30, double-emit root fix): an
+    // identical phase for the same filing joins the in-flight run
+    // or replays a fresh success — never a second chain execution.
+    // Maps live on the engine instance (lazily created so
+    // prototype-built test engines work); per-process by design,
+    // because the duplication is two POSTs in one process. Failed /
+    // blocked / fallback / unknown results are never cached, so a
+    // deliberate retry after failure always runs fresh. The guard
+    // key is never logged (it carries phone/name/DOB).
+    if (!this._httpChainGuard) this._httpChainGuard = { inflight: new Map(), done: new Map() };
+    const guard = this._httpChainGuard;
+    const guardKey = httpChainGuardKey(userId, params);
+    const guardNow = Date.now();
+    for (const [k, v] of guard.done) { if (guardNow - v.at >= HTTP_CHAIN_DEDUP_TTL_MS) guard.done.delete(k); }
+    const inFlight = guard.inflight.get(guardKey);
+    if (inFlight) {
+      const shared = await inFlight;
+      return { status: shared.status, body: shared.body };
     }
+    const cached = guard.done.get(guardKey);
+    if (cached && guardNow - cached.at < HTTP_CHAIN_DEDUP_TTL_MS) {
+      return { status: cached.status, body: cached.body };
+    }
+    const runPromise = (async () => {
+      try {
+        const result = await this.executor.execute('SUBMIT_HTTP_CHAIN', params, {
+          session, emit, userId, socket: null,
+        });
+        return { status: 200, body: result };
+      } catch (e) {
+        return { status: 500, body: { ok: false, error: 'EXECUTION_FAILED', message: (e && e.message) || 'Command execution failed' } };
+      }
+    })();
+    guard.inflight.set(guardKey, runPromise);
+    const outcome = await runPromise;
+    // Cache-then-release with no await between them, so no waiter
+    // can slip between the two map updates.
+    if (outcome.body && outcome.body.ok === true) {
+      guard.done.set(guardKey, { status: outcome.status, body: outcome.body, at: Date.now() });
+      while (guard.done.size > HTTP_CHAIN_DEDUP_MAX_KEYS) {
+        const firstKey = guard.done.keys().next().value;
+        guard.done.delete(firstKey);
+      }
+    }
+    guard.inflight.delete(guardKey);
+    return outcome;
   }
 
   // DIRECT HTTP BYPASS (2026-10-29): POST /http-chain, reached
@@ -1294,7 +1390,7 @@ class BdrisEngineV2 {
   }
 }
 
-module.exports = { BdrisEngineV2, mergeStepParams, buildPlaywrightFallbackPlan };
+module.exports = { BdrisEngineV2, mergeStepParams, buildPlaywrightFallbackPlan, httpChainGuardKey, HTTP_CHAIN_DEDUP_TTL_MS };
 
 // ── Bootstrap: standalone subprocess entry point ──
 // Adapter (index.js) এই file-কে subprocess হিসেবে spawn করে।
