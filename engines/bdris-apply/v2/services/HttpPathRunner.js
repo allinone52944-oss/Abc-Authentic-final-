@@ -62,7 +62,7 @@
 
 'use strict';
 
-const { BdrisHttpClient } = require('../http/client');
+const { BdrisHttpClient, parentBrnDirectDecision } = require('../http/client');
 const { verifyChargeToken, bnToArab, consumeSubmitToken, isSubmitTokenConsumed } = require('./StepHandler');
 
 const HTTP_CANDIDATE_LABEL = 'CANDIDATE (submit/verify shapes from the pasted form source, NOT live-verified)';
@@ -270,7 +270,23 @@ function normalizeChainInput(data = {}) {
   };
   const uploadFiles = data.docs || data.uploadFiles || null;
   const documentRefs = data.documents || s3.documents || null;
+  // DIRECT BRN-FREE ROUTE (2026-10-29): routing information, NOT
+  // a forced switch. A filing is BRN-free when its direct payload
+  // carries no parent ubrn at all — no BRN given, BRN withheld by
+  // the exemption/family rule, any bracket. That is derived here
+  // from the merged parentBrnDirectDecision (the unmerged
+  // singlename-pattern branch's decision object is NOT duplicated
+  // here; if it merges, the two markers should be unified). The
+  // marker only tells the caller/UI that this filing belongs on
+  // the direct channel — the bot page's verified gate cannot pass
+  // it BRN-free — and it never authorises sending, verifying, or
+  // submitting on its own; those still need the user's own
+  // phone/OTP/submit. Fallback behaviour is unchanged.
+  const brnDecision = parentBrnDirectDecision(data);
+  const brnFree = brnDecision.fatherUbrn === '' && brnDecision.motherUbrn === '';
   return {
+    brnFree,
+    brnFreeRoute: brnFree ? 'direct' : null,
     canonical,
     otpContext,
     // DIRECT-PATH WIRING: an EMPTY file list is not a file list —
@@ -368,6 +384,11 @@ async function runHttpChain(opts = {}) {
   }
 
   const norm = normalizeChainInput(data);
+  // DIRECT BRN-FREE ROUTE: routing information carried on every
+  // post-normalize result below (information only — see the
+  // normalizeChainInput note; it never triggers a send, verify,
+  // submit, or fallback on its own).
+  const routeInfo = { brnFree: norm.brnFree, brnFreeRoute: norm.brnFreeRoute };
   const client = opts.client
     || (typeof opts.clientFactory === 'function' ? opts.clientFactory() : null)
     || new BdrisHttpClient({ base: opts.base || HTTP_BASE });
@@ -379,7 +400,7 @@ async function runHttpChain(opts = {}) {
     if (step === 'submit' && !isFallbackSafe(step, err)) {
       candidateLog(log, 'submit', 'SUBMIT_OUTCOME_UNKNOWN — no server response, automatic Playwright fallback SUPPRESSED to avoid a duplicate submission');
       return {
-        ...baseResult, ok: false, error: 'SUBMIT_OUTCOME_UNKNOWN',
+        ...baseResult, ...routeInfo, ok: false, error: 'SUBMIT_OUTCOME_UNKNOWN',
         message: 'সাবমিটের ফল জানা যায়নি (সার্ভারের উত্তর আসেনি) — ডাবল আবেদন এড়াতে স্বয়ংক্রিয় পুনঃচেষ্টা বন্ধ রাখা হয়েছে; আবেদন হয়েছে কিনা যাচাই করে আবার চেষ্টা করুন।',
         httpStep: step, httpReason: reason,
       };
@@ -387,13 +408,21 @@ async function runHttpChain(opts = {}) {
     if (typeof opts.playwrightRunner === 'function') {
       const pw = await opts.playwrightRunner(data);
       return {
-        ...(pw || {}), path: 'playwright', httpFallback: true, httpStep: step, httpReason: reason,
+        ...(pw || {}), ...routeInfo, path: 'playwright', httpFallback: true, httpStep: step, httpReason: reason,
         candidate: true, candidateLabel: HTTP_CANDIDATE_LABEL,
       };
     }
     return {
-      ...baseResult, ok: false, fallback: true, httpStep: step, httpReason: reason,
+      ...baseResult, ...routeInfo, ok: false, fallback: true, httpStep: step, httpReason: reason,
       message: `HTTP ${step} failed (${reason}); Playwright fallback is required but no Playwright runner was provided.`,
+      // Information only: a BRN-free filing cannot pass the bot
+      // page's verified gate, so a bot fallback after a direct
+      // failure is futile for it — the caller/user decides the
+      // next step (direct retry with the same true data, or stop);
+      // nothing here resends a rejected request.
+      brnFreeNote: routeInfo.brnFree && step !== 'submit'
+        ? 'BRN-free filing: bot fallback cannot pass BRN-free (bot page requires verified parent BRN).'
+        : null,
     };
   };
 
@@ -503,7 +532,7 @@ async function runHttpChain(opts = {}) {
     if (phase === 'send') {
       candidateLog(log, 'done', 'send phase complete (OTP sent, proof returned); verify + submit await the submit phase');
       return {
-        ...baseResult, ok: true, sent: true,
+        ...baseResult, ...routeInfo, ok: true, sent: true,
         sendCode: sent ? sent.code : null,
         sendMessage: sent ? sent.message : null,
         steps: stepsDone,
@@ -549,7 +578,7 @@ async function runHttpChain(opts = {}) {
     // never on attempt, so retries after a failed chain keep the token.
     consumeSubmitToken(data._chargeToken);
     return {
-      ...baseResult, ok: true, success: true, hasPrintLink: !!submitted.hasPrintLink,
+      ...baseResult, ...routeInfo, ok: true, success: true, hasPrintLink: !!submitted.hasPrintLink,
       steps: stepsDone, ackNumber: null, // never extracted: format unverified
       message: '✅ HTTP পথে সাবমিট সফল (প্রার্থী পে-লোড — লাইভ নিশ্চিতকরণ বাকি)।',
       familyNamesOnly: familyAdvance,

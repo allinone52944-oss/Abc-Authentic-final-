@@ -99,7 +99,9 @@ function otpSendBodyWording(json) {
 // Parent-BRN direct-path helpers (2026-10-29, points 1+6): the
 // bot path's rules, mirrored on the direct path. Digit
 // normalisation only (Bengali → Arabic, spaces/dashes stripped);
-// parent NAMES are passed through verbatim, never altered.
+// this decision touches ONLY the ubrn fields. Name transit for
+// the send/verify steps lives in transitDirectName; the submit
+// payload keeps names verbatim (final record).
 // Pre-2013 applicants send ubrn empty (the bot's live-verified
 // site rule) — the draft's BRN is untouched, only the payload
 // omits it, and parentBrnDirectDecision reports the withholding.
@@ -184,39 +186,48 @@ function submitRejectionWording(res) {
   return [wording, field ? `[field: ${field}]` : '', marker].filter(Boolean).join(' ');
 }
 
-// DIRECT SEND SINGLE-NAME TEST (2026-10-29): TEST-ONLY diagnostic.
-// The bot path bridges single names at the gate: when the last name
-// has no letters, the gate gets the first name's form in the last
-// slot (StepHandler buildCinnos: last = first when gate &&
-// !hasLetters(last)), while the final joined record is NEVER
-// doubled. The direct send has no such bridge — whether
-// /api/otp/sent requires a two-word applicantName is UNPROVEN, and
-// this test decides it. These helpers gate ONLY the OTP-send
-// request (otpSend's query applicantName + buildOtpSendBody's six
-// fields). Submit (buildSubmitPayload), verify (buildVerifyPayload),
-// and the charge gate are untouched, so the final record keeps the
-// true single name. Remove this block if the live test refutes it.
-function sendHasLetters(s) {
+// DIRECT BRN-FREE ROUTE (2026-10-29): two wire fixes for the
+// typing-equivalent steps (OTP send + verify), plus the removal of
+// the refuted send-gate below.
+//  - transitDirectName mirrors the bot path's transitName
+//    (StepHandler.js: cleanName minus backticks): letters
+//    (Bengali/Latin) + space only, other marks stripped, marks-only
+//    → ''. The bot's typed form is exactly this — BDRIS does NOT
+//    accept ` when typing (live-verified 2026-10-11) — so the direct
+//    send/verify steps must not carry raw backticks or other marks.
+//    Names are NEVER doubled, substituted, or otherwise invented:
+//    a single name goes out as the single name, verbatim.
+//  - mapDirectRelation mirrors the bot path's REL_VALUE map
+//    (StepHandler.js submitS3): the site's relation radio values
+//    are enums (FATHER/MOTHER/SELF/...), while the engine draft
+//    carries the Bengali label (পিতা/মাতা/...). The direct path
+//    previously passed the Bengali label verbatim on send, verify,
+//    and submit — a direct-only defect. Known labels map to the
+//    enum; enums pass through unchanged; anything else passes
+//    through unchanged (never guessed).
+// REMOVED 2026-10-29: the DIRECT SEND SINGLE-NAME TEST gate
+// (gateSendJoinName/gateSendSingleField) that DOUBLED single names
+// on the send request. The live test refuted it (OTP send returned
+// 400 again with the gate live, 2026-10-29), and doubling violates
+// the standing never-double rule — so the gate is deleted, not
+// kept, and its test file is deleted with it. Single names now go
+// out verbatim on send, as they already did on submit/verify.
+function directHasLetters(s) {
   return /[A-Za-z\u0980-\u09FF]/.test(String(s || ''));
 }
-// Split-name gate (applicant Bn/En): last part without letters →
-// first + ' ' + first; a last part WITH letters joins unchanged
-// (byte-identical to the previous joinName for that case).
-function gateSendJoinName(first, last) {
-  const f = String(first || '').trim();
-  const l = String(last || '').trim();
-  if (!sendHasLetters(l)) return f ? `${f} ${f}` : f;
-  return l ? `${f} ${l}` : f;
+function transitDirectName(s) {
+  const t = String(s || '').replace(/[^A-Za-z\u0980-\u09FF\u200C\u200D` ]/g, '').replace(/\s+/g, ' ').trim().replace(/`/g, '').trim();
+  return directHasLetters(t) ? t : '';
 }
-// Single-field gate (father/mother nameBn/nameEn, or an explicitly
-// joined name): one token with letters → token + ' ' + token;
-// anything already two-part, or letterless, goes out verbatim.
-function gateSendSingleField(name) {
-  const raw = String(name || '');
-  const t = raw.trim();
-  if (!t || !sendHasLetters(t)) return raw;
-  if (t.split(/\s+/).length === 1) return `${t} ${t}`;
-  return raw;
+const DIRECT_RELATION_MAP = {
+  'পিতা': 'FATHER', 'মাতা': 'MOTHER', 'নিজ': 'SELF',
+  'পিতামহ': 'GRANDFATHER', 'পিতামহী': 'GRANDMOTHER',
+  'মাতামহ': 'MATERNALGRANDFATHER', 'মাতামহী': 'MATERNALGRANDMOTHER',
+  'অভিভাবক': 'GUARDIAN', 'অন্যান্য': 'OTHERS',
+};
+function mapDirectRelation(v) {
+  const s = String(v || '');
+  return DIRECT_RELATION_MAP[s] || s;
 }
 
 /** Minimal live cookie jar: name -> value, updated from Set-Cookie. */
@@ -621,20 +632,10 @@ class BdrisHttpClient {
    */
   async otpSend(data = {}) {
     const { phone = '', email = '', officeId = '', personUbrn = '', relation = '', applicantName = '', applicantBrn = '', applicantDob = '', officeAddressType = '' } = data;
-    // DIRECT SEND SINGLE-NAME TEST (2026-10-29): gate the send
-    // query's applicantName the same way as the body names. The
-    // person's En split is authoritative when present; when the
-    // person carries no En split at all, a single-token explicit
-    // applicantName is gated on its own. Anything else goes out
-    // verbatim — the submit/verify applicantName is untouched.
-    const personForGate = data.person || data.s1 || {};
-    let sendApplicantName = applicantName;
-    if (sendHasLetters(personForGate.firstNameEn) && !sendHasLetters(personForGate.lastNameEn)) {
-      const f = String(personForGate.firstNameEn).trim();
-      sendApplicantName = `${f} ${f}`;
-    } else if (!personForGate.firstNameEn && !personForGate.lastNameEn) {
-      sendApplicantName = gateSendSingleField(applicantName);
-    }
+    // DIRECT BRN-FREE ROUTE: send query carries the transit
+    // (typed) applicant name and the enum relation — never a
+    // doubled name, never a raw backtick, never a Bengali label
+    // where the site's radio value is the enum.
     const qs = new URLSearchParams({
       appType: 'BIRTH_REGISTRATION_APPLICATION',
       phone,
@@ -642,8 +643,8 @@ class BdrisHttpClient {
       // LIVE-CONFIRMED 2026-10-27 (Stage C): officeId 0 when empty.
       officeId: officeId || '0',
       personUbrn,
-      relation,
-      applicantName: sendApplicantName,
+      relation: mapDirectRelation(relation),
+      applicantName: transitDirectName(applicantName),
       applicantBrn,
       applicantDob,
       officeAddressType: mapOfficeAddressType(officeAddressType),
@@ -940,7 +941,16 @@ function buildSubmitPayload(data = {}) {
     ...birthFields,
     ...permFields,
     ...presFields,
-    relationWithApplicant: str(relation),
+    // DIRECT BRN-FREE ROUTE: relationWithApplicant carries the
+    // site's enum value (bot REL_VALUE map), not the draft's
+    // Bengali label. Person/parent names below stay VERBATIM on
+    // purpose: the submit payload IS the final record, and the
+    // bot's final step re-applies the backtick form through the
+    // site's own handler — whether the direct form POST accepts
+    // a backtick in the final record is a live-test question
+    // (see DIRECT-BRN-FREE-LIVE-TEST.md), not something to guess
+    // by stripping the draft's names here.
+    relationWithApplicant: mapDirectRelation(relation),
     applicantBrn: str(data.applicantBrn || person.brn),
     applicantDob: str(data.applicantDob || dob),
     applicantName: str(applicantName),
@@ -988,19 +998,23 @@ function buildOtpSendBody(data = {}) {
   const s2 = data.s2 || {};
   const father = data.father || s2.father || {};
   const mother = data.mother || s2.mother || {};
-  // DIRECT SEND SINGLE-NAME TEST (2026-10-29): the six send-body
-  // fields carry the gate form for single names (see the helpers
-  // above). An explicitly joined name is gated as a single field;
-  // a split name is gated on its last part. Two-part names go out
-  // byte-identical to before. Submit's builder is a separate
-  // joinName and is untouched.
+  // DIRECT BRN-FREE ROUTE: the six send-body fields carry the
+  // transit (typed) form — backticks/marks stripped, names never
+  // doubled. A split name joins first + ' ' + last (or first
+  // alone); an explicitly joined name transits as-is.
+  const joinTransit = (joined, first, last) => {
+    if (joined) return transitDirectName(joined);
+    const f = String(first || '').trim();
+    const l = String(last || '').trim();
+    return transitDirectName(l ? `${f} ${l}` : f);
+  };
   return {
-    'personInfoForBirth.personNameBn': String(person.personNameBn ? gateSendSingleField(person.personNameBn) : gateSendJoinName(person.firstNameBn, person.lastNameBn)),
-    'personInfoForBirth.personNameEn': String(person.personNameEn ? gateSendSingleField(person.personNameEn) : gateSendJoinName(person.firstNameEn, person.lastNameEn)),
-    'personInfoForBirth.father.personNameBn': String(gateSendSingleField(father.personNameBn || father.nameBn || '')),
-    'personInfoForBirth.father.personNameEn': String(gateSendSingleField(father.personNameEn || father.nameEn || '')),
-    'personInfoForBirth.mother.personNameBn': String(gateSendSingleField(mother.personNameBn || mother.nameBn || '')),
-    'personInfoForBirth.mother.personNameEn': String(gateSendSingleField(mother.personNameEn || mother.nameEn || '')),
+    'personInfoForBirth.personNameBn': joinTransit(person.personNameBn, person.firstNameBn, person.lastNameBn),
+    'personInfoForBirth.personNameEn': joinTransit(person.personNameEn, person.firstNameEn, person.lastNameEn),
+    'personInfoForBirth.father.personNameBn': transitDirectName(father.personNameBn || father.nameBn || ''),
+    'personInfoForBirth.father.personNameEn': transitDirectName(father.personNameEn || father.nameEn || ''),
+    'personInfoForBirth.mother.personNameBn': transitDirectName(mother.personNameBn || mother.nameBn || ''),
+    'personInfoForBirth.mother.personNameEn': transitDirectName(mother.personNameEn || mother.nameEn || ''),
   };
 }
 
@@ -1026,8 +1040,8 @@ function buildVerifyPayload(data = {}) {
     geoLocationId,
     email: String(data.email || ''),
     officeId: String(data.officeId || '0'),
-    relation: String(data.relation || ''),
-    applicantName: String(data.applicantName || ''),
+    relation: mapDirectRelation(data.relation || ''),
+    applicantName: transitDirectName(data.applicantName || ''),
     applicantBrn: String(data.applicantBrn || ''),
     applicantDob: String(data.applicantDob || ''),
     officeAddressType: officeType,
@@ -1057,6 +1071,8 @@ module.exports = {
   GeoCache,
   parseSuccessPage,
   buildSubmitPayload,
+  transitDirectName,
+  mapDirectRelation,
   parentBrnDirectDecision,
   normalizeDirectBrn,
   isPre2013Direct,
