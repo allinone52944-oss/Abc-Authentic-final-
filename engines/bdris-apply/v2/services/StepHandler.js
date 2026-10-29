@@ -179,6 +179,32 @@ function brnWarning(v) {
 // isFamilyErrorText — the site's family-validation wording only
 // (180-days / age-difference). Used to pick the names-only branch,
 // never to rewrite a name or a BRN.
+// isParentVerifyStateError — the site's parent-verify STATE error
+// (2026-10-29, permanent): "Father/Mother birth record not verified
+// [personInfoForBirth.father.ubrn] | ..." as rendered by the site's
+// own Next-validation and read by _detectValidationBlock. This is
+// NOT a required-field gate error: relaxing required markers/rules
+// (relaxParentBrnGate) cannot set a record to verified, and the
+// site's verified state can only ever come from its own Verify
+// (a real registry BRN) — never from the engine. A verify-state
+// error therefore must NOT enter the 2013-gate relax-and-retry
+// branch: retrying the same gate-pass is a deterministic re-failure,
+// and the panel's "ঘরটি পূরণ করে আবার চেষ্টা করুন" instruction is
+// false when no parent BRN exists at all (there is no true value
+// to fill). The honest channel is the applicant's own channel (see
+// PARENT_VERIFY_CHANNEL_NOTE_*): the applicant files themselves
+// through the OTP-verified direct filing, the server decides, and
+// the officer verifies against the parents' ID cards — submission
+// alone registers nothing. Family text is never a verify-state
+// error (it contains no verified wording), so family precedence is
+// unaffected.
+function isParentVerifyStateError(t) {
+  const s = String(t || '');
+  return /birth record not verified|not verified|যাচাই হয়নি|verify হয়নি/i.test(s)
+    && /ubrn|father|mother|পিতা|মাতা/i.test(s);
+}
+const PARENT_VERIFY_CHANNEL_NOTE_WITHHELD = 'পিতামাতার জন্ম নিবন্ধন যাচাই ছাড়া সাইটের এই ধাপ এগোবে না — কোনো BRN বানানো হবে না। বৈধ পথ: আবেদনকারী নিজে (নিজের ফোন/OTP চ্যানেলে) সরাসরি আবেদন জমা দিলে সার্ভার সিদ্ধান্ত নেবে, আর মা-বাবার আইডি কার্ড প্রমাণ হিসেবে অফিসার যাচাই করবেন।';
+const PARENT_VERIFY_CHANNEL_NOTE_PRESENTED = 'পিতামাতার জন্ম নিবন্ধন যাচাই ছাড়া সাইটের এই ধাপ এগোবে না — সঠিক ১৭ ডিজিটের BRN ও জন্ম তারিখ দিয়ে Verify চেপে আবার চেষ্টা করুন।';
 function isFamilyErrorText(t) {
   return /180|difference of age/i.test(String(t || ''));
 }
@@ -1151,10 +1177,55 @@ class StepHandler {
           // না গেলে success-এর ভান করা হবে না। শুধু চিহ্ন রাখি।
           this._familyAttempted = true;
         }
+      } else if (chk.blocked && isParentVerifyStateError(chk.reason)) {
+        // Parent-verify STATE branch (2026-10-29, permanent): the
+        // site demands verified parent birth records, and no
+        // gate-pass can create that state — the 2013-gate
+        // relax-and-retry below is deliberately NOT entered here
+        // (it would re-run the same required-rule relax and the
+        // same Next, and deterministically fail again on the same
+        // text). The bot page is stopped honestly with the site's
+        // verbatim text preserved in `reason`, a classified code
+        // on the failed entry, and the applicant-channel note
+        // instead of the false "fill the field and retry" line:
+        // with no parent BRN there is nothing true to fill, and
+        // inventing one would file a false record. Address and
+        // document "not sent" lines downstream are consequences
+        // of this block, not separate failures — the chain stops
+        // here, so S2B/S3 are never attempted. This return sets
+        // no verifyUncertain flag, so no replay/catch-up treats
+        // it as "advance anyway" — fields-gone is still the only
+        // advance proof, and the fields are still here.
+        // One exception, mirroring the family/gate branches: if the
+        // parents fields are already gone, the site DID advance
+        // and this text is stale — fall through to the fields-gone
+        // proof below instead of failing on stale text.
+        // NOTE (scope, 2026-10-29): this branch has NO year or
+        // bracket condition — it covers every parent-registration
+        // case (pre-2013, 2013, 2014+, single parent, BRN given
+        // but unverified, no BRN at all). The note is picked by
+        // whether a BRN was WITHHELD by a site rule (exempt or
+        // family names-only clear) versus PRESENTED to the site's
+        // Verify and failed — a rule-based split, not a year hack.
+        if (!(await this._parentsFieldsGone())) {
+          const brnWithheld = brnExempt || !!this.familyNamesOnly;
+          const channelNote = brnWithheld ? PARENT_VERIFY_CHANNEL_NOTE_WITHHELD : PARENT_VERIFY_CHANNEL_NOTE_PRESENTED;
+          this.progress('❌ ' + chk.reason + ' — ' + channelNote);
+          return {
+            ok: false, step: 3, blocked: true, reason: chk.reason,
+            message: '❌ ' + chk.reason + ' — ' + channelNote,
+            failed: [{ field: 'পরবর্তী (ধাপ ৩)', reason: chk.reason + ' — ' + channelNote, code: 'PARENT_VERIFY_UNVERIFIED' }],
+            verifyStatus, brnNote, parentVerifyUnverified: true, parentVerifyChannel: 'applicant',
+          };
+        }
       } else if (chk.blocked && brnExempt && /ubrn|personBirthDate/i.test(chk.reason)) {
         // 2013-gate relax-and-retry: the site's in-page validator
         // re-asserted the ubrn/personBirthDate required rules
-        // despite the exemption (this is the live b2bd0cb2 failure:
+        // despite the exemption (this is the live b2bd0cb2 failure).
+        // This branch is only reached for non-verify-state text —
+        // a verify-state error took the branch above instead,
+        // because relaxing required rules cannot change a
+        // verified state.
         // frontend says "no BRN for 2013", site page says "fill
         // [father.ubrn] / select [father.personBirthDate]"). Relax
         // the gate again and click Next once more — exactly the
@@ -3294,4 +3365,4 @@ class StepHandler {
   }
 }
 
-module.exports = { StepHandler, verifyChargeToken, bnToArab, thChildSite, consumeSubmitToken, isSubmitTokenConsumed, extractAckNumber, normalizeBrn, brnWarning, isFamilyErrorText, parentBrnSubmitAction, isParentBrnExempt, parentBrnExemptNote, PARENT_BRN_PRE2013_NOTE, PARENT_BRN_2013_NOTE, PARENT_BRN_FAMILY_NOTE, relaxParentBrnGate, parseSiteDateToIso, PARENT_GATE_FIELDS };
+module.exports = { StepHandler, verifyChargeToken, bnToArab, thChildSite, consumeSubmitToken, isSubmitTokenConsumed, extractAckNumber, normalizeBrn, brnWarning, isFamilyErrorText, isParentVerifyStateError, PARENT_VERIFY_CHANNEL_NOTE_WITHHELD, PARENT_VERIFY_CHANNEL_NOTE_PRESENTED, parentBrnSubmitAction, isParentBrnExempt, parentBrnExemptNote, PARENT_BRN_PRE2013_NOTE, PARENT_BRN_2013_NOTE, PARENT_BRN_FAMILY_NOTE, relaxParentBrnGate, parseSiteDateToIso, PARENT_GATE_FIELDS };
