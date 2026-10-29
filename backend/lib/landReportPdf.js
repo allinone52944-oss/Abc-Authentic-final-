@@ -135,9 +135,10 @@ function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdict
           doc.font('bn-bold').fontSize(12).fillColor('#14532d')
             .text((i + 1) + '. ' + (l.mouza || '—') + ' — ' + (l.class || '—'), X, y, { width: W });
           y += 21;
-          row('শতাংশপ্রতি হার', toBn(l.rate) + ' টাকা');
-          row('পরিমাণ', toBn(l.qtyShatangsho) + ' শতাংশ'
-            + (l.unit && l.unit !== 'shatangsho' ? ' (' + toBn(l.amount) + ' ' + (l.unit === 'katha' ? 'কাঠা' : 'বিঘা') + ')' : ''));
+          const ulab = { shatangsho: 'শতাংশ', katha: 'কাঠা', bigha: 'বিঘা', gonda: 'গন্ডা' }[l.unit] || 'শতাংশ';
+          row(ulab + 'প্রতি হার', toBn(l.rate) + ' টাকা');
+          row('পরিমাণ', toBn(l.amount) + ' ' + ulab
+            + ' (' + toBn(l.qtyShatangsho) + ' শতাংশ)');
           row('লাইন মূল্য', toBn(l.value) + ' টাকা', { bold: true });
           if (l.oldRate !== undefined) {
             row('পুরনো হার / পুরনো মূল্য', toBn(l.oldRate) + ' টাকা / ' + toBn(l.oldValue) + ' টাকা'

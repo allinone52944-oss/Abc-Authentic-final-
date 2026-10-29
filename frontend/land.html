@@ -193,7 +193,7 @@
               <option>নাল</option><option>বাড়ী</option><option>ভিটা</option>
               <option>বাগান</option><option>পুকুর</option><option>ডোবা</option><option>বাণিজ্যিক</option>
             </select></div>
-            <div class="field"><label>শতাংশপ্রতি হার (টাকা) *</label><input type="text" id="mLineRate" inputmode="decimal" placeholder="যেমন: 100000"></div>
+            <div class="field"><label id="mLineRateLabel">শতাংশপ্রতি হার (টাকা) *</label><input type="text" id="mLineRate" inputmode="decimal" placeholder="যেমন: 100000"></div>
             <div class="field"><label>পরিমাণ *</label><input type="text" id="mLineAmount" inputmode="decimal" placeholder="যেমন: 10"></div>
             <div class="field"><label>একক</label><select id="mLineUnit">
               <option value="shatangsho">শতাংশ</option><option value="katha">কাঠা (১ = ১.৬৫ শতাংশ)</option><option value="bigha">বিঘা (১ = ৩৩ শতাংশ)</option><option value="gonda">গন্ডা (১ = ২ শতাংশ)</option>
@@ -356,8 +356,19 @@
   // recomputes every line — the preview never decides money) --
   const MOUZA_LINES = [];
   const MOUZA_FACTORS = { shatangsho: 1, katha: 1.65, bigha: 33, gonda: 2 };
-  // Live unit hint: show the shatangsho conversion before the line is
-  // added, so the shopkeeper can check it at a glance.
+  const MOUZA_UNIT_LABELS = { shatangsho: 'শতাংশ', katha: 'কাঠা', bigha: 'বিঘা', gonda: 'গন্ডা' };
+  // The rate always means "per selected unit": changing the unit
+  // re-labels the rate field, so the entered rate is never silently
+  // read as a per-shatangsho rate.
+  function updateMouzaRateLabel() {
+    const lab = $('mLineRateLabel');
+    if (!lab) return;
+    const u = MOUZA_UNIT_LABELS[$('mLineUnit').value] || 'শতাংশ';
+    lab.textContent = u + 'প্রতি হার (টাকা) *';
+  }
+  // Live unit hint: show the shatangsho conversion and the line value
+  // preview before the line is added, so the shopkeeper can check it
+  // at a glance.
   function updateMouzaUnitHint() {
     const hint = $('mUnitHint');
     if (!hint) return;
@@ -365,17 +376,23 @@
     const unit = $('mLineUnit').value;
     if (!(amount > 0) || !MOUZA_FACTORS[unit]) { hint.textContent = ''; return; }
     const qty = Math.round(amount * MOUZA_FACTORS[unit] * 100) / 100;
-    hint.textContent = '= ' + bn(qty) + ' শতাংশ';
+    const rate = Number($('mLineRate').value.trim());
+    let txt = '= ' + bn(qty) + ' শতাংশ';
+    if (rate >= 0 && $('mLineRate').value.trim() !== '') {
+      txt += ' · ' + bn(Math.round(rate * amount * 100) / 100) + ' টাকা';
+    }
+    hint.textContent = txt;
   }
   function renderMouzaLines() {
     let total = 0;
     let h = '';
     MOUZA_LINES.forEach((l, i) => {
       const qty = l.amount * (MOUZA_FACTORS[l.unit] || 1);
-      const val = l.rate * qty;
+      const val = l.rate * l.amount;
       total += val;
+      const ulab = MOUZA_UNIT_LABELS[l.unit] || 'শতাংশ';
       h += '<div class="r"><b>' + esc(l.mouza || '—') + ' · ' + esc(l.class) + '</b><span>' +
-        bn(l.rate) + ' × ' + bn(qty) + ' = ' + bn(val) + ' টাকা' +
+        bn(l.rate) + ' × ' + bn(l.amount) + ' ' + ulab + ' (' + bn(Math.round(qty * 100) / 100) + ' শতাংশ) = ' + bn(val) + ' টাকা' +
         ' <a href="#" onclick="MOUZA_LINES.splice(' + i + ',1);renderMouzaLines();return false;">মুছুন</a></span></div>';
     });
     $('mLinesBox').innerHTML = h ? '<div class="rec">' + h + '</div>' : '';
@@ -384,7 +401,9 @@
       : '';
   }
   $('mLineAmount').addEventListener('input', updateMouzaUnitHint);
-  $('mLineUnit').addEventListener('change', updateMouzaUnitHint);
+  $('mLineRate').addEventListener('input', updateMouzaUnitHint);
+  $('mLineUnit').addEventListener('change', () => { updateMouzaRateLabel(); updateMouzaUnitHint(); });
+  updateMouzaRateLabel();
   $('mAddLineBtn').addEventListener('click', () => {
     const rate = Number($('mLineRate').value.trim());
     const amount = Number($('mLineAmount').value.trim());
@@ -398,6 +417,7 @@
     });
     clearBoxes();
     renderMouzaLines();
+    updateMouzaRateLabel();
     updateMouzaUnitHint();
   });
 
@@ -405,8 +425,9 @@
     if (r.lines) {
       let h = '<div class="rec"><div class="rec-hd"><div class="seal">✓</div><h4>মৌজা মূল্য রিপোর্ট</h4></div>';
       r.lines.forEach((l) => {
+        const ulab = MOUZA_UNIT_LABELS[l.unit] || 'শতাংশ';
         h += '<div class="r"><b>' + esc(l.mouza) + ' · ' + esc(l.class) + '</b><span>' +
-          bn(l.rate) + ' × ' + bn(l.qtyShatangsho) + ' শতাংশ = ' + bn(l.value) + ' টাকা</span></div>';
+          bn(l.rate) + ' × ' + bn(l.amount) + ' ' + ulab + ' (' + bn(l.qtyShatangsho) + ' শতাংশ) = ' + bn(l.value) + ' টাকা</span></div>';
       });
       h += '</div>';
       if (r.breakdown) {

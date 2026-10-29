@@ -21,10 +21,14 @@ function round2(n) { return Math.round(n * 100) / 100; }
 /**
  * calcMouzaReport({ lines, declaredPrice, scheduleVersion })
  * lines: [{ mouza, class, rate, amount, unit, oldRate? }]
- *   rate: taka per shatangsho (entered from the checked schedule)
+ *   rate: taka per SELECTED unit (the unit the shopkeeper chose for
+ *     this line — shatangsho, katha, bigha or gonda). The rate follows
+ *     the unit automatically; it is never silently reinterpreted as a
+ *     per-shatangsho rate.
  *   amount: land amount in the given unit
  *   unit: 'shatangsho' | 'katha' | 'bigha' | 'gonda' (user-correctable)
- *   oldRate: optional rate from an older schedule, for comparison
+ *   oldRate: optional rate from an older schedule, in the same unit,
+ *     for comparison
  * Returns { lines, totalMinimum, deedBasis, breakdown, checks,
  *           hasOldComparison, valid } — throws on bad input.
  */
@@ -48,13 +52,15 @@ function calcMouzaReport(input) {
     if (!Number.isFinite(amount) || amount <= 0) { const e = new Error('BAD_LINE_AMOUNT:' + i); e.code = 'BAD_LINE'; throw e; }
     if (!UNIT_FACTORS[unit]) { const e = new Error('BAD_LINE_UNIT:' + i); e.code = 'BAD_LINE'; throw e; }
     const qty = round2(amount * UNIT_FACTORS[unit]);
-    const value = round2(rate * qty);
+    // Value follows the selected unit: rate (per unit) × amount (in
+    // that unit). qtyShatangsho is kept only for display/record.
+    const value = round2(rate * amount);
     const out = { mouza, class: cls, rate, amount, unit, qtyShatangsho: qty, value };
     if (l.oldRate !== undefined && l.oldRate !== null && String(l.oldRate) !== '') {
       const oldRate = Number(l.oldRate);
       if (!Number.isFinite(oldRate) || oldRate < 0) { const e = new Error('BAD_LINE_OLD_RATE:' + i); e.code = 'BAD_LINE'; throw e; }
       out.oldRate = oldRate;
-      out.oldValue = round2(oldRate * qty);
+      out.oldValue = round2(oldRate * amount);
       out.delta = round2(value - out.oldValue);
     }
     return out;
@@ -83,7 +89,7 @@ function calcMouzaReport(input) {
       ? String(input.oldScheduleVersion).trim().slice(0, 40) : null,
     checks: [
       'যোগফল পুনরায় যোগ করে মিলিয়ে দেখা হয়েছে: ' + totalMinimum + ' = ' + reAdd,
-      'একক রূপান্তর: ১ কাঠা = ১.৬৫ শতাংশ, ১ বিঘা = ৩৩ শতাংশ, ১ গন্ডা = ২ শতাংশ (গ্রাহক সংশোধন করতে পারেন)',
+      'প্রতি লাইন: বাছা এককপ্রতি হার × ওই এককে পরিমাণ; শতাংশ রূপান্তর শুধু দেখানোর জন্য (১ কাঠা = ১.৬৫, ১ বিঘা = ৩৩, ১ গন্ডা = ২ শতাংশ)',
       'প্রতিটি লাইনে হার ও পরিমাণ দেওয়া হয়েছে; হার না পাওয়া লাইন শূন্য ধরা হয়নি',
     ],
     valid: reAdd === totalMinimum,

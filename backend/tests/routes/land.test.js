@@ -180,10 +180,10 @@ describe('POST /api/land/mouza', () => {
     expect(r.body.breakdown).toMatchObject({ 'নাল': 1000000, 'বাগান': 300000 });
     expect(r.body.lines[1]).toMatchObject({ oldRate: 50000, oldValue: 250000, delta: 50000 });
   });
-  test('katha conversion: 10 katha at 100000 = 1650000', async () => {
+  test('rate follows the selected unit: 10 katha at 100000 per katha = 1000000', async () => {
     const r = await withUser(request(app()).post('/api/land/mouza'))
       .send({ ...MOUZA_BODY, declared_price: '', lines: [{ mouza: 'নমুনা মৌজা', class: 'নাল', rate: '100000', amount: '10', unit: 'katha' }], idempotency_key: 't-mouza-katha' }).expect(200);
-    expect(r.body).toMatchObject({ totalMinimum: 1650000, deedBasis: 1650000 });
+    expect(r.body).toMatchObject({ totalMinimum: 1000000, deedBasis: 1000000 });
   });
   test('no lines → 400, wallet untouched, no charge', async () => {
     const r = await withUser(request(app()).post('/api/land/mouza'))
