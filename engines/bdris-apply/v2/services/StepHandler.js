@@ -370,6 +370,79 @@ async function relaxEmptyLast(page, which) {
     } catch (e) { return 'ERR:' + String(e && e.message); }
   }, which).catch(() => 'fail');
 }
+// 2013-gate relax (2026-10-29, permanent) — mirrors relaxEmptyLast, but
+// for the parents step, NOT for names, and it does NOT touch the
+// single-name / cinno logic. RESEARCHED, not assumed (user correction
+// 2026-10-29 ~17:17): when the child's DOB is given, the SERVER's own
+// page knows the child's age and its parent-registration verify system
+// activates keyed off that DOB as held on the site page. The engine's
+// frontend exemption (Step 3: no BRN for 2013) is NOT the site's rule:
+// the site page's own validator still marks father/mother ubrn and
+// father/mother personBirthDate as required, which is exactly what the
+// live fill on b2bd0cb2 showed ("please fill this field"
+// [father.ubrn] + "Click to select your birth date"
+// [father.personBirthDate]) while the frontend said 2013 needs no BRN.
+// The pre-2013 clearing rule was live-verified 2026-10-11; the whole-
+// 2013 exemption in this codebase is a USER rule (2026-10-29), never
+// live-proven at the server. So this relax only passes the IN-PAGE
+// gate, exactly like relaxEmptyLast passes the last-name gate: it
+// removes the in-page required markers and validator rules for the
+// four parent fields, leaves every field EMPTY (no BRN invented, no
+// DOB invented or substituted — a gate-pass value may only ever be a
+// true value already given by the user, and no such value exists for
+// an ungiven parent BRN), and lets the site's advance (parents fields
+// gone) be the proof. It cannot override a server-side POST rejection
+// at final submit: if the server rejects ubrn/personBirthDate there,
+// that rejection is surfaced verbatim by the existing capture and is
+// never forced through.
+const PARENT_GATE_FIELDS = [
+  { id: 'fatherBrn', name: 'personInfoForBirth.father.ubrn' },
+  { id: 'motherBrn', name: 'personInfoForBirth.mother.ubrn' },
+  { id: 'fatherBirthDate', name: 'personInfoForBirth.father.personBirthDate' },
+  { id: 'motherBirthDate', name: 'personInfoForBirth.mother.personBirthDate' },
+];
+async function relaxParentBrnGate(page) {
+  if (!page || typeof page.evaluate !== 'function') return 'skip';
+  return await page.evaluate((fields) => {
+    try {
+      const $ = window.jQuery;
+      fields.forEach(({ id, name }) => {
+        const el = document.querySelector('#' + id)
+          || document.querySelector('input[name="' + name + '"]')
+          || document.querySelector('input[name$="' + id + '"]');
+        if (!el) return;
+        try { el.required = false; el.removeAttribute('required'); } catch (e) {}
+        if ($) $(el).removeClass('error').closest('.form-group, .mb-3, .col-md-6, .col-md-4').find('label.error, .text-danger, .invalid-feedback').remove();
+      });
+      if ($ && $.validator) {
+        const v = $('.form-to-be-validated').data('validator');
+        if (v && v.settings && v.settings.rules) {
+          Object.keys(v.settings.rules).forEach((k) => {
+            if (/(father|mother)\.(ubrn|personBirthDate)$/.test(k)) {
+              const r = v.settings.rules[k];
+              if (r && typeof r === 'object' && 'required' in r) delete r.required;
+              else if (typeof r === 'string' && /required/.test(r)) delete v.settings.rules[k];
+            }
+          });
+        }
+      }
+      return 'ok';
+    } catch (e) { return 'ERR:' + String(e && e.message); }
+  }, PARENT_GATE_FIELDS).catch(() => 'fail');
+}
+// Site-held applicant DOB (DD/MM/YYYY as typed on the BDRIS page, or
+// ISO) → ISO YYYY-MM-DD, or null when absent/unparseable. The server
+// keys its age/verify decision off the DOB as held on ITS page, so a
+// mismatch against the draft DOB is a real decision error, not a
+// cosmetic one — see _readSiteApplicantDob / submitS2's DOB guard.
+function parseSiteDateToIso(v) {
+  const t = String(v || '').trim();
+  let m = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return null;
+}
 async function emptyLastVisible(page, which) {
   if (!which || (!which.bn && !which.en)) return 0;
   return await page.evaluate((w) => {
@@ -914,6 +987,27 @@ class StepHandler {
       this.progress('❌ ' + dobReason);
       return { ok: false, step: 3, blocked: true, reason: dobReason, message: '❌ ' + dobReason, failed: [{ field: 'আবেদনকারীর জন্ম তারিখ', reason: dobReason }], verifyStatus, applicantDobMissing: true };
     }
+    // 2013-gate, researched (user correction 2026-10-29 ~17:17):
+    // the server keys its parent-verify decision off the applicant
+    // DOB AS HELD ON ITS PAGE. If that held DOB puts the child in a
+    // different bracket than the draft DOB, the engine's exemption
+    // decision is simply wrong for this page — proceeding would
+    // relax (or demand) the wrong gate. Stop honestly instead of
+    // guessing; a missing/unreadable held DOB cannot prove a
+    // mismatch, so it does not block on its own.
+    if (brnExempt) {
+      const siteDob = await this._readSiteApplicantDob().catch(() => null);
+      if (siteDob && isParentBrnExempt(siteDob) !== brnExempt) {
+        const raceReason = 'সাইটে থাকা আবেদনকারীর জন্ম তারিখ ড্রাফটের সঙ্গে মিলছে না — ২০১৩-ছাড়ের সিদ্ধান্ত এই পেজে ভুল হবে, তাই পিতামাতার ধাপে এগোনো হচ্ছে না। জন্ম তারিখ সাইটে ঠিকভাবে বসেছে কিনা মিলিয়ে আবার চেষ্টা করুন।';
+        this.progress('❌ ' + raceReason);
+        return { ok: false, step: 3, blocked: true, reason: raceReason, message: '❌ ' + raceReason, failed: [{ field: 'আবেদনকারীর জন্ম তারিখ', reason: raceReason }], verifyStatus, applicantDobMismatch: true };
+      }
+      // Pre-fill relax: the site's required markers for ubrn /
+      // personBirthDate are removed BEFORE Next is ever clicked,
+      // mirroring relaxEmptyLast for a single name. Fields stay
+      // empty — no BRN, no DOB is invented here.
+      await this._relaxParentBrnGate().catch(() => {});
+    }
     let brnNote = null;
     // Family advance persistence (2026-10-29 follow-up): the same
     // handler re-runs submitS2 during replay, and the session may
@@ -1057,6 +1151,36 @@ class StepHandler {
           // না গেলে success-এর ভান করা হবে না। শুধু চিহ্ন রাখি।
           this._familyAttempted = true;
         }
+      } else if (chk.blocked && brnExempt && /ubrn|personBirthDate/i.test(chk.reason)) {
+        // 2013-gate relax-and-retry: the site's in-page validator
+        // re-asserted the ubrn/personBirthDate required rules
+        // despite the exemption (this is the live b2bd0cb2 failure:
+        // frontend says "no BRN for 2013", site page says "fill
+        // [father.ubrn] / select [father.personBirthDate]"). Relax
+        // the gate again and click Next once more — exactly the
+        // single-name shape (relax, then gate). Advance is still
+        // only claimed on the fields-gone proof below; if the site
+        // still blocks after the relax, its exact text is returned
+        // and no advance is claimed. No field is filled here: both
+        // ubrn and any ungiven parent DOB stay empty.
+        this.progress('ℹ️ সাইটের ২০১৩ গেট (পিতামাতার BRN/জন্ম তারিখের আবশ্যক নিয়ম) শিথিল করে আবার পরবর্তী চেষ্টা করা হচ্ছে…');
+        await this._relaxParentBrnGate().catch(() => {});
+        const nxtGate = await this._clickNextAndWait('পরবর্তী (ধাপ ৩ — ২০১৩ গেট)');
+        if (nxtGate.ok) {
+          try { await this.page.waitForTimeout(1200); } catch { /* no-op */ }
+          const chkGate = await this._detectValidationBlock(null);
+          if (!chkGate.blocked || await this._parentsFieldsGone()) {
+            this._gateRelaxRetried = true;
+            // No siteError: fall through to the advanced proof
+            // below, which alone decides success.
+          } else {
+            siteError = chkGate.reason;
+          }
+        } else if (await this._parentsFieldsGone()) {
+          this._gateRelaxRetried = true;
+        } else {
+          siteError = nxtGate.reason || chk.reason;
+        }
       } else if (chk.blocked) {
         siteError = chk.reason;
       }
@@ -1078,6 +1202,14 @@ class StepHandler {
         ['#fatherBrn', 'input[name="personInfoForBirth.father.ubrn"]'], 1500));
     }
     if (advanced) {
+      // 2013-gate note, only after the fields-gone proof: the
+      // in-page gate was relaxed and the site advanced. This is
+      // NOT a claim about the server's final-submit decision —
+      // that is still the server's, and a submit rejection there
+      // is surfaced verbatim, never forced.
+      if (this._gateRelaxRetried) {
+        this.progress('ℹ️ ২০১৩ গেট শিথিল করে সাইট এগিয়েছে (পিতামাতার BRN/জন্ম তারিখ খালি রাখা হয়েছে, কোনো নম্বর/তারিখ বানানো হয়নি) — চূড়ান্ত সাবমিটে সার্ভারের সিদ্ধান্তই শেষ কথা।');
+      }
       // Family advance-এর নোট শুধু এখানে, প্রমাণের পরে:
       // ঘর সত্যিই গেছে মানেই advance, তার আগে নয়।
       if (this._familyAttempted || familySeeded) {
@@ -2673,11 +2805,43 @@ class StepHandler {
     }, which).catch(() => 'fail');
   }
 
+  // 2013-gate relax (see relaxParentBrnGate): only when the
+  // applicant DOB held by THIS handler is in the exempt range.
+  // A non-exempt applicant is never relaxed, and a missing DOB
+  // never relaxes (isParentBrnExempt('') is false).
+  async _relaxParentBrnGate() {
+    if (!isParentBrnExempt(this.applicantDob)) return 'skip';
+    return relaxParentBrnGate(this.page);
+  }
+
+  // Best-effort read of the applicant DOB AS HELD ON THE SITE PAGE
+  // (the value the server's age/verify logic actually keys off).
+  // Returns an ISO date, or null when the field is not in the DOM
+  // (SPA sections may be hidden) or unparseable — null means
+  // "cannot prove", never "assume the draft is right".
+  async _readSiteApplicantDob() {
+    try {
+      const raw = await this.page.evaluate(() => {
+        const el = document.querySelector('input[name="personInfoForBirth.personBirthDate"]');
+        return el ? (el.value || '') : '';
+      });
+      return parseSiteDateToIso(raw);
+    } catch { return null; }
+  }
+
   // "পরবর্তী" — visible বাটন খুঁজে, enabled যাচাই করে ক্লিক
   async _clickNextAndWait(label, opts = {}) {
     // ১-নাম: প্রতিটি ধাপের "পরবর্তী"-র আগে required-রুল শিথিল রাখি
     if (this.singleName && (this.singleName.bn || this.singleName.en)) {
       await this._relaxEmptyLast().catch(() => {});
+    }
+    // 2013-gate: same shape — before EVERY Next click, re-relax the
+    // parent ubrn/personBirthDate required rules for an exempt
+    // applicant, in case the site re-applied them (a replay or a
+    // later step command revisits the parents page). Non-exempt
+    // applicants and missing DOB are never relaxed.
+    if (isParentBrnExempt(this.applicantDob)) {
+      await this._relaxParentBrnGate().catch(() => {});
     }
     // একাধিক সেকশনের "পরবর্তী" একসাথে দৃশ্যমান থাকলে সবার নিচেরটি (চলমান সেকশনেরটিই)
     // বাছাই করি — নাহলে ভুল সেকশনের বাটনে ক্লিক পড়ে চুপচাপ আটকে থাকতে পারে (2026-10-11 live)
@@ -3031,4 +3195,4 @@ class StepHandler {
   }
 }
 
-module.exports = { StepHandler, verifyChargeToken, bnToArab, thChildSite, consumeSubmitToken, isSubmitTokenConsumed, extractAckNumber, normalizeBrn, brnWarning, isFamilyErrorText, parentBrnSubmitAction, isParentBrnExempt, parentBrnExemptNote, PARENT_BRN_PRE2013_NOTE, PARENT_BRN_2013_NOTE, PARENT_BRN_FAMILY_NOTE };
+module.exports = { StepHandler, verifyChargeToken, bnToArab, thChildSite, consumeSubmitToken, isSubmitTokenConsumed, extractAckNumber, normalizeBrn, brnWarning, isFamilyErrorText, parentBrnSubmitAction, isParentBrnExempt, parentBrnExemptNote, PARENT_BRN_PRE2013_NOTE, PARENT_BRN_2013_NOTE, PARENT_BRN_FAMILY_NOTE, relaxParentBrnGate, parseSiteDateToIso, PARENT_GATE_FIELDS };
