@@ -24,6 +24,24 @@ function landText(totalLand) {
   return toBn(v) + ' একর (' + toBn(shot) + ' শতাংশ)';
 }
 
+/** Header mouza for a report. For mouza reports the header must
+ * show the LINES' mouzas (joined, distinct) — never a stale
+ * cascade value: a header naming one mouza while the lines
+ * calculate on another is the flaw this fixes. Other kinds
+ * keep the cascade mouza; a mouza report with no lines falls
+ * back to the cascade mouza. */
+function headerMouzaFor(kind, area, lines) {
+  if (kind === 'mouza' && Array.isArray(lines) && lines.length) {
+    const seen = [];
+    lines.forEach((l) => {
+      const m = String((l && l.mouza) || '').trim();
+      if (m && !seen.includes(m)) seen.push(m);
+    });
+    if (seen.length) return seen.join(', ');
+  }
+  return (area && area.mouza) || '—';
+}
+
 function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdicts, claimNote,
   lines, totalMinimum, deedBasis, declaredPrice, breakdown, scheduleVersion,
   oldScheduleVersion, hasOldComparison, checks }) {
@@ -93,13 +111,20 @@ function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdict
       row('রেফারেন্স', ref);
       divider();
 
-      // Area block — same for every kind
+      // Area block — same for every kind, except the mouza
+      // row: for mouza reports it comes from the lines (see
+      // headerMouzaFor). The JL suffix is shown ONLY when it
+      // belongs to that same mouza — never a cascade JL paired
+      // with a different line mouza.
       heading('এলাকা');
       if (area) {
         row('বিভাগ', area.division || '—');
         row('জেলা', area.district || '—');
         row('উপজেলা / থানা', area.upazila || '—');
-        row('মৌজা', (area.mouza || '—') + (area.jl ? ' (জে. এল. নং: ' + area.jl + ')' : ''));
+        const headerMouza = headerMouzaFor(kind, area, lines);
+        const jlSuffix = (area.jl && headerMouza === area.mouza)
+          ? ' (জে. এল. নং: ' + area.jl + ')' : '';
+        row('মৌজা', headerMouza + jlSuffix);
         if (area.officeName) row('সাব-রেজিস্ট্রার অফিস', area.officeName);
       }
       if (kind === 'mouza') {
@@ -202,7 +227,7 @@ function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdict
       divider();
       const footers = kind === 'mouza' ? [
         'সীমা (পরিষ্কার করে): এই রিপোর্ট সার্টিফাইড কপি নয়, মালিকানা / স্বত্ব / দখলের প্রমাণ নয়, বাজারমূল্য নয়, চূড়ান্ত দলিল বিল নয়।',
-        'হারগুলো দোকানদারের যাচাই করা তালিকা থেকে বসানো হয়েছে; স্বয়ংক্রিয় তালিকা-খোঁজা এখনো তৈরি হয়নি। দলিল করার আগে শ্রেণি, পরিমাণ ও বর্তমান তালিকা সাব-রেজিস্ট্রার অফিসে মিলিয়ে নিন।',
+        'হারগুলো তালিকা-খোঁজা (যেখানে তালিকায় পাওয়া গেছে — লাইনে "তালিকা" লেখা থাকে) অথবা দোকানদারের যাচাই করা তালিকা থেকে বসানো হয়েছে ("নিজে বসানো")। দলিল করার আগে শ্রেণি, পরিমাণ ও বর্তমান তালিকা সাব-রেজিস্ট্রার অফিসে মিলিয়ে নিন।',
         'দলিলের ফি / করের হার এখানে সরকারি হার হিসেবে ধরা হয়নি — সেগুলো অফিস থেকে নিশ্চিত করে হিসাব করতে হবে।',
         'যাচাই তালিকা: (১) শ্রেণি ঠিক আছে কিনা, (২) পরিমাণ ঠিক আছে কিনা, (৩) বর্তমান তালিকার সংস্করণ ঠিক আছে কিনা, (৪) সাব-রেজিস্ট্রার অফিসে হার মিলেছে কিনা।',
       ] : [
@@ -219,4 +244,4 @@ function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdict
   });
 }
 
-module.exports = { buildLandReportPdf, toBn, landText };
+module.exports = { buildLandReportPdf, toBn, landText, headerMouzaFor };

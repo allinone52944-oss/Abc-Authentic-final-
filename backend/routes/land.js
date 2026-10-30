@@ -46,7 +46,7 @@ const { buildReceiptPdf } = require('../lib/receiptPdf');
 const { buildLandReportPdf } = require('../lib/landReportPdf');
 const client = require('../../engines/land-core/client');
 const { calcMouzaReport } = require('../../engines/land-mouza-value/calc');
-const { lookupMouzaRate } = require('../../engines/land-mouza-value/rates');
+const { lookupMouzaRate, OFFICES } = require('../../engines/land-mouza-value/rates');
 
 const router = express.Router();
 const UPLOAD_DIR = '/opt/all-in-one-abc-authentic/uploads/orders';
@@ -540,13 +540,60 @@ router.get('/mouza-rate', requireAuth, async (req, res) => {
   });
 });
 
+// ---------- mouza report area (professional single flow) ----------
+// The old form sent the full DLRMS cascade (division/district/
+// upazila/mouza) and the PDF header used it, while the lines
+// carried their OWN mouza — so a report could be headed one
+// mouza and calculated on another. The new form sends NO
+// cascade: the area is derived here from the office + the
+// lines, so the header mouza can never differ from the line
+// mouzas. BACKWARD COMPAT: an old client that still sends the
+// full cascade is accepted; its division/district/upazila/JL
+// are kept (they were real selections), but the header mouza
+// still comes from the lines — in the normal old case (a line
+// mouza left empty, or equal to the cascade mouza) the result
+// is identical to before.
+const MOUZA_OFFICE_GEO = {
+  // Office id → report-header geography. Boalkhali is an
+  // upazila of Chattogram district, Chattogram division.
+  boalkhali: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'বোয়ালখালী' },
+};
+function deriveMouzaReportArea(body, lines) {
+  const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  const old = cleanArea(body);
+  const officeId = s(body.office, 40);
+  const geo = MOUZA_OFFICE_GEO[officeId] || null;
+  const officeRec = officeId && OFFICES[officeId];
+  const mouzas = [];
+  (Array.isArray(lines) ? lines : []).forEach((l) => {
+    const m = String((l && l.mouza) || '').trim();
+    if (m && !mouzas.includes(m)) mouzas.push(m);
+  });
+  return {
+    divisionBbs: old ? old.divisionBbs : '',
+    districtBbs: old ? old.districtBbs : '',
+    upazilaBbs: old ? old.upazilaBbs : '',
+    mouzaId: old ? old.mouzaId : '',
+    division: old ? old.division : (geo ? geo.division : ''),
+    district: old ? old.district : (geo ? geo.district : ''),
+    upazila: old ? old.upazila : (geo ? geo.upazila : ''),
+    mouza: mouzas.join(', '),
+    jl: old ? old.jl : '',
+    officeName: s(body.office_name, 80) || (officeRec ? officeRec.name : ''),
+  };
+}
+
 // ---------- POST /mouza ----------
 // Mouza-value report (engine land-mouza-value). No portal is
-// called here. Manual lines carry a shopkeeper-entered rate;
-// lookup lines are re-verified here against rates.js (office
-// from body.lookup_office, rate must match exactly) BEFORE
-// any calculation or charge — a tampered or unknown lookup
-// line is 400 with NO charge and no order.
+// called here. The area cascade is NO LONGER required: the new
+// single-flow form sends office + lines only, and the report
+// area is derived from them (see deriveMouzaReportArea). Old
+// clients sending the full cascade still work (see above).
+// Manual lines carry a shopkeeper-entered rate; lookup lines
+// are re-verified here against rates.js (office per line, or
+// body.lookup_office for old clients; rate must match exactly)
+// BEFORE any calculation or charge — a tampered or unknown
+// lookup line is 400 with NO charge and no order.
 // Charge discipline is the same as the other land services:
 // a valid report is charged; invalid input is 400 with NO
 // charge and no order. The report PDF carries the mandatory
@@ -556,11 +603,7 @@ router.get('/mouza-rate', requireAuth, async (req, res) => {
 router.post('/mouza', requireAuth, async (req, res) => {
   try {
     const body = req.body || {};
-    const area = cleanArea(body);
-    if (!area) {
-      return res.status(400).json({ error: 'BAD_INPUT', message: 'বিভাগ, জেলা, উপজেলা ও মৌজা — সবগুলো বেছে নিন।' });
-    }
-    const officeName = String(body.office_name || '').trim().slice(0, 80);
+    const area = cleanArea(body); // null for new clients — fine now
     const scheduleVersion = String(body.schedule_version || '2025-2026').trim().slice(0, 40) || '2025-2026';
     const oldScheduleVersion = body.old_schedule_version
       ? String(body.old_schedule_version).trim().slice(0, 40) : null;
@@ -569,7 +612,7 @@ router.post('/mouza', requireAuth, async (req, res) => {
     const verified = []; // per-line verified lookup info (index-aligned)
     const lines = rawLines.map((l) => {
       const line = {
-        mouza: String((l && l.mouza) || '').trim() || area.mouza,
+        mouza: String((l && l.mouza) || '').trim() || (area ? area.mouza : ''),
         class: String((l && l.class) || '').trim(),
         rate: Number(toEn(String((l && l.rate) ?? ''))),
         amount: Number(toEn(String((l && l.amount) ?? ''))),
@@ -577,6 +620,7 @@ router.post('/mouza', requireAuth, async (req, res) => {
         oldRate: (l && l.oldRate !== undefined && l.oldRate !== null && String(l.oldRate) !== '')
           ? Number(toEn(String(l.oldRate))) : undefined,
         source: (l && l.source === 'lookup') ? 'lookup' : 'manual',
+        lookupOffice: String((l && l.lookupOffice) || '').trim() || undefined,
       };
       verified.push(null);
       return line;
@@ -586,7 +630,8 @@ router.post('/mouza', requireAuth, async (req, res) => {
     // never decides a lookup rate on its own.
     for (let i = 0; i < lines.length; i++) {
       if (lines[i].source !== 'lookup') continue;
-      const hit = lookupOffice ? lookupMouzaRate(lookupOffice, lines[i].mouza, lines[i].class) : null;
+      const office = lines[i].lookupOffice || lookupOffice;
+      const hit = office ? lookupMouzaRate(office, lines[i].mouza, lines[i].class) : null;
       if (!hit || hit.rate !== lines[i].rate) {
         return res.status(400).json({ error: 'LOOKUP_RATE_MISMATCH', message: 'তালিকার হার মেলেনি — লুকআপ দিয়ে আবার হার আনুন।' });
       }
@@ -616,6 +661,9 @@ router.post('/mouza', requireAuth, async (req, res) => {
     if (await replayIfExists(req, res, idem)) return;
     const chk = await precheck(req, res, 'mouza');
     if (!chk) return;
+    // Report area comes from office + lines (never from a stale
+    // cascade): the stored order and the PDF header agree.
+    const reportArea = deriveMouzaReportArea(body, calc.lines);
     const payload = {
       records: calc.lines,
       lines: calc.lines,
@@ -629,9 +677,9 @@ router.post('/mouza', requireAuth, async (req, res) => {
         scheduleVersion: calc.scheduleVersion, hasOldComparison: calc.hasOldComparison,
       },
     };
-    return succeed(req, res, 'mouza', chk, idem, area, payload,
+    return succeed(req, res, 'mouza', chk, idem, reportArea, payload,
       {
-        kind: 'mouza', area: { ...area, officeName },
+        kind: 'mouza', area: reportArea,
         lines: calc.lines, totalMinimum: calc.totalMinimum, deedBasis: calc.deedBasis,
         declaredPrice: calc.declaredPrice, breakdown: calc.breakdown,
         scheduleVersion: calc.scheduleVersion, oldScheduleVersion: calc.oldScheduleVersion,
@@ -645,3 +693,6 @@ router.post('/mouza', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+// Exported for unit tests only (the route itself is the export).
+module.exports.deriveMouzaReportArea = deriveMouzaReportArea;
+module.exports.MOUZA_OFFICE_GEO = MOUZA_OFFICE_GEO;

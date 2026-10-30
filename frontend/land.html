@@ -148,7 +148,7 @@
       <div class="ok" id="okBox"></div>
 
       <form id="lform">
-        <div class="grid2">
+        <div class="grid2" id="areaCascade">
           <div class="field"><label>বিভাগ *</label><select id="fDivision"><option value="">— বেছে নিন —</option></select></div>
           <div class="field"><label>জেলা *</label><select id="fDistrict"><option value="">— আগে বিভাগ —</option></select></div>
           <div class="field"><label>উপজেলা / থানা *</label><select id="fUpazila"><option value="">— আগে জেলা —</option></select></div>
@@ -175,47 +175,40 @@
         </div>
 
         <div id="pane-mouza" style="display:none">
+          <!-- Professional single flow, in order: office → mouza →
+               class → amount+unit → rate → add line → declared
+               price + schedule version → report. ONE mouza field,
+               ONE class field, ONE rate field: the old form asked
+               mouza 3 times, class twice and rate twice, and the
+               report header could name a different mouza than
+               the lines calculated on. The shared DLRMS cascade
+               above is hidden in this mode only; the other modes
+               still use it. -->
           <div class="note" style="margin:0 0 12px; font-size:13.5px; color:#92400e; background:#fffbeb; border:1px solid #f59e0b66; padding:10px 12px; border-radius:12px;">
-            ⚠️ এই রিপোর্ট সার্টিফাইড কপি নয়, মালিকানা বা দখলের প্রমাণ নয়, বাজারমূল্য নয়, চূড়ান্ত দলিল বিল নয়।
-            প্রমাণ হিসেবে বোয়ালখালী অফিসের কধুরখীল মৌজার হার তালিকা থেকে খোঁজা যায়; অন্য মৌজার হার নিজে বসাতে হবে।
-            দলিলের আগে শ্রেণি, পরিমাণ ও বর্তমান তালিকা সাব-রেজিস্ট্রার অফিসে মিলিয়ে নিন।
+            ⚠️ এই রিপোর্ট সার্টিফাইড কপি নয়, মালিকানা বা দখলের প্রমাণ নয়, বাজারমূল্য নয়, চূড়ান্ত দলিল বিল নয়।<br>
             চার্জ শুধু রিপোর্ট তৈরি হলেই কাটবে; লাইন ভুল হলে কোনো চার্জ নয়।
           </div>
-          <div class="field"><label>সাব-রেজিস্ট্রার অফিস (ঐচ্ছিক)</label><input type="text" id="fOfficeName" placeholder="যেমন: সদর সাব-রেজিস্ট্রি অফিস"></div>
+          <div class="field"><label>১ · সাব-রেজিস্ট্রার অফিস *</label><select id="mOffice"></select></div>
+          <div class="field"><label>২ · মৌজা *</label><select id="mMouza"><option value="">— বেছে নিন —</option></select></div>
+          <div class="field" id="mMouzaManualWrap" style="display:none"><label>মৌজার নাম *</label><input type="text" id="mMouzaManual" placeholder="যেমন: শাকপুরা"></div>
+          <div class="field"><label>৩ · শ্রেণি *</label><select id="mClass"><option value="">— আগে মৌজা —</option></select></div>
           <div class="grid2">
-            <div class="field"><label>তালিকার সংস্করণ *</label><input type="text" id="fScheduleVersion" value="2025-2026"></div>
-            <div class="field"><label>ঘোষিত দাম (টাকা, ঐচ্ছিক)</label><input type="text" id="fDeclaredPrice" inputmode="decimal" placeholder="খালি থাকলে শুধু সর্বনিম্ন মূল্যই ভিত্তি"></div>
-          </div>
-          <div class="field"><label>তালিকা থেকে হার খুঁজুন (প্রমাণ: বোয়ালখালী অফিস, কধুরখীল মৌজা)</label></div>
-          <div class="grid2">
-            <div class="field"><label>অফিস</label><select id="mLookOffice"><option value="boalkhali">বোয়ালখালী</option></select></div>
-            <div class="field"><label>মৌজা</label><select id="mLookMouza"><option value="কধুরখীল">কধুরখীল</option></select></div>
-            <div class="field"><label>শ্রেণি</label><select id="mLookClass">
-              <option>নাল</option><option>বাড়ী</option><option>ভিটা</option>
-              <option>বাগান</option><option>পুকুর</option><option>ডোবা</option>
-            </select></div>
-          </div>
-          <button type="button" class="btn" id="mLookBtn" style="padding:10px 18px;">🔍 তালিকার হার খুঁজুন</button>
-          <div id="mLookNote" style="font-size:13.5px;color:#14532d;min-height:19px;margin-top:6px;"></div>
-          <div class="field"><label>তালিকার হার (শতাংশপ্রতি, শুধু দেখা যাবে)</label><input type="text" id="mLookRate" readonly placeholder="হার খুঁজলে এখানে আসবে"></div>
-          <div class="field"><label>লাইন যোগ করুন — মৌজা, শ্রেণি, হার, পরিমাণ</label></div>
-          <div class="grid2">
-            <div class="field"><label>মৌজা</label><input type="text" id="mLineMouza" placeholder="খালি থাকলে উপরের মৌজা ধরা হবে"></div>
-            <div class="field"><label>শ্রেণি</label><select id="mLineClass">
-              <option>নাল</option><option>বাড়ী</option><option>ভিটা</option>
-              <option>বাগান</option><option>পুকুর</option><option>ডোবা</option><option>বাণিজ্যিক</option>
-            </select></div>
-            <div class="field"><label id="mLineRateLabel">শতাংশপ্রতি হার (টাকা) *</label><input type="text" id="mLineRate" inputmode="decimal" placeholder="যেমন: 100000"></div>
-            <div class="field"><label>পরিমাণ *</label><input type="text" id="mLineAmount" inputmode="decimal" placeholder="যেমন: 10"></div>
-            <div class="field"><label>একক</label><select id="mLineUnit">
+            <div class="field"><label>৪ · পরিমাণ *</label><input type="text" id="mAmount" inputmode="decimal" placeholder="যেমন: 10"></div>
+            <div class="field"><label>একক</label><select id="mUnit">
               <option value="shatangsho">শতাংশ</option><option value="katha">কাঠা (১ = ১.৬৫ শতাংশ)</option><option value="bigha">বিঘা (১ = ৩৩ শতাংশ)</option><option value="gonda">গন্ডা (১ = ২ শতাংশ)</option>
             </select></div>
-            <div class="field"><label>পুরনো হার (ঐচ্ছিক — তুলনার জন্য)</label><input type="text" id="mLineOldRate" inputmode="decimal" placeholder="খালি থাকলে তুলনা দেখানো হবে না"></div>
           </div>
+          <div class="field"><label id="mRateLabel">৫ · হার (টাকা) *</label><input type="text" id="mRate" inputmode="decimal" placeholder="মৌজা ও শ্রেণি বাছলে হার এখানে আসবে"></div>
+          <div id="mRateNote" style="font-size:13.5px;color:#14532d;min-height:19px;margin:-6px 0 10px;"></div>
+          <div class="field"><label>পুরনো হার (ঐচ্ছিক — তুলনার জন্য)</label><input type="text" id="mOldRate" inputmode="decimal" placeholder="খালি থাকলে তুলনা দেখানো হবে না"></div>
           <div id="mUnitHint" style="font-size:13.5px;color:#14532d;min-height:19px;margin-bottom:6px;"></div>
           <button type="button" class="btn" id="mAddLineBtn" style="padding:10px 18px;">➕ লাইন যোগ করুন</button>
           <div id="mLinesBox" style="margin-top:12px;"></div>
           <div class="note" id="mTotalNote" style="font-size:14px; font-weight:700; color:#14532d;"></div>
+          <div class="grid2">
+            <div class="field"><label>ঘোষিত দাম (টাকা, ঐচ্ছিক)</label><input type="text" id="mDeclaredPrice" inputmode="decimal" placeholder="খালি থাকলে শুধু সর্বনিম্ন মূল্যই ভিত্তি"></div>
+            <div class="field"><label>তালিকার সংস্করণ</label><input type="text" id="mScheduleVersion" value="2025-2026"></div>
+          </div>
         </div>
 
         <button type="submit" class="btn btn-primary" id="goBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; background:#14532d;">
@@ -290,6 +283,10 @@
     if (prices[mode] == null) loadPrice(mode);
     document.querySelectorAll('.mode-card').forEach((c) => c.classList.toggle('on', c.dataset.mode === mode));
     ['search', 'scan', 'verify', 'mouza'].forEach((m) => { $('pane-' + m).style.display = m === mode ? '' : 'none'; });
+    // Mouza mode has its own single flow (office → mouza → class
+    // → amount → rate): the shared DLRMS cascade is hidden HERE
+    // ONLY. The other modes still need it, so it is never removed.
+    $('areaCascade').style.display = mode === 'mouza' ? 'none' : '';
     $('priceVal').textContent = prices[mode] != null ? bn(prices[mode]) : '–';
     updateBtn();
     clearBoxes();
@@ -364,18 +361,69 @@
     };
   }
 
-  // ---------- mouza lines (client preview only; the server
-  // recomputes every line — the preview never decides money) --
+  // ---------- mouza single flow (client preview only; the
+  // server recomputes every line — the preview never decides
+  // money). One flow in order: office → mouza → class →
+  // amount+unit → rate → add line. ONE mouza field, ONE class
+  // field, ONE rate field. A lookup mouza auto-fetches its
+  // schedule rate (no separate lookup button, no second rate
+  // display); a manual mouza ("অন্য মৌজা") takes a hand-entered
+  // rate. The report header is derived server-side from the
+  // lines, so it can never name a different mouza. --
   const MOUZA_LINES = [];
   const MOUZA_FACTORS = { shatangsho: 1, katha: 1.65, bigha: 33, gonda: 2 };
   const MOUZA_UNIT_LABELS = { shatangsho: 'শতাংশ', katha: 'কাঠা', bigha: 'বিঘা', gonda: 'গন্ডা' };
-  // Pending schedule lookup for the NEXT line only (null = manual
-  // line). Set by the lookup button; cleared by any manual edit
-  // of the line form or after the line is added.
+  // Proof scope only: offices whose schedule rates the server
+  // knows (rates.js). Adding an office here + in rates.js is
+  // all it takes to offer another office.
+  const MOUZA_OFFICES = { boalkhali: { name: 'বোয়ালখালী', mouzas: ['কধুরখীল'] } };
+  const MOUZA_LOOKUP_CLASSES = ['নাল', 'বাড়ী', 'ভিটা', 'বাগান', 'পুকুর', 'ডোবা'];
+  const MOUZA_ALL_CLASSES = ['নাল', 'বাড়ী', 'ভিটা', 'বাগান', 'পুকুর', 'ডোবা', 'বাণিজ্যিক'];
+  const MOUZA_MANUAL = '__manual__';
+  // Pending schedule lookup for the NEXT line only (null =
+  // manual line). Set by the auto-lookup; cleared by any manual
+  // edit of the rate or after the line is added.
   let MOUZA_LOOKUP = null;
+  // Bengali digits → Latin, so hand-typed rates/amounts work
+  // the way the server already accepts them (server toEn).
+  const toEnNum = (s) => Number(String(s == null ? '' : s).trim().replace(/[০-৯]/g, (d) => '০১২৩৪৫৬৭৮৯'.indexOf(d)));
+  function mouzaIsManual() { return $('mMouza').value === MOUZA_MANUAL; }
+  function resolvedMouza() {
+    return mouzaIsManual() ? $('mMouzaManual').value.trim() : $('mMouza').value;
+  }
+  function fillSelectOptions(sel, items, placeholder) {
+    sel.innerHTML = '<option value="">' + placeholder + '</option>';
+    items.forEach((it) => {
+      const o = document.createElement('option');
+      o.value = it; o.textContent = it;
+      sel.appendChild(o);
+    });
+  }
+  function fillMouzaOffice() {
+    const sel = $('mOffice');
+    sel.innerHTML = '';
+    Object.entries(MOUZA_OFFICES).forEach(([id, o]) => {
+      const opt = document.createElement('option');
+      opt.value = id; opt.textContent = o.name;
+      sel.appendChild(opt);
+    });
+  }
+  function fillMouzaSelect() {
+    const office = MOUZA_OFFICES[$('mOffice').value];
+    const sel = $('mMouza');
+    sel.innerHTML = '<option value="">— বেছে নিন —</option>';
+    (office ? office.mouzas : []).forEach((m) => {
+      const o = document.createElement('option');
+      o.value = m; o.textContent = m + ' (তালিকার হার আছে)';
+      sel.appendChild(o);
+    });
+    const manual = document.createElement('option');
+    manual.value = MOUZA_MANUAL; manual.textContent = 'অন্য মৌজা (হার নিজে বসাবো)';
+    sel.appendChild(manual);
+  }
   function clearMouzaLookup() {
     MOUZA_LOOKUP = null;
-    $('mLineRate').readOnly = false;
+    $('mRate').readOnly = false;
     updateMouzaRateLabel();
   }
   // Manual rate means "per selected unit": changing the unit
@@ -383,58 +431,77 @@
   // read as a per-shatangsho rate. A lookup rate is different:
   // it is always per shatangsho, so its label is fixed.
   function updateMouzaRateLabel() {
-    const lab = $('mLineRateLabel');
+    const lab = $('mRateLabel');
     if (!lab) return;
-    if (MOUZA_LOOKUP) { lab.textContent = 'তালিকার হার (শতাংশপ্রতি) *'; return; }
-    const u = MOUZA_UNIT_LABELS[$('mLineUnit').value] || 'শতাংশ';
-    lab.textContent = u + 'প্রতি হার (টাকা) *';
+    if (MOUZA_LOOKUP) { lab.textContent = '৫ · তালিকার হার (শতাংশপ্রতি) *'; return; }
+    const u = MOUZA_UNIT_LABELS[$('mUnit').value] || 'শতাংশ';
+    lab.textContent = '৫ · ' + u + 'প্রতি হার (টাকা) *';
   }
-  $('mLookBtn').addEventListener('click', async () => {
-    const office = $('mLookOffice').value;
-    const mouza = $('mLookMouza').value;
-    const cls = $('mLookClass').value;
+  function onMouzaChange() {
+    $('mMouzaManualWrap').style.display = mouzaIsManual() ? '' : 'none';
+    if (!mouzaIsManual()) $('mMouzaManual').value = '';
+    // Lookup mouza → only its lookup classes; manual mouza →
+    // all 7 engine classes (বাণিজ্যিক has no lookup rate).
+    fillSelectOptions($('mClass'),
+      mouzaIsManual() ? MOUZA_ALL_CLASSES : MOUZA_LOOKUP_CLASSES, '— বেছে নিন —');
+    clearMouzaLookup();
+    $('mRate').value = '';
+    $('mRateNote').textContent = '';
+    updateMouzaUnitHint();
+    // Auto-select the first class so the rate lookup runs at
+    // once for a chosen mouza (no extra button press). Nothing
+    // is preselected while no mouza is chosen yet.
+    const cls = $('mClass');
+    if ($('mMouza').value && cls.options.length > 1) { cls.selectedIndex = 1; refreshMouzaRate(); }
+  }
+  // Auto-lookup: choosing office/mouza/class fetches the
+  // schedule rate when one exists. A miss is NOT an error —
+  // the shopkeeper just enters the rate by hand.
+  async function refreshMouzaRate() {
+    const office = $('mOffice').value;
+    const mouza = resolvedMouza();
+    const cls = $('mClass').value;
+    clearMouzaLookup();
+    $('mRate').value = '';
+    $('mRateNote').textContent = '';
+    if (!office || !mouza || !cls || mouzaIsManual()) { updateMouzaUnitHint(); return; }
     try {
       const { resp, data } = await apiJson(API + '/mouza-rate?office=' + encodeURIComponent(office) +
         '&mouza=' + encodeURIComponent(mouza) + '&class=' + encodeURIComponent(cls));
-      if (!resp.ok || !data) { showErr('হার খোঁজা যায়নি — আবার চেষ্টা করুন।'); return; }
+      if (!resp.ok || !data) { $('mRateNote').textContent = 'হার খোঁজা যায়নি — হার নিজে বসান।'; return; }
       if (!data.found) {
-        clearMouzaLookup();
-        $('mLookNote').textContent = data.message || 'তালিকার হার পাওয়া যায়নি।';
-        showErr(data.message || 'তালিকার হার পাওয়া যায়নি।');
+        $('mRateNote').textContent = data.message || 'তালিকার হার পাওয়া যায়নি — হার নিজে বসান।';
+        updateMouzaUnitHint();
         return;
       }
       MOUZA_LOOKUP = { office: data.office, mouza: data.mouza, class: data.class, rate: data.rate, period: data.period, p: data.p === true };
-      $('mLineMouza').value = data.mouza;
-      $('mLineClass').value = data.class;
-      $('mLineRate').value = String(data.rate);
-      $('mLineRate').readOnly = true;
-      $('mLookRate').value = bn(data.rate);
-      $('mLookNote').textContent = 'তালিকার হার পাওয়া গেছে — ' + data.period +
+      $('mRate').value = String(data.rate);
+      $('mRate').readOnly = true;
+      $('mRateNote').textContent = 'তালিকার হার পাওয়া গেছে — ' + data.period +
         (data.p === true ? ' · P চিহ্ন: আগের মূল্য বহাল আছে' : '');
+      $('mScheduleVersion').value = data.period;
       updateMouzaRateLabel();
       updateMouzaUnitHint();
     } catch (e) {
-      showErr('হার খোঁজা যায়নি — আবার চেষ্টা করুন।');
+      $('mRateNote').textContent = 'হার খোঁজা যায়নি — হার নিজে বসান।';
     }
-  });
-  // Any manual edit of the line form drops the pending lookup,
-  // so a hand-edited rate can never ride along as a lookup line.
-  $('mLineMouza').addEventListener('input', () => { if (MOUZA_LOOKUP) clearMouzaLookup(); });
-  $('mLineClass').addEventListener('change', () => { if (MOUZA_LOOKUP) clearMouzaLookup(); });
-  $('mLineRate').addEventListener('input', () => { if (MOUZA_LOOKUP) clearMouzaLookup(); });
+  }
+  // A hand edit of the rate drops the pending lookup, so a
+  // hand-edited rate can never ride along as a lookup line.
+  $('mRate').addEventListener('input', () => { if (MOUZA_LOOKUP) clearMouzaLookup(); updateMouzaUnitHint(); });
   // Live unit hint: show the shatangsho conversion and the line value
   // preview before the line is added, so the shopkeeper can check it
   // at a glance.
   function updateMouzaUnitHint() {
     const hint = $('mUnitHint');
     if (!hint) return;
-    const amount = Number($('mLineAmount').value.trim());
-    const unit = $('mLineUnit').value;
+    const amount = toEnNum($('mAmount').value);
+    const unit = $('mUnit').value;
     if (!(amount > 0) || !MOUZA_FACTORS[unit]) { hint.textContent = ''; return; }
     const qty = Math.round(amount * MOUZA_FACTORS[unit] * 100) / 100;
-    const rate = Number($('mLineRate').value.trim());
+    const rate = toEnNum($('mRate').value);
     let txt = '= ' + bn(qty) + ' শতাংশ';
-    if (rate >= 0 && $('mLineRate').value.trim() !== '') {
+    if (rate >= 0 && $('mRate').value.trim() !== '') {
       // Lookup preview: schedule rate (per shatangsho) × qty.
       // Manual preview: rate (per selected unit) × amount.
       const val = MOUZA_LOOKUP ? rate * qty : rate * amount;
@@ -450,11 +517,12 @@
       const val = l.source === 'lookup' ? l.rate * qty : l.rate * l.amount;
       total += val;
       const ulab = MOUZA_UNIT_LABELS[l.unit] || 'শতাংশ';
+      const tag = l.source === 'lookup' ? 'তালিকা' : 'নিজে বসানো';
       const desc = l.source === 'lookup'
-        ? bn(l.rate) + ' × ' + bn(Math.round(qty * 100) / 100) + ' শতাংশ = ' + bn(Math.round(val * 100) / 100) + ' টাকা (তালিকার হার)'
+        ? bn(l.rate) + ' × ' + bn(Math.round(qty * 100) / 100) + ' শতাংশ = ' + bn(Math.round(val * 100) / 100) + ' টাকা'
         : bn(l.rate) + ' × ' + bn(l.amount) + ' ' + ulab + ' (' + bn(Math.round(qty * 100) / 100) + ' শতাংশ) = ' + bn(Math.round(val * 100) / 100) + ' টাকা';
       h += '<div class="r"><b>' + esc(l.mouza || '—') + ' · ' + esc(l.class) + '</b><span>' +
-        desc +
+        desc + ' <span style="display:inline-block;background:#dcfce7;color:#14532d;border:1px solid #86efac;padding:1px 8px;border-radius:20px;font-size:12px;font-weight:700;">' + tag + '</span>' +
         ' <a href="#" onclick="MOUZA_LINES.splice(' + i + ',1);renderMouzaLines();return false;">মুছুন</a></span></div>';
     });
     $('mLinesBox').innerHTML = h ? '<div class="rec">' + h + '</div>' : '';
@@ -462,20 +530,27 @@
       ? 'প্রাক্কলিত মোট সর্বনিম্ন মূল্য: ' + bn(Math.round(total * 100) / 100) + ' টাকা (সার্ভার আবার হিসাব করবে)'
       : '';
   }
-  $('mLineAmount').addEventListener('input', updateMouzaUnitHint);
-  $('mLineRate').addEventListener('input', updateMouzaUnitHint);
-  $('mLineUnit').addEventListener('change', () => { updateMouzaRateLabel(); updateMouzaUnitHint(); });
+  $('mOffice').addEventListener('change', () => { fillMouzaSelect(); onMouzaChange(); });
+  $('mMouza').addEventListener('change', onMouzaChange);
+  $('mClass').addEventListener('change', refreshMouzaRate);
+  $('mAmount').addEventListener('input', updateMouzaUnitHint);
+  $('mUnit').addEventListener('change', () => { updateMouzaRateLabel(); updateMouzaUnitHint(); });
+  fillMouzaOffice();
+  fillMouzaSelect();
   updateMouzaRateLabel();
   $('mAddLineBtn').addEventListener('click', () => {
-    const rate = Number($('mLineRate').value.trim());
-    const amount = Number($('mLineAmount').value.trim());
-    const oldRateRaw = $('mLineOldRate').value.trim();
+    const mouza = resolvedMouza();
+    const rate = toEnNum($('mRate').value);
+    const amount = toEnNum($('mAmount').value);
+    const oldRateRaw = $('mOldRate').value.trim();
+    if (!mouza) { showErr('মৌজা বাছুন বা মৌজার নাম লিখুন।'); return; }
+    if (!$('mClass').value) { showErr('শ্রেণি বাছুন।'); return; }
     if (!(rate >= 0) || !(amount > 0)) { showErr('হার ও পরিমাণ ঠিক করে বসান।'); return; }
     MOUZA_LINES.push({
-      mouza: $('mLineMouza').value.trim(),
-      class: $('mLineClass').value,
-      rate: rate, amount: amount, unit: $('mLineUnit').value,
-      oldRate: oldRateRaw === '' ? undefined : Number(oldRateRaw),
+      mouza: mouza,
+      class: $('mClass').value,
+      rate: rate, amount: amount, unit: $('mUnit').value,
+      oldRate: oldRateRaw === '' ? undefined : toEnNum(oldRateRaw),
       source: MOUZA_LOOKUP ? 'lookup' : 'manual',
       lookupOffice: MOUZA_LOOKUP ? MOUZA_LOOKUP.office : undefined,
     });
@@ -543,33 +618,42 @@
   $('lform').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     clearBoxes();
-    const area = areaBody();
-    if (!area) { showErr('বিভাগ, জেলা, উপজেলা ও মৌজা — সবগুলো বেছে নিন।'); return; }
-    const body = { ...area, idempotency_key: 'land-' + MODE + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9) };
-    if (MODE === 'search') {
-      body.khatian_no = $('fKhatianNo').value.trim();
-      if (!body.khatian_no) { showErr('খতিয়ান নম্বর লিখুন।'); return; }
-    } else if (MODE === 'scan') {
-      body.owner_name = $('fOwnerName').value.trim();
-      if (!body.owner_name) { showErr('মালিকের নাম লিখুন।'); return; }
-    } else if (MODE === 'mouza') {
+    // Mouza mode sends NO cascade: office + lines only, and the
+    // server derives the report area from them (so the header
+    // mouza can never differ from the line mouzas). The other
+    // modes still require the cascade, exactly as before.
+    let body;
+    if (MODE === 'mouza') {
       if (!MOUZA_LINES.length) { showErr('অন্তত একটি লাইন যোগ করুন।'); return; }
+      body = { idempotency_key: 'land-' + MODE + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9) };
       body.lines = MOUZA_LINES.map((l) => ({
-        mouza: l.mouza || area.mouza_name, class: l.class, rate: l.rate,
+        mouza: l.mouza, class: l.class, rate: l.rate,
         amount: l.amount, unit: l.unit, oldRate: l.oldRate, source: l.source || 'manual',
+        lookupOffice: l.lookupOffice,
       }));
       const lk = MOUZA_LINES.find((l) => l.source === 'lookup');
       if (lk) body.lookup_office = lk.lookupOffice;
-      body.office_name = $('fOfficeName').value.trim();
-      body.schedule_version = $('fScheduleVersion').value.trim() || '2025-2026';
-      body.declared_price = $('fDeclaredPrice').value.trim();
+      body.office = $('mOffice').value;
+      body.schedule_version = $('mScheduleVersion').value.trim() || '2025-2026';
+      body.declared_price = $('mDeclaredPrice').value.trim();
     } else {
-      body.khatian_no = $('fVKhatianNo').value.trim();
-      body.claim = { owner: $('fClaimOwner').value.trim(), dag: $('fClaimDag').value.trim(), total_land: $('fClaimLand').value.trim() };
-      // No claim is fine — address + khatian number alone runs
-      // the check and returns the full record report (owner,
-      // 2026-10-23); the claim comparison is an optional extra.
-      if (!body.khatian_no) { showErr('খতিয়ান নম্বর লিখুন।'); return; }
+      const area = areaBody();
+      if (!area) { showErr('বিভাগ, জেলা, উপজেলা ও মৌজা — সবগুলো বেছে নিন।'); return; }
+      body = { ...area, idempotency_key: 'land-' + MODE + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9) };
+      if (MODE === 'search') {
+        body.khatian_no = $('fKhatianNo').value.trim();
+        if (!body.khatian_no) { showErr('খতিয়ান নম্বর লিখুন।'); return; }
+      } else if (MODE === 'scan') {
+        body.owner_name = $('fOwnerName').value.trim();
+        if (!body.owner_name) { showErr('মালিকের নাম লিখুন।'); return; }
+      } else {
+        body.khatian_no = $('fVKhatianNo').value.trim();
+        body.claim = { owner: $('fClaimOwner').value.trim(), dag: $('fClaimDag').value.trim(), total_land: $('fClaimLand').value.trim() };
+        // No claim is fine — address + khatian number alone runs
+        // the check and returns the full record report (owner,
+        // 2026-10-23); the claim comparison is an optional extra.
+        if (!body.khatian_no) { showErr('খতিয়ান নম্বর লিখুন।'); return; }
+      }
     }
     const btn = $('goBtn');
     btn.disabled = true;

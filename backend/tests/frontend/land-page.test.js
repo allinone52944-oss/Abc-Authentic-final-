@@ -169,21 +169,54 @@ describe('mouza-value mode (land-mouza-value)', () => {
       expect(f).not.toContain('amarvumi');
     }
   });
-  test('mouza lookup proof: office/mouza/class selects + read-only rate + lookup endpoint call', () => {
+  test('mouza professional single flow: office → mouza → class → amount → rate, one field each', () => {
     const html = read('frontend/land.html');
-    expect(html).toContain('id="mLookOffice"');
-    expect(html).toContain('id="mLookMouza"');
-    expect(html).toContain('id="mLookClass"');
-    expect(html).toContain('id="mLookBtn"');
-    expect(html).toContain('id="mLookRate" readonly');
+    // The single flow, in order — one office, one mouza (with a
+    // manual-mouza option), one class, amount+unit, one rate.
+    for (const id of ['mOffice', 'mMouza', 'mMouzaManual', 'mClass', 'mAmount', 'mUnit',
+      'mRate', 'mRateLabel', 'mRateNote', 'mOldRate', 'mAddLineBtn', 'mLinesBox',
+      'mTotalNote', 'mDeclaredPrice', 'mScheduleVersion']) {
+      expect(html).toContain('id="' + id + '"');
+    }
+    expect(html).toContain('অন্য মৌজা (হার নিজে বসাবো)');
+    // The shared DLRMS cascade is hidden in mouza mode ONLY —
+    // the other modes still use it.
+    expect(html).toContain('id="areaCascade"');
+    expect(html).toContain("$('areaCascade').style.display = mode === 'mouza' ? 'none' : ''");
+    // The old triple-mouza / double-class / double-rate form is
+    // gone: no lookup block, no separate line form, no free-text
+    // office field, no old schedule-version/declared-price ids.
+    for (const id of ['mLookOffice', 'mLookMouza', 'mLookClass', 'mLookBtn', 'mLookRate',
+      'mLineMouza', 'mLineClass', 'mLineRate', 'mLineAmount', 'mLineUnit', 'mLineOldRate',
+      'fOfficeName', 'fScheduleVersion', 'fDeclaredPrice']) {
+      expect(html).not.toContain('id="' + id + '"');
+    }
+    // The long disclaimer is shortened to two lines on the form
+    // (the full honesty lines stay in the PDF).
+    expect(html).toContain('চার্জ শুধু রিপোর্ট তৈরি হলেই কাটবে; লাইন ভুল হলে কোনো চার্জ নয়।');
+    expect(html).not.toContain('প্রমাণ হিসেবে বোয়ালখালী অফিসের কধুরখীল মৌজার হার তালিকা থেকে খোঁজা যায়');
+    // Auto-lookup still calls the endpoint; a lookup rate is
+    // read-only and a hand edit drops it to a manual line.
     expect(html).toContain("API + '/mouza-rate?");
     expect(html).toContain('তালিকার হার (শতাংশপ্রতি)');
-    // The lookup rate is read-only: the line form must not let a
-    // hand edit ride along as a lookup line.
     expect(html).toContain('MOUZA_LOOKUP');
     expect(html).toContain("source: MOUZA_LOOKUP ? 'lookup' : 'manual'");
-    // Lookup lines are labelled in the preview and the result.
-    expect(html).toContain('(তালিকার হার)');
+    expect(html).toContain("$('mRate').readOnly = true");
+    // Lines carry a source tag (তালিকা / নিজে বসানো).
+    expect(html).toContain('নিজে বসানো');
+    // The submit sends office + lines with NO cascade in mouza
+    // mode; the server derives the header area from the lines.
+    expect(html).toContain("body.office = $('mOffice').value");
+    expect(html).toContain('lookupOffice: l.lookupOffice');
+  });
+  test('mouza route + PDF derive the header area from the lines (no cascade mouza)', () => {
+    const route = read('backend/routes/land.js');
+    expect(route).toContain('deriveMouzaReportArea');
+    expect(route).toContain('MOUZA_OFFICE_GEO');
+    expect(route).toContain('boalkhali');
+    const pdf = read('backend/lib/landReportPdf.js');
+    expect(pdf).toContain('headerMouzaFor');
+    expect(pdf).not.toContain('স্বয়ংক্রিয় তালিকা-খোঁজা এখনো তৈরি হয়নি');
   });
   test('mouza lookup route exists and verifies lookup lines server-side', () => {
     const route = read('backend/routes/land.js');
