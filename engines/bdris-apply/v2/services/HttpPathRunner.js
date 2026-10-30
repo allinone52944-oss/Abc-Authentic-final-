@@ -62,7 +62,7 @@
 
 'use strict';
 
-const { BdrisHttpClient, parentBrnDirectDecision, submitSummaryText, submitErrorWording } = require('../http/client');
+const { BdrisHttpClient, parentBrnDirectDecision, submitSummaryText, submitErrorWording, submitResponseFingerprint } = require('../http/client');
 const { verifyChargeToken, bnToArab, consumeSubmitToken, isSubmitTokenConsumed } = require('./StepHandler');
 
 const HTTP_CANDIDATE_LABEL = 'CANDIDATE (submit/verify shapes from the pasted form source, NOT live-verified)';
@@ -415,7 +415,8 @@ async function runHttpChain(opts = {}) {
       // of only the shape. When no wording was attached, the
       // line is unchanged.
       const wording = err.responseErrorWording || '';
-      candidateLog(log, 'submit', `SUBMIT-RESPONSE ${submitSummaryText(err.responseSummary)}${wording ? ` errorWording=${wording}` : ''} — filed-vs-not must be read from this shape, not from the [field: …] heuristic`);
+      const fp = err.responseFingerprint || '';
+      candidateLog(log, 'submit', `SUBMIT-RESPONSE ${submitSummaryText(err.responseSummary)}${wording ? ` errorWording=${wording}` : ''}${fp ? ` fingerprint=${fp}` : ''} — filed-vs-not must be read from this shape, not from the [field: …] heuristic`);
     }
     candidateLog(log, 'decision', `DIRECT-DECISION step=${step} outcome=fallback sessionDead=${decisionFlags.sessionDead} otpUnexpired=${decisionFlags.otpUnexpired}`);
     if (step === 'submit' && !isFallbackSafe(step, err)) {
