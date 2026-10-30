@@ -204,8 +204,11 @@ describe('DIRECT HTTP BYPASS: handleHttpChainRequest gating', () => {
     // as the third route (auth-gated diagnostic trigger, no UI).
     // REGISTER-SCRIPT PROBE (2026-10-30): /probe-register-script
     // joined as the fourth route (same gating pattern, no UI).
-    assert.strictEqual(posts.length, 5);
-    assert.deepStrictEqual(posts.map((p) => p[0]).sort(), ['/draft-save', '/http-chain', '/probe-register', '/probe-register-script', '/probe-submit-handler']);
+    // ALL-BUGS (i): /draft-delete joined as the sixth route
+    // (DONE via direct HTTP with a dead socket must still delete
+    // the submitted draft — the socket DELETE_DRAFT never arrives).
+    assert.strictEqual(posts.length, 6);
+    assert.deepStrictEqual(posts.map((p) => p[0]).sort(), ['/draft-delete', '/draft-save', '/http-chain', '/probe-register', '/probe-register-script', '/probe-submit-handler']);
     const handler = posts.find((p) => p[0] === '/http-chain')[1];
     let status = 0;
     let body = null;

@@ -45,8 +45,15 @@ describe('frontend S4Prep: code-sent only after otpSent:true ack', () => {
     assert.match(html, /sent = sent === true/);
     assert.match(html, /কোড পাঠানো হচ্ছে/);
   });
-  it('sendOtp opens the OTP view in sending state, not sent state', () => {
-    assert.match(html, /renderOtpCode\(false\)/);
+  it('sendOtp does NOT pre-render the OTP view in sending state (ALL-BUGS (a): view only after send success)', () => {
+    // SUPERSEDED 2026-10-30 (user bug report, bug (a)): the old
+    // pre-render made a FAILED send (400 cap) still show "code
+    // being sent" with an OTP view and no sent code — advancing
+    // without a sent OTP is meaningless. The view now renders
+    // only on otpSent:true proof (ack handlers below), so the
+    // sending-state pre-render is gone for good.
+    assert.doesNotMatch(html, /renderOtpCode\(false\)/);
+    assert.match(html, /renderOtpCode\(true\)/);
   });
   it('both ack handlers gate the sent text on d.otpSent === true', () => {
     const hits = html.match(/d\.otpSent === true/g) || [];

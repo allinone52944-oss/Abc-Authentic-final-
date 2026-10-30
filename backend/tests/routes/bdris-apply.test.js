@@ -188,14 +188,45 @@ describe('GET /api/bdris-apply/prices', () => {
 describe('POST/GET/DELETE /api/bdris-apply/applications (আবেদনের সার্ভার রেকর্ড)', () => {
   test('record a submitted application → 201, idempotent on (user, ack)', async () => {
     db.__routeQuery([
-      ['INSERT INTO bdris_applications', { rows: [{ id: 'a1', ack_no: '265530312', applicant_name: 'টেস্ট', created_at: 'x' }] }],
+      ['INSERT INTO bdris_applications', { rows: [{ id: 'a1', ack_no: '265530312', applicant_name: 'টেস্ট', created_at: 'x', inserted: true }] }],
     ]);
     const r = await withUser(request(app()).post('/api/bdris-apply/applications'))
       .send({ ack_no: '265530312', name: 'টেস্ট' }).expect(201);
     expect(r.body.application.ack_no).toBe('265530312');
     const ins = db.query.mock.calls.find((c) => /INSERT INTO bdris_applications/.test(c[0]));
-    expect(ins[0]).toMatch(/ON CONFLICT \(user_id, ack_no\) DO NOTHING/);
-    expect(ins[1]).toEqual(['u1', '265530312', 'টেস্ট']);
+    // ALL-BUGS (i): the conflict clause upgrades the original-PDF
+    // flag (OR, never downgrades) instead of DO NOTHING, so a
+    // later flag-only re-POST is no longer silently ignored.
+    expect(ins[0]).toMatch(/ON CONFLICT \(user_id, ack_no\) DO UPDATE SET/);
+    expect(ins[0]).toContain('original_pdf_available = bdris_applications.original_pdf_available OR EXCLUDED.original_pdf_available');
+    expect(ins[1]).toEqual(['u1', '265530312', 'টেস্ট', false]);
+  });
+
+  test('flag-only re-POST on an existing record → duplicate, flag upgraded, NO repeat notification', async () => {
+    db.__routeQuery([
+      ['INSERT INTO bdris_applications', { rows: [{ id: 'a1', ack_no: '265530312', applicant_name: 'টেস্ট', created_at: 'x', inserted: false }] }],
+      ['FROM bdris_applications WHERE user_id', { rows: [{ id: 'a1', ack_no: '265530312', applicant_name: 'টেস্ট', created_at: 'x', original_pdf_available: true }] }],
+    ]);
+    const r = await withUser(request(app()).post('/api/bdris-apply/applications'))
+      .send({ ack_no: '265530312', name: '', original_pdf_available: true }).expect(200);
+    expect(r.body.duplicate).toBe(true);
+    expect(r.body.application.original_pdf_available).toBe(true);
+    // The name is never blanked by a flag-only re-POST…
+    const ins = db.query.mock.calls.find((c) => /INSERT INTO bdris_applications/.test(c[0]));
+    expect(ins[0]).not.toMatch(/applicant_name\s*=/);
+    // …and the customer is NOT notified again for the same filing.
+    expect(push.notifyUser).not.toHaveBeenCalled();
+  });
+
+  test('own list carries the original-PDF flag', async () => {
+    db.__routeQuery([
+      ['FROM bdris_applications', { rows: [{ id: 'a1', ack_no: '123', original_pdf_available: true }] }],
+    ]);
+    const r = await withUser(request(app()).get('/api/bdris-apply/applications')).expect(200);
+    expect(r.body.applications).toHaveLength(1);
+    expect(r.body.applications[0].original_pdf_available).toBe(true);
+    const listQ = db.query.mock.calls.find((c) => /FROM bdris_applications/.test(c[0]));
+    expect(listQ[0]).toContain('original_pdf_available');
   });
 
   test('missing ack_no → 400', async () => {

@@ -808,12 +808,49 @@ function reportAckToServer(a) {
   // জমা হওয়া আবেদন সার্ভারেও জমা হয় — যাতে admin সব আবেদন দেখতে
   // পান (শুধু এই ব্রাউজারের তালিকায় নয়)। ব্যর্থ হলে স্থানীয়
   // রেকর্ড থাকছেই; নম্বর ছাড়া রেকর্ড পাঠানো হয় না।
+  // ALL-BUGS (i): the old fire-and-forget (.catch(()=>{})) let a
+  // DONE-time failure silently lose the server record — the
+  // submission then vanished from every other browser. A failed
+  // report is now marked pending; the next home render retries
+  // it once for ack numbers the server still lacks (below).
   try {
     if (!a || !a.no || a.no === 'সংরক্ষিত নয়') return;
     fetch('/api/bdris-apply/applications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
       body: JSON.stringify({ ack_no: a.no, name: a.name || '' })
+    }).then(r => {
+      if (r && r.ok) clearAckPending(a); else markAckPending(a);
+    }).catch(() => { markAckPending(a); });
+  } catch {}
+}
+function markAckPending(a) {
+  try {
+    const p = JSON.parse(localStorage.getItem('bdris_acks_pending') || '{}');
+    p[String(a.no)] = 1;
+    localStorage.setItem('bdris_acks_pending', JSON.stringify(p));
+  } catch {}
+}
+function clearAckPending(a) {
+  try {
+    const p = JSON.parse(localStorage.getItem('bdris_acks_pending') || '{}');
+    delete p[String(a.no)];
+    localStorage.setItem('bdris_acks_pending', JSON.stringify(p));
+  } catch {}
+}
+function reportOriginalAvailable(ackNo) {
+  // ALL-BUGS (i): the engine already wrote the Form-1 file to
+  // disk, but nothing linked it to the submitted record — after
+  // leaving the DONE page the original was unretrievable from
+  // the record. Flag the record (upsert: never blanks the name).
+  // A lost call heals on the next ORIGINAL_PDF success for the
+  // same ack, which re-sends the flag.
+  try {
+    if (!ackNo) return;
+    fetch('/api/bdris-apply/applications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
+      body: JSON.stringify({ ack_no: String(ackNo), name: '', original_pdf_available: true })
     }).catch(() => {});
   } catch {}
 }
@@ -836,7 +873,16 @@ function addAck(a) {
   l.unshift(a);
   // পুরোনো এন্ট্রির PDF খোঁচা বাদ — localStorage ফুলে উড়ে না যায় (শুধু শেষ আবেদনের কপি থাকে)
   l.slice(1).forEach(x => { if (x.pdfB64) { delete x.pdfB64; delete x.pdfName; } });
-  try { localStorage.setItem('bdris_acks', JSON.stringify(l.slice(0, 20))); } catch {}
+  // ALL-BUGS (i): a quota throw used to silently drop the whole
+  // recent list. Retry once with metadata only (copies stripped)
+  // so the numbers + names always survive.
+  try { localStorage.setItem('bdris_acks', JSON.stringify(l.slice(0, 20))); }
+  catch {
+    try {
+      const meta = l.slice(0, 20).map(x => { const y = Object.assign({}, x); delete y.pdfB64; delete y.pdfName; return y; });
+      localStorage.setItem('bdris_acks', JSON.stringify(meta));
+    } catch {}
+  }
 }
 function delAck(id) {
   try {
@@ -1017,6 +1063,7 @@ function addrBookGeoHtml(d) {
     '<input type="text" id="' + id + '" value="' + esc(d[id.slice(3)] || '') + '"></div>';
   return sel('ab_division', 'বিভাগ') + sel('ab_district', 'জেলা') +
     sel('ab_cityCorpUpazila', 'সিটি কর্পোরেশন / উপজেলা') + sel('ab_paurasavaUnion', 'পৌরসভা / ইউনিয়ন') +
+    txt('ab_zone', 'অঞ্চল (সিটি কর্পোরেশন হলে, যেমন: অঞ্চল - ৭)') +
     txt('ab_ward', 'ওয়ার্ড') + txt('ab_postBn', 'ডাকঘর (বাংলায়)') +
     txt('ab_postEn', 'ডাকঘর (English)') + txt('ab_vilBn', 'গ্রাম / পাড়া / মহল্লা') +
     txt('ab_vilEn', 'Village / Area (English)') + txt('ab_houseBn', 'বাসা ও সড়ক (বাংলা)') +
@@ -1164,6 +1211,17 @@ function renderHome() {
       .then(r => r.json().catch(() => null))
       .then(d => {
         const rows = (d && d.ok && Array.isArray(d.applications)) ? d.applications : [];
+        // ALL-BUGS (i): flush pending server reports — one
+        // attempt per home render, only for ack numbers the
+        // server still lacks. A lost DONE-time report heals here
+        // instead of vanishing; a later success clears the flag.
+        try {
+          const pend = JSON.parse(localStorage.getItem('bdris_acks_pending') || '{}');
+          const serverNos = new Set(rows.map(x => String(x.ack_no)));
+          getAcks().forEach(a => {
+            if (a && a.no && pend[String(a.no)] && !serverNos.has(String(a.no))) reportAckToServer(a);
+          });
+        } catch {}
         const localNos = new Set(getAcks().map(a => String(a.no)));
         const extra = rows.filter(x => x && x.ack_no && !localNos.has(String(x.ack_no)));
         if (!extra.length) return;
@@ -1462,6 +1520,23 @@ function resumeGo() {
 }
 
 /* ═══════════ address book view ═══════════ */
+// ALL-BUGS (g): the book form's selects carry value = display
+// NAME (addrBookFill), so readAddrFields writes display names
+// into *Id fields — names posing as IDs. The book saves by
+// NAME only; the engine matches labels live. And a city-corp
+// zone has no select to live in (bd-geo.json u/p arrays are
+// empty for Dhaka South/North) — so a city-corp entry used to
+// save paurasavaUnion EMPTY, and pick-back broke at that level,
+// losing the ward too. The zone text field IS the paurasavaUnion
+// value for city corps, because the form's cascade already
+// stores the zone label in paurasavaUnion (geoLoad's zone
+// endpoint feeds that select). Pure function — unit-tested.
+function addrBookSaveRecord(a) {
+  const out = Object.assign({}, a);
+  Object.keys(out).forEach(k => { if (/Id$/.test(k)) delete out[k]; });
+  if (!out.paurasavaUnion && out.zone) out.paurasavaUnion = out.zone;
+  return out;
+}
 function renderAddrBook(pickFn, backFn) {
   S.addrPick = pickFn || null; S.addrBack = backFn || (() => renderHome());
   setView('addr'); renderStepper(-1); hideFail();
@@ -1479,7 +1554,15 @@ function renderAddrBook(pickFn, backFn) {
   $('abSave').onclick = () => {
     const nm = $('ab_name').value.trim();
     if (!nm) { note('নাম দিন', 'err'); $('ab_name').classList.add('bad'); return; }
-    const a = Object.assign({ name: nm }, readAddrFields('ab'));
+    // ALL-BUGS (g): ab_zone is read directly (zone is not an
+    // A_KEYS field — the main form has no zone input) and the
+    // record is normalised by addrBookSaveRecord before saving.
+    const zoneEl = $('ab_zone');
+    const a = addrBookSaveRecord(Object.assign(
+      { name: nm },
+      readAddrFields('ab'),
+      { zone: zoneEl ? String(zoneEl.value || '').trim() : '' }
+    ));
     const btn = $('abSave'); btn.disabled = true;
     let done = false;
     const to = setTimeout(() => {
@@ -1490,7 +1573,7 @@ function renderAddrBook(pickFn, backFn) {
       $('ab_name').classList.remove('bad');
       if (!r || r.ok === false) { note((r && r.error) || 'সেভ হয়নি — আবার চেষ্টা করুন', 'err'); return; }
       note('✔ ঠিকানা সেভ হয়েছে', 'ok');
-      ['ab_name'].concat(A_KEYS.map(([k]) => 'ab_' + k)).forEach(id => { const e = $(id); if (e) e.value = ''; });
+      ['ab_name', 'ab_zone'].concat(A_KEYS.map(([k]) => 'ab_' + k)).forEach(id => { const e = $(id); if (e) e.value = ''; });
       addrBookWire();
       loadAddrList();
     });
@@ -1989,13 +2072,18 @@ function renderStep1() {
   );
   const pick = (t) => {
     S.d.s0.addressType = t;
-    $('rcBirth').classList.toggle('sel', t !== 'PERMANENT');
-    $('rcPerm').classList.toggle('sel', t === 'PERMANENT');
+    // ALL-BUGS (e): the cards may be gone when a stale handler
+    // fires after a body re-render — never throw on them.
+    const _b = $('rcBirth'); if (_b) _b.classList.toggle('sel', t !== 'PERMANENT');
+    const _p = $('rcPerm'); if (_p) _p.classList.toggle('sel', t === 'PERMANENT');
     syncS0Live();
   };
-  $('rcBirth').onclick = () => pick('BIRTHPLACE');
-  $('rcPerm').onclick = () => pick('PERMANENT');
-  $('s1emb').onchange = () => { S.d.s0.embassy = $('s1emb').checked; syncS0Live(); };
+  // ALL-BUGS (e): bind only when present — btnRow outlives
+  // stepBody, so a stale Next press after the step-1 body is gone
+  // used to throw on these null elements and block the flow.
+  const _rcB = $('rcBirth'); if (_rcB) _rcB.onclick = () => pick('BIRTHPLACE');
+  const _rcP = $('rcPerm'); if (_rcP) _rcP.onclick = () => pick('PERMANENT');
+  const _emb = $('s1emb'); if (_emb) _emb.onchange = () => { S.d.s0.embassy = !!_emb.checked; syncS0Live(); };
   setBtns([
     { html: 'পরবর্তী →', fn: () => submitStep1() },
     { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => saveDraft(0, () => note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” বাটন থেকে পরে চালু করতে পারবেন', 'ok')) },
@@ -2003,7 +2091,11 @@ function renderStep1() {
   ]);
 }
 function submitStep1() {
-  S.d.s0 = { addressType: S.d.s0.addressType || 'BIRTHPLACE', embassy: !!$('s1emb').checked };
+  // ALL-BUGS (e): the embassy checkbox may be absent when this
+  // handler fires after a body re-render (btnRow outlives
+  // stepBody) — never throw on it; keep the stored value.
+  const _emb = $('s1emb');
+  S.d.s0 = { addressType: S.d.s0.addressType || 'BIRTHPLACE', embassy: _emb ? !!_emb.checked : !!(S.d.s0 && S.d.s0.embassy) };
   if ((S.d.uiStep || 0) >= 2) {
     // ফিরে এসে কিছু বদলালে কেবল এই এক ধাপই আবার সাইটে বসাই (লকস্টেপ)
     if (stepChanged('SUBMIT_S0', payloadFor('SUBMIT_S0'))) { resendFrom('SUBMIT_S0'); return; }
@@ -3244,7 +3336,9 @@ function directFallbackToBotSend() {
   // re-render (that would wipe typed boxes) — the bot ack
   // updates the hint on proof, as it always has.
   S._directOtp = false;
-  if (S.otpStage !== 'code') renderOtpCode(false);
+  // ALL-BUGS (a): no OTP view before bot proof either — the ack
+  // handler renders it on otpSent:true; on failure the real
+  // reason shows at the send step instead of a 'sending' view.
   busy(true, '📲 কোড পাঠানো হচ্ছে…');
   emitStep('SUBMIT_S4_PREP', payloadFor('SUBMIT_S4_PREP'));
 }
@@ -3553,13 +3647,16 @@ function sendOtp() {
   // SUBMIT_S4_PREP. The direct path never renders 'sending'
   // before server proof (see directSend).
   if (directHttpEnabled()) { directSend(); return; }
-  // Permanent fix (2026-10-26): 'code sent' is NOT shown here. The
-  // OTP view opens in 'sending' state; only an otpSent:true ack flips
-  // it to 'sent' (see manualStepAck / otpPrepAck). The old code
-  // rendered 'sent' before the server had confirmed anything, which
-  // is why the page claimed delivery while no SMS ever arrived.
-  renderOtpCode(false);
-  busy(true, '📲 কোড পাঠানো হচ্ছে…'); // ডাবল-চাপ আটকায় (কোড-স্ক্রিনের বাটনগুলো তৈরি হওয়ার পরে)
+  // ALL-BUGS (a): NO OTP view before server proof — not even a
+  // 'sending' view. The old code rendered the OTP view here and
+  // the ack only flipped its hint, so a FAILED send (e.g. 400
+  // cap) still left the user on a code screen waiting for a code
+  // that never comes. The view stays on the preview with a busy
+  // note; manualStepAck / otpPrepAck render the OTP view ONLY on
+  // otpSent:true proof (or the unexpired-code case, where a live
+  // code already exists). On failure the fail panel shows the
+  // real reason at the send step.
+  busy(true, '📲 কোড পাঠানো হচ্ছে…'); // ডাবল-চাপ আটকায়
   // গার্ড আটকালে (আগের ধাপ তখনো সাইটে যাচ্ছে) সাথে সাথে বাটন ছেড়ে দিই —
   // নইলে নোটে “আবার চাপুন” লেখা থাকলেও বাটন নিষ্ক্রিয় থেকে চিরতরে আটকে যায়
   if (emitStep('SUBMIT_S4_PREP', payloadFor('SUBMIT_S4_PREP')) === false) busy(false);
@@ -3626,9 +3723,11 @@ function renderOtpCode(sent) {
         // the hint flips to 'sent' only on server proof, and typed
         // boxes are never re-rendered away).
         if (directHttpEnabled() && S._directOtp) { directSend(); return; }
-        // কখনো আটকে না থাকেন — ওয়েটশিটা ওয়ালা ধাপ আবারই চালানো যায়
-        // Re-send also goes back to 'sending' until its own ack.
-        renderOtpCode(false);
+        // ALL-BUGS (a): re-send never re-renders the OTP view —
+        // re-rendering would wipe typed boxes, and a failed
+        // re-send must not replace the live view with a 'sending'
+        // lie. The ack handler updates the hint in place on
+        // success, or shows the real failure on this same view.
         busy(true, '⏳ আবার কোড পাঠানো হচ্ছে…');
         if (emitStep('SUBMIT_S4_PREP', payloadFor('SUBMIT_S4_PREP')) === false) busy(false);
       } },
@@ -3829,7 +3928,10 @@ function showDone(d, restore) {
   S._otpSessionLive = false; // FINAL-SOLUTION (#2): submitted → no return button
   S._pendingSubmit = null; // FINAL-SOLUTION (#4): submitted → no held submit
   S.photo = d.screenshot || S.photo || null;
-  S.pdf = d.pdf || S.pdf || null;
+  // ALL-BUGS (c): a bytes-only pdf (legacy COMPLETED carries
+  // name+bytes, no content) must never replace a real base64 copy
+  // or render a broken download button — keep the existing copy.
+  S.pdf = (d.pdf && d.pdf.base64) ? d.pdf : (S.pdf || null);
   // Debug-2 (2026-10-26): COMPLETED.original is the original-PDF
   // RECORD object ({appId, date, nameEn, mobileNo}), never a URL —
   // v1 sent a URL string here. Only a string may render the direct
@@ -3853,7 +3955,18 @@ function showDone(d, restore) {
   };
   if (!restore) {
     try { addAck(rec); } catch {}
-    if (S.draftId) { socket.emit('DELETE_DRAFT', S.draftId, () => {}); S.draftId = null; }
+    if (S.draftId) {
+      const _did = S.draftId; S.draftId = null;
+      // ALL-BUGS (i): draft delete must not depend on the live
+      // socket alone — DONE via direct HTTP with a dead socket
+      // used to leave the submitted draft in the list.
+      if (socket && socket.connected) socket.emit('DELETE_DRAFT', _did, () => {});
+      else fetch('/api/bdris-apply/draft-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + curAccessToken() },
+        body: JSON.stringify({ _authToken: curAccessToken(), draftId: _did }),
+      }).catch(() => {});
+    }
     updDraftsCnt();
   }
   // PREMIUM-DONE: সাইটের নিজের মেসেজ থাকলে সেটাই মূল ডিসপ্লে (ব্যানার নয়);
@@ -3875,17 +3988,17 @@ function showDone(d, restore) {
         : '<p class="hsub">জমা হয়েছে — তবে নম্বরটি পেজ থেকে পড়া যায়নি। নিচের পেজের ছবিতে নম্বরটি দেখে নিন।</p>') +
       (d.ackId && !siteSms && String(d.ackId).trim() !== no ? '<p class="hsub">“' + esc(String(d.ackId).trim().slice(0, 200)) + '”</p>' : '') +
       '<p class="hsub">' + esc(nm) + ' — নম্বরটি এখনই কপি করে রেখে দিন।</p>' +
-      '<p class="hint">📄 PDF তৈরি হতে একটু সময় লাগে — তৈরি হলেই নিজে থেকে নেমে যাবে।</p>' +
+      '<p class="hint">📄 আসল PDF (কার্যালয়ের কপি) — অবস্থা নিচের বোতামেই দেখাবে।</p>' +
       '<div class="copyrow2">' +
         (no ? '<button class="btn" id="akCopy">📋 নম্বর কপি</button>' : '') +
         (origUrl ? '<button class="btn" id="akOrig">⬇️ আসল PDF (এখনই নামান)</button>' : '') +
         (!origUrl ? '<button class="btn ghost" id="akOrigPend" disabled>⏳ PDF তৈরি হচ্ছে…</button>' : '') +
-        (S.pdf ? '<button class="btn ghost" id="akPdf">⬇️ PDF কপি নামান</button>' : '') +
+        (S.pdf ? '<button class="btn ghost" id="akPdf">⬇️ আবেদন কপি নামান</button>' : '') +
       '</div>' +
     '</div>' +
     (S.photo ? '<details class="sec"><summary class="sub-h" style="cursor:pointer"><span class="snum">📸</span> জমা হওয়া পেজের ছবি</summary>' +
       '<img src="' + S.photo + '" alt="জমা হওয়া পেজ" style="max-width:100%;border-radius:12px;margin-top:10px"></details>' : '') +
-    (!S.pdf ? '<p class="hint">PDF কপি এখানে আসেনি — উপরের ছবিতে নম্বরটি সংরক্ষণ করে রাখুন, চাইলে নিজের অ্যাকাউন্ট থেকেও নামানো যাবে।</p>' : '')
+    (!S.pdf ? '<p class="hint">আবেদন কপি এখানে আসেনি — উপরের ছবিতে নম্বরটি সংরক্ষণ করে রাখুন, চাইলে নিজের অ্যাকাউন্ট থেকেও নামানো যাবে।</p>' : '')
   );
   const c = $('akCopy'); if (c) c.onclick = () => copyText(no);
   const p = $('akPdf'); if (p) p.onclick = () => { dlBase64(S.pdf.name || 'bdris-application.pdf', S.pdf.base64); note('⬇️ PDF কপি নামছে…', 'ok'); };
@@ -3905,22 +4018,29 @@ function showDone(d, restore) {
     S._origAutoDl = key;
     socket.emit('FETCH_ORIGINAL', { ack: key });
     el.onclick = () => { note('⏳ PDF তৈরি হচ্ছে — হয়ে গেলেই নেমে যাবে', 'info'); socket.emit('FETCH_ORIGINAL', { ack: key }); };
-    // FINAL-PACK: the fetch progress label (e.g. the print-page step)
-    // used to stick forever when the socket died mid-fetch — no
-    // result event ever arrives to replace it. This watchdog only
-    // RE-LABELS the button to a retry state after 120s without any
-    // ORIGINAL_PDF outcome for this ack: it cancels nothing, retries
-    // nothing by itself, and a later real result still wins through
-    // the ORIGINAL_PDF handler above (which sets _origDone).
-    setTimeout(() => {
-      const done = S._origDone && S._origDone[key];
-      const still = $('akOrigPend');
-      if (!done && still && S._origAutoDl === key) {
+    // ALL-BUGS (d): ONE driven path for the original PDF — the
+    // button itself is the state (preparing → ready → failed),
+    // never a separate auto-download promise beside it. The
+    // watchdog only relabels to retry when NO progress event
+    // arrived for 120s (socket dead mid-fetch); while progress
+    // flows the job is alive and bounded by its own 5-min job
+    // timeout, so the watchdog re-arms instead of lying about a
+    // retry. A later real result still wins (sets _origDone).
+    S._origProgressAt = Date.now();
+    const _armOrigWatch = (until) => {
+      setTimeout(() => {
+        const done = S._origDone && S._origDone[key];
+        const still = $('akOrigPend');
+        if (done || !still || S._origAutoDl !== key) return;
+        const fresh = Date.now() - (S._origProgressAt || 0) < 120000;
+        if (fresh && Date.now() < until) { _armOrigWatch(until); return; }
         still.disabled = false; still.style.opacity = '';
         still.textContent = '⬇️ আসল PDF আবার আনুন';
         still.onclick = () => { note('⏳ আসল কপি আনা হচ্ছে…', 'info'); socket.emit('FETCH_ORIGINAL', { ack: key }); };
-      }
-    }, 120000);
+        note('⚠️ আসল PDF আসতে দেরি হচ্ছে — বোতাম চাপলে আবার আনা হবে', 'warn');
+      }, 120000);
+    };
+    _armOrigWatch(Date.now() + 360000);
   })();
   setBtns([
     { html: '🏠 নতুন আবেদন', fn: () => location.reload() },
@@ -4577,7 +4697,9 @@ function otpPrepAck(d) {
   }
   if (d.blocked || failed.length) {
     if (failed.length) showFail(failed.map(x => (x.field ? x.field + ' — ' : '') + (x.reason || 'সমস্যা হয়েছে')));
-    note('⚠️ কোড পাঠানো যায়নি — “আবার চেষ্টা করুন” চাপুন', 'warn');
+    // ALL-BUGS (b): the note carries the first real reason, not
+    // a generic sentence — the cause must be visible at a glance.
+    note('⚠️ ' + san(failed[0] ? (failed[0].reason || 'কোড পাঠানো যায়নি') : 'কোড পাঠানো যায়নি') + ' — “আবার চেষ্টা করুন” চাপুন', 'warn');
     setBtns([
       { html: '🔁 আবার চেষ্টা করুন', fn: () => { hideFail(); note('⏳ আবার চেষ্টা করা হচ্ছে…', 'info'); autoPrep(); } },
       { html: '⏸️ খসড়ায় রেখে বেরোন', cls: 'ghost', fn: () => abortChain() }
@@ -4594,8 +4716,15 @@ function otpPrepAck(d) {
     note('📲 কোড পাঠানো হয়েছে — মোবাইলে এসেছে কি না দেখুন', 'ok');
     autoSaveDraft(6); // FINAL-SOLUTION (#9): send success auto-saves
   } else {
-    note('⏳ কোড পাঠানো হচ্ছে…', 'info');
-    renderOtpCode(false);
+    // ALL-BUGS (a): no proof, no OTP view — a 'sending' view
+    // here used to hang forever for a code that may never come.
+    // Truthful failure at the send step with a deliberate retry.
+    showFail(['কোড পাঠানো যাচাই হয়নি — সার্ভারের নিশ্চিত জবাব (কোড পাঠানো হয়েছে) আসেনি। আবার চেষ্টা করুন।']);
+    note('⚠️ কোড পাঠানো যাচাই হয়নি — আবার চেষ্টা করুন', 'warn');
+    setBtns([
+      { html: '🔁 আবার চেষ্টা করুন', fn: () => { hideFail(); note('⏳ আবার চেষ্টা করা হচ্ছে…', 'info'); autoPrep(); } },
+      { html: '⏸️ খসড়ায় রেখে বেরোন', cls: 'ghost', fn: () => abortChain() }
+    ]);
   }
 }
 
@@ -4694,7 +4823,7 @@ function manualStepAck(d) {
     // লকস্টেপ: নতুন সেশন মানেই বট নিজে পুরো চেইন চালাবে না — ইউজারের সেই ক্লিকের ধাপটিই
     // (এক চাপে) আবার পাঠানোর সুযোগ দিই; ব্যাকএন্ডের ensureAligned আগের ধাপগুলো নিজে সাজায়
     opAbort();
-    if (op === 'SUBMIT_S4_OTP') { if (S.otpStage !== 'code') renderOtpCode(); note('🔄 সংযোগ নতুন — আবার কোড পাঠিয়ে জমা দিতে হবে', 'warn'); return; }
+    if (op === 'SUBMIT_S4_OTP') { if (S.otpStage !== 'code') { renderOtpCode(); const h = document.getElementById('otpSentHint'); if (h) h.innerHTML = esc('সংযোগ নতুন — “আবার কোড পাঠান” চাপলে নতুন কোড আসবে, তারপর জমা দিন।') + ' <b>কোড কারও সাথে শেয়ার করবেন না।</b>'; } note('🔄 সংযোগ নতুন — আবার কোড পাঠিয়ে জমা দিতে হবে', 'warn'); return; }
     if (op === 'SUBMIT_S4_PREP') {
       // নতুন সেশনে সাইট ধাপ ১-এ ফিরে গেছে — কাগজপত্র ছাড়া ওটিপি-ধাপে ফেরা যায় না।
       // Recovery is the documents-return action: saved docs are
@@ -4791,11 +4920,53 @@ function manualStepAck(d) {
         documentsReturnAction, docsReadyForResend() ? '📎 কাগজ আবার পাঠান' : '📎 কাগজপত্রে ফিরুন');
       return;
     }
+    // ALL-BUGS (b): the banner is the most prominent element, so
+    // IT must carry the real reason — never a generic sentence
+    // while the cause sits buried in the fail panel below.
+    const _firstReason = (failed[0] && (failed[0].reason || '')) || '';
+    const _allReasons = failed.map(x => x.reason || '').join(' ');
+    // S4_PREP 400-unexpired (bot path): the previous code is
+    // still valid — same rule as otpPrepAck. Never show a
+    // failure + resend trap for it; render the sent-state OTP
+    // view with the still-valid hint instead.
+    if (op === 'SUBMIT_S4_PREP' && /মেয়াদ শেষ হয়নি|not expired/i.test(_allReasons)) {
+      hideFail();
+      if (S.otpStage !== 'code') { if (S.pvMode && S.mode === 'auto') showPvOtp(); else renderOtpCode(true); }
+      const h = document.getElementById('otpSentHint');
+      if (h) h.innerHTML = esc('আগের কোডের মেয়াদ এখনো আছে — নতুন কোড আসবে না, আগের কোডটাই বসান।') + ' <b>কোড কারও সাথে শেয়ার করবেন না।</b>';
+      note('📲 আগের কোডের মেয়াদ এখনো আছে — নতুন কোড আসবে না, আগের কোডটাই বসান', 'ok');
+      return;
+    }
+    // S4_PREP 400-cap: resending the same number can never
+    // succeed — never offer a resend trap. The real reason +
+    // the true recovery (change the number) is the banner.
+    if (op === 'SUBMIT_S4_PREP' && /সর্বোচ্চ ৫ বার|maximum 5 times/i.test(_allReasons)) {
+      showBanner('warn', '⚠️ ' + san(_firstReason) + ' — এই নম্বরে আর কোড আসবে না, অন্য নম্বর ব্যবহার করুন।', () => {
+        hideBanner(); hideFail(); goStep(6);
+      }, 'নম্বর বদলান');
+      return;
+    }
+    // ALL-BUGS (h): the bot page is not on the OTP step — the
+    // typed code belongs to a different send, so re-pressing
+    // submit can NEVER succeed (and a silent bot replay would
+    // re-send an already-sent code: 400-unexpired, and cannot
+    // pass the parent gate for a BRN-free filing). Branch on
+    // the engine's machine-readable code, never on wording.
+    // True recovery: walk the bot page properly via S4_PREP
+    // (new send, new code), offered as one deliberate action.
+    // (The HTTP-chain path needs no branch: its retry re-runs
+    // the fallback plan, which walks the page properly.)
+    if (op === 'SUBMIT_S4_OTP' && (d.code === 'BOT_PAGE_NOT_ON_OTP_STEP' || failed.some(x => x && x.code === 'BOT_PAGE_NOT_ON_OTP_STEP'))) {
+      showBanner('warn', '⚠️ ' + san(_firstReason || 'বটের পেজ OTP ধাপে নেই') + ' — এই কোড দিয়ে জমা হবে না। বটের পথে আবার কোড পাঠিয়ে জমা দিন।', () => {
+        hideBanner(); hideFail(); goStep(6);
+      }, 'বটের পথে আবার কোড পাঠান');
+      return;
+    }
     // পরের ধাপ ইউজার নিজে চাপলে ব্যাকএন্ডের ensureAligned সাইটকে মেরামত করে নেবে —
     // এখানে কেবল একটি ভদ্র রিট্রাই-ব্যানার দিই (বট নিজে কিছু পাঠায় না)
     const rp = (op && op !== 'SUBMIT_S4_OTP') ? payloadFor(op) : null;
     if (rp) {
-      showBanner('warn', '⚠️ একটি ধাপে সমস্যা হয়েছে — ঠিক করা দরকার।', () => {
+      showBanner('warn', '⚠️ ' + san(_firstReason || 'একটি ধাপে সমস্যা হয়েছে') + ' — ঠিক করে আবার চেষ্টা করুন।', () => {
         hideBanner(); hideFail(); note('⏳ আবার পাঠানো হচ্ছে…', 'info'); emitStep(op, rp);
       }, op === 'SUBMIT_S4_PREP' ? 'আবার কোড পাঠান' : 'আবার চেষ্টা করুন');
     }
@@ -4851,9 +5022,18 @@ function manualStepAck(d) {
         emitStep(held.op, payload);
       }
     } else {
-      note('⏳ কোড পাঠানো হচ্ছে…', 'info');
-      if (S.otpStage !== 'code') renderOtpCode(false);
-      else busy(false);
+      // ALL-BUGS (a): ok ack WITHOUT otpSent proof is not
+      // delivery. Already on the OTP view (re-send): keep the
+      // view, claim nothing. Not on it yet (fresh send): never
+      // open a 'sending' OTP view on unproven delivery — show
+      // the truthful failure at the send step instead.
+      busy(false);
+      if (S.otpStage === 'code') {
+        note('⏳ কোড পাঠানো যাচাই হয়নি — আগের কোড থাকলে সেটাই বসান, না এলে আবার চেষ্টা করুন', 'warn');
+      } else {
+        showFail(['কোড পাঠানো যাচাই হয়নি — সার্ভারের নিশ্চিত জবাব (কোড পাঠানো হয়েছে) আসেনি, তাই কোডের পর্দা খোলা হয়নি। আবার চেষ্টা করুন।']);
+        note('⚠️ কোড পাঠানো যাচাই হয়নি — আবার চেষ্টা করুন', 'warn');
+      }
     }
     return;
   }
@@ -4985,6 +5165,7 @@ socket.on('BOT_STATUS', (d) => {
   // PREMIUM-PROGRESS (2026-10-28): ফেচের লাইভ ধাপ — DONE-এর pending
   // বোতামে ধাপের লেখা বসে (চুপচাপ ১ মিনিট নয়); বোতাম না থাকলে note।
   if (st === 'ORIGINAL_PDF_PROGRESS') {
+    S._origProgressAt = Date.now();
     const pl = san(d.label || '⏳ PDF তৈরি হচ্ছে…');
     const el = $('akOrigPend');
     if (el) el.textContent = pl; else note(pl, 'info');
@@ -5000,6 +5181,10 @@ socket.on('BOT_STATUS', (d) => {
     if (ono && u) ORIG_READY[ono] = u;
     const el = $('akOrigPend');
     if (u) {
+      // ALL-BUGS (i): link the stored original to the server
+      // record, so the submission stays retrievable with its
+      // Form-1 PDF after leaving the DONE page.
+      try { reportOriginalAvailable(ono); } catch {}
       if (el) {
         el.disabled = false; el.className = 'btn'; el.style.opacity = '';
         el.textContent = '⬇️ আসল PDF (কার্যালয়ের কপি)';
@@ -5017,6 +5202,9 @@ socket.on('BOT_STATUS', (d) => {
       el.disabled = false; el.style.opacity = '';
       el.textContent = '⬇️ আসল PDF আবার আনুন';
       el.onclick = () => { note('⏳ আসল কপি আনা হচ্ছে…', 'info'); if (ono) socket.emit('FETCH_ORIGINAL', { ack: ono }); };
+      // ALL-BUGS (d): a failed fetch used to leave only a bare
+      // retry button — the real reason is the terminal state.
+      note('⚠️ আসল PDF আনা যায়নি — ' + san(d.error || 'আবার চেষ্টা করুন'), 'err');
     }
     return;
   }
@@ -5047,7 +5235,37 @@ socket.on('BOT_STATUS', (d) => {
     S._directOtp = false; // DIRECT-PATH WIRING: submitted — no direct phase survives DONE
     directAckClear(); // DIRECT ACK TIMEOUT: no fallback after DONE
     S.otpStage = 'done';
+    // ALL-BUGS (c): the banner shows the moment the site accepts.
+    // submitS4 emits COMPLETED before its screenshot/PDF capture,
+    // and the legacy handler re-emits it with attachments — a
+    // second COMPLETED for the same ack is an attachments update,
+    // never a second DONE (restore-render skips addAck + draft
+    // delete, so the recent list can never double).
+    if (S.view === 'done' && S._done && d.ackId && S._done.ackId && d.ackId === S._done.ackId) {
+      const merged = Object.assign({}, S._done, {
+        screenshot: d.screenshot || S._done.screenshot || null,
+        pdf: (d.pdf && d.pdf.base64) ? d.pdf : (S._done.pdf || null),
+      });
+      showDone(merged, true);
+      return;
+    }
     showDone(d);
+    return;
+  }
+  if (st === 'COMPLETED_ATTACHMENTS') {
+    // ALL-BUGS (c): screenshot / PDF copy captured after the
+    // immediate banner. Merge into the shown DONE page (or stash
+    // for restore if the user already navigated away) — never a
+    // new DONE, never a second recent-list entry.
+    if (d.screenshot) S.photo = d.screenshot;
+    if (d.pdf && d.pdf.base64) S.pdf = d.pdf;
+    if (S.view === 'done' && S._done) {
+      const merged = Object.assign({}, S._done, {
+        screenshot: d.screenshot || S._done.screenshot || null,
+        pdf: (d.pdf && d.pdf.base64) ? d.pdf : (S._done.pdf || null),
+      });
+      showDone(merged, true);
+    }
     return;
   }
   if (st === 'ERROR') {
@@ -5065,7 +5283,7 @@ socket.on('BOT_STATUS', (d) => {
     opAbort();
     if (S.otpStage === 'submitting' && /OTP|কোড/i.test(msg)) {
       S.otpStage = 'code';
-      if (S.pvMode && S.mode === 'auto') showPvOtp(); else renderOtpCode();
+      if (S.pvMode && S.mode === 'auto') showPvOtp(); else { renderOtpCode(); const h = document.getElementById('otpSentHint'); if (h) h.innerHTML = esc('কোড বসান — না এলে “আবার কোড পাঠান” চাপুন।') + ' <b>কোড কারও সাথে শেয়ার করবেন না।</b>'; }
       note(san(msg), 'err');
       return;
     }
