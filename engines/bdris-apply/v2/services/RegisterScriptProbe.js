@@ -54,15 +54,22 @@ const MAX_FIELD_NAME_LEN = 128;
 // The form's OWN submit path (SUBMIT_PATH = FORM_PATH in client.js).
 const SUBMIT_NEEDLE = '/br/application';
 
-// ENGINE SUBMIT WIRE LIST (2026-10-30): every field name the engine's
-// direct POST actually sends, taken from buildSubmitPayload() +
-// submitApplication() in http/client.js: the returned object keys
-// (attachments sent once per id under the single name 'attachments')
-// plus '_csrf' appended by submitApplication. Generated from the
-// prefix/suffix lists so a typo cannot silently drop a field; a test
-// proves this list equals a live buildSubmitPayload() call's keys.
+// ENGINE SUBMIT WIRE LIST (2026-10-30, NATIVE-POST): every field name
+// the engine's direct POST actually sends, taken from
+// buildSubmitPayload() + submitApplication() in http/client.js: the
+// returned object keys (attachments sent once per id under the
+// single name 'attachments') plus '_csrf' appended by
+// submitApplication. Generated from the prefix/suffix lists so a
+// typo cannot silently drop a field; a test proves this list equals
+// a live buildSubmitPayload() call's keys. NATIVE-POST alignment:
+// City suffixes dropped (live DOM has no City input), DOM top-level
+// names added (copy flags, flat parent ids, officeAddr group,
+// wardId).
 const ENGINE_SUBMIT_TOP = [
   'officeAddressType', 'officeId', 'geoLocationId',
+  'officeAddrCountry', 'officeAddrCity', 'officeAddrOffice', 'wardId',
+  'copyBirthPlaceToPermAddr', 'copyPermAddrToPrsntAddr',
+  'father.id', 'mother.id',
   'personInfoForBirth.personFirstNameBn', 'personInfoForBirth.personLastNameBn',
   'personInfoForBirth.personFirstNameEn', 'personInfoForBirth.personLastNameEn',
   'personInfoForBirth.personNameBn', 'personInfoForBirth.personNameEn',
@@ -83,7 +90,7 @@ const ENGINE_SUBMIT_TOP = [
 const ADDRESS_PREFIXES = ['birthPlace', 'permAddr', 'prsntAddr'];
 const ADDRESS_SUFFIXES = [
   'Country', 'Div', 'Dist', 'CityCorpCantOrUpazila', 'PaurasavaOrUnion',
-  'WardInCityCorp', 'Area', 'WardInPaurasavaOrUnion', 'City', 'PostOfc',
+  'WardInCityCorp', 'Area', 'WardInPaurasavaOrUnion', 'PostOfc',
   'PostOfcEn', 'PostCode', 'VilAreaTownBn', 'VilAreaTownEn', 'HouseRoadBn',
   'HouseRoadEn', 'LocationId', 'En', 'Bn',
 ];

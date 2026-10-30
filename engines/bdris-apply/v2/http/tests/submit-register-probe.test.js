@@ -182,7 +182,7 @@ test('probe is referenced ONLY by the auth-gated server trigger, never by submit
 test('submitApplication at runtime never touches the register path', async () => {
   const client = new BdrisHttpClient({ base: 'http://mock' });
   client.csrfToken = 'mock-csrf';
-  client.apiHeaders = () => ({});
+  client.navigationHeaders = () => ({});
   const calledPaths = [];
   client.request = async (p) => {
     calledPaths.push(p);

@@ -32,12 +32,18 @@
  * What is STILL source-derived, not live-captured (see DESIGN.md):
  *  - The exact form-submit field VALUES for a few fields whose page
  *    option values were not in the pasted source (e.g. declaration
- *    checkbox value, officeAddr group fields): buildSubmitPayload()
- *    sends the field NAMES from the pasted form source, with those
- *    few values marked as the best available mapping, and the
- *    Playwright v2 path remains the fallback if the server rejects
- *    the form submit live. Never claim realtime live speed — no
- *    live call has been made from this module.
+ *    checkbox value): buildSubmitPayload() sends the field NAMES
+ *    from the pasted form source, with those few values marked as
+ *    the best available mapping, and the Playwright v2 path remains
+ *    the fallback if the server rejects the form submit live.
+ *    NATIVE-POST (2026-10-30, live DOM): the copy flags ARE form
+ *    fields (the old "not form fields" note was wrong), the
+ *    officeAddr group is sent empty (nothing fills it pre-submit:
+ *    no /api/office/* call in any verified flow, bot never fills
+ *    it, office is server-assigned), and the flat wardId follows
+ *    the officeAddressType address (INFERRED — see buildSubmitPayload).
+ *    Never claim realtime live speed — no live call has been made
+ *    from this module.
  *
  * First parent: the pasted page source shows bangladeshId = "1",
  * so a Bangladesh division chain starts at parent 1. walkGeoChain()
@@ -617,6 +623,41 @@ class BdrisHttpClient {
   }
 
   /**
+   * Headers for the final submit POST only — a document navigation,
+   * not an XHR call (NATIVE-POST 2026-10-30, live-probe proven:
+   * the form submits by native <form> POST, mechanism native, no
+   * JS submit construction). A native browser navigation sends NO
+   * x-requested-with and Accept: text/html (the success page IS
+   * HTML), plus the Sec-Fetch document-navigation set and
+   * Upgrade-Insecure-Requests. The repo never sets these manually
+   * for its own navigations (Playwright sends them automatically);
+   * this is the standard Chromium document-navigation set for a
+   * same-origin HTTPS form POST. Cookies, CSRF header, referer
+   * and client: bris are kept exactly as apiHeaders() sends them.
+   * NOTE: Sec-Fetch-* headers are forbidden in browser fetch()
+   * but legal here — this client runs in Node, not in a browser.
+   * Never use for API calls (send/verify/geo/upload stay XHR).
+   */
+  navigationHeaders() {
+    if (!this.bootstrapped) {
+      throw err('NOT_BOOTSTRAPPED', 'Call bootstrap() (GET the form page) before any API call.');
+    }
+    const cookie = this.jar.headerValue();
+    return {
+      ...(cookie ? { Cookie: cookie } : {}),
+      [this.csrfHeaderName]: this.csrfToken,
+      Referer: this.formUrl,
+      client: 'bris',
+      Accept: 'text/html',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'same-origin',
+      'Sec-Fetch-User': '?1',
+      'Upgrade-Insecure-Requests': '1',
+    };
+  }
+
+  /**
    * Session bootstrap: GET the form page, keep its cookies, parse CSRF.
    * @param {string} [formPath] - override only for tests (mock no-meta page)
    */
@@ -975,7 +1016,8 @@ class BdrisHttpClient {
     form.append('_csrf', this.csrfToken);
     const res = await this.request(SUBMIT_PATH, {
       method: 'POST',
-      headers: this.apiHeaders(),
+      // NATIVE-POST: the submit is a document navigation, not XHR.
+      headers: this.navigationHeaders(),
       body: form,
     });
     if (!res.ok) {
@@ -1069,7 +1111,11 @@ class BdrisHttpClient {
  *    WardInCityCorp, Area, WardInPaurasavaOrUnion, City, PostOfc,
  *    PostOfcEn, PostCode, VilAreaTownBn, VilAreaTownEn, HouseRoadBn,
  *    HouseRoadEn, LocationId, En, Bn. PostCode is carried only if
- *    supplied. The old copy flags are NOT form fields and are dropped.
+ *    supplied. NATIVE-POST (2026-10-30, live DOM): the City fields
+ *    are NOT sent — the live form has no City input, and the
+ *    browser never sends them, so the server cannot require them.
+ *    The copy flags ARE form fields (live DOM) and are sent when
+ *    the copy is effective in this payload (see copyApplies).
  *    SUBMIT-GEO: cascade values mirror the browser POST — geo ids
  *    when the canonical address carries them, display names only
  *    as fallback; city-corp addresses put the zone in
@@ -1099,6 +1145,36 @@ class BdrisHttpClient {
  * Missing required fields throw MISSING_SUBMIT_FIELD listing every
  * missing field name — never a silent guess.
  */
+/**
+ * NATIVE-POST (2026-10-30): effective-copy test for the DOM copy
+ * checkboxes. On the real page a ticked copy box HIDES the target
+ * section and the target IS the source (bot rule, StepHandler
+ * copy-box handling) — so the browser sends the flag exactly when
+ * the submitted target equals the source. The engine's safety rule
+ * (runner: a copy applies only when the target record is empty)
+ * means a ticked flag with separate target data must NOT send the
+ * flag — the server would overwrite real data with the source.
+ * Compare the raw records on the address content fields (aliases
+ * as in addressFields); LocationId is excluded — it is computed
+ * per address and may differ even for a true copy.
+ */
+function copyApplies(source = {}, target = {}) {
+  const fields = [
+    ['division'], ['district'], ['cityCorpUpazila'], ['paurasavaUnion'], ['ward'],
+    ['postOfficeBn', 'postBn'], ['postOfficeEn', 'postEn'],
+    ['villageBn', 'vilBn'], ['villageEn', 'vilEn'],
+    ['houseRoadBn', 'houseBn'], ['houseRoadEn', 'houseEn'],
+    ['area'], ['postCode'],
+  ];
+  const pick = (rec, keys) => {
+    for (const k of keys) {
+      if (rec[k] !== undefined && rec[k] !== null && String(rec[k]).trim() !== '') return String(rec[k]).trim();
+    }
+    return '';
+  };
+  return fields.every(([a, ...alts]) => pick(source, [a, ...alts]) === pick(target, [a, ...alts]));
+}
+
 function buildSubmitPayload(data = {}) {
   const missing = [];
   const req = (value, name) => {
@@ -1168,7 +1244,6 @@ function buildSubmitPayload(data = {}) {
       [`${prefix}WardInCityCorp`]: cityCorp ? zone : '',
       [`${prefix}Area`]: str(addr.area),
       [`${prefix}WardInPaurasavaOrUnion`]: ward,
-      [`${prefix}City`]: str(addr.city),
       [`${prefix}PostOfc`]: str(addr.postOfficeBn || addr.postBn),
       [`${prefix}PostOfcEn`]: str(addr.postOfficeEn || addr.postEn),
       [`${prefix}PostCode`]: str(addr.postCode),
@@ -1220,11 +1295,32 @@ function buildSubmitPayload(data = {}) {
     ? str(permAddr.locationId || data.permGeoLocationId || data.geoLocationId)
     : str(birthPlace.locationId || data.birthGeoLocationId || data.geoLocationId);
   const attachmentIds = [docsByType.get(40), docsByType.get(41)].map((d) => d.id);
+  // NATIVE-POST (2026-10-30): copy ticks come from the canonical
+  // copyFlags (runner) with s2b/direct fallbacks. The flag is sent
+  // only when the copy is effective in this payload — see
+  // copyApplies. The flat ward id follows the officeAddressType
+  // address (office-group parallel to geoLocationId, INFERRED).
+  const copyFlags = data.copyFlags || {};
+  const permCopyTick = !!(copyFlags.permCopy || (data.s2b && data.s2b.permCopy) || data.permCopy);
+  const presCopyTick = !!(copyFlags.presCopy || (data.s2b && data.s2b.presCopy) || data.presCopy);
+  const officeAddrRec = officeType === 'PERMANENT' ? permAddr : birthPlace;
   return {
     officeAddressType: officeType,
     // LIVE-CONFIRMED 2026-10-27 (Stage C): officeId 0 when empty.
     officeId: str(data.officeId || (data.s4prep && data.s4prep.officeId)) || '0',
     geoLocationId,
+    // NATIVE-POST: office address group. Nothing fills these
+    // pre-submit (no /api/office/* call in any verified flow, bot
+    // never fills them, office is server-assigned) — the browser
+    // sends them empty. officeAddrCountry keeps the canonical
+    // value when the chain carries one, else empty.
+    officeAddrCountry: str(data.officeAddrCountry || (data.s4prep && data.s4prep.officeAddrCountry)),
+    officeAddrCity: '',
+    officeAddrOffice: '',
+    // NATIVE-POST: flat ward id (office-group parallel, INFERRED —
+    // see header note). idOrName guards a display-name *Id
+    // exactly as the address fields do.
+    wardId: idOrName(officeAddrRec.wardId, officeAddrRec.ward),
     'personInfoForBirth.personFirstNameBn': str(firstBn),
     'personInfoForBirth.personLastNameBn': str(lastBn),
     'personInfoForBirth.personFirstNameEn': str(firstEn),
@@ -1238,6 +1334,12 @@ function buildSubmitPayload(data = {}) {
     'personInfoForBirth.personNid': str(person.nid || person.personNid),
     religion: 'NOT_APPLICABLE',
     'personInfoForBirth.father.id': str(father.id),
+    // NATIVE-POST (live DOM): the flat parent record id — the DOM
+    // form sends father.id, not only the dotted name. The dotted
+    // id above is RETAINED with the same value (2026-10-25 source
+    // showed it; one value on both names cannot contradict either
+    // server binding).
+    'father.id': str(father.id),
     'personInfoForBirth.father.ubrn': str(brnDecision.fatherUbrn),
     'personInfoForBirth.father.personBirthDate': toSiteDate(father.dob),
     'personInfoForBirth.father.personNameBn': str(father.nameBn),
@@ -1245,6 +1347,9 @@ function buildSubmitPayload(data = {}) {
     'personInfoForBirth.father.passportNumber': str(father.passportNumber),
     'personInfoForBirth.father.personNationality': mapNationality(father.nationality),
     'personInfoForBirth.mother.id': str(mother.id),
+    // NATIVE-POST (live DOM): flat mother.id, same retention rule
+    // as father.id above.
+    'mother.id': str(mother.id),
     'personInfoForBirth.mother.ubrn': str(brnDecision.motherUbrn),
     'personInfoForBirth.mother.personBirthDate': toSiteDate(mother.dob),
     'personInfoForBirth.mother.personNameBn': str(mother.nameBn),
@@ -1254,6 +1359,14 @@ function buildSubmitPayload(data = {}) {
     ...birthFields,
     ...permFields,
     ...presFields,
+    // NATIVE-POST (live DOM): copy checkboxes. Sent ONLY when the
+    // copy is effective in this payload — checkbox semantics:
+    // unchecked = absent, never a false flag. Value 'true': the
+    // probe captured names only, so the DOM value attribute is
+    // unproven; Spring boolean binding treats 'true' exactly like
+    // the browser's default 'on'.
+    ...(permCopyTick && copyApplies(birthPlace, permAddr) ? { copyBirthPlaceToPermAddr: 'true' } : {}),
+    ...(presCopyTick && copyApplies(permAddr, prsntAddr) ? { copyPermAddrToPrsntAddr: 'true' } : {}),
     // DIRECT BRN-FREE ROUTE: relationWithApplicant carries the
     // site's enum value (bot REL_VALUE map), not the draft's
     // Bengali label. Person/parent names above stay VERBATIM on

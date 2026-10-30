@@ -143,7 +143,7 @@ test('submitErrorWording: JSON message/code, HTML error-class, no leak', () => {
 test('submitApplication attaches responseErrorWording on the form-wall throw', async () => {
   const client = new BdrisHttpClient({ base: 'http://mock' });
   client.csrfToken = 'mock-csrf';
-  client.apiHeaders = () => ({});
+  client.navigationHeaders = () => ({});
   client.request = async () => ({
     status: 200, ok: true, json: null,
     text: '<html><form><input name="personInfoForBirth"><div class="text-danger">এই ঘরটি পূরণ আবশ্যক</div></form></html>',
