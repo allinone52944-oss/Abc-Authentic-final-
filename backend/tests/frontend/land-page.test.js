@@ -169,45 +169,68 @@ describe('mouza-value mode (land-mouza-value)', () => {
       expect(f).not.toContain('amarvumi');
     }
   });
-  test('mouza professional single flow: office → mouza → class → amount → rate, one field each', () => {
+  test('mouza wizard: one plain question at a time, rate card first, never a dead-end miss', () => {
     const html = read('frontend/land.html');
-    // The single flow, in order — one office, one mouza (with a
-    // manual-mouza option), one class, amount+unit, one rate.
-    for (const id of ['mOffice', 'mMouza', 'mMouzaManual', 'mClass', 'mAmount', 'mUnit',
-      'mRate', 'mRateLabel', 'mRateNote', 'mOldRate', 'mAddLineBtn', 'mLinesBox',
-      'mTotalNote', 'mDeclaredPrice', 'mScheduleVersion']) {
+    // Steps + progress + back buttons, in customer order.
+    for (const id of ['wzProgress', 'wzStep1', 'wzStepThana', 'wzStep2', 'wzStep3',
+      'wzStep4', 'wzStep5', 'wzStepLines', 'wzStepFinish',
+      'wzBackThana', 'wzBack2', 'wzBack3', 'wzBack4', 'wzBack5', 'wzBackFinish']) {
       expect(html).toContain('id="' + id + '"');
     }
-    expect(html).toContain('অন্য মৌজা (হার নিজে বসাবো)');
-    // The shared DLRMS cascade is hidden in mouza mode ONLY —
-    // the other modes still use it.
-    expect(html).toContain('id="areaCascade"');
-    expect(html).toContain("$('areaCascade').style.display = mode === 'mouza' ? 'none' : ''");
-    // The old triple-mouza / double-class / double-rate form is
-    // gone: no lookup block, no separate line form, no free-text
-    // office field, no old schedule-version/declared-price ids.
-    for (const id of ['mLookOffice', 'mLookMouza', 'mLookClass', 'mLookBtn', 'mLookRate',
-      'mLineMouza', 'mLineClass', 'mLineRate', 'mLineAmount', 'mLineUnit', 'mLineOldRate',
-      'fOfficeName', 'fScheduleVersion', 'fDeclaredPrice']) {
-      expect(html).not.toContain('id="' + id + '"');
+    for (const q of ['জমি কোথায়?', 'কোন থানা?', 'জমির ধরন কী?', 'কতটুকু জমি?',
+      'রিপোর্টে যা থাকবে', 'আরেকটা জমি যোগ করুন']) {
+      expect(html).toContain(q);
     }
-    // The long disclaimer is shortened to two lines on the form
-    // (the full honesty lines stay in the PDF).
-    expect(html).toContain('চার্জ শুধু রিপোর্ট তৈরি হলেই কাটবে; লাইন ভুল হলে কোনো চার্জ নয়।');
-    expect(html).not.toContain('প্রমাণ হিসেবে বোয়ালখালী অফিসের কধুরখীল মৌজার হার তালিকা থেকে খোঁজা যায়');
-    // Auto-lookup still calls the endpoint; a lookup rate is
-    // read-only and a hand edit drops it to a manual line.
-    expect(html).toContain("API + '/mouza-rate?");
-    expect(html).toContain('তালিকার হার (শতাংশপ্রতি)');
-    expect(html).toContain('MOUZA_LOOKUP');
-    expect(html).toContain("source: MOUZA_LOOKUP ? 'lookup' : 'manual'");
-    expect(html).toContain("$('mRate').readOnly = true");
+    // Offices with data are marked; an uncovered office is a
+    // plain sentence + the manual path, never an error.
+    expect(html).toContain('তালিকার হার আছে');
+    expect(html).toContain('অন্য অফিস (তালিকা এখনো যোগ হয়নি)');
+    expect(html).toContain('এই অফিসের তালিকা এখনো যোগ হয়নি');
+    expect(html).toContain('অন্য মৌজা (হার নিজে বসাবো)');
+    // Searchable mouza list + whole-mouza rate card in one call.
+    expect(html).toContain('id="wzMouzaSearch"');
+    expect(html).toContain('id="wzCardGrid"');
+    expect(html).toContain("API + '/mouza-rates?");
+    // Structured miss reasons, each with a plain WHY + manual
+    // fallback — never the old dead-end message.
+    for (const code of ['OFFICE_NOT_COVERED', 'MOUZA_NOT_IN_TABLE', 'CLASS_NO_RATE']) {
+      expect(html).toContain(code);
+    }
+    expect(html).not.toContain('এই মৌজা/শ্রেণির তালিকার হার পাওয়া যায়নি — হার নিজে বসান অথবা তালিকায় থাকা শ্রেণি বাছুন');
+    // P-flagged rates in plain words, never a bare "P".
+    expect(html).toContain('আগের বছরের হার বহাল আছে');
+    expect(html).not.toContain('P চিহ্ন');
+    expect(html).not.toContain('· P:');
+    // Preview is a sentence with grouped digits, not a raw
+    // number string; the finish screen states the charge rule.
+    expect(html).toContain('bnGrouped');
+    expect(html).toContain('চার্জ ৳৫০ — শুধু বৈধ রিপোর্টেই কাটবে, ভুল লাইনে ৳০।');
+    // The report button lives on the finish screen ONLY.
+    expect(html).toContain("go.style.display = step === 'finish' ? '' : 'none'");
     // Lines carry a source tag (তালিকা / নিজে বসানো).
     expect(html).toContain('নিজে বসানো');
     // The submit sends office + lines with NO cascade in mouza
     // mode; the server derives the header area from the lines.
     expect(html).toContain("body.office = $('mOffice').value");
     expect(html).toContain('lookupOffice: l.lookupOffice');
+    expect(html).toContain('lookupThana: l.lookupThana');
+    // The shared DLRMS cascade is hidden in mouza mode ONLY —
+    // the other modes still use it.
+    expect(html).toContain('id="areaCascade"');
+    expect(html).toContain("$('areaCascade').style.display = mode === 'mouza' ? 'none' : ''");
+    // The old single-flow form is gone: no per-class lookup
+    // fields, no thana popup, no separate line form.
+    for (const id of ['mMouza', 'mMouzaManual', 'mClass', 'mAmount', 'mUnit',
+      'mRate', 'mRateLabel', 'mRateNote', 'mOldRate', 'mAddLineBtn', 'mLinesBox',
+      'mTotalNote', 'mThanaWrap', 'mThana',
+      'mLookOffice', 'mLookMouza', 'mLookClass', 'mLookBtn', 'mLookRate',
+      'mLineMouza', 'mLineClass', 'mLineRate', 'mLineAmount', 'mLineUnit', 'mLineOldRate']) {
+      expect(html).not.toContain('id="' + id + '"');
+    }
+    expect(html).not.toContain('MOUZA_LOOKUP');
+    expect(html).not.toContain('resetMouzaThana');
+    // The short honesty note stays on the form (full lines in PDF).
+    expect(html).toContain('চার্জ শুধু রিপোর্ট তৈরি হলেই কাটবে; লাইন ভুল হলে কোনো চার্জ নয়।');
   });
   test('mouza route + PDF derive the header area from the lines (no cascade mouza)', () => {
     const route = read('backend/routes/land.js');
@@ -228,7 +251,7 @@ describe('mouza-value mode (land-mouza-value)', () => {
     expect(rates).toContain('কধুরখীল');
     expect(rates).toContain('2025-2026');
   });
-  test('mouza batch 1: 5 new offices in the form, thana qualifier UI, pouro note, qualified submit', () => {
+  test('mouza wizard batch 1: 5 new offices in the form, thana question, pouro note, qualified submit', () => {
     const html = read('frontend/land.html');
     // New offices + a sample mouza name from each batch-1 office.
     for (const id of ['chandgaon', 'sandwip', 'gachbaria', 'rangunia', 'pahartali']) {
@@ -237,20 +260,17 @@ describe('mouza-value mode (land-mouza-value)', () => {
     for (const name of ['বাকলিয়া', 'হরামিয়া', 'জামিরজুরী', 'সৈয়দবাড়ী', 'উত্তর কাট্টলী']) {
       expect(html).toContain(name);
     }
-    // Thana qualifier: hidden select shown only on an ambiguous
-    // lookup response, re-fetching with the chosen thana.
-    expect(html).toContain('id="mThanaWrap"');
-    expect(html).toContain('id="mThana"');
+    // Thana question: an ordinary step shown only on an
+    // ambiguous card response, re-fetching with the thana.
+    expect(html).toContain('id="wzThana"');
     expect(html).toContain('data.ambiguous');
-    expect(html).toContain("'&thana=' + encodeURIComponent(MOUZA_THANA)");
+    expect(html).toContain("'&thana=' + encodeURIComponent(WZ.thana)");
     expect(html).toContain('থানা বাছুন');
-    // A class change resets the qualifier (ambiguity is per
-    // mouza+class), and the thana rides the line to the server.
-    expect(html).toContain('resetMouzaThana');
+    // The thana rides the wizard line to the server.
     expect(html).toContain('lookupThana: l.lookupThana');
-    expect(html).toContain('lookupThana: MOUZA_LOOKUP ? MOUZA_LOOKUP.thana : undefined');
+    expect(html).toContain('lookupThana: WZ.rateIsTable ? (WZ.thana || undefined) : undefined');
     // Sandwip pouro note is displayed under the rate when present.
-    expect(html).toContain('data.pouroNote');
+    expect(html).toContain('pouroNote');
     // Server: qualifier param + qualified verification + geo for
     // the new offices (header area derivation).
     const route = read('backend/routes/land.js');

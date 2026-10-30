@@ -3658,6 +3658,84 @@ function lookupMouzaRate(office, mouza, cls, thana) {
   };
 }
 
+/** Classes shown on a mouza rate card, in order. বাণিজ্যিক has
+ * no lookup rate anywhere, so its card entry is always null —
+ * picking it leads to the manual-rate path with a plain WHY. */
+const CARD_CLASSES = ['নাল', 'বাড়ী', 'ভিটা', 'বাগান', 'পুকুর', 'ডোবা', 'বাণিজ্যিক'];
+
+/**
+ * lookupMouzaCard(office, mouza, thana?)
+ * Whole-mouza rate card for the guided wizard: ALL classes'
+ * rates in one call, so the customer can SEE what exists
+ * before picking a class.
+ * Returns null when the office has no lookup data at all
+ * (OFFICE_NOT_COVERED at the route).
+ * Returns { notInTable: true, ... } when the office is covered
+ * but the mouza is not in its table (MOUZA_NOT_IN_TABLE).
+ * Returns { ambiguous: true, options: [thanas] } when several
+ * thana variants exist and no thana was given — the card cannot
+ * pick one variant's rates, so the caller must ask "কোন থানা?".
+ * (Unlike the single-class lookup, there is no single-variant
+ * shortcut here: a card shows every class, so any multi-variant
+ * mouza is ambiguous until a thana is picked.)
+ * Otherwise { office, officeName, mouza, thana?, jl?, period,
+ * rates: { class: { rate: number|null, p: bool,
+ * pouroPukur?, pouroNote? } } } — a null rate means the table
+ * has no rate for that class (never 0).
+ */
+function lookupMouzaCard(office, mouza, thana) {
+  const o = OFFICES[norm(office)];
+  if (!o) return null;
+  const rec = o.mouzas[norm(mouza)];
+  if (!rec) {
+    return { notInTable: true, office: norm(office), officeName: o.name, mouza: norm(mouza) };
+  }
+  const variants = variantsOf(rec);
+  const t = norm(thana);
+  if (t) {
+    const v = variants.find((x) => norm(x.thana) === t);
+    if (!v) {
+      return { badThana: true, office: norm(office), officeName: o.name, mouza: norm(mouza), thana: t };
+    }
+    return cardFrom(norm(office), o, mouza, v);
+  }
+  if (variants.length > 1) {
+    return {
+      ambiguous: true,
+      office: norm(office),
+      officeName: o.name,
+      mouza: norm(mouza),
+      period: o.period,
+      options: variants.map((v) => v.thana),
+    };
+  }
+  return cardFrom(norm(office), o, mouza, variants[0]);
+}
+
+function cardFrom(officeId, o, mouza, variant) {
+  const rates = {};
+  for (const cls of CARD_CLASSES) {
+    const r = variant.rates[cls];
+    if (!r) { rates[cls] = { rate: null, p: false }; continue; }
+    const entry = { rate: r.rate, p: r.p === true };
+    if (cls === 'পুকুর' && variant.pouroPukur) {
+      entry.pouroPukur = variant.pouroPukur;
+      entry.pouroNote = 'পৌর এলাকার হার: ' + variant.pouroPukur + ' টাকা — গ্রাম-মান দেখানো হয়েছে';
+    }
+    rates[cls] = entry;
+  }
+  const card = {
+    office: officeId,
+    officeName: o.name,
+    mouza: norm(mouza),
+    period: o.period,
+    rates,
+  };
+  if (variant.thana) card.thana = variant.thana;
+  if (variant.jl) card.jl = variant.jl;
+  return card;
+}
+
 /** Offices available for lookup: [{ id, name, period, mouzas: [names] }]. */
 function listLookupOffices() {
   return Object.entries(OFFICES).map(([id, o]) => ({
@@ -3682,4 +3760,4 @@ function listLookupClasses(office, mouza) {
   return out;
 }
 
-module.exports = { OFFICES, lookupMouzaRate, listLookupOffices, listLookupClasses };
+module.exports = { OFFICES, lookupMouzaRate, lookupMouzaCard, listLookupOffices, listLookupClasses };

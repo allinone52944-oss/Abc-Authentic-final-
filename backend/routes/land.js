@@ -46,7 +46,7 @@ const { buildReceiptPdf } = require('../lib/receiptPdf');
 const { buildLandReportPdf } = require('../lib/landReportPdf');
 const client = require('../../engines/land-core/client');
 const { calcMouzaReport } = require('../../engines/land-mouza-value/calc');
-const { lookupMouzaRate, OFFICES } = require('../../engines/land-mouza-value/rates');
+const { lookupMouzaRate, lookupMouzaCard, OFFICES } = require('../../engines/land-mouza-value/rates');
 
 const router = express.Router();
 const UPLOAD_DIR = '/opt/all-in-one-abc-authentic/uploads/orders';
@@ -550,6 +550,59 @@ router.get('/mouza-rate', requireAuth, async (req, res) => {
     rate: hit.rate, period: hit.period, p: hit.p,
     thana: hit.thana, jl: hit.jl,
     pouroPukur: hit.pouroPukur, pouroNote: hit.pouroNote,
+  });
+});
+
+// ---------- GET /mouza-rates (wizard rate card) ----------
+// Whole-mouza rate card for the guided wizard: every class'
+// table rate in ONE call, so the customer can SEE what rates
+// exist before picking a class. The single-class /mouza-rate
+// endpoint above is left working unchanged.
+// Query: ?office=boalkhali&mouza=কধুরখীল[&thana=...]
+// Misses are 200 + structured codes, never errors, and the
+// frontend turns each into a plain sentence + the manual-rate
+// path — a miss is never a dead end:
+//   OFFICE_NOT_COVERED — office has no lookup data yet.
+//   MOUZA_NOT_IN_TABLE — office covered, mouza not in its table.
+//   THANA_NOT_MATCHED  — thana given matches no variant.
+// A null rate inside `rates` means that class has no table rate
+// (CLASS_NO_RATE at pick time) — never 0. No charge here.
+router.get('/mouza-rates', requireAuth, async (req, res) => {
+  const office = String(req.query.office || '').trim();
+  const mouza = String(req.query.mouza || '').trim();
+  const thana = String(req.query.thana || '').trim() || undefined;
+  if (!office || !mouza) {
+    return res.status(400).json({ error: 'BAD_INPUT', message: 'অফিস ও মৌজা — দুটোই লাগবে।' });
+  }
+  const card = lookupMouzaCard(office, mouza, thana);
+  if (!card) {
+    return res.json({
+      ok: true, found: false, miss: 'OFFICE_NOT_COVERED',
+      message: 'এই অফিসের তালিকা এখনো যোগ হয়নি — তালিকা দেখে হার নিজে বসিয়ে রিপোর্ট করা যাবে।',
+    });
+  }
+  if (card.notInTable) {
+    return res.json({
+      ok: true, found: false, miss: 'MOUZA_NOT_IN_TABLE',
+      message: 'এই মৌজা এই অফিসের তালিকায় নেই — হার নিজে বসিয়ে রিপোর্ট করা যাবে।',
+    });
+  }
+  if (card.badThana) {
+    return res.json({
+      ok: true, found: false, miss: 'THANA_NOT_MATCHED',
+      message: 'ওই থানায় এই মৌজার হার নেই — হার নিজে বসিয়ে রিপোর্ট করা যাবে।',
+    });
+  }
+  if (card.ambiguous) {
+    return res.json({
+      ok: true, found: false, ambiguous: true, options: card.options,
+      message: 'এই মৌজা একাধিক থানায় আছে — থানা বাছুন।',
+    });
+  }
+  return res.json({
+    ok: true, found: true,
+    office: card.office, officeName: card.officeName, mouza: card.mouza,
+    thana: card.thana, jl: card.jl, period: card.period, rates: card.rates,
   });
 });
 

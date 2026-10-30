@@ -174,45 +174,100 @@
           </div>
         </div>
 
-        <div id="pane-mouza" style="display:none">
-          <!-- Professional single flow, in order: office → mouza →
-               class → amount+unit → rate → add line → declared
-               price + schedule version → report. ONE mouza field,
-               ONE class field, ONE rate field: the old form asked
-               mouza 3 times, class twice and rate twice, and the
-               report header could name a different mouza than
-               the lines calculated on. The shared DLRMS cascade
-               above is hidden in this mode only; the other modes
-               still use it. -->
+                <div id="pane-mouza" style="display:none">
+          <!-- Customer-logic guided wizard: one plain question at
+               a time — where → what kind (whole-mouza rate card)
+               → how much → rate → preview sentence → lines →
+               finish summary. No engineer logic is shown: no
+               lookup fields, no qualifier popups, no bare "P",
+               no raw number strings. A miss is never a dead end:
+               it explains WHY in plain words and continues to
+               the manual-rate path. The shared DLRMS cascade
+               above is hidden in this mode only. -->
           <div class="note" style="margin:0 0 12px; font-size:13.5px; color:#92400e; background:#fffbeb; border:1px solid #f59e0b66; padding:10px 12px; border-radius:12px;">
             ⚠️ এই রিপোর্ট সার্টিফাইড কপি নয়, মালিকানা বা দখলের প্রমাণ নয়, বাজারমূল্য নয়, চূড়ান্ত দলিল বিল নয়।<br>
             চার্জ শুধু রিপোর্ট তৈরি হলেই কাটবে; লাইন ভুল হলে কোনো চার্জ নয়।
           </div>
-          <div class="field"><label>১ · সাব-রেজিস্ট্রার অফিস *</label><select id="mOffice"></select></div>
-          <div class="field"><label>২ · মৌজা *</label><select id="mMouza"><option value="">— বেছে নিন —</option></select></div>
-          <div class="field" id="mMouzaManualWrap" style="display:none"><label>মৌজার নাম *</label><input type="text" id="mMouzaManual" placeholder="যেমন: শাকপুরা"></div>
-          <div class="field"><label>৩ · শ্রেণি *</label><select id="mClass"><option value="">— আগে মৌজা —</option></select></div>
-          <div class="field" id="mThanaWrap" style="display:none"><label>থানা *</label><select id="mThana"></select></div>
-          <div class="grid2">
-            <div class="field"><label>৪ · পরিমাণ *</label><input type="text" id="mAmount" inputmode="decimal" placeholder="যেমন: 10"></div>
-            <div class="field"><label>একক</label><select id="mUnit">
-              <option value="shatangsho">শতাংশ</option><option value="katha">কাঠা (১ = ১.৬৫ শতাংশ)</option><option value="bigha">বিঘা (১ = ৩৩ শতাংশ)</option><option value="gonda">গন্ডা (১ = ২ শতাংশ)</option>
-            </select></div>
+          <div id="wzProgress" style="font-size:14px; font-weight:700; color:#14532d; margin-bottom:12px;">ধাপ ১ / ৫ · জমি কোথায়?</div>
+
+          <!-- Step 1: where -->
+          <div id="wzStep1">
+            <div class="field"><label>জমি কোথায়? — সাব-রেজিস্ট্রার অফিস *</label><select id="mOffice"></select></div>
+            <div id="wzOfficeNote" style="font-size:13.5px;color:#14532d;min-height:19px;margin:-6px 0 10px;"></div>
+            <div class="field" id="wzOfficeManualWrap" style="display:none"><label>অফিসের নাম *</label><input type="text" id="wzOfficeManual" placeholder="যেমন: সদর সাব-রেজিস্ট্রি অফিস"></div>
+            <div class="field" id="wzMouzaSearchWrap"><label>মৌজা খুঁজুন</label><input type="text" id="wzMouzaSearch" placeholder="মৌজার নাম লিখে খুঁজুন…"></div>
+            <div class="field"><label>মৌজা *</label><select id="wzMouza"><option value="">— বেছে নিন —</option></select></div>
+            <div class="field" id="wzMouzaManualWrap" style="display:none"><label>মৌজার নাম *</label><input type="text" id="wzMouzaManual" placeholder="যেমন: শাকপুরা"></div>
+            <button type="button" class="btn btn-primary" id="wzNext1" style="padding:10px 18px;">পরের ধাপ →</button>
           </div>
-          <div class="field"><label id="mRateLabel">৫ · হার (টাকা) *</label><input type="text" id="mRate" inputmode="decimal" placeholder="মৌজা ও শ্রেণি বাছলে হার এখানে আসবে"></div>
-          <div id="mRateNote" style="font-size:13.5px;color:#14532d;min-height:19px;margin:-6px 0 10px;"></div>
-          <div class="field"><label>পুরনো হার (ঐচ্ছিক — তুলনার জন্য)</label><input type="text" id="mOldRate" inputmode="decimal" placeholder="খালি থাকলে তুলনা দেখানো হবে না"></div>
-          <div id="mUnitHint" style="font-size:13.5px;color:#14532d;min-height:19px;margin-bottom:6px;"></div>
-          <button type="button" class="btn" id="mAddLineBtn" style="padding:10px 18px;">➕ লাইন যোগ করুন</button>
-          <div id="mLinesBox" style="margin-top:12px;"></div>
-          <div class="note" id="mTotalNote" style="font-size:14px; font-weight:700; color:#14532d;"></div>
-          <div class="grid2">
+
+          <!-- Step 1b: which thana (only when one mouza name lives in several thanas) -->
+          <div id="wzStepThana" style="display:none">
+            <div class="field"><label>কোন থানা?</label><select id="wzThana"></select></div>
+            <div style="font-size:13.5px;color:#374151;margin:-6px 0 10px;">এই মৌজা একাধিক থানায় আছে — থানা বাছলে ঠিক হার দেখাবে।</div>
+            <button type="button" class="btn" id="wzBackThana" style="padding:10px 18px;">← ফিরে যান</button>
+            <button type="button" class="btn btn-primary" id="wzNextThana" style="padding:10px 18px;">পরের ধাপ →</button>
+          </div>
+
+          <!-- Step 2: what kind — whole-mouza rate card, or plain class pick on the manual path -->
+          <div id="wzStep2" style="display:none">
+            <div id="wzCardHead" style="font-size:15px; margin-bottom:10px;"></div>
+            <div id="wzCardGrid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;"></div>
+            <div id="wzCardNote" style="font-size:13.5px;color:#374151;margin-bottom:10px;"></div>
+            <button type="button" class="btn" id="wzBack2" style="padding:10px 18px;">← ফিরে যান</button>
+          </div>
+
+          <!-- Step 3: how much -->
+          <div id="wzStep3" style="display:none">
+            <div class="grid2">
+              <div class="field"><label>কতটুকু জমি? — পরিমাণ *</label><input type="text" id="wzAmount" inputmode="decimal" placeholder="যেমন: 10"></div>
+              <div class="field"><label>একক</label><select id="wzUnit">
+                <option value="shatangsho">শতাংশ</option><option value="katha">কাঠা (১ = ১.৬৫ শতাংশ)</option><option value="bigha">বিঘা (১ = ৩৩ শতাংশ)</option><option value="gonda">গন্ডা (১ = ২ শতাংশ)</option>
+              </select></div>
+            </div>
+            <div id="wzAmountWords" style="font-size:14px;color:#14532d;min-height:19px;margin:-6px 0 10px;"></div>
+            <button type="button" class="btn" id="wzBack3" style="padding:10px 18px;">← ফিরে যান</button>
+            <button type="button" class="btn btn-primary" id="wzNext3" style="padding:10px 18px;">পরের ধাপ →</button>
+          </div>
+
+          <!-- Step 4: rate -->
+          <div id="wzStep4" style="display:none">
+            <div id="wzRateBox" style="margin-bottom:10px;"></div>
+            <div class="field" id="wzRateManualWrap" style="display:none"><label id="wzRateLabel">হার (টাকা) *</label><input type="text" id="wzRateInput" inputmode="decimal" placeholder="যেমন: 100000"></div>
+            <div class="field"><label>পুরনো হার (ঐচ্ছিক — তুলনার জন্য)</label><input type="text" id="wzOldRate" inputmode="decimal" placeholder="খালি থাকলে তুলনা দেখানো হবে না"></div>
+            <button type="button" class="btn" id="wzBack4" style="padding:10px 18px;">← ফিরে যান</button>
+            <button type="button" class="btn btn-primary" id="wzNext4" style="padding:10px 18px;">পরের ধাপ →</button>
+          </div>
+
+          <!-- Step 5: preview sentence -->
+          <div id="wzStep5" style="display:none">
+            <div id="wzPreviewBox" style="margin-bottom:10px;"></div>
             <div class="field"><label>ঘোষিত দাম (টাকা, ঐচ্ছিক)</label><input type="text" id="mDeclaredPrice" inputmode="decimal" placeholder="খালি থাকলে শুধু সর্বনিম্ন মূল্যই ভিত্তি"></div>
-            <div class="field"><label>তালিকার সংস্করণ</label><input type="text" id="mScheduleVersion" value="2025-2026"></div>
+            <button type="button" class="btn" id="wzBack5" style="padding:10px 18px;">← ফিরে যান</button>
+            <button type="button" class="btn btn-primary" id="wzAddLine" style="padding:10px 18px;">➕ লাইন যোগ করুন</button>
           </div>
+
+          <!-- Lines list -->
+          <div id="wzStepLines" style="display:none">
+            <div id="wzLinesBox" style="margin-bottom:10px;"></div>
+            <div class="note" id="wzTotalNote" style="font-size:14px; font-weight:700; color:#14532d;"></div>
+            <button type="button" class="btn" id="wzAddAnother" style="padding:10px 18px;">➕ আরেকটা জমি যোগ করুন</button>
+            <button type="button" class="btn btn-primary" id="wzToFinish" style="padding:10px 18px;">রিপোর্টের সারাংশ দেখুন →</button>
+          </div>
+
+          <!-- Finish screen, BEFORE payment -->
+          <div id="wzStepFinish" style="display:none">
+            <div id="wzFinishBox" style="margin-bottom:10px;"></div>
+            <div class="note" style="font-size:14px; color:#14532d;">
+              চার্জ ৳৫০ — শুধু বৈধ রিপোর্টেই কাটবে, ভুল লাইনে ৳০।
+            </div>
+            <button type="button" class="btn" id="wzBackFinish" style="padding:10px 18px; margin-top:10px;">← লাইন তালিকায় ফিরুন</button>
+          </div>
+
+          <input type="hidden" id="mScheduleVersion" value="2025-2026">
         </div>
 
-        <button type="submit" class="btn btn-primary" id="goBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; background:#14532d;">
+<button type="submit" class="btn btn-primary" id="goBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; background:#14532d;">
           🔍 খুঁজুন
         </button>
         <div class="note">
@@ -288,6 +343,10 @@
     // → amount → rate): the shared DLRMS cascade is hidden HERE
     // ONLY. The other modes still need it, so it is never removed.
     $('areaCascade').style.display = mode === 'mouza' ? 'none' : '';
+    // Wizard: entering mouza mode always starts fresh at step 1
+    // (report button hidden until the finish screen); leaving
+    // it restores the shared report button for other modes.
+    if (mode === 'mouza') { wzResetWizard(); } else { const g = $('goBtn'); if (g) g.style.display = ''; }
     $('priceVal').textContent = prices[mode] != null ? bn(prices[mode]) : '–';
     updateBtn();
     clearBoxes();
@@ -371,173 +430,372 @@
   // display); a manual mouza ("অন্য মৌজা") takes a hand-entered
   // rate. The report header is derived server-side from the
   // lines, so it can never name a different mouza. --
+  // ---- Mouza wizard: customer-logic guided flow ----
+  // One plain question at a time: where → what kind (whole-
+  // mouza rate card) → how much → rate → preview sentence →
+  // lines → finish summary. Nothing here shows engineer logic:
+  // no lookup fields, no qualifier popups, no bare "P", no raw
+  // number strings. A miss is never a dead end: it explains WHY
+  // in plain words and continues to the manual-rate path.
+  // The report submit, charge, verification and PDF are the
+  // same as before — only the way the customer gets there
+  // changed.
   const MOUZA_LINES = [];
   const MOUZA_FACTORS = { shatangsho: 1, katha: 1.65, bigha: 33, gonda: 2 };
   const MOUZA_UNIT_LABELS = { shatangsho: 'শতাংশ', katha: 'কাঠা', bigha: 'বিঘা', gonda: 'গন্ডা' };
   // Offices whose schedule rates the server knows (rates.js):
   // Boalkhali (proof) + batch 1 (5 Chattogram offices).
-  // Adding an office here + in rates.js is all it takes to
-  // offer another office. Mouza names are unique per office;
-  // Chandgaon collisions resolve by thana at lookup time.
+  // Any other office is offered as "অন্য অফিস" and flows to
+  // the manual-rate path with a plain explanation — never an
+  // error. Mouza names are unique per office; Chandgaon
+  // collisions resolve by an ordinary "কোন থানা?" question.
   const MOUZA_OFFICES = {"boalkhali":{"name":"বোয়ালখালী","mouzas":["কধুরখীল"]},"chandgaon":{"name":"চাঁদগাঁও থানা","mouzas":["চান্দগাঁও","মোহরা","চর মোহরা","চর রাঙ্গামাটিয়া","পূর্ব ষোলশহর","বাকলিয়া","চর বাকলিয়া"]},"sandwip":{"name":"সন্দ্বীপ","mouzas":["আজিমপুর","আমান উল্যা","কাটগড়","কাহিয়াপাড়","কাহিয়াপাড় (চর)","কাহিয়াপাড় (বাক)","কালাপানিয়া","কুহিয়ামোড়া","কুহিয়ামোড়া (চর)","কুহিয়ামোড়া (বাক)","গাছুয়া","গাছুয়া (চর)","গাছুয়া (বাক)","চেউরিয়া","চৌকাতলী","দীর্ঘাপাড়","দীর্ঘাপাড় (চর)","দীর্ঘাপাড় (বাক)","দুর্বলাপাড়","বাউরিয়া","বাউরিয়া (চর)","বাউরিয়া (বাক)","মগধরা","মাইটভাঙ্গা","মুছাপুর","রহমতপুর","সন্তোষপুর","সন্তোষপুর (চর)","সন্তোষপুর (বাক)","সাতঘরিয়া","সারিকাইত","হরিশপুর","হরামিয়া","ছদ্রাখালী","ছদ্রাখালী (চর)","ছদ্রাখালী (বাক)"]},"gachbaria":{"name":"গাছবাড়িয়া, চন্দনাইশ","mouzas":["উত্তর জোয়ারা","উত্তর কেশবা","উত্তর আটিয়া","কাঞ্চননগর","কানাইমাদারী","কেওচিয়া","কুলাল চেন্না","গাছবাড়ীয়া","চন্দনাইশ","চর বরমা","চাগাচর","চিরিংঘাটি","জঙ্গল হাশিমপুর","জাফরাবাদ","জামিরজুরী","দক্ষিণ জোয়ারা","দঃ আড়াদিঘা","দোহাজারী","শিয়াজুরী","পাটা জোড়া","পূর্ব এলাহাবাদ","পশ্চিম এলাহাবাদ","পূর্ব গোপালঘাটি","পশ্চিম গোপালঘাটি","কতলপুর","পাটিলদহ","বরকল","বরমা","বলরাম নগর","বাইনজুরী","বাতাজুরী","বৈলতলী","মাইসাতা","মোহাম্মদপুর","মোহাম্মদবালী","মুরাদাবাদ","রামজোয়ারা","ছোট কাঞ্চন","শোলকী","সাতবাড়িয়া","হাশিমপুর","হরলা","হাহন্দী","হাতিয়ার খোলা"]},"rangunia":{"name":"রাঙ্গুনিয়া","mouzas":["আন্দর ঘোনা","ইছামতি","উত্তর ঘাগড়া","কদমতলী","কাউখালী","কাটাখালী","কোদালা","কোকানিয়া","খারগোলা","গজালিয়া","গুনগুনিয়া বেতাগী","গুমাইবিল","গুমাই","ঘাটচেক","চন্দ্রঘোনা","চেংখালী","জঙ্গল পাকুয়া","জঙ্গল সরকভাটা","জঙ্গল ঘাটচেক","জঙ্গল দক্ষিণ নিশ্চিন্তপুর","জঙ্গল পোমরা","জঙ্গল সুরত সিংহের ঢালা","জঙ্গল বগাবিল","ঠাণ্ডাছড়ি","ডিঙ্গল গোপা","টেমির ছড়া","তিনচৌদিয়া","ত্রিপুরা সুন্দরী","তৈলাভাঙ্গা","দক্ষিণ নিশ্চিন্তপুর","দক্ষিণ ঘাগড়া","দক্ষিণ ইছামতি","দক্ষিণ পাকুয়া","ঘারিকোপ","দুধ পুকুরিয়া","দেবীপুর কদমতলী","ধোপাঘাটা","নারিচা","নাপিত পুকুরিয়া","নোয়াগাঁও","পদুয়া","পশ্চিম নিশ্চিন্তপুর","পারকুয়া","পশ্চিম বুরশিয়া","পুকুরিয়া গোলা","পূর্ব বুরশিয়া","পূর্ব নিশ্চিন্তপুর","পোমরা","কলাহারিয়া","বগাবিল","বানিয়া খোলা","বাইনলা","বেতাগী","ভবনছড়া","মধ্য ঘাগড়া","মেঘাছড়ি","রাঙ্গুনিয়া","লট-২ কোদালা","লট-৫ জঙ্গল কোদালা","লট কোদালা","লট-৫৮ নিশ্চিন্তপুর","লালনগর","শিলক","শিয়াল বুড়া","ভরত সিংহের ঢালা","সরফভাটা","সুবিলাস","সৈয়দবাড়ী","সোনাইছড়ি","হোসনাবাদ","লট-৫৭ ঠাণ্ডাছড়ি","লট-৪৭ হাজারী"]},"pahartali":{"name":"পাহাড়তলী","mouzas":["লতিফপুর","উত্তর কাট্টলী","উত্তর পাহাড়তলী","লট-৯ পাহাড়তলী","দক্ষিণ কাট্টলী","সরাইপাড়া","দক্ষিণ পাহাড়তলী","পশ্চিম নাছিরাবাদ","রামপুর","উত্তর হালিশহর","নলশা"]}};
-  const MOUZA_LOOKUP_CLASSES = ['নাল', 'বাড়ী', 'ভিটা', 'বাগান', 'পুকুর', 'ডোবা'];
-  const MOUZA_ALL_CLASSES = ['নাল', 'বাড়ী', 'ভিটা', 'বাগান', 'পুকুর', 'ডোবা', 'বাণিজ্যিক'];
-  const MOUZA_MANUAL = '__manual__';
-  // Pending schedule lookup for the NEXT line only (null =
-  // manual line). Set by the auto-lookup; cleared by any manual
-  // edit of the rate or after the line is added.
-  let MOUZA_LOOKUP = null;
-  // Thana qualifier for the pending lookup (Chandgaon collisions
-  // only): null until the server says the mouza is ambiguous and
-  // the shopkeeper picks a thana. Offices without qualified rows
-  // never show the thana select.
-  let MOUZA_THANA = null;
-  function resetMouzaThana() {
-    MOUZA_THANA = null;
-    const w = $('mThanaWrap');
-    if (w) w.style.display = 'none';
-    const s = $('mThana');
-    if (s) s.innerHTML = '';
-  }
+  const MOUZA_CARD_CLASSES = ['নাল', 'বাড়ী', 'ভিটা', 'বাগান', 'পুকুর', 'ডোবা', 'বাণিজ্যিক'];
+  const MOUZA_OTHER_OFFICE = '__other__';
+  const MOUZA_MANUAL_MOUZA = '__manual__';
   // Bengali digits → Latin, so hand-typed rates/amounts work
   // the way the server already accepts them (server toEn).
   const toEnNum = (s) => Number(String(s == null ? '' : s).trim().replace(/[০-৯]/g, (d) => '০১২৩৪৫৬৭৮৯'.indexOf(d)));
-  function mouzaIsManual() { return $('mMouza').value === MOUZA_MANUAL; }
-  function resolvedMouza() {
-    return mouzaIsManual() ? $('mMouzaManual').value.trim() : $('mMouza').value;
+  // Grouped Bengali digits for sentences: 121421 → ১,২১,৪২১.
+  // (bn() only converts digits; customers read grouped
+  // numbers, so the wizard formats its sentences this way.)
+  function bnGrouped(v) {
+    const num = Number(v);
+    if (!Number.isFinite(num)) return bn(v);
+    const rounded = Math.round(Math.abs(num) * 100) / 100;
+    const parts = String(rounded).split('.');
+    let intStr = parts[0];
+    let grouped = intStr;
+    if (intStr.length > 3) {
+      const last3 = intStr.slice(-3);
+      let rest = intStr.slice(0, -3);
+      const pairs = [];
+      while (rest.length > 2) { pairs.unshift(rest.slice(-2)); rest = rest.slice(0, -2); }
+      if (rest) pairs.unshift(rest);
+      grouped = pairs.join(',') + ',' + last3;
+    }
+    if (parts[1]) grouped += '.' + parts[1];
+    return (num < 0 ? '-' : '') + bn(grouped);
   }
-  function fillSelectOptions(sel, items, placeholder) {
-    sel.innerHTML = '<option value="">' + placeholder + '</option>';
-    items.forEach((it) => {
-      const o = document.createElement('option');
-      o.value = it; o.textContent = it;
-      sel.appendChild(o);
-    });
+  // One pending line's wizard state. `miss` carries the plain
+  // WHY whenever the table cannot supply a rate — it is shown,
+  // never turned into an error.
+  const WZ = {
+    office: '', officeName: '', covered: true,
+    mouza: '', manualMouza: false, thana: null,
+    card: null, miss: null,
+    cls: '', rateIsTable: false, tableRate: null, manualRate: null,
+    pNote: '', pouroNote: '',
+    amount: 0, unit: 'shatangsho',
+  };
+  const WZ_STEP_IDS = { 1: 'wzStep1', thana: 'wzStepThana', 2: 'wzStep2', 3: 'wzStep3', 4: 'wzStep4', 5: 'wzStep5', lines: 'wzStepLines', finish: 'wzStepFinish' };
+  const WZ_TITLES = { 1: 'ধাপ ১ / ৫ · জমি কোথায়?', thana: 'কোন থানা?', 2: 'ধাপ ২ / ৫ · জমির ধরন কী?', 3: 'ধাপ ৩ / ৫ · কতটুকু জমি?', 4: 'ধাপ ৪ / ৫ · হার', 5: 'ধাপ ৫ / ৫ · হিসাব দেখুন', lines: 'লাইন তালিকা', finish: 'রিপোর্টের সারাংশ' };
+  function wzShowStep(step) {
+    Object.values(WZ_STEP_IDS).forEach((id) => { const el = $(id); if (el) el.style.display = 'none'; });
+    const show = $(WZ_STEP_IDS[step]);
+    if (show) show.style.display = '';
+    const prog = $('wzProgress');
+    if (prog) prog.textContent = WZ_TITLES[step] || '';
+    // The report button lives on the finish screen ONLY: on
+    // every earlier step it is hidden, so a half-filled line
+    // can never be submitted by accident. Other modes are
+    // untouched — this only applies inside mouza mode.
+    const go = $('goBtn');
+    if (go && MODE === 'mouza') go.style.display = step === 'finish' ? '' : 'none';
   }
-  function fillMouzaOffice() {
+  function wzResetWizard() {
+    WZ.office = ''; WZ.officeName = ''; WZ.covered = true;
+    WZ.mouza = ''; WZ.manualMouza = false; WZ.thana = null;
+    WZ.card = null; WZ.miss = null;
+    WZ.cls = ''; WZ.rateIsTable = false; WZ.tableRate = null; WZ.manualRate = null;
+    WZ.pNote = ''; WZ.pouroNote = '';
+    WZ.amount = 0; WZ.unit = 'shatangsho';
+    $('mOffice').value = '';
+    $('wzOfficeManual').value = '';
+    $('wzMouzaSearch').value = '';
+    $('wzMouzaManual').value = '';
+    $('wzAmount').value = '';
+    $('wzRateInput').value = '';
+    $('wzOldRate').value = '';
+    $('wzOfficeNote').textContent = '';
+    $('wzOfficeManualWrap').style.display = 'none';
+    $('wzMouzaSearchWrap').style.display = '';
+    $('wzMouzaManualWrap').style.display = 'none';
+    wzFillMouzas();
+    wzShowStep(1);
+  }
+  function wzFillOffices() {
     const sel = $('mOffice');
-    sel.innerHTML = '';
+    sel.innerHTML = '<option value="">— বেছে নিন —</option>';
     Object.entries(MOUZA_OFFICES).forEach(([id, o]) => {
-      const opt = document.createElement('option');
-      opt.value = id; opt.textContent = o.name;
-      sel.appendChild(opt);
+      const op = document.createElement('option');
+      op.value = id; op.textContent = o.name + ' — তালিকার হার আছে';
+      sel.appendChild(op);
     });
+    const other = document.createElement('option');
+    other.value = MOUZA_OTHER_OFFICE; other.textContent = 'অন্য অফিস (তালিকা এখনো যোগ হয়নি)';
+    sel.appendChild(other);
   }
-  function fillMouzaSelect() {
+  function wzFillMouzas() {
     const office = MOUZA_OFFICES[$('mOffice').value];
-    const sel = $('mMouza');
+    const sel = $('wzMouza');
     sel.innerHTML = '<option value="">— বেছে নিন —</option>';
     (office ? office.mouzas : []).forEach((m) => {
       const o = document.createElement('option');
-      o.value = m; o.textContent = m + ' (তালিকার হার আছে)';
+      o.value = m; o.textContent = m;
       sel.appendChild(o);
     });
     const manual = document.createElement('option');
-    manual.value = MOUZA_MANUAL; manual.textContent = 'অন্য মৌজা (হার নিজে বসাবো)';
+    manual.value = MOUZA_MANUAL_MOUZA; manual.textContent = 'অন্য মৌজা (হার নিজে বসাবো)';
     sel.appendChild(manual);
   }
-  function clearMouzaLookup() {
-    MOUZA_LOOKUP = null;
-    $('mRate').readOnly = false;
-    updateMouzaRateLabel();
+  function wzFilterMouzas() {
+    const q = $('wzMouzaSearch').value.trim();
+    for (const op of $('wzMouza').options) {
+      if (!op.value) { op.style.display = ''; continue; }
+      op.style.display = (!q || op.textContent.indexOf(q) !== -1) ? '' : 'none';
+    }
   }
-  // Manual rate means "per selected unit": changing the unit
-  // re-labels the rate field, so the entered rate is never silently
-  // read as a per-shatangsho rate. A lookup rate is different:
-  // it is always per shatangsho, so its label is fixed.
-  function updateMouzaRateLabel() {
-    const lab = $('mRateLabel');
-    if (!lab) return;
-    if (MOUZA_LOOKUP) { lab.textContent = '৫ · তালিকার হার (শতাংশপ্রতি) *'; return; }
-    const u = MOUZA_UNIT_LABELS[$('mUnit').value] || 'শতাংশ';
-    lab.textContent = '৫ · ' + u + 'প্রতি হার (টাকা) *';
+  function wzOnOffice() {
+    const id = $('mOffice').value;
+    WZ.office = id;
+    WZ.covered = !!MOUZA_OFFICES[id];
+    WZ.officeName = WZ.covered ? MOUZA_OFFICES[id].name : '';
+    WZ.card = null; WZ.miss = null; WZ.thana = null;
+    $('wzOfficeManualWrap').style.display = id === MOUZA_OTHER_OFFICE ? '' : 'none';
+    $('wzOfficeNote').textContent = id === MOUZA_OTHER_OFFICE
+      ? 'এই অফিসের তালিকা এখনো যোগ হয়নি — তালিকা দেখে হার নিজে বসিয়ে রিপোর্ট করা যাবে।'
+      : (WZ.covered ? 'এই অফিসের তালিকার হার আছে।' : '');
+    if (id === MOUZA_OTHER_OFFICE) {
+      $('wzMouzaSearchWrap').style.display = 'none';
+      $('wzMouzaManualWrap').style.display = '';
+    } else {
+      $('wzMouzaSearchWrap').style.display = '';
+      $('wzMouzaManualWrap').style.display = 'none';
+      wzFillMouzas();
+    }
+    $('wzMouzaManual').value = '';
+    clearBoxes();
   }
-  function onMouzaChange() {
-    resetMouzaThana();
-    $('mMouzaManualWrap').style.display = mouzaIsManual() ? '' : 'none';
-    if (!mouzaIsManual()) $('mMouzaManual').value = '';
-    // Lookup mouza → only its lookup classes; manual mouza →
-    // all 7 engine classes (বাণিজ্যিক has no lookup rate).
-    fillSelectOptions($('mClass'),
-      mouzaIsManual() ? MOUZA_ALL_CLASSES : MOUZA_LOOKUP_CLASSES, '— বেছে নিন —');
-    clearMouzaLookup();
-    $('mRate').value = '';
-    $('mRateNote').textContent = '';
-    updateMouzaUnitHint();
-    // Auto-select the first class so the rate lookup runs at
-    // once for a chosen mouza (no extra button press). Nothing
-    // is preselected while no mouza is chosen yet.
-    const cls = $('mClass');
-    if ($('mMouza').value && cls.options.length > 1) { cls.selectedIndex = 1; refreshMouzaRate(); }
+  function wzOnMouza() {
+    $('wzMouzaManualWrap').style.display = $('wzMouza').value === MOUZA_MANUAL_MOUZA ? '' : 'none';
+    if ($('wzMouza').value !== MOUZA_MANUAL_MOUZA) $('wzMouzaManual').value = '';
+    clearBoxes();
   }
-  // Auto-lookup: choosing office/mouza/class fetches the
-  // schedule rate when one exists. A miss is NOT an error —
-  // the shopkeeper just enters the rate by hand.
-  async function refreshMouzaRate() {
+  async function wzNext1() {
+    clearBoxes();
     const office = $('mOffice').value;
-    const mouza = resolvedMouza();
-    const cls = $('mClass').value;
-    clearMouzaLookup();
-    $('mRate').value = '';
-    $('mRateNote').textContent = '';
-    if (!office || !mouza || !cls || mouzaIsManual()) { updateMouzaUnitHint(); return; }
+    if (!office) { showErr('অফিস বাছুন।'); return; }
+    WZ.thana = null; WZ.card = null; WZ.miss = null;
+    if (office === MOUZA_OTHER_OFFICE) {
+      // Uncovered office: no card to fetch — plain sentence,
+      // then the manual path (class pick → amount → hand rate).
+      WZ.officeName = $('wzOfficeManual').value.trim();
+      if (!WZ.officeName) { showErr('অফিসের নাম লিখুন।'); return; }
+      const mouza = $('wzMouzaManual').value.trim();
+      if (!mouza) { showErr('মৌজার নাম লিখুন।'); return; }
+      WZ.mouza = mouza; WZ.manualMouza = true;
+      WZ.miss = { code: 'OFFICE_NOT_COVERED', message: 'এই অফিসের তালিকা এখনো যোগ হয়নি — তালিকা দেখে হার নিজে বসিয়ে রিপোর্ট করা যাবে।' };
+      wzShowClassPick();
+      return;
+    }
+    const mv = $('wzMouza').value;
+    if (!mv) { showErr('মৌজা বাছুন।'); return; }
+    if (mv === MOUZA_MANUAL_MOUZA) {
+      const mouza = $('wzMouzaManual').value.trim();
+      if (!mouza) { showErr('মৌজার নাম লিখুন।'); return; }
+      // A typed mouza might still be in the table (spelling
+      // differs from the list) — try the card before falling
+      // back to the manual path.
+      WZ.mouza = mouza; WZ.manualMouza = true;
+      await wzFetchCard();
+      return;
+    }
+    WZ.mouza = mv; WZ.manualMouza = false;
+    await wzFetchCard();
+  }
+  // Whole-mouza card fetch. Ambiguity becomes an ordinary
+  // "কোন থানা?" question; any other miss becomes the manual
+  // path with its plain WHY — never an error screen.
+  async function wzFetchCard() {
+    const q = API + '/mouza-rates?office=' + encodeURIComponent(WZ.office) +
+      '&mouza=' + encodeURIComponent(WZ.mouza) +
+      (WZ.thana ? '&thana=' + encodeURIComponent(WZ.thana) : '');
     try {
-      const { resp, data } = await apiJson(API + '/mouza-rate?office=' + encodeURIComponent(office) +
-        '&mouza=' + encodeURIComponent(mouza) + '&class=' + encodeURIComponent(cls) +
-        (MOUZA_THANA ? '&thana=' + encodeURIComponent(MOUZA_THANA) : ''));
-      if (!resp.ok || !data) { $('mRateNote').textContent = 'হার খোঁজা যায়নি — হার নিজে বসান।'; return; }
+      const { resp, data } = await apiJson(q);
+      if (!resp.ok || !data) { showErr('হারের তালিকা খোলা যায়নি — আবার চেষ্টা করুন।'); return; }
       if (data.ambiguous) {
-        // Same mouza name in several thanas (Chandgaon): ask for
-        // the thana, then re-fetch with it. The rate stays
-        // editable until a single variant resolves.
-        fillSelectOptions($('mThana'), data.options || [], '— বেছে নিন —');
-        $('mThanaWrap').style.display = '';
-        $('mRateNote').textContent = data.message || 'এই মৌজা একাধিক থানায় আছে — থানা বাছুন।';
-        updateMouzaUnitHint();
+        const sel = $('wzThana');
+        sel.innerHTML = '<option value="">— বেছে নিন —</option>';
+        (data.options || []).forEach((t) => {
+          const o = document.createElement('option');
+          o.value = t; o.textContent = t;
+          sel.appendChild(o);
+        });
+        wzShowStep('thana');
         return;
       }
       if (!data.found) {
-        $('mRateNote').textContent = data.message || 'তালিকার হার পাওয়া যায়নি — হার নিজে বসান।';
-        updateMouzaUnitHint();
+        WZ.miss = { code: data.miss || 'MOUZA_NOT_IN_TABLE', message: data.message || 'হার নিজে বসিয়ে রিপোর্ট করা যাবে।' };
+        WZ.card = null;
+        wzShowClassPick();
         return;
       }
-      MOUZA_LOOKUP = { office: data.office, mouza: data.mouza, class: data.class, rate: data.rate, period: data.period, p: data.p === true, thana: data.thana };
-      $('mRate').value = String(data.rate);
-      $('mRate').readOnly = true;
-      $('mRateNote').textContent = 'তালিকার হার পাওয়া গেছে — ' + data.period +
-        (data.p === true ? ' · P চিহ্ন: আগের মূল্য বহাল আছে' : '') +
-        (data.pouroNote ? ' · ' + data.pouroNote : '');
-      $('mScheduleVersion').value = data.period;
-      updateMouzaRateLabel();
-      updateMouzaUnitHint();
+      WZ.card = data; WZ.miss = null;
+      if (data.period) $('mScheduleVersion').value = data.period;
+      wzShowCard();
     } catch (e) {
-      $('mRateNote').textContent = 'হার খোঁজা যায়নি — হার নিজে বসান।';
+      showErr('সংযোগে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
     }
   }
-  // A hand edit of the rate drops the pending lookup, so a
-  // hand-edited rate can never ride along as a lookup line.
-  $('mRate').addEventListener('input', () => { if (MOUZA_LOOKUP) { clearMouzaLookup(); resetMouzaThana(); } updateMouzaUnitHint(); });
-  // Live unit hint: show the shatangsho conversion and the line value
-  // preview before the line is added, so the shopkeeper can check it
-  // at a glance.
-  function updateMouzaUnitHint() {
-    const hint = $('mUnitHint');
-    if (!hint) return;
-    const amount = toEnNum($('mAmount').value);
-    const unit = $('mUnit').value;
-    if (!(amount > 0) || !MOUZA_FACTORS[unit]) { hint.textContent = ''; return; }
+  function wzNextThana() {
+    const t = $('wzThana').value;
+    if (!t) { showErr('থানা বাছুন।'); return; }
+    WZ.thana = t;
+    wzFetchCard();
+  }
+  function wzCardButton(cls, line) {
+    return '<button type="button" class="wz-card" data-cls="' + esc(cls) + '" style="text-align:left;background:#fff;border:1.5px solid #d6c9ae;border-radius:12px;padding:12px;cursor:pointer;">' +
+      '<b style="font-size:15px;">' + esc(cls) + '</b><br><span style="font-size:13.5px;color:#14532d;">' + line + '</span></button>';
+  }
+  function wzShowCard() {
+    $('wzCardHead').innerHTML = '<b>' + esc(WZ.card.mouza) + (WZ.card.thana ? ' (' + esc(WZ.card.thana) + ')' : '') + '</b> · ' +
+      esc(WZ.card.officeName) + ' অফিস · ' + esc(WZ.card.period) + ' তালিকা থেকে';
+    let h = '';
+    MOUZA_CARD_CLASSES.forEach((cls) => {
+      const r = (WZ.card.rates && WZ.card.rates[cls]) || { rate: null, p: false };
+      let line;
+      if (r.rate == null) {
+        line = '<span style="color:#92400e">হার নেই</span>';
+      } else {
+        line = 'শতাংশপ্রতি ' + bnGrouped(r.rate) + ' টাকা';
+        if (r.p) line += '<br><span style="font-size:12.5px;color:#374151">আগের বছরের হার বহাল আছে</span>';
+        if (r.pouroNote) line += '<br><span style="font-size:12.5px;color:#374151">' + esc(r.pouroNote) + '</span>';
+      }
+      h += wzCardButton(cls, line);
+    });
+    const grid = $('wzCardGrid');
+    grid.innerHTML = h;
+    grid.querySelectorAll('.wz-card').forEach((b) => b.addEventListener('click', () => wzPickClass(b.dataset.cls)));
+    $('wzCardNote').textContent = 'একটা ধরন বাছুন — তারপর পরিমাণ জিজ্ঞেস করবো।';
+    wzShowStep(2);
+  }
+  function wzShowClassPick() {
+    // Manual path: no card — plain WHY on top, then a plain
+    // class pick. The rate step will ask for a hand rate.
+    $('wzCardHead').innerHTML = '<b>' + esc(WZ.mouza) + '</b>' +
+      (WZ.miss ? '<br><span style="font-weight:400;color:#92400e">' + esc(WZ.miss.message) + '</span>' : '');
+    const grid = $('wzCardGrid');
+    let h = '';
+    MOUZA_CARD_CLASSES.forEach((cls) => { h += wzCardButton(cls, ''); });
+    grid.innerHTML = h;
+    grid.querySelectorAll('.wz-card').forEach((b) => b.addEventListener('click', () => wzPickClass(b.dataset.cls)));
+    $('wzCardNote').textContent = 'একটা ধরন বাছুন — তারপর পরিমাণ জিজ্ঞেস করবো।';
+    wzShowStep(2);
+  }
+  function wzPickClass(cls) {
+    WZ.cls = cls;
+    const r = WZ.card ? WZ.card.rates[cls] : null;
+    if (r && r.rate != null) {
+      WZ.rateIsTable = true; WZ.tableRate = r.rate;
+      WZ.pNote = r.p ? 'আগের বছরের হার বহাল আছে।' : '';
+      WZ.pouroNote = r.pouroNote || '';
+    } else {
+      WZ.rateIsTable = false; WZ.tableRate = null; WZ.pNote = ''; WZ.pouroNote = '';
+      if (WZ.card) WZ.miss = { code: 'CLASS_NO_RATE', message: 'এই শ্রেণির হার এই তালিকায় নেই — হার নিজে বসান।' };
+      // Without a card, WZ.miss already holds the OFFICE_ /
+      // MOUZA_ reason from step 1 — it stays as the WHY.
+    }
+    $('wzAmount').value = '';
+    $('wzAmountWords').textContent = '';
+    wzShowStep(3);
+  }
+  function wzBackTo2() {
+    if (WZ.card) wzShowCard(); else wzShowClassPick();
+  }
+  function wzAmountWords() {
+    const amount = toEnNum($('wzAmount').value);
+    const unit = $('wzUnit').value;
+    const box = $('wzAmountWords');
+    if (!(amount > 0) || !MOUZA_FACTORS[unit]) { box.textContent = ''; return; }
     const qty = Math.round(amount * MOUZA_FACTORS[unit] * 100) / 100;
-    const rate = toEnNum($('mRate').value);
-    let txt = '= ' + bn(qty) + ' শতাংশ';
-    if (rate >= 0 && $('mRate').value.trim() !== '') {
-      // Lookup preview: schedule rate (per shatangsho) × qty.
-      // Manual preview: rate (per selected unit) × amount.
-      const val = MOUZA_LOOKUP ? rate * qty : rate * amount;
-      txt += ' · ' + bn(Math.round(val * 100) / 100) + ' টাকা';
-    }
-    hint.textContent = txt;
+    box.textContent = bnGrouped(amount) + ' ' + (MOUZA_UNIT_LABELS[unit] || 'শতাংশ') + ' = ' + bnGrouped(qty) + ' শতাংশ';
   }
-  function renderMouzaLines() {
+  function wzNext3() {
+    const amount = toEnNum($('wzAmount').value);
+    if (!(amount > 0)) { showErr('পরিমাণ ঠিক করে বসান।'); return; }
+    WZ.amount = amount; WZ.unit = $('wzUnit').value;
+    wzRenderRateStep();
+    wzShowStep(4);
+  }
+  function wzRenderRateStep() {
+    const box = $('wzRateBox');
+    if (WZ.rateIsTable) {
+      box.innerHTML = '<div class="rec" style="padding:12px"><b>শতাংশপ্রতি ' + bnGrouped(WZ.tableRate) + ' টাকা</b>' +
+        '<div style="font-size:13.5px;color:#374151;margin-top:4px">' + esc(WZ.card.officeName) + ' অফিসের ' + esc(WZ.card.period) + ' তালিকা থেকে' +
+        (WZ.pNote ? '<br>' + esc(WZ.pNote) : '') +
+        (WZ.pouroNote ? '<br>' + esc(WZ.pouroNote) : '') + '</div></div>';
+      $('wzRateManualWrap').style.display = 'none';
+    } else {
+      box.innerHTML = '<div style="font-size:14px;color:#92400e">' + esc((WZ.miss && WZ.miss.message) || 'হার নিজে বসান।') + '</div>';
+      $('wzRateManualWrap').style.display = '';
+      $('wzRateLabel').textContent = (MOUZA_UNIT_LABELS[WZ.unit] || 'শতাংশ') + 'প্রতি হার (টাকা) *';
+    }
+    $('wzOldRate').value = '';
+  }
+  function wzLineValue() {
+    const rate = WZ.rateIsTable ? WZ.tableRate : WZ.manualRate;
+    const qty = Math.round(WZ.amount * (MOUZA_FACTORS[WZ.unit] || 1) * 100) / 100;
+    const val = WZ.rateIsTable ? rate * qty : rate * WZ.amount;
+    return { rate, qty, val: Math.round(val * 100) / 100 };
+  }
+  function wzNext4() {
+    if (!WZ.rateIsTable) {
+      const rate = toEnNum($('wzRateInput').value);
+      if (!(rate >= 0)) { showErr('হার ঠিক করে বসান।'); return; }
+      WZ.manualRate = rate;
+    }
+    wzRenderPreview();
+    wzShowStep(5);
+  }
+  function wzRenderPreview() {
+    const { rate, qty, val } = wzLineValue();
+    let sentence;
+    if (WZ.rateIsTable) {
+      sentence = bnGrouped(qty) + ' শতাংশ × ' + bnGrouped(rate) + ' টাকা = ' + bnGrouped(val) + ' টাকা';
+    } else {
+      sentence = bnGrouped(WZ.amount) + ' ' + (MOUZA_UNIT_LABELS[WZ.unit] || 'শতাংশ') + ' × ' + bnGrouped(rate) + ' টাকা = ' + bnGrouped(val) + ' টাকা';
+    }
+    let h = '<div class="rec" style="padding:12px"><b>' + sentence + '</b>';
+    const declared = toEnNum($('mDeclaredPrice').value);
+    if (declared > 0) {
+      let total = val;
+      MOUZA_LINES.forEach((l) => {
+        const q = l.amount * (MOUZA_FACTORS[l.unit] || 1);
+        total += l.source === 'lookup' ? l.rate * q : l.rate * l.amount;
+      });
+      total = Math.round(total * 100) / 100;
+      const basis = Math.max(total, declared);
+      h += '<div style="font-size:13.5px;color:#374151;margin-top:6px">ঘোষিত দাম ' + bnGrouped(declared) + ' টাকা, সব লাইন মিলিয়ে সর্বনিম্ন মূল্য ' + bnGrouped(total) + ' টাকা — দলিলের ভিত্তি হবে ' + bnGrouped(basis) + ' টাকা।</div>';
+    }
+    h += '</div>';
+    $('wzPreviewBox').innerHTML = h;
+  }
+  function wzAddLine() {
+    const { rate } = wzLineValue();
+    const oldRaw = $('wzOldRate').value.trim();
+    MOUZA_LINES.push({
+      mouza: WZ.mouza, class: WZ.cls, rate: rate, amount: WZ.amount, unit: WZ.unit,
+      oldRate: oldRaw === '' ? undefined : toEnNum(oldRaw),
+      source: WZ.rateIsTable ? 'lookup' : 'manual',
+      lookupOffice: WZ.rateIsTable ? WZ.office : undefined,
+      lookupThana: WZ.rateIsTable ? (WZ.thana || undefined) : undefined,
+      officeName: WZ.officeName,
+    });
+    wzRenderLines();
+    wzShowStep('lines');
+  }
+  function wzRenderLines() {
     let total = 0;
     let h = '';
     MOUZA_LINES.forEach((l, i) => {
@@ -547,54 +805,67 @@
       const ulab = MOUZA_UNIT_LABELS[l.unit] || 'শতাংশ';
       const tag = l.source === 'lookup' ? 'তালিকা' : 'নিজে বসানো';
       const desc = l.source === 'lookup'
-        ? bn(l.rate) + ' × ' + bn(Math.round(qty * 100) / 100) + ' শতাংশ = ' + bn(Math.round(val * 100) / 100) + ' টাকা'
-        : bn(l.rate) + ' × ' + bn(l.amount) + ' ' + ulab + ' (' + bn(Math.round(qty * 100) / 100) + ' শতাংশ) = ' + bn(Math.round(val * 100) / 100) + ' টাকা';
+        ? bnGrouped(Math.round(qty * 100) / 100) + ' শতাংশ × ' + bnGrouped(l.rate) + ' টাকা = ' + bnGrouped(Math.round(val * 100) / 100) + ' টাকা'
+        : bnGrouped(l.amount) + ' ' + ulab + ' × ' + bnGrouped(l.rate) + ' টাকা = ' + bnGrouped(Math.round(val * 100) / 100) + ' টাকা';
       h += '<div class="r"><b>' + esc(l.mouza || '—') + (l.lookupThana ? ' (' + esc(l.lookupThana) + ')' : '') + ' · ' + esc(l.class) + '</b><span>' +
         desc + ' <span style="display:inline-block;background:#dcfce7;color:#14532d;border:1px solid #86efac;padding:1px 8px;border-radius:20px;font-size:12px;font-weight:700;">' + tag + '</span>' +
-        ' <a href="#" onclick="MOUZA_LINES.splice(' + i + ',1);renderMouzaLines();return false;">মুছুন</a></span></div>';
+        ' <a href="#" onclick="MOUZA_LINES.splice(' + i + ',1);wzRenderLines();if(!MOUZA_LINES.length)wzResetWizard();return false;">মুছুন</a></span></div>';
     });
-    $('mLinesBox').innerHTML = h ? '<div class="rec">' + h + '</div>' : '';
-    $('mTotalNote').textContent = MOUZA_LINES.length
-      ? 'প্রাক্কলিত মোট সর্বনিম্ন মূল্য: ' + bn(Math.round(total * 100) / 100) + ' টাকা (সার্ভার আবার হিসাব করবে)'
+    $('wzLinesBox').innerHTML = h ? '<div class="rec">' + h + '</div>' : '';
+    $('wzTotalNote').textContent = MOUZA_LINES.length
+      ? 'প্রাক্কলিত মোট সর্বনিম্ন মূল্য: ' + bnGrouped(Math.round(total * 100) / 100) + ' টাকা (সার্ভার আবার হিসাব করবে)'
       : '';
   }
-  $('mOffice').addEventListener('change', () => { fillMouzaSelect(); onMouzaChange(); });
-  $('mMouza').addEventListener('change', onMouzaChange);
-  // Class change resets the thana qualifier: ambiguity is per
-  // (mouza, class) — e.g. বাকলিয়া/ডোবা resolves to one variant
-  // while বাকলিয়া/নাল needs a thana, so a stale thana must
-  // never ride into the next class lookup.
-  $('mClass').addEventListener('change', () => { resetMouzaThana(); refreshMouzaRate(); });
-  $('mThana').addEventListener('change', () => { MOUZA_THANA = $('mThana').value || null; refreshMouzaRate(); });
-  $('mAmount').addEventListener('input', updateMouzaUnitHint);
-  $('mUnit').addEventListener('change', () => { updateMouzaRateLabel(); updateMouzaUnitHint(); });
-  fillMouzaOffice();
-  fillMouzaSelect();
-  updateMouzaRateLabel();
-  $('mAddLineBtn').addEventListener('click', () => {
-    const mouza = resolvedMouza();
-    const rate = toEnNum($('mRate').value);
-    const amount = toEnNum($('mAmount').value);
-    const oldRateRaw = $('mOldRate').value.trim();
-    if (!mouza) { showErr('মৌজা বাছুন বা মৌজার নাম লিখুন।'); return; }
-    if (!$('mClass').value) { showErr('শ্রেণি বাছুন।'); return; }
-    if (!(rate >= 0) || !(amount > 0)) { showErr('হার ও পরিমাণ ঠিক করে বসান।'); return; }
-    MOUZA_LINES.push({
-      mouza: mouza,
-      class: $('mClass').value,
-      rate: rate, amount: amount, unit: $('mUnit').value,
-      oldRate: oldRateRaw === '' ? undefined : toEnNum(oldRateRaw),
-      source: MOUZA_LOOKUP ? 'lookup' : 'manual',
-      lookupOffice: MOUZA_LOOKUP ? MOUZA_LOOKUP.office : undefined,
-      lookupThana: MOUZA_LOOKUP ? MOUZA_LOOKUP.thana : undefined,
+  function wzShowFinish() {
+    // Finish summary BEFORE payment: what the report will
+    // hold, the totals, and the charge honesty — no surprises.
+    const offices = [];
+    const mouzas = [];
+    MOUZA_LINES.forEach((l) => {
+      if (l.officeName && !offices.includes(l.officeName)) offices.push(l.officeName);
+      if (l.mouza && !mouzas.includes(l.mouza)) mouzas.push(l.mouza);
     });
-    clearBoxes();
-    // The pending lookup is consumed by this line only.
-    if (MOUZA_LOOKUP) { clearMouzaLookup(); resetMouzaThana(); }
-    renderMouzaLines();
-    updateMouzaRateLabel();
-    updateMouzaUnitHint();
-  });
+    let total = 0;
+    MOUZA_LINES.forEach((l) => {
+      const q = l.amount * (MOUZA_FACTORS[l.unit] || 1);
+      total += l.source === 'lookup' ? l.rate * q : l.rate * l.amount;
+    });
+    total = Math.round(total * 100) / 100;
+    const declared = toEnNum($('mDeclaredPrice').value);
+    const basis = declared > 0 ? Math.max(total, declared) : total;
+    let h = '<div class="rec" style="padding:12px"><h4 style="margin:0 0 8px">রিপোর্টে যা থাকবে</h4>';
+    h += '<div class="r"><b>অফিস</b><span>' + esc(offices.join(', ') || '—') + '</span></div>';
+    h += '<div class="r"><b>মৌজা</b><span>' + esc(mouzas.join(', ') || '—') + '</span></div>';
+    h += '<div class="r"><b>লাইন</b><span>' + bnGrouped(MOUZA_LINES.length) + 'টি</span></div>';
+    h += '<div class="r"><b>মোট সর্বনিম্ন মূল্য</b><span>' + bnGrouped(total) + ' টাকা</span></div>';
+    if (declared > 0) h += '<div class="r"><b>ঘোষিত দাম</b><span>' + bnGrouped(declared) + ' টাকা</span></div>';
+    h += '<div class="r"><b>দলিলের ভিত্তি</b><span>' + bnGrouped(basis) + ' টাকা</span></div>';
+    h += '</div>';
+    $('wzFinishBox').innerHTML = h;
+    wzShowStep('finish');
+  }
+  $('mOffice').addEventListener('change', wzOnOffice);
+  $('wzMouza').addEventListener('change', wzOnMouza);
+  $('wzMouzaSearch').addEventListener('input', wzFilterMouzas);
+  $('wzNext1').addEventListener('click', wzNext1);
+  $('wzBackThana').addEventListener('click', () => wzShowStep(1));
+  $('wzNextThana').addEventListener('click', wzNextThana);
+  $('wzBack2').addEventListener('click', () => wzShowStep(1));
+  $('wzAmount').addEventListener('input', wzAmountWords);
+  $('wzUnit').addEventListener('change', wzAmountWords);
+  $('wzBack3').addEventListener('click', wzBackTo2);
+  $('wzNext3').addEventListener('click', wzNext3);
+  $('wzBack4').addEventListener('click', () => wzShowStep(3));
+  $('wzNext4').addEventListener('click', wzNext4);
+  $('mDeclaredPrice').addEventListener('input', () => { if ($('wzStep5').style.display !== 'none') wzRenderPreview(); });
+  $('wzBack5').addEventListener('click', () => { wzRenderRateStep(); wzShowStep(4); });
+  $('wzAddLine').addEventListener('click', wzAddLine);
+  $('wzAddAnother').addEventListener('click', () => { wzResetWizard(); });
+  $('wzToFinish').addEventListener('click', wzShowFinish);
+  $('wzBackFinish').addEventListener('click', () => wzShowStep('lines'));
+  wzFillOffices();
+  wzFillMouzas();
+  wzShowStep(1);
 
   function renderResult(r) {
     if (r.lines) {
@@ -603,7 +874,7 @@
         const ulab = MOUZA_UNIT_LABELS[l.unit] || 'শতাংশ';
         const desc = l.source === 'lookup'
           ? bn(l.rate) + ' × ' + bn(l.qtyShatangsho) + ' শতাংশ = ' + bn(l.value) + ' টাকা (তালিকার হার' +
-            (l.lookupPeriod ? ', ' + l.lookupPeriod : '') + (l.lookupP ? ' · P: আগের মূল্য বহাল' : '') + ')'
+            (l.lookupPeriod ? ', ' + l.lookupPeriod : '') + (l.lookupP ? ' · আগের বছরের হার বহাল আছে' : '') + ')'
           : bn(l.rate) + ' × ' + bn(l.amount) + ' ' + ulab + ' (' + bn(l.qtyShatangsho) + ' শতাংশ) = ' + bn(l.value) + ' টাকা';
         h += '<div class="r"><b>' + esc(l.mouza) + (l.lookupThana ? ' (' + esc(l.lookupThana) + ')' : '') + ' · ' + esc(l.class) + '</b><span>' + desc + '</span></div>';
       });
@@ -668,6 +939,10 @@
       const lk = MOUZA_LINES.find((l) => l.source === 'lookup');
       if (lk) body.lookup_office = lk.lookupOffice;
       body.office = $('mOffice').value;
+      // Uncovered office: the typed office name rides along so
+      // the PDF header can name it (deriveMouzaReportArea
+      // prefers body.office_name over the office id lookup).
+      if (body.office === '__other__') body.office_name = (typeof WZ !== 'undefined' && WZ.officeName) || '';
       body.schedule_version = $('mScheduleVersion').value.trim() || '2025-2026';
       body.declared_price = $('mDeclaredPrice').value.trim();
     } else {
