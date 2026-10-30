@@ -308,6 +308,16 @@ function normalizeChainInput(data = {}) {
     geoChain: data.geoChain || null,
     otp: data.otp,
     chargeToken: data._chargeToken,
+    // RESEED (2026-10-30): true ONLY on a deliberate user retry
+    // after a chain that already verified (verify demonstrably
+    // succeeded — the chain reached submit). Re-verify with the
+    // same code is NOT proven idempotent anywhere in this repo
+    // (verifyOtp throws unless the response reports verified; a
+    // consumed code's second verify is unproven), so the retry
+    // must not re-run it: the submit phase skips the verify call
+    // and submits on the verified session, with the otp still
+    // riding in the submit payload itself (the form's own field).
+    alreadyVerified: data.alreadyVerified === true,
     // DIRECT-PATH WIRING: true when a ticked copy's source record
     // is empty — runHttpChain fails loudly at 'address' on this.
     copySourceEmpty: (s2bIn.permCopy && isAddrEmpty(permRec)) || (s2bIn.presCopy && isAddrEmpty(presRec)),
@@ -366,6 +376,13 @@ function candidateLog(log, step, message) {
  * @param {boolean} [opts.noBareBootstrap] - DIRECT-PATH WIRING:
  *   when true and no client/factory was injected, fail with
  *   SEED_FAILED instead of building a bare client (proven 403).
+ * @param {object} [opts.reseedPage] - RESEED (2026-10-30): the
+ *   live warm page to refresh cookies + CSRF from immediately
+ *   before the submit POST (never navigated/reloaded). Absent =
+ *   the reseed step logs its skip and the submit proceeds on
+ *   the jarred state. Data flag `alreadyVerified: true` (see
+ *   normalizeChainInput) skips the verify call on a deliberate
+ *   retry of an already-verified session.
  */
 async function runHttpChain(opts = {}) {
   const log = opts.log || ((...a) => console.log(...a));
@@ -614,10 +631,54 @@ async function runHttpChain(opts = {}) {
     }
 
     // 5. OTP verify (CANDIDATE payload).
+    // RESEED (2026-10-30): on a deliberate retry the session is
+    // already verified (the previous chain reached submit, so its
+    // verify demonstrably succeeded) — re-running verifyOtp with
+    // the same, possibly consumed code is unproven-idempotent, so
+    // the retry SKIPS the verify call. The otp still rides in the
+    // submit payload itself (the form's own otp field, unchanged).
+    // A first attempt (alreadyVerified false/absent) always
+    // verifies, exactly as before.
     currentStep = 'verify';
-    candidateLog(log, 'verify', 'POST /api/otp/verify — query params, empty body (otpSend context + otp + geoLocationId)');
-    await client.verifyOtp({ ...norm.otpContext, otp: norm.otp });
-    stepsDone.push('verify');
+    if (norm.alreadyVerified) {
+      candidateLog(log, 'verify', 'skipped — retry on an already-verified session (no re-verify with a consumed code); otp still rides in the submit payload');
+      stepsDone.push('verify-skipped');
+    } else {
+      candidateLog(log, 'verify', 'POST /api/otp/verify — query params, empty body (otpSend context + otp + geoLocationId)');
+      await client.verifyOtp({ ...norm.otpContext, otp: norm.otp });
+      stepsDone.push('verify');
+    }
+
+    // 5b. RESEED (2026-10-30): refresh cookies + CSRF from the
+    // live warm page immediately before the submit POST. The
+    // 7th live submit proved headers + field set make zero
+    // difference (byte-identical shell), so the remaining
+    // session-side difference is freshness: the chain's seed
+    // carries the warm page's navigation-time cookies, and the
+    // jar never dropped expired ones. Best-effort by design:
+    // no warm page, an unreadable page, or a client without
+    // refreshSeed only logs the skip — the submit proceeds on
+    // the jarred state and NEVER fails on a missing warm page.
+    // Never navigates or reloads the page (it may be the bot's
+    // mid-flow page; seedFromPage never navigates for that
+    // reason). If the shell persists after this, the next
+    // diagnostic is reload-then-seed / TSPD-per-route — named
+    // here, not silently attempted.
+    currentStep = 'reseed';
+    if (opts.reseedPage && client && typeof client.refreshSeed === 'function') {
+      try {
+        const { HttpGeoService } = require('./HttpGeoService');
+        const geo = new HttpGeoService();
+        const ok = await geo.reseedFromPage(opts.reseedPage, client);
+        candidateLog(log, 'reseed', ok
+          ? 'refreshed cookies + CSRF from live warm page before submit (no navigation; API-response cookies kept)'
+          : 'skipped — warm page unreadable or token missing; proceeding with jarred state');
+      } catch (e) {
+        candidateLog(log, 'reseed', `skipped — reseed failed (${(e && e.message) || e}); proceeding with jarred state`);
+      }
+    } else {
+      candidateLog(log, 'reseed', 'skipped — no warm page supplied; proceeding with jarred state');
+    }
 
     // 6. Final submit (CANDIDATE payload; scope ends at success page).
     currentStep = 'submit';
