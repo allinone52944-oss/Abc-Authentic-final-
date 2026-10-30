@@ -68,9 +68,9 @@ function countRows(officeId) {
 }
 
 describe('batch-1 data shape (machine-transcribed, 0-mismatch verified)', () => {
-  test('row counts: 11 + 36 + 44 + 72 + 11 = 174 mouza rows, 6 offices total', () => {
-    expect(Object.keys(OFFICES).sort()).toEqual(
-      ['boalkhali', 'chandgaon', 'gachbaria', 'pahartali', 'rangunia', 'sandwip'].sort());
+  test('row counts: 11 + 36 + 44 + 72 + 11 = 174 mouza rows (batch-1 offices only; later batches add offices)', () => {
+    const BATCH1 = ['boalkhali', 'chandgaon', 'gachbaria', 'pahartali', 'rangunia', 'sandwip'];
+    expect(Object.keys(OFFICES).filter((k) => BATCH1.includes(k)).sort()).toEqual(BATCH1.sort());
     expect(countRows('chandgaon')).toBe(11);
     expect(countRows('sandwip')).toBe(36);
     expect(countRows('gachbaria')).toBe(44);

@@ -620,7 +620,7 @@ router.get('/mouza-rates', requireAuth, async (req, res) => {
 // mouza left empty, or equal to the cascade mouza) the result
 // is identical to before.
 const MOUZA_OFFICE_GEO = {
-  // Office id → report-header geography. All six are in
+  // Office id → report-header geography. All seventeen are in
   // Chattogram district, Chattogram division; the header field
   // is "উপজেলা / থানা", so city thanas fit here as well.
   boalkhali: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'বোয়ালখালী' },
@@ -629,6 +629,17 @@ const MOUZA_OFFICE_GEO = {
   gachbaria: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'চন্দনাইশ' },
   rangunia: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'রাঙ্গুনিয়া' },
   pahartali: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'পাহাড়তলী' },
+  adhunagar: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'লোহাগাড়া' },
+  banshkhali: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'বাঁশখালী' },
+  'ctg-sadar': { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'কোতোয়ালী' },
+  'mirsharai-jorarganj': { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'মীরসরাই' },
+  anowara: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'আনোয়ারা' },
+  fatikchhari: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'ফটিকছড়ি' },
+  'hathazari-fateyabad': { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'হাটহাজারী' },
+  satkania: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'সাতকানিয়া' },
+  sitakunda: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'সীতাকুণ্ড' },
+  patiya: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'পটিয়া' },
+  raozan: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'রাউজান' },
 };
 function deriveMouzaReportArea(body, lines) {
   const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
