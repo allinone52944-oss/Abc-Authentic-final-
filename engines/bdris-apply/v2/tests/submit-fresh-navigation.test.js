@@ -1,16 +1,16 @@
 /**
- * Fresh navigation before submit (2026-10-30) — step 5c of the
- * HTTP chain. The 9th live submit proved every other difference
- * dead (headers, fields, cookie freshness via non-navigating
- * re-seed, submit-time fields, client value, Origin, empty file
- * parts — all byte-identical shell). What remains is navigation-
- * time state: the chain's seed comes from a warm page navigated
- * long before, and only a fresh homepage-route navigation can
- * mint new state. These tests drive the real runHttpChain with a
- * fake client and a mock warm page (no browser, no network, no
- * real submit): the real BdrisNavigator.gotoFormViaSite runs
- * against the mock page, so gotoFormViaSite being called before
- * submit is proven by the mock's recorded effects, not by a stub.
+ * Dedicated-page fresh navigation before submit (2026-10-30) — step 5c
+ * of the HTTP chain. Attempt 10's journal proved the OLD step 5c
+ * (navigate the shared session.page behind an idle-guard) SKIPPED:
+ * the guard correctly refused a page the bot fallback builds
+ * StepHandler on, so fresh navigation could never run on the shared
+ * page. Step 5c now navigates a FRESH, dedicated page (created by
+ * the executor's factory, closed in a finally) and never navigates
+ * session.page or the user's tab. These tests drive the real
+ * runHttpChain with a fake client and mock pages (no browser, no
+ * network, no real submit): the real BdrisNavigator.gotoFormViaSite
+ * runs against the mock dedicated page, so navigation is proven by
+ * the mock's recorded effects, not by a stub.
  * Run: node --test engines/bdris-apply/v2/tests/submit-fresh-navigation.test.js
  * (from engines/bdris-apply/)
  */
@@ -57,17 +57,14 @@ function fakeClient(order, refreshSeeds, submitInputs) {
   };
 }
 
-// Mock warm page. Its evaluate() dispatches on the in-page
-// function's shape, exactly as a real document would behave
-// differently for each script:
-// - called with an argument → getPageState (division selectors)
-// - source mentions defaultValue → the mid-flow guard
-// - source mentions _csrf → the session read (first read returns
-//   the stale token, later reads the fresh one — proving the
-//   post-navigation re-seed adopts fresh state)
+// Mock page. Its evaluate() dispatches on the in-page function's
+// shape, exactly as the old warm-page mock did:
+// - called with an argument → getPageState (form-content poll)
+// - source mentions _csrf → the session read (returns the page's
+//   token; noToken → null token, proving the reseed skip)
 // - source mentions querySelectorAll → the homepage link click
-function mockWarmPage(scenario, order) {
-  const calls = { goto: [], evaluateKinds: [], waitForTimeout: 0, sessionReads: 0 };
+function mockPage(scenario, order) {
+  const calls = { goto: [], evaluateKinds: [], waitForTimeout: 0, closed: false };
   const page = {
     goto: async (url) => {
       calls.goto.push(url);
@@ -78,6 +75,7 @@ function mockWarmPage(scenario, order) {
     waitForTimeout: async () => { calls.waitForTimeout++; },
     context: () => ({ cookies: async () => [{ name: 'TS-1', value: 'x' }] }),
     url: () => 'https://bdris.gov.bd/br/application',
+    close: async () => { calls.closed = true; if (order) order.push('close'); },
     evaluate: async (fn, ...args) => {
       const src = Function.prototype.toString.call(fn);
       if (args.length > 0) {
@@ -85,19 +83,12 @@ function mockWarmPage(scenario, order) {
         const formContent = scenario.formContent !== false;
         return { formElement: formContent, hasMetaCsrf: !scenario.noToken, hasHiddenCsrf: false, title: '', bodyTextLength: 100, divisions: { birth: formContent, perm: false, prsnt: false }, scriptCount: 0, cookieCount: 0, formContent };
       }
-      if (src.includes('defaultValue')) {
-        calls.evaluateKinds.push('midflow-guard');
-        // The real in-page check returns true when PROVEN IDLE.
-        return !scenario.filled;
-      }
       if (src.includes('_csrf')) {
         calls.evaluateKinds.push('session-read');
-        calls.sessionReads++;
         if (scenario.noToken) {
           return { token: null, headerName: null, source: null, pageUrl: 'https://bdris.gov.bd/br/application', formElement: false };
         }
-        const token = calls.sessionReads === 1 ? 'stale-csrf' : 'fresh-csrf';
-        return { token, headerName: 'X-CSRF-TOKEN', source: 'meta', pageUrl: 'https://bdris.gov.bd/br/application', formElement: true };
+        return { token: scenario.token || 'page-csrf', headerName: 'X-CSRF-TOKEN', source: 'meta', pageUrl: 'https://bdris.gov.bd/br/application', formElement: true };
       }
       if (src.includes('querySelectorAll')) {
         calls.evaluateKinds.push('link-click');
@@ -114,148 +105,194 @@ function freshNavLogLine(logs) {
   return logs.find((l) => l.includes('[HTTP-CANDIDATE] fresh-navigation:'));
 }
 
-describe('fresh navigation before submit (step 5c)', () => {
-  it('idle page: homepage-route navigation runs before submit and the post-navigation re-seed adopts the fresh token', async () => {
+describe('dedicated-page fresh navigation before submit (step 5c)', () => {
+  it('dedicated page: created, homepage-route navigated, re-seeded from it, closed; session.page never navigated', async () => {
     const order = [];
     const refreshSeeds = [];
     const submitInputs = [];
     const logs = [];
-    const { page, calls } = mockWarmPage({ formContent: true }, order);
+    const closed = [];
+    const warm = mockPage({ token: 'stale-csrf' }, order);
+    const dedicated = mockPage({ token: 'dedicated-csrf' }, order);
     const out = await runHttpChain({
-      data: chainData('ref-nav-1'),
+      data: chainData('ref-dnav-1'),
       userId: 'user-1',
       secret: 'test-secret',
       client: fakeClient(order, refreshSeeds, submitInputs),
-      reseedPage: page,
+      reseedPage: warm.page,
+      createDedicatedPage: async () => { order.push('create'); return dedicated.page; },
+      closeDedicatedPage: async (p) => { closed.push(p); await p.close(); },
       log: (...a) => logs.push(a.join(' ')),
     });
     assert.strictEqual(out.ok, true);
-    // Only the passed warm page is navigated, to the homepage.
-    assert.deepStrictEqual(calls.goto, ['https://bdris.gov.bd/']);
-    assert.ok(calls.evaluateKinds.includes('link-click'), 'the homepage link click must run');
-    assert.ok(calls.evaluateKinds.includes('midflow-guard'), 'the idle guard must run');
-    // Exact chain order: non-navigating re-seed, then navigation,
-    // then the fresh re-seed, then submit.
-    assert.deepStrictEqual(order, ['otp-send', 'verify', 'refreshSeed', 'goto:https://bdris.gov.bd/', 'refreshSeed', 'submit']);
-    // The post-navigation re-seed carries the fresh token, not the stale one.
+    // Only the dedicated page is navigated, to the homepage.
+    assert.deepStrictEqual(dedicated.calls.goto, ['https://bdris.gov.bd/']);
+    assert.deepStrictEqual(warm.calls.goto, [], 'the shared session.page must never be navigated');
+    assert.ok(dedicated.calls.evaluateKinds.includes('link-click'), 'the homepage link click must run');
+    assert.strictEqual(closed.length, 1, 'the dedicated page must be closed');
+    assert.strictEqual(closed[0], dedicated.page);
+    // Exact chain order: non-navigating re-seed, then dedicated
+    // creation + navigation + fresh re-seed + close, then submit.
+    assert.deepStrictEqual(order, ['otp-send', 'verify', 'refreshSeed', 'create', 'goto:https://bdris.gov.bd/', 'refreshSeed', 'close', 'submit']);
+    // The post-navigation re-seed carries the dedicated token.
     assert.strictEqual(refreshSeeds.length, 2);
     assert.strictEqual(refreshSeeds[0].csrfToken, 'stale-csrf');
-    assert.strictEqual(refreshSeeds[1].csrfToken, 'fresh-csrf');
+    assert.strictEqual(refreshSeeds[1].csrfToken, 'dedicated-csrf');
     const line = freshNavLogLine(logs);
-    assert.ok(line && line.includes('re-navigated'), `expected a re-navigated log line, got: ${line}`);
+    assert.ok(line && line.includes('dedicated page re-navigated'), `expected a dedicated re-navigated log line, got: ${line}`);
   });
 
-  it('mid-flow page: navigation skipped, submit still proceeds on jarred state', async () => {
+  it('factory throws: skipped, submit still proceeds, nothing to close', async () => {
     const order = [];
     const refreshSeeds = [];
     const submitInputs = [];
     const logs = [];
-    const { page, calls } = mockWarmPage({ filled: true, formContent: true }, order);
+    const closed = [];
+    const warm = mockPage({ token: 'stale-csrf' }, order);
     const out = await runHttpChain({
-      data: chainData('ref-nav-2'),
+      data: chainData('ref-dnav-2'),
       userId: 'user-1',
       secret: 'test-secret',
       client: fakeClient(order, refreshSeeds, submitInputs),
-      reseedPage: page,
+      reseedPage: warm.page,
+      createDedicatedPage: async () => { throw new Error('no browser'); },
+      closeDedicatedPage: async (p) => { closed.push(p); },
       log: (...a) => logs.push(a.join(' ')),
     });
     assert.strictEqual(out.ok, true);
-    assert.deepStrictEqual(calls.goto, [], 'a filled page must never be navigated away from');
     assert.ok(order.includes('submit'), 'submit must still proceed');
-    assert.strictEqual(refreshSeeds.length, 1, 'only the non-navigating re-seed runs');
+    assert.deepStrictEqual(closed, [], 'nothing was created, so nothing closes');
     const line = freshNavLogLine(logs);
-    assert.ok(line && line.includes('skipped') && line.includes('mid-flow'), `expected a mid-flow skip line, got: ${line}`);
+    assert.ok(line && line.includes('skipped') && line.includes('failed'), `expected a failed-navigation skip line, got: ${line}`);
   });
 
-  it('navigation yielding no form content: skipped, submit still proceeds', async () => {
+  it('navigation yielding no form content: skipped, page still closed, submit still proceeds', async () => {
     const order = [];
     const refreshSeeds = [];
     const submitInputs = [];
     const logs = [];
-    const { page, calls } = mockWarmPage({ gotoFails: true, formContent: false }, order);
+    const closed = [];
+    const warm = mockPage({ token: 'stale-csrf' }, order);
+    const dedicated = mockPage({ gotoFails: true, formContent: false, token: 'dedicated-csrf' }, order);
     const out = await runHttpChain({
-      data: chainData('ref-nav-3'),
+      data: chainData('ref-dnav-3'),
       userId: 'user-1',
       secret: 'test-secret',
       client: fakeClient(order, refreshSeeds, submitInputs),
-      reseedPage: page,
+      reseedPage: warm.page,
+      createDedicatedPage: async () => dedicated.page,
+      closeDedicatedPage: async (p) => { closed.push(p); await p.close(); },
       log: (...a) => logs.push(a.join(' ')),
     });
     assert.strictEqual(out.ok, true);
-    assert.strictEqual(calls.goto.length, 1, 'navigation must be attempted once');
+    assert.strictEqual(dedicated.calls.goto.length, 1, 'navigation must be attempted once');
+    assert.strictEqual(closed.length, 1, 'a failed navigation must still close its page');
     assert.ok(order.includes('submit'), 'submit must still proceed');
     const line = freshNavLogLine(logs);
     assert.ok(line && line.includes('did not yield form content'), `expected a no-form-content skip line, got: ${line}`);
   });
 
-  it('missing page: skipped, submit still proceeds', async () => {
+  it('dedicated page without a token: reseed skipped, page closed, submit still proceeds', async () => {
     const order = [];
     const refreshSeeds = [];
     const submitInputs = [];
     const logs = [];
+    const closed = [];
+    const warm = mockPage({ token: 'stale-csrf' }, order);
+    const dedicated = mockPage({ noToken: true, formContent: true }, order);
     const out = await runHttpChain({
-      data: chainData('ref-nav-4'),
+      data: chainData('ref-dnav-4'),
       userId: 'user-1',
       secret: 'test-secret',
       client: fakeClient(order, refreshSeeds, submitInputs),
+      reseedPage: warm.page,
+      createDedicatedPage: async () => dedicated.page,
+      closeDedicatedPage: async (p) => { closed.push(p); await p.close(); },
+      log: (...a) => logs.push(a.join(' ')),
+    });
+    assert.strictEqual(out.ok, true);
+    assert.strictEqual(closed.length, 1, 'a tokenless page must still be closed');
+    assert.ok(order.includes('submit'), 'submit must still proceed');
+    const line = freshNavLogLine(logs);
+    assert.ok(line && line.includes('skipped') && line.includes('token missing'), `expected a token-missing skip line, got: ${line}`);
+  });
+
+  it('no factory supplied: skipped, submit still proceeds', async () => {
+    const order = [];
+    const refreshSeeds = [];
+    const submitInputs = [];
+    const logs = [];
+    const warm = mockPage({ token: 'stale-csrf' }, order);
+    const out = await runHttpChain({
+      data: chainData('ref-dnav-5'),
+      userId: 'user-1',
+      secret: 'test-secret',
+      client: fakeClient(order, refreshSeeds, submitInputs),
+      reseedPage: warm.page,
       log: (...a) => logs.push(a.join(' ')),
     });
     assert.strictEqual(out.ok, true);
     assert.ok(order.includes('submit'));
     const line = freshNavLogLine(logs);
-    assert.ok(line && line.includes('no warm page'), `expected a no-page skip line, got: ${line}`);
+    assert.ok(line && line.includes('no dedicated-page factory'), `expected a no-factory skip line, got: ${line}`);
   });
 
-  it('only the passed warm page is ever navigated (a decoy page is untouched)', async () => {
+  it('only the dedicated page is ever navigated (a decoy page is untouched)', async () => {
     const order = [];
     const refreshSeeds = [];
     const submitInputs = [];
     const logs = [];
     const decoyCalls = [];
     const decoyPage = { goto: async () => { decoyCalls.push('navigated'); } };
-    const { page, calls } = mockWarmPage({ formContent: true }, order);
+    const warm = mockPage({ token: 'stale-csrf' }, order);
+    const dedicated = mockPage({ token: 'dedicated-csrf' }, order);
     const out = await runHttpChain({
-      data: chainData('ref-nav-5'),
+      data: chainData('ref-dnav-6'),
       userId: 'user-1',
       secret: 'test-secret',
       client: fakeClient(order, refreshSeeds, submitInputs),
-      reseedPage: page,
+      reseedPage: warm.page,
+      createDedicatedPage: async () => dedicated.page,
+      closeDedicatedPage: async (p) => { await p.close(); },
       log: (...a) => logs.push(a.join(' ')),
     });
     assert.strictEqual(out.ok, true);
-    assert.deepStrictEqual(decoyCalls, [], 'no page other than reseedPage may be navigated');
-    assert.strictEqual(calls.goto.length, 1);
+    assert.deepStrictEqual(decoyCalls, [], 'no page other than the dedicated page may be navigated');
+    assert.deepStrictEqual(warm.calls.goto, [], 'the shared session.page must never be navigated');
+    assert.strictEqual(dedicated.calls.goto.length, 1);
     void decoyPage;
   });
 
-  it('fresh navigation changes no submit field, value, or header input', async () => {
-    const mkRun = async (ref, reseedPage) => {
+  it('dedicated navigation changes no submit field, value, or header input', async () => {
+    const mkRun = async (ref, withDedicated) => {
       const order = [];
       const refreshSeeds = [];
       const submitInputs = [];
       const logs = [];
+      const dedicated = mockPage({ token: 'dedicated-csrf' }, order);
       const out = await runHttpChain({
         data: chainData(ref),
         userId: 'user-1',
         secret: 'test-secret',
         client: fakeClient(order, refreshSeeds, submitInputs),
-        ...(reseedPage ? { reseedPage } : {}),
+        ...(withDedicated ? {
+          createDedicatedPage: async () => dedicated.page,
+          closeDedicatedPage: async (p) => { await p.close(); },
+        } : {}),
         log: (...a) => logs.push(a.join(' ')),
       });
       assert.strictEqual(out.ok, true);
       return submitInputs[0];
     };
-    const withNav = mkRun('ref-nav-6a', mockWarmPage({ formContent: true }).page);
-    const withoutNav = mkRun('ref-nav-6b', null);
-    const a = await withNav;
-    const b = await withoutNav;
+    const a = await mkRun('ref-dnav-7a', true);
+    const b = await mkRun('ref-dnav-7b', false);
     delete a._chargeToken;
     delete b._chargeToken;
-    assert.deepStrictEqual(a, b, 'the submit payload must be identical with and without fresh navigation');
+    assert.deepStrictEqual(a, b, 'the submit payload must be identical with and without dedicated navigation');
   });
 });
 
-describe('isPageMidFlow guard', () => {
+describe('isPageMidFlow guard (kept exported; step 5c no longer needs it)', () => {
   it('no evaluate → mid-flow (never navigate an uninspectable page)', async () => {
     assert.strictEqual(await isPageMidFlow({}), true);
     assert.strictEqual(await isPageMidFlow(null), true);
@@ -275,19 +312,21 @@ describe('isPageMidFlow guard', () => {
   });
 });
 
-describe('fresh navigation step structure', () => {
-  it('step 5c uses gotoFormViaSite + re-seed on reseedPage only; never reload, never a fresh-page factory', () => {
+describe('dedicated navigation step structure', () => {
+  it('step 5c uses a dedicated-page factory + close + gotoFormViaSite + re-seed; never navigates reseedPage, never reload', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'services', 'HttpPathRunner.js'), 'utf8');
-    const start = src.indexOf('5c. FRESH NAVIGATION');
+    const start = src.indexOf('5c. DEDICATED-PAGE FRESH NAVIGATION');
     assert.ok(start >= 0, 'step 5c must exist');
     const end = src.indexOf('6. Final submit', start);
     assert.ok(end > start, 'step 5c must end before step 6');
     const section = src.slice(start, end);
+    assert.ok(section.includes('createDedicatedPage'), 'step 5c must create a dedicated page');
+    assert.ok(section.includes('closeDedicatedPage'), 'step 5c must close the dedicated page');
     assert.ok(section.includes('gotoFormViaSite'), 'step 5c must re-run gotoFormViaSite');
     assert.ok(section.includes('reseedFromPage'), 'step 5c must re-seed after navigation');
-    assert.ok(section.includes('opts.reseedPage'), 'step 5c must use the passed warm page');
+    assert.ok(!section.includes('opts.reseedPage'), 'step 5c must never navigate the shared session.page');
+    assert.ok(!section.includes('isPageMidFlow'), 'no idle-guard on a fresh page: nothing shared to protect');
     assert.ok(!section.includes('reload('), 'plain reload is forbidden');
-    assert.ok(!section.includes('createFreshPage'), 'no fresh-page factory: only the passed page is navigated');
     assert.ok(!section.toLowerCase().includes('qr'), 'no fallback-logic reference in step 5c');
   });
 });

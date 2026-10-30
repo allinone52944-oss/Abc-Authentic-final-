@@ -191,10 +191,15 @@ describe('direct: family flag, marker, and submit retry', () => {
   it('family wording in a rejection body carries the marker; other text does not', () => {
     assert.ok(isFamilyRejectionText(FAMILY));
     assert.ok(!isFamilyRejectionText('some other error'));
+    // STRICT (2026-10-30): the marker mirrors the bot — it tests
+    // the wording on a TARGETED validation message (error-class
+    // text here), never on a bare body scan. Plain family wording
+    // without error-class markup carries no marker anymore.
     assert.match(
-      submitRejectionWording({ text: FAMILY, json: null }),
+      submitRejectionWording({ text: `<div class="text-danger">${FAMILY}</div>`, json: null }),
       /\[family: 180-days\]/,
     );
+    assert.ok(!/family: 180-days/.test(submitRejectionWording({ text: FAMILY, json: null })));
     assert.ok(!/family: 180-days/.test(submitRejectionWording({ text: 'plain', json: null })));
   });
 

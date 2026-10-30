@@ -670,6 +670,18 @@ class BdrisEngineV2 {
           // reseed; absent = reseed logs its skip, submit still
           // proceeds on the jarred state).
           reseedPage: session?.page || null,
+          // DEDICATED-PAGE FRESH NAVIGATION (2026-10-30): step
+          // 5c navigates ONLY a fresh page from this factory —
+          // never the shared session.page (the bot fallback
+          // builds StepHandler on it, so the old idle-guard
+          // correctly refused it on attempt 10) and never the
+          // user's browser tab. Same pattern as the
+          // GET_ADDRESS_OPTIONS fresh-page factory above: a new
+          // page carries its own context, and closePage closes
+          // the page and its context. The runner closes it in a
+          // finally, so no page leaks even when navigation fails.
+          createDedicatedPage: async () => this.browserManager.newPage(),
+          closeDedicatedPage: async (page) => this.browserManager.closePage(page),
           // DIRECT-PATH WIRING: a UI direct call must run SEEDED —
           // a failed seed fails fast (SEED_FAILED → bot fallback)
           // instead of attempting a bare bootstrap (proven 403).

@@ -419,11 +419,23 @@ async function isPageMidFlow(page) {
  *   live warm page to refresh cookies + CSRF from immediately
  *   before the submit POST (never navigated/reloaded by the
  *   re-seed itself). Absent = the reseed step logs its skip and
- *   the submit proceeds on the jarred state. Step 5c (fresh
- *   navigation) reuses this SAME page — the only page ever
- *   navigated; never any other page, never the user's browser
- *   tab. Data flag `alreadyVerified: true` (see
- *   normalizeChainInput) skips the verify call on a deliberate
+ *   the submit proceeds on the jarred state. Data flag
+ *   `alreadyVerified: true` (see normalizeChainInput) skips the
+ *   verify call on a deliberate retry of an already-verified session.
+ * @param {function} [opts.createDedicatedPage] - DEDICATED-PAGE
+ *   FRESH NAVIGATION (2026-10-30): async () => a fresh,
+ *   dedicated Playwright page for step 5c only (the executor
+ *   supplies BrowserManager.newPage, same pattern as the
+ *   GET_ADDRESS_OPTIONS fresh-page factory). Step 5c navigates
+ *   ONLY this page — never the shared session.page (the bot
+ *   fallback builds StepHandler on it, so the old idle-guard
+ *   correctly refused it on attempt 10) and never the user's
+ *   browser tab. Absent = step 5c logs its skip and the submit
+ *   proceeds on the jarred state.
+ * @param {function} [opts.closeDedicatedPage] - async (page) =>
+ *   closes a step-5c dedicated page (the executor supplies
+ *   BrowserManager.closePage, which also closes the page's own
+ *   context). Always called in a finally, so no page leaks.
  *   retry of an already-verified session.
  */
 async function runHttpChain(opts = {}) {
@@ -723,60 +735,63 @@ async function runHttpChain(opts = {}) {
       candidateLog(log, 'reseed', 'skipped — no warm page supplied; proceeding with jarred state');
     }
 
-    // 5c. FRESH NAVIGATION (2026-10-30): re-navigate the engine's
-    // own warm page via the homepage route immediately before the
-    // submit POST, then re-seed from the freshly navigated page.
-    // Why: the 9th live submit proved every other difference dead
-    // (headers, fields, cookie freshness via non-navigating
-    // re-seed, submit-time fields, client value, Origin, empty
-    // file parts — all byte-identical shell). The chain's seed
-    // comes from a warm page navigated long before; TS cookies
-    // rotate with ~30s Max-Age and navigation-time TSPD/session
-    // state dies in between, and a NON-navigating re-seed cannot
-    // mint fresh state from an idle page. Only a fresh page
-    // NAVIGATION (homepage route — plain page.reload is
-    // FORBIDDEN: a direct GET of /br/application serves the stub
-    // page) can mint it. Safety mirrors the re-seed step: a
-    // missing/failed navigation, a page that cannot be proven
-    // idle (bot mid-flow), or a page that yields no form content
+    // 5c. DEDICATED-PAGE FRESH NAVIGATION (2026-10-30): re-navigate
+    // a FRESH, dedicated Playwright page via the homepage route
+    // immediately before the submit POST, then re-seed the submit
+    // client from it. Why dedicated, not the shared warm page:
+    // attempt 10's journal proved the old step (navigate the
+    // shared session.page behind an idle-guard) SKIPPED — the
+    // guard correctly refused a page the bot fallback builds
+    // StepHandler on (server.js:618-619) and that sat on the
+    // form page. A shared page can therefore never be proven
+    // idle while bot state persists, so fresh navigation could
+    // never run on it. A dedicated page has no shared state to
+    // protect: no idle-guard is needed (and none is run — a
+    // guard could false-positive on the form page's own
+    // load-time defaults, the exact unproven concern), and the
+    // page is closed in a finally so nothing leaks. Only the
+    // dedicated page is ever navigated: never session.page,
+    // never any other page, never the user's own browser tab
+    // (a separate browser the engine cannot reach). Plain
+    // page.reload is FORBIDDEN (a direct GET of /br/application
+    // serves the stub page). The post-navigation re-seed follows
+    // the existing reseed rule (CSRF always adopted; page cookies
+    // fill only missing/expired names, never overwrite chain-set
+    // values, so verify's fresh cookies survive). Safety mirrors
+    // the re-seed step: a missing factory, a failed creation,
+    // a failed navigation, or a page that yields no form content
     // only logs the skip — the submit proceeds on the jarred
-    // state and NEVER fails on fresh navigation. Only the page
-    // passed as opts.reseedPage is ever navigated: never any
-    // other page, never the user's own browser tab (which is a
-    // separate browser the engine cannot reach). The post-
-    // navigation re-seed follows the existing reseed rule
-    // (CSRF always adopted; page cookies fill only missing/
-    // expired names, never overwrite chain-set values, so
-    // verify's fresh cookies survive). If the shell persists
-    // after this, the verdict is that direct HTTP submit is
-    // blocked by page-route protection and only browser-native
-    // submit (bot path) works.
+    // state and NEVER fails on fresh navigation.
     currentStep = 'fresh-navigation';
-    if (opts.reseedPage && client && typeof client.refreshSeed === 'function') {
+    if (opts.createDedicatedPage && client && typeof client.refreshSeed === 'function') {
+      let dedicatedPage = null;
       try {
         const { BdrisNavigator } = require('./BdrisNavigator');
         const { HttpGeoService } = require('./HttpGeoService');
-        const navPage = opts.reseedPage;
-        if (await isPageMidFlow(navPage)) {
-          candidateLog(log, 'fresh-navigation', 'skipped — warm page holds user-entered values or cannot be proven idle (bot mid-flow?); proceeding with jarred state');
+        dedicatedPage = await opts.createDedicatedPage();
+        const nav = new BdrisNavigator(dedicatedPage);
+        const via = await nav.gotoFormViaSite();
+        if (via && via.state && via.state.formContent) {
+          const geoFresh = new HttpGeoService();
+          const okFresh = await geoFresh.reseedFromPage(dedicatedPage, client);
+          candidateLog(log, 'fresh-navigation', okFresh
+            ? 'dedicated page re-navigated via homepage route + re-seeded cookies/CSRF from the fresh page before submit (verify cookies kept)'
+            : 'skipped — dedicated page unreadable or token missing after navigation; proceeding with jarred state');
         } else {
-          const nav = new BdrisNavigator(navPage);
-          const via = await nav.gotoFormViaSite();
-          if (via && via.state && via.state.formContent) {
-            const geoFresh = new HttpGeoService();
-            const okFresh = await geoFresh.reseedFromPage(navPage, client);
-            candidateLog(log, 'fresh-navigation', okFresh
-              ? 're-navigated via homepage route + re-seeded cookies/CSRF from the fresh page before submit (verify cookies kept)'
-              : 'skipped — fresh page unreadable or token missing after navigation; proceeding with jarred state');
-          } else {
-            candidateLog(log, 'fresh-navigation', 'skipped — homepage-route navigation did not yield form content; proceeding with jarred state');
-          }
+          candidateLog(log, 'fresh-navigation', 'skipped — dedicated-page homepage-route navigation did not yield form content; proceeding with jarred state');
         }
       } catch (e) {
-        candidateLog(log, 'fresh-navigation', `skipped — fresh navigation failed (${(e && e.message) || e}); proceeding with jarred state`);
+        candidateLog(log, 'fresh-navigation', `skipped — dedicated-page fresh navigation failed (${(e && e.message) || e}); proceeding with jarred state`);
+      } finally {
+        if (dedicatedPage) {
+          try {
+            if (typeof opts.closeDedicatedPage === 'function') await opts.closeDedicatedPage(dedicatedPage);
+            else if (typeof dedicatedPage.close === 'function') await dedicatedPage.close();
+          } catch { /* cleanup must never fail the submit */ }
+        }
       }
     } else {
-      candidateLog(log, 'fresh-navigation', 'skipped — no warm page supplied or client cannot refresh; proceeding with jarred state');
+      candidateLog(log, 'fresh-navigation', 'skipped — no dedicated-page factory supplied or client cannot refresh; proceeding with jarred state');
     }
 
     // 6. Final submit (CANDIDATE payload; scope ends at success page).
@@ -791,15 +806,22 @@ async function runHttpChain(opts = {}) {
       // Family/180-days ADVANCE (2026-10-29 follow-up): the direct
       // path previously had no family branch at all — a family
       // rejection failed the chain outright. Mirror the bot rule:
-      // on a DEFINITIVE server rejection (err.code present, the
-      // same rule isFallbackSafe uses for bot fallback) whose
-      // wording carries the family marker, retry ONCE names-only
-      // (ubrn empty, names + nationality + DOB untouched, draft
-      // BRN retained). Never on an unknown outcome (no code:
-      // network/timeout) — that application may already exist,
-      // and a retry could double-submit. If the retry also fails,
-      // its exact error is what fail() reports below.
-      const familyRejection = !!(e && e.code && /\[family: 180-days\]/.test(String(e.message || '')));
+      // on a DEFINITIVE server rejection whose wording carries
+      // the family marker, retry ONCE names-only (ubrn empty,
+      // names + nationality + DOB untouched, draft BRN retained).
+      // TWO gates, both required (2026-10-30 principled fix):
+      // (1) isFallbackSafe('submit', e) — a 200 non-JSON shell
+      // (outcome-unknown) is NOT a definitive rejection, so the
+      // retry NEVER runs on it; a retry there could double-file
+      // an application that already landed. The old code checked
+      // only e.code, and SUBMIT_NOT_SUCCESS carries a code on a
+      // shell too. (2) the [family: 180-days] tag, which since
+      // the same fix is set ONLY from the server's explicit
+      // error wording (JSON message/code, else error-class text)
+      // — never from a bare scan of the whole response body.
+      // If the retry also fails, its exact error is what fail()
+      // reports below.
+      const familyRejection = !!(e && e.code && isFallbackSafe('submit', e) && /\[family: 180-days\]/.test(String(e.message || '')));
       if (!familyRejection) throw e;
       candidateLog(log, 'submit', 'family/180-days rejection — retrying once names-only (ubrn empty, names unchanged)');
       submitted = await client.submitApplication({ ...submitInput, _familyNamesOnly: true });
