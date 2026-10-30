@@ -258,11 +258,127 @@ function submitErrorWording(res) {
   return '';
 }
 
-// FINAL-SOLUTION (2026-10-30, problem-map #14): the server's
-// unexpired-OTP wording — a second send while the previous code
-// is still live is REJECTED (live-proven 2026-10-30: direct 400
-// 'ওটিপি-এর মেয়াদ শেষ হয়নি'), and the previous code STAYS
-// valid. Matched on the server's own wording only.
+// SUBMIT-CAUSE (2026-10-30): privacy-safe STRUCTURAL fingerprint of
+// a re-rendered form response. The live wall (5×, same 200 HTML
+// form) carries no JSON wording and no error-class text, so the
+// next diagnosis needs the form's SHAPE, not its words: which
+// fields the server echoed back, which hidden inputs the page
+// carries, what the form posts to, and which submit button the
+// browser would press. This returns STRUCTURE ONLY:
+//  - the form action PATH (query values never included, only a
+//    query-present yes/no — a query value could be an identifier),
+//  - step-marker presence (yes/no per marker field name),
+//  - Bengali message-word presence (yes/no per word, scanned on
+//    tag-stripped text only, never on attribute values),
+//  - per named control, echoed-value presence (yes/no ONLY —
+//    checkbox/radio count as present only when checked, selects
+//    only when a selected option carries a non-empty value/text,
+//    textareas only when inner text is non-empty),
+//  - hidden input NAMES (names only, never values),
+//  - submit button NAMES (names only) + value-attribute presence.
+// NEVER included: any control value, person name, number, code,
+// token, date, or identifier. Digit runs are stripped from the
+// final string, and the whole fingerprint is capped — so even a
+// field name that ever carried digits cannot leak one. A body
+// with no form at all yields a short marker-only string, never ''.
+const FINGERPRINT_MAX = 2000;
+const FINGERPRINT_WORDS = ['আবশ্যক', 'ত্রুটি', 'ভুল', 'সঠিক'];
+const FINGERPRINT_STEPS = [
+  ['stepPerson', 'personInfoForBirth.personFirstNameBn'],
+  ['stepParents', 'personInfoForBirth.father.personNameBn'],
+  ['stepBirthAddr', 'birthPlaceDiv'],
+  ['stepPermAddr', 'permAddrDiv'],
+  ['stepPresAddr', 'prsntAddrDiv'],
+  ['stepRelation', 'relationWithApplicant'],
+  ['stepDocs', 'attachments'],
+  ['stepContact', 'phone'],
+  ['stepOtp', 'otp'],
+];
+function _fpAttr(tag, name) {
+  const m = tag.match(new RegExp(`${name}\\s*=\\s*"([^"]*)"`, 'i'))
+    || tag.match(new RegExp(`${name}\\s*=\\s*'([^']*)'`, 'i'));
+  return m ? m[1] : null;
+}
+function submitResponseFingerprint(res) {
+  const text = String((res && res.text) || '');
+  if (!text) return '';
+  const present = new Map(); // control name -> echoed-value yes/no
+  const hiddenNames = [];
+  const submitBtnNames = [];
+  let submitBtnValue = false;
+  let hasSubmitBtn = false;
+  const note = (name, yes) => {
+    if (!name) return;
+    if (present.get(name) !== true) present.set(name, !!yes);
+  };
+  const inputRe = /<input\b[^>]*>/gi;
+  let m;
+  while ((m = inputRe.exec(text))) {
+    const tag = m[0];
+    const name = _fpAttr(tag, 'name');
+    if (!name) continue;
+    const type = String(_fpAttr(tag, 'type') || 'text').toLowerCase();
+    if (type === 'submit') {
+      hasSubmitBtn = true;
+      submitBtnNames.push(name);
+      if ((_fpAttr(tag, 'value') || '').trim() !== '') submitBtnValue = true;
+      continue;
+    }
+    if (type === 'hidden') {
+      if (!hiddenNames.includes(name)) hiddenNames.push(name);
+      note(name, (_fpAttr(tag, 'value') || '').trim() !== '');
+      continue;
+    }
+    if (type === 'checkbox' || type === 'radio') {
+      note(name, /\bchecked\b/i.test(tag));
+      continue;
+    }
+    note(name, (_fpAttr(tag, 'value') || '').trim() !== '');
+  }
+  const selectRe = /<select\b[^>]*name\s*=\s*"([^"]+)"[^>]*>([\s\S]*?)<\/select\s*>/gi;
+  while ((m = selectRe.exec(text))) {
+    const name = m[1];
+    const body = m[2] || '';
+    const sel = body.match(/<option\b[^>]*\bselected\b[^>]*>([^<]*)/i)
+      || body.match(/<option\b[^>]*\bselected\b[^>]*value\s*=\s*"([^"]*)"[^>]*>/i);
+    let yes = false;
+    if (sel) {
+      const v = _fpAttr(sel[0], 'value');
+      const inner = (sel[1] || '').trim();
+      yes = (v !== null && v.trim() !== '') || inner !== '';
+    }
+    note(name, yes);
+  }
+  const areaRe = /<textarea\b[^>]*name\s*=\s*"([^"]+)"[^>]*>([\s\S]*?)<\/textarea\s*>/gi;
+  while ((m = areaRe.exec(text))) note(m[1], (m[2] || '').trim() !== '');
+  const btnRe = /<button\b[^>]*>/gi;
+  while ((m = btnRe.exec(text))) {
+    const tag = m[0];
+    if (String(_fpAttr(tag, 'type') || '').toLowerCase() !== 'submit') continue;
+    hasSubmitBtn = true;
+    const name = _fpAttr(tag, 'name');
+    if (name) submitBtnNames.push(name);
+    if ((_fpAttr(tag, 'value') || '').trim() !== '') submitBtnValue = true;
+  }
+  const formM = text.match(/<form\b[^>]*>/i);
+  let actionPath = 'none';
+  let actionQuery = 'no';
+  if (formM) {
+    const action = _fpAttr(formM[0], 'action') || '';
+    if (action) {
+      const q = action.indexOf('?');
+      actionPath = q >= 0 ? action.slice(0, q) : action;
+      actionQuery = q >= 0 ? 'yes' : 'no';
+      if (!actionPath) actionPath = 'empty';
+    }
+  }
+  const textOnly = text.replace(/<[^>]*>/g, ' ');
+  const words = FINGERPRINT_WORDS.map((w) => `${w}:${textOnly.includes(w) ? 'yes' : 'no'}`).join(',');
+  const steps = FINGERPRINT_STEPS.map(([label, marker]) => `${label}:${present.has(marker) ? 'yes' : 'no'}`).join(',');
+  const fields = [...present.entries()].slice(0, 120).map(([n, y]) => `${n}:${y ? 'yes' : 'no'}`).join(',');
+  const out = `formAction=${actionPath} formQuery=${actionQuery} submitBtn=${hasSubmitBtn ? 'yes' : 'no'} submitBtnNames=${submitBtnNames.join('|') || 'none'} submitBtnValue=${submitBtnValue ? 'yes' : 'no'} steps=${steps} words=${words} hidden=${hiddenNames.slice(0, 60).join('|') || 'none'} fields=${fields || 'none'}`;
+  return out.replace(/[0-9০-৯]+/g, '').slice(0, FINGERPRINT_MAX);
+}
 const OTP_UNEXPIRED_RE = /মেয়াদ শেষ হয়নি|not expired|has not expired/i;
 
 // DIRECT BRN-FREE ROUTE (2026-10-29): two wire fixes for the
@@ -853,6 +969,7 @@ class BdrisHttpClient {
       // the validation reason instead of only the shape.
       e.responseSummary = submitResponseSummary(res);
       e.responseErrorWording = submitErrorWording(res);
+      e.responseFingerprint = submitResponseFingerprint(res);
       throw e;
     }
     if (res.json && res.json.success === true) {
@@ -871,8 +988,10 @@ class BdrisHttpClient {
       // the summary is what lets the next diagnosis tell the two
       // apart. The message text itself is unchanged.
       // SUBMIT-FINAL: error wording attached (wording only).
+      // SUBMIT-CAUSE: structural fingerprint attached (shape only).
       e.responseSummary = submitResponseSummary(res);
       e.responseErrorWording = submitErrorWording(res);
+      e.responseFingerprint = submitResponseFingerprint(res);
       throw e;
     }
     return { success: true, hasPrintLink: parsed.hasPrintLink, json: res.json, responseSummary: submitResponseSummary(res) };
@@ -902,6 +1021,15 @@ class BdrisHttpClient {
  *    PostOfcEn, PostCode, VilAreaTownBn, VilAreaTownEn, HouseRoadBn,
  *    HouseRoadEn, LocationId, En, Bn. PostCode is carried only if
  *    supplied. The old copy flags are NOT form fields and are dropped.
+ *    SUBMIT-GEO: cascade values mirror the browser POST — geo ids
+ *    when the canonical address carries them, display names only
+ *    as fallback; city-corp addresses put the zone in
+ *    WardInCityCorp with PaurasavaOrUnion empty (bot DSCC pattern),
+ *    union addresses put the union in PaurasavaOrUnion.
+ *  - Dates/thChild mirror the bot's typed/selected shapes:
+ *    person + parent birth dates DD/MM/YYYY, thChild the Bengali
+ *    single digit. applicantDob is left as supplied: no bot code
+ *    types it into a site input, so its form format is unproven.
  *  - Documents: `attachments` = the uploaded file ids for types 40
  *    and 41 (the form's hidden `attachments` inputs), NOT a JSON
  *    documents array. The upload itself is verified.
@@ -968,15 +1096,29 @@ function buildSubmitPayload(data = {}) {
     req(addr.postOfficeEn || addr.postEn, `${label}.postOfficeEn`);
     req(addr.villageBn || addr.vilBn, `${label}.villageBn`);
     req(addr.villageEn || addr.vilEn, `${label}.villageEn`);
+    // SUBMIT-GEO: city-corp pattern mirrors StepHandler
+    // _fillAddressSection (live-verified 2026-10-11, DSCC):
+    // the zone goes in WardInCityCorp and PaurasavaOrUnion stays
+    // empty; the ward goes in WardInPaurasavaOrUnion. Union
+    // pattern: union in PaurasavaOrUnion, ward in
+    // WardInPaurasavaOrUnion, WardInCityCorp empty. Detection is
+    // the bot's exact test on the display value, so an English
+    // city-corp label (no 'সিটি কর্পোরেশন') maps union-style,
+    // exactly as the bot would fill it. Cascade values are geo
+    // ids when present, display names only as fallback — never a
+    // new required-field error for a missing id.
+    const cityCorp = /সিটি কর্পোরেশন/.test(String(addr.cityCorpUpazila || ''));
+    const zone = idOrName(addr.paurasavaUnionId, addr.paurasavaUnion);
+    const ward = idOrName(addr.wardId, addr.ward);
     return {
       [`${prefix}Country`]: str(addr.country || 'বাংলাদেশ'),
-      [`${prefix}Div`]: str(addr.division),
-      [`${prefix}Dist`]: str(addr.district),
-      [`${prefix}CityCorpCantOrUpazila`]: str(addr.cityCorpUpazila),
-      [`${prefix}PaurasavaOrUnion`]: str(addr.paurasavaUnion),
-      [`${prefix}WardInCityCorp`]: str(addr.wardInCityCorp),
+      [`${prefix}Div`]: idOrName(addr.divisionId, addr.division),
+      [`${prefix}Dist`]: idOrName(addr.districtId, addr.district),
+      [`${prefix}CityCorpCantOrUpazila`]: idOrName(addr.cityCorpUpazilaId, addr.cityCorpUpazila),
+      [`${prefix}PaurasavaOrUnion`]: cityCorp ? '' : zone,
+      [`${prefix}WardInCityCorp`]: cityCorp ? zone : '',
       [`${prefix}Area`]: str(addr.area),
-      [`${prefix}WardInPaurasavaOrUnion`]: str(addr.ward),
+      [`${prefix}WardInPaurasavaOrUnion`]: ward,
       [`${prefix}City`]: str(addr.city),
       [`${prefix}PostOfc`]: str(addr.postOfficeBn || addr.postBn),
       [`${prefix}PostOfcEn`]: str(addr.postOfficeEn || addr.postEn),
@@ -1040,22 +1182,22 @@ function buildSubmitPayload(data = {}) {
     'personInfoForBirth.personLastNameEn': str(lastEn),
     'personInfoForBirth.personNameBn': joinName(firstBn, lastBn),
     'personInfoForBirth.personNameEn': joinName(firstEn, lastEn),
-    'personInfoForBirth.personBirthDate': str(dob),
-    'personInfoForBirth.thChild': str(person.thChild),
+    'personInfoForBirth.personBirthDate': toSiteDate(dob),
+    'personInfoForBirth.thChild': thChildSiteValue(person.thChild),
     'personInfoForBirth.gender': mapGender(person.gender),
     'personInfoForBirth.religionOther': str(person.religionOther),
     'personInfoForBirth.personNid': str(person.nid || person.personNid),
     religion: 'NOT_APPLICABLE',
     'personInfoForBirth.father.id': str(father.id),
     'personInfoForBirth.father.ubrn': str(brnDecision.fatherUbrn),
-    'personInfoForBirth.father.personBirthDate': str(father.dob),
+    'personInfoForBirth.father.personBirthDate': toSiteDate(father.dob),
     'personInfoForBirth.father.personNameBn': str(father.nameBn),
     'personInfoForBirth.father.personNameEn': str(father.nameEn),
     'personInfoForBirth.father.passportNumber': str(father.passportNumber),
     'personInfoForBirth.father.personNationality': mapNationality(father.nationality),
     'personInfoForBirth.mother.id': str(mother.id),
     'personInfoForBirth.mother.ubrn': str(brnDecision.motherUbrn),
-    'personInfoForBirth.mother.personBirthDate': str(mother.dob),
+    'personInfoForBirth.mother.personBirthDate': toSiteDate(mother.dob),
     'personInfoForBirth.mother.personNameBn': str(mother.nameBn),
     'personInfoForBirth.mother.personNameEn': str(mother.nameEn),
     'personInfoForBirth.mother.passportNumber': str(mother.passportNumber),
@@ -1077,6 +1219,15 @@ function buildSubmitPayload(data = {}) {
     // cause must be learned from the error-wording diagnostic.
     relationWithApplicant: mapDirectRelation(relation),
     applicantBrn: str(data.applicantBrn || person.brn),
+    // SUBMIT-GEO, deliberately UNCHANGED: no bot code types an
+    // applicantDob into any site input (StepHandler uses
+    // applicantDob only for the 2013/18+ rules; the verify query
+    // is a separate endpoint), so no bot format is proven for a
+    // form applicantDob field. Converting it on a guess could
+    // break the one shape that currently passes verify. The
+    // live evidence that would settle it: a form-source capture
+    // showing an applicantDob input and the value the browser
+    // posts for it.
     applicantDob: str(data.applicantDob || dob),
     applicantName: str(applicantName),
     declaration: data.declaration !== undefined ? !!data.declaration : true,
@@ -1085,6 +1236,49 @@ function buildSubmitPayload(data = {}) {
     otp: String(otp).replace(/\D/g, ''),
     attachments: attachmentIds,
   };
+}
+
+/**
+ * SUBMIT-GEO (2026-10-30): browser-mirror value shapes for the
+ * direct submit payload. The bot path is the reference — a browser
+ * POST carries what the page's inputs actually hold at submit:
+ *  - Cascade selects submit the selected option's VALUE, and the
+ *    site's cascade option values are BDRIS geo ids
+ *    (BdrisNavigator selectOption value-first, Phase 1 2026-10-27;
+ *    StepHandler _selectFirstMatch value-first). So a cascade
+ *    field sends its geo id when present, else the display name.
+ *  - Masked date inputs hold DD/MM/YYYY at submit (StepHandler
+ *    _typeMaskedDate types isoToBdFormat output with exact
+ *    read-back, S1 + S2 parents). So person/parent birth dates
+ *    send DD/MM/YYYY, never ISO.
+ *  - thChild is a select whose options carry no value attribute
+ *    (mock form mirrors the live form), so the submitted value IS
+ *    the option text — the Bengali single digit from StepHandler
+ *    thChildSite (live-verified v1).
+ * Names are NEVER touched here: these helpers only reshape geo /
+ * date / thChild values, and every one falls back to the input
+ * value instead of throwing when its preferred shape is absent.
+ */
+function idOrName(id, name) {
+  const i = id === undefined || id === null ? '' : String(id).trim();
+  return i !== '' ? i : String(name === undefined || name === null ? '' : name);
+}
+function toSiteDate(v) {
+  const s = String(v || '').trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  return s;
+}
+const BN_DIGITS = '০১২৩৪৫৬৭৮৯';
+function thChildSiteValue(v) {
+  const s = String(v || '');
+  const arab = s.replace(/[০-৯]/g, (d) => String(BN_DIGITS.indexOf(d)));
+  const m = arab.match(/(\d{1,2})/);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    if (n >= 1 && n <= 11) return String(n).replace(/[0-9]/g, (d) => BN_DIGITS[+d]);
+  }
+  return s;
 }
 
 /** Map the app's Bengali gender labels to the form's enum values. */
@@ -1207,6 +1401,7 @@ module.exports = {
   submitResponseSummary,
   submitSummaryText,
   submitErrorWording,
+  submitResponseFingerprint,
   OTP_UNEXPIRED_RE,
   isFamilyRejectionText,
   familyRejectionMarker,
