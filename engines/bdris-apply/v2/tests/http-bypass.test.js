@@ -204,8 +204,8 @@ describe('DIRECT HTTP BYPASS: handleHttpChainRequest gating', () => {
     // as the third route (auth-gated diagnostic trigger, no UI).
     // REGISTER-SCRIPT PROBE (2026-10-30): /probe-register-script
     // joined as the fourth route (same gating pattern, no UI).
-    assert.strictEqual(posts.length, 4);
-    assert.deepStrictEqual(posts.map((p) => p[0]).sort(), ['/draft-save', '/http-chain', '/probe-register', '/probe-register-script']);
+    assert.strictEqual(posts.length, 5);
+    assert.deepStrictEqual(posts.map((p) => p[0]).sort(), ['/draft-save', '/http-chain', '/probe-register', '/probe-register-script', '/probe-submit-handler']);
     const handler = posts.find((p) => p[0] === '/http-chain')[1];
     let status = 0;
     let body = null;

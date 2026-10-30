@@ -67,6 +67,7 @@ const { OriginalFetcher, STEP_LABELS } = require('./services/OriginalFetcher');
 const { runSubmitHttpChain, runStageAProbe, getHttpPathStatus, isHttpPathEnabled, HTTP_CANDIDATE_LABEL } = require('./services/HttpPathRunner');
 const { HttpGeoService } = require('./services/HttpGeoService');
 const { probePageScripts } = require('./services/RegisterScriptProbe');
+const { probeSubmitHandler } = require('./services/SubmitHandlerProbe');
 
 // ── HTTP-CHAIN IDEMPOTENCY GUARD (2026-10-30, double-emit root fix) ──
 // Journal proof (2026-10-30, UTC): ONE user send press produced TWO
@@ -1541,6 +1542,72 @@ class BdrisEngineV2 {
     }
   }
 
+  // SUBMIT-HANDLER PROBE (2026-10-30): POST /probe-submit-handler —
+  // the read-only diagnostic that settles WHAT the warm form page's
+  // own JavaScript does AT SUBMIT TIME (a submit listener appending
+  // fields, a TSPD clearance token read at submit, or a form
+  // attribute the DOM read missed). Same two-layer gate as
+  // /probe-register-script (body _authToken verified via
+  // verifyJwtHS256, same id precedence, token never logged or
+  // forwarded) and the same session seeding
+  // (sessionManager.findByUser + HttpGeoService.seedFromPage, no
+  // bare bootstrap on failure). It then reads the warm page's
+  // script refs + form attributes via page.evaluate, fetches each
+  // same-origin script's text with the seeded client, and returns
+  // ONLY SubmitHandlerProbe's reduced result: script pathnames,
+  // handler booleans, match counts, mechanism labels, appended/
+  // header/storage key NAMES only, and the form's action/method/
+  // enctype attribute strings. No script text, page content,
+  // cookie, token, or value ever leaves the server in this
+  // response. It calls NO submit/OTP/charge/draft function —
+  // searching script text is not submitting. No frontend button
+  // exists for it — the live run is an explicit call.
+  async handleProbeSubmitHandlerRequest(body = {}) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return { status: 400, body: { ok: false, error: 'BAD_REQUEST', message: 'Request body must be a JSON object.' } };
+    }
+    const secret = process.env.ABC_JWT_SECRET || process.env.JWT_SECRET || '';
+    const tokenPayload = verifyJwtHS256(body._authToken, secret);
+    const userId = tokenPayload ? (tokenPayload.id || tokenPayload.sub || tokenPayload.userId) : null;
+    if (!userId) {
+      return { status: 401, body: { ok: false, error: 'UNAUTHORIZED', message: 'Valid access token required.' } };
+    }
+    const session = this.sessionManager.findByUser(userId);
+    if (!session) {
+      return { status: 200, body: { ok: false, error: 'NO_SESSION', message: 'Session not initialized' } };
+    }
+    if (!session.page) {
+      return { status: 200, body: { ok: false, error: 'NO_SESSION_PAGE', message: 'Handler probe needs a warm browser session page to read script refs from.' } };
+    }
+    let client = null;
+    try {
+      const geo = new HttpGeoService();
+      if (await geo.seedFromPage(session.page)) client = geo.client;
+    } catch {
+      client = null;
+    }
+    if (!client) {
+      return { status: 200, body: { ok: false, error: 'SEED_FAILED', message: 'Session page seeding failed; no bare bootstrap attempted.' } };
+    }
+    // Static assets need no CSRF, but carry the seeded headers when
+    // available; a client that cannot produce them still fetches.
+    let headers = {};
+    try { headers = client.apiHeaders(); } catch { headers = {}; }
+    try {
+      const result = await probeSubmitHandler({
+        page: session.page,
+        fetchText: async (p) => {
+          const r = await client.request(p, { headers });
+          if (!r || r.status !== 200 || typeof r.text !== 'string') throw new Error('script fetch failed');
+          return r.text;
+        },
+      });
+      return { status: 200, body: result };
+    } catch {
+      return { status: 200, body: { ok: false, error: 'HANDLER_PROBE_FAILED', message: 'Warm page handler collection failed.' } };
+    }
+  }
+
   // DIRECT HTTP BYPASS (2026-10-29): POST /http-chain, reached
   // externally as /api/bdris-apply/http-chain through the backend
   // mount (requireAuth + rate limit) and the adapter proxy.
@@ -1607,6 +1674,20 @@ class BdrisEngineV2 {
     app.post('/probe-register-script', async (req, res) => {
       try {
         const r = await this.handleProbeRegisterScriptRequest(req.body);
+        res.status(r.status).json(r.body);
+      } catch {
+        res.status(500).json({ ok: false, error: 'PROBE_FAILED' });
+      }
+    });
+    // SUBMIT-HANDLER PROBE (2026-10-30): POST /probe-submit-handler
+    // — the minimal trigger for handleProbeSubmitHandlerRequest
+    // above. Reached externally as /api/bdris-apply/probe-submit-handler
+    // through the backend mount (requireAuth + rate limit) and the
+    // adapter proxy. POST only, so it cannot fire from a link or
+    // prefetch; no frontend button exists for it.
+    app.post('/probe-submit-handler', async (req, res) => {
+      try {
+        const r = await this.handleProbeSubmitHandlerRequest(req.body);
         res.status(r.status).json(r.body);
       } catch {
         res.status(500).json({ ok: false, error: 'PROBE_FAILED' });
