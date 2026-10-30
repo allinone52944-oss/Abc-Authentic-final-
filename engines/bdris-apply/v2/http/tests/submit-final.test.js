@@ -1,20 +1,23 @@
 /**
- * SUBMIT-FINAL FIX PACK (2026-10-30) — direct submit payload
- * bridges + submit error wording (node:test, no live contact,
- * no browser, no personal data; fixture values only).
+ * SUBMIT-FINAL FIX PACK (2026-10-30) — submit error wording
+ * + S4 OTP-step gate (node:test, no live contact, no browser,
+ * no personal data; fixture values only).
  *
- * Live evidence (2026-10-30): four direct submits returned the
- * 200 HTML form wall (formFields=true, successPhrase=false,
- * printLink=false) with verbatim backtick names + a single-name
- * applicant, while the bot path (transit-typed +
- * single-name-relaxed) proceeds. So the submit payload mirrors
- * the bot bridges, and the submit response carries wording.
+ * REVISED per user directive 2026-10-30 that ALL logics are
+ * required: the direct-payload transit change is REJECTED and
+ * reverted — submit names stay VERBATIM (backticks/marks
+ * preserved exactly as given), single-name joins stay single
+ * and are never doubled, and the input draft is untouched.
+ * What remains from SUBMIT-FINAL is diagnostics only: the
+ * submit response carries error wording so the true wall cause
+ * can be learned live, instead of stripping the user's names
+ * on an unproven hypothesis.
  *
  * Covered:
- *  #1  buildSubmitPayload transits applicant/father/mother
- *      names (backticks + other marks stripped, never doubled)
- *      and joins on the transit forms (letterless last name
- *      stays single); the input draft is untouched.
+ *  #1  buildSubmitPayload keeps applicant/father/mother
+ *      names verbatim (backticks preserved) and joins
+ *      single names once, never doubled; the input draft is
+ *      untouched.
  *  #2  submitErrorWording returns wording only: JSON
  *      message/code, or an error-class HTML snippet with digit
  *      runs removed; a re-rendered form with values in input
@@ -67,43 +70,37 @@ function fixtureApplication(overrides = {}) {
   return { ...base, ...overrides };
 }
 
-test('single-name applicant + backticks: payload is transit, never doubled', () => {
+test('single-name applicant + backticks: payload is verbatim, never doubled', () => {
   const input = fixtureApplication({
-    person: { firstNameBn: 'আবুল', lastNameBn: '', firstNameEn: 'Abul', lastNameEn: '`', dob: '2020-01-15', gender: 'পুরুষ', thChild: '১ম' },
+    person: { firstNameBn: 'আবুল', lastNameBn: '', firstNameEn: 'Abul', lastNameEn: '', dob: '2020-01-15', gender: 'পুরুষ', thChild: '১ম' },
     father: { brn: '', dob: '1990-05-01', nameBn: 'আহাম্মদ আলী`', nameEn: 'Ahammad Ali`', nationality: 'বাংলাদেশী' },
     mother: { brn: '', dob: '1992-03-01', nameBn: 'রোকিয়া খাতুন`', nameEn: 'Rokia Khathun`', nationality: 'বাংলাদেশী' },
   });
   const p = buildSubmitPayload(input);
-  // Applicant: transit first/last, joined single, never doubled.
+  // Applicant: single name joined once, never doubled.
   assert.equal(p['personInfoForBirth.personFirstNameEn'], 'Abul');
   assert.equal(p['personInfoForBirth.personLastNameEn'], '');
   assert.equal(p['personInfoForBirth.personNameEn'], 'Abul');
   assert.equal(p['personInfoForBirth.personFirstNameBn'], 'আবুল');
   assert.equal(p['personInfoForBirth.personLastNameBn'], '');
   assert.equal(p['personInfoForBirth.personNameBn'], 'আবুল');
-  // Parents: backticks stripped, nothing else changed.
-  assert.equal(p['personInfoForBirth.father.personNameBn'], 'আহাম্মদ আলী');
-  assert.equal(p['personInfoForBirth.father.personNameEn'], 'Ahammad Ali');
-  assert.equal(p['personInfoForBirth.mother.personNameBn'], 'রোকিয়া খাতুন');
-  assert.equal(p['personInfoForBirth.mother.personNameEn'], 'Rokia Khathun');
-  // No backtick anywhere in any payload name field.
-  for (const [k, v] of Object.entries(p)) {
-    if (k.includes('personName') || k.includes('personFirstName') || k.includes('personLastName')) {
-      assert.ok(!String(v).includes('`'), `${k} must not carry a backtick`);
-    }
-  }
-  // The input draft is untouched (transit applies to the payload only).
-  assert.equal(input.person.lastNameEn, '`');
+  // Parents: backticks preserved exactly as given (verbatim).
+  assert.equal(p['personInfoForBirth.father.personNameBn'], 'আহাম্মদ আলী`');
+  assert.equal(p['personInfoForBirth.father.personNameEn'], 'Ahammad Ali`');
+  assert.equal(p['personInfoForBirth.mother.personNameBn'], 'রোকিয়া খাতুন`');
+  assert.equal(p['personInfoForBirth.mother.personNameEn'], 'Rokia Khathun`');
+  // The input draft is untouched (verbatim applies to the payload as given).
+  assert.equal(input.person.lastNameEn, '');
   assert.equal(input.father.nameBn, 'আহাম্মদ আলী`');
 });
 
-test('marks-only last name stays single; other marks stripped', () => {
+test('empty last name stays single; marks stay verbatim', () => {
   const p = buildSubmitPayload(fixtureApplication({
-    person: { firstNameBn: 'আবুল', lastNameBn: '...', firstNameEn: 'Abul.', lastNameEn: '...', dob: '2020-01-15', gender: 'পুরুষ', thChild: '১ম' },
+    person: { firstNameBn: 'আবুল', lastNameBn: '', firstNameEn: 'Abul.', lastNameEn: '', dob: '2020-01-15', gender: 'পুরুষ', thChild: '১ম' },
   }));
-  assert.equal(p['personInfoForBirth.personFirstNameEn'], 'Abul');
+  assert.equal(p['personInfoForBirth.personFirstNameEn'], 'Abul.');
   assert.equal(p['personInfoForBirth.personLastNameEn'], '');
-  assert.equal(p['personInfoForBirth.personNameEn'], 'Abul');
+  assert.equal(p['personInfoForBirth.personNameEn'], 'Abul.');
   assert.equal(p['personInfoForBirth.personNameBn'], 'আবুল');
 });
 
@@ -116,9 +113,9 @@ test('normal two-name case is unchanged', () => {
   assert.equal(p['personInfoForBirth.father.personNameEn'], 'Abdul Hamid');
 });
 
-test('supplied applicantName is transited, never doubled', () => {
+test('supplied applicantName stays verbatim, never doubled', () => {
   const p = buildSubmitPayload(fixtureApplication({ applicantName: 'Abul`' }));
-  assert.equal(p.applicantName, 'Abul');
+  assert.equal(p.applicantName, 'Abul`');
   const p2 = buildSubmitPayload(fixtureApplication({
     person: { firstNameBn: 'আবুল', lastNameBn: '', firstNameEn: 'Abul', lastNameEn: '', dob: '2020-01-15', gender: 'পুরুষ', thChild: '১ম' },
   }));

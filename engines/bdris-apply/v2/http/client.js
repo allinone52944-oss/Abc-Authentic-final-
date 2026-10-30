@@ -100,11 +100,12 @@ function otpSendBodyWording(json) {
 // bot path's rules, mirrored on the direct path. Digit
 // normalisation only (Bengali → Arabic, spaces/dashes stripped);
 // this decision touches ONLY the ubrn fields. Name transit for
-// the send/verify steps lives in transitDirectName; since
-// SUBMIT-FINAL (2026-10-30) the SUBMIT payload mirrors the same
-// transit rule (buildSubmitPayload) — the live-test question is
-// answered (four 200 HTML form walls with verbatim backtick
-// names), so verbatim names no longer reach the form POST.
+// the send/verify steps lives in transitDirectName; the submit
+// payload keeps names verbatim (final record) — RESTORED per
+// user directive 2026-10-30 that ALL logics are required: the
+// SUBMIT-FINAL transit change is rejected, and the wall cause
+// must be learned from the error-wording diagnostic instead of
+// by stripping the user's names.
 // Pre-2013 applicants send ubrn empty (the bot's live-verified
 // site rule) — the draft's BRN is untouched, only the payload
 // omits it, and parentBrnDirectDecision reports the withholding.
@@ -954,31 +955,6 @@ function buildSubmitPayload(data = {}) {
     const l = str(last).trim();
     return l ? `${f} ${l}` : f;
   };
-  // SUBMIT-FINAL (2026-10-30): mirror the bot bridges on the
-  // direct submit payload. The old verbatim rule below rested on
-  // a live-test question — whether the direct form POST accepts
-  // a backtick in the final record — and 2026-10-30 answered it:
-  // four direct submits returned the 200 HTML form wall with
-  // verbatim backtick names + a single-name applicant, while the
-  // bot path (transit-typed + single-name-relaxed) proceeds.
-  // So the payload carries the TRANSIT form (bot transitName
-  // rule via transitDirectName: backticks/marks stripped, never
-  // doubled, never substituted) for applicant, father, and
-  // mother, and joins on the transit forms — a letterless last
-  // name stays single, exactly as the bot's relaxEmptyLast does.
-  // The DRAFT's names are untouched; only the payload is
-  // transited. Validation above still reads the raw values (a
-  // marks-only name is never a new blocking error — the bot
-  // types it as empty all the same).
-  const tFirstBn = transitDirectName(firstBn);
-  const tLastBn = transitDirectName(lastBn);
-  const tFirstEn = transitDirectName(firstEn);
-  const tLastEn = transitDirectName(lastEn);
-  const joinTransit = (first, last) => {
-    const f = str(first).trim();
-    const l = str(last).trim();
-    return l ? `${f} ${l}` : f;
-  };
   req(father.nameBn, 'father.nameBn');
   req(father.nameEn, 'father.nameEn');
   req(mother.nameBn, 'mother.nameBn');
@@ -1058,12 +1034,12 @@ function buildSubmitPayload(data = {}) {
     // LIVE-CONFIRMED 2026-10-27 (Stage C): officeId 0 when empty.
     officeId: str(data.officeId || (data.s4prep && data.s4prep.officeId)) || '0',
     geoLocationId,
-    'personInfoForBirth.personFirstNameBn': tFirstBn,
-    'personInfoForBirth.personLastNameBn': tLastBn,
-    'personInfoForBirth.personFirstNameEn': tFirstEn,
-    'personInfoForBirth.personLastNameEn': tLastEn,
-    'personInfoForBirth.personNameBn': joinTransit(tFirstBn, tLastBn),
-    'personInfoForBirth.personNameEn': joinTransit(tFirstEn, tLastEn),
+    'personInfoForBirth.personFirstNameBn': str(firstBn),
+    'personInfoForBirth.personLastNameBn': str(lastBn),
+    'personInfoForBirth.personFirstNameEn': str(firstEn),
+    'personInfoForBirth.personLastNameEn': str(lastEn),
+    'personInfoForBirth.personNameBn': joinName(firstBn, lastBn),
+    'personInfoForBirth.personNameEn': joinName(firstEn, lastEn),
     'personInfoForBirth.personBirthDate': str(dob),
     'personInfoForBirth.thChild': str(person.thChild),
     'personInfoForBirth.gender': mapGender(person.gender),
@@ -1073,15 +1049,15 @@ function buildSubmitPayload(data = {}) {
     'personInfoForBirth.father.id': str(father.id),
     'personInfoForBirth.father.ubrn': str(brnDecision.fatherUbrn),
     'personInfoForBirth.father.personBirthDate': str(father.dob),
-    'personInfoForBirth.father.personNameBn': transitDirectName(father.nameBn),
-    'personInfoForBirth.father.personNameEn': transitDirectName(father.nameEn),
+    'personInfoForBirth.father.personNameBn': str(father.nameBn),
+    'personInfoForBirth.father.personNameEn': str(father.nameEn),
     'personInfoForBirth.father.passportNumber': str(father.passportNumber),
     'personInfoForBirth.father.personNationality': mapNationality(father.nationality),
     'personInfoForBirth.mother.id': str(mother.id),
     'personInfoForBirth.mother.ubrn': str(brnDecision.motherUbrn),
     'personInfoForBirth.mother.personBirthDate': str(mother.dob),
-    'personInfoForBirth.mother.personNameBn': transitDirectName(mother.nameBn),
-    'personInfoForBirth.mother.personNameEn': transitDirectName(mother.nameEn),
+    'personInfoForBirth.mother.personNameBn': str(mother.nameBn),
+    'personInfoForBirth.mother.personNameEn': str(mother.nameEn),
     'personInfoForBirth.mother.passportNumber': str(mother.passportNumber),
     'personInfoForBirth.mother.personNationality': mapNationality(mother.nationality),
     ...birthFields,
@@ -1089,17 +1065,20 @@ function buildSubmitPayload(data = {}) {
     ...presFields,
     // DIRECT BRN-FREE ROUTE: relationWithApplicant carries the
     // site's enum value (bot REL_VALUE map), not the draft's
-    // Bengali label. Person/parent names above carry the TRANSIT
-    // form (SUBMIT-FINAL 2026-10-30, reversing the old verbatim
-    // rule): the live-test question is answered — four direct
-    // submits returned the 200 HTML form wall with verbatim
-    // backtick names + a single-name applicant — so the payload
-    // mirrors the bot's typed form. The draft's names are
-    // untouched; the final record is never doubled.
+    // Bengali label. Person/parent names above stay VERBATIM on
+    // purpose: the submit payload IS the final record, and the
+    // bot's final step re-applies the backtick form through the
+    // site's own handler — whether the direct form POST accepts
+    // a backtick in the final record is a live-test question
+    // (see DIRECT-BRN-FREE-LIVE-TEST.md), not something to guess
+    // by stripping the draft's names here. VERBATIM RESTORED per
+    // user directive 2026-10-30 that ALL logics are required:
+    // the SUBMIT-FINAL transit change is rejected; the wall
+    // cause must be learned from the error-wording diagnostic.
     relationWithApplicant: mapDirectRelation(relation),
     applicantBrn: str(data.applicantBrn || person.brn),
     applicantDob: str(data.applicantDob || dob),
-    applicantName: transitDirectName(applicantName),
+    applicantName: str(applicantName),
     declaration: data.declaration !== undefined ? !!data.declaration : true,
     email: str(data.email || (data.s4prep && data.s4prep.email)),
     phone: str(phone),

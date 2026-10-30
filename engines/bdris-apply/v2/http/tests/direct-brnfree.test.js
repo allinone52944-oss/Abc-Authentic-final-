@@ -229,17 +229,11 @@ describe('direct verify: geoLocationId and officeId', () => {
 });
 
 describe('direct submit: final record truth for BRN-free filings', () => {
-  it('submit names carry the transit form (bot bridge) and documents 40/41 are required', () => {
+  it('submit names stay verbatim (final record) and documents 40/41 are required', () => {
     const p = buildSubmitPayload(completeApplication({
       father: { brn: '', dob: '1990-05-01', nameBn: 'আবদুল` হামিদ', nameEn: 'Abdul` Hamid', nationality: 'বাংলাদেশী' },
     }));
-    // SUBMIT-FINAL (2026-10-30): the old verbatim rule rested
-    // on a live-test question, answered 2026-10-30 (four 200
-    // HTML form walls with verbatim backtick names) — the
-    // submit payload mirrors the bot's transit form; the draft
-    // is untouched and the record is never doubled.
-    assert.strictEqual(p['personInfoForBirth.father.personNameEn'], 'Abdul Hamid');
-    assert.strictEqual(p['personInfoForBirth.father.personNameBn'], 'আবদুল হামিদ');
+    assert.strictEqual(p['personInfoForBirth.father.personNameEn'], 'Abdul` Hamid');
     assert.deepStrictEqual(p.attachments, [40, 41]);
     assert.throws(() => buildSubmitPayload(completeApplication({ documents: [] })), /documents\[40\]/);
   });
