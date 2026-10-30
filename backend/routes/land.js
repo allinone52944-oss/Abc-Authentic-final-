@@ -13,14 +13,17 @@
 //                               all survey types (engine land-scan)
 //   POST /api/land/verify       claim vs record report
 //                               (engine land-verify)
+//   GET  /api/land/mouza-rate  schedule-rate lookup (PROOF:
+//                               Boalkhali office, কধুরখীল only —
+//                               data in engines/land-mouza-value/
+//                               rates.js; no portal is called)
 //   POST /api/land/mouza        mouza-value report (engine
-//                               land-mouza-value): rates are
-//                               entered by the shopkeeper from a
-//                               schedule they have checked —
-//                               automated schedule lookup is
-//                               NOT built (endpoints unmapped,
-//                               never guessed); the engine only
-//                               calculates, checks and reports.
+//                               land-mouza-value): manual lines
+//                               carry a shopkeeper-entered rate;
+//                               lookup lines carry a schedule
+//                               rate that the route re-verifies
+//                               against rates.js before any
+//                               calculation or charge.
 //
 // Money discipline (same as QR verify): the wallet is charged
 // ONLY when a record is actually found; "not found" records a
@@ -43,6 +46,7 @@ const { buildReceiptPdf } = require('../lib/receiptPdf');
 const { buildLandReportPdf } = require('../lib/landReportPdf');
 const client = require('../../engines/land-core/client');
 const { calcMouzaReport } = require('../../engines/land-mouza-value/calc');
+const { lookupMouzaRate } = require('../../engines/land-mouza-value/rates');
 
 const router = express.Router();
 const UPLOAD_DIR = '/opt/all-in-one-abc-authentic/uploads/orders';
@@ -507,11 +511,42 @@ router.post('/verify', requireAuth, async (req, res) => {
   }
 });
 
+// ---------- GET /mouza-rate ----------
+// Schedule-rate lookup, PROOF SCOPE ONLY: Boalkhali office,
+// কধুরখীল mouza, 2025-2026 (data file, no portal call).
+// No charge on this endpoint — charging happens only on a
+// valid report. A miss returns found:false with a Bengali
+// message (200, not an error): the shopkeeper then enters
+// the rate manually instead.
+// Query: ?office=boalkhali&mouza=কধুরখীল&class=নাল
+router.get('/mouza-rate', requireAuth, async (req, res) => {
+  const office = String(req.query.office || '').trim();
+  const mouza = String(req.query.mouza || '').trim();
+  const cls = String(req.query.class || '').trim();
+  if (!office || !mouza || !cls) {
+    return res.status(400).json({ error: 'BAD_INPUT', message: 'অফিস, মৌজা ও শ্রেণি — তিনটাই লাগবে।' });
+  }
+  const hit = lookupMouzaRate(office, mouza, cls);
+  if (!hit) {
+    return res.json({
+      ok: true, found: false,
+      message: 'এই মৌজা/শ্রেণির তালিকার হার পাওয়া যায়নি — হার নিজে বসান অথবা তালিকায় থাকা শ্রেণি বাছুন।',
+    });
+  }
+  return res.json({
+    ok: true, found: true,
+    office: hit.office, officeName: hit.officeName, mouza: hit.mouza, class: hit.class,
+    rate: hit.rate, period: hit.period, p: hit.p,
+  });
+});
+
 // ---------- POST /mouza ----------
 // Mouza-value report (engine land-mouza-value). No portal is
-// called here: the shopkeeper enters each line's rate from the
-// schedule they have checked (automated schedule lookup is a
-// future step — its endpoints are unmapped and never guessed).
+// called here. Manual lines carry a shopkeeper-entered rate;
+// lookup lines are re-verified here against rates.js (office
+// from body.lookup_office, rate must match exactly) BEFORE
+// any calculation or charge — a tampered or unknown lookup
+// line is 400 with NO charge and no order.
 // Charge discipline is the same as the other land services:
 // a valid report is charged; invalid input is 400 with NO
 // charge and no order. The report PDF carries the mandatory
@@ -530,15 +565,33 @@ router.post('/mouza', requireAuth, async (req, res) => {
     const oldScheduleVersion = body.old_schedule_version
       ? String(body.old_schedule_version).trim().slice(0, 40) : null;
     const rawLines = Array.isArray(body.lines) ? body.lines : [];
-    const lines = rawLines.map((l) => ({
-      mouza: String((l && l.mouza) || '').trim() || area.mouza,
-      class: String((l && l.class) || '').trim(),
-      rate: Number(toEn(String((l && l.rate) ?? ''))),
-      amount: Number(toEn(String((l && l.amount) ?? ''))),
-      unit: String((l && l.unit) || 'shatangsho'),
-      oldRate: (l && l.oldRate !== undefined && l.oldRate !== null && String(l.oldRate) !== '')
-        ? Number(toEn(String(l.oldRate))) : undefined,
-    }));
+    const lookupOffice = String(body.lookup_office || '').trim();
+    const verified = []; // per-line verified lookup info (index-aligned)
+    const lines = rawLines.map((l) => {
+      const line = {
+        mouza: String((l && l.mouza) || '').trim() || area.mouza,
+        class: String((l && l.class) || '').trim(),
+        rate: Number(toEn(String((l && l.rate) ?? ''))),
+        amount: Number(toEn(String((l && l.amount) ?? ''))),
+        unit: String((l && l.unit) || 'shatangsho'),
+        oldRate: (l && l.oldRate !== undefined && l.oldRate !== null && String(l.oldRate) !== '')
+          ? Number(toEn(String(l.oldRate))) : undefined,
+        source: (l && l.source === 'lookup') ? 'lookup' : 'manual',
+      };
+      verified.push(null);
+      return line;
+    });
+    // Server-side lookup verification: a lookup line is trusted
+    // ONLY when its rate matches rates.js exactly. The client
+    // never decides a lookup rate on its own.
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].source !== 'lookup') continue;
+      const hit = lookupOffice ? lookupMouzaRate(lookupOffice, lines[i].mouza, lines[i].class) : null;
+      if (!hit || hit.rate !== lines[i].rate) {
+        return res.status(400).json({ error: 'LOOKUP_RATE_MISMATCH', message: 'তালিকার হার মেলেনি — লুকআপ দিয়ে আবার হার আনুন।' });
+      }
+      verified[i] = hit;
+    }
     let calc;
     try {
       calc = calcMouzaReport({
@@ -550,6 +603,15 @@ router.post('/mouza', requireAuth, async (req, res) => {
     } catch (e) {
       return res.status(400).json({ error: 'BAD_INPUT', message: 'অন্তত একটি সঠিক লাইন লাগবে — মৌজা, শ্রেণি, হার ও পরিমাণ ঠিক করে বসান।' });
     }
+    // Stamp verified lookup facts onto the output lines (the
+    // client-supplied values are never trusted for these).
+    calc.lines.forEach((l, i) => {
+      if (verified[i]) {
+        l.lookupPeriod = verified[i].period;
+        l.lookupOffice = verified[i].office;
+        l.lookupP = verified[i].p;
+      }
+    });
     const idem = idemOf(body, 'mouza');
     if (await replayIfExists(req, res, idem)) return;
     const chk = await precheck(req, res, 'mouza');

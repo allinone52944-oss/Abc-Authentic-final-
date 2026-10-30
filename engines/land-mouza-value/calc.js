@@ -1,14 +1,18 @@
 // ============================================================
 // Land mouza-value calculation — pure arithmetic, no portal,
-// no network, no external data source.
+// no network. Two line kinds, never silently mixed:
 //
-// FUTURE STEP (explicitly NOT done here): automated lookup of
-// the mouza rate schedule itself. The live schedule's cascade /
-// PDF endpoints are NOT yet mapped, so no site endpoint is
-// guessed or called anywhere in this build. For now the rate
-// for each line is entered by the shopkeeper from the schedule
-// they have checked, and this module only calculates, checks
-// the arithmetic, and breaks the total down by class.
+//   MANUAL line (default): rate = per SELECTED unit, value =
+//     rate × amount in that unit (the deployed rule).
+//   LOOKUP line (source: 'lookup'): rate = schedule rate PER
+//     SHATANGSHO (from engines/land-mouza-value/rates.js),
+//     value = rate × quantity converted to shatangsho.
+//     The route verifies a lookup line's rate against the data
+//     file before calling this module, so a tampered rate can
+//     never reach the calculation as a lookup line.
+//
+// Lookup data is PROOF SCOPE ONLY (one office, one mouza — see
+// rates.js). Every other line stays manual.
 // ============================================================
 const CLASSES = ['নাল', 'বাড়ী', 'ভিটা', 'বাগান', 'পুকুর', 'ডোবা', 'বাণিজ্যিক'];
 // Unit factors in shatangsho. Gonda follows the same rounding convention
@@ -20,17 +24,19 @@ function round2(n) { return Math.round(n * 100) / 100; }
 
 /**
  * calcMouzaReport({ lines, declaredPrice, scheduleVersion })
- * lines: [{ mouza, class, rate, amount, unit, oldRate? }]
- *   rate: taka per SELECTED unit (the unit the shopkeeper chose for
- *     this line — shatangsho, katha, bigha or gonda). The rate follows
- *     the unit automatically; it is never silently reinterpreted as a
- *     per-shatangsho rate.
+ * lines: [{ mouza, class, rate, amount, unit, oldRate?, source? }]
+ *   rate: MANUAL line — taka per SELECTED unit (the unit the
+ *     shopkeeper chose for this line). LOOKUP line — taka per
+ *     SHATANGSHO from the schedule data file.
  *   amount: land amount in the given unit
  *   unit: 'shatangsho' | 'katha' | 'bigha' | 'gonda' (user-correctable)
- *   oldRate: optional rate from an older schedule, in the same unit,
- *     for comparison
+ *   oldRate: optional rate from an older schedule, for comparison
+ *     — in the same unit as the line's rate (per shatangsho for
+ *     lookup lines, per selected unit for manual lines)
+ *   source: 'lookup' | 'manual' (default 'manual')
  * Returns { lines, totalMinimum, deedBasis, breakdown, checks,
  *           hasOldComparison, valid } — throws on bad input.
+ * Output lines carry `source` through.
  */
 function calcMouzaReport(input) {
   const raw = (input && input.lines) || [];
@@ -52,15 +58,17 @@ function calcMouzaReport(input) {
     if (!Number.isFinite(amount) || amount <= 0) { const e = new Error('BAD_LINE_AMOUNT:' + i); e.code = 'BAD_LINE'; throw e; }
     if (!UNIT_FACTORS[unit]) { const e = new Error('BAD_LINE_UNIT:' + i); e.code = 'BAD_LINE'; throw e; }
     const qty = round2(amount * UNIT_FACTORS[unit]);
-    // Value follows the selected unit: rate (per unit) × amount (in
-    // that unit). qtyShatangsho is kept only for display/record.
-    const value = round2(rate * amount);
-    const out = { mouza, class: cls, rate, amount, unit, qtyShatangsho: qty, value };
+    // Dual convention, labelled per line, never mixed:
+    //   lookup: schedule rate (per shatangsho) × shatangsho qty
+    //   manual: rate (per selected unit) × amount in that unit
+    const source = l.source === 'lookup' ? 'lookup' : 'manual';
+    const value = source === 'lookup' ? round2(rate * qty) : round2(rate * amount);
+    const out = { mouza, class: cls, rate, amount, unit, qtyShatangsho: qty, value, source };
     if (l.oldRate !== undefined && l.oldRate !== null && String(l.oldRate) !== '') {
       const oldRate = Number(l.oldRate);
       if (!Number.isFinite(oldRate) || oldRate < 0) { const e = new Error('BAD_LINE_OLD_RATE:' + i); e.code = 'BAD_LINE'; throw e; }
       out.oldRate = oldRate;
-      out.oldValue = round2(oldRate * amount);
+      out.oldValue = source === 'lookup' ? round2(oldRate * qty) : round2(oldRate * amount);
       out.delta = round2(value - out.oldValue);
     }
     return out;
@@ -89,7 +97,7 @@ function calcMouzaReport(input) {
       ? String(input.oldScheduleVersion).trim().slice(0, 40) : null,
     checks: [
       'যোগফল পুনরায় যোগ করে মিলিয়ে দেখা হয়েছে: ' + totalMinimum + ' = ' + reAdd,
-      'প্রতি লাইন: বাছা এককপ্রতি হার × ওই এককে পরিমাণ; শতাংশ রূপান্তর শুধু দেখানোর জন্য (১ কাঠা = ১.৬৫, ১ বিঘা = ৩৩, ১ গন্ডা = ২ শতাংশ)',
+      'লুকআপ লাইন: তালিকার হার (শতাংশপ্রতি) × শতাংশ পরিমাণ; নিজের লাইন: বাছা এককপ্রতি হার × ওই এককে পরিমাণ (১ কাঠা = ১.৬৫, ১ বিঘা = ৩৩, ১ গন্ডা = ২ শতাংশ)',
       'প্রতিটি লাইনে হার ও পরিমাণ দেওয়া হয়েছে; হার না পাওয়া লাইন শূন্য ধরা হয়নি',
     ],
     valid: reAdd === totalMinimum,

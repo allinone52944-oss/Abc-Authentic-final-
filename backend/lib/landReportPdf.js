@@ -136,7 +136,14 @@ function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdict
             .text((i + 1) + '. ' + (l.mouza || '—') + ' — ' + (l.class || '—'), X, y, { width: W });
           y += 21;
           const ulab = { shatangsho: 'শতাংশ', katha: 'কাঠা', bigha: 'বিঘা', gonda: 'গন্ডা' }[l.unit] || 'শতাংশ';
-          row(ulab + 'প্রতি হার', toBn(l.rate) + ' টাকা');
+          if (l.source === 'lookup') {
+            row('তালিকার হার (শতাংশপ্রতি)', toBn(l.rate) + ' টাকা');
+            row('হারের উৎস', 'তালিকা' + (l.lookupPeriod ? ' (' + l.lookupPeriod + ')' : '') +
+              (l.lookupP ? ' · P চিহ্ন: আগের মূল্য বহাল আছে' : ''));
+          } else {
+            row(ulab + 'প্রতি হার', toBn(l.rate) + ' টাকা');
+            row('হারের উৎস', 'নিজে বসানো');
+          }
           row('পরিমাণ', toBn(l.amount) + ' ' + ulab
             + ' (' + toBn(l.qtyShatangsho) + ' শতাংশ)');
           row('লাইন মূল্য', toBn(l.value) + ' টাকা', { bold: true });

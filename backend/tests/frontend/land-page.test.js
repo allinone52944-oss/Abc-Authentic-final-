@@ -169,6 +169,32 @@ describe('mouza-value mode (land-mouza-value)', () => {
       expect(f).not.toContain('amarvumi');
     }
   });
+  test('mouza lookup proof: office/mouza/class selects + read-only rate + lookup endpoint call', () => {
+    const html = read('frontend/land.html');
+    expect(html).toContain('id="mLookOffice"');
+    expect(html).toContain('id="mLookMouza"');
+    expect(html).toContain('id="mLookClass"');
+    expect(html).toContain('id="mLookBtn"');
+    expect(html).toContain('id="mLookRate" readonly');
+    expect(html).toContain("API + '/mouza-rate?");
+    expect(html).toContain('তালিকার হার (শতাংশপ্রতি)');
+    // The lookup rate is read-only: the line form must not let a
+    // hand edit ride along as a lookup line.
+    expect(html).toContain('MOUZA_LOOKUP');
+    expect(html).toContain("source: MOUZA_LOOKUP ? 'lookup' : 'manual'");
+    // Lookup lines are labelled in the preview and the result.
+    expect(html).toContain('(তালিকার হার)');
+  });
+  test('mouza lookup route exists and verifies lookup lines server-side', () => {
+    const route = read('backend/routes/land.js');
+    expect(route).toContain("router.get('/mouza-rate'");
+    expect(route).toContain('LOOKUP_RATE_MISMATCH');
+    expect(route).toContain('lookupMouzaRate');
+    const rates = read('engines/land-mouza-value/rates.js');
+    expect(rates).toContain('boalkhali');
+    expect(rates).toContain('কধুরখীল');
+    expect(rates).toContain('2025-2026');
+  });
 });
 
 describe('backend wiring', () => {
