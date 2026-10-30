@@ -64,6 +64,9 @@ const OFFICE_PROJECTION_PATH = '/api/office/find-office-geo-projection-by-geo-id
 const VERIFY_PATH = '/api/otp/verify';
 // Present in the page script but NOT used by this form's verified
 // flow (which submits the form itself); kept for reference only.
+// REGISTER-PROBE (2026-10-30): probeRegisterEndpoint() diagnoses
+// this endpoint with an empty body; it is never wired into the
+// submit chain, the runner, or any UI path.
 const REGISTER_PATH = '/api/br/application/register';
 const SUBMIT_PATH = FORM_PATH;
 const PRINT_PATH = '/admin/br/application/print';
@@ -262,6 +265,18 @@ function submitErrorWording(res) {
     if (cleaned) return cleaned.slice(0, 200);
   }
   return '';
+}
+
+// REGISTER-PROBE (2026-10-30): wording sanitizer for the register
+// probe's return value. submitErrorWording's JSON branch returns
+// message/code verbatim (capped, not digit-stripped); the probe
+// must never surface a digit run (a digit run could be an
+// identifier), so this wrapper strips Arabic + Bengali digit runs,
+// re-collapses whitespace, and re-caps at 200 chars. Pure, no I/O.
+function probeResponseWording(res) {
+  const w = submitErrorWording(res);
+  if (!w) return '';
+  return w.replace(/[0-9০-৯]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 200);
 }
 
 // SUBMIT-CAUSE (2026-10-30): privacy-safe STRUCTURAL fingerprint of
@@ -1002,6 +1017,34 @@ class BdrisHttpClient {
     }
     return { success: true, hasPrintLink: parsed.hasPrintLink, json: res.json, responseSummary: submitResponseSummary(res) };
   }
+
+  /**
+   * REGISTER-PROBE (diagnostic ONLY — never a submit route):
+   * POSTs an EMPTY JSON object to /api/br/application/register
+   * with the session cookies + CSRF header only (this.apiHeaders()).
+   * The body carries ZERO record fields — no names, dates,
+   * addresses, documents, phone, OTP, or any other application
+   * data — so no validation can pass and no record can be created.
+   * Returns ONLY { status, isJson, wording }, where wording is
+   * probeResponseWording (JSON message/code or HTML error-class
+   * text, digit runs stripped, capped 200 chars). A non-2xx
+   * response does NOT throw — the status/wording IS the evidence.
+   * NOT called by submitApplication, HttpPathRunner, or any UI
+   * path; the only entry point is an explicit diagnostic call to
+   * this method. Never wire it into the submit chain.
+   */
+  async probeRegisterEndpoint() {
+    const res = await this.request(REGISTER_PATH, {
+      method: 'POST',
+      headers: this.apiHeaders({ 'Content-Type': 'application/json' }),
+      body: '{}',
+    });
+    return {
+      status: res.status,
+      isJson: res.json !== null,
+      wording: probeResponseWording(res),
+    };
+  }
 }
 
 /**
@@ -1420,6 +1463,7 @@ module.exports = {
   submitSummaryText,
   submitErrorWording,
   submitResponseFingerprint,
+  probeResponseWording,
   OTP_UNEXPIRED_RE,
   isFamilyRejectionText,
   familyRejectionMarker,
