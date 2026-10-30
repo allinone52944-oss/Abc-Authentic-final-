@@ -200,8 +200,10 @@ describe('DIRECT HTTP BYPASS: handleHttpChainRequest gating', () => {
     // FINAL-SOLUTION (2026-10-30): /draft-save joined /http-chain
     // (silent server-side auto-save over plain HTTP). The chain
     // route itself is unchanged — same path, same mapping.
-    assert.strictEqual(posts.length, 2);
-    assert.deepStrictEqual(posts.map((p) => p[0]).sort(), ['/draft-save', '/http-chain']);
+    // REGISTER-PROBE TRIGGER (2026-10-30): /probe-register joined
+    // as the third route (auth-gated diagnostic trigger, no UI).
+    assert.strictEqual(posts.length, 3);
+    assert.deepStrictEqual(posts.map((p) => p[0]).sort(), ['/draft-save', '/http-chain', '/probe-register']);
     const handler = posts.find((p) => p[0] === '/http-chain')[1];
     let status = 0;
     let body = null;

@@ -129,7 +129,7 @@ test('probe body contains zero record fields', async () => {
   assert.ok(!body.includes('='), 'probe body carries no key=value fields');
 });
 
-test('probe is not referenced by submit, runner, server, adapter, or UI', () => {
+test('probe is referenced ONLY by the auth-gated server trigger, never by submit, runner, adapter, or UI', () => {
   const clientSrc = fs.readFileSync(path.join(__dirname, '..', 'client.js'), 'utf8');
   // Exactly two mentions in client.js: the REGISTER_PATH comment and
   // the method definition itself. Anything else would be a wiring.
@@ -151,10 +151,24 @@ test('probe is not referenced by submit, runner, server, adapter, or UI', () => 
   const submitBody = clientSrc.slice(submitStart, probeStart);
   assert.ok(!submitBody.includes('probeRegisterEndpoint'), 'submitApplication must not call the probe');
   assert.ok(!submitBody.includes('REGISTER_PATH'), 'submitApplication must not use the register path');
+  // TRIGGER UPDATE (2026-10-30): server.js now references the probe
+  // ONLY through the auth-gated handleProbeRegisterRequest trigger
+  // (POST /probe-register) — that single sanctioned wiring replaces
+  // the old zero-reference rule for server.js. The trigger comment
+  // block sits directly above the handler; nothing before it may
+  // mention the probe, and server.js must never touch the register
+  // path directly (only the client's probe method does).
+  const serverSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'server.js'), 'utf8');
+  const handlerStart = serverSrc.indexOf('async handleProbeRegisterRequest(');
+  assert.ok(handlerStart > 0, 'trigger handler found');
+  const beforeHandler = serverSrc.slice(0, handlerStart);
+  const commentStart = beforeHandler.lastIndexOf('REGISTER-PROBE TRIGGER');
+  const preTrigger = commentStart >= 0 ? beforeHandler.slice(0, commentStart) : beforeHandler;
+  assert.ok(!preTrigger.includes('probeRegisterEndpoint'), 'only the trigger may reference the probe');
+  assert.ok(!serverSrc.includes('REGISTER_PATH'), 'server.js must not reference the register path directly');
   // No other layer references it at all.
   const elsewhere = [
     path.join(__dirname, '..', '..', 'services', 'HttpPathRunner.js'),
-    path.join(__dirname, '..', '..', 'server.js'),
     path.join(__dirname, '..', '..', '..', 'index.js'),
     path.join(__dirname, '..', '..', '..', '..', '..', 'frontend', 'bdris-apply.html'),
   ];
