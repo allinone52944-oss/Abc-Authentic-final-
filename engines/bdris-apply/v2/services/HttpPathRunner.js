@@ -148,7 +148,11 @@ async function runSubmitHttpChain(opts = {}) {
  */
 function finestAddressId(addr = {}) {
   for (const k of ['wardId', 'paurasavaUnionId', 'cityCorpUpazilaId', 'districtId', 'divisionId']) {
-    if (addr[k] !== undefined && addr[k] !== null && String(addr[k]) !== '') return String(addr[k]);
+    const v = addr[k];
+    // SUBMIT-SAFETY (2026-10-30): same guard as idOrName — an
+    // address-book *Id holding a display name is not an id and
+    // must be skipped, never used as a LocationId.
+    if (v !== undefined && v !== null && /^\d+$/.test(String(v).trim())) return String(v).trim();
   }
   return '';
 }
@@ -187,7 +191,7 @@ function normalizeChainInput(data = {}) {
     declaration: data.declaration !== undefined ? data.declaration : s3.declaration,
     email: data.email || s4prep.email,
     phone: bnToArab(data.phone || s4prep.phone),
-    officeAddressType: data.officeAddressType || s4prep.officeAddressType,
+    officeAddressType: data.officeAddressType || s4prep.officeAddressType || 'BIRTHPLACE',
     officeAddrCountry: data.officeAddrCountry || s4prep.officeAddrCountry,
     // LIVE-CONFIRMED 2026-10-27 (Stage C, user-run real application):
     // the page sends officeId 0 when getOfficeId() is empty, and the
@@ -211,8 +215,13 @@ function normalizeChainInput(data = {}) {
   const birthRec = canonical.birthPlace || {};
   let permRec = canonical.permAddr || {};
   let presRec = canonical.prsntAddr || {};
-  if (s2bIn.permCopy) permRec = { ...birthRec };
-  if (s2bIn.presCopy) presRec = { ...permRec };
+  // SUBMIT-SAFETY (2026-10-30): the bot rule (StepHandler
+  // permHasData: data থাকলে flag উপেক্ষা করে fill করি) — a ticked
+  // copy applies ONLY when the target record is empty. The old
+  // unconditional copy overwrote a real permanent address with the
+  // birthplace (silent record corruption, direct-only).
+  if (s2bIn.permCopy && isAddrEmpty(permRec)) permRec = { ...birthRec };
+  if (s2bIn.presCopy && isAddrEmpty(presRec)) presRec = { ...permRec };
   canonical.permAddr = permRec;
   canonical.prsntAddr = presRec;
   canonical.copyFlags = { permCopy: !!s2bIn.permCopy, presCopy: !!s2bIn.presCopy };
@@ -310,10 +319,19 @@ function normalizeChainInput(data = {}) {
  * without a server response (no client error code) is unsafe — the
  * application may already exist. Every other failure is a definitive
  * rejection or a pre-submit failure, so Playwright can still try.
+ * SUBMIT-SAFETY (2026-10-30): a 200 response with an unrecognized
+ * shape (SUBMIT_NOT_SUCCESS: re-rendered form, no success phrase)
+ * is NOT a definitive rejection — the success page may simply be
+ * shaped differently, so the application may already exist. Such a
+ * 200 is outcome-unknown with fallback SUPPRESSED, unless the
+ * server explicitly answered failure in JSON (jsonExplicitFailure:
+ * success === false — a positive non-filing signal).
  */
 function isFallbackSafe(step, err) {
   if (step !== 'submit') return true;
   if (!err) return true;
+  const s = err.responseSummary;
+  if (s && s.status === 200 && !s.jsonExplicitFailure) return false;
   // Client-thrown rejection codes mean the server answered (or the
   // payload never left): SUBMIT_BAD_RESPONSE / SUBMIT_NOT_SUCCESS /
   // MISSING_SUBMIT_FIELD. A bare network/timeout error has no code.
@@ -427,11 +445,41 @@ async function runHttpChain(opts = {}) {
         httpStep: step, httpReason: reason, ...decisionFlags,
       };
     }
-    if (typeof opts.playwrightRunner === 'function') {
+    // SUBMIT-SAFETY (2026-10-30): a BRN-free submit failure never
+    // runs the bot fallback — the code's own brnFreeNote states a
+    // BRN-free filing cannot pass the bot page's verified gate, so
+    // a bot replay is futile. Surface the direct reason instead.
+    if (step === 'submit' && routeInfo.brnFree) {
+      return {
+        ...baseResult, ...routeInfo, ok: false, fallback: false, httpStep: step, httpReason: reason, ...decisionFlags,
+        message: `HTTP submit failed (${reason}); bot fallback skipped — a BRN-free filing cannot pass the bot page's verified gate.`,
+        brnFreeNote: 'BRN-free filing: bot fallback cannot pass BRN-free (bot page requires verified parent BRN).',
+      };
+    }
+    // SUBMIT-SAFETY (2026-10-30, timeout architecture): on the
+    // direct HTTP path the direct result returns BEFORE any bot
+    // fallback — the fallback is reported separately (fallback:
+    // true), and the frontend's existing direct-fallback routing
+    // (send → bot send, submit → bot SUBMIT_S4_OTP) owns it as a
+    // second, separately-timed operation. Running the bot inline
+    // here stretched one fetch past the 90s UI window, the 120s
+    // adapter proxy kill, and the 180s executor race, so the UI
+    // declared "unknown" while the server kept working. The socket
+    // path keeps inline fallback (progress events, no fetch abort).
+    if (typeof opts.playwrightRunner === 'function' && !data.uiDirect) {
       const pw = await opts.playwrightRunner(data);
       return {
         ...(pw || {}), ...routeInfo, path: 'playwright', httpFallback: true, httpStep: step, httpReason: reason, ...decisionFlags,
         candidate: true, candidateLabel: HTTP_CANDIDATE_LABEL,
+      };
+    }
+    if (data.uiDirect) {
+      return {
+        ...baseResult, ...routeInfo, ok: false, fallback: true, httpStep: step, httpReason: reason, ...decisionFlags,
+        message: `HTTP ${step} failed (${reason}); the bot path continues separately.`,
+        brnFreeNote: routeInfo.brnFree && step !== 'submit'
+          ? 'BRN-free filing: bot fallback cannot pass BRN-free (bot page requires verified parent BRN).'
+          : null,
       };
     }
     return {

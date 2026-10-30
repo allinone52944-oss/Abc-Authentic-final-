@@ -278,8 +278,12 @@ describe('direct wiring: phased chain', () => {
     const client = fakeClient({
       submitApplication: async () => { throw Object.assign(new Error('Submit rejected'), { code: 'SUBMIT_NOT_SUCCESS' }); },
     });
+    // Parents WITH brn: a BRN-free fixture now takes the safety
+    // skip instead (see submit-safety-chain.test.js) — this test
+    // proves the definitive-rejection fallback for non-BR-free.
     const r = await runHttpChain({
-      data: { ...draft(), documents: REFS, otp: '123456', _chargeToken: validChargeToken('u1', secret, 'direct-fallback-1') },
+      data: { ...draft(), documents: REFS, otp: '123456', _chargeToken: validChargeToken('u1', secret, 'direct-fallback-1'),
+        s2: { father: { nameBn: 'আবদুল হামিদ', nameEn: 'Abdul Hamid', brn: '1234567890' }, mother: { nameBn: 'ফাতেমা', nameEn: 'Fatema', brn: '1234567891' } } },
       userId: 'u1', secret, client, log: () => {}, phase: 'submit',
       playwrightRunner: async () => { pwCalls += 1; return { ok: true, path: 'playwright', completed: true }; },
     });
