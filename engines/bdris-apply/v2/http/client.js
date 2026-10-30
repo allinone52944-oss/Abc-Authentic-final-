@@ -739,7 +739,9 @@ class BdrisHttpClient {
    * for its own navigations (Playwright sends them automatically);
    * this is the standard Chromium document-navigation set for a
    * same-origin HTTPS form POST. Cookies, CSRF header, referer
-   * and client: bris are kept exactly as apiHeaders() sends them.
+   * and client: bris are kept exactly as apiHeaders() sends them,
+   * PLUS Origin (a browser sends Origin on every POST; the engine
+   * never did — submit only, apiHeaders untouched).
    * NOTE: Sec-Fetch-* headers are forbidden in browser fetch()
    * but legal here — this client runs in Node, not in a browser.
    * Never use for API calls (send/verify/geo/upload stay XHR).
@@ -753,6 +755,11 @@ class BdrisHttpClient {
       ...(cookie ? { Cookie: cookie } : {}),
       [this.csrfHeaderName]: this.csrfToken,
       Referer: this.formUrl,
+      // ORIGIN-EMPTY-PARTS (2026-10-30): a browser sends Origin on
+      // every POST (navigation and XHR); the engine never did. This
+      // header set is the SUBMIT POST only — apiHeaders() (send /
+      // verify / geo / upload) deliberately gains no Origin.
+      Origin: this.base,
       client: 'bris',
       Accept: 'text/html',
       'Sec-Fetch-Dest': 'document',
@@ -1104,7 +1111,8 @@ class BdrisHttpClient {
    * Final submit — the form's OWN POST (source-proven page flow):
    * multipart/form-data to /br/application with every field from
    * buildSubmitPayload() + one `attachments` field per uploaded
-   * document id + _csrf. The response is accepted ONLY in the
+   * document id + _csrf, PLUS the browser's empty file parts (see
+   * buildSubmitMultipartBody). The response is accepted ONLY in the
    * verified success shape: HTML containing the Bengali success
    * phrase (plus print link if present), or JSON with
    * success === true. Anything else throws SUBMIT_NOT_SUCCESS /
@@ -1113,18 +1121,17 @@ class BdrisHttpClient {
    */
   async submitApplication(data = {}) {
     const payload = buildSubmitPayload(data);
-    const form = new FormData();
-    for (const [k, v] of Object.entries(payload)) {
-      if (k === 'attachments') continue;
-      form.append(k, String(v));
-    }
-    for (const id of payload.attachments || []) form.append('attachments', String(id));
-    form.append('_csrf', this.csrfToken);
+    // ORIGIN-EMPTY-PARTS (2026-10-30): the wire body is built
+    // manually, NOT via undici FormData — undici drops `filename`
+    // on empty file parts, while a browser's native POST always
+    // carries `filename=""` for an empty file input. Headers come
+    // from navigationHeaders() (submit only, now with Origin).
+    const { body, contentType } = buildSubmitMultipartBody(payload, this.csrfToken);
     const res = await this.request(SUBMIT_PATH, {
       method: 'POST',
       // NATIVE-POST: the submit is a document navigation, not XHR.
-      headers: this.navigationHeaders(),
-      body: form,
+      headers: { ...this.navigationHeaders(), 'Content-Type': contentType },
+      body,
     });
     if (!res.ok) {
       const wording = submitRejectionWording(res);
@@ -1196,6 +1203,93 @@ class BdrisHttpClient {
 }
 
 /**
+ * Build the submit POST's multipart body, byte-format-matched to a
+ * browser's native form POST (ORIGIN-EMPTY-PARTS, 2026-10-30).
+ *
+ * Why manual, not undici FormData: undici serialises an empty file
+ * part WITHOUT a filename attribute, while a browser always sends
+ * `filename=""` for an empty file input (HTML spec multipart
+ * serialisation). A server-side multipart parser that keys file
+ * parts on the filename attribute would therefore never see the
+ * engine's empty parts — the exact gap this closes.
+ *
+ * Part order mirrors the previous FormData construction: payload
+ * fields (in builder order, attachments skipped), one `attachments`
+ * field per uploaded document id, the two empty file parts, then
+ * _csrf last. Field names/values are UNCHANGED (verbatim, no name
+ * logic); `attachments` ids are untouched (ids suffice, bot-proven).
+ *
+ * Empty file parts: the form's file inputs are `files` (the upload
+ * widget's input, recreated EMPTY after every async upload) and
+ * `personImage` (never set by the bot). The submit payload never
+ * carries file bytes — documents ride as `attachments` ids — so
+ * both parts are always the empty form: `filename=""`,
+ * `Content-Type: application/octet-stream`, empty body. Guarded:
+ * if a future payload ever carried a `files`/`personImage` entry,
+ * the empty part for that name is skipped (no duplicate part).
+ *
+ * @returns {{body: Buffer, contentType: string}} — the caller sets
+ *   Content-Type from `contentType`; the boundary is random per call
+ *   (browsers do the same), so it cannot collide with a field value.
+ */
+function buildSubmitMultipartBody(payload, csrfToken) {
+  const boundary = '----WebKitFormBoundary'
+    + require('node:crypto').randomBytes(16).toString('hex');
+  const chunks = [];
+  const text = (s) => Buffer.from(s, 'utf8');
+  // Field names are engine-controlled identifiers; strip CR/LF/quote
+  // defensively so a name can never break the part framing.
+  const safeName = (n) => String(n).replace(/[\r\n"]/g, '');
+  const fieldPart = (name, value) => text(
+    `--${boundary}\r\nContent-Disposition: form-data; name="${safeName(name)}"\r\n\r\n${value}\r\n`);
+  const emptyFilePart = (name) => text(
+    `--${boundary}\r\nContent-Disposition: form-data; name="${safeName(name)}"; filename=""\r\n`
+    + 'Content-Type: application/octet-stream\r\n\r\n\r\n');
+  for (const [k, v] of Object.entries(payload)) {
+    if (k === 'attachments') continue;
+    chunks.push(fieldPart(k, String(v)));
+  }
+  for (const id of payload.attachments || []) chunks.push(fieldPart('attachments', String(id)));
+  if (!('files' in payload)) chunks.push(emptyFilePart('files'));
+  if (!('personImage' in payload)) chunks.push(emptyFilePart('personImage'));
+  chunks.push(fieldPart('_csrf', csrfToken));
+  chunks.push(text(`--${boundary}--\r\n`));
+  return { body: Buffer.concat(chunks), contentType: `multipart/form-data; boundary=${boundary}` };
+}
+
+
+/**
+ * NATIVE-POST (2026-10-30): effective-copy test for the DOM copy
+ * checkboxes. On the real page a ticked copy box HIDES the target
+ * section and the target IS the source (bot rule, StepHandler
+ * copy-box handling) — so the browser sends the flag exactly when
+ * the submitted target equals the source. The engine's safety rule
+ * (runner: a copy applies only when the target record is empty)
+ * means a ticked flag with separate target data must NOT send the
+ * flag — the server would overwrite real data with the source.
+ * Compare the raw records on the address content fields (aliases
+ * as in addressFields); LocationId is excluded — it is computed
+ * per address and may differ even for a true copy.
+ */
+function copyApplies(source = {}, target = {}) {
+  const fields = [
+    ['division'], ['district'], ['cityCorpUpazila'], ['paurasavaUnion'], ['ward'],
+    ['postOfficeBn', 'postBn'], ['postOfficeEn', 'postEn'],
+    ['villageBn', 'vilBn'], ['villageEn', 'vilEn'],
+    ['houseRoadBn', 'houseBn'], ['houseRoadEn', 'houseEn'],
+    ['area'], ['postCode'],
+  ];
+  const pick = (rec, keys) => {
+    for (const k of keys) {
+      if (rec[k] !== undefined && rec[k] !== null && String(rec[k]).trim() !== '') return String(rec[k]).trim();
+    }
+    return '';
+  };
+  return fields.every(([a, ...alts]) => pick(source, [a, ...alts]) === pick(target, [a, ...alts]));
+}
+
+
+/**
  * Form-submit payload builder (pure, no I/O).
  *
  * Field NAMES from the pasted form page source (2026-10-25),
@@ -1251,36 +1345,6 @@ class BdrisHttpClient {
  * Missing required fields throw MISSING_SUBMIT_FIELD listing every
  * missing field name — never a silent guess.
  */
-/**
- * NATIVE-POST (2026-10-30): effective-copy test for the DOM copy
- * checkboxes. On the real page a ticked copy box HIDES the target
- * section and the target IS the source (bot rule, StepHandler
- * copy-box handling) — so the browser sends the flag exactly when
- * the submitted target equals the source. The engine's safety rule
- * (runner: a copy applies only when the target record is empty)
- * means a ticked flag with separate target data must NOT send the
- * flag — the server would overwrite real data with the source.
- * Compare the raw records on the address content fields (aliases
- * as in addressFields); LocationId is excluded — it is computed
- * per address and may differ even for a true copy.
- */
-function copyApplies(source = {}, target = {}) {
-  const fields = [
-    ['division'], ['district'], ['cityCorpUpazila'], ['paurasavaUnion'], ['ward'],
-    ['postOfficeBn', 'postBn'], ['postOfficeEn', 'postEn'],
-    ['villageBn', 'vilBn'], ['villageEn', 'vilEn'],
-    ['houseRoadBn', 'houseBn'], ['houseRoadEn', 'houseEn'],
-    ['area'], ['postCode'],
-  ];
-  const pick = (rec, keys) => {
-    for (const k of keys) {
-      if (rec[k] !== undefined && rec[k] !== null && String(rec[k]).trim() !== '') return String(rec[k]).trim();
-    }
-    return '';
-  };
-  return fields.every(([a, ...alts]) => pick(source, [a, ...alts]) === pick(target, [a, ...alts]));
-}
-
 function buildSubmitPayload(data = {}) {
   const missing = [];
   const req = (value, name) => {
@@ -1670,6 +1734,7 @@ module.exports = {
   GeoCache,
   parseSuccessPage,
   buildSubmitPayload,
+  buildSubmitMultipartBody,
   transitDirectName,
   mapDirectRelation,
   parentBrnDirectDecision,
