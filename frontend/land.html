@@ -213,9 +213,16 @@
 
           <!-- Step 2: what kind — whole-mouza rate card, or plain class pick on the manual path -->
           <div id="wzStep2" style="display:none">
+            <div id="wzCardUnitWrap" style="display:none; margin-bottom:10px;">
+              <div style="font-size:13.5px;color:#374151;margin-bottom:6px;">হার কোন এককে দেখবেন?</div>
+              <div id="wzCardUnitBtns" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+            </div>
             <div id="wzCardHead" style="font-size:15px; margin-bottom:10px;"></div>
             <div id="wzCardGrid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;"></div>
             <div id="wzCardNote" style="font-size:13.5px;color:#374151;margin-bottom:10px;"></div>
+            <div style="margin-bottom:10px;">
+              <button type="button" class="btn btn-primary" id="wzCardDownload" style="display:none; padding:10px 18px;">⬇ রেট-কার্ড ডাউনলোড</button>
+            </div>
             <button type="button" class="btn" id="wzBack2" style="padding:10px 18px;">← ফিরে যান</button>
           </div>
 
@@ -486,6 +493,10 @@
     office: '', officeName: '', covered: true,
     mouza: '', manualMouza: false, thana: null,
     card: null, miss: null,
+    // cardUnit only changes how step 2 DISPLAYS the card (and
+    // the free card PDF) — the picked table rate for the paid
+    // report always stays per-shatangsho (see wzPickClass).
+    cardUnit: 'shatangsho',
     cls: '', rateIsTable: false, tableRate: null, manualRate: null,
     pNote: '', pouroNote: '',
     amount: 0, unit: 'shatangsho',
@@ -508,7 +519,7 @@
   function wzResetWizard() {
     WZ.office = ''; WZ.officeName = ''; WZ.covered = true;
     WZ.mouza = ''; WZ.manualMouza = false; WZ.thana = null;
-    WZ.card = null; WZ.miss = null;
+    WZ.card = null; WZ.miss = null; WZ.cardUnit = 'shatangsho';
     WZ.cls = ''; WZ.rateIsTable = false; WZ.tableRate = null; WZ.manualRate = null;
     WZ.pNote = ''; WZ.pouroNote = '';
     WZ.amount = 0; WZ.unit = 'shatangsho';
@@ -680,7 +691,7 @@
         wzShowClassPick();
         return;
       }
-      WZ.card = data; WZ.miss = null;
+      WZ.card = data; WZ.miss = null; WZ.cardUnit = 'shatangsho';
       if (data.period) $('mScheduleVersion').value = data.period;
       wzShowCard();
     } catch (e) {
@@ -697,7 +708,17 @@
     return '<button type="button" class="wz-card" data-cls="' + esc(cls) + '" style="text-align:left;background:#fff;border:1.5px solid #d6c9ae;border-radius:12px;padding:12px;cursor:pointer;">' +
       '<b style="font-size:15px;">' + esc(cls) + '</b><br><span style="font-size:13.5px;color:#14532d;">' + line + '</span></button>';
   }
-  function wzShowCard() {
+  function wzShowCard() { wzRenderCard(); }
+  // Card render in the picked unit. Table rates arrive per
+  // শতাংশ; the display (and the free card PDF) converts with
+  // MOUZA_FACTORS — the same factors as the server's calc.js.
+  // P and পৌর notes keep their exact wording; null stays
+  // "হার নেই". The stored card rates are never rewritten, so
+  // the picked rate for the paid report stays per-shatangsho.
+  function wzRenderCard() {
+    const unit = WZ.cardUnit || 'shatangsho';
+    const ulab = MOUZA_UNIT_LABELS[unit] || 'শতাংশ';
+    const f = MOUZA_FACTORS[unit] || 1;
     $('wzCardHead').innerHTML = '<b>' + esc(WZ.card.mouza) + (WZ.card.thana ? ' (' + esc(WZ.card.thana) + ')' : '') + '</b> · ' +
       esc(WZ.card.officeName) + ' অফিস · ' + esc(WZ.card.period) + ' তালিকা থেকে';
     let h = '';
@@ -707,7 +728,7 @@
       if (r.rate == null) {
         line = '<span style="color:#92400e">হার নেই</span>';
       } else {
-        line = 'শতাংশপ্রতি ' + bnGrouped(r.rate) + ' টাকা';
+        line = ulab + 'প্রতি ' + bnGrouped(Math.round(r.rate * f * 100) / 100) + ' টাকা';
         if (r.p) line += '<br><span style="font-size:12.5px;color:#374151">আগের বছরের হার বহাল আছে</span>';
         if (r.pouroNote) line += '<br><span style="font-size:12.5px;color:#374151">' + esc(r.pouroNote) + '</span>';
       }
@@ -717,11 +738,52 @@
     grid.innerHTML = h;
     grid.querySelectorAll('.wz-card').forEach((b) => b.addEventListener('click', () => wzPickClass(b.dataset.cls)));
     $('wzCardNote').textContent = 'একটা ধরন বাছুন — তারপর পরিমাণ জিজ্ঞেস করবো।';
+    const ub = $('wzCardUnitBtns');
+    ub.innerHTML = '';
+    Object.keys(MOUZA_UNIT_LABELS).forEach((u) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = MOUZA_UNIT_LABELS[u];
+      const on = u === unit;
+      b.style.cssText = 'padding:8px 14px;border-radius:20px;cursor:pointer;border:1.5px solid ' +
+        (on ? '#14532d' : '#d6c9ae') + ';background:' + (on ? '#14532d' : '#fff') +
+        ';color:' + (on ? '#fff' : '#111827') + ';font-size:14px;';
+      b.addEventListener('click', () => { WZ.cardUnit = u; wzRenderCard(); });
+      ub.appendChild(b);
+    });
+    $('wzCardUnitWrap').style.display = '';
+    $('wzCardDownload').style.display = '';
     wzShowStep(2);
+  }
+  // Free card download: exactly the card on screen, in the
+  // picked unit. The server builds the PDF from the same
+  // rates.js card — no charge, no order. A non-PDF answer
+  // (a miss) is shown as an error, never saved as a file.
+  async function wzDownloadCard() {
+    if (!WZ.card) return;
+    const q = '/land/mouza-rate-card?office=' + encodeURIComponent(WZ.card.office) +
+      '&mouza=' + encodeURIComponent(WZ.card.mouza) +
+      (WZ.card.thana ? '&thana=' + encodeURIComponent(WZ.card.thana) : '') +
+      '&unit=' + encodeURIComponent(WZ.cardUnit || 'shatangsho');
+    try {
+      const r = await ABC.api(q);
+      const ct = (r.headers.get('content-type') || '');
+      if (!r.ok || ct.indexOf('application/pdf') === -1) { showErr('রেট-কার্ড ডাউনলোড করা যায়নি — আবার চেষ্টা করুন।'); return; }
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'mouza-rate-card.pdf';
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+    } catch (e) { showErr('রেট-কার্ড ডাউনলোড করা যায়নি — আবার চেষ্টা করুন।'); }
   }
   function wzShowClassPick() {
     // Manual path: no card — plain WHY on top, then a plain
     // class pick. The rate step will ask for a hand rate.
+    // No card exists to download, so the unit buttons and the
+    // download button stay hidden here.
+    $('wzCardUnitWrap').style.display = 'none';
+    $('wzCardDownload').style.display = 'none';
     $('wzCardHead').innerHTML = '<b>' + esc(WZ.mouza) + '</b>' +
       (WZ.miss ? '<br><span style="font-weight:400;color:#92400e">' + esc(WZ.miss.message) + '</span>' : '');
     const grid = $('wzCardGrid');
@@ -891,6 +953,7 @@
   $('wzBackThana').addEventListener('click', () => wzShowStep(1));
   $('wzNextThana').addEventListener('click', wzNextThana);
   $('wzBack2').addEventListener('click', () => wzShowStep(1));
+  $('wzCardDownload').addEventListener('click', wzDownloadCard);
   $('wzAmount').addEventListener('input', wzAmountWords);
   $('wzUnit').addEventListener('change', wzAmountWords);
   $('wzBack3').addEventListener('click', wzBackTo2);

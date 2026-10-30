@@ -232,6 +232,23 @@ describe('mouza-value mode (land-mouza-value)', () => {
     // The short honesty note stays on the form (full lines in PDF).
     expect(html).toContain('চার্জ শুধু রিপোর্ট তৈরি হলেই কাটবে; লাইন ভুল হলে কোনো চার্জ নয়।');
   });
+  test('mouza wizard step 2: unit selector + free rate-card download', () => {
+    const html = read('frontend/land.html');
+    // Unit buttons above the card; download button on step 2.
+    expect(html).toContain('id="wzCardUnitWrap"');
+    expect(html).toContain('id="wzCardUnitBtns"');
+    expect(html).toContain('id="wzCardDownload"');
+    expect(html).toContain('হার কোন এককে দেখবেন?');
+    expect(html).toContain('রেট-কার্ড ডাউনলোড');
+    // Download hits the card endpoint with office + mouza +
+    // thana + picked unit; the button is wired once.
+    expect(html).toContain("'/land/mouza-rate-card?office='");
+    expect(html).toContain("wzCardDownload').addEventListener('click', wzDownloadCard)");
+    // Unit only changes display: the picked table rate for the
+    // paid report stays per-shatangsho (see wzPickClass).
+    expect(html).toContain('cardUnit');
+    expect(html).toContain('MOUZA_FACTORS[unit]');
+  });
   test('mouza route + PDF derive the header area from the lines (no cascade mouza)', () => {
     const route = read('backend/routes/land.js');
     expect(route).toContain('deriveMouzaReportArea');

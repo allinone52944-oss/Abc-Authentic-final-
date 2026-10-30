@@ -44,6 +44,7 @@ const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
 const { buildReceiptPdf } = require('../lib/receiptPdf');
 const { buildLandReportPdf } = require('../lib/landReportPdf');
+const { RATE_CARD_UNITS, buildMouzaRateCardPdf } = require('../lib/mouzaRateCardPdf');
 const client = require('../../engines/land-core/client');
 const { calcMouzaReport } = require('../../engines/land-mouza-value/calc');
 const { lookupMouzaRate, lookupMouzaCard, OFFICES } = require('../../engines/land-mouza-value/rates');
@@ -604,6 +605,62 @@ router.get('/mouza-rates', requireAuth, async (req, res) => {
     office: card.office, officeName: card.officeName, mouza: card.mouza,
     thana: card.thana, jl: card.jl, period: card.period, rates: card.rates,
   });
+});
+
+// ---------- GET /mouza-rate-card (wizard step 2 download) ----------
+// FREE: the card is already shown free on screen; this only
+// saves exactly that card as a PDF, in the unit the customer
+// picked. Rates come from lookupMouzaCard — the SAME source as
+// GET /mouza-rates — converted by UNIT_FACTORS, so card and PDF
+// can never disagree. No DB call, no charge, no order, no
+// idempotency: nothing is recorded. Misses follow the
+// /mouza-rates convention (200 + found:false), never an error;
+// an unknown unit is 400.
+// Query: ?office=chandgaon&mouza=মোহরা[&thana=...][&unit=gonda]
+router.get('/mouza-rate-card', requireAuth, async (req, res) => {
+  const office = String(req.query.office || '').trim();
+  const mouza = String(req.query.mouza || '').trim();
+  const thana = String(req.query.thana || '').trim() || undefined;
+  const unit = String(req.query.unit || 'shatangsho').trim();
+  if (!office || !mouza) {
+    return res.status(400).json({ error: 'BAD_INPUT', message: 'অফিস ও মৌজা — দুটোই লাগবে।' });
+  }
+  if (!RATE_CARD_UNITS.includes(unit)) {
+    return res.status(400).json({ error: 'BAD_UNIT', message: 'একক ঠিক নয় — শতাংশ, কাঠা, বিঘা বা গন্ডা বাছুন।' });
+  }
+  const card = lookupMouzaCard(office, mouza, thana);
+  if (!card) {
+    return res.json({
+      ok: true, found: false, miss: 'OFFICE_NOT_COVERED',
+      message: 'এই অফিসের তালিকা এখনো যোগ হয়নি — তালিকা দেখে হার নিজে বসিয়ে রিপোর্ট করা যাবে।',
+    });
+  }
+  if (card.notInTable) {
+    return res.json({
+      ok: true, found: false, miss: 'MOUZA_NOT_IN_TABLE',
+      message: 'এই মৌজা এই অফিসের তালিকায় নেই — হার নিজে বসিয়ে রিপোর্ট করা যাবে।',
+    });
+  }
+  if (card.badThana) {
+    return res.json({
+      ok: true, found: false, miss: 'THANA_NOT_MATCHED',
+      message: 'ওই থানায় এই মৌজার হার নেই — হার নিজে বসিয়ে রিপোর্ট করা যাবে।',
+    });
+  }
+  if (card.ambiguous) {
+    return res.json({
+      ok: true, found: false, ambiguous: true, options: card.options,
+      message: 'এই মৌজা একাধিক থানায় আছে — থানা বাছুন।',
+    });
+  }
+  try {
+    const pdf = await buildMouzaRateCardPdf({ card, unit, when: nowBn() });
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', 'attachment; filename="mouza-rate-card.pdf"');
+    return res.send(pdf);
+  } catch (e) {
+    return res.status(500).json({ error: 'PDF_FAILED', message: 'রেট-কার্ড PDF বানানো যায়নি — আবার চেষ্টা করুন।' });
+  }
 });
 
 // ---------- mouza report area (professional single flow) ----------
