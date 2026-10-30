@@ -1422,6 +1422,56 @@ class BdrisEngineV2 {
     return outcome;
   }
 
+  // REGISTER-PROBE TRIGGER (2026-10-30): plain-HTTP trigger for the
+  // probeRegisterEndpoint() diagnostic — same shape discipline as
+  // handleHttpChainRequest (returns {status, body} so tests can call
+  // it without HTTP). Auth is the SAME two-layer gate as /http-chain
+  // and /draft-save: the backend mount already enforced its JWT +
+  // rate limit before proxying, and this handler re-verifies the
+  // same JWT (body _authToken, same id precedence as io.use) to
+  // derive userId — a client-supplied userId is never trusted, and
+  // the token itself is never logged or forwarded. The probe client
+  // is seeded EXACTLY like the submit chain's (SUBMIT_HTTP_CHAIN
+  // executor): the requesting user's session page goes through
+  // HttpGeoService.seedFromPage, which seeds a client from the
+  // page's cookies + CSRF. No session page, or a failed seed,
+  // returns an error and attempts NO bare bootstrap (proven 403)
+  // and NO probe call. The probe is the ONLY BDRIS call this
+  // handler ever makes: it sends an empty body that cannot create
+  // a record, and returns only {status, isJson, wording}. No
+  // frontend button exists for it — the live run is an explicit
+  // server-side call.
+  async handleProbeRegisterRequest(body = {}) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return { status: 400, body: { ok: false, error: 'BAD_REQUEST', message: 'Request body must be a JSON object.' } };
+    }
+    const secret = process.env.ABC_JWT_SECRET || process.env.JWT_SECRET || '';
+    const tokenPayload = verifyJwtHS256(body._authToken, secret);
+    const userId = tokenPayload ? (tokenPayload.id || tokenPayload.sub || tokenPayload.userId) : null;
+    if (!userId) {
+      return { status: 401, body: { ok: false, error: 'UNAUTHORIZED', message: 'Valid access token required.' } };
+    }
+    const session = this.sessionManager.findByUser(userId);
+    if (!session) {
+      return { status: 200, body: { ok: false, error: 'NO_SESSION', message: 'Session not initialized' } };
+    }
+    if (!session.page) {
+      return { status: 200, body: { ok: false, error: 'NO_SESSION_PAGE', message: 'Probe needs a warm browser session page to seed from.' } };
+    }
+    let client = null;
+    try {
+      const geo = new HttpGeoService();
+      if (await geo.seedFromPage(session.page)) client = geo.client;
+    } catch {
+      client = null;
+    }
+    if (!client) {
+      return { status: 200, body: { ok: false, error: 'SEED_FAILED', message: 'Session page seeding failed; no bare bootstrap attempted.' } };
+    }
+    const result = await client.probeRegisterEndpoint();
+    return { status: 200, body: { status: result.status, isJson: result.isJson, wording: result.wording } };
+  }
+
   // DIRECT HTTP BYPASS (2026-10-29): POST /http-chain, reached
   // externally as /api/bdris-apply/http-chain through the backend
   // mount (requireAuth + rate limit) and the adapter proxy.
@@ -1463,6 +1513,20 @@ class BdrisEngineV2 {
         res.status(200).json({ ok: true, draftId: r.draftId, savedAt: r.savedAt });
       } catch {
         res.status(500).json({ ok: false, error: 'DRAFT_SAVE_FAILED' });
+      }
+    });
+    // REGISTER-PROBE TRIGGER (2026-10-30): POST /probe-register —
+    // the minimal trigger for handleProbeRegisterRequest above.
+    // Reached externally as /api/bdris-apply/probe-register through
+    // the backend mount (requireAuth + rate limit) and the adapter
+    // proxy. POST only, so it cannot fire from a link or prefetch;
+    // no frontend button exists for it.
+    app.post('/probe-register', async (req, res) => {
+      try {
+        const r = await this.handleProbeRegisterRequest(req.body);
+        res.status(r.status).json(r.body);
+      } catch {
+        res.status(500).json({ ok: false, error: 'PROBE_FAILED' });
       }
     });
   }
