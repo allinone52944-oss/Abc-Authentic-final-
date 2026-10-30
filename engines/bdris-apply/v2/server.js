@@ -1663,6 +1663,36 @@ class BdrisEngineV2 {
         res.status(500).json({ ok: false, error: 'DRAFT_SAVE_FAILED' });
       }
     });
+    // ALL-BUGS (i): POST /draft-delete — DONE via direct HTTP
+    // with a dead socket used to leave the submitted draft in
+    // the list (the socket DELETE_DRAFT never arrived). Same JWT
+    // verification + id sanitisation as /draft-save; deleting a
+    // missing draft is still ok:true (idempotent).
+    // Reached externally as /api/bdris-apply/draft-delete through
+    // the backend mount (requireAuth + rate limit). Body:
+    // {_authToken, draftId}.
+    app.post('/draft-delete', async (req, res) => {
+      try {
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const secret = process.env.ABC_JWT_SECRET || process.env.JWT_SECRET || '';
+        const tokenPayload = verifyJwtHS256(body._authToken, secret);
+        const userId = tokenPayload ? (tokenPayload.id || tokenPayload.sub || tokenPayload.userId) : null;
+        if (!userId) {
+          res.status(401).json({ ok: false, error: 'UNAUTHORIZED', message: 'Valid access token required.' });
+          return;
+        }
+        const draftId = String(body.draftId || '').replace(/[^a-zA-Z0-9-]/g, '');
+        if (!draftId) {
+          res.status(400).json({ ok: false, error: 'BAD_REQUEST', message: 'draftId required.' });
+          return;
+        }
+        const f = path.join(draftsDirFor(userId), draftId + '.json');
+        try { fs.unlinkSync(f); } catch { /* already gone — idempotent */ }
+        res.status(200).json({ ok: true, draftId });
+      } catch {
+        res.status(500).json({ ok: false, error: 'DRAFT_DELETE_FAILED' });
+      }
+    });
     // REGISTER-PROBE TRIGGER (2026-10-30): POST /probe-register —
     // the minimal trigger for handleProbeRegisterRequest above.
     // Reached externally as /api/bdris-apply/probe-register through

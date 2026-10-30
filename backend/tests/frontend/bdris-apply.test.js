@@ -495,3 +495,77 @@ describe('Debug-2 (2026-10-26): original-PDF record type, chain uiStep, charge-f
     expect(html).toMatch(/if \(!tok\) \{ busy\(false\); if \(S\.otpStage === 'submitting'\) S\.otpStage = 'code'; return false; \}/);
   });
 });
+
+describe('ALL-BUGS cycle (2026-10-30): OTP view, real errors, PDF path, step-1, address book, OTP-step gate, storage', () => {
+  test('(a) OTP view never renders in "sending" state without a send — no renderOtpCode(false) anywhere', () => {
+    // The old sendOtp/resend/direct-fallback paths pre-rendered the
+    // OTP view before any send succeeded, so a FAILED send (400)
+    // still showed "code being sent". The view now renders only
+    // on otpSent proof (manualStepAck/otpPrepAck, sent-state).
+    expect(html).not.toMatch(/renderOtpCode\(false\)/);
+    expect(html).toMatch(/renderOtpCode\(true\)/);
+  });
+
+  test('(b) retry banner carries the first real failure reason, not a generic sentence', () => {
+    expect(html).toMatch(/const _firstReason = \(failed\[0\] && \(failed\[0\]\.reason \|\| ''\)\) \|\| ''/);
+    expect(html).toMatch(/showBanner\('warn', '⚠️ ' \+ san\(_firstReason\)/);
+  });
+
+  test('(b) S4_PREP 400-cap shows the real reason + number-change recovery, never a resend trap', () => {
+    expect(html).toMatch(/সর্বোচ্চ ৫ বার\|maximum 5 times/);
+    expect(html).toMatch(/এই নম্বরে আর কোড আসবে না, অন্য নম্বর ব্যবহার করুন/);
+  });
+
+  test('(d) original-PDF button is the single driven state: progress-aware watchdog, real failure reason, once-only auto-download', () => {
+    expect(html).toMatch(/S\._origProgressAt = Date\.now\(\)/);
+    expect(html).toMatch(/_armOrigWatch/);
+    expect(html).toMatch(/আসল PDF আনা যায়নি/);
+    expect(html).toMatch(/if \(!ORIG_AUTODLED\[ono\]\) \{ ORIG_AUTODLED\[ono\] = 1; downloadOriginal\(u, ono\); \}/);
+  });
+
+  test('(e) submitStep1 never throws on the absent embassy checkbox (btnRow outlives stepBody)', () => {
+    expect(html).toMatch(/const _emb = \$\('s1emb'\);/);
+    expect(html).toMatch(/embassy: _emb \? !!_emb\.checked :/);
+  });
+
+  test('(g) address book has a zone field and normalises saves by name only', () => {
+    expect(html).toMatch(/txt\('ab_zone', 'অঞ্চল \(সিটি কর্পোরেশন হলে/);
+    expect(html).toMatch(/function addrBookSaveRecord\(a\)/);
+    expect(html).toMatch(/const a = addrBookSaveRecord\(Object\.assign\(/);
+  });
+
+  test('(g) addrBookSaveRecord: city-corp zone becomes paurasavaUnion; display-name *Id fields are stripped', () => {
+    const m = html.match(/function addrBookSaveRecord\(a\) \{[\s\S]*?\n\}/);
+    expect(m).not.toBeNull();
+    const fn = new Function('return ' + m[0])();
+    const out = fn({
+      name: 'বাসা', division: 'ঢাকা বিভাগ', divisionId: 'ঢাকা বিভাগ',
+      cityCorpUpazila: 'ঢাকা দক্ষিণ সিটি কর্পোরেশন',
+      paurasavaUnion: '', paurasavaUnionId: '',
+      zone: 'অঞ্চল - ৭', ward: '১২',
+    });
+    expect(out.paurasavaUnion).toBe('অঞ্চল - ৭');
+    expect(out.zone).toBe('অঞ্চল - ৭');
+    expect(out.divisionId).toBeUndefined();
+    expect(out.paurasavaUnionId).toBeUndefined();
+    expect(out.division).toBe('ঢাকা বিভাগ');
+  });
+
+  test('(g) addrBookSaveRecord: a real union value is never overwritten by zone', () => {
+    const m = html.match(/function addrBookSaveRecord\(a\) \{[\s\S]*?\n\}/);
+    const fn = new Function('return ' + m[0])();
+    expect(fn({ paurasavaUnion: 'সাভার ইউনিয়ন', zone: 'অঞ্চল - ৭' }).paurasavaUnion).toBe('সাভার ইউনিয়ন');
+  });
+
+  test('(h) S4_OTP failure branches on the machine-readable OTP-step code with true bot-path recovery', () => {
+    expect(html).toMatch(/d\.code === 'BOT_PAGE_NOT_ON_OTP_STEP'/);
+    expect(html).toMatch(/বটের পথে আবার কোড পাঠান/);
+  });
+
+  test('(i) submitted record links its original PDF; pending reports flush; draft delete survives a dead socket', () => {
+    expect(html).toMatch(/function reportOriginalAvailable\(ackNo\)/);
+    expect(html).toMatch(/bdris_acks_pending/);
+    expect(html).toMatch(/fetch\('\/api\/bdris-apply\/draft-delete'/);
+    expect(html).toMatch(/localStorage\.setItem\('bdris_acks', JSON\.stringify\(meta\)\)/);
+  });
+});

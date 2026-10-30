@@ -179,20 +179,26 @@ router.get('/prices', requireAuth, async (req, res) => {
 // the admin sees all applications (Admin → অর্ডার tab) and can
 // delete a record; the customer can fetch/delete their own.
 
-// POST /api/bdris-apply/applications { ack_no, name } — idempotent
+// POST /api/bdris-apply/applications { ack_no, name, original_pdf_available? } — idempotent
+// ALL-BUGS (i): the flag-only re-POST (sent when the Form-1 PDF
+// lands) used to be a DO NOTHING on conflict — the record never
+// learned the original exists. The conflict clause now upgrades
+// the flag (OR, never downgrades) and never blanks the name.
 router.post('/applications', requireAuth, async (req, res) => {
   try {
     const ackNo = String((req.body && req.body.ack_no) || '').trim().slice(0, 64);
     const name = String((req.body && req.body.name) || '').trim().slice(0, 160);
+    const origFlag = (req.body && req.body.original_pdf_available) === true;
     if (!ackNo) return res.status(400).json({ error: 'MISSING_ACK' });
     const r = await db.query(
-      `INSERT INTO bdris_applications (user_id, ack_no, applicant_name)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (user_id, ack_no) DO NOTHING
-       RETURNING id, ack_no, applicant_name, created_at`,
-      [req.user.id, ackNo, name]
+      `INSERT INTO bdris_applications (user_id, ack_no, applicant_name, original_pdf_available)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, ack_no) DO UPDATE SET
+         original_pdf_available = bdris_applications.original_pdf_available OR EXCLUDED.original_pdf_available
+       RETURNING id, ack_no, applicant_name, created_at, (xmax = 0) AS inserted`,
+      [req.user.id, ackNo, name, origFlag]
     );
-    if (r.rows.length) {
+    if (r.rows.length && r.rows[0].inserted) {
       // First record of this submission → customer confirmation
       // (WhatsApp + own-device push).
       wa.notifyServiceCompleted(db, req.user.id, 'জন্ম নিবন্ধন আবেদন').catch(() => {});
@@ -201,7 +207,7 @@ router.post('/applications', requireAuth, async (req, res) => {
       return res.status(201).json({ ok: true, application: r.rows[0] });
     }
     const cur = await db.query(
-      'SELECT id, ack_no, applicant_name, created_at FROM bdris_applications WHERE user_id = $1 AND ack_no = $2',
+      'SELECT id, ack_no, applicant_name, created_at, original_pdf_available FROM bdris_applications WHERE user_id = $1 AND ack_no = $2',
       [req.user.id, ackNo]
     );
     return res.json({ ok: true, duplicate: true, application: cur.rows[0] || null });
@@ -250,7 +256,7 @@ router.post('/applications/failure', requireAuth, async (req, res) => {
 router.get('/applications', requireAuth, async (req, res) => {
   try {
     const r = await db.query(
-      `SELECT id, ack_no, applicant_name, created_at FROM bdris_applications
+      `SELECT id, ack_no, applicant_name, created_at, original_pdf_available FROM bdris_applications
        WHERE user_id = $1 AND status = 'submitted' ORDER BY created_at DESC LIMIT 50`,
       [req.user.id]
     );

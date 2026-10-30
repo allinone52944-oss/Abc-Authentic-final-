@@ -325,6 +325,54 @@ describe('POST /api/auth/refresh + /logout', () => {
     expect(chainRevoke).toBeDefined();
   });
 
+  test('revoked token WITH a recent DB rotation lineage (post-restart second tab) → rotates the lineage head, no chain revoke', async () => {
+    // Simulates a service restart: the in-memory grace is gone, so
+    // only the persistent lineage can save the second tab. Before
+    // the fix this presented token looked like theft (TOKEN_REUSED
+    // + whole-chain revoke) because the leeway lived only in memory.
+    if (authRouter.__resetRotationGrace) authRouter.__resetRotationGrace();
+    const crypto = require('crypto');
+    const presentedHash = crypto.createHash('sha256').update('e'.repeat(96)).digest('hex');
+    const now = new Date();
+    db.__routeQuery([
+      [(text, params) => text.includes('FROM refresh_tokens rt') && params && params[0] === presentedHash,
+        { rows: [{ id: 'rt-old', user_id: 'u1', role: 'user', status: 'active', revoked: true, replaced_by_hash: 'newhash123', replaced_at: now }] }],
+      [(text, params) => text.includes('FROM refresh_tokens rt') && params && params[0] === 'newhash123',
+        { rows: [{ id: 'rt-new', user_id: 'u1', role: 'user', status: 'active', revoked: false, last_activity: now, created_at: now }] }],
+    ]);
+    const r = await request(app())
+      .post('/api/auth/refresh').send({ refresh_token: 'e'.repeat(96) }).expect(200);
+    expect(r.body.access_token).toBeTruthy();
+    expect(r.body.refresh_token).toMatch(/^[a-f0-9]{96}$/);
+    const chainRevoke = db.__client.query.mock.calls.find(
+      (c) => /UPDATE refresh_tokens SET revoked = TRUE WHERE user_id/.test(c[0])
+    );
+    expect(chainRevoke).toBeUndefined();
+    // The lineage head was rotated (lineage recorded on the old row):
+    const lineageUpdate = db.__client.query.mock.calls.find(
+      (c) => /replaced_by_hash/.test(c[0])
+    );
+    expect(lineageUpdate).toBeDefined();
+  });
+
+  test('revoked token with a STALE lineage (rotated >30s ago) → theft response still revokes the chain', async () => {
+    if (authRouter.__resetRotationGrace) authRouter.__resetRotationGrace();
+    const crypto = require('crypto');
+    const presentedHash = crypto.createHash('sha256').update('f'.repeat(96)).digest('hex');
+    const stale = new Date(Date.now() - 60000);
+    db.__routeQuery([
+      [(text, params) => text.includes('FROM refresh_tokens rt') && params && params[0] === presentedHash,
+        { rows: [{ id: 'rt-old2', user_id: 'u1', role: 'user', status: 'active', revoked: true, replaced_by_hash: 'newhash456', replaced_at: stale }] }],
+    ]);
+    const r = await request(app())
+      .post('/api/auth/refresh').send({ refresh_token: 'f'.repeat(96) }).expect(401);
+    expect(r.body.error).toBe('TOKEN_REUSED');
+    const chainRevoke = db.__client.query.mock.calls.find(
+      (c) => /UPDATE refresh_tokens SET revoked = TRUE WHERE user_id/.test(c[0])
+    );
+    expect(chainRevoke).toBeDefined();
+  });
+
   test('logout revokes and always returns ok', async () => {
     const r = await request(app())
       .post('/api/auth/logout').send({ refresh_token: 'b'.repeat(96) }).expect(200);

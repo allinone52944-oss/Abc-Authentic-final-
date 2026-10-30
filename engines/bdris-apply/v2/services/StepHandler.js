@@ -2365,7 +2365,7 @@ class StepHandler {
     const otpStep = await this._ensureOtpStep(otpSels);
     if (!otpStep.ok) {
       this.progress(otpStep.message);
-      return { ok: false, message: otpStep.message, pageState: otpStep.pageState };
+      return { ok: false, code: 'BOT_PAGE_NOT_ON_OTP_STEP', message: otpStep.message, pageState: otpStep.pageState };
     }
     const r = await this._typeInto(otpSels, otp, 'OTP কোড', { required: true, typeCharByChar: true });
     if (!r.ok) {
@@ -2563,6 +2563,23 @@ class StepHandler {
       return { ok: false, message: '❌ ' + why, failed: [{ field: 'চূড়ান্ত সাবমিট', reason: why }] };
     }
 
+    // ALL-BUGS (c): the success banner must show the MOMENT the
+    // site accepts — never after screenshot + PDF capture (which
+    // can cost 15s + 10s + 25s + copy-PDF generation, the exact
+    // delay users reported). Emit COMPLETED at once with the ack;
+    // the attachments follow on COMPLETED_ATTACHMENTS and the
+    // frontend merges them into the already-shown DONE page.
+    // Charge token: consumed here — the clean success point is
+    // site acceptance (sawSuccess + ack above), unchanged.
+    consumeSubmitToken(data._chargeToken);
+    this.emit('BOT_STATUS', {
+      status: 'COMPLETED', message: '🎉 BDRIS আবেদন সফলভাবে জমা হয়েছে!',
+      level: 'ok', ackId: ackText || 'BDRIS পোর্টালে সফলভাবে জমা হয়েছে.',
+      screenshot: null, pdf: null, original: null,
+      attachmentsPending: true,
+      brnNote: s4BrnNote || undefined,
+    });
+
     let screenshot = null;
     try {
       const buf = await this.page.screenshot({ fullPage: false, timeout: 15000 });
@@ -2640,22 +2657,25 @@ class StepHandler {
       } catch (e) { console.warn('genCopyPdf:', e.message.slice(0, 100)); }
     }
 
-    // v1 wire-compat: সাফল্য BOT_STATUS COMPLETED-এই যায়
-    this.emit('BOT_STATUS', {
-      status: 'COMPLETED', message: '🎉 BDRIS আবেদন সফলভাবে জমা হয়েছে!',
-      level: 'ok', ackId: ackText || 'BDRIS পোর্টালে সফলভাবে জমা হয়েছে.', screenshot, pdf, original: null,
-      brnNote: s4BrnNote || undefined,
-    });
+    // ALL-BUGS (c): attachments for the already-shown banner —
+    // never a second DONE. The legacy handler also re-emits
+    // COMPLETED with these attachments; the frontend dedupes by
+    // ackId, so both paths converge on a merge, never a double.
+    // (Charge token already consumed at the clean success point
+    // above, right after site acceptance — unchanged semantics.)
+    if (screenshot || pdf) {
+      this.emit('BOT_STATUS', {
+        status: 'COMPLETED_ATTACHMENTS',
+        ackId: ackText || 'BDRIS পোর্টালে সফলভাবে জমা হয়েছে.', ackNum,
+        screenshot: screenshot || null,
+        pdf: pdf ? { name: pdf.name, base64: pdf.base64 } : null,
+      });
+    }
 
     // আসল PDF prefetch-এর জন্য rec — fetch subsystem (FETCH_ORIGINAL migration)
     // এটিকে ব্যবহার করবে; v2 handler নিজে background fetcher চালায় না।
     let originalRec = null;
     try { originalRec = buildOriginalRec(fd, ackNum); } catch { /* ঐচ্ছিক */ }
-
-    // Clean success point ONLY: the token is consumed here, after the
-    // site accepted the submission (sawSuccess + ack above) — never on
-    // attempt, so OTP retries after a failed submit keep their token.
-    consumeSubmitToken(data._chargeToken);
 
     return {
       ok: true, completed: true, step: 7, blocked: false,
@@ -2721,8 +2741,14 @@ class StepHandler {
     console.log('S4OTP-PAGE-STATE:', JSON.stringify(pageState));
     return {
       ok: false,
+      code: 'BOT_PAGE_NOT_ON_OTP_STEP',
       pageState,
-      message: `❌ বটের পেজ OTP ধাপে নেই (${pageState.hint}${pageState.url ? `, পেজ: ${pageState.url}` : ''}) — সরাসরি পথে আবার চেষ্টা করুন।`,
+      // ALL-BUGS (h): the old message ended "try the direct path
+      // again" — a loop back into the failing path. The true
+      // recovery is a fresh bot-path send (the typed code belongs
+      // to a different send and can never submit here); the
+      // frontend branches on the code above, never on wording.
+      message: `❌ বটের পেজ OTP ধাপে নেই (${pageState.hint}${pageState.url ? `, পেজ: ${pageState.url}` : ''}) — এই কোড দিয়ে জমা হবে না; বটের পথে আবার কোড পাঠিয়ে জমা দিন।`,
     };
   }
 

@@ -512,11 +512,43 @@ router.post('/refresh', async (req, res) => {
          LIMIT 1 FOR UPDATE`,
         [hash]
       );
-      const row = r.rows[0];
+      const row0 = r.rows[0];
+      let row = row0;
       if (!row) { const e = new Error('INVALID_REFRESH'); e.statusCode = 401; throw e; }
       if (row.revoked) {
-        await client.query('UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1', [row.user_id]);
-        const e = new Error('TOKEN_REUSED'); e.statusCode = 401; throw e;
+        // ALL-BUGS (f): persistent rotation grace. The old
+        // in-memory leeway vanished on restart, so a second tab
+        // presenting the pre-restart token looked like theft and
+        // revoked the whole chain (forced logout after every
+        // restart). The lineage below survives restarts: follow
+        // replaced_by_hash while each hop is within the leeway;
+        // if the walk lands on a live token, rotate it (the
+        // presenting tab gets a fresh pair, the other tab's next
+        // refresh follows the same lineage). Anything else is
+        // still theft: revoke the chain.
+        let head = row;
+        let hops = 0;
+        while (head.revoked && head.replaced_by_hash && head.replaced_at
+          && (Date.now() - new Date(head.replaced_at).getTime()) <= ROTATION_LEEWAY_MS
+          && hops < 5) {
+          hops++;
+          const nxt = await client.query(
+            `SELECT rt.*, u.role, u.status, u.token_version FROM refresh_tokens rt
+             JOIN users u ON u.id = rt.user_id
+             WHERE rt.token_hash = $1 AND rt.expires_at > NOW()
+             LIMIT 1 FOR UPDATE`,
+            [head.replaced_by_hash]
+          );
+          if (!nxt.rows.length) break;
+          head = nxt.rows[0];
+        }
+        if (head.revoked) {
+          await client.query('UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1', [row.user_id]);
+          const e = new Error('TOKEN_REUSED'); e.statusCode = 401; throw e;
+        }
+        // Land on the live head and rotate it below (same as the
+        // normal path, but for the lineage head).
+        row = head;
       }
       if (row.status === 'blocked' || row.status === 'disabled') {
         const e = new Error('ACCOUNT_DISABLED'); e.statusCode = 403; throw e;
@@ -533,9 +565,11 @@ router.post('/refresh', async (req, res) => {
         const e = new Error('SESSION_EXPIRED'); e.statusCode = 401; throw e;
       }
       await client.query('UPDATE refresh_tokens SET last_activity = NOW() WHERE id = $1', [row.id]);
-      await client.query('UPDATE refresh_tokens SET revoked = TRUE WHERE id = $1', [row.id]);
       const access_token = signAccess({ id: row.user_id, role: row.role, tv: Number(row.token_version) || 0 });
       const minted = mintRefreshToken();
+      // ALL-BUGS (f): record the rotation lineage on the old row
+      // (same transaction) so the grace above survives restarts.
+      await client.query('UPDATE refresh_tokens SET revoked = TRUE, replaced_by_hash = $2, replaced_at = NOW() WHERE id = $1', [row.id, minted.hash]);
       await client.query(
         `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
          VALUES ($1, $2, $3)`,
