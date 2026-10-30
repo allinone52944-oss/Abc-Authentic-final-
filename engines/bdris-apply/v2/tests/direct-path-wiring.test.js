@@ -167,7 +167,7 @@ describe('direct wiring: name flags carried, payloads unchanged', () => {
     assert.equal(clean.canonical.nameFlags.hasCinno, false);
   });
 
-  it('buildSubmitPayload still joins single names once and keeps backticks raw', () => {
+  it('buildSubmitPayload still joins single names once and transits backticks (bot bridge)', () => {
     const payload = buildSubmitPayload({
       person: { firstNameBn: 'আবদুল', lastNameBn: '', firstNameEn: 'Abdul', lastNameEn: '', dob: '2020-01-15', thChild: '১ম', gender: 'পুরুষ' },
       father: { nameBn: 'আবদুল `হামিদ', nameEn: 'Abdul Hamid' },
@@ -178,7 +178,10 @@ describe('direct wiring: name flags carried, payloads unchanged', () => {
     });
     assert.equal(payload['personInfoForBirth.personNameBn'], 'আবদুল');
     assert.equal(payload['personInfoForBirth.personNameEn'], 'Abdul');
-    assert.equal(payload['personInfoForBirth.father.personNameBn'], 'আবদুল `হামিদ');
+    // SUBMIT-FINAL (2026-10-30): the old keeps-backticks-raw rule
+    // rested on a live-test question, answered 2026-10-30 (four
+    // 200 HTML form walls) — the payload carries the transit form.
+    assert.equal(payload['personInfoForBirth.father.personNameBn'], 'আবদুল হামিদ');
   });
 });
 

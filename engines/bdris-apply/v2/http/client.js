@@ -100,8 +100,11 @@ function otpSendBodyWording(json) {
 // bot path's rules, mirrored on the direct path. Digit
 // normalisation only (Bengali → Arabic, spaces/dashes stripped);
 // this decision touches ONLY the ubrn fields. Name transit for
-// the send/verify steps lives in transitDirectName; the submit
-// payload keeps names verbatim (final record).
+// the send/verify steps lives in transitDirectName; since
+// SUBMIT-FINAL (2026-10-30) the SUBMIT payload mirrors the same
+// transit rule (buildSubmitPayload) — the live-test question is
+// answered (four 200 HTML form walls with verbatim backtick
+// names), so verbatim names no longer reach the form POST.
 // Pre-2013 applicants send ubrn empty (the bot's live-verified
 // site rule) — the draft's BRN is untouched, only the payload
 // omits it, and parentBrnDirectDecision reports the withholding.
@@ -212,6 +215,46 @@ function submitResponseSummary(res) {
 function submitSummaryText(s) {
   if (!s) return 'none';
   return `status=${s.status} json=${s.isJson} jsonSuccess=${s.jsonSuccess} textLen=${s.textLen} successPhrase=${s.hasSuccessPhrase} printLink=${s.hasPrintLink} formFields=${s.hasFormFields}`;
+}
+
+// SUBMIT-FINAL (2026-10-30, problem-map #1 follow-up): the
+// shape-only SUBMIT-RESPONSE hides the server's validation
+// wording — the next diagnosis needs the REASON, not just the
+// shape. This extractor returns WORDING ONLY, from two safe
+// sources and no others:
+//  - JSON body: the message/code wording (otpSendBodyWording,
+//    already capped at 200 chars, fields only).
+//  - HTML body: the inner text of an element whose class marks
+//    it as a validation/error display (text-danger,
+//    invalid-feedback, alert-danger) — the site's own error
+//    wording, never a form field value: tags are stripped by
+//    the match itself (text up to the next tag only), digit
+//    runs are removed (a digit run could be an identifier),
+//    and the snippet is capped at 200 chars.
+// Anything else — re-rendered form labels, input values,
+// names, numbers, codes, tokens — is never returned: a body
+// with no JSON wording and no error-class text yields ''.
+const SUBMIT_ERROR_CLASS_RE = /class\s*=\s*"[^"]*(?:text-danger|invalid-feedback|alert-danger)[^"]*"[^>]*>([^<]+)/gi;
+function submitErrorWording(res) {
+  const json = res && res.json;
+  if (json) {
+    const w = otpSendBodyWording(json);
+    if (w) return w;
+  }
+  const text = String((res && res.text) || '');
+  if (!text) return '';
+  SUBMIT_ERROR_CLASS_RE.lastIndex = 0;
+  let m;
+  let tried = 0;
+  while ((m = SUBMIT_ERROR_CLASS_RE.exec(text)) && tried < 5) {
+    tried += 1;
+    const cleaned = String(m[1] || '').replace(/\s+/g, ' ').trim()
+      .replace(/[0-9০-৯]+/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (cleaned) return cleaned.slice(0, 200);
+  }
+  return '';
 }
 
 // FINAL-SOLUTION (2026-10-30, problem-map #14): the server's
@@ -804,7 +847,11 @@ class BdrisHttpClient {
         : `Submit returned status ${res.status}.`);
       // FINAL-SOLUTION (problem-map #1): shape/status only, never
       // text — the chain logs this so filed-vs-not is provable.
+      // SUBMIT-FINAL: the error wording rides along too (wording
+      // only, see submitErrorWording) so the journal can name
+      // the validation reason instead of only the shape.
       e.responseSummary = submitResponseSummary(res);
+      e.responseErrorWording = submitErrorWording(res);
       throw e;
     }
     if (res.json && res.json.success === true) {
@@ -822,7 +869,9 @@ class BdrisHttpClient {
       // the [field: …] extra above is a weak word-scan only, and
       // the summary is what lets the next diagnosis tell the two
       // apart. The message text itself is unchanged.
+      // SUBMIT-FINAL: error wording attached (wording only).
       e.responseSummary = submitResponseSummary(res);
+      e.responseErrorWording = submitErrorWording(res);
       throw e;
     }
     return { success: true, hasPrintLink: parsed.hasPrintLink, json: res.json, responseSummary: submitResponseSummary(res) };
@@ -901,6 +950,31 @@ function buildSubmitPayload(data = {}) {
   // Joined names follow the site rule: first + ' ' + last, or the
   // first name alone for a 1-name applicant (never a doubled name).
   const joinName = (first, last) => {
+    const f = str(first).trim();
+    const l = str(last).trim();
+    return l ? `${f} ${l}` : f;
+  };
+  // SUBMIT-FINAL (2026-10-30): mirror the bot bridges on the
+  // direct submit payload. The old verbatim rule below rested on
+  // a live-test question — whether the direct form POST accepts
+  // a backtick in the final record — and 2026-10-30 answered it:
+  // four direct submits returned the 200 HTML form wall with
+  // verbatim backtick names + a single-name applicant, while the
+  // bot path (transit-typed + single-name-relaxed) proceeds.
+  // So the payload carries the TRANSIT form (bot transitName
+  // rule via transitDirectName: backticks/marks stripped, never
+  // doubled, never substituted) for applicant, father, and
+  // mother, and joins on the transit forms — a letterless last
+  // name stays single, exactly as the bot's relaxEmptyLast does.
+  // The DRAFT's names are untouched; only the payload is
+  // transited. Validation above still reads the raw values (a
+  // marks-only name is never a new blocking error — the bot
+  // types it as empty all the same).
+  const tFirstBn = transitDirectName(firstBn);
+  const tLastBn = transitDirectName(lastBn);
+  const tFirstEn = transitDirectName(firstEn);
+  const tLastEn = transitDirectName(lastEn);
+  const joinTransit = (first, last) => {
     const f = str(first).trim();
     const l = str(last).trim();
     return l ? `${f} ${l}` : f;
@@ -984,12 +1058,12 @@ function buildSubmitPayload(data = {}) {
     // LIVE-CONFIRMED 2026-10-27 (Stage C): officeId 0 when empty.
     officeId: str(data.officeId || (data.s4prep && data.s4prep.officeId)) || '0',
     geoLocationId,
-    'personInfoForBirth.personFirstNameBn': str(firstBn),
-    'personInfoForBirth.personLastNameBn': str(lastBn),
-    'personInfoForBirth.personFirstNameEn': str(firstEn),
-    'personInfoForBirth.personLastNameEn': str(lastEn),
-    'personInfoForBirth.personNameBn': joinName(firstBn, lastBn),
-    'personInfoForBirth.personNameEn': joinName(firstEn, lastEn),
+    'personInfoForBirth.personFirstNameBn': tFirstBn,
+    'personInfoForBirth.personLastNameBn': tLastBn,
+    'personInfoForBirth.personFirstNameEn': tFirstEn,
+    'personInfoForBirth.personLastNameEn': tLastEn,
+    'personInfoForBirth.personNameBn': joinTransit(tFirstBn, tLastBn),
+    'personInfoForBirth.personNameEn': joinTransit(tFirstEn, tLastEn),
     'personInfoForBirth.personBirthDate': str(dob),
     'personInfoForBirth.thChild': str(person.thChild),
     'personInfoForBirth.gender': mapGender(person.gender),
@@ -999,15 +1073,15 @@ function buildSubmitPayload(data = {}) {
     'personInfoForBirth.father.id': str(father.id),
     'personInfoForBirth.father.ubrn': str(brnDecision.fatherUbrn),
     'personInfoForBirth.father.personBirthDate': str(father.dob),
-    'personInfoForBirth.father.personNameBn': str(father.nameBn),
-    'personInfoForBirth.father.personNameEn': str(father.nameEn),
+    'personInfoForBirth.father.personNameBn': transitDirectName(father.nameBn),
+    'personInfoForBirth.father.personNameEn': transitDirectName(father.nameEn),
     'personInfoForBirth.father.passportNumber': str(father.passportNumber),
     'personInfoForBirth.father.personNationality': mapNationality(father.nationality),
     'personInfoForBirth.mother.id': str(mother.id),
     'personInfoForBirth.mother.ubrn': str(brnDecision.motherUbrn),
     'personInfoForBirth.mother.personBirthDate': str(mother.dob),
-    'personInfoForBirth.mother.personNameBn': str(mother.nameBn),
-    'personInfoForBirth.mother.personNameEn': str(mother.nameEn),
+    'personInfoForBirth.mother.personNameBn': transitDirectName(mother.nameBn),
+    'personInfoForBirth.mother.personNameEn': transitDirectName(mother.nameEn),
     'personInfoForBirth.mother.passportNumber': str(mother.passportNumber),
     'personInfoForBirth.mother.personNationality': mapNationality(mother.nationality),
     ...birthFields,
@@ -1015,17 +1089,17 @@ function buildSubmitPayload(data = {}) {
     ...presFields,
     // DIRECT BRN-FREE ROUTE: relationWithApplicant carries the
     // site's enum value (bot REL_VALUE map), not the draft's
-    // Bengali label. Person/parent names below stay VERBATIM on
-    // purpose: the submit payload IS the final record, and the
-    // bot's final step re-applies the backtick form through the
-    // site's own handler — whether the direct form POST accepts
-    // a backtick in the final record is a live-test question
-    // (see DIRECT-BRN-FREE-LIVE-TEST.md), not something to guess
-    // by stripping the draft's names here.
+    // Bengali label. Person/parent names above carry the TRANSIT
+    // form (SUBMIT-FINAL 2026-10-30, reversing the old verbatim
+    // rule): the live-test question is answered — four direct
+    // submits returned the 200 HTML form wall with verbatim
+    // backtick names + a single-name applicant — so the payload
+    // mirrors the bot's typed form. The draft's names are
+    // untouched; the final record is never doubled.
     relationWithApplicant: mapDirectRelation(relation),
     applicantBrn: str(data.applicantBrn || person.brn),
     applicantDob: str(data.applicantDob || dob),
-    applicantName: str(applicantName),
+    applicantName: transitDirectName(applicantName),
     declaration: data.declaration !== undefined ? !!data.declaration : true,
     email: str(data.email || (data.s4prep && data.s4prep.email)),
     phone: str(phone),
@@ -1153,6 +1227,7 @@ module.exports = {
   submitRejectionField,
   submitResponseSummary,
   submitSummaryText,
+  submitErrorWording,
   OTP_UNEXPIRED_RE,
   isFamilyRejectionText,
   familyRejectionMarker,
