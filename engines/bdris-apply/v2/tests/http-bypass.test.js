@@ -197,9 +197,12 @@ describe('DIRECT HTTP BYPASS: handleHttpChainRequest gating', () => {
     const app = { post: (p, h) => posts.push([p, h]) };
     const engine = makeEngine({ session: makeSession() });
     engine.setupHttpRoutes(app);
-    assert.strictEqual(posts.length, 1);
-    assert.strictEqual(posts[0][0], '/http-chain');
-    const handler = posts[0][1];
+    // FINAL-SOLUTION (2026-10-30): /draft-save joined /http-chain
+    // (silent server-side auto-save over plain HTTP). The chain
+    // route itself is unchanged — same path, same mapping.
+    assert.strictEqual(posts.length, 2);
+    assert.deepStrictEqual(posts.map((p) => p[0]).sort(), ['/draft-save', '/http-chain']);
+    const handler = posts.find((p) => p[0] === '/http-chain')[1];
     let status = 0;
     let body = null;
     const res = { status: (s) => { status = s; return res; }, json: (b) => { body = b; } };

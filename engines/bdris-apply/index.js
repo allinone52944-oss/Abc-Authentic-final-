@@ -48,10 +48,17 @@ let _installing = false;
 let _restartTimer = null;
 let _watchdog = null;
 let _crashCount = 0;
+// GRACEFUL SHUTDOWN (#13 service timeout loop, 2026-10-30): while systemd
+// stops the cgroup, the supervisor must NOT resurrect the engine —
+// _stopping freezes init/scheduleRestart, and stop() (called by the
+// backend's own SIGTERM handler) terminates the child with SIGTERM
+// then SIGKILL. Without this, an engine that exits during a stop
+// would be restarted into a dying cgroup.
+let _stopping = false;
 
 function scheduleRestart() {
   // Exponential backoff: 5s, 10s, 20s ... capped at 5 min. Prevents tight crash loops.
-  if (_restartTimer) return;
+  if (_restartTimer || _stopping) return;
   _crashCount += 1;
   const delay = Math.min(5000 * Math.pow(2, Math.min(_crashCount - 1, 6)), 300000);
   console.error(`[bdris-apply] scheduling restart in ${Math.round(delay / 1000)}s (crash #${_crashCount})`);
@@ -63,7 +70,7 @@ function scheduleRestart() {
 }
 
 function init() {
-  if (_proc || _installing) return;
+  if (_proc || _installing || _stopping) return;
   // v2 enabled (2026-10-18): startup bootstrap fixed + verified (10 checks)
   const v2ServerJs = path.join(engineDir(), 'v2', 'server.js');
   const v1ServerJs = path.join(engineDir(), 'server.js');
@@ -144,6 +151,7 @@ function startEngine() {
     _proc = null;
     _procStartTime = 0;
     _ready = false;
+    if (_stopping) return; // shutting down — do not resurrect the engine
     // Supervisor: restart crashed engine (2026-10-15 — previously a single
     // crash left the engine dead until the next full service restart).
     scheduleRestart();
@@ -312,4 +320,30 @@ function getApp() {
   return router;
 }
 
-module.exports = { init, getApp, handleUpgrade, isReady, ENGINE_PORT };
+// GRACEFUL SHUTDOWN (#13): stop the engine child for a service stop.
+// SIGTERM, wait up to 4s for exit, then SIGKILL and wait up to 2s.
+// Resolves { stopped, killed } and never rejects. Sets _stopping so
+// the watchdog/supervisor cannot restart the child mid-shutdown.
+function _waitProcExit(proc, ms) {
+  return new Promise((resolve) => {
+    if (!proc || proc.exitCode !== null || proc.signalCode !== null) return resolve(true);
+    let done = false;
+    const t = setTimeout(() => { if (!done) { done = true; resolve(false); } }, ms);
+    proc.once('exit', () => { if (!done) { done = true; clearTimeout(t); resolve(true); } });
+  });
+}
+
+async function stop() {
+  _stopping = true;
+  if (_restartTimer) { clearTimeout(_restartTimer); _restartTimer = null; }
+  if (_watchdog) { clearInterval(_watchdog); _watchdog = null; }
+  const proc = _proc;
+  if (!proc) return { stopped: true, killed: false };
+  try { proc.kill('SIGTERM'); } catch (e) {}
+  if (await _waitProcExit(proc, 4000)) return { stopped: true, killed: false };
+  try { proc.kill('SIGKILL'); } catch (e) {}
+  const exited = await _waitProcExit(proc, 2000);
+  return { stopped: exited, killed: true };
+}
+
+module.exports = { init, getApp, handleUpgrade, isReady, ENGINE_PORT, stop };

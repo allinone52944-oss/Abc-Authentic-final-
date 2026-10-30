@@ -1267,6 +1267,27 @@ class StepHandler {
    */
   async submitS2B(data = {}) {
     const failed = [];
+    // FINAL-SOLUTION (2026-10-30, problem-map #7): S2B timeout
+    // root cause. The op chains TWO full cascade fills + a
+    // next-wait + a still-check + a retry-next inside ONE 120s
+    // executor window, and the waits are additive: each cascade
+    // level can wait up to 8s, each fill is ~35-50s on a slow
+    // site, and the partial re-fill loop can add two more full
+    // fills — worst case ~240s against a 120s cap. The executor
+    // kill then never cancels the bot work (zombie), and the
+    // frontend only ever saw a bare timeout ack. The number is
+    // NOT raised (banned band-aid). Instead: (a) every phase
+    // logs its ms (S2B-PHASE) so the next slowness names its
+    // phase; (b) the OPTIONAL parts — the re-fill loop and the
+    // retry-next — are skipped once the elapsed budget is nearly
+    // spent, and the op returns a REAL ack (success or the
+    // validation reason) instead of dying to the executor kill;
+    // the frontend's existing fresh-op retry (resendFrom) then
+    // gives the step a new window. The mandatory fills and the
+    // first next-click are never skipped.
+    const s2bT0 = Date.now();
+    const s2bElapsed = () => Date.now() - s2bT0;
+    const s2bPhase = (name) => console.log(`S2B-PHASE: ${name} elapsed=${s2bElapsed()}ms`);
     // কপি-চেকবক্স: লেবেল-টেক্সট দিয়ে খোঁজা (live label), name দিয়ে fallback
     const findCopyBox = async (labelText, nameFallback) => {
       try {
@@ -1316,6 +1337,7 @@ class StepHandler {
         else failed.push({ field: 'স্থায়ী ঠিকানা', reason: 'জন্মস্থান থেকে কপি হয়নি — স্থায়ী ঠিকানা খালি আছে' });
       }
     }
+    s2bPhase('perm-done');
     // বর্তমান ঠিকানা
     const presHasData = data.pres && (data.pres.division || data.pres.district || data.pres.vilBn);
     if (presHasData) {
@@ -1343,16 +1365,25 @@ class StepHandler {
       }
     }
 
+    s2bPhase('pres-done');
     // partial re-render-এ খালি থাকলে আবার বসাই (যাচাই উপরে আছে)
-    for (const [pre, rec, cp] of [['permAddr', data.perm, data.permCopy], ['prsntAddr', data.pres, data.presCopy]]) {
-      if (rec && !cp && !(await addrFilled(pre))) {
-        this.progress('⏳ ঠিকানার কিছু ঘর খালি থেকে গেছে — আবার বসানো হচ্ছে…');
-        await this._fillAddressSection(pre, rec, failed);
+    // — OPTIONAL: বাজেট প্রায় শেষ হলে এড়িয়ে যাই (নিচে দেখুন)।
+    if (s2bElapsed() > 90000) {
+      s2bPhase('refill-skipped-budget');
+      this.progress('⏳ ঠিকানার ধাপে সময় বেশি লেগেছে — পুনরায় বসানো এড়িয়ে এগোনো হচ্ছে…');
+    } else {
+      for (const [pre, rec, cp] of [['permAddr', data.perm, data.permCopy], ['prsntAddr', data.pres, data.presCopy]]) {
+        if (rec && !cp && !(await addrFilled(pre))) {
+          this.progress('⏳ ঠিকানার কিছু ঘর খালি থেকে গেছে — আবার বসানো হচ্ছে…');
+          await this._fillAddressSection(pre, rec, failed);
+        }
       }
     }
+    s2bPhase('refill-done');
 
     await this._dismissNotices();
     let nxtA = await this._clickNextAndWait('পরবর্তী (ঠিকানার ধাপ)');
+    s2bPhase('next-done');
     if (!nxtA.ok) failed.push({ field: nxtA.field, reason: nxtA.reason });
     else {
       await this._dismissNotices();
@@ -1361,21 +1392,35 @@ class StepHandler {
       if (await addrStill()) {
         const b1 = await this._detectValidationBlock(null);
         console.log('S2B-BLOCK-1:', b1.reason);
-        this.progress('⏳ ঠিকানার ধাপ এগোয়নি — আবার চেষ্টা করা হচ্ছে…');
-        await this.page.waitForTimeout(800);
-        nxtA = await this._clickNextAndWait('পরবর্তী (ঠিকানার ধাপ, পুনঃচেষ্টা)');
-        if (!nxtA.ok || (await addrStill())) {
-          const b2 = await this._detectValidationBlock(['input[name="files"]']);
-          console.log('S2B-BLOCK-2:', b2.reason);
+        // OPTIONAL retry — বাজেট প্রায় শেষ হলে পুনঃচেষ্টা নয়:
+        // ব্লকের কারণসহ আসল ack ফেরাই (executor-kill-এর বদলে),
+        // আর frontend-এর fresh-op retry (resendFrom) নতুন
+        // window-এ আবার চেষ্টা করবে।
+        if (s2bElapsed() > 100000) {
+          s2bPhase('retry-skipped-budget');
           failed.push({
             field: 'ঠিকানার ধাপ',
-            reason: (b2.blocked && b2.reason) || (b1.blocked && b1.reason) || 'সাইট পরের ধাপে যায়নি — তথ্য একবার মিলিয়ে নিন',
+            reason: (b1.blocked && b1.reason) || 'সাইট পরের ধাপে যায়নি — তথ্য একবার মিলিয়ে নিন',
           });
         } else {
-          this.progress('✔ পুনঃচেষ্টায় ঠিকানার ধাপ সম্পন্ন');
+          this.progress('⏳ ঠিকানার ধাপ এগোয়নি — আবার চেষ্টা করা হচ্ছে…');
+          await this.page.waitForTimeout(800);
+          nxtA = await this._clickNextAndWait('পরবর্তী (ঠিকানার ধাপ, পুনঃচেষ্টা)');
+          s2bPhase('retry-done');
+          if (!nxtA.ok || (await addrStill())) {
+            const b2 = await this._detectValidationBlock(['input[name="files"]']);
+            console.log('S2B-BLOCK-2:', b2.reason);
+            failed.push({
+              field: 'ঠিকানার ধাপ',
+              reason: (b2.blocked && b2.reason) || (b1.blocked && b1.reason) || 'সাইট পরের ধাপে যায়নি — তথ্য একবার মিলিয়ে নিন',
+            });
+          } else {
+            this.progress('✔ পুনঃচেষ্টায় ঠিকানার ধাপ সম্পন্ন');
+          }
         }
       }
     }
+    s2bPhase('done');
     return {
       ok: failed.length === 0,
       step: 5, blocked: failed.length > 0,
@@ -2018,11 +2063,21 @@ class StepHandler {
         failed.push({ field: 'ওটিপি পাঠান', reason: 'বাটন পাওয়া যায়নি' });
       } else {
         const net = this._tapOtpSendNet();
+        // FINAL-SOLUTION (2026-10-30, problem-map #3): snapshot
+        // the pre-click evidence state FIRST. The old wait
+        // accepted ANY visible countdown or success toast — so a
+        // STALE countdown left over from a previous send passed
+        // as fresh proof, and a 302/empty-network send still
+        // showed "sent" (live 2026-10-30: 19:03 302s, 19:10
+        // empty-NET). Fresh evidence must be NEW: a countdown
+        // whose text changed, or a success toast that was not
+        // already on screen before this click.
+        const beforeEv = await this._snapshotOtpEvidence();
         const clickedOk = await this._robustClick(sendBtn, 'ওটিপি পাঠান', 8000);
         console.log('S4-SENDOTP-CLICK:', clickedOk ? 'ok' : 'fail');
         let ev;
         try {
-          ev = await this._waitOtpEvidence(30000);
+          ev = await this._waitOtpEvidence(30000, beforeEv);
         } finally {
           net.detach();
         }
@@ -2038,6 +2093,16 @@ class StepHandler {
       }
     }
     await this._dismissNotices();
+    // FINAL-SOLUTION (2026-10-30, problem-map #4): capture the
+    // page state on S4PREP failure — anchor presence, whether a
+    // replay ran, and the failed field names (never values) — so
+    // a dropped prep can be diagnosed from the journal. The
+    // frontend's pending-submit repair (a queued S4_OTP held
+    // across this failure and re-emitted after the next good prep)
+    // is the other half; this log is the server-side half.
+    if (failed.length) {
+      console.log('S4PREP-PAGESTATE:', JSON.stringify({ anchor: !!anchor, s4prepReplay: !!s4prepReplay, failedFields: failed.map((f) => f.field) }));
+    }
     return {
       ok: failed.length === 0,
       step: 6, otpSent, resumable,
@@ -2142,9 +2207,57 @@ class StepHandler {
    * OTP পাঠানোর সত্যিকারের প্রমাণ — toast / #otpIntervalText পর্যবেক্ষণ।
    * v1 waitOtpEvidence(ms) থেকে faithful port (this.page ব্যবহার)।
    */
-  async _waitOtpEvidence(ms) {
+  // Pre-click OTP-evidence snapshot (see submitS4Prep): the
+  // countdown text + visible toast texts before this click, so
+  // the wait below can require FRESH evidence.
+  async _snapshotOtpEvidence() {
+    return this.page.evaluate(() => {
+      const toasts = [];
+      document.querySelectorAll('.jq-toast-single').forEach((t) => {
+        if (t.offsetParent === null) return;
+        const txt = (t.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 160);
+        if (txt) toasts.push(txt);
+      });
+      const it = document.querySelector('#otpIntervalText');
+      return {
+        toasts,
+        interval: !!(it && it.offsetParent !== null),
+        intervalText: it ? (it.innerText || '').trim().slice(0, 32) : '',
+      };
+    }).catch(() => ({ toasts: [], interval: false, intervalText: '' }));
+  }
+
+  async _waitOtpEvidence(ms, before = null) {
     const deadline = Date.now() + ms;
     let last = { toasts: [], interval: false };
+    // Freshness rule (FINAL-SOLUTION #3): without a snapshot,
+    // any visible interval/success toast counts (old behaviour,
+    // kept for callers that cannot snapshot). WITH a snapshot,
+    // only NEW evidence counts. NOTE the trap: a stale countdown
+    // TICKS, so its text changes every second — text-change
+    // alone would still pass as "fresh". The real fresh signal
+    // for a countdown is a RESET: absent before, or jumped UP to
+    // a larger remaining time (a new send restarts the window;
+    // ticking only ever goes down). Toasts count only when their
+    // text was not already visible before the click.
+    const toSec = (t) => {
+      const m = String(t || '').replace(/[০-৯]/g, (d) => String('০১২৩৪৫৬৭৮৯'.indexOf(d))).match(/(\d+):(\d+)/);
+      return m ? (+m[1]) * 60 + (+m[2]) : null;
+    };
+    const isFresh = (st) => {
+      if (!before) return true;
+      const beforeToasts = before.toasts || [];
+      if (st.interval) {
+        if (!before.interval) return true;
+        const now = toSec(st.intervalText);
+        const was = toSec(before.intervalText);
+        if (now !== null && was !== null && now > was) return true;
+        if (now !== null && was === null) return true;
+        if (now === null && was === null && st.intervalText !== (before.intervalText || '')) return true;
+      }
+      if (st.toasts.some((t) => (t.ok || t.err) && !beforeToasts.includes(t.txt))) return true;
+      return false;
+    };
     while (Date.now() < deadline) {
       const st = await this.page.evaluate(() => {
         const toasts = [];
@@ -2163,16 +2276,17 @@ class StepHandler {
         return {
           toasts: toasts.slice(-3),
           interval: !!(it && it.offsetParent !== null),
+          intervalText: it ? (it.innerText || '').trim().slice(0, 32) : '',
           sendHidden: !!(sb && sb.offsetParent === null),
         };
-      }).catch(() => ({ toasts: [], interval: false, sendHidden: false }));
+      }).catch(() => ({ toasts: [], interval: false, intervalText: '', sendHidden: false }));
       last = st;
-      if (st.interval || st.toasts.some((t) => t.ok)) {
+      if (isFresh(st) && (st.interval || st.toasts.some((t) => t.ok))) {
         const good = st.toasts.find((t) => t.ok);
         return { ok: true, note: good ? good.txt : '' };
       }
       const bad = st.toasts.find((t) => t.err);
-      if (bad) return { ok: false, reason: `সাইটের বার্তা: ${bad.txt}` };
+      if (bad && (!before || !(before.toasts || []).includes(bad.txt))) return { ok: false, reason: `সাইটের বার্তা: ${bad.txt}` };
       await this.page.waitForTimeout(600);
     }
     console.log('OTP-EVIDENCE-TIMEOUT:', JSON.stringify(last).slice(0, 400));

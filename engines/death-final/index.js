@@ -70,4 +70,27 @@ function getApp() {
 
 function getInfo() { return { engine: 'death-proxy', port: ENGINE_PORT }; }
 
-module.exports = { init, getInfo, getApp };
+// GRACEFUL SHUTDOWN (#13, symmetric with bdris-apply): stop the engine
+// child for a service stop — SIGTERM, wait up to 4s, then SIGKILL and
+// wait up to 2s. Resolves { stopped, killed }, never rejects. This
+// adapter has no restart supervisor, so no _stopping flag is needed.
+function _waitProcExit(proc, ms) {
+  return new Promise((resolve) => {
+    if (!proc || proc.exitCode !== null || proc.signalCode !== null) return resolve(true);
+    let done = false;
+    const t = setTimeout(() => { if (!done) { done = true; resolve(false); } }, ms);
+    proc.once('exit', () => { if (!done) { done = true; clearTimeout(t); resolve(true); } });
+  });
+}
+
+async function stop() {
+  const proc = _proc;
+  if (!proc) return { stopped: true, killed: false };
+  try { proc.kill('SIGTERM'); } catch (e) {}
+  if (await _waitProcExit(proc, 4000)) return { stopped: true, killed: false };
+  try { proc.kill('SIGKILL'); } catch (e) {}
+  const exited = await _waitProcExit(proc, 2000);
+  return { stopped: exited, killed: true };
+}
+
+module.exports = { init, getInfo, getApp, stop };

@@ -120,11 +120,20 @@ describe('otpSend error wording (DIRECT OTP BODY)', () => {
     assert.strictEqual(res.payload, null);
   });
 
-  it('ok response without JSON keeps the exact previous status-only message', async () => {
+  // FINAL-SOLUTION (2026-10-30, problem-map #8): SUPERSEDES the
+  // old status-only expectation for this exact shape. A 200
+  // non-JSON send is live-proven session death (2026-10-30: a
+  // 200 HTML send produced a UI "sent" while no SMS left) — it
+  // must classify SESSION_DEAD ("session refresh needed", no
+  // bot replay on the same dead session), never a generic
+  // OTP_SEND_FAILED that falls back to the bot path. The non-ok
+  // non-JSON case above keeps its old message deliberately: a
+  // 400/500 HTML body is a server answer, not proven death.
+  it('ok response without JSON is session-dead, not a generic failure', async () => {
     const c = seededClient(stubFetch(200, '<html>not json</html>'));
     await assert.rejects(
       () => c.otpSend(SEND_DATA),
-      (e) => e.message === 'OTP send returned status 200.',
+      (e) => e.code === 'SESSION_DEAD',
     );
   });
 });

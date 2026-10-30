@@ -253,8 +253,9 @@ const deathEngineLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'RATE_LIMITED' },
 });
+let deathEngine = null;
 try {
-  const deathEngine = require('../engines/death-final/index.js');
+  deathEngine = require('../engines/death-final/index.js');
   deathEngine.init({});
   app.use('/api/death-engine', requireAuth, deathEngineLimiter,
     chargeGate('death-verify', 'death', '/api/death-engine'), deathEngine.getApp());
@@ -459,3 +460,53 @@ _httpServer.on('upgrade', (req, socket, head) => {
   } catch (e) { /* fall through */ }
   socket.destroy();
 });
+
+// ---- Graceful shutdown (#13 service timeout loop, 2026-10-30) ----
+// Proven cause: systemd STOP timeouts (TimeoutStopSec was 5s) SIGKILLed
+// the cgroup because processes did not exit in 5s. This backend is the
+// systemd main process and previously had NO signal handler at all:
+// default SIGTERM killed it instantly while adapter children and their
+// Playwright browsers were left to the cgroup signal. Now a signal:
+// stops accepting work, destroys open sockets, stops both engine
+// adapters' children (SIGTERM then SIGKILL, bounded), ends the DB
+// pool, and exits — all inside a 20s hard cap (live unit is now
+// TimeoutStopSec=30s). A second signal forces immediate exit.
+const _openSockets = new Set();
+_httpServer.on('connection', (socket) => {
+  _openSockets.add(socket);
+  socket.on('close', () => _openSockets.delete(socket));
+});
+let _backendShuttingDown = false;
+let _backendHardTimer = null;
+async function gracefulShutdown() {
+  if (_backendShuttingDown) return;
+  _backendShuttingDown = true;
+  safeLog('[abc-authentic] shutting down: stop accepting new work');
+  try { _httpServer.close(); } catch (e) {}
+  try { if (typeof _httpServer.closeAllConnections === 'function') _httpServer.closeAllConnections(); } catch (e) {}
+  for (const s of _openSockets) { try { s.destroy(); } catch (e) {} }
+  const stops = [];
+  if (bdrisApplyAdapter && typeof bdrisApplyAdapter.stop === 'function') stops.push(bdrisApplyAdapter.stop().catch(() => {}));
+  if (deathEngine && typeof deathEngine.stop === 'function') stops.push(deathEngine.stop().catch(() => {}));
+  await Promise.race([
+    Promise.all(stops),
+    new Promise((r) => setTimeout(r, 10000)),
+  ]);
+  try {
+    if (db && db.pool && typeof db.pool.end === 'function') {
+      await Promise.race([db.pool.end(), new Promise((r) => setTimeout(r, 3000))]);
+    }
+  } catch (e) {}
+  safeLog('[abc-authentic] shutdown complete, exiting');
+  process.exit(0);
+}
+function onBackendSignal() {
+  if (_backendHardTimer) { process.exit(0); return; } // second signal: exit now
+  _backendHardTimer = setTimeout(() => {
+    safeLog('[abc-authentic] shutdown hard timeout, forcing exit');
+    process.exit(0);
+  }, 20000);
+  gracefulShutdown();
+}
+process.on('SIGTERM', onBackendSignal);
+process.on('SIGINT', onBackendSignal);
