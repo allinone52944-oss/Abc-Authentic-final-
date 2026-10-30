@@ -354,6 +354,45 @@ function candidateLog(log, step, message) {
 }
 
 /**
+ * FRESH NAVIGATION (2026-10-30): can the warm page be proven idle?
+ * Returns true when the page must NOT be navigated: no page, no
+ * evaluate(), evaluate throws, the in-page check errors, or any
+ * user-entered value is present. Only an explicit true from the
+ * in-page check permits navigation. The check reads NO values —
+ * it compares each control against its own default (value vs
+ * defaultValue, checked vs defaultChecked, selected option vs
+ * defaultSelected) and returns a boolean; hidden inputs (_csrf
+ * and friends) and disabled controls are ignored, so a fresh,
+ * default-rendered form reads idle while a bot-filled form reads
+ * mid-flow. Never throws.
+ */
+async function isPageMidFlow(page) {
+  try {
+    if (!page || typeof page.evaluate !== 'function') return true;
+    const provenIdle = await page.evaluate(() => {
+      try {
+        const els = document.querySelectorAll ? document.querySelectorAll('input, select, textarea') : [];
+        for (const el of els) {
+          try {
+            if (el.type === 'hidden' || el.disabled) continue;
+            if (el.tagName === 'SELECT') {
+              const opt = el.options ? el.options[el.selectedIndex] : null;
+              if (opt && !opt.defaultSelected) return false;
+            } else if (el.type === 'checkbox' || el.type === 'radio') {
+              if (el.checked !== el.defaultChecked) return false;
+            } else if (el.value !== el.defaultValue) return false;
+          } catch (e) { /* next control */ }
+        }
+        return true;
+      } catch (e) { return false; }
+    });
+    return provenIdle !== true;
+  } catch (e) {
+    return true;
+  }
+}
+
+/**
  * Run the full chain via HTTP, falling back to Playwright on failure.
  *
  * @param {object} opts
@@ -378,9 +417,12 @@ function candidateLog(log, step, message) {
  *   SEED_FAILED instead of building a bare client (proven 403).
  * @param {object} [opts.reseedPage] - RESEED (2026-10-30): the
  *   live warm page to refresh cookies + CSRF from immediately
- *   before the submit POST (never navigated/reloaded). Absent =
- *   the reseed step logs its skip and the submit proceeds on
- *   the jarred state. Data flag `alreadyVerified: true` (see
+ *   before the submit POST (never navigated/reloaded by the
+ *   re-seed itself). Absent = the reseed step logs its skip and
+ *   the submit proceeds on the jarred state. Step 5c (fresh
+ *   navigation) reuses this SAME page — the only page ever
+ *   navigated; never any other page, never the user's browser
+ *   tab. Data flag `alreadyVerified: true` (see
  *   normalizeChainInput) skips the verify call on a deliberate
  *   retry of an already-verified session.
  */
@@ -662,8 +704,9 @@ async function runHttpChain(opts = {}) {
     // Never navigates or reloads the page (it may be the bot's
     // mid-flow page; seedFromPage never navigates for that
     // reason). If the shell persists after this, the next
-    // diagnostic is reload-then-seed / TSPD-per-route — named
-    // here, not silently attempted.
+    // diagnostic is fresh-navigation-before-submit — now
+    // implemented as step 5c below (homepage route, never a
+    // plain reload).
     currentStep = 'reseed';
     if (opts.reseedPage && client && typeof client.refreshSeed === 'function') {
       try {
@@ -678,6 +721,62 @@ async function runHttpChain(opts = {}) {
       }
     } else {
       candidateLog(log, 'reseed', 'skipped — no warm page supplied; proceeding with jarred state');
+    }
+
+    // 5c. FRESH NAVIGATION (2026-10-30): re-navigate the engine's
+    // own warm page via the homepage route immediately before the
+    // submit POST, then re-seed from the freshly navigated page.
+    // Why: the 9th live submit proved every other difference dead
+    // (headers, fields, cookie freshness via non-navigating
+    // re-seed, submit-time fields, client value, Origin, empty
+    // file parts — all byte-identical shell). The chain's seed
+    // comes from a warm page navigated long before; TS cookies
+    // rotate with ~30s Max-Age and navigation-time TSPD/session
+    // state dies in between, and a NON-navigating re-seed cannot
+    // mint fresh state from an idle page. Only a fresh page
+    // NAVIGATION (homepage route — plain page.reload is
+    // FORBIDDEN: a direct GET of /br/application serves the stub
+    // page) can mint it. Safety mirrors the re-seed step: a
+    // missing/failed navigation, a page that cannot be proven
+    // idle (bot mid-flow), or a page that yields no form content
+    // only logs the skip — the submit proceeds on the jarred
+    // state and NEVER fails on fresh navigation. Only the page
+    // passed as opts.reseedPage is ever navigated: never any
+    // other page, never the user's own browser tab (which is a
+    // separate browser the engine cannot reach). The post-
+    // navigation re-seed follows the existing reseed rule
+    // (CSRF always adopted; page cookies fill only missing/
+    // expired names, never overwrite chain-set values, so
+    // verify's fresh cookies survive). If the shell persists
+    // after this, the verdict is that direct HTTP submit is
+    // blocked by page-route protection and only browser-native
+    // submit (bot path) works.
+    currentStep = 'fresh-navigation';
+    if (opts.reseedPage && client && typeof client.refreshSeed === 'function') {
+      try {
+        const { BdrisNavigator } = require('./BdrisNavigator');
+        const { HttpGeoService } = require('./HttpGeoService');
+        const navPage = opts.reseedPage;
+        if (await isPageMidFlow(navPage)) {
+          candidateLog(log, 'fresh-navigation', 'skipped — warm page holds user-entered values or cannot be proven idle (bot mid-flow?); proceeding with jarred state');
+        } else {
+          const nav = new BdrisNavigator(navPage);
+          const via = await nav.gotoFormViaSite();
+          if (via && via.state && via.state.formContent) {
+            const geoFresh = new HttpGeoService();
+            const okFresh = await geoFresh.reseedFromPage(navPage, client);
+            candidateLog(log, 'fresh-navigation', okFresh
+              ? 're-navigated via homepage route + re-seeded cookies/CSRF from the fresh page before submit (verify cookies kept)'
+              : 'skipped — fresh page unreadable or token missing after navigation; proceeding with jarred state');
+          } else {
+            candidateLog(log, 'fresh-navigation', 'skipped — homepage-route navigation did not yield form content; proceeding with jarred state');
+          }
+        }
+      } catch (e) {
+        candidateLog(log, 'fresh-navigation', `skipped — fresh navigation failed (${(e && e.message) || e}); proceeding with jarred state`);
+      }
+    } else {
+      candidateLog(log, 'fresh-navigation', 'skipped — no warm page supplied or client cannot refresh; proceeding with jarred state');
     }
 
     // 6. Final submit (CANDIDATE payload; scope ends at success page).
@@ -964,4 +1063,4 @@ function extractScriptSrcs(html, base = '') {
   return srcs;
 }
 
-module.exports = { runHttpChain, runSubmitHttpChain, runStageAProbe, getHttpPathStatus, normalizeChainInput, finestAddressId, isAddrEmpty, isHttpPathEnabled, isFallbackSafe, HTTP_CANDIDATE_LABEL, HTTP_BASE, extractOfficeMatches, extractOfficeCallMatches, extractGetOfficeIdMatches, extractScriptSrcs };
+module.exports = { runHttpChain, runSubmitHttpChain, runStageAProbe, getHttpPathStatus, normalizeChainInput, finestAddressId, isAddrEmpty, isHttpPathEnabled, isFallbackSafe, isPageMidFlow, HTTP_CANDIDATE_LABEL, HTTP_BASE, extractOfficeMatches, extractOfficeCallMatches, extractGetOfficeIdMatches, extractScriptSrcs };
