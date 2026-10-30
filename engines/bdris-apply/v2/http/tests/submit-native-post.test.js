@@ -10,9 +10,11 @@
  * Covered (node:test, no live contact, no browser, fixture data):
  *  #1  submit headers are the document-navigation set and contain
  *      NO x-requested-with (XHR marker dropped on submit only).
- *  #2  the submitted field-name set equals the live DOM list
- *      modulo: minus {files, personImage} (empty file inputs send
- *      nothing — bot never sets them) plus the retained extras
+ *  #2  the builder field-name set equals the live DOM list
+ *      modulo: minus {files, personImage} (the BUILDER emits
+ *      neither — submitApplication appends both at wire time as
+ *      the browser's empty file parts, see
+ *      submit-origin-emptyparts.test.js) plus the retained extras
  *      {personInfoForBirth.father.id, personInfoForBirth.mother.id,
  *      attachments} (dotted ids retained same-value; attachments
  *      ids are the submit-time reference — file bytes go only to
