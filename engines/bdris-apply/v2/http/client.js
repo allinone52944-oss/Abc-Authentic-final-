@@ -141,9 +141,44 @@ const DIRECT_FAMILY_NOTE = 'সাইটের পারিবারিক ন�
 function isFamilyRejectionText(t) {
   return /180|difference of age/i.test(String(t || ''));
 }
+// submitErrorWordingRaw — the SAME extraction as
+// submitErrorWording (JSON message/code, else first error-class
+// text) but WITHOUT digit-stripping, for internal boolean
+// decisions only. It is never logged and never returned: the
+// family decision below uses it, and only the constant tag
+// enters the error message. Digit-stripping would erase the
+// very signal ("180") the bot's rule tests on its validation
+// reason, so the stripped wording cannot serve here.
+function submitErrorWordingRaw(res) {
+  const json = res && res.json;
+  if (json) {
+    const w = otpSendBodyWording(json);
+    if (w) return w;
+  }
+  const text = String((res && res.text) || '');
+  if (!text) return '';
+  SUBMIT_ERROR_CLASS_RE.lastIndex = 0;
+  let m;
+  let tried = 0;
+  while ((m = SUBMIT_ERROR_CLASS_RE.exec(text)) && tried < 5) {
+    tried += 1;
+    const cleaned = String(m[1] || '').replace(/\s+/g, ' ').trim();
+    if (cleaned) return cleaned.slice(0, 200);
+  }
+  return '';
+}
 function familyRejectionMarker(res) {
-  const hay = [res && res.text, res && res.json && JSON.stringify(res.json)].filter(Boolean).join(' ');
-  return isFamilyRejectionText(hay) ? '[family: 180-days]' : '';
+  // STRICT (2026-10-30 principled fix): mirror the bot, which
+  // tests the family wording on a TARGETED validation message
+  // (its validation-block reason) — never on the whole response
+  // body. The direct equivalent is the server's explicit error
+  // wording: a JSON message/code, else error-class text. The old
+  // code scanned the entire 118KB shell with the bare /180/
+  // regex, so any "180" anywhere (a size, a year fragment, a
+  // script) mistagged a shell as a family rejection — and the
+  // runner then retried it. A shell with no error-class text
+  // and no JSON message now yields no marker, by construction.
+  return isFamilyRejectionText(submitErrorWordingRaw(res)) ? '[family: 180-days]' : '';
 }
 function parentBrnDirectDecision(data = {}) {
   const s2 = data.s2 || {};
