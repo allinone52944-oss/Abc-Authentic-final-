@@ -442,7 +442,7 @@ class BdrisEngineV2 {
       ['SUBMIT_S0', 'submitS0', 60000],
       ['SUBMIT_S1', 'submitS1', 120000],
       ['SUBMIT_S2', 'submitS2', 120000],
-      ['SUBMIT_S2B', 'submitS2B', 120000],
+      ['SUBMIT_S2B', 'submitS2B', 300000],
       ['SUBMIT_S3_DOCS', 'submitS3', 180000],
       // S4Prep replay (2026-10-26, permanent fix): one docs-Next or a
       // full S0-S3 catch-up plus OTP evidence can exceed the old 120s

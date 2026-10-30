@@ -262,7 +262,13 @@ function proxyMiddleware() {
       if (!res.headersSent) res.status(502).json({ error: 'ENGINE_UNREACHABLE' });
     });
     proxyReq.on('timeout', () => proxyReq.destroy());
-    proxyReq.setTimeout(120000);
+    // SUBMIT-SAFETY (2026-10-30, timeout architecture): the proxy
+    // must never kill a chain response first — the SUBMIT_HTTP_CHAIN
+    // executor races out at 180s and answers (TIMEOUT included), so
+    // the proxy window sits above it at 200s. At 120s the proxy
+    // destroyed the response while the engine kept working, and the
+    // UI declared "unknown" on a still-running submit.
+    proxyReq.setTimeout(200000);
     // Pipe body (for POST/PUT). The main app uses express.json() globally,
     // so req.body is already parsed — re-serialize it.
     if (req.body && typeof req.body === 'object' && Object.keys(req.body).length) {

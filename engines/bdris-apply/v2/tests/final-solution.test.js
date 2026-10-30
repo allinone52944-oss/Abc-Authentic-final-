@@ -305,16 +305,19 @@ describe('final-solution #6: chain decision flags', () => {
 // ---------- #7: S2B phase budget (source-pattern guard) ----------
 
 describe('final-solution #7: S2B phase budget (pattern guard)', () => {
-  it('phase logs + budget skips present, 120s cap unchanged', () => {
+  it('phase logs + budget skips present, S2B cap aligned to 300s', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'services', 'StepHandler.js'), 'utf8');
     assert.ok(src.includes('S2B-PHASE:'), 'per-phase timing logs');
     assert.ok(src.includes('refill-skipped-budget'), 're-fill loop budget skip');
     assert.ok(src.includes('retry-skipped-budget'), 'retry-next budget skip');
-    // The cap lives in server.js registration, not StepHandler:
-    // ['SUBMIT_S2B', 'submitS2B', 120000] — still 120000, the
-    // number was NOT raised (banned band-aid).
+    // The cap lives in server.js registration, not StepHandler.
+    // SUBMIT-SAFETY (2026-10-30): S2B is 300000, aligned with
+    // S4_PREP (already 300s) — two cascade fills genuinely take
+    // ~240s (the 2026-10-30 13:54 live failure was exactly this
+    // 120s timeout), so the cap matches measured work; this is a
+    // permanent alignment, not a timeout band-aid.
     const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-    assert.ok(serverSrc.includes("['SUBMIT_S2B', 'submitS2B', 120000]"), 'S2B executor window still 120s');
+    assert.ok(serverSrc.includes("['SUBMIT_S2B', 'submitS2B', 300000]"), 'S2B executor window aligned to 300s');
   });
 });
 

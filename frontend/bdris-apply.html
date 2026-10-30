@@ -707,14 +707,17 @@ function note(msg, cls = '') {
 }
 function sanitizeCls(c) { return ['ok', 'warn', 'err', 'info'].includes(c) ? c : ''; }
 function noteOff() { $('liveNote').className = 'livenote'; }
-function busy(on, msg) {
+function busy(on, msg, watchdogMs) {
   els('#btnRow .btn').forEach(b => {
     if (on) { if (!b.disabled) { b.dataset.was = '1'; b.disabled = true; } }
     else if (b.dataset.was) { b.disabled = false; delete b.dataset.was; }
   });
   clearTimeout(S._busyWdog);
   // নিরাপত্তা-জাল: কোনো কারণে ack হারালেও বাটন ৯০ সেকেন্ডের বেশি নিষ্ক্রিয় বসে থাকবে না
-  if (on) S._busyWdog = setTimeout(() => { busy(false); note('⏳ একটু দেরি হচ্ছে — আবার চেষ্টা করুন', 'warn'); }, 90000);
+  // SUBMIT-SAFETY (2026-10-30): submit passes its own 200s window
+  // (same policy as the submit fetch) — a 90s watchdog here used
+  // to re-enable buttons mid-submit while the server kept working.
+  if (on) S._busyWdog = setTimeout(() => { busy(false); note('⏳ একটু দেরি হচ্ছে — আবার চেষ্টা করুন', 'warn'); }, watchdogMs || 90000);
   if (on && msg) note(msg, 'info');
 }
 function showFail(list) {
@@ -1903,7 +1906,15 @@ function advanceAndSend(n, op, payload) {
   // "এক মুহূর্ত পরে আবার চাপুন" block সরানো হলো।
   S.d.uiStep = n;
   if (op === 'SUBMIT_S3_DOCS') S.d.docsDone = true;
-  if (S.draftId) saveDraft(n, () => {});
+  // SUBMIT-SAFETY (2026-10-30, forward-Next auto-save): the old
+  // `if (S.draftId) saveDraft(n)` never saved a FRESH filing — no
+  // draftId exists until an explicit save or step-6 auto-save, so
+  // a tab close/crash at steps 2–5 lost everything. autoSaveDraft
+  // is the same draft record via the HTTP draft-save endpoint
+  // (socket saveDraft is its fallback), signature-guarded so an
+  // unchanged draft is not re-sent, and it CREATES the draft when
+  // none exists. Back buttons keep raw saveDraft unchanged.
+  autoSaveDraft(n);
   goStep(n);
   return emitStep(op, payload) !== false;
 }
@@ -3138,6 +3149,7 @@ function directSubmitUnknown(msg) {
   // submit may already exist server-side), the user checks first,
   // and a later deliberate submit goes via bot (the OTP button
   // gate needs S._directOtp, cleared here).
+  try { clearInterval(S._submitProgressTimer); S._submitProgressTimer = null; } catch (e) {}
   busy(false);
   S._directOtp = false; S.otpStage = 'code';
   showFail([san(msg || 'সাবমিটের ফল জানা যায়নি — আবেদন হয়েছে কিনা যাচাই করে আবার চেষ্টা করুন')]);
@@ -3226,21 +3238,32 @@ function directFallbackToBotSend() {
    ack handlers unchanged, so all response-shape handling is
    identical to the socket path. A fetch failure NEVER falls
    back to a socket emit — the socket is the known-flaky path.
-   Timeout 90000ms: below the adapter HTTP proxy's 120s kill
-   (so the client times out cleanly instead of a destroyed
-   connection), far above normal work (send = one POST, seconds;
-   submit = verify + submit, tens of seconds at most). A timeout
-   on submit means outcome-unknown handling, which is the safe
-   behavior by construction (never a retry). */
+   Timeout 90000ms for send: below the adapter HTTP proxy's 200s
+   window (so the client times out cleanly instead of a destroyed
+   connection), far above normal work (send = one POST, seconds).
+   A timeout on submit means outcome-unknown handling, which is
+   the safe behavior by construction (never a retry).
+   SUBMIT-SAFETY (2026-10-30, timeout architecture): the submit
+   fetch gets its own 200s window, above the 180s executor race
+   (the executor ANSWERS at 180s, TIMEOUT included) and above the
+   200s adapter proxy window — so the UI can no longer abort at
+   90s while the server chain is still running. The direct result
+   returns before any bot fallback (HttpPathRunner uiDirect skip),
+   so the submit fetch only ever waits on direct HTTP work. The
+   busy watchdog below takes the same 200s for submit, and a
+   30s progress tick keeps the note live — never a frozen
+   spinner on a long submit. */
 const DIRECT_HTTP_TIMEOUT_MS = 90000;
-async function directHttpPost(payload) {
+const DIRECT_HTTP_SUBMIT_TIMEOUT_MS = 200000;
+async function directHttpPost(payload, timeoutMs) {
   // Returns {acked:true, r} on ANY usable JSON body (any HTTP
   // status — the ack handlers own shape handling), else
   // {acked:false} (network error, timeout, or unparseable body).
   // The backend mount authenticates via the Authorization header;
   // v2 re-verifies the same JWT from the body to derive userId
   // (the adapter strips Authorization before proxying to v2).
-  const sig = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(DIRECT_HTTP_TIMEOUT_MS) : undefined;
+  const ms = timeoutMs || DIRECT_HTTP_TIMEOUT_MS;
+  const sig = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(ms) : undefined;
   try {
     const r = await fetch('/api/bdris-apply/http-chain', {
       method: 'POST',
@@ -3375,7 +3398,15 @@ function directSendAck(r) {
   note('⚠️ কোড পাঠানো যায়নি — আবার চেষ্টা করুন', 'warn');
 }
 async function directSubmit(otp) {
-  busy(true, '⏳ আবেদন জমা হচ্ছে… একটু অপেক্ষা করুন');
+  busy(true, '⏳ আবেদন জমা হচ্ছে… একটু অপেক্ষা করুন', DIRECT_HTTP_SUBMIT_TIMEOUT_MS);
+  // SUBMIT-SAFETY (2026-10-30): a long submit window must never
+  // look frozen — tick the progress note every 30s with elapsed
+  // time until an ack (or unknown) clears it.
+  try { clearInterval(S._submitProgressTimer); } catch (e) {}
+  const _submitT0 = Date.now();
+  S._submitProgressTimer = setInterval(() => {
+    try { note('⏳ আবেদন জমা হচ্ছে… (' + Math.round((Date.now() - _submitT0) / 1000) + ' সেকেন্ড)', 'info'); } catch (e) {}
+  }, 30000);
   S.otpStage = 'submitting'; S._failReported = false;
   hideFail(); hideBanner(); noteOff();
   // Submit-90 charge, exactly like the bot path: same
@@ -3396,11 +3427,12 @@ async function directSubmit(otp) {
   // the submit phase uploads from data.docs. A fetch failure
   // means outcome-unknown handling — NEVER a bot submit, NEVER
   // a socket emit, NEVER a retry (a submit may already exist).
-  const posted = await directHttpPost(Object.assign({}, payload, { _authToken: curAccessToken() }));
+  const posted = await directHttpPost(Object.assign({}, payload, { _authToken: curAccessToken() }), DIRECT_HTTP_SUBMIT_TIMEOUT_MS);
   if (!posted.acked) { directSubmitUnknown(); return; }
   directSubmitAck(posted.r, otp);
 }
 function directSubmitAck(r, otp) {
+  try { clearInterval(S._submitProgressTimer); S._submitProgressTimer = null; } catch (e) {}
   busy(false);
   if (!r) { S.otpStage = 'code'; showFail(['সার্ভারের জবাব আসেনি']); return; }
   if (r.httpPath === 'disabled' || r.error === 'HTTP_PATH_DISABLED'
@@ -3421,6 +3453,14 @@ function directSubmitAck(r, otp) {
     // (Body shared with the timeout/disconnect path — see
     // directSubmitUnknown; the ack branch keeps busy(false) above.)
     directSubmitUnknown(r.message);
+    return;
+  }
+  if (r.error === 'TIMEOUT') {
+    // SUBMIT-SAFETY (2026-10-30): the executor races out at 180s
+    // but the underlying work KEEPS RUNNING (withTimeout is a
+    // race, not a kill) — so a TIMEOUT answer is outcome-unknown,
+    // never a definitive failure: check first, never blind-retry.
+    directSubmitUnknown('সাবমিটের ফল জানা যায়নি — সার্ভারের উত্তর সময়মতো আসেনি, আবেদন হয়েছে কিনা যাচাই করে আবার চেষ্টা করুন');
     return;
   }
   if (r.httpFallback === true) {

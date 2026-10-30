@@ -207,6 +207,12 @@ function submitResponseSummary(res) {
     status: res ? res.status : null,
     isJson: !!json,
     jsonSuccess: !!(json && json.success === true),
+    // SUBMIT-SAFETY (2026-10-30): an explicit JSON success:false is
+    // a positive non-filing signal (the server answered with a
+    // rejection, not a page) — isFallbackSafe uses it to keep a
+    // definitive rejection fallback-safe while a 200 page of
+    // unrecognized shape stays outcome-unknown.
+    jsonExplicitFailure: !!(json && json.success === false),
     textLen: text.length,
     hasSuccessPhrase: text.includes(SUCCESS_PHRASE),
     hasPrintLink: text.includes(PRINT_PATH),
@@ -1111,7 +1117,7 @@ function buildSubmitPayload(data = {}) {
     const zone = idOrName(addr.paurasavaUnionId, addr.paurasavaUnion);
     const ward = idOrName(addr.wardId, addr.ward);
     return {
-      [`${prefix}Country`]: str(addr.country || 'বাংলাদেশ'),
+      [`${prefix}Country`]: idOrName(addr.countryId, addr.country || 'বাংলাদেশ'),
       [`${prefix}Div`]: idOrName(addr.divisionId, addr.division),
       [`${prefix}Dist`]: idOrName(addr.districtId, addr.district),
       [`${prefix}CityCorpCantOrUpazila`]: idOrName(addr.cityCorpUpazilaId, addr.cityCorpUpazila),
@@ -1259,9 +1265,20 @@ function buildSubmitPayload(data = {}) {
  * date / thChild values, and every one falls back to the input
  * value instead of throwing when its preferred shape is absent.
  */
+// SUBMIT-SAFETY (2026-10-30): BDRIS geo ids are numeric (Stage A
+// probe: division 3, district 19, upazila 184, union 1988, ward
+// 7193). The address-book save form builds its selects with
+// value=name (addrBookFill), and readAddrFields stores those values
+// as *Id — so an *Id that is not numeric is a stored display name,
+// NOT an id, and must be treated as absent (fall back to the name).
+// A numeric id always wins; anything else can only ever reproduce
+// the old name behaviour, never regress it.
+function isNumericId(v) {
+  return v !== undefined && v !== null && /^\d+$/.test(String(v).trim());
+}
 function idOrName(id, name) {
-  const i = id === undefined || id === null ? '' : String(id).trim();
-  return i !== '' ? i : String(name === undefined || name === null ? '' : name);
+  if (isNumericId(id)) return String(id).trim();
+  return String(name === undefined || name === null ? '' : name);
 }
 function toSiteDate(v) {
   const s = String(v || '').trim();
@@ -1301,6 +1318,7 @@ function mapNationality(v) {
 /** Map legacy BIRTH/PERMANENT to the form's officeAddressType values. */
 function mapOfficeAddressType(v) {
   const s = String(v || '').trim().toUpperCase();
+  if (s === '') return 'BIRTHPLACE';
   if (s === 'BIRTH' || s === 'BIRTHPLACE') return 'BIRTHPLACE';
   if (s === 'PERMANENT') return 'PERMANENT';
   if (s === 'MISSION') return 'MISSION';
