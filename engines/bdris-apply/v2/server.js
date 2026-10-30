@@ -1519,10 +1519,30 @@ if (require.main === module) {
     console.error('UNCAUGHT-EXCEPTION:', (e && e.stack) ? String(e.stack).slice(0, 500) : String(e).slice(0, 500));
   });
 
-  const shutdown = async () => {
-    await engine.shutdown();
-    server.close(() => process.exit(0));
+  // GRACEFUL SHUTDOWN (#13 service timeout loop, 2026-10-30): the old
+  // shutdown did `server.close(() => exit)` WITHOUT closing socket.io,
+  // so server.close() never called back while any client stayed
+  // connected — and session/browser closes had no bound at all. That
+  // is why systemd's 5s stop budget expired and the whole cgroup got
+  // SIGKILLed twice. Every step below is bounded and a 20s hard timer
+  // forces exit (live unit is now TimeoutStopSec=30s); the typical
+  // path completes in ~1-2s. A second signal forces immediate exit.
+  const { createShutdown, closeServer } = require('./core/Shutdown');
+  const shutdown = createShutdown({
+    hardTimeoutMs: 20000,
+    logFn: (m) => console.log(`[bdris-apply-v2:shutdown] ${m}`),
+    steps: [
+      { name: 'http-stop-accepting', timeoutMs: 5000, fn: () => closeServer(server, io, 5000, (m) => console.log(`[bdris-apply-v2:shutdown] ${m}`)) },
+      { name: 'engine-sessions', timeoutMs: 8000, fn: () => engine.sessionManager.closeAll() },
+      { name: 'engine-browser', timeoutMs: 8000, fn: () => engine.browserManager.close() },
+    ],
+  });
+  let _shutdownSignaled = false;
+  const onSignal = () => {
+    if (_shutdownSignaled) { process.exit(0); return; }
+    _shutdownSignaled = true;
+    shutdown.run();
   };
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', onSignal);
+  process.on('SIGINT', onSignal);
 }
