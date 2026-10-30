@@ -131,7 +131,7 @@ test('fingerprint is capped and handles empty bodies', () => {
 test('submitApplication attaches responseFingerprint on the form-wall throw', async () => {
   const client = new BdrisHttpClient({ base: 'http://mock' });
   client.csrfToken = 'mock-csrf';
-  client.apiHeaders = () => ({});
+  client.navigationHeaders = () => ({});
   client.request = async () => ({
     status: 200, ok: true, json: null,
     text: '<html><form action="/br/application"><input name="personInfoForBirth"><input name="phone" value="01999999999"></form></html>',

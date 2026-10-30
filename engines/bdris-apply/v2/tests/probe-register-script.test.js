@@ -526,6 +526,9 @@ describe('REGISTER-SCRIPT PROBE: submit construction', () => {
       father: { nameBn: 'F', nameEn: 'F' },
       mother: { nameBn: 'M', nameEn: 'M' },
       birthPlace: addr, permAddr: addr, prsntAddr: addr,
+      // NATIVE-POST: identical records + ticks = effective copies,
+      // so the conditional copy flags are present in this wire list.
+      copyFlags: { permCopy: true, presCopy: true },
       relation: 'SELF', phone: '01700000000', otp: '123456',
       documents: [{ attachmentType: 40, id: '1' }, { attachmentType: 41, id: '2' }],
     });
