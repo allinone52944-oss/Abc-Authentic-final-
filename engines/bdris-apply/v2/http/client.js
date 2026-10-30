@@ -101,7 +101,11 @@ function otpSendBodyWording(json) {
 // normalisation only (Bengali → Arabic, spaces/dashes stripped);
 // this decision touches ONLY the ubrn fields. Name transit for
 // the send/verify steps lives in transitDirectName; the submit
-// payload keeps names verbatim (final record).
+// payload keeps names verbatim (final record) — RESTORED per
+// user directive 2026-10-30 that ALL logics are required: the
+// SUBMIT-FINAL transit change is rejected, and the wall cause
+// must be learned from the error-wording diagnostic instead of
+// by stripping the user's names.
 // Pre-2013 applicants send ubrn empty (the bot's live-verified
 // site rule) — the draft's BRN is untouched, only the payload
 // omits it, and parentBrnDirectDecision reports the withholding.
@@ -212,6 +216,46 @@ function submitResponseSummary(res) {
 function submitSummaryText(s) {
   if (!s) return 'none';
   return `status=${s.status} json=${s.isJson} jsonSuccess=${s.jsonSuccess} textLen=${s.textLen} successPhrase=${s.hasSuccessPhrase} printLink=${s.hasPrintLink} formFields=${s.hasFormFields}`;
+}
+
+// SUBMIT-FINAL (2026-10-30, problem-map #1 follow-up): the
+// shape-only SUBMIT-RESPONSE hides the server's validation
+// wording — the next diagnosis needs the REASON, not just the
+// shape. This extractor returns WORDING ONLY, from two safe
+// sources and no others:
+//  - JSON body: the message/code wording (otpSendBodyWording,
+//    already capped at 200 chars, fields only).
+//  - HTML body: the inner text of an element whose class marks
+//    it as a validation/error display (text-danger,
+//    invalid-feedback, alert-danger) — the site's own error
+//    wording, never a form field value: tags are stripped by
+//    the match itself (text up to the next tag only), digit
+//    runs are removed (a digit run could be an identifier),
+//    and the snippet is capped at 200 chars.
+// Anything else — re-rendered form labels, input values,
+// names, numbers, codes, tokens — is never returned: a body
+// with no JSON wording and no error-class text yields ''.
+const SUBMIT_ERROR_CLASS_RE = /class\s*=\s*"[^"]*(?:text-danger|invalid-feedback|alert-danger)[^"]*"[^>]*>([^<]+)/gi;
+function submitErrorWording(res) {
+  const json = res && res.json;
+  if (json) {
+    const w = otpSendBodyWording(json);
+    if (w) return w;
+  }
+  const text = String((res && res.text) || '');
+  if (!text) return '';
+  SUBMIT_ERROR_CLASS_RE.lastIndex = 0;
+  let m;
+  let tried = 0;
+  while ((m = SUBMIT_ERROR_CLASS_RE.exec(text)) && tried < 5) {
+    tried += 1;
+    const cleaned = String(m[1] || '').replace(/\s+/g, ' ').trim()
+      .replace(/[0-9০-৯]+/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (cleaned) return cleaned.slice(0, 200);
+  }
+  return '';
 }
 
 // FINAL-SOLUTION (2026-10-30, problem-map #14): the server's
@@ -804,7 +848,11 @@ class BdrisHttpClient {
         : `Submit returned status ${res.status}.`);
       // FINAL-SOLUTION (problem-map #1): shape/status only, never
       // text — the chain logs this so filed-vs-not is provable.
+      // SUBMIT-FINAL: the error wording rides along too (wording
+      // only, see submitErrorWording) so the journal can name
+      // the validation reason instead of only the shape.
       e.responseSummary = submitResponseSummary(res);
+      e.responseErrorWording = submitErrorWording(res);
       throw e;
     }
     if (res.json && res.json.success === true) {
@@ -822,7 +870,9 @@ class BdrisHttpClient {
       // the [field: …] extra above is a weak word-scan only, and
       // the summary is what lets the next diagnosis tell the two
       // apart. The message text itself is unchanged.
+      // SUBMIT-FINAL: error wording attached (wording only).
       e.responseSummary = submitResponseSummary(res);
+      e.responseErrorWording = submitErrorWording(res);
       throw e;
     }
     return { success: true, hasPrintLink: parsed.hasPrintLink, json: res.json, responseSummary: submitResponseSummary(res) };
@@ -1015,13 +1065,16 @@ function buildSubmitPayload(data = {}) {
     ...presFields,
     // DIRECT BRN-FREE ROUTE: relationWithApplicant carries the
     // site's enum value (bot REL_VALUE map), not the draft's
-    // Bengali label. Person/parent names below stay VERBATIM on
+    // Bengali label. Person/parent names above stay VERBATIM on
     // purpose: the submit payload IS the final record, and the
     // bot's final step re-applies the backtick form through the
     // site's own handler — whether the direct form POST accepts
     // a backtick in the final record is a live-test question
     // (see DIRECT-BRN-FREE-LIVE-TEST.md), not something to guess
-    // by stripping the draft's names here.
+    // by stripping the draft's names here. VERBATIM RESTORED per
+    // user directive 2026-10-30 that ALL logics are required:
+    // the SUBMIT-FINAL transit change is rejected; the wall
+    // cause must be learned from the error-wording diagnostic.
     relationWithApplicant: mapDirectRelation(relation),
     applicantBrn: str(data.applicantBrn || person.brn),
     applicantDob: str(data.applicantDob || dob),
@@ -1153,6 +1206,7 @@ module.exports = {
   submitRejectionField,
   submitResponseSummary,
   submitSummaryText,
+  submitErrorWording,
   OTP_UNEXPIRED_RE,
   isFamilyRejectionText,
   familyRejectionMarker,

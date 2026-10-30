@@ -62,7 +62,7 @@
 
 'use strict';
 
-const { BdrisHttpClient, parentBrnDirectDecision, submitSummaryText } = require('../http/client');
+const { BdrisHttpClient, parentBrnDirectDecision, submitSummaryText, submitErrorWording } = require('../http/client');
 const { verifyChargeToken, bnToArab, consumeSubmitToken, isSubmitTokenConsumed } = require('./StepHandler');
 
 const HTTP_CANDIDATE_LABEL = 'CANDIDATE (submit/verify shapes from the pasted form source, NOT live-verified)';
@@ -409,7 +409,13 @@ async function runHttpChain(opts = {}) {
       otpUnexpired: !!(err && err.code === 'OTP_SEND_UNEXPIRED'),
     };
     if (step === 'submit' && err && err.responseSummary) {
-      candidateLog(log, 'submit', `SUBMIT-RESPONSE ${submitSummaryText(err.responseSummary)} — filed-vs-not must be read from this shape, not from the [field: …] heuristic`);
+      // SUBMIT-FINAL: the error wording (wording only, never
+      // values) rides on the same line when the client attached
+      // it, so the journal names the validation reason instead
+      // of only the shape. When no wording was attached, the
+      // line is unchanged.
+      const wording = err.responseErrorWording || '';
+      candidateLog(log, 'submit', `SUBMIT-RESPONSE ${submitSummaryText(err.responseSummary)}${wording ? ` errorWording=${wording}` : ''} — filed-vs-not must be read from this shape, not from the [field: …] heuristic`);
     }
     candidateLog(log, 'decision', `DIRECT-DECISION step=${step} outcome=fallback sessionDead=${decisionFlags.sessionDead} otpUnexpired=${decisionFlags.otpUnexpired}`);
     if (step === 'submit' && !isFallbackSafe(step, err)) {

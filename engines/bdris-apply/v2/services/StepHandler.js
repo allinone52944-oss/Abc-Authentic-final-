@@ -2348,6 +2348,25 @@ class StepHandler {
       return { ok: false, message: '❌ কোডটি ৬ ডিজিটের — মোবাইলে আসা পুরো কোডটি লিখুন।' };
     }
     const otpSels = ['#otp', 'input[name="otp"]', 'input[placeholder="OTP"]'];
+    // SUBMIT-FINAL (2026-10-30): OTP-STEP GATE — the direct
+    // fallback emits bare SUBMIT_S4_OTP (frontend directSubmitAck)
+    // without driving the bot page through S0–S4Prep, so the page
+    // is often NOT at the OTP step (warm form page / step 1).
+    // Typing blindly then fails with the misleading 'কোডের ঘর
+    // পাওয়া যায়নি' even though the field is absent because the
+    // STEP is absent, not because the OTP view broke (live
+    // 2026-10-30 ×2, code re-entered + verified on screen). Wait
+    // boundedly for the OTP step to appear (covers a slow render
+    // / in-flight replay); if it never appears, fail with the
+    // page STATE, never the field error — and log that state.
+    // A second full replay is NOT driven from here: it would
+    // re-send an already-sent code (400-unexpired) and, for a
+    // BRN-free filing, cannot pass the site's parent gate.
+    const otpStep = await this._ensureOtpStep(otpSels);
+    if (!otpStep.ok) {
+      this.progress(otpStep.message);
+      return { ok: false, message: otpStep.message, pageState: otpStep.pageState };
+    }
     const r = await this._typeInto(otpSels, otp, 'OTP কোড', { required: true, typeCharByChar: true });
     if (!r.ok) {
       this.progress('❌ কোডের ঘর পাওয়া যায়নি — আবার চেষ্টা করুন।');
@@ -2682,6 +2701,58 @@ class StepHandler {
       await this.page.waitForTimeout(350);
     }
     return null;
+  }
+
+  // SUBMIT-FINAL (2026-10-30): OTP-step gate for submitS4.
+  // Returns {ok:true} when an OTP field is visible, else a
+  // distinct page-state failure — never the misleading field
+  // error. The state carries URL PATH only (query/hash
+  // stripped — a query could carry personal data), a site flag,
+  // a form flag, a plain-language step hint, and visible
+  // control descriptors (tag/type/id/name only, same discipline
+  // as _visibleFirstStepControls — values and text are never
+  // read). The state is logged (S4OTP-PAGE-STATE) so the next
+  // live filing's bot page state is provable from the journal.
+  async _ensureOtpStep(otpSels) {
+    let el = null;
+    try { el = await this._waitVisible(otpSels, 8000); } catch { el = null; }
+    if (el) return { ok: true };
+    const pageState = await this._otpPageState();
+    console.log('S4OTP-PAGE-STATE:', JSON.stringify(pageState));
+    return {
+      ok: false,
+      pageState,
+      message: `❌ বটের পেজ OTP ধাপে নেই (${pageState.hint}${pageState.url ? `, পেজ: ${pageState.url}` : ''}) — সরাসরি পথে আবার চেষ্টা করুন।`,
+    };
+  }
+
+  async _otpPageState() {
+    let rawUrl = '';
+    try { rawUrl = (this.page && typeof this.page.url === 'function' ? this.page.url() : '') || ''; } catch { rawUrl = ''; }
+    let path = '';
+    try { path = new URL(rawUrl).pathname || ''; } catch { path = String(rawUrl).split('?')[0].split('#')[0]; }
+    let info = { hasForm: false, hasLogin: false, inputs: [] };
+    try {
+      info = await this.page.evaluate(() => {
+        const hasForm = !!document.querySelector('form');
+        const hasLogin = !!document.querySelector('input[type="password"]');
+        const inputs = [];
+        document.querySelectorAll('input').forEach((el) => {
+          if (el.offsetParent === null) return;
+          inputs.push({ type: el.getAttribute('type') || '', id: el.id || '', name: el.getAttribute('name') || '' });
+        });
+        return { hasForm, hasLogin, inputs: inputs.slice(0, 10) };
+      });
+      if (!info || typeof info !== 'object') info = { hasForm: false, hasLogin: false, inputs: [] };
+    } catch { info = { hasForm: false, hasLogin: false, inputs: [] }; }
+    const hint = info.hasLogin ? 'লগইন পেজ' : info.hasForm ? 'ফর্ম পেজ (OTP ধাপ নয়)' : 'অজানা পেজ';
+    return {
+      url: String(path || '').slice(0, 200),
+      onBdris: String(rawUrl).startsWith('https://bdris.gov.bd'),
+      hasForm: !!info.hasForm,
+      hint,
+      inputs: Array.isArray(info.inputs) ? info.inputs : [],
+    };
   }
 
   /**
