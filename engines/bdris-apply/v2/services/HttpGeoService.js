@@ -164,67 +164,109 @@ class HttpGeoService {
       return false;
     }
     try {
-      const ctx = typeof page.context === 'function' ? page.context() : (page._context || null);
-      const cookies = ctx && typeof ctx.cookies === 'function' ? await ctx.cookies() : [];
-      const extracted = typeof page.evaluate === 'function'
-        ? await page.evaluate(() => {
-          const meta = document.querySelector('meta[name="_csrf"]');
-          const metaHeader = document.querySelector('meta[name="_csrf_headerName"]');
-          let token = (meta && meta.content) || null;
-          let headerName = (metaHeader && metaHeader.content) || null;
-          let source = token ? 'meta' : null;
-          if (!token) {
-            // Inline `csrf` (util.js fallback, header X-CSRF-TOKEN).
-            // A top-level `const csrf` is not a window property, so
-            // try the identifier itself as well as window.csrf.
-            let inline = null;
-            try { inline = (typeof window !== 'undefined' && window.csrf) || null; } catch (e) { /* next */ }
-            if (!inline) {
-              try { inline = (typeof csrf !== 'undefined') ? csrf : null; } catch (e) { /* next */ }
-            }
-            if (inline && typeof inline === 'object') inline = inline.token || inline.value || null;
-            if (typeof inline === 'string' && inline) {
-              token = inline; headerName = 'X-CSRF-TOKEN'; source = 'inline';
-            }
-          }
-          if (!token) {
-            const hidden = document.querySelector('input[name="_csrf"]');
-            if (hidden && hidden.value) {
-              token = hidden.value; headerName = headerName || 'X-CSRF-TOKEN'; source = 'hidden';
-            }
-          }
-          let pageUrl = null;
-          try { pageUrl = location.href; } catch (e) { /* unknown */ }
-          // Form-content fact for the error: a page with a form
-          // element but no token is a different failure from a
-          // stub/challenge page with no form element at all.
-          let formElement = false;
-          try {
-            formElement = !!(document.querySelector('form#birth_application_form') || document.querySelector('form'));
-          } catch (e) { /* unknown */ }
-          return { token, headerName, source, pageUrl, formElement };
-        })
-        : {};
-      // Older test doubles return only {token, headerName}; accept them.
-      const token = extracted.token || null;
-      const headerName = extracted.headerName || (token ? 'X-CSRF-TOKEN' : null);
-      let pageUrl = extracted.pageUrl || null;
-      if (!pageUrl && typeof page.url === 'function') {
-        try { pageUrl = page.url(); } catch (e) { /* unknown */ }
-      }
-      if (!token) {
+      const read = await this._readPageSession(page);
+      if (!read.token) {
         this.lastSeedError = new Error(
-          `HttpGeo: Browser page has no CSRF token (meta _csrf: no, inline csrf: no, hidden _csrf field: no) on page ${pageUrl || 'unknown'} (form content: ${extracted.formElement ? 'yes' : 'no'}); cannot build API headers.`,
+          `HttpGeo: Browser page has no CSRF token (meta _csrf: no, inline csrf: no, hidden _csrf field: no) on page ${read.pageUrl || 'unknown'} (form content: ${read.formElement ? 'yes' : 'no'}); cannot build API headers.`,
         );
         return false;
       }
-      client.seedFromBrowser({ cookies, csrfToken: token, csrfHeaderName: headerName });
+      client.seedFromBrowser({ cookies: read.cookies, csrfToken: read.token, csrfHeaderName: read.headerName });
       this.lastSeedError = null;
       return true;
     } catch (e) {
       this.lastSeedError = e;
       return false;
     }
+  }
+
+  /**
+   * RESEED (2026-10-30): force a fresh read of a live warm page's
+   * cookies + CSRF into an ALREADY-seeded client. Unlike
+   * seedFromPage, this deliberately bypasses the bootstrapped
+   * early-return (that early-return is why no re-seed path existed
+   * at all). Never navigates and never reloads the page: the page
+   * may be the bot's mid-flow page, and seedFromPage never
+   * navigates for exactly that reason. Returns false (never
+   * throws) when there is no page, no readable token, or the
+   * target client cannot refresh — the caller then proceeds with
+   * the jarred state and logs the skip. The refresh itself is
+   * `refreshSeed` (API-response cookies win over idle-page values;
+   * CSRF always adopted; expired cookies dropped).
+   */
+  async reseedFromPage(page, targetClient) {
+    try {
+      if (!page || !targetClient || typeof targetClient.refreshSeed !== 'function') return false;
+      const read = await this._readPageSession(page);
+      if (!read.token) {
+        this.lastSeedError = new Error('HttpGeo: reseed found no CSRF token on the warm page; keeping jarred state.');
+        return false;
+      }
+      targetClient.refreshSeed({ cookies: read.cookies, csrfToken: read.token, csrfHeaderName: read.headerName });
+      this.lastSeedError = null;
+      return true;
+    } catch (e) {
+      this.lastSeedError = e;
+      return false;
+    }
+  }
+
+  /**
+   * Read a page's session (context cookies + CSRF token) without
+   * navigating it. Shared by the initial seed and the re-seed so
+   * both use the same extraction (meta _csrf, inline csrf,
+   * hidden _csrf field, in the form's util.js order).
+   */
+  async _readPageSession(page) {
+    const ctx = typeof page.context === 'function' ? page.context() : (page._context || null);
+    const cookies = ctx && typeof ctx.cookies === 'function' ? await ctx.cookies() : [];
+    const extracted = typeof page.evaluate === 'function'
+      ? await page.evaluate(() => {
+        const meta = document.querySelector('meta[name="_csrf"]');
+        const metaHeader = document.querySelector('meta[name="_csrf_headerName"]');
+        let token = (meta && meta.content) || null;
+        let headerName = (metaHeader && metaHeader.content) || null;
+        let source = token ? 'meta' : null;
+        if (!token) {
+          // Inline `csrf` (util.js fallback, header X-CSRF-TOKEN).
+          // A top-level `const csrf` is not a window property, so
+          // try the identifier itself as well as window.csrf.
+          let inline = null;
+          try { inline = (typeof window !== 'undefined' && window.csrf) || null; } catch (e) { /* next */ }
+          if (!inline) {
+            try { inline = (typeof csrf !== 'undefined') ? csrf : null; } catch (e) { /* next */ }
+          }
+          if (inline && typeof inline === 'object') inline = inline.token || inline.value || null;
+          if (typeof inline === 'string' && inline) {
+            token = inline; headerName = 'X-CSRF-TOKEN'; source = 'inline';
+          }
+        }
+        if (!token) {
+          const hidden = document.querySelector('input[name="_csrf"]');
+          if (hidden && hidden.value) {
+            token = hidden.value; headerName = headerName || 'X-CSRF-TOKEN'; source = 'hidden';
+          }
+        }
+        let pageUrl = null;
+        try { pageUrl = location.href; } catch (e) { /* unknown */ }
+        // Form-content fact for the error: a page with a form
+        // element but no token is a different failure from a
+        // stub/challenge page with no form element at all.
+        let formElement = false;
+        try {
+          formElement = !!(document.querySelector('form#birth_application_form') || document.querySelector('form'));
+        } catch (e) { /* unknown */ }
+        return { token, headerName, source, pageUrl, formElement };
+      })
+      : {};
+    // Older test doubles return only {token, headerName}; accept them.
+    const token = extracted.token || null;
+    const headerName = extracted.headerName || (token ? 'X-CSRF-TOKEN' : null);
+    let pageUrl = extracted.pageUrl || null;
+    if (!pageUrl && typeof page.url === 'function') {
+      try { pageUrl = page.url(); } catch (e) { /* unknown */ }
+    }
+    return { cookies, token, headerName, pageUrl, formElement: !!extracted.formElement };
   }
 
   async ensureBootstrapped() {

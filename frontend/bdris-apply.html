@@ -3149,10 +3149,28 @@ function directSubmitUnknown(msg) {
   // submit may already exist server-side), the user checks first,
   // and a later deliberate submit goes via bot (the OTP button
   // gate needs S._directOtp, cleared here).
+  // RESEED (2026-10-30): plus ONE deliberate direct retry, offered
+  // only when the submitted code is still remembered: the user
+  // checks first, then clicks — never automatic — and the retry
+  // re-submits the SAME code on the already-verified session
+  // (no new send, no re-verify with a consumed code, charge
+  // idempotent via the existing DUPLICATE token path). Without
+  // a remembered code there is no retry button at all (the plain
+  // message stays, and the OTP button routes to bot as before).
   try { clearInterval(S._submitProgressTimer); S._submitProgressTimer = null; } catch (e) {}
   busy(false);
   S._directOtp = false; S.otpStage = 'code';
   showFail([san(msg || 'সাবমিটের ফল জানা যায়নি — আবেদন হয়েছে কিনা যাচাই করে আবার চেষ্টা করুন')]);
+  const code = S._lastDirectOtp || '';
+  if (/^\d{6}$/.test(code)) {
+    showBanner('info', 'আবেদন হয়েছে কিনা যাচাই করে নিন — নিশ্চিত হলে নতুন কোড ছাড়াই সরাসরি আবার চেষ্টা করতে পারেন।', () => {
+      hideBanner();
+      const retryCode = S._lastDirectOtp || '';
+      if (!/^\d{6}$/.test(retryCode)) { note('কোড পাওয়া যায়নি — OTP view থেকে আবার জমা দিন', 'warn'); return; }
+      S._directOtp = true;
+      directSubmit(retryCode, true);
+    }, 'সরাসরি আবার চেষ্টা');
+  }
 }
 function directHttpEnabled() { return S.httpPathEnabled === true; }
 function probeHttpPath() {
@@ -3277,6 +3295,10 @@ async function directHttpPost(payload, timeoutMs) {
   } catch (e) { return { acked: false }; }
 }
 async function directSend() {
+  // RESEED (2026-10-30): a fresh send supersedes any remembered
+  // submit code — the retry button must never reuse a code from
+  // an earlier filing's attempt.
+  S._lastDirectOtp = null;
   // Truthful display: NO OTP view before server proof — only a
   // transient busy note. The view renders on a sent-proof ack.
   // DIRECT HTTP BYPASS: fetch replaces the socket emit entirely
@@ -3397,7 +3419,13 @@ function directSendAck(r) {
   showFail([san(msg)]);
   note('⚠️ কোড পাঠানো যায়নি — আবার চেষ্টা করুন', 'warn');
 }
-async function directSubmit(otp) {
+async function directSubmit(otp, alreadyVerified) {
+  // RESEED (2026-10-30): remember the submitted code so a
+  // deliberate retry after outcome-unknown can re-submit with
+  // the SAME code (no new send) on the already-verified session.
+  // Cleared on DONE and on a fresh direct send, so a stale code
+  // can never be reused across filings.
+  S._lastDirectOtp = otp;
   busy(true, '⏳ আবেদন জমা হচ্ছে… একটু অপেক্ষা করুন', DIRECT_HTTP_SUBMIT_TIMEOUT_MS);
   // SUBMIT-SAFETY (2026-10-30): a long submit window must never
   // look frozen — tick the progress note every 30s with elapsed
@@ -3421,7 +3449,14 @@ async function directSubmit(otp) {
   }
   const tok = await getTok();
   if (!tok) { busy(false); S.otpStage = 'code'; return; } // charge() already alerted
-  const payload = Object.assign({}, directCtx(), { phase: 'submit', uiDirect: true, otp: otp, _chargeToken: tok });
+  const payload = Object.assign({}, directCtx(), { phase: 'submit', uiDirect: true, otp: otp, _chargeToken: tok },
+    // RESEED (2026-10-30): a deliberate retry after
+    // outcome-unknown sets this — the chain then skips the
+    // verify call (a consumed code's second verify is unproven)
+    // and submits on the already-verified session, with the otp
+    // still riding in the submit payload itself. Absent on a
+    // first attempt: verify always runs, exactly as before.
+    alreadyVerified ? { alreadyVerified: true } : {});
   // DIRECT HTTP BYPASS: fetch replaces the socket emit entirely
   // (no directAckStart — see directSend). Full docs are kept:
   // the submit phase uploads from data.docs. A fetch failure
@@ -3495,7 +3530,7 @@ function directSubmitAck(r, otp) {
     // original-PDF button has no key until the live test
     // confirms the ack format — then only the ackId mapping
     // below needs the number, no new flow.
-    S._directOtp = false;
+    S._directOtp = false; S._lastDirectOtp = null;
     showDone({ ackId: '', screenshot: null, pdf: null, original: null });
     return;
   }

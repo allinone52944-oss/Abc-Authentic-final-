@@ -664,6 +664,11 @@ class BdrisEngineV2 {
           client: httpClient,
           playwrightRunner,
           phase,
+          // RESEED (2026-10-30): the live warm page, for the
+          // runner's pre-submit refresh (never navigated by the
+          // reseed; absent = reseed logs its skip, submit still
+          // proceeds on the jarred state).
+          reseedPage: session?.page || null,
           // DIRECT-PATH WIRING: a UI direct call must run SEEDED —
           // a failed seed fails fast (SEED_FAILED → bot fallback)
           // instead of attempting a bare bootstrap (proven 403).

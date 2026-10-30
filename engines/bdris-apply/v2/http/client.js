@@ -452,10 +452,40 @@ function mapDirectRelation(v) {
   return DIRECT_RELATION_MAP[s] || s;
 }
 
-/** Minimal live cookie jar: name -> value, updated from Set-Cookie. */
+/** Minimal live cookie jar: name -> value, updated from Set-Cookie.
+ * RESEED (2026-10-30): expiry-aware. Browsers never send an
+ * expired cookie, but this jar used to: it stored values with no
+ * expiry at all (only Max-Age=0 deleted), and seedFromBrowser
+ * copied page cookies regardless of age. The server rotates its
+ * TS cookies (one with ~30s Max-Age, see the header comment), so
+ * a warm page navigated minutes before submit hands the chain
+ * cookies that are already dead — and the chain sent them anyway.
+ * Now: Playwright `expires` (epoch seconds, -1 = session) and
+ * Set-Cookie Max-Age/Expires are honored; an expired cookie is
+ * never stored and never sent. Provenance is tracked separately:
+ * names set by API responses (`fromResponse`) are fresher than
+ * idle-page cookies, so a later refreshSeed never downgrades
+ * them back to stale page values. */
 class CookieJar {
   constructor() {
     this.cookies = new Map();
+    // name -> expiry epoch ms (Infinity = session cookie, no expiry).
+    this.expiry = new Map();
+    // Names most recently set by an API response (not by a page seed).
+    this.fromResponse = new Set();
+  }
+
+  /** Store one cookie, dropping it when already expired. Returns true when stored. */
+  set(name, value, expiryMs = Infinity) {
+    if (!name) return false;
+    if (expiryMs !== Infinity && !(expiryMs > Date.now())) {
+      this.cookies.delete(name);
+      this.expiry.delete(name);
+      return false;
+    }
+    this.cookies.set(name, value);
+    this.expiry.set(name, expiryMs);
+    return true;
   }
 
   /** Apply one Set-Cookie header value (or an array of them). */
@@ -469,23 +499,58 @@ class CookieJar {
       const name = first.slice(0, eq).trim();
       const value = first.slice(eq + 1).trim();
       // Max-Age=0 (or a past Expires) deletes the cookie.
-      if (/max-age=0/i.test(header)) {
+      const maxAge = /max-age=(-?\d+)/i.exec(header);
+      if (maxAge && Number(maxAge[1]) <= 0) {
         this.cookies.delete(name);
-      } else {
-        this.cookies.set(name, value);
+        this.expiry.delete(name);
+        this.fromResponse.delete(name);
+        continue;
       }
+      let expiryMs = Infinity;
+      if (maxAge) {
+        expiryMs = Date.now() + Number(maxAge[1]) * 1000;
+      } else {
+        const exp = /expires=([^;]+)/i.exec(header);
+        if (exp) {
+          const t = Date.parse(exp[1].trim());
+          expiryMs = Number.isNaN(t) ? Infinity : t;
+        }
+      }
+      if (this.set(name, value, expiryMs)) this.fromResponse.add(name);
+      else this.fromResponse.delete(name);
     }
   }
 
+  /** Drop entries past expiry. Returns how many were dropped. */
+  pruneExpired(now = Date.now()) {
+    let dropped = 0;
+    for (const [name, exp] of this.expiry) {
+      if (exp !== Infinity && exp <= now) {
+        this.cookies.delete(name);
+        this.expiry.delete(name);
+        dropped += 1;
+      }
+    }
+    return dropped;
+  }
+
   headerValue() {
+    this.pruneExpired();
     return [...this.cookies.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
   }
 
   get(name) {
+    const exp = this.expiry.get(name);
+    if (exp !== undefined && exp !== Infinity && exp <= Date.now()) {
+      this.cookies.delete(name);
+      this.expiry.delete(name);
+      return undefined;
+    }
     return this.cookies.get(name);
   }
 
   size() {
+    this.pruneExpired();
     return this.cookies.size;
   }
 }
@@ -594,7 +659,14 @@ class BdrisHttpClient {
         return eq > 0 ? { name: p.slice(0, eq).trim(), value: p.slice(eq + 1).trim() } : null;
       }).filter(Boolean);
     for (const c of list) {
-      if (c && c.name) this.jar.cookies.set(c.name, c.value);
+      if (!c || !c.name) continue;
+      // Playwright cookies carry `expires` (epoch seconds, -1 =
+      // session). A cookie already dead at seed time is skipped,
+      // never stored — and never deletes a live value the jar
+      // already holds (skip, not set-and-drop).
+      const expiryMs = (typeof c.expires === 'number' && c.expires > 0) ? c.expires * 1000 : Infinity;
+      if (expiryMs !== Infinity && expiryMs <= Date.now()) continue;
+      this.jar.set(c.name, c.value, expiryMs);
     }
     if (!csrfToken) {
       throw err('BOOTSTRAP_NO_CSRF', 'Browser page has no CSRF token (meta _csrf, inline csrf and hidden _csrf field all absent); cannot build API headers.');
@@ -603,6 +675,40 @@ class BdrisHttpClient {
     if (csrfHeaderName) this.csrfHeaderName = csrfHeaderName;
     this.bootstrapped = true;
     return { cookies: this.jar.size() };
+  }
+
+  /**
+   * RESEED (2026-10-30): refresh this client from a live warm
+   * page's CURRENT cookies + CSRF without navigating it (the page
+   * may be the bot's mid-flow page; seedFromPage never navigates
+   * for exactly that reason). Rules, in order:
+   *  - CSRF: the page's current token always wins (it is the
+   *    page's own truth; when the page is unchanged it is simply
+   *    the same value, so adopting it is never a downgrade).
+   *  - Cookies: a cookie this chain's API responses set (jar
+   *    provenance `fromResponse`) is fresher than any idle-page
+   *    value and is NEVER overwritten by the page; page cookies
+   *    only fill names the jar lacks (or whose jar entry expired).
+   *    Expired page cookies are dropped, never stored.
+   * Never throws for a missing token (the caller keeps the jarred
+   * state instead); returns {cookies, refreshed} counts only.
+   * Does NOT touch bootstrapped: a re-seed never un-seeds.
+   */
+  refreshSeed({ cookies = [], csrfToken = null, csrfHeaderName = null } = {}) {
+    const list = Array.isArray(cookies) ? cookies : [];
+    for (const c of list) {
+      if (!c || !c.name) continue;
+      const expiryMs = (typeof c.expires === 'number' && c.expires > 0) ? c.expires * 1000 : Infinity;
+      if (expiryMs !== Infinity && expiryMs <= Date.now()) continue; // dead page cookie: never stored
+      const live = this.jar.get(c.name);
+      if (live !== undefined && this.jar.fromResponse.has(c.name)) continue; // API-fresher: keep jar's
+      this.jar.set(c.name, c.value, expiryMs);
+    }
+    if (csrfToken) {
+      this.csrfToken = csrfToken;
+      if (csrfHeaderName) this.csrfHeaderName = csrfHeaderName;
+    }
+    return { cookies: this.jar.size(), refreshed: true };
   }
 
   /** Headers every BDRIS API call must carry (verified). */
