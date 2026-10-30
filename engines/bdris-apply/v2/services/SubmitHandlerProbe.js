@@ -23,6 +23,18 @@
  *    presence, found booleans, match counts, mechanism labels,
  *    appended/header/storage key NAMES only, and the form's action/
  *    method/enctype attribute strings (markup, not values).
+ *  - The clientHeader determination is the ONE exception that may
+ *    report a VALUE — and only when that value is a SHORT STATIC
+ *    string literal in the page's own code (plain ASCII identifier,
+ *    20 chars or fewer, e.g. an app name like "bdris"/"bris"):
+ *    static code, identical for every visitor, not a secret, not a
+ *    session token. Anything else — a variable, a computed
+ *    expression, a template literal, a long or random-looking
+ *    literal — is reported ONLY as valueKind "variable-or-token",
+ *    with no content, no length, no hash, no prefix. The runtime
+ *    check reports ONLY two booleans (equalsBdris, equalsBris) and
+ *    only when a readable window-level holder exists; when none
+ *    exists it reports runtimeAvailable false and no booleans.
  *  - NEVER returned: script text, page content, form values, cookies,
  *    tokens, CSRF values, phone numbers, OTPs, names, dates, or any
  *    other value. Name extraction only ever captures the FIRST
@@ -102,6 +114,65 @@ function headerNamesFromText(text, out) {
   const re = /\.setRequestHeader\(\s*['"]([^'"]{1,128})['"]/g;
   let hit;
   while ((hit = re.exec(text)) !== null) cleanHeaderName(hit[1], out);
+}
+
+// A static-literal value is a plain ASCII identifier, 20 chars or
+// fewer, in single/double quotes. Template literals are NOT static
+// (they can interpolate), and neither are long or random-looking
+// literals — both classify as variable-or-token.
+const STATIC_LITERAL_RE = /^['"]([A-Za-z][A-Za-z0-9_-]*)['"]$/;
+
+/**
+ * Server-side reduction of one script text for the "client" header
+ * VALUE expression. Finds every place the script sets a header
+ * named exactly "client" — setRequestHeader('client', EXPR),
+ * Headers.append('client', EXPR), or a headers object with a
+ * client key — and classifies each value expression:
+ *  - setCount 0 → valueKind "not-found".
+ *  - every setting a short static literal and all literals equal
+ *    → valueKind "static-literal" + the literal itself (public
+ *    code, same for every visitor — reporting it cannot leak a
+ *    session token, because a session token is never a short
+ *    static app-name literal).
+ *  - every setting static but distinct literals → "multiple-literals"
+ *    (value withheld: the determination is ambiguous, not a token).
+ *  - any setting a variable, call, concatenation, template literal,
+ *    long literal, or anything else → "variable-or-token" (no
+ *    content, no length, no hash, no prefix — nothing).
+ * The second-argument capture stops at the first ')' — a call like
+ * getToken() therefore classifies as variable, which is correct;
+ * a pure literal is unaffected. The headers-object capture stops
+ * at the first '}' — nested objects are a known blind spot,
+ * documented, not silently patched.
+ */
+function reduceClientHeaderText(text) {
+  const empty = { setCount: 0, valueKind: 'not-found', value: null };
+  if (typeof text !== 'string' || !text) return empty;
+  const literals = new Set();
+  let hasVariable = false;
+  let count = 0;
+  const note = (expr) => {
+    count += 1;
+    const e = String(expr || '').trim();
+    const m = STATIC_LITERAL_RE.exec(e);
+    if (m && m[1].length <= 20) literals.add(m[1]);
+    else hasVariable = true;
+  };
+  let hit;
+  const srh = /\.setRequestHeader\s*\(\s*['"]client['"]\s*,\s*([^)]*)\)/g;
+  while ((hit = srh.exec(text)) !== null) note(hit[1]);
+  const hap = /\.append\s*\(\s*['"]client['"]\s*,\s*([^)]*)\)/g;
+  while ((hit = hap.exec(text)) !== null) note(hit[1]);
+  const hobj = /\bheaders\s*:\s*\{([^}]*)\}/g;
+  while ((hit = hobj.exec(text)) !== null) {
+    const kv = /['"]?client['"]?\s*:\s*([^,}\]]+)/g;
+    let kvHit;
+    while ((kvHit = kv.exec(hit[1])) !== null) note(kvHit[1]);
+  }
+  if (count === 0) return empty;
+  if (hasVariable) return { setCount: count, valueKind: 'variable-or-token', value: null };
+  if (literals.size === 1) return { setCount: count, valueKind: 'static-literal', value: [...literals][0] };
+  return { setCount: count, valueKind: 'multiple-literals', value: null };
 }
 
 function submitMechanismFromFlags(f) {
@@ -277,7 +348,7 @@ function sameOrigin(src, pageUrl) {
  * forms: [{action, method, enctype}], inlineReadAtSubmit } where
  * inline[] aligns with the inline scripts in order. Each inline entry
  * is the reduced result only (handler evidence + TSPD mention +
- * storage names when mentioned) — inline script text never leaves
+ * storage names when mentioned + clientHeader value-kind) — inline script text never leaves
  * the page. forms carry getAttribute strings only (null when the
  * attribute is absent — an absent method means the GET default, and
  * an absent action stays absent instead of resolving to the page
@@ -435,6 +506,45 @@ function collectSubmitHandlerEvidence() {
       },
     };
   }
+  function reduceClientHeader(t) {
+    // Mirror of reduceClientHeaderText (ES5): same three setting
+    // shapes, same static-literal rule (plain ASCII identifier,
+    // 20 chars or fewer, single/double quotes only). A variable,
+    // call, template literal, or long/random literal yields
+    // variable-or-token with no content.
+    var literals = {};
+    var litCount = 0;
+    var hasVariable = false;
+    var count = 0;
+    function note(expr) {
+      var e = String(expr || '').replace(/^\s+|\s+$/g, '');
+      var m = /^['"]([A-Za-z][A-Za-z0-9_-]*)['"]$/.exec(e);
+      count += 1;
+      if (m && m[1].length <= 20) {
+        if (!literals[m[1]]) { literals[m[1]] = true; litCount += 1; }
+      } else {
+        hasVariable = true;
+      }
+    }
+    var hit;
+    var srh = /\.setRequestHeader\s*\(\s*['"]client['"]\s*,\s*([^)]*)\)/g;
+    while ((hit = srh.exec(t)) !== null) note(hit[1]);
+    var hap = /\.append\s*\(\s*['"]client['"]\s*,\s*([^)]*)\)/g;
+    while ((hit = hap.exec(t)) !== null) note(hit[1]);
+    var hobj = /\bheaders\s*:\s*\{([^}]*)\}/g;
+    while ((hit = hobj.exec(t)) !== null) {
+      var inner = hit[1];
+      var kv = /['"]?client['"]?\s*:\s*([^,}\]]+)/g;
+      var kvHit;
+      while ((kvHit = kv.exec(inner)) !== null) note(kvHit[1]);
+    }
+    if (count === 0) return { setCount: 0, valueKind: 'not-found', value: null };
+    if (hasVariable) return { setCount: count, valueKind: 'variable-or-token', value: null };
+    if (litCount === 1) {
+      for (var k in literals) return { setCount: count, valueKind: 'static-literal', value: k };
+    }
+    return { setCount: count, valueKind: 'multiple-literals', value: null };
+  }
   var scripts = [];
   var inline = [];
   var all = document.querySelectorAll('script');
@@ -451,6 +561,7 @@ function collectSubmitHandlerEvidence() {
         found: h.found, matchCount: h.matchCount, mechanism: h.mechanism,
         appendedFieldNames: h.appendedFieldNames, headerNames: h.headerNames,
         tspdMention: tp.mention, storage: tp.storage,
+        clientHeader: reduceClientHeader(txt),
       });
     }
   }
@@ -501,6 +612,66 @@ function collectSubmitHandlerEvidence() {
 }
 
 /**
+ * Page function (runs INSIDE the warm page via page.evaluate; must
+ * stay self-contained — no module-scope references).
+ *
+ * Reports ONLY two booleans about the "client" header's runtime
+ * value: whether any readable window-level string holder with a
+ * token-ish name (tspd/fingerprint/challenge/clearance, case
+ * insensitive) equals 'bdris' or 'bris'. One level of nesting is
+ * followed (window.TSPD = { token: '...' }) — nothing else is
+ * descended into, so DOM objects and unrelated state are never
+ * touched. The value itself, its length, and any hash never leave
+ * the page. runtimeAvailable is false when no such holder exists
+ * (e.g. the token lives in a closure scope the page function
+ * cannot see) — that says NOTHING about the value, only that this
+ * read could not reach it. When runtimeAvailable is false, the
+ * booleans are omitted entirely.
+ */
+function collectClientHeaderRuntime() {
+  var unavailable = { runtimeAvailable: false };
+  try {
+    var w = null;
+    if (typeof window !== 'undefined') w = window;
+    else if (typeof globalThis !== 'undefined') w = globalThis;
+    if (!w) return unavailable;
+    var names = [];
+    try { names = Object.getOwnPropertyNames(w); } catch (e) { return unavailable; }
+    var found = false;
+    var eqBdris = false;
+    var eqBris = false;
+    for (var i = 0; i < names.length; i++) {
+      var n = names[i];
+      if (!/^(tspd|fingerprint|challenge|clearance)/i.test(n)) continue;
+      var v;
+      try { v = w[n]; } catch (e) { continue; }
+      if (typeof v === 'string') {
+        found = true;
+        if (v === 'bdris') eqBdris = true;
+        if (v === 'bris') eqBris = true;
+        continue;
+      }
+      if (v && typeof v === 'object') {
+        var sub = [];
+        try { sub = Object.getOwnPropertyNames(v); } catch (e) { sub = []; }
+        for (var j = 0; j < sub.length; j++) {
+          var sv;
+          try { sv = v[sub[j]]; } catch (e) { continue; }
+          if (typeof sv !== 'string') continue;
+          found = true;
+          if (sv === 'bdris') eqBdris = true;
+          if (sv === 'bris') eqBris = true;
+        }
+      }
+    }
+    if (!found) return unavailable;
+    return { runtimeAvailable: true, equalsBdris: eqBdris, equalsBris: eqBris };
+  } catch (e) {
+    return unavailable;
+  }
+}
+
+/**
  * Orchestration: refs from the warm page, external texts via the
  * seeded client's fetchText(pathname), reduction to paths/booleans/
  * counts/names/markup-attributes only. Per-script fetch failure or a
@@ -509,6 +680,21 @@ function collectSubmitHandlerEvidence() {
  */
 async function probeSubmitHandler({ page, fetchText }) {
   const refs = await page.evaluate(collectSubmitHandlerEvidence);
+  // Runtime booleans (best-effort, never fatal): a failed read is
+  // "no readable holder", not a probe failure.
+  let runtime = { runtimeAvailable: false };
+  try {
+    const raw = await page.evaluate(collectClientHeaderRuntime);
+    if (raw && raw.runtimeAvailable === true) {
+      runtime = {
+        runtimeAvailable: true,
+        equalsBdris: raw.equalsBdris === true,
+        equalsBris: raw.equalsBris === true,
+      };
+    }
+  } catch {
+    runtime = { runtimeAvailable: false };
+  }
   const pageUrl = (refs && typeof refs.url === 'string') ? refs.url : '';
   const list = (refs && Array.isArray(refs.scripts)) ? refs.scripts : [];
   const inlineResults = (refs && Array.isArray(refs.inline)) ? refs.inline : [];
@@ -521,6 +707,22 @@ async function probeSubmitHandler({ page, fetchText }) {
   let handlerMechanism = 'unknown';
   const tspdPaths = [];
   const tspdStorage = { cookies: new Set(), localStorage: new Set(), sessionStorage: new Set(), headers: new Set(), tokenVariables: new Set() };
+  // Client-header aggregation across every script that sets it
+  // (submit-context or not — the setter is what matters, and the
+  // submit-context heuristic must not hide it).
+  const clientSetBy = [];
+  let clientSettingCount = 0;
+  const clientLiterals = new Set();
+  let clientHasVariable = false;
+  let clientMultipleLiterals = false;
+  const noteClientHeader = (label, ch) => {
+    if (!ch || !ch.setCount) return;
+    clientSetBy.push(label);
+    clientSettingCount += ch.setCount;
+    if (ch.valueKind === 'static-literal' && ch.value) clientLiterals.add(ch.value);
+    else if (ch.valueKind === 'multiple-literals') clientMultipleLiterals = true;
+    else if (ch.valueKind === 'variable-or-token') clientHasVariable = true;
+  };
   const externalTexts = [];
   let inlineIdx = 0;
   for (const ref of list.slice(0, MAX_SCRIPTS)) {
@@ -545,6 +747,7 @@ async function probeSubmitHandler({ page, fetchText }) {
           }
         }
       }
+      noteClientHeader('inline', r.clientHeader);
       scripts.push(entry);
       continue;
     }
@@ -566,6 +769,8 @@ async function probeSubmitHandler({ page, fetchText }) {
     externalTexts.push({ path, text });
     const h = reduceSubmitHandlerText(text);
     const tp = reduceTspdText(text);
+    const ch = reduceClientHeaderText(text);
+    noteClientHeader(path, ch);
     const entry = { path, inline: false, found: h.found, matchCount: h.matchCount };
     if (h.found) {
       handlerFound = true;
@@ -611,6 +816,23 @@ async function probeSubmitHandler({ page, fetchText }) {
     }
   }
   const form = forms.find((f) => f.action === FORM_ACTION) || forms[0] || null;
+  // Client-header value determination: a static literal is reported
+  // only when it is the SOLE literal across every setting; any
+  // variable setting, or distinct literals, withholds the value.
+  let clientValueKind = 'not-found';
+  let clientValue = null;
+  if (clientSettingCount > 0) {
+    if (clientHasVariable) clientValueKind = 'variable-or-token';
+    else if (clientMultipleLiterals || clientLiterals.size > 1) clientValueKind = 'multiple-literals';
+    else { clientValueKind = 'static-literal'; clientValue = [...clientLiterals][0]; }
+  }
+  const clientHeader = {
+    setBy: [...new Set(clientSetBy)],
+    settingCount: clientSettingCount,
+    valueKind: clientValueKind,
+    ...(clientValueKind === 'static-literal' ? { value: clientValue } : {}),
+    runtime,
+  };
   return {
     ok: true,
     truncated: list.length > MAX_SCRIPTS,
@@ -634,6 +856,7 @@ async function probeSubmitHandler({ page, fetchText }) {
       },
       readAtSubmit,
     },
+    clientHeader,
     scripts,
   };
 }
@@ -644,7 +867,9 @@ module.exports = {
   FORM_ACTION,
   reduceSubmitHandlerText,
   reduceTspdText,
+  reduceClientHeaderText,
   scriptPathname,
   collectSubmitHandlerEvidence,
+  collectClientHeaderRuntime,
   probeSubmitHandler,
 };

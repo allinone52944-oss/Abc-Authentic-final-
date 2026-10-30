@@ -23,6 +23,17 @@
  *    name literal).
  *  - Form attributes: the /br/application form's action/method/
  *    enctype attribute strings exactly (null when absent).
+ *  - Client-header value read (2026-10-30): the existing response
+ *    gains a clientHeader object — which scripts set a "client"
+ *    header, how many settings, and the value KIND. A short static
+ *    literal (plain ASCII identifier, ≤20 chars) is reported as-is
+ *    (public code, same for every visitor); a variable, computed
+ *    expression, template literal, or long/random literal is
+ *    reported ONLY as variable-or-token, with no content, length,
+ *    hash, or prefix. Runtime booleans (equalsBdris/equalsBris)
+ *    come from the warm page's window-level holders only, and are
+ *    omitted when no readable holder exists. No second endpoint —
+ *    the existing /probe-submit-handler carries it.
  *  - Privacy: value-stuffed scripts yield a response containing NONE
  *    of those values — keys only.
  *  - Exclusivity: the handler calls probeSubmitHandler and nothing
@@ -50,8 +61,10 @@ const { HttpGeoService } = require('../services/HttpGeoService');
 const {
   reduceSubmitHandlerText,
   reduceTspdText,
+  reduceClientHeaderText,
   scriptPathname,
   collectSubmitHandlerEvidence,
+  collectClientHeaderRuntime,
   probeSubmitHandler,
 } = require('../services/SubmitHandlerProbe');
 
@@ -106,8 +119,12 @@ function makeFakeClient(textByPath) {
   };
 }
 
-function makeFakePage(refs) {
-  return { evaluate: async () => refs };
+function makeFakePage(refs, runtime) {
+  return {
+    evaluate: async (fn) => (fn === collectClientHeaderRuntime
+      ? (runtime || { runtimeAvailable: false })
+      : refs),
+  };
 }
 
 const PAGE_URL = 'https://bdris.gov.bd/br/application';
@@ -249,7 +266,7 @@ describe('SUBMIT-HANDLER PROBE: handleProbeSubmitHandlerRequest gating', () => {
     stubSeed(fake, true);
     const r = await engine.handleProbeSubmitHandlerRequest({ _authToken: mintToken({ id: 'u1' }) });
     assert.strictEqual(r.status, 200);
-    assert.deepStrictEqual(Object.keys(r.body).sort(), ['form', 'formCount', 'ok', 'scripts', 'submitHandler', 'truncated', 'tspd']);
+    assert.deepStrictEqual(Object.keys(r.body).sort(), ['clientHeader', 'form', 'formCount', 'ok', 'scripts', 'submitHandler', 'truncated', 'tspd']);
     assert.strictEqual(r.body.ok, true);
     assert.strictEqual(r.body.truncated, false);
     assert.strictEqual(r.body.formCount, 2);
@@ -382,6 +399,7 @@ describe('SUBMIT-HANDLER PROBE: handleProbeSubmitHandlerRequest gating', () => {
       ok: true, truncated: false, form: null, formCount: 0,
       submitHandler: { found: false, mechanism: 'unknown', appendedFieldNames: [], headerNames: [], foundIn: [] },
       tspd: { scripts: [], storage: EMPTY_STORAGE, readAtSubmit: false },
+      clientHeader: { setBy: [], settingCount: 0, valueKind: 'not-found', runtime: { runtimeAvailable: false } },
       scripts: [],
     });
     let status2 = 0;
@@ -591,5 +609,244 @@ describe('SUBMIT-HANDLER PROBE: pure reduction', () => {
       if (savedLoc === undefined) delete global.location;
       else global.location = savedLoc;
     }
+  });
+});
+
+describe('CLIENT-HEADER VALUE READ: reduceClientHeaderText + runtime booleans', () => {
+  it('setRequestHeader static literals: bdris and bris reported as-is', () => {
+    assert.deepStrictEqual(reduceClientHeaderText('x.setRequestHeader("client", "bdris");'), {
+      setCount: 1, valueKind: 'static-literal', value: 'bdris',
+    });
+    assert.deepStrictEqual(reduceClientHeaderText("x.setRequestHeader('client', 'bris');"), {
+      setCount: 1, valueKind: 'static-literal', value: 'bris',
+    });
+    // Same literal twice is still one literal.
+    assert.deepStrictEqual(reduceClientHeaderText(
+      'x.setRequestHeader("client", "bdris"); y.setRequestHeader("client", "bdris");',
+    ), { setCount: 2, valueKind: 'static-literal', value: 'bdris' });
+  });
+
+  it('variable / call / concatenation / template literal → variable-or-token, no value', () => {
+    for (const text of [
+      'x.setRequestHeader("client", tspdToken);',
+      'x.setRequestHeader("client", getTspdToken());',
+      'x.setRequestHeader("client", "bd" + "ris");',
+      'x.setRequestHeader("client", `bdris`);',
+      'x.setRequestHeader("client", token || "bdris");',
+    ]) {
+      const r = reduceClientHeaderText(text);
+      assert.strictEqual(r.valueKind, 'variable-or-token', text);
+      assert.strictEqual(r.value, null, text);
+      assert.strictEqual(r.setCount, 1, text);
+    }
+  });
+
+  it('headers object: literal and variable; Headers.append literal', () => {
+    assert.deepStrictEqual(reduceClientHeaderText(
+      'fetch("/br/application", { method: "POST", headers: { client: "bdris" } });',
+    ), { setCount: 1, valueKind: 'static-literal', value: 'bdris' });
+    assert.deepStrictEqual(reduceClientHeaderText(
+      'fetch("/br/application", { method: "POST", headers: { "client": token } });',
+    ), { setCount: 1, valueKind: 'variable-or-token', value: null });
+    assert.deepStrictEqual(reduceClientHeaderText(
+      'var h = new Headers(); h.append("client", "bris");',
+    ), { setCount: 1, valueKind: 'static-literal', value: 'bris' });
+  });
+
+  it('long random literal suppressed: length and content both hidden', () => {
+    const longLiteral = 'tok_9f8e7d6c5b4a39281ef';
+    const r = reduceClientHeaderText(`x.setRequestHeader("client", "${longLiteral}");`);
+    assert.strictEqual(r.valueKind, 'variable-or-token');
+    assert.strictEqual(r.value, null);
+    assert.ok(!JSON.stringify(r).includes(longLiteral), 'long literal must not leak');
+    // Non-identifier literal (spaces/dots) is suppressed too.
+    const dotted = reduceClientHeaderText('x.setRequestHeader("client", "bdris.gov.bd");');
+    assert.strictEqual(dotted.valueKind, 'variable-or-token');
+    assert.strictEqual(dotted.value, null);
+  });
+
+  it('no client setting → not-found; non-client headers ignored', () => {
+    assert.deepStrictEqual(reduceClientHeaderText('x.setRequestHeader("X-Foo", "bdris");'), {
+      setCount: 0, valueKind: 'not-found', value: null,
+    });
+    assert.deepStrictEqual(reduceClientHeaderText('console.log("client");'), {
+      setCount: 0, valueKind: 'not-found', value: null,
+    });
+    assert.deepStrictEqual(reduceClientHeaderText(''), {
+      setCount: 0, valueKind: 'not-found', value: null,
+    });
+  });
+
+  it('distinct static literals → multiple-literals, value withheld', () => {
+    const r = reduceClientHeaderText(
+      'x.setRequestHeader("client", "bdris"); y.setRequestHeader("client", "bris");',
+    );
+    assert.strictEqual(r.valueKind, 'multiple-literals');
+    assert.strictEqual(r.value, null);
+    assert.strictEqual(r.setCount, 2);
+  });
+
+  it('collectClientHeaderRuntime: window holders → booleans only, never the value', () => {
+    const savedWindow = global.window;
+    try {
+      global.window = { TSPD: 'zzz-neither-value', other: 'bdris' };
+      const r = collectClientHeaderRuntime();
+      assert.deepStrictEqual(r, { runtimeAvailable: true, equalsBdris: false, equalsBris: false });
+      assert.ok(!JSON.stringify(r).includes('zzz-neither-value'), 'neither value must not leak');
+      global.window = { TSPD: 'bdris' };
+      assert.deepStrictEqual(collectClientHeaderRuntime(), {
+        runtimeAvailable: true, equalsBdris: true, equalsBris: false,
+      });
+      global.window = { tspdToken: 'bris' };
+      assert.deepStrictEqual(collectClientHeaderRuntime(), {
+        runtimeAvailable: true, equalsBdris: false, equalsBris: true,
+      });
+      // One level of nesting: window.TSPD = { token: 'bris' }.
+      global.window = { TSPD: { token: 'bris', other: 42 } };
+      assert.deepStrictEqual(collectClientHeaderRuntime(), {
+        runtimeAvailable: true, equalsBdris: false, equalsBris: true,
+      });
+    } finally {
+      if (savedWindow === undefined) delete global.window;
+      else global.window = savedWindow;
+    }
+  });
+
+  it('collectClientHeaderRuntime: no holder → unavailable, no booleans', () => {
+    const savedWindow = global.window;
+    try {
+      global.window = { document: {}, location: {} };
+      const r = collectClientHeaderRuntime();
+      assert.deepStrictEqual(r, { runtimeAvailable: false });
+      assert.ok(!('equalsBdris' in r) && !('equalsBris' in r), 'no booleans when unavailable');
+      global.window = { TSPD: 42 };
+      assert.deepStrictEqual(collectClientHeaderRuntime(), { runtimeAvailable: false });
+      delete global.window;
+      assert.deepStrictEqual(collectClientHeaderRuntime(), { runtimeAvailable: false });
+    } finally {
+      if (savedWindow === undefined) delete global.window;
+      else global.window = savedWindow;
+    }
+  });
+
+  it('in-page clientHeader reduction agrees with the server reducer (parity)', () => {
+    const samples = [
+      'x.setRequestHeader("client", "bdris");',
+      'fetch("/br/application", { method: "POST", headers: { client: getToken() } });',
+      'var h = new Headers(); h.append("client", "tok_9f8e7d6c5b4a39281ef");',
+      'console.log("nothing here");',
+    ];
+    const savedDoc = global.document;
+    const savedLoc = global.location;
+    try {
+      global.location = { href: PAGE_URL };
+      global.document = {
+        querySelectorAll: (sel) => {
+          if (sel === 'script') return samples.map((textContent) => ({ src: '', textContent }));
+          if (sel === 'form') return [];
+          return [];
+        },
+      };
+      const refs = collectSubmitHandlerEvidence();
+      assert.strictEqual(refs.inline.length, samples.length);
+      for (let i = 0; i < samples.length; i++) {
+        assert.deepStrictEqual(refs.inline[i].clientHeader, reduceClientHeaderText(samples[i]));
+      }
+    } finally {
+      if (savedDoc === undefined) delete global.document;
+      else global.document = savedDoc;
+      if (savedLoc === undefined) delete global.location;
+      else global.location = savedLoc;
+    }
+  });
+
+  it('probeSubmitHandler: static-literal case — setBy, value, runtime booleans', async () => {
+    const refs = {
+      url: PAGE_URL,
+      scripts: [
+        { src: 'https://bdris.gov.bd/TSPD/', inline: false },
+        { src: '', inline: true },
+      ],
+      inline: [{
+        found: false, matchCount: 0, mechanism: 'unknown',
+        appendedFieldNames: [], headerNames: [],
+        tspdMention: false, storage: EMPTY_STORAGE,
+        clientHeader: { setCount: 1, valueKind: 'static-literal', value: 'bdris' },
+      }],
+      forms: [],
+      inlineReadAtSubmit: false,
+    };
+    const page = makeFakePage(refs, { runtimeAvailable: true, equalsBdris: true, equalsBris: false });
+    const result = await probeSubmitHandler({
+      page,
+      fetchText: async (p) => {
+        if (p === '/TSPD/') return 'x.setRequestHeader("client", "bdris");';
+        return '';
+      },
+    });
+    assert.deepStrictEqual(result.clientHeader, {
+      setBy: ['/TSPD/', 'inline'],
+      settingCount: 2,
+      valueKind: 'static-literal',
+      value: 'bdris',
+      runtime: { runtimeAvailable: true, equalsBdris: true, equalsBris: false },
+    });
+  });
+
+  it('probeSubmitHandler: variable case — value suppressed, neither-booleans, no leak', async () => {
+    const longLiteral = 'tok_9f8e7d6c5b4a39281ef';
+    const refs = {
+      url: PAGE_URL,
+      scripts: [
+        { src: 'https://bdris.gov.bd/TSPD/', inline: false },
+        { src: 'https://bdris.gov.bd/static/js/x.js', inline: false },
+      ],
+      inline: [],
+      forms: [],
+      inlineReadAtSubmit: false,
+    };
+    const page = makeFakePage(refs, { runtimeAvailable: true, equalsBdris: false, equalsBris: false });
+    const result = await probeSubmitHandler({
+      page,
+      fetchText: async (p) => {
+        if (p === '/TSPD/') return 'x.setRequestHeader("client", tspdToken);';
+        if (p === '/static/js/x.js') return `x.setRequestHeader("client", "${longLiteral}");`;
+        return '';
+      },
+    });
+    assert.strictEqual(result.clientHeader.valueKind, 'variable-or-token');
+    assert.ok(!('value' in result.clientHeader), 'variable case must carry no value key');
+    assert.deepStrictEqual(result.clientHeader.setBy, ['/TSPD/', '/static/js/x.js']);
+    assert.strictEqual(result.clientHeader.settingCount, 2);
+    assert.deepStrictEqual(result.clientHeader.runtime, {
+      runtimeAvailable: true, equalsBdris: false, equalsBris: false,
+    });
+    const dumped = JSON.stringify(result);
+    assert.ok(!dumped.includes(longLiteral), 'long literal must not leak');
+    assert.ok(!dumped.includes('tspdToken'), 'variable name is not a value, but must not appear either');
+  });
+
+  it('probeSubmitHandler: runtime evaluate failure → unavailable, probe still succeeds', async () => {
+    const refs = {
+      url: PAGE_URL,
+      scripts: [{ src: 'https://bdris.gov.bd/TSPD/', inline: false }],
+      inline: [],
+      forms: [],
+      inlineReadAtSubmit: false,
+    };
+    const page = {
+      evaluate: async (fn) => {
+        if (fn === collectClientHeaderRuntime) throw new Error('page gone');
+        return refs;
+      },
+    };
+    const result = await probeSubmitHandler({
+      page,
+      fetchText: async () => 'x.setRequestHeader("client", "bdris");',
+    });
+    assert.strictEqual(result.ok, true);
+    assert.deepStrictEqual(result.clientHeader.runtime, { runtimeAvailable: false });
+    assert.strictEqual(result.clientHeader.valueKind, 'static-literal');
+    assert.strictEqual(result.clientHeader.value, 'bdris');
   });
 });
