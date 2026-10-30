@@ -523,20 +523,33 @@ router.get('/mouza-rate', requireAuth, async (req, res) => {
   const office = String(req.query.office || '').trim();
   const mouza = String(req.query.mouza || '').trim();
   const cls = String(req.query.class || '').trim();
+  const thana = String(req.query.thana || '').trim() || undefined;
   if (!office || !mouza || !cls) {
     return res.status(400).json({ error: 'BAD_INPUT', message: 'অফিস, মৌজা ও শ্রেণি — তিনটাই লাগবে।' });
   }
-  const hit = lookupMouzaRate(office, mouza, cls);
+  const hit = lookupMouzaRate(office, mouza, cls, thana);
   if (!hit) {
     return res.json({
       ok: true, found: false,
       message: 'এই মৌজা/শ্রেণির তালিকার হার পাওয়া যায়নি — হার নিজে বসান অথবা তালিকায় থাকা শ্রেণি বাছুন।',
     });
   }
+  // Thana qualifier (Chandgaon collisions): several variants
+  // match and no thana was given — the client must ask the
+  // shopkeeper to pick the thana. Still 200 + found:false, so
+  // the form treats it as "no rate yet", not an error.
+  if (hit.ambiguous) {
+    return res.json({
+      ok: true, found: false, ambiguous: true, options: hit.options,
+      message: 'এই মৌজা একাধিক থানায় আছে — থানা বাছুন।',
+    });
+  }
   return res.json({
     ok: true, found: true,
     office: hit.office, officeName: hit.officeName, mouza: hit.mouza, class: hit.class,
     rate: hit.rate, period: hit.period, p: hit.p,
+    thana: hit.thana, jl: hit.jl,
+    pouroPukur: hit.pouroPukur, pouroNote: hit.pouroNote,
   });
 });
 
@@ -554,9 +567,15 @@ router.get('/mouza-rate', requireAuth, async (req, res) => {
 // mouza left empty, or equal to the cascade mouza) the result
 // is identical to before.
 const MOUZA_OFFICE_GEO = {
-  // Office id → report-header geography. Boalkhali is an
-  // upazila of Chattogram district, Chattogram division.
+  // Office id → report-header geography. All six are in
+  // Chattogram district, Chattogram division; the header field
+  // is "উপজেলা / থানা", so city thanas fit here as well.
   boalkhali: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'বোয়ালখালী' },
+  chandgaon: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'চাঁদগাঁও' },
+  sandwip: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'সন্দ্বীপ' },
+  gachbaria: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'চন্দনাইশ' },
+  rangunia: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'রাঙ্গুনিয়া' },
+  pahartali: { division: 'চট্টগ্রাম', district: 'চট্টগ্রাম', upazila: 'পাহাড়তলী' },
 };
 function deriveMouzaReportArea(body, lines) {
   const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
@@ -621,18 +640,22 @@ router.post('/mouza', requireAuth, async (req, res) => {
           ? Number(toEn(String(l.oldRate))) : undefined,
         source: (l && l.source === 'lookup') ? 'lookup' : 'manual',
         lookupOffice: String((l && l.lookupOffice) || '').trim() || undefined,
+        lookupThana: String((l && l.lookupThana) || '').trim() || undefined,
       };
       verified.push(null);
       return line;
     });
     // Server-side lookup verification: a lookup line is trusted
     // ONLY when its rate matches rates.js exactly. The client
-    // never decides a lookup rate on its own.
+    // never decides a lookup rate on its own. A qualified line
+    // (Chandgaon collision resolved by thana) is trusted only
+    // when office+mouza+thana+class+rate ALL match rates.js —
+    // a line carrying the wrong thana (or none) fails here.
     for (let i = 0; i < lines.length; i++) {
       if (lines[i].source !== 'lookup') continue;
       const office = lines[i].lookupOffice || lookupOffice;
-      const hit = office ? lookupMouzaRate(office, lines[i].mouza, lines[i].class) : null;
-      if (!hit || hit.rate !== lines[i].rate) {
+      const hit = office ? lookupMouzaRate(office, lines[i].mouza, lines[i].class, lines[i].lookupThana) : null;
+      if (!hit || hit.ambiguous || hit.rate !== lines[i].rate) {
         return res.status(400).json({ error: 'LOOKUP_RATE_MISMATCH', message: 'তালিকার হার মেলেনি — লুকআপ দিয়ে আবার হার আনুন।' });
       }
       verified[i] = hit;
@@ -655,6 +678,7 @@ router.post('/mouza', requireAuth, async (req, res) => {
         l.lookupPeriod = verified[i].period;
         l.lookupOffice = verified[i].office;
         l.lookupP = verified[i].p;
+        if (verified[i].thana) l.lookupThana = verified[i].thana;
       }
     });
     const idem = idemOf(body, 'mouza');

@@ -192,6 +192,7 @@
           <div class="field"><label>২ · মৌজা *</label><select id="mMouza"><option value="">— বেছে নিন —</option></select></div>
           <div class="field" id="mMouzaManualWrap" style="display:none"><label>মৌজার নাম *</label><input type="text" id="mMouzaManual" placeholder="যেমন: শাকপুরা"></div>
           <div class="field"><label>৩ · শ্রেণি *</label><select id="mClass"><option value="">— আগে মৌজা —</option></select></div>
+          <div class="field" id="mThanaWrap" style="display:none"><label>থানা *</label><select id="mThana"></select></div>
           <div class="grid2">
             <div class="field"><label>৪ · পরিমাণ *</label><input type="text" id="mAmount" inputmode="decimal" placeholder="যেমন: 10"></div>
             <div class="field"><label>একক</label><select id="mUnit">
@@ -373,10 +374,12 @@
   const MOUZA_LINES = [];
   const MOUZA_FACTORS = { shatangsho: 1, katha: 1.65, bigha: 33, gonda: 2 };
   const MOUZA_UNIT_LABELS = { shatangsho: 'শতাংশ', katha: 'কাঠা', bigha: 'বিঘা', gonda: 'গন্ডা' };
-  // Proof scope only: offices whose schedule rates the server
-  // knows (rates.js). Adding an office here + in rates.js is
-  // all it takes to offer another office.
-  const MOUZA_OFFICES = { boalkhali: { name: 'বোয়ালখালী', mouzas: ['কধুরখীল'] } };
+  // Offices whose schedule rates the server knows (rates.js):
+  // Boalkhali (proof) + batch 1 (5 Chattogram offices).
+  // Adding an office here + in rates.js is all it takes to
+  // offer another office. Mouza names are unique per office;
+  // Chandgaon collisions resolve by thana at lookup time.
+  const MOUZA_OFFICES = {"boalkhali":{"name":"বোয়ালখালী","mouzas":["কধুরখীল"]},"chandgaon":{"name":"চাঁদগাঁও থানা","mouzas":["চান্দগাঁও","মোহরা","চর মোহরা","চর রাঙ্গামাটিয়া","পূর্ব ষোলশহর","বাকলিয়া","চর বাকলিয়া"]},"sandwip":{"name":"সন্দ্বীপ","mouzas":["আজিমপুর","আমান উল্যা","কাটগড়","কাহিয়াপাড়","কাহিয়াপাড় (চর)","কাহিয়াপাড় (বাক)","কালাপানিয়া","কুহিয়ামোড়া","কুহিয়ামোড়া (চর)","কুহিয়ামোড়া (বাক)","গাছুয়া","গাছুয়া (চর)","গাছুয়া (বাক)","চেউরিয়া","চৌকাতলী","দীর্ঘাপাড়","দীর্ঘাপাড় (চর)","দীর্ঘাপাড় (বাক)","দুর্বলাপাড়","বাউরিয়া","বাউরিয়া (চর)","বাউরিয়া (বাক)","মগধরা","মাইটভাঙ্গা","মুছাপুর","রহমতপুর","সন্তোষপুর","সন্তোষপুর (চর)","সন্তোষপুর (বাক)","সাতঘরিয়া","সারিকাইত","হরিশপুর","হরামিয়া","ছদ্রাখালী","ছদ্রাখালী (চর)","ছদ্রাখালী (বাক)"]},"gachbaria":{"name":"গাছবাড়িয়া, চন্দনাইশ","mouzas":["উত্তর জোয়ারা","উত্তর কেশবা","উত্তর আটিয়া","কাঞ্চননগর","কানাইমাদারী","কেওচিয়া","কুলাল চেন্না","গাছবাড়ীয়া","চন্দনাইশ","চর বরমা","চাগাচর","চিরিংঘাটি","জঙ্গল হাশিমপুর","জাফরাবাদ","জামিরজুরী","দক্ষিণ জোয়ারা","দঃ আড়াদিঘা","দোহাজারী","শিয়াজুরী","পাটা জোড়া","পূর্ব এলাহাবাদ","পশ্চিম এলাহাবাদ","পূর্ব গোপালঘাটি","পশ্চিম গোপালঘাটি","কতলপুর","পাটিলদহ","বরকল","বরমা","বলরাম নগর","বাইনজুরী","বাতাজুরী","বৈলতলী","মাইসাতা","মোহাম্মদপুর","মোহাম্মদবালী","মুরাদাবাদ","রামজোয়ারা","ছোট কাঞ্চন","শোলকী","সাতবাড়িয়া","হাশিমপুর","হরলা","হাহন্দী","হাতিয়ার খোলা"]},"rangunia":{"name":"রাঙ্গুনিয়া","mouzas":["আন্দর ঘোনা","ইছামতি","উত্তর ঘাগড়া","কদমতলী","কাউখালী","কাটাখালী","কোদালা","কোকানিয়া","খারগোলা","গজালিয়া","গুনগুনিয়া বেতাগী","গুমাইবিল","গুমাই","ঘাটচেক","চন্দ্রঘোনা","চেংখালী","জঙ্গল পাকুয়া","জঙ্গল সরকভাটা","জঙ্গল ঘাটচেক","জঙ্গল দক্ষিণ নিশ্চিন্তপুর","জঙ্গল পোমরা","জঙ্গল সুরত সিংহের ঢালা","জঙ্গল বগাবিল","ঠাণ্ডাছড়ি","ডিঙ্গল গোপা","টেমির ছড়া","তিনচৌদিয়া","ত্রিপুরা সুন্দরী","তৈলাভাঙ্গা","দক্ষিণ নিশ্চিন্তপুর","দক্ষিণ ঘাগড়া","দক্ষিণ ইছামতি","দক্ষিণ পাকুয়া","ঘারিকোপ","দুধ পুকুরিয়া","দেবীপুর কদমতলী","ধোপাঘাটা","নারিচা","নাপিত পুকুরিয়া","নোয়াগাঁও","পদুয়া","পশ্চিম নিশ্চিন্তপুর","পারকুয়া","পশ্চিম বুরশিয়া","পুকুরিয়া গোলা","পূর্ব বুরশিয়া","পূর্ব নিশ্চিন্তপুর","পোমরা","কলাহারিয়া","বগাবিল","বানিয়া খোলা","বাইনলা","বেতাগী","ভবনছড়া","মধ্য ঘাগড়া","মেঘাছড়ি","রাঙ্গুনিয়া","লট-২ কোদালা","লট-৫ জঙ্গল কোদালা","লট কোদালা","লট-৫৮ নিশ্চিন্তপুর","লালনগর","শিলক","শিয়াল বুড়া","ভরত সিংহের ঢালা","সরফভাটা","সুবিলাস","সৈয়দবাড়ী","সোনাইছড়ি","হোসনাবাদ","লট-৫৭ ঠাণ্ডাছড়ি","লট-৪৭ হাজারী"]},"pahartali":{"name":"পাহাড়তলী","mouzas":["লতিফপুর","উত্তর কাট্টলী","উত্তর পাহাড়তলী","লট-৯ পাহাড়তলী","দক্ষিণ কাট্টলী","সরাইপাড়া","দক্ষিণ পাহাড়তলী","পশ্চিম নাছিরাবাদ","রামপুর","উত্তর হালিশহর","নলশা"]}};
   const MOUZA_LOOKUP_CLASSES = ['নাল', 'বাড়ী', 'ভিটা', 'বাগান', 'পুকুর', 'ডোবা'];
   const MOUZA_ALL_CLASSES = ['নাল', 'বাড়ী', 'ভিটা', 'বাগান', 'পুকুর', 'ডোবা', 'বাণিজ্যিক'];
   const MOUZA_MANUAL = '__manual__';
@@ -384,6 +387,18 @@
   // manual line). Set by the auto-lookup; cleared by any manual
   // edit of the rate or after the line is added.
   let MOUZA_LOOKUP = null;
+  // Thana qualifier for the pending lookup (Chandgaon collisions
+  // only): null until the server says the mouza is ambiguous and
+  // the shopkeeper picks a thana. Offices without qualified rows
+  // never show the thana select.
+  let MOUZA_THANA = null;
+  function resetMouzaThana() {
+    MOUZA_THANA = null;
+    const w = $('mThanaWrap');
+    if (w) w.style.display = 'none';
+    const s = $('mThana');
+    if (s) s.innerHTML = '';
+  }
   // Bengali digits → Latin, so hand-typed rates/amounts work
   // the way the server already accepts them (server toEn).
   const toEnNum = (s) => Number(String(s == null ? '' : s).trim().replace(/[০-৯]/g, (d) => '০১২৩৪৫৬৭৮৯'.indexOf(d)));
@@ -438,6 +453,7 @@
     lab.textContent = '৫ · ' + u + 'প্রতি হার (টাকা) *';
   }
   function onMouzaChange() {
+    resetMouzaThana();
     $('mMouzaManualWrap').style.display = mouzaIsManual() ? '' : 'none';
     if (!mouzaIsManual()) $('mMouzaManual').value = '';
     // Lookup mouza → only its lookup classes; manual mouza →
@@ -467,18 +483,30 @@
     if (!office || !mouza || !cls || mouzaIsManual()) { updateMouzaUnitHint(); return; }
     try {
       const { resp, data } = await apiJson(API + '/mouza-rate?office=' + encodeURIComponent(office) +
-        '&mouza=' + encodeURIComponent(mouza) + '&class=' + encodeURIComponent(cls));
+        '&mouza=' + encodeURIComponent(mouza) + '&class=' + encodeURIComponent(cls) +
+        (MOUZA_THANA ? '&thana=' + encodeURIComponent(MOUZA_THANA) : ''));
       if (!resp.ok || !data) { $('mRateNote').textContent = 'হার খোঁজা যায়নি — হার নিজে বসান।'; return; }
+      if (data.ambiguous) {
+        // Same mouza name in several thanas (Chandgaon): ask for
+        // the thana, then re-fetch with it. The rate stays
+        // editable until a single variant resolves.
+        fillSelectOptions($('mThana'), data.options || [], '— বেছে নিন —');
+        $('mThanaWrap').style.display = '';
+        $('mRateNote').textContent = data.message || 'এই মৌজা একাধিক থানায় আছে — থানা বাছুন।';
+        updateMouzaUnitHint();
+        return;
+      }
       if (!data.found) {
         $('mRateNote').textContent = data.message || 'তালিকার হার পাওয়া যায়নি — হার নিজে বসান।';
         updateMouzaUnitHint();
         return;
       }
-      MOUZA_LOOKUP = { office: data.office, mouza: data.mouza, class: data.class, rate: data.rate, period: data.period, p: data.p === true };
+      MOUZA_LOOKUP = { office: data.office, mouza: data.mouza, class: data.class, rate: data.rate, period: data.period, p: data.p === true, thana: data.thana };
       $('mRate').value = String(data.rate);
       $('mRate').readOnly = true;
       $('mRateNote').textContent = 'তালিকার হার পাওয়া গেছে — ' + data.period +
-        (data.p === true ? ' · P চিহ্ন: আগের মূল্য বহাল আছে' : '');
+        (data.p === true ? ' · P চিহ্ন: আগের মূল্য বহাল আছে' : '') +
+        (data.pouroNote ? ' · ' + data.pouroNote : '');
       $('mScheduleVersion').value = data.period;
       updateMouzaRateLabel();
       updateMouzaUnitHint();
@@ -488,7 +516,7 @@
   }
   // A hand edit of the rate drops the pending lookup, so a
   // hand-edited rate can never ride along as a lookup line.
-  $('mRate').addEventListener('input', () => { if (MOUZA_LOOKUP) clearMouzaLookup(); updateMouzaUnitHint(); });
+  $('mRate').addEventListener('input', () => { if (MOUZA_LOOKUP) { clearMouzaLookup(); resetMouzaThana(); } updateMouzaUnitHint(); });
   // Live unit hint: show the shatangsho conversion and the line value
   // preview before the line is added, so the shopkeeper can check it
   // at a glance.
@@ -521,7 +549,7 @@
       const desc = l.source === 'lookup'
         ? bn(l.rate) + ' × ' + bn(Math.round(qty * 100) / 100) + ' শতাংশ = ' + bn(Math.round(val * 100) / 100) + ' টাকা'
         : bn(l.rate) + ' × ' + bn(l.amount) + ' ' + ulab + ' (' + bn(Math.round(qty * 100) / 100) + ' শতাংশ) = ' + bn(Math.round(val * 100) / 100) + ' টাকা';
-      h += '<div class="r"><b>' + esc(l.mouza || '—') + ' · ' + esc(l.class) + '</b><span>' +
+      h += '<div class="r"><b>' + esc(l.mouza || '—') + (l.lookupThana ? ' (' + esc(l.lookupThana) + ')' : '') + ' · ' + esc(l.class) + '</b><span>' +
         desc + ' <span style="display:inline-block;background:#dcfce7;color:#14532d;border:1px solid #86efac;padding:1px 8px;border-radius:20px;font-size:12px;font-weight:700;">' + tag + '</span>' +
         ' <a href="#" onclick="MOUZA_LINES.splice(' + i + ',1);renderMouzaLines();return false;">মুছুন</a></span></div>';
     });
@@ -532,7 +560,12 @@
   }
   $('mOffice').addEventListener('change', () => { fillMouzaSelect(); onMouzaChange(); });
   $('mMouza').addEventListener('change', onMouzaChange);
-  $('mClass').addEventListener('change', refreshMouzaRate);
+  // Class change resets the thana qualifier: ambiguity is per
+  // (mouza, class) — e.g. বাকলিয়া/ডোবা resolves to one variant
+  // while বাকলিয়া/নাল needs a thana, so a stale thana must
+  // never ride into the next class lookup.
+  $('mClass').addEventListener('change', () => { resetMouzaThana(); refreshMouzaRate(); });
+  $('mThana').addEventListener('change', () => { MOUZA_THANA = $('mThana').value || null; refreshMouzaRate(); });
   $('mAmount').addEventListener('input', updateMouzaUnitHint);
   $('mUnit').addEventListener('change', () => { updateMouzaRateLabel(); updateMouzaUnitHint(); });
   fillMouzaOffice();
@@ -553,10 +586,11 @@
       oldRate: oldRateRaw === '' ? undefined : toEnNum(oldRateRaw),
       source: MOUZA_LOOKUP ? 'lookup' : 'manual',
       lookupOffice: MOUZA_LOOKUP ? MOUZA_LOOKUP.office : undefined,
+      lookupThana: MOUZA_LOOKUP ? MOUZA_LOOKUP.thana : undefined,
     });
     clearBoxes();
     // The pending lookup is consumed by this line only.
-    if (MOUZA_LOOKUP) clearMouzaLookup();
+    if (MOUZA_LOOKUP) { clearMouzaLookup(); resetMouzaThana(); }
     renderMouzaLines();
     updateMouzaRateLabel();
     updateMouzaUnitHint();
@@ -571,7 +605,7 @@
           ? bn(l.rate) + ' × ' + bn(l.qtyShatangsho) + ' শতাংশ = ' + bn(l.value) + ' টাকা (তালিকার হার' +
             (l.lookupPeriod ? ', ' + l.lookupPeriod : '') + (l.lookupP ? ' · P: আগের মূল্য বহাল' : '') + ')'
           : bn(l.rate) + ' × ' + bn(l.amount) + ' ' + ulab + ' (' + bn(l.qtyShatangsho) + ' শতাংশ) = ' + bn(l.value) + ' টাকা';
-        h += '<div class="r"><b>' + esc(l.mouza) + ' · ' + esc(l.class) + '</b><span>' + desc + '</span></div>';
+        h += '<div class="r"><b>' + esc(l.mouza) + (l.lookupThana ? ' (' + esc(l.lookupThana) + ')' : '') + ' · ' + esc(l.class) + '</b><span>' + desc + '</span></div>';
       });
       h += '</div>';
       if (r.breakdown) {
@@ -629,7 +663,7 @@
       body.lines = MOUZA_LINES.map((l) => ({
         mouza: l.mouza, class: l.class, rate: l.rate,
         amount: l.amount, unit: l.unit, oldRate: l.oldRate, source: l.source || 'manual',
-        lookupOffice: l.lookupOffice,
+        lookupOffice: l.lookupOffice, lookupThana: l.lookupThana,
       }));
       const lk = MOUZA_LINES.find((l) => l.source === 'lookup');
       if (lk) body.lookup_office = lk.lookupOffice;

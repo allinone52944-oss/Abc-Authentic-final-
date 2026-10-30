@@ -228,6 +228,38 @@ describe('mouza-value mode (land-mouza-value)', () => {
     expect(rates).toContain('কধুরখীল');
     expect(rates).toContain('2025-2026');
   });
+  test('mouza batch 1: 5 new offices in the form, thana qualifier UI, pouro note, qualified submit', () => {
+    const html = read('frontend/land.html');
+    // New offices + a sample mouza name from each batch-1 office.
+    for (const id of ['chandgaon', 'sandwip', 'gachbaria', 'rangunia', 'pahartali']) {
+      expect(html).toContain('"' + id + '"');
+    }
+    for (const name of ['বাকলিয়া', 'হরামিয়া', 'জামিরজুরী', 'সৈয়দবাড়ী', 'উত্তর কাট্টলী']) {
+      expect(html).toContain(name);
+    }
+    // Thana qualifier: hidden select shown only on an ambiguous
+    // lookup response, re-fetching with the chosen thana.
+    expect(html).toContain('id="mThanaWrap"');
+    expect(html).toContain('id="mThana"');
+    expect(html).toContain('data.ambiguous');
+    expect(html).toContain("'&thana=' + encodeURIComponent(MOUZA_THANA)");
+    expect(html).toContain('থানা বাছুন');
+    // A class change resets the qualifier (ambiguity is per
+    // mouza+class), and the thana rides the line to the server.
+    expect(html).toContain('resetMouzaThana');
+    expect(html).toContain('lookupThana: l.lookupThana');
+    expect(html).toContain('lookupThana: MOUZA_LOOKUP ? MOUZA_LOOKUP.thana : undefined');
+    // Sandwip pouro note is displayed under the rate when present.
+    expect(html).toContain('data.pouroNote');
+    // Server: qualifier param + qualified verification + geo for
+    // the new offices (header area derivation).
+    const route = read('backend/routes/land.js');
+    expect(route).toContain("req.query.thana");
+    expect(route).toContain('lookupThana');
+    for (const id of ['chandgaon', 'sandwip', 'gachbaria', 'rangunia', 'pahartali']) {
+      expect(route).toContain(id + ': {');
+    }
+  });
 });
 
 describe('backend wiring', () => {

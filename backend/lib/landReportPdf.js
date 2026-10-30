@@ -158,7 +158,7 @@ function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdict
         mlines.forEach((l, i) => {
           ensure(104);
           doc.font('bn-bold').fontSize(12).fillColor('#14532d')
-            .text((i + 1) + '. ' + (l.mouza || '—') + ' — ' + (l.class || '—'), X, y, { width: W });
+            .text((i + 1) + '. ' + (l.mouza || '—') + (l.lookupThana ? ' (' + l.lookupThana + ')' : '') + ' — ' + (l.class || '—'), X, y, { width: W });
           y += 21;
           const ulab = { shatangsho: 'শতাংশ', katha: 'কাঠা', bigha: 'বিঘা', gonda: 'গন্ডা' }[l.unit] || 'শতাংশ';
           if (l.source === 'lookup') {
