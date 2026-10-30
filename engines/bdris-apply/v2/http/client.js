@@ -186,6 +186,41 @@ function submitRejectionWording(res) {
   return [wording, field ? `[field: ${field}]` : '', marker].filter(Boolean).join(' ');
 }
 
+// FINAL-SOLUTION (2026-10-30, problem-map #1): submit-response
+// summary — shape/status ONLY, never response text, never
+// identifiers, codes, or tokens. Tonight's filings proved the gap:
+// candidate logs recorded phase plans only, so a phrase-check
+// fallback left filed-vs-not unprovable, and the [field: ubrn]
+// heuristic (a bare word-scan of the body) was misread as a
+// rejection when the body was just a re-rendered form page. The
+// summary distinguishes those two shapes: a re-rendered form has
+// form-field names and no success phrase; a real rejection names
+// its reason in JSON wording. hasFormFields is presence-only.
+function submitResponseSummary(res) {
+  const text = String((res && res.text) || '');
+  const json = res && res.json;
+  return {
+    status: res ? res.status : null,
+    isJson: !!json,
+    jsonSuccess: !!(json && json.success === true),
+    textLen: text.length,
+    hasSuccessPhrase: text.includes(SUCCESS_PHRASE),
+    hasPrintLink: text.includes(PRINT_PATH),
+    hasFormFields: /personInfoForBirth|<form/i.test(text),
+  };
+}
+function submitSummaryText(s) {
+  if (!s) return 'none';
+  return `status=${s.status} json=${s.isJson} jsonSuccess=${s.jsonSuccess} textLen=${s.textLen} successPhrase=${s.hasSuccessPhrase} printLink=${s.hasPrintLink} formFields=${s.hasFormFields}`;
+}
+
+// FINAL-SOLUTION (2026-10-30, problem-map #14): the server's
+// unexpired-OTP wording — a second send while the previous code
+// is still live is REJECTED (live-proven 2026-10-30: direct 400
+// 'ওটিপি-এর মেয়াদ শেষ হয়নি'), and the previous code STAYS
+// valid. Matched on the server's own wording only.
+const OTP_UNEXPIRED_RE = /মেয়াদ শেষ হয়নি|not expired|has not expired/i;
+
 // DIRECT BRN-FREE ROUTE (2026-10-29): two wire fixes for the
 // typing-equivalent steps (OTP send + verify), plus the removal of
 // the refuted send-gate below.
@@ -666,6 +701,32 @@ class BdrisHttpClient {
       // an ok response without JSON keeps it too (wording is read
       // for non-ok responses only).
       const wording = !res.ok ? otpSendBodyWording(res.json) : '';
+      // FINAL-SOLUTION (2026-10-30, problem-map #8): session-dead
+      // detection, ONLY for proven-dead shapes. A redirect/auth
+      // status, or a 2xx body that is not JSON (we landed on an
+      // HTML / stub / login page, not the API), is NEVER a valid
+      // send proof — the session context is gone. Live-proven
+      // 2026-10-30: a 200 non-JSON send and 302 bot sends both
+      // produced UI "sent" confirmations while no SMS ever left.
+      // SESSION_DEAD carries the code so the chain and the UI
+      // can show "session refresh needed" instead of falling
+      // back to a bot replay on the same dead session or
+      // claiming delivery. A NON-2xx non-JSON body is NOT
+      // classified dead: a 400/500 HTML body is a server answer
+      // without wording, and the bot fallback stays available
+      // for it (old OTP_SEND_FAILED status-only message kept).
+      if (res.status === 301 || res.status === 302 || res.status === 401 || res.status === 403
+          || (res.ok && !res.json)) {
+        throw err('SESSION_DEAD', `OTP send got a non-JSON response (status ${res.status}) — session refresh needed.`);
+      }
+      // FINAL-SOLUTION (2026-10-30, problem-map #14): a 400 whose
+      // wording says the previous OTP has not expired is NOT a
+      // generic send failure and must NOT trigger a bot replay —
+      // the previous code is still valid. Machine-readable code
+      // so the chain/UI can say exactly that.
+      if (res.status === 400 && OTP_UNEXPIRED_RE.test(wording)) {
+        throw err('OTP_SEND_UNEXPIRED', `OTP send returned status 400: ${wording}. Previous code still valid.`);
+      }
       throw err('OTP_SEND_FAILED', wording
         ? `OTP send returned status ${res.status}: ${wording}.`
         : `OTP send returned status ${res.status}.`);
@@ -738,22 +799,33 @@ class BdrisHttpClient {
     });
     if (!res.ok) {
       const wording = submitRejectionWording(res);
-      throw err('SUBMIT_BAD_RESPONSE', wording
+      const e = err('SUBMIT_BAD_RESPONSE', wording
         ? `Submit returned status ${res.status}: ${wording}.`
         : `Submit returned status ${res.status}.`);
+      // FINAL-SOLUTION (problem-map #1): shape/status only, never
+      // text — the chain logs this so filed-vs-not is provable.
+      e.responseSummary = submitResponseSummary(res);
+      throw e;
     }
     if (res.json && res.json.success === true) {
-      return { success: true, hasPrintLink: false, json: res.json };
+      return { success: true, hasPrintLink: false, json: res.json, responseSummary: submitResponseSummary(res) };
     }
     const parsed = parseSuccessPage(res.text);
     if (!parsed.success) {
       const field = submitRejectionField(res);
       const extra = [field ? `[field: ${field}]` : '', familyRejectionMarker(res)].filter(Boolean).join(' ');
-      throw err('SUBMIT_NOT_SUCCESS', extra
+      const e = err('SUBMIT_NOT_SUCCESS', extra
         ? `Submit response contains neither success:true JSON nor the verified success phrase. ${extra}`
         : 'Submit response contains neither success:true JSON nor the verified success phrase.');
+      // Same summary here: a re-rendered form page (formFields
+      // true, successPhrase false) is NOT a proven rejection —
+      // the [field: …] extra above is a weak word-scan only, and
+      // the summary is what lets the next diagnosis tell the two
+      // apart. The message text itself is unchanged.
+      e.responseSummary = submitResponseSummary(res);
+      throw e;
     }
-    return { success: true, hasPrintLink: parsed.hasPrintLink, json: res.json };
+    return { success: true, hasPrintLink: parsed.hasPrintLink, json: res.json, responseSummary: submitResponseSummary(res) };
   }
 }
 
@@ -1079,6 +1151,9 @@ module.exports = {
   isParentBrnExemptDirect,
   submitRejectionWording,
   submitRejectionField,
+  submitResponseSummary,
+  submitSummaryText,
+  OTP_UNEXPIRED_RE,
   isFamilyRejectionText,
   familyRejectionMarker,
   DIRECT_FAMILY_NOTE,

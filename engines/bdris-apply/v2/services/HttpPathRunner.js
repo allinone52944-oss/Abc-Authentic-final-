@@ -62,7 +62,7 @@
 
 'use strict';
 
-const { BdrisHttpClient, parentBrnDirectDecision } = require('../http/client');
+const { BdrisHttpClient, parentBrnDirectDecision, submitSummaryText } = require('../http/client');
 const { verifyChargeToken, bnToArab, consumeSubmitToken, isSubmitTokenConsumed } = require('./StepHandler');
 
 const HTTP_CANDIDATE_LABEL = 'CANDIDATE (submit/verify shapes from the pasted form source, NOT live-verified)';
@@ -397,23 +397,38 @@ async function runHttpChain(opts = {}) {
   const fail = async (step, err) => {
     const reason = (err && err.message) || String(err);
     candidateLog(log, 'fallback', `HTTP_PATH_FALLBACK step=${step} reason=${reason}`);
+    // FINAL-SOLUTION (2026-10-30, problem-map #1 + #6): the
+    // direct-vs-fallback DECISION is logged with its cause, and a
+    // submit failure carries the response summary (shape/status
+    // only) so the next live filing's path and outcome are
+    // provable from the journal instead of guessed. Machine flags
+    // (never identifiers) let the UI branch without parsing
+    // Bengali wording: sessionDead (#8) and otpUnexpired (#14).
+    const decisionFlags = {
+      sessionDead: !!(err && (err.code === 'SESSION_DEAD' || err.code === 'NO_SESSION' || err.code === 'SESSION_EXPIRED' || err.code === 'SEED_FAILED')),
+      otpUnexpired: !!(err && err.code === 'OTP_SEND_UNEXPIRED'),
+    };
+    if (step === 'submit' && err && err.responseSummary) {
+      candidateLog(log, 'submit', `SUBMIT-RESPONSE ${submitSummaryText(err.responseSummary)} — filed-vs-not must be read from this shape, not from the [field: …] heuristic`);
+    }
+    candidateLog(log, 'decision', `DIRECT-DECISION step=${step} outcome=fallback sessionDead=${decisionFlags.sessionDead} otpUnexpired=${decisionFlags.otpUnexpired}`);
     if (step === 'submit' && !isFallbackSafe(step, err)) {
       candidateLog(log, 'submit', 'SUBMIT_OUTCOME_UNKNOWN — no server response, automatic Playwright fallback SUPPRESSED to avoid a duplicate submission');
       return {
         ...baseResult, ...routeInfo, ok: false, error: 'SUBMIT_OUTCOME_UNKNOWN',
         message: 'সাবমিটের ফল জানা যায়নি (সার্ভারের উত্তর আসেনি) — ডাবল আবেদন এড়াতে স্বয়ংক্রিয় পুনঃচেষ্টা বন্ধ রাখা হয়েছে; আবেদন হয়েছে কিনা যাচাই করে আবার চেষ্টা করুন।',
-        httpStep: step, httpReason: reason,
+        httpStep: step, httpReason: reason, ...decisionFlags,
       };
     }
     if (typeof opts.playwrightRunner === 'function') {
       const pw = await opts.playwrightRunner(data);
       return {
-        ...(pw || {}), ...routeInfo, path: 'playwright', httpFallback: true, httpStep: step, httpReason: reason,
+        ...(pw || {}), ...routeInfo, path: 'playwright', httpFallback: true, httpStep: step, httpReason: reason, ...decisionFlags,
         candidate: true, candidateLabel: HTTP_CANDIDATE_LABEL,
       };
     }
     return {
-      ...baseResult, ...routeInfo, ok: false, fallback: true, httpStep: step, httpReason: reason,
+      ...baseResult, ...routeInfo, ok: false, fallback: true, httpStep: step, httpReason: reason, ...decisionFlags,
       message: `HTTP ${step} failed (${reason}); Playwright fallback is required but no Playwright runner was provided.`,
       // Information only: a BRN-free filing cannot pass the bot
       // page's verified gate, so a bot fallback after a direct
@@ -531,6 +546,10 @@ async function runHttpChain(opts = {}) {
     // (code/message) without touching verify, submit, or the charge.
     if (phase === 'send') {
       candidateLog(log, 'done', 'send phase complete (OTP sent, proof returned); verify + submit await the submit phase');
+      // FINAL-SOLUTION (problem-map #6): the send decision is
+      // logged with its server proof code (a constant, never an
+      // identifier) so a later "sent" claim can be checked.
+      candidateLog(log, 'decision', `DIRECT-DECISION step=otp-send outcome=direct-success sendCode=${sent ? sent.code : null}`);
       return {
         ...baseResult, ...routeInfo, ok: true, sent: true,
         sendCode: sent ? sent.code : null,
@@ -573,6 +592,12 @@ async function runHttpChain(opts = {}) {
     }
     stepsDone.push('submit');
 
+    // FINAL-SOLUTION (problem-map #1): success also logs its
+    // shape — a later existence check compares against this.
+    if (submitted && submitted.responseSummary) {
+      candidateLog(log, 'submit', `SUBMIT-RESPONSE ${submitSummaryText(submitted.responseSummary)} outcome=success`);
+    }
+    candidateLog(log, 'decision', 'DIRECT-DECISION step=submit outcome=direct-success');
     candidateLog(log, 'done', `HTTP chain complete (steps: ${stepsDone.join(', ')}); success accepted only on the verified success shape`);
     // Clean success point ONLY (same rule as submitS4): consume here,
     // never on attempt, so retries after a failed chain keep the token.

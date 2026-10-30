@@ -760,6 +760,14 @@ function b64Of(dataUrl) { const i = String(dataUrl || '').indexOf(','); return i
 function setView(v) {
   // চেইন কেবল progress স্ক্রিনেই চলে — ইউজার অন্য স্ক্রিনে গেলে বাকি ধাপ আর নিজে থেকে যায় না
   if (S.chain && v !== 'progress') { S.chain = null; opAbort(); }
+  // FINAL-SOLUTION (2026-10-30, problem-map #11): fail panels
+  // and retry banners belong to the view that raised them — a
+  // S2B timeout panel must not sit on the OTP view as a stale
+  // "আগের ধাপ" label, and an OTP-view failure must not sit on
+  // the preview. Clear both on an ACTUAL view change only (same
+  // view re-renders keep their panels: renderOtpCode clears
+  // explicitly where it needs to).
+  if (S.view !== v) { hideFail(); hideBanner(); }
   S.view = v;
 }
 function renderStepper(activeIdx) {
@@ -1076,6 +1084,8 @@ function readAddrFields(prefix, prev) {
 function renderHome() {
   S._heldPrep = null; // leaving the flow — a parked send must not follow the user home
   S._directOtp = false; // DIRECT-PATH WIRING: the direct OTP phase dies with the flow
+  S._otpSessionLive = false; // FINAL-SOLUTION (#2): home = flow over, no return button
+  S._pendingSubmit = null; // FINAL-SOLUTION (#4): held submit dies with the flow
   directAckClear(); // DIRECT ACK TIMEOUT: no fallback after leaving the flow
   setView('home'); renderStepper(-1); hideFail(); hideBanner(); noteOff();
   S._passedOps = {}; // FINAL-PACK stale-banner: home = flow over, old passes void
@@ -1536,7 +1546,12 @@ function startManual() {
 }
 function goStep(n) {
   S.cur = n;
-  renderStepper(n - 1); hideFail(); noteOff(); busy(false);
+  renderStepper(n - 1); hideFail(); hideBanner(); noteOff(); busy(false);
+  // FINAL-SOLUTION (#4): any step navigation voids a held
+  // submit — the user is editing, so a stashed code must never
+  // auto-fire against changed data. A fresh deliberate submit
+  // after return is the only path.
+  S._pendingSubmit = null;
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (n === 1) renderStep1();
   else if (n === 2) renderStep2();
@@ -1580,6 +1595,48 @@ function saveDraft(uiStep, cb) {
     }
     if (cb) cb(r);
   });
+}
+/* FINAL-SOLUTION (2026-10-30, problem-map #9): silent
+   server-side auto-save. The explicit "খসড়ায় রাখুন" button was
+   not enough — on 2026-10-30 a restart wiped an in-session filing
+   that had never been explicitly saved, and its data lived only
+   in page memory. Auto-save runs (a) on entering the Step 6
+   preview and (b) on every send success, but only when the draft
+   actually changed (signature guard), so back-navigation does not
+   spam saves. HTTP first: the direct path succeeds over plain
+   HTTP precisely when the socket is dead, and a socket-only save
+   would fail exactly then; the socket SAVE_DRAFT is the fallback.
+   The draft is saved under the current draftId (overwrite, never
+   a pile of copies). Restore proof: the home draft list shows
+   this id with a fresh savedAt afterwards. Silent: no note, no
+   banner — the draft-count update is the only trace. */
+function autoSaveDraft(uiStep) {
+  try {
+    const payload = draftPayload(uiStep);
+    const sig = sigOf(payload);
+    if (S._autoDraftSig === sig) return;
+    S._autoDraftSig = sig;
+    const done = (r) => {
+      if (r && r.ok) {
+        S.draftId = r.draftId; updDraftsCnt(); S._draftSaveWarned = false;
+        try { if (S._submitKey) localStorage.setItem('bdris_submit_key_for_' + r.draftId, S._submitKey); } catch (e) {}
+      } else {
+        // A failed auto-save must not poison the guard: the next
+        // preview/send retries instead of assuming it landed.
+        S._autoDraftSig = null;
+      }
+    };
+    const sig2 = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(30000) : undefined;
+    fetch('/api/bdris-apply/draft-save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + curAccessToken() },
+      body: JSON.stringify({ draft: payload, _authToken: curAccessToken() }),
+      signal: sig2
+    }).then(r => r.json().catch(() => null)).then(d => {
+      if (d && d.ok) done(d);
+      else saveDraft(uiStep, done);
+    }).catch(() => saveDraft(uiStep, done));
+  } catch (e) { /* auto-save never blocks the flow */ }
 }
 /* ধাপ-রেকর্ড (2026-10-11): কোন ধাপ সাইটে সত্যিই গেছে + শেষ পাঠানো তথ্য।
    ব্যবহারকারী পিছনে গিয়ে তথ্য বদলে আবার “পরবর্তী” চাপলে কেবল সেই এক ধাপই আবার
@@ -1698,6 +1755,15 @@ function takeQueuedPrep() {
   S._opQ = q.filter(j => j.op !== 'SUBMIT_S4_PREP');
   return prep.length ? prep[prep.length - 1] : null;
 }
+// FINAL-SOLUTION (#4): same rescue for a queued SUBMIT_S4_OTP —
+// a submit the user already pressed must never silently die
+// because an earlier op's failure cleared the queue.
+function takeQueuedOtp() {
+  const q = S._opQ || [];
+  const sub = q.filter(j => j.op === 'SUBMIT_S4_OTP');
+  S._opQ = q.filter(j => j.op !== 'SUBMIT_S4_OTP');
+  return sub.length ? sub[sub.length - 1] : null;
+}
 function opLabel(op) {
   const o = OPS.find(x => x.op === op);
   if (o) return o.label;
@@ -1745,6 +1811,10 @@ function emitStep(op, payload, onAckExtra) {
   // FAILQSAVE FIX: a manual S4_PREP click supersedes any held copy —
   // otherwise the held copy could later double-send beside this one.
   if (op === 'SUBMIT_S4_PREP') S._heldPrep = null;
+  // FINAL-SOLUTION (#4): a fresh deliberate S4_OTP press
+  // supersedes a held submit — the fresh press is now the live
+  // one; the held copy must never fire beside it.
+  if (op === 'SUBMIT_S4_OTP') S._pendingSubmit = null;
   // OPQUEUE-LOST-SEND FIX: একই অপ সারিতে থাকলে ডুপ্লিকেট নয় — নতুন
   // পেলোড দিয়ে পুরনোটা বদলাই (রিসেটে বাঁচানো S4_PREP + ইউজারের আবার
   // চাপা — দুটো মিলে ডাবল-সেন্ড হবে না)।
@@ -2079,6 +2149,25 @@ function setSelByText(id, text) {
     Array.from(node.options).find(o => norm(o.text).includes(wN) || wN.includes(norm(o.text.trim()))) ||
     Array.from(node.options).find(o => o.text.includes(want) || want.includes(o.text.trim()));
   if (opt) { node.value = opt.value; return true; }
+  // FINAL-SOLUTION (#12): zone/ward digit match. Saved labels
+  // ('Zone-8', 'Ward-68') and live options ('অঞ্চল - ৮',
+  // 'ওয়ার্ড - ৬৮') share nothing but the number — exact and
+  // substring matching both fail, and addrWarm used to break the
+  // whole cascade there, losing zone AND ward (3x live). Match
+  // on the digit sequence ONLY when both sides name a zone/ward
+  // (অঞ্চল/zone/ওয়ার্ড/ward) — division/district/upazila names
+  // never carry those words, so no false match there. Within one
+  // zone/ward list the number is unique.
+  const bnDigits = (s) => String(s || '').replace(/[০-৯]/g, (d) => String('০১২৩৪৫৬৭৮৯'.indexOf(d)));
+  const digitsOf = (s) => { const m = bnDigits(s).match(/\d+/g); return m ? m.join('-') : ''; };
+  const zoneWard = (s) => /অঞ্চল|zone|ওয়ার্ড|ward/i.test(s);
+  if (zoneWard(want)) {
+    const wD = digitsOf(want);
+    if (wD) {
+      const opt2 = Array.from(node.options).find(o => zoneWard(o.text) && digitsOf(o.text) === wD);
+      if (opt2) { node.value = opt2.value; return true; }
+    }
+  }
   return false;
 }
 function degradeToText(id, label, value) {
@@ -2164,7 +2253,13 @@ async function geoLoad(k, Ls, data, wantOv) {
         setGeoState(k, Ls, 'error');
         // showBanner, not note(): geoChanged calls noteOff() right
         // after geoLoad, which would erase a note() immediately.
-        showBanner('err', 'অঞ্চলের তালিকা আসেনি (' + esc(addrRes.error || 'error') + ') — উপরের ঘরটা আবার বাছুন');
+        // FINAL-SOLUTION (#8): a SESSION_EXPIRED zone/ward fetch
+        // is session death, not a list glitch — say "session
+        // refresh needed" plainly instead of only "re-select".
+        const zoneErr = addrRes.error || 'error';
+        showBanner('err', /SESSION_EXPIRED/.test(zoneErr)
+          ? 'সেশন শেষ হয়ে গেছে — আবার লগইন করে সেশন refresh করুন, তারপর উপরের ঘরটা আবার বাছুন (SESSION_EXPIRED)'
+          : 'অঞ্চলের তালিকা আসেনি (' + esc(zoneErr) + ') — উপরের ঘরটা আবার বাছুন');
         return;
       }
       // zone-এর জন্য WardInCityCorp থেকে এলে fromAlt সেট করো (label-এর জন্য)
@@ -2357,13 +2452,29 @@ async function addrWarm(prefix, rec) {
   const Ls = addrGeoLevels(prefix);
   const data = addrRec(prefix);
   await geoLoad(Ls[0].k, Ls, data, rec[Ls[0].k]);
+  // FINAL-SOLUTION (#12): the old loop BROKE on the first
+  // unmatched level — a zone label that did not match live
+  // option text ('Zone-8' vs 'অঞ্চল - ৮') silently lost zone
+  // AND ward (3x live: the user had to hand-restore both).
+  // Now: a missed level is recorded and the loop CONTINUES
+  // (a child load is skipped only when its parent missed, since
+  // a child cannot load without its parent); a second pass
+  // retries missed levels once the cascade catches up; and any
+  // level still unlanded is EMPTIED in the record (not left
+  // holding the wanted label — the old readAddrFields
+  // prev-fallback would otherwise re-show it as set while the
+  // select sat empty) and NAMED to the user, so the loss is
+  // visible and hand-pickable instead of silent.
+  const missed = [];
+  let parentMissed = false;
   for (const L of Ls) {
     const want = String(rec[L.k] || data[L.k] || '').trim();
     if (!want) { break; }
     const node = $(L.ui); if (!node) break;
     if (node.tagName === 'SELECT') {
-      if (node.options.length <= 1) await geoLoad(L.k, Ls, data, want);
-      if (!setSelByText(L.ui, want)) break;
+      if (!parentMissed && node.options.length <= 1) await geoLoad(L.k, Ls, data, want);
+      if (!setSelByText(L.ui, want)) { missed.push(L); parentMissed = true; continue; }
+      parentMissed = false;
     }
     data[L.k] = want;
     if (!L.childSite) break;
@@ -2372,6 +2483,20 @@ async function addrWarm(prefix, rec) {
     const loadP = nxt ? geoLoad(nxt.k, Ls, data, rec[nxt.k]) : Promise.resolve();
     try { await geoMirror(L.k, Ls); } catch (e) {}
     await loadP;
+  }
+  for (const L of missed.slice()) {
+    const want = String(rec[L.k] || '').trim();
+    const node = $(L.ui);
+    if (!want || !node || node.tagName !== 'SELECT') continue;
+    const idx = Ls.indexOf(L);
+    const parentOk = idx <= 0 || !missed.includes(Ls[idx - 1]);
+    if (parentOk) await geoLoad(L.k, Ls, data, want);
+    else await new Promise(r => setTimeout(r, 1200));
+    if (setSelByText(L.ui, want)) { data[L.k] = want; missed.splice(missed.indexOf(L), 1); }
+  }
+  if (missed.length) {
+    for (const L of missed) data[L.k] = '';
+    note('⚠️ ঠিকানা বই থেকে ' + missed.map(L => L.lbl).join(', ') + ' স্বয়ংক্রিয়ভাবে বসেনি — হাতে বেছে নিন', 'warn');
   }
 }
 function renderStep2() {
@@ -2850,11 +2975,27 @@ function renderStep6() {
     '</div>'
   );
   bindPvEdits();
-  setBtns([
+  // FINAL-SOLUTION (#9): preview entry auto-saves the draft
+  // server-side (silent) — a restart after this point no longer
+  // wipes the filing.
+  autoSaveDraft(6);
+  const step6Btns = [
     { html: '📲 কোড পাঠান', fn: () => sendOtp() },
     { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep6(); saveDraft(6, () => note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে যেকোনো সময় কোড দিয়ে শেষ করতে পারবেন', 'ok')); } },
     { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => { collectStep6(); if (S.draftId) saveDraft(5, () => {}); goStep(5); } }
-  ]);
+  ];
+  // FINAL-SOLUTION (#2): OTP-view return WITHOUT a re-send.
+  // After a send, the user may edit data (main-site rule: any
+  // edit after send keeps the rest unchanged and the existing
+  // OTP still submits — no re-send needed). The old preview had
+  // no way back to the OTP view except re-send. This button
+  // re-renders the OTP view from the live OTP session only
+  // (flag set on sent proof, cleared on session loss/DONE) —
+  // it sends nothing, and the existing code still submits.
+  if (S._otpSessionLive) {
+    step6Btns.splice(1, 0, { html: '📲 কোড জমা দেওয়ার পর্দায় ফিরুন', cls: 'ghost', fn: () => { collectStep6(); renderOtpCode(true); } });
+  }
+  setBtns(step6Btns);
   // লাইভ-সেভ (2026-10-28): টাইপের সাথে সাথে S.d.phone আপডেট — আগে S.d.phone
   // শুধু collectStep6-এ (কোড পাঠান/খসড়া) আপডেট হতো, তাই "ঠিক করুন" চেপে অন্য
   // ধাপে গিয়ে ফিরে এলে renderStep6 পুরনো S.d.phone বসিয়ে লেখা নম্বর চুপচাপ
@@ -3131,6 +3272,39 @@ async function directSend() {
 }
 function directSendAck(r) {
   busy(false);
+  // FINAL-SOLUTION (#8): chain-classified session-dead (redirect
+  // / HTML / SESSION_EXPIRED / unseeded) — show "session refresh
+  // needed" and do NOT run the bot replay: the bot path rides the
+  // same dead session (live 2026-10-30: 302 bot sends after a
+  // dead session still showed "sent" while no SMS left). The draft
+  // auto-saves first, so the re-login recovery keeps the data.
+  if (r && r.sessionDead === true) {
+    S._directOtp = false;
+    autoSaveDraft(6);
+    showFail(['সেশন শেষ হয়ে গেছে — আবার লগইন করে সেশন refresh করুন, তারপর আবার “কোড পাঠান” চাপুন।']);
+    note('⚠️ সেশন refresh দরকার — bot replay চালানো হয়নি (একই dead session-এ যেত)', 'warn');
+    return;
+  }
+  // FINAL-SOLUTION (#14): 400-unexpired — the previous code is
+  // STILL VALID, no new code is issued. Surface exactly that
+  // (no fallback confusion, no bot replay — the bot send would
+  // hit the same 400). The OTP view renders from the live
+  // session; the existing code still submits via the direct path.
+  if (r && r.otpUnexpired === true) {
+    S._directOtp = true;
+    autoSaveDraft(6);
+    const unexpHint = 'আগের কোডের মেয়াদ এখনো আছে — নতুন কোড আসবে না, আগের কোডটাই বসান।';
+    if (S.otpStage === 'code') {
+      const h = document.getElementById('otpSentHint');
+      if (h) h.innerHTML = esc(unexpHint) + ' <b>কোড কারও সাথে শেয়ার করবেন না।</b>';
+    } else {
+      renderOtpCode(true);
+      const h = document.getElementById('otpSentHint');
+      if (h) h.innerHTML = esc(unexpHint) + ' <b>কোড কারও সাথে শেয়ার করবেন না।</b>';
+    }
+    note('📲 আগের কোডের মেয়াদ এখনো আছে — নতুন কোড আসবে না, আগের কোডটাই বসান', 'ok');
+    return;
+  }
   if (!r || r.httpPath === 'disabled' || r.error === 'HTTP_PATH_DISABLED'
     || r.error === 'NO_SESSION' || r.error === 'SESSION_EXPIRED'
     || r.error === 'SEED_FAILED' || r.fallback === true) {
@@ -3168,9 +3342,15 @@ function directSendAck(r) {
     }
     return;
   }
-  if (r.ok === true && r.sent === true) {
-    // Server proof of sent — ONLY now claim delivery.
+  if (r.ok === true && r.sent === true && r.sendCode != null) {
+    // Server proof of sent — ONLY now claim delivery. The
+    // sendCode gate is FINAL-SOLUTION (#3): an ok+sent ack
+    // WITHOUT the server's MESSAGE_SENT code is not proof (the
+    // 2026-10-30 200-non-JSON case returned sent with a null
+    // code) — it falls through to the no-proof failure below,
+    // never to a "sent" claim.
     S._directOtp = true;
+    autoSaveDraft(6);
     if (S.otpStage === 'code') {
       // Re-send: update the hint in place, never re-render (typed
       // boxes must survive).
@@ -3179,6 +3359,13 @@ function directSendAck(r) {
     } else {
       renderOtpCode(true);
     }
+    return;
+  }
+  if (r.ok === true && r.sent === true) {
+    // ok+sent but NO server code — not proof, never "sent".
+    S._directOtp = false;
+    showFail(['কোড পাঠানো যাচাই হয়নি — সার্ভারের নিশ্চিত জবাব (MESSAGE_SENT) আসেনি, তাই “পাঠানো হয়েছে” দেখানো হচ্ছে না। আবার চেষ্টা করুন।']);
+    note('⚠️ কোড পাঠানো যাচাই হয়নি — আবার চেষ্টা করুন', 'warn');
     return;
   }
   // Anything else: truthful failure, no stuck 'sending' view.
@@ -3198,7 +3385,7 @@ async function directSubmit(otp) {
   if (typeof getTok !== 'function') {
     // Shim missing — the bot submit charges via its own wrapper.
     S._directOtp = false;
-    emitStep('SUBMIT_S4_OTP', { otp: otp });
+    emitStep('SUBMIT_S4_OTP', { otp: otp, _submitSource: 'direct-fallback' });
     return;
   }
   const tok = await getTok();
@@ -3223,7 +3410,9 @@ function directSubmitAck(r, otp) {
     // (its charge wrapper attaches the submit token).
     if (r.httpPath === 'disabled') S.httpPathEnabled = false;
     S._directOtp = false;
-    emitStep('SUBMIT_S4_OTP', { otp: otp });
+    // FINAL-SOLUTION (#6): the fallback source is logged
+    // server-side (BOT-SUBMIT-DECISION) so the path is provable.
+    emitStep('SUBMIT_S4_OTP', { otp: otp, _submitSource: 'direct-fallback' });
     return;
   }
   if (r.error === 'SUBMIT_OUTCOME_UNKNOWN') {
@@ -3304,6 +3493,10 @@ function sendOtp() {
    Only call with true after an otpSent:true ack — never before. */
 function renderOtpCode(sent) {
   sent = sent === true;
+  // FINAL-SOLUTION (#2): a 'sent' render marks the OTP session
+  // live (the preview return button keys on this). A 'sending'
+  // render never marks it — only server proof does.
+  if (sent) S._otpSessionLive = true;
   // পুরনো এরর পরিষ্কার (2026-10-28): OTP পর্দায় ঢুকলেই আগের ধাপের ব্যানার/
   // failBox/নোট মুছে যায় — নইলে পুরনো লেখা OTP পর্দার ওপর স্থায়ীভাবে বসে থাকে।
   // নতুন এরর এর পরেও নিজের fail পথ দিয়ে আবার দেখাবে — এটা শুধু পুরনো ডিসপ্লে মোছে,
@@ -3349,7 +3542,8 @@ function renderOtpCode(sent) {
         // বসে থাকবে না; জমায় নতুন এরর এলে fail পথ আবার দেখাবে।
         hideFail(); hideBanner(); noteOff();
         // গার্ড আটকালে সোজা আগের স্ক্রিনে ফিরি — বাটন চিরতরে নিষ্ক্রিয় হয় না
-        if (emitStep('SUBMIT_S4_OTP', { otp }) === false) { S.otpStage = 'code'; busy(false); }
+        // FINAL-SOLUTION (#6): user-press source for the journal.
+        if (emitStep('SUBMIT_S4_OTP', { otp: otp, _submitSource: 'user-press' }) === false) { S.otpStage = 'code'; busy(false); }
       } },
     { html: '📲 আবার কোড পাঠান', cls: 'ghost', fn: () => {
         // DIRECT-PATH WIRING (2026-10-28): a direct OTP view
@@ -3526,7 +3720,7 @@ function showPvOtp() {
     if (otp.length < 6) { note('⚠️ মোবাইলে আসা ৬ ডিজিটের কোডটি সম্পূর্ণ লিখুন', 'warn'); return; }
     S.otpStage = 'submitting'; S._failReported = false;
     busy(true, '⏳ আবেদন জমা হচ্ছে… একটু অপেক্ষা করুন');
-    if (emitStep('SUBMIT_S4_OTP', { otp }) === false) { S.otpStage = 'code'; busy(false); }
+    if (emitStep('SUBMIT_S4_OTP', { otp: otp, _submitSource: 'user-press' }) === false) { S.otpStage = 'code'; busy(false); }
   };
   $('pvOtpRe').onclick = () => {
     busy(true, '⏳ আবার কোড পাঠানো হচ্ছে…');
@@ -3557,6 +3751,8 @@ function showDone(d, restore) {
   d = d || {};
   S._done = d; // প্রিভিউ থেকে ফেরার সময় আবার দেখানোর জন্য
   S.otpStage = 'done'; S.pvMode = false;
+  S._otpSessionLive = false; // FINAL-SOLUTION (#2): submitted → no return button
+  S._pendingSubmit = null; // FINAL-SOLUTION (#4): submitted → no held submit
   S.photo = d.screenshot || S.photo || null;
   S.pdf = d.pdf || S.pdf || null;
   // Debug-2 (2026-10-26): COMPLETED.original is the original-PDF
@@ -4289,6 +4485,21 @@ function otpPrepAck(d) {
     renderProgress(S.chain.title); chainSend();
     return;
   }
+  // FINAL-SOLUTION (#14): bot-path 400-unexpired — the site's
+  // own wording rides the failed reason ("সাইটের সেন্ড-জবাব:
+  // 400 — ওটিপি-এর মেয়াদ শেষ হয়নি"). Same rule as direct:
+  // the previous code is still valid, no new code, no retry
+  // loop. Render the OTP view in sent state (the session's
+  // earlier code submits via the bot path) instead of retry.
+  if (failed.some(x => /মেয়াদ শেষ হয়নি|not expired/i.test(x.reason || ''))) {
+    hideFail();
+    S._directOtp = false;
+    renderOtpCode(true);
+    const h = document.getElementById('otpSentHint');
+    if (h) h.innerHTML = esc('আগের কোডের মেয়াদ এখনো আছে — নতুন কোড আসবে না, আগের কোডটাই বসান।') + ' <b>কোড কারও সাথে শেয়ার করবেন না।</b>';
+    note('📲 আগের কোডের মেয়াদ এখনো আছে — নতুন কোড আসবে না, আগের কোডটাই বসান', 'ok');
+    return;
+  }
   if (d.blocked || failed.length) {
     if (failed.length) showFail(failed.map(x => (x.field ? x.field + ' — ' : '') + (x.reason || 'সমস্যা হয়েছে')));
     note('⚠️ কোড পাঠানো যায়নি — “আবার চেষ্টা করুন” চাপুন', 'warn');
@@ -4306,6 +4517,7 @@ function otpPrepAck(d) {
     // নোট রেন্ডারের পরে — নইলে renderOtpCode-এর noteOff() তাজা নোট মুছে দিত
     renderOtpCode(true);
     note('📲 কোড পাঠানো হয়েছে — মোবাইলে এসেছে কি না দেখুন', 'ok');
+    autoSaveDraft(6); // FINAL-SOLUTION (#9): send success auto-saves
   } else {
     note('⏳ কোড পাঠানো হচ্ছে…', 'info');
     renderOtpCode(false);
@@ -4347,6 +4559,8 @@ function onSessionReady() {
 function sessionLost() {
   S.ready = false; S.starting = false;
   S._directOtp = false; // DIRECT-PATH WIRING: session lost — the direct OTP phase dies with it
+  S._otpSessionLive = false; // FINAL-SOLUTION (#2): dead session → no return button
+  S._pendingSubmit = null; // FINAL-SOLUTION (#4): held submit dies with the session
   directAckClear(); // DIRECT ACK TIMEOUT: no fallback after session loss
   busy(false);
   // FAILQ-LOST-SEND FIX (2026-10-28): opAbort() সারি চুপচাপ মুছে দিত —
@@ -4454,6 +4668,19 @@ function manualStepAck(d) {
     // বাঁচাই; ব্যর্থ অপটাই S4_PREP হলে আবার পাঠাই না (সার্ভারে জম্বি
     // চলতে পারে — ডাবল-সেন্ডের ভয়) — সত্যি ফেল দেখাই।
     const _failSavedPrep = takeQueuedPrep();
+    // FINAL-SOLUTION (#4): a queued S4_OTP orphaned by an EARLIER
+    // op's failure is HELD, not dropped — the user already pressed
+    // submit with a typed code (live 2026-10-30: S4_PREP ack failed
+    // -> FAILQ dropped S4_OTP -> "code submit could not be sent",
+    // and the verified submit never ran). It re-fires once, after
+    // the next successful prep, while the user is still on the OTP
+    // view (see the S4_PREP success branch); any step navigation
+    // voids it (goStep). When the failed op IS S4_OTP itself, the
+    // queued copy is the same failed action and is dropped, not
+    // held — the user re-presses deliberately.
+    const _failSavedOtp = takeQueuedOtp();
+    const _failHeldOtp = (_failSavedOtp && op !== 'SUBMIT_S4_OTP') ? _failSavedOtp : null;
+    if (_failHeldOtp) S._pendingSubmit = _failHeldOtp;
     const _failDropped = (S._opQ || []).map(j => j.op);
     const _failWillRepump = !!(_failSavedPrep && op !== 'SUBMIT_S4_PREP' && S.ready && socket.connected);
     traceQ('FAILQ', op, { saved: !!_failSavedPrep, repump: _failWillRepump, ready: !!S.ready, conn: !!(typeof socket !== 'undefined' && socket && socket.connected), dropped: _failDropped });
@@ -4469,7 +4696,7 @@ function manualStepAck(d) {
     const _oi = op ? OPS.findIndex(o => o.op === op) : -1;
     const _opStep = _oi >= 0 ? (OPS[_oi].step || 0) : 0;
     const _late = !!(_opStep && (S.d.uiStep || 0) >= _opStep);
-    const _failLines = (_late ? ['আগের ধাপ (' + (OPS[_oi].label || op) + ') থেকে এসেছে — সেই ধাপে ফিরে ঠিক করুন'] : []).concat(failed.map(x => (x.field ? x.field + ' — ' : '') + (x.reason || 'সমস্যা হয়েছে'))).concat(_failDropped.map(o => opLabel(o) + ' — ব্যর্থতার কারণে পাঠানো যায়নি')).concat((_failSavedPrep && !_failWillRepump) ? ['কোড পাঠানো — ব্যর্থতার কারণে পাঠানো যায়নি'] : []);
+    const _failLines = (_late ? ['আগের ধাপ (' + (OPS[_oi].label || op) + ') থেকে এসেছে — সেই ধাপে ফিরে ঠিক করুন'] : []).concat(failed.map(x => (x.field ? x.field + ' — ' : '') + (x.reason || 'সমস্যা হয়েছে'))).concat(_failDropped.map(o => opLabel(o) + ' — ব্যর্থতার কারণে পাঠানো যায়নি')).concat((_failSavedPrep && !_failWillRepump) ? ['কোড পাঠানো — ব্যর্থতার কারণে পাঠানো যায়নি'] : []).concat(_failHeldOtp ? ['কোড জমা ধরে রাখা হয়েছে — পরের সফল কোড-পাঠানোর পর স্বয়ংক্রিয়ভাবে জমা হবে'] : []);
     if (_failLines.length) showFail(_failLines);
     note('⚠️ ' + san(d.message || 'কিছু মিলছে না — ঠিক করে আবার চেষ্টা করুন'), 'warn');
     if (op) dropSent(op); // ব্যর্থ ধাপ সাইটে যাওয়া গণ্য নয় — রিট্রাই আবার পাঠাবে
@@ -4530,6 +4757,24 @@ function manualStepAck(d) {
       else { const h = document.getElementById('otpSentHint'); if (h) h.innerHTML = esc((S.d.phone || '').slice(-4)) + '-এ শেষ হওয়া নম্বরে কোড পাঠানো হয়েছে। না এলে “আবার কোড পাঠান” চাপুন। <b>কোড কারও সাথে শেয়ার করবেন না।</b>'; else renderOtpCode(true); busy(false); }
       // নোট রেন্ডারের পরে — নইলে renderOtpCode-এর noteOff() তাজা নোট মুছে দিত
       note('📲 কোড পাঠানো হয়েছে — মোবাইলে এসেছে কি না দেখুন', 'ok');
+      autoSaveDraft(6); // FINAL-SOLUTION (#9): send success auto-saves
+      // FINAL-SOLUTION (#4): the held submit fires ONCE now —
+      // the same user press, the same filing, no new send. The
+      // code currently in the boxes wins (the user may have
+      // corrected a digit while waiting); otherwise the held
+      // payload's code. Single-shot: cleared before emitting,
+      // and only while still on the OTP view.
+      if (S._pendingSubmit && S.otpStage === 'code') {
+        const held = S._pendingSubmit; S._pendingSubmit = null;
+        let otpNow = '';
+        try {
+          const boxes = els('.otpbox');
+          if (boxes && boxes.length === 6) otpNow = boxes.map(b => (b.value || '').replace(/\D/g, '')).join('');
+        } catch (e) {}
+        const payload = Object.assign({}, held.payload, (otpNow.length === 6 ? { otp: otpNow } : {}));
+        note('⏳ ধরে রাখা কোড-জমা স্বয়ংক্রিয়ভাবে পাঠানো হচ্ছে…', 'info');
+        emitStep(held.op, payload);
+      }
     } else {
       note('⏳ কোড পাঠানো হচ্ছে…', 'info');
       if (S.otpStage !== 'code') renderOtpCode(false);
@@ -4937,6 +5182,12 @@ $('logoutBtn').onclick = async () => {
         alert('চার্জ ব্যর্থ হয়েছে — আবার চেষ্টা করুন');
         return null;
       }
+      // FINAL-SOLUTION (#10): DUPLICATE is token-ok, not an
+      // error — the server already returned charged:0 +
+      // alreadyCharged:true with a fresh token. Say so plainly
+      // instead of leaving the user to wonder whether the retry
+      // double-charged.
+      if (d.alreadyCharged) note('✅ আগে চার্জ হয়ে গেছে — আবার কাটা হয়নি', 'ok');
       return d.chargeToken;
     } catch (e) {
       alert('নেটওয়ার্ক সমস্যা — আবার চেষ্টা করুন');

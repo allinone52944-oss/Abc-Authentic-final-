@@ -32,6 +32,31 @@ function verifyJwtHS256(token, secret) {
     return payload;
   } catch { return null; }
 }
+// FINAL-SOLUTION (2026-10-30, problem-map #9): server-side draft
+// store shared by the socket SAVE_DRAFT handler and the HTTP
+// /draft-save route. Same file layout and id sanitisation as the
+// socket handler always had (drafts/u_<uid>/<id>.json) — the HTTP
+// route exists because the direct path succeeds over plain HTTP
+// precisely when the socket is dead, and a socket-only auto-save
+// would then fail exactly when it is needed most (a restart
+// wiped an in-session filing on 2026-10-30 because no save had
+// ever reached the server). The frontend auto-saves the FULL
+// draft (docs base64 included) — the http-chain send body is
+// deliberately docs-stripped and is never used as draft data.
+const fs = require('fs');
+function draftsDirFor(uid) {
+  const safe = String(uid || 'anon').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 64) || 'anon';
+  const d = path.join(__dirname, '..', 'drafts', 'u_' + safe);
+  try { fs.mkdirSync(d, { recursive: true }); } catch {}
+  return d;
+}
+function saveDraftRecord(uid, data) {
+  const raw = (data && data.draftId) || ('draft-' + Date.now().toString(36));
+  const id = String(raw).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 80) || ('draft-' + Date.now().toString(36));
+  const rec = Object.assign({}, data, { draftId: id, savedAt: new Date().toISOString() });
+  fs.writeFileSync(path.join(draftsDirFor(uid), id + '.json'), JSON.stringify(rec));
+  return { draftId: id, savedAt: rec.savedAt };
+}
 const { SessionManager } = require('./core/SessionManager');
 const { CommandExecutor } = require('./core/CommandExecutor');
 const { toStepAck, shouldDropSession } = require('./core/stepAck');
@@ -1022,6 +1047,18 @@ class BdrisEngineV2 {
             return;
           }
           this.sessionManager.touch(sessionId);
+          // FINAL-SOLUTION (2026-10-30, problem-map #6): log
+          // which path chose this bot submit — a user press, or
+          // the direct-submit fallback — so the next live filing's
+          // path is provable from the journal. _submitSource is a
+          // safe enum the frontend sets (never a phone, code, or
+          // name); unknown/absent sources log as 'unknown', never
+          // guessed. (This loop is the real S4_OTP dispatch — the
+          // frontend emits under the op name, not ENGINE_COMMAND.)
+          if (evName === 'SUBMIT_S4_OTP') {
+            const src = (data && typeof data._submitSource === 'string' && data._submitSource) || 'unknown';
+            console.log(`BOT-SUBMIT-DECISION source=${src.slice(0, 32)}`);
+          }
           try {
             const result = await this.executor.execute(evName, data, {
               session,
@@ -1119,7 +1156,9 @@ class BdrisEngineV2 {
         } catch (e) { if (callback) callback({ ok: false, addresses: [] }); }
       });
 
-      // Legacy: Draft handlers (v1 compat)
+      // Legacy: Draft handlers (v1 compat) — writes via the
+      // module-level saveDraftRecord (shared with HTTP /draft-save);
+      // reads keep the local dir helper below, unchanged.
       const DRAFTS_BASE = path.join(__dirname, '..', 'drafts');
       const draftsDirFor = (uid) => {
         const safe = String(uid || 'anon').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 64) || 'anon';
@@ -1130,12 +1169,9 @@ class BdrisEngineV2 {
       socket.on('SAVE_DRAFT', (data, callback) => {
         try {
           const uid = socket.abcUser?.id || userId || 'anon';
-          const raw = (data && data.draftId) || ('draft-' + Date.now().toString(36));
-          const id = String(raw).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 80) || ('draft-' + Date.now().toString(36));
-          const rec = Object.assign({}, data, { draftId: id, savedAt: new Date().toISOString() });
-          fs.writeFileSync(path.join(draftsDirFor(uid), id + '.json'), JSON.stringify(rec));
-          socket.emit('BOT_STATUS', { status: 'PROGRESS', message: `💾 খসড়া সংরক্ষিত (${id})` });
-          if (callback) callback({ ok: true, draftId: id, savedAt: rec.savedAt });
+          const r = saveDraftRecord(uid, data);
+          socket.emit('BOT_STATUS', { status: 'PROGRESS', message: `💾 খসড়া সংরক্ষিত (${r.draftId})` });
+          if (callback) callback({ ok: true, draftId: r.draftId, savedAt: r.savedAt });
         } catch (e) { if (callback) callback({ ok: false, error: 'খসড়া সংরক্ষণ করা যায়নি' }); }
       });
       socket.on('LIST_DRAFTS', (callback) => {
@@ -1341,13 +1377,23 @@ class BdrisEngineV2 {
     const guardKey = httpChainGuardKey(userId, params);
     const guardNow = Date.now();
     for (const [k, v] of guard.done) { if (guardNow - v.at >= HTTP_CHAIN_DEDUP_TTL_MS) guard.done.delete(k); }
+    // FINAL-SOLUTION (2026-10-30, problem-map #6): every chain
+    // outcome logs its decision (phase + result kind + machine
+    // flags only — never identifiers) so the next live filing's
+    // path is provable from the journal.
+    const logChainDecision = (outcomeLabel, body) => {
+      const b = (body && typeof body === 'object') ? body : {};
+      console.log(`HTTP-CHAIN-DECISION phase=${params.phase || 'unknown'} outcome=${outcomeLabel} ok=${b.ok === true} fallback=${b.fallback === true || b.httpFallback === true} httpStep=${b.httpStep || ''} error=${b.error || ''} sessionDead=${b.sessionDead === true} otpUnexpired=${b.otpUnexpired === true}`);
+    };
     const inFlight = guard.inflight.get(guardKey);
     if (inFlight) {
       const shared = await inFlight;
+      logChainDecision('joined-inflight', shared.body);
       return { status: shared.status, body: shared.body };
     }
     const cached = guard.done.get(guardKey);
     if (cached && guardNow - cached.at < HTTP_CHAIN_DEDUP_TTL_MS) {
+      logChainDecision('replayed-cached', cached.body);
       return { status: cached.status, body: cached.body };
     }
     const runPromise = (async () => {
@@ -1372,6 +1418,7 @@ class BdrisEngineV2 {
       }
     }
     guard.inflight.delete(guardKey);
+    logChainDecision(outcome.body && outcome.body.ok === true ? 'direct-success' : 'direct-failure', outcome.body);
     return outcome;
   }
 
@@ -1387,10 +1434,41 @@ class BdrisEngineV2 {
         res.status(500).json({ ok: false, error: 'EXECUTION_FAILED' });
       }
     });
+    // FINAL-SOLUTION (2026-10-30, problem-map #9): POST /draft-save
+    // — the auto-save endpoint for the frontend's silent draft
+    // save (preview + send success). Same JWT verification as
+    // /http-chain (the adapter strips Authorization before
+    // proxying, so the token travels in the body, as there).
+    // Reached externally as /api/bdris-apply/draft-save through
+    // the backend mount (requireAuth + rate limit). Body:
+    // {_authToken, draft: <full draftPayload incl. docs base64>}.
+    // Returns {ok, draftId, savedAt} — the restore proof is the
+    // draft list (LIST_DRAFTS) showing this id afterwards.
+    app.post('/draft-save', async (req, res) => {
+      try {
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const secret = process.env.ABC_JWT_SECRET || process.env.JWT_SECRET || '';
+        const tokenPayload = verifyJwtHS256(body._authToken, secret);
+        const userId = tokenPayload ? (tokenPayload.id || tokenPayload.sub || tokenPayload.userId) : null;
+        if (!userId) {
+          res.status(401).json({ ok: false, error: 'UNAUTHORIZED', message: 'Valid access token required.' });
+          return;
+        }
+        if (!body.draft || typeof body.draft !== 'object') {
+          res.status(400).json({ ok: false, error: 'BAD_REQUEST', message: 'draft object required.' });
+          return;
+        }
+        const r = saveDraftRecord(userId, body.draft);
+        console.log(`DRAFT-AUTOSAVE: user draft ${r.draftId} saved via HTTP`);
+        res.status(200).json({ ok: true, draftId: r.draftId, savedAt: r.savedAt });
+      } catch {
+        res.status(500).json({ ok: false, error: 'DRAFT_SAVE_FAILED' });
+      }
+    });
   }
 }
 
-module.exports = { BdrisEngineV2, mergeStepParams, buildPlaywrightFallbackPlan, httpChainGuardKey, HTTP_CHAIN_DEDUP_TTL_MS };
+module.exports = { BdrisEngineV2, mergeStepParams, buildPlaywrightFallbackPlan, httpChainGuardKey, HTTP_CHAIN_DEDUP_TTL_MS, saveDraftRecord, draftsDirFor };
 
 // ── Bootstrap: standalone subprocess entry point ──
 // Adapter (index.js) এই file-কে subprocess হিসেবে spawn করে।

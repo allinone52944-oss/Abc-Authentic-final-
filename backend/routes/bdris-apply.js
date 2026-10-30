@@ -94,7 +94,17 @@ router.post('/charge/submit', requireAuth, async (req, res) => {
     safeLog('[bdris-apply] submit charged', price, 'for user', req.user.id);
     res.json({ ok: true, charged: r.charged, newBalance: r.newBalance, chargeToken: mintChargeToken(req.user.id, 'submit', ref) });
   } catch (e) {
-    safeLog('[bdris-apply] submit charge error:', e.message);
+    // FINAL-SOLUTION (2026-10-30, problem-map #10): DUPLICATE is
+    // NOT an error — it is the idempotency proof (already paid,
+    // charged 0, token re-issued). Logging it as "charge error"
+    // made journals (and readers) treat a healthy retry as a
+    // failure. Log it as token-ok; only other failures log as
+    // errors. Charge logic itself is untouched.
+    if (/DUPLICATE_TRANSACTION/.test(e.message)) {
+      safeLog('[bdris-apply] submit charge duplicate (already charged, token re-issued, charged 0)');
+    } else {
+      safeLog('[bdris-apply] submit charge error:', e.message);
+    }
     // 2026-10-25 double-charge fix: a retry with the same
     // idempotency_key (OTP retry, network retry after a deduction,
     // draft resume) must NOT deduct again — it already paid once.
@@ -130,7 +140,12 @@ router.post('/charge/pdf', requireAuth, async (req, res) => {
     safeLog('[bdris-apply] pdf charged', price, 'for user', req.user.id);
     res.json({ ok: true, charged: r.charged, newBalance: r.newBalance, chargeToken: mintChargeToken(req.user.id, 'pdf', ref) });
   } catch (e) {
-    safeLog('[bdris-apply] pdf charge error:', e.message);
+    // FINAL-SOLUTION (problem-map #10): same token-ok rule as submit.
+    if (/DUPLICATE_TRANSACTION/.test(e.message)) {
+      safeLog('[bdris-apply] pdf charge duplicate (already charged, token re-issued, charged 0)');
+    } else {
+      safeLog('[bdris-apply] pdf charge error:', e.message);
+    }
     // 2026-10-25 double-charge fix: same rule as submit above.
     if (/DUPLICATE_TRANSACTION/.test(e.message)) {
       const clientKey = (req.body && req.body.idempotency_key) ? String(req.body.idempotency_key).slice(0, 64) : Date.now();

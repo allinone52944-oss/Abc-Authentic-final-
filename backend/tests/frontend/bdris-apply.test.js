@@ -438,7 +438,12 @@ describe('zone/ward failure visibility (2026-10-25 zone fix)', () => {
   test('geoLoad does NOT degrade paurasavaUnion/ward to a text input on empty, it shows an error banner and keeps the select', () => {
     const m = html.match(/async function geoLoad\(k, Ls, data, wantOv\) \{([\s\S]*?)\nasync function geoMirror/);
     expect(m).not.toBeNull();
-    expect(m[1]).toMatch(/showBanner\('err', 'অঞ্চলের তালিকা আসেনি/);
+    // FINAL-SOLUTION (2026-10-30, #8): the banner is now branched —
+    // SESSION_EXPIRED names the session refresh, other errors keep
+    // the original "list did not arrive" wording. Both are error
+    // banners on the kept select, never a degrade to text.
+    expect(m[1]).toMatch(/showBanner\('err', \/SESSION_EXPIRED\/\.test\(zoneErr\)/);
+    expect(m[1]).toMatch(/অঞ্চলের তালিকা আসেনি \(/);
     expect(m[1]).toMatch(/setGeoState\(k, Ls, 'error'\)/);
     // The degradeToText call must not be on the zone/ward empty path:
     // geoLoad's only remaining degradeToText is for other levels, after the zone/ward early return.
