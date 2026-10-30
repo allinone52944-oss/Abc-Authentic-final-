@@ -1021,6 +1021,15 @@ class BdrisHttpClient {
  *    PostOfcEn, PostCode, VilAreaTownBn, VilAreaTownEn, HouseRoadBn,
  *    HouseRoadEn, LocationId, En, Bn. PostCode is carried only if
  *    supplied. The old copy flags are NOT form fields and are dropped.
+ *    SUBMIT-GEO: cascade values mirror the browser POST — geo ids
+ *    when the canonical address carries them, display names only
+ *    as fallback; city-corp addresses put the zone in
+ *    WardInCityCorp with PaurasavaOrUnion empty (bot DSCC pattern),
+ *    union addresses put the union in PaurasavaOrUnion.
+ *  - Dates/thChild mirror the bot's typed/selected shapes:
+ *    person + parent birth dates DD/MM/YYYY, thChild the Bengali
+ *    single digit. applicantDob is left as supplied: no bot code
+ *    types it into a site input, so its form format is unproven.
  *  - Documents: `attachments` = the uploaded file ids for types 40
  *    and 41 (the form's hidden `attachments` inputs), NOT a JSON
  *    documents array. The upload itself is verified.
@@ -1087,15 +1096,29 @@ function buildSubmitPayload(data = {}) {
     req(addr.postOfficeEn || addr.postEn, `${label}.postOfficeEn`);
     req(addr.villageBn || addr.vilBn, `${label}.villageBn`);
     req(addr.villageEn || addr.vilEn, `${label}.villageEn`);
+    // SUBMIT-GEO: city-corp pattern mirrors StepHandler
+    // _fillAddressSection (live-verified 2026-10-11, DSCC):
+    // the zone goes in WardInCityCorp and PaurasavaOrUnion stays
+    // empty; the ward goes in WardInPaurasavaOrUnion. Union
+    // pattern: union in PaurasavaOrUnion, ward in
+    // WardInPaurasavaOrUnion, WardInCityCorp empty. Detection is
+    // the bot's exact test on the display value, so an English
+    // city-corp label (no 'সিটি কর্পোরেশন') maps union-style,
+    // exactly as the bot would fill it. Cascade values are geo
+    // ids when present, display names only as fallback — never a
+    // new required-field error for a missing id.
+    const cityCorp = /সিটি কর্পোরেশন/.test(String(addr.cityCorpUpazila || ''));
+    const zone = idOrName(addr.paurasavaUnionId, addr.paurasavaUnion);
+    const ward = idOrName(addr.wardId, addr.ward);
     return {
       [`${prefix}Country`]: str(addr.country || 'বাংলাদেশ'),
-      [`${prefix}Div`]: str(addr.division),
-      [`${prefix}Dist`]: str(addr.district),
-      [`${prefix}CityCorpCantOrUpazila`]: str(addr.cityCorpUpazila),
-      [`${prefix}PaurasavaOrUnion`]: str(addr.paurasavaUnion),
-      [`${prefix}WardInCityCorp`]: str(addr.wardInCityCorp),
+      [`${prefix}Div`]: idOrName(addr.divisionId, addr.division),
+      [`${prefix}Dist`]: idOrName(addr.districtId, addr.district),
+      [`${prefix}CityCorpCantOrUpazila`]: idOrName(addr.cityCorpUpazilaId, addr.cityCorpUpazila),
+      [`${prefix}PaurasavaOrUnion`]: cityCorp ? '' : zone,
+      [`${prefix}WardInCityCorp`]: cityCorp ? zone : '',
       [`${prefix}Area`]: str(addr.area),
-      [`${prefix}WardInPaurasavaOrUnion`]: str(addr.ward),
+      [`${prefix}WardInPaurasavaOrUnion`]: ward,
       [`${prefix}City`]: str(addr.city),
       [`${prefix}PostOfc`]: str(addr.postOfficeBn || addr.postBn),
       [`${prefix}PostOfcEn`]: str(addr.postOfficeEn || addr.postEn),
@@ -1159,22 +1182,22 @@ function buildSubmitPayload(data = {}) {
     'personInfoForBirth.personLastNameEn': str(lastEn),
     'personInfoForBirth.personNameBn': joinName(firstBn, lastBn),
     'personInfoForBirth.personNameEn': joinName(firstEn, lastEn),
-    'personInfoForBirth.personBirthDate': str(dob),
-    'personInfoForBirth.thChild': str(person.thChild),
+    'personInfoForBirth.personBirthDate': toSiteDate(dob),
+    'personInfoForBirth.thChild': thChildSiteValue(person.thChild),
     'personInfoForBirth.gender': mapGender(person.gender),
     'personInfoForBirth.religionOther': str(person.religionOther),
     'personInfoForBirth.personNid': str(person.nid || person.personNid),
     religion: 'NOT_APPLICABLE',
     'personInfoForBirth.father.id': str(father.id),
     'personInfoForBirth.father.ubrn': str(brnDecision.fatherUbrn),
-    'personInfoForBirth.father.personBirthDate': str(father.dob),
+    'personInfoForBirth.father.personBirthDate': toSiteDate(father.dob),
     'personInfoForBirth.father.personNameBn': str(father.nameBn),
     'personInfoForBirth.father.personNameEn': str(father.nameEn),
     'personInfoForBirth.father.passportNumber': str(father.passportNumber),
     'personInfoForBirth.father.personNationality': mapNationality(father.nationality),
     'personInfoForBirth.mother.id': str(mother.id),
     'personInfoForBirth.mother.ubrn': str(brnDecision.motherUbrn),
-    'personInfoForBirth.mother.personBirthDate': str(mother.dob),
+    'personInfoForBirth.mother.personBirthDate': toSiteDate(mother.dob),
     'personInfoForBirth.mother.personNameBn': str(mother.nameBn),
     'personInfoForBirth.mother.personNameEn': str(mother.nameEn),
     'personInfoForBirth.mother.passportNumber': str(mother.passportNumber),
@@ -1196,6 +1219,15 @@ function buildSubmitPayload(data = {}) {
     // cause must be learned from the error-wording diagnostic.
     relationWithApplicant: mapDirectRelation(relation),
     applicantBrn: str(data.applicantBrn || person.brn),
+    // SUBMIT-GEO, deliberately UNCHANGED: no bot code types an
+    // applicantDob into any site input (StepHandler uses
+    // applicantDob only for the 2013/18+ rules; the verify query
+    // is a separate endpoint), so no bot format is proven for a
+    // form applicantDob field. Converting it on a guess could
+    // break the one shape that currently passes verify. The
+    // live evidence that would settle it: a form-source capture
+    // showing an applicantDob input and the value the browser
+    // posts for it.
     applicantDob: str(data.applicantDob || dob),
     applicantName: str(applicantName),
     declaration: data.declaration !== undefined ? !!data.declaration : true,
@@ -1204,6 +1236,49 @@ function buildSubmitPayload(data = {}) {
     otp: String(otp).replace(/\D/g, ''),
     attachments: attachmentIds,
   };
+}
+
+/**
+ * SUBMIT-GEO (2026-10-30): browser-mirror value shapes for the
+ * direct submit payload. The bot path is the reference — a browser
+ * POST carries what the page's inputs actually hold at submit:
+ *  - Cascade selects submit the selected option's VALUE, and the
+ *    site's cascade option values are BDRIS geo ids
+ *    (BdrisNavigator selectOption value-first, Phase 1 2026-10-27;
+ *    StepHandler _selectFirstMatch value-first). So a cascade
+ *    field sends its geo id when present, else the display name.
+ *  - Masked date inputs hold DD/MM/YYYY at submit (StepHandler
+ *    _typeMaskedDate types isoToBdFormat output with exact
+ *    read-back, S1 + S2 parents). So person/parent birth dates
+ *    send DD/MM/YYYY, never ISO.
+ *  - thChild is a select whose options carry no value attribute
+ *    (mock form mirrors the live form), so the submitted value IS
+ *    the option text — the Bengali single digit from StepHandler
+ *    thChildSite (live-verified v1).
+ * Names are NEVER touched here: these helpers only reshape geo /
+ * date / thChild values, and every one falls back to the input
+ * value instead of throwing when its preferred shape is absent.
+ */
+function idOrName(id, name) {
+  const i = id === undefined || id === null ? '' : String(id).trim();
+  return i !== '' ? i : String(name === undefined || name === null ? '' : name);
+}
+function toSiteDate(v) {
+  const s = String(v || '').trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  return s;
+}
+const BN_DIGITS = '০১২৩৪৫৬৭৮৯';
+function thChildSiteValue(v) {
+  const s = String(v || '');
+  const arab = s.replace(/[০-৯]/g, (d) => String(BN_DIGITS.indexOf(d)));
+  const m = arab.match(/(\d{1,2})/);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    if (n >= 1 && n <= 11) return String(n).replace(/[0-9]/g, (d) => BN_DIGITS[+d]);
+  }
+  return s;
 }
 
 /** Map the app's Bengali gender labels to the form's enum values. */

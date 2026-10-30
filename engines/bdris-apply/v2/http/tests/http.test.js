@@ -419,19 +419,28 @@ describe('Form-submit payload builder (pasted form source field names)', () => {
     assert.strictEqual(p['personInfoForBirth.personLastNameEn'], 'Karim');
     assert.strictEqual(p['personInfoForBirth.personNameBn'], 'আবদুল করিম');
     assert.strictEqual(p['personInfoForBirth.personNameEn'], 'Abdul Karim');
-    assert.strictEqual(p['personInfoForBirth.personBirthDate'], '2020-01-15');
-    assert.strictEqual(p['personInfoForBirth.thChild'], '১ম');
+    // SUBMIT-GEO: dates/thChild mirror the bot's typed/selected
+    // shapes (masked DD/MM/YYYY inputs, Bengali-digit thChild
+    // option) — not the draft's ISO/'১ম' storage shapes.
+    assert.strictEqual(p['personInfoForBirth.personBirthDate'], '15/01/2020');
+    assert.strictEqual(p['personInfoForBirth.thChild'], '১');
     assert.strictEqual(p['personInfoForBirth.gender'], 'MALE');
     assert.strictEqual(p.religion, 'NOT_APPLICABLE');
     // Parents (S2): BRN, DOB, names, numeric nationality.
     assert.strictEqual(p['personInfoForBirth.father.personNameBn'], 'আবদুল হামিদ');
-    assert.strictEqual(p['personInfoForBirth.father.personBirthDate'], '1990-05-01');
+    assert.strictEqual(p['personInfoForBirth.father.personBirthDate'], '01/05/1990');
     assert.strictEqual(p['personInfoForBirth.mother.personNameEn'], 'Fatema');
     assert.strictEqual(p['personInfoForBirth.mother.personNationality'], '1');
     // Addresses (S2B): all three sections, full suffix set incl. LocationId/En/Bn.
     assert.strictEqual(p.birthPlaceDiv, 'ঢাকা');
     assert.strictEqual(p.birthPlaceCityCorpCantOrUpazila, 'ঢাকা দক্ষিণ সিটি কর্পোরেশন');
-    assert.strictEqual(p.birthPlacePaurasavaOrUnion, 'অঞ্চল - ১');
+    // SUBMIT-GEO: the fixture address is city-corp (DSCC), so the
+    // bot pattern puts the zone in WardInCityCorp and leaves
+    // PaurasavaOrUnion empty — no geo ids in this fixture, so the
+    // zone falls back to its display name.
+    assert.strictEqual(p.birthPlacePaurasavaOrUnion, '');
+    assert.strictEqual(p.birthPlaceWardInCityCorp, 'অঞ্চল - ১');
+    assert.strictEqual(p.birthPlaceWardInPaurasavaOrUnion, 'ওয়ার্ড - ১');
     assert.strictEqual(p.birthPlaceVilAreaTownBn, 'মহল্লা');
     assert.strictEqual(p.birthPlaceLocationId, '700');
     assert.strictEqual(p.birthPlaceEn, 'House 1, Moholla, Dhaka');
