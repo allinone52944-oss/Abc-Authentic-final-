@@ -64,7 +64,11 @@ function baseHandler(siteDobValue) {
 
 function waitStub() {
   let calls = 0;
-  return async () => {
+  return async (sels) => {
+    // STEP-PROOF (A1): address calls answer present without
+    // consuming the parent-field call count.
+    const _list = Array.isArray(sels) ? sels : [sels];
+    if (_list.some((s) => String(s).includes('permAddr') || String(s).includes('prsntAddr'))) return { fill: async () => {} };
     calls += 1;
     return calls <= 2 ? { fill: async () => {} } : null;
   };

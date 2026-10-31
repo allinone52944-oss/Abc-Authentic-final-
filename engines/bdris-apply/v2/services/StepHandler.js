@@ -804,6 +804,15 @@ class StepHandler {
     this.progress('🔄 ধাপ ২: ব্যক্তির পরিচিতি লেখা হচ্ছে...');
     const failed = [];
 
+    // STEP-GATE (cycle 1, A2): prove the person step before filling
+    // anything — filling person fields on a wrong-step page used to
+    // fail with confusing per-field errors (or, via the lying
+    // _clickNextAndWait, advance falsely). Fail fast with the code.
+    const gate1 = await this._ensureSiteStep(2, 'BOT_PAGE_NOT_ON_PERSON_STEP', 'ব্যক্তির');
+    if (!gate1.ok) {
+      return { ok: false, failed: [{ field: 'ব্যক্তির ধাপ', reason: gate1.reason }], message: '❌ ' + gate1.reason, nameCheck: [], code: gate1.code };
+    }
+
     const keep = (r) => {
       if (!r.ok && !r.skipped) failed.push({ field: r.field, reason: r.reason });
     };
@@ -1000,6 +1009,14 @@ class StepHandler {
     const failed = [];
     const verifyStatus = {};
     const keep = (r) => { if (!r.ok && !r.skipped) failed.push({ field: r.field, reason: r.reason }); };
+
+    // STEP-GATE (cycle 1, A2): prove the parents step before filling
+    // — same discipline as the S0 basis gate. A wrong-step page
+    // fails fast with the code, never with per-field noise.
+    const gate2 = await this._ensureSiteStep(3, 'BOT_PAGE_NOT_ON_PARENTS_STEP', 'পিতামাতার');
+    if (!gate2.ok) {
+      return { ok: false, step: 3, blocked: true, reason: gate2.reason, message: '❌ ' + gate2.reason, failed: [{ field: 'পিতামাতার ধাপ', reason: gate2.reason }], verifyStatus, code: gate2.code };
+    }
 
     // ২০১৩-নিয়ম (live-verified 2026-10-11, সংশোধিত): সাইট applicant-DOB দেখে নিজেই ঠিক
     // করে পিতামাতার BRN চাইবে কি না — 2026-জন্ম ধরা পড়লে (ভুল DOB race) parents-BRN
@@ -1234,6 +1251,24 @@ class StepHandler {
         ['#fatherBrn', 'input[name="personInfoForBirth.father.ubrn"]'], 1500));
     }
     if (advanced) {
+      // STEP-PROOF (cycle 1, A1): fields-gone alone is NOT success
+      // proof — on a page already past parents it is trivially true
+      // and no parent field was ever checked, yet the old code
+      // returned ok:true with failed:[] unconditionally, discarding
+      // every fill failure. Success now requires BOTH: no fill
+      // failure carried, AND a positive address-step anchor visible.
+      const addrAnchor = await this._waitVisible(
+        ['select[name="permAddrDiv"]', 'input[name="permAddrHouseRoadEn"]', 'select[name="prsntAddrDiv"]'], 5000);
+      if (!addrAnchor) {
+        const reason = 'পিতামাতার ঘর চলে গেছে কিন্তু ঠিকানার ধাপের ঘর দেখা যাচ্ছে না — সাইট কোন ধাপে আছে নিশ্চিত নয়, তাই ধাপ ৩ সম্পন্ন ধরা হচ্ছে না।';
+        this.progress('❌ ' + reason);
+        return { ok: false, step: 3, blocked: true, reason, message: '❌ ' + reason, failed: [...failed, { field: 'ঠিকানার ধাপ', reason }], verifyStatus, brnNote };
+      }
+      if (failed.length) {
+        const reason = `${failed.length}টি ফিল্ড পূরণ হয়নি — সাইট এগিয়ে গেলেও ধাপ ৩ সম্পন্ন ধরা হচ্ছে না।`;
+        this.progress('❌ ' + reason);
+        return { ok: false, step: 3, blocked: true, reason, message: '❌ ' + reason, failed, verifyStatus, brnNote };
+      }
       // 2013-gate note, only after the fields-gone proof: the
       // in-page gate was relaxed and the site advanced. This is
       // NOT a claim about the server's final-submit decision —
@@ -1299,6 +1334,15 @@ class StepHandler {
    */
   async submitS2B(data = {}) {
     const failed = [];
+
+    // STEP-GATE (cycle 1, A2): prove the address step before filling
+    // — same discipline as the S0 basis gate. A wrong-step page
+    // fails fast with the code, never with per-field noise.
+    const gate2b = await this._ensureSiteStep(4, 'BOT_PAGE_NOT_ON_ADDRESS_STEP', 'ঠিকানার');
+    if (!gate2b.ok) {
+      return { ok: false, step: 5, blocked: true, message: '❌ ' + gate2b.reason, failed: [{ field: 'ঠিকানার ধাপ', reason: gate2b.reason }], code: gate2b.code };
+    }
+
     // FINAL-SOLUTION (2026-10-30, problem-map #7): S2B timeout
     // root cause. The op chains TWO full cascade fills + a
     // next-wait + a still-check + a retry-next inside ONE 120s
@@ -1667,18 +1711,30 @@ class StepHandler {
         await this.page.waitForTimeout(500);
         const startBtn = await this.page.locator('button:has-text("Start")').first().elementHandle().catch(() => null);
         if (!startBtn) return 'no-start';
-        await startBtn.click().catch(() => {});
+        // STEP-PROOF (cycle 1, A4): the old code swallowed BOTH the
+        // Start click and the row-collapse wait and returned 'ok'
+        // unconditionally, so the 40+41 gate passed on uploads that
+        // never landed. Now each step's result is honored: a failed
+        // Start click and an unconfirmed upload are distinct
+        // failures, never 'ok'. The collapse wait (the site's own
+        // upload-complete signal — the type select leaves the DOM)
+        // is positive evidence: only its success counts as landed.
+        const startClicked = await startBtn.click().then(() => true).catch(() => false);
+        if (!startClicked) return 'start-failed';
         // আপলোড শেষে row collapse হয় (select চলে যায়)
-        await this.page.waitForFunction(
+        const collapsed = await this.page.waitForFunction(
           (s) => !document.querySelector(s),
           typeSel, { timeout: 20000 }
-        ).catch(() => {});
+        ).then(() => true).catch(() => false);
+        if (!collapsed) return 'not-confirmed';
         await this.page.waitForTimeout(800);
         return 'ok';
       };
       const reasonOf = (code) => code === 'no-input' ? 'আপলোড ঘর পাওয়া যায়নি'
         : code === 'no-row' ? 'File Type row আসেনি'
         : code === 'no-start' ? 'Start বাটন পাওয়া যায়নি'
+        : code === 'start-failed' ? 'Start চাপা যায়নি'
+        : code === 'not-confirmed' ? 'আপলোড শেষ হয়েছে কিনা নিশ্চিত হওয়া যায়নি — আবার চেষ্টা করুন'
         : 'আপলোড করা যায়নি';
       for (const d of good) {
         const wantType = d.docType === '41' ? '41' : '40';
@@ -1765,6 +1821,29 @@ class StepHandler {
       };
     }).catch(() => ({ step: 0, contact: false, docs: false, start: false, form: false, bodyLen: -1 }));
     return { step: probe.step || 0, probe };
+  }
+
+  // STEP-GATE (cycle 1, A2): entry gate for S1/S2/S2B, mirroring the
+  // S0 _ensureBasisStep discipline — prove the page step BEFORE
+  // filling, and fail fast with a machine-readable code on a
+  // definitive wrong-step page. Reuses _detectSiteStep (highest
+  // visible step: 6=contact, 5=docs, 4=address, 3=parents,
+  // 2=person, 1=office, 0=unknown). An unknown/empty page passes:
+  // the step's own waits stay the arbiter there (booting / slow
+  // render), exactly like the basis gate. NO re-navigation repair
+  // here: unlike S0 (whose own step IS the form landing step),
+  // repairing S1/S2/S2B would require replaying prior steps,
+  // which the S3/S4Prep catch-up paths already do from their
+  // entry points — a wrong-step command fails honestly instead,
+  // and the caller surfaces the code, never a field error.
+  async _ensureSiteStep(expected, code, label) {
+    const det = await this._detectSiteStep().catch(() => ({ step: 0 }));
+    const step = det.step || 0;
+    if (step === expected || step === 0) return { ok: true };
+    const STEP_BN = { 1: 'শুরুর (ভিত্তি)', 2: 'ব্যক্তির', 3: 'পিতামাতার', 4: 'ঠিকানার', 5: 'ডকুমেন্টের', 6: 'যোগাযোগের' };
+    const reason = `বটের পেজ ${label} ধাপে নেই (সাইট এখন ${STEP_BN[step] || 'অন্য'} ধাপে আছে) — ভুল পেজে তথ্য বসানো হবে না। সঠিক ধাপ থেকে আবার চেষ্টা করুন।`;
+    this.progress('❌ ' + reason);
+    return { ok: false, code, step, reason };
   }
 
   /**
@@ -3262,6 +3341,20 @@ class StepHandler {
     }
     // একাধিক সেকশনের "পরবর্তী" একসাথে দৃশ্যমান থাকলে সবার নিচেরটি (চলমান সেকশনেরটিই)
     // বাছাই করি — নাহলে ভুল সেকশনের বাটনে ক্লিক পড়ে চুপচাপ আটকে থাকতে পারে (2026-10-11 live)
+    // STEP-PROOF (cycle 1, A3): the old code then ignored the click
+    // result AND the anchor wait and returned ok:true unconditionally,
+    // so callers reported a successful advance on a blocked click.
+    // Contract now: ok:true means the click was actually performed
+    // and, when the caller gave a nextAnchor, the destination anchor
+    // was seen. Section scoping: candidates are grouped by their
+    // nearest id-bearing ancestor section; a button inside a section
+    // holding visible form controls (a real step section) is
+    // preferred over a bare container (nav/footer stray) — within
+    // the preferred group the lowest button still wins (live
+    // 2026-10-11). Callers without nextAnchor must verify advance
+    // themselves (S2 parents-gone, S2B addrStill, S3 contact
+    // anchors already do) — a performed click alone is not advance
+    // proof, and this function no longer pretends otherwise.
     const btnSels = ['button:has-text("পরবর্তী")', 'button:has-text("Next")'];
     let el = null;
     const deadline = Date.now() + 12000;
@@ -3279,7 +3372,28 @@ class StepHandler {
           } catch { /* next */ }
         }
       }
-      if (found.length) { found.sort((a, b) => a.y - b.y); el = found[found.length - 1].cand; break; }
+      if (found.length) {
+        const scoped = [];
+        for (const c of found) {
+          let hasControls = false;
+          try {
+            hasControls = await c.cand.evaluate((e) => {
+              let node = e;
+              for (let i = 0; i < 10 && node; i++, node = node.parentElement) {
+                if (node.id) break;
+              }
+              const scope = node || (e.ownerDocument || document);
+              return !!scope.querySelector('input:not([type=hidden]), select, textarea');
+            });
+          } catch { hasControls = false; }
+          scoped.push({ ...c, hasControls });
+        }
+        let pool = scoped.filter((c) => c.hasControls);
+        if (!pool.length) pool = scoped;
+        pool.sort((a, b) => a.y - b.y);
+        el = pool[pool.length - 1].cand;
+        break;
+      }
       await this.page.waitForTimeout(350);
     }
     if (!el) {
@@ -3308,16 +3422,26 @@ class StepHandler {
       });
       console.log('CLICK-NEXT:', binfo);
     } catch { /* ডায়াগনস্টিক — ব্যর্থ হলেও চলবে */ }
-    await this._robustClick(el, `next:${label}`, 10000);
+    const clicked = await this._robustClick(el, `next:${label}`, 10000);
+    if (!clicked) {
+      const reason = `"${label}" বাটনে ক্লিক করা যায়নি`;
+      this.progress(`⚠ ${reason}`);
+      return { ok: false, field: label, reason };
+    }
     this.progress(`✔ "${label}" ক্লিক করা হয়েছে`);
     // এগোনোর লক্ষণ: URL বদল / বাটন লুকানো / পরের ধাপের anchor
     try {
       await this.page.waitForFunction(([u]) => location.href !== u, [beforeUrl], { timeout: 3000 }).catch(() => {});
       await el.waitFor({ state: 'hidden', timeout: 6000 }).catch(() => {});
-      if (opts.nextAnchor) {
-        await this._waitVisible(opts.nextAnchor, 8000);
+    } catch { /* advance evidence is the anchor check below */ }
+    if (opts.nextAnchor) {
+      const anchor = await this._waitVisible(opts.nextAnchor, 8000);
+      if (!anchor) {
+        const reason = `"${label}"-এর পর পরের ধাপের ঘর দেখা যায়নি`;
+        this.progress(`⚠ ${reason}`);
+        return { ok: false, field: label, reason };
       }
-    } catch { /* fallback নিচে */ }
+    }
     await this.page.waitForTimeout(900);
     return { ok: true };
   }
