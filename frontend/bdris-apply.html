@@ -803,7 +803,67 @@ function setBtns(list) {
 function clearBtns() { $('btnRow').innerHTML = ''; }
 
 /* ═══════════ acks / storage helpers ═══════════ */
-function getAcks() { try { return JSON.parse(localStorage.getItem('bdris_acks') || '[]'); } catch { return []; } }
+function getAcks() { try { return dedupeAcks(JSON.parse(localStorage.getItem('bdris_acks') || '[]')); } catch { return []; } }
+// HOME-LIST (2026-10-31): one number = one card, always. addAck used to
+// unshift without dedupe, so a double-add rendered the same application
+// twice (live: same number + time twice). Dedupe by ack number here so
+// every read path (home render, server merge, pending flush) sees a
+// clean list — including duplicates already sitting in localStorage.
+// Numberless entries cannot dedupe by number, so they pass through.
+function dedupeAcks(list) {
+  const seen = new Set(); const out = [];
+  (Array.isArray(list) ? list : []).forEach(a => {
+    const key = (a && a.no) ? String(a.no) : null;
+    if (key) { if (seen.has(key)) return; seen.add(key); }
+    out.push(a);
+  });
+  return out;
+}
+// HOME-LIST (2026-10-31): server-fetch failure reason, classified once
+// so the home list never again shows a silent partial list as complete.
+// kind 'login' = session gone (fresh login is the only recovery);
+// kind 'retry' = anything else (a retry can work).
+function classifyServerAcksFailure(f) {
+  f = f || {};
+  if (!f.tokenPresent) return { kind: 'login', text: 'সার্ভার রেকর্ড দেখতে আবার লগইন করুন — সেশন পাওয়া যায়নি' };
+  if (f.status === 401 || f.status === 403 || f.error === 'NO_TOKEN') return { kind: 'login', text: 'সেশন শেষ হয়ে গেছে — সার্ভার রেকর্ড দেখতে আবার লগইন করুন' };
+  if (f.networkError) return { kind: 'retry', text: 'সার্ভার রেকর্ড আনা যায়নি — নেটওয়ার্ক সমস্যা' };
+  if (f.status) return { kind: 'retry', text: 'সার্ভার রেকর্ড আনা যায়নি — সার্ভার জবাব ' + f.status };
+  if (f.error) return { kind: 'retry', text: 'সার্ভার রেকর্ড আনা যায়নি: ' + String(f.error).slice(0, 120) };
+  return { kind: 'retry', text: 'সার্ভার রেকর্ড আনা যায়নি — অজানা জবাব' };
+}
+function renderServerAcksStatus(fail) {
+  let sec = $('recentSec');
+  if (!sec) {
+    sec = document.createElement('div');
+    sec.className = 'sec'; sec.id = 'recentSec';
+    sec.innerHTML = '<div class="sub-h"><span class="snum">🕘</span> সাম্প্রতিক আবেদন</div>';
+    $('stepBody').appendChild(sec);
+  }
+  let st = $('srvAckStatus');
+  if (!st) { st = document.createElement('div'); st.id = 'srvAckStatus'; sec.appendChild(st); }
+  const btn = fail.kind === 'login'
+    ? '<button class="btn small" id="srvAckLogin">🔑 আবার লগইন করুন</button>'
+    : '<button class="btn small" id="srvAckRetry">🔄 আবার চেষ্টা করুন</button>';
+  st.innerHTML = '<div class="ds" style="padding:8px 0">' + esc(fail.text) + '</div>' + btn;
+  const rb = $('srvAckRetry'); if (rb) rb.onclick = () => renderHome();
+  const lb = $('srvAckLogin'); if (lb) lb.onclick = () => { location.href = '/login.html'; };
+}
+function clearServerAcksStatus() { const st = $('srvAckStatus'); if (st && st.parentNode) st.parentNode.removeChild(st); }
+// HOME-LIST (2026-10-31): charge-failure reason in plain Bengali, so a
+// charge/send note never again shows without its cause.
+function chargeErrorText(status, d) {
+  d = d || {};
+  if (d.message) return 'চার্জ ব্যর্থ হয়েছে — ' + d.message;
+  if (d.error) return 'চার্জ ব্যর্থ হয়েছে — ' + d.error;
+  if (status) return 'চার্জ ব্যর্থ হয়েছে — সার্ভার জবাব ' + status;
+  return 'চার্জ ব্যর্থ হয়েছে — অজানা কারণ';
+}
+function chargeCatchReason(e) {
+  try { if (typeof S !== 'undefined' && S && S._lastChargeError) return S._lastChargeError; } catch (e2) {}
+  if (e && e.message) return e.message;
+  return 'অজানা কারণ';
+}
 function reportAckToServer(a) {
   // জমা হওয়া আবেদন সার্ভারেও জমা হয় — যাতে admin সব আবেদন দেখতে
   // পান (শুধু এই ব্রাউজারের তালিকায় নয়)। ব্যর্থ হলে স্থানীয়
@@ -869,7 +929,11 @@ function reportApplicationFailure(reason) {
 }
 function addAck(a) {
   reportAckToServer(a);
-  const l = getAcks();
+  // HOME-LIST (2026-10-31): drop any existing entry with the same
+  // number first — a re-add replaces, never duplicates (getAcks() is
+  // already deduped, so this also repairs lists written before).
+  let l = getAcks();
+  if (a && a.no) l = l.filter(x => String(x && x.no) !== String(a.no));
   l.unshift(a);
   // পুরোনো এন্ট্রির PDF খোঁচা বাদ — localStorage ফুলে উড়ে না যায় (শুধু শেষ আবেদনের কপি থাকে)
   l.slice(1).forEach(x => { if (x.pdfB64) { delete x.pdfB64; delete x.pdfName; } });
@@ -1204,13 +1268,26 @@ function renderHome() {
   // into the same list: local entries keep their PDF-copy button,
   // server-only entries get number-copy + original-PDF (re-fetchable
   // by charge from any browser — the real deliverable) + server
-  // delete. Local numbers win on duplicates. Fetch failure is
-  // fail-open: the local list simply stays as it was, no error spam.
+  // delete. Local numbers win on duplicates.
+  // HOME-LIST (2026-10-31): fetch failure is NEVER silent anymore
+  // (live: the user's browser showed a different/empty history with
+  // no explanation). The status line carries the real reason + retry
+  // (or fresh-login on expired token); local entries still render,
+  // but never as a silent complete list.
   try {
-    fetch('/api/bdris-apply/applications', { headers: { 'Authorization': 'Bearer ' + getToken() } })
-      .then(r => r.json().catch(() => null))
+    if (!getToken()) { renderServerAcksStatus(classifyServerAcksFailure({ tokenPresent: false })); }
+    else fetch('/api/bdris-apply/applications', { headers: { 'Authorization': 'Bearer ' + getToken() } })
+      .then(async r => {
+        if (!r.ok) return { __fail: classifyServerAcksFailure({ status: r.status, tokenPresent: true }) };
+        const d = await r.json().catch(() => null);
+        if (!d || !d.ok) return { __fail: classifyServerAcksFailure({ tokenPresent: true, error: d && d.error }) };
+        return d;
+      })
       .then(d => {
-        const rows = (d && d.ok && Array.isArray(d.applications)) ? d.applications : [];
+        if (!d) return;
+        const fail = d.__fail;
+        if (fail) renderServerAcksStatus(fail); else clearServerAcksStatus();
+        const rows = (!fail && Array.isArray(d.applications)) ? d.applications : [];
         // ALL-BUGS (i): flush pending server reports — one
         // attempt per home render, only for ack numbers the
         // server still lacks. A lost DONE-time report heals here
@@ -1251,7 +1328,7 @@ function renderHome() {
             socket.emit('FETCH_ORIGINAL', { ack: ackNo, _chargeToken: token });
             setTimeout(() => { b.disabled = false; b.textContent = '⬇️ আসল PDF'; }, 30000);
           } catch (e) {
-            note('চার্জ/পাঠাতে সমস্যা — আবার চেষ্টা করুন', 'err');
+            note('চার্জ/পাঠাতে সমস্যা: ' + chargeCatchReason(e), 'err');
           } finally {
             if (!emitted) { b.disabled = false; b.textContent = '⬇️ আসল PDF'; }
           }
@@ -1261,7 +1338,7 @@ function renderHome() {
           fetch('/api/bdris-apply/applications/' + encodeURIComponent(b.dataset.srvdel), { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getToken() } })
             .then(() => renderHome()).catch(() => renderHome());
         });
-      }).catch(() => {});
+      }).catch(() => { renderServerAcksStatus(classifyServerAcksFailure({ networkError: true, tokenPresent: true })); });
   } catch {}
   els('[data-orig]').forEach(b => b.onclick = async () => {
     const ackNo = b.dataset.orig;
@@ -1277,7 +1354,7 @@ function renderHome() {
       // Ready হলে auto-download হবে (ORIGINAL_PDF handler দেখে)
       setTimeout(() => { b.disabled = false; b.textContent = '⬇️ আসল PDF'; }, 30000);
     } catch (e) {
-      note('চার্জ/পাঠাতে সমস্যা — আবার চেষ্টা করুন', 'err');
+      note('চার্জ/পাঠাতে সমস্যা: ' + chargeCatchReason(e), 'err');
     } finally {
       if (!emitted) { b.disabled = false; b.textContent = '⬇️ আসল PDF'; }
     }
@@ -5472,7 +5549,9 @@ $('logoutBtn').onclick = async () => {
         return null;
       }
       if (!r.ok || d.ok === false || !d.chargeToken) {
-        alert('চার্জ ব্যর্থ হয়েছে — আবার চেষ্টা করুন');
+        const reason = chargeErrorText(r.status, d);
+        try { if (typeof S !== 'undefined' && S) S._lastChargeError = reason; } catch (e2) {}
+        alert(reason);
         return null;
       }
       // FINAL-SOLUTION (#10): DUPLICATE is token-ok, not an
@@ -5483,10 +5562,23 @@ $('logoutBtn').onclick = async () => {
       if (d.alreadyCharged) note('✅ আগে চার্জ হয়ে গেছে — আবার কাটা হয়নি', 'ok');
       return d.chargeToken;
     } catch (e) {
-      alert('নেটওয়ার্ক সমস্যা — আবার চেষ্টা করুন');
+      const reason = (e && e.name === 'AbortError') ? 'চার্জের সময় শেষ হয়ে গেছে — আবার চেষ্টা করুন'
+        : (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) ? 'ইন্টারনেট সংযোগ নেই — সংযোগ ফিরলে আবার চেষ্টা করুন'
+        : 'নেটওয়ার্ক সমস্যা — আবার চেষ্টা করুন';
+      try { if (typeof S !== 'undefined' && S) S._lastChargeError = reason; } catch (e2) {}
+      alert(reason);
       return null;
     }
   }
+  // HOME-LIST (2026-10-31): charge() was defined ONLY inside this IIFE
+  // and never exposed — so the home recent-list handlers (main script
+  // scope) calling charge() threw ReferenceError on every click, and
+  // their catch masked it with the generic 'charge/send problem' note
+  // (live screenshot). The author plainly intended charge to be
+  // callable (see the 'charge() already alerted' comments) — expose
+  // it. Idempotency keys + server DUPLICATE handling mean exposing
+  // it cannot double-charge.
+  window.charge = charge;
   function wrapEmitStep() {
     if (typeof emitStep !== 'function') { setTimeout(wrapEmitStep, 500); return; }
     var orig = emitStep;
