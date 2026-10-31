@@ -2,16 +2,20 @@
  * PARENT-VERIFY (2026-10-31) — mock only, no live contact.
  *
  * Regression tests for the real parent-BRN verification path in
- * services/StepHandler.js (submitS2 / _clickVerify):
+ * services/StepHandler.js (submitS2 / _clickVerify), under
+ * SITE-MIRRORING semantics (2026-10-29 point 2, restored by the
+ * 2026-10-31 adjustment — see the history note below):
  *   1. Verify success → verifyStatus true, no verify failure, S2 ok.
- *   2. Verify control missing → honest named failure (parent + what
- *      was searched), verifyStatus false + verbatim reason, S2 fails
- *      — never a silent pending badge.
- *   3. Registry mismatch → the site's reason verbatim in the failed
- *      entry + verifyReason, S2 fails, path stopped (no filing on an
- *      unverified BRN where the site requires it).
- *   4. Inconclusive wait (no definitive signal) → honest failure,
- *      never proceeding on a guess.
+ *   2. Verify control missing → verifyStatus false + verbatim
+ *      named reason, NO failed entry from verify alone; S2 proceeds
+ *      to the site's own Next gate, and the site advancing means
+ *      S2 ok — never a silent pending badge, never our own block.
+ *   3. Registry mismatch → the site's reason verbatim in
+ *      verifyReason, NO failed entry from verify alone; the site
+ *      advancing means S2 ok, per-parent and exact.
+ *   4. Inconclusive wait (no definitive signal) → verifyStatus
+ *      false + verbatim reason, NO failed entry; the site gate
+ *      decides, never a guess.
  *   5. Mismatch after an empty landing → one refill + one re-attempt;
  *      a second success clears the failure and S2 proceeds.
  *   6. Near-field Bengali button (যাচাই করুন next to the BRN field)
@@ -19,14 +23,23 @@
  *      the only path.
  *   7. Preserved deliberately: pre-2013 exempt (BRN cleared, verify
  *      skipped) and family names-only advance (verify skipped).
+ *   8. Verify failed AND the site never advances → honest
+ *      not-advanced failure whose reason is NOT verify-derived
+ *      (fresh site error, or honest "no fresh error") and whose
+ *      failed[] holds no verify entry: the site decided, not us.
  *
- * Each test FAILS on pre-fix code by construction:
- *   2 — pre-fix _clickVerify returned { verified: null } silently
- *       (quietMissing) and S2 proceeded with a pending badge;
- *   3 — pre-fix a mismatch only warned and continued to Next;
- *   4 — pre-fix a timeout returned null and S2 proceeded;
- *   6 — pre-fix only #father-check/#mother-check and English
- *       "Verify" buttons were searched.
+ * HISTORY — read before "fixing" these assertions back:
+ *   Pre-branch code silently skipped verify (quietMissing) and S2
+ *   proceeded with a pending badge — tests 2/3/4 fail on it (no
+ *   reason, status null).
+ *   Branch fix-bdris-parentverify @ 65b468f made a mismatch /
+ *   missing control / inconclusive wait a failed entry, so the
+ *   cycle-1 A1 gate failed the step — OUR engine adding a block
+ *   the site did not impose, contradicting standing rule point 2
+ *   ("Verify never blocks alone", 2026-10-29).
+ *   This adjustment RESTORES point 2: tests 2/3/4/8 fail on the
+ *   branch code (verify entry in failed[] fails the step) and pass
+ *   on the adjusted code (badge reason present, site gate decides).
  */
 'use strict';
 const { describe, it } = require('node:test');
@@ -360,34 +373,35 @@ describe('parent verify: success path', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. Missing control → honest named failure, never silent pending.
+// 2. Missing control → recorded honestly, never our own block.
+//    The site's Next gate decides: the fake site advances, so S2 ok.
 // ---------------------------------------------------------------------------
 
 describe('parent verify: missing control', () => {
-  it('no verify control anywhere fails S2 with a named reason per parent', async () => {
+  it('no verify control anywhere records a named reason per parent and S2 still follows the site gate', async () => {
     const page = makeVerifyPage({ verifyButtons: 'none' });
     const h = makeHandler(page, { applicantDob: '2015-06-01' });
     const out = await h.submitS2(PARENTS);
-    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.ok, true, 'site advanced, so verify alone must not fail the step');
     assert.strictEqual(out.verifyStatus.father, false);
     assert.strictEqual(out.verifyStatus.mother, false);
     assert.match(out.verifyReason.father, /পিতা-এর Verify নিয়ন্ত্রণ.*পাওয়া যায়নি/);
     assert.match(out.verifyReason.mother, /মাতা-এর Verify নিয়ন্ত্রণ.*পাওয়া যায়নি/);
-    assert.ok(out.failed.some((f) => f.field === 'পিতা-এর BRN যাচাই'
-      && /Verify নিয়ন্ত্রণ/.test(f.reason)));
-    assert.ok(out.failed.some((f) => f.field === 'মাতা-এর BRN যাচাই'));
-    // Pre-fix code returned { verified: null } silently and S2 could
-    // still succeed with a pending badge — that outcome is gone.
+    assert.ok(!out.failed.some((f) => /BRN যাচাই/.test(f.field || '')),
+      'verify must not land in failed[] on its own');
+    // Pre-fix code returned { verified: null } silently and S2
+    // proceeded with a pending badge — that outcome is gone: an
+    // attempt was made, so the status is false, never null.
     assert.notStrictEqual(out.verifyStatus.father, null);
   });
 });
 
 // ---------------------------------------------------------------------------
-// 3. Registry mismatch → verbatim reason, path stopped.
+// 3. Registry mismatch → verbatim reason on the badge, site gate decides.
 // ---------------------------------------------------------------------------
 
 describe('parent verify: registry mismatch', () => {
-  it('a fresh mismatch fails S2 with the site reason verbatim', async () => {
+  it('a fresh mismatch records the site reason verbatim and S2 follows the site gate', async () => {
     const page = makeVerifyPage({
       verifyButtons: 'id',
       verifySeq: { father: ['mismatch'], mother: ['success'] },
@@ -395,22 +409,22 @@ describe('parent verify: registry mismatch', () => {
     });
     const h = makeHandler(page, { applicantDob: '2015-06-01' });
     const out = await h.submitS2(PARENTS);
-    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.ok, true, 'site advanced, so a mismatch alone must not fail the step');
     assert.strictEqual(out.verifyStatus.father, false);
     assert.strictEqual(out.verifyReason.father, 'No birth record found for the given BRN');
-    assert.ok(out.failed.some((f) => f.field === 'পিতা-এর BRN যাচাই'
-      && f.reason === 'No birth record found for the given BRN'));
+    assert.ok(!out.failed.some((f) => /BRN যাচাই/.test(f.field || '')),
+      'verify must not land in failed[] on its own');
     // The mother still verifies — the failure is per-parent, exact.
     assert.strictEqual(out.verifyStatus.mother, true);
   });
 });
 
 // ---------------------------------------------------------------------------
-// 4. Inconclusive wait → honest failure, never a guess.
+// 4. Inconclusive wait → recorded honestly, site gate decides, never a guess.
 // ---------------------------------------------------------------------------
 
 describe('parent verify: inconclusive wait', () => {
-  it('a verify that never resolves fails instead of proceeding', async () => {
+  it('a verify that never resolves records a reason and S2 follows the site gate', async () => {
     const page = makeVerifyPage({
       verifyButtons: 'id',
       verifySeq: { father: ['timeout'], mother: ['success'] },
@@ -418,10 +432,11 @@ describe('parent verify: inconclusive wait', () => {
     });
     const h = makeHandler(page, { applicantDob: '2015-06-01' });
     const out = await h.submitS2(PARENTS);
-    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.ok, true, 'site advanced, so an inconclusive wait alone must not fail the step');
     assert.strictEqual(out.verifyStatus.father, false);
     assert.match(out.verifyReason.father, /ফলাফল সময়মতো পাওয়া যায়নি/);
-    assert.ok(out.failed.some((f) => f.field === 'পিতা-এর BRN যাচাই'));
+    assert.ok(!out.failed.some((f) => /BRN যাচাই/.test(f.field || '')),
+      'verify must not land in failed[] on its own');
   });
 });
 
@@ -460,6 +475,34 @@ describe('parent verify: near-field Bengali button', () => {
     assert.strictEqual(out.verifyStatus.mother, true);
     assert.strictEqual(page.state.verifyClicks.father, 1);
     assert.strictEqual(page.state.verifyClicks.mother, 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8. Verify failed AND the site never advances → the failure is the
+//    site's (not-advanced), never verify-derived, and failed[] holds
+//    no verify entry. The site gate is the only authority.
+// ---------------------------------------------------------------------------
+
+describe('parent verify: failed verify plus site never advances', () => {
+  it('a mismatch plus a non-advancing site fails honestly without a verify entry', async () => {
+    const page = makeVerifyPage({
+      verifyButtons: 'id',
+      verifySeq: { father: ['mismatch'], mother: ['success'] },
+      mismatchText: 'No birth record found for the given BRN',
+    });
+    page.state.advanceTo = null; // Next clicks but the site stays on parents
+    const h = makeHandler(page, { applicantDob: '2015-06-01' });
+    const out = await h.submitS2(PARENTS);
+    assert.strictEqual(out.ok, false, 'site never advanced, so still an honest failure');
+    assert.strictEqual(out.blocked, true);
+    assert.strictEqual(out.verifyUncertain, true);
+    assert.strictEqual(out.verifyStatus.father, false);
+    assert.strictEqual(out.verifyReason.father, 'No birth record found for the given BRN');
+    assert.ok(!out.failed.some((f) => /BRN যাচাই/.test(f.field || '')),
+      'verify must not land in failed[] even when the step fails for another reason');
+    assert.ok(!/verify হয়নি/.test(out.reason), `reason must not be verify-derived: ${out.reason}`);
+    assert.match(out.reason, /নতুন কোনো ভুল-বার্তা পাওয়া যায়নি/);
   });
 });
 

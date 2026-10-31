@@ -1000,9 +1000,16 @@ class StepHandler {
    * Migrated faithfully from v1 applyS2Core:
    * - 2013-rule: pre-2013 DOB → BRN optional (site family-validation "180 days"
    *   live-verified 2026-10-11), BRN field cleared, verify skipped
-   * - post-2013: BRN required + REAL Verify (2026-10-31): a missing control,
-   *   an inconclusive wait, or a registry mismatch is an honest failure with
-   *   a named reason + verbatim site text — never a silent pending badge
+   * - post-2013: BRN required + REAL Verify (2026-10-31): the
+   *   attempt happens (control search, refill-once +
+   *   re-attempt-once on mismatch, 15s inconclusive wait) and its
+   *   outcome is recorded honestly (verifyStatus false + verbatim
+   *   reason, badge-visible) — but it NEVER blocks alone
+   *   (2026-10-29 point 2, restored 2026-10-31: the branch's
+   *   blocking semantics were reversed because our site must add
+   *   no blocking validation of its own). The site's own Next gate
+   *   is the only authority on whether the filing advances; a
+   *   silent pending badge after an attempt is still gone.
    * - masked DOB fields: char-by-char type + exact read-back, 3 attempts
    * - next-click → validation-block detect → "advanced" check (parents fields gone)
    */
@@ -1112,11 +1119,14 @@ class StepHandler {
       keep(await this._typeInto([`#${p}NameEn`, `input[name="${base}personNameEn"]`], transitName((data[p] || {}).nameEn), `${who}-এর নাম (English)`, { required: true }));
       if (!brnExempt && !familyAdvance && brn) {
         // PARENT-VERIFY (2026-10-31): REAL verify path. The attempt
-        // must end in a definitive outcome — a registry mismatch, a
-        // missing control, or an inconclusive wait is an honest
-        // failure with a named reason, never a silent pending
-        // badge. Family advance has no Verify — nothing to check
-        // without a BRN.
+        // must end in a recorded outcome — a registry mismatch, a
+        // missing control, or an inconclusive wait is recorded
+        // honestly (verifyStatus false + verbatim reason, shown on
+        // the step-3 badge) but NEVER blocks alone (2026-10-29
+        // point 2, restored 2026-10-31): only the site's own Next
+        // gate decides whether the filing advances. The old silent
+        // pending badge after an attempt is still gone. Family
+        // advance has no Verify — nothing to check without a BRN.
         const attempt = async () => this._clickVerify(verifyIndex, who, brnSel);
         let v = await attempt();
         if (v.verified === true) {
@@ -1138,29 +1148,32 @@ class StepHandler {
               verifyStatus[p] = true;
               verifyReason[p] = null;
             } else {
+              // Site-mirroring (2026-10-29 point 2, restored
+              // 2026-10-31): a second fresh mismatch is recorded
+              // honestly and shown on the badge, but it is NEVER a
+              // failed entry on its own — only the site's own Next
+              // gate decides whether the filing advances.
               // Defensive fallback only: the real _clickVerify always
               // returns a reason for false/null; a reason-less stub
-              // must never produce an undefined failed reason.
+              // must never produce an undefined reason.
               verifyStatus[p] = false;
               verifyReason[p] = v2.reason || v.reason || 'সাইটের রেকর্ড মেলেনি (কারণ-বার্তা পাওয়া যায়নি)';
-              keep({ ok: false, field: `${who}-এর BRN যাচাই`, reason: verifyReason[p] });
-              this.progress(`❌ ${who}-এর BRN যাচাই ব্যর্থ — ${verifyReason[p]}`);
+              this.progress(`⚠ ${who}-এর BRN যাচাই হয়নি — ${verifyReason[p]} — সাইটের পরের ধাপই চূড়ান্ত সিদ্ধান্ত নেবে, Verify-ফল একা আটকাবে না।`);
             }
           } else {
             verifyStatus[p] = false;
             verifyReason[p] = v.reason || 'সাইটের রেকর্ড মেলেনি (কারণ-বার্তা পাওয়া যায়নি)';
-            keep({ ok: false, field: `${who}-এর BRN যাচাই`, reason: verifyReason[p] });
-            this.progress(`❌ ${who}-এর BRN যাচাই ব্যর্থ — ${verifyReason[p]}`);
+            this.progress(`⚠ ${who}-এর BRN যাচাই হয়নি — ${verifyReason[p]} — সাইটের পরের ধাপই চূড়ান্ত সিদ্ধান্ত নেবে, Verify-ফল একা আটকাবে না।`);
           }
         } else {
-          // null: missing control or inconclusive wait — the verify
-          // system effectively does not exist on this page, so the
-          // step fails honestly instead of proceeding as if
-          // verified (the old silent-skip path).
+          // null: missing control or inconclusive wait — recorded
+          // honestly (false + verbatim reason, badge-visible) but
+          // never a failed entry alone; the site's Next gate
+          // decides. The old silent-skip path is still gone: no
+          // pending badge after an attempt.
           verifyStatus[p] = false;
           verifyReason[p] = v.reason || 'যাচাই করা যায়নি (কারণ পাওয়া যায়নি)';
-          keep({ ok: false, field: `${who}-এর BRN যাচাই`, reason: verifyReason[p] });
-          this.progress(`❌ ${who}-এর BRN যাচাই করা যায়নি — ${verifyReason[p]}`);
+          this.progress(`⚠ ${who}-এর BRN যাচাই করা যায়নি — ${verifyReason[p]} — সাইটের পরের ধাপই চূড়ান্ত সিদ্ধান্ত নেবে।`);
         }
       }
       keep(await this._selectFirstMatch([`#${p}Nationality`, `select[name="${base}personNationality"]`],
@@ -1342,12 +1355,11 @@ class StepHandler {
     }
     if (nxt.ok && !advanced) {
       // এগোয়নি — কারণ আর verifyStatus থেকে বানানো নয়
-      // (2026-10-29, point 2): Verify-ফল একা ব্লকের কারণ হতে
-      // পারে না। সাইটের তাজা ভুল-বার্তা আগেই siteError-এ ধরা
-      // হয়েছে; এখানে এলে নতুন বার্তা আসেনি — সত্যিটাই বলি।
-      // (2026-10-31: verify failures now fail at the verify stage
-      // with their own failed entries above — this path's reason
-      // stays about advancement, not verification.)
+      // (2026-10-29, point 2, RESTORED 2026-10-31): Verify-ফল একা
+      // ব্লকের কারণ হতে পারে না — verify-ব্যর্থতা failed[]-এ
+      // যায় না, শুধু badge-এ কারণসহ দেখা যায়। সাইটের তাজা
+      // ভুল-বার্তা আগেই siteError-এ ধরা হয়েছে; এখানে এলে নতুন
+      // বার্তা আসেনি — সত্যিটাই বলি।
       // verifyUncertain শুধু রিপ্লে-র জন্য চিহ্ন (point 7)।
       const verifyUncertain = Object.values(verifyStatus).some((v) => v === false || v === null);
       const reason = 'BDRIS এগোতে দিচ্ছে না — সাইটের নতুন কোনো ভুল-বার্তা পাওয়া যায়নি। পিতামাতার তথ্য (BRN, জন্ম তারিখ, নাম) মিলিয়ে আবার চেষ্টা করুন।';
@@ -3252,8 +3264,10 @@ class StepHandler {
   //    site's text verbatim (the line carrying the failure pattern,
   //    capped), never invented.
   //  - null: no control found (missing:true) or no definitive
-  //    signal within the wait (missing:false). Both are honest
-  //    failures for the caller — never a silent pending badge.
+  //    signal within the wait (missing:false). Both are recorded
+  //    honestly by the caller (status false + verbatim reason,
+  //    badge-visible) but never block alone — the site's Next gate
+  //    decides. A silent pending badge after an attempt is gone.
   // The wait itself (15s poll) is the genuine verify wait; the
   // caller retries the step on failure, never guesses an outcome.
   async _clickVerify(index, who, brnSel) {
@@ -3343,8 +3357,8 @@ class StepHandler {
       }
     }
     if (!how) {
-      const reason = `${who}-এর Verify নিয়ন্ত্রণ সাইটে পাওয়া যায়নি (খোঁজা হয়েছে: ${idSel || 'স্থির আইডি'}, BRN ঘরের পাশের যাচাই বাটন, Verify/যাচাই বাটন) — সাইটে যাচাই ব্যবস্থা না থাকলে এই ধাপ এগোবে না।`;
-      this.progress(`❌ ${reason}`);
+      const reason = `${who}-এর Verify নিয়ন্ত্রণ সাইটে পাওয়া যায়নি (খোঁজা হয়েছে: ${idSel || 'স্থির আইডি'}, BRN ঘরের পাশের যাচাই বাটন, Verify/যাচাই বাটন) — সাইটের পরের ধাপই ঠিক করবে এগোনো যাবে কিনা।`;
+      this.progress(`⚠ ${reason}`);
       return { verified: null, reason, missing: true };
     }
     const before = await readNear(how);
@@ -3371,7 +3385,7 @@ class StepHandler {
         // বদলালেই বিশ্বাস করি; নইলে uncertain (নিচের inconclusive শাখা)।
         if (sawProgress || t !== before.text) {
           const reason = extractReason(cur.raw, `${who}-এর BRN রেজিস্ট্রিতে পাওয়া যায়নি`);
-          this.progress(`❌ ${reason}`);
+          this.progress(`⚠ ${reason}`);
           return { verified: false, reason, missing: false };
         }
       }

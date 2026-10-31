@@ -8,14 +8,25 @@
  *     failed[], and the not-advanced reason is never verify-derived
  *     — it is the fresh site error, or an honest "no fresh error".
  *     A stale validation text is re-checked after a settle.
- *     SUPERSEDED 2026-10-31 (parent-verify cycle): where a parent
- *     BRN is required and verification is attempted, a mismatch /
+ *     SUPERSEDED 2026-10-31 (parent-verify cycle, branch
+ *     fix-bdris-parentverify @ 65b468f): where a parent BRN is
+ *     required and verification is attempted, a mismatch /
  *     missing control / inconclusive wait IS an honest failure with
  *     a per-parent failed entry + verbatim reason, and the path
  *     stops — the user-reported "যাচাই বাকি forever" bug was this
  *     rule letting an unverified BRN through silently. The
  *     not-advanced tail reason and the point-7 replay exception
  *     (advance proven by gone fields) are unchanged.
+ *     RESTORED 2026-10-31 (adjustment on the same branch): the
+ *     blocking semantics above were REVERSED — they made OUR
+ *     engine add a block the site did not impose, contradicting
+ *     this standing rule (own site adds no blocking validation;
+ *     easy submission, then the officer verifies). What survives
+ *     from the branch: the REAL verify attempt (control search,
+ *     refill-once + re-attempt-once, 15s wait) and the honest
+ *     badge (verifyStatus false + verbatim verifyReason) — only
+ *     the failed entry is gone, so the site's own Next gate is
+ *     again the only authority on advance.
  *  3. On Verify false the landed BRN/DOB are re-read (presence
  *     only, never values) and refilled once when a field is empty.
  *  4. Pre-2013 keeps clearing the site BRN field (site rule) but
@@ -117,7 +128,7 @@ describe('point 1+3: bot BRN normalisation and Verify-false handling', () => {
     assert.strictEqual(brnWarning('12345678901234567'), '');
     assert.match(brnWarning('123'), /১৭ ডিজিট/);
   });
-  it('Verify false now fails honestly with a per-parent entry + verbatim reason (2026-10-31 supersedes point 2 for attempted verifications)', async () => {
+  it('Verify false pushes no failed entry and the tail reason is not verify-derived (point 2, restored 2026-10-31)', async () => {
     const h = baseHandler();
     const typed = [];
     h._typeInto = async (sels, value, label) => { typed.push(label); return { ok: true }; };
@@ -125,14 +136,19 @@ describe('point 1+3: bot BRN normalisation and Verify-false handling', () => {
     h._detectValidationBlock = async () => ({ blocked: false });
     h._waitVisible = async () => ({ fill: async () => {}, isVisible: async () => true });
     const out = await h.submitS2(parentArgs('2020-01-01'));
-    assert.strictEqual(out.ok, false, 'a failed verification stops the path');
+    assert.strictEqual(out.ok, false, 'site never advanced, so still honest failure');
     assert.strictEqual(out.blocked, true);
     assert.strictEqual(out.verifyUncertain, true);
+    assert.ok(!(out.failed || []).some((f) => /BRN যাচাই/.test(f.field || '')), 'Verify must not land in failed[]');
+    assert.ok(!/verify হয়নি/.test(out.reason), `reason must not be verify-derived: ${out.reason}`);
+    assert.match(out.reason, /নতুন কোনো ভুল-বার্তা পাওয়া যায়নি/);
+    // The branch's honest badge survives the restore: the attempt
+    // was made, so the status is false (never null) and the site's
+    // verbatim reason travels for the badge — only the block is gone.
     assert.strictEqual(out.verifyStatus.father, false);
     assert.strictEqual(out.verifyStatus.mother, false);
     assert.strictEqual(out.verifyReason.father, 'No birth record found');
-    assert.ok((out.failed || []).some((f) => f.field === 'পিতা-এর BRN যাচাই' && f.reason === 'No birth record found'), 'mismatch reason verbatim in failed[]');
-    assert.ok((out.failed || []).some((f) => f.field === 'মাতা-এর BRN যাচাই'), 'per-parent entry, not a generic one');
+    assert.strictEqual(out.verifyReason.mother, 'No birth record found');
     assert.strictEqual(typed.filter((l) => /BRN/.test(l)).length, 4, 'initial BRN fill + one refill per parent');
   });
 });
