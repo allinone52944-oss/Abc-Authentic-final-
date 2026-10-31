@@ -255,6 +255,7 @@ input.bad, select.bad{border-color:var(--err); box-shadow:0 0 0 3px rgba(251,113
 .vbadge.ok{color:var(--ok); border-color:rgba(52,211,153,.4); background:rgba(52,211,153,.08)}
 .vbadge.warn{color:var(--warn); border-color:rgba(251,191,36,.4); background:rgba(251,191,36,.08)}
 .vbadge.wait{color:var(--muted); border-color:var(--line2); background:#ffffff}
+.vreason{font-size:12px; color:var(--warn); margin-top:4px; line-height:1.4; overflow-wrap:anywhere}
 
 /* ── live note ── */
 .livenote{display:none; align-items:center; gap:10px; margin-top:16px; padding:12px 15px;
@@ -574,6 +575,7 @@ const S = {
   cur: null,         // manual current ui step
   ready: false, starting: false,
   verify: { father: null, mother: null },   // null | true | false
+  verifyReason: { father: null, mother: null }, // site reason text (verbatim) for failed attempts
   d: {},             // all collected data
   draftId: null,
   view: 'home',      // home|flow|drafts|addr|progress|done
@@ -2803,13 +2805,15 @@ function renderStep3() {
   const pre = isPre2013Client(S.d.s1.dob);
   const brnExempt = isParentBrnExemptClient(S.d.s1.dob);
   const vf = S.verify.father, vm = S.verify.mother;
-  const badge = (v) => v === true ? '<span class="vbadge ok">✔ যাচাই সফল</span>' :
-    v === false ? '<span class="vbadge warn">✖ যাচাই হয়নি</span>' :
+  const rf = S.verifyReason.father, rm = S.verifyReason.mother;
+  const badge = (v, r) => v === true ? '<span class="vbadge ok">✔ যাচাই সফল</span>' :
+    v === false ? '<span class="vbadge warn">✖ যাচাই হয়নি</span>' + (r ? '<div class="vreason">' + esc(r) + '</div>' : '') :
     v === 'skipped-pre2013' ? '<span class="vbadge warn">২০১৩-পূর্ব — প্রয়োজন নেই</span>' :
     v === 'skipped-2013' ? '<span class="vbadge warn">২০১৩ সাল — BRN প্রয়োজন নেই</span>' :
+    v === 'skipped-family' ? '<span class="vbadge warn">পরিবার — BRN ছাড়া এগোনো</span>' :
     '<span class="vbadge wait">যাচাই বাকি</span>';
-  const person = (p, o, v) => (
-    '<div class="addrwrap"><div class="ah"><span class="t">' + (p === 'father' ? 'পিতার তথ্য' : 'মাতার তথ্য') + '</span>' + badge(v) + '</div>' +
+  const person = (p, o, v, r) => (
+    '<div class="addrwrap"><div class="ah"><span class="t">' + (p === 'father' ? 'পিতার তথ্য' : 'মাতার তথ্য') + '</span>' + badge(v, r) + '</div>' +
     '<div class="row2">' +
       '<div class="fld"><label>জন্ম নিবন্ধন নম্বর (BRN) ' + (brnExempt ? '' : '<b>*</b>') + '</label><input type="text" id="' + p + '_brn" value="' + esc(o.brn || '') + '" placeholder="১৭ ডিজিটের নম্বর"></div>' +
       dobFieldHtml(p + '_dob', 'জন্ম তারিখ (খ্রিঃ)', o.dob, !brnExempt) +
@@ -2826,7 +2830,7 @@ function renderStep3() {
         ? '<p class="hint">২০১৩ সালে জন্ম — পিতামাতার BRN লাগবে না, শুধু মা-বাবার আইডি কার্ডই যথেষ্ট (নাম অবশ্যই লাগবে)।</p>'
         : '<p class="hint">পিতামাতার ১৭ ডিজিটের জন্ম নিবন্ধন নম্বর ও জন্ম তারিখ দিন — নম্বর মিললে যাচাই হয়ে যাবে।</p>')) +
     '</div>' +
-    person('father', f, vf) + person('mother', m, vm)
+    person('father', f, vf, rf) + person('mother', m, vm, rm)
   );
   setBtns([
     { html: 'পরবর্তী →', fn: () => submitStep3() },
@@ -4925,6 +4929,14 @@ function manualStepAck(d) {
   if (d.verifyStatus && typeof d.verifyStatus === 'object') {
     if ('father' in d.verifyStatus) S.verify.father = d.verifyStatus.father;
     if ('mother' in d.verifyStatus) S.verify.mother = d.verifyStatus.mother;
+  }
+  // PARENT-VERIFY (2026-10-31): the site's verbatim reason for a
+  // failed attempt travels with the status, so the step-3 badge
+  // shows WHY verification failed — never a bare pending badge
+  // after an attempt.
+  if (d.verifyReason && typeof d.verifyReason === 'object') {
+    if ('father' in d.verifyReason) S.verifyReason.father = d.verifyReason.father;
+    if ('mother' in d.verifyReason) S.verifyReason.mother = d.verifyReason.mother;
   }
   // Parent-BRN site-rule note (2026-10-29, points 4+5): a BRN
   // withheld from the site form by the pre-2013 or family rule is
