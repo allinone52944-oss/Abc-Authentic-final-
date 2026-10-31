@@ -637,6 +637,38 @@ class StepHandler {
     const embassy = !!((data.embassy !== undefined && data.embassy !== null) ? data.embassy : (data.s0 && data.s0.embassy));
     this.progress('🔄 ধাপ ১: আবেদনের ভিত্তি নির্বাচন...');
 
+    // S0-SELF-REPAIR (2026-10-31): a wrong-step page can never
+    // select a basis — and retrying on the same page fails
+    // identically forever (the 2026-10-31 triple failure), so
+    // repair it here instead of reporting it: one fresh-form
+    // navigation via the navigator, then re-gate. S0 submits
+    // nothing, charges nothing, and sends no OTP, so a fresh
+    // form here cannot double-submit or double-charge; it is
+    // state repair, the same class as the S4Prep catch-up
+    // replay that re-runs S0..S3 on a fresh page by design.
+    // Only one repair attempt: if it fails, the gate failure
+    // below is honest, and the server destroys this session so
+    // the next attempt starts fresh (see SUBMIT_S0 handler).
+    {
+      const gate = await this._ensureBasisStep();
+      if (!gate.ok) {
+        let renavOk = false;
+        try {
+          if (this.navigator && typeof this.navigator.gotoForm === 'function') {
+            await this.navigator.gotoForm();
+            renavOk = true;
+          }
+        } catch { renavOk = false; }
+        if (!renavOk) {
+          return { ok: false, step: 1, code: gate.code, pageState: gate.pageState, failed: [{ field: 'আবেদনের ভিত্তি', reason: 'বটের পেজ আবেদনের ভিত্তি ধাপে নেই — নতুন ফর্ম খোলা যায়নি, আবার চেষ্টা করলে নতুন সেশন নিয়ে শুরু হবে' }] };
+        }
+        const gate2 = await this._ensureBasisStep();
+        if (!gate2.ok) {
+          return { ok: false, step: 1, code: gate2.code, pageState: gate2.pageState, failed: [{ field: 'আবেদনের ভিত্তি', reason: 'বটের পেজ আবেদনের ভিত্তি ধাপে নেই — নতুন ফর্ম খোলার পরও ভিত্তি ধাপ আসেনি' }] };
+        }
+      }
+    }
+
     // Embassy off: clear the mission checkbox first (v1 LIVE_FIELD:
     // unchecking it makes the site itself return to BIRTHPLACE), so the
     // basis radio selected next is not overridden by a stale mission state.
@@ -2750,6 +2782,81 @@ class StepHandler {
       // frontend branches on the code above, never on wording.
       message: `❌ বটের পেজ OTP ধাপে নেই (${pageState.hint}${pageState.url ? `, পেজ: ${pageState.url}` : ''}) — এই কোড দিয়ে জমা হবে না; বটের পথে আবার কোড পাঠিয়ে জমা দিন।`,
     };
+  }
+
+  // S0-BASIS-GATE (2026-10-31): the 2026-10-31 triple failure.
+  // Root cause, code-proven: a new filing's SUBMIT_S0 ran on a
+  // REUSED session page that had already walked BDRIS steps
+  // S0..S3_DOCS for an earlier filing (socket disconnect does
+  // NOT destroy the session — server.js disconnect handler —
+  // and INIT_SESSION reuses it via findByUser when it still has
+  // ANY form content, verifyReusedSession's formContent-only
+  // check). submitS0 never navigated and never verified the
+  // page is on step 0 — it just waited 30s for the basis radio
+  // and failed with the misleading 'radio বাটন পাওয়া যায়নি'
+  // field error, identically on every retry (retries reuse the
+  // same page; nothing re-navigates). A fresh-navigation probe
+  // found the radios fine, so the selectors and the form are
+  // healthy — only the page state was wrong. This gate mirrors
+  // the S4 _ensureOtpStep pattern: prove the page step BEFORE
+  // the step's own wait, and say so with a machine-readable
+  // code instead of a field error.
+  // Discipline: one evaluate, booleans + URL path only — no
+  // values, no text (same as _visibleFirstStepControls).
+  // Visibility uses offsetParent, the same discipline as
+  // _visibleFirstStepControls; the 30s _waitVisible (Playwright
+  // isVisible) below remains the arbiter for the proceed case.
+  async _basisPageState() {
+    let path = '';
+    try {
+      const rawUrl = (this.page && typeof this.page.url === 'function' ? this.page.url() : '') || '';
+      try { path = new URL(rawUrl).pathname || ''; } catch { path = String(rawUrl).split('?')[0].split('#')[0]; }
+    } catch { path = ''; }
+    try {
+      const s = await this.page.evaluate(() => {
+        const vis = (sel) => {
+          try {
+            const el = document.querySelector(sel);
+            return !!el && el.offsetParent !== null;
+          } catch { return false; }
+        };
+        const basisVisible = vis('#officeBirthplace') || vis('#officePermanent')
+          || vis('input[name="officeAddressType"]');
+        const laterStepVisible = vis('#personFirstNameBn')
+          || vis('input[name="personInfoForBirth.personFirstNameBn"]')
+          || vis('#fatherBrn') || vis('input[name="personInfoForBirth.father.ubrn"]')
+          || vis('select[name="permAddrDiv"]') || vis('input[name="permAddrHouseRoadEn"]')
+          || vis('input[name="files"]') || vis('input[name="relationWithApplicant"]')
+          || vis('#otp') || vis('input[name="otp"]')
+          || vis('input[type="password"]');
+        return { basisVisible, laterStepVisible };
+      });
+      if (!s || typeof s !== 'object') return { basisVisible: false, laterStepVisible: false, path: String(path).slice(0, 200) };
+      return { basisVisible: !!s.basisVisible, laterStepVisible: !!s.laterStepVisible, path: String(path).slice(0, 200) };
+    } catch {
+      return { basisVisible: false, laterStepVisible: false, path: String(path).slice(0, 200) };
+    }
+  }
+
+  // Returns {ok:true} when S0 may proceed: the basis radio is
+  // visible, OR the page shows no step at all yet (booting /
+  // slow render — the existing 30s S0-RADIO-SETTLE wait below
+  // stays the arbiter there). Returns the gate failure ONLY
+  // when a later-step control is visibly present while no basis
+  // radio is — definitive proof the page is on another step.
+  async _ensureBasisStep() {
+    const st = await this._basisPageState();
+    if (st.basisVisible) return { ok: true };
+    if (st.laterStepVisible) {
+      const seen = await this._visibleFirstStepControls();
+      console.log('S0-WRONG-STEP:', JSON.stringify({ path: st.path, seen }).slice(0, 400));
+      return {
+        ok: false,
+        code: 'BOT_PAGE_NOT_ON_BASIS_STEP',
+        pageState: { path: st.path, seen },
+      };
+    }
+    return { ok: true };
   }
 
   async _otpPageState() {

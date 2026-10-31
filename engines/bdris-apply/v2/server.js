@@ -489,6 +489,19 @@ class BdrisEngineV2 {
           // Debug-2 / replay-docs rules, moved verbatim.)
           const merged = mergeStepParams(params, session, cmdName);
           const result = await handler[methodName](merged);
+          // S0-BASIS-GATE (2026-10-31): a gate failure means this
+          // session's page was on a wrong step AND fresh-form
+          // navigation failed — keeping it guarantees every
+          // later attempt fails identically (the 2026-10-31
+          // triple failure). Destroy it, mirroring the existing
+          // destroy-on-gotoForm-failure trap, so the next
+          // INIT_SESSION creates a fresh page + gotoForm instead
+          // of reusing this stale page via findByUser. The
+          // frontend surfaces SESSION_EXPIRED and re-inits, so
+          // the next submit attempt starts fresh.
+          if (cmdName === 'SUBMIT_S0' && result && result.code === 'BOT_PAGE_NOT_ON_BASIS_STEP' && session && session.id) {
+            await this.sessionManager.destroy(session.id).catch(() => {});
+          }
           if (cmdName === 'SUBMIT_S3_DOCS' && merged.docs && merged.docs.length) session.docs = merged.docs;
           // S4Prep-area fix (2026-10-28, item 22): remember the
           // relation the same way docs are remembered, so a later
