@@ -642,3 +642,24 @@ describe('HOME-LIST cycle (2026-10-31): duplicate cards, silent server-fetch fai
     expect(chargeCatchReason(null)).toBe('অজানা কারণ');
   });
 });
+
+describe('PARENT-VERIFY cycle (2026-10-31): real verify outcome reaches the step-3 badges', () => {
+  test('S carries verifyReason next to verify, and the ack handler mirrors d.verifyReason into it', () => {
+    expect(html).toMatch(/verify: \{ father: null, mother: null \}/);
+    expect(html).toMatch(/verifyReason: \{ father: null, mother: null \}/);
+    expect(html).toMatch(/if \(d\.verifyReason && typeof d\.verifyReason === 'object'\)/);
+    expect(html).toMatch(/S\.verifyReason\.father = d\.verifyReason\.father/);
+    expect(html).toMatch(/S\.verifyReason\.mother = d\.verifyReason\.mother/);
+  });
+
+  test('a failed badge renders the site reason verbatim (escaped), never a bare pending badge after an attempt', () => {
+    expect(html).toMatch(/const badge = \(v, r\)/);
+    expect(html).toMatch(/v === false \? '<span class="vbadge warn">✖ যাচাই হয়নি<\/span>' \+ \(r \? '<div class="vreason">' \+ esc\(r\) \+ '<\/div>' : ''\)/);
+    expect(html).toMatch(/person\('father', f, vf, rf\) \+ person\('mother', m, vm, rm\)/);
+    expect(html).toMatch(/\.vreason\{font-size:12px; color:var\(--warn\)/);
+  });
+
+  test('the deliberately-skipped family advance has its own badge case (not pending)', () => {
+    expect(html).toMatch(/v === 'skipped-family' \? '<span class="vbadge warn">পরিবার — BRN ছাড়া এগোনো<\/span>'/);
+  });
+});

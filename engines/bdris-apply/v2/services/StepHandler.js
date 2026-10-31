@@ -1000,7 +1000,16 @@ class StepHandler {
    * Migrated faithfully from v1 applyS2Core:
    * - 2013-rule: pre-2013 DOB → BRN optional (site family-validation "180 days"
    *   live-verified 2026-10-11), BRN field cleared, verify skipped
-   * - post-2013: BRN required + Verify attempt (silent skip if button missing)
+   * - post-2013: BRN required + REAL Verify (2026-10-31): the
+   *   attempt happens (control search, refill-once +
+   *   re-attempt-once on mismatch, 15s inconclusive wait) and its
+   *   outcome is recorded honestly (verifyStatus false + verbatim
+   *   reason, badge-visible) — but it NEVER blocks alone
+   *   (2026-10-29 point 2, restored 2026-10-31: the branch's
+   *   blocking semantics were reversed because our site must add
+   *   no blocking validation of its own). The site's own Next gate
+   *   is the only authority on whether the filing advances; a
+   *   silent pending badge after an attempt is still gone.
    * - masked DOB fields: char-by-char type + exact read-back, 3 attempts
    * - next-click → validation-block detect → "advanced" check (parents fields gone)
    */
@@ -1008,6 +1017,7 @@ class StepHandler {
     this.progress('🔄 ধাপ ৩: পিতামাতার তথ্য লেখা হচ্ছে...');
     const failed = [];
     const verifyStatus = {};
+    const verifyReason = {}; // per-parent site reason text (verbatim) for failed attempts
     const keep = (r) => { if (!r.ok && !r.skipped) failed.push({ field: r.field, reason: r.reason }); };
 
     // STEP-GATE (cycle 1, A2): prove the parents step before filling
@@ -1015,7 +1025,7 @@ class StepHandler {
     // fails fast with the code, never with per-field noise.
     const gate2 = await this._ensureSiteStep(3, 'BOT_PAGE_NOT_ON_PARENTS_STEP', 'পিতামাতার');
     if (!gate2.ok) {
-      return { ok: false, step: 3, blocked: true, reason: gate2.reason, message: '❌ ' + gate2.reason, failed: [{ field: 'পিতামাতার ধাপ', reason: gate2.reason }], verifyStatus, code: gate2.code };
+      return { ok: false, step: 3, blocked: true, reason: gate2.reason, message: '❌ ' + gate2.reason, failed: [{ field: 'পিতামাতার ধাপ', reason: gate2.reason }], verifyStatus, verifyReason, code: gate2.code };
     }
 
     // ২০১৩-নিয়ম (live-verified 2026-10-11, সংশোধিত): সাইট applicant-DOB দেখে নিজেই ঠিক
@@ -1034,7 +1044,7 @@ class StepHandler {
     if (!dobIso) {
       const dobReason = 'আবেদনকারীর জন্ম তারিখ পাওয়া যায়নি — ২০১৩-পূর্ব/পর নিয়ম ঠিক করা যাচ্ছে না, তাই পিতামাতার BRN চাওয়া হচ্ছে না। জন্ম তারিখ ঠিক করে আবার চেষ্টা করুন।';
       this.progress('❌ ' + dobReason);
-      return { ok: false, step: 3, blocked: true, reason: dobReason, message: '❌ ' + dobReason, failed: [{ field: 'আবেদনকারীর জন্ম তারিখ', reason: dobReason }], verifyStatus, applicantDobMissing: true };
+      return { ok: false, step: 3, blocked: true, reason: dobReason, message: '❌ ' + dobReason, failed: [{ field: 'আবেদনকারীর জন্ম তারিখ', reason: dobReason }], verifyStatus, verifyReason, applicantDobMissing: true };
     }
     // 2013-gate, researched (user correction 2026-10-29 ~17:17):
     // the server keys its parent-verify decision off the applicant
@@ -1049,7 +1059,7 @@ class StepHandler {
       if (siteDob && isParentBrnExempt(siteDob) !== brnExempt) {
         const raceReason = 'সাইটে থাকা আবেদনকারীর জন্ম তারিখ ড্রাফটের সঙ্গে মিলছে না — ২০১৩-ছাড়ের সিদ্ধান্ত এই পেজে ভুল হবে, তাই পিতামাতার ধাপে এগোনো হচ্ছে না। জন্ম তারিখ সাইটে ঠিকভাবে বসেছে কিনা মিলিয়ে আবার চেষ্টা করুন।';
         this.progress('❌ ' + raceReason);
-        return { ok: false, step: 3, blocked: true, reason: raceReason, message: '❌ ' + raceReason, failed: [{ field: 'আবেদনকারীর জন্ম তারিখ', reason: raceReason }], verifyStatus, applicantDobMismatch: true };
+        return { ok: false, step: 3, blocked: true, reason: raceReason, message: '❌ ' + raceReason, failed: [{ field: 'আবেদনকারীর জন্ম তারিখ', reason: raceReason }], verifyStatus, verifyReason, applicantDobMismatch: true };
       }
       // Pre-fill relax: the site's required markers for ubrn /
       // personBirthDate are removed BEFORE Next is ever clicked,
@@ -1108,22 +1118,62 @@ class StepHandler {
       keep(await this._typeInto([`#${p}NameBn`, `input[name="${base}personNameBn"]`], transitName((data[p] || {}).nameBn), `${who}-এর নাম (বাংলা)`, { required: true }));
       keep(await this._typeInto([`#${p}NameEn`, `input[name="${base}personNameEn"]`], transitName((data[p] || {}).nameEn), `${who}-এর নাম (English)`, { required: true }));
       if (!brnExempt && !familyAdvance && brn) {
-        // Verify (BRN+DOB+নাম পূরণের পর); বাটন না থাকলে নীরব skip
-        // Family advance-এ Verify নেই — BRN ছাড়া যাচাইয়ের কিছু নেই।
-        const v = await this._clickVerify(verifyIndex, who, { quietMissing: true });
-        verifyStatus[p] = v.verified;
-        if (v.verified === false) {
-          // Parent-BRN non-block (2026-10-29, points 2+3): Verify-ফল
-          // একা কখনো failed-এ যাবে না — সাইটের পরের ধাপই চূড়ান্ত
-          // বিচারক। আগে এখানকার failed-এন্ট্রিই না-এগোনো টেইলে
-          // BRN-ব্লক বানাত। এখন landed মান একবার মিলিয়ে দেখি
-          // (উপস্থিতি-মাত্র লগে, মান নয়): ঘর খালি থাকলে একবার
-          // আবার বসাই, বসে থাকলে Verify-কে আর ঘাঁটাই না।
+        // PARENT-VERIFY (2026-10-31): REAL verify path. The attempt
+        // must end in a recorded outcome — a registry mismatch, a
+        // missing control, or an inconclusive wait is recorded
+        // honestly (verifyStatus false + verbatim reason, shown on
+        // the step-3 badge) but NEVER blocks alone (2026-10-29
+        // point 2, restored 2026-10-31): only the site's own Next
+        // gate decides whether the filing advances. The old silent
+        // pending badge after an attempt is still gone. Family
+        // advance has no Verify — nothing to check without a BRN.
+        const attempt = async () => this._clickVerify(verifyIndex, who, brnSel);
+        let v = await attempt();
+        if (v.verified === true) {
+          verifyStatus[p] = true;
+          verifyReason[p] = null;
+        } else if (v.verified === false) {
+          // Registry mismatch — but first rule out a fill problem:
+          // if the BRN/DOB fields landed empty, the lookup ran on
+          // empty fields, not on the given data. Refill once and
+          // re-attempt once; only a second fresh mismatch is a
+          // verdict. No BRN/DOB is ever invented or altered here.
           const landed = await this._readParentLanded(p);
-          console.log(`PARENT-BRN-LANDED ${p} brn=${landed.brn === null ? 'unknown' : (landed.brn ? 'present' : 'empty')} dob=${landed.dob === null ? 'unknown' : (landed.dob ? 'present' : 'empty')}`);
-          if (landed.brn === '') keep(await this._typeInto(brnSel, brn, `${who}-এর BRN`, { required: true }));
-          if (landed.dob === '' && data[p] && data[p].dob) keep(await this._typeMaskedDate(dobSel, isoToBdFormat(data[p].dob), `${who}-এর জন্ম তারিখ`));
-          this.progress(`⚠ ${who}-এর BRN যাচাইয়ে রেজিস্ট্রিতে পাওয়া যায়নি — সাইটের পরের ধাপই চূড়ান্ত সিদ্ধান্ত নেবে, Verify-ফল একা আটকাবে না।`);
+          const needRefill = landed.brn === '' || (landed.dob === '' && data[p] && data[p].dob);
+          if (needRefill) {
+            if (landed.brn === '') keep(await this._typeInto(brnSel, brn, `${who}-এর BRN`, { required: true }));
+            if (landed.dob === '' && data[p] && data[p].dob) keep(await this._typeMaskedDate(dobSel, isoToBdFormat(data[p].dob), `${who}-এর জন্ম তারিখ`));
+            const v2 = await attempt();
+            if (v2.verified === true) {
+              verifyStatus[p] = true;
+              verifyReason[p] = null;
+            } else {
+              // Site-mirroring (2026-10-29 point 2, restored
+              // 2026-10-31): a second fresh mismatch is recorded
+              // honestly and shown on the badge, but it is NEVER a
+              // failed entry on its own — only the site's own Next
+              // gate decides whether the filing advances.
+              // Defensive fallback only: the real _clickVerify always
+              // returns a reason for false/null; a reason-less stub
+              // must never produce an undefined reason.
+              verifyStatus[p] = false;
+              verifyReason[p] = v2.reason || v.reason || 'সাইটের রেকর্ড মেলেনি (কারণ-বার্তা পাওয়া যায়নি)';
+              this.progress(`⚠ ${who}-এর BRN যাচাই হয়নি — ${verifyReason[p]} — সাইটের পরের ধাপই চূড়ান্ত সিদ্ধান্ত নেবে, Verify-ফল একা আটকাবে না।`);
+            }
+          } else {
+            verifyStatus[p] = false;
+            verifyReason[p] = v.reason || 'সাইটের রেকর্ড মেলেনি (কারণ-বার্তা পাওয়া যায়নি)';
+            this.progress(`⚠ ${who}-এর BRN যাচাই হয়নি — ${verifyReason[p]} — সাইটের পরের ধাপই চূড়ান্ত সিদ্ধান্ত নেবে, Verify-ফল একা আটকাবে না।`);
+          }
+        } else {
+          // null: missing control or inconclusive wait — recorded
+          // honestly (false + verbatim reason, badge-visible) but
+          // never a failed entry alone; the site's Next gate
+          // decides. The old silent-skip path is still gone: no
+          // pending badge after an attempt.
+          verifyStatus[p] = false;
+          verifyReason[p] = v.reason || 'যাচাই করা যায়নি (কারণ পাওয়া যায়নি)';
+          this.progress(`⚠ ${who}-এর BRN যাচাই করা যায়নি — ${verifyReason[p]} — সাইটের পরের ধাপই চূড়ান্ত সিদ্ধান্ত নেবে।`);
         }
       }
       keep(await this._selectFirstMatch([`#${p}Nationality`, `select[name="${base}personNationality"]`],
@@ -1240,7 +1290,7 @@ class StepHandler {
       return {
         ok: false, step: 3, blocked: true, reason: siteError,
         message: msg + ' — ঘরটি পূরণ করে আবার চেষ্টা করুন।',
-        failed: [...failed, { field: 'পরবর্তী (ধাপ ৩)', reason: siteError }], verifyStatus, brnNote,
+        failed: [...failed, { field: 'পরবর্তী (ধাপ ৩)', reason: siteError }], verifyStatus, verifyReason, brnNote,
       };
     }
     // parents ঘর আর নেই = সাইট নিশ্চিতভাবে পরের ধাপে → verify-নেগেটিভ মিথ্যা, বাদ
@@ -1262,12 +1312,12 @@ class StepHandler {
       if (!addrAnchor) {
         const reason = 'পিতামাতার ঘর চলে গেছে কিন্তু ঠিকানার ধাপের ঘর দেখা যাচ্ছে না — সাইট কোন ধাপে আছে নিশ্চিত নয়, তাই ধাপ ৩ সম্পন্ন ধরা হচ্ছে না।';
         this.progress('❌ ' + reason);
-        return { ok: false, step: 3, blocked: true, reason, message: '❌ ' + reason, failed: [...failed, { field: 'ঠিকানার ধাপ', reason }], verifyStatus, brnNote };
+        return { ok: false, step: 3, blocked: true, reason, message: '❌ ' + reason, failed: [...failed, { field: 'ঠিকানার ধাপ', reason }], verifyStatus, verifyReason, brnNote };
       }
       if (failed.length) {
         const reason = `${failed.length}টি ফিল্ড পূরণ হয়নি — সাইট এগিয়ে গেলেও ধাপ ৩ সম্পন্ন ধরা হচ্ছে না।`;
         this.progress('❌ ' + reason);
-        return { ok: false, step: 3, blocked: true, reason, message: '❌ ' + reason, failed, verifyStatus, brnNote };
+        return { ok: false, step: 3, blocked: true, reason, message: '❌ ' + reason, failed, verifyStatus, verifyReason, brnNote };
       }
       // 2013-gate note, only after the fields-gone proof: the
       // in-page gate was relaxed and the site advanced. This is
@@ -1288,7 +1338,7 @@ class StepHandler {
       return {
         ok: true, step: 4, blocked: false,
         message: '✅ ধাপ ৩ সম্পন্ন! স্থায়ী ও বর্তমান ঠিকানা দিন।',
-        failed: [], verifyStatus, brnNote, familyNamesOnly: !!this.familyNamesOnly,
+        failed: [], verifyStatus, verifyReason, brnNote, familyNamesOnly: !!this.familyNamesOnly,
       };
     }
     // Submit-debug (2026-10-26): the old tail returned ok:true
@@ -1305,20 +1355,22 @@ class StepHandler {
     }
     if (nxt.ok && !advanced) {
       // এগোয়নি — কারণ আর verifyStatus থেকে বানানো নয়
-      // (2026-10-29, point 2): Verify-ফল একা ব্লকের কারণ হতে
-      // পারে না। সাইটের তাজা ভুল-বার্তা আগেই siteError-এ ধরা
-      // হয়েছে; এখানে এলে নতুন বার্তা আসেনি — সত্যিটাই বলি।
+      // (2026-10-29, point 2, RESTORED 2026-10-31): Verify-ফল একা
+      // ব্লকের কারণ হতে পারে না — verify-ব্যর্থতা failed[]-এ
+      // যায় না, শুধু badge-এ কারণসহ দেখা যায়। সাইটের তাজা
+      // ভুল-বার্তা আগেই siteError-এ ধরা হয়েছে; এখানে এলে নতুন
+      // বার্তা আসেনি — সত্যিটাই বলি।
       // verifyUncertain শুধু রিপ্লে-র জন্য চিহ্ন (point 7)।
       const verifyUncertain = Object.values(verifyStatus).some((v) => v === false || v === null);
       const reason = 'BDRIS এগোতে দিচ্ছে না — সাইটের নতুন কোনো ভুল-বার্তা পাওয়া যায়নি। পিতামাতার তথ্য (BRN, জন্ম তারিখ, নাম) মিলিয়ে আবার চেষ্টা করুন।';
       this.progress('❌ ' + reason);
-      return { ok: false, step: 3, blocked: true, reason, message: '❌ ' + reason, failed, verifyStatus, verifyUncertain, brnNote };
+      return { ok: false, step: 3, blocked: true, reason, message: '❌ ' + reason, failed, verifyStatus, verifyReason, verifyUncertain, brnNote };
     }
 
     return {
       ok: failed.length === 0, step: 4, blocked: false,
       message: `⚠️ ধাপ ৩ শেষ — ${failed.length}টি সমস্যা।`,
-      failed, verifyStatus, brnNote,
+      failed, verifyStatus, verifyReason, brnNote,
     };
   }
 
@@ -3200,69 +3252,147 @@ class StepHandler {
     return false;
   }
 
-  async _clickVerify(index, who, opts = {}) {
-    // স্থির id প্রাইমারি (#father-check/#mother-check) — index-সমস্যা নয় (audit fix 2026-10-11)
+  // PARENT-VERIFY (2026-10-31): real verify path — never a silent skip.
+  // Search order: (1) fixed ids #father-check/#mother-check,
+  // (2) a Verify/যাচাই control next to THIS parent's BRN field
+  // (scoped to the field's container — a global index mapping
+  // breaks when only one parent's button exists), (3) any global
+  // Verify/যাচাই button/link by index (legacy fallback).
+  // Returns { verified: true|false|null, reason: string|null, missing: bool }:
+  //  - true: the site showed a fresh success signal.
+  //  - false: the site showed a fresh mismatch signal; reason is the
+  //    site's text verbatim (the line carrying the failure pattern,
+  //    capped), never invented.
+  //  - null: no control found (missing:true) or no definitive
+  //    signal within the wait (missing:false). Both are recorded
+  //    honestly by the caller (status false + verbatim reason,
+  //    badge-visible) but never block alone — the site's Next gate
+  //    decides. A silent pending badge after an attempt is gone.
+  // The wait itself (15s poll) is the genuine verify wait; the
+  // caller retries the step on failure, never guesses an outcome.
+  async _clickVerify(index, who, brnSel) {
     const idSel = index === 0 ? '#father-check' : (index === 1 ? '#mother-check' : null);
-    const readNear = () => this.page.evaluate((a) => {
-      let b = a.sel ? document.querySelector(a.sel) : null;
-      if (!b) {
-        const btns = Array.from(document.querySelectorAll('button'))
-          .filter(x => /verify/i.test(x.innerText || ''));
-        b = btns[a.idx];
+    const brnList = (Array.isArray(brnSel) ? brnSel : [brnSel]).filter(Boolean);
+    const VERIFY_TXT = /verify|যাচাই/i;
+    const NEXT_TXT = /পরবর্তী|next|submit|জমা/i;
+    const norm = (t) => (t || '').replace(/\s+/g, ' ').trim();
+    // One read of the region where the site shows verify results:
+    // { text (normalized, for pattern matching + stale comparison),
+    //   raw (for verbatim reason extraction) }.
+    const readNear = (how) => this.page.evaluate((a) => {
+      const climb = (el, n) => { let c = el; for (let i = 0; i < n && c && c.parentElement; i++) c = c.parentElement; return c; };
+      let region = null;
+      if (how.kind === 'id' && how.sel) {
+        const b = document.querySelector(how.sel);
+        if (b) region = climb(b, 3);
+      } else if (how.kind === 'near') {
+        for (const s of a.brnList) {
+          try {
+            const input = document.querySelector(s);
+            if (input) { region = climb(input, 4); break; }
+          } catch { /* next selector */ }
+        }
+      } else if (how.kind === 'global') {
+        const btns = Array.from(document.querySelectorAll('button, a'))
+          .filter(x => /verify|যাচাই/i.test(x.innerText || x.value || ''));
+        const b = btns[how.idx];
+        if (b) region = climb(b, 3);
       }
-      if (!b) return '';
-      let el = b;
-      for (let i = 0; i < 3 && el.parentElement; i++) el = el.parentElement;
-      return (el.innerText || '').replace(/\s+/g, ' ').trim();
-    }, { sel: idSel, idx: index }).catch(() => '');
+      const raw = region ? (region.innerText || '') : '';
+      return { text: raw.replace(/\s+/g, ' ').trim(), raw };
+    }, { brnList, kind: how.kind, sel: how.sel || null, idx: how.idx || 0 }).catch(() => ({ text: '', raw: '' }));
+    // The failing line, verbatim from the site's own text (capped).
+    const extractReason = (raw, fallback) => {
+      const lines = String(raw || '').split(/\n+/).map(s => s.trim()).filter(Boolean);
+      const hit = lines.find(l => /no birth record|not found|পাওয়া যায়নি/i.test(l));
+      const txt = (hit || lines.join(' ') || fallback || '').replace(/\s+/g, ' ').trim();
+      return txt ? txt.slice(0, 240) : fallback;
+    };
+
+    // (1) Fixed id, primary (audit fix 2026-10-11).
+    let how = null;
     let btn = null;
     if (idSel) {
       const l = this.page.locator(idSel).first();
-      if ((await l.count().catch(() => 0)) && (await l.isVisible().catch(() => false))) btn = l;
+      if ((await l.count().catch(() => 0)) && (await l.isVisible().catch(() => false))) {
+        how = { kind: 'id', sel: idSel };
+        btn = l;
+      }
     }
-    if (!btn) {
-      const btns = this.page.locator('button:has-text("Verify")');
+    // (2) Near-field control (scoped to this parent's BRN field).
+    if (!how) {
+      const nearClicked = await this.page.evaluate((a) => {
+        for (const s of a.brnList) {
+          let input = null;
+          try { input = document.querySelector(s); } catch { /* next */ }
+          if (!input) continue;
+          let scope = input;
+          for (let i = 0; i < 4 && scope.parentElement; i++) {
+            scope = scope.parentElement;
+            let btns = [];
+            try { btns = Array.from(scope.querySelectorAll('button, a, input[type="button"]')); } catch { btns = []; }
+            for (const b of btns) {
+              const t = ((b.innerText || b.value) || '').trim();
+              if (/verify|যাচাই/i.test(t) && !/পরবর্তী|next|submit|জমা/i.test(t)) {
+                try { b.click(); } catch { return false; }
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      }, { brnList }).catch(() => false);
+      if (nearClicked) how = { kind: 'near' };
+    }
+    // (3) Global Verify/যাচাই button/link by index (legacy fallback).
+    if (!how) {
+      const btns = this.page.locator('button:has-text("Verify"), button:has-text("যাচাই"), a:has-text("Verify"), a:has-text("যাচাই")');
       const n = await btns.count().catch(() => 0);
-      if (n <= index) {
-        if (!opts.quietMissing)
-          this.progress(`⚠ ${who}-এর Verify বাটন পাওয়া যায়নি`);
-        return { verified: null };
+      if (n > index) {
+        const cand = btns.nth(index);
+        if (await cand.isVisible().catch(() => false)) {
+          how = { kind: 'global', idx: index };
+          btn = cand;
+        }
       }
-      const cand = btns.nth(index);
-      if (!(await cand.isVisible().catch(() => false))) {
-        if (!opts.quietMissing)
-          this.progress(`⚠ ${who}-এর Verify বাটন দৃশ্যমান নয়`);
-        return { verified: null };
-      }
-      btn = cand;
     }
-    const before = await readNear();
-    await btn.click();
+    if (!how) {
+      const reason = `${who}-এর Verify নিয়ন্ত্রণ সাইটে পাওয়া যায়নি (খোঁজা হয়েছে: ${idSel || 'স্থির আইডি'}, BRN ঘরের পাশের যাচাই বাটন, Verify/যাচাই বাটন) — সাইটের পরের ধাপই ঠিক করবে এগোনো যাবে কিনা।`;
+      this.progress(`⚠ ${reason}`);
+      return { verified: null, reason, missing: true };
+    }
+    const before = await readNear(how);
+    if (btn) {
+      try { await btn.click(); } catch { /* the wait loop below reports the outcome */ }
+    }
     this.progress(`⏳ ${who}-এর BRN যাচাই হচ্ছে…`);
     let sawProgress = false;
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline) {
       await this.page.waitForTimeout(500);
-      const t = await readNear();
+      const cur = await readNear(how);
+      const t = cur.text;
       if (/যাচাই হচ্ছে|যাচাই চলছে/.test(t)) { sawProgress = true; continue; }
       const failedTxt = /no birth record|not found|পাওয়া যায়নি/i.test(t);
       const okTxt = !failedTxt && !/নয়নি/.test(t)
         && /যাচাই সফল|সফলভাবে যাচাই|যাচাই সম্পন্ন|verified|সফল/i.test(t);
       if (okTxt) {
         this.progress(`✔ ${who}-এর BRN যাচাই সফল`);
-        return { verified: true };
+        return { verified: true, reason: null, missing: false };
       }
       if (failedTxt) {
         // আগের ডেড বার্তা নাকি এই ক্লিকের ফল? — progress দেখা গেলে বা টেক্সট
-        // বদলালেই বিশ্বাস করি; নইলে uncertain (সাইটের পরের ধাপই চূড়ান্ত বিচারক)
-        if (sawProgress || t !== before) {
-          this.progress(`❌ ${who}-এর BRN রেজিস্ট্রিতে পাওয়া যায়নি`);
-          return { verified: false };
+        // বদলালেই বিশ্বাস করি; নইলে uncertain (নিচের inconclusive শাখা)।
+        if (sawProgress || t !== before.text) {
+          const reason = extractReason(cur.raw, `${who}-এর BRN রেজিস্ট্রিতে পাওয়া যায়নি`);
+          this.progress(`⚠ ${reason}`);
+          return { verified: false, reason, missing: false };
         }
       }
     }
-    this.progress(`⚠ ${who}-এর যাচাই ফলাফল অস্পষ্ট — সাইটের পরের ধাপ দেখে সিদ্ধান্ত হবে`);
-    return { verified: null };
+    const reason = `${who}-এর BRN যাচাইয়ের ফলাফল সময়মতো পাওয়া যায়নি — আবার চেষ্টা করুন`;
+    this.progress(`⚠ ${reason}`);
+    return { verified: null, reason, missing: false };
   }
 
   // ১-নাম: প্রতিটি ধাপের "পরবর্তী"-র আগে required-রুল শিথিল রাখি (সাইট কোনো ধাপে
