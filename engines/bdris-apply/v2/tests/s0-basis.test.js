@@ -21,8 +21,8 @@ const { StepHandler } = require('../services/StepHandler');
 const { BdrisNavigator } = require('../services/BdrisNavigator');
 
 function makeS0Page(opts = {}) {
-  const { radios = true, checkbox = true, embassyChecked = false, neverAdvance = false } = opts;
-  const state = { radio: null, embassyChecked, nextClicked: false, requested: [] };
+  const { radios = true, checkbox = true, embassyChecked = false, neverAdvance = false, laterStep = false } = opts;
+  const state = { radio: null, embassyChecked, nextClicked: false, requested: [], basis: radios && !laterStep, laterStep };
   const radioValueFor = (sel) => {
     if (sel.includes('officePermanent') || sel.includes('value="PERMANENT"')) return 'PERMANENT';
     if (sel.includes('officeBirthplace') || sel.includes('value="BIRTHPLACE"')) return 'BIRTHPLACE';
@@ -30,9 +30,12 @@ function makeS0Page(opts = {}) {
   };
   const doc = {
     querySelector: (sel) => {
-      if (sel === '#bdMissionCheckbox') return { checked: state.embassyChecked };
+      if (sel === '#bdMissionCheckbox') return checkbox ? { checked: state.embassyChecked, offsetParent: {} } : null;
+      if (sel === '#personFirstNameBn' || sel.includes('personInfoForBirth.personFirstNameBn')) {
+        return state.laterStep ? { offsetParent: {} } : null;
+      }
       const val = radioValueFor(sel);
-      if (val) return { checked: state.radio === val };
+      if (val) return state.basis ? { checked: state.radio === val, offsetParent: {} } : null;
       return null;
     },
   };
@@ -83,7 +86,7 @@ function makeS0Page(opts = {}) {
     locator: (sel) => {
       state.requested.push(sel);
       const val = radioValueFor(sel);
-      const isRadio = val && radios;
+      const isRadio = val && state.basis;
       const isCheckbox = sel === '#bdMissionCheckbox' && checkbox;
       const isNext = sel.includes('পরবর্তী') || sel.includes('Next');
       const isAnchor = sel.includes('personFirstNameBn');
@@ -174,6 +177,7 @@ describe('submitS0 basis (v1 site selectors)', () => {
       .submitS0({ addressType: 'BIRTHPLACE' });
     assert.strictEqual(out.ok, false);
     assert.strictEqual(out.failed[0].field, 'আবেদনের ভিত্তি');
+    assert.strictEqual(out.code, undefined, 'an empty/booting page must NOT trigger the wrong-step gate — the 30s settle wait stays the arbiter there');
     assert.strictEqual(state.nextClicked, false, 'Next must not be clicked without a radio');
   });
 
@@ -184,5 +188,45 @@ describe('submitS0 basis (v1 site selectors)', () => {
     assert.strictEqual(out.ok, false);
     assert.strictEqual(state.nextClicked, true);
     assert.strictEqual(state.radio, 'BIRTHPLACE');
+  });
+
+  // S0-BASIS-GATE (2026-10-31): a reused session page sitting on a
+  // later BDRIS step must not burn 30s and die with the misleading
+  // radio field error — it must repair (fresh form) or fail with
+  // the machine-readable gate code. No live contact, no browser.
+  it('wrong-step page: re-navigates once to a fresh form and then selects the basis', async () => {
+    const { page, state } = makeS0Page({ laterStep: true });
+    const h = new StepHandler(new BdrisNavigator(page), { emit: () => {} });
+    let renavCalls = 0;
+    h.navigator.gotoForm = async () => { renavCalls++; state.basis = true; state.laterStep = false; };
+    const out = await h.submitS0({ addressType: 'BIRTHPLACE' });
+    assert.strictEqual(out.ok, true, JSON.stringify(out.failed || out));
+    assert.strictEqual(renavCalls, 1, 'exactly one repair navigation');
+    assert.strictEqual(state.radio, 'BIRTHPLACE');
+    assert.strictEqual(state.nextClicked, true);
+  });
+
+  it('wrong-step page + failed re-navigation: gate code, no Next, fail-fast', async () => {
+    const { page, state } = makeS0Page({ laterStep: true });
+    const h = new StepHandler(new BdrisNavigator(page), { emit: () => {} });
+    h.navigator.gotoForm = async () => { throw new Error('nav fail'); };
+    const t0 = Date.now();
+    const out = await h.submitS0({ addressType: 'BIRTHPLACE' });
+    const dt = Date.now() - t0;
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.code, 'BOT_PAGE_NOT_ON_BASIS_STEP');
+    assert.strictEqual(out.failed[0].field, 'আবেদনের ভিত্তি');
+    assert.strictEqual(state.nextClicked, false, 'Next must not be clicked on a wrong-step page');
+    assert.ok(dt < 15000, `gate failure must be fast, took ${dt}ms (old path burned 30s+)`);
+  });
+
+  it('step-0 page: no re-navigation happens on the success path', async () => {
+    const { page } = makeS0Page();
+    const h = new StepHandler(new BdrisNavigator(page), { emit: () => {} });
+    let renavCalls = 0;
+    h.navigator.gotoForm = async () => { renavCalls++; };
+    const out = await h.submitS0({ addressType: 'BIRTHPLACE' });
+    assert.strictEqual(out.ok, true, JSON.stringify(out.failed || out));
+    assert.strictEqual(renavCalls, 0, 'the success path must pay no repair cost');
   });
 });
