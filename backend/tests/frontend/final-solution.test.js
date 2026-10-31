@@ -42,16 +42,24 @@ beforeAll(() => {
 describe('final-solution #2: OTP-view return without re-send', () => {
   test('preview offers a return-to-OTP button gated on the live session flag', () => {
     expect(html).toMatch(/কোড জমা দেওয়ার পর্দায় ফিরুন/);
-    expect(html).toMatch(/if \(S\._otpSessionLive\)/);
+    // OTP-TRAP (A5, 2026-10-31): the gate is no longer the bare
+    // flag — the return renders only when the current phone
+    // still matches the phone the code was sent to.
+    expect(html).toMatch(/if \(S\._otpSessionLive && \(!S\._sentPhone \|\| S\.d\.phone === S\._sentPhone\)\)/);
   });
   test('the flag is set only on a sent render, cleared on home/session-loss/DONE', () => {
-    expect(html).toMatch(/if \(sent\) S\._otpSessionLive = true/);
+    // OTP-TRAP (A5): a sent render now also records the sent
+    // phone, so the return check can match against it.
+    expect(html).toMatch(/if \(sent\) \{ S\._otpSessionLive = true; S\._sentPhone = S\.d\.phone/);
     expect(html).toMatch(/S\._otpSessionLive = false/);
   });
   test('the return button re-renders the OTP view and sends nothing', () => {
-    const btn = html.match(/কোড জমা দেওয়ার পর্দায় ফিরুন[\s\S]{0,200}?renderOtpCode\(true\)/);
+    const btn = html.match(/কোড জমা দেওয়ার পর্দায় ফিরুন[\s\S]{0,400}?renderOtpCode\(true\)/);
     expect(btn).not.toBeNull();
     expect(html).not.toMatch(/কোড জমা দেওয়ার পর্দায় ফিরুন[\s\S]{0,200}?directSend\(\)/);
+  });
+  test('OTP-TRAP (A5): a diverged phone resends to the new number instead of returning to dead code', () => {
+    expect(html).toMatch(/if \(S\._sentPhone && S\.d\.phone !== S\._sentPhone\) \{ note\('⚠️ নম্বর বদলেছে/);
   });
 });
 

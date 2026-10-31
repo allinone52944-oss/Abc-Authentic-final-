@@ -663,3 +663,52 @@ describe('PARENT-VERIFY cycle (2026-10-31): real verify outcome reaches the step
     expect(html).toMatch(/v === 'skipped-family' \? '<span class="vbadge warn">পরিবার — BRN ছাড়া এগোনো<\/span>'/);
   });
 });
+
+describe('OTP-TRAP cycle 2 (2026-10-31): A5 sent-phone match-or-resend, A6 shared cap classifier', () => {
+  test('A5: renderOtpCode records which phone the code was sent to', () => {
+    expect(html).toMatch(/if \(sent\) \{ S\._otpSessionLive = true; S\._sentPhone = S\.d\.phone \|\| ''; \}/);
+  });
+
+  test('A5: step-6 return renders only for a matching phone, diverged phone gets a resend button', () => {
+    expect(html).toMatch(/if \(S\._otpSessionLive && \(!S\._sentPhone \|\| S\.d\.phone === S\._sentPhone\)\)/);
+    expect(html).toMatch(/কোড জমা দেওয়ার পর্দায় ফিরুন/);
+    expect(html).toMatch(/else if \(S\._otpSessionLive && S\._sentPhone && S\.d\.phone !== S\._sentPhone\)/);
+    expect(html).toMatch(/নতুন নম্বরে কোড পাঠান/);
+  });
+
+  test('A5: return click re-checks the phone and resends on divergence instead of returning to dead code', () => {
+    expect(html).toMatch(/if \(S\._sentPhone && S\.d\.phone !== S\._sentPhone\) \{ note\('⚠️ নম্বর বদলেছে/);
+  });
+
+  test('A5: the OTP-session flag is cleared on draft open and on fresh session, with the sent phone', () => {
+    expect(html).toMatch(/S\._otpSessionLive = false; S\._sentPhone = null;/);
+  });
+
+  test('A5: editing the phone away from the sent number clears the return flag', () => {
+    expect(html).toMatch(/if \(S\._otpSessionLive && S\._sentPhone && S\.d\.phone !== S\._sentPhone\) \{ S\._otpSessionLive = false; S\._sentPhone = null; \}/);
+  });
+
+  test('A6: one shared cap classifier exists and both handlers use it', () => {
+    expect(html).toMatch(/function isOtpCapReason\(s\) \{ return \/সর্বোচ্চ ৫ বার\|maximum 5 times\/i\.test\(s \|\| ''\); \}/);
+    expect(html).toMatch(/failed\.some\(x => isOtpCapReason\(x\.reason \|\| ''\)\)/);
+    expect(html).toMatch(/if \(op === 'SUBMIT_S4_PREP' && isOtpCapReason\(_allReasons\)\)/);
+  });
+
+  test('A6: auto otpPrepAck cap branch builds its banner from the cap reason, never a retry', () => {
+    expect(html).toMatch(/const _capReason = \(failed\.find\(x => isOtpCapReason\(x\.reason \|\| ''\)\) \|\| \{\}\)\.reason/);
+  });
+
+  test('A7: direct send ack routes a capped number to change-number before any bot fallback', () => {
+    expect(html).toMatch(/if \(r && r\.otpCapped === true\)/);
+  });
+
+  test('C1: direct send ack shows the honest replay hint instead of a fresh sent claim', () => {
+    expect(html).toMatch(/r\.replayed === true/);
+    expect(html).toMatch(/নতুন SMS আসেনি, আগের কোডটাই বসান/);
+  });
+
+  test('C3: direct submit ack surfaces the code-expired resend message before any bot fallback', () => {
+    expect(html).toMatch(/if \(r\.otpVerifyFailed === true\)/);
+    expect(html).toMatch(/কোডের মেয়াদ শেষ হয়েছে বা কোডটি ভুল/);
+  });
+});

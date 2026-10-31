@@ -1425,8 +1425,14 @@ class BdrisEngineV2 {
     }
     const cached = guard.done.get(guardKey);
     if (cached && guardNow - cached.at < HTTP_CHAIN_DEDUP_TTL_MS) {
+      // OTP-TRAP (C1, 2026-10-31): a replayed cached 'sent' is
+      // NOT a fresh send — the first SMS may already be lost, so
+      // the UI must never claim a new code was sent. Mark the
+      // replay on a copy (the cache itself stays unmutated) so
+      // the frontend shows "previous code still valid, no new
+      // SMS" instead of "code sent".
       logChainDecision('replayed-cached', cached.body);
-      return { status: cached.status, body: cached.body };
+      return { status: cached.status, body: { ...cached.body, replayed: true } };
     }
     const runPromise = (async () => {
       try {

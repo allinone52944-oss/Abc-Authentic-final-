@@ -200,7 +200,11 @@ describe('preserved behaviours (must not regress)', () => {
   });
 
   test('phone live-save is intact', () => {
-    expect(html).toContain("if (cp) cp.oninput = () => { S.d.phone = bnDigits(cp.value || '').replace(/\\D/g, ''); };");
+    // OTP-TRAP (A5, 2026-10-31): the live-save assignment is
+    // unchanged; the handler now additionally clears the OTP
+    // return flag when the phone diverges from the sent number.
+    expect(html).toContain("S.d.phone = bnDigits(cp.value || '').replace(/\\D/g, '');");
+    expect(html).toContain("if (S._otpSessionLive && S._sentPhone && S.d.phone !== S._sentPhone) { S._otpSessionLive = false; S._sentPhone = null; }");
   });
 
   test('no QR logic is introduced by this pack', () => {

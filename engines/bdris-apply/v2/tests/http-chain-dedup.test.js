@@ -188,7 +188,12 @@ describe('HTTP-CHAIN IDEMPOTENCY GUARD', () => {
     assert.strictEqual(r1.body.ok, true);
     const r2 = await engine.handleHttpChainRequest(sendBody());
     assert.strictEqual(engine.executor.calls.length, 1);
-    assert.deepStrictEqual(r2.body, r1.body);
+    // OTP-TRAP (C1, 2026-10-31): a cached replay is no longer
+    // byte-identical to the fresh result — it carries
+    // replayed:true so the UI can honestly say "previous code
+    // still valid, no new SMS" instead of claiming a fresh send.
+    // Everything else in the replayed body is unchanged.
+    assert.deepStrictEqual(r2.body, { ...r1.body, replayed: true });
   });
 
   it('repeat after FAILURE → runs fresh (failed runs stay retryable)', async () => {
