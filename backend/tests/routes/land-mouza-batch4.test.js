@@ -6,7 +6,10 @@
 // -> 11992 entries (6 rows collapse into thana/union variants),
 // 54222 class-rates, machine-transcribed from reader JSON and verified
 // 0-mismatch by an independent lookup pass (180337 checks, kept out of
-// the repo). Tests: data shape + totals + thana/union variants +
+// the repo). Correction (2026-10-31): +24 Araihazar বাণিজ্যিক rates from
+// a targeted re-read of the 'চান্দিনা ভিটি ও বাণিজ্যিক ভূমি' column
+// (Nangalkot precedent: combined বাণিজ্যিক-bearing column → বাণিজ্যিক),
+// total now 54246. Tests: data shape + totals + thana/union variants +
 // JL/poura/kromik suffix names + Dhaka city x100 conversions +
 // Barangaol exact decimals + Hossainpur placeholders + Baidyer Bazar
 // 31-row Sonargaon filter + Mirzapur dedupe + zero-rate cards +
@@ -98,7 +101,7 @@ const cardQ = (office, mouza, thana) => {
 };
 
 describe('batch 4 shape + totals', () => {
-  test('104 new offices, all 2025-2026, 11992 entries, 54222 class-rates, 184 total', () => {
+  test('104 new offices, all 2025-2026, 11992 entries, 54246 class-rates, 184 total', () => {
     expect(BATCH4).toHaveLength(104);
     let entries = 0, rates = 0;
     for (const key of BATCH4) {
@@ -112,7 +115,7 @@ describe('batch 4 shape + totals', () => {
       }
     }
     expect(entries).toBe(11992);
-    expect(rates).toBe(54222);
+    expect(rates).toBe(54246);
     expect(Object.keys(OFFICES)).toHaveLength(184);
     expect(OFFICES['dhaka-sadar']).toBeUndefined();
     expect(OFFICES.kalukhali).toBeUndefined();
@@ -122,6 +125,25 @@ describe('batch 4 shape + totals', () => {
     expect(lookupMouzaRate('boalkhali', 'কধুরখীল', 'নাল', null).rate).toBe(121421);
     expect(lookupMouzaRate('patiya', 'কেশাগাঁও (JL 16)', 'নাল', null).rate).toBe(106622);
     expect(lookupMouzaRate('begumganj', 'আবদুল্যাপুর (JL 199)', 'নাল', null).rate).toBe(37312);
+  });
+});
+
+describe('Araihazar correction (re-read 2026-10-31)', () => {
+  test('চান্দিনা ভিটি ও বাণিজ্যিক ভূমি column maps to বাণিজ্যিক (Nangalkot precedent)', () => {
+    expect(lookupMouzaRate('araihazar', 'দেয়াবৈ', 'বাণিজ্যিক', null)).toMatchObject({ rate: 2052000, p: false });
+    expect(lookupMouzaRate('araihazar', 'বড় নোয়াগাঁও', 'বাণিজ্যিক', null)).toMatchObject({ rate: 440100, p: true });
+    expect(lookupMouzaRate('araihazar', 'গোপালদী', 'বাণিজ্যিক', null)).toMatchObject({ rate: 4703600, p: true });
+    expect(lookupMouzaRate('araihazar', 'শালমদী', 'বাণিজ্যিক', null)).toMatchObject({ rate: 1388900, p: false });
+    expect(lookupMouzaRate('araihazar', 'নিজ কালাপাহাড়িয়া', 'বাণিজ্যিক', null)).toMatchObject({ rate: 975700, p: true });
+  });
+  test('blank চান্দিনা cells stay missing, never zero', () => {
+    expect(lookupMouzaRate('araihazar', 'চারিগাঁও', 'বাণিজ্যিক', null)).toBeNull();
+  });
+  test('Sreepur ভিটাবাড়ী stays joint ref-only: no বাড়ী/ভিটা rates', () => {
+    expect(lookupMouzaRate('sripur', 'আতালভা', 'বাড়ী', null)).toBeNull();
+    expect(lookupMouzaRate('sripur', 'আতালভা', 'ভিটা', null)).toBeNull();
+    expect(lookupMouzaRate('sripur', 'শ্রীপুর', 'বাড়ী', null)).toBeNull();
+    expect(lookupMouzaRate('sripur', 'শ্রীপুর', 'ভিটা', null)).toBeNull();
   });
 });
 
