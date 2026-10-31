@@ -103,7 +103,7 @@ describe('batch 3 shape + totals', () => {
     }
     expect(entries).toBe(6904);
     expect(rates).toBe(37724);
-    expect(Object.keys(OFFICES)).toHaveLength(373);
+    expect(Object.keys(OFFICES)).toHaveLength(415);
     expect(OFFICES.bijoyanagar).toBeUndefined();
   });
   test('earlier batches untouched', () => {

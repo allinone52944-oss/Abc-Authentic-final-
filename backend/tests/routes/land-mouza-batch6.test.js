@@ -117,7 +117,7 @@ describe('batch 6 shape + totals', () => {
     }
     expect(entries).toBe(6930);
     expect(rates).toBe(16947);
-    expect(Object.keys(OFFICES)).toHaveLength(373);
+    expect(Object.keys(OFFICES)).toHaveLength(415);
     expect(OFFICES.pirganj).toBeUndefined();
     expect(OFFICES.nawabganj).toBeTruthy();
     expect(OFFICES['nawabganj-dinajpur']).toBeTruthy();
