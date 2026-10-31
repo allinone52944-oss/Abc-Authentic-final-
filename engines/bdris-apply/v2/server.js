@@ -51,11 +51,47 @@ function draftsDirFor(uid) {
   return d;
 }
 function saveDraftRecord(uid, data) {
-  const raw = (data && data.draftId) || ('draft-' + Date.now().toString(36));
-  const id = String(raw).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 80) || ('draft-' + Date.now().toString(36));
+  // DRAFTS/AUTH (A8): server-side dedupe by filing identity. A save
+  // with no draftId (fresh tab, concurrent first saves, a session
+  // restored without the persisted id) used to mint a NEW id every
+  // time — one filing became a pile of drafts. Now it reuses the
+  // existing draft for the same filing. Identity is the core of the
+  // filing only (mode + applicant names + DOB): phone/email/docs
+  // change as the user progresses and must not fork the draft, and
+  // a filing with no name+DOB yet cannot be identified, so it is
+  // never merged blindly — it mints as before.
+  let raw = (data && data.draftId) || '';
+  if (!raw) {
+    const ident = draftFilingIdentity(data);
+    if (ident) {
+      try {
+        const dir = draftsDirFor(uid);
+        for (const f of fs.readdirSync(dir).filter(x => x.endsWith('.json'))) {
+          try {
+            const r = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+            if (r && r.draftId && draftFilingIdentity(r) === ident) { raw = r.draftId; break; }
+          } catch {}
+        }
+      } catch {}
+    }
+  }
+  // Mint with a random suffix: a bare millisecond mint collides for
+  // two id-less saves in the same ms (concurrent first saves), so
+  // the second would silently overwrite a DIFFERENT filing.
+  if (!raw) raw = 'draft-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const id = String(raw).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 80) || ('draft-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
   const rec = Object.assign({}, data, { draftId: id, savedAt: new Date().toISOString() });
   fs.writeFileSync(path.join(draftsDirFor(uid), id + '.json'), JSON.stringify(rec));
   return { draftId: id, savedAt: rec.savedAt };
+}
+function draftFilingIdentity(data) {
+  const s1 = (data && data.s1) || {};
+  const first = String(s1.firstNameBn || '').trim();
+  const dob = String(s1.dob || '').trim();
+  if (!first || !dob) return null;
+  return JSON.stringify([
+    String(data.mode || ''), first, String(s1.lastNameBn || '').trim(), dob,
+  ]);
 }
 const { SessionManager } = require('./core/SessionManager');
 const { CommandExecutor } = require('./core/CommandExecutor');
@@ -1757,7 +1793,7 @@ class BdrisEngineV2 {
   }
 }
 
-module.exports = { BdrisEngineV2, mergeStepParams, buildPlaywrightFallbackPlan, httpChainGuardKey, HTTP_CHAIN_DEDUP_TTL_MS, saveDraftRecord, draftsDirFor };
+module.exports = { BdrisEngineV2, mergeStepParams, buildPlaywrightFallbackPlan, httpChainGuardKey, HTTP_CHAIN_DEDUP_TTL_MS, saveDraftRecord, draftFilingIdentity, draftsDirFor };
 
 // ── Bootstrap: standalone subprocess entry point ──
 // Adapter (index.js) এই file-কে subprocess হিসেবে spawn করে।

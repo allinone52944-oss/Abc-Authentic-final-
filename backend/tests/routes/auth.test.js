@@ -46,6 +46,7 @@ beforeEach(() => {
   db.__reset();
   wa.notifyWelcome.mockClear();
   push.notifyNewUser.mockClear();
+  if (authRouter.__setServerStartedAt) authRouter.__setServerStartedAt(null);
 });
 
 describe('POST /api/auth/register — happy path', () => {
@@ -355,8 +356,13 @@ describe('POST /api/auth/refresh + /logout', () => {
     expect(lineageUpdate).toBeDefined();
   });
 
-  test('revoked token with a STALE lineage (rotated >30s ago) → theft response still revokes the chain', async () => {
+  test('revoked token with a STALE lineage (rotated >30s ago, during this process life) → theft response still revokes the chain', async () => {
     if (authRouter.__resetRotationGrace) authRouter.__resetRotationGrace();
+    // DRAFTS/AUTH (A9): the stale lineage must be stale DURING this
+    // process's life — pin the process start to before the rotation,
+    // otherwise the pre-restart exemption below would (correctly)
+    // treat it as a restart case.
+    if (authRouter.__setServerStartedAt) authRouter.__setServerStartedAt(Date.now() - 120000);
     const crypto = require('crypto');
     const presentedHash = crypto.createHash('sha256').update('f'.repeat(96)).digest('hex');
     const stale = new Date(Date.now() - 60000);
@@ -371,6 +377,35 @@ describe('POST /api/auth/refresh + /logout', () => {
       (c) => /UPDATE refresh_tokens SET revoked = TRUE WHERE user_id/.test(c[0])
     );
     expect(chainRevoke).toBeDefined();
+  });
+
+  test('revoked token with a PRE-RESTART lineage (rotated before this process started, dormant tab) → rotates the lineage head, never whole-chain-revokes', async () => {
+    // DRAFTS/AUTH (A9): the 30s cap never ran for a replacement that
+    // predates this process — the restart wiped the in-memory grace,
+    // so a dormant tab presenting immediately after restart must not
+    // look like theft. Simulate the restart by pinning process start
+    // to now; the rotation (10 min ago) predates it.
+    if (authRouter.__resetRotationGrace) authRouter.__resetRotationGrace();
+    if (authRouter.__setServerStartedAt) authRouter.__setServerStartedAt(Date.now());
+    const crypto = require('crypto');
+    const presentedHash = crypto.createHash('sha256').update('a'.repeat(96)).digest('hex');
+    const now = new Date();
+    const preRestart = new Date(Date.now() - 600000);
+    db.__routeQuery([
+      [(text, params) => text.includes('FROM refresh_tokens rt') && params && params[0] === presentedHash,
+        { rows: [{ id: 'rt-pre', user_id: 'u1', role: 'user', status: 'active', revoked: true, replaced_by_hash: 'newhash789', replaced_at: preRestart }] }],
+      [(text, params) => text.includes('FROM refresh_tokens rt') && params && params[0] === 'newhash789',
+        { rows: [{ id: 'rt-head', user_id: 'u1', role: 'user', status: 'active', revoked: false, last_activity: now, created_at: now }] }],
+    ]);
+    const r = await request(app())
+      .post('/api/auth/refresh')
+      .send({ refresh_token: 'a'.repeat(96) });
+    expect(r.body.access_token).toBeTruthy();
+    expect(r.body.refresh_token).toMatch(/^[a-f0-9]{96}$/);
+    const chainRevoke = db.__client.query.mock.calls.find(
+      (c) => /UPDATE refresh_tokens SET revoked = TRUE WHERE user_id/.test(c[0])
+    );
+    expect(chainRevoke).toBeUndefined();
   });
 
   test('logout revokes and always returns ok', async () => {

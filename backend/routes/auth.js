@@ -478,6 +478,15 @@ router.post('/login', async (req, res) => {
 // OAuth reuse leeway). Theft detection is unchanged for any
 // token outside the window.
 const ROTATION_LEEWAY_MS = 30 * 1000;
+// DRAFTS/AUTH (A9): the process start time. The DB lineage walk below
+// caps each hop at 30s — but a hop that predates THIS process can
+// never have enjoyed the in-memory grace (the restart wiped it), so
+// a dormant tab presenting a pre-restart token must not die on the
+// cap: the 30s window never ran for it in this process. Hops whose
+// replacement happened during this process's life keep the cap, so
+// genuinely stale lineages are still theft (see the stale test).
+const _MODULE_LOADED_AT = Date.now();
+let SERVER_STARTED_AT = _MODULE_LOADED_AT;
 const _rotationGrace = new Map(); // old token hash -> { tokens, at }
 function graceGet(hash) {
   const g = _rotationGrace.get(hash);
@@ -529,7 +538,8 @@ router.post('/refresh', async (req, res) => {
         let head = row;
         let hops = 0;
         while (head.revoked && head.replaced_by_hash && head.replaced_at
-          && (Date.now() - new Date(head.replaced_at).getTime()) <= ROTATION_LEEWAY_MS
+          && (new Date(head.replaced_at).getTime() <= SERVER_STARTED_AT
+            || (Date.now() - new Date(head.replaced_at).getTime()) <= ROTATION_LEEWAY_MS)
           && hops < 5) {
           hops++;
           const nxt = await client.query(
@@ -888,5 +898,9 @@ router.post('/verify-otp', async (req, res) => {
 // Test hook: clears the rotation-leeway cache between cases
 // (never called in production).
 router.__resetRotationGrace = () => { _rotationGrace.clear(); };
+// Test hook: overrides the process-start time so a test can simulate
+// a restart (null restores the real module-load time). Never called
+// in production.
+router.__setServerStartedAt = (t) => { SERVER_STARTED_AT = t || _MODULE_LOADED_AT; };
 
 module.exports = router;
