@@ -134,6 +134,8 @@ describe('Araihazar correction (re-read 2026-10-31)', () => {
     expect(lookupMouzaRate('araihazar', 'বড় নোয়াগাঁও', 'বাণিজ্যিক', null)).toMatchObject({ rate: 440100, p: true });
     expect(lookupMouzaRate('araihazar', 'গোপালদী', 'বাণিজ্যিক', null)).toMatchObject({ rate: 4703600, p: true });
     expect(lookupMouzaRate('araihazar', 'শালমদী', 'বাণিজ্যিক', null)).toMatchObject({ rate: 1388900, p: false });
+    // Zoom-verified 2026-10-31: first read dropped an 8 (138000*); printed value is 1388000*.
+    expect(lookupMouzaRate('araihazar', 'শালমদী', 'ভিটা', null)).toMatchObject({ rate: 1388000, p: true });
     expect(lookupMouzaRate('araihazar', 'নিজ কালাপাহাড়িয়া', 'বাণিজ্যিক', null)).toMatchObject({ rate: 975700, p: true });
   });
   test('blank চান্দিনা cells stay missing, never zero', () => {
