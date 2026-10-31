@@ -471,11 +471,17 @@ input.bad, select.bad{border-color:var(--err); box-shadow:0 0 0 3px rgba(251,113
 const LS_ACCESS_T = 'abc_access_token', LS_REFRESH_T = 'abc_refresh_token';
 function curAccessToken() { try { return sessionStorage.getItem(LS_ACCESS_T) || ''; } catch (e) { return ''; } }
 let _tokRefreshP = null;
+// DRAFTS/AUTH (C5): tri-state result — 'ok' | 'expired' |
+// 'transient'. The old boolean lumped every non-OK together, so a
+// transient blip (500, network hiccup) showed the false
+// "session over, log in again" banner. Only a dead refresh token
+// (401, or none stored) means the session is over; anything else
+// is transient and must never present as session-over.
 function refreshAccessToken() {
   if (_tokRefreshP) return _tokRefreshP;
   _tokRefreshP = (async () => {
     let rt = ''; try { rt = localStorage.getItem(LS_REFRESH_T) || ''; } catch (e) {}
-    if (!rt) return false;
+    if (!rt) return 'expired';
     try {
       const r = await fetch('/api/auth/refresh', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -483,17 +489,17 @@ function refreshAccessToken() {
       });
       if (r.status === 401) {   // refresh token dead → session truly over
         try { sessionStorage.removeItem(LS_ACCESS_T); localStorage.removeItem(LS_REFRESH_T); } catch (e) {}
-        return false;
+        return 'expired';
       }
-      if (!r.ok) return false;
+      if (!r.ok) return 'transient';
       const d = await r.json().catch(() => null);
-      if (!d || !d.access_token) return false;
+      if (!d || !d.access_token) return 'transient';
       try {
         sessionStorage.setItem(LS_ACCESS_T, d.access_token);
         if (d.refresh_token) localStorage.setItem(LS_REFRESH_T, d.refresh_token);
       } catch (e) {}
-      return true;
-    } catch (e) { return false; }
+      return 'ok';
+    } catch (e) { return 'transient'; }
   })().finally(() => { _tokRefreshP = null; });
   return _tokRefreshP;
 }
@@ -506,19 +512,27 @@ const socket = (typeof io !== 'undefined')
       auth: (cb) => cb({ token: curAccessToken() })
     })
   : { connected: false,
-      emit: function(){ console.warn('[bdris-apply] socket.io server not available'); },
+      // DRAFTS/AUTH (A10): the io-absent stub used to swallow emits
+      // — callbacks never fired, so draft list/count/delete hung
+      // silently. Now it calls back immediately with an error, so
+      // every draft op fails honestly instead of hanging.
+      emit: function(ev){ console.warn('[bdris-apply] socket.io server not available'); const a = Array.prototype.slice.call(arguments, 1); const cb = a[a.length - 1]; if (typeof cb === 'function') { try { cb(ev === 'LIST_DRAFTS' ? { error: 'SOCKET_UNAVAILABLE' } : { ok: false, error: 'SOCKET_UNAVAILABLE' }); } catch (e) {} } },
       on: function(){}, once: function(){}, off: function(){} };
 let _netWarnShown = false;
 socket.on('connect_error', (err) => {
   const m = String((err && err.message) || '');
   if (/unauthori|invalid token|jwt expired/i.test(m)) {
     // stale access token → one silent refresh, then retry with the fresh token
-    refreshAccessToken().then((ok) => {
-      if (ok) { try { socket.connect(); } catch (e) {} }
-      else showBanner('err',
+    refreshAccessToken().then((st) => {
+      if (st === 'ok') { try { socket.connect(); } catch (e) {} }
+      else if (st === 'expired') showBanner('err',
         'সেশন শেষ হয়ে গেছে — আবার লগইন করুন, তারপর পেজটি রিলোড করুন।',
         () => { location.href = '/login.html?next=' + encodeURIComponent(location.pathname); },
         'লগইন করুন');
+      else if (!_netWarnShown) { // DRAFTS/AUTH (C5): transient, NOT session-over
+        _netWarnShown = true;
+        showBanner('warn', 'সার্ভারের সাথে সংযোগে সমস্যা হচ্ছে… স্বয়ংক্রিয়ভাবে আবার চেষ্টা চলছে।');
+      }
     });
     return;
   }
@@ -590,6 +604,26 @@ const S = {
   pdf: null,         // {name, base64}
   ackNo: null
 };
+
+/* DRAFTS/AUTH (A8): draftId persistence. S.draftId used to live only
+   in page memory — a reload minted a NEW id on the next save and
+   one filing became a pile of drafts. Now every assignment goes
+   through setDraftId, which mirrors it to sessionStorage, and the
+   id (plus its submit key) is restored at page load. Server-side
+   dedupe by filing identity covers the rest (concurrent saves). */
+const LS_DRAFT_ID = 'bdris_draft_id';
+function setDraftId(id) {
+  S.draftId = id || null;
+  try { if (id) sessionStorage.setItem(LS_DRAFT_ID, id); else sessionStorage.removeItem(LS_DRAFT_ID); } catch (e) {}
+}
+try {
+  const _rid = sessionStorage.getItem(LS_DRAFT_ID);
+  if (_rid) {
+    S.draftId = _rid;
+    const _rk = localStorage.getItem('bdris_submit_key_for_' + _rid);
+    if (_rk) S._submitKey = _rk;
+  }
+} catch (e) {}
 
 const STEP_LBL = ['ভিত্তি', 'ব্যক্তির পরিচিতি', 'পিতামাতা', 'ঠিকানা', 'ডকুমেন্ট', 'OTP'];
 const RELATIONS = ['নিজ', 'পিতা', 'মাতা', 'পিতামহ', 'পিতামহী', 'মাতামহ', 'মাতামহী', 'অভিভাবক', 'অন্যান্য'];
@@ -968,10 +1002,14 @@ function fmtTime(iso) {
   catch { return String(iso || ''); }
 }
 function updDraftsCnt() {
-  socket.emit('LIST_DRAFTS', (list) => {
+  // DRAFTS/AUTH (A10): timeout-guarded; on error the count simply
+  // stays as it was — a background count must never hang, and
+  // showing a stale count beats clearing it on a transient blip.
+  emitDraftOp('LIST_DRAFTS', undefined, (list) => {
+    if (!list || list.error) return;
     const n = Array.isArray(list) ? list.length : 0;
     const c = $('draftsCnt'); if (c) c.textContent = n ? '(' + n + ')' : '';
-  });
+  }, 10000);
 }
 
 /* ═══════════ date of birth helpers (copy-paste friendly, 2026-10-11) ═══════════ */
@@ -1506,8 +1544,17 @@ function renderDrafts() {
     '<div id="draftList"><div class="draft-card">খসড়া তালিকা আসছে…</div></div>'
   );
   setBtns([{ html: '← ফিরে যান', cls: 'ghost', fn: () => renderHome() }]);
-  socket.emit('LIST_DRAFTS', (list) => {
+  emitDraftOp('LIST_DRAFTS', undefined, (list) => {
     const l = $('draftList'); if (!l) return;
+    if (!list || list.error) {
+      // DRAFTS/AUTH (A10): dead socket / timeout — never hang on
+      // "খসড়া তালিকা আসছে…"; show the real failure + retry.
+      l.innerHTML = '<div class="draft-card"><div class="di">⚠️</div><div><div class="dt">খসড়া তালিকা আনা যায়নি</div>' +
+        '<div class="ds">সংযোগ নেই বা সার্ভার জবাব দিচ্ছে না — আবার চেষ্টা করুন।</div></div>' +
+        '<div class="da"><button class="btn small" id="dlRetry">↻ আবার চেষ্টা করুন</button></div></div>';
+      const rb = $('dlRetry'); if (rb) rb.onclick = () => renderDrafts();
+      return;
+    }
     if (!Array.isArray(list) || !list.length) {
       l.innerHTML = '<div class="draft-card"><div class="di">📭</div><div><div class="dt">কোনো খসড়া নেই</div>' +
         '<div class="ds">আবেদন পূরণ করে “খসড়ায় রাখুন” চাপলে এখানে জমা হবে।</div></div></div>';
@@ -1525,9 +1572,14 @@ function renderDrafts() {
       '<button class="btn danger small" data-del="' + esc(d.draftId) + '">মুছুন</button></div></div>').join('');
     l.querySelectorAll('[data-open]').forEach(b => b.onclick = () => openDraft(b.dataset.open));
     l.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
-      socket.emit('DELETE_DRAFT', b.dataset.del, () => { updDraftsCnt(); renderDrafts(); note('✔ খসড়া মুছে ফেলা হয়েছে', 'ok'); });
+      // DRAFTS/AUTH (A10): the old handler reported success
+      // unconditionally — a dead socket still showed "deleted".
+      deleteDraftReliable(b.dataset.del, (ok) => {
+        if (ok) { updDraftsCnt(); renderDrafts(); note('✔ খসড়া মুছে ফেলা হয়েছে', 'ok'); }
+        else note('⚠️ খসড়া মোছা যায়নি — সংযোগ ফিরলে আবার চেষ্টা করুন', 'err');
+      });
     });
-  });
+  }, 10000);
 }
 function openDraft(draftId) {
   S._heldPrep = null; // switching application context — the old flow's parked send dies here
@@ -1539,11 +1591,11 @@ function openDraft(draftId) {
   S._otpSessionLive = false; S._sentPhone = null;
   directAckClear(); // DIRECT ACK TIMEOUT: no fallback after switching drafts
   busy(true, 'খসড়া প্রস্তুত হচ্ছে…');
-  socket.emit('LOAD_DRAFT', draftId, (res) => {
+  emitDraftOp('LOAD_DRAFT', draftId, (res) => {
     busy(false);
     if (!res || !res.ok || !res.draft) { note('খসড়া খোলা যায়নি — আবার চেষ্টা করুন', 'err'); return; }
     const dr = res.draft;
-    S.draftId = dr.draftId || draftId;
+    setDraftId(dr.draftId || draftId);
     try { var savedKey = localStorage.getItem('bdris_submit_key_for_' + S.draftId); if (savedKey) S._submitKey = savedKey; } catch (e) {}
     S.mode = dr.mode === 'auto' ? 'auto' : 'manual';
     const savedDocs = Array.isArray(dr.docs) ? dr.docs : [];
@@ -1558,7 +1610,7 @@ function openDraft(draftId) {
     resetSent(); // খসড়া চালু মানে চেইন শুরু থেকেই যাবে — ধাপ-রেকর্ড নতুন
     S._passedOps = {}; // FINAL-PACK stale-banner: new draft = new flow, old passes void
     renderResume();
-  });
+  }, 15000);
 }
 function renderResume() {
   setView('drafts'); renderStepper(-1); hideFail();
@@ -1584,7 +1636,10 @@ function renderResume() {
   setBtns([
     { html: '▶ চালিয়ে যান', fn: () => resumeGo() },
     { html: '🗑️ খসড়া মুছুন', cls: 'danger', fn: () => {
-        socket.emit('DELETE_DRAFT', S.draftId, () => { S.draftId = null; updDraftsCnt(); renderHome(); });
+        deleteDraftReliable(S.draftId, (ok) => {
+          if (ok) { setDraftId(null); updDraftsCnt(); renderHome(); }
+          else note('⚠️ খসড়া মোছা যায়নি — সংযোগ ফিরলে আবার চেষ্টা করুন', 'err');
+        });
       } },
     { html: '← ফিরে যান', cls: 'ghost', fn: () => renderDrafts() }
   ]);
@@ -1744,6 +1799,38 @@ function draftPayload(uiStep) {
 function docsMetaOf(docs) {
   return (docs || []).map(x => ({ name: x.name, mimeType: x.mimeType, docType: x.docType, base64: x.base64 || null }));
 }
+/* DRAFTS/AUTH (A10): socket draft ops with a timeout. A dead socket
+   used to swallow LIST/LOAD/DELETE/SAVE emits — the callback never
+   fired, so the draft list, the count and deletes hung silently.
+   emitDraftOp fails honestly on timeout (late acks are ignored via
+   the done flag); callers show a failure note instead of hanging.
+   deleteDraftReliable adds the HTTP /draft-delete fallback with one
+   retry, so a delete never depends on the live socket alone. */
+function emitDraftOp(event, data, cb, ms) {
+  let done = false;
+  const t = setTimeout(() => { if (!done) { done = true; if (cb) cb({ ok: false, error: 'SOCKET_TIMEOUT' }); } }, ms || 10000);
+  const finish = (r) => { if (done) return; done = true; clearTimeout(t); if (cb) cb(r); };
+  try {
+    if (data === undefined) socket.emit(event, finish);
+    else socket.emit(event, data, finish);
+  } catch (e) { finish({ ok: false, error: 'SOCKET_TIMEOUT' }); }
+}
+function deleteDraftReliable(draftId, cb) {
+  const viaHttp = (retry, done) => {
+    fetch('/api/bdris-apply/draft-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + curAccessToken() },
+      body: JSON.stringify({ _authToken: curAccessToken(), draftId }),
+    }).then(r => r.json().catch(() => null))
+      .then(d => { if (d && d.ok) done(true); else if (retry) viaHttp(false, done); else done(false); })
+      .catch(() => { if (retry) viaHttp(false, done); else done(false); });
+  };
+  if (typeof socket !== 'undefined' && socket && socket.connected) {
+    emitDraftOp('DELETE_DRAFT', draftId, (r) => {
+      if (r && r.ok) cb(true); else viaHttp(true, cb);
+    }, 8000);
+  } else viaHttp(true, cb);
+}
 function saveDraft(uiStep, cb) {
   // FINAL-PACK: a SAVE_DRAFT whose socket ack never arrives (dead
   // socket at save time) used to fail silently — the user believed
@@ -1757,14 +1844,14 @@ function saveDraft(uiStep, cb) {
     S._draftSaveWarned = true;
     note('⚠️ খসড়া সেভ হয়নি (সংযোগ নেই) — সংযোগ ফিরলে “খসড়ায় রাখুন” চাপুন বা পরের ধাপে যান', 'warn');
   }, 10000);
-  socket.emit('SAVE_DRAFT', draftPayload(uiStep), (r) => {
+  emitDraftOp('SAVE_DRAFT', draftPayload(uiStep), (r) => {
     done = true; clearTimeout(wd);
     if (r && r.ok) {
-      S.draftId = r.draftId; updDraftsCnt(); S._draftSaveWarned = false;
+      setDraftId(r.draftId); updDraftsCnt(); S._draftSaveWarned = false;
       try { if (S._submitKey) localStorage.setItem('bdris_submit_key_for_' + r.draftId, S._submitKey); } catch (e) {}
     }
     if (cb) cb(r);
-  });
+  }, 15000);
 }
 /* FINAL-SOLUTION (2026-10-30, problem-map #9): silent
    server-side auto-save. The explicit "খসড়ায় রাখুন" button was
@@ -1788,7 +1875,7 @@ function autoSaveDraft(uiStep) {
     S._autoDraftSig = sig;
     const done = (r) => {
       if (r && r.ok) {
-        S.draftId = r.draftId; updDraftsCnt(); S._draftSaveWarned = false;
+        setDraftId(r.draftId); updDraftsCnt(); S._draftSaveWarned = false;
         try { if (S._submitKey) localStorage.setItem('bdris_submit_key_for_' + r.draftId, S._submitKey); } catch (e) {}
       } else {
         // A failed auto-save must not poison the guard: the next
@@ -2170,7 +2257,7 @@ function renderStep1() {
   const _emb = $('s1emb'); if (_emb) _emb.onchange = () => { S.d.s0.embassy = !!_emb.checked; syncS0Live(); };
   setBtns([
     { html: 'পরবর্তী →', fn: () => submitStep1() },
-    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => saveDraft(0, () => note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” বাটন থেকে পরে চালু করতে পারবেন', 'ok')) },
+    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => saveDraft(0, (r) => { if (r && r.ok) note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” বাটন থেকে পরে চালু করতে পারবেন', 'ok'); else note('⚠️ খসড়া সেভ হয়নি — সংযোগ ফিরলে আবার চাপুন', 'err'); }) },
     { html: '← হোম', cls: 'ghost', fn: () => renderHome() }
   ]);
 }
@@ -2739,7 +2826,7 @@ function renderStep2() {
   };
   setBtns([
     { html: 'পরবর্তী →', fn: () => submitStep2() },
-    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep2(); saveDraft(2, () => note('✔ খসড়ায় রাখা হয়েছে', 'ok')); } },
+    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep2(); saveDraft(2, (r) => { if (r && r.ok) note('✔ খসড়ায় রাখা হয়েছে', 'ok'); else note('⚠️ খসড়া সেভ হয়নি — সংযোগ ফিরলে আবার চাপুন', 'err'); }); } },
     { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => { collectStep2(); if (S.draftId) saveDraft(1, () => {}); goStep(1); } }
   ]);
 }
@@ -2839,7 +2926,7 @@ function renderStep3() {
   );
   setBtns([
     { html: 'পরবর্তী →', fn: () => submitStep3() },
-    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep3(); saveDraft(3, () => note('✔ খসড়ায় রাখা হয়েছে', 'ok')); } },
+    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep3(); saveDraft(3, (r) => { if (r && r.ok) note('✔ খসড়ায় রাখা হয়েছে', 'ok'); else note('⚠️ খসড়া সেভ হয়নি — সংযোগ ফিরলে আবার চাপুন', 'err'); }); } },
     { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => { collectStep3(); if (S.draftId) saveDraft(2, () => {}); goStep(2); } }
   ]);
 }
@@ -3018,7 +3105,7 @@ function renderStep4() {
   };
   setBtns([
     { html: 'পরবর্তী →', fn: () => submitStep4() },
-    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep4(); saveDraft(4, () => note('✔ খসড়ায় রাখা হয়েছে', 'ok')); } },
+    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep4(); saveDraft(4, (r) => { if (r && r.ok) note('✔ খসড়ায় রাখা হয়েছে', 'ok'); else note('⚠️ খসড়া সেভ হয়নি — সংযোগ ফিরলে আবার চাপুন', 'err'); }); } },
     { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => { collectStep4(); if (S.draftId) saveDraft(3, () => {}); goStep(3); } }
   ]);
 }
@@ -3130,7 +3217,7 @@ function renderStep5() {
   };
   setBtns([
     { html: 'পরবর্তী →', fn: () => submitStep5() },
-    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => saveDraft(5, () => note('✔ খসড়ায় রাখা হয়েছে — ছবিসহই জমা থাকল', 'ok')) },
+    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => saveDraft(5, (r) => { if (r && r.ok) note('✔ খসড়ায় রাখা হয়েছে — ছবিসহই জমা থাকল', 'ok'); else note('⚠️ খসড়া সেভ হয়নি — সংযোগ ফিরলে আবার চাপুন', 'err'); }) },
     { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => { if (S.draftId) saveDraft(4, () => {}); goStep(4); } }
   ]);
 }
@@ -3170,7 +3257,7 @@ function renderStep6() {
   autoSaveDraft(6);
   const step6Btns = [
     { html: '📲 কোড পাঠান', fn: () => sendOtp() },
-    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep6(); saveDraft(6, () => note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে যেকোনো সময় কোড দিয়ে শেষ করতে পারবেন', 'ok')); } },
+    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep6(); saveDraft(6, (r) => { if (r && r.ok) note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে যেকোনো সময় কোড দিয়ে শেষ করতে পারবেন', 'ok'); else note('⚠️ খসড়া সেভ হয়নি — সংযোগ ফিরলে আবার চাপুন', 'err'); }); } },
     { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => { collectStep6(); if (S.draftId) saveDraft(5, () => {}); goStep(5); } }
   ];
   // FINAL-SOLUTION (#2): OTP-view return WITHOUT a re-send.
@@ -3874,7 +3961,7 @@ function renderOtpCode(sent) {
         busy(true, '⏳ আবার কোড পাঠানো হচ্ছে…');
         if (emitStep('SUBMIT_S4_PREP', payloadFor('SUBMIT_S4_PREP')) === false) busy(false);
       } },
-    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => saveDraft(6, () => { note('✔ খসড়ায় রাখা হয়েছে — যেকোনো সময় OTP দিয়ে শেষ করতে পারবেন', 'ok'); setTimeout(renderDrafts, 700); }) },
+    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => saveDraft(6, (r) => { if (r && r.ok) { note('✔ খসড়ায় রাখা হয়েছে — যেকোনো সময় OTP দিয়ে শেষ করতে পারবেন', 'ok'); setTimeout(renderDrafts, 700); } else note('⚠️ খসড়া সেভ হয়নি — সংযোগ ফিরলে আবার চাপুন', 'err'); }) },
     { html: '← পূর্ববর্তী', cls: 'ghost', fn: () => goStep(6) }
   ]);
 }
@@ -4099,18 +4186,19 @@ function showDone(d, restore) {
   if (!restore) {
     try { addAck(rec); } catch {}
     if (S.draftId) {
-      const _did = S.draftId; S.draftId = null;
-      // ALL-BUGS (i): draft delete must not depend on the live
-      // socket alone — DONE via direct HTTP with a dead socket
-      // used to leave the submitted draft in the list.
-      if (socket && socket.connected) socket.emit('DELETE_DRAFT', _did, () => {});
-      else fetch('/api/bdris-apply/draft-delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + curAccessToken() },
-        body: JSON.stringify({ _authToken: curAccessToken(), draftId: _did }),
-      }).catch(() => {});
-    }
-    updDraftsCnt();
+      const _did = S.draftId; setDraftId(null);
+      // DRAFTS/AUTH (B16): the old fire-and-forget delete + an
+      // immediate count refresh let submitted drafts reappear (the
+      // count refreshed before the delete landed, and a failed
+      // delete was never reported). Now the delete is awaited
+      // (socket ack with timeout, HTTP fallback + one retry) and
+      // the count refreshes only after it settles; a failure is
+      // surfaced honestly instead of silently reappearing later.
+      deleteDraftReliable(_did, (ok) => {
+        if (!ok) note('⚠️ জমা দেওয়া খসড়াটি মোছা যায়নি — “খসড়া” তালিকায় আবার দেখা গেলে সেখান থেকে মুছে ফেলুন', 'err');
+        updDraftsCnt();
+      });
+    } else updDraftsCnt();
   }
   // PREMIUM-DONE: সাইটের নিজের মেসেজ থাকলে সেটাই মূল ডিসপ্লে (ব্যানার নয়);
   // ফলব্যাক-বাক্য বা খালি হলে আগের ব্যানারই থাকে।
@@ -4367,6 +4455,7 @@ function applyPaste() {
   const r = parsePastedData(raw, S.d);
   S._pasteRaw = raw;
   renderAuto();
+  autoSaveDraft(0); // DRAFTS/AUTH (B14): pasted data is progress too — save it, don't wait for submit
   note(r.n ? ('📥 ' + r.n + 'টি তথ্য বসে গেছে — সব ঘর একবার দেখে নিয়ে ছবি যোগ করুন' + (r.miss ? ' (আর ' + r.miss + 'টি লাইন চেনা যায়নি)' : '') + (r.brnWarn ? ' — ⚠️ পিতা/মাতার BRN ১৭ ডিজিট নয়, মিলিয়ে দেখুন' : ''))
     : '⚠️ কিছুই চেনা যায়নি — তথ্যটা একবার মিলিয়ে দেখুন', r.n ? 'ok' : 'warn');
 }
@@ -4509,9 +4598,9 @@ function renderAuto() {
   $('sp_same').onchange = toggle;
   $('rp_same').onchange = toggle;
   $('spFromBirth').onclick = () => fillPrefixFromBirth('sp');
-  $('spBook').onclick = () => { collectAuto(); renderAddrBook((rec) => { S.d.s2b.perm = Object.assign({}, rec); S.d.s2b.permCopy = false; renderAuto(); if (S.draftId) saveDraft(S.d.uiStep || 0, () => {}); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
+  $('spBook').onclick = () => { collectAuto(); renderAddrBook((rec) => { S.d.s2b.perm = Object.assign({}, rec); S.d.s2b.permCopy = false; renderAuto(); autoSaveDraft(S.d.uiStep || 0); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
   $('rpFromPerm').onclick = () => { fillPrefixFrom('rp', readAddrFields('sp')); note('✔ স্থায়ী ঠিকানা থেকে বসানো হয়েছে', 'ok'); };
-  $('rpBook').onclick = () => { collectAuto(); renderAddrBook((rec) => { S.d.s2b.pres = Object.assign({}, rec); S.d.s2b.presCopy = false; renderAuto(); if (S.draftId) saveDraft(S.d.uiStep || 0, () => {}); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
+  $('rpBook').onclick = () => { collectAuto(); renderAddrBook((rec) => { S.d.s2b.pres = Object.assign({}, rec); S.d.s2b.presCopy = false; renderAuto(); autoSaveDraft(S.d.uiStep || 0); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
   // Auto mode জন্মস্থানে ঠিকানা বই (2026-10-17)
   const abb = $('aBirthBook'); if (abb) abb.onclick = () => {
     collectAuto();
@@ -4543,6 +4632,7 @@ function renderAuto() {
       S.d.docs.push(d);
     }
     renderDocRows();
+    autoSaveDraft(0); // DRAFTS/AUTH (B14): added photos are progress — save them with the form
     busy(false); noteOff();
   };
   renderDocRows();
@@ -4556,11 +4646,27 @@ function renderAuto() {
   const btns = [
     { html: '🚀 আবেদন জমা দিন', fn: () => submitAuto() },
     { html: '👁️ প্রিভিউ দেখুন', cls: 'ghost', fn: () => autoPreview() },
-    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectAuto(); saveDraft(0, () => note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে পরে চালু করতে পারবেন', 'ok')); } },
-    { html: '← ফিরে যান', cls: 'ghost', fn: () => renderHome() }
+    { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectAuto(); saveDraft(0, (r) => { if (r && r.ok) note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে পরে চালু করতে পারবেন', 'ok'); else note('⚠️ খসড়া সেভ হয়নি — সংযোগ ফিরলে আবার চাপুন', 'err'); }); } },
+    { html: '← ফিরে যান', cls: 'ghost', fn: () => { try { collectAuto(); } catch (e) {} autoSaveDraft(0); renderHome(); } }
   ];
   if (new URLSearchParams(location.search).has('demo')) btns.push({ html: '🧪 ডেমো তথ্য', cls: 'ghost small', fn: () => fillDemo() });
   setBtns(btns);
+  // DRAFTS/AUTH (B14): typing-then-tab-close used to lose the whole
+  // auto form (nothing saved until a button click). A delegated,
+  // debounced input save covers it: the auto fields live only in
+  // the DOM until collectAuto runs, so after 4s of no typing the
+  // current form is collected + auto-saved (signature-guarded, so
+  // unchanged data is never re-sent). Guarded to the live auto view
+  // only, and bound once — renderAuto re-renders the body, but the
+  // document-level listener survives re-renders.
+  if (!S._autoInputSaveBound) {
+    S._autoInputSaveBound = true;
+    document.addEventListener('input', () => {
+      if (S.mode !== 'auto' || S.view !== 'flow' || !$('a_f_bn')) return;
+      clearTimeout(S._autoInputSaveT);
+      S._autoInputSaveT = setTimeout(() => { try { collectAuto(); autoSaveDraft(0); } catch (e) {} }, 4000);
+    });
+  }
 }
 function personAuto(p, lbl, o) {
   const pre = isPre2013Client((S.d.s1 || {}).dob);
@@ -4618,6 +4724,15 @@ function collectAuto() {
   };
   S.d.phone = bnDigits($('a_phone').value || '').replace(/\D/g, '');
   S.d.email = ($('a_email').value || '').trim();
+  // DRAFTS/AUTH (B14): the auto form used to save only on explicit
+  // "খসড়ায় রাখুন" or at submit — a filled auto form died on tab
+  // close. Every successful collect now progressively auto-saves
+  // (signature-guarded inside autoSaveDraft, so unchanged data is
+  // never re-sent). collectAuto throws when the auto view is not
+  // live, so this line only runs on a real auto form. The typeof
+  // guard keeps collection crash-free if the saver is absent
+  // (isolated-test extraction); on the real page it always runs.
+  if (typeof autoSaveDraft === 'function') autoSaveDraft(0);
   return S.d;
 }
 function validateAuto() {
@@ -4823,6 +4938,15 @@ function otpPrepAck(d) {
   opFinish();
   const failed = Array.isArray(d.failed) ? d.failed : [];
   if (d.relationBn) S.d.relation = d.relationBn;
+  // DRAFTS/AUTH (C2): a SESSION_EXPIRED ack is not a generic step
+  // failure and must never trigger a same-op retry on the dead
+  // session — it goes to the session handler, which shows the real
+  // reason with the login action.
+  if (d.error === 'SESSION_EXPIRED' || d.code === 'SESSION_EXPIRED' || d.sessionExpired === true) {
+    opAbort(); busy(false);
+    onSessionExpired('সেশন শেষ হয়ে গেছে (SESSION_EXPIRED)');
+    return;
+  }
   if (d.resumable) {
     opAbort();
     note('🔄 নতুন সেশন — তথ্যগুলো আবার বসানো হচ্ছে…', 'info');
@@ -4981,6 +5105,15 @@ function manualStepAck(d) {
   if (op !== 'SUBMIT_S4_OTP') busy(false);
   const failed = Array.isArray(d.failed) ? d.failed : [];
   if (d.relationBn) S.d.relation = d.relationBn;
+  // DRAFTS/AUTH (C2): a SESSION_EXPIRED ack is not a generic step
+  // failure and must never trigger a same-op retry on the dead
+  // session — it goes to the session handler, which shows the real
+  // reason with the login action.
+  if (d.error === 'SESSION_EXPIRED' || d.code === 'SESSION_EXPIRED' || d.sessionExpired === true) {
+    opAbort(); busy(false);
+    onSessionExpired('সেশন শেষ হয়ে গেছে (SESSION_EXPIRED)');
+    return;
+  }
   if (d.resumable) {
     if (staleAck) { opAbort(); return; } // পুরনো ধাপ — নতুন সেশনে আর দরকার নেই
     // লকস্টেপ: নতুন সেশন মানেই বট নিজে পুরো চেইন চালাবে না — ইউজারের সেই ক্লিকের ধাপটিই
@@ -5218,6 +5351,18 @@ function manualStepAck(d) {
 }
 
 /* ═══════════ socket events ═══════════ */
+/* DRAFTS/AUTH (C2): SESSION_EXPIRED finally has a real listener
+   and one honest handler. Before, there was only a zone-fetch
+   banner; op acks carrying SESSION_EXPIRED fell into generic
+   failure handling with same-op retry on a dead session. Now the
+   reason is shown loudly with a login action, and no op is
+   retried against the dead session from here — re-login (which
+   reloads the page) is the recovery. */
+function onSessionExpired(reason) {
+  showBanner('err', '⚠️ ' + san(reason || 'সেশন শেষ হয়ে গেছে') + ' — আবার লগইন করে সেশন refresh করুন, তারপর ধাপগুলো আবার এগোলে তথ্য বসে যাবে।',
+    () => { location.href = '/login.html?next=' + encodeURIComponent(location.pathname); }, 'লগইন করুন');
+}
+if (typeof socket !== 'undefined' && socket && socket.on) socket.on('SESSION_EXPIRED', (d) => onSessionExpired(d && (d.message || d.reason)));
 socket.on('STEP_CHANGE_ACK', (d) => {
   d = (d && typeof d === 'object') ? d : {};
   if (S.view === 'progress' && S.chain) { chainAck(d); return; }
@@ -5242,6 +5387,10 @@ function handleFreshReady(d) {
   if (pendingUnsent) return true;
   // সাইটের সেশন সত্যিই নতুন (আগের ধাপগুলো সাইটে হারিয়ে গেছে) — UI ধাপ ১ থেকে সাজাই
   const inFlight = S._waitingAck;
+  // DRAFTS/AUTH (C2): remember whether an OTP view dies in this
+  // reset — it must be reported loudly below, never silently
+  // dropped (the 2026-10-31 step-6 → step-1 report).
+  const wasOtpView = S.otpStage === 'code' || !!S._directOtp || inFlight === 'SUBMIT_S4_PREP' || !!S._pendingSubmit;
   const savedPrep = takeQueuedPrep();
   const heldPrep = S._heldPrep || null;
   const dropped = (S._opQ || []).map(j => j.op);
@@ -5271,8 +5420,6 @@ function handleFreshReady(d) {
   const failedOps = dropped.slice();
   if (savedPrep && !repumped) failedOps.push('SUBMIT_S4_PREP');
   if (inFlight === 'SUBMIT_S4_PREP') failedOps.push('SUBMIT_S4_PREP');
-  if (failedOps.length) showFail(failedOps.map(op => opLabel(op) + ' — সংযোগ নতুন হওয়ায় পাঠানো যায়নি'));
-  note('🔄 সংযোগ নতুন — ধাপ ১ থেকে আবার সাজানো হবে (তথ্য আপনার হাতেই আছে)', 'info');
   S._directOtp = false; // DIRECT-PATH WIRING: fresh session — the OTP view's direct phase dies with the reset
   // OTP-TRAP (A5): fresh session — the old OTP session died
   // with the reset, so no return button may offer it.
@@ -5300,6 +5447,16 @@ function handleFreshReady(d) {
   // message is the whole handling.
   if (_freshDirectFallback) note('🔄 সংযোগ নতুন হওয়ায় সরাসরি পাঠানো যায়নি — বট দিয়ে আবার পাঠানো হচ্ছে', 'info');
   else if (_freshDirectKind === 'submit') directSubmitUnknown();
+  // DRAFTS/AUTH (C2): these messages used to sit BEFORE goStep(1),
+  // which clears fail + notes — so the reset looked silent. They
+  // land here, after the reset, where they survive. The step-1
+  // reset itself is DELIBERATE (the site-side steps are genuinely
+  // lost on a truly new session) and stays; what changes is that
+  // the user is told why, and an OTP view is never dropped quietly:
+  // the form data (S.d) was never wiped, only the site-side steps.
+  if (failedOps.length) showFail(failedOps.map(op => opLabel(op) + ' — সংযোগ নতুন হওয়ায় পাঠানো যায়নি'));
+  note('🔄 সংযোগ নতুন — ধাপ ১ থেকে আবার সাজানো হবে (তথ্য আপনার হাতেই আছে)', 'info');
+  if (wasOtpView) showBanner('err', '⚠️ OTP-র পর্দা চলে গেছে — সাইটের সেশন নতুন হয়ে গেছে, তাই পুরোনো কোড আর চলবে না। আপনার তথ্য মুছে যায়নি — ধাপগুলো আবার এগোলে বসে যাবে, তারপর নতুন কোড পাঠাতে হবে।');
   return true;
 }
 socket.on('BOT_STATUS', (d) => {

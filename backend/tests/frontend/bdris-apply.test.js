@@ -712,3 +712,77 @@ describe('OTP-TRAP cycle 2 (2026-10-31): A5 sent-phone match-or-resend, A6 share
     expect(html).toMatch(/কোডের মেয়াদ শেষ হয়েছে বা কোডটি ভুল/);
   });
 });
+
+describe('DRAFTS/AUTH cycle 3 (2026-10-31): A8 draftId persistence, A10 timeouts, B14 auto save, B16 awaited delete, C2 session honesty, C5 tri-state refresh', () => {
+  test('A8: every draftId assignment goes through setDraftId, which mirrors to sessionStorage', () => {
+    expect(html).toMatch(/function setDraftId\(id\)/);
+    expect(html).toMatch(/sessionStorage\.setItem\(LS_DRAFT_ID, id\)/);
+    expect(html).toMatch(/sessionStorage\.getItem\(LS_DRAFT_ID\)/);
+    expect(html).toMatch(/setDraftId\(r\.draftId\)/);
+    expect(html).toMatch(/setDraftId\(dr\.draftId \|\| draftId\)/);
+    expect(html).toMatch(/setDraftId\(null\)/);
+    expect(html).not.toMatch(/S\.draftId = r\.draftId/);
+    expect(html).not.toMatch(/S\.draftId = dr\.draftId/);
+  });
+
+  test('A10: draft ops go through a timeout wrapper; the io-absent stub calls back with an error', () => {
+    expect(html).toMatch(/function emitDraftOp\(event, data, cb, ms\)/);
+    expect(html).toMatch(/SOCKET_TIMEOUT/);
+    expect(html).toMatch(/SOCKET_UNAVAILABLE/);
+    expect(html).toMatch(/emitDraftOp\('LIST_DRAFTS'/);
+    expect(html).toMatch(/emitDraftOp\('LOAD_DRAFT'/);
+    expect(html).toMatch(/emitDraftOp\('SAVE_DRAFT'/);
+  });
+
+  test('A10: a failed draft list shows a failure + retry, never a permanent loading card', () => {
+    expect(html).toMatch(/খসড়া তালিকা আনা যায়নি/);
+    expect(html).toMatch(/dlRetry/);
+  });
+
+  test('A10: draft deletes go through the reliable path and report failure instead of fake success', () => {
+    expect(html).toMatch(/function deleteDraftReliable\(draftId, cb\)/);
+    expect(html).toMatch(/deleteDraftReliable\(b\.dataset\.del/);
+    expect(html).toMatch(/খসড়া মোছা যায়নি/);
+    expect(html).not.toMatch(/socket\.emit\('DELETE_DRAFT', b\.dataset\.del, \(\) => \{ updDraftsCnt/);
+  });
+
+  test('A10: explicit save buttons report failure honestly instead of claiming success', () => {
+    expect(html).toMatch(/saveDraft\(0, \(r\) => \{ if \(r && r\.ok\) note\('✔ খসড়ায় রাখা হয়েছে/);
+    expect(html).toMatch(/খসড়া সেভ হয়নি — সংযোগ ফিরলে আবার চাপুন/);
+  });
+
+  test('B14: auto-form progress saves progressively — collect, picks, paste, docs, typing, back', () => {
+    expect(html).toMatch(/if \(typeof autoSaveDraft === 'function'\) autoSaveDraft\(0\);\n  return S\.d;/);
+    expect(html).toMatch(/renderAuto\(\); autoSaveDraft\(S\.d\.uiStep \|\| 0\)/);
+    expect(html).toMatch(/S\._autoInputSaveBound/);
+    expect(html).toMatch(/setTimeout\(\(\) => \{ try \{ collectAuto\(\); autoSaveDraft\(0\); \} catch \(e\) \{\} \}, 4000\)/);
+    expect(html).toMatch(/try \{ collectAuto\(\); \} catch \(e\) \{\} autoSaveDraft\(0\); renderHome\(\)/);
+  });
+
+  test('B16: DONE delete is awaited with retry + failure note; the count refreshes only after it settles', () => {
+    expect(html).toMatch(/deleteDraftReliable\(_did, \(ok\) => \{/);
+    expect(html).toMatch(/জমা দেওয়া খসড়াটি মোছা যায়নি/);
+    expect(html).not.toMatch(/socket\.emit\('DELETE_DRAFT', _did, \(\) => \{\}\)/);
+  });
+
+  test('C2: SESSION_EXPIRED has a real listener and a single honest handler; acks route to it, never to generic retry', () => {
+    expect(html).toMatch(/function onSessionExpired\(reason\)/);
+    expect(html).toMatch(/socket\.on\('SESSION_EXPIRED'/);
+    expect(html).toMatch(/d\.error === 'SESSION_EXPIRED' \|\| d\.code === 'SESSION_EXPIRED'/);
+    expect(html).toMatch(/onSessionExpired\('সেশন শেষ হয়ে গেছে \(SESSION_EXPIRED\)'\)/);
+  });
+
+  test('C2: fresh-READY reports a lost OTP view loudly, and the dropped-op failures survive goStep(1)', () => {
+    expect(html).toMatch(/const wasOtpView = S\.otpStage === 'code'/);
+    expect(html).toMatch(/OTP-র পর্দা চলে গেছে/);
+    expect(html).toMatch(/goStep\(1\);[\s\S]{0,2000}?failedOps\.map\(op => opLabel\(op\)/);
+  });
+
+  test('C5: refresh returns ok/expired/transient; only expired shows session-over, transient warns', () => {
+    expect(html).toMatch(/if \(!rt\) return 'expired'/);
+    expect(html).toMatch(/if \(!r\.ok\) return 'transient'/);
+    expect(html).toMatch(/return 'ok';/);
+    expect(html).toMatch(/refreshAccessToken\(\)\.then\(\(st\) => \{/);
+    expect(html).toMatch(/st === 'expired'/);
+  });
+});

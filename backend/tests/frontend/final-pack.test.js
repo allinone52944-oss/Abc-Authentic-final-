@@ -144,7 +144,10 @@ describe('fill survival: live-save and previous-button save', () => {
     expect(src).toContain('setTimeout(() => {');
     expect(src).toContain('10000');
     expect(src).toContain('S._draftSaveWarned');
-    const timerBody = src.slice(src.indexOf('setTimeout'), src.indexOf('socket.emit'));
+    // DRAFTS/AUTH (A10): saveDraft now emits via the timeout wrapper
+    // emitDraftOp, not raw socket.emit — the timer-body assertion is
+    // unchanged in intent (the watchdog itself must never call cb).
+    const timerBody = src.slice(src.indexOf('setTimeout'), src.indexOf('emitDraftOp'));
     expect(timerBody).not.toContain('cb(');
   });
 });
@@ -157,8 +160,11 @@ describe('address-book pick no longer loses the picked address', () => {
 
   test('birthplace and auto picks save the draft', () => {
     expect(html).toContain('if (S.draftId) saveDraft(2, () => {});');
-    expect(html).toContain('S.d.s2b.permCopy = false; renderAuto(); if (S.draftId) saveDraft(S.d.uiStep || 0, () => {});');
-    expect(html).toContain('S.d.s2b.presCopy = false; renderAuto(); if (S.draftId) saveDraft(S.d.uiStep || 0, () => {});');
+    // DRAFTS/AUTH (B14): auto picks now auto-save unconditionally —
+    // the old conditional save skipped a fresh auto form with no
+    // draftId yet, which is exactly how a filled auto form was lost.
+    expect(html).toContain('S.d.s2b.permCopy = false; renderAuto(); autoSaveDraft(S.d.uiStep || 0);');
+    expect(html).toContain('S.d.s2b.presCopy = false; renderAuto(); autoSaveDraft(S.d.uiStep || 0);');
   });
 
   test('address-book list has a retry when the socket answer never arrives', () => {
