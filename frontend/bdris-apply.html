@@ -1532,6 +1532,11 @@ function renderDrafts() {
 function openDraft(draftId) {
   S._heldPrep = null; // switching application context — the old flow's parked send dies here
   S._directOtp = false; // DIRECT-PATH WIRING: a new draft is never a direct OTP view
+  // OTP-TRAP (A5): a new draft is a new flow — the old flow's
+  // OTP session is not provably live here, so the return button
+  // must not offer it (a re-send reports unexpired if the old
+  // code is still valid, so nothing is burned by re-sending).
+  S._otpSessionLive = false; S._sentPhone = null;
   directAckClear(); // DIRECT ACK TIMEOUT: no fallback after switching drafts
   busy(true, 'খসড়া প্রস্তুত হচ্ছে…');
   socket.emit('LOAD_DRAFT', draftId, (res) => {
@@ -3176,8 +3181,17 @@ function renderStep6() {
   // re-renders the OTP view from the live OTP session only
   // (flag set on sent proof, cleared on session loss/DONE) —
   // it sends nothing, and the existing code still submits.
-  if (S._otpSessionLive) {
-    step6Btns.splice(1, 0, { html: '📲 কোড জমা দেওয়ার পর্দায় ফিরুন', cls: 'ghost', fn: () => { collectStep6(); renderOtpCode(true); } });
+  // OTP-TRAP (A5, 2026-10-31): match-or-resend. The flag alone
+  // is not enough — the phone may have been edited after the
+  // send, and returning would submit dead code against the NEW
+  // number. Render-time: a diverged phone gets a resend button,
+  // not a return button. Click-time (phone edited after this
+  // render): same check again, so a stale rendered button can
+  // never return to a dead code — it sends to the new number.
+  if (S._otpSessionLive && (!S._sentPhone || S.d.phone === S._sentPhone)) {
+    step6Btns.splice(1, 0, { html: '📲 কোড জমা দেওয়ার পর্দায় ফিরুন', cls: 'ghost', fn: () => { collectStep6(); if (S._sentPhone && S.d.phone !== S._sentPhone) { note('⚠️ নম্বর বদলেছে — নতুন নম্বরে আবার কোড পাঠানো হচ্ছে…', 'warn'); sendOtp(); } else { renderOtpCode(true); } } });
+  } else if (S._otpSessionLive && S._sentPhone && S.d.phone !== S._sentPhone) {
+    step6Btns.splice(1, 0, { html: '📲 নতুন নম্বরে কোড পাঠান', cls: 'ghost', fn: () => { collectStep6(); sendOtp(); } });
   }
   setBtns(step6Btns);
   // লাইভ-সেভ (2026-10-28): টাইপের সাথে সাথে S.d.phone আপডেট — আগে S.d.phone
@@ -3186,7 +3200,13 @@ function renderStep6() {
   // মুছে দিত, আর "কোড পাঠান" খালি ঘরে ফেল করতো। ইনপুটের লেখা বদলানো হয় না
   // (কার্সর সমস্যা এড়াতে) — শুধু S.d আপডেট হয়, sendOtp-এর যাচাই আগের মতোই।
   const cp = $('c_phone');
-  if (cp) cp.oninput = () => { S.d.phone = bnDigits(cp.value || '').replace(/\D/g, ''); };
+  if (cp) cp.oninput = () => { S.d.phone = bnDigits(cp.value || '').replace(/\D/g, '');
+    // OTP-TRAP (A5): editing the phone away from the sent number
+    // kills the return button — the live code belongs to the old
+    // number. (Typing back to the sent number does not resurrect
+    // it; a re-send then reports unexpired if the old code is
+    // still valid, so no cap is burned.)
+    if (S._otpSessionLive && S._sentPhone && S.d.phone !== S._sentPhone) { S._otpSessionLive = false; S._sentPhone = null; } };
   // FINAL-PACK: same live-save for email — it had the same re-render
   // wipe as phone (collectStep6-only), only smaller in impact.
   const ce = $('c_email');
@@ -3525,6 +3545,18 @@ function directSendAck(r) {
     note('📲 আগের কোডের মেয়াদ এখনো আছে — নতুন কোড আসবে না, আগের কোডটাই বসান', 'ok');
     return;
   }
+  // OTP-TRAP (A7): chain-classified 400-cap — mirror the
+  // unexpired branch, but the recovery is change-number, never
+  // a bot replay (the bot send hits the same cap) and never a
+  // resend. Checked BEFORE the fallback branch below.
+  if (r && r.otpCapped === true) {
+    S._directOtp = false;
+    autoSaveDraft(6);
+    showBanner('warn', '⚠️ ' + san((r.httpReason || '').trim() || 'এই নম্বরে সর্বোচ্চ বার কোড পাঠানো হয়ে গেছে') + ' — এই নম্বরে আর কোড আসবে না, অন্য নম্বর ব্যবহার করুন।', () => {
+      hideBanner(); hideFail(); goStep(6);
+    }, 'নম্বর বদলান');
+    return;
+  }
   if (!r || r.httpPath === 'disabled' || r.error === 'HTTP_PATH_DISABLED'
     || r.error === 'NO_SESSION' || r.error === 'SESSION_EXPIRED'
     || r.error === 'SEED_FAILED' || r.fallback === true) {
@@ -3575,9 +3607,22 @@ function directSendAck(r) {
       // Re-send: update the hint in place, never re-render (typed
       // boxes must survive).
       const h = document.getElementById('otpSentHint');
-      if (h) h.innerHTML = esc((S.d.phone || '').slice(-4)) + '-এ শেষ হওয়া নম্বরে কোড পাঠানো হয়েছে। না এলে “আবার কোড পাঠান” চাপুন। <b>কোড কারও সাথে শেয়ার করবেন না।</b>';
+      // OTP-TRAP (C1): a replayed cached 'sent' is not a fresh
+      // send — say so honestly instead of claiming a new code.
+      // (A5: a re-send also refreshes which phone the code
+      // belongs to; renderOtpCode covers the fresh-view case.)
+      if (h) h.innerHTML = r.replayed === true
+        ? esc('আগের কোডের মেয়াদ এখনো আছে — নতুন SMS আসেনি, আগের কোডটাই বসান।') + ' <b>কোড কারও সাথে শেয়ার করবেন না।</b>'
+        : esc((S.d.phone || '').slice(-4)) + '-এ শেষ হওয়া নম্বরে কোড পাঠানো হয়েছে। না এলে “আবার কোড পাঠান” চাপুন। <b>কোড কারও সাথে শেয়ার করবেন না।</b>';
+      S._sentPhone = S.d.phone || '';
     } else {
       renderOtpCode(true);
+      // OTP-TRAP (C1): fresh view from a replay — override the
+      // default 'sent' hint with the honest replay text.
+      if (r.replayed === true) {
+        const h = document.getElementById('otpSentHint');
+        if (h) h.innerHTML = esc('আগের কোডের মেয়াদ এখনো আছে — নতুন SMS আসেনি, আগের কোডটাই বসান।') + ' <b>কোড কারও সাথে শেয়ার করবেন না।</b>';
+      }
     }
     return;
   }
@@ -3645,6 +3690,19 @@ function directSubmitAck(r, otp) {
   try { clearInterval(S._submitProgressTimer); S._submitProgressTimer = null; } catch (e) {}
   busy(false);
   if (!r) { S.otpStage = 'code'; showFail(['সার্ভারের জবাব আসেনি']); return; }
+  // OTP-TRAP (C3): chain-classified verify failure — the code
+  // expired or is wrong. Surface the resend message, keep the
+  // OTP view, and NEVER fall back to a bot submit: the bot page
+  // never walked the bot steps, so the bot submit would degrade
+  // to a BOT_PAGE_NOT_ON_OTP_STEP gate error instead of telling
+  // the user the code itself is the problem. Checked BEFORE the
+  // fallback branch below.
+  if (r.otpVerifyFailed === true) {
+    S._directOtp = false; S.otpStage = 'code';
+    showFail(['কোডের মেয়াদ শেষ হয়েছে বা কোডটি ভুল — আবার কোড পাঠিয়ে নতুন কোড বসান।']);
+    note('⚠️ কোডের মেয়াদ শেষ বা ভুল কোড — “আবার কোড পাঠান” চাপুন', 'warn');
+    return;
+  }
   if (r.httpPath === 'disabled' || r.error === 'HTTP_PATH_DISABLED'
     || r.error === 'NO_SESSION' || r.error === 'SESSION_EXPIRED'
     || r.fallback === true) {
@@ -3749,7 +3807,11 @@ function renderOtpCode(sent) {
   // FINAL-SOLUTION (#2): a 'sent' render marks the OTP session
   // live (the preview return button keys on this). A 'sending'
   // render never marks it — only server proof does.
-  if (sent) S._otpSessionLive = true;
+  // OTP-TRAP (A5, 2026-10-31): record WHICH phone the code was
+  // sent to — the return button must only return to a code sent
+  // to the CURRENT number, never submit dead code against an
+  // edited number.
+  if (sent) { S._otpSessionLive = true; S._sentPhone = S.d.phone || ''; }
   // পুরনো এরর পরিষ্কার (2026-10-28): OTP পর্দায় ঢুকলেই আগের ধাপের ব্যানার/
   // failBox/নোট মুছে যায় — নইলে পুরনো লেখা OTP পর্দার ওপর স্থায়ীভাবে বসে থাকে।
   // নতুন এরর এর পরেও নিজের fail পথ দিয়ে আবার দেখাবে — এটা শুধু পুরনো ডিসপ্লে মোছে,
@@ -4749,6 +4811,13 @@ function abortChain() {
   saveDraft(S.d.uiStep || 0, () => { note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে পরে চালু করুন', 'ok'); setTimeout(renderHome, 500); });
 }
 /* অটো-চেইন শেষ হওয়ার পরের ধাপ: ওটিপি-প্রস্তুতির ack (progress view-তে chain আর থাকে না) */
+/* OTP-TRAP (A6, 2026-10-31): shared cap classifier — the 5-use
+   cap wording, matched on the engine's reason. Both the auto
+   (otpPrepAck) and manual (manualStepAck) handlers use this one
+   function, so the cap can never again have a path with only a
+   generic retry loop. Cap recovery is always change-number,
+   never resend. */
+function isOtpCapReason(s) { return /সর্বোচ্চ ৫ বার|maximum 5 times/i.test(s || ''); }
 function otpPrepAck(d) {
   busy(false);
   opFinish();
@@ -4774,6 +4843,19 @@ function otpPrepAck(d) {
     const h = document.getElementById('otpSentHint');
     if (h) h.innerHTML = esc('আগের কোডের মেয়াদ এখনো আছে — নতুন কোড আসবে না, আগের কোডটাই বসান।') + ' <b>কোড কারও সাথে শেয়ার করবেন না।</b>';
     note('📲 আগের কোডের মেয়াদ এখনো আছে — নতুন কোড আসবে না, আগের কোডটাই বসান', 'ok');
+    return;
+  }
+  // OTP-TRAP (A6): auto-mode 400-cap — the manual handler had
+  // this branch, the auto handler only had the unexpired one, so
+  // a capped auto number looped on generic retry forever.
+  // Shared classifier, same recovery: change-number banner,
+  // never a resend (resending a capped number can never work).
+  if (failed.some(x => isOtpCapReason(x.reason || ''))) {
+    hideFail();
+    const _capReason = (failed.find(x => isOtpCapReason(x.reason || '')) || {}).reason || 'এই নম্বরে সর্বোচ্চ বার কোড পাঠানো হয়ে গেছে';
+    showBanner('warn', '⚠️ ' + san(_capReason) + ' — এই নম্বরে আর কোড আসবে না, অন্য নম্বর ব্যবহার করুন।', () => {
+      hideBanner(); hideFail(); goStep(6);
+    }, 'নম্বর বদলান');
     return;
   }
   if (d.blocked || failed.length) {
@@ -5029,7 +5111,8 @@ function manualStepAck(d) {
     // S4_PREP 400-cap: resending the same number can never
     // succeed — never offer a resend trap. The real reason +
     // the true recovery (change the number) is the banner.
-    if (op === 'SUBMIT_S4_PREP' && /সর্বোচ্চ ৫ বার|maximum 5 times/i.test(_allReasons)) {
+    // (Shared classifier — see otpPrepAck.)
+    if (op === 'SUBMIT_S4_PREP' && isOtpCapReason(_allReasons)) {
       showBanner('warn', '⚠️ ' + san(_firstReason) + ' — এই নম্বরে আর কোড আসবে না, অন্য নম্বর ব্যবহার করুন।', () => {
         hideBanner(); hideFail(); goStep(6);
       }, 'নম্বর বদলান');
@@ -5090,6 +5173,10 @@ function manualStepAck(d) {
     if (d.otpSent === true) {
       if (S.otpStage !== 'code') { if (S.pvMode && S.mode === 'auto') showPvOtp(); else renderOtpCode(true); }
       else { const h = document.getElementById('otpSentHint'); if (h) h.innerHTML = esc((S.d.phone || '').slice(-4)) + '-এ শেষ হওয়া নম্বরে কোড পাঠানো হয়েছে। না এলে “আবার কোড পাঠান” চাপুন। <b>কোড কারও সাথে শেয়ার করবেন না।</b>'; else renderOtpCode(true); busy(false); }
+      // OTP-TRAP (A5): a re-send on the code view updates the
+      // hint without renderOtpCode — refresh the sent phone
+      // here too, so the step-6 return check stays exact.
+      S._sentPhone = S.d.phone || '';
       // নোট রেন্ডারের পরে — নইলে renderOtpCode-এর noteOff() তাজা নোট মুছে দিত
       note('📲 কোড পাঠানো হয়েছে — মোবাইলে এসেছে কি না দেখুন', 'ok');
       autoSaveDraft(6); // FINAL-SOLUTION (#9): send success auto-saves
@@ -5187,6 +5274,9 @@ function handleFreshReady(d) {
   if (failedOps.length) showFail(failedOps.map(op => opLabel(op) + ' — সংযোগ নতুন হওয়ায় পাঠানো যায়নি'));
   note('🔄 সংযোগ নতুন — ধাপ ১ থেকে আবার সাজানো হবে (তথ্য আপনার হাতেই আছে)', 'info');
   S._directOtp = false; // DIRECT-PATH WIRING: fresh session — the OTP view's direct phase dies with the reset
+  // OTP-TRAP (A5): fresh session — the old OTP session died
+  // with the reset, so no return button may offer it.
+  S._otpSessionLive = false; S._sentPhone = null;
   // DIRECT ACK FRESHREADY (2026-10-29): a direct call clicked while the
   // socket was ALREADY dead arms a slot whose emit dies silently — the
   // disconnect trigger ran before the slot existed, so it fired nothing,

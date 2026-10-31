@@ -493,9 +493,17 @@ async function runHttpChain(opts = {}) {
     // provable from the journal instead of guessed. Machine flags
     // (never identifiers) let the UI branch without parsing
     // Bengali wording: sessionDead (#8) and otpUnexpired (#14).
+    // OTP-TRAP (A7, C3, 2026-10-31): otpCapped (5-use cap — the
+    // UI routes to change-number, never a bot replay) and
+    // otpVerifyFailed (submit-phase verify said not verified —
+    // expired/wrong code, resend message, never a bot replay
+    // that would degrade to a BOT_PAGE_NOT_ON_OTP_STEP gate
+    // error on a page that never walked the bot steps).
     const decisionFlags = {
       sessionDead: !!(err && (err.code === 'SESSION_DEAD' || err.code === 'NO_SESSION' || err.code === 'SESSION_EXPIRED' || err.code === 'SEED_FAILED')),
       otpUnexpired: !!(err && err.code === 'OTP_SEND_UNEXPIRED'),
+      otpCapped: !!(err && err.code === 'OTP_SEND_CAP'),
+      otpVerifyFailed: !!(err && (err.code === 'VERIFY_NOT_VERIFIED' || err.code === 'VERIFY_FAILED')),
     };
     if (step === 'submit' && err && err.responseSummary) {
       // SUBMIT-FINAL: the error wording (wording only, never
@@ -507,7 +515,7 @@ async function runHttpChain(opts = {}) {
       const fp = err.responseFingerprint || '';
       candidateLog(log, 'submit', `SUBMIT-RESPONSE ${submitSummaryText(err.responseSummary)}${wording ? ` errorWording=${wording}` : ''}${fp ? ` fingerprint=${fp}` : ''} — filed-vs-not must be read from this shape, not from the [field: …] heuristic`);
     }
-    candidateLog(log, 'decision', `DIRECT-DECISION step=${step} outcome=fallback sessionDead=${decisionFlags.sessionDead} otpUnexpired=${decisionFlags.otpUnexpired}`);
+    candidateLog(log, 'decision', `DIRECT-DECISION step=${step} outcome=fallback sessionDead=${decisionFlags.sessionDead} otpUnexpired=${decisionFlags.otpUnexpired} otpCapped=${decisionFlags.otpCapped} otpVerifyFailed=${decisionFlags.otpVerifyFailed}`);
     if (step === 'submit' && !isFallbackSafe(step, err)) {
       candidateLog(log, 'submit', 'SUBMIT_OUTCOME_UNKNOWN — no server response, automatic Playwright fallback SUPPRESSED to avoid a duplicate submission');
       return {

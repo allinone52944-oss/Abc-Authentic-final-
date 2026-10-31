@@ -442,6 +442,12 @@ function submitResponseFingerprint(res) {
   return out.replace(/[0-9০-৯]+/g, '').slice(0, FINGERPRINT_MAX);
 }
 const OTP_UNEXPIRED_RE = /মেয়াদ শেষ হয়নি|not expired|has not expired/i;
+// OTP-TRAP (A7, 2026-10-31): the 5-use cap wording, shared with the
+// frontend's manual cap branch — a 400 carrying it is NOT a generic
+// send failure and must NOT trigger a bot replay (the bot send
+// hits the same cap). Machine-readable code so the chain/UI can
+// route it to the change-number banner like unexpired.
+const OTP_CAP_RE = /সর্বোচ্চ ৫ বার|maximum 5 times/i;
 
 // DIRECT BRN-FREE ROUTE (2026-10-29): two wire fixes for the
 // typing-equivalent steps (OTP send + verify), plus the removal of
@@ -1096,6 +1102,13 @@ class BdrisHttpClient {
       // so the chain/UI can say exactly that.
       if (res.status === 400 && OTP_UNEXPIRED_RE.test(wording)) {
         throw err('OTP_SEND_UNEXPIRED', `OTP send returned status 400: ${wording}. Previous code still valid.`);
+      }
+      // OTP-TRAP (A7): a 400 whose wording says the number hit
+      // the 5-use cap is NOT a generic send failure and must NOT
+      // trigger a bot replay — same rule as unexpired, but the
+      // recovery is change-number, never resend.
+      if (res.status === 400 && OTP_CAP_RE.test(wording)) {
+        throw err('OTP_SEND_CAP', `OTP send returned status 400: ${wording}. Number capped, change number.`);
       }
       throw err('OTP_SEND_FAILED', wording
         ? `OTP send returned status ${res.status}: ${wording}.`
@@ -1784,6 +1797,7 @@ module.exports = {
   submitResponseFingerprint,
   probeResponseWording,
   OTP_UNEXPIRED_RE,
+  OTP_CAP_RE,
   isFamilyRejectionText,
   familyRejectionMarker,
   DIRECT_FAMILY_NOTE,
