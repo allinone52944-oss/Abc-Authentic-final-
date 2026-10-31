@@ -111,7 +111,7 @@ describe('batch 5 shape + totals', () => {
     }
     expect(entries).toBe(12133);
     expect(rates).toBe(48203);
-    expect(Object.keys(OFFICES)).toHaveLength(451);
+    expect(Object.keys(OFFICES)).toHaveLength(488);
     expect(OFFICES.naldanga).toBeUndefined();
   });
   test('earlier batches untouched', () => {

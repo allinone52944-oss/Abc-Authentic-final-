@@ -130,7 +130,7 @@ describe('batch 9 shape + totals', () => {
     }
     expect(entries).toBe(4773);
     expect(rates).toBe(12159);
-    expect(Object.keys(OFFICES)).toHaveLength(451);
+    expect(Object.keys(OFFICES)).toHaveLength(488);
     expect(Object.keys(OFFICES.jagannathpur.mouzas)).toHaveLength(250);
     expect(Object.keys(OFFICES.sylhet_kanaighat.mouzas)).toHaveLength(261);
     expect(Object.keys(OFFICES.barlekha.mouzas)).toHaveLength(178);
