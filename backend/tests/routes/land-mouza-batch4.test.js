@@ -116,7 +116,7 @@ describe('batch 4 shape + totals', () => {
     }
     expect(entries).toBe(11992);
     expect(rates).toBe(54246);
-    expect(Object.keys(OFFICES)).toHaveLength(415);
+    expect(Object.keys(OFFICES)).toHaveLength(451);
     expect(OFFICES['dhaka-sadar']).toBeUndefined();
     expect(OFFICES.kalukhali).toBeUndefined();
     expect(OFFICES['kishoreganj-sadar']).toBeUndefined();
