@@ -786,3 +786,41 @@ describe('DRAFTS/AUTH cycle 3 (2026-10-31): A8 draftId persistence, A10 timeouts
     expect(html).toMatch(/st === 'expired'/);
   });
 });
+
+describe('address book (2026-10-31)', () => {
+  test('book city-corp selection yields zones from the engine endpoint, not a silent empty list', () => {
+    // onUp: static u/p first; only when static is empty does it ask
+    // the engine's zone endpoint (the same one geoLoad uses).
+    expect(html).toMatch(/const onUp = async \(want\) => \{/);
+    expect(html).toMatch(/if \(arr\.length\) \{ addrBookFill\('ab_paurasavaUnion', arr, want\); return; \}/);
+    expect(html).toMatch(/fetchAddrOpts\('zone', \{ division: dv, district: ds, upazila: up, zone: '' \}, 40000, 'birth'\)/);
+    expect(html).toMatch(/addrBookFill\('ab_paurasavaUnion', names, want\)/);
+  });
+
+  test('book upazila selection still yields static unions; endpoint failure falls back to the zone text field with a visible note', () => {
+    expect(html).toMatch(/const u = GEO_DATA\[dv\]\[ds\]\[up\];/);
+    expect(html).toMatch(/if \(u\) arr = \[\.\.\.\(u\.u \|\| \[\]\), \.\.\.\(u\.p \|\| \[\]\)\];/);
+    expect(html).toMatch(/অঞ্চলের তালিকা আসেনি — অঞ্চল ঘরে লিখে দিন/);
+    // The ab_zone text field is still read on save and mapped to
+    // paurasavaUnion (all-bugs fix (g)) — the fallback path.
+    expect(html).toMatch(/const zoneEl = \$\('ab_zone'\);/);
+    expect(html).toMatch(/if \(!out\.paurasavaUnion && out\.zone\) out\.paurasavaUnion = out\.zone;/);
+  });
+
+  test('book cascade passes the saved zone through the async onUp so it survives the endpoint fill', () => {
+    expect(html).toMatch(/\$?\('ab_cityCorpUpazila'\)\.onchange = \(\) => onUp\(\);/);
+    expect(html).toMatch(/onUp\(d\.paurasavaUnion\)/);
+  });
+
+  test('auto birthplace book pick lands in S.d.s1 before re-render, so it survives renderAuto', () => {
+    // The old pick wrote DOM geo_* inputs (absent in the book view)
+    // and then renderAuto() rebuilt from pre-pick S.d — pick wiped,
+    // note lied. The pick must write S.d.s1, then re-render.
+    expect(html).toMatch(/S\.d\.s1 = S\.d\.s1 \|\| \{\};\s*A_KEYS\.forEach\(\(\[k\]\) => \{ const v = rec\[k\]; if \(v !== undefined && String\(v\)\.trim\(\) !== ''\) S\.d\.s1\[k\] = v; \}\);/);
+    expect(html).not.toMatch(/f\.forEach\(k => \{ const el = \$\('geo_' \+ k\); if \(el && rec\[k\] !== undefined\) el\.value = rec\[k\]; \}\);/);
+  });
+
+  test('auto birthplace book pick auto-saves the draft like the perm/pres picks', () => {
+    expect(html).toMatch(/A_KEYS\.forEach\(\(\[k\]\) => \{ const v = rec\[k\]; if \(v !== undefined && String\(v\)\.trim\(\) !== ''\) S\.d\.s1\[k\] = v; \}\);\s*renderAuto\(\); autoSaveDraft\(S\.d\.uiStep \|\| 0\); note\('✔ ঠিকানা বসানো হয়েছে', 'ok'\);/);
+  });
+});

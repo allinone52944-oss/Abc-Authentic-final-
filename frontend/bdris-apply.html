@@ -1195,20 +1195,39 @@ function addrBookWire(d) {
     addrBookFill('ab_cityCorpUpazila', ups);
     addrBookFill('ab_paurasavaUnion', []);
   };
-  const onUp = () => {
+  const onUp = async (want) => {
     const dv = $('ab_division').value, ds = $('ab_district').value, up = $('ab_cityCorpUpazila').value;
     let arr = [];
     try {
       const u = GEO_DATA[dv][ds][up];
       if (u) arr = [...(u.u || []), ...(u.p || [])];
     } catch (e) { /* noop */ }
-    addrBookFill('ab_paurasavaUnion', arr);
+    if (arr.length) { addrBookFill('ab_paurasavaUnion', arr, want); return; }
+    // ADDRBOOK-ZONE (2026-10-31): city corporations have EMPTY static
+    // u/p arrays by construction (bd-geo.json) — the old code left the
+    // next dropdown empty and zone as a bare text field, so zones
+    // NEVER appeared after a city selection (user report 2026-10-31).
+    // Upazilas keep the static lists above; only when static is empty
+    // do we ask the engine's zone endpoint — the SAME one the main
+    // form's geoLoad uses for paurasavaUnion — so zones actually
+    // appear. On endpoint failure the ab_zone text field stays as the
+    // fallback (save maps it to paurasavaUnion, addrBookSaveRecord),
+    // and the failure is shown — never a silent empty list.
+    if (dv && ds && up) {
+      const res = await fetchAddrOpts('zone', { division: dv, district: ds, upazila: up, zone: '' }, 40000, 'birth');
+      const names = (res.options || []).map(o => (typeof o === 'string' ? o : (o.name || o.id || ''))).map(s => String(s).trim()).filter(Boolean);
+      if (names.length) { addrBookFill('ab_paurasavaUnion', names, want); return; }
+      addrBookFill('ab_paurasavaUnion', []);
+      note('অঞ্চলের তালিকা আসেনি — অঞ্চল ঘরে লিখে দিন', 'warn');
+      return;
+    }
+    addrBookFill('ab_paurasavaUnion', []);
   };
-  $('ab_division').onchange = onDiv; $('ab_district').onchange = onDis; $('ab_cityCorpUpazila').onchange = onUp;
+  $('ab_division').onchange = onDiv; $('ab_district').onchange = onDis; $('ab_cityCorpUpazila').onchange = () => onUp();
   // saved মান থাকলে cascade চালিয়ে বসাও
   if (d.division && setSelByText('ab_division', d.division)) { onDiv(); }
   if (d.district && setSelByText('ab_district', d.district)) { onDis(); }
-  if (d.cityCorpUpazila && setSelByText('ab_cityCorpUpazila', d.cityCorpUpazila)) { onUp(); }
+  if (d.cityCorpUpazila && setSelByText('ab_cityCorpUpazila', d.cityCorpUpazila)) { onUp(d.paurasavaUnion); }
   if (d.paurasavaUnion) setSelByText('ab_paurasavaUnion', d.paurasavaUnion);
 }
 function readAddrFields(prefix, prev) {
@@ -4602,12 +4621,20 @@ function renderAuto() {
   $('rpFromPerm').onclick = () => { fillPrefixFrom('rp', readAddrFields('sp')); note('✔ স্থায়ী ঠিকানা থেকে বসানো হয়েছে', 'ok'); };
   $('rpBook').onclick = () => { collectAuto(); renderAddrBook((rec) => { S.d.s2b.pres = Object.assign({}, rec); S.d.s2b.presCopy = false; renderAuto(); autoSaveDraft(S.d.uiStep || 0); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
   // Auto mode জন্মস্থানে ঠিকানা বই (2026-10-17)
+  // ADDRBOOK-PICK (2026-10-31): the old pick wrote the record into
+  // DOM geo_* inputs and then renderAuto() replaced #stepBody from
+  // S.d collected BEFORE the pick — so the pick was wiped while the
+  // "✔ ঠিকানা বসানো হয়েছে" note still showed. The pick now lands
+  // in S.d.s1 FIRST (the same pattern as the perm/pres book picks),
+  // so the re-render shows the picked address and the note tells
+  // the truth. Only non-empty record values overwrite, so a saved
+  // entry with a blank field never wipes a typed value.
   const abb = $('aBirthBook'); if (abb) abb.onclick = () => {
     collectAuto();
     renderAddrBook((rec) => {
-      const f = ['division','district','cityCorpUpazila','paurasavaUnion','ward'];
-      f.forEach(k => { const el = $('geo_' + k); if (el && rec[k] !== undefined) el.value = rec[k]; });
-      renderAuto(); note('✔ ঠিকানা বসানো হয়েছে', 'ok');
+      S.d.s1 = S.d.s1 || {};
+      A_KEYS.forEach(([k]) => { const v = rec[k]; if (v !== undefined && String(v).trim() !== '') S.d.s1[k] = v; });
+      renderAuto(); autoSaveDraft(S.d.uiStep || 0); note('✔ ঠিকানা বসানো হয়েছে', 'ok');
     }, () => renderAuto());
   };
   els('.rcard.rsm').forEach(c => c.onclick = () => {
