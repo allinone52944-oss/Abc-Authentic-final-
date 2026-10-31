@@ -88,7 +88,7 @@ const cardQ = (office, mouza, thana) => {
 };
 
 describe('batch 3 shape + totals', () => {
-  test('63 new offices, all 2025-2026, 6904 entries, 37724 class-rates, 184 total', () => {
+  test('63 new offices, all 2025-2026, 6904 entries, 37724 class-rates, 254 total', () => {
     expect(BATCH3).toHaveLength(63);
     let entries = 0, rates = 0;
     for (const key of BATCH3) {
@@ -103,7 +103,7 @@ describe('batch 3 shape + totals', () => {
     }
     expect(entries).toBe(6904);
     expect(rates).toBe(37724);
-    expect(Object.keys(OFFICES)).toHaveLength(184);
+    expect(Object.keys(OFFICES)).toHaveLength(254);
     expect(OFFICES.bijoyanagar).toBeUndefined();
   });
   test('earlier batches untouched', () => {
