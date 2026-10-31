@@ -569,3 +569,76 @@ describe('ALL-BUGS cycle (2026-10-30): OTP view, real errors, PDF path, step-1, 
     expect(html).toMatch(/localStorage\.setItem\('bdris_acks', JSON\.stringify\(meta\)\)/);
   });
 });
+
+describe('HOME-LIST cycle (2026-10-31): duplicate cards, silent server-fetch failure, generic charge note', () => {
+  const extract = (name, args) => {
+    const m = html.match(new RegExp('function ' + name + '\\(' + args + '\\) \\{[\\s\\S]*?\\n\\}'));
+    expect(m).not.toBeNull();
+    return new Function('return ' + m[0])();
+  };
+
+  test('(1) dedupeAcks: same number collapses to one (first wins, order kept); numberless entries pass through', () => {
+    const dedupeAcks = extract('dedupeAcks', 'list');
+    const out = dedupeAcks([
+      { no: '111111111', name: 'First' },
+      { no: '111111111', name: 'Second' },
+      { no: '222222222', name: 'Third' },
+      { name: 'NoNumberA' },
+      { name: 'NoNumberB' },
+      { no: '222222222', name: 'Fourth' },
+    ]);
+    expect(out.map(x => x.name)).toEqual(['First', 'Third', 'NoNumberA', 'NoNumberB']);
+    expect(dedupeAcks([])).toEqual([]);
+    expect(dedupeAcks(null)).toEqual([]);
+  });
+
+  test('(1) addAck drops the same number before unshift; getAcks reads through dedupeAcks (render can never show a dup)', () => {
+    expect(html).toMatch(/l = l\.filter\(x => String\(x && x\.no\) !== String\(a\.no\)\)/);
+    expect(html).toMatch(/function getAcks\(\) \{ try \{ return dedupeAcks\(/);
+    expect(html).toMatch(/const acks = getAcks\(\);/);
+  });
+
+  test('(2) classifyServerAcksFailure: missing/expired session -> login; everything else -> retry with the real reason', () => {
+    const classify = extract('classifyServerAcksFailure', 'f');
+    expect(classify({ tokenPresent: false }).kind).toBe('login');
+    expect(classify({ status: 401, tokenPresent: true }).kind).toBe('login');
+    expect(classify({ status: 403, tokenPresent: true }).kind).toBe('login');
+    expect(classify({ tokenPresent: true, error: 'NO_TOKEN' }).kind).toBe('login');
+    const s500 = classify({ status: 500, tokenPresent: true });
+    expect(s500.kind).toBe('retry');
+    expect(s500.text).toMatch(/500/);
+    expect(classify({ networkError: true, tokenPresent: true }).kind).toBe('retry');
+    expect(classify({ networkError: true, tokenPresent: true }).text).toMatch(/নেটওয়ার্ক/);
+    expect(classify({ tokenPresent: true }).kind).toBe('retry');
+  });
+
+  test('(2) server-fetch failure renders a status line (never silent): token-empty, !ok, and network paths all show it; success clears it', () => {
+    expect(html).toMatch(/if \(!getToken\(\)\) \{ renderServerAcksStatus\(classifyServerAcksFailure\(\{ tokenPresent: false \}\)\)/);
+    expect(html).toMatch(/renderServerAcksStatus\(classifyServerAcksFailure\(\{ networkError: true, tokenPresent: true \}\)\)/);
+    expect(html).toMatch(/if \(fail\) renderServerAcksStatus\(fail\); else clearServerAcksStatus\(\);/);
+    expect(html).toMatch(/id="srvAckRetry"/);
+    expect(html).toMatch(/id="srvAckLogin"/);
+    expect(html).toMatch(/location\.href = '\/login\.html'/);
+  });
+
+  test('(3) chargeErrorText carries the server reason: message, then error, then status, then generic', () => {
+    const chargeErrorText = extract('chargeErrorText', 'status, d');
+    expect(chargeErrorText(400, { message: 'ব্যালেন্স অপর্যাপ্ত' })).toMatch(/ব্যালেন্স অপর্যাপ্ত/);
+    expect(chargeErrorText(500, { error: 'DB_DOWN' })).toMatch(/DB_DOWN/);
+    expect(chargeErrorText(503, {})).toMatch(/503/);
+    expect(chargeErrorText(0, {})).toMatch(/অজানা কারণ/);
+  });
+
+  test('(3) charge() is reachable from home handlers, and no generic charge/send note remains', () => {
+    expect(html).toMatch(/window\.charge = charge;/);
+    expect(html).toMatch(/chargeErrorText\(r\.status, d\)/);
+    expect(html).toMatch(/chargeCatchReason\(e\)/);
+    expect(html).not.toMatch(/চার্জ\/পাঠাতে সমস্যা — আবার চেষ্টা করুন/);
+  });
+
+  test('(3) chargeCatchReason prefers the recorded charge reason, then the thrown message', () => {
+    const chargeCatchReason = extract('chargeCatchReason', 'e');
+    expect(chargeCatchReason({ message: 'charge is not defined' })).toBe('charge is not defined');
+    expect(chargeCatchReason(null)).toBe('অজানা কারণ');
+  });
+});
