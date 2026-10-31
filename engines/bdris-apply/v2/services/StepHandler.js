@@ -182,6 +182,22 @@ function brnWarning(v) {
 function isFamilyErrorText(t) {
   return /180|difference of age/i.test(String(t || ''));
 }
+// isSubmitConfirmWarning — the site's PRE-SUBMIT CONFIRMATION
+// wording only (live 2026-10-31): BDRIS asks the applicant to
+// re-check everything and SHOW it to the applicant before the
+// submit completes. This is a CONFIRMATION checkpoint, never a
+// validation error — the old submitS4 surfaced its text as the
+// submit failure reason and left the filing stuck at the OTP step
+// with the code boxes filled and buttons re-enabled. The core
+// phrase covers the live text (…দেখে নিন ও আবেদনকারীকে
+// দেখান।) and the mock variant (…দেখে নিন। একবার সাবমিট হয়ে
+// গেলে এডিট করা যাবে না।). Narrow on purpose: field validation
+// errors (আবশ্যক, পূরণ করুন, field names) never contain this
+// phrase, so filtering on it can never swallow a real error.
+const SUBMIT_CONFIRM_CORE = 'আবেদনপত্রটি সাবমিট করার পূর্বে সকল তথ্য ঠিক আছে কিনা দেখে নিন';
+function isSubmitConfirmWarning(t) {
+  return String(t || '').replace(/\s+/g, ' ').includes(SUBMIT_CONFIRM_CORE);
+}
 const PARENT_BRN_PRE2013_NOTE = '২০১৩-পূর্ব নিয়ম: পিতামাতার BRN সাইটে পাঠানো হয়নি — ড্রাফটে রাখা আছে।';
 const PARENT_BRN_2013_NOTE = '২০১৩ সালের নিয়ম: পিতামাতার BRN ছাড়াই (শুধু মা-বাবার আইডি কার্ড দিয়ে) এগোনো হয়েছে।';
 function parentBrnExemptNote(iso) {
@@ -2550,12 +2566,17 @@ class StepHandler {
       console.log('S4OTP-CINNO-RELAX:', rx);
     }
     const applyCinnosLocal = async (withCinno) => applyCinnos(this.page, cinnos, withCinno);
+    // SUBMIT-CONFIRM (2026-10-31): set when the pre-submit
+    // confirmation warning was seen in this submitS4 call, so
+    // the final failure path can name it instead of guessing an
+    // OTP error. Never a success signal on its own.
+    let confirmSeen = false;
     const clickSubmit = async (withCinno) => {
       const n = await applyCinnosLocal(withCinno);
       if (cinnos.length) console.log('CINNO-SNEAK: applied ' + n + '/' + cinnos.length + (withCinno ? ' (cinno-সহ)' : ' (cinno-বাদ)'));
       await this._robustClick(btn, withCinno ? 'চূড়ান্ত সাবমিট' : 'চূড়ান্ত সাবমিট (cinno-বাদ)', 8000);
       await this.page.waitForTimeout(2400);
-      return await this.page.evaluate(() => {
+      const probePost = async () => this.page.evaluate(() => {
         // দৃশ্যমান success-প্রমাণই গ্রহণযোগ্য — hidden template-এ ভুয়া সাফল্য নয়
         const vis = (el) => !!(el && (el.offsetParent !== null || el.getClientRects().length));
         let succ = false;
@@ -2577,6 +2598,29 @@ class StepHandler {
         });
         return { succ, errs: errs.slice(0, 3) };
       }).catch(() => ({ succ: false, errs: [] }));
+      let post = await probePost();
+      // SUBMIT-CONFIRM: the warning is never a validation error
+      // and never feeds a retry branch — strip it from errs, then
+      // complete THIS submit through the site's own confirm
+      // control (one click, never the submit button again).
+      post.errs = (post.errs || []).filter((t) => !isSubmitConfirmWarning(t));
+      if (!post.succ) {
+        const warn = await this._detectSubmitConfirm();
+        if (warn) {
+          confirmSeen = true;
+          this.progress('⚠ সাবমিটের আগে নিশ্চিতকরণ চাইছে — সাইটের নিশ্চিত বাটনে চাপ দেওয়া হচ্ছে…');
+          const confirmed = await this._confirmSubmitDialog();
+          if (confirmed) {
+            await this.page.waitForTimeout(2400);
+            post = await probePost();
+            post.errs = (post.errs || []).filter((t) => !isSubmitConfirmWarning(t));
+            if (post.succ) this.progress('✔ নিশ্চিতকরণের পর সাবমিট গৃহীত হয়েছে');
+          } else {
+            this.progress('⚠ নিশ্চিতকরণ বার্তা এসেছে কিন্তু নিশ্চিত বাটন পাওয়া যায়নি — আসল কারণসহ জানানো হবে');
+          }
+        }
+      }
+      return post;
     };
     // ১-নাম স্থায়ী নিয়ম: সাবমিটের ঠিক আগে শেষ-নামের ঘর খালি + রুল শিথিল —
     // join-নামও ইতিমধ্যেই এক-নাম রূপে বসানো (buildCinnos)। সাইট তবু আটকালে
@@ -2718,10 +2762,19 @@ class StepHandler {
         const hasOtp = !!(document.querySelector('#otp, input[name="otp"]'));
         return { msgs: msgs.slice(0, 3), hasOtp };
       }).catch(() => ({ msgs: [], hasOtp: false }));
-      const why = (perr.msgs && perr.msgs[0])
-        || (perr.hasOtp
-          ? 'কোডটি মিলছে না বা মেয়াদ শেষ — মোবাইলে আসা সর্বশেষ কোডটি আবার বসান (না এলে “আবার কোড পাঠান”)'
-          : 'সাইট জমাটি নেয়নি — আবার চেষ্টা করুন');
+      // SUBMIT-CONFIRM: a confirmation warning is never the
+      // failure reason — strip it from the messages, and when
+      // this submit actually saw the warning, name the confirm
+      // state instead of guessing an OTP error (the code boxes
+      // are still filled precisely because the submit is waiting
+      // on confirmation, not because the code is wrong).
+      const realMsgs = (perr.msgs || []).filter((t) => !isSubmitConfirmWarning(t));
+      const why = (realMsgs[0])
+        || (confirmSeen
+          ? 'সাবমিটের নিশ্চিতকরণ বার্তা এসেছে কিন্তু নিশ্চিত করা যায়নি — আবার চেষ্টা করুন'
+          : (perr.hasOtp
+            ? 'কোডটি মিলছে না বা মেয়াদ শেষ — মোবাইলে আসা সর্বশেষ কোডটি আবার বসান (না এলে “আবার কোড পাঠান”)'
+            : 'সাইট জমাটি নেয়নি — আবার চেষ্টা করুন'));
       this.progress('❌ ' + why);
       return { ok: false, message: '❌ ' + why, failed: [{ field: 'চূড়ান্ত সাবমিট', reason: why }] };
     }
@@ -2913,6 +2966,86 @@ class StepHandler {
       // frontend branches on the code above, never on wording.
       message: `❌ বটের পেজ OTP ধাপে নেই (${pageState.hint}${pageState.url ? `, পেজ: ${pageState.url}` : ''}) — এই কোড দিয়ে জমা হবে না; বটের পথে আবার কোড পাঠিয়ে জমা দিন।`,
     };
+  }
+
+  // SUBMIT-CONFIRM (2026-10-31): the pre-submit confirmation
+  // warning. After the final submit click, BDRIS shows a
+  // confirmation checkpoint (the warning text above) and waits
+  // for the applicant to confirm — it is NOT a validation error
+  // and must never be reported as one. _detectSubmitConfirm
+  // reads visible BODY text (the warning can live in a modal,
+  // an alert-info, or a toast — never only in the error
+  // selectors), so the shape of its container does not matter.
+  // Returns the warning text, or null when absent.
+  async _detectSubmitConfirm() {
+    try {
+      const body = await this.page.evaluate(() => (document.body ? (document.body.innerText || '') : ''));
+      const flat = String(body || '').replace(/\s+/g, ' ');
+      if (!isSubmitConfirmWarning(flat)) return null;
+      const i = flat.indexOf(SUBMIT_CONFIRM_CORE);
+      return flat.slice(Math.max(0, i - 20), i + SUBMIT_CONFIRM_CORE.length + 60).trim();
+    } catch { return null; }
+  }
+
+  // SUBMIT-CONFIRM (2026-10-31): click the site's OWN confirm /
+  // accept control for the warning above, and nothing else.
+  // Scoped first: a button inside the warning's container
+  // (dialog / modal / alert), then a visible global confirm
+  // button. Cancel / close controls (বাতিল, বন্ধ, Cancel, না)
+  // are never clicked. Returns true only when a confirm control
+  // was actually clicked — this click COMPLETES the already-sent
+  // submit, it is never a second submit: the submit button is
+  // never touched here. At most one button, once per call.
+  async _confirmSubmitDialog() {
+    try {
+      return await this.page.evaluate(() => {
+        const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+        const CORE = 'আবেদনপত্রটি সাবমিট করার পূর্বে সকল তথ্য ঠিক আছে কিনা দেখে নিন';
+        const vis = (el) => !!(el && (el.offsetParent !== null || el.getClientRects().length));
+        const clean = (t) => norm(t).replace(/[![।.]+$/, '');
+        const isConfirm = (t) => {
+          const c = clean(t);
+          return c === 'নিশ্চিত করুন' || c === 'ঠিক আছে' || c === 'OK' || c === 'Confirm'
+            || c === 'সাবমিট' || c === 'জমা দিন' || c === 'হ্যাঁ' || c === 'Yes'
+            || c.includes('নিশ্চিত');
+        };
+        const isCancel = (t) => /(বাতিল|বন্ধ|Cancel|ফিরে যান|^না$|×)/.test(norm(t));
+        // Deepest visible element holding the warning text.
+        let holder = null;
+        const all = document.querySelectorAll('body *');
+        for (const el of all) {
+          if (!vis(el)) continue;
+          if (!norm(el.innerText || '').includes(CORE)) continue;
+          if (!holder || (el.innerText || '').length < (holder.innerText || '').length) holder = el;
+        }
+        if (!holder) return false;
+        // Walk up to a dialog-ish container, else use the holder.
+        // NOTE: 'alert' is deliberately NOT dialog-ish — the
+        // warning itself often lives in an .alert-info box whose
+        // buttons are siblings in the modal, not children; stopping
+        // at the alert would strand the search on a leaf.
+        let box = holder;
+        for (let i = 0; i < 6 && box && box !== document.body; i++) {
+          const cls = (box.className && box.className.baseVal !== undefined ? '' : String(box.className || ''));
+          if (box.getAttribute && (box.getAttribute('role') === 'dialog' || box.getAttribute('role') === 'alertdialog'
+            || /modal|dialog|popup|confirm/i.test(cls))) break;
+          box = box.parentElement;
+        }
+        if (!box) box = holder;
+        const pick = (root) => {
+          const btns = root.querySelectorAll('button, input[type="button"], input[type="submit"], a');
+          for (const b of btns) {
+            if (!vis(b)) continue;
+            const t = b.innerText || b.value || '';
+            if (!t || isCancel(t)) continue;
+            if (isConfirm(t)) { b.click(); return true; }
+          }
+          return false;
+        };
+        if (pick(box)) return true;
+        return pick(document.body);
+      });
+    } catch { return false; }
   }
 
   // S0-BASIS-GATE (2026-10-31): the 2026-10-31 triple failure.
@@ -3866,4 +3999,4 @@ class StepHandler {
   }
 }
 
-module.exports = { StepHandler, verifyChargeToken, bnToArab, thChildSite, consumeSubmitToken, isSubmitTokenConsumed, extractAckNumber, normalizeBrn, brnWarning, isFamilyErrorText, parentBrnSubmitAction, isParentBrnExempt, parentBrnExemptNote, PARENT_BRN_PRE2013_NOTE, PARENT_BRN_2013_NOTE, PARENT_BRN_FAMILY_NOTE, relaxParentBrnGate, parseSiteDateToIso, PARENT_GATE_FIELDS };
+module.exports = { StepHandler, verifyChargeToken, bnToArab, thChildSite, consumeSubmitToken, isSubmitTokenConsumed, extractAckNumber, normalizeBrn, brnWarning, isFamilyErrorText, isSubmitConfirmWarning, parentBrnSubmitAction, isParentBrnExempt, parentBrnExemptNote, PARENT_BRN_PRE2013_NOTE, PARENT_BRN_2013_NOTE, PARENT_BRN_FAMILY_NOTE, relaxParentBrnGate, parseSiteDateToIso, PARENT_GATE_FIELDS };
