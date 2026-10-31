@@ -102,7 +102,12 @@ describe('bot: family advance on an already-advanced page', () => {
     h._detectValidationBlock = async () => ({ blocked: true, reason: FAMILY });
     const goneQueue = [false, true]; // entry: still there; after names-only Next: gone
     h._parentsFieldsGone = async () => goneQueue.shift();
-    h._waitVisible = async () => null; // tail: fields gone = advanced
+    h._waitVisible = async (sels) => {
+      const _list = Array.isArray(sels) ? sels : [sels];
+      // STEP-PROOF (A1): a real advanced page HAS address anchors.
+      return _list.some((s) => String(s).includes('permAddr') || String(s).includes('prsntAddr'))
+        ? { fill: async () => {} } : null;
+    }; // tail: fields gone = advanced
     const out = await h.submitS2(parentArgs('2020-01-01'));
     assert.strictEqual(out.ok, true);
     assert.strictEqual(out.brnNote, PARENT_BRN_FAMILY_NOTE);
@@ -125,7 +130,12 @@ describe('bot: family advance on an already-advanced page', () => {
       // site moved on (fields gone on the _parentsFieldsGone check).
       return nextCalls === 1 ? { ok: true } : { ok: false, field: 'পরবর্তী', reason: 'বাটন সক্রিয় হয়নি' };
     };
-    h._waitVisible = async () => null;
+    h._waitVisible = async (sels) => {
+      const _list = Array.isArray(sels) ? sels : [sels];
+      // STEP-PROOF (A1): a real advanced page HAS address anchors.
+      return _list.some((s) => String(s).includes('permAddr') || String(s).includes('prsntAddr'))
+        ? { fill: async () => {} } : null;
+    };
     const out = await h.submitS2(parentArgs('2020-01-01'));
     assert.strictEqual(out.ok, true);
     assert.strictEqual(out.brnNote, PARENT_BRN_FAMILY_NOTE);
@@ -165,7 +175,12 @@ describe('bot: clear verification and seeded replay', () => {
     h._clickVerify = async () => { throw new Error('Verify must not run names-only'); };
     h._clickNextAndWait = async () => ({ ok: true });
     h._detectValidationBlock = async () => ({ blocked: false });
-    h._waitVisible = async () => null;
+    h._waitVisible = async (sels) => {
+      const _list = Array.isArray(sels) ? sels : [sels];
+      // STEP-PROOF (A1): a real advanced page HAS address anchors.
+      return _list.some((s) => String(s).includes('permAddr') || String(s).includes('prsntAddr'))
+        ? { fill: async () => {} } : null;
+    };
     h._dismissNotices = async () => false;
     const out = await h.submitS2(parentArgs('2020-01-01'));
     assert.strictEqual(out.ok, true);

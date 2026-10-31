@@ -139,7 +139,11 @@ describe('point 4: pre-2013 rule kept, silence removed, DOB guard', () => {
     const h = baseHandler();
     const cleared = [];
     let waitCalls = 0;
-    h._waitVisible = async () => {
+    h._waitVisible = async (sels) => {
+      // STEP-PROOF (A1): address calls answer present without
+      // consuming the parent-field call count.
+      const _list = Array.isArray(sels) ? sels : [sels];
+      if (_list.some((s) => String(s).includes('permAddr') || String(s).includes('prsntAddr'))) return { fill: async () => {} };
       waitCalls += 1;
       // First two calls: the pre-2013 BRN clears (father, mother).
       // Later calls: the advanced check — fields are gone.
@@ -157,7 +161,11 @@ describe('2013 rule: ID cards only, no parent BRN, names exact', () => {
   it('a 2013 application advances with no parent BRN at all: no Verify, no required-field block', async () => {
     const h = baseHandler();
     let waitCalls = 0;
-    h._waitVisible = async () => {
+    h._waitVisible = async (sels) => {
+      // STEP-PROOF (A1): address calls answer present without
+      // consuming the parent-field call count.
+      const _list = Array.isArray(sels) ? sels : [sels];
+      if (_list.some((s) => String(s).includes('permAddr') || String(s).includes('prsntAddr'))) return { fill: async () => {} };
       waitCalls += 1;
       return waitCalls <= 2 ? { fill: async () => {} } : null;
     };
@@ -176,7 +184,11 @@ describe('2013 rule: ID cards only, no parent BRN, names exact', () => {
     const h = baseHandler();
     const cleared = [];
     let waitCalls = 0;
-    h._waitVisible = async () => {
+    h._waitVisible = async (sels) => {
+      // STEP-PROOF (A1): address calls answer present without
+      // consuming the parent-field call count.
+      const _list = Array.isArray(sels) ? sels : [sels];
+      if (_list.some((s) => String(s).includes('permAddr') || String(s).includes('prsntAddr'))) return { fill: async () => {} };
       waitCalls += 1;
       return waitCalls <= 2 ? { fill: async (v) => { cleared.push(v); } } : null;
     };
@@ -191,7 +203,12 @@ describe('2013 rule: ID cards only, no parent BRN, names exact', () => {
     const h = baseHandler();
     h._clickVerify = async () => ({ verified: true });
     h._detectValidationBlock = async () => ({ blocked: false });
-    h._waitVisible = async () => null;
+    h._waitVisible = async (sels) => {
+      const _list = Array.isArray(sels) ? sels : [sels];
+      // STEP-PROOF (A1): a real advanced page HAS address anchors.
+      return _list.some((s) => String(s).includes('permAddr') || String(s).includes('prsntAddr'))
+        ? { fill: async () => {} } : null;
+    };
     const out = await h.submitS2(parentArgs('2014-01-01'));
     assert.strictEqual(out.ok, true);
     assert.strictEqual(out.brnNote, null);
@@ -206,7 +223,12 @@ describe('point 2+5: stale re-check and family branch', () => {
       calls += 1;
       return calls === 1 ? { blocked: true, reason: 'সাইট এগোতে দিচ্ছে না — পুরনো ভুল' } : { blocked: false };
     };
-    h._waitVisible = async () => null; // parents fields gone = advanced
+    h._waitVisible = async (sels) => {
+      const _list = Array.isArray(sels) ? sels : [sels];
+      // STEP-PROOF (A1): a real advanced page HAS address anchors.
+      return _list.some((s) => String(s).includes('permAddr') || String(s).includes('prsntAddr'))
+        ? { fill: async () => {} } : null;
+    }; // parents fields gone = advanced
     const out = await h.submitS2(parentArgs('2020-01-01'));
     assert.strictEqual(out.ok, true);
     assert.strictEqual(calls, 2, 'exactly one settle re-check');
@@ -225,7 +247,11 @@ describe('point 2+5: stale re-check and family branch', () => {
         : { blocked: false };
     };
     let waitCalls = 0;
-    h._waitVisible = async () => {
+    h._waitVisible = async (sels) => {
+      // STEP-PROOF (A1): address calls answer present without
+      // consuming the parent-field call count.
+      const _list = Array.isArray(sels) ? sels : [sels];
+      if (_list.some((s) => String(s).includes('permAddr') || String(s).includes('prsntAddr'))) return { fill: async () => {} };
       waitCalls += 1;
       return waitCalls <= 2 ? { fill: async () => {} } : null;
     };
@@ -242,7 +268,12 @@ describe('point 7: replay does not re-block on Verify uncertainty alone', () => 
     h.submitS2 = async () => ({ ok: false, blocked: true, verifyUncertain: true, message: 'replay S2 uncertain' });
     h.submitS2B = async () => ({ ok: true });
     h.submitS3 = async () => ({ ok: true });
-    h._waitVisible = async () => null; // parents fields gone
+    h._waitVisible = async (sels) => {
+      const _list = Array.isArray(sels) ? sels : [sels];
+      // STEP-PROOF (A1): a real advanced page HAS address anchors.
+      return _list.some((s) => String(s).includes('permAddr') || String(s).includes('prsntAddr'))
+        ? { fill: async () => {} } : null;
+    }; // parents fields gone
     const out = await h._replayToContact(3, { s2: {}, s1: { dob: '2020-01-01' } });
     assert.strictEqual(out.ok, true);
     assert.strictEqual(out.replayed, 'catch-up');
