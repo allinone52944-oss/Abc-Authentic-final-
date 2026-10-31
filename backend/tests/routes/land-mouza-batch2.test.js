@@ -88,7 +88,8 @@ describe('batch 2 shape + totals', () => {
     }
     expect(entries).toBe(857);
     expect(rates).toBe(4254);
-    expect(Object.keys(OFFICES)).toHaveLength(17);
+    // Was 17 at batch-2 time; batch 3 added 63 more (80 total).
+    expect(Object.keys(OFFICES)).toHaveLength(80);
   });
   test('batch 1 offices untouched', () => {
     expect(lookupMouzaRate('boalkhali', 'কধুরখীল', 'নাল', null).rate).toBe(121421);
