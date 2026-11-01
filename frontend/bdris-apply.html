@@ -638,6 +638,29 @@ function relationsForAge() {
   return ((Date.now() - t) / (365.25 * 24 * 3600 * 1000)) >= 18 ? REL_ADULT : REL_MINOR;
 }
 function defaultRelation() { return relationsForAge()[0]; }
+// CASCADE-RELATION-FIX (2026-11-01): সংরক্ষিত সম্পর্ক হুবহু দেখাতে
+// হবে — প্রথম তালিকার আইটেম দিয়ে চুপচাপ বদলে দেওয়া যাবে না।
+// খসড়ায় দুই রূপই থাকতে পারে: বাংলা লেবেল ('অন্যান্য') অথবা
+// সাইটের রেডিও কোড ('OTHERS') — দুটোই একই canonical লেবেলে আসে।
+// চেনা না গেলে (খালি/অজানা) '' ফেরে — unset, কখনো অনুমান নয়।
+const REL_CODE_TO_LABEL = { FATHER: 'পিতা', MOTHER: 'মাতা', SELF: 'নিজ', GRANDFATHER: 'পিতামহ', GRANDMOTHER: 'পিতামহী', MATERNALGRANDFATHER: 'মাতামহ', MATERNALGRANDMOTHER: 'মাতামহী', GUARDIAN: 'অভিভাবক', OTHERS: 'অন্যান্য' };
+function normalizeRelation(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return '';
+  if (RELATIONS.includes(s)) return s;
+  const code = s.toUpperCase().replace(/[\s_-]+/g, '');
+  return REL_CODE_TO_LABEL[code] || '';
+}
+// Render-এর জন্য: { value: দেখানোর সম্পর্ক (বা ''), dropped: বাদ
+// পড়া সংরক্ষিত মান (নোটের জন্য, বা '') }। বয়সের তালিকায় নেই এমন
+// চেনা সম্পর্কও dropped — সাইট ওই রেডিও দেখাবে না, তাই selected
+// দেখানো ভুল হবে।
+function relationRenderState(saved) {
+  const norm = normalizeRelation(saved);
+  const list = relationsForAge();
+  if (norm && list.includes(norm)) return { value: norm, dropped: '' };
+  return { value: '', dropped: saved ? String(saved).trim() : '' };
+}
 // OTHERS-FILL (2026-11-01): সম্পর্ক অন্যান্য/অভিভাবক হলে মূল
 // সাইট ওই ব্যক্তির BRN + জন্ম তারিখ + English নাম চায় (live
 // screenshot: "পিতা,মাতা ব্যতিরেকে অন্য কেহ হইলে" — তিনটিই
@@ -2668,6 +2691,19 @@ async function geoChanged(k, Ls, data) {
   const node = $(L.ui);
   const label = (node && node.tagName === 'SELECT' && node.value) ? node.selectedOptions[0].text :
     (node ? String(node.value || '').trim() : '');
+  // CASCADE-FIX (2026-11-01): error state-এর retry option ("⚠️ আবার
+  // চেষ্টা করুন", value "") বাছলে পুরোনো কোড data[k] মুছে ফেলে
+  // চুপচাপ return করত — retry-টা মৃত ছিল, সংরক্ষিত মানও যেত।
+  // এখন: error state-এ খালি বাছাই মানে retry — সংরক্ষিত parent-সহ
+  // পুরো cascade warm আবার চালাও, data না ছুঁয়ে।
+  if (!label && getGeoState(k, Ls) === 'error') {
+    if (Ls === GEO_LEVELS) { warmFromData().catch(() => {}); }
+    else {
+      const pfx = String(L.ui || '').split('_')[0];
+      if (pfx === 'sp' || pfx === 'rp') addrWarm(pfx, addrRec(pfx)).catch(() => {});
+    }
+    return;
+  }
   data[k] = label;
   setGeoState(k, Ls, label ? 'loaded' : 'idle');
   const idx = Ls.indexOf(L);
@@ -2692,9 +2728,15 @@ async function geoChanged(k, Ls, data) {
   try { await geoMirror(k, Ls); } catch (e) {}
 }
 let _warmRunning = false;
+let _warmQueued = false;
 async function warmFromData() {
-  // Concurrent run guard — দ্রুত back/forward-এ দুটো instance interfere করতো
-  if (_warmRunning) return;
+  // CASCADE-FIX (2026-11-01): concurrent run guard — আগের কোড
+  // চলমান warm-এর সময় নতুন render-এর warm-কে DROP করত, আর চলমান
+  // run-এর finally নতুন select-গুলোকে placeholder-এ পরিণত করত —
+  // ফলে re-render-এর পর cascade চিরতরে খালি থাকত। এখন: চলমান
+  // থাকলে পুনরায় চাওয়া QUEUE হয় — বর্তমান run শেষ হলে পুরো
+  // warm আবার চলে, তাই সর্বশেষ render-এর select-গুলো সবসময় ভরে।
+  if (_warmRunning) { _warmQueued = true; return; }
   _warmRunning = true;
   try {
   const data = S.d.s1 = S.d.s1 || {};
@@ -2770,9 +2812,30 @@ async function warmFromData() {
         }
       } catch (e) {}
     });
+    // CASCADE-FIX (2026-11-01): placeholder-এ ফেরানো select-গুলোর
+    // মধ্যে সংরক্ষিত মান থাকলে সেটা dead end নয় — আসল কারণ +
+    // কাজ করা retry বোতাম দেখাও (retry সংরক্ষিত parent-সহ পুরো
+    // warm আবার চালায়)। SESSION_EXPIRED-এর নির্দিষ্ট বার্তা
+    // থাকলে সেটাই থাক — generic banner তা ঢাকবে না।
+    try {
+      const unfilled = GEO_LEVELS.filter(L => {
+        const want = String((data && data[L.k]) || '').trim();
+        if (!want) return false;
+        const n = $(L.ui);
+        return n && n.tagName === 'SELECT' && n.options.length <= 1;
+      });
+      const bn = $('sysBanner');
+      const sessionMsg = bn && /সেশন শেষ/.test(bn.textContent || '');
+      if (unfilled.length && !sessionMsg) {
+        showBanner('err', 'ঠিকানার তালিকা আসেনি: ' + unfilled.map(L => L.lbl).join(', ') + ' — সংরক্ষিত মান বসানো যায়নি', () => { hideBanner(); warmFromData().catch(() => {}); }, 'আবার চেষ্টা করুন');
+      }
+    } catch (e) {}
   }
   } finally {
     _warmRunning = false;
+    // Queue drain: render-এর সময় চাওয়া warm এখনই চালাও — এতে
+    // সর্বশেষ render-এর cascade পুরোপুরি ভরে, placeholder-এ আটকে থাকে না।
+    if (_warmQueued) { _warmQueued = false; warmFromData().catch(() => {}); }
   }
 }
 /* স্থায়ী/বর্তমান ঠিকানা — এক চাপে (বা খসড়া থেকে) ক্যাসকেড ভরাট + সাইটে মিরর */
@@ -3238,13 +3301,18 @@ function renderStep5() {
   setView('flow');
   if (!Array.isArray(S.d.docs)) S.d.docs = [];
   const relList = relationsForAge();
-  if (!relList.includes(S.d.relation)) S.d.relation = relList[0];
+  // CASCADE-RELATION-FIX (2026-11-01): চুপচাপ relList[0] ('পিতা')
+  // বসানো নয় — সংরক্ষিত সম্পর্ক normalize করে হুবহু দেখাও; চেনা
+  // না গেলে খালি + নোট (submit gate-এ আটকাবে, অনুমান নয়)।
+  const _relSt = relationRenderState(S.d.relation);
+  S.d.relation = _relSt.value; S._relDropped = _relSt.dropped;
   const rels = relList.map(r => '<div class="rcard rsm' + (S.d.relation === r ? ' sel' : '') + '" data-rel="' + esc(r) + '">' +
     '<span class="rdot"></span><div><div class="rt">' + esc(r) + '</div></div></div>').join('');
   showBody(
     '<div class="sec"><div class="sub-h"><span class="snum">৫</span> আবেদনকারীর পরিচয় ও ডকুমেন্ট</div>' +
     '<p class="hint">আবেদনকারী নিবন্ধনাধীন ব্যক্তির কে, তা বেছে নিন। তারপর দুই ধরনের কাগজের ছবি দিন — দুটোই জরুরি।</p></div>' +
     '<div class="relgrid">' + rels + '</div>' +
+    (S._relDropped ? '<p class="hint" id="relNote">⚠️ সংরক্ষিত সম্পর্ক (' + esc(S._relDropped) + ') বসানো যায়নি — আবার বেছে নিন।</p>' : '') +
     otherPersonSection() +
     '<div class="sec"><div class="sub-h"><span class="snum">📎</span> কাগজপত্র</div>' +
     '<div id="docTypes" class="hint"></div></div>' +
@@ -3255,6 +3323,8 @@ function renderStep5() {
   renderDocRows();
   els('.rcard.rsm').forEach(c => c.onclick = () => {
     S.d.relation = c.dataset.rel;
+    S._relDropped = '';
+    const rn = $('relNote'); if (rn) rn.remove();
     els('.rcard.rsm').forEach(x => x.classList.toggle('sel', x.dataset.rel === S.d.relation));
     toggleOtherSec();
   });
@@ -3299,6 +3369,11 @@ function submitStep5() {
   // তথ্য ছাড়া সাইট এগোতে দেবে না — এগোনোর আগেই এখানে থামা।
   syncOtherFromDom();
   otherPersonErrors().forEach(e => bad.push(e.msg));
+  // CASCADE-RELATION-FIX (2026-11-01): সম্পর্ক কখনো অনুমান নয় —
+  // resume-এ চেনা না গেলে খালি থাকে (উপরে নোট); খালি সম্পর্ক নিয়ে
+  // এগোলে পুরোনো defaultRelation() চুপচাপ 'পিতা' বসাত। স্পষ্ট
+  // বাছাই ছাড়া এগোনো নয় — সাইটের রেডিওও এটাই চায়।
+  if (!normalizeRelation(S.d.relation) || !relationsForAge().includes(normalizeRelation(S.d.relation))) bad.push('আবেদনকারী কে তা বেছে নিন (সম্পর্ক)');
   if (bad.length) { showFail(bad); note('⚠️ কাগজপত্র ঠিক করুন', 'warn'); return; }
   hideFail();
   advanceAndSend(6, 'SUBMIT_S3_DOCS', { relation: S.d.relation || defaultRelation(), other: S.d.other || {}, docs: S.d.docs });
@@ -4639,8 +4714,9 @@ function renderAuto() {
 
     '<div class="sec"><div class="sub-h"><span class="snum">৫</span> আবেদনকারী ও কাগজপত্র</div>' +
     '<p class="hint">আবেদনকারী কে তা বেছে নিন। তারপর দুই ধরনের কাগজের ছবি দিন (JPG/PNG, প্রতিটি ২MB-এর কম)।</p></div>' +
-    '<div class="relgrid">' + (() => { const rl = relationsForAge(); if (!rl.includes(S.d.relation)) S.d.relation = rl[0]; return rl.map(r => '<div class="rcard rsm' + (S.d.relation === r ? ' sel' : '') + '" data-rel="' + esc(r) + '">' +
+    '<div class="relgrid">' + (() => { const st = relationRenderState(S.d.relation); S.d.relation = st.value; S._relDropped = st.dropped; return relationsForAge().map(r => '<div class="rcard rsm' + (S.d.relation === r ? ' sel' : '') + '" data-rel="' + esc(r) + '">' +
       '<span class="rdot"></span><div><div class="rt">' + esc(r) + '</div></div></div>').join(''); })() + '</div>' +
+    (S._relDropped ? '<p class="hint" id="relNote">⚠️ সংরক্ষিত সম্পর্ক (' + esc(S._relDropped) + ') বসানো যায়নি — আবার বেছে নিন।</p>' : '') +
     otherPersonSection() +
     '<div id="docTypes" class="hint"></div>' +
     '<div id="docRows"></div>' +
@@ -4690,6 +4766,8 @@ function renderAuto() {
   };
   els('.rcard.rsm').forEach(c => c.onclick = () => {
     S.d.relation = c.dataset.rel;
+    S._relDropped = '';
+    const rn = $('relNote'); if (rn) rn.remove();
     els('.rcard.rsm').forEach(x => x.classList.toggle('sel', x.dataset.rel === S.d.relation));
     toggleOtherSec();
   });
@@ -4849,6 +4927,9 @@ function validateAuto() {
   // BRN + জন্ম তারিখ + English নাম ছাড়া সাইট এগোতে দেবে না।
   syncOtherFromDom();
   otherPersonErrors().forEach(e => { bad.push(e.msg); mark(e.id); });
+  // CASCADE-RELATION-FIX (2026-11-01): সম্পর্ক অনুমান নয় — resume-এ
+  // চেনা না গেলে খালি থাকে; স্পষ্ট বাছাই ছাড়া auto submit নয়।
+  if (!normalizeRelation(S.d.relation) || !relationsForAge().includes(normalizeRelation(S.d.relation))) bad.push('আবেদনকারী কে তা বেছে নিন (সম্পর্ক)');
   const st = docTypeStatus();
   if (!st.n) bad.push('কমপক্ষে ১টি কাগজের ছবি যোগ করুন');
   else if (!(st.has40 && st.has41)) bad.push('দুই ধরনের কাগজ দরকার — ধরন ৪০ ও ৪১ দুটোই চিহ্নিত করুন');
