@@ -94,6 +94,702 @@ const OFFICES = {
         // Informational only — never a lookup class.
         notes: 'বিবিধ: কবরস্থান 478571 (তথ্য মাত্র)',
       },
+      // ---- Boalkhali fill (2026-11-01): remaining book rows in ক্রম order; row 2 is the live proof entry (kept above), row 22 is a plot row (excluded). See rates-boalkhali-fill.md.
+      'চরখিদিরপুর (ক্রম ১)': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 229306 },
+          'বাড়ী': { rate: 220583 },
+          'ভিটা': { rate: 218414 },
+          'বাগান': { rate: 213028 },
+          'পুকুর': { rate: 162277 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 248679,
+          'দোকান': null,
+          'টিলা/পাহাড়': null,
+          'পতিত': 207795,
+          'বিলা': { rate: 182000, p: true },
+          'বাঁশঝাড়': null,
+          'হালসোনা': null,
+          'পশ': { rate: 250000, p: true },
+          'পারের পতিত': null,
+          'বৃত্ত': null,
+        },
+      },
+      'চরখীল': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 119204 },
+          'বাড়ী': { rate: 222788 },
+          'ভিটা': { rate: 132600, p: true },
+          'বাগান': { rate: 209880 },
+          'পুকুর': { rate: 137956 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 262643,
+          'দোকান': { rate: 300000, p: true },
+          'টিলা/পাহাড়': null,
+          'পতিত': { rate: 58000, p: true },
+          'বিলা': 211538,
+          'বাঁশঝাড়': { rate: 18000, p: true },
+          'হালসোনা': null,
+          'পশ': 52488,
+          'পারের পতিত': null,
+          'বৃত্ত': null,
+        },
+        // Informational only — never a lookup class.
+        notes: 'বিবিধ: কবরস্থান 232000',
+      },
+      'বরখীল': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 100493 },
+          'বাড়ী': { rate: 125715 },
+          'ভিটা': { rate: 122303, p: true },
+          'বাগান': { rate: 107982 },
+          'পুকুর': { rate: 93821 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 122164,
+          'দোকান': { rate: 534000, p: true },
+          'টিলা/পাহাড়': null,
+          'পতিত': { rate: 29590, p: true },
+          'বিলা': { rate: 87000, p: true },
+          'বাঁশঝাড়': null,
+          'হালসোনা': null,
+          'পশ': 150000,
+          'পারের পতিত': { rate: 190023, p: true },
+          'বৃত্ত': null,
+        },
+        // Informational only — never a lookup class.
+        notes: 'বিবিধ: কবরস্থান 272200; ডোবা 111681',
+      },
+      'বরইতল': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 129582 },
+          'বাড়ী': { rate: 120586 },
+          'ভিটা': { rate: 127441, p: true },
+          'বাগান': { rate: 132482 },
+          'পুকুর': { rate: 120930 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 132249,
+          'দোকান': null,
+          'টিলা/পাহাড়': null,
+          'পতিত': null,
+          'বিলা': null,
+          'বাঁশঝাড়': { rate: 118667, p: true },
+          'হালসোনা': null,
+          'পশ': 120339,
+          'পারের পতিত': null,
+          'বৃত্ত': null,
+        },
+        // Informational only — never a lookup class.
+        notes: 'বিবিধ: কবরস্থান 136867',
+      },
+      'শৈলপুর': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 95360 },
+          'বাড়ী': { rate: 199784 },
+          'ভিটা': { rate: 100000, p: true },
+          'বাগান': { rate: 148444 },
+          'পুকুর': { rate: 98951 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 108639,
+          'দোকান': null,
+          'টিলা/পাহাড়': null,
+          'পতিত': null,
+          'বিলা': { rate: 135295, p: true },
+          'বাঁশঝাড়': { rate: 78571, p: true },
+          'হালসোনা': null,
+          'পশ': 169352,
+          'পারের পতিত': null,
+          'বৃত্ত': null,
+        },
+        // Informational only — never a lookup class.
+        notes: 'বিবিধ: কবরস্থান 232500',
+      },
+      'অমুচিয়া': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 108142 },
+          'বাড়ী': { rate: 202631 },
+          'ভিটা': { rate: 186000 },
+          'বাগান': { rate: 166046 },
+          'পুকুর': { rate: 169267 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 169238,
+          'দোকান': { rate: 70000, p: true },
+          'টিলা/পাহাড়': null,
+          'পতিত': null,
+          'বিলা': 150326,
+          'বাঁশঝাড়': 233333,
+          'হালসোনা': { rate: 111735, p: true },
+          'পশ': 350000,
+          'পারের পতিত': null,
+          'বৃত্ত': 352941,
+        },
+      },
+      'পূর্ব শেরনদী': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 257065 },
+          'বাড়ী': { rate: 421880 },
+          'ভিটা': { rate: 437724 },
+          'বাগান': { rate: 429470 },
+          'পুকুর': { rate: 264888 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 455694,
+          'দোকান': 747481,
+          'টিলা/পাহাড়': null,
+          'পতিত': null,
+          'বিলা': 359406,
+          'বাঁশঝাড়': 205086,
+          'হালসোনা': { rate: 153333, p: true },
+          'পশ': { rate: 311111, p: true },
+          'পারের পতিত': 221421,
+          'বৃত্ত': { rate: 278000, p: true },
+        },
+        // Informational only — never a lookup class.
+        notes: 'বিবিধ: কবরস্থান P 384000; নদী 411105; ছড়া বাড়ী 369000; কাটি P 224000',
+      },
+      'পশ্চিম শেরনদী': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 242308 },
+          'বাড়ী': { rate: 354420 },
+          'ভিটা': { rate: 236000 },
+          'বাগান': { rate: 263785 },
+          'পুকুর': { rate: 266657 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 305377,
+          'দোকান': 1237895,
+          'টিলা/পাহাড়': null,
+          'পতিত': 286265,
+          'বিলা': 439442,
+          'বাঁশঝাড়': null,
+          'হালসোনা': null,
+          'পশ': { rate: 240000, p: true },
+          'পারের পতিত': null,
+          'বৃত্ত': 278000,
+        },
+        // Informational only — never a lookup class.
+        notes: 'বিবিধ: কবরস্থান 31376',
+      },
+      'চরখিদিরপুর (ক্রম ১০)': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 102525 },
+          'বাড়ী': { rate: 120876 },
+          'ভিটা': { rate: 78149 },
+          'বাগান': { rate: 352679 },
+          'পুকুর': { rate: 89825 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 192801,
+          'দোকান': null,
+          'টিলা/পাহাড়': null,
+          'পতিত': 100300,
+          'বিলা': { rate: 80000, p: true },
+          'বাঁশঝাড়': null,
+          'হালসোনা': null,
+          'পশ': null,
+          'পারের পতিত': 37500,
+          'বৃত্ত': 46157,
+        },
+        // Informational only — never a lookup class.
+        notes: 'বিবিধ: বাঁশের বাড়ী P 125000',
+      },
+      'শকপুরা': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 155959 },
+          'বাড়ী': { rate: 180688 },
+          'ভিটা': { rate: 161107 },
+          'বাগান': { rate: 146827 },
+          'পুকুর': { rate: 150402 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 150250,
+          'দোকান': 1440000,
+          'টিলা/পাহাড়': { rate: 2800, p: true },
+          'পতিত': { rate: 67789, p: true },
+          'বিলা': 104329,
+          'বাঁশঝাড়': { rate: 108318, p: true },
+          'হালসোনা': { rate: 50000, p: true },
+          'পশ': 218182,
+          'পারের পতিত': null,
+          'বৃত্ত': { rate: 153778, p: true },
+        },
+        // Informational only — never a lookup class.
+        notes: 'বিবিধ: কবরস্থান 131000',
+      },
+      'ঘোষখীল': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 63905 },
+          'বাড়ী': { rate: 50000 },
+          'ভিটা': { rate: 48000, p: true },
+          'বাগান': { rate: 48148 },
+          'পুকুর': { rate: 20000 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 57000,
+          'দোকান': { rate: 48000, p: true },
+          'টিলা/পাহাড়': null,
+          'পতিত': null,
+          'বিলা': { rate: 16000, p: true },
+          'বাঁশঝাড়': null,
+          'হালসোনা': null,
+          'পশ': null,
+          'পারের পতিত': null,
+          'বৃত্ত': null,
+        },
+      },
+      'বিছান্দর': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 89581 },
+          'বাড়ী': { rate: 105321 },
+          'ভিটা': { rate: 160748 },
+          'বাগান': { rate: 107773 },
+          'পুকুর': { rate: 183359 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 187104,
+          'দোকান': { rate: 800000, p: true },
+          'টিলা/পাহাড়': null,
+          'পতিত': null,
+          'বিলা': { rate: 140000, p: true },
+          'বাঁশঝাড়': { rate: 57143, p: true },
+          'হালসোনা': null,
+          'পশ': 70000,
+          'পারের পতিত': null,
+          'বৃত্ত': null,
+        },
+        // Informational only — never a lookup class.
+        notes: 'বিবিধ: কাটি 224000; ঘরের মূল্য P 200000',
+      },
+      'ঘোষখাল': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 133608 },
+          'বাড়ী': { rate: 150000 },
+          'ভিটা': { rate: 159041 },
+          'বাগান': { rate: 133338, p: true },
+          'পুকুর': { rate: 55302, p: true },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 314961,
+          'দোকান': 225000,
+          'টিলা/পাহাড়': null,
+          'পতিত': null,
+          'বিলা': { rate: 150000, p: true },
+          'বাঁশঝাড়': { rate: 67106, p: true },
+          'হালসোনা': null,
+          'পশ': null,
+          'পারের পতিত': null,
+          'বৃত্ত': null,
+        },
+      },
+      'বেঙ্গুরা': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 113785 },
+          'বাড়ী': { rate: 108820 },
+          'ভিটা': { rate: 100000, p: true },
+          'বাগান': { rate: 123581 },
+          'পুকুর': { rate: 125253 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 111111,
+          'দোকান': 2011864,
+          'টিলা/পাহাড়': null,
+          'পতিত': null,
+          'বিলা': null,
+          'বাঁশঝাড়': null,
+          'হালসোনা': null,
+          'পশ': { rate: 100000, p: true },
+          'পারের পতিত': { rate: 156250, p: true },
+          'বৃত্ত': null,
+        },
+      },
+      'সারোয়াতলী': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 112471 },
+          'বাড়ী': { rate: 205221 },
+          'ভিটা': { rate: 232770 },
+          'বাগান': { rate: 123066 },
+          'পুকুর': { rate: 164394 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 180896,
+          'দোকান': { rate: 100000, p: true },
+          'টিলা/পাহাড়': null,
+          'পতিত': null,
+          'বিলা': 235135,
+          'বাঁশঝাড়': { rate: 116667, p: true },
+          'হালসোনা': null,
+          'পশ': { rate: 121740, p: true },
+          'পারের পতিত': null,
+          'বৃত্ত': 204348,
+        },
+        // Informational only — never a lookup class.
+        notes: 'বিবিধ: ছড়া বাড়ী 222271',
+      },
+      'শৈলদিয়া': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 98900 },
+          'বাড়ী': { rate: 91021 },
+          'ভিটা': { rate: 152774 },
+          'বাগান': { rate: 188314 },
+          'পুকুর': { rate: 125488 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 128027,
+          'দোকান': { rate: 342263, p: true },
+          'টিলা/পাহাড়': { rate: 32895, p: true },
+          'পতিত': { rate: 379566, p: true },
+          'বিলা': 106757,
+          'বাঁশঝাড়': { rate: 379310, p: true },
+          'হালসোনা': { rate: 5714, p: true },
+          'পশ': 225827,
+          'পারের পতিত': null,
+          'বৃত্ত': null,
+        },
+        // Informational only — never a lookup class.
+        notes: 'বিবিধ: মসজিদ 125010',
+      },
+      'আরকানিয়া': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 254958 },
+          'বাড়ী': { rate: 185500 },
+          'ভিটা': { rate: 184463, p: true },
+          'বাগান': { rate: 243688 },
+          'পুকুর': { rate: 104483 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 176809,
+          'দোকান': null,
+          'টিলা/পাহাড়': null,
+          'পতিত': 237619,
+          'বিলা': null,
+          'বাঁশঝাড়': null,
+          'হালসোনা': null,
+          'পশ': 228000,
+          'পারের পতিত': 225874,
+          'বৃত্ত': null,
+        },
+      },
+      'ঈশ্বর': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 125081 },
+          'বাড়ী': { rate: 91109 },
+          'ভিটা': { rate: 208477 },
+          'বাগান': { rate: 102326 },
+          'পুকুর': { rate: 108303 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 95628,
+          'দোকান': { rate: 89337, p: true },
+          'টিলা/পাহাড়': null,
+          'পতিত': null,
+          'বিলা': null,
+          'বাঁশঝাড়': { rate: 37736, p: true },
+          'হালসোনা': null,
+          'পশ': { rate: 84211, p: true },
+          'পারের পতিত': 191000,
+          'বৃত্ত': null,
+        },
+        // Informational only — never a lookup class.
+        notes: 'বিবিধ: ডোবা P 2088',
+      },
+      'বরকনা': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 78204 },
+          'বাড়ী': { rate: 105634 },
+          'ভিটা': { rate: 35719, p: true },
+          'বাগান': { rate: 35719, p: true },
+          'পুকুর': { rate: 323112 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 420433,
+          'দোকান': 3802667,
+          'টিলা/পাহাড়': { rate: 125366, p: true },
+          'পতিত': null,
+          'বিলা': null,
+          'বাঁশঝাড়': null,
+          'হালসোনা': null,
+          'পশ': null,
+          'পারের পতিত': null,
+          'বৃত্ত': null,
+        },
+      },
+      'চৈতন্যপুর': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 81224 },
+          'বাড়ী': { rate: 100953 },
+          'ভিটা': { rate: 71203, p: true },
+          'বাগান': { rate: 69000, p: true },
+          'পুকুর': { rate: 61793 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 80303,
+          'দোকান': { rate: 84270, p: true },
+          'টিলা/পাহাড়': { rate: 5292, p: true },
+          'পতিত': 67014,
+          'বিলা': 31306,
+          'বাঁশঝাড়': { rate: 70341, p: true },
+          'হালসোনা': null,
+          'পশ': { rate: 710000, p: true },
+          'পারের পতিত': 267113,
+          'বৃত্ত': null,
+        },
+      },
+      'জঙ্গল আমুচিয়া': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 37002 },
+          'বাগান': { rate: 18891 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': null,
+          'দোকান': null,
+          'টিলা/পাহাড়': 2528,
+          'পতিত': { rate: 2525, p: true },
+          'বিলা': null,
+          'বাঁশঝাড়': { rate: 2524, p: true },
+          'হালসোনা': null,
+          'পশ': null,
+          'পারের পতিত': null,
+          'বৃত্ত': null,
+        },
+      },
+      'আমুচিয়া': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 37251 },
+          'বাড়ী': { rate: 110772 },
+          'ভিটা': { rate: 124000 },
+          'বাগান': { rate: 109934 },
+          'পুকুর': { rate: 175903 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 56217,
+          'দোকান': 204762,
+          'টিলা/পাহাড়': 3524,
+          'পতিত': null,
+          'বিলা': 37388,
+          'বাঁশঝাড়': { rate: 203704, p: true },
+          'হালসোনা': null,
+          'পশ': { rate: 58000, p: true },
+          'পারের পতিত': null,
+          'বৃত্ত': 108014,
+        },
+        // Informational only — never a lookup class.
+        notes: 'বিবিধ: গোরস্থান ঘর P 51112',
+      },
+      'বিন্দারাম': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 158100 },
+          'বাড়ী': { rate: 171000 },
+          'ভিটা': { rate: 500000 },
+          'বাগান': { rate: 366015 },
+          'পুকুর': { rate: 206995 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 233337,
+          'দোকান': { rate: 1428572, p: true },
+          'টিলা/পাহাড়': null,
+          'পতিত': { rate: 121000, p: true },
+          'বিলা': { rate: 37932, p: true },
+          'বাঁশঝাড়': 1226923,
+          'হালসোনা': null,
+          'পশ': { rate: 29715, p: true },
+          'পারের পতিত': null,
+          'বৃত্ত': null,
+        },
+      },
+      'ককুই': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 94845 },
+          'বাড়ী': { rate: 136716 },
+          'ভিটা': { rate: 95874 },
+          'বাগান': { rate: 78313 },
+          'পুকুর': { rate: 99536 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 103764,
+          'দোকান': null,
+          'টিলা/পাহাড়': null,
+          'পতিত': null,
+          'বিলা': { rate: 116633, p: true },
+          'বাঁশঝাড়': null,
+          'হালসোনা': null,
+          'পশ': { rate: 100000, p: true },
+          'পারের পতিত': null,
+          'বৃত্ত': null,
+        },
+        // Informational only — never a lookup class.
+        notes: 'বিবিধ: বাগ P 140000',
+      },
+      'চন্দ্র ইন্দ্রপুরা': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 50326 },
+          'বাড়ী': { rate: 117457 },
+          'ভিটা': { rate: 110319 },
+          'বাগান': { rate: 114554 },
+          'পুকুর': { rate: 63867 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 8889,
+          'দোকান': null,
+          'টিলা/পাহাড়': null,
+          'পতিত': { rate: 100000, p: true },
+          'বিলা': null,
+          'বাঁশঝাড়': null,
+          'হালসোনা': null,
+          'পশ': null,
+          'পারের পতিত': null,
+          'বৃত্ত': null,
+        },
+      },
+      'অম্বলা': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 55526 },
+          'বাড়ী': { rate: 96449 },
+          'ভিটা': { rate: 63306, p: true },
+          'বাগান': { rate: 39308 },
+          'পুকুর': { rate: 121093 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 74848,
+          'দোকান': { rate: 16667, p: true },
+          'টিলা/পাহাড়': null,
+          'পতিত': { rate: 35091, p: true },
+          'বিলা': null,
+          'বাঁশঝাড়': null,
+          'হালসোনা': null,
+          'পশ': { rate: 32500, p: true },
+          'পারের পতিত': { rate: 32741, p: true },
+          'বৃত্ত': null,
+        },
+        // Informational only — never a lookup class.
+        notes: 'বিবিধ: ডোবা 120430; ছড়া বাড়ী 95710',
+      },
+      'বেলনা': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 97795 },
+          'বাড়ী': { rate: 244828 },
+          'ভিটা': { rate: 242308 },
+          'বাগান': { rate: 226830, p: true },
+          'পুকুর': { rate: 176674 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': { rate: 94286, p: true },
+          'দোকান': { rate: 172414, p: true },
+          'টিলা/পাহাড়': null,
+          'পতিত': null,
+          'বিলা': 75674,
+          'বাঁশঝাড়': null,
+          'হালসোনা': null,
+          'পশ': null,
+          'পারের পতিত': null,
+          'বৃত্ত': null,
+        },
+        // Informational only — never a lookup class.
+        notes: 'বিবিধ: কবরস্থান 388881; ডোবা 220000',
+      },
+      'ককনতলা': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 35260 },
+          'বাড়ী': { rate: 120948 },
+          'ভিটা': { rate: 112200 },
+          'বাগান': { rate: 126667, p: true },
+          'পুকুর': { rate: 122725 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': 57724,
+          'দোকান': { rate: 118333, p: true },
+          'টিলা/পাহাড়': 5497,
+          'পতিত': 102104,
+          'বিলা': 129048,
+          'বাঁশঝাড়': null,
+          'হালসোনা': null,
+          'পশ': null,
+          'পারের পতিত': null,
+          'বৃত্ত': null,
+        },
+        // Informational only — never a lookup class.
+        notes: 'বিবিধ: বীজ খোলা 117140; জলাশয় P 45000',
+      },
+      'জল ককনতলা': {
+        // Lookup classes: exact-name matches only, per shatangsho.
+        rates: {
+          'নাল': { rate: 9023, p: true },
+          'বাগান': { rate: 10000 },
+        },
+        // NOT lookup classes — reference only, never returned.
+        otherColumns: {
+          'খাই': null,
+          'দোকান': null,
+          'টিলা/পাহাড়': 2112,
+          'পতিত': null,
+          'বিলা': null,
+          'বাঁশঝাড়': null,
+          'হালসোনা': 10276,
+          'পশ': null,
+          'পারের পতিত': null,
+          'বৃত্ত': null,
+        },
+      },
     },
   },
   // ---- Batch 1 (Chattogram, 2025-2026): machine-transcribed
