@@ -72,24 +72,24 @@ const OFFICES = {
       'কধুরখীল': {
         // Lookup classes: exact-name matches only, per shatangsho.
         rates: {
-          'নাল': { rate: 121421 },
+          'নাল': { rate: 121425 },
           'বাড়ী': { rate: 157248 },
-          'ভিটা': { rate: 140752 },
+          'ভিটা': { rate: 140575 },
           'বাগান': { rate: 147838 },
           'পুকুর': { rate: 109707 },
-          'ডোবা': { rate: 100000, p: true },
         },
         // NOT lookup classes — reference only, never returned.
+        // Corrected 2026-11-01 to the book: the live ডোবা P 100000 was the
+        // book's বৃত্ত column value wrongly mapped to ডোবা (this book has
+        // no ডোবা column); reference headers use the book's printed forms.
         otherColumns: {
-          'খাল': 162756,
+          'খাই': 162756,
           'দোকান': { rate: 1400000, p: true },
           'পতিত': { rate: 50000, p: true },
-          'বিলা': 212528,
+          'বিলা': 225528,
           'বাঁশঝাড়': 500000,
-          'পথ': 256000,
-          'টিলা/পাহাড়': null,
-          'ফলবাগান': null,
-          'গার্ডেন': null,
+          'পশ': 256000,
+          'বৃত্ত': { rate: 100000, p: true },
         },
         // Informational only — never a lookup class.
         notes: 'বিবিধ: কবরস্থান 478571 (তথ্য মাত্র)',
