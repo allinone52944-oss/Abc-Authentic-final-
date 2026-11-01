@@ -638,6 +638,47 @@ function relationsForAge() {
   return ((Date.now() - t) / (365.25 * 24 * 3600 * 1000)) >= 18 ? REL_ADULT : REL_MINOR;
 }
 function defaultRelation() { return relationsForAge()[0]; }
+// OTHERS-FILL (2026-11-01): সম্পর্ক অন্যান্য/অভিভাবক হলে মূল
+// সাইট ওই ব্যক্তির BRN + জন্ম তারিখ + English নাম চায় (live
+// screenshot: "পিতা,মাতা ব্যতিরেকে অন্য কেহ হইলে" — তিনটিই
+// বাধ্যতামূলক)। পুরোনো ফর্মে এই ঘরগুলো ছিলই না — তাই Others
+// filing সাইটের gate-এ খালি ঘর নিয়ে আটকাত। S.d.other-এ থাকে।
+function isOtherRelation(rel) { return rel === 'অন্যান্য' || rel === 'অভিভাবক'; }
+function otherPersonSection() {
+  const o = S.d.other || {};
+  const show = isOtherRelation(S.d.relation);
+  return '<div id="otherSec" class="sec"' + (show ? '' : ' style="display:none"') + '><div class="sub-h"><span class="snum">👤</span> আবেদনকারীর তথ্য (অন্যান্য / অভিভাবক)</div>' +
+    '<p class="hint">সম্পর্ক অন্যান্য বা অভিভাবক হলে মূল সাইট এই ব্যক্তির জন্ম নিবন্ধন নম্বর, জন্ম তারিখ ও English নাম চায় — তিনটিই বাধ্যতামূলক।</p>' +
+    '<div class="row2">' +
+    '<div class="fld"><label>জন্ম নিবন্ধন নম্বর (BRN) <b>*</b></label><input type="text" id="other_brn" value="' + esc(o.brn || '') + '" placeholder="১৭ ডিজিটের নম্বর"></div>' +
+    dobFieldHtml('other_dob', 'জন্ম তারিখ (খ্রিঃ)', o.dob || '', true) +
+    '<div class="fld"><label>নাম (English) <b>*</b></label><input type="text" id="other_en" value="' + esc(o.en || '') + '"></div>' +
+    '</div></div>';
+}
+function syncOtherFromDom() {
+  S.d.other = S.d.other || {};
+  const b = $('other_brn'); if (b) S.d.other.brn = b.value.trim();
+  const d = $('other_dob'); if (d) S.d.other.dob = dobExtract(d.value);
+  const e = $('other_en'); if (e) S.d.other.en = e.value.trim();
+}
+function wireOtherSec() {
+  const b = $('other_brn'); if (b) b.oninput = syncOtherFromDom;
+  const d = $('other_dob'); if (d) d.oninput = syncOtherFromDom;
+  const e = $('other_en'); if (e) e.oninput = syncOtherFromDom;
+}
+function toggleOtherSec() {
+  const el = $('otherSec'); if (el) el.style.display = isOtherRelation(S.d.relation) ? '' : 'none';
+}
+function otherPersonErrors() {
+  if (!isOtherRelation(S.d.relation)) return [];
+  const o = S.d.other || {};
+  const errs = [];
+  const digits = bnDigits(String(o.brn || '')).replace(/\D/g, '');
+  if (digits.length !== 17) errs.push({ msg: 'অন্য ব্যক্তির জন্ম নিবন্ধন নম্বর (১৭ ডিজিট)', id: 'other_brn' });
+  if (!o.dob) errs.push({ msg: 'অন্য ব্যক্তির জন্ম তারিখ (DD/MM/YYYY)', id: 'other_dob' });
+  if (!o.en || o.en.trim().length < 2) errs.push({ msg: 'অন্য ব্যক্তির নাম (English)', id: 'other_en' });
+  return errs;
+}
 const DOC_TYPES = [
   { v: '40', t: 'চিকিৎসক কর্তৃক প্রত্যয়ন পত্র / শিক্ষা সনদ' },
   { v: '41', t: 'পিতা/মাতার NID বা ঠিকানার প্রমাণ' }
@@ -1083,7 +1124,7 @@ function dobExtract(raw) {
   return '';
 }
 function isDobFieldId(id) {
-  return id === 's1_dob' || id === 'a_dob' || /^(father|mother|af|am)_dob$/.test(id || '');
+  return id === 's1_dob' || id === 'a_dob' || id === 'other_dob' || /^(father|mother|af|am)_dob$/.test(id || '');
 }
 document.addEventListener('paste', (e) => {
   const t = e.target; if (!t || !t.id || !isDobFieldId(t.id)) return;
@@ -1622,6 +1663,7 @@ function openDraft(draftId) {
       mode: S.mode, uiStep: parseInt(dr.uiStep, 10) || 0,
       s0: dr.s0 || {}, s1: dr.s1 || {}, s2: dr.s2 || {}, s2b: dr.s2b || {},
       relation: dr.relation || '',
+      other: dr.other || {},
       docs: savedDocs.filter(x => x && x.base64),
       docsSaved: savedDocs.length,
       email: dr.email || '', phone: dr.phone || ''
@@ -1809,7 +1851,7 @@ function draftPayload(uiStep) {
     draftId: S.draftId || undefined,
     mode: S.mode, uiStep: uiStep != null ? uiStep : (S.d.uiStep || 0),
     s0: S.d.s0 || {}, s1: S.d.s1 || {}, s2: S.d.s2 || {}, s2b: S.d.s2b || {},
-    relation: S.d.relation || '', docs: docsMetaOf(S.d.docs),
+    relation: S.d.relation || '', other: S.d.other || {}, docs: docsMetaOf(S.d.docs),
     email: S.d.email || '', phone: S.d.phone || ''
   };
 }
@@ -2083,7 +2125,7 @@ function emitStep(op, payload, onAckExtra) {
   // S4Prep-area fix (2026-10-28, item 22): ctx carries relation too,
   // so the server merge can fill a S4Prep whose own payload lacks
   // one (same source as the S3/S4Prep payloads).
-  payload = Object.assign({}, payload, { ctx: { s0: S.d.s0, s1: S.d.s1, s2: S.d.s2, s2b: S.d.s2b, relation: S.d.relation || defaultRelation() } });
+  payload = Object.assign({}, payload, { ctx: { s0: S.d.s0, s1: S.d.s1, s2: S.d.s2, s2b: S.d.s2b, relation: S.d.relation || defaultRelation(), other: S.d.other || {} } });
   // FAILQSAVE FIX: a manual S4_PREP click supersedes any held copy —
   // otherwise the held copy could later double-send beside this one.
   if (op === 'SUBMIT_S4_PREP') S._heldPrep = null;
@@ -3203,6 +3245,7 @@ function renderStep5() {
     '<div class="sec"><div class="sub-h"><span class="snum">৫</span> আবেদনকারীর পরিচয় ও ডকুমেন্ট</div>' +
     '<p class="hint">আবেদনকারী নিবন্ধনাধীন ব্যক্তির কে, তা বেছে নিন। তারপর দুই ধরনের কাগজের ছবি দিন — দুটোই জরুরি।</p></div>' +
     '<div class="relgrid">' + rels + '</div>' +
+    otherPersonSection() +
     '<div class="sec"><div class="sub-h"><span class="snum">📎</span> কাগজপত্র</div>' +
     '<div id="docTypes" class="hint"></div></div>' +
     '<div id="docRows"></div>' +
@@ -3213,7 +3256,9 @@ function renderStep5() {
   els('.rcard.rsm').forEach(c => c.onclick = () => {
     S.d.relation = c.dataset.rel;
     els('.rcard.rsm').forEach(x => x.classList.toggle('sel', x.dataset.rel === S.d.relation));
+    toggleOtherSec();
   });
+  wireOtherSec();
   $('addDoc').onclick = () => $('docFile').click();
   $('docFile').onchange = async () => {
     const files = Array.from($('docFile').files || []);
@@ -3250,9 +3295,13 @@ function submitStep5() {
   const st = docTypeStatus(), bad = [];
   if (!st.n) bad.push('কমপক্ষে ১টি কাগজের ছবি যোগ করুন');
   if (st.n && !(st.has40 && st.has41)) bad.push('দুই ধরনের কাগজ দরকার — ধরন ৪০ ও ধরন ৪১ দুটোই চিহ্নিত করুন');
+  // OTHERS-FILL (2026-11-01): অন্যান্য/অভিভাবক হলে ওই ব্যক্তির
+  // তথ্য ছাড়া সাইট এগোতে দেবে না — এগোনোর আগেই এখানে থামা।
+  syncOtherFromDom();
+  otherPersonErrors().forEach(e => bad.push(e.msg));
   if (bad.length) { showFail(bad); note('⚠️ কাগজপত্র ঠিক করুন', 'warn'); return; }
   hideFail();
-  advanceAndSend(6, 'SUBMIT_S3_DOCS', { relation: S.d.relation || defaultRelation(), docs: S.d.docs });
+  advanceAndSend(6, 'SUBMIT_S3_DOCS', { relation: S.d.relation || defaultRelation(), other: S.d.other || {}, docs: S.d.docs });
 }
 
 /* ═══════════ step 6: পুরো আবেদন প্রিভিউ + যোগাযোগ + OTP — মেইন সার্ভারের মতো এক পর্দা ═══════════ */
@@ -3510,11 +3559,12 @@ function directCtx() {
   const applicantNameEn = [s1.firstNameEn, s1.lastNameEn].filter(Boolean).join(' ');
   return {
     s0: s0, s1: s1, s2: S.d.s2 || {}, s2b: S.d.s2b || {},
-    s3: { relation: S.d.relation || defaultRelation(), docs: S.d.docs || [] },
+    s3: { relation: S.d.relation || defaultRelation(), other: S.d.other || {}, docs: S.d.docs || [] },
     s4prep: { email: S.d.email || '', phone: S.d.phone || '' },
     docs: S.d.docs || [],
     birthPlace: birthPlace,
     relation: S.d.relation || defaultRelation(),
+    other: S.d.other || {},
     applicantName: applicantNameEn,
     email: S.d.email || '', phone: S.d.phone || '',
     addressType: s0.addressType || 'BIRTHPLACE',
@@ -4120,7 +4170,7 @@ function showPvOtp() {
     S.d.phone = np;
     const af = $('a_phone'); if (af) af.value = np; // অটো ফর্মের ঘরটাও মিলিয়ে রাখি
     busy(true, '⏳ নতুন নম্বরে কোড পাঠানো হচ্ছে…');
-    if (emitStep('SUBMIT_S4_PREP', { email: S.d.email || '', phone: np, docs: S.d.docs || [], relation: S.d.relation || defaultRelation() }) === false) busy(false);
+    if (emitStep('SUBMIT_S4_PREP', { email: S.d.email || '', phone: np, docs: S.d.docs || [], relation: S.d.relation || defaultRelation(), other: S.d.other || {} }) === false) busy(false);
   };
   const boxes = [0, 1, 2, 3, 4, 5].map(i => $('pvob' + i));
   const val = () => boxes.map(b => (b.value || '').replace(/\D/g, '')).join('');
@@ -4591,6 +4641,7 @@ function renderAuto() {
     '<p class="hint">আবেদনকারী কে তা বেছে নিন। তারপর দুই ধরনের কাগজের ছবি দিন (JPG/PNG, প্রতিটি ২MB-এর কম)।</p></div>' +
     '<div class="relgrid">' + (() => { const rl = relationsForAge(); if (!rl.includes(S.d.relation)) S.d.relation = rl[0]; return rl.map(r => '<div class="rcard rsm' + (S.d.relation === r ? ' sel' : '') + '" data-rel="' + esc(r) + '">' +
       '<span class="rdot"></span><div><div class="rt">' + esc(r) + '</div></div></div>').join(''); })() + '</div>' +
+    otherPersonSection() +
     '<div id="docTypes" class="hint"></div>' +
     '<div id="docRows"></div>' +
     '<div class="mt8"><button class="btn ghost" id="addDoc">➕ ছবি যোগ করুন</button>' +
@@ -4640,7 +4691,9 @@ function renderAuto() {
   els('.rcard.rsm').forEach(c => c.onclick = () => {
     S.d.relation = c.dataset.rel;
     els('.rcard.rsm').forEach(x => x.classList.toggle('sel', x.dataset.rel === S.d.relation));
+    toggleOtherSec();
   });
+  wireOtherSec();
   $('addDoc').onclick = () => $('docFile').click();
   $('docFile').onchange = async () => {
     const files = Array.from($('docFile').files || []);
@@ -4792,6 +4845,10 @@ function validateAuto() {
   });
   if (!z.permCopy && z.perm) need(z.perm, 'স্থায়ী ঠিকানা', 'sp');
   if (!z.presCopy && z.pres) need(z.pres, 'বর্তমান ঠিকানা', 'rp');
+  // OTHERS-FILL (2026-11-01): অন্যান্য/অভিভাবক হলে ওই ব্যক্তির
+  // BRN + জন্ম তারিখ + English নাম ছাড়া সাইট এগোতে দেবে না।
+  syncOtherFromDom();
+  otherPersonErrors().forEach(e => { bad.push(e.msg); mark(e.id); });
   const st = docTypeStatus();
   if (!st.n) bad.push('কমপক্ষে ১টি কাগজের ছবি যোগ করুন');
   else if (!(st.has40 && st.has41)) bad.push('দুই ধরনের কাগজ দরকার — ধরন ৪০ ও ৪১ দুটোই চিহ্নিত করুন');
@@ -4861,7 +4918,7 @@ function payloadFor(op) {
   if (op === 'SUBMIT_S1') return Object.assign({ docsAvailable: true }, S.d.s1);
   if (op === 'SUBMIT_S2') return Object.assign({}, S.d.s2, { applicantDob: S.d.s1.dob });
   if (op === 'SUBMIT_S2B') return Object.assign({}, S.d.s2b);
-  if (op === 'SUBMIT_S3_DOCS') return { relation: S.d.relation || defaultRelation(), docs: S.d.docs || [] };
+  if (op === 'SUBMIT_S3_DOCS') return { relation: S.d.relation || defaultRelation(), other: S.d.other || {}, docs: S.d.docs || [] };
   // S4Prep also carries docs: the engine's S4Prep replay catches up
   // through S3 when the site is behind, and S3 cannot upload without
   // the draft docs. The frontend is the only source on a resumed
@@ -4871,7 +4928,7 @@ function payloadFor(op) {
   // without it the replay's catch-up submitS3 got relation:
   // undefined and skipped the relation radio entirely. Same source
   // as the S3 payload above, so the two can never disagree.
-  if (op === 'SUBMIT_S4_PREP') return { email: S.d.email || '', phone: S.d.phone || '', docs: S.d.docs || [], relation: S.d.relation || defaultRelation() };
+  if (op === 'SUBMIT_S4_PREP') return { email: S.d.email || '', phone: S.d.phone || '', docs: S.d.docs || [], relation: S.d.relation || defaultRelation(), other: S.d.other || {} };
   return {};
 }
 function runChain(ops, onDone, title) {

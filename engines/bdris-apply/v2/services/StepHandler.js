@@ -198,6 +198,63 @@ const SUBMIT_CONFIRM_CORE = 'আবেদনপত্রটি সাবমি�
 function isSubmitConfirmWarning(t) {
   return String(t || '').replace(/\s+/g, ' ').includes(SUBMIT_CONFIRM_CORE);
 }
+// locateOthersFields — the site's Others-person fields, found by
+// label/section context, NEVER by guessed ids (live 2026-11-01:
+// relation Others/Guardian was a dead end because the bot clicked
+// the radio and then never filled the site's Others block). The
+// block is headed "পিতা,মাতা ব্যতিরেকে অন্য কেহ হইলে" and holds
+// "জন্ম নিবন্ধন নম্বর" (BRN), "জন্ম তারিখ" (DOB, DD/MM/YYYY) and
+// "আবেদনকারীর নাম" (English name, placeholder "নাম ইংরেজিতে").
+// Self-contained on purpose: page.evaluate serializes it into the
+// site page, and unit tests run it against a fake document.
+// Returns { brn, dob, en } CSS selectors (or null per field).
+function locateOthersFields() {
+  const norm = (s) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+  const labelOf = (input) => {
+    if (input.id) {
+      const lab = document.querySelector('label[for="' + input.id + '"]');
+      if (lab) return norm(lab.innerText || lab.textContent);
+    }
+    let p = input.parentElement;
+    for (let i = 0; i < 4 && p; i++) {
+      if (p.tagName === 'LABEL') return norm(p.innerText || p.textContent);
+      const lab = p.querySelector ? p.querySelector('label') : null;
+      if (lab) return norm(lab.innerText || lab.textContent);
+      p = p.parentElement;
+    }
+    return '';
+  };
+  const selOf = (input) => {
+    if (input.id) return '#' + input.id;
+    const name = input.getAttribute ? input.getAttribute('name') : null;
+    if (name) return 'input[name="' + name + '"]';
+    return null;
+  };
+  const inputs = Array.from(document.querySelectorAll('input')).filter((el) => {
+    const t = String(el.type || 'text').toLowerCase();
+    return t === 'text' || t === '' || t === 'date';
+  });
+  const inOthersBlock = (input) => {
+    let p = input;
+    for (let i = 0; i < 8 && p; i++) {
+      const t = norm(p.innerText || p.textContent || '');
+      if (t.includes('পিতা,মাতা ব্যতিরেকে অন্য কেহ হইলে')) return true;
+      p = p.parentElement;
+    }
+    return false;
+  };
+  const scoped = inputs.filter(inOthersBlock);
+  const pool = scoped.length ? scoped : inputs;
+  const pick = (pred) => {
+    const el = pool.find(pred);
+    return el ? selOf(el) : null;
+  };
+  return {
+    brn: pick((el) => labelOf(el).includes('জন্ম নিবন্ধন নম্বর')),
+    dob: pick((el) => labelOf(el).includes('জন্ম তারিখ')),
+    en: pick((el) => labelOf(el).includes('আবেদনকারীর নাম') || norm(el.placeholder || '').includes('নাম ইংরেজিতে')),
+  };
+}
 const PARENT_BRN_PRE2013_NOTE = '২০১৩-পূর্ব নিয়ম: পিতামাতার BRN সাইটে পাঠানো হয়নি — ড্রাফটে রাখা আছে।';
 const PARENT_BRN_2013_NOTE = '২০১৩ সালের নিয়ম: পিতামাতার BRN ছাড়াই (শুধু মা-বাবার আইডি কার্ড দিয়ে) এগোনো হয়েছে।';
 function parentBrnExemptNote(iso) {
@@ -1603,8 +1660,60 @@ class StepHandler {
    * - প্রতি ফাইলে ফ্রেশ file-input হ্যান্ডেল (Angular re-render, 2026-10-11)
    * - typeSel-এ v1-এর "attchment" typo হুবহু রাখা (সাইটের আসল class)
    *
-   * data: { relation, docs: [{name, mimeType, base64, docType}], applicantDob, s1 }
+   * data: { relation, other: { brn, dob, en }, docs: [{name, mimeType, base64, docType}], applicantDob, s1 }
    */
+  // OTHERS-FILL (2026-11-01): relation Others/Guardian হলে সাইট
+  // "পিতা,মাতা ব্যতিরেকে অন্য কেহ হইলে" ব্লকে ওই ব্যক্তির BRN +
+  // জন্ম তারিখ + English নাম চায় — খালি থাকলে সাইট এগোতে দেয়
+  // না। পুরোনো কোড রেডিওর পর শুধু #applicantName + ঘোষণা
+  // ভরত, এই ঘরগুলো কখনো ভরত না — তাই Others filing সাইটের
+  // gate-এ আটকাত। ঘর লেবেল দিয়ে খোঁজা হয় (locateOthersFields),
+  // id আন্দাজ করা হয় না। ফল { ok:true } বা নামযুক্ত ব্যর্থতা —
+  // নীরব skip কখনো নয়, মান বানানোও নয়।
+  async _fillOthersPerson(other, pickedRel) {
+    const who = pickedRel === 'GUARDIAN' ? 'অভিভাবক' : 'অন্য ব্যক্তি';
+    if (!other || !other.brn || !other.dob || !other.en) {
+      const missing = !other ? 'তথ্য দেওয়া হয়নি'
+        : (!other.brn ? 'জন্ম নিবন্ধন নম্বর' : (!other.dob ? 'জন্ম তারিখ' : 'নাম (English)'));
+      return { ok: false, field: who, reason: `${who}-এর ${missing} — ফর্মে অন্য ব্যক্তির তথ্য দিন, তারপর আবার চেষ্টা করুন` };
+    }
+    let found = null;
+    try { found = await this.page.evaluate(locateOthersFields); } catch { found = null; }
+    if (!found) return { ok: false, field: who, reason: `${who}-এর তথ্যের ঘর পড়া যায়নি — সাইটের ফর্ম খুলছে কিনা দেখে আবার চেষ্টা করুন` };
+    const missing = [];
+    if (!found.brn) missing.push('জন্ম নিবন্ধন নম্বর');
+    if (!found.dob) missing.push('জন্ম তারিখ');
+    if (!found.en) missing.push('নাম (English)');
+    if (missing.length) return { ok: false, field: who, reason: `${who}-এর ${missing.join(', ')} ঘর সাইটে পাওয়া যায়নি — সাইটের অন্যান্য-ব্লক খুলছে কিনা দেখে আবার চেষ্টা করুন` };
+    const brn = normalizeBrn(other.brn);
+    const dobBd = isoToBdFormat(other.dob);
+    const enName = transitName(other.en);
+    const r1 = await this._typeInto([found.brn], brn, `${who}-এর BRN`, { required: true });
+    if (!r1.ok) return r1;
+    const r2 = await this._typeMaskedDate([found.dob], dobBd, `${who}-এর জন্ম তারিখ`);
+    if (!r2.ok) return r2;
+    const r3 = await this._typeInto([found.en], enName, `${who}-এর নাম (English)`, { required: true });
+    if (!r3.ok) return r3;
+    // Read-back: _typeInto landed value যাচাই করে না (audit C7) —
+    // তিনটি মান সত্যিই বসেছে কিনা নিশ্চিত না হয়ে এগোনো যাবে না।
+    const landed = await this.page.evaluate((sels) => {
+      const out = {};
+      for (const k of ['brn', 'dob', 'en']) {
+        const el = sels[k] ? document.querySelector(sels[k]) : null;
+        out[k] = el ? String(el.value || '') : '';
+      }
+      return out;
+    }, found).catch(() => null);
+    if (!landed) return { ok: false, field: who, reason: `${who}-এর তথ্য বসেছে কিনা যাচাই করা যায়নি — আবার চেষ্টা করুন` };
+    const bad = [];
+    if (String(landed.brn).replace(/\D/g, '') !== String(brn).replace(/\D/g, '')) bad.push('জন্ম নিবন্ধন নম্বর');
+    if (String(landed.dob).replace(/\s+/g, '') !== String(dobBd).replace(/\s+/g, '')) bad.push('জন্ম তারিখ');
+    if (String(landed.en).trim() !== String(enName).trim()) bad.push('নাম (English)');
+    if (bad.length) return { ok: false, field: who, reason: `${who}-এর ${bad.join(', ')} সাইটে ঠিকভাবে বসেনি — আবার চেষ্টা করুন` };
+    this.progress(`✔ ${who}-এর তথ্য পূরণ হয়েছে`);
+    return { ok: true };
+  }
+
   async submitS3(data = {}) {
     const failed = [];
     this.progress('🔄 ধাপ ৪: প্রত্যয়ন ও কাগজপত্র...');
@@ -1733,6 +1842,20 @@ class StepHandler {
         failed.push({ field: 'আবেদনকারী', reason: 'সম্পর্কের রেডিও নির্বাচন হয়নি — সাইট OTP আটকে দেবে' });
       }
       await this.page.waitForTimeout(300);
+      // OTHERS-FILL (2026-11-01): সাইট যা বেছেছে (state.value) তাই
+      // শেষ কথা — UI-চাওয়া Others হলেও সাইট SELF বাছলে ব্লক
+      // আসে না, তখন ভরার কিছু নেই। GUARDIAN/OTHERS বাছলে ব্লক
+      // আসবেই, আর তার ঘর খালি থাকলে সাইট এগোতে দেবে না — তাই
+      // এখানেই সৎভাবে থামা (ডকুমেন্টে এগিয়ে গিয়ে সাইটের gate-এ
+      // অস্পষ্টভাবে আটকানোর চেয়ে)।
+      if (state.value === 'GUARDIAN' || state.value === 'OTHERS') {
+        const of = await this._fillOthersPerson(data.other, state.value);
+        if (!of.ok) {
+          this.progress('❌ ' + of.reason);
+          failed.push({ field: of.field, reason: of.reason });
+          return { ok: false, step: 4, message: '❌ অন্য ব্যক্তির তথ্য অসম্পূর্ণ', failed, blocked: true };
+        }
+      }
     }
     // ঘোষণা checkbox
     const decl = await this.page.$('input[name="declaration"]');
@@ -3999,4 +4122,4 @@ class StepHandler {
   }
 }
 
-module.exports = { StepHandler, verifyChargeToken, bnToArab, thChildSite, consumeSubmitToken, isSubmitTokenConsumed, extractAckNumber, normalizeBrn, brnWarning, isFamilyErrorText, isSubmitConfirmWarning, parentBrnSubmitAction, isParentBrnExempt, parentBrnExemptNote, PARENT_BRN_PRE2013_NOTE, PARENT_BRN_2013_NOTE, PARENT_BRN_FAMILY_NOTE, relaxParentBrnGate, parseSiteDateToIso, PARENT_GATE_FIELDS };
+module.exports = { StepHandler, verifyChargeToken, bnToArab, thChildSite, consumeSubmitToken, isSubmitTokenConsumed, extractAckNumber, normalizeBrn, brnWarning, isFamilyErrorText, isSubmitConfirmWarning, locateOthersFields, parentBrnSubmitAction, isParentBrnExempt, parentBrnExemptNote, PARENT_BRN_PRE2013_NOTE, PARENT_BRN_2013_NOTE, PARENT_BRN_FAMILY_NOTE, relaxParentBrnGate, parseSiteDateToIso, PARENT_GATE_FIELDS };
