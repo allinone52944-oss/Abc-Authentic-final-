@@ -67,19 +67,21 @@ beforeEach(() => {
 });
 
 describe('lookupMouzaRate (data file)', () => {
-  test('found rate: কধুরখীল নাল = 121421 per shatangsho, period 2025-2026', () => {
+  test('found rate: কধুরখীল নাল = 121425 per shatangsho, period 2025-2026', () => {
     expect(lookupMouzaRate('boalkhali', 'কধুরখীল', 'নাল')).toMatchObject({
-      rate: 121421, period: '2025-2026', p: false,
+      rate: 121425, period: '2025-2026', p: false,
     });
   });
-  test('P-flag rate: কধুরখীল ডোবা = 100000 with p:true', () => {
-    expect(lookupMouzaRate('boalkhali', 'কধুরখীল', 'ডোবা')).toMatchObject({
-      rate: 100000, period: '2025-2026', p: true,
-    });
+  // Book correction 2026-11-01: this book has NO ডোবা column — the old
+  // ডোবা P 100000 was the book's বৃত্ত column value wrongly mapped to
+  // ডোবা. ডোবা is now no-rate; বৃত্ত stays reference-only, never lookup.
+  test('no-rate: কধুরখীল ডোবা has no lookup rate (book has no ডোবা column)', () => {
+    expect(lookupMouzaRate('boalkhali', 'কধুরখীল', 'ডোবা')).toBeNull();
+    expect(lookupMouzaRate('boalkhali', 'কধুরখীল', 'বৃত্ত')).toBeNull();
   });
-  test('all six lookup classes present, বাণিজ্যিক absent', () => {
+  test('all five lookup classes present, বাণিজ্যিক absent', () => {
     expect(listLookupClasses('boalkhali', 'কধুরখীল').sort()).toEqual(
-      ['নাল', 'বাগান', 'বাড়ী', 'ভিটা', 'পুকুর', 'ডোবা'].sort());
+      ['নাল', 'বাগান', 'বাড়ী', 'ভিটা', 'পুকুর'].sort());
     expect(lookupMouzaRate('boalkhali', 'কধুরখীল', 'বাণিজ্যিক')).toBeNull();
   });
   test('no-rate: unknown mouza, unknown office, unmapped column', () => {
@@ -93,12 +95,12 @@ describe('lookupMouzaRate (data file)', () => {
 });
 
 describe('calc dual convention', () => {
-  test('lookup line: schedule rate × shatangsho qty (2.5 gonda নাল = 5 × 121421)', () => {
+  test('lookup line: schedule rate × shatangsho qty (2.5 gonda নাল = 5 × 121425)', () => {
     const r = calcMouzaReport({
-      lines: [{ mouza: 'কধুরখীল', class: 'নাল', rate: 121421, amount: 2.5, unit: 'gonda', source: 'lookup' }],
+      lines: [{ mouza: 'কধুরখীল', class: 'নাল', rate: 121425, amount: 2.5, unit: 'gonda', source: 'lookup' }],
     });
-    expect(r.lines[0]).toMatchObject({ source: 'lookup', qtyShatangsho: 5, value: 607105 });
-    expect(r.totalMinimum).toBe(607105);
+    expect(r.lines[0]).toMatchObject({ source: 'lookup', qtyShatangsho: 5, value: 607125 });
+    expect(r.totalMinimum).toBe(607125);
   });
   test('lookup P line keeps the P rate as the applicable rate', () => {
     const r = calcMouzaReport({
@@ -109,17 +111,17 @@ describe('calc dual convention', () => {
   test('mixed lookup + manual lines use their own rule each', () => {
     const r = calcMouzaReport({
       lines: [
-        { mouza: 'কধুরখীল', class: 'নাল', rate: 121421, amount: 2.5, unit: 'gonda', source: 'lookup' },
+        { mouza: 'কধুরখীল', class: 'নাল', rate: 121425, amount: 2.5, unit: 'gonda', source: 'lookup' },
         { mouza: 'নমুনা মৌজা', class: 'নাল', rate: 100000, amount: 10, unit: 'katha', source: 'manual' },
       ],
     });
-    expect(r.lines[0].value).toBe(607105); // lookup: 121421 × 5
+    expect(r.lines[0].value).toBe(607125); // lookup: 121425 × 5
     expect(r.lines[1].value).toBe(1000000); // manual: 100000 × 10
-    expect(r.totalMinimum).toBe(1607105);
+    expect(r.totalMinimum).toBe(1607125);
   });
   test('lookup oldRate is per shatangsho like the lookup rate', () => {
     const r = calcMouzaReport({
-      lines: [{ mouza: 'কধুরখীল', class: 'নাল', rate: 121421, amount: 2.5, unit: 'gonda', source: 'lookup', oldRate: 100000 }],
+      lines: [{ mouza: 'কধুরখীল', class: 'নাল', rate: 121425, amount: 2.5, unit: 'gonda', source: 'lookup', oldRate: 100000 }],
     });
     expect(r.lines[0].oldValue).toBe(500000); // 100000 × 5, not × 2.5
   });
@@ -130,13 +132,16 @@ describe('GET /api/land/mouza-rate', () => {
     await request(app()).get('/api/land/mouza-rate?office=boalkhali&mouza=কধুরখীল&class=নাল').expect(401);
   });
   test('found → rate + period + p flag', async () => {
-    const r = await withUser(request(app()).get('/api/land/mouza-rate?office=boalkhali&mouza=কধুরখীল&class=ডোবা')).expect(200);
-    expect(r.body).toMatchObject({ ok: true, found: true, rate: 100000, period: '2025-2026', p: true });
+    const r = await withUser(request(app()).get('/api/land/mouza-rate?office=boalkhali&mouza=কধুরখীল&class=নাল')).expect(200);
+    expect(r.body).toMatchObject({ ok: true, found: true, rate: 121425, period: '2025-2026', p: false });
   });
   test('no-rate → 200 found:false with a Bengali message (no error, no charge)', async () => {
     const r = await withUser(request(app()).get('/api/land/mouza-rate?office=boalkhali&mouza=কধুরখীল&class=বাণিজ্যিক')).expect(200);
     expect(r.body.found).toBe(false);
     expect(r.body.message).toMatch('পাওয়া যায়নি');
+    // Book correction 2026-11-01: ডোবা is no-rate for this book.
+    const r2 = await withUser(request(app()).get('/api/land/mouza-rate?office=boalkhali&mouza=কধুরখীল&class=ডোবা')).expect(200);
+    expect(r2.body.found).toBe(false);
   });
   test('missing param → 400', async () => {
     await withUser(request(app()).get('/api/land/mouza-rate?office=boalkhali&mouza=কধুরখীল')).expect(400);
@@ -155,11 +160,11 @@ describe('POST /api/land/mouza with lookup lines', () => {
     const r = await withUser(request(app()).post('/api/land/mouza'))
       .send({
         ...BODY,
-        lines: [{ mouza: 'কধুরখীল', class: 'নাল', rate: '121421', amount: '2.5', unit: 'gonda', source: 'lookup' }],
+        lines: [{ mouza: 'কধুরখীল', class: 'নাল', rate: '121425', amount: '2.5', unit: 'gonda', source: 'lookup' }],
         idempotency_key: 't-lookup-1',
       }).expect(200);
-    expect(r.body).toMatchObject({ ok: true, totalMinimum: 607105, deedBasis: 607105 });
-    expect(r.body.lines[0]).toMatchObject({ source: 'lookup', lookupPeriod: '2025-2026', value: 607105 });
+    expect(r.body).toMatchObject({ ok: true, totalMinimum: 607125, deedBasis: 607125 });
+    expect(r.body.lines[0]).toMatchObject({ source: 'lookup', lookupPeriod: '2025-2026', value: 607125 });
   });
   test('tampered lookup rate → 400, wallet untouched, no charge', async () => {
     const r = await withUser(request(app()).post('/api/land/mouza'))
@@ -176,7 +181,7 @@ describe('POST /api/land/mouza with lookup lines', () => {
     const r = await withUser(request(app()).post('/api/land/mouza'))
       .send({
         ...BODY, lookup_office: 'no-office',
-        lines: [{ mouza: 'কধুরখীল', class: 'নাল', rate: '121421', amount: '1', unit: 'shatangsho', source: 'lookup' }],
+        lines: [{ mouza: 'কধুরখীল', class: 'নাল', rate: '121425', amount: '1', unit: 'shatangsho', source: 'lookup' }],
         idempotency_key: 't-lookup-office',
       }).expect(400);
     expect(r.body.error).toBe('LOOKUP_RATE_MISMATCH');

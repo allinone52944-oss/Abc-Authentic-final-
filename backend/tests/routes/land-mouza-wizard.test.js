@@ -44,13 +44,13 @@ describe('GET /api/land/mouza-rates: whole-mouza rate card', () => {
     expect(r.body.found).toBe(true);
     expect(r.body.officeName).toBe('বোয়ালখালী');
     expect(r.body.period).toBe('2025-2026');
-    expect(r.body.rates['নাল'].rate).toBe(121421);
+    expect(r.body.rates['নাল'].rate).toBe(121425);
     expect(r.body.rates['বাড়ী'].rate).toBe(157248);
-    expect(r.body.rates['ভিটা'].rate).toBe(140752);
+    expect(r.body.rates['ভিটা'].rate).toBe(140575);
     expect(r.body.rates['বাগান'].rate).toBe(147838);
     expect(r.body.rates['পুকুর'].rate).toBe(109707);
-    expect(r.body.rates['ডোবা'].rate).toBe(100000);
-    expect(r.body.rates['ডোবা'].p).toBe(true);
+    // Book correction 2026-11-01: this book has no ডোবা column — null, never 0.
+    expect(r.body.rates['ডোবা'].rate).toBeNull();
     // বাণিজ্যিক has no lookup rate anywhere — null, never 0.
     expect(r.body.rates['বাণিজ্যিক'].rate).toBeNull();
   });
@@ -118,7 +118,7 @@ describe('GET /api/land/mouza-rates: whole-mouza rate card', () => {
       '/api/land/mouza-rate?office=boalkhali&mouza=' + encodeURIComponent('কধুরখীল') + '&class=' + encodeURIComponent('নাল')));
     expect(r.status).toBe(200);
     expect(r.body.found).toBe(true);
-    expect(r.body.rate).toBe(121421);
+    expect(r.body.rate).toBe(121425);
     const miss = await withUser(request(app()).get(
       '/api/land/mouza-rate?office=boalkhali&mouza=' + encodeURIComponent('কধুরখীল') + '&class=' + encodeURIComponent('বাণিজ্যিক')));
     expect(miss.body.found).toBe(false);

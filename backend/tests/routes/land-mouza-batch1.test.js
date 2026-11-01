@@ -186,11 +186,12 @@ describe('GET /api/land/mouza-rate: pouro note + no-rate classes + Boalkhali reg
     const sib2 = await withUser(request(app()).get(q('pahartali', 'লতিফপুর', 'নাল'))).expect(200);
     expect(sib2.body).toMatchObject({ found: true, rate: 514650 });
   });
-  test('Boalkhali regression: rates unchanged', async () => {
+  test('Boalkhali regression: book-corrected rates', async () => {
     const r = await withUser(request(app()).get(q('boalkhali', 'কধুরখীল', 'নাল'))).expect(200);
-    expect(r.body).toMatchObject({ found: true, rate: 121421, period: '2025-2026', p: false });
+    expect(r.body).toMatchObject({ found: true, rate: 121425, period: '2025-2026', p: false });
+    // Book correction 2026-11-01: this book has no ডোবা column.
     const d = await withUser(request(app()).get(q('boalkhali', 'কধুরখীল', 'ডোবা'))).expect(200);
-    expect(d.body).toMatchObject({ found: true, rate: 100000, p: true });
+    expect(d.body).toMatchObject({ found: false });
   });
 });
 

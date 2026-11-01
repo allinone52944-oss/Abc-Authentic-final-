@@ -92,7 +92,7 @@ describe('batch 2 shape + totals', () => {
     expect(Object.keys(OFFICES)).toHaveLength(488);
   });
   test('batch 1 offices untouched', () => {
-    expect(lookupMouzaRate('boalkhali', 'কধুরখীল', 'নাল', null).rate).toBe(121421);
+    expect(lookupMouzaRate('boalkhali', 'কধুরখীল', 'নাল', null).rate).toBe(121425);
     expect(lookupMouzaRate('chandgaon', 'বাকলিয়া', 'নাল', 'বদর').rate).toBe(693896);
   });
 });

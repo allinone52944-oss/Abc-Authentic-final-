@@ -126,24 +126,24 @@ describe('POST /api/land/mouza without the area cascade (new form)', () => {
     expect(r.body).toMatchObject({ ok: true, totalMinimum: 1000000, deedBasis: 1000000, charged: 30 });
     expect(r.body.lines[0]).toMatchObject({ mouza: 'শাকপুরা', source: 'manual', value: 1000000 });
   });
-  test('valid lookup line without cascade → 200, period stamped, schedule rule (121421 × 5)', async () => {
+  test('valid lookup line without cascade → 200, period stamped, schedule rule (121425 × 5)', async () => {
     const r = await withUser(request(app()).post('/api/land/mouza'))
       .send({
         office: 'boalkhali', schedule_version: '2025-2026', declared_price: '',
-        lines: [{ mouza: 'কধুরখীল', class: 'নাল', rate: '121421', amount: '2.5', unit: 'gonda', source: 'lookup', lookupOffice: 'boalkhali' }],
+        lines: [{ mouza: 'কধুরখীল', class: 'নাল', rate: '121425', amount: '2.5', unit: 'gonda', source: 'lookup', lookupOffice: 'boalkhali' }],
         idempotency_key: 't-prof-lookup-1',
       }).expect(200);
-    expect(r.body).toMatchObject({ ok: true, totalMinimum: 607105 });
-    expect(r.body.lines[0]).toMatchObject({ source: 'lookup', lookupPeriod: '2025-2026', value: 607105 });
+    expect(r.body).toMatchObject({ ok: true, totalMinimum: 607125 });
+    expect(r.body.lines[0]).toMatchObject({ source: 'lookup', lookupPeriod: '2025-2026', value: 607125 });
   });
   test('old-style body.lookup_office still verifies a lookup line (old client compat)', async () => {
     const r = await withUser(request(app()).post('/api/land/mouza'))
       .send({
         office: 'boalkhali', lookup_office: 'boalkhali', schedule_version: '2025-2026', declared_price: '',
-        lines: [{ mouza: 'কধুরখীল', class: 'নাল', rate: '121421', amount: '1', unit: 'shatangsho', source: 'lookup' }],
+        lines: [{ mouza: 'কধুরখীল', class: 'নাল', rate: '121425', amount: '1', unit: 'shatangsho', source: 'lookup' }],
         idempotency_key: 't-prof-lookup-old',
       }).expect(200);
-    expect(r.body).toMatchObject({ ok: true, totalMinimum: 121421 });
+    expect(r.body).toMatchObject({ ok: true, totalMinimum: 121425 });
   });
   test('tampered lookup rate, area-less → 400, wallet untouched, no charge', async () => {
     const r = await withUser(request(app()).post('/api/land/mouza'))
@@ -160,13 +160,13 @@ describe('POST /api/land/mouza without the area cascade (new form)', () => {
       .send({
         office: 'boalkhali', schedule_version: '2025-2026', declared_price: '',
         lines: [
-          { mouza: 'কধুরখীল', class: 'নাল', rate: '121421', amount: '2.5', unit: 'gonda', source: 'lookup', lookupOffice: 'boalkhali' },
+          { mouza: 'কধুরখীল', class: 'নাল', rate: '121425', amount: '2.5', unit: 'gonda', source: 'lookup', lookupOffice: 'boalkhali' },
           { mouza: 'শাকপুরা', class: 'নাল', rate: '100000', amount: '10', unit: 'katha', source: 'manual' },
         ],
         idempotency_key: 't-prof-multi',
       }).expect(200);
-    // lookup: 121421 × 5 = 607105; manual: 100000 × 10 = 1000000
-    expect(r.body).toMatchObject({ ok: true, totalMinimum: 1607105 });
+    // lookup: 121425 × 5 = 607125; manual: 100000 × 10 = 1000000
+    expect(r.body).toMatchObject({ ok: true, totalMinimum: 1607125 });
   });
   test('no lines, area-less → 400, wallet untouched', async () => {
     const r = await withUser(request(app()).post('/api/land/mouza'))
@@ -178,7 +178,7 @@ describe('POST /api/land/mouza without the area cascade (new form)', () => {
 });
 
 describe('POST /api/land/mouza backward compat (old full-cascade client)', () => {
-  const LINES = [{ mouza: 'কধুরখীল', class: 'নাল', rate: '121421', amount: '2.5', unit: 'gonda', source: 'lookup', lookupOffice: 'boalkhali' }];
+  const LINES = [{ mouza: 'কধুরখীল', class: 'নাল', rate: '121425', amount: '2.5', unit: 'gonda', source: 'lookup', lookupOffice: 'boalkhali' }];
   test('old full-area payload accepted with identical totals to the area-less one', async () => {
     const oldRes = await withUser(request(app()).post('/api/land/mouza'))
       .send({ ...AREA, office_name: 'বোয়ালখালী সাব-রেজিস্ট্রি অফিস', schedule_version: '2025-2026', declared_price: '', lookup_office: 'boalkhali', lines: LINES, idempotency_key: 't-prof-old-1' })
@@ -188,7 +188,7 @@ describe('POST /api/land/mouza backward compat (old full-cascade client)', () =>
       .expect(200);
     expect(oldRes.body.totalMinimum).toBe(newRes.body.totalMinimum);
     expect(oldRes.body.deedBasis).toBe(newRes.body.deedBasis);
-    expect(oldRes.body.totalMinimum).toBe(607105);
+    expect(oldRes.body.totalMinimum).toBe(607125);
   });
   test('old client, line mouza left empty → still defaults to the cascade mouza', async () => {
     const r = await withUser(request(app()).post('/api/land/mouza'))

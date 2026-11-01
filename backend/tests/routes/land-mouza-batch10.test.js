@@ -143,7 +143,7 @@ describe('batch 10 shape + totals', () => {
     expect(OFFICES['mymensingh-sadar'].name).toBe('ময়মনসিংহ সদর');
   });
   test('earlier batches untouched', () => {
-    expect(lookupMouzaRate('boalkhali', 'কধুরখীল', 'নাল', null).rate).toBe(121421);
+    expect(lookupMouzaRate('boalkhali', 'কধুরখীল', 'নাল', null).rate).toBe(121425);
     expect(lookupMouzaRate('araihazar', 'শালমদী', 'ভিটা', null)).toMatchObject({ rate: 1388000, p: true });
     expect(lookupMouzaRate('bogura-sadar', 'নামুজা', 'নাল', null).rate).toBe(55011);
     expect(lookupMouzaRate('chakhar-banaripara', 'ভিতরকুল', 'বাড়ী', null).rate).toBe(49696);
