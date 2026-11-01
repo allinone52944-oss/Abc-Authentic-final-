@@ -877,3 +877,44 @@ describe('OTHERS-FILL cycle (2026-11-01): Others/Guardian person fields end to e
     expect(html).toMatch(/if \(payload\.s3\) payload\.s3 = \{ relation: payload\.s3\.relation \};/);
   });
 });
+
+describe('CASCADE-RELATION cycle (2026-11-01): cascade survives resume/re-render, relation never silently substituted', () => {
+  test('warmFromData queues a re-warm instead of dropping it mid-run', () => {
+    expect(html).toMatch(/let _warmQueued = false;/);
+    expect(html).toMatch(/if \(_warmRunning\) \{ _warmQueued = true; return; \}/);
+    expect(html).toMatch(/if \(_warmQueued\) \{ _warmQueued = false; warmFromData\(\)\.catch\(\(\) => \{\}\); \}/);
+  });
+
+  test('warmFromData finally shows unfilled saved levels with a working retry button', () => {
+    expect(html).toMatch(/const unfilled = GEO_LEVELS\.filter\(L => \{/);
+    expect(html).toMatch(/showBanner\('err', 'ঠিকানার তালিকা আসেনি: '/);
+    expect(html).toMatch(/unfilled\.map\(L => L\.lbl\)/);
+    expect(html).toMatch(/'আবার চেষ্টা করুন'\)/);
+  });
+
+  test('geoChanged error-state retry re-runs the cascade instead of wiping the saved value', () => {
+    expect(html).toMatch(/if \(!label && getGeoState\(k, Ls\) === 'error'\) \{/);
+    expect(html).toMatch(/if \(Ls === GEO_LEVELS\) \{ warmFromData\(\)\.catch\(\(\) => \{\}\); \}/);
+  });
+
+  test('no render site silently resets relation to the first list item', () => {
+    expect(html).not.toMatch(/S\.d\.relation = relList\[0\]/);
+    expect(html).not.toMatch(/S\.d\.relation = rl\[0\]/);
+  });
+
+  test('normalizeRelation maps both saved forms; both renders use relationRenderState', () => {
+    expect(html).toMatch(/function normalizeRelation\(v\)/);
+    expect(html).toMatch(/OTHERS: 'অন্যান্য'/);
+    expect(html).toMatch(/function relationRenderState\(saved\)/);
+    expect((html.match(/relationRenderState\(S\.d\.relation\)/g) || []).length).toBe(2);
+  });
+
+  test('a dropped saved relation shows a visible note, cleared on pick', () => {
+    expect(html).toMatch(/id="relNote"/);
+    expect(html).toMatch(/সংরক্ষিত সম্পর্ক \(' \+ esc\(S\._relDropped\)/);
+  });
+
+  test('submit gates require an explicit relation in manual step 5 and auto validation', () => {
+    expect((html.match(/আবেদনকারী কে তা বেছে নিন \(সম্পর্ক\)/g) || []).length).toBe(2);
+  });
+});
