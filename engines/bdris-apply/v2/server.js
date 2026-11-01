@@ -188,6 +188,11 @@ function mergeStepParams(params = {}, session = {}, cmdName = '') {
     if (!merged.relation && ctxData.relation) merged.relation = ctxData.relation;
   }
   if (!merged.relation && session.relation) merged.relation = session.relation;
+  // OTHERS-FILL (2026-11-01): relation-এর মতোই other-person
+  // ফিল্ডও session-এ মনে রাখা — S4Prep replay-এর catch-up
+  // submitS3 যেন পুরোনো payload ছাড়াও ব্লক ভরতে পারে।
+  if (!merged.other && ctxData && ctxData.other) merged.other = ctxData.other;
+  if (!merged.other && session.other) merged.other = session.other;
   if (session.contact) {
     const sp = (merged.s4prep && typeof merged.s4prep === 'object') ? merged.s4prep : {};
     merged.s4prep = {
@@ -230,7 +235,7 @@ function buildPlaywrightFallbackPlan(d = {}, session = {}) {
       ['submitS1', d.s1 || d.person || {}],
       ['submitS2', { ...(d.s2 || {}), applicantDob }],
       ['submitS2B', d.s2b || {}],
-      ['submitS3', { ...(d.s3 || {}), docs: d.docs || (d.s3 || {}).docs || [], s1: d.s1, applicantDob, relation }],
+      ['submitS3', { ...(d.s3 || {}), docs: d.docs || (d.s3 || {}).docs || [], s1: d.s1, applicantDob, relation, other: d.other || (d.s3 || {}).other || session.other || null }],
       ['submitS4Prep', { ...s4c, s0: d.s0, s1: d.s1, s2: d.s2, s2b: d.s2b, docs, relation }],
       ['submitS4', {
         otp: d.otp, _chargeToken: d._chargeToken,
@@ -544,6 +549,7 @@ class BdrisEngineV2 {
           // S4Prep in this session replays with the radio even
           // when its own payload lacks one.
           if ((cmdName === 'SUBMIT_S3_DOCS' || cmdName === 'SUBMIT_S4_PREP') && merged.relation) session.relation = merged.relation;
+          if ((cmdName === 'SUBMIT_S3_DOCS' || cmdName === 'SUBMIT_S4_PREP') && merged.other) session.other = merged.other;
           if (handler.singleName) session.singleName = handler.singleName;
           if (handler.applicantDob) session.applicantDob = handler.applicantDob;
           // Family advance persistence (2026-10-29 follow-up): a

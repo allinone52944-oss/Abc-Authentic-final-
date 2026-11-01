@@ -274,7 +274,7 @@ describe('B. frontend S4Prep payload + ctx carry relation', () => {
   });
 
   it('emitStep ctx carries relation, and the preview-OTP inline S4Prep does too', () => {
-    assert.match(html, /ctx: \{ s0: S\.d\.s0, s1: S\.d\.s1, s2: S\.d\.s2, s2b: S\.d\.s2b, relation: S\.d\.relation \|\| defaultRelation\(\) \}/);
-    assert.match(html, /emitStep\('SUBMIT_S4_PREP', \{ email: S\.d\.email \|\| '', phone: np, docs: S\.d\.docs \|\| \[\], relation: S\.d\.relation \|\| defaultRelation\(\) \}\)/);
+    assert.match(html, /ctx: \{ s0: S\.d\.s0, s1: S\.d\.s1, s2: S\.d\.s2, s2b: S\.d\.s2b, relation: S\.d\.relation \|\| defaultRelation\(\), other: S\.d\.other \|\| \{\} \}/);
+    assert.match(html, /emitStep\('SUBMIT_S4_PREP', \{ email: S\.d\.email \|\| '', phone: np, docs: S\.d\.docs \|\| \[\], relation: S\.d\.relation \|\| defaultRelation\(\), other: S\.d\.other \|\| \{\} \}\)/);
   });
 });
