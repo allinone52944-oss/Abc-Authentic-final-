@@ -192,7 +192,9 @@
 
           <!-- Step 1: where -->
           <div id="wzStep1">
+            <div class="field"><label>অফিস খুঁজুন</label><input type="text" id="wzOfficeSearch" placeholder="অফিসের নাম লিখে খুঁজুন…"></div>
             <div class="field"><label>জমি কোথায়? — সাব-রেজিস্ট্রার অফিস *</label><select id="mOffice"></select></div>
+            <div id="wzOfficeCount" style="font-size:13.5px;color:#14532d;min-height:19px;margin:-6px 0 10px;"></div>
             <div id="wzOfficeNote" style="font-size:13.5px;color:#14532d;min-height:19px;margin:-6px 0 10px;"></div>
             <div class="field" id="wzOfficeManualWrap" style="display:none"><label>অফিসের নাম *</label><input type="text" id="wzOfficeManual" placeholder="যেমন: সদর সাব-রেজিস্ট্রি অফিস"></div>
             <div class="field" id="wzMouzaSearchWrap"><label>মৌজা খুঁজুন</label><input type="text" id="wzMouzaSearch" placeholder="মৌজার নাম লিখে খুঁজুন…"></div>
@@ -512,6 +514,7 @@
     WZ.amount = 0; WZ.unit = 'shatangsho';
     $('mOffice').value = '';
     $('wzOfficeManual').value = '';
+    $('wzOfficeSearch').value = '';
     $('wzMouzaSearch').value = '';
     $('wzMouzaManual').value = '';
     $('wzAmount').value = '';
@@ -522,19 +525,55 @@
     $('wzMouzaSearchWrap').style.display = '';
     $('wzMouzaManualWrap').style.display = 'none';
     wzFillMouzas();
+    wzFillOffices();
+    wzFilterOffices();
     wzShowStep(1);
   }
+  // Duplicate display names, disambiguated by district. Each district
+  // below was verified per key from its batch data file (mouza count
+  // + batch-file district context) — never inferred from key spelling:
+  // bare daulatpur is Manikganj's (batch 4), bare kaliganj is Gazipur's
+  // (batch 4), bare mirpur is Dhaka's (batch 7 note), bare nawabganj is
+  // Dhaka's (batch 6 note). The suffix is display-only: the option value
+  // stays the office key, so selection and the report payload are unchanged.
+  const MOUZA_OFFICE_DISTRICTS = {
+    kachua: 'চাঁদপুর', 'kachua-bagerhat': 'বাগেরহাট',
+    gauripur: 'কুমিল্লা', gouripur: 'ময়মনসিংহ',
+    nawabganj: 'ঢাকা', 'nawabganj-dinajpur': 'দিনাজপুর',
+    mirpur: 'ঢাকা', 'mirpur-kushtia': 'কুষ্টিয়া',
+    daulatpur: 'মানিকগঞ্জ', 'daulatpur-kushtia': 'কুষ্টিয়া', 'daulatpur-thana-khulna': 'খুলনা',
+    kaliganj: 'গাজীপুর', 'jhenaidah-kaliganj': 'ঝিনাইদহ',
+    durgapur: 'রাজশাহী', 'durgapur-netrokona': 'নেত্রকোণা',
+    'pirganj-rangpur': 'রংপুর', 'pirganj-thakurgaon': 'ঠাকুরগাঁও',
+    'fulbari-dinajpur': 'দিনাজপুর', 'fulbari-kurigram': 'কুড়িগ্রাম',
+  };
   function wzFillOffices() {
     const sel = $('mOffice');
     sel.innerHTML = '<option value="">— বেছে নিন —</option>';
     Object.entries(MOUZA_OFFICES).forEach(([id, o]) => {
       const op = document.createElement('option');
-      op.value = id; op.textContent = o.name + ' — তালিকার হার আছে';
+      op.value = id;
+      const dist = MOUZA_OFFICE_DISTRICTS[id];
+      op.textContent = o.name + (dist ? ' (' + dist + ')' : '') + ' — তালিকার হার আছে';
       sel.appendChild(op);
     });
     const other = document.createElement('option');
     other.value = MOUZA_OTHER_OFFICE; other.textContent = 'অন্য অফিস (তালিকা এখনো যোগ হয়নি)';
     sel.appendChild(other);
+  }
+  function wzFilterOffices() {
+    const q = $('wzOfficeSearch').value.trim();
+    let matched = 0;
+    for (const op of $('mOffice').options) {
+      if (!op.value || op.value === MOUZA_OTHER_OFFICE) { op.style.display = ''; continue; }
+      const ok = !q || op.textContent.indexOf(q) !== -1;
+      op.style.display = ok ? '' : 'none';
+      if (ok) matched++;
+    }
+    const total = Object.keys(MOUZA_OFFICES).length;
+    $('wzOfficeCount').textContent = !q
+      ? bn(total) + 'টি অফিস'
+      : (matched ? bn(matched) + 'টি মিলেছে' : 'কিছু মিলেনি — "অন্য অফিস" বেছে নিয়ে নাম লিখে এগোনো যাবে।');
   }
   function wzFillMouzas() {
     const office = MOUZA_OFFICES[$('mOffice').value];
@@ -846,6 +885,7 @@
   }
   $('mOffice').addEventListener('change', wzOnOffice);
   $('wzMouza').addEventListener('change', wzOnMouza);
+  $('wzOfficeSearch').addEventListener('input', wzFilterOffices);
   $('wzMouzaSearch').addEventListener('input', wzFilterMouzas);
   $('wzNext1').addEventListener('click', wzNext1);
   $('wzBackThana').addEventListener('click', () => wzShowStep(1));
@@ -864,6 +904,7 @@
   $('wzToFinish').addEventListener('click', wzShowFinish);
   $('wzBackFinish').addEventListener('click', () => wzShowStep('lines'));
   wzFillOffices();
+  wzFilterOffices();
   wzFillMouzas();
   wzShowStep(1);
 
