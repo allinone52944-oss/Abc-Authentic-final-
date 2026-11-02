@@ -143,29 +143,57 @@ async function recordOrder(db, userId, serviceId, price, orderKey) {
 }
 
 async function hasChargedOrder(db, userId, orderKey) {
+  // Admin-order fix (2026-11-03): a gate order the admin moved to
+  // 'delivered' is still a paid order — the old completed-only check
+  // made preview/PDF 402 after delivery. 'refunded' stays excluded:
+  // a refunded attempt must NOT reopen preview/PDF.
   const r = await db.query(
-    'SELECT 1 FROM orders WHERE user_id = $1 AND idempotency_key = $2 AND status = \'completed\' LIMIT 1',
+    `SELECT 1 FROM orders WHERE user_id = $1 AND idempotency_key = $2
+      AND status IN ('completed', 'delivered') LIMIT 1`,
     [userId, orderKey]
   );
   return r.rows.length > 0;
 }
 
-// Charge once for one attempt. Returns 'charged', 'already-paid', or
-// throws INSUFFICIENT_BALANCE / other errors. The duplicate check
-// inside payForService (row lock + ref dedupe) also covers a
-// concurrent double-submit racing this check.
-async function chargeOnce(db, serviceCredits, userId, serviceId, price, ref) {
-  if (await alreadyPaid(db, userId, ref)) return 'already-paid';
+// Charge once for one attempt, on an already-open transaction client
+// (the caller wraps charge + record in one transaction — see the
+// verify interceptor). Returns 'charged', 'already-paid', or throws
+// INSUFFICIENT_BALANCE / other errors. The duplicate check inside
+// payForService (row lock + ref dedupe) also covers a concurrent
+// double-submit racing this check.
+async function chargeOnce(client, serviceCredits, userId, serviceId, price, ref) {
+  if (await alreadyPaid(client, userId, ref)) return 'already-paid';
   try {
-    await db.withTransaction((client) =>
-      serviceCredits.payForService(client, {
-        userId, serviceId, amount: Math.abs(price), ref,
-      }));
+    await serviceCredits.payForService(client, {
+      userId, serviceId, amount: Math.abs(price), ref,
+    });
   } catch (e) {
     if (/DUPLICATE_TRANSACTION/.test(e.message)) return 'already-paid';
     throw e;
   }
   return 'charged';
+}
+
+// Admin-order fix (2026-11-03): charge + order record in ONE
+// transaction, and report the row's status afterwards. The old code
+// charged in its own transaction and recorded the order in a second
+// query — a crash between them left a paid attempt with no order
+// row (preview/PDF 402, nothing actionable in any admin queue).
+// The status matters for item 13 below: a 'refunded' row must not
+// re-expose the record on re-verify.
+async function chargeAndRecordOrder(db, serviceCredits, userId, serviceId, price, ref, orderKey) {
+  const run = async (client) => {
+    await chargeOnce(client, serviceCredits, userId, serviceId, price, ref);
+    await recordOrder(client, userId, serviceId, price, orderKey);
+    const r = await client.query(
+      'SELECT status FROM orders WHERE user_id = $1 AND idempotency_key = $2 LIMIT 1',
+      [userId, orderKey]
+    );
+    return r.rows[0] ? r.rows[0].status : null;
+  };
+  if (typeof db.withTransaction === 'function') return db.withTransaction(run);
+  // DB doubles without withTransaction (tests): sequential, old shape.
+  return run(db);
 }
 
 // Intercept a downstream response so the gate can decide AFTER seeing
@@ -318,8 +346,10 @@ function chargeGate(engineId, engineKind, mount, deps) {
           return send.forward(status, body);
         }
         if (price <= 0 || !serviceId) return send.forward(status, body);
+        let orderStatus;
         try {
-          await chargeOnce(db, serviceCredits, userId, serviceId, price, ref);
+          orderStatus = await chargeAndRecordOrder(
+            db, serviceCredits, userId, serviceId, price, ref, orderKey);
         } catch (e) {
           if (/INSUFFICIENT_BALANCE/.test(e.message)) {
             // Record withheld: the client gets 402, not the record.
@@ -330,7 +360,20 @@ function chargeGate(engineId, engineKind, mount, deps) {
           }
           throw e;
         }
-        await recordOrder(db, userId, serviceId, price, orderKey);
+        // Admin-order fix (2026-11-03): an admin refund is NOT undone
+        // by re-verify. chargeOnce returns 'already-paid' (no new
+        // charge) and recordOrder is a DO NOTHING on the surviving
+        // refunded row — but the old code then forwarded the record
+        // anyway. Now a refunded row blocks the record with 402, and
+        // no new charge is taken. (A deleted row is different: the
+        // record inserts fresh as 'completed' and forwards — that
+        // delete-reversal is a separate, still-open conflict.)
+        if (orderStatus === 'refunded') {
+          return send.replace(402, {
+            success: false, error: 'CHARGE_REQUIRED',
+            message: 'এই অর্ডারটি রিফান্ড করা হয়েছে। প্রিভিউ/PDF খুলতে নতুন করে যাচাই করুন (নতুন চার্জ প্রযোজ্য হবে)।',
+          });
+        }
         if (generatedKey && parsed) {
           parsed.idempotency_key = attemptKey;
           return send.forward(status, Buffer.from(JSON.stringify(parsed)));

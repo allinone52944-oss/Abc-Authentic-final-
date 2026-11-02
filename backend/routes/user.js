@@ -381,14 +381,30 @@ router.get('/orders/:id/messages', async (req, res) => {
 
 // Upload document for an order (customer uploads required docs)
 router.post('/orders/:id/documents', orderDocUpload(db, 'order'), async (req, res) => {
+  // The multer middleware already wrote the file to disk — rejections
+  // below unlink it again (same orphan rule as the manual handlers).
+  const unlinkUpload = () => {
+    if (req.file) { try { require('fs').unlinkSync(req.file.path); } catch (_) {} }
+  };
   try {
     const orderId = req.params.id;
     const docType = req.body.doc_type || 'document';
     // Verify order belongs to user
     const ord = await db.query('SELECT * FROM orders WHERE id=$1 AND user_id=$2', [orderId, req.user.id]);
-    if (!ord.rows.length) return res.status(404).json({ error: 'ORDER_NOT_FOUND' });
+    if (!ord.rows.length) {
+      unlinkUpload();
+      return res.status(404).json({ error: 'ORDER_NOT_FOUND' });
+    }
     if (!req.file) return res.status(400).json({ error: 'NO_FILE' });
     const order = ord.rows[0];
+    // Admin-order fix (2026-11-03): documents may only be added
+    // while the order is still open. The old code appended to
+    // completed/delivered/refunded/cancelled/failed orders too,
+    // silently changing a finished order's contents.
+    if (['completed', 'delivered', 'refunded', 'cancelled', 'failed'].includes(order.status)) {
+      unlinkUpload();
+      return res.status(400).json({ error: 'INVALID_STATUS', status: order.status });
+    }
     const docs = safeJsonArray(order.documents);
     docs.push({
       type: docType,
@@ -401,6 +417,7 @@ router.post('/orders/:id/documents', orderDocUpload(db, 'order'), async (req, re
     await db.query('UPDATE orders SET documents=$1 WHERE id=$2', [JSON.stringify(docs), orderId]);
     res.json({ ok: true, filename: req.file.filename });
   } catch (e) {
+    unlinkUpload();
     res.status(500).json({ error: e.message });
   }
 });

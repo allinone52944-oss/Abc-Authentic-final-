@@ -12,6 +12,7 @@ const { requireAuth, requireAdmin, hashPassword, verifyPassword } = require('../
 const { safeLog, orderDocUpload, safeJsonArray } = require('../security');
 const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
+const serviceCredits = require('../lib/serviceCredits');
 
 // Delivery document uploads: settings-driven via orderDocUpload(db, 'delivery') (H-12).
 // Filenames stay random (C-2: never embed req.params.id).
@@ -517,7 +518,10 @@ router.get('/orders', async (req, res) => {
     let i = 1;
     if (req.query.status) { conds.push(`o.status = $${i++}`); params.push(req.query.status); }
     if (req.query.q) {
-      conds.push(`(u.name ILIKE $${i} OR u.phone ILIKE $${i} OR s.name ILIKE $${i} OR s.name_bn ILIKE $${i})`);
+      // Admin-order fix (2026-11-03): the list shows "#<first 8 of id>"
+      // but search never matched it. CAST to text so an order number
+      // (full id or its first 8 chars) finds the order.
+      conds.push(`(u.name ILIKE $${i} OR u.phone ILIKE $${i} OR s.name ILIKE $${i} OR s.name_bn ILIKE $${i} OR CAST(o.id AS TEXT) ILIKE $${i})`);
       params.push('%' + req.query.q.trim() + '%'); i++;
     }
     if (req.query.type) {
@@ -556,74 +560,165 @@ const ORDER_TRANSITIONS = {
   processing: ['completed', 'failed', 'cancelled'],
   completed: ['delivered', 'refunded'],
   delivered: ['refunded'],
-  failed: ['pending'],
-  cancelled: [],
+  // Admin-order fix (2026-11-03): cancelled/failed can now reach
+  // 'refunded' directly, so the money comes back WITHOUT deleting
+  // the order row (its history, chat and documents survive). Cancelling
+  // or failing alone still refunds NOTHING — refund stays a separate,
+  // deliberate admin action. The old failed → pending → processing →
+  // completed → refunded detour (with its false "completed" notice)
+  // is no longer needed.
+  failed: ['pending', 'refunded'],
+  cancelled: ['refunded'],
   refunded: [],
 };
+
+// Admin-order fix (2026-11-03): has this order an admin-uploaded
+// delivery file? Only then may a "download the file" sentence be
+// sent to the customer. orders.documents is JSONB in production
+// (parsed array) or a JSON string in older rows/mocks.
+function orderHasDeliveryFile(order) {
+  const docs = safeJsonArray(order && order.documents);
+  return docs.some((d) => d && d.uploaded_by === 'admin');
+}
 router.put('/orders/:id/status', async (req, res) => {
   try {
     const { status, admin_note } = req.body || {};
     if (!ORDER_STATUSES.includes(status)) {
       return res.status(400).json({ error: 'INVALID_STATUS' });
     }
-    const cur = await db.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
-    if (!cur.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
-    const from = cur.rows[0].status;
-    // Same status: idempotent no-op (no history spam)
-    if (from !== status && !(ORDER_TRANSITIONS[from] || []).includes(status)) {
-      return res.status(400).json({ error: 'INVALID_TRANSITION', from, allowed: ORDER_TRANSITIONS[from] || [] });
-    }
-    const r = await db.query(
-      `UPDATE orders SET status = $1, admin_note = COALESCE($2, admin_note), updated_at = NOW()
-       WHERE id = $3 RETURNING *`,
-      [status, admin_note || null, req.params.id]
-    );
+    // Admin note length cap mirrors the manual PUT (manual.js:281).
+    const note = (admin_note === undefined || admin_note === null || admin_note === '')
+      ? null : String(admin_note).slice(0, 2000);
 
-    // Refund: credit the order price back to wallet (idempotent via wallet_apply)
-    if (status === 'refunded' && from !== 'refunded') {
-      try {
-        await db.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
-          r.rows[0].user_id, Number(r.rows[0].price), 'refund', 'refund-' + r.rows[0].id,
-        ]);
-      } catch (e) { safeLog('[admin] refund credit skipped:', e.message); }
-    }
-
-    // Status history (H-1)
-    if (from !== status) {
-      try {
-        await db.query(
+    // Admin-order fix (2026-11-03): the whole transition runs inside
+    // ONE transaction, on a row locked with SELECT ... FOR UPDATE.
+    // The old code read-then-wrote in separate queries with no status
+    // guard, so two admins racing could write a backwards transition
+    // (e.g. completed → failed), and a failed refund was swallowed
+    // while the order still flipped to refunded. Now: the transition
+    // is validated against the LOCKED row, the UPDATE repeats the
+    // guard (WHERE id AND status = from, rowCount checked), and the
+    // history row + refund share the transaction. A refund failure
+    // (other than DUPLICATE_TRANSACTION, which means the money
+    // already landed once) rolls everything back: no status change,
+    // no 200 + refunded lie — the admin gets a 500 and can retry.
+    let result;
+    try {
+      result = await db.withTransaction(async (client) => {
+        const cur = await client.query(
+          'SELECT * FROM orders WHERE id = $1 FOR UPDATE', [req.params.id]);
+        if (!cur.rows.length) {
+          const e = new Error('NOT_FOUND'); e.statusCode = 404; throw e;
+        }
+        const from = cur.rows[0].status;
+        if (from === status) {
+          // Same status: a note edit may change admin_note, but
+          // nothing else moves — no UPDATE at all when there is no
+          // new note (updated_at must not creep), no history row,
+          // and NO notification (a note save must never re-notify).
+          if (note === null || note === cur.rows[0].admin_note) {
+            return { order: cur.rows[0], from, changed: false, refunded: false };
+          }
+          const upd = await client.query(
+            'UPDATE orders SET admin_note = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+            [note, req.params.id]
+          );
+          return { order: upd.rows[0], from, changed: false, refunded: false };
+        }
+        if (!(ORDER_TRANSITIONS[from] || []).includes(status)) {
+          const e = new Error('INVALID_TRANSITION');
+          e.statusCode = 400; e.from = from; e.allowed = ORDER_TRANSITIONS[from] || [];
+          throw e;
+        }
+        const r = await client.query(
+          `UPDATE orders SET status = $1, admin_note = COALESCE($2, admin_note), updated_at = NOW()
+           WHERE id = $3 AND status = $4 RETURNING *`,
+          [status, note, req.params.id, from]
+        );
+        if (r.rows.length !== 1) {
+          const e = new Error('STALE_WRITE'); e.statusCode = 409; throw e;
+        }
+        // Refund: proportional (locked credit back to service_credits,
+        // balance part back to the wallet) via lib/serviceCredits.
+        // Throws on real failure → whole transaction rolls back.
+        let refundSplit = null;
+        if (status === 'refunded') {
+          refundSplit = await serviceCredits.refundOrderPrice(client, r.rows[0], 'refund');
+        }
+        // Status history (H-1) — inside the transaction now, so a
+        // status change can never exist without its timeline row.
+        await client.query(
           `INSERT INTO order_status_history (order_id, from_status, to_status, admin_id, note)
            VALUES ($1, $2, $3, $4, $5)`,
-          [req.params.id, from, status, req.user.id, admin_note || null]
+          [req.params.id, from, status, req.user.id, note]
         );
-      } catch (e) { safeLog('[admin] status history skipped:', e.message); }
+        return { order: r.rows[0], from, changed: true, refunded: status === 'refunded', refundSplit };
+      });
+    } catch (e) {
+      if (e.statusCode) {
+        const body = { error: e.message };
+        if (e.from !== undefined) { body.from = e.from; body.allowed = e.allowed; }
+        return res.status(e.statusCode).json(body);
+      }
+      throw e;
     }
 
     await logActivity(req.user.id, 'order.status', {
-      order_id: req.params.id, from, status, admin_note: admin_note || null,
+      order_id: req.params.id, from: result.from, status, admin_note: note,
     });
 
-    // Customer notifications: WhatsApp + a web push to the
+    // Customer notifications AFTER commit, and ONLY on a real
+    // transition (changed === true). WhatsApp + a web push to the
     // customer's own devices (async, non-blocking, never breaks
     // the response). The push matters while WhatsApp templates
     // are pending: it is free, instant and window-independent.
-    if (status === 'completed' || status === 'delivered') {
-      wa.notifyOrderCompleted(db, r.rows[0]).catch(() => {});
-      push.notifyUser(db, r.rows[0].user_id, '✅ অর্ডার সম্পন্ন!',
-        'আপনার অর্ডারটি সম্পন্ন হয়েছে — ডেলিভারি ফাইলটি ইতিহাস থেকে ডাউনলোড করতে পারবেন।', '/orders.html').catch(() => {});
-    }
-    if (status === 'failed') {
-      wa.notifyOrderFailed(db, r.rows[0]).catch(() => {});
-      push.notifyUser(db, r.rows[0].user_id, '❌ অর্ডার সম্পন্ন হয়নি',
-        'দুঃখিত — আপনার অর্ডারটি সম্পন্ন করা যায়নি। বিস্তারিত দেখতে অর্ডার পেজে যান।', '/orders.html').catch(() => {});
-    }
-    if (status === 'cancelled') {
-      wa.notifyOrderCancelled(db, r.rows[0]).catch(() => {});
-      push.notifyUser(db, r.rows[0].user_id, 'অর্ডার বাতিল হয়েছে',
-        'আপনার অর্ডারটি বাতিল করা হয়েছে।', '/orders.html').catch(() => {});
+    if (result.changed) {
+      const order = result.order;
+      const hasFile = orderHasDeliveryFile(order);
+      if (status === 'completed') {
+        wa.notifyOrderCompleted(db, order, { hasDeliveryFile: hasFile }).catch(() => {});
+        push.notifyUser(db, order.user_id, '✅ অর্ডার সম্পন্ন!',
+          hasFile
+            ? 'আপনার অর্ডারটি সম্পন্ন হয়েছে — ডেলিভারি ফাইলটি ইতিহাস থেকে ডাউনলোড করতে পারবেন।'
+            : 'আপনার অর্ডারটি সম্পন্ন হয়েছে।',
+          '/orders.html').catch(() => {});
+      } else if (status === 'delivered') {
+        // Delivered has its OWN message now — completed's text must
+        // not be reused here, or one delivery notifies "completed"
+        // twice (once per step of the smart transition).
+        wa.notifyOrderDelivered(db, order, { hasDeliveryFile: hasFile }).catch(() => {});
+        push.notifyUser(db, order.user_id, '📦 অর্ডার ডেলিভার্ড!',
+          hasFile
+            ? 'আপনার অর্ডারটি ডেলিভার্ড হয়েছে — ডেলিভারি ফাইলটি ইতিহাস থেকে ডাউনলোড করতে পারবেন।'
+            : 'আপনার অর্ডারটি ডেলিভার্ড হয়েছে।',
+          '/orders.html').catch(() => {});
+      } else if (status === 'failed') {
+        wa.notifyOrderFailed(db, order).catch(() => {});
+        push.notifyUser(db, order.user_id, '❌ অর্ডার সম্পন্ন হয়নি',
+          'দুঃখিত — আপনার অর্ডারটি সম্পন্ন করা যায়নি। বিস্তারিত দেখতে অর্ডার পেজে যান।', '/orders.html').catch(() => {});
+      } else if (status === 'cancelled') {
+        wa.notifyOrderCancelled(db, order).catch(() => {});
+        push.notifyUser(db, order.user_id, 'অর্ডার বাতিল হয়েছে',
+          'আপনার অর্ডারটি বাতিল করা হয়েছে।', '/orders.html').catch(() => {});
+      } else if (status === 'refunded') {
+        const split = result.refundSplit || {};
+        wa.notifyOrderRefunded(db, order, {
+          creditPart: split.creditPart || 0, balancePart: split.balancePart,
+        }).catch(() => {});
+        let refundText;
+        if ((split.creditPart || 0) > 0 && (split.balancePart || 0) > 0) {
+          refundText = `৳${split.balancePart} আপনার ওয়ালেটে এবং ৳${split.creditPart} ওই সেবার ক্রেডিটে ফেরত দেওয়া হয়েছে।`;
+        } else if ((split.creditPart || 0) > 0) {
+          refundText = `৳${split.creditPart} ওই সেবার ক্রেডিটে ফেরত দেওয়া হয়েছে।`;
+        } else {
+          refundText = `৳${Number(order.price) || 0} আপনার ওয়ালেটে ফেরত দেওয়া হয়েছে।`;
+        }
+        push.notifyUser(db, order.user_id, '↩️ অর্ডার রিফান্ড হয়েছে',
+          refundText, '/orders.html').catch(() => {});
+      }
     }
 
-    res.json({ order: r.rows[0] });
+    res.json({ order: result.order, refunded: result.refunded });
   } catch (e) {
     safeLog('[admin] order status error:', e.message);
     res.status(500).json({ error: 'FAILED' });
@@ -657,53 +752,63 @@ router.delete('/bdris-applications/:id', async (req, res) => {
   } catch (e) { safeLog('[admin] bdris application delete error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });
 
-// DELETE /api/admin/orders/:id?refund=yes|no — permanently delete order (with optional refund)
+// DELETE /api/admin/orders/:id?confirm=yes&refund=yes|no — permanently
+// delete order (with optional refund). confirm=yes is REQUIRED, like
+// user delete (?confirm=yes → 400 CONFIRM_REQUIRED): the API itself
+// must not let a bare DELETE wipe a paid order, whatever the UI does.
 router.delete('/orders/:id', async (req, res) => {
   try {
     const id = req.params.id;
-    const cur = await db.query('SELECT * FROM orders WHERE id = $1', [id]);
-    if (!cur.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
-    const order = cur.rows[0];
-
+    if (req.query.confirm !== 'yes') {
+      return res.status(400).json({ error: 'CONFIRM_REQUIRED' });
+    }
     const refundRequested = req.query.refund === 'yes';
-    let refunded = false;
 
-    // Refund: credit order price back to user wallet if requested and not already refunded
-    if (refundRequested && Number(order.price) > 0 && order.status !== 'refunded') {
-      try {
-        await db.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
-          order.user_id, Number(order.price), 'refund', 'refund-del-' + order.id,
-        ]);
-        refunded = true;
-      } catch (e) {
-        safeLog('[admin] order delete refund failed:', e.message);
-      }
-    }
-
-    // Collect uploaded documents before deleting order row
-    let docFiles = [];
+    // Admin-order fix (2026-11-03): refund + delete share ONE
+    // transaction on the locked row. The old code credited the
+    // refund (or silently failed to) and then deleted the row
+    // anyway — a failed refund left no order to retry against.
+    // Now a real refund failure (DUPLICATE excepted: the money
+    // already landed once) aborts the whole thing: the row survives
+    // and the admin gets a 500, so the refund can be retried.
+    let result;
     try {
-      let docs = [];
-      if (typeof order.documents === 'string') {
-        docs = JSON.parse(order.documents || '[]');
-      } else if (Array.isArray(order.documents)) {
-        docs = order.documents;
-      }
-      for (const d of docs) {
-        if (d && (d.filename || d.path)) docFiles.push(d.filename || d.path);
-      }
-    } catch (_) {
-      safeLog('[admin] corrupt documents JSON during order delete');
+      result = await db.withTransaction(async (client) => {
+        const cur = await client.query(
+          'SELECT * FROM orders WHERE id = $1 FOR UPDATE', [id]);
+        if (!cur.rows.length) {
+          const e = new Error('NOT_FOUND'); e.statusCode = 404; throw e;
+        }
+        const order = cur.rows[0];
+        let refunded = false;
+        let refundSplit = null;
+        if (refundRequested && Number(order.price) > 0 && order.status !== 'refunded') {
+          const r = await serviceCredits.refundOrderPrice(client, order, 'refund-del');
+          refunded = r.refunded;
+          refundSplit = r;
+        }
+        // Collect uploaded documents before deleting order row
+        const docFiles = [];
+        for (const d of safeJsonArray(order.documents)) {
+          if (d && (d.filename || d.path)) docFiles.push(d.filename || d.path);
+        }
+        // Delete order row (cascades order_status_history, chat_messages, support_messages)
+        await client.query('DELETE FROM orders WHERE id = $1', [id]);
+        return {
+          user_id: order.user_id, price: order.price, status: order.status,
+          refunded, refundSplit, docFiles,
+        };
+      });
+    } catch (e) {
+      if (e.statusCode) return res.status(e.statusCode).json({ error: e.message });
+      throw e;
     }
 
-    // Delete order row (cascades order_status_history, chat_messages, support_messages)
-    await db.query('DELETE FROM orders WHERE id = $1', [id]);
-
-    // Clean up physical uploaded files from disk safely
+    // Clean up physical uploaded files from disk safely (after commit)
     try {
       const path = require('path');
       const UP = '/opt/all-in-one-abc-authentic/uploads/orders';
-      for (const f of docFiles) {
+      for (const f of result.docFiles) {
         const full = path.resolve(UP, path.basename(f));
         if (full.startsWith(UP) && fs.existsSync(full)) {
           fs.unlinkSync(full);
@@ -713,15 +818,26 @@ router.delete('/orders/:id', async (req, res) => {
       safeLog('[admin] order file delete skipped:', e.message);
     }
 
+    // Refund notification BEFORE the record is gone from the admin's
+    // view — the customer must hear about money that just moved.
+    if (result.refunded) {
+      const split = result.refundSplit || {};
+      wa.notifyOrderRefunded(db,
+        { id, user_id: result.user_id, price: result.price },
+        { creditPart: split.creditPart || 0, balancePart: split.balancePart }).catch(() => {});
+      push.notifyUser(db, result.user_id, '↩️ অর্ডার রিফান্ড হয়েছে',
+        `৳${Number(result.price) || 0} ফেরত দেওয়া হয়েছে।`, '/orders.html').catch(() => {});
+    }
+
     await logActivity(req.user.id, 'order.delete', {
       order_id: id,
-      user_id: order.user_id,
-      price: order.price,
-      status: order.status,
-      refunded,
+      user_id: result.user_id,
+      price: result.price,
+      status: result.status,
+      refunded: result.refunded,
     });
 
-    res.json({ ok: true, deleted_id: id, refunded });
+    res.json({ ok: true, deleted_id: id, refunded: result.refunded });
   } catch (e) {
     safeLog('[admin] order delete error:', e.message);
     res.status(500).json({ error: 'FAILED' });
@@ -826,12 +942,29 @@ router.get('/support-templates', async (req, res) => {
 
 // Admin upload delivery document
 router.post('/orders/:id/delivery-docs', orderDocUpload(db, 'delivery'), async (req, res) => {
+  // The multer middleware already wrote the file to disk before this
+  // handler runs — every rejection below must unlink it again, or
+  // rejected uploads pile up as orphans (the manual delivery handler
+  // already does this on 404; the order handler did not).
+  const unlinkUpload = () => {
+    if (req.file) { try { fs.unlinkSync(req.file.path); } catch (_) {} }
+  };
   try {
     const orderId = req.params.id;
     if (!req.file) return res.status(400).json({ error: 'NO_FILE' });
     const ord = await db.query('SELECT * FROM orders WHERE id=$1', [orderId]);
-    if (!ord.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    if (!ord.rows.length) {
+      unlinkUpload();
+      return res.status(404).json({ error: 'NOT_FOUND' });
+    }
     const order = ord.rows[0];
+    // Admin-order fix (2026-11-03): a cancelled/refunded/failed order
+    // must not receive new delivery files — the customer could
+    // download a "delivery" after the money came back.
+    if (['cancelled', 'refunded', 'failed'].includes(order.status)) {
+      unlinkUpload();
+      return res.status(400).json({ error: 'INVALID_STATUS', status: order.status });
+    }
     const docs = safeJsonArray(order.documents);
     docs.push({
       type: req.body.doc_type || 'delivery',
@@ -844,6 +977,7 @@ router.post('/orders/:id/delivery-docs', orderDocUpload(db, 'delivery'), async (
     await db.query('UPDATE orders SET documents=$1 WHERE id=$2', [JSON.stringify(docs), orderId]);
     res.json({ ok: true, filename: req.file.filename });
   } catch (e) {
+    unlinkUpload();
     res.status(500).json({ error: e.message });
   }
 });
@@ -1547,6 +1681,11 @@ router.get('/stats', async (req, res) => {
         (SELECT COUNT(*) FROM orders WHERE status = 'new') AS orders_new,
         (SELECT COUNT(*) FROM orders WHERE status IN ('pending','processing')) AS orders_active,
         (SELECT COUNT(*) FROM orders WHERE status = 'completed') AS orders_completed,
+        (SELECT COUNT(*) FROM orders WHERE status = 'delivered') AS orders_delivered,
+        (SELECT COUNT(*) FROM orders WHERE status = 'pending') AS orders_pending,
+        (SELECT COUNT(*) FROM orders WHERE status = 'cancelled') AS orders_cancelled,
+        (SELECT COUNT(*) FROM orders WHERE status = 'refunded') AS orders_refunded,
+        (SELECT COUNT(*) FROM orders WHERE status = 'failed') AS orders_failed,
         -- L-13 (2026-10-15): today's counts (Asia/Dhaka)
         (SELECT COUNT(*) FROM orders
           WHERE created_at >= (CURRENT_DATE AT TIME ZONE 'Asia/Dhaka')::timestamptz

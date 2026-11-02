@@ -361,7 +361,7 @@ function rechargeApprovedMessage({ name, greeting, amount, newBalance }) {
 
 // ---- High-level notifiers (never throw) -----------------------
 // Fetch user + service, check toggles, send. Fire-and-forget safe.
-async function notifyOrderCompleted(db, order) {
+async function notifyOrderCompleted(db, order, opts) {
   try {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
     if (!(await isNotifyEnabled(db, 'order_completed'))) return { ok: false, error: 'NOTIFY_OFF' };
@@ -377,20 +377,119 @@ async function notifyOrderCompleted(db, order) {
       );
       serviceName = (s.rows[0] && (s.rows[0].name_bn || s.rows[0].name)) || '';
     } catch (_) { /* service name is optional */ }
+    const short = String(order.id || '').slice(0, 8);
+    // Admin-order fix (2026-11-03): the completed template promises a
+    // downloadable delivery file. When the order has NO admin-uploaded
+    // delivery file, that promise is false — send plain text with no
+    // file sentence instead. The 'order_completed_nofile' event has no
+    // Meta template mapping, so dispatch goes straight to text (the
+    // template path could otherwise re-introduce the file sentence).
+    if (opts && opts.hasDeliveryFile === false) {
+      const text =
+        `${greetingFor(user)} 🎉\n` +
+        `আপনার ${serviceName} সেবাটি সফলভাবে সম্পন্ন হয়েছে ✅\n` +
+        `অর্ডার নম্বর: ${short}\n` +
+        'Abc Authentic-এর সঙ্গে থাকার জন্য আন্তরিক ধন্যবাদ।';
+      return dispatch(db, 'order_completed_nofile', user, {
+        text,
+        params: [greetingFor(user), serviceName, short],
+      });
+    }
     const tpl = await getTemplates(db);
     const msg = renderTemplate(tpl.order_completed_msg, {
       name: user.name || '',
       greeting: greetingFor(user),
-      order_number: String(order.id || '').slice(0, 8),
+      order_number: short,
       service_name: serviceName,
       status: order.status,
     });
     return dispatch(db, 'order_completed', user, {
       text: msg,
-      params: [greetingFor(user), serviceName, String(order.id || '').slice(0, 8)],
+      params: [greetingFor(user), serviceName, short],
     });
   } catch (e) {
     safeLog('[whatsapp] notifyOrderCompleted failed:', e.message);
+    return { ok: false, error: 'FAILED' };
+  }
+}
+
+// Admin-order fix (2026-11-03): delivered gets its OWN message — the
+// completed template/text must not be reused for delivery, or the
+// customer gets the same "completed" message twice for one delivery.
+// Plain text (no Meta template mapping yet, so dispatch falls back
+// to text); the file sentence appears only when the order actually
+// has an admin-uploaded delivery file.
+async function notifyOrderDelivered(db, order, opts) {
+  try {
+    if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
+    if (!(await isNotifyEnabled(db, 'order_delivered'))) return { ok: false, error: 'NOTIFY_OFF' };
+    const u = await db.query(
+      'SELECT name, whatsapp, religion FROM users WHERE id = $1', [order.user_id]
+    );
+    const user = u.rows[0];
+    if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
+    let serviceName = '';
+    try {
+      const s = await db.query(
+        'SELECT name, name_bn FROM services WHERE id = $1', [order.service_id]
+      );
+      serviceName = (s.rows[0] && (s.rows[0].name_bn || s.rows[0].name)) || '';
+    } catch (_) { /* service name is optional */ }
+    const short = String(order.id || '').slice(0, 8);
+    const hasFile = !!(opts && opts.hasDeliveryFile);
+    let text =
+      `${greetingFor(user)} 🎉\n` +
+      `আপনার ${serviceName} সেবাটি ডেলিভার্ড হয়েছে ✅\n` +
+      `অর্ডার নম্বর: ${short}\n`;
+    if (hasFile) {
+      text += 'ডেলিভারি ফাইলটি আপনার অ্যাকাউন্টের ইতিহাস (History) থেকে যেকোনো সময় আবার ডাউনলোড করতে পারবেন।\n';
+    }
+    text += 'Abc Authentic-এর সঙ্গে থাকার জন্য আন্তরিক ধন্যবাদ।';
+    return dispatch(db, 'order_delivered', user, {
+      text,
+      params: [greetingFor(user), serviceName, short],
+    });
+  } catch (e) {
+    safeLog('[whatsapp] notifyOrderDelivered failed:', e.message);
+    return { ok: false, error: 'FAILED' };
+  }
+}
+
+// Admin-order fix (2026-11-03): refunds previously notified nobody.
+// The split matters: a credit part goes back to service credit, not
+// the wallet — never tell the customer the whole amount is in the
+// wallet when part of it is locked credit. Plain text (no Meta
+// template mapping yet, so dispatch falls back to text).
+async function notifyOrderRefunded(db, order, opts) {
+  try {
+    if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
+    if (!(await isNotifyEnabled(db, 'order_refunded'))) return { ok: false, error: 'NOTIFY_OFF' };
+    const u = await db.query(
+      'SELECT name, whatsapp, religion FROM users WHERE id = $1', [order.user_id]
+    );
+    const user = u.rows[0];
+    if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
+    const short = String(order.id || '').slice(0, 8);
+    const amount = Number(order.price) || 0;
+    const creditPart = opts && opts.creditPart ? Number(opts.creditPart) : 0;
+    const balancePart = opts && opts.balancePart !== undefined && opts.balancePart !== null
+      ? Number(opts.balancePart) : amount;
+    let text =
+      `${greetingFor(user)}\n` +
+      `আপনার অর্ডার (নম্বর: ${short}) রিফান্ড করা হয়েছে।\n`;
+    if (creditPart > 0 && balancePart > 0) {
+      text += `৳${balancePart} আপনার ওয়ালেটে এবং ৳${creditPart} ওই সেবার ক্রেডিটে ফেরত দেওয়া হয়েছে।`;
+    } else if (creditPart > 0) {
+      text += `৳${creditPart} ওই সেবার ক্রেডিটে ফেরত দেওয়া হয়েছে।`;
+    } else {
+      text += `৳${amount} আপনার ওয়ালেটে ফেরত দেওয়া হয়েছে।`;
+    }
+    return dispatch(db, 'order_refunded', user, {
+      text,
+      params: [greetingFor(user), short, String(amount)],
+    });
+  } catch (e) {
+    safeLog('[whatsapp] notifyOrderRefunded failed:', e.message);
     return { ok: false, error: 'FAILED' };
   }
 }
@@ -412,10 +511,13 @@ async function notifyOrderFailed(db, order) {
       serviceName = (s.rows[0] && (s.rows[0].name_bn || s.rows[0].name)) || '';
     } catch (_) {}
     const short = String(order.id || '').slice(0, 8);
+    // Admin-order fix (2026-11-03): failed/cancelled transitions do NOT
+    // refund — a refund is a separate admin action. Never claim the
+    // money is back in the wallet here.
     const msg =
       `${greetingFor(user)}\n` +
       `দুঃখিত — আপনার ${serviceName} সেবাটি (অর্ডার নম্বর: ${short}) সম্পন্ন করা যায়নি।\n` +
-      'কোনো টাকা কেটে থাকলে তা আপনার ওয়ালেটে ফেরত দেওয়া হয়েছে। সহায়তার জন্য আমাদের সাপোর্টে যোগাযোগ করুন।';
+      'টাকা ফেরতের জন্য রিফান্ড আলাদাভাবে করতে হবে — সহায়তার জন্য আমাদের সাপোর্টে যোগাযোগ করুন।';
     return dispatch(db, 'order_failed', user, {
       text: msg,
       params: [greetingFor(user), serviceName, short],
@@ -436,10 +538,12 @@ async function notifyOrderCancelled(db, order) {
     const user = u.rows[0];
     if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
     const short = String(order.id || '').slice(0, 8);
+    // Admin-order fix (2026-11-03): cancelling does NOT refund — a
+    // refund is a separate admin action. Never claim the money is back.
     const msg =
       `${greetingFor(user)}\n` +
       `আপনার অর্ডার (নম্বর: ${short}) বাতিল করা হয়েছে।\n` +
-      'কেটে নেওয়া টাকা আপনার ওয়ালেটে ফেরত দেওয়া হয়েছে।';
+      'টাকা ফেরতের জন্য রিফান্ড আলাদাভাবে করতে হবে — সহায়তার জন্য সাপোর্টে যোগাযোগ করুন।';
     return dispatch(db, 'order_cancelled', user, {
       text: msg,
       params: [greetingFor(user), short],
@@ -529,7 +633,7 @@ async function notifyRechargeRejected(db, tx) {
 // application submitted, certificate / death-verify PDF issued).
 // One generic notifier so every service a customer takes from any
 // engine confirms back to them on WhatsApp.
-async function notifyServiceCompleted(db, userId, serviceLabel) {
+async function notifyServiceCompleted(db, userId, serviceLabel, opts) {
   try {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
     if (!(await isNotifyEnabled(db, 'service_completed'))) return { ok: false, error: 'NOTIFY_OFF' };
@@ -539,11 +643,16 @@ async function notifyServiceCompleted(db, userId, serviceLabel) {
     const user = u.rows[0];
     if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
     const label = String(serviceLabel || 'সেবা');
-    const text =
+    // Admin-order fix (2026-11-03): manual completed without a delivery
+    // file must not promise one. opts.hasDeliveryFile === false drops
+    // the file sentence; unset opts keep the old text (engine callers).
+    let text =
       `${greetingFor(user)} 🎉\n` +
-      `আপনার ${label} সফলভাবে সম্পন্ন হয়েছে ✅\n` +
-      'ফাইলটি আপনার অ্যাকাউন্টের ইতিহাস (History) থেকে যেকোনো সময় আবার ডাউনলোড করতে পারবেন।\n' +
-      'Abc Authentic-এর সঙ্গে থাকার জন্য আন্তরিক ধন্যবাদ।';
+      `আপনার ${label} সফলভাবে সম্পন্ন হয়েছে ✅\n`;
+    if (!(opts && opts.hasDeliveryFile === false)) {
+      text += 'ফাইলটি আপনার অ্যাকাউন্টের ইতিহাস (History) থেকে যেকোনো সময় আবার ডাউনলোড করতে পারবেন।\n';
+    }
+    text += 'Abc Authentic-এর সঙ্গে থাকার জন্য আন্তরিক ধন্যবাদ।';
     return dispatch(db, 'service_completed', user, {
       text,
       params: [greetingFor(user), label],
@@ -693,6 +802,8 @@ module.exports = {
   orderCompletedMessage,
   rechargeApprovedMessage,
   notifyOrderCompleted,
+  notifyOrderDelivered,
+  notifyOrderRefunded,
   notifyOrderFailed,
   notifyOrderCancelled,
   notifyRechargeApproved,

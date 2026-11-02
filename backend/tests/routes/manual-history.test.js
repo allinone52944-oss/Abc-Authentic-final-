@@ -249,7 +249,9 @@ describe('GET /api/history — delivery files only, no work details', () => {
 describe('PUT /api/admin/manual/:id — outcome notifications on transition', () => {
   function putHandlers(prevStatus, newStatus) {
     return [
-      ['SELECT user_id, service_id, status FROM manual_submissions', { rows: [{ user_id: 'u1', service_id: 7, status: prevStatus }] }],
+      // The PUT now also reads documents (for the conditional
+      // completed message), so the route string must match it.
+      ['SELECT user_id, service_id, status, documents FROM manual_submissions', { rows: [{ user_id: 'u1', service_id: 7, status: prevStatus, documents: [] }] }],
       ['UPDATE manual_submissions SET', { rows: [{ id: 'm1', status: newStatus }] }],
       ['SELECT name_bn, name FROM services', { rows: [{ name_bn: 'পাসপোর্ট সেবা', name: 'Passport' }] }],
     ];
@@ -279,5 +281,15 @@ describe('PUT /api/admin/manual/:id — outcome notifications on transition', ()
       .send({ status: 'rejected' }).expect(200);
     expect(push.notifyUser).toHaveBeenCalledTimes(1);
     expect(wa.notifyServiceCompleted).not.toHaveBeenCalled();
+  });
+
+  test('completed → new is an illegal jump → 400 INVALID_TRANSITION, no update', async () => {
+    db.__routeQuery(putHandlers('completed', 'new'));
+    const r = await asAdmin(request(app()).put('/api/admin/manual/m1'))
+      .send({ status: 'new' }).expect(400);
+    expect(r.body.error).toBe('INVALID_TRANSITION');
+    expect(r.body.allowed).toEqual([]);
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    expect(allCalls.find((c) => /UPDATE manual_submissions SET/.test(c[0]))).toBeUndefined();
   });
 });

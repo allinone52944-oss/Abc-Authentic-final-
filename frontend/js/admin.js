@@ -6,8 +6,12 @@
 (function () {
 'use strict';
 
-const STBN = { new:'নতুন', pending:'অপেক্ষমান', received:'গৃহীত',
-  processing:'প্রসেসিং', registered:'নিবন্ধিত', completed:'সম্পন্ন',
+// Admin-order fix (2026-11-03): received/registered removed — those
+// statuses exist in no backend list, transition map or schema CHECK,
+// so an order can never be in them; keeping the labels only invited
+// dead action branches. Unknown statuses fall back to the raw value.
+const STBN = { new:'নতুন', pending:'অপেক্ষমান',
+  processing:'প্রসেসিং', completed:'সম্পন্ন',
   delivered:'ডেলিভার্ড', failed:'ব্যর্থ', cancelled:'বাতিল', refunded:'রিফান্ডেড' };
 const content = document.getElementById('content');
 let me = null;
@@ -1437,7 +1441,8 @@ TABS.orders = async () => {
   const _f = TABS._f || '';
   const _q = TABS._q || '';
   const _type = TABS._orderType || '';
-  let url = '/admin/orders?limit=50';
+  const _page = TABS._opage || 1;
+  let url = '/admin/orders?limit=50&page=' + _page;
   if (_f) url += '&status=' + encodeURIComponent(_f);
   if (_q) url += '&q=' + encodeURIComponent(_q);
   if (_type) url += '&type=' + encodeURIComponent(_type);
@@ -1463,10 +1468,11 @@ TABS.orders = async () => {
     { key: 'new', label: 'নতুন', count: stats.orders_new },
     { key: 'processing', label: 'প্রসেসিং', count: stats.orders_active },
     { key: 'completed', label: 'সম্পন্ন', count: stats.orders_completed },
-    { key: 'delivered', label: 'ডেলিভার্ড' },
-    { key: 'pending', label: 'অপেক্ষমান' },
-    { key: 'cancelled', label: 'বাতিল' },
-    { key: 'refunded', label: 'রিফান্ডেড' }
+    { key: 'delivered', label: 'ডেলিভার্ড', count: stats.orders_delivered },
+    { key: 'pending', label: 'অপেক্ষমান', count: stats.orders_pending },
+    { key: 'failed', label: 'ব্যর্থ', count: stats.orders_failed },
+    { key: 'cancelled', label: 'বাতিল', count: stats.orders_cancelled },
+    { key: 'refunded', label: 'রিফান্ডেড', count: stats.orders_refunded }
   ];
 
   let html = '<div class="adm-orders-wrap">' +
@@ -1521,7 +1527,7 @@ TABS.orders = async () => {
       let quickActionBtn = '';
       if (o.status === 'new' || o.status === 'pending') {
         quickActionBtn = '<button class="btn-quick-primary" onclick="AdmOrders.startProcessing(\'' + o.id + '\')">▶️ গ্রহণ করুন</button>';
-      } else if (o.status === 'processing' || o.status === 'received' || o.status === 'registered') {
+      } else if (o.status === 'processing') {
         quickActionBtn = '<button class="btn-quick-success" onclick="AdmOrders.openQuickComplete(\'' + o.id + '\')">✅ সম্পন্ন ও ডেলিভারি</button>';
       } else if (o.status === 'completed') {
         quickActionBtn = '<button class="btn-quick-emerald" onclick="AdmOrders.markDelivered(\'' + o.id + '\')">🚀 ডেলিভার্ড করুন</button>';
@@ -1575,6 +1581,18 @@ TABS.orders = async () => {
   }
 
   html += '</tbody></table></div></div></div>';
+  // Admin-order fix (2026-11-03): the list used to stop at the first
+  // 50 rows with no way to reach the rest. The backend already
+  // returns total/page/limit — now the pager actually uses them.
+  const totalOrders = (d.total !== undefined && d.total !== null) ? Number(d.total) : (TABS._orders || []).length;
+  const totalPages = Math.max(1, Math.ceil(totalOrders / 50));
+  const curPage = Math.min(_page, totalPages);
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap;">' +
+    '<span style="font-size:12px;color:var(--text-muted);">মোট ' + bn(totalOrders) + 'টি অর্ডার · পেজ ' + bn(curPage) + '/' + bn(totalPages) + '</span>' +
+    '<span style="display:flex;gap:8px;">' +
+      (curPage > 1 ? '<button class="mini-btn" onclick="AdmOrders.page(' + (curPage - 1) + ')">← আগের পেজ</button>' : '') +
+      (curPage < totalPages ? '<button class="mini-btn" onclick="AdmOrders.page(' + (curPage + 1) + ')">পরের পেজ →</button>' : '') +
+    '</span></div>';
   html += '<div class="card" style="margin-top:16px;"><h3>🕘 BDRIS আবেদনসমূহ (অটো সেবা)</h3>' +
     '<div id="admBdrisApps" class="s">⏳ লোড হচ্ছে…</div></div>';
   html += '<div class="card" style="margin-top:16px;"><h3>🎓 Engine ডেলিভারি (সার্টিফিকেট / মৃত্যু সনদ)</h3>' +
@@ -1666,21 +1684,30 @@ window.AdmOrders = {
 
   async search(q) {
     TABS._q = (q || '').trim();
+    TABS._opage = 1;
     show('orders');
   },
 
   clearSearch() {
     TABS._q = '';
+    TABS._opage = 1;
     show('orders');
   },
 
   filterType(type) {
     TABS._orderType = type;
+    TABS._opage = 1;
     show('orders');
   },
 
   async filter(s) {
     TABS._f = s;
+    TABS._opage = 1;
+    show('orders');
+  },
+
+  page(p) {
+    TABS._opage = Math.max(1, Number(p) || 1);
     show('orders');
   },
 
@@ -1691,13 +1718,13 @@ window.AdmOrders = {
     if (targetStatus === 'delivered') {
       if (fromStatus === 'new') path.push('processing', 'completed', 'delivered');
       else if (fromStatus === 'pending') path.push('processing', 'completed', 'delivered');
-      else if (fromStatus === 'processing' || fromStatus === 'received' || fromStatus === 'registered') path.push('completed', 'delivered');
+      else if (fromStatus === 'processing') path.push('completed', 'delivered');
       else if (fromStatus === 'completed') path.push('delivered');
       else path.push('delivered');
     } else if (targetStatus === 'completed') {
       if (fromStatus === 'new') path.push('processing', 'completed');
       else if (fromStatus === 'pending') path.push('processing', 'completed');
-      else if (fromStatus === 'processing' || fromStatus === 'received' || fromStatus === 'registered') path.push('completed');
+      else if (fromStatus === 'processing') path.push('completed');
       else path.push('completed');
     } else if (targetStatus === 'processing') {
       if (fromStatus === 'new' || fromStatus === 'pending') path.push('processing');
@@ -1849,11 +1876,20 @@ window.AdmOrders = {
 
   async confirmDelete(id, refund) {
     try {
-      const q = refund ? '?refund=yes' : '?refund=no';
+      // Admin-order fix (2026-11-03): confirm=yes is now REQUIRED
+      // by the API, and the backend's refunded flag is honoured —
+      // a delete with refund=false must never be reported as a
+      // successful refund.
+      const q = '?confirm=yes&' + (refund ? 'refund=yes' : 'refund=no');
       const r = await ABC.api('/admin/orders/' + id + q, { method: 'DELETE' });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || 'অর্ডার মুছতে ব্যর্থ');
-      alert(refund ? '✅ অর্ডারের মূল্য রিফান্ড করে সফলভাবে মুছে ফেলা হয়েছে' : '✅ অর্ডার সফলভাবে মুছে ফেলা হয়েছে');
+      if (refund) {
+        if (d.refunded === true) alert('✅ অর্ডারের মূল্য রিফান্ড করে সফলভাবে মুছে ফেলা হয়েছে');
+        else alert('⚠️ অর্ডার মুছে ফেলা হয়েছে, তবে রিফান্ড জমা হয়নি (মূল্য ০ বা আগেই রিফান্ড হয়েছে)।');
+      } else {
+        alert('✅ অর্ডার সফলভাবে মুছে ফেলা হয়েছে');
+      }
       closeModal();
       show('orders');
     } catch (e) {
@@ -1865,11 +1901,24 @@ window.AdmOrders = {
     const note = document.getElementById('admOrderNoteInput');
     if (!note) return;
     const txt = note.value.trim();
-    const o = (TABS._orders || []).find(x => x.id === id);
+    let o = (TABS._orders || []).find(x => x.id === id);
+    if (!o) {
+      // Admin-order fix (2026-11-03): NEVER guess 'processing' for a
+      // missing cache entry — that guess used to fail note saves on
+      // delivered orders (and could mislabel the transition). Refetch
+      // the list data (without re-rendering, so the open note modal
+      // survives) and retry once; if still missing, say so.
+      try {
+        const lr = await ABC.api('/admin/orders?limit=50');
+        const ld = await lr.json().catch(() => ({}));
+        o = (ld.orders || []).find(x => x.id === id);
+      } catch (_) {}
+    }
+    if (!o) { alert('অর্ডার তালিকায় পাওয়া যায়নি — পেজ রিলোড করে আবার চেষ্টা করুন'); return; }
     try {
       const r = await ABC.api('/admin/orders/' + id + '/status', {
         method: 'PUT',
-        body: { status: o ? o.status : 'processing', admin_note: txt }
+        body: { status: o.status, admin_note: txt }
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'নোট সংরক্ষণ ব্যর্থ');
@@ -1990,11 +2039,18 @@ window.AdmOrders = {
     const curStatus = o.status || 'new';
     let activeIdx = stepOrder.indexOf(curStatus);
     if (curStatus === 'pending') activeIdx = 0;
-    if (curStatus === 'received' || curStatus === 'registered') activeIdx = 1;
-    if (activeIdx === -1 && curStatus === 'completed') activeIdx = 2;
-    if (activeIdx === -1 && curStatus === 'delivered') activeIdx = 3;
 
-    const pipelineHtml = '<div class="adm-pipeline-steps">' +
+    // Admin-order fix (2026-11-03): cancelled/refunded/failed used
+    // to render a BLANK stepper (activeIdx -1). They now show a
+    // status badge instead — the order is out of the pipeline.
+    let pipelineHtml;
+    if (curStatus === 'cancelled' || curStatus === 'refunded' || curStatus === 'failed') {
+      pipelineHtml = '<div class="adm-pipeline-steps">' +
+        '<span class="st-badge st-' + curStatus + '">' + esc(STBN[curStatus] || curStatus) + '</span>' +
+        '<span style="font-size:12px;color:var(--text-muted);margin-left:8px;">এই অর্ডারটি আর পাইপলাইনে নেই</span>' +
+      '</div>';
+    } else {
+      pipelineHtml = '<div class="adm-pipeline-steps">' +
       '<div class="adm-step-item' + (activeIdx >= 0 ? (activeIdx === 0 ? ' active' : ' done') : '') + '">' +
         '<div class="adm-step-dot">' + (activeIdx > 0 ? '✓' : '১') + '</div>' +
         '<div class="adm-step-label">নতুন অর্ডার</div>' +
@@ -2015,6 +2071,7 @@ window.AdmOrders = {
         '<div class="adm-step-label">ডেলিভার্ড</div>' +
       '</div>' +
     '</div>';
+    }
 
     // Action Hub (Clear, prominent controls for completion & delivery)
     let actionHubHtml = '';
@@ -2031,7 +2088,7 @@ window.AdmOrders = {
           '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ মুছে ফেলুন</button>' +
         '</div>' +
       '</div>';
-    } else if (curStatus === 'processing' || curStatus === 'received' || curStatus === 'registered') {
+    } else if (curStatus === 'processing') {
       actionHubHtml = '<div class="adm-hub-card" style="border-left-color:#16a34a;background:linear-gradient(135deg, #f0fdf4, #ffffff);">' +
         '<div class="adm-hub-title" style="color:#166534;">' +
           '<span>🎯 অর্ডার ডেলিভারি ও সমাপ্তকরণ</span>' +
@@ -2078,6 +2135,38 @@ window.AdmOrders = {
         '<p style="color:#166534;font-size:12px;margin:4px 0 10px;">গ্রাহক ইতিমধ্যে তাঁর ডেলিভারি ডকুমেন্ট পেয়েছেন এবং কাজ সম্পন্ন হয়েছে।</p>' +
         '<div class="adm-hub-actions">' +
           '<button class="mini-btn" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎 অতিরিক্ত ফাইল সংযোজন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\')">↩️ রিফান্ড করুন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ মুছে ফেলুন</button>' +
+        '</div>' +
+      '</div>';
+    } else if (curStatus === 'failed') {
+      // Admin-order fix (2026-11-03): failed orders used to have NO
+      // action hub at all — the backend's only retry path
+      // (failed → pending) had no UI caller. setStatus is finally
+      // called from here, plus a direct refund (no delete needed).
+      actionHubHtml = '<div class="adm-hub-card" style="border-left-color:#dc2626;background:linear-gradient(135deg, #fef2f2, #ffffff);">' +
+        '<div class="adm-hub-title" style="color:#991b1b;">' +
+          '<span>❌ অর্ডার ব্যর্থ — আবার চেষ্টা বা রিফান্ড</span>' +
+          '<span class="st-badge st-failed">ব্যর্থ</span>' +
+        '</div>' +
+        '<p style="color:var(--text-muted);font-size:12px;margin:4px 0 10px;">ব্যর্থ অর্ডার আবার অপেক্ষমাণ করে পুনরায় প্রসেস করা যায়, অথবা টাকা রিফান্ড করা যায় — অর্ডার মুছতে হবে না।</p>' +
+        '<div class="adm-hub-actions">' +
+          '<button class="btn-quick-primary" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.setStatus(\'' + o.id + '\', \'pending\')">🔄 আবার অপেক্ষমাণ করুন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\')">↩️ রিফান্ড করুন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ মুছে ফেলুন</button>' +
+        '</div>' +
+      '</div>';
+    } else if (curStatus === 'cancelled') {
+      // Admin-order fix (2026-11-03): cancelled orders can now be
+      // refunded in place (cancelled → refunded) — the delete modal
+      // is no longer the only money-back path.
+      actionHubHtml = '<div class="adm-hub-card" style="border-left-color:#dc2626;background:linear-gradient(135deg, #fef2f2, #ffffff);">' +
+        '<div class="adm-hub-title" style="color:#991b1b;">' +
+          '<span>🚫 অর্ডার বাতিল — রিফান্ড করা যায়</span>' +
+          '<span class="st-badge st-cancelled">বাতিল</span>' +
+        '</div>' +
+        '<p style="color:var(--text-muted);font-size:12px;margin:4px 0 10px;">বাতিল করলে টাকা নিজে থেকে ফেরে না — রিফান্ড আলাদা অ্যাকশন। অর্ডার না মুছেই রিফান্ড করা যায়।</p>' +
+        '<div class="adm-hub-actions">' +
           '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\')">↩️ রিফান্ড করুন</button>' +
           '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ মুছে ফেলুন</button>' +
         '</div>' +
@@ -2300,9 +2389,13 @@ window.AdmOrders = {
   async modalDeliverWithFile(id) {
     const f = window._modalDeliFile;
     if (!f) { alert('ফাইল বেছে নিন'); return; }
+    // Admin-order fix (2026-11-03): the file+deliver path used to
+    // run with no confirm, unlike markDelivered.
+    if (!confirm('ডেলিভারি ফাইল আপলোড করে অর্ডারটি ডেলিভার্ড মার্ক করতে চান?')) return;
     const btn = document.getElementById('admModalUploadDeliverBtn');
     if (btn) { btn.disabled = true; btn.innerText = 'আপলোড ও ডেলিভারি হচ্ছে…'; }
 
+    let fileUploaded = false;
     try {
       // 1. Upload delivery doc
       const fd = new FormData();
@@ -2315,6 +2408,7 @@ window.AdmOrders = {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'ডেলিভারি ফাইল আপলোড ব্যর্থ');
+      fileUploaded = true;
 
       // 2. Advance status smoothly to delivered
       const o = (TABS._orders || []).find(x => x.id === id);
@@ -2324,7 +2418,15 @@ window.AdmOrders = {
       closeModal();
       show('orders');
     } catch (e) {
-      alert('❌ ডেলিভারি ব্যর্থ: ' + e.message);
+      // Admin-order fix (2026-11-03): never call this "delivery
+      // failed" when step 1 already succeeded — the file IS in the
+      // order and downloadable from History; only the status step
+      // failed. Say exactly that.
+      if (fileUploaded) {
+        alert('⚠️ ফাইল আপলোড হয়েছে এবং গ্রাহক ইতিহাস থেকে ডাউনলোড করতে পারবেন, কিন্তু স্ট্যাটাস ডেলিভার্ড হয়নি — আবার চেষ্টা করুন বা স্ট্যাটাস হাতে বদলান। (' + e.message + ')');
+      } else {
+        alert('❌ ডেলিভারি ব্যর্থ: ' + e.message);
+      }
       if (btn) { btn.disabled = false; btn.innerText = '🚀 ডেলিভারি ফাইল আপলোড ও সমাপ্ত করুন'; }
     }
   },
@@ -4644,8 +4746,9 @@ TABS.reports = async () => {
     processing: 'প্রসেসিং',
     completed: 'সম্পন্ন',
     delivered: 'ডেলিভার্ড',
+    failed: 'ব্যর্থ',
     cancelled: 'বাতিল',
-    rejected: 'বাতিল',
+    refunded: 'রিফান্ডেড',
     hold: 'হোল্ড'
   };
 
@@ -4703,7 +4806,10 @@ TABS.reports = async () => {
     '<h3 style="margin:0 0 14px; font-size:16px; color:#0f172a;">📦 অর্ডার স্ট্যাটাস ব্রেকডাউন</h3>' +
     '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px;">';
 
-  const statuses = ['completed', 'delivered', 'processing', 'pending', 'cancelled', 'rejected'];
+  // Admin-order fix (2026-11-03): rejected is a MANUAL-submission
+  // status, never an order status — it always showed 0 while new /
+  // failed / refunded counts existed in the data but were hidden.
+  const statuses = ['new', 'pending', 'processing', 'completed', 'delivered', 'failed', 'cancelled', 'refunded'];
   statuses.forEach(s => {
     const count = byStatus[s] || 0;
     const pct = totalOrders > 0 ? Math.round((count / totalOrders) * 100) : 0;

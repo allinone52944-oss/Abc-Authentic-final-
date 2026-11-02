@@ -170,6 +170,19 @@ customerManual.post('/submit', (req, res) => {
         return res.status(400).json({ error: 'EMPTY_TEXT' });
       }
       const serviceId = req.body.service_id || null;
+      // Admin-order fix (2026-11-03): a manual submission is the
+      // payment-free track, so it may only name a manual-type
+      // service. The old code accepted ANY service_id (including
+      // priced automated services) with no lookup at all — a free
+      // intake path for paid services. Null service_id keeps the
+      // old behaviour (unlinked submission).
+      if (serviceId) {
+        const sr = await db.query('SELECT type FROM services WHERE id = $1', [serviceId]);
+        if (!sr.rows.length || sr.rows[0].type !== 'manual') {
+          for (const f of (req.files || [])) { try { fs.unlinkSync(f.path); } catch (_) {} }
+          return res.status(400).json({ error: sr.rows.length ? 'NOT_MANUAL_SERVICE' : 'SERVICE_NOT_FOUND' });
+        }
+      }
       const parsed = parser.parseManualText(rawText);
       const docs = (req.files || []).map(f => ({
         filename: f.filename,
@@ -264,13 +277,34 @@ adminManual.get('/:id', async (req, res) => {
 // (this flow previously notified nobody at all): completed →
 // WhatsApp + push, rejected → push. A re-save with the same
 // status (e.g. an admin_note edit) never re-notifies.
+// Admin-order fix (2026-11-03): manual submissions had NO transition
+// map — completed → new backwards was accepted. Same shape as the
+// order map, but for the manual vocabulary (new/processing/completed/
+// rejected). Same-status re-saves stay allowed (note edits) and never
+// re-notify (the existing guard below).
+const MANUAL_TRANSITIONS = {
+  new: ['processing', 'completed', 'rejected'],
+  processing: ['completed', 'rejected'],
+  completed: [],
+  rejected: [],
+};
+
 adminManual.put('/:id', async (req, res) => {
   try {
     const { status, admin_note } = req.body || {};
     const before = await db.query(
-      'SELECT user_id, service_id, status FROM manual_submissions WHERE id = $1',
+      'SELECT user_id, service_id, status, documents FROM manual_submissions WHERE id = $1',
       [req.params.id]
     );
+    if (before.rows.length && status && status !== before.rows[0].status &&
+        ['new', 'processing', 'completed', 'rejected'].includes(status) &&
+        !(MANUAL_TRANSITIONS[before.rows[0].status] || []).includes(status)) {
+      return res.status(400).json({
+        error: 'INVALID_TRANSITION',
+        from: before.rows[0].status,
+        allowed: MANUAL_TRANSITIONS[before.rows[0].status] || [],
+      });
+    }
     const sets = [];
     const params = [];
     let i = 1;
@@ -296,9 +330,17 @@ adminManual.put('/:id', async (req, res) => {
           const sv = await db.query('SELECT name_bn, name FROM services WHERE id = $1', [prev.service_id]);
           if (sv.rows.length) label = sv.rows[0].name_bn || sv.rows[0].name || label;
         } catch (_) {}
-        wa.notifyServiceCompleted(db, prev.user_id, label).catch(() => {});
+        // Admin-order fix (2026-11-03): the file sentence goes out
+        // ONLY when an admin delivery file actually exists on the
+        // submission — completed-without-a-file used to promise one.
+        const hasDelivery = parseDocs(prev.documents)
+          .some((d) => d && d.uploaded_by === 'admin');
+        wa.notifyServiceCompleted(db, prev.user_id, label, { hasDeliveryFile: hasDelivery }).catch(() => {});
         push.notifyUser(db, prev.user_id, '✅ আপনার সেবা সম্পন্ন!',
-          'আপনার ' + label + ' সম্পন্ন হয়েছে — ডেলিভারি ফাইলটি ইতিহাসে পাবেন।', '/history.html').catch(() => {});
+          hasDelivery
+            ? 'আপনার ' + label + ' সম্পন্ন হয়েছে — ডেলিভারি ফাইলটি ইতিহাসে পাবেন।'
+            : 'আপনার ' + label + ' সম্পন্ন হয়েছে।',
+          '/history.html').catch(() => {});
       } else {
         push.notifyUser(db, prev.user_id, '❌ সেবার অনুরোধ সম্পন্ন হয়নি',
           'দুঃখিত — আপনার ম্যানুয়াল সেবার অনুরোধটি সম্পন্ন করা যায়নি। সহায়তার জন্য সাপোর্টে যোগাযোগ করুন।', '/history.html').catch(() => {});

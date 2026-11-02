@@ -142,6 +142,29 @@ describe('charge gate', () => {
     expect(serviceCredits.payForService).not.toHaveBeenCalled();
   });
 
+  test('re-verify of a REFUNDED attempt -> 402 CHARGE_REQUIRED, record withheld, no new charge', async () => {
+    // The original transaction exists (already-paid path, so no new
+    // charge), the order row survives as 'refunded' — the old code
+    // forwarded the record anyway. The status lookup must come
+    // first: 'FROM orders' also matches it, so order matters.
+    db.__routeQuery([
+      ['SELECT status FROM orders', { rows: [{ status: 'refunded' }] }],
+      ['FROM services', [{ id: 7, price: 100 }]],
+      ['FROM user_services', []],
+      ['FROM users', [{ balance: 1000 }]],
+      ['FROM transactions', [{ '1': 1 }]],
+      ['FROM orders', []],
+    ]);
+    serviceCredits.availableFor.mockResolvedValue(0);
+    const { app } = appWith({ mode: 'success' });
+    const r = await request(app).post('/api/bdris-engine/api/verify')
+      .send({ sessionId: 's', brn: '1', dob: '2000-01-01', captcha: 'x', idempotency_key: 'k-ref' });
+    expect(r.status).toBe(402);
+    expect(r.body.error).toBe('CHARGE_REQUIRED');
+    expect(JSON.stringify(r.body)).not.toContain('19900101123456789');
+    expect(serviceCredits.payForService).not.toHaveBeenCalled();
+  });
+
   test('verify failure -> forwarded, no charge', async () => {
     routeDb();
     const { app } = appWith({ mode: 'failure' });

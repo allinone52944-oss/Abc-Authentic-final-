@@ -239,8 +239,10 @@ describe('orders', () => {
     const r = await withAdmin(request(app()).put('/api/admin/orders/o1/status'))
       .send({ status: 'completed' }).expect(200);
     expect(r.body.order.status).toBe('completed');
-    // history recorded
-    const h = db.query.mock.calls.find((c) => /order_status_history/.test(c[0]));
+    // history recorded — inside the transaction now, so it lands on
+    // the transaction client's call log, not the pool log.
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    const h = allCalls.find((c) => /order_status_history/.test(c[0]));
     expect(h).toBeDefined();
     expect(h[1].slice(0, 3)).toEqual(['o1', 'processing', 'completed']);
   });
@@ -269,14 +271,26 @@ describe('orders', () => {
       ['UPDATE orders SET status', { rows: [{ id: 'o1', user_id: 'u1', price: '200', status: 'refunded' }] }],
     ]);
     await withAdmin(request(app()).put('/api/admin/orders/o1/status')).send({ status: 'refunded' }).expect(200);
-    const w = db.query.mock.calls.find((c) => /wallet_apply/.test(c[0]));
+    // Refund now runs inside the transaction: check both call logs.
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    const w = allCalls.find((c) => /wallet_apply/.test(c[0]));
     expect(w).toBeDefined();
     expect(w[1]).toEqual(['u1', 200, 'refund', 'refund-o1']);
   });
 
+  test('DELETE /orders/:id without confirm=yes → 400 CONFIRM_REQUIRED (no delete)', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o1', user_id: 'u1', price: '150', status: 'new', documents: '[]' }] }],
+    ]);
+    const r = await withAdmin(request(app()).delete('/api/admin/orders/o1')).expect(400);
+    expect(r.body.error).toBe('CONFIRM_REQUIRED');
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    expect(allCalls.find((c) => /DELETE FROM orders WHERE id/.test(c[0]))).toBeUndefined();
+  });
+
   test('DELETE /orders/:id: not found → 404', async () => {
     db.__routeQuery([['SELECT * FROM orders WHERE id', { rows: [] }]]);
-    await withAdmin(request(app()).delete('/api/admin/orders/o_missing')).expect(404);
+    await withAdmin(request(app()).delete('/api/admin/orders/o_missing?confirm=yes')).expect(404);
   });
 
   test('DELETE /orders/:id without refund → 200 and deletes order', async () => {
@@ -284,13 +298,14 @@ describe('orders', () => {
       ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o1', user_id: 'u1', price: '150', status: 'new', documents: '[]' }] }],
       ['DELETE FROM orders WHERE id', { rowCount: 1 }],
     ]);
-    const r = await withAdmin(request(app()).delete('/api/admin/orders/o1')).expect(200);
+    const r = await withAdmin(request(app()).delete('/api/admin/orders/o1?confirm=yes')).expect(200);
     expect(r.body.ok).toBe(true);
     expect(r.body.deleted_id).toBe('o1');
     expect(r.body.refunded).toBe(false);
-    const w = db.query.mock.calls.find((c) => /wallet_apply/.test(c[0]));
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    const w = allCalls.find((c) => /wallet_apply/.test(c[0]));
     expect(w).toBeUndefined();
-    const d = db.query.mock.calls.find((c) => /DELETE FROM orders WHERE id/.test(c[0]));
+    const d = allCalls.find((c) => /DELETE FROM orders WHERE id/.test(c[0]));
     expect(d).toBeDefined();
   });
 
@@ -299,13 +314,57 @@ describe('orders', () => {
       ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o2', user_id: 'u1', price: '250', status: 'processing', documents: '[]' }] }],
       ['DELETE FROM orders WHERE id', { rowCount: 1 }],
     ]);
-    const r = await withAdmin(request(app()).delete('/api/admin/orders/o2?refund=yes')).expect(200);
+    const r = await withAdmin(request(app()).delete('/api/admin/orders/o2?confirm=yes&refund=yes')).expect(200);
     expect(r.body.ok).toBe(true);
     expect(r.body.deleted_id).toBe('o2');
     expect(r.body.refunded).toBe(true);
-    const w = db.query.mock.calls.find((c) => /wallet_apply/.test(c[0]));
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    const w = allCalls.find((c) => /wallet_apply/.test(c[0]));
     expect(w).toBeDefined();
     expect(w[1]).toEqual(['u1', 250, 'refund', 'refund-del-o2']);
+  });
+
+  test('DELETE /orders/:id?refund=yes with a failing refund → 500 and NO delete (row survives to retry)', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o3', user_id: 'u1', price: '250', status: 'processing', documents: '[]' }] }],
+      ['SELECT * FROM wallet_apply', () => { throw new Error('DB_GONE'); }],
+      ['DELETE FROM orders WHERE id', { rowCount: 1 }],
+    ]);
+    const r = await withAdmin(request(app()).delete('/api/admin/orders/o3?confirm=yes&refund=yes')).expect(500);
+    expect(r.body.error).toBe('FAILED');
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    expect(allCalls.find((c) => /DELETE FROM orders WHERE id/.test(c[0]))).toBeUndefined();
+  });
+
+  test('cancelled → refunded and failed → refunded are allowed without deleting the row', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o4', user_id: 'u1', price: '100', status: 'cancelled' }] }],
+      ['UPDATE orders SET status', { rows: [{ id: 'o4', user_id: 'u1', price: '100', status: 'refunded' }] }],
+    ]);
+    const r1 = await withAdmin(request(app()).put('/api/admin/orders/o4/status'))
+      .send({ status: 'refunded' }).expect(200);
+    expect(r1.body.order.status).toBe('refunded');
+    expect(r1.body.refunded).toBe(true);
+    db.__reset();
+    db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o5', user_id: 'u1', price: '100', status: 'failed' }] }],
+      ['UPDATE orders SET status', { rows: [{ id: 'o5', user_id: 'u1', price: '100', status: 'refunded' }] }],
+    ]);
+    const r2 = await withAdmin(request(app()).put('/api/admin/orders/o5/status'))
+      .send({ status: 'refunded' }).expect(200);
+    expect(r2.body.order.status).toBe('refunded');
+    expect(r2.body.refunded).toBe(true);
+  });
+
+  test('status refund failure rolls back → 500, not 200 + refunded', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o6', user_id: 'u1', price: '100', status: 'completed' }] }],
+      ['UPDATE orders SET status', { rows: [{ id: 'o6', user_id: 'u1', price: '100', status: 'refunded' }] }],
+      ['SELECT * FROM wallet_apply', () => { throw new Error('DB_GONE'); }],
+    ]);
+    const r = await withAdmin(request(app()).put('/api/admin/orders/o6/status'))
+      .send({ status: 'refunded' }).expect(500);
+    expect(r.body.error).toBe('FAILED');
   });
 });
 

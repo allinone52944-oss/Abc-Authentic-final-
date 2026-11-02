@@ -117,4 +117,134 @@ async function payForService(client, { userId, serviceId, amount, ref }) {
   return { paidFromCredit: fromCredit, paidFromBalance: fromBalance, newBalance };
 }
 
-module.exports = { addServiceCredit, availableFor, payForService, lockedCreditRows };
+// ---- Proportional refunds (admin-order fix, 2026-11-03) ----------
+//
+// A charge paid partly from service-locked credit and partly from the
+// wallet balance must refund the same way: the credit part back to
+// service_credits, the balance part back to users.balance. Refunding
+// everything to the balance would widen the spending scope of locked
+// money (the lock exists precisely to prevent that).
+//
+// The charge split is NOT stored on the order row, so it is rebuilt
+// from the transactions ledger: payForService writes a balance debit
+// under the charge ref and, when credit was used, a credit debit
+// under ref + ':svc'. Candidate refs, in order:
+//   - POST /api/orders: 'order-' + idempotency_key + '-' + userId
+//     (user.js order create; idempotency_key IS the client key)
+//   - charge gate: engineId + '-' + attemptKey, where the order's
+//     idempotency_key is engineId + ':' + attemptKey
+//     (engineChargeGate.js orderKeyOf/txRefOf)
+// Other engines (land/nid/qr/server-copy) use refs that cannot be
+// rebuilt from the order row alone. When no candidate matches the
+// ledger reliably, the whole price refunds to the balance (the old
+// behaviour) — NEVER invent credit from a guess.
+//
+// All queries run on the caller's transaction client, so the credit
+// restore, the balance credit and the caller's own status/delete
+// write commit or roll back together. DUPLICATE_TRANSACTION on the
+// balance leg means a concurrent refund already landed the money —
+// that counts as success, not failure (the same rule as the status
+// endpoint: never report 200 + refunded for money that never moved,
+// and never fail a refund whose money already arrived).
+async function reconstructChargeSplit(client, userId, order) {
+  const price = Math.round((Number(order.price) || 0) * 100) / 100;
+  const key = order.idempotency_key ? String(order.idempotency_key) : '';
+  if (!key || !(price > 0)) return null;
+  const candidates = ['order-' + key + '-' + userId];
+  const colon = key.indexOf(':');
+  if (colon > 0) candidates.push(key.slice(0, colon) + '-' + key.slice(colon + 1));
+  for (const ref of candidates) {
+    const r = await client.query(
+      `SELECT trxid, amount FROM transactions
+        WHERE user_id = $1 AND trxid IN ($2, $3) AND status = 'approved'`,
+      [userId, ref, ref + ':svc']
+    );
+    const svc = r.rows.find((x) => x.trxid === ref + ':svc');
+    const bal = r.rows.find((x) => x.trxid === ref);
+    if (!svc && !bal) continue;
+    const creditPart = svc ? Math.round(Math.abs(Number(svc.amount)) * 100) / 100 : 0;
+    if (creditPart < 0 || creditPart > price) continue;
+    const balancePart = Math.round((price - creditPart) * 100) / 100;
+    // If a balance leg exists it must agree with the split; a
+    // mismatch means this candidate is not this order's charge.
+    if (bal && Math.abs(Math.abs(Number(bal.amount)) - balancePart) > 0.01) continue;
+    return { creditPart, balancePart };
+  }
+  return null;
+}
+
+// Top the consumed credit back up, earliest rows first, never above
+// each row's original amount; any remainder (original rows expired
+// or deleted) goes into a fresh 'refund' row so the credit is not
+// silently lost. The ref makes a repeated restore a no-op.
+async function restoreServiceCredit(client, userId, serviceId, amount, refKey) {
+  let left = Math.round((Number(amount) || 0) * 100) / 100;
+  if (!(left > 0)) return;
+  const rows = await client.query(
+    `SELECT id, amount, remaining FROM service_credits
+      WHERE user_id = $1 AND service_id = $2 AND remaining < amount
+        AND (expires_at IS NULL OR expires_at > NOW())
+      ORDER BY created_at ASC
+      FOR UPDATE`,
+    [userId, serviceId]
+  );
+  for (const row of rows.rows) {
+    if (!(left > 0)) break;
+    const headroom = Math.round((Number(row.amount) - Number(row.remaining)) * 100) / 100;
+    if (!(headroom > 0)) continue;
+    const add = Math.min(headroom, left);
+    await client.query(
+      'UPDATE service_credits SET remaining = remaining + $1 WHERE id = $2',
+      [add, row.id]
+    );
+    left = Math.round((left - add) * 100) / 100;
+  }
+  if (left > 0) {
+    await client.query(
+      `INSERT INTO service_credits (user_id, service_id, source, ref, amount, remaining, expires_at)
+       VALUES ($1, $2, 'refund', $3, $4, $4, NULL)
+       ON CONFLICT (ref) DO NOTHING`,
+      [userId, serviceId, refKey, left]
+    );
+  }
+}
+
+// Refund one order's price through `client` (caller's transaction).
+// refPrefix: 'refund' (status refund) or 'refund-del' (delete refund),
+// matching the wallet_apply refs the old code used. Returns the split
+// actually refunded. Throws on any non-duplicate failure so the
+// caller's transaction rolls back — the order must never flip to
+// refunded (or disappear) while the money never moved.
+async function refundOrderPrice(client, order, refPrefix) {
+  const price = Math.round((Number(order.price) || 0) * 100) / 100;
+  if (!(price > 0)) return { refunded: false, creditPart: 0, balancePart: 0 };
+  const split = await reconstructChargeSplit(client, order.user_id, order);
+  const creditPart = split ? split.creditPart : 0;
+  const balancePart = split ? split.balancePart : price;
+  if (creditPart > 0 && order.service_id) {
+    await restoreServiceCredit(
+      client, order.user_id, order.service_id, creditPart,
+      (refPrefix || 'refund') + '-' + order.id
+    );
+  }
+  if (balancePart > 0) {
+    try {
+      await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
+        order.user_id, balancePart, 'refund', (refPrefix || 'refund') + '-' + order.id,
+      ]);
+    } catch (e) {
+      if (/DUPLICATE_TRANSACTION/.test(e.message)) {
+        // A concurrent refund already credited the balance leg once.
+        // The money is there; do not fail the refund for it.
+      } else {
+        throw e;
+      }
+    }
+  }
+  return { refunded: true, creditPart, balancePart };
+}
+
+module.exports = {
+  addServiceCredit, availableFor, payForService, lockedCreditRows,
+  refundOrderPrice, reconstructChargeSplit,
+};

@@ -2,7 +2,7 @@
 // credit rule (owner, 2026-10-21): scoped coupon/cashback money can
 // pay ONLY for its own service, is consumed before wallet balance,
 // and can never fund another service.
-const { payForService, addServiceCredit, availableFor } = require('../../lib/serviceCredits');
+const { payForService, addServiceCredit, availableFor, refundOrderPrice } = require('../../lib/serviceCredits');
 
 function mockClient({ balance = 0, credits = [], dup = false } = {}) {
   const calls = [];
@@ -100,5 +100,80 @@ describe('addServiceCredit / availableFor', () => {
   test('availableFor sums remaining for the user+service', async () => {
     const client = mockClient({ credits: [{ id: 'c1', remaining: 10 }, { id: 'c2', remaining: 5 }] });
     await expect(availableFor(client, 'u1', 's1')).resolves.toBe(15);
+  });
+});
+
+describe('refundOrderPrice (admin-order fix, 2026-11-03)', () => {
+  // Focused mock: ledger rows keyed by the charge ref the refund
+  // helper reconstructs, plus one service_credits row to top up.
+  function refundClient({ ledger = {}, creditRows = [] } = {}) {
+    const calls = [];
+    return {
+      calls,
+      query: jest.fn(async (text, params) => {
+        calls.push([text, params]);
+        if (/FROM transactions/.test(text)) {
+          const ref = params[1];
+          return { rows: ledger[ref] || [] };
+        }
+        if (/FROM service_credits/.test(text)) return { rows: creditRows };
+        if (/UPDATE service_credits SET remaining/.test(text)) return { rows: [] };
+        if (/INSERT INTO service_credits/.test(text)) return { rows: [{ id: 'sc-ref' }] };
+        if (/wallet_apply/.test(text)) return { rows: [{ new_balance: 0 }] };
+        return { rows: [] };
+      }),
+    };
+  }
+
+  test('split charge refunds proportionally: credit part tops up service_credits, balance part via wallet_apply', async () => {
+    const client = refundClient({
+      ledger: {
+        'order-ck1-u1': [
+          { trxid: 'order-ck1-u1', amount: -60 },
+          { trxid: 'order-ck1-u1:svc', amount: -40 },
+        ],
+      },
+      creditRows: [{ id: 'c1', amount: 50, remaining: 10 }],
+    });
+    const out = await refundOrderPrice(client,
+      { id: 'o1', user_id: 'u1', service_id: 's1', price: 100, idempotency_key: 'ck1' }, 'refund');
+    expect(out).toEqual({ refunded: true, creditPart: 40, balancePart: 60 });
+    const upd = client.calls.find((c) => /UPDATE service_credits SET remaining/.test(c[0]));
+    expect(upd[1]).toEqual([40, 'c1']); // headroom was 50-10=40
+    const w = client.calls.find((c) => /wallet_apply/.test(c[0]));
+    expect(w[1]).toEqual(['u1', 60, 'refund', 'refund-o1']);
+  });
+
+  test('gate ref reconstructs too (engineId:attemptKey → engineId-attemptKey)', async () => {
+    const client = refundClient({
+      ledger: {
+        'bdris-certificate-att1': [
+          { trxid: 'bdris-certificate-att1:svc', amount: -30 },
+        ],
+      },
+      creditRows: [{ id: 'c1', amount: 100, remaining: 70 }],
+    });
+    const out = await refundOrderPrice(client,
+      { id: 'o2', user_id: 'u1', service_id: 's1', price: 100, idempotency_key: 'bdris-certificate:att1' }, 'refund');
+    expect(out).toEqual({ refunded: true, creditPart: 30, balancePart: 70 });
+  });
+
+  test('unreconstructible split → whole price to balance, NEVER invented credit', async () => {
+    const client = refundClient({ ledger: {}, creditRows: [{ id: 'c1', amount: 50, remaining: 50 }] });
+    const out = await refundOrderPrice(client,
+      { id: 'o3', user_id: 'u1', service_id: 's1', price: 100, idempotency_key: 'unknown-key' }, 'refund');
+    expect(out).toEqual({ refunded: true, creditPart: 0, balancePart: 100 });
+    expect(client.calls.find((c) => /UPDATE service_credits/.test(c[0]))).toBeUndefined();
+    expect(client.calls.find((c) => /INSERT INTO service_credits/.test(c[0]))).toBeUndefined();
+    const w = client.calls.find((c) => /wallet_apply/.test(c[0]));
+    expect(w[1]).toEqual(['u1', 100, 'refund', 'refund-o3']);
+  });
+
+  test('zero price → no refund calls at all', async () => {
+    const client = refundClient();
+    const out = await refundOrderPrice(client,
+      { id: 'o4', user_id: 'u1', service_id: 's1', price: 0, idempotency_key: 'ck0' }, 'refund');
+    expect(out.refunded).toBe(false);
+    expect(client.calls).toEqual([]);
   });
 });
