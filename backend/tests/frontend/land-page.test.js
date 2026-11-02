@@ -82,11 +82,16 @@ describe('downloads go through the login (the NO_TOKEN bug)', () => {
 
 describe('catalog shows land ONCE (the duplicate complaint)', () => {
   const svcs = read('frontend/services.html');
-  test('services page collapses the three land engines into one card', () => {
+  test('services page collapses the four land engines into one card', () => {
     expect(svcs).toContain('function groupLand(');
-    expect(svcs).toContain("LAND_ENGINES = ['land-search', 'land-scan', 'land-verify']");
+    expect(svcs).toContain("LAND_ENGINES = ['land-search', 'land-scan', 'land-verify', 'land-mouza-value']");
     expect(svcs).toContain('ALL_SERVICES = groupLand(services || [])');
     expect(svcs).toContain("_landGroup: true");
+  });
+  test('the group card names mouza, and mouza stays searchable', () => {
+    expect(svcs).toContain('খতিয়ান খোঁজ · নামে সন্ধান · জমি যাচাই · মৌজা মূল্য');
+    expect(svcs).toContain("_landSearch: 'খতিয়ান খোঁজ নামে সন্ধান জমি যাচাই মৌজা মূল্য মৌজা মূল্য রিপোর্ট'");
+    expect(svcs).toContain("extra.includes(q)");
   });
   test('the group card opens the single land page', () => {
     expect(svcs).toContain("if (s._landGroup)");

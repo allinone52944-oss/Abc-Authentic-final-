@@ -244,13 +244,17 @@ function autoIcon(name){
   return '🛎️';
 }
 
-// The three land engines are ONE customer service (ভূমি সেবা)
-// with three modes on a single page — showing three separate
-// catalog cards for them was a duplicate (owner, 2026-10-23).
+// The land engines are ONE customer service (ভূমি সেবা)
+// with four modes on a single page — showing separate catalog
+// cards for them was a duplicate (owner, 2026-10-23, and again
+// for mouza, 2026-11-03: mouza stayed a separate card while
+// also appearing as the fourth mode tile inside land.html).
 // They collapse into a single group card that opens land.html
 // directly; the individual rows stay in Admin → Services for
 // pricing, and their detail pages keep working.
-const LAND_ENGINES = ['land-search', 'land-scan', 'land-verify'];
+// _landSearch keeps every sub-service name searchable, so
+// searching "মৌজা" still finds the group card.
+const LAND_ENGINES = ['land-search', 'land-scan', 'land-verify', 'land-mouza-value'];
 function groupLand(list){
   const lands = list.filter(s => LAND_ENGINES.includes(s.engine_id));
   if (lands.length < 2) return list;
@@ -260,6 +264,7 @@ function groupLand(list){
     name: 'Land Services', name_bn: 'ভূমি সেবা (খতিয়ান)', icon: '🌾',
     price: Math.min.apply(null, lands.map(s => Number(s.price) || 0)),
     open: lands.some(s => s.open), _landGroup: true,
+    _landSearch: 'খতিয়ান খোঁজ নামে সন্ধান জমি যাচাই মৌজা মূল্য মৌজা মূল্য রিপোর্ট',
   });
   rest.splice(Math.min(list.indexOf(first), rest.length), 0, group);
   return rest;
@@ -270,7 +275,7 @@ function card(s){
     return '<div class="svc-card" onclick="location.href=\'/land.html\'">' +
       '<div class="svc-ico">🌾</div>' +
       '<div class="svc-info"><h4>ভূমি সেবা (খতিয়ান)</h4>' +
-      '<div style="font-size:12px;color:#64748b;margin-top:2px;">খতিয়ান খোঁজ · নামে সন্ধান · জমি যাচাই</div>' +
+      '<div style="font-size:12px;color:#64748b;margin-top:2px;">খতিয়ান খোঁজ · নামে সন্ধান · জমি যাচাই · মৌজা মূল্য</div>' +
       '<div style="margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">' +
       '<span class="ptype auto">⚡ স্বয়ংক্রিয়</span>' + (s.open ? '' : '<span class="ptype closed">সাময়িক বন্ধ</span>') + '</div></div>' +
       '<div class="svc-pr">৳' + bnNum(s.price) + ' থেকে</div></div>';
@@ -376,7 +381,8 @@ function applySearch(q){
     const bn = (s.name_bn || '').toLowerCase();
     const en = (s.name || '').toLowerCase();
     const cat = (s.category_name_bn || s.category_name || '').toLowerCase();
-    return bn.includes(q) || en.includes(q) || cat.includes(q);
+    const extra = (s._landSearch || '').toLowerCase();
+    return bn.includes(q) || en.includes(q) || cat.includes(q) || extra.includes(q);
   });
 
   v.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
