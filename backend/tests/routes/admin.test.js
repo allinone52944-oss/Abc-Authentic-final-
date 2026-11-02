@@ -180,6 +180,26 @@ describe('users', () => {
     expect(r4.body.deleted.orders).toBe('1');
   });
 
+  test('DELETE /users/:id clears the three non-cascade FK references before deleting', async () => {
+    db.__routeQuery([
+      ['SELECT id, phone, name, role FROM users WHERE id', { rows: [{ id: 'u2', phone: '0171', name: 'R', role: 'user' }] }],
+      ['SELECT (SELECT COUNT(*) FROM orders', { rows: [{ orders: '0', transactions: '0', coupons: '1', notices: '0', chat: '0' }] }],
+    ]);
+    await withAdmin(request(app()).delete('/api/admin/users/u2?confirm=yes')).expect(200);
+    const sqls = db.query.mock.calls.map((c) => c[0]);
+    const tx = sqls.findIndex((s) => /UPDATE transactions SET admin_id = NULL/.test(s));
+    const lg = sqls.findIndex((s) => /UPDATE activity_log SET admin_id = NULL/.test(s));
+    const cp = sqls.findIndex((s) => /DELETE FROM coupons WHERE user_id/.test(s));
+    const del = sqls.findIndex((s) => /DELETE FROM users WHERE id/.test(s));
+    expect(tx).toBeGreaterThanOrEqual(0);
+    expect(lg).toBeGreaterThanOrEqual(0);
+    expect(cp).toBeGreaterThanOrEqual(0);
+    expect(del).toBeGreaterThanOrEqual(0);
+    expect(tx).toBeLessThan(del);
+    expect(lg).toBeLessThan(del);
+    expect(cp).toBeLessThan(del);
+  });
+
   test('H-9: deleting the last active admin → 403 LAST_ADMIN', async () => {
     db.__routeQuery([
       ['SELECT id, phone, name, role FROM users WHERE id', { rows: [{ id: 'u9', phone: '0171', name: 'A', role: 'admin' }] }],

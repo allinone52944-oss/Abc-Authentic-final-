@@ -461,9 +461,22 @@ router.delete('/users/:id', async (req, res) => {
       }
     } catch (e) { safeLog('[admin] doc list skipped:', e.message); }
 
-    // ON DELETE CASCADE handles: user_services, orders, transactions,
-    // coupons(user_id), notices(user_id), chat_messages, refresh_tokens.
-    // Explicitly clear anything else first.
+    // ON DELETE CASCADE handles: user_services, orders, transactions
+    // (user_id), notices(user_id), chat_messages, refresh_tokens.
+    // But three columns reference users WITHOUT any ON DELETE action
+    // in schema.sql, so a plain DELETE fails with an FK violation
+    // (surfaced only as generic DELETE_FAILED) whenever any of them
+    // points at this user — clear them first:
+    //  - transactions.admin_id: user approved a transaction → NULL
+    //    (the transaction itself stays; same SET NULL pattern as
+    //    order_status_history.admin_id elsewhere).
+    //  - activity_log.admin_id: user did admin work → NULL (log stays).
+    //  - coupons.user_id: a personal coupon must NOT become NULL,
+    //    because NULL means "any user" — delete the personal coupon
+    //    with the user instead (its count was taken above for the log).
+    await db.query('UPDATE transactions SET admin_id = NULL WHERE admin_id = $1', [id]);
+    await db.query('UPDATE activity_log SET admin_id = NULL WHERE admin_id = $1', [id]);
+    await db.query('DELETE FROM coupons WHERE user_id = $1', [id]);
     await db.query('DELETE FROM users WHERE id = $1', [id]);
 
     // Delete the collected files from disk (uploads dir only — safety).
