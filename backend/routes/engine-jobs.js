@@ -234,14 +234,20 @@ const adminEngineJobs = express.Router();
 adminEngineJobs.use(requireAuth, requireAdmin);
 
 // GET /api/admin/engine-jobs — latest engine deliveries, all customers
+// Orders-page split (2026-11-03): optional q filter (name/phone/ref_no)
+// for the standalone engine-delivery tab. LIMIT 100 and delete unchanged.
 adminEngineJobs.get('/', async (req, res) => {
   try {
+    const q = (req.query.q || '').trim();
+    const where = q ? `WHERE (j.subject_name ILIKE $1 OR u.name ILIKE $1 OR u.phone ILIKE $1 OR j.ref_no ILIKE $1)` : '';
+    const params = q ? ['%' + q + '%'] : [];
     const r = await db.query(
       `SELECT j.id, j.engine_id, j.ref_no, j.subject_name, j.originalname, j.created_at,
               j.outcome, j.reason,
               u.name AS user_name, u.phone AS user_phone
        FROM engine_jobs j JOIN users u ON u.id = j.user_id
-       ORDER BY j.created_at DESC LIMIT 100`
+       ${where}
+       ORDER BY j.created_at DESC LIMIT 100`, params
     );
     res.json({ jobs: r.rows });
   } catch (e) { safeLog('[engine-jobs] admin list error:', e.message); res.status(500).json({ error: 'FAILED' }); }

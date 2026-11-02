@@ -1458,7 +1458,7 @@ TABS.orders = async () => {
   TABS._orders = d.orders || [];
   const pendingManual = Number(stats.manual_new) || 0;
   const orderTypeTabs = [
-    { key: '', label: 'সব প্রসেসিং', icon: '📦' },
+    { key: '', label: 'সব ধরন', icon: '📦' },
     { key: 'auto', label: 'অটো সেবা', icon: '⚙️' },
     { key: 'manual', label: 'ম্যানুয়াল আবেদন', icon: '📝' }
   ];
@@ -1593,24 +1593,55 @@ TABS.orders = async () => {
       (curPage > 1 ? '<button class="mini-btn" onclick="AdmOrders.page(' + (curPage - 1) + ')">← আগের পেজ</button>' : '') +
       (curPage < totalPages ? '<button class="mini-btn" onclick="AdmOrders.page(' + (curPage + 1) + ')">পরের পেজ →</button>' : '') +
     '</span></div>';
-  html += '<div class="card" style="margin-top:16px;"><h3>🕘 BDRIS আবেদনসমূহ (অটো সেবা)</h3>' +
-    '<div id="admBdrisApps" class="s">⏳ লোড হচ্ছে…</div></div>';
-  html += '<div class="card" style="margin-top:16px;"><h3>🎓 Engine ডেলিভারি (সার্টিফিকেট / মৃত্যু সনদ)</h3>' +
-    '<div id="admEngineJobs" class="s">⏳ লোড হচ্ছে…</div></div>';
   content.innerHTML = html;
-  AdmOrders.loadBdrisApps();
-  AdmOrders.loadEngineJobs();
+};
+
+// Orders-page split (2026-11-03): BDRIS applications and engine
+// deliveries used to render as two extra cards BELOW the orders
+// table on every orders view, ignoring all filters — so "all orders"
+// showed three unlinked lists. They now live in their own sidebar
+// tabs (TABS.bdrisApps / TABS.engineJobs); the orders page shows
+// only the orders table + pager, so its counts match what is shown.
+TABS.bdrisApps = async () => {
+  const q = TABS._bdrisQ || '';
+  content.innerHTML = '<div class="card"><h3>🕘 BDRIS আবেদনসমূহ</h3>' +
+    '<div class="s" style="margin-bottom:10px;">এগুলো অর্ডার পাইপলাইনের অংশ নয় — BDRIS ইঞ্জিনে জমা হওয়া আবেদনের রেকর্ড। এখান থেকে দেখা আর ডিলিট করা যায়; স্ট্যাটাস বদল বা রিফান্ডের কাজ অর্ডার পেজে হয় না।</div>' +
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">' +
+      '<input type="text" id="admBdrisSearch" class="adm-search-input" placeholder="🔍 আবেদনকারীর নাম, মোবাইল বা আবেদন নম্বর খুঁজুন..." value="' + esc(q) + '" onkeydown="if(event.key===\'Enter\')AdmOrders.searchBdris(this.value)">' +
+      '<button class="mini-btn" onclick="AdmOrders.searchBdris(document.getElementById(\'admBdrisSearch\').value)">খুঁজুন</button>' +
+      (q ? '<button class="mini-btn danger" onclick="AdmOrders.clearBdrisSearch()">✕ ক্লিয়ার</button>' : '') +
+    '</div>' +
+    '<div id="admBdrisCount" class="s" style="margin-bottom:8px;"></div>' +
+    '<div id="admBdrisApps" class="s">⏳ লোড হচ্ছে…</div></div>';
+  AdmOrders.loadBdrisApps(q);
+};
+
+TABS.engineJobs = async () => {
+  const q = TABS._engineQ || '';
+  content.innerHTML = '<div class="card"><h3>🎓 Engine ডেলিভারি (সার্টিফিকেট / মৃত্যু সনদ)</h3>' +
+    '<div class="s" style="margin-bottom:10px;">এগুলো অর্ডার পাইপলাইনের অংশ নয় — জন্ম/মৃত্যু সনদ যাচাই ইঞ্জিনের ডেলিভারি রেকর্ড। এখান থেকে দেখা আর ডিলিট করা যায়; স্ট্যাটাস বদল বা রিফান্ডের কাজ অর্ডার পেজে হয় না।</div>' +
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">' +
+      '<input type="text" id="admEngineSearch" class="adm-search-input" placeholder="🔍 নাম, মোবাইল বা নম্বর (BRN/DRN) খুঁজুন..." value="' + esc(q) + '" onkeydown="if(event.key===\'Enter\')AdmOrders.searchEngine(this.value)">' +
+      '<button class="mini-btn" onclick="AdmOrders.searchEngine(document.getElementById(\'admEngineSearch\').value)">খুঁজুন</button>' +
+      (q ? '<button class="mini-btn danger" onclick="AdmOrders.clearEngineSearch()">✕ ক্লিয়ার</button>' : '') +
+    '</div>' +
+    '<div id="admEngineCount" class="s" style="margin-bottom:8px;"></div>' +
+    '<div id="admEngineJobs" class="s">⏳ লোড হচ্ছে…</div></div>';
+  AdmOrders.loadEngineJobs(q);
 };
 
 window.AdmOrders = {
-  async loadBdrisApps() {
+  async loadBdrisApps(q) {
     const box = document.getElementById('admBdrisApps');
     if (!box) return;
+    const countEl = document.getElementById('admBdrisCount');
     try {
-      const r = await ABC.api('/admin/bdris-applications');
+      const url = '/admin/bdris-applications' + (q ? '?q=' + encodeURIComponent(q) : '');
+      const r = await ABC.api(url);
       const d = await r.json();
       const apps = d.applications || [];
-      if (!apps.length) { box.textContent = 'এখনো কোনো BDRIS আবেদন জমা হয়নি।'; return; }
+      if (countEl) countEl.textContent = 'মোট ' + bn(apps.length) + 'টি' + (apps.length >= 200 ? ' (সর্বোচ্চ ২০০টি দেখানো হচ্ছে)' : '');
+      if (!apps.length) { box.textContent = q ? 'এই খোঁজায় কোনো BDRIS আবেদন পাওয়া যায়নি।' : 'এখনো কোনো BDRIS আবেদন জমা হয়নি।'; return; }
       box.innerHTML = '<div class="tw"><table><thead><tr><th>আবেদন নম্বর</th><th>আবেদনকারী</th><th>অবস্থা</th><th>গ্রাহক</th><th>সময়</th><th></th></tr></thead><tbody>' +
         apps.map(a =>
           '<tr><td>' + esc(a.status === 'failed' ? '—' : a.ack_no) + '</td><td>' + esc(a.applicant_name || '') + '</td>' +
@@ -1627,17 +1658,28 @@ window.AdmOrders = {
     if (!confirm('এই BDRIS আবেদনের রেকর্ড মুছে ফেলবেন? (আসল আবেদন সরকারি পোর্টালে থেকে যাবে — শুধু এখানের রেকর্ড মুছবে)')) return;
     const r = await ABC.api('/admin/bdris-applications/' + id, { method: 'DELETE' });
     if (!r.ok) { alert('ডিলিট ব্যর্থ হয়েছে'); return; }
-    AdmOrders.loadBdrisApps();
+    AdmOrders.loadBdrisApps(TABS._bdrisQ || '');
   },
-  async loadEngineJobs() {
+  async searchBdris(q) {
+    TABS._bdrisQ = (q || '').trim();
+    show('bdrisApps');
+  },
+  clearBdrisSearch() {
+    TABS._bdrisQ = '';
+    show('bdrisApps');
+  },
+  async loadEngineJobs(q) {
     const box = document.getElementById('admEngineJobs');
     if (!box) return;
+    const countEl = document.getElementById('admEngineCount');
     const lbl = { 'bdris-certificate': 'জন্ম সনদ', 'death-verify': 'মৃত্যু সনদ' };
     try {
-      const r = await ABC.api('/admin/engine-jobs');
+      const url = '/admin/engine-jobs' + (q ? '?q=' + encodeURIComponent(q) : '');
+      const r = await ABC.api(url);
       const d = await r.json();
       const jobs = d.jobs || [];
-      if (!jobs.length) { box.textContent = 'এখনো কোনো engine ডেলিভারি জমা হয়নি।'; return; }
+      if (countEl) countEl.textContent = 'মোট ' + bn(jobs.length) + 'টি' + (jobs.length >= 100 ? ' (সর্বোচ্চ ১০০টি দেখানো হচ্ছে)' : '');
+      if (!jobs.length) { box.textContent = q ? 'এই খোঁজায় কোনো engine ডেলিভারি পাওয়া যায়নি।' : 'এখনো কোনো engine ডেলিভারি জমা হয়নি।'; return; }
       box.innerHTML = '<div class="tw"><table><thead><tr><th>ধরন</th><th>নম্বর (BRN/DRN)</th><th>নাম</th><th>অবস্থা</th><th>গ্রাহক</th><th>সময়</th><th></th></tr></thead><tbody>' +
         jobs.map(j =>
           '<tr><td>' + esc(lbl[j.engine_id] || j.engine_id) + '</td><td>' + esc(j.ref_no || '') + '</td><td>' + esc(j.subject_name || '') + '</td>' +
@@ -1654,7 +1696,15 @@ window.AdmOrders = {
     if (!confirm('এই engine ডেলিভারির রেকর্ড ও ফাইল মুছে ফেলবেন? গ্রাহকের ইতিহাস থেকেও সরে যাবে।')) return;
     const r = await ABC.api('/admin/engine-jobs/' + id, { method: 'DELETE' });
     if (!r.ok) { alert('ডিলিট ব্যর্থ হয়েছে'); return; }
-    AdmOrders.loadEngineJobs();
+    AdmOrders.loadEngineJobs(TABS._engineQ || '');
+  },
+  async searchEngine(q) {
+    TABS._engineQ = (q || '').trim();
+    show('engineJobs');
+  },
+  clearEngineSearch() {
+    TABS._engineQ = '';
+    show('engineJobs');
   },
   copyData() {
     const t = TABS._viewRaw || '';

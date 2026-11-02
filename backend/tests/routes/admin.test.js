@@ -940,6 +940,15 @@ describe('BDRIS applications (admin visibility + delete)', () => {
     expect(r.body.applications[0].ack_no).toBe('265530312');
   });
 
+  test('GET /api/admin/bdris-applications?q= filters by name/phone/ack', async () => {
+    db.__routeQuery([
+      ['FROM bdris_applications a', { rows: [] }],
+    ]);
+    await withAdmin(request(app()).get('/api/admin/bdris-applications?q=%E0%A6%95%E0%A6%B0%E0%A6%BF%E0%A6%AE')).expect(200);
+    const list = db.query.mock.calls.find((c) => /FROM bdris_applications a/.test(c[0]));
+    expect(list[1]).toEqual(['%করিম%']);
+  });
+
   test('DELETE /api/admin/bdris-applications/:id removes the record', async () => {
     db.__routeQuery([
       ['DELETE FROM bdris_applications', { rows: [{ ack_no: '265530312' }] }],

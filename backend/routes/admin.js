@@ -809,13 +809,19 @@ router.put('/orders/:id/status', async (req, res) => {
 // admin, and that the admin can delete it.
 router.get('/bdris-applications', async (req, res) => {
   try {
+    // Orders-page split (2026-11-03): optional q filter (name/phone/ack)
+    // for the standalone BDRIS tab. LIMIT 200 and delete unchanged.
+    const q = (req.query.q || '').trim();
+    const where = q ? `WHERE (a.applicant_name ILIKE $1 OR u.name ILIKE $1 OR u.phone ILIKE $1 OR a.ack_no ILIKE $1)` : '';
+    const params = q ? ['%' + q + '%'] : [];
     const r = await db.query(
       `SELECT a.id, a.ack_no, a.applicant_name, a.created_at,
               a.status, a.failure_reason,
               u.name AS user_name, u.phone AS user_phone
          FROM bdris_applications a
          JOIN users u ON u.id = a.user_id
-        ORDER BY a.created_at DESC LIMIT 200`);
+        ${where}
+        ORDER BY a.created_at DESC LIMIT 200`, params);
     res.json({ ok: true, applications: r.rows });
   } catch (e) { safeLog('[admin] bdris applications error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });

@@ -217,6 +217,15 @@ describe('admin engine-jobs', () => {
     await asUser(request(app()).get('/api/admin/engine-jobs')).expect(403);
   });
 
+  test('list ?q= filters by name/phone/ref_no', async () => {
+    db.__routeQuery([
+      ['FROM engine_jobs j JOIN users', { rows: [] }],
+    ]);
+    await asAdmin(request(app()).get('/api/admin/engine-jobs?q=999')).expect(200);
+    const list = db.query.mock.calls.find((c) => /FROM engine_jobs j JOIN users/.test(c[0]));
+    expect(list[1]).toEqual(['%999%']);
+  });
+
   test('delete removes record and file; unknown id → 404', async () => {
     const FN = 'engine-todel.pdf';
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
