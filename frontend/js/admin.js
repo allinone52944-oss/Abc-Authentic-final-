@@ -1808,7 +1808,11 @@ window.AdmOrders = {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'বাতিল ব্যর্থ');
-      alert('অর্ডার বাতিল করা হয়েছে');
+      // Auto-refund (2026-11-03): cancelling refunds at once, so
+      // the alert says so when the order had a price. Price 0 →
+      // no money moved, so no refund claim.
+      const price = o ? Number(o.price || 0) : 0;
+      alert(price > 0 ? 'বাতিল করা হয়েছে এবং টাকা ফেরত দেওয়া হয়েছে' : 'বাতিল করা হয়েছে');
       closeModal();
       show('orders');
     } catch (e) {
@@ -1830,7 +1834,15 @@ window.AdmOrders = {
       closeModal();
       show('orders');
     } catch (e) {
-      alert('❌ রিফান্ড ব্যর্থ: ' + e.message);
+      // Strict guard: an already-refunded order is NOT a failed
+      // refund — say honestly that the money is already back.
+      if (String(e.message || '').includes('ALREADY_REFUNDED')) {
+        alert('ℹ️ এই অর্ডারের টাকা আগেই ফেরত দেওয়া হয়েছে');
+        closeModal();
+        show('orders');
+      } else {
+        alert('❌ রিফান্ড ব্যর্থ: ' + e.message);
+      }
     }
   },
 
@@ -1885,7 +1897,8 @@ window.AdmOrders = {
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || 'অর্ডার মুছতে ব্যর্থ');
       if (refund) {
-        if (d.refunded === true) alert('✅ অর্ডারের মূল্য রিফান্ড করে সফলভাবে মুছে ফেলা হয়েছে');
+        if (d.refundedAlready === true) alert('✅ অর্ডার মুছে ফেলা হয়েছে (টাকা আগেই ফেরত দেওয়া হয়েছিল)');
+        else if (d.refunded === true) alert('✅ অর্ডারের মূল্য রিফান্ড করে সফলভাবে মুছে ফেলা হয়েছে');
         else alert('⚠️ অর্ডার মুছে ফেলা হয়েছে, তবে রিফান্ড জমা হয়নি (মূল্য ০ বা আগেই রিফান্ড হয়েছে)।');
       } else {
         alert('✅ অর্ডার সফলভাবে মুছে ফেলা হয়েছে');
@@ -2140,32 +2153,35 @@ window.AdmOrders = {
         '</div>' +
       '</div>';
     } else if (curStatus === 'failed') {
-      // Admin-order fix (2026-11-03): failed orders used to have NO
-      // action hub at all — the backend's only retry path
-      // (failed → pending) had no UI caller. setStatus is finally
-      // called from here, plus a direct refund (no delete needed).
+      // Auto-refund (2026-11-03): failing refunds at once, so
+      // there is NO retry button here any more — a refunded
+      // failed order cannot retry (backend returns 400), a new
+      // order is needed. The refund button stays for OLD failed
+      // rows (pre-auto-refund, money not yet back); on an
+      // already-refunded row it honestly says the money is
+      // already back (ALREADY_REFUNDED).
       actionHubHtml = '<div class="adm-hub-card" style="border-left-color:#dc2626;background:linear-gradient(135deg, #fef2f2, #ffffff);">' +
         '<div class="adm-hub-title" style="color:#991b1b;">' +
-          '<span>❌ অর্ডার ব্যর্থ — আবার চেষ্টা বা রিফান্ড</span>' +
+          '<span>❌ অর্ডার ব্যর্থ</span>' +
           '<span class="st-badge st-failed">ব্যর্থ</span>' +
         '</div>' +
-        '<p style="color:var(--text-muted);font-size:12px;margin:4px 0 10px;">ব্যর্থ অর্ডার আবার অপেক্ষমাণ করে পুনরায় প্রসেস করা যায়, অথবা টাকা রিফান্ড করা যায় — অর্ডার মুছতে হবে না।</p>' +
+        '<p style="color:var(--text-muted);font-size:12px;margin:4px 0 10px;">ব্যর্থ অর্ডার আর পুনরায় প্রসেস করা যাবে না — নতুন অর্ডার করতে হবে। টাকা ফেরত না পেয়ে থাকলে (পুরনো অর্ডার) রিফান্ড বোতাম চাপুন — ইতিমধ্যে ফেরত দেওয়া হয়ে থাকলে সেটা জানানো হবে।</p>' +
         '<div class="adm-hub-actions">' +
-          '<button class="btn-quick-primary" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.setStatus(\'' + o.id + '\', \'pending\')">🔄 আবার অপেক্ষমাণ করুন</button>' +
           '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\')">↩️ রিফান্ড করুন</button>' +
           '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ মুছে ফেলুন</button>' +
         '</div>' +
       '</div>';
     } else if (curStatus === 'cancelled') {
-      // Admin-order fix (2026-11-03): cancelled orders can now be
-      // refunded in place (cancelled → refunded) — the delete modal
-      // is no longer the only money-back path.
+      // Auto-refund (2026-11-03): cancelling refunds at once. The
+      // refund button stays for OLD cancelled rows (pre-auto-
+      // refund, money not yet back); on an already-refunded row
+      // it honestly says the money is already back.
       actionHubHtml = '<div class="adm-hub-card" style="border-left-color:#dc2626;background:linear-gradient(135deg, #fef2f2, #ffffff);">' +
         '<div class="adm-hub-title" style="color:#991b1b;">' +
-          '<span>🚫 অর্ডার বাতিল — রিফান্ড করা যায়</span>' +
+          '<span>🚫 অর্ডার বাতিল</span>' +
           '<span class="st-badge st-cancelled">বাতিল</span>' +
         '</div>' +
-        '<p style="color:var(--text-muted);font-size:12px;margin:4px 0 10px;">বাতিল করলে টাকা নিজে থেকে ফেরে না — রিফান্ড আলাদা অ্যাকশন। অর্ডার না মুছেই রিফান্ড করা যায়।</p>' +
+        '<p style="color:var(--text-muted);font-size:12px;margin:4px 0 10px;">বাতিল অর্ডার আর প্রসেস করা যাবে না। টাকা ফেরত না পেয়ে থাকলে (পুরনো অর্ডার) রিফান্ড বোতাম চাপুন — ইতিমধ্যে ফেরত দেওয়া হয়ে থাকলে সেটা জানানো হবে।</p>' +
         '<div class="adm-hub-actions">' +
           '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\')">↩️ রিফান্ড করুন</button>' +
           '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ মুছে ফেলুন</button>' +

@@ -356,6 +356,133 @@ describe('orders', () => {
     expect(r2.body.refunded).toBe(true);
   });
 
+  test('auto-refund: processing → cancelled refunds in the same transaction (split, refund-<id> ref)', async () => {
+    const guardEmpty = (text) => text.includes('SELECT 1 FROM transactions');
+    db.__routeQuery([
+      [guardEmpty, { rows: [] }],
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o1', user_id: 'u1', service_id: 's1', price: '100', status: 'processing', idempotency_key: 'ck1' }] }],
+      ['UPDATE orders SET status', { rows: [{ id: 'o1', user_id: 'u1', service_id: 's1', price: '100', status: 'cancelled', idempotency_key: 'ck1' }] }],
+      ['trxid IN', { rows: [
+        { trxid: 'order-ck1-u1', amount: -60 },
+        { trxid: 'order-ck1-u1:svc', amount: -40 },
+      ] }],
+    ]);
+    const r = await withAdmin(request(app()).put('/api/admin/orders/o1/status'))
+      .send({ status: 'cancelled' }).expect(200);
+    expect(r.body.order.status).toBe('cancelled');
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    const w = allCalls.find((c) => /wallet_apply/.test(c[0]));
+    expect(w).toBeDefined();
+    expect(w[1]).toEqual(['u1', 60, 'refund', 'refund-o1']);
+  });
+
+  test('auto-refund: processing → failed refunds in the same transaction', async () => {
+    const guardEmpty = (text) => text.includes('SELECT 1 FROM transactions');
+    db.__routeQuery([
+      [guardEmpty, { rows: [] }],
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o2', user_id: 'u1', service_id: 's1', price: '150', status: 'processing', idempotency_key: 'ck2' }] }],
+      ['UPDATE orders SET status', { rows: [{ id: 'o2', user_id: 'u1', service_id: 's1', price: '150', status: 'failed', idempotency_key: 'ck2' }] }],
+      ['trxid IN', { rows: [{ trxid: 'order-ck2-u1', amount: -150 }] }],
+    ]);
+    const r = await withAdmin(request(app()).put('/api/admin/orders/o2/status'))
+      .send({ status: 'failed' }).expect(200);
+    expect(r.body.order.status).toBe('failed');
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    const w = allCalls.find((c) => /wallet_apply/.test(c[0]));
+    expect(w).toBeDefined();
+    expect(w[1]).toEqual(['u1', 150, 'refund', 'refund-o2']);
+  });
+
+  test('auto-refund: price 0 → status changes, no refund writes at all', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o3', user_id: 'u1', service_id: 's1', price: '0', status: 'processing', idempotency_key: 'ck3' }] }],
+      ['UPDATE orders SET status', { rows: [{ id: 'o3', user_id: 'u1', service_id: 's1', price: '0', status: 'cancelled', idempotency_key: 'ck3' }] }],
+    ]);
+    const r = await withAdmin(request(app()).put('/api/admin/orders/o3/status'))
+      .send({ status: 'cancelled' }).expect(200);
+    expect(r.body.order.status).toBe('cancelled');
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    expect(allCalls.find((c) => /wallet_apply/.test(c[0]))).toBeUndefined();
+    expect(allCalls.find((c) => /service_credits/.test(c[0]))).toBeUndefined();
+  });
+
+  test('strict guard: manual refund on an already-refunded order → 400 ALREADY_REFUNDED, no status change', async () => {
+    const guardHit = (text) => text.includes('SELECT 1 FROM transactions');
+    db.__routeQuery([
+      [guardHit, { rows: [{ one: 1 }] }],
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o4', user_id: 'u1', price: '100', status: 'cancelled' }] }],
+      ['UPDATE orders SET status', { rows: [{ id: 'o4', user_id: 'u1', price: '100', status: 'refunded' }] }],
+    ]);
+    const r = await withAdmin(request(app()).put('/api/admin/orders/o4/status'))
+      .send({ status: 'refunded' }).expect(400);
+    expect(r.body.error).toBe('ALREADY_REFUNDED');
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    expect(allCalls.find((c) => /UPDATE orders SET status/.test(c[0]))).toBeUndefined();
+    expect(allCalls.find((c) => /wallet_apply/.test(c[0]))).toBeUndefined();
+  });
+
+  test('strict guard: failed → pending on an already-refunded order → 400 ALREADY_REFUNDED (no retry)', async () => {
+    const guardHit = (text) => text.includes('SELECT 1 FROM transactions');
+    db.__routeQuery([
+      [guardHit, { rows: [{ one: 1 }] }],
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o5', user_id: 'u1', price: '100', status: 'failed' }] }],
+      ['UPDATE orders SET status', { rows: [{ id: 'o5', user_id: 'u1', price: '100', status: 'pending' }] }],
+    ]);
+    const r = await withAdmin(request(app()).put('/api/admin/orders/o5/status'))
+      .send({ status: 'pending' }).expect(400);
+    expect(r.body.error).toBe('ALREADY_REFUNDED');
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    expect(allCalls.find((c) => /UPDATE orders SET status/.test(c[0]))).toBeUndefined();
+  });
+
+  test('strict guard: auto-refund path with a prior refund tx → status changes but NOT one taka more is credited', async () => {
+    const guardHit = (text) => text.includes('SELECT 1 FROM transactions');
+    db.__routeQuery([
+      [guardHit, { rows: [{ one: 1 }] }],
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o6', user_id: 'u1', service_id: 's1', price: '100', status: 'processing', idempotency_key: 'ck6' }] }],
+      ['UPDATE orders SET status', { rows: [{ id: 'o6', user_id: 'u1', service_id: 's1', price: '100', status: 'cancelled', idempotency_key: 'ck6' }] }],
+    ]);
+    const r = await withAdmin(request(app()).put('/api/admin/orders/o6/status'))
+      .send({ status: 'cancelled' }).expect(200);
+    expect(r.body.order.status).toBe('cancelled');
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    expect(allCalls.find((c) => /wallet_apply/.test(c[0]))).toBeUndefined();
+    expect(allCalls.find((c) => /service_credits/.test(c[0]))).toBeUndefined();
+  });
+
+  test('strict guard: delete-with-refund on an already-refunded order → deletes, no second credit, refundedAlready=true', async () => {
+    const guardHit = (text) => text.includes('SELECT 1 FROM transactions');
+    db.__routeQuery([
+      [guardHit, { rows: [{ one: 1 }] }],
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o7', user_id: 'u1', price: '200', status: 'cancelled', documents: '[]' }] }],
+      ['DELETE FROM orders WHERE id', { rowCount: 1 }],
+    ]);
+    const r = await withAdmin(request(app()).delete('/api/admin/orders/o7?confirm=yes&refund=yes')).expect(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.refunded).toBe(true);
+    expect(r.body.refundedAlready).toBe(true);
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    expect(allCalls.find((c) => /wallet_apply/.test(c[0]))).toBeUndefined();
+    expect(allCalls.find((c) => /DELETE FROM orders WHERE id/.test(c[0]))).toBeDefined();
+  });
+
+  test('old row (no refund tx) → manual refund still works', async () => {
+    const guardEmpty = (text) => text.includes('SELECT 1 FROM transactions');
+    db.__routeQuery([
+      [guardEmpty, { rows: [] }],
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o8', user_id: 'u1', price: '100', status: 'cancelled', idempotency_key: 'ck8' }] }],
+      ['UPDATE orders SET status', { rows: [{ id: 'o8', user_id: 'u1', price: '100', status: 'refunded', idempotency_key: 'ck8' }] }],
+    ]);
+    const r = await withAdmin(request(app()).put('/api/admin/orders/o8/status'))
+      .send({ status: 'refunded' }).expect(200);
+    expect(r.body.order.status).toBe('refunded');
+    expect(r.body.refunded).toBe(true);
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    const w = allCalls.find((c) => /wallet_apply/.test(c[0]));
+    expect(w).toBeDefined();
+    expect(w[1]).toEqual(['u1', 100, 'refund', 'refund-o8']);
+  });
+
   test('status refund failure rolls back → 500, not 200 + refunded', async () => {
     db.__routeQuery([
       ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o6', user_id: 'u1', price: '100', status: 'completed' }] }],

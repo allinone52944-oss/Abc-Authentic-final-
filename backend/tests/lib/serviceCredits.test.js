@@ -169,6 +169,28 @@ describe('refundOrderPrice (admin-order fix, 2026-11-03)', () => {
     expect(w[1]).toEqual(['u1', 100, 'refund', 'refund-o3']);
   });
 
+  test('full-credit refund still leaves a wallet_apply marker (0) so the prior-refund guard can see it', async () => {
+    const client = refundClient({
+      ledger: {
+        'order-ck9-u1': [
+          { trxid: 'order-ck9-u1:svc', amount: -100 },
+        ],
+      },
+      creditRows: [{ id: 'c1', amount: 100, remaining: 0 }],
+    });
+    const out = await refundOrderPrice(client,
+      { id: 'o9', user_id: 'u1', service_id: 's1', price: 100, idempotency_key: 'ck9' }, 'refund');
+    expect(out).toEqual({ refunded: true, creditPart: 100, balancePart: 0 });
+    const upd = client.calls.find((c) => /UPDATE service_credits SET remaining/.test(c[0]));
+    expect(upd[1]).toEqual([100, 'c1']); // headroom was 100-0=100
+    // Balance leg is 0, but wallet_apply MUST still run: its
+    // approved 0-amount row is the marker hasPriorRefund checks.
+    // Without it a credit-only refund would leave no trace and a
+    // later refund could double-restore the same credit.
+    const w = client.calls.find((c) => /wallet_apply/.test(c[0]));
+    expect(w[1]).toEqual(['u1', 0, 'refund', 'refund-o9']);
+  });
+
   test('zero price → no refund calls at all', async () => {
     const client = refundClient();
     const out = await refundOrderPrice(client,

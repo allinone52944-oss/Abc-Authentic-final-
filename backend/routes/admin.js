@@ -560,13 +560,18 @@ const ORDER_TRANSITIONS = {
   processing: ['completed', 'failed', 'cancelled'],
   completed: ['delivered', 'refunded'],
   delivered: ['refunded'],
-  // Admin-order fix (2026-11-03): cancelled/failed can now reach
-  // 'refunded' directly, so the money comes back WITHOUT deleting
-  // the order row (its history, chat and documents survive). Cancelling
-  // or failing alone still refunds NOTHING — refund stays a separate,
-  // deliberate admin action. The old failed → pending → processing →
-  // completed → refunded detour (with its false "completed" notice)
-  // is no longer needed.
+  // Auto-refund policy (2026-11-03, revised same night):
+  // cancelling or failing an order refunds it AT ONCE, inside the
+  // same transaction — no separate refund step, no delete needed.
+  // The map below is KEPT for old rows only: pre-auto-refund
+  // cancelled/failed rows (no refund tx) can still be refunded by
+  // hand, and pre-auto-refund failed rows can still retry via
+  // pending. The REAL control is the hasPriorRefund guard in the
+  // status endpoint: once an approved refund-<id> transaction
+  // exists, NO path credits the order again, and a refunded
+  // failed order can no longer retry (a new order is needed).
+  // NO backfill: old cancelled/failed rows are NOT batch-refunded;
+  // auto-refund fires only on a NEW transition, exactly once.
   failed: ['pending', 'refunded'],
   cancelled: ['refunded'],
   refunded: [],
@@ -579,6 +584,37 @@ const ORDER_TRANSITIONS = {
 function orderHasDeliveryFile(order) {
   const docs = safeJsonArray(order && order.documents);
   return docs.some((d) => d && d.uploaded_by === 'admin');
+}
+
+// Strict auto-refund guard (2026-11-03): has this order ALREADY
+// been refunded? Every refund at price > 0 leaves an approved
+// refund-<id> transaction row — including credit-only refunds,
+// whose balance leg is a 0-amount wallet_apply marker (see
+// lib/serviceCredits refundOrderPrice). Price-0 orders never get
+// a marker, but they also never moved money, so nothing needs
+// guarding there. Callers: status endpoint (manual refund +
+// failed→pending + auto-refund credit skip) and order delete.
+async function hasPriorRefund(client, order) {
+  const r = await client.query(
+    `SELECT 1 FROM transactions
+      WHERE user_id = $1 AND trxid = $2 AND status = 'approved' LIMIT 1`,
+    [order.user_id, 'refund-' + order.id]
+  );
+  return r.rows.length > 0;
+}
+
+// One-line refund sentence for failed/cancelled push notices
+// (WhatsApp builds the same line from opts in utils/whatsapp.js).
+// Only parts that actually moved are named; price 0 → ''.
+function autoRefundSentence(split, price) {
+  if (!split || !split.refunded || !(Number(price) > 0)) return '';
+  const credit = Number(split.creditPart) || 0;
+  const balance = (split.balancePart !== undefined && split.balancePart !== null)
+    ? Number(split.balancePart) : Number(price);
+  if (credit > 0 && balance > 0) return `৳${balance} আপনার ওয়ালেটে এবং ৳${credit} ওই সেবার ক্রেডিটে ফেরত দেওয়া হয়েছে।`;
+  if (credit > 0) return `৳${credit} ওই সেবার ক্রেডিটে ফেরত দেওয়া হয়েছে।`;
+  if (balance > 0) return `৳${balance} আপনার ওয়ালেটে ফেরত দেওয়া হয়েছে।`;
+  return '';
 }
 router.put('/orders/:id/status', async (req, res) => {
   try {
@@ -625,6 +661,18 @@ router.put('/orders/:id/status', async (req, res) => {
           );
           return { order: upd.rows[0], from, changed: false, refunded: false };
         }
+        // Strict guard: an already-refunded order must NEVER be
+        // credited again, and a refunded failed order must NOT
+        // retry (its money is already back — a new order is
+        // needed). This runs BEFORE the transition check so the
+        // admin gets ALREADY_REFUNDED, not a misleading
+        // INVALID_TRANSITION, and before any UPDATE so nothing
+        // moves on a blocked request.
+        if (status === 'refunded' || (from === 'failed' && status === 'pending')) {
+          if (await hasPriorRefund(client, cur.rows[0])) {
+            const e = new Error('ALREADY_REFUNDED'); e.statusCode = 400; throw e;
+          }
+        }
         if (!(ORDER_TRANSITIONS[from] || []).includes(status)) {
           const e = new Error('INVALID_TRANSITION');
           e.statusCode = 400; e.from = from; e.allowed = ORDER_TRANSITIONS[from] || [];
@@ -641,9 +689,24 @@ router.put('/orders/:id/status', async (req, res) => {
         // Refund: proportional (locked credit back to service_credits,
         // balance part back to the wallet) via lib/serviceCredits.
         // Throws on real failure → whole transaction rolls back.
+        // Auto-refund (2026-11-03): cancelling/failing refunds IN
+        // THIS transaction — price 0 is a no-op inside
+        // refundOrderPrice (no refund writes). If a prior refund
+        // tx exists (legacy/manual edge: money already back), the
+        // CREDIT IS SKIPPED, never doubled — but the status change
+        // itself still goes through (the admin's cancel/fail action
+        // is legitimate even when the money already moved).
         let refundSplit = null;
+        let autoRefunded = false;
         if (status === 'refunded') {
           refundSplit = await serviceCredits.refundOrderPrice(client, r.rows[0], 'refund');
+        } else if (status === 'cancelled' || status === 'failed') {
+          if (await hasPriorRefund(client, r.rows[0])) {
+            refundSplit = null;
+          } else {
+            refundSplit = await serviceCredits.refundOrderPrice(client, r.rows[0], 'refund');
+            autoRefunded = !!(refundSplit && refundSplit.refunded);
+          }
         }
         // Status history (H-1) — inside the transaction now, so a
         // status change can never exist without its timeline row.
@@ -652,7 +715,7 @@ router.put('/orders/:id/status', async (req, res) => {
            VALUES ($1, $2, $3, $4, $5)`,
           [req.params.id, from, status, req.user.id, note]
         );
-        return { order: r.rows[0], from, changed: true, refunded: status === 'refunded', refundSplit };
+        return { order: r.rows[0], from, changed: true, refunded: status === 'refunded', refundSplit, autoRefunded };
       });
     } catch (e) {
       if (e.statusCode) {
@@ -693,13 +756,27 @@ router.put('/orders/:id/status', async (req, res) => {
             : 'আপনার অর্ডারটি ডেলিভার্ড হয়েছে।',
           '/orders.html').catch(() => {});
       } else if (status === 'failed') {
-        wa.notifyOrderFailed(db, order).catch(() => {});
+        // ONE message, not two: the failed notice itself carries
+        // the auto-refund line (no separate refund notice).
+        const split = result.refundSplit || {};
+        const sentence = autoRefundSentence(result.refundSplit, order.price);
+        wa.notifyOrderFailed(db, order, {
+          creditPart: split.creditPart || 0, balancePart: split.balancePart,
+          refunded: result.autoRefunded,
+        }).catch(() => {});
         push.notifyUser(db, order.user_id, '❌ অর্ডার সম্পন্ন হয়নি',
-          'দুঃখিত — আপনার অর্ডারটি সম্পন্ন করা যায়নি। বিস্তারিত দেখতে অর্ডার পেজে যান।', '/orders.html').catch(() => {});
+          'দুঃখিত — আপনার অর্ডারটি সম্পন্ন করা যায়নি।' + (sentence ? ' ' + sentence : ''),
+          '/orders.html').catch(() => {});
       } else if (status === 'cancelled') {
-        wa.notifyOrderCancelled(db, order).catch(() => {});
+        const split = result.refundSplit || {};
+        const sentence = autoRefundSentence(result.refundSplit, order.price);
+        wa.notifyOrderCancelled(db, order, {
+          creditPart: split.creditPart || 0, balancePart: split.balancePart,
+          refunded: result.autoRefunded,
+        }).catch(() => {});
         push.notifyUser(db, order.user_id, 'অর্ডার বাতিল হয়েছে',
-          'আপনার অর্ডারটি বাতিল করা হয়েছে।', '/orders.html').catch(() => {});
+          'আপনার অর্ডারটি বাতিল করা হয়েছে।' + (sentence ? ' ' + sentence : ''),
+          '/orders.html').catch(() => {});
       } else if (status === 'refunded') {
         const split = result.refundSplit || {};
         wa.notifyOrderRefunded(db, order, {
@@ -781,11 +858,25 @@ router.delete('/orders/:id', async (req, res) => {
         }
         const order = cur.rows[0];
         let refunded = false;
+        let refundAlready = false;
         let refundSplit = null;
         if (refundRequested && Number(order.price) > 0 && order.status !== 'refunded') {
-          const r = await serviceCredits.refundOrderPrice(client, order, 'refund-del');
-          refunded = r.refunded;
-          refundSplit = r;
+          // Strict guard (2026-11-03): an order with an approved
+          // refund-<id> transaction — auto-refunded on cancel/fail
+          // or refunded by hand — is NEVER credited again, not
+          // even by delete-with-refund. The row is still deleted,
+          // and the response says the money was ALREADY refunded
+          // (refundedAlready) instead of pretending a fresh refund
+          // just happened. No backfill is involved: this only
+          // guards the single row being deleted.
+          if (await hasPriorRefund(client, order)) {
+            refunded = true;
+            refundAlready = true;
+          } else {
+            const r = await serviceCredits.refundOrderPrice(client, order, 'refund-del');
+            refunded = r.refunded;
+            refundSplit = r;
+          }
         }
         // Collect uploaded documents before deleting order row
         const docFiles = [];
@@ -796,7 +887,7 @@ router.delete('/orders/:id', async (req, res) => {
         await client.query('DELETE FROM orders WHERE id = $1', [id]);
         return {
           user_id: order.user_id, price: order.price, status: order.status,
-          refunded, refundSplit, docFiles,
+          refunded, refundAlready, refundSplit, docFiles,
         };
       });
     } catch (e) {
@@ -820,7 +911,10 @@ router.delete('/orders/:id', async (req, res) => {
 
     // Refund notification BEFORE the record is gone from the admin's
     // view — the customer must hear about money that just moved.
-    if (result.refunded) {
+    // NOT for already-refunded rows: that customer was already
+    // told at auto-refund/manual-refund time; a second notice
+    // would claim money that did not move now.
+    if (result.refunded && !result.refundAlready) {
       const split = result.refundSplit || {};
       wa.notifyOrderRefunded(db,
         { id, user_id: result.user_id, price: result.price },
@@ -835,9 +929,10 @@ router.delete('/orders/:id', async (req, res) => {
       price: result.price,
       status: result.status,
       refunded: result.refunded,
+      refundedAlready: result.refundAlready,
     });
 
-    res.json({ ok: true, deleted_id: id, refunded: result.refunded });
+    res.json({ ok: true, deleted_id: id, refunded: result.refunded, refundedAlready: result.refundAlready });
   } catch (e) {
     safeLog('[admin] order delete error:', e.message);
     res.status(500).json({ error: 'FAILED' });

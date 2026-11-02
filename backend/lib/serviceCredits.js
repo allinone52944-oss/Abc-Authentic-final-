@@ -227,18 +227,24 @@ async function refundOrderPrice(client, order, refPrefix) {
       (refPrefix || 'refund') + '-' + order.id
     );
   }
-  if (balancePart > 0) {
-    try {
-      await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
-        order.user_id, balancePart, 'refund', (refPrefix || 'refund') + '-' + order.id,
-      ]);
-    } catch (e) {
-      if (/DUPLICATE_TRANSACTION/.test(e.message)) {
-        // A concurrent refund already credited the balance leg once.
-        // The money is there; do not fail the refund for it.
-      } else {
-        throw e;
-      }
+  // Auto-refund guard completeness (2026-11-03, stricter): EVERY
+  // refund at price > 0 must leave an approved refund-<id> (or
+  // refund-del-<id>) transaction row — even a credit-only refund
+  // whose balance part is 0. wallet_apply(0) inserts a 0-amount
+  // approved row (balance untouched), and that row is the marker
+  // hasPriorRefund() checks. Without it, a credit-only refund
+  // restored purely into headroom would leave NO trace, and a
+  // later refund could double-restore the same credit.
+  try {
+    await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
+      order.user_id, balancePart, 'refund', (refPrefix || 'refund') + '-' + order.id,
+    ]);
+  } catch (e) {
+    if (/DUPLICATE_TRANSACTION/.test(e.message)) {
+      // A concurrent refund already credited the balance leg once.
+      // The money is there; do not fail the refund for it.
+    } else {
+      throw e;
     }
   }
   return { refunded: true, creditPart, balancePart };

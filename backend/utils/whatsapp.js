@@ -494,7 +494,22 @@ async function notifyOrderRefunded(db, order, opts) {
   }
 }
 
-async function notifyOrderFailed(db, order) {
+// Auto-refund line for failed/cancelled notices (2026-11-03):
+// only parts that actually moved are named; no refund (price 0,
+// or this transition did not move money) → no money sentence at
+// all. Never claim money that did not move.
+function refundLineForNotice(opts) {
+  if (!opts || !opts.refunded) return '';
+  const credit = Number(opts.creditPart) || 0;
+  const balance = (opts.balancePart !== undefined && opts.balancePart !== null)
+    ? Number(opts.balancePart) : 0;
+  if (credit > 0 && balance > 0) return `৳${balance} আপনার ওয়ালেটে এবং ৳${credit} ওই সেবার ক্রেডিটে ফেরত দেওয়া হয়েছে।`;
+  if (credit > 0) return `৳${credit} ওই সেবার ক্রেডিটে ফেরত দেওয়া হয়েছে।`;
+  if (balance > 0) return `৳${balance} আপনার ওয়ালেটে ফেরত দেওয়া হয়েছে।`;
+  return '';
+}
+
+async function notifyOrderFailed(db, order, opts) {
   try {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
     if (!(await isNotifyEnabled(db, 'order_failed'))) return { ok: false, error: 'NOTIFY_OFF' };
@@ -511,13 +526,15 @@ async function notifyOrderFailed(db, order) {
       serviceName = (s.rows[0] && (s.rows[0].name_bn || s.rows[0].name)) || '';
     } catch (_) {}
     const short = String(order.id || '').slice(0, 8);
-    // Admin-order fix (2026-11-03): failed/cancelled transitions do NOT
-    // refund — a refund is a separate admin action. Never claim the
-    // money is back in the wallet here.
+    // Auto-refund (2026-11-03): failing an order refunds it at once
+    // (same transaction). The notice itself names the refund — the
+    // old "refund separately, contact support" line is no longer
+    // true and must never appear again.
+    const refundLine = refundLineForNotice(opts);
     const msg =
       `${greetingFor(user)}\n` +
-      `দুঃখিত — আপনার ${serviceName} সেবাটি (অর্ডার নম্বর: ${short}) সম্পন্ন করা যায়নি।\n` +
-      'টাকা ফেরতের জন্য রিফান্ড আলাদাভাবে করতে হবে — সহায়তার জন্য আমাদের সাপোর্টে যোগাযোগ করুন।';
+      `দুঃখিত — আপনার ${serviceName} সেবাটি (অর্ডার নম্বর: ${short}) সম্পন্ন করা যায়নি।` +
+      (refundLine ? `\n${refundLine}` : '');
     return dispatch(db, 'order_failed', user, {
       text: msg,
       params: [greetingFor(user), serviceName, short],
@@ -528,7 +545,7 @@ async function notifyOrderFailed(db, order) {
   }
 }
 
-async function notifyOrderCancelled(db, order) {
+async function notifyOrderCancelled(db, order, opts) {
   try {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
     if (!(await isNotifyEnabled(db, 'order_cancelled'))) return { ok: false, error: 'NOTIFY_OFF' };
@@ -538,12 +555,14 @@ async function notifyOrderCancelled(db, order) {
     const user = u.rows[0];
     if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
     const short = String(order.id || '').slice(0, 8);
-    // Admin-order fix (2026-11-03): cancelling does NOT refund — a
-    // refund is a separate admin action. Never claim the money is back.
+    // Auto-refund (2026-11-03): cancelling an order refunds it at
+    // once (same transaction). The notice itself names the refund
+    // — the old "refund separately" line is no longer true.
+    const refundLine = refundLineForNotice(opts);
     const msg =
       `${greetingFor(user)}\n` +
-      `আপনার অর্ডার (নম্বর: ${short}) বাতিল করা হয়েছে।\n` +
-      'টাকা ফেরতের জন্য রিফান্ড আলাদাভাবে করতে হবে — সহায়তার জন্য সাপোর্টে যোগাযোগ করুন।';
+      `আপনার অর্ডার (নম্বর: ${short}) বাতিল করা হয়েছে।` +
+      (refundLine ? `\n${refundLine}` : '');
     return dispatch(db, 'order_cancelled', user, {
       text: msg,
       params: [greetingFor(user), short],
