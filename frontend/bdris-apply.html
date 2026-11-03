@@ -913,11 +913,31 @@ function getAcks() { try { return dedupeAcks(JSON.parse(localStorage.getItem('bd
 function dedupeAcks(list) {
   const seen = new Set(); const out = [];
   (Array.isArray(list) ? list : []).forEach(a => {
-    const key = (a && a.no) ? String(a.no) : null;
+    // MONEY/PDF (B9): the dedupe key must be the canonical number —
+    // the old raw String(a.no) let the 'সংরক্ষিত নয়' sentinel act as
+    // a key, collapsing every distinct numberless application into
+    // one card. A sentinel/digitless value yields no key, so those
+    // entries pass through untouched, as the comment always intended.
+    const key = canonicalAck(a && a.no);
     if (key) { if (seen.has(key)) return; seen.add(key); }
     out.push(a);
   });
   return out;
+}
+// MONEY/PDF (2026-11-03, cycle 4): one canonical ack form everywhere.
+// BDRIS ack numbers are digit strings. Anything else — the
+// 'সংরক্ষিত নয়' sentinel for numberless cards, raw site text, display
+// strings — is NOT an ack and must never become a charge key, a dedupe
+// key, or a server row key (B6/B8/B9).
+function canonicalAck(v) {
+  return String(v || '').replace(/\D/g, '');
+}
+function isSentinelAck(v) {
+  return !canonicalAck(v);
+}
+function pdfChargeKey(ackNo) {
+  const c = canonicalAck(ackNo);
+  return c ? 'pdf-' + c : null;
 }
 // HOME-LIST (2026-10-31): server-fetch failure reason, classified once
 // so the home list never again shows a silent partial list as complete.
@@ -974,11 +994,16 @@ function reportAckToServer(a) {
   // report is now marked pending; the next home render retries
   // it once for ack numbers the server still lacks (below).
   try {
-    if (!a || !a.no || a.no === 'সংরক্ষিত নয়') return;
+    // MONEY/PDF (B6/B9): send the canonical digits-only ack — the
+    // DONE-time record and the later original-PDF flag must meet on
+    // the same key. A sentinel/digitless value is never sent at all
+    // (it was never an ack, and the old guard only excluded the exact
+    // sentinel string, not other digitless values).
+    if (!a || isSentinelAck(a.no)) return;
     fetch('/api/bdris-apply/applications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
-      body: JSON.stringify({ ack_no: a.no, name: a.name || '' })
+      body: JSON.stringify({ ack_no: canonicalAck(a.no), name: a.name || '' })
     }).then(r => {
       if (r && r.ok) clearAckPending(a); else markAckPending(a);
     }).catch(() => { markAckPending(a); });
@@ -1048,18 +1073,36 @@ function addAck(a) {
     } catch {}
   }
 }
-function delAck(id) {
+async function delAck(id) {
+  // MONEY/PDF (B7): deletion used to lie — local remove was
+  // unconditional and the server DELETE fire-and-forget, so a failed
+  // server delete still showed success AND dropped the local card,
+  // which may hold the ONLY copy of the PDF (pdfB64). Now the
+  // server result is awaited first; on failure the entry stays and
+  // the real reason is shown. Returns true only when the entry is
+  // actually gone.
   try {
     const rec = getAcks().find(x => String(x.id) === String(id));
-    if (rec && rec.no) {
-      fetch('/api/bdris-apply/applications/' + encodeURIComponent(rec.no), {
-        method: 'DELETE',
-        headers: { 'Authorization': 'Bearer ' + getToken() }
-      }).catch(() => {});
+    if (rec && rec.no && !isSentinelAck(rec.no)) {
+      let r = null;
+      try {
+        r = await fetch('/api/bdris-apply/applications/' + encodeURIComponent(canonicalAck(rec.no)), {
+          method: 'DELETE',
+          headers: { 'Authorization': 'Bearer ' + getToken() }
+        });
+      } catch (e) {
+        note('⚠️ সার্ভার থেকে মোছা যায়নি — সংযোগ সমস্যা, কার্ডটি রয়ে গেছে', 'err');
+        return false;
+      }
+      if (!r.ok) {
+        note('⚠️ সার্ভার থেকে মোছা যায়নি (সার্ভার জবাব ' + r.status + ') — কার্ডটি রয়ে গেছে', 'err');
+        return false;
+      }
     }
     const l = getAcks().filter(x => String(x.id) !== String(id));
     localStorage.setItem('bdris_acks', JSON.stringify(l));
-  } catch {}
+    return true;
+  } catch (e) { return false; }
 }
 function fmtTime(iso) {
   try { return new Date(iso).toLocaleString('bn-BD', { dateStyle: 'medium', timeStyle: 'short' }); }
@@ -1318,6 +1361,50 @@ function readAddrFields(prefix, prev) {
 }
 
 /* ═══════════ home view ═══════════ */
+// MONEY/PDF (2026-11-03, cycle 4): the home original-PDF button,
+// shared by local and server cards.
+//  (A14) ack FIRST — a numberless card (sentinel 'সংরক্ষিত নয়' or
+//  any digitless value) has no original to fetch; charging it first
+//  used to take the PDF price and then fail with MISSING_ACK.
+//  (B8) one canonical digits-only charge key on every path, so the
+//  same PDF can never be charged twice via different key shapes.
+//  (C14) bounded watchdog — the DONE page has one, the home button
+//  had none: if no ORIGINAL_PDF outcome arrives, the failure is
+//  stated honestly instead of silently resetting the button.
+async function fetchHomeOriginal(b, ackNo) {
+  const key = pdfChargeKey(ackNo);
+  if (!key) { note('এই আবেদনের নম্বর সংরক্ষিত হয়নি — আসল PDF আনা যাবে না', 'warn'); return; }
+  const canon = canonicalAck(ackNo);
+  b.disabled = true; b.textContent = '⏳ চার্জ হচ্ছে…';
+  let emitted = false;
+  try {
+    const token = await charge('pdf', key);
+    if (!token) return;
+    // Keep the paid token where downloadOriginal (B10 gate) finds it.
+    S._pdfTok = S._pdfTok || {}; S._pdfTok[key] = { tok: token, at: Date.now() };
+    b.textContent = '⏳ PDF আসছে…';
+    S._origAutoDl = canon;
+    emitted = true;
+    socket.emit('FETCH_ORIGINAL', { ack: canon, _chargeToken: token });
+    armHomeOrigWatch(b, canon, Date.now() + 360000);
+  } catch (e) {
+    note('চার্জ/পাঠাতে সমস্যা: ' + chargeCatchReason(e), 'err');
+  } finally {
+    if (!emitted) { b.disabled = false; b.textContent = '⬇️ আসল PDF'; }
+  }
+}
+function armHomeOrigWatch(b, canon, until) {
+  setTimeout(() => {
+    const done = S._origDone && S._origDone[canon];
+    if (done) return;
+    const prog = S._origProgressByAck && S._origProgressByAck[canon];
+    const fresh = prog && (Date.now() - prog < 120000);
+    if (fresh && Date.now() < until) { armHomeOrigWatch(b, canon, until); return; }
+    if (S._origAutoDl === canon) S._origAutoDl = null;
+    b.disabled = false; b.textContent = '⬇️ আসল PDF';
+    note('⚠️ আসল PDF আসেনি — আবার চেষ্টা করুন', 'err');
+  }, 120000);
+}
 function renderHome() {
   S._heldPrep = null; // leaving the flow — a parked send must not follow the user home
   S._directOtp = false; // DIRECT-PATH WIRING: the direct OTP phase dies with the flow
@@ -1371,11 +1458,23 @@ function renderHome() {
     if (rec && rec.pdfB64) dlBase64(rec.pdfName || 'bdris-copy.pdf', rec.pdfB64);
     else note('সংরক্ষিত কপি পাওয়া যায়নি', 'warn');
   });
-  els('[data-ackdel]').forEach(b => b.onclick = () => {
-    if (!confirm('এই আবেদনটি সাম্প্রতিক তালিকা থেকে মুছে ফেলবেন?')) return;
-    delAck(b.dataset.ackdel);
+  els('[data-ackdel]').forEach(b => b.onclick = async () => {
+    const rec = getAcks().find(x => x.id === b.dataset.ackdel);
+    // MONEY/PDF (B7): if this card holds the ONLY PDF copy (a local
+    // copy + no server-backed number, or its server report is still
+    // pending), say so in the confirm — deleting it loses the copy.
+    let warn = '';
+    try {
+      const pend = JSON.parse(localStorage.getItem('bdris_acks_pending') || '{}');
+      if (rec && rec.pdfB64 && (isSentinelAck(rec.no) || pend[String(rec.no)])) warn = '\n⚠️ এই কার্ডের PDF কপি শুধু এই ব্রাউজারে আছে — মুছলে কপিটি হারিয়ে যাবে।';
+    } catch {}
+    if (!confirm('এই আবেদনটি সাম্প্রতিক তালিকা থেকে মুছে ফেলবেন?' + warn)) return;
+    // MONEY/PDF (B7): success is claimed only when the entry is
+    // actually gone — a failed server delete keeps the card and its
+    // note says so (delAck reports the failure itself).
+    const ok = await delAck(b.dataset.ackdel);
     renderHome();
-    note('✔ সাম্প্রতিক আবেদন মুছে ফেলা হয়েছে', 'ok');
+    if (ok) note('✔ সাম্প্রতিক আবেদন মুছে ফেলা হয়েছে', 'ok');
   });
   // আসল PDF (2026-10-17): recent list থেকেও original PDF আনা যাবে
   // PREMIUM-RESET (2026-10-28): চার্জ-কল না-ফিরলে (2026-10-28 লাইভ:
@@ -1438,50 +1537,24 @@ function renderHome() {
           '<button class="btn small" data-srvorig="' + esc(x.ack_no) + '">⬇️ আসল PDF</button>' +
           '<button class="btn danger small" data-srvdel="' + esc(x.ack_no) + '">🗑️ মুছুন</button></div></div>').join(''));
         els('[data-srvcopy]').forEach(b => b.onclick = () => copyText(b.dataset.srvcopy));
-        els('[data-srvorig]').forEach(b => b.onclick = async () => {
-          const ackNo = b.dataset.srvorig;
-          b.disabled = true; b.textContent = '⏳ চার্জ হচ্ছে…';
-          let emitted = false;
-          try {
-            const token = await charge('pdf', ackNo ? 'pdf-' + ackNo : null);
-            if (!token) return;
-            b.textContent = '⏳ PDF আসছে…';
-            S._origAutoDl = ackNo;
-            emitted = true;
-            socket.emit('FETCH_ORIGINAL', { ack: ackNo, _chargeToken: token });
-            setTimeout(() => { b.disabled = false; b.textContent = '⬇️ আসল PDF'; }, 30000);
-          } catch (e) {
-            note('চার্জ/পাঠাতে সমস্যা: ' + chargeCatchReason(e), 'err');
-          } finally {
-            if (!emitted) { b.disabled = false; b.textContent = '⬇️ আসল PDF'; }
-          }
-        });
-        els('[data-srvdel]').forEach(b => b.onclick = () => {
+        els('[data-srvorig]').forEach(b => b.onclick = () => fetchHomeOriginal(b, b.dataset.srvorig));
+        els('[data-srvdel]').forEach(b => b.onclick = async () => {
           if (!confirm('এই আবেদনটি সার্ভার রেকর্ড থেকে মুছবেন?')) return;
-          fetch('/api/bdris-apply/applications/' + encodeURIComponent(b.dataset.srvdel), { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getToken() } })
-            .then(() => renderHome()).catch(() => renderHome());
+          // MONEY/PDF (B7): the old .then(renderHome).catch(renderHome)
+          // claimed success whatever the server said. Report honestly.
+          try {
+            const r = await fetch('/api/bdris-apply/applications/' + encodeURIComponent(b.dataset.srvdel), { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getToken() } });
+            if (!r.ok) { note('⚠️ সার্ভার থেকে মোছা যায়নি (সার্ভার জবাব ' + r.status + ')', 'err'); return; }
+            note('✔ সার্ভার রেকর্ড মুছে ফেলা হয়েছে', 'ok');
+          } catch (e) {
+            note('⚠️ সার্ভার থেকে মোছা যায়নি — সংযোগ সমস্যা', 'err');
+            return;
+          }
+          renderHome();
         });
       }).catch(() => { renderServerAcksStatus(classifyServerAcksFailure({ networkError: true, tokenPresent: true })); });
   } catch {}
-  els('[data-orig]').forEach(b => b.onclick = async () => {
-    const ackNo = b.dataset.orig;
-    b.disabled = true; b.textContent = '⏳ চার্জ হচ্ছে…';
-    let emitted = false;
-    try {
-      const token = await charge('pdf', ackNo ? 'pdf-' + ackNo : null);
-      if (!token) return;
-      b.textContent = '⏳ PDF আসছে…';
-      S._origAutoDl = ackNo;
-      emitted = true;
-      socket.emit('FETCH_ORIGINAL', { ack: ackNo, _chargeToken: token });
-      // Ready হলে auto-download হবে (ORIGINAL_PDF handler দেখে)
-      setTimeout(() => { b.disabled = false; b.textContent = '⬇️ আসল PDF'; }, 30000);
-    } catch (e) {
-      note('চার্জ/পাঠাতে সমস্যা: ' + chargeCatchReason(e), 'err');
-    } finally {
-      if (!emitted) { b.disabled = false; b.textContent = '⬇️ আসল PDF'; }
-    }
-  });
+  els('[data-orig]').forEach(b => b.onclick = () => fetchHomeOriginal(b, b.dataset.orig));
 }
 
 /* ═══════════ status view (জমা দেওয়া আবেদনের অবস্থা) ═══════════ */
@@ -4317,9 +4390,16 @@ function showDone(d, restore) {
   const nm = [s1.firstNameBn, s1.lastNameBn].filter(Boolean).join(' ') || 'আবেদন';
   let no = '';
   const labeled = String(d.ackId || '').match(/আবেদন(?:পত্র)?\s*নম্বর\s*[:：]?\s*(\d{4,20})/);
-  const m = labeled ? null : String(d.ackId || '').match(/\d{17}|\d{7,12}/);
+  // MONEY/PDF (B6): the old \d{17}|\d{7,12} match TRUNCATED longer
+  // runs (a 15-digit ack became its first 12 digits), so the
+  // DONE-time server record and the later digits-only original flag
+  // never met — the flag created a second, nameless row. Take the
+  // longest digit run (≥4) instead, so the stored number is the
+  // full ack.
+  const runs = labeled ? null : (String(d.ackId || '').match(/\d{4,}/g) || []);
+  const m = runs && runs.length ? runs.reduce((a, b) => (b.length > a.length ? b : a)) : null;
   if (labeled) no = labeled[1];
-  else if (m) no = m[0];
+  else if (m) no = m;
   else { const t = String(d.ackId || '').trim(); if (t && t.length <= 60) no = t; }
   S.ackNo = no || null;
   const rec = {
@@ -4377,7 +4457,18 @@ function showDone(d, restore) {
   );
   const c = $('akCopy'); if (c) c.onclick = () => copyText(no);
   const p = $('akPdf'); if (p) p.onclick = () => { dlBase64(S.pdf.name || 'bdris-application.pdf', S.pdf.base64); note('⬇️ PDF কপি নামছে…', 'ok'); };
-  const og = $('akOrig'); if (og) og.onclick = () => { downloadOriginal(origUrl, no); };
+  const og = $('akOrig'); if (og) og.onclick = async () => {
+    // MONEY/PDF (B10): this button used to download the static URL
+    // with no charge at all. It now charges first (canonical key —
+    // a retry for the same PDF is charged 0 by idempotency) and
+    // only then downloads, with the token cached for the gate.
+    const key = pdfChargeKey(no);
+    if (!key) { note('এই আবেদনের নম্বর সংরক্ষিত হয়নি — আসল PDF আনা যাবে না', 'warn'); return; }
+    const token = await charge('pdf', key);
+    if (!token) return;
+    S._pdfTok = S._pdfTok || {}; S._pdfTok[key] = { tok: token, at: Date.now() };
+    downloadOriginal(origUrl, no);
+  };
   // bot পেছনে PDF তৈরি করে রাখে — পেজ খুলতেই fetch শুরু, ready হলেই auto-download
   (function bgPdf() {
     const el = $('akOrigPend'); if (!el || origUrl) return;
@@ -4429,11 +4520,29 @@ function showDone(d, restore) {
 const ORIG_READY = {};
 const ORIG_AUTODLED = {};
 function downloadOriginal(url, no) {
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'bdris-abedon-' + (no || 'copy') + '.pdf';
-  document.body.appendChild(a); a.click(); a.remove();
-  note('⬇️ আসল PDF নামছে…', 'ok');
+  // MONEY/PDF (B10): originals are no longer anonymous static files —
+  // the server refuses a bare /bdris-original-*.pdf URL. Fetch with
+  // the user's JWT + the paid charge token, then download the blob,
+  // so no token ever sits in a URL.
+  const canon = canonicalAck(no);
+  const cached = (canon && S._pdfTok && S._pdfTok['pdf-' + canon]) ? S._pdfTok['pdf-' + canon].tok : null;
+  const headers = { 'Authorization': 'Bearer ' + getToken() };
+  if (cached) headers['X-Charge-Token'] = cached;
+  fetch(url, { headers }).then(async r => {
+    if (!r.ok) {
+      note('⚠️ আসল PDF নামানো যায়নি — ' + (r.status === 401 ? 'আবার লগইন করুন' : r.status === 403 ? 'এই কপির অনুমতি নেই' : 'সার্ভার জবাব ' + r.status), 'err');
+      return null;
+    }
+    return r.blob();
+  }).then(blob => {
+    if (!blob) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'bdris-abedon-' + (no || 'copy') + '.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    note('⬇️ আসল PDF নামছে…', 'ok');
+  }).catch(() => { note('⚠️ আসল PDF নামানো যায়নি — সংযোগ সমস্যা', 'err'); });
 }
 /* ═══════════ অটো আবেদন — এক ফর্মে সব ═══════════ */
 function startAuto(resume) {
@@ -5667,6 +5776,9 @@ socket.on('BOT_STATUS', (d) => {
   // বোতামে ধাপের লেখা বসে (চুপচাপ ১ মিনিট নয়); বোতাম না থাকলে note।
   if (st === 'ORIGINAL_PDF_PROGRESS') {
     S._origProgressAt = Date.now();
+    // MONEY/PDF (C14): per-ack progress, so the home watchdog judges
+    // its own fetch, not another fetch's progress.
+    try { const k = String(d.ackId || '').replace(/\D/g, ''); if (k) { (S._origProgressByAck = S._origProgressByAck || {})[k] = Date.now(); } } catch {}
     const pl = san(d.label || '⏳ PDF তৈরি হচ্ছে…');
     const el = $('akOrigPend');
     if (el) el.textContent = pl; else note(pl, 'info');
@@ -5679,6 +5791,16 @@ socket.on('BOT_STATUS', (d) => {
     // pending watchdog below knows a result arrived (success or
     // failure — the failure branch already sets its own retry text).
     if (ono) { (S._origDone = S._origDone || {})[ono] = true; }
+    // MONEY/PDF (C14): home buttons own their terminal state too —
+    // reset any matching home button on outcome (success or
+    // failure), so a home fetch never sticks on '⏳ PDF আসছে…'
+    // after its result arrived.
+    if (ono) {
+      try {
+        els('[data-orig]').forEach(x => { if (canonicalAck(x.dataset.orig) === ono) { x.disabled = false; x.textContent = '⬇️ আসল PDF'; } });
+        els('[data-srvorig]').forEach(x => { if (canonicalAck(x.dataset.srvorig) === ono) { x.disabled = false; x.textContent = '⬇️ আসল PDF'; } });
+      } catch {}
+    }
     if (ono && u) ORIG_READY[ono] = u;
     const el = $('akOrigPend');
     if (u) {
@@ -6040,7 +6162,10 @@ $('logoutBtn').onclick = async () => {
           return origEmit.apply(null, [ev].concat(args));
         }
         var ackNo = (args[0] && typeof args[0] === 'object') ? (args[0].ack || '') : '';
-        var pdfKey = ackNo ? 'pdf-' + ackNo : null;
+        // MONEY/PDF (B8): one canonical digits-only key — the DONE
+        // retry passes digits, home passes the card value; both must
+        // land on the same cache entry and the same charge ref.
+        var pdfKey = pdfChargeKey(ackNo);
         S._pdfTok = S._pdfTok || {};
         var cached = pdfKey && S._pdfTok[pdfKey] && (Date.now() - S._pdfTok[pdfKey].at) < 25 * 60 * 1000 ? S._pdfTok[pdfKey].tok : null;
         if (cached) {
