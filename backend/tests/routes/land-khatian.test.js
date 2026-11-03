@@ -24,6 +24,21 @@ jest.mock('../../../engines/land-core/client', () => ({
   ownerMatches: (owners, name) => String(owners || '').includes(String(name || '').trim()),
   sumLand: (ds) => Math.round(ds.reduce((a, d) => a + (parseFloat(d.TOTAL_LAND) || 0), 0) * 10000) / 10000,
 }));
+// Store mocked to an EMPTY store: this file's pre-store
+// tests assume "portal failure → 502", which now holds
+// only when the store is empty/unreachable (a live success
+// in the same process would otherwise legitimately serve a
+// stale 200 from the real local tmp store — see the
+// land-khatian-store suite for the fallback cases).
+jest.mock('../../lib/khatianStore', () => ({
+  getStoreClient: () => ({
+    upsert: jest.fn().mockResolvedValue({ upserted: 1, updated: false, total: 1 }),
+    search: jest.fn().mockResolvedValue({ records: [], collectedAt: null, totalMatches: 0, mouzaCollected: false }),
+    countForUnit: jest.fn().mockResolvedValue({ count: 1 }),
+    ping: jest.fn().mockResolvedValue({ ok: true }),
+  }),
+  createStoreClient: () => ({}),
+}));
 jest.mock('../../utils/whatsapp', () => ({
   notifyServiceCompleted: jest.fn().mockResolvedValue({ ok: true }),
   notifyServiceFailed: jest.fn().mockResolvedValue({ ok: true }),

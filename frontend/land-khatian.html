@@ -116,6 +116,10 @@
         অফিসিয়াল কাজে সরকারি পোর্টালে যাচাই করে নিন।
       </div>
 
+      <div class="disclaimer" id="coverageBox">
+        সংরক্ষিত তথ্যের সংগ্রহের অবস্থা লোড হচ্ছে…
+      </div>
+
       <div class="err" id="errBox"></div>
       <div class="ok" id="okBox"></div>
 
@@ -173,6 +177,7 @@
     </div>
 
     <div id="resultsBox" style="max-width:720px; display:none;">
+      <div class="capped-note" id="staleNote" style="display:none;"></div>
       <div class="totals" id="totalLandLine"></div>
       <div class="capped-note" id="cappedNote" style="display:none;"></div>
       <div class="mutation-note" id="mutationNote" style="display:none;"></div>
@@ -440,6 +445,21 @@
   function renderResults(d) {
     const list = $('resultsList');
     list.replaceChildren();
+    // Store (stale) delivery: show the collection date and
+    // that it was NOT verified against the live portal —
+    // plus ONLY the surveys actually present in the stored
+    // records for this JL, never implying uncollected
+    // surveys are covered.
+    const stale = $('staleNote');
+    if (d.source === 'store') {
+      const when = d.collectedAt ? new Date(d.collectedAt).toLocaleString('bn-BD', { timeZone: 'Asia/Dhaka' }) : '';
+      let text = '⚠️ সংরক্ষিত তথ্য' + (when ? ' — শেষ আপডেট: ' + when : '') + ' — লাইভ পোর্টাল থেকে যাচাই করা হয়নি।';
+      if (Array.isArray(d.surveysPresent) && d.surveysPresent.length) {
+        text += ' সংরক্ষিত জরিপ: ' + d.surveysPresent.join(', ') + ' — এর বাইরের জরিপ সংরক্ষিত নয়।';
+      }
+      stale.textContent = text;
+      stale.style.display = '';
+    } else { stale.style.display = 'none'; }
     const records = Array.isArray(d.records) ? d.records : [];
     $('totalLandLine').textContent = 'মোট জমি (সব খতিয়ান মিলিয়ে): ' +
       bn(d.totalLand == null ? '—' : String(d.totalLand)) + ' একর' +
@@ -556,7 +576,15 @@
       } else if (r.status === 403) {
         showErr('❌ ' + (d.message || ERR_BN.SERVICE_ACCESS_DISABLED));
       } else if (r.status === 502 || (d && d.error === 'LAND_UNREACHABLE')) {
-        showErr('❌ ' + ERR_BN.LAND_UNREACHABLE);
+        // Store fallback ran out too: say honestly whether
+        // this mouza has any stored data yet at all.
+        if (d && d.storeEmpty === true) {
+          showErr('❌ লাইভ পোর্টালে সংযোগ করা যাচ্ছে না এবং এই মৌজার কোনো সংরক্ষিত তথ্যও এখনো সংগ্রহ হয়নি — কিছুক্ষণ পর আবার চেষ্টা করুন। কোনো টাকা কাটা হয়নি।');
+        } else if (d && d.storeEmpty === false) {
+          showErr('❌ লাইভ পোর্টালে সংযোগ করা যাচ্ছে না এবং সংরক্ষিত তথ্যে এই অনুসন্ধানের কোনো মিল পাওয়া যায়নি — কিছুক্ষণ পর আবার চেষ্টা করুন। কোনো টাকা কাটা হয়নি।');
+        } else {
+          showErr('❌ ' + ERR_BN.LAND_UNREACHABLE);
+        }
       } else {
         const msg = (d && d.message) || (d && d.error && ERR_BN[d.error]) ||
           'অনুসন্ধান সফল হয়নি — আবার চেষ্টা করুন।';
@@ -571,7 +599,51 @@
     btn.textContent = '🔍 খুঁজুন';
   });
 
+  // Stored (offline) collection status — plainly, and
+  // never conflated with live search: the form's "সব
+  // জরিপ" means "all survey TYPES in a live search", not
+  // all-BD coverage. Live search runs separately from the
+  // stored service, whatever this box says.
+  async function loadCoverage() {
+    const box = $('coverageBox');
+    try {
+      const r = await apiCall('/api/land-khatian/coverage');
+      if (!r.ok) throw new Error('coverage failed');
+      const d = await r.json();
+      const districts = Array.isArray(d.districts) ? d.districts : [];
+      box.replaceChildren();
+      const head = document.createElement('div');
+      head.style.fontWeight = '700';
+      head.textContent = '📦 সংরক্ষিত (অফলাইন) সেবা — এখনো সংগ্রহের পর্যায়ে, সারা-বাংলাদেশ সেবা নয়।';
+      box.appendChild(head);
+      const live = document.createElement('div');
+      live.textContent = 'লাইভ অনুসন্ধান এর বাইরে আলাদাভাবে চলে — উপরের ফর্ম দিয়ে লাইভ পোর্টালে খুঁজুন। ফর্মের "সব জরিপ" মানে লাইভ অনুসন্ধানে সব ধরনের জরিপ, সারা-বাংলাদেশ সংগ্রহ নয়।';
+      box.appendChild(live);
+      if (!districts.length) {
+        const none = document.createElement('div');
+        none.style.fontWeight = '700';
+        none.textContent = 'এখনো কোনো জেলার তথ্য সংগ্রহ হয়নি — সংরক্ষিত সেবায় এখনো কিছু নেই।';
+        box.appendChild(none);
+      } else {
+        const list = document.createElement('div');
+        districts.forEach((x) => {
+          const row = document.createElement('div');
+          row.textContent = '• ' + (x.districtName || x.districtBbs) + ': সম্পূর্ণ ' + bn(x.completeUnits || 0) +
+            ' ইউনিট, আংশিক ' + bn(x.partialUnits || 0) + ' ইউনিট, মোট ' + bn(x.recordCount || 0) + 'টি রেকর্ড';
+          list.appendChild(row);
+        });
+        box.appendChild(list);
+        const pct = document.createElement('div');
+        pct.textContent = 'শতাংশ (মোটের তুলনায়) এই বক্সে দেখানো হয় না — হর পোর্টালের তালিকা থেকে আসে; শতাংশ অ্যাডমিনের coverage-এ থাকে। শুধু উপরের জেলাগুলোর সংগৃহীত তথ্যই সংরক্ষিত আছে — এর বাইরের এলাকা সংরক্ষিত নয়।';
+        box.appendChild(pct);
+      }
+    } catch (e) {
+      box.textContent = '📦 সংরক্ষিত (অফলাইন) সেবা — এখনো সংগ্রহের পর্যায়ে, সারা-বাংলাদেশ সেবা নয়। সংগ্রহের অবস্থা এখন লোড হয়নি — লাইভ অনুসন্ধান আলাদাভাবে চলে।';
+    }
+  }
+
   loadPrice();
+  loadCoverage();
   loadDivisions();
 </script>
 </body>

@@ -61,6 +61,29 @@ plainly in Bengali that it is a **summary, NOT a certified
 copy**, NOT ownership/title/possession proof, and must be
 verified at the government portal if needed for official work.
 
+## Collection store (fallback, not primary)
+
+Live DLRMS is always tried first; the store is consulted
+only when live fails. Production Postgres holds only the
+index/metadata table `land_khatian_index` (migration 047) —
+bulk records live in a **separate store** reached via
+`backend/lib/khatianStore.js` (HTTP remote when
+`LAND_KHATIAN_STORE_URL` is set, ephemeral local file store
+otherwise). A store hit is delivered with stale flags in
+the response, the PDF, and a page banner — and charged
+exactly like a normal found result (Pankaj may overrule
+that to free; see `STORE.md`). Admin batch import
+(`POST /api/land-khatian/admin/import`: one survey, up to
+5 mouzas / 3000 records per call, cursor continuation) and
+coverage (`GET /api/land-khatian/admin/coverage`: imported
+pairs vs the portal's own lists, percent unavailable —
+never invented — when the portal is unreachable) are
+documented in full in **`STORE.md`**, including hosting
+options and the provision-before-collection warning. The
+"server keeps running if the source goes off" goal holds
+only for data already collected — never claimed for
+uncollected areas.
+
 ## What is NOT built
 
 No login, no payment step, no cart, no certified-copy or

@@ -315,4 +315,116 @@ async function search(args) {
   };
 }
 
-module.exports = { search, offeredSurveys, DETAIL_CAP, MUTATION_KEY };
+/**
+ * countDags(dags) — dag-token count for one detail DAGS
+ * string, with the exact splitting method (STORE.md):
+ * Bengali digits → Latin, split on ',' or ';', trim each
+ * token, drop empties. A token counts ONLY if it matches
+ * /^\d+$/ (a plain dag number). Returns { count } or
+ * { unparseable: true } — an unparseable token is NEVER
+ * guessed: the caller flags the record in issues and the
+ * unit goes partial. An empty/missing DAGS string counts
+ * as 0 (no dags listed), not unparseable.
+ */
+function countDags(dags) {
+  if (dags === null || dags === undefined || String(dags).trim() === '') return { count: 0 };
+  const tokens = toEn(String(dags)).split(/[,;]/).map((t) => t.trim()).filter((t) => t !== '');
+  for (const t of tokens) {
+    if (!/^\d+$/.test(t)) return { unparseable: true };
+  }
+  return { count: tokens.length };
+}
+
+/**
+ * importMouza({ divisionBbs, districtBbs, upazilaBbs,
+ *   surveyId, jlId, mouzaId }) — batch-collection import of
+ *   ONE unit (mouza JL × survey), for the collection store.
+ *
+ * Serial order, exactly as the collection inventory
+ * (~/workspace/land-service/khatian-collection-inventory.md)
+ * requires: cascade (offered surveys + jlNumbers) → FULL
+ * index list → detail per record → hal-sabek (best-effort
+ * only, never required for completeness) → map/PDF is NOT
+ * in this build (needs live proof first — see STORE.md).
+ *
+ * Reconciliation, per step, in this exact order:
+ *   1. The FULL index list is fetched FIRST and its length
+ *      recorded as `expected` BEFORE any detail is loaded.
+ *   2. Details are then fetched per index item. A detail
+ *      failure does NOT abort the unit: the item lands in
+ *      `failedDetails` (index id + khatian number + reason)
+ *      and the unit goes partial — the missing items stay
+ *      OPEN in the index row's issues, never synthesized,
+ *      never silently skipped.
+ *   3. `records` holds only successfully collected details;
+ *      `indexItems` holds the full source list so the caller
+ *      can reconcile (stored vs expected) and reopen a unit
+ *      on a later re-run that finds a gap.
+ *
+ * A mouza with no JL entry in this survey returns
+ * { records: [], jlId: null, ... } — the caller counts it
+ * as skipped, not failed. A survey the portal does not
+ * offer throws SURVEY_NOT_OFFERED. No DETAIL_CAP here: the
+ * import caller enforces its own per-call cap (5 mouzas /
+ * 3000 records).
+ */
+async function importMouza(args) {
+  const a = args || {};
+  const divisionBbs = toEn(String(a.divisionBbs || '').trim());
+  const districtBbs = toEn(String(a.districtBbs || '').trim());
+  const upazilaBbs = toEn(String(a.upazilaBbs || '').trim());
+  if (!/^\d+$/.test(divisionBbs) || !/^\d+$/.test(districtBbs) || !/^\d+$/.test(upazilaBbs)) {
+    throw typed('BAD_AREA', 'division/district/upazila BBS codes must be digits');
+  }
+  const surveyIdRaw = a.surveyId !== null && a.surveyId !== undefined ? String(a.surveyId).trim() : '';
+  if (!/^\d+$/.test(surveyIdRaw)) {
+    throw typed('SURVEY_NOT_OFFERED', 'import needs one numeric survey id');
+  }
+  const offered = await offeredSurveys(districtBbs, upazilaBbs);
+  const sv = offered.find((s) => s.id === Number(surveyIdRaw));
+  if (!sv) throw typed('SURVEY_NOT_OFFERED', 'survey is not offered in this upazila');
+  const jlId = a.jlId !== null && a.jlId !== undefined && String(a.jlId) !== '' ? a.jlId : null;
+  const mouzaId = a.mouzaId !== null && a.mouzaId !== undefined && String(a.mouzaId) !== '' ? a.mouzaId : null;
+  if (jlId === null && mouzaId === null) {
+    throw typed('JL_REQUIRED', 'jlId or mouzaId is required');
+  }
+  const jl = await jlEntry(districtBbs, upazilaBbs, sv.id, jlId, mouzaId);
+  if (!jl) {
+    return {
+      records: [], expected: 0, indexItems: [], failedDetails: [],
+      surveyKey: sv.key, surveyName: sv.name, jlId: null,
+      mouzaId: mouzaId !== null ? Number(mouzaId) : null, jlNumber: null,
+    };
+  }
+  // Step 1: FULL index list first; its length IS the source
+  // count, recorded before any detail is loaded.
+  const list = await client.indexList(sv.key, jl.ID);
+  const indexItems = (list || []).map((hit) => ({ id: hit.ID, khatianNo: hit.KHATIAN_NO }));
+  const expected = indexItems.length;
+  // Step 2: details per item; failures stay open, never abort.
+  const items = [];
+  const failedDetails = [];
+  for (const hit of list || []) {
+    try {
+      const det = await client.detail(sv.key, hit.ID);
+      if (!det || det.KHATIAN_NO === null || det.KHATIAN_NO === undefined || String(det.KHATIAN_NO) === '') {
+        throw typed('UNREADABLE_DETAIL', 'detail returned no khatian number');
+      }
+      items.push(normalize(det, sv.key, sv.name, jl.ID));
+    } catch (e) {
+      failedDetails.push({ indexId: hit.ID, khatianNo: hit.KHATIAN_NO, reason: e.code || 'DETAIL_FAILED' });
+    }
+  }
+  // Step 3: hal-sabek, best-effort only (a populated
+  // hal-sabek response is UNPROVEN — the sample returns
+  // 200 + EMPTY — so it never affects completeness).
+  const area = { divisionBbs, districtBbs, upazilaBbs };
+  for (const item of items) await attachHalSabek(item, area);
+  return {
+    records: items, expected, indexItems, failedDetails,
+    surveyKey: sv.key, surveyName: sv.name, jlId: jl.ID,
+    mouzaId: jl.MOUZA_ID, jlNumber: jl.JL_NUMBER,
+  };
+}
+
+module.exports = { search, offeredSurveys, importMouza, countDags, DETAIL_CAP, MUTATION_KEY };

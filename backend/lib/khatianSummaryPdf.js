@@ -20,7 +20,18 @@
 const path = require('path');
 const { toBn, landText } = require('./landReportPdf');
 
-function buildKhatianSummaryPdf({ ref, when, area, items, totalLand, totalMatches, capped }) {
+// The stale line rendered in a store-served PDF (and
+// mirrored in the API response + page banner). Null for
+// live PDFs and for store results without a collection
+// date — live PDFs are unchanged.
+function staleLine(source, collectedAt) {
+  if (source !== 'store' || !collectedAt) return null;
+  const staleBn = toBn(new Date(collectedAt).toLocaleString('bn-BD', { timeZone: 'Asia/Dhaka' })
+    .replace('AM', 'পূর্বাহ্ন').replace('PM', 'অপরাহ্ন'));
+  return 'সংরক্ষিত তথ্য — শেষ আপডেট: ' + staleBn + ' — লাইভ পোর্টাল থেকে যাচাই করা হয়নি';
+}
+
+function buildKhatianSummaryPdf({ ref, when, area, items, totalLand, totalMatches, capped, source, collectedAt }) {
   return new Promise((resolve, reject) => {
     try {
       const PDFDocument = require('pdfkit');
@@ -66,6 +77,16 @@ function buildKhatianSummaryPdf({ ref, when, area, items, totalLand, totalMatche
       y += 16;
       doc.font('bn-bold').fontSize(17).fillColor('#14532d').text('খতিয়ান অনুসন্ধান সারাংশ', X, y, { width: W });
       y += 28;
+      // Store (stale) delivery: the staleness is visible in
+      // the PDF itself, not only in the API response or the
+      // page banner. Live PDFs are unchanged.
+      const stale = staleLine(source, collectedAt);
+      if (stale) {
+        ensure(28);
+        doc.font('bn').fontSize(11).fillColor('#92400e')
+          .text(stale, X, y, { width: W });
+        y += 26;
+      }
       row('তারিখ ও সময়', whenBn);
       row('রেফারেন্স', ref);
       divider();
@@ -122,4 +143,4 @@ function buildKhatianSummaryPdf({ ref, when, area, items, totalLand, totalMatche
   });
 }
 
-module.exports = { buildKhatianSummaryPdf };
+module.exports = { buildKhatianSummaryPdf, staleLine };
