@@ -340,6 +340,30 @@ try {
   safeLog('[engines] land services not mounted:', e.message);
 }
 
+// ---- Land khatian search (SPEC Phase 1: login-free search +
+// summary only; engines/land-khatian/adapter.js over the
+// DLRMS public channel). Cascade comes from the EXISTING
+// /api/land/geo/* endpoints — no geo routes duplicated here.
+// Wallet charged ONLY when >= 1 record is found; summary
+// PDF lands on the order → History, like /api/land.
+//   GET  /api/land-khatian/price
+//   POST /api/land-khatian/search
+const landKhatianLimiter = rateLimit({
+  validate: { xForwardedForHeader: false },
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'RATE_LIMITED' },
+});
+try {
+  const landKhatianRoutes = require('./routes/land-khatian');
+  app.use('/api/land-khatian', requireAuth, landKhatianLimiter, landKhatianRoutes);
+  safeLog('[engines] mounted land-khatian at /api/land-khatian');
+} catch (e) {
+  safeLog('[engines] land-khatian not mounted:', e.message);
+}
+
 // ---- NID Server Copy (portal login + captcha relay, auth + limit) ---
 // A completely separate engine from nid-replica: the customer logs
 // in with their OWN NID portal (services.nidw.gov.bd/nid-pub) ID +
