@@ -453,7 +453,10 @@ describe('order document download (2026-10-15)', () => {
     db.__reset();
   });
   test('GET /orders/:id/documents/:filename → 404 when file missing on disk', async () => {
-    db.__routeQuery([['FROM orders WHERE id=$1 AND user_id=$2', { rows: [{ documents: docsJson }] }]]);
+    // P2: admin files pass the delivery gate only on
+    // completed/delivered/refunded orders — this row is delivered,
+    // so the missing disk file (not the gate) produces the 404.
+    db.__routeQuery([['FROM orders WHERE id=$1 AND user_id=$2', { rows: [{ status: 'delivered', documents: docsJson }] }]]);
     await withUser(request(app()).get('/api/orders/o1/documents/delivery-abc123.pdf')).expect(404);
     db.__reset();
   });
@@ -472,7 +475,7 @@ describe('order document download (2026-10-15)', () => {
         { filename: 'delivery-abc123.pdf', originalname: 'certificate.pdf', uploaded_by: 'admin' },
         { filename: 'order-xyz789.jpg', originalname: 'nid.jpg', uploaded_by: 'customer' },
       ];
-      db.__routeQuery([['FROM orders WHERE id=$1 AND user_id=$2', { rows: [{ documents: docsArray }] }]]);
+      db.__routeQuery([['FROM orders WHERE id=$1 AND user_id=$2', { rows: [{ status: 'delivered', documents: docsArray }] }]]);
       const r = await withUser(request(app()).get('/api/orders/o1/documents/delivery-abc123.pdf')).expect(200);
       expect(r.headers['content-type']).toContain('application/pdf');
       expect(r.text || (r.body && r.body.toString())).toContain('delivered');

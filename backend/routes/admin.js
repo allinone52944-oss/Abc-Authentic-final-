@@ -521,8 +521,20 @@ router.get('/orders', async (req, res) => {
       // Admin-order fix (2026-11-03): the list shows "#<first 8 of id>"
       // but search never matched it. CAST to text so an order number
       // (full id or its first 8 chars) finds the order.
-      conds.push(`(u.name ILIKE $${i} OR u.phone ILIKE $${i} OR s.name ILIKE $${i} OR s.name_bn ILIKE $${i} OR CAST(o.id AS TEXT) ILIKE $${i})`);
-      params.push('%' + req.query.q.trim() + '%'); i++;
+      // P2 (2026-11-03): phone search is digit-only + 01/880
+      // equivalent — spaces/dashes never block it, and a 01… query
+      // matches a stored 8801… number (and vice versa), because the
+      // stored digits always contain the local form as a substring
+      // (880 + 171… contains 0171… from index 2).
+      const qRaw = req.query.q.trim();
+      const qDigits = qRaw.replace(/\D/g, '');
+      let phoneClause = '';
+      if (qDigits) {
+        phoneClause = ` OR regexp_replace(u.phone, '[^0-9]', '', 'g') LIKE $${i}`;
+        params.push('%' + qDigits + '%'); i++;
+      }
+      conds.push(`(u.name ILIKE $${i} OR u.phone ILIKE $${i} OR s.name ILIKE $${i} OR s.name_bn ILIKE $${i} OR CAST(o.id AS TEXT) ILIKE $${i}${phoneClause})`);
+      params.push('%' + qRaw + '%'); i++;
     }
     if (req.query.type) {
       if (req.query.type === 'manual') {
@@ -618,7 +630,14 @@ function autoRefundSentence(split, price) {
 }
 router.put('/orders/:id/status', async (req, res) => {
   try {
-    const { status, admin_note } = req.body || {};
+    // P2 (2026-11-03): cancel_reason is the customer-facing cancel
+    // reason, sent explicitly by the admin UI's cancel prompt. It is
+    // deliberately separate from admin_note (internal only): the
+    // notification carries the reason, never the internal note.
+    const { status, admin_note, cancel_reason } = req.body || {};
+    const reason = (cancel_reason !== undefined && cancel_reason !== null &&
+      String(cancel_reason).trim() !== '')
+      ? String(cancel_reason).trim().slice(0, 500) : null;
     if (!ORDER_STATUSES.includes(status)) {
       return res.status(400).json({ error: 'INVALID_STATUS' });
     }
@@ -653,13 +672,13 @@ router.put('/orders/:id/status', async (req, res) => {
           // new note (updated_at must not creep), no history row,
           // and NO notification (a note save must never re-notify).
           if (note === null || note === cur.rows[0].admin_note) {
-            return { order: cur.rows[0], from, changed: false, refunded: false };
+            return { order: cur.rows[0], from, changed: false, noteChanged: false, refunded: false };
           }
           const upd = await client.query(
             'UPDATE orders SET admin_note = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
             [note, req.params.id]
           );
-          return { order: upd.rows[0], from, changed: false, refunded: false };
+          return { order: upd.rows[0], from, changed: false, noteChanged: true, refunded: false };
         }
         // Strict guard: an already-refunded order must NEVER be
         // credited again, and a refunded failed order must NOT
@@ -710,12 +729,23 @@ router.put('/orders/:id/status', async (req, res) => {
         }
         // Status history (H-1) — inside the transaction now, so a
         // status change can never exist without its timeline row.
+        // P2 (2026-11-03): the history note is NEVER the admin's
+        // free-text note. Code inspection found no separate
+        // "system message" string is written anywhere — the only
+        // value ever inserted here was admin_note itself — so the
+        // history row now carries just the transition (from/to,
+        // admin, time), which IS the system record. The admin's
+        // free text stays only in orders.admin_note (admin eyes
+        // only); the customer history endpoint no longer returns a
+        // note column at all, so even old rows cannot leak.
         await client.query(
           `INSERT INTO order_status_history (order_id, from_status, to_status, admin_id, note)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [req.params.id, from, status, req.user.id, note]
+           VALUES ($1, $2, $3, $4, NULL)`,
+          [req.params.id, from, status, req.user.id]
         );
-        return { order: r.rows[0], from, changed: true, refunded: status === 'refunded', refundSplit, autoRefunded };
+        return { order: r.rows[0], from, changed: true,
+          noteChanged: r.rows[0].admin_note !== cur.rows[0].admin_note,
+          refunded: status === 'refunded', refundSplit, autoRefunded };
       });
     } catch (e) {
       if (e.statusCode) {
@@ -773,9 +803,12 @@ router.put('/orders/:id/status', async (req, res) => {
         wa.notifyOrderCancelled(db, order, {
           creditPart: split.creditPart || 0, balancePart: split.balancePart,
           refunded: result.autoRefunded,
+          cancelReason: reason,
         }).catch(() => {});
         push.notifyUser(db, order.user_id, 'অর্ডার বাতিল হয়েছে',
-          'আপনার অর্ডারটি বাতিল করা হয়েছে।' + (sentence ? ' ' + sentence : ''),
+          'আপনার অর্ডারটি বাতিল করা হয়েছে।' +
+            (reason ? ' কারণ: ' + reason : '') +
+            (sentence ? ' ' + sentence : ''),
           '/orders.html').catch(() => {});
       } else if (status === 'refunded') {
         const split = result.refundSplit || {};
@@ -795,9 +828,35 @@ router.put('/orders/:id/status', async (req, res) => {
       }
     }
 
-    res.json({ order: result.order, refunded: result.refunded });
+    // P2 (2026-11-03): the UI must not claim a note save succeeded
+    // when nothing changed (e.g. an empty save, which under the
+    // long-standing null-means-absent rule writes nothing). changed
+    // = a real status transition; noteChanged = admin_note moved.
+    res.json({ order: result.order, refunded: result.refunded,
+      changed: result.changed, noteChanged: result.noteChanged });
   } catch (e) {
     safeLog('[admin] order status error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// GET /api/admin/orders/:id — single order, same shape as one list
+// row (P2: the admin UI's single-order fallback for saveAdminNote /
+// toast-open, so it never has to guess from a 50-row page).
+router.get('/orders/:id', async (req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT o.*, u.name AS user_name, u.phone AS user_phone,
+              s.name AS service_name, s.name_bn AS service_name_bn,
+              s.type AS service_type, s.engine_id AS service_engine
+       FROM orders o JOIN users u ON u.id = o.user_id
+       JOIN services s ON s.id = o.service_id
+       WHERE o.id = $1`,
+      [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    res.json({ order: r.rows[0] });
+  } catch (e) {
+    safeLog('[admin] order get error:', e.message);
     res.status(500).json({ error: 'FAILED' });
   }
 });
@@ -1076,6 +1135,20 @@ router.post('/orders/:id/delivery-docs', orderDocUpload(db, 'delivery'), async (
       uploaded_by: 'admin'
     });
     await db.query('UPDATE orders SET documents=$1 WHERE id=$2', [JSON.stringify(docs), orderId]);
+    // P2 (2026-11-03): a file added to an ALREADY-delivered order
+    // must tell the customer — otherwise they never look again.
+    // This cannot double with the first-delivery message: the
+    // first-delivery path uploads while the order is still
+    // processing/completed and notifies via the delivered
+    // transition afterwards; this branch fires only when the order
+    // is already delivered at upload time. Notify failures never
+    // fail the upload itself.
+    if (order.status === 'delivered') {
+      wa.notifyDeliveryFileAdded(db, order).catch(() => {});
+      push.notifyUser(db, order.user_id, '📎 নতুন ডেলিভারি ফাইল যোগ হয়েছে',
+        'আপনার ডেলিভার্ড অর্ডারে একটি নতুন ফাইল যোগ করা হয়েছে — ইতিহাস থেকে ডাউনলোড করতে পারবেন।',
+        '/history.html').catch(() => {});
+    }
     res.json({ ok: true, filename: req.file.filename });
   } catch (e) {
     unlinkUpload();
@@ -1796,9 +1869,21 @@ router.get('/stats', async (req, res) => {
             AND created_at >= (CURRENT_DATE AT TIME ZONE 'Asia/Dhaka')::timestamptz
             AND created_at < ((CURRENT_DATE + 1) AT TIME ZONE 'Asia/Dhaka')::timestamptz) AS users_today,
         (SELECT COUNT(*) FROM transactions WHERE status = 'pending' AND type = 'recharge') AS pending_recharge,
+        -- P2 (2026-11-03): revenue_today on the Dhaka day, like
+        -- orders_today above (CURRENT_DATE is the DB server's day,
+        -- which is not Dhaka's). DATE(timezone(...)) is Dhaka's
+        -- calendar date even when the DB runs on UTC.
         (SELECT COALESCE(SUM(amount),0) FROM transactions
           WHERE type = 'recharge' AND status = 'approved'
-            AND created_at >= CURRENT_DATE) AS revenue_today,
+            AND created_at >= (DATE(timezone('Asia/Dhaka', now())) AT TIME ZONE 'Asia/Dhaka')::timestamptz
+            AND created_at < ((DATE(timezone('Asia/Dhaka', now())) + 1) AT TIME ZONE 'Asia/Dhaka')::timestamptz) AS revenue_today,
+        -- P2 (2026-11-03): paid manual ORDER count, on the exact
+        -- condition of the orders list type=manual filter — so the
+        -- manual type-tab badge counts what the tab shows. This is
+        -- NOT manual_new (the free submission queue) below.
+        (SELECT COUNT(*) FROM orders o
+           JOIN services s ON s.id = o.service_id
+          WHERE s.type = 'manual' OR (o.data::text LIKE '%_manual_form%')) AS orders_manual,
         (SELECT COUNT(*) FROM services WHERE status = 'active') AS services_active
     `);
     // Manual submissions count (defensive: table may not exist on old DBs)

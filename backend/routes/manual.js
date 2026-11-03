@@ -124,8 +124,12 @@ customerManual.get('/template', async (req, res) => {
 // customer keeps both their own uploads and admin delivery files)
 customerManual.get('/mine', async (req, res) => {
   try {
+    // P2 (2026-11-03): admin_note is internal only — never in a
+    // customer payload. Admin delivery files list only once the
+    // submission is completed (same visibility rule as orders);
+    // the customer's own uploads always list.
     const r = await db.query(
-      `SELECT m.id, m.status, m.created_at, m.admin_note, m.documents,
+      `SELECT m.id, m.status, m.created_at, m.documents,
               s.name_bn AS service_name_bn, s.name AS service_name,
               jsonb_array_length(m.documents) AS doc_count
        FROM manual_submissions m
@@ -136,7 +140,8 @@ customerManual.get('/mine', async (req, res) => {
     const list = r.rows.map(m => ({
       ...m,
       documents: parseDocs(m.documents)
-        .filter(d => d && d.filename)
+        .filter(d => d && d.filename &&
+          (d.uploaded_by !== 'admin' || m.status === 'completed'))
         .map(d => ({ filename: d.filename, originalname: d.originalname || d.filename, uploaded_by: d.uploaded_by || 'customer' })),
     }));
     res.json({ list });
@@ -145,13 +150,18 @@ customerManual.get('/mine', async (req, res) => {
 
 // GET /api/manual/:id/documents/:filename — customer download (owner only).
 // Serves both the customer's own uploads and admin delivery files.
+// P2 (2026-11-03): an admin delivery file downloads only once the
+// submission is completed; the customer's own uploads always do.
 customerManual.get('/:id/documents/:filename', async (req, res) => {
   try {
     const fn = path.basename(req.params.filename);
-    const r = await db.query('SELECT documents FROM manual_submissions WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+    const r = await db.query('SELECT status, documents FROM manual_submissions WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
     if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
     const doc = parseDocs(r.rows[0].documents).find(d => d && path.basename(d.filename) === fn);
     if (!doc) return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
+    if (doc.uploaded_by === 'admin' && r.rows[0].status !== 'completed') {
+      return res.status(403).json({ error: 'NOT_DELIVERED_YET' });
+    }
     const fp = path.join(UPLOAD_DIR, fn);
     if (!fs.existsSync(fp)) return res.status(404).json({ error: 'FILE_MISSING' });
     res.download(fp, doc.originalname || fn);
@@ -218,28 +228,45 @@ const adminManual = express.Router();
 adminManual.use(requireAuth, requireAdmin);
 
 // GET /api/admin/manual — list (new first)
+// P2 (2026-11-03): q filter (name/phone/number) + total, mirroring
+// the BDRIS/engine queue searches from the orders-page split.
 adminManual.get('/', async (req, res) => {
   try {
     const status = req.query.status;
     const conds = [];
     const params = [];
+    let i = 1;
     if (status && ['new', 'processing', 'completed', 'rejected'].includes(status)) {
-      conds.push('m.status = $1'); params.push(status);
+      conds.push(`m.status = $${i++}`); params.push(status);
+    }
+    const q = (req.query.q || '').trim();
+    if (q) {
+      conds.push(`(u.name ILIKE $${i} OR u.phone ILIKE $${i} OR CAST(m.id AS TEXT) ILIKE $${i} OR (m.parsed_data->'flat'->>'নাম (বাংলা)') ILIKE $${i})`);
+      params.push('%' + q + '%'); i++;
     }
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
-    const r = await db.query(
-      `SELECT m.id, m.status, m.created_at, m.admin_note,
-              u.name AS user_name, u.phone AS user_phone,
-              s.name_bn AS service_name_bn, s.name AS service_name,
-              jsonb_array_length(m.documents) AS doc_count,
-              (m.parsed_data->'flat'->>'নাম (বাংলা)') AS name_bn
-       FROM manual_submissions m
-       JOIN users u ON u.id = m.user_id
-       LEFT JOIN services s ON s.id = m.service_id
-       ${where} ORDER BY m.created_at DESC LIMIT 100`,
-      params
-    );
-    res.json({ list: r.rows });
+    const [r, t] = await Promise.all([
+      db.query(
+        `SELECT m.id, m.status, m.created_at, m.admin_note,
+                u.name AS user_name, u.phone AS user_phone,
+                s.name_bn AS service_name_bn, s.name AS service_name,
+                jsonb_array_length(m.documents) AS doc_count,
+                (m.parsed_data->'flat'->>'নাম (বাংলা)') AS name_bn
+         FROM manual_submissions m
+         JOIN users u ON u.id = m.user_id
+         LEFT JOIN services s ON s.id = m.service_id
+         ${where} ORDER BY m.created_at DESC LIMIT 100`,
+        params
+      ),
+      db.query(
+        `SELECT COUNT(*) FROM manual_submissions m
+         JOIN users u ON u.id = m.user_id
+         LEFT JOIN services s ON s.id = m.service_id
+         ${where}`,
+        params
+      ),
+    ]);
+    res.json({ list: r.rows, total: parseInt(t.rows[0].count, 10) });
   } catch (e) { safeLog('[manual] admin list error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });
 
@@ -273,9 +300,9 @@ adminManual.get('/:id', async (req, res) => {
 });
 
 // PUT /api/admin/manual/:id — update status / admin_note.
-// On a TRANSITION into completed/rejected the customer is told
-// (this flow previously notified nobody at all): completed →
-// WhatsApp + push, rejected → push. A re-save with the same
+// On a TRANSITION into completed/rejected the customer is told:
+// completed → WhatsApp + push, rejected → WhatsApp + push (P2:
+// rejected previously pushed only). A re-save with the same
 // status (e.g. an admin_note edit) never re-notifies.
 // Admin-order fix (2026-11-03): manual submissions had NO transition
 // map — completed → new backwards was accepted. Same shape as the
@@ -342,6 +369,15 @@ adminManual.put('/:id', async (req, res) => {
             : 'আপনার ' + label + ' সম্পন্ন হয়েছে।',
           '/history.html').catch(() => {});
       } else {
+        // P2 (2026-11-03): rejected now notifies on WhatsApp too,
+        // in the completed pattern (template first via dispatch,
+        // free-text fallback when no template is mapped) + push.
+        let label = 'ম্যানুয়াল সেবা';
+        try {
+          const sv = await db.query('SELECT name_bn, name FROM services WHERE id = $1', [prev.service_id]);
+          if (sv.rows.length) label = sv.rows[0].name_bn || sv.rows[0].name || label;
+        } catch (_) {}
+        wa.notifyServiceRejected(db, prev.user_id, label).catch(() => {});
         push.notifyUser(db, prev.user_id, '❌ সেবার অনুরোধ সম্পন্ন হয়নি',
           'দুঃখিত — আপনার ম্যানুয়াল সেবার অনুরোধটি সম্পন্ন করা যায়নি। সহায়তার জন্য সাপোর্টে যোগাযোগ করুন।', '/history.html').catch(() => {});
       }

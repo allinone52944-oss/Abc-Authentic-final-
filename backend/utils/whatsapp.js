@@ -558,10 +558,14 @@ async function notifyOrderCancelled(db, order, opts) {
     // Auto-refund (2026-11-03): cancelling an order refunds it at
     // once (same transaction). The notice itself names the refund
     // — the old "refund separately" line is no longer true.
+    // P2 (2026-11-03): the explicit cancel reason travels here as
+    // opts.cancelReason — never the internal admin_note.
     const refundLine = refundLineForNotice(opts);
+    const reason = opts && opts.cancelReason ? String(opts.cancelReason).trim() : '';
     const msg =
       `${greetingFor(user)}\n` +
       `আপনার অর্ডার (নম্বর: ${short}) বাতিল করা হয়েছে।` +
+      (reason ? `\nকারণ: ${reason}` : '') +
       (refundLine ? `\n${refundLine}` : '');
     return dispatch(db, 'order_cancelled', user, {
       text: msg,
@@ -678,6 +682,72 @@ async function notifyServiceCompleted(db, userId, serviceLabel, opts) {
     });
   } catch (e) {
     safeLog('[whatsapp] notifyServiceCompleted failed:', e.message);
+    return { ok: false, error: 'FAILED' };
+  }
+}
+
+// P2 (2026-11-03): a manual submission REJECTED by the admin.
+// Same pattern as notifyServiceCompleted: template first via
+// dispatch (no Meta template is mapped for 'service_rejected' yet,
+// so dispatch falls back to free text — the in-window path), push
+// is sent by the caller alongside.
+async function notifyServiceRejected(db, userId, serviceLabel) {
+  try {
+    if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
+    if (!(await isNotifyEnabled(db, 'service_rejected'))) return { ok: false, error: 'NOTIFY_OFF' };
+    const u = await db.query(
+      'SELECT name, whatsapp, religion FROM users WHERE id = $1', [userId]
+    );
+    const user = u.rows[0];
+    if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
+    const label = String(serviceLabel || 'ম্যানুয়াল সেবা');
+    const text =
+      `${greetingFor(user)}\n` +
+      `দুঃখিত — আপনার ${label} অনুরোধটি সম্পন্ন করা যায়নি ❌\n` +
+      'সহায়তার জন্য সাপোর্টে যোগাযোগ করুন।';
+    return dispatch(db, 'service_rejected', user, {
+      text,
+      params: [greetingFor(user), label],
+    });
+  } catch (e) {
+    safeLog('[whatsapp] notifyServiceRejected failed:', e.message);
+    return { ok: false, error: 'FAILED' };
+  }
+}
+
+// P2 (2026-11-03): a file added to an ALREADY-delivered order.
+// Deliberately its own message — reusing the delivered message
+// here would tell the customer the order was "delivered" a second
+// time. The caller (delivery-docs endpoint) fires this only when
+// the order is already delivered, so it can never double with the
+// first-delivery notice.
+async function notifyDeliveryFileAdded(db, order, opts) {
+  try {
+    if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
+    if (!(await isNotifyEnabled(db, 'delivery_file_added'))) return { ok: false, error: 'NOTIFY_OFF' };
+    const u = await db.query(
+      'SELECT name, whatsapp, religion FROM users WHERE id = $1', [order.user_id]
+    );
+    const user = u.rows[0];
+    if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
+    let serviceName = '';
+    try {
+      const s = await db.query(
+        'SELECT name, name_bn FROM services WHERE id = $1', [order.service_id]
+      );
+      serviceName = (s.rows[0] && (s.rows[0].name_bn || s.rows[0].name)) || '';
+    } catch (_) {}
+    const short = String(order.id || '').slice(0, 8);
+    const text =
+      `${greetingFor(user)}\n` +
+      `আপনার ${serviceName} অর্ডারে (নম্বর: ${short}) একটি নতুন ডেলিভারি ফাইল যোগ করা হয়েছে 📎\n` +
+      'ফাইলটি আপনার অ্যাকাউন্টের ইতিহাস (History) থেকে ডাউনলোড করতে পারবেন।';
+    return dispatch(db, 'delivery_file_added', user, {
+      text,
+      params: [greetingFor(user), serviceName, short],
+    });
+  } catch (e) {
+    safeLog('[whatsapp] notifyDeliveryFileAdded failed:', e.message);
     return { ok: false, error: 'FAILED' };
   }
 }
@@ -830,6 +900,8 @@ module.exports = {
   notifyRechargeRejected,
   notifyServiceCompleted,
   notifyServiceFailed,
+  notifyServiceRejected,
+  notifyDeliveryFileAdded,
   notifyCashbackReceived,
   notifyWelcome,
   notifyDuplicateTrxid,

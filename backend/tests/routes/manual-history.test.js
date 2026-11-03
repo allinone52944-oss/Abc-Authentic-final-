@@ -6,6 +6,8 @@
 jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
 jest.mock('../../utils/whatsapp', () => ({
   notifyServiceCompleted: jest.fn().mockResolvedValue({ ok: true }),
+  // P2: rejected now notifies on WhatsApp too (item 13).
+  notifyServiceRejected: jest.fn().mockResolvedValue({ ok: true }),
 }));
 jest.mock('../../utils/push', () => ({
   notifyAdmins: jest.fn().mockResolvedValue({ ok: true }),
@@ -41,6 +43,7 @@ const asAdmin = (r) => r.set('Authorization', 'Bearer ' + adminTok());
 beforeEach(() => {
   db.__reset();
   wa.notifyServiceCompleted.mockClear();
+  if (wa.notifyServiceRejected) wa.notifyServiceRejected.mockClear();
   push.notifyUser.mockClear();
 });
 
@@ -79,8 +82,9 @@ describe('GET /api/manual/:id/documents/:filename — customer download', () => 
   afterEach(() => dropFile('manual-del.pdf'));
 
   test('owner can download an admin delivery file', async () => {
+    // P2: admin files pass the gate only on completed submissions.
     db.__routeQuery([
-      ['WHERE id = $1 AND user_id = $2', { rows: [{ documents: DOCS }] }],
+      ['WHERE id = $1 AND user_id = $2', { rows: [{ status: 'completed', documents: DOCS }] }],
     ]);
     const r = await asUser(request(app()).get('/api/manual/m1/documents/manual-del.pdf')).expect(200);
     expect(Buffer.isBuffer(r.body) ? r.body.toString('utf8') : r.text).toContain('PDF-DELIVERY');
@@ -275,11 +279,12 @@ describe('PUT /api/admin/manual/:id — outcome notifications on transition', ()
     expect(push.notifyUser).not.toHaveBeenCalled();
   });
 
-  test('new → rejected: push only, no WhatsApp success wording anywhere', async () => {
+  test('new → rejected: WhatsApp rejected + push, no completed wording (P2 item 13)', async () => {
     db.__routeQuery(putHandlers('new', 'rejected'));
     await asAdmin(request(app()).put('/api/admin/manual/m1'))
       .send({ status: 'rejected' }).expect(200);
     expect(push.notifyUser).toHaveBeenCalledTimes(1);
+    expect(wa.notifyServiceRejected).toHaveBeenCalledTimes(1);
     expect(wa.notifyServiceCompleted).not.toHaveBeenCalled();
   });
 
