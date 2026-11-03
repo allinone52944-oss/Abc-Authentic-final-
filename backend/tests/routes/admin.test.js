@@ -958,3 +958,78 @@ describe('BDRIS applications (admin visibility + delete)', () => {
     expect(del[1]).toEqual(['a1']);
   });
 });
+
+describe('P1 premium gaps: refund fields, preview, processing count', () => {
+  test('GET /stats exposes orders_processing separately from orders_active', async () => {
+    db.__routeQuery([['SELECT', { rows: [{ users: '5', orders_total: '3', orders_active: '4', orders_processing: '2' }] }]]);
+    const r = await withAdmin(request(app()).get('/api/admin/stats')).expect(200);
+    expect(r.body.orders_processing).toBe('2');
+    expect(r.body.orders_active).toBe('4');
+    const statsQ = db.query.mock.calls.find((c) => /orders_processing/.test(c[0]));
+    expect(statsQ).toBeDefined();
+  });
+
+  test('PUT status → refunded returns the actual refund split', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o1', user_id: 'u1', price: '200', status: 'completed' }] }],
+      ['UPDATE orders SET status', { rows: [{ id: 'o1', user_id: 'u1', price: '200', status: 'refunded' }] }],
+    ]);
+    const r = await withAdmin(request(app()).put('/api/admin/orders/o1/status')).send({ status: 'refunded' }).expect(200);
+    expect(r.body.refund).toEqual({ refunded: true, balancePart: 200, creditPart: 0, total: 200 });
+  });
+
+  test('PUT status → cancelled with a prior refund reports refundedAlready, no fresh refund', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o1', user_id: 'u1', price: '200', status: 'new' }] }],
+      ['FROM transactions', { rows: [{ '1': 1 }] }],
+      ['UPDATE orders SET status', { rows: [{ id: 'o1', user_id: 'u1', price: '200', status: 'cancelled' }] }],
+    ]);
+    const r = await withAdmin(request(app()).put('/api/admin/orders/o1/status')).send({ status: 'cancelled' }).expect(200);
+    expect(r.body.refundedAlready).toBe(true);
+    expect(r.body.refund).toEqual({ alreadyRefunded: true });
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    expect(allCalls.find((c) => /wallet_apply/.test(c[0]))).toBeUndefined();
+  });
+
+  test('GET /orders/:id → order + null refund when no refund row exists', async () => {
+    db.__routeQuery([
+      ['FROM orders o JOIN users', { rows: [{ id: 'o1', user_id: 'u1', price: '200', status: 'refunded' }] }],
+    ]);
+    const r = await withAdmin(request(app()).get('/api/admin/orders/o1')).expect(200);
+    expect(r.body.order.id).toBe('o1');
+    expect(r.body.refund).toBeNull();
+  });
+
+  test('GET /orders/:id → 404 when missing', async () => {
+    db.__routeQuery([['FROM orders o JOIN users', { rows: [] }]]);
+    await withAdmin(request(app()).get('/api/admin/orders/o-missing')).expect(404);
+  });
+
+  test('GET /orders/:id/refund-preview → refundable split, whole price to balance by default', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o1', user_id: 'u1', price: '300', status: 'processing' }] }],
+    ]);
+    const r = await withAdmin(request(app()).get('/api/admin/orders/o1/refund-preview')).expect(200);
+    expect(r.body).toMatchObject({ order_id: 'o1', price: 300, refundable: true, alreadyRefunded: false, balancePart: 300, creditPart: 0, total: 300 });
+  });
+
+  test('GET /orders/:id/refund-preview → alreadyRefunded when a refund row exists, no fresh split', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o1', user_id: 'u1', price: '300', status: 'cancelled' }] }],
+      ['FROM transactions', { rows: [{ amount: '250', created_at: '2026-11-03T00:00:00.000Z' }] }],
+    ]);
+    const r = await withAdmin(request(app()).get('/api/admin/orders/o1/refund-preview')).expect(200);
+    expect(r.body.alreadyRefunded).toBe(true);
+    expect(r.body.refundable).toBe(false);
+    expect(r.body.balancePart).toBe(250);
+  });
+
+  test('GET /orders/:id/refund-preview → price 0 is not refundable', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o1', user_id: 'u1', price: '0', status: 'processing' }] }],
+    ]);
+    const r = await withAdmin(request(app()).get('/api/admin/orders/o1/refund-preview')).expect(200);
+    expect(r.body.refundable).toBe(false);
+    expect(r.body.total).toBe(0);
+  });
+});
