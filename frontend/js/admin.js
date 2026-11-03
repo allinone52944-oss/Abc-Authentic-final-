@@ -1097,9 +1097,9 @@ window.AdmUsers = {
       '<td>' + stBadge + '</td>' +
       '<td style="text-align:right;">' +
         '<div style="display:inline-flex; align-items:center; gap:6px;">' +
-          '<button class="mini-btn ok" style="padding:6px 10px; font-size:11px; font-weight:700;" onclick="AdmUsers.edit(\'' + u.id + '\')">⚙️ নিয়ন্ত্রণ</button>' +
+          '<button class="mini-btn ok" style="min-height:36px;padding:9px 12px; font-size:12px; font-weight:700;" onclick="AdmUsers.edit(\'' + u.id + '\')">⚙️ নিয়ন্ত্রণ</button>' +
           (u.id !== myId
-            ? '<button class="mini-btn danger" style="padding:6px 9px;" onclick="AdmUsers.del(\'' + u.id + '\',\'' + escJs(u.name) + '\')" title="ডিলিট করুন">🗑️</button>'
+            ? '<button class="mini-btn danger" style="min-width:36px;min-height:36px;padding:9px 11px;" onclick="AdmUsers.del(\'' + u.id + '\',\'' + escJs(u.name) + '\')" title="ডিলিট করুন">🗑️</button>'
             : '<span style="font-size:11px; color:#94a3b8; padding:0 6px;">(নিজ একাউন্ট)</span>') +
         '</div>' +
       '</td>' +
@@ -1520,6 +1520,12 @@ TABS.orders = async () => {
 
   const d = await ordersRes.json().catch(() => ({}));
   if (!ordersRes.ok) throw new Error(d.error && d.error !== 'FAILED' ? d.error : 'অর্ডার লোড ব্যর্থ (সার্ভার সমস্যা)');
+  // F2: an out-of-range page (rows deleted / transitioned away
+  // since the page opened) steps back to the last real page
+  // instead of rendering an empty out-of-range page.
+  const _total0 = (d.total !== undefined && d.total !== null) ? Number(d.total) : (d.orders || []).length;
+  const _pages0 = Math.max(1, Math.ceil(_total0 / 50));
+  if (_page > _pages0) { TABS._opage = _pages0; return TABS.orders(); }
   const stats = statsRes.ok ? await statsRes.json().catch(() => ({})) : {};
   const summaryData = (summaryRes && summaryRes.ok) ? await summaryRes.json().catch(() => null) : null;
   TABS._orders = d.orders || [];
@@ -1573,7 +1579,7 @@ TABS.orders = async () => {
       // endpoint; never a charge or transaction.
       if (_type !== 'manual') return '';
       let inner = '<div style="font-size:15px;font-weight:700;margin-bottom:4px;">👥 ইউজারপ্রতি ম্যানুয়াল সারাংশ</div>' +
-        '<div class="s" style="margin-bottom:10px;">শুধু সম্পন্ন ও ডেলিভার্ড ম্যানুয়াল অর্ডার গোনা হয়েছে — নতুন, প্রসেসিং, ব্যর্থ, বাতিল ও রিফান্ডেড অর্ডার এই হিসাবে নেই।</div>';
+        '<div class="s" style="margin-bottom:10px;">শুধু সম্পন্ন ও ডেলিভার্ড ম্যানুয়াল অর্ডার গোনা হয়েছে — নতুন, অপেক্ষমান, প্রসেসিং, ব্যর্থ, বাতিল ও রিফান্ডেড অর্ডার এই হিসাবে নেই।</div>';
       if (!summaryData) {
         inner += '<div class="s">সারাংশ লোড করা যায়নি — পেজ রিলোড করে আবার চেষ্টা করুন।</div>';
       } else if (!summaryData.summary || !summaryData.summary.length) {
@@ -1794,6 +1800,8 @@ window.AdmOrders = {
 
   // P1: silent list-cache refresh (no re-render, so an open modal
   // survives) — used after a half-successful smart transition.
+  // Returns true only when the cache fetch actually succeeded —
+  // callers must not claim a refresh they did not get (F5).
   async _refreshOrdersCache() {
     try {
       let url = '/admin/orders?limit=50&page=' + (TABS._opage || 1);
@@ -1801,9 +1809,44 @@ window.AdmOrders = {
       if (TABS._q) url += '&q=' + encodeURIComponent(TABS._q);
       if (TABS._orderType) url += '&type=' + encodeURIComponent(TABS._orderType);
       const r = await ABC.api(url);
-      if (!r.ok) return;
+      if (!r.ok) return false;
       const d = await r.json().catch(() => ({}));
       if (d.orders) TABS._orders = d.orders;
+      return true;
+    } catch (_) { return false; }
+  },
+
+  // F3: one lookup across both lists — an auto-data order must
+  // never fall back to price 0 just because it is not in _orders.
+  // Also covers the detail order fetched by view()'s fallback (F1).
+  findOrder(id) {
+    const sid = String(id);
+    const inList = (arr) => (arr || []).find(x => String(x.id) === sid);
+    return inList(TABS._orders) || inList(TABS._autoOrders)
+      || (TABS._detailOrder && String(TABS._detailOrder.id) === sid ? TABS._detailOrder : null);
+  },
+
+  // F4: the tab a detail-modal action returns to. Only a call made
+  // while a detail modal is open uses the detail's back tab; a
+  // list-row call always returns to the orders list, so a stale
+  // back tab from a closed detail can never hijack it.
+  _backTabForAction() {
+    try {
+      if (typeof document !== 'undefined' && document.getElementById('admModal')) return TABS._activeDetailBack || 'orders';
+    } catch (_) {}
+    return 'orders';
+  },
+
+  // F15: focus a durable element after a delete — the sidebar tab
+  // for the returned view (made focusable at runtime), falling
+  // back to the first button in the re-rendered content. Never
+  // the deleted row's button.
+  _focusAfterDelete(backTab) {
+    try {
+      const tab = document.querySelector('#tabs .side-link[data-t="' + backTab + '"]');
+      if (tab) { tab.tabIndex = 0; tab.focus(); return; }
+      const firstBtn = document.querySelector('#content button');
+      if (firstBtn) firstBtn.focus();
     } catch (_) {}
   },
 
@@ -1859,8 +1902,10 @@ window.AdmOrders = {
     if (!confirm('এই BDRIS আবেদনের রেকর্ড মুছে ফেলবেন? (আসল আবেদন সরকারি পোর্টালে থেকে যাবে — শুধু এখানের রেকর্ড মুছবে)')) return;
     const r = await ABC.api('/admin/bdris-applications/' + id, { method: 'DELETE' });
     if (!r.ok) { alert('ডিলিট ব্যর্থ হয়েছে'); return; }
-    // P3: a delete from the auto-data view refreshes that view.
-    if (document.getElementById('admAutoDataBox')) AdmOrders.loadAutoData(TABS._autoQ || '');
+    // F6: invalidate the auto-data cache — the deleted row must
+    // never reappear from a stale cached list.
+    TABS._autoBdris = null; TABS._autoEngine = null;
+    if (document.getElementById('admAutoDataBox')) AdmOrders.loadAutoData(TABS._autoQ || '', true);
     else AdmOrders.loadBdrisApps(TABS._bdrisQ || '');
   },
   async searchBdris(q) {
@@ -1899,8 +1944,10 @@ window.AdmOrders = {
     if (!confirm('এই engine ডেলিভারির রেকর্ড ও ফাইল মুছে ফেলবেন? গ্রাহকের ইতিহাস থেকেও সরে যাবে।')) return;
     const r = await ABC.api('/admin/engine-jobs/' + id, { method: 'DELETE' });
     if (!r.ok) { alert('ডিলিট ব্যর্থ হয়েছে'); return; }
-    // P3: a delete from the auto-data view refreshes that view.
-    if (document.getElementById('admAutoDataBox')) AdmOrders.loadAutoData(TABS._autoQ || '');
+    // F6: invalidate the auto-data cache — the deleted row must
+    // never reappear from a stale cached list.
+    TABS._autoBdris = null; TABS._autoEngine = null;
+    if (document.getElementById('admAutoDataBox')) AdmOrders.loadAutoData(TABS._autoQ || '', true);
     else AdmOrders.loadEngineJobs(TABS._engineQ || '');
   },
   async searchEngine(q) {
@@ -1916,39 +1963,57 @@ window.AdmOrders = {
     const eBox = document.getElementById('admAutoEngine');
     const oBox = document.getElementById('admAutoOrders');
     if (!bBox && !eBox && !oBox) return;
+    const _page = Math.max(1, Number(TABS._autoPage) || 1);
+    // F9: BDRIS + engine load independently — one section's
+    // failure sets only its own error flag and never wipes the
+    // other sections (or the auto-orders section below).
+    if (firstLoad || !TABS._autoBdris || !TABS._autoEngine) {
+      const results = await Promise.allSettled([ABC.api('/admin/bdris-applications'), ABC.api('/admin/engine-jobs')]);
+      const loadOne = async (res, key, errKey, listKey) => {
+        if (res.status !== 'fulfilled') { TABS[errKey] = true; if (TABS[key] === undefined) TABS[key] = []; return; }
+        try {
+          const dd = await res.value.json().catch(() => ({}));
+          if (res.value.ok === false) { TABS[errKey] = true; if (TABS[key] === undefined) TABS[key] = []; return; }
+          TABS[key] = dd[listKey] || [];
+          TABS[errKey] = false;
+        } catch (_) { TABS[errKey] = true; if (TABS[key] === undefined) TABS[key] = []; }
+      };
+      await loadOne(results[0], '_autoBdris', '_autoBdrisError', 'applications');
+      await loadOne(results[1], '_autoEngine', '_autoEngineError', 'jobs');
+    }
+    // F8: auto orders use the server's page/limit/total.
     try {
-      // BDRIS + engine: one fetch, then client-side filtering on
-      // every search — no extra endpoint, no refetch per keystroke.
-      if (firstLoad || !TABS._autoBdris || !TABS._autoEngine) {
-        const [br, er] = await Promise.all([ABC.api('/admin/bdris-applications'), ABC.api('/admin/engine-jobs')]);
-        const bd = await br.json().catch(() => ({}));
-        const ed = await er.json().catch(() => ({}));
-        TABS._autoBdris = bd.applications || [];
-        TABS._autoEngine = ed.jobs || [];
-      }
-      // Auto orders: the server q (name/phone/service/order id).
-      const or = await ABC.api('/admin/orders?type=auto&limit=50' + (q ? '&q=' + encodeURIComponent(q) : ''));
+      const or = await ABC.api('/admin/orders?type=auto&limit=50&page=' + _page + (q ? '&q=' + encodeURIComponent(q) : ''));
       const od = await or.json().catch(() => ({}));
       if (!or.ok) throw new Error('auto orders');
       TABS._autoOrders = od.orders || [];
       TABS._autoOrdersTotal = (od.total !== undefined && od.total !== null) ? Number(od.total) : TABS._autoOrders.length;
-      AdmOrders.renderAutoData(q);
+      TABS._autoOrdersLimit = Number(od.limit) || 50;
+      TABS._autoOrdersPage = Number(od.page) || _page;
+      TABS._autoOrdersError = false;
+      // F2-style clamp: a shrunk page count steps back, never empty.
+      const _aPages = Math.max(1, Math.ceil(TABS._autoOrdersTotal / TABS._autoOrdersLimit));
+      if (_page > _aPages) { TABS._autoPage = _aPages; return AdmOrders.loadAutoData(q, false); }
+      TABS._autoPage = TABS._autoOrdersPage;
     } catch (e) {
-      if (bBox) bBox.textContent = 'লোড ব্যর্থ হয়েছে।';
-      if (eBox) eBox.textContent = 'লোড ব্যর্থ হয়েছে।';
-      if (oBox) oBox.textContent = 'লোড ব্যর্থ হয়েছে।';
+      TABS._autoOrdersError = true;
     }
+    AdmOrders.renderAutoData(q);
   },
   renderAutoData(q) {
     const needle = (q || '').trim().toLowerCase();
     const match = (...vals) => !needle || vals.some(v => String(v == null ? '' : v).toLowerCase().includes(needle));
     const bBox = document.getElementById('admAutoBdris');
-    if (bBox) {
+    if (bBox && TABS._autoBdrisError) {
+      // F9: per-section load failure — never "no records".
+      bBox.innerHTML = '<div style="font-size:15px;font-weight:700;margin:16px 0 4px;">🕘 BDRIS আবেদন</div>' +
+        '<div class="s" style="color:#dc2626;">⚠️ BDRIS তালিকা লোড ব্যর্থ হয়েছে — অন্য সেকশনগুলো নিচে দেখুন, পেজ রিলোড করে আবার চেষ্টা করুন।</div>';
+    } else if (bBox) {
       const apps = (TABS._autoBdris || []).filter(a => match(a.applicant_name, a.user_name, a.user_phone, a.ack_no));
       let html = '<div style="font-size:15px;font-weight:700;margin:16px 0 4px;">🕘 BDRIS আবেদন</div>' +
         '<div class="s" style="margin-bottom:8px;">এগুলো অর্ডার পাইপলাইনের অংশ নয় — BDRIS ইঞ্জিনে জমা হওয়া আবেদনের রেকর্ড। এই রেকর্ডগুলোর সঙ্গে কোনো ডাউনলোড-ফাইল থাকে না।</div>' +
         '<div class="s" style="margin-bottom:8px;">' + (needle ? 'এই খোঁজায় মোট ' : 'মোট ') + bn(apps.length) + 'টি' +
-        (!needle && apps.length >= 200 ? ' (সর্বোচ্চ ২০০টি দেখানো হচ্ছে)' : '') + '</div>';
+        ((TABS._autoBdris || []).length >= 200 ? ' ⚠️ শুধু নতুন ২০০টি সারি খোঁজা হয়েছে — এর বাইরের পুরনো সারি এই খোঁজায় আসবে না।' : '') + '</div>';
       if (!apps.length) {
         html += '<div class="s">' + (needle ? 'এই খোঁজায় কোনো BDRIS আবেদন পাওয়া যায়নি।' : 'এখনো কোনো BDRIS আবেদন জমা হয়নি।') + '</div>';
       } else {
@@ -1966,13 +2031,17 @@ window.AdmOrders = {
       bBox.innerHTML = html;
     }
     const eBox = document.getElementById('admAutoEngine');
-    if (eBox) {
+    if (eBox && TABS._autoEngineError) {
+      // F9: per-section load failure — never "no records".
+      eBox.innerHTML = '<div style="font-size:15px;font-weight:700;margin:16px 0 4px;">🎓 Engine ডেলিভারি (সার্টিফিকেট / মৃত্যু সনদ)</div>' +
+        '<div class="s" style="color:#dc2626;">⚠️ Engine তালিকা লোড ব্যর্থ হয়েছে — অন্য সেকশনগুলো দেখুন, পেজ রিলোড করে আবার চেষ্টা করুন।</div>';
+    } else if (eBox) {
       const lbl = { 'bdris-certificate': 'জন্ম সনদ', 'death-verify': 'মৃত্যু সনদ' };
       const jobs = (TABS._autoEngine || []).filter(j => match(j.subject_name, j.user_name, j.user_phone, j.ref_no, lbl[j.engine_id] || j.engine_id));
       let html = '<div style="font-size:15px;font-weight:700;margin:16px 0 4px;">🎓 Engine ডেলিভারি (সার্টিফিকেট / মৃত্যু সনদ)</div>' +
         '<div class="s" style="margin-bottom:8px;">এগুলো অর্ডার পাইপলাইনের অংশ নয় — জন্ম/মৃত্যু সনদ যাচাই ইঞ্জিনের ডেলিভারি রেকর্ড। অ্যাডমিনের জন্য ফাইল-ডাউনলোড এন্ডপয়েন্ট নেই, তাই এখানে ডাউনলোড বোতাম দেওয়া হয়নি।</div>' +
         '<div class="s" style="margin-bottom:8px;">' + (needle ? 'এই খোঁজায় মোট ' : 'মোট ') + bn(jobs.length) + 'টি' +
-        (!needle && jobs.length >= 100 ? ' (সর্বোচ্চ ১০০টি দেখানো হচ্ছে)' : '') + '</div>';
+        ((TABS._autoEngine || []).length >= 100 ? ' ⚠️ শুধু নতুন ১০০টি সারি খোঁজা হয়েছে — এর বাইরের পুরনো সারি এই খোঁজায় আসবে না।' : '') + '</div>';
       if (!jobs.length) {
         html += '<div class="s">' + (needle ? 'এই খোঁজায় কোনো engine ডেলিভারি পাওয়া যায়নি।' : 'এখনো কোনো engine ডেলিভারি জমা হয়নি।') + '</div>';
       } else {
@@ -1990,13 +2059,17 @@ window.AdmOrders = {
       eBox.innerHTML = html;
     }
     const oBox = document.getElementById('admAutoOrders');
-    if (oBox) {
+    if (oBox && TABS._autoOrdersError) {
+      // F9: an auto-orders failure never wipes the other sections.
+      oBox.innerHTML = '<div style="font-size:15px;font-weight:700;margin:16px 0 4px;">📦 অটো অর্ডার-রেকর্ড</div>' +
+        '<div class="s" style="color:#dc2626;">⚠️ অটো অর্ডার তালিকা লোড ব্যর্থ হয়েছে — BDRIS ও engine সেকশন উপরে অটুট আছে, পেজ রিলোড করে আবার চেষ্টা করুন।</div>';
+    } else if (oBox) {
       const orders = TABS._autoOrders || [];
       const total = TABS._autoOrdersTotal !== undefined ? TABS._autoOrdersTotal : orders.length;
       let html = '<div style="font-size:15px;font-weight:700;margin:16px 0 4px;">📦 অটো অর্ডার-রেকর্ড</div>' +
         '<div class="s" style="margin-bottom:8px;">এগুলো অর্ডার পাইপলাইনের অংশ নয় — স্বয়ংক্রিয় সেবার অর্ডার-রেকর্ড। এখানে কোনো গ্রহণ, সম্পন্ন বা ডেলিভারি বোতাম নেই — শুধু দেখা, ফাইল ডাউনলোড আর ডিলিট।</div>' +
         '<div class="s" style="margin-bottom:8px;">' + (needle ? 'এই খোঁজায় মোট ' : 'মোট ') + bn(total) + 'টি' +
-        (total > orders.length ? ' (প্রথম ' + bn(orders.length) + 'টি দেখানো হচ্ছে)' : '') + '</div>';
+        (total > orders.length ? ' · পেজ ' + bn(TABS._autoPage || 1) + ' (এই পেজে ' + bn(orders.length) + 'টি)' : '') + '</div>';
       if (!orders.length) {
         html += '<div class="s">' + (needle ? 'এই খোঁজায় কোনো অটো অর্ডার-রেকর্ড পাওয়া যায়নি।' : 'এখনো কোনো অটো অর্ডার-রেকর্ড নেই।') + '</div>';
       } else {
@@ -2020,23 +2093,42 @@ window.AdmOrders = {
               '</div></td></tr>';
           }).join('') + '</tbody></table></div>';
       }
+      // F8: pager from the server's page/limit/total — rows past
+      // 50 are reachable instead of stopping at the first page.
+      const _aTotal = TABS._autoOrdersTotal !== undefined ? TABS._autoOrdersTotal : orders.length;
+      const _aLimit = TABS._autoOrdersLimit || 50;
+      const _aPages = Math.max(1, Math.ceil(_aTotal / _aLimit));
+      const _aCur = Math.min(Math.max(1, TABS._autoPage || 1), _aPages);
+      if (_aPages > 1) {
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap;">' +
+          '<span style="font-size:12px;color:var(--text-muted);">মোট ' + bn(_aTotal) + 'টি অটো অর্ডার · পেজ ' + bn(_aCur) + '/' + bn(_aPages) + '</span>' +
+          '<span style="display:flex;gap:8px;">' +
+            (_aCur > 1 ? '<button class="mini-btn" onclick="AdmOrders.pageAutoData(' + (_aCur - 1) + ')">← আগের পেজ</button>' : '') +
+            (_aCur < _aPages ? '<button class="mini-btn" onclick="AdmOrders.pageAutoData(' + (_aCur + 1) + ')">পরের পেজ →</button>' : '') +
+          '</span></div>';
+      }
       oBox.innerHTML = html;
     }
   },
   searchAutoData(q) {
     TABS._autoQ = (q || '').trim();
+    TABS._autoPage = 1;
     // BDRIS/engine filter from cache; only auto orders refetch.
     AdmOrders.loadAutoData(TABS._autoQ, false);
   },
+  pageAutoData(p) {
+    TABS._autoPage = Math.max(1, Number(p) || 1);
+    AdmOrders.loadAutoData(TABS._autoQ || '', false);
+  },
   clearAutoSearch() {
     TABS._autoQ = '';
+    TABS._autoPage = 1;
     show('autoData');
   },
   deleteAutoOrder(id) {
-    // Reuse the orders-page delete modal; view() and the modal read
-    // TABS._orders, so point it at the auto list, and return to
-    // auto-data after a confirmed delete (not the orders page).
-    TABS._orders = TABS._autoOrders || [];
+    // F3: no _orders clobbering — deleteOrder finds the order via
+    // findOrder (_orders + _autoOrders), so the refund option
+    // survives for auto orders; return to auto-data after delete.
     AdmOrders.deleteOrder(id, 'autoData');
   },
   viewAutoOrder(id) {
@@ -2146,10 +2238,12 @@ window.AdmOrders = {
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        try { await this._refreshOrdersCache(); } catch (_) {}
+        // F5: claim a refresh only when it really happened.
+        let _refreshed = false;
+        try { _refreshed = await this._refreshOrdersCache(); } catch (_) {}
         const base = admErrBn(d.error) || ('স্ট্যাটাস পরিবর্তন ব্যর্থ (' + st + ')');
         const err = new Error(doneSteps.length
-          ? (base + ' — ' + doneSteps.map(s => STBN[s] || s).join(' → ') + ' পর্যন্ত এগিয়েছে, ' + (STBN[st] || st) + ' ধাপে আটকে গেছে। তালিকা রিফ্রেশ করা হয়েছে।')
+          ? (base + ' — ' + doneSteps.map(s => STBN[s] || s).join(' → ') + ' পর্যন্ত এগিয়েছে, ' + (STBN[st] || st) + ' ধাপে আটকে গেছে।' + (_refreshed ? ' তালিকা রিফ্রেশ করা হয়েছে।' : ' তালিকা রিফ্রেশ করা যায়নি — পেজ রিলোড করে আবার দেখুন।'))
           : base);
         err.partial = doneSteps.slice();
         err.failedStep = st;
@@ -2162,13 +2256,14 @@ window.AdmOrders = {
 
   async setStatus(id, status, adminNote, btn) {
     if (this._setBusy(btn, true) === false) return;
-    const o = (TABS._orders || []).find(x => x.id === id);
+    const _backTab = this._backTabForAction();
+    const o = this.findOrder(id);
     const fromStatus = o ? o.status : 'new';
     try {
       await this.smartTransition(id, fromStatus, status, adminNote);
       alert('✅ অর্ডার স্ট্যাটাস সফলভাবে আপডেট করা হয়েছে (' + (STBN[status] || status) + ')');
       closeModal();
-      show('orders');
+      show(_backTab);
     } catch (e) {
       alert('❌ ব্যর্থ: ' + admErrBn(e.message));
     } finally {
@@ -2178,12 +2273,13 @@ window.AdmOrders = {
 
   async startProcessing(id, btn) {
     if (this._setBusy(btn, true) === false) return;
-    const o = (TABS._orders || []).find(x => x.id === id);
+    const _backTab = this._backTabForAction();
+    const o = this.findOrder(id);
     if (!confirm('অর্ডারটি গ্রহণ করে প্রসেসিং শুরু করতে চান?')) { this._setBusy(btn, false); return; }
     try {
       await this.smartTransition(id, o ? o.status : 'new', 'processing');
       alert('✅ অর্ডার গৃহীত ও প্রসেসিং শুরু হয়েছে');
-      show('orders');
+      show(_backTab);
     } catch (e) {
       alert('❌ ব্যর্থ: ' + admErrBn(e.message));
     } finally {
@@ -2193,13 +2289,14 @@ window.AdmOrders = {
 
   async markCompleted(id, btn) {
     if (this._setBusy(btn, true) === false) return;
-    const o = (TABS._orders || []).find(x => x.id === id);
+    const _backTab = this._backTabForAction();
+    const o = this.findOrder(id);
     if (!confirm('অর্ডারটির কাজ সম্পন্ন হিসেবে মার্ক করতে চান?')) { this._setBusy(btn, false); return; }
     try {
       await this.smartTransition(id, o ? o.status : 'processing', 'completed');
       alert('✅ অর্ডার সম্পন্ন মার্ক করা হয়েছে');
       closeModal();
-      show('orders');
+      show(_backTab);
     } catch (e) {
       alert('❌ ব্যর্থ: ' + admErrBn(e.message));
     } finally {
@@ -2209,13 +2306,14 @@ window.AdmOrders = {
 
   async markDelivered(id, btn) {
     if (this._setBusy(btn, true) === false) return;
-    const o = (TABS._orders || []).find(x => x.id === id);
+    const _backTab = this._backTabForAction();
+    const o = this.findOrder(id);
     if (!confirm('অর্ডারটি গ্রাহককে ডেলিভার্ড হিসেবে মার্ক করতে চান?')) { this._setBusy(btn, false); return; }
     try {
       await this.smartTransition(id, o ? o.status : 'completed', 'delivered');
       alert('✅ অর্ডার ডেলিভার্ড মার্ক করা হয়েছে এবং গ্রাহককে নোটিফিকেশন পাঠানো হয়েছে');
       closeModal();
-      show('orders');
+      show(_backTab);
     } catch (e) {
       alert('❌ ব্যর্থ: ' + admErrBn(e.message));
     } finally {
@@ -2225,9 +2323,10 @@ window.AdmOrders = {
 
   async cancelOrder(id, btn) {
     if (this._setBusy(btn, true) === false) return;
+    const _backTab = this._backTabForAction();
     const note = prompt('অর্ডার বাতিলের কারণ লিখুন (ঐচ্ছিক):');
     if (note === null) { this._setBusy(btn, false); return; }
-    const o = (TABS._orders || []).find(x => x.id === id);
+    const o = this.findOrder(id);
     const price = o ? Number(o.price || 0) : 0;
     // P1 (1): money confirm BEFORE cancelling — preview split +
     // "cannot be undone" warning. Preview failure never blocks.
@@ -2255,7 +2354,7 @@ window.AdmOrders = {
         ? ('বাতিল করা হয়েছে এবং ' + admRefundText(d.refund, price, true))
         : (d.refundedAlready ? 'বাতিল করা হয়েছে (টাকা আগেই ফেরত দেওয়া হয়েছিল)' : 'বাতিল করা হয়েছে'));
       closeModal();
-      show('orders');
+      show(_backTab);
     } catch (e) {
       alert('❌ ব্যর্থ: ' + admErrBn(e.message));
     } finally {
@@ -2268,7 +2367,8 @@ window.AdmOrders = {
   // outcome as cancel, via the backend failed transition.
   async failOrder(id, btn) {
     if (this._setBusy(btn, true) === false) return;
-    const o = (TABS._orders || []).find(x => x.id === id);
+    const _backTab = this._backTabForAction();
+    const o = this.findOrder(id);
     const price = o ? Number(o.price || 0) : 0;
     const pv = await this._refundPreview(id);
     const refundLine = pv && pv.refundable
@@ -2286,7 +2386,7 @@ window.AdmOrders = {
         ? ('ব্যর্থ মার্ক করা হয়েছে এবং ' + admRefundText(d.refund, price, true))
         : (d.refundedAlready ? 'ব্যর্থ মার্ক করা হয়েছে (টাকা আগেই ফেরত দেওয়া হয়েছিল)' : 'ব্যর্থ মার্ক করা হয়েছে'));
       closeModal();
-      show('orders');
+      show(_backTab);
     } catch (e) {
       alert('❌ ব্যর্থ: ' + admErrBn(e.message));
     } finally {
@@ -2296,7 +2396,8 @@ window.AdmOrders = {
 
   async refundOrder(id, btn) {
     if (this._setBusy(btn, true) === false) return;
-    const o = (TABS._orders || []).find(x => x.id === id);
+    const _backTab = this._backTabForAction();
+    const o = this.findOrder(id);
     const price = o ? Number(o.price || 0) : 0;
     // P1 (3): split-aware wording — never "ওয়ালেটে"-only.
     const pv = await this._refundPreview(id);
@@ -2304,7 +2405,7 @@ window.AdmOrders = {
       alert('ℹ️ এই অর্ডারের টাকা আগেই ফেরত দেওয়া হয়েছে');
       this._setBusy(btn, false);
       closeModal();
-      show('orders');
+      show(_backTab);
       return;
     }
     const refundLine = pv && pv.refundable
@@ -2320,14 +2421,14 @@ window.AdmOrders = {
       if (!r.ok) throw new Error(d.error || 'রিফান্ড ব্যর্থ');
       alert('✅ ' + (d.refund && d.refund.refunded ? admRefundText(d.refund, price, true) : ('অর্ডারের মূল্য সফলভাবে রিফান্ড করা হয়েছে')));
       closeModal();
-      show('orders');
+      show(_backTab);
     } catch (e) {
       // Strict guard: an already-refunded order is NOT a failed
       // refund — say honestly that the money is already back.
       if (String(e.message || '').includes('ALREADY_REFUNDED')) {
         alert('ℹ️ এই অর্ডারের টাকা আগেই ফেরত দেওয়া হয়েছে');
         closeModal();
-        show('orders');
+        show(_backTab);
       } else {
         alert('❌ রিফান্ড ব্যর্থ: ' + admErrBn(e.message));
       }
@@ -2340,7 +2441,7 @@ window.AdmOrders = {
   // all existing callers omit it and return to the orders page.
   // async because P1's refund-preview await lives in this body.
   async deleteOrder(id, backTab = 'orders') {
-    const o = (TABS._orders || []).find(x => String(x.id) === String(id));
+    const o = this.findOrder(id);
     const orderNum = o ? ('#' + String(o.id).slice(0, 8)) : ('#' + String(id).slice(0, 8));
     const price = o ? Number(o.price || 0) : 0;
     const userName = o ? (o.user_name || 'গ্রাহক') : 'গ্রাহক';
@@ -2370,13 +2471,13 @@ window.AdmOrders = {
     if (isRefundable) {
       confirmHtml += '<div style="margin-bottom:14px;font-weight:700;font-size:13px;color:var(--text-main);">ডিলিট করার ধরণ বেছে নিন:</div>' +
         '<div style="display:flex;flex-direction:column;gap:10px;">' +
+          '<button class="btn-secondary" style="padding:10px;text-align:center;" onclick="closeModal()">✕ ফিরে যান</button>' +
           '<button class="btn-quick-emerald" style="padding:12px;font-size:13px;text-align:center;" onclick="AdmOrders.confirmDelete(\'' + id + '\', true, this, \'' + backTab + '\')">' +
             esc(refundBtnText) +
           '</button>' +
           '<button class="mini-btn danger" style="padding:12px;font-size:13px;text-align:center;" onclick="AdmOrders.confirmDelete(\'' + id + '\', false, this, \'' + backTab + '\')">' +
             '🗑️ কোনো রিফান্ড ছাড়া সরাসরি ডিলিট করুন (টেস্ট/ফেক অর্ডারের জন্য)' +
           '</button>' +
-          '<button class="btn-secondary" style="padding:10px;text-align:center;" onclick="closeModal()">✕ ফিরে যান</button>' +
         '</div>';
     } else {
       confirmHtml += '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
@@ -2408,8 +2509,17 @@ window.AdmOrders = {
       } else {
         alert('✅ অর্ডার সফলভাবে মুছে ফেলা হয়েছে');
       }
+      // F15: do NOT return focus to the deleted row's button —
+      // suppress closeModal's opener restore, then focus a
+      // durable sidebar tab once the list has re-rendered.
+      const _dm = document.getElementById('admModal');
+      if (_dm) _dm._returnTo = null;
       closeModal();
-      show(backTab);
+      try {
+        const _p = show(backTab);
+        if (_p && _p.then) _p.then(() => AdmOrders._focusAfterDelete(backTab)).catch(() => {});
+        else AdmOrders._focusAfterDelete(backTab);
+      } catch (_) { AdmOrders._focusAfterDelete(backTab); }
     } catch (e) {
       alert('❌ মুছে ফেলা ব্যর্থ: ' + admErrBn(e.message));
     } finally {
@@ -2502,8 +2612,7 @@ window.AdmOrders = {
   },
 
   async view(id) {
-    let o = (TABS._orders || []).find(x => x.id === id)
-      || (TABS._autoOrders || []).find(x => String(x.id) === String(id));
+    let o = this.findOrder(id);
     if (!o) {
       // P3 detail fallback: the toast/detail path may open an order
       // the current (manual-default) list does not contain — refetch
@@ -2512,7 +2621,9 @@ window.AdmOrders = {
         const lr = await ABC.api('/admin/orders?limit=50');
         const ld = await lr.json().catch(() => ({}));
         o = (ld.orders || []).find(x => String(x.id) === String(id));
-        if (o) TABS._orders = ld.orders || TABS._orders;
+        // F1: never replace TABS._orders — the filtered list stays
+        // intact; the fetched row lives only as the detail order.
+        if (o) TABS._detailOrder = o;
       } catch (_) {}
     }
     if (!o) { alert('অর্ডার পাওয়া যায়নি'); return; }
@@ -2522,6 +2633,10 @@ window.AdmOrders = {
     // so a later orders-page view never inherits it.
     const _detailBack = TABS._detailBackTab || 'orders';
     TABS._detailBackTab = '';
+    // F1+F4: the detail order itself, and the back tab the
+    // detail's cancel/fail/refund actions return to.
+    TABS._detailOrder = o;
+    TABS._activeDetailBack = _detailBack;
 
     // Parse Submitted Form Data
     let dataCardsHtml = '';
@@ -2823,7 +2938,7 @@ window.AdmOrders = {
             '<span>👤 <b>' + esc(o.user_name || 'গ্রাহক') + '</b></span> • ' +
             '<span>📞 <a href="tel:' + esc(o.user_phone) + '" style="color:var(--primary-600);text-decoration:none;font-weight:600;">' + esc(o.user_phone) + '</a>' +
             // P2: phone copy button next to the tel: link.
-            ' <button class="mini-btn" aria-label="ফোন নম্বর কপি করুন" style="padding:2px 7px;font-size:11px;" onclick="AdmOrders.copyVal(\'' + escJs(o.user_phone) + '\')">📋 কপি</button></span> • ' +
+            ' <button class="mini-btn" aria-label="ফোন নম্বর কপি করুন" style="min-width:36px;min-height:36px;padding:8px 10px;font-size:12px;" onclick="AdmOrders.copyVal(\'' + escJs(o.user_phone) + '\')">📋 কপি</button></span> • ' +
             // P2: same waDigits() as the user section — an already
             // -880 number must not get a second 88.
             '<span><a href="https://wa.me/' + esc(waDigits(o.user_phone)) + '" target="_blank" style="color:#16a34a;text-decoration:none;font-weight:700;">💬 WhatsApp</a></span>' +
@@ -5455,7 +5570,7 @@ function modal(title, bodyHtml) {
   const returnTo = document.activeElement;
   const bg = document.createElement('div');
   bg.className = 'modal-bg'; bg.id = 'admModal';
-  bg.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="admModalTitle" tabindex="-1"><button class="modal-x" aria-label="মোডাল বন্ধ করুন" onclick="closeModal()" style="position:absolute;top:8px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:#888;">✕</button><h3 id="admModalTitle">' + esc(title) + '</h3>' + bodyHtml + '</div>';
+  bg.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="admModalTitle" tabindex="-1"><button class="modal-x" aria-label="মোডাল বন্ধ করুন" onclick="closeModal()" style="position:absolute;top:8px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:#888;width:36px;height:36px;min-width:36px;min-height:36px;display:inline-flex;align-items:center;justify-content:center;padding:0;">✕</button><h3 id="admModalTitle">' + esc(title) + '</h3>' + bodyHtml + '</div>';
   bg.onclick = (e) => { if (e.target === bg) closeModal(); };
   document.body.appendChild(bg);
   // Escape key closes modal
@@ -5464,8 +5579,13 @@ function modal(title, bodyHtml) {
   // P2: focus into the modal — first focusable control, else the
   // dialog itself. The stored opener is restored by closeModal().
   bg._returnTo = returnTo;
+  // F14: focus must never land on a destructive button — pick
+  // the first non-danger focusable control (the delete modal's
+  // cancel button also comes first for the same reason).
   try {
-    const first = bg.querySelector('input, select, textarea, button:not(.modal-x)');
+    const all = bg.querySelectorAll('input, select, textarea, button:not(.modal-x)');
+    const list = Array.prototype.slice.call(all || []);
+    const first = list.find(function (el) { return el && !el.disabled && !(el.classList && el.classList.contains('danger')); }) || list[0];
     if (first) first.focus();
     else {
       const dlg = bg.querySelector('.modal');
