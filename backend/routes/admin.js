@@ -538,7 +538,13 @@ router.get('/orders', async (req, res) => {
     const rows = await db.query(
       `SELECT o.*, u.name AS user_name, u.phone AS user_phone,
               s.name AS service_name, s.name_bn AS service_name_bn,
-              s.type AS service_type, s.engine_id AS service_engine
+              s.type AS service_type, s.engine_id AS service_engine,
+              (SELECT amount FROM transactions
+                WHERE user_id = o.user_id AND trxid = 'refund-' || o.id::text
+                  AND status = 'approved' LIMIT 1) AS refund_balance,
+              (SELECT created_at FROM transactions
+                WHERE user_id = o.user_id AND trxid = 'refund-' || o.id::text
+                  AND status = 'approved' LIMIT 1) AS refund_at
        FROM orders o JOIN users u ON u.id = o.user_id
        JOIN services s ON s.id = o.service_id
        ${where} ORDER BY o.created_at DESC LIMIT $${i} OFFSET $${i + 1}`,
@@ -602,6 +608,88 @@ async function hasPriorRefund(client, order) {
   );
   return r.rows.length > 0;
 }
+
+// P1 premium gaps (2026-11-03): read-only refund display. The
+// approved refund-<id> transaction row proves money came back and
+// carries the balance part + time; the credit part is rebuilt from
+// the SAME charge ledger refundOrderPrice used (reconstructChargeSplit
+// — no new calculation, no write). Returns null when no refund row
+// exists, so callers never invent a refund.
+async function refundInfoForOrder(client, order) {
+  const tx = await client.query(
+    `SELECT amount, created_at FROM transactions
+      WHERE user_id = $1 AND trxid = $2 AND status = 'approved' LIMIT 1`,
+    [order.user_id, 'refund-' + order.id]
+  );
+  if (!tx.rows.length) return null;
+  const balancePart = Number(tx.rows[0].amount) || 0;
+  let creditPart = 0;
+  try {
+    const split = await serviceCredits.reconstructChargeSplit(client, order.user_id, order);
+    if (split) creditPart = Number(split.creditPart) || 0;
+  } catch (_) { /* display only: balance part + time still stand */ }
+  return {
+    refunded: true,
+    balancePart,
+    creditPart,
+    total: Math.round((balancePart + creditPart) * 100) / 100,
+    refundedAt: tx.rows[0].created_at,
+  };
+}
+
+// GET /api/admin/orders/:id — single order + refund summary (additive;
+// the list endpoint stays the source for tables, this is for detail).
+router.get('/orders/:id', async (req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT o.*, u.name AS user_name, u.phone AS user_phone,
+              s.name AS service_name, s.name_bn AS service_name_bn,
+              s.type AS service_type, s.engine_id AS service_engine
+       FROM orders o JOIN users u ON u.id = o.user_id
+       JOIN services s ON s.id = o.service_id
+       WHERE o.id = $1`,
+      [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    const order = r.rows[0];
+    let refund = null;
+    try { refund = await refundInfoForOrder(db, order); } catch (_) { refund = null; }
+    res.json({ order, refund });
+  } catch (e) {
+    safeLog('[admin] order detail error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// GET /api/admin/orders/:id/refund-preview — READ-ONLY cancel/fail/
+// refund preview. Reuses reconstructChargeSplit (the refund's own
+// split logic) with the same whole-price-to-balance fallback as
+// refundOrderPrice; it writes nothing and moves no money.
+router.get('/orders/:id/refund-preview', async (req, res) => {
+  try {
+    const r = await db.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    const order = r.rows[0];
+    const price = Math.round((Number(order.price) || 0) * 100) / 100;
+    if (!(price > 0)) {
+      return res.json({ order_id: order.id, price, refundable: false, alreadyRefunded: false, balancePart: 0, creditPart: 0, total: 0 });
+    }
+    if (await hasPriorRefund(db, order)) {
+      let refund = null;
+      try { refund = await refundInfoForOrder(db, order); } catch (_) { refund = null; }
+      return res.json({ order_id: order.id, price, refundable: false, alreadyRefunded: true, balancePart: refund ? refund.balancePart : 0, creditPart: refund ? refund.creditPart : 0, total: refund ? refund.total : 0, refundedAt: refund ? refund.refundedAt : null });
+    }
+    let balancePart = price;
+    let creditPart = 0;
+    try {
+      const split = await serviceCredits.reconstructChargeSplit(db, order.user_id, order);
+      if (split) { creditPart = Number(split.creditPart) || 0; balancePart = Number(split.balancePart); }
+    } catch (_) { /* fallback: whole price to balance, as refundOrderPrice does */ }
+    res.json({ order_id: order.id, price, refundable: true, alreadyRefunded: false, balancePart, creditPart, total: Math.round((balancePart + creditPart) * 100) / 100 });
+  } catch (e) {
+    safeLog('[admin] refund preview error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
 
 // One-line refund sentence for failed/cancelled push notices
 // (WhatsApp builds the same line from opts in utils/whatsapp.js).
@@ -698,11 +786,13 @@ router.put('/orders/:id/status', async (req, res) => {
         // is legitimate even when the money already moved).
         let refundSplit = null;
         let autoRefunded = false;
+        let priorRefund = false;
         if (status === 'refunded') {
           refundSplit = await serviceCredits.refundOrderPrice(client, r.rows[0], 'refund');
         } else if (status === 'cancelled' || status === 'failed') {
           if (await hasPriorRefund(client, r.rows[0])) {
             refundSplit = null;
+            priorRefund = true;
           } else {
             refundSplit = await serviceCredits.refundOrderPrice(client, r.rows[0], 'refund');
             autoRefunded = !!(refundSplit && refundSplit.refunded);
@@ -715,7 +805,7 @@ router.put('/orders/:id/status', async (req, res) => {
            VALUES ($1, $2, $3, $4, $5)`,
           [req.params.id, from, status, req.user.id, note]
         );
-        return { order: r.rows[0], from, changed: true, refunded: status === 'refunded', refundSplit, autoRefunded };
+        return { order: r.rows[0], from, changed: true, refunded: status === 'refunded', refundSplit, autoRefunded, priorRefund };
       });
     } catch (e) {
       if (e.statusCode) {
@@ -795,7 +885,13 @@ router.put('/orders/:id/status', async (req, res) => {
       }
     }
 
-    res.json({ order: result.order, refunded: result.refunded });
+    // P1 premium gaps: additive refund fields only — the money math
+    // above is untouched; the UI shows the ACTUAL split, not a guess.
+    const rs = result.refundSplit;
+    const refundOut = rs
+      ? { refunded: !!rs.refunded, balancePart: Number(rs.balancePart) || 0, creditPart: Number(rs.creditPart) || 0, total: Math.round(((Number(rs.balancePart) || 0) + (Number(rs.creditPart) || 0)) * 100) / 100 }
+      : (result.priorRefund ? { alreadyRefunded: true } : null);
+    res.json({ order: result.order, refunded: result.refunded, refund: refundOut, refundedAlready: !!result.priorRefund });
   } catch (e) {
     safeLog('[admin] order status error:', e.message);
     res.status(500).json({ error: 'FAILED' });
@@ -938,7 +1034,9 @@ router.delete('/orders/:id', async (req, res) => {
       refundedAlready: result.refundAlready,
     });
 
-    res.json({ ok: true, deleted_id: id, refunded: result.refunded, refundedAlready: result.refundAlready });
+    const ds = result.refundSplit;
+    res.json({ ok: true, deleted_id: id, refunded: result.refunded, refundedAlready: result.refundAlready,
+      refund: ds ? { refunded: !!ds.refunded, balancePart: Number(ds.balancePart) || 0, creditPart: Number(ds.creditPart) || 0, total: Math.round(((Number(ds.balancePart) || 0) + (Number(ds.creditPart) || 0)) * 100) / 100 } : null });
   } catch (e) {
     safeLog('[admin] order delete error:', e.message);
     res.status(500).json({ error: 'FAILED' });
@@ -1781,6 +1879,7 @@ router.get('/stats', async (req, res) => {
         (SELECT COUNT(*) FROM orders) AS orders_total,
         (SELECT COUNT(*) FROM orders WHERE status = 'new') AS orders_new,
         (SELECT COUNT(*) FROM orders WHERE status IN ('pending','processing')) AS orders_active,
+        (SELECT COUNT(*) FROM orders WHERE status = 'processing') AS orders_processing,
         (SELECT COUNT(*) FROM orders WHERE status = 'completed') AS orders_completed,
         (SELECT COUNT(*) FROM orders WHERE status = 'delivered') AS orders_delivered,
         (SELECT COUNT(*) FROM orders WHERE status = 'pending') AS orders_pending,

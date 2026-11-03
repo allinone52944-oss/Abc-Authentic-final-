@@ -454,7 +454,8 @@ describe('admin panel navigation & premium workflows (2026-10-19)', () => {
   test('orders tab and view modal provide safe delete button and deleteOrder handler', () => {
     expect(ajs).toMatch(/AdmOrders\.deleteOrder\(/);
     expect(ajs).toMatch(/deleteOrder\(id\)\s*\{/);
-    expect(ajs).toMatch(/confirmDelete\(id,\s*refund\)/);
+    // P1: confirmDelete gained an optional btn param for busy state.
+    expect(ajs).toMatch(/confirmDelete\(id,\s*refund(,\s*btn)?\)/);
     expect(ajs).toContain('🗑️ এই অর্ডারটি মুছে ফেলুন');
   });
   test('settings tab uses horizontal segmented pill navigation without vertical scroll sprawl', () => {

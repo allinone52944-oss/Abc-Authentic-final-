@@ -26,6 +26,35 @@ function escJs(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g
 function jqAttr(v){const s=JSON.stringify(v);return (s===undefined?'""':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');}
 function bn(n){return Number(n||0).toLocaleString('bn-BD');}
 
+// P1 premium gaps (2026-11-03): ONE Bengali mapper for order-action
+// errors — raw codes / HTTP numbers must never reach the admin UI.
+// Unknown code-like tokens fall back to a generic Bengali message.
+function admErrBn(msg){
+  const s = String(msg == null ? '' : msg);
+  const MAP = { ALREADY_REFUNDED: 'এই অর্ডারের টাকা আগেই ফেরত দেওয়া হয়েছে', INVALID_TRANSITION: 'এই অবস্থা থেকে ওই অবস্থায় নেওয়া যাবে না', INVALID_STATUS: 'অবৈধ স্ট্যাটাস — আবার চেষ্টা করুন', NOT_FOUND: 'অর্ডার পাওয়া যায়নি', CONFIRM_REQUIRED: 'ডিলিট নিশ্চিত করা হয়নি', STALE_WRITE: 'তথ্য এর মধ্যে বদলে গেছে — পেজ রিফ্রেশ করে আবার চেষ্টা করুন', FAILED: 'সার্ভার সমস্যা হয়েছে — একটু পরে আবার চেষ্টা করুন', NO_FILE: 'কোনো ফাইল বেছে নেওয়া হয়নি', RATE_LIMITED: 'অনেক রিকোয়েস্ট হয়েছে — একটু পরে আবার চেষ্টা করুন' };
+  for (const k of Object.keys(MAP)) if (s.includes(k)) return MAP[k];
+  const m = s.match(/\b(400|401|403|404|409|429|500|502|503)\b/);
+  if (m) return 'সার্ভার সমস্যা হয়েছে (কোড ' + m[1] + ') — একটু পরে আবার চেষ্টা করুন';
+  if (/^[A-Z][A-Z0-9_]{2,}$/.test(s.trim())) return 'সার্ভার সমস্যা হয়েছে — একটু পরে আবার চেষ্টা করুন';
+  return s;
+}
+
+// P1 premium gaps: split-aware refund wording. `done` = past tense
+// (money already back) vs future tense (about to be refunded).
+function admRefundText(split, price, done){
+  const b = split ? (Number(split.balancePart) || 0) : 0;
+  const c = split ? (Number(split.creditPart) || 0) : 0;
+  const verb = done ? 'ফেরত দেওয়া হয়েছে' : 'ফেরত যাবে';
+  const parts = [];
+  if (b > 0) parts.push('৳' + bn(b) + ' ওয়ালেটে');
+  if (c > 0) parts.push('৳' + bn(c) + ' ওই সেবার ক্রেডিটে');
+  if (!parts.length) {
+    if (split && split.alreadyRefunded) return 'এই অর্ডারের টাকা আগেই ফেরত দেওয়া হয়েছে';
+    return Number(price) > 0 ? ('৳' + bn(price) + ' ' + verb) : 'কোনো টাকা ফেরত যাবে না (মূল্য ০)';
+  }
+  return parts.join(' + ') + ' ' + verb;
+}
+
 function getAuthToken() {
   try {
     if (typeof ABC !== 'undefined' && ABC.getAccessToken) {
@@ -1466,7 +1495,7 @@ TABS.orders = async () => {
   const statusList = [
     { key: '', label: 'সব অর্ডার', count: stats.orders_total },
     { key: 'new', label: 'নতুন', count: stats.orders_new },
-    { key: 'processing', label: 'প্রসেসিং', count: stats.orders_active },
+    { key: 'processing', label: 'প্রসেসিং', count: (stats.orders_processing !== undefined && stats.orders_processing !== null ? stats.orders_processing : stats.orders_active) },
     { key: 'completed', label: 'সম্পন্ন', count: stats.orders_completed },
     { key: 'delivered', label: 'ডেলিভার্ড', count: stats.orders_delivered },
     { key: 'pending', label: 'অপেক্ষমান', count: stats.orders_pending },
@@ -1490,11 +1519,12 @@ TABS.orders = async () => {
         }).join('') +
       '</div>' +
       '<div style="display:flex;align-items:center;gap:8px;margin-left:auto;">' +
-        '<input type="text" id="admOrderSearch" class="adm-search-input" placeholder="🔍 গ্রাহকের নাম, মোবাইল বা সার্ভিস খুঁজুন..." value="' + esc(_q) + '" onkeydown="if(event.key===\'Enter\')AdmOrders.search(this.value)">' +
+        '<input type="text" id="admOrderSearch" class="adm-search-input" placeholder="🔍 গ্রাহকের নাম, মোবাইল, সার্ভিস বা অর্ডার নম্বর (#…) খুঁজুন..." value="' + esc(_q) + '" onkeydown="if(event.key===\'Enter\')AdmOrders.search(this.value)">' +
         '<button class="mini-btn" onclick="AdmOrders.search(document.getElementById(\'admOrderSearch\').value)">খুঁজুন</button>' +
         (_q ? '<button class="mini-btn danger" onclick="AdmOrders.clearSearch()">✕ ক্লিয়ার</button>' : '') +
       '</div>' +
     '</div>' +
+    '<div style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">ℹ️ ট্যাবের সংখ্যাগুলো মোট হিসাব — বর্তমান ফিল্টার/সার্চের নয়।</div>' +
 
     '<!-- Orders Table Card -->' +
     '<div class="adm-table-card">' +
@@ -1526,13 +1556,19 @@ TABS.orders = async () => {
       // Smart Quick Action button
       let quickActionBtn = '';
       if (o.status === 'new' || o.status === 'pending') {
-        quickActionBtn = '<button class="btn-quick-primary" onclick="AdmOrders.startProcessing(\'' + o.id + '\')">▶️ গ্রহণ করুন</button>';
+        quickActionBtn = '<button class="btn-quick-primary" onclick="AdmOrders.startProcessing(\'' + o.id + '\', this)">▶️ গ্রহণ করুন</button>';
       } else if (o.status === 'processing') {
         quickActionBtn = '<button class="btn-quick-success" onclick="AdmOrders.openQuickComplete(\'' + o.id + '\')">✅ সম্পন্ন ও ডেলিভারি</button>';
       } else if (o.status === 'completed') {
-        quickActionBtn = '<button class="btn-quick-emerald" onclick="AdmOrders.markDelivered(\'' + o.id + '\')">🚀 ডেলিভার্ড করুন</button>';
+        quickActionBtn = '<button class="btn-quick-emerald" onclick="AdmOrders.markDelivered(\'' + o.id + '\', this)">🚀 ডেলিভার্ড করুন</button>';
       } else if (o.status === 'delivered') {
         quickActionBtn = '<span style="color:#059669;font-weight:700;font-size:11px;">✓ ডেলিভার্ড সম্পন্ন</span>';
+      } else if (o.status === 'cancelled' || o.status === 'failed') {
+        // P1: dead rows get a useful action — refund (backend guard
+        // answers ALREADY_REFUNDED in Bengali when money is back).
+        quickActionBtn = '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\', this)">↩️ রিফান্ড</button>';
+      } else if (o.status === 'refunded') {
+        quickActionBtn = '<span style="color:#059669;font-weight:700;font-size:11px;">↩️ ফেরত সম্পন্ন</span>';
       }
 
       html += '<tr>' +
@@ -1543,7 +1579,7 @@ TABS.orders = async () => {
               '<div class="adm-user-name">' + esc(uName) + '</div>' +
               '<div class="adm-user-phone">' +
                 '<span>📞 <a href="tel:' + esc(o.user_phone) + '" style="color:inherit;text-decoration:none;">' + esc(o.user_phone) + '</a></span>' +
-                '<span class="adm-order-tag">#' + esc(String(o.id).slice(0, 8)) + '</span>' +
+                '<span class="adm-order-tag" style="cursor:pointer;" title="অর্ডার নম্বর কপি করতে ক্লিক করুন" onclick="AdmOrders.copyVal(\'#' + esc(String(o.id).slice(0, 8)) + '\')">#' + esc(String(o.id).slice(0, 8)) + '</span>' +
               '</div>' +
             '</div>' +
           '</div>' +
@@ -1559,6 +1595,9 @@ TABS.orders = async () => {
         '</td>' +
         '<td>' +
           '<span class="adm-price-badge">৳' + bn(o.price) + '</span>' +
+          (o.refund_balance !== undefined && o.refund_balance !== null
+            ? '<div style="font-size:11px;color:#059669;font-weight:700;margin-top:2px;">↩️ ' + (Number(o.refund_balance) > 0 ? ('ফেরত ৳' + bn(o.refund_balance)) : 'ফেরত দেওয়া হয়েছে (ক্রেডিটে)') + (o.refund_at ? ' · ' + new Date(o.refund_at).toLocaleDateString('bn-BD') : '') + '</div>'
+            : '') +
         '</td>' +
         '<td>' +
           '<span class="st-badge ' + stClass + '">' + esc(stText) + '</span>' +
@@ -1572,7 +1611,9 @@ TABS.orders = async () => {
             quickActionBtn +
             '<button class="adm-icon-btn" title="সম্পূর্ণ তথ্য পর্যালোচনা ও ডেলিভারি" onclick="AdmOrders.view(\'' + o.id + '\')">👁️ বিস্তারিত</button>' +
             '<button class="adm-icon-btn" title="গ্রাহকের সাথে সাপোর্ট চ্যাট" onclick="AdmOrders.supportForm(\'' + o.id + '\')">💬</button>' +
-            '<button class="adm-icon-btn" title="ডেলিভারি ফাইল আপলোড" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎</button>' +
+            (['cancelled', 'refunded', 'failed'].includes(o.status)
+              ? '<button class="adm-icon-btn" title="বাতিল/ব্যর্থ/রিফান্ডেড অর্ডারে ডেলিভারি দেওয়া যায় না" disabled style="opacity:0.35;cursor:not-allowed;">📎</button>'
+              : '<button class="adm-icon-btn" title="ডেলিভারি ফাইল আপলোড" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎</button>') +
             '<button class="adm-icon-btn danger" title="অর্ডার ডিলিট করুন" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️</button>' +
           '</div>' +
         '</td>' +
@@ -1631,6 +1672,76 @@ TABS.engineJobs = async () => {
 };
 
 window.AdmOrders = {
+  // P1 premium gaps: busy state — returns false when the button is
+  // already busy (caller must abort); restores the old label after.
+  _setBusy(btn, on, busyText) {
+    if (!btn || !btn.dataset) return true;
+    if (on) {
+      if (btn.dataset.admBusy === '1') return false;
+      btn.dataset.admBusy = '1';
+      btn.dataset.admOldText = btn.innerText;
+      btn.disabled = true;
+      btn.innerText = busyText || 'প্রসেস হচ্ছে…';
+      return true;
+    }
+    if (btn.dataset.admBusy === '1') {
+      btn.disabled = false;
+      btn.innerText = btn.dataset.admOldText || btn.innerText;
+      delete btn.dataset.admBusy;
+    }
+    return true;
+  },
+
+  // P1: read-only refund preview (null when unavailable — callers
+  // fall back to the price, they never block on a preview failure).
+  async _refundPreview(id) {
+    try {
+      const r = await ABC.api('/admin/orders/' + id + '/refund-preview');
+      if (!r.ok) return null;
+      return await r.json();
+    } catch (_) { return null; }
+  },
+
+  // P1: silent list-cache refresh (no re-render, so an open modal
+  // survives) — used after a half-successful smart transition.
+  async _refreshOrdersCache() {
+    try {
+      let url = '/admin/orders?limit=50&page=' + (TABS._opage || 1);
+      if (TABS._f) url += '&status=' + encodeURIComponent(TABS._f);
+      if (TABS._q) url += '&q=' + encodeURIComponent(TABS._q);
+      if (TABS._orderType) url += '&type=' + encodeURIComponent(TABS._orderType);
+      const r = await ABC.api(url);
+      if (!r.ok) return;
+      const d = await r.json().catch(() => ({}));
+      if (d.orders) TABS._orders = d.orders;
+    } catch (_) {}
+  },
+
+  // P1: refund summary for the detail hub — exact split + time from
+  // the detail endpoint (item 2 data), never a guessed number.
+  async loadRefundSummary(orderId) {
+    const el = document.getElementById('admRefundSummary_' + orderId);
+    if (!el) return;
+    try {
+      const r = await ABC.api('/admin/orders/' + orderId);
+      if (!r.ok) throw new Error('লোড ব্যর্থ');
+      const d = await r.json();
+      const rf = d.refund;
+      if (!rf) {
+        el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">রিফান্ডের তথ্য পাওয়া যায়নি — টাকা ফেরত না পেয়ে থাকলে (পুরনো অর্ডার) রিফান্ড বোতাম চাপুন।</div>';
+        return;
+      }
+      const when = rf.refundedAt ? new Date(rf.refundedAt).toLocaleString('bn-BD') : '—';
+      el.innerHTML = '<div style="font-size:13px;line-height:1.7;color:var(--text-main);">' +
+        '<div>↩️ <b>রিফান্ড সম্পন্ন:</b> ' + esc(when) + '</div>' +
+        '<div>💰 <b>মোট ফেরত:</b> ৳' + bn(rf.total) + '</div>' +
+        '<div>↪️ <b>ভাগ:</b> ' + esc(admRefundText(rf, null, true)) + '</div>' +
+      '</div>';
+    } catch (e) {
+      el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">রিফান্ড তথ্য লোড ব্যর্থ — আবার চেষ্টা করুন।</div>';
+    }
+  },
+
   async loadBdrisApps(q) {
     const box = document.getElementById('admBdrisApps');
     if (!box) return;
@@ -1783,6 +1894,9 @@ window.AdmOrders = {
       path.push(targetStatus);
     }
 
+    // P1 (10ক): honest half-success — remember every step that DID
+    // land, refresh the list cache, and say exactly how far it got.
+    const doneSteps = [];
     for (const st of path) {
       const r = await ABC.api('/admin/orders/' + id + '/status', {
         method: 'PUT',
@@ -1790,13 +1904,22 @@ window.AdmOrders = {
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        throw new Error(d.error || ('স্ট্যাটাস পরিবর্তন ব্যর্থ (' + st + ')'));
+        try { await this._refreshOrdersCache(); } catch (_) {}
+        const base = admErrBn(d.error) || ('স্ট্যাটাস পরিবর্তন ব্যর্থ (' + st + ')');
+        const err = new Error(doneSteps.length
+          ? (base + ' — ' + doneSteps.map(s => STBN[s] || s).join(' → ') + ' পর্যন্ত এগিয়েছে, ' + (STBN[st] || st) + ' ধাপে আটকে গেছে। তালিকা রিফ্রেশ করা হয়েছে।')
+          : base);
+        err.partial = doneSteps.slice();
+        err.failedStep = st;
+        throw err;
       }
+      doneSteps.push(st);
     }
     return true;
   },
 
-  async setStatus(id, status, adminNote) {
+  async setStatus(id, status, adminNote, btn) {
+    if (this._setBusy(btn, true) === false) return;
     const o = (TABS._orders || []).find(x => x.id === id);
     const fromStatus = o ? o.status : 'new';
     try {
@@ -1805,52 +1928,75 @@ window.AdmOrders = {
       closeModal();
       show('orders');
     } catch (e) {
-      alert('❌ ব্যর্থ: ' + e.message);
+      alert('❌ ব্যর্থ: ' + admErrBn(e.message));
+    } finally {
+      this._setBusy(btn, false);
     }
   },
 
-  async startProcessing(id) {
+  async startProcessing(id, btn) {
+    if (this._setBusy(btn, true) === false) return;
     const o = (TABS._orders || []).find(x => x.id === id);
-    if (!confirm('অর্ডারটি গ্রহণ করে প্রসেসিং শুরু করতে চান?')) return;
+    if (!confirm('অর্ডারটি গ্রহণ করে প্রসেসিং শুরু করতে চান?')) { this._setBusy(btn, false); return; }
     try {
       await this.smartTransition(id, o ? o.status : 'new', 'processing');
       alert('✅ অর্ডার গৃহীত ও প্রসেসিং শুরু হয়েছে');
       show('orders');
     } catch (e) {
-      alert('❌ ব্যর্থ: ' + e.message);
+      alert('❌ ব্যর্থ: ' + admErrBn(e.message));
+    } finally {
+      this._setBusy(btn, false);
     }
   },
 
-  async markCompleted(id) {
+  async markCompleted(id, btn) {
+    if (this._setBusy(btn, true) === false) return;
     const o = (TABS._orders || []).find(x => x.id === id);
-    if (!confirm('অর্ডারটির কাজ সম্পন্ন হিসেবে মার্ক করতে চান?')) return;
+    if (!confirm('অর্ডারটির কাজ সম্পন্ন হিসেবে মার্ক করতে চান?')) { this._setBusy(btn, false); return; }
     try {
       await this.smartTransition(id, o ? o.status : 'processing', 'completed');
       alert('✅ অর্ডার সম্পন্ন মার্ক করা হয়েছে');
       closeModal();
       show('orders');
     } catch (e) {
-      alert('❌ ব্যর্থ: ' + e.message);
+      alert('❌ ব্যর্থ: ' + admErrBn(e.message));
+    } finally {
+      this._setBusy(btn, false);
     }
   },
 
-  async markDelivered(id) {
+  async markDelivered(id, btn) {
+    if (this._setBusy(btn, true) === false) return;
     const o = (TABS._orders || []).find(x => x.id === id);
-    if (!confirm('অর্ডারটি গ্রাহককে ডেলিভার্ড হিসেবে মার্ক করতে চান?')) return;
+    if (!confirm('অর্ডারটি গ্রাহককে ডেলিভার্ড হিসেবে মার্ক করতে চান?')) { this._setBusy(btn, false); return; }
     try {
       await this.smartTransition(id, o ? o.status : 'completed', 'delivered');
       alert('✅ অর্ডার ডেলিভার্ড মার্ক করা হয়েছে এবং গ্রাহককে নোটিফিকেশন পাঠানো হয়েছে');
       closeModal();
       show('orders');
     } catch (e) {
-      alert('❌ ব্যর্থ: ' + e.message);
+      alert('❌ ব্যর্থ: ' + admErrBn(e.message));
+    } finally {
+      this._setBusy(btn, false);
     }
   },
 
-  async cancelOrder(id) {
+  async cancelOrder(id, btn) {
+    if (this._setBusy(btn, true) === false) return;
     const note = prompt('অর্ডার বাতিলের কারণ লিখুন (ঐচ্ছিক):');
-    if (note === null) return;
+    if (note === null) { this._setBusy(btn, false); return; }
     const o = (TABS._orders || []).find(x => x.id === id);
+    const price = o ? Number(o.price || 0) : 0;
+    // P1 (1): money confirm BEFORE cancelling — preview split +
+    // "cannot be undone" warning. Preview failure never blocks.
+    const pv = await this._refundPreview(id);
+    if (pv && pv.alreadyRefunded) {
+      alert('ℹ️ এই অর্ডারের টাকা আগেই ফেরত দেওয়া হয়েছে — বাতিল করলে আর নতুন করে ফেরত যাবে না।');
+    }
+    const refundLine = pv && pv.refundable
+      ? ('বাতিল করলে ' + admRefundText(pv, price, false) + '।')
+      : (price > 0 ? ('বাতিল করলে ৳' + bn(price) + ' ফেরত যাবে (ওয়ালেট + ওই সেবার ক্রেডিটের ভাগে)।') : 'এই অর্ডারের মূল্য ০ — কোনো টাকা ফেরত যাবে না।');
+    if (!confirm('অর্ডারটি বাতিল করতে চান?\n' + refundLine + '\n⚠️ বাতিলের পর ফেরত দেওয়া টাকা আর ফেরানো যাবে না।')) { this._setBusy(btn, false); return; }
     try {
       const r = await ABC.api('/admin/orders/' + id + '/status', {
         method: 'PUT',
@@ -1858,29 +2004,76 @@ window.AdmOrders = {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'বাতিল ব্যর্থ');
-      // Auto-refund (2026-11-03): cancelling refunds at once, so
-      // the alert says so when the order had a price. Price 0 →
-      // no money moved, so no refund claim.
-      const price = o ? Number(o.price || 0) : 0;
-      alert(price > 0 ? 'বাতিল করা হয়েছে এবং টাকা ফেরত দেওয়া হয়েছে' : 'বাতিল করা হয়েছে');
+      // P1 (1): post-cancel alert shows the ACTUAL refund split
+      // from the response, not a guess from the list price.
+      alert(d.refund && d.refund.refunded
+        ? ('বাতিল করা হয়েছে এবং ' + admRefundText(d.refund, price, true))
+        : (d.refundedAlready ? 'বাতিল করা হয়েছে (টাকা আগেই ফেরত দেওয়া হয়েছিল)' : 'বাতিল করা হয়েছে'));
       closeModal();
       show('orders');
     } catch (e) {
-      alert('❌ ব্যর্থ: ' + e.message);
+      alert('❌ ব্যর্থ: ' + admErrBn(e.message));
+    } finally {
+      this._setBusy(btn, false);
     }
   },
 
-  async refundOrder(id) {
+  // P1 (8): a REAL "failed" action — the processing hub's old
+  // "বাতিল/ব্যর্থ" button only cancelled. Same auto-refund money
+  // outcome as cancel, via the backend failed transition.
+  async failOrder(id, btn) {
+    if (this._setBusy(btn, true) === false) return;
     const o = (TABS._orders || []).find(x => x.id === id);
-    if (!confirm('অর্ডারের মূল্য ৳' + bn(o ? o.price : 0) + ' গ্রাহকের ওয়ালেটে রিফান্ড ফেরত দিতে চান?')) return;
+    const price = o ? Number(o.price || 0) : 0;
+    const pv = await this._refundPreview(id);
+    const refundLine = pv && pv.refundable
+      ? ('ব্যর্থ করলে ' + admRefundText(pv, price, false) + '।')
+      : (price > 0 ? ('ব্যর্থ করলে ৳' + bn(price) + ' ফেরত যাবে (ওয়ালেট + ওই সেবার ক্রেডিটের ভাগে)।') : 'এই অর্ডারের মূল্য ০ — কোনো টাকা ফেরত যাবে না।');
+    if (!confirm('অর্ডারটি ব্যর্থ হিসেবে মার্ক করতে চান?\n' + refundLine + '\n⚠️ ব্যর্থ করার পর ফেরত দেওয়া টাকা আর ফেরানো যাবে না, এবং এই অর্ডার আর পুনরায় প্রসেস করা যাবে না।')) { this._setBusy(btn, false); return; }
     try {
       const r = await ABC.api('/admin/orders/' + id + '/status', {
         method: 'PUT',
-        body: { status: 'refunded', admin_note: 'এডমিন কর্তৃক ওয়ালেট রিফান্ড' }
+        body: { status: 'failed', admin_note: 'এডমিন কর্তৃক ব্যর্থ' }
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'ব্যর্থ মার্ক ব্যর্থ');
+      alert(d.refund && d.refund.refunded
+        ? ('ব্যর্থ মার্ক করা হয়েছে এবং ' + admRefundText(d.refund, price, true))
+        : (d.refundedAlready ? 'ব্যর্থ মার্ক করা হয়েছে (টাকা আগেই ফেরত দেওয়া হয়েছিল)' : 'ব্যর্থ মার্ক করা হয়েছে'));
+      closeModal();
+      show('orders');
+    } catch (e) {
+      alert('❌ ব্যর্থ: ' + admErrBn(e.message));
+    } finally {
+      this._setBusy(btn, false);
+    }
+  },
+
+  async refundOrder(id, btn) {
+    if (this._setBusy(btn, true) === false) return;
+    const o = (TABS._orders || []).find(x => x.id === id);
+    const price = o ? Number(o.price || 0) : 0;
+    // P1 (3): split-aware wording — never "ওয়ালেটে"-only.
+    const pv = await this._refundPreview(id);
+    if (pv && pv.alreadyRefunded) {
+      alert('ℹ️ এই অর্ডারের টাকা আগেই ফেরত দেওয়া হয়েছে');
+      this._setBusy(btn, false);
+      closeModal();
+      show('orders');
+      return;
+    }
+    const refundLine = pv && pv.refundable
+      ? admRefundText(pv, price, false)
+      : ('৳' + bn(price) + ' ফেরত যাবে (ওয়ালেট + ওই সেবার ক্রেডিটের ভাগে)');
+    if (!confirm('অর্ডারের মূল্য ' + refundLine + ' — রিফান্ড করতে চান?')) { this._setBusy(btn, false); return; }
+    try {
+      const r = await ABC.api('/admin/orders/' + id + '/status', {
+        method: 'PUT',
+        body: { status: 'refunded', admin_note: 'এডমিন কর্তৃক রিফান্ড' }
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'রিফান্ড ব্যর্থ');
-      alert('✅ অর্ডারের মূল্য সফলভাবে গ্রাহকের ওয়ালেটে রিফান্ড করা হয়েছে');
+      alert('✅ ' + (d.refund && d.refund.refunded ? admRefundText(d.refund, price, true) : ('অর্ডারের মূল্য সফলভাবে রিফান্ড করা হয়েছে')));
       closeModal();
       show('orders');
     } catch (e) {
@@ -1891,17 +2084,28 @@ window.AdmOrders = {
         closeModal();
         show('orders');
       } else {
-        alert('❌ রিফান্ড ব্যর্থ: ' + e.message);
+        alert('❌ রিফান্ড ব্যর্থ: ' + admErrBn(e.message));
       }
+    } finally {
+      this._setBusy(btn, false);
     }
   },
 
-  deleteOrder(id) {
+  async deleteOrder(id) {
     const o = (TABS._orders || []).find(x => String(x.id) === String(id));
     const orderNum = o ? ('#' + String(o.id).slice(0, 8)) : ('#' + String(id).slice(0, 8));
     const price = o ? Number(o.price || 0) : 0;
     const userName = o ? (o.user_name || 'গ্রাহক') : 'গ্রাহক';
     const isRefundable = price > 0 && o && o.status !== 'refunded';
+    // P1 (3): split-aware refund button — preview split when
+    // available, otherwise generic wallet+credit wording (never
+    // "ওয়ালেটে"-only). Preview failure never blocks the modal.
+    const pv = await this._refundPreview(id);
+    const refundBtnText = pv && pv.alreadyRefunded
+      ? '💰 রিফান্ড দিয়ে ডিলিট করুন (টাকা আগেই ফেরত দেওয়া হয়েছে — নতুন করে ফেরত যাবে না)'
+      : (pv && pv.refundable
+        ? ('💰 ' + admRefundText(pv, price, false) + ' — রিফান্ড দিয়ে ডিলিট করুন')
+        : ('💰 ৳' + bn(price) + ' রিফান্ড দিয়ে ডিলিট করুন (ওয়ালেট + ওই সেবার ক্রেডিটের ভাগে টাকা ফেরত যাবে)'));
 
     let confirmHtml = '<div style="padding:10px 0;">' +
       '<div style="background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;padding:12px;border-radius:8px;margin-bottom:14px;font-size:13px;line-height:1.5;">' +
@@ -1917,10 +2121,10 @@ window.AdmOrders = {
     if (isRefundable) {
       confirmHtml += '<div style="margin-bottom:14px;font-weight:700;font-size:13px;color:var(--text-main);">ডিলিট করার ধরণ বেছে নিন:</div>' +
         '<div style="display:flex;flex-direction:column;gap:10px;">' +
-          '<button class="btn-quick-emerald" style="padding:12px;font-size:13px;text-align:center;" onclick="AdmOrders.confirmDelete(\'' + id + '\', true)">' +
-            '💰 ৳' + bn(price) + ' রিফান্ড দিয়ে ডিলিট করুন (গ্রাহকের ওয়ালেটে টাকা ফেরত যাবে)' +
+          '<button class="btn-quick-emerald" style="padding:12px;font-size:13px;text-align:center;" onclick="AdmOrders.confirmDelete(\'' + id + '\', true, this)">' +
+            esc(refundBtnText) +
           '</button>' +
-          '<button class="mini-btn danger" style="padding:12px;font-size:13px;text-align:center;" onclick="AdmOrders.confirmDelete(\'' + id + '\', false)">' +
+          '<button class="mini-btn danger" style="padding:12px;font-size:13px;text-align:center;" onclick="AdmOrders.confirmDelete(\'' + id + '\', false, this)">' +
             '🗑️ কোনো রিফান্ড ছাড়া সরাসরি ডিলিট করুন (টেস্ট/ফেক অর্ডারের জন্য)' +
           '</button>' +
           '<button class="btn-secondary" style="padding:10px;text-align:center;" onclick="closeModal()">✕ ফিরে যান</button>' +
@@ -1928,7 +2132,7 @@ window.AdmOrders = {
     } else {
       confirmHtml += '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
         '<button class="btn-secondary" onclick="closeModal()">✕ বাতিল</button>' +
-        '<button class="mini-btn danger" style="padding:10px 18px;" onclick="AdmOrders.confirmDelete(\'' + id + '\', false)">🗑️ নিশ্চিতভাবে মুছে ফেলুন</button>' +
+        '<button class="mini-btn danger" style="padding:10px 18px;" onclick="AdmOrders.confirmDelete(\'' + id + '\', false, this)">🗑️ নিশ্চিতভাবে মুছে ফেলুন</button>' +
       '</div>';
     }
     confirmHtml += '</div>';
@@ -1936,7 +2140,8 @@ window.AdmOrders = {
     modal('🗑️ অর্ডার মুছে ফেলার কনফার্মেশন ' + esc(orderNum), confirmHtml);
   },
 
-  async confirmDelete(id, refund) {
+  async confirmDelete(id, refund, btn) {
+    if (this._setBusy(btn, true) === false) return;
     try {
       // Admin-order fix (2026-11-03): confirm=yes is now REQUIRED
       // by the API, and the backend's refunded flag is honoured —
@@ -1948,7 +2153,7 @@ window.AdmOrders = {
       if (!r.ok) throw new Error(d.error || 'অর্ডার মুছতে ব্যর্থ');
       if (refund) {
         if (d.refundedAlready === true) alert('✅ অর্ডার মুছে ফেলা হয়েছে (টাকা আগেই ফেরত দেওয়া হয়েছিল)');
-        else if (d.refunded === true) alert('✅ অর্ডারের মূল্য রিফান্ড করে সফলভাবে মুছে ফেলা হয়েছে');
+        else if (d.refunded === true) alert('✅ ' + (d.refund && d.refund.refunded ? admRefundText(d.refund, null, true) + ' — অর্ডার মুছে ফেলা হয়েছে' : 'অর্ডারের মূল্য রিফান্ড করে সফলভাবে মুছে ফেলা হয়েছে'));
         else alert('⚠️ অর্ডার মুছে ফেলা হয়েছে, তবে রিফান্ড জমা হয়নি (মূল্য ০ বা আগেই রিফান্ড হয়েছে)।');
       } else {
         alert('✅ অর্ডার সফলভাবে মুছে ফেলা হয়েছে');
@@ -1956,13 +2161,16 @@ window.AdmOrders = {
       closeModal();
       show('orders');
     } catch (e) {
-      alert('❌ মুছে ফেলা ব্যর্থ: ' + e.message);
+      alert('❌ মুছে ফেলা ব্যর্থ: ' + admErrBn(e.message));
+    } finally {
+      this._setBusy(btn, false);
     }
   },
 
-  async saveAdminNote(id) {
+  async saveAdminNote(id, btn) {
+    if (this._setBusy(btn, true, 'সংরক্ষণ হচ্ছে…') === false) return;
     const note = document.getElementById('admOrderNoteInput');
-    if (!note) return;
+    if (!note) { this._setBusy(btn, false); return; }
     const txt = note.value.trim();
     let o = (TABS._orders || []).find(x => x.id === id);
     if (!o) {
@@ -1977,7 +2185,7 @@ window.AdmOrders = {
         o = (ld.orders || []).find(x => x.id === id);
       } catch (_) {}
     }
-    if (!o) { alert('অর্ডার তালিকায় পাওয়া যায়নি — পেজ রিলোড করে আবার চেষ্টা করুন'); return; }
+    if (!o) { alert('অর্ডার তালিকায় পাওয়া যায়নি — পেজ রিলোড করে আবার চেষ্টা করুন'); this._setBusy(btn, false); return; }
     try {
       const r = await ABC.api('/admin/orders/' + id + '/status', {
         method: 'PUT',
@@ -1985,9 +2193,23 @@ window.AdmOrders = {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'নোট সংরক্ষণ ব্যর্থ');
+      // P1 (10ঙ): detail refresh from the server + clear the note
+      // box (the saved note lives on the order now, not in the box).
+      try {
+        const dr = await ABC.api('/admin/orders/' + id);
+        if (dr.ok) {
+          const dd = await dr.json();
+          const idx = (TABS._orders || []).findIndex(x => x.id === id);
+          if (idx >= 0 && dd.order) TABS._orders[idx] = Object.assign({}, TABS._orders[idx], dd.order);
+        }
+      } catch (_) {}
+      note.value = '';
+      try { this.loadHistory(id); } catch (_) {}
       alert('✅ এডমিন নোট সংরক্ষিত হয়েছে');
     } catch (e) {
-      alert('❌ সংরক্ষণ ব্যর্থ: ' + e.message);
+      alert('❌ সংরক্ষণ ব্যর্থ: ' + admErrBn(e.message));
+    } finally {
+      this._setBusy(btn, false);
     }
   },
 
@@ -2001,7 +2223,12 @@ window.AdmOrders = {
 
     // Parse Submitted Form Data
     let dataCardsHtml = '';
-    let rawText = 'অর্ডার: ' + (o.service_name_bn || o.service_name || '') + '\n' +
+    // P1 (10খ): copy-all now carries order number, price, status, date.
+    let rawText = 'অর্ডার নম্বর: #' + String(o.id).slice(0, 8) + '\n' +
+      'অর্ডার: ' + (o.service_name_bn || o.service_name || '') + '\n' +
+      'মূল্য: ৳' + bn(o.price) + '\n' +
+      'স্ট্যাটাস: ' + (STBN[o.status] || o.status) + '\n' +
+      'তারিখ: ' + new Date(o.created_at).toLocaleString('bn-BD') + '\n' +
       'গ্রাহক: ' + (o.user_name || '') + ' (' + (o.user_phone || '') + ')\n\n--- ফর্ম ডেটা ---\n';
 
     try {
@@ -2146,8 +2373,8 @@ window.AdmOrders = {
         '</div>' +
         '<p style="color:var(--text-muted);font-size:12px;margin:4px 0 10px;">গ্রাহকের প্রদত্ত তথ্য পরীক্ষা করুন এবং কাজ শুরু করার জন্য গ্রহণ করুন।</p>' +
         '<div class="adm-hub-actions">' +
-          '<button class="btn-quick-primary" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.startProcessing(\'' + o.id + '\')">▶️ অর্ডার গ্রহণ ও প্রসেসিং শুরু করুন</button>' +
-          '<button class="mini-btn danger" onclick="AdmOrders.cancelOrder(\'' + o.id + '\')">❌ বাতিল করুন</button>' +
+          '<button class="btn-quick-primary" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.startProcessing(\'' + o.id + '\', this)">▶️ অর্ডার গ্রহণ ও প্রসেসিং শুরু করুন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.cancelOrder(\'' + o.id + '\', this)">❌ বাতিল করুন</button>' +
           '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ মুছে ফেলুন</button>' +
         '</div>' +
       '</div>';
@@ -2170,8 +2397,9 @@ window.AdmOrders = {
 
         '<div class="adm-hub-actions">' +
           '<button class="btn-quick-emerald" id="admModalUploadDeliverBtn" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.modalDeliverWithFile(\'' + o.id + '\')" disabled>🚀 ডেলিভারি ফাইল আপলোড ও সমাপ্ত করুন</button>' +
-          '<button class="btn-quick-success" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.markCompleted(\'' + o.id + '\')">✅ ফাইল ছাড়া সম্পন্ন মার্ক করুন</button>' +
-          '<button class="mini-btn danger" onclick="AdmOrders.cancelOrder(\'' + o.id + '\')">❌ বাতিল/ব্যর্থ</button>' +
+          '<button class="btn-quick-success" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.markCompleted(\'' + o.id + '\', this)">✅ ফাইল ছাড়া সম্পন্ন মার্ক করুন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.cancelOrder(\'' + o.id + '\', this)">❌ বাতিল করুন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.failOrder(\'' + o.id + '\', this)">❌ ব্যর্থ করুন</button>' +
           '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ মুছে ফেলুন</button>' +
         '</div>' +
       '</div>';
@@ -2183,9 +2411,9 @@ window.AdmOrders = {
         '</div>' +
         '<p style="color:var(--text-muted);font-size:12px;margin:4px 0 10px;">অর্ডারটির কাজ সম্পন্ন হয়েছে। গ্রাহককে চূড়ান্ত ডেলিভারি কনফার্ম করুন।</p>' +
         '<div class="adm-hub-actions">' +
-          '<button class="btn-quick-emerald" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.markDelivered(\'' + o.id + '\')">🚀 ডেলিভার্ড মার্ক করুন ও নোটিফিকেশন দিন</button>' +
+          '<button class="btn-quick-emerald" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.markDelivered(\'' + o.id + '\', this)">🚀 ডেলিভার্ড মার্ক করুন ও নোটিফিকেশন দিন</button>' +
           '<button class="mini-btn" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎 অতিরিক্ত ডেলিভারি ফাইল যোগ করুন</button>' +
-          '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\')">↩️ রিফান্ড করুন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\', this)">↩️ রিফান্ড করুন</button>' +
           '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ মুছে ফেলুন</button>' +
         '</div>' +
       '</div>';
@@ -2198,7 +2426,7 @@ window.AdmOrders = {
         '<p style="color:#166534;font-size:12px;margin:4px 0 10px;">গ্রাহক ইতিমধ্যে তাঁর ডেলিভারি ডকুমেন্ট পেয়েছেন এবং কাজ সম্পন্ন হয়েছে।</p>' +
         '<div class="adm-hub-actions">' +
           '<button class="mini-btn" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎 অতিরিক্ত ফাইল সংযোজন</button>' +
-          '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\')">↩️ রিফান্ড করুন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\', this)">↩️ রিফান্ড করুন</button>' +
           '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ মুছে ফেলুন</button>' +
         '</div>' +
       '</div>';
@@ -2215,9 +2443,9 @@ window.AdmOrders = {
           '<span>❌ অর্ডার ব্যর্থ</span>' +
           '<span class="st-badge st-failed">ব্যর্থ</span>' +
         '</div>' +
-        '<p style="color:var(--text-muted);font-size:12px;margin:4px 0 10px;">ব্যর্থ অর্ডার আর পুনরায় প্রসেস করা যাবে না — নতুন অর্ডার করতে হবে। টাকা ফেরত না পেয়ে থাকলে (পুরনো অর্ডার) রিফান্ড বোতাম চাপুন — ইতিমধ্যে ফেরত দেওয়া হয়ে থাকলে সেটা জানানো হবে।</p>' +
+        '<p style="color:var(--text-muted);font-size:12px;margin:4px 0 10px;">ব্যর্থ অর্ডার আর পুনরায় প্রসেস করা যাবে না — নতুন অর্ডার করতে হবে। টাকা ফেরত না পেয়ে থাকলে (পুরনো অর্ডার) রিফান্ড বোতাম চাপুন — ফেরত ওয়ালেট + ওই সেবার ক্রেডিটের ভাগে যাবে; ইতিমধ্যে ফেরত দেওয়া হয়ে থাকলে সেটা জানানো হবে।</p>' +
         '<div class="adm-hub-actions">' +
-          '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\')">↩️ রিফান্ড করুন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\', this)">↩️ রিফান্ড করুন</button>' +
           '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ মুছে ফেলুন</button>' +
         '</div>' +
       '</div>';
@@ -2231,13 +2459,32 @@ window.AdmOrders = {
           '<span>🚫 অর্ডার বাতিল</span>' +
           '<span class="st-badge st-cancelled">বাতিল</span>' +
         '</div>' +
-        '<p style="color:var(--text-muted);font-size:12px;margin:4px 0 10px;">বাতিল অর্ডার আর প্রসেস করা যাবে না। টাকা ফেরত না পেয়ে থাকলে (পুরনো অর্ডার) রিফান্ড বোতাম চাপুন — ইতিমধ্যে ফেরত দেওয়া হয়ে থাকলে সেটা জানানো হবে।</p>' +
+        '<p style="color:var(--text-muted);font-size:12px;margin:4px 0 10px;">বাতিল অর্ডার আর প্রসেস করা যাবে না। টাকা ফেরত না পেয়ে থাকলে (পুরনো অর্ডার) রিফান্ড বোতাম চাপুন — ফেরত ওয়ালেট + ওই সেবার ক্রেডিটের ভাগে যাবে; ইতিমধ্যে ফেরত দেওয়া হয়ে থাকলে সেটা জানানো হবে।</p>' +
         '<div class="adm-hub-actions">' +
-          '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\')">↩️ রিফান্ড করুন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\', this)">↩️ রিফান্ড করুন</button>' +
+          '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ মুছে ফেলুন</button>' +
+        '</div>' +
+      '</div>';
+    } else if (curStatus === 'refunded') {
+      // P1 (9): refunded orders finally get a hub — with the refund
+      // summary (loaded below) instead of another refund button.
+      actionHubHtml = '<div class="adm-hub-card" style="border-left-color:#059669;background:linear-gradient(135deg, #f0fdf4, #ffffff);">' +
+        '<div class="adm-hub-title" style="color:#065f46;">' +
+          '<span>↩️ অর্ডার রিফান্ড সম্পন্ন</span>' +
+          '<span class="st-badge st-refunded">রিফান্ডেড</span>' +
+        '</div>' +
+        '<p style="color:var(--text-muted);font-size:12px;margin:4px 0 10px;">এই অর্ডারের টাকা ফেরত দেওয়া হয়েছে — নিচে কখন, কত, কোন ভাগে ফেরত গেছে তা দেখুন। এই অর্ডার আর প্রসেস করা যাবে না।</p>' +
+        '<div class="adm-hub-actions">' +
           '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️ মুছে ফেলুন</button>' +
         '</div>' +
       '</div>';
     }
+
+    // P1 (2/9): refund summary slot for terminal money-back states
+    // (and any row carrying a refund from the list query).
+    const refundSummaryHtml = (curStatus === 'cancelled' || curStatus === 'refunded' || curStatus === 'failed' || (o.refund_balance !== undefined && o.refund_balance !== null))
+      ? '<div class="adm-hub-card" style="margin-top:12px;"><div style="font-weight:800;font-size:13px;color:var(--primary-800);margin-bottom:6px;">↩️ রিফান্ড সারাংশ</div><div id="admRefundSummary_' + o.id + '" style="font-size:12px;color:var(--text-muted);">⏳ রিফান্ড তথ্য লোড হচ্ছে…</div></div>'
+      : '';
 
     const bodyHtml = '<div class="adm-modal-content">' +
       '<!-- Top Info Box -->' +
@@ -2259,6 +2506,7 @@ window.AdmOrders = {
 
       pipelineHtml +
       actionHubHtml +
+      refundSummaryHtml +
 
       '<!-- Submitted Data Grid -->' +
       '<div style="margin-top:16px;">' +
@@ -2280,7 +2528,7 @@ window.AdmOrders = {
         '<div style="font-weight:700;font-size:13px;margin-bottom:6px;color:var(--text-main);">👨‍💼 এডমিন ইন্টারনাল নোট (শুধুমাত্র এডমিনদের জন্য দৃশ্যমান):</div>' +
         '<div style="display:flex;gap:6px;">' +
           '<input type="text" id="admOrderNoteInput" value="' + esc(o.admin_note || '') + '" placeholder="এখানে ইন্টারনাল নোট লিখুন..." style="flex:1;font-size:12px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;">' +
-          '<button class="mini-btn ok" style="padding:8px 14px;font-size:12px;" onclick="AdmOrders.saveAdminNote(\'' + o.id + '\')">💾 নোট সংরক্ষণ</button>' +
+          '<button class="mini-btn ok" style="padding:8px 14px;font-size:12px;" onclick="AdmOrders.saveAdminNote(\'' + o.id + '\', this)">💾 নোট সংরক্ষণ</button>' +
         '</div>' +
       '</div>' +
 
@@ -2331,6 +2579,7 @@ window.AdmOrders = {
     setTimeout(() => {
       AdmOrders.loadHistory(o.id);
       AdmOrders.loadInModalChat(o.id);
+      if (document.getElementById('admRefundSummary_' + o.id)) AdmOrders.loadRefundSummary(o.id);
     }, 60);
   },
 
@@ -2424,7 +2673,7 @@ window.AdmOrders = {
       inp.disabled = false;
       this.loadInModalChat(orderId);
     } catch (e) {
-      alert('মেসেজ পাঠানো ব্যর্থ: ' + e.message);
+      alert('মেসেজ পাঠানো ব্যর্থ: ' + admErrBn(e.message));
       inp.disabled = false;
     }
   },
@@ -2489,9 +2738,9 @@ window.AdmOrders = {
       // order and downloadable from History; only the status step
       // failed. Say exactly that.
       if (fileUploaded) {
-        alert('⚠️ ফাইল আপলোড হয়েছে এবং গ্রাহক ইতিহাস থেকে ডাউনলোড করতে পারবেন, কিন্তু স্ট্যাটাস ডেলিভার্ড হয়নি — আবার চেষ্টা করুন বা স্ট্যাটাস হাতে বদলান। (' + e.message + ')');
+        alert('⚠️ ফাইল আপলোড হয়েছে এবং গ্রাহক ইতিহাস থেকে ডাউনলোড করতে পারবেন, কিন্তু স্ট্যাটাস ডেলিভার্ড হয়নি — আবার চেষ্টা করুন বা স্ট্যাটাস হাতে বদলান। (' + admErrBn(e.message) + ')');
       } else {
-        alert('❌ ডেলিভারি ব্যর্থ: ' + e.message);
+        alert('❌ ডেলিভারি ব্যর্থ: ' + admErrBn(e.message));
       }
       if (btn) { btn.disabled = false; btn.innerText = '🚀 ডেলিভারি ফাইল আপলোড ও সমাপ্ত করুন'; }
     }
@@ -2547,6 +2796,8 @@ window.AdmOrders = {
   async deliUpload(id) {
     const f = window._deliFile;
     if (!f) { alert('ফাইল বেছে নিন'); return; }
+    const btn = document.getElementById('deliUploadBtn');
+    if (btn) { btn.disabled = true; btn.innerText = 'আপলোড হচ্ছে…'; }
     const fd = new FormData();
     fd.append('file', f);
     fd.append('doc_type', 'delivery');
@@ -2564,13 +2815,14 @@ window.AdmOrders = {
           try {
             await this.smartTransition(id, o.status, 'delivered');
           } catch (e) {
-            alert('স্ট্যাটাস আপডেট ব্যর্থ: ' + e.message);
+            alert('স্ট্যাটাস আপডেট ব্যর্থ: ' + admErrBn(e.message));
           }
         }
       }
       closeModal(); show('orders');
     } else {
-      alert('❌ ব্যর্থ: ' + (d.error || r.status));
+      alert('❌ ব্যর্থ: ' + admErrBn(d.error || String(r.status)));
+      if (btn) { btn.disabled = false; btn.innerText = '⬆️ আপলোড'; }
     }
   },
 
@@ -2608,7 +2860,7 @@ window.AdmOrders = {
       method: 'POST', body: { message: msg },
     });
     const d = await r.json();
-    if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
+    if (!r.ok) { alert('ব্যর্থ: ' + admErrBn(d.error)); return; }
     closeModal();
     alert('✅ মেসেজ পাঠানো হয়েছে!');
   },
