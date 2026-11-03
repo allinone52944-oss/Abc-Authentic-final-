@@ -152,8 +152,11 @@
       });
     }
     clearTimeout(timer);
-    // Retry on 503/504 (transient server/tunnel issues), not on 4xx
-    if ((r.status === 503 || r.status === 504) && _retry < 2) {
+    // Retry on 503/504 (transient server/tunnel issues), not on 4xx.
+    // Callers may pass skip503Retry when a 503 is deterministic for
+    // them (e.g. QR verify's GATEWAY_NOT_CONFIGURED) so the user
+    // is not made to wait through two pointless retries.
+    if ((r.status === 503 || r.status === 504) && _retry < 2 && !opts.skip503Retry) {
       await new Promise(function (res) { setTimeout(res, 1000 * (_retry + 1)); });
       return api(path, opts, _retry + 1);
     }

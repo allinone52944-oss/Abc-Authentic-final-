@@ -44,7 +44,13 @@ function multerError(err, req, res, next) {
     const code = err.code === 'LIMIT_FILE_SIZE' ? 'IMAGE_TOO_LARGE'
       : err.message === 'FILE_TYPE_NOT_ALLOWED' ? 'NOT_AN_IMAGE'
       : 'UPLOAD_FAILED';
-    return res.status(400).json({ error: code });
+    // A bare code used to reach the customer as-is (the raw-code
+    // leak found in the 2026-11-03 audit) — always pair it with a
+    // Bengali message. The frontend mapper is the second layer.
+    const message = code === 'IMAGE_TOO_LARGE' ? 'ছবির সাইজ অনেক বড় — ১০MB-এর মধ্যে ছবি দিন।'
+      : code === 'NOT_AN_IMAGE' ? 'শুধু JPG/PNG ছবি দিন।'
+      : 'ছবি আপলোড হয়নি — আবার চেষ্টা করুন।';
+    return res.status(400).json({ error: code, message });
   }
   next();
 }
@@ -160,9 +166,23 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
       const receipt = docs.find((d) => d && d.type === 'delivery');
       const receiptUrl = receipt ? '/api/orders/' + prev.rows[0].id + '/documents/' + receipt.filename : null;
       if (prev.rows[0].status === 'failed') {
+        // Replay used to lose the reason (generic message only) —
+        // rebuild it from the stored gateway text, or from the
+        // charge-failed marker when that is what happened.
+        let prevData = {};
+        try {
+          const raw = prev.rows[0].data;
+          prevData = typeof raw === 'string' ? JSON.parse(raw) : (raw || {});
+        } catch (e) { prevData = {}; }
+        let replayMsg = 'যাচাই সফল হয়নি — কোনো টাকা কাটা হয়নি।';
+        if (prevData.charge_failed_after_gateway) {
+          replayMsg = 'গেটওয়েতে যাচাই সফল হয়েছিল, কিন্তু ওয়ালেট চার্জ কাটা যায়নি — এই QR এখন ব্যবহৃত, নতুন QR দিয়ে চেষ্টা করুন বা সাপোর্টে জানান।';
+        } else if (prevData.reason) {
+          replayMsg = 'যাচাই সফল হয়নি: ' + failureReasonBn(prevData.reason) + ' — কোনো টাকা কাটা হয়নি।';
+        }
         return res.status(422).json({
           error: 'NOT_VERIFIED', verified: false, duplicate: true,
-          message: 'যাচাই সফল হয়নি — কোনো টাকা কাটা হয়নি।',
+          message: replayMsg,
           charged: 0,
           orderId: prev.rows[0].id,
           receipt: receiptUrl,
@@ -239,12 +259,9 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
         ).catch((e) => { safeLog('[qr-verify] failed-order insert error:', e.message); return null; });
         if (ins && ins.rows.length) {
           orderId = ins.rows[0].id;
-          wa.notifyServiceFailed(db, req.user.id, 'QR + ছবি যাচাই', reasonBn,
-            'নতুন QR কোড দিয়ে আবার চেষ্টা করুন। সহায়তা লাগলে আমাদের সাপোর্টে যোগাযোগ করুন।').catch(() => {});
-          push.notifyUser(db, req.user.id, '❌ QR যাচাই ব্যর্থ',
-            'আপনার QR + ছবি যাচাই সফল হয়নি — কোনো টাকা কাটা হয়নি। ব্যর্থতার রসিদটি ইতিহাসে পাবেন।', '/history.html').catch(() => {});
-          push.notifyAdmins(db, '❌ QR যাচাই ব্যর্থ',
-            'একটি QR + ছবি যাচাই সফল হয়নি — কোনো চার্জ কাটা হয়নি।', '/admin.html').catch(() => {});
+          // Receipt FIRST, notifications second: the old order
+          // promised "রসিদটি ইতিহাসে পাবেন" before the receipt
+          // existed, so a store failure left a false promise.
           try {
             receiptUrl = await storeReceipt(orderId, 'delivery-qr-failed-' + idemSlug + '.pdf', {
               serviceLabel: 'QR + ছবি যাচাই', outcome: 'failed', reason: reasonBn,
@@ -257,6 +274,15 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
               ],
             });
           } catch (e) { safeLog('[qr-verify] failure receipt store error:', e.message); }
+          wa.notifyServiceFailed(db, req.user.id, 'QR + ছবি যাচাই', reasonBn,
+            'নতুন QR কোড দিয়ে আবার চেষ্টা করুন। সহায়তা লাগলে আমাদের সাপোর্টে যোগাযোগ করুন।').catch(() => {});
+          push.notifyUser(db, req.user.id, '❌ QR যাচাই ব্যর্থ',
+            receiptUrl
+              ? 'আপনার QR + ছবি যাচাই সফল হয়নি — কোনো টাকা কাটা হয়নি। ব্যর্থতার রসিদটি ইতিহাসে পাবেন।'
+              : 'আপনার QR + ছবি যাচাই সফল হয়নি — কোনো টাকা কাটা হয়নি। রসিদ তৈরি হয়নি, সহায়তা লাগলে সাপোর্টে জানান।',
+            '/history.html').catch(() => {});
+          push.notifyAdmins(db, '❌ QR যাচাই ব্যর্থ',
+            'একটি QR + ছবি যাচাই সফল হয়নি — কোনো চার্জ কাটা হয়নি।', '/admin.html').catch(() => {});
         } else {
           const again = await db.query(
             'SELECT id, documents FROM orders WHERE user_id = $1 AND idempotency_key = $2',
@@ -294,12 +320,38 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
           }));
         } catch (e) {
           if (/INSUFFICIENT_BALANCE/.test(e.message)) {
-            // The gateway already took its fee for this success —
-            // log it loudly; the customer is not charged.
+            // The gateway already took its fee for this success and
+            // the QR is now consumed — the old code returned with
+            // NO record at all, so a retry (new idempotency key)
+            // met only a confusing "already used" gateway error.
+            // Record a failed outcome under this idempotency key so
+            // the case is visible to admin and a retry replays the
+            // honest explanation instead of re-burning anything.
             safeLog('[qr-verify] CHARGE FAILED after gateway success (gateway charged', result.charged, ') user', req.user.id, 'ref', ref);
+            let failedId = null;
+            if (serviceId) {
+              const fins = await db.query(
+                `INSERT INTO orders (user_id, service_id, status, data, price, idempotency_key)
+                 VALUES ($1, $2, 'failed', $3, 0, $4)
+                 ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+                 RETURNING id`,
+                [req.user.id, serviceId,
+                 JSON.stringify({ subject_ref: subjectRef || null, verified: false, charge_failed_after_gateway: true, gateway_charged: result.charged }),
+                 idem]
+              ).catch(() => null);
+              if (fins && fins.rows.length) failedId = fins.rows[0].id;
+              else {
+                const ag = await db.query(
+                  'SELECT id FROM orders WHERE user_id = $1 AND idempotency_key = $2',
+                  [req.user.id, idem]
+                ).catch(() => null);
+                if (ag && ag.rows.length) failedId = ag.rows[0].id;
+              }
+            }
             return res.status(402).json({
-              error: 'INSUFFICIENT_BALANCE',
-              message: 'পর্যাপ্ত ব্যালেন্স নেই। অনুগ্রহ করে ওয়ালেট রিচার্জ করুন।',
+              error: 'CHARGE_FAILED_AFTER_GATEWAY',
+              message: 'গেটওয়েতে যাচাই সফল হয়েছিল, কিন্তু ওয়ালেটে পর্যাপ্ত ব্যালেন্স না থাকায় চার্জ কাটা যায়নি। এই QR এখন ব্যবহৃত — নতুন QR দিয়ে চেষ্টা করুন, আর গেটওয়ে-ফি নিয়ে সাপোর্টে জানান।',
+              orderId: failedId,
             });
           }
           if (!/DUPLICATE_TRANSACTION/.test(e.message)) throw e;
@@ -308,37 +360,54 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
     }
 
     let orderId = null;
+    let firstInsert = false;
     if (serviceId) {
       // PARTIAL idempotency index (migration 019) — the conflict
       // target must repeat its predicate (see routes/nid.js).
-      const ins = await db.query(
+      const orderData = JSON.stringify({ subject_ref: subjectRef || null, verified: true, gateway_charged: result.charged, gateway_balance: result.remainingBalance });
+      const doInsert = () => db.query(
         `INSERT INTO orders (user_id, service_id, status, data, price, idempotency_key)
          VALUES ($1, $2, 'completed', $3, $4, $5)
          ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
          RETURNING id`,
-        [req.user.id, serviceId,
-         JSON.stringify({ subject_ref: subjectRef || null, verified: true, gateway_charged: result.charged, gateway_balance: result.remainingBalance }),
-         price, idem]
+        [req.user.id, serviceId, orderData, price, idem]
       ).catch((e) => { safeLog('[qr-verify] order insert error:', e.message); return null; });
+      let ins = await doInsert();
       if (ins && ins.rows.length) {
         orderId = ins.rows[0].id;
-        wa.notifyServiceCompleted(db, req.user.id, 'QR + ছবি যাচাই').catch(() => {});
-        push.notifyUser(db, req.user.id, '✅ QR যাচাই সফল',
-          'আপনার QR + ছবি যাচাই সফল হয়েছে — রসিদটি ইতিহাসে পাবেন।', '/history.html').catch(() => {});
-        push.notifyAdmins(db, '✅ QR যাচাই সফল',
-          `একটি QR + ছবি যাচাই সফলভাবে সম্পন্ন হয়েছে — চার্জ ৳${price}।`, '/admin.html').catch(() => {});
+        firstInsert = true;
       } else {
         const again = await db.query(
           'SELECT id FROM orders WHERE user_id = $1 AND idempotency_key = $2',
           [req.user.id, idem]
         ).catch(() => null);
         if (again && again.rows.length) orderId = again.rows[0].id;
+        else {
+          // One retry for a transient DB glitch before giving up:
+          // the old code answered success with NO record at all
+          // after a failed insert, money taken and nothing in
+          // History. Never claim success without a record again.
+          ins = await doInsert();
+          if (ins && ins.rows.length) {
+            orderId = ins.rows[0].id;
+            firstInsert = true;
+          }
+        }
       }
+    }
+
+    if (serviceId && !orderId) {
+      safeLog('[qr-verify] ORDER RECORD FAILED after charge (user', req.user.id, 'ref', ref, ') — money taken, no order row');
+      return res.status(500).json({
+        error: 'ORDER_RECORD_FAILED',
+        message: 'চার্জ কাটা হয়েছে কিন্তু রেকর্ড তৈরি হয়নি — সাপোর্টে জানান।',
+      });
     }
 
     // Delivery copy: the premium receipt PDF lives on the order,
     // so it appears in the customer's History like every other
-    // delivery.
+    // delivery. Stored BEFORE notifications, so the "receipt in
+    // History" promise is never made for a receipt that failed.
     let receiptUrl = null;
     if (orderId) {
       try {
@@ -355,6 +424,16 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
           });
       } catch (e) { safeLog('[qr-verify] receipt store error:', e.message); }
     }
+    if (firstInsert) {
+      wa.notifyServiceCompleted(db, req.user.id, 'QR + ছবি যাচাই').catch(() => {});
+      push.notifyUser(db, req.user.id, '✅ QR যাচাই সফল',
+        receiptUrl
+          ? 'আপনার QR + ছবি যাচাই সফল হয়েছে — রসিদটি ইতিহাসে পাবেন।'
+          : 'আপনার QR + ছবি যাচাই সফল হয়েছে। রসিদ তৈরি হয়নি — সাপোর্টে জানান।',
+        '/history.html').catch(() => {});
+      push.notifyAdmins(db, '✅ QR যাচাই সফল',
+        `একটি QR + ছবি যাচাই সফলভাবে সম্পন্ন হয়েছে — চার্জ ৳${price}।`, '/admin.html').catch(() => {});
+    }
 
     const u2 = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
     res.json({
@@ -366,7 +445,7 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
     });
   } catch (e) {
     safeLog('[qr-verify] verify route error:', e.message);
-    res.status(500).json({ error: 'VERIFY_FAILED' });
+    res.status(500).json({ error: 'VERIFY_FAILED', message: 'সার্ভারে সমস্যা হয়েছে — কিছুক্ষণ পর আবার চেষ্টা করুন।' });
   }
 });
 

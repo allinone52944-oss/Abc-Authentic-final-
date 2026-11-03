@@ -150,7 +150,7 @@
   // Premium failure display on purpose: message + charge line only,
   // NO receipt button on the failure screen (the failed receipt PDF
   // is still stored in the customer's History by the backend).
-  function showErrResult(msg) {
+  function showErrResult(msg, charge) {
     const e = document.getElementById('errBox');
     e.replaceChildren();
     const m = document.createElement('div');
@@ -158,10 +158,50 @@
     e.appendChild(m);
     const c = document.createElement('div');
     c.className = 'res-line';
-    c.textContent = 'চার্জ: ৳০ — কোনো টাকা কাটা হয়নি';
+    // The charge line must never guess: for a recorded verification
+    // failure the charge is certainly ৳0, but for a network/server
+    // failure the charge may already have landed, and for a record
+    // failure it certainly did — each state gets its own honest line.
+    c.textContent = charge === 'taken' ? 'চার্জ: টাকা কাটা হয়েছে — সাপোর্টে জানান'
+      : charge === 'uncertain' ? 'চার্জ: নিশ্চিত হতে ব্যালেন্স ও ইতিহাস দেখুন'
+      : 'চার্জ: ৳০ — কোনো টাকা কাটা হয়নি';
     e.appendChild(c);
     e.classList.add('on');
     document.getElementById('okBox').classList.remove('on');
+  }
+  // Server error codes → Bengali. Some responses carry only a code
+  // (upload errors, 500, ABC's synthetic network 503); showing the
+  // code as-is was the raw-code leak found in the 2026-11-03 audit.
+  const ERR_BN = {
+    IMAGE_TOO_LARGE: 'ছবির সাইজ অনেক বড় — ১০MB-এর মধ্যে ছবি দিন।',
+    NOT_AN_IMAGE: 'শুধু JPG/PNG ছবি দিন।',
+    UPLOAD_FAILED: 'ছবি আপলোড হয়নি — আবার চেষ্টা করুন।',
+    VERIFY_FAILED: 'সার্ভারে সমস্যা হয়েছে — কিছুক্ষণ পর আবার চেষ্টা করুন।',
+    NETWORK_ERROR: 'সংযোগে সমস্যা হয়েছে। আবার চেষ্টা করুন — একই চেষ্টায় দুবার চার্জ কাটবে না।',
+    MISSING_FILES: 'ছবি ও QR — দুটোই দিতে হবে।',
+    SERVICE_ACCESS_DISABLED: 'এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।',
+    GATEWAY_NOT_CONFIGURED: 'সেবাটি এখনো প্রস্তুত নয় — অ্যাডমিনকে জানান।',
+    GATEWAY_ERROR: 'যাচাই সার্ভারে সমস্যা হয়েছে — কোনো টাকা কাটা হয়নি। কিছুক্ষণ পর আবার চেষ্টা করুন।',
+    ORDER_RECORD_FAILED: 'চার্জ কাটা হয়েছে কিন্তু রেকর্ড তৈরি হয়নি — সাপোর্টে জানান।',
+  };
+  const CHARGE_UNCERTAIN_CODES = ['NETWORK_ERROR', 'VERIFY_FAILED'];
+  function showFailure(d, status) {
+    if (status === 401) { location.href = '/login.html'; return; }
+    const msg = (d && d.message)
+      || (d && d.error && ERR_BN[d.error])
+      || (status >= 500 ? 'সার্ভারে সমস্যা হয়েছে — কিছুক্ষণ পর আবার চেষ্টা করুন।'
+      : 'যাচাই সফল হয়নি — কোনো টাকা কাটা হয়নি।');
+    let charge = 'none';
+    if (d && d.error === 'ORDER_RECORD_FAILED') charge = 'taken';
+    else if ((d && CHARGE_UNCERTAIN_CODES.indexOf(d.error) >= 0) || status >= 500) charge = 'uncertain';
+    showErrResult(msg, charge);
+  }
+  // Download errors must NOT wipe the success box (the old dlPdf
+  // called showErr, which hid okBox and took the receipt button
+  // with it). The receipt stays reachable from History either way.
+  function showErrKeepOk(msg) {
+    const e = document.getElementById('errBox');
+    e.textContent = msg; e.classList.add('on');
   }
   function showOk(html) {
     const o = document.getElementById('okBox');
@@ -176,14 +216,26 @@
   async function dlPdf(url, name) {
     try {
       const r = await ABC.api(String(url).replace(/^\/api/, ''));
-      if (!r.ok) { showErr('❌ ডাউনলোড ব্যর্থ হয়েছে — আবার চেষ্টা করুন।'); return; }
+      if (!r.ok) { showErrKeepOk('❌ ডাউনলোড ব্যর্থ হয়েছে — ইতিহাস থেকে আবার চেষ্টা করুন।'); return; }
       const blob = await r.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = name || 'qr-receipt.pdf';
       document.body.appendChild(a); a.click();
       setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
-    } catch (e) { showErr('❌ ডাউনলোড ব্যর্থ হয়েছে — আবার চেষ্টা করুন।'); }
+    } catch (e) { showErrKeepOk('❌ ডাউনলোড ব্যর্থ হয়েছে — ইতিহাস থেকে আবার চেষ্টা করুন।'); }
+  }
+  // Client-side file check, mirroring the server's 10MB / jpg+png
+  // rule — so a too-big or webp file fails here in Bengali instead
+  // of travelling up and coming back as a raw server code.
+  const QR_MAX_BYTES = 10 * 1024 * 1024;
+  const QR_OK_EXT = ['jpg', 'jpeg', 'png'];
+  function fileErr(f) {
+    if (!f) return null;
+    const ext = (f.name.split('.').pop() || '').toLowerCase();
+    if (QR_OK_EXT.indexOf(ext) < 0) return 'শুধু JPG/PNG ছবি দিন।';
+    if (f.size > QR_MAX_BYTES) return 'ছবির সাইজ ১০MB-এর বেশি — ছোট ছবি দিন।';
+    return null;
   }
   function bindDrop(inputId, prevId, nameId) {
     const inp = document.getElementById(inputId);
@@ -217,6 +269,8 @@
     const qr = document.getElementById('qrFile').files[0];
     if (!qr) return showErr('⚠️ QR কোডের ছবি দিন।');
     if (!photo) return showErr('⚠️ ব্যক্তির ছবি দিন।');
+    const bad = fileErr(qr) || fileErr(photo);
+    if (bad) return showErr('⚠️ ' + bad);
 
     const btn = document.getElementById('goBtn');
     btn.disabled = true;
@@ -234,9 +288,10 @@
     fd.append('idempotency_key', currentIdem);
 
     try {
-      const r = await ABC.api(API + '/verify', { method: 'POST', body: fd, timeout: 150000 });
+      const r = await ABC.api(API + '/verify', { method: 'POST', body: fd, timeout: 150000, skip503Retry: true });
       const d = await r.json().catch(() => ({}));
       currentIdem = null; // definitive answer received — next attempt is a new one
+      if (r.status === 401) { location.href = '/login.html'; return; }
       if (r.ok && d.verified) {
         let html = '✅ <b>যাচাই সফল!</b> ছবির ব্যক্তির সঙ্গে QR-এর মালিক মিলেছে।'
           + '<br>চার্জ কাটা হয়েছে: ৳' + bn(d.charged || 0)
@@ -247,9 +302,7 @@
         showOk(html);
         loadPrice();
       } else {
-        showErrResult(
-          d.message || d.error || 'যাচাই সফল হয়নি — কোনো টাকা কাটা হয়নি।'
-        );
+        showFailure(d, r.status);
       }
     } catch (err) {
       // Network-level failure: keep the same idempotency key so a

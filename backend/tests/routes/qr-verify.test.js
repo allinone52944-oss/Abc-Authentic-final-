@@ -229,6 +229,47 @@ describe('POST /api/qr-verify/verify — gateway outcomes', () => {
     expect(wa.notifyServiceCompleted).not.toHaveBeenCalled();
   });
 
+  test('non-image file → Bengali message paired with the code (no bare code to the customer)', async () => {
+    db.__routeQuery(baseRoutes());
+    const r = await withUser(request(app()).post('/api/qr-verify/verify'))
+      .attach('photo', PNG, 'evil.exe')
+      .attach('qr_image', PNG, 'qr.png')
+      .field('subject_ref', 'NID-123')
+      .field('idempotency_key', 'idem-msg')
+      .expect(400);
+    expect(r.body.error).toBe('NOT_AN_IMAGE');
+    expect(r.body.message).toContain('JPG/PNG');
+  });
+
+  test('failed replay keeps the stored reason (not a generic message)', async () => {
+    db.__routeQuery([
+      ['FROM orders WHERE user_id', {
+        rows: [{ id: 'oF9', price: 0, status: 'failed',
+          data: JSON.stringify({ reason: 'Record not found', verified: false }),
+          documents: JSON.stringify([{ type: 'delivery', filename: 'delivery-qr-failed-idem-1.pdf' }]) }],
+      }],
+    ]);
+    const r = await postVerify(request(app())).expect(422);
+    expect(r.body).toMatchObject({ verified: false, duplicate: true, orderId: 'oF9', charged: 0 });
+    expect(r.body.message).toContain('কোনো রেকর্ড পাওয়া যায়নি');
+    expect(adapter.verify).not.toHaveBeenCalled();
+  });
+
+  test('order insert keeps failing after charge → 500 ORDER_RECORD_FAILED, never a record-less success', async () => {
+    db.__routeQuery(baseRoutes([
+      ['FROM transactions WHERE', { rows: [] }],
+      ['wallet_apply', () => ({ rows: [{ balance: 150 }] })],
+      ['INSERT INTO orders', () => ({ rows: [] })],
+    ]));
+    adapter.verify.mockResolvedValue({
+      ok: true, verified: true, message: 'Verification completed successfully',
+      charged: 30, remainingBalance: 440,
+    });
+    const r = await postVerify(request(app()), { idem: 'idem-norec' }).expect(500);
+    expect(r.body.error).toBe('ORDER_RECORD_FAILED');
+    expect(r.body.message).toContain('রেকর্ড তৈরি হয়নি');
+  });
+
   test('duplicate idempotency_key of a FAILED attempt → stored 422 + receipt, gateway NOT called again', async () => {
     db.__routeQuery([
       ['FROM orders WHERE user_id', {

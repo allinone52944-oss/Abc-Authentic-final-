@@ -23,9 +23,13 @@ describe('qr-photo-verify.html receipt downloads', () => {
     expect(html).not.toContain('href="\' + d.receipt');
     expect(html).not.toContain("href='\" + d.receipt");
   });
-  test('both receipt buttons are wired (success + failure)', () => {
+  // Owner decision 2026-11-03 (commit 3a51649): the QR failure
+  // screen shows a premium error with NO receipt button — the
+  // failed receipt PDF still lands in the customer's History via
+  // the backend, it is just not offered on the failure screen.
+  test('success receipt button is wired; failure screen has NO receipt button', () => {
     expect(html).toContain('qr-receipt.pdf');
-    expect(html).toContain('qr-receipt-failed.pdf');
+    expect(html).not.toContain('qr-receipt-failed.pdf');
   });
 });
 
