@@ -36,6 +36,28 @@ function mintChargeToken(userId, kind, ref) {
   return body + '.' + mac;
 }
 
+// MONEY/PDF (2026-11-03, cycle 4): one canonical ack form (B6).
+// BDRIS ack numbers are digit strings; the DONE-time record and the
+// later original-PDF flag must meet on the same key, or the flag
+// creates a second, nameless row. Digits-only when digits exist; a
+// digitless value passes through untouched (it was never an ack, and
+// rejecting it would lose records whose ack arrived as raw text).
+function canonicalAckNo(v) {
+  const d = String(v || '').replace(/\D/g, '');
+  return d || String(v || '').trim().slice(0, 64);
+}
+
+// MONEY/PDF (C21): a concurrent same-key charge races past the
+// SELECT-then-insert idempotency check and hits the transactions
+// unique constraint instead — that is the same already-paid outcome,
+// not a 500. Map Postgres unique violations to already-charged.
+// This is NOT a double-charge case: the first charge already paid,
+// the second deducts nothing.
+function isAlreadyChargedError(e) {
+  const m = String((e && e.message) || '');
+  return /DUPLICATE_TRANSACTION/.test(m) || /duplicate key value violates unique constraint/.test(m) || e.code === '23505';
+}
+
 // Get the bdris-apply service price (admin sets via Admin → Services).
 async function getSubmitPrice() {
   const r = await db.query(
@@ -100,7 +122,7 @@ router.post('/charge/submit', requireAuth, async (req, res) => {
     // made journals (and readers) treat a healthy retry as a
     // failure. Log it as token-ok; only other failures log as
     // errors. Charge logic itself is untouched.
-    if (/DUPLICATE_TRANSACTION/.test(e.message)) {
+    if (isAlreadyChargedError(e)) {
       safeLog('[bdris-apply] submit charge duplicate (already charged, token re-issued, charged 0)');
     } else {
       safeLog('[bdris-apply] submit charge error:', e.message);
@@ -111,7 +133,7 @@ router.post('/charge/submit', requireAuth, async (req, res) => {
     // payForService throws DUPLICATE_TRANSACTION before any
     // deduction, so returning the token for the same ref is safe
     // and lets the OTP submit proceed instead of blocking it.
-    if (/DUPLICATE_TRANSACTION/.test(e.message)) {
+    if (isAlreadyChargedError(e)) {
       const clientKey = (req.body && req.body.idempotency_key) ? String(req.body.idempotency_key).slice(0, 64) : Date.now();
       const ref = 'bdris-apply-submit-' + clientKey + '-' + req.user.id;
       return res.json({ ok: true, charged: 0, alreadyCharged: true, message: 'আগে চার্জ হয়ে গেছে — আবার কাটা হয়নি', chargeToken: mintChargeToken(req.user.id, 'submit', ref) });
@@ -141,13 +163,13 @@ router.post('/charge/pdf', requireAuth, async (req, res) => {
     res.json({ ok: true, charged: r.charged, newBalance: r.newBalance, chargeToken: mintChargeToken(req.user.id, 'pdf', ref) });
   } catch (e) {
     // FINAL-SOLUTION (problem-map #10): same token-ok rule as submit.
-    if (/DUPLICATE_TRANSACTION/.test(e.message)) {
+    if (isAlreadyChargedError(e)) {
       safeLog('[bdris-apply] pdf charge duplicate (already charged, token re-issued, charged 0)');
     } else {
       safeLog('[bdris-apply] pdf charge error:', e.message);
     }
     // 2026-10-25 double-charge fix: same rule as submit above.
-    if (/DUPLICATE_TRANSACTION/.test(e.message)) {
+    if (isAlreadyChargedError(e)) {
       const clientKey = (req.body && req.body.idempotency_key) ? String(req.body.idempotency_key).slice(0, 64) : Date.now();
       const ref = 'bdris-apply-pdf-' + clientKey + '-' + req.user.id;
       return res.json({ ok: true, charged: 0, alreadyCharged: true, message: 'আগে চার্জ হয়ে গেছে — আবার কাটা হয়নি', chargeToken: mintChargeToken(req.user.id, 'pdf', ref) });
@@ -186,7 +208,7 @@ router.get('/prices', requireAuth, async (req, res) => {
 // the flag (OR, never downgrades) and never blanks the name.
 router.post('/applications', requireAuth, async (req, res) => {
   try {
-    const ackNo = String((req.body && req.body.ack_no) || '').trim().slice(0, 64);
+    const ackNo = canonicalAckNo((req.body && req.body.ack_no) || '');
     const name = String((req.body && req.body.name) || '').trim().slice(0, 160);
     const origFlag = (req.body && req.body.original_pdf_available) === true;
     if (!ackNo) return res.status(400).json({ error: 'MISSING_ACK' });
@@ -271,8 +293,9 @@ router.get('/applications', requireAuth, async (req, res) => {
 router.delete('/applications/:ackNo', requireAuth, async (req, res) => {
   try {
     const r = await db.query(
-      'DELETE FROM bdris_applications WHERE user_id = $1 AND ack_no = $2 RETURNING id',
-      [req.user.id, String(req.params.ackNo).slice(0, 64)]
+      `DELETE FROM bdris_applications WHERE user_id = $1
+       AND (ack_no = $2 OR regexp_replace(ack_no, '\\D', '', 'g') = $2) RETURNING id`,
+      [req.user.id, canonicalAckNo(req.params.ackNo)]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
     return res.json({ ok: true });

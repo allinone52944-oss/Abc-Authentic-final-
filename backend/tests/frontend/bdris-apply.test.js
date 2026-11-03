@@ -237,13 +237,17 @@ describe('double-charge fix (2026-10-25)', () => {
   });
 
   test('PDF charge uses a stable key per ack and caches the token per ack', () => {
-    expect(html).toMatch(/var pdfKey = ackNo \? 'pdf-' \+ ackNo : null/);
+    // MONEY/PDF (B8): the key is now the canonical digits-only key —
+    // the old raw 'pdf-' + ackNo shape let the same PDF charge twice
+    // via different key shapes. Caching per canonical key is unchanged.
+    expect(html).toMatch(/var pdfKey = pdfChargeKey\(ackNo\);/);
     expect(html).toMatch(/S\._pdfTok\[pdfKey\] = \{ tok: tok, at: Date\.now\(\) \}/);
   });
 
   test('FETCH_ORIGINAL with an existing token is NOT charged again by the shim', () => {
     expect(html).toMatch(/if \(args\[0\] && typeof args\[0\] === 'object' && args\[0\]\._chargeToken\)/);
-    expect(html).toMatch(/charge\('pdf', ackNo \? 'pdf-' \+ ackNo : null\)/);
+    // MONEY/PDF (B8): the no-token path charges the canonical key.
+    expect(html).toMatch(/charge\('pdf', pdfKey\)/);
   });
 
   test('draft save remembers the submit key and draft open restores it', () => {
@@ -578,7 +582,14 @@ describe('HOME-LIST cycle (2026-10-31): duplicate cards, silent server-fetch fai
   };
 
   test('(1) dedupeAcks: same number collapses to one (first wins, order kept); numberless entries pass through', () => {
-    const dedupeAcks = extract('dedupeAcks', 'list');
+    // MONEY/PDF (B9): dedupeAcks now keys on canonicalAck — extract
+    // that helper too so the evaluated function resolves it.
+    const srcOf = (name, args) => {
+      const m = html.match(new RegExp('function ' + name + '\\(' + args + '\\) \\{[\\s\\S]*?\\n\\}'));
+      expect(m).not.toBeNull();
+      return m[0];
+    };
+    const dedupeAcks = new Function(srcOf('canonicalAck', 'v') + ';' + srcOf('dedupeAcks', 'list') + '; return dedupeAcks;')();
     const out = dedupeAcks([
       { no: '111111111', name: 'First' },
       { no: '111111111', name: 'Second' },

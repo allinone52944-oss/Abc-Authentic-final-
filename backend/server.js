@@ -50,6 +50,11 @@ app.use(xssClean);
 app.use(sameOrigin);
 
 // Serve frontend + bundled assets (fonts local, no CDN dependency)
+// MONEY/PDF (B10): original Form-1 PDFs are gated BEFORE static
+// serving — a bare /bdris-original-*.pdf URL no longer downloads
+// anonymously; the gate requires a charge token for that file or an
+// owned server record with the original flagged available.
+app.use(require('./middleware/originalPdfGate').originalPdfGate(db));
 app.use(express.static(path.join(__dirname, '..', 'frontend'), {
   setHeaders: (res, filePath) => {
     // HTML: always revalidate (no stale ?v= references)

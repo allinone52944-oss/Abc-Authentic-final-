@@ -271,3 +271,54 @@ describe('POST/GET/DELETE /api/bdris-apply/applications (আবেদনের �
     expect(push.notifyAdmins).not.toHaveBeenCalled();
   });
 });
+
+describe('MONEY/PDF cycle 4 (2026-11-03)', () => {
+  const dupKeyError = () => {
+    const e = new Error('duplicate key value violates unique constraint "transactions_trxid_key"');
+    e.code = '23505';
+    return e;
+  };
+
+  test('C21 submit: concurrent same-key charge (unique violation) → already-charged, not 500', async () => {
+    db.__routeQuery([
+      ['FROM services WHERE engine_id', { rows: [{ price: '100' }] }],
+      ['wallet_apply', () => { throw dupKeyError(); }],
+    ]);
+    const r = await withUser(request(app()).post('/api/bdris-apply/charge/submit'))
+      .send({ idempotency_key: 'race-key-1' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, charged: 0, alreadyCharged: true });
+    expect(typeof r.body.chargeToken).toBe('string');
+  });
+
+  test('C21 pdf: concurrent same-key charge (unique violation) → already-charged, not 500', async () => {
+    db.__routeQuery([
+      ["SELECT value FROM settings WHERE key = 'bdris_apply.pdf_price'", { rows: [{ value: 10 }] }],
+      ['wallet_apply', () => { throw dupKeyError(); }],
+    ]);
+    const r = await withUser(request(app()).post('/api/bdris-apply/charge/pdf'))
+      .send({ idempotency_key: 'pdf-race-1' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, charged: 0, alreadyCharged: true });
+  });
+
+  test('B6: mixed-form ack is stored canonical digits-only', async () => {
+    db.__routeQuery([
+      ['INSERT INTO bdris_applications', { rows: [] }],
+    ]);
+    const r = await withUser(request(app()).post('/api/bdris-apply/applications'))
+      .send({ ack_no: 'TRK-1234567890', name: 'টেস্ট' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, duplicate: true });
+    const ins = db.query.mock.calls.find((c) => /INSERT INTO bdris_applications/.test(c[0]));
+    expect(ins).toBeDefined();
+    expect(ins[1][1]).toBe('1234567890');
+  });
+
+  test('B6/DELETE: delete matches by canonical digits (legacy raw rows too)', async () => {
+    db.__routeQuery([
+      ['DELETE FROM bdris_applications', { rows: [{ id: 'a1' }] }],
+    ]);
+    await withUser(request(app()).delete('/api/bdris-apply/applications/TRK-1234567890')).expect(200);
+    const del = db.query.mock.calls.find((c) => /DELETE FROM bdris_applications/.test(c[0]));
+    expect(del[0]).toMatch(/regexp_replace\(ack_no/);
+    expect(del[1]).toEqual(['u1', '1234567890']);
+  });
+});
