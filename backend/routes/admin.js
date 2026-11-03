@@ -1042,7 +1042,24 @@ router.delete('/orders/:id', async (req, res) => {
         let refunded = false;
         let refundAlready = false;
         let refundSplit = null;
-        if (refundRequested && Number(order.price) > 0 && order.status !== 'refunded') {
+        let refundMessage = null;
+        // B5 (2026-11-03): an ALREADY-refunded order deleted with
+        // refund=yes must not report a bare "refunded: false" —
+        // that reads as "no refund happened" with no reason. Two
+        // already-refunded shapes exist: status 'refunded' (the
+        // old code skipped the refund block entirely for these
+        // rows, so refunded came back false with no explanation)
+        // and a prior refund-<id> transaction (cancel/fail
+        // auto-refund or hand refund, on a still-open status).
+        // Both delete the row, credit NOTHING twice, and answer
+        // refundedAlready: true plus an understandable message —
+        // the cancelled auto-refund branch's shape. No second
+        // notification fires for these rows (see below).
+        if (refundRequested && order.status === 'refunded') {
+          refunded = true;
+          refundAlready = true;
+          refundMessage = 'এই অর্ডারটি আগেই রিফান্ড করা হয়েছে — নতুন করে কোনো টাকা ফেরত দেওয়া হয়নি।';
+        } else if (refundRequested && Number(order.price) > 0) {
           // Strict guard (2026-11-03): an order with an approved
           // refund-<id> transaction — auto-refunded on cancel/fail
           // or refunded by hand — is NEVER credited again, not
@@ -1054,6 +1071,7 @@ router.delete('/orders/:id', async (req, res) => {
           if (await hasPriorRefund(client, order)) {
             refunded = true;
             refundAlready = true;
+            refundMessage = 'এই অর্ডারের টাকা আগেই ফেরত দেওয়া হয়েছে — নতুন করে কোনো টাকা ফেরত দেওয়া হয়নি।';
           } else {
             const r = await serviceCredits.refundOrderPrice(client, order, 'refund-del');
             refunded = r.refunded;
@@ -1069,7 +1087,7 @@ router.delete('/orders/:id', async (req, res) => {
         await client.query('DELETE FROM orders WHERE id = $1', [id]);
         return {
           user_id: order.user_id, price: order.price, status: order.status,
-          refunded, refundAlready, refundSplit, docFiles,
+          refunded, refundAlready, refundSplit, refundMessage, docFiles,
         };
       });
     } catch (e) {
@@ -1116,7 +1134,8 @@ router.delete('/orders/:id', async (req, res) => {
 
     const ds = result.refundSplit;
     res.json({ ok: true, deleted_id: id, refunded: result.refunded, refundedAlready: result.refundAlready,
-      refund: ds ? { refunded: !!ds.refunded, balancePart: Number(ds.balancePart) || 0, creditPart: Number(ds.creditPart) || 0, total: Math.round(((Number(ds.balancePart) || 0) + (Number(ds.creditPart) || 0)) * 100) / 100 } : null });
+      ...(result.refundMessage ? { refundMessage: result.refundMessage } : {}),
+      refund: ds ? { refunded: !!ds.refunded, balancePart: Number(ds.balancePart) || 0, creditPart: Number(ds.creditPart) || 0, total: Math.round(((Number(ds.balancePart) || 0) + (Number(ds.creditPart) || 0)) * 100) / 100 } : (result.refundAlready ? { alreadyRefunded: true } : null) });
   } catch (e) {
     safeLog('[admin] order delete error:', e.message);
     res.status(500).json({ error: 'FAILED' });
@@ -1254,18 +1273,21 @@ router.post('/orders/:id/delivery-docs', orderDocUpload(db, 'delivery'), async (
       uploaded_by: 'admin'
     });
     await db.query('UPDATE orders SET documents=$1 WHERE id=$2', [JSON.stringify(docs), orderId]);
-    // P2 (2026-11-03): a file added to an ALREADY-delivered order
-    // must tell the customer — otherwise they never look again.
-    // This cannot double with the first-delivery message: the
-    // first-delivery path uploads while the order is still
-    // processing/completed and notifies via the delivered
-    // transition afterwards; this branch fires only when the order
-    // is already delivered at upload time. Notify failures never
-    // fail the upload itself.
-    if (order.status === 'delivered') {
+    // P2 (2026-11-03) + B4 (2026-11-03): a file added to an
+    // ALREADY-completed or ALREADY-delivered order must tell the
+    // customer — otherwise they never look again. This cannot
+    // double with the first-delivery message: the first-delivery
+    // path uploads while the order is still processing (or
+    // completed, before the delivered step) and notifies via the
+    // delivered transition afterwards; this branch fires only
+    // when the order is already completed/delivered at upload
+    // time. Notify failures never fail the upload itself.
+    if (order.status === 'completed' || order.status === 'delivered') {
       wa.notifyDeliveryFileAdded(db, order).catch(() => {});
       push.notifyUser(db, order.user_id, '📎 নতুন ডেলিভারি ফাইল যোগ হয়েছে',
-        'আপনার ডেলিভার্ড অর্ডারে একটি নতুন ফাইল যোগ করা হয়েছে — ইতিহাস থেকে ডাউনলোড করতে পারবেন।',
+        order.status === 'completed'
+          ? 'আপনার সম্পন্ন অর্ডারে একটি নতুন ফাইল যোগ করা হয়েছে — ইতিহাস থেকে ডাউনলোড করতে পারবেন।'
+          : 'আপনার ডেলিভার্ড অর্ডারে একটি নতুন ফাইল যোগ করা হয়েছে — ইতিহাস থেকে ডাউনলোড করতে পারবেন।',
         '/history.html').catch(() => {});
     }
     res.json({ ok: true, filename: req.file.filename });

@@ -128,16 +128,30 @@ async function payForService(client, { userId, serviceId, amount, ref }) {
 // The charge split is NOT stored on the order row, so it is rebuilt
 // from the transactions ledger: payForService writes a balance debit
 // under the charge ref and, when credit was used, a credit debit
-// under ref + ':svc'. Candidate refs, in order:
+// under ref + ':svc'. Candidate refs, in order (every format below
+// is proven in code — no format is guessed):
 //   - POST /api/orders: 'order-' + idempotency_key + '-' + userId
 //     (user.js order create; idempotency_key IS the client key)
 //   - charge gate: engineId + '-' + attemptKey, where the order's
 //     idempotency_key is engineId + ':' + attemptKey
 //     (engineChargeGate.js orderKeyOf/txRefOf)
-// Other engines (land/nid/qr/server-copy) use refs that cannot be
-// rebuilt from the order row alone. When no candidate matches the
-// ledger reliably, the whole price refunds to the balance (the old
-// behaviour) — NEVER invent credit from a guess.
+//   - land.js: ref 'land-' + mode + '-' + idem, order key IS idem.
+//     The mode is NOT stored on the order row, so all four modes
+//     (search/scan/verify/mouza) are tried; the ledger-agreement
+//     check below rejects a wrong mode. The same formula covers a
+//     client-supplied idem AND an auto idem ('land-' + mode + '-'
+//     + uuid, land.js idemOf), where the real ref carries the mode
+//     twice ('land-<mode>-land-<mode>-<uuid>').
+//   - nid.js: order key 'nid-' + jobId, ref 'nid-card-' + jobId.
+//   - nid-server-copy.js: the order key IS the ref
+//     ('nidsc-' + jobId + '-' + kind) — it is inserted as the
+//     order's idempotency_key, so the key itself is the candidate.
+//   - qr-verify.js: order key IS idem, ref 'qr-verify-' + idem.
+// Other charges (e.g. bdris-apply, which records no order row) use
+// refs that cannot be rebuilt from the order row alone. When no
+// candidate matches the ledger reliably, the whole price refunds
+// to the balance (the old behaviour) — NEVER invent credit from a
+// guess.
 //
 // All queries run on the caller's transaction client, so the credit
 // restore, the balance credit and the caller's own status/delete
@@ -153,6 +167,16 @@ async function reconstructChargeSplit(client, userId, order) {
   const candidates = ['order-' + key + '-' + userId];
   const colon = key.indexOf(':');
   if (colon > 0) candidates.push(key.slice(0, colon) + '-' + key.slice(colon + 1));
+  // land.js: mode unknown from the row alone — try all four.
+  for (const mode of ['search', 'scan', 'verify', 'mouza']) {
+    candidates.push('land-' + mode + '-' + key);
+  }
+  // nid.js: 'nid-' + jobId → 'nid-card-' + jobId.
+  if (key.startsWith('nid-')) candidates.push('nid-card-' + key.slice(4));
+  // nid-server-copy.js: the key IS the ref.
+  if (key.startsWith('nidsc-')) candidates.push(key);
+  // qr-verify.js: key IS idem → 'qr-verify-' + idem.
+  candidates.push('qr-verify-' + key);
   for (const ref of candidates) {
     const r = await client.query(
       `SELECT trxid, amount FROM transactions

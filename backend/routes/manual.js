@@ -319,39 +319,81 @@ const MANUAL_TRANSITIONS = {
 adminManual.put('/:id', async (req, res) => {
   try {
     const { status, admin_note } = req.body || {};
-    const before = await db.query(
-      'SELECT user_id, service_id, status, documents FROM manual_submissions WHERE id = $1',
-      [req.params.id]
-    );
-    if (before.rows.length && status && status !== before.rows[0].status &&
-        ['new', 'processing', 'completed', 'rejected'].includes(status) &&
-        !(MANUAL_TRANSITIONS[before.rows[0].status] || []).includes(status)) {
-      return res.status(400).json({
-        error: 'INVALID_TRANSITION',
-        from: before.rows[0].status,
-        allowed: MANUAL_TRANSITIONS[before.rows[0].status] || [],
+    const statusValid = status && ['new', 'processing', 'completed', 'rejected'].includes(status);
+    if (!statusValid && admin_note === undefined) {
+      return res.status(400).json({ error: 'NOTHING_TO_UPDATE' });
+    }
+    // B2 (2026-11-03): the whole PUT runs inside ONE transaction,
+    // on a row locked with SELECT ... FOR UPDATE — the order PUT
+    // pattern. The old code read-then-wrote in separate queries
+    // with no status guard, so two concurrent PUTs could both
+    // read the old status and both notify. Now the second PUT
+    // waits on the lock, then reads the NEW status: a repeat of
+    // the same transition becomes a silent same-status save and
+    // an onward jump from the new state hits INVALID_TRANSITION —
+    // either way it never notifies twice. Notifications fire only
+    // AFTER commit, and only on a real transition.
+    const note = (admin_note === undefined)
+      ? null : String(admin_note || '').slice(0, 2000);
+    let result;
+    try {
+      result = await db.withTransaction(async (client) => {
+        const before = await client.query(
+          'SELECT user_id, service_id, status, documents, admin_note FROM manual_submissions WHERE id = $1 FOR UPDATE',
+          [req.params.id]
+        );
+        if (!before.rows.length) {
+          const e = new Error('NOT_FOUND'); e.statusCode = 404; throw e;
+        }
+        const prev = before.rows[0];
+        if (statusValid && status !== prev.status &&
+            !(MANUAL_TRANSITIONS[prev.status] || []).includes(status)) {
+          const e = new Error('INVALID_TRANSITION');
+          e.statusCode = 400; e.from = prev.status;
+          e.allowed = MANUAL_TRANSITIONS[prev.status] || [];
+          throw e;
+        }
+        if (!statusValid || status === prev.status) {
+          // Same status: a note edit may change admin_note, but
+          // nothing else moves — no UPDATE at all when there is
+          // no new note (or the note is unchanged), no history
+          // row, and NO notification (a note save must never
+          // re-notify). An invalid status string is ignored here
+          // exactly as the old code ignored it.
+          if (note === null || note === prev.admin_note) {
+            return { row: { id: req.params.id, status: prev.status }, prev, changed: false };
+          }
+          const upd = await client.query(
+            `UPDATE manual_submissions SET admin_note = $1, updated_at = NOW()
+             WHERE id = $2 AND status = $3 RETURNING id, status`,
+            [note, req.params.id, prev.status]
+          );
+          if (upd.rows.length !== 1) {
+            const e = new Error('STALE_WRITE'); e.statusCode = 409; throw e;
+          }
+          return { row: upd.rows[0], prev, changed: false };
+        }
+        const upd = await client.query(
+          `UPDATE manual_submissions SET status = $1, admin_note = COALESCE($2, admin_note), updated_at = NOW()
+           WHERE id = $3 AND status = $4 RETURNING id, status`,
+          [status, note, req.params.id, prev.status]
+        );
+        if (upd.rows.length !== 1) {
+          const e = new Error('STALE_WRITE'); e.statusCode = 409; throw e;
+        }
+        return { row: upd.rows[0], prev, changed: true, to: status };
       });
+    } catch (e) {
+      if (e.statusCode) {
+        const body = { error: e.message };
+        if (e.from !== undefined) { body.from = e.from; body.allowed = e.allowed; }
+        return res.status(e.statusCode).json(body);
+      }
+      throw e;
     }
-    const sets = [];
-    const params = [];
-    let i = 1;
-    if (status && ['new', 'processing', 'completed', 'rejected'].includes(status)) {
-      sets.push(`status = $${i++}`); params.push(status);
-    }
-    if (admin_note !== undefined) {
-      sets.push(`admin_note = $${i++}`); params.push(String(admin_note || '').slice(0, 2000));
-    }
-    if (!sets.length) return res.status(400).json({ error: 'NOTHING_TO_UPDATE' });
-    sets.push(`updated_at = NOW()`);
-    params.push(req.params.id);
-    const r = await db.query(
-      `UPDATE manual_submissions SET ${sets.join(', ')} WHERE id = $${i} RETURNING id, status`,
-      params
-    );
-    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
-    const prev = before.rows[0];
-    if (prev && status && status !== prev.status && (status === 'completed' || status === 'rejected')) {
-      if (status === 'completed') {
+    const prev = result.prev;
+    if (result.changed && (result.to === 'completed' || result.to === 'rejected')) {
+      if (result.to === 'completed') {
         let label = 'ম্যানুয়াল সেবা';
         try {
           const sv = await db.query('SELECT name_bn, name FROM services WHERE id = $1', [prev.service_id]);
@@ -382,7 +424,7 @@ adminManual.put('/:id', async (req, res) => {
           'দুঃখিত — আপনার ম্যানুয়াল সেবার অনুরোধটি সম্পন্ন করা যায়নি। সহায়তার জন্য সাপোর্টে যোগাযোগ করুন।', '/history.html').catch(() => {});
       }
     }
-    res.json({ ok: true, ...r.rows[0] });
+    res.json({ ok: true, ...result.row });
   } catch (e) { safeLog('[manual] admin update error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });
 
@@ -394,11 +436,21 @@ adminManual.post('/:id/delivery-docs', (req, res) => {
     if (err) return res.status(400).json({ error: err.message || 'UPLOAD_FAILED' });
     try {
       if (!req.file) return res.status(400).json({ error: 'NO_FILE' });
-      const r = await db.query('SELECT documents FROM manual_submissions WHERE id = $1', [req.params.id]);
+      const r = await db.query('SELECT user_id, service_id, status, documents FROM manual_submissions WHERE id = $1', [req.params.id]);
       if (!r.rows.length) {
         try { fs.unlinkSync(req.file.path); } catch (_) {}
         return res.status(404).json({ error: 'NOT_FOUND' });
       }
+      // B3 (2026-11-03): status gate, mirroring the order
+      // delivery-docs gate (cancelled/refunded/failed there).
+      // A rejected submission must not receive new files — the
+      // customer was already told it will not be done — and the
+      // uploaded file is cleaned up like the 404 path above.
+      if (r.rows[0].status === 'rejected') {
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+        return res.status(400).json({ error: 'INVALID_STATUS', status: 'rejected' });
+      }
+      const wasCompleted = r.rows[0].status === 'completed';
       const docs = parseDocs(r.rows[0].documents);
       docs.push({
         filename: req.file.filename,
@@ -410,6 +462,22 @@ adminManual.post('/:id/delivery-docs', (req, res) => {
       });
       await db.query('UPDATE manual_submissions SET documents = $1, updated_at = NOW() WHERE id = $2',
         [JSON.stringify(docs), req.params.id]);
+      // A file added to an ALREADY-completed submission must tell
+      // the customer — otherwise they never look again (the order
+      // delivered late-file branch). Files added while the
+      // submission is still new/processing stay silent: the
+      // completion transition notifies afterwards, and the file
+      // is not even visible to the customer until then.
+      // Notify failures never fail the upload itself.
+      if (wasCompleted) {
+        if (typeof wa.notifyDeliveryFileAdded === 'function') {
+          wa.notifyDeliveryFileAdded(db,
+            { id: req.params.id, user_id: r.rows[0].user_id, service_id: r.rows[0].service_id }).catch(() => {});
+        }
+        push.notifyUser(db, r.rows[0].user_id, '📎 নতুন ডেলিভারি ফাইল যোগ হয়েছে',
+          'আপনার সম্পন্ন ম্যানুয়াল সেবায় একটি নতুন ডেলিভারি ফাইল যোগ করা হয়েছে — ইতিহাস থেকে ডাউনলোড করতে পারবেন।',
+          '/history.html').catch(() => {});
+      }
       res.json({ ok: true, filename: req.file.filename });
     } catch (e) { safeLog('[manual] delivery upload error:', e.message); res.status(500).json({ error: 'FAILED' }); }
   });

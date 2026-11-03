@@ -133,7 +133,7 @@ describe('POST /api/admin/manual/:id/delivery-docs — admin delivery upload', (
   test('appends an admin delivery doc the customer can later download', async () => {
     let saved = null;
     db.__routeQuery([
-      ['SELECT documents FROM manual_submissions WHERE id = $1', { rows: [{ documents: [DOCS[0]] }] }],
+      ['SELECT user_id, service_id, status, documents FROM manual_submissions WHERE id = $1', { rows: [{ user_id: 'u1', service_id: 7, status: 'processing', documents: [DOCS[0]] }] }],
       ['UPDATE manual_submissions SET documents', (text, params) => { saved = JSON.parse(params[0]); return { rows: [] }; }],
     ]);
     const r = await asAdmin(request(app()).post('/api/admin/manual/m1/delivery-docs'))
@@ -148,7 +148,7 @@ describe('POST /api/admin/manual/:id/delivery-docs — admin delivery upload', (
 
   test('unknown submission → 404 and the uploaded file is cleaned up', async () => {
     db.__routeQuery([
-      ['SELECT documents FROM manual_submissions WHERE id = $1', { rows: [] }],
+      ['SELECT user_id, service_id, status, documents FROM manual_submissions WHERE id = $1', { rows: [] }],
     ]);
     const before = fs.existsSync(UPLOAD_DIR) ? fs.readdirSync(UPLOAD_DIR).length : 0;
     await asAdmin(request(app()).post('/api/admin/manual/nope/delivery-docs'))
@@ -254,8 +254,9 @@ describe('PUT /api/admin/manual/:id — outcome notifications on transition', ()
   function putHandlers(prevStatus, newStatus) {
     return [
       // The PUT now also reads documents (for the conditional
-      // completed message), so the route string must match it.
-      ['SELECT user_id, service_id, status, documents FROM manual_submissions', { rows: [{ user_id: 'u1', service_id: 7, status: prevStatus, documents: [] }] }],
+      // completed message) and admin_note (for the unchanged-note
+      // shortcut), so the route string must match it.
+      ['SELECT user_id, service_id, status, documents, admin_note FROM manual_submissions', { rows: [{ user_id: 'u1', service_id: 7, status: prevStatus, documents: [] }] }],
       ['UPDATE manual_submissions SET', { rows: [{ id: 'm1', status: newStatus }] }],
       ['SELECT name_bn, name FROM services', { rows: [{ name_bn: 'পাসপোর্ট সেবা', name: 'Passport' }] }],
     ];
