@@ -139,13 +139,17 @@
   }
   @media (max-width: 768px) {
     #content table { min-width: 640px; }
-    /* P2: first-column sticky width matches the user cell
-       (170px) — the old 120px cap clipped name/phone inside a
-       170px cell. Inner name/phone wrap instead of ellipsis so
+    /* F11: the sticky first column is a REAL 170px column
+       (width + min-width, not just a max-width cap) — the old
+       cap fought the .adm-user-cell min-width:170px base rule,
+       so the column width was never actually fixed. The inner
+       cell keeps min-width:0 below so it cannot force the column
+       wider than 170px; name/phone wrap instead of ellipsis so
        nothing is cut off. */
     #content th:first-child, #content td:first-child {
       position: sticky; left: 0; background: #fff; z-index: 1;
-      box-shadow: 2px 0 4px rgba(0,0,0,0.06); max-width: 170px;
+      box-shadow: 2px 0 4px rgba(0,0,0,0.06);
+      width: 170px; min-width: 170px; max-width: 170px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     #content td:first-child .adm-user-cell { min-width: 0; }
@@ -500,14 +504,20 @@
     overflow-y: auto;
     box-shadow: var(--shadow-xl);
   }
+  /* F12: the modal ✕ is a real 36px tap target, not a bare glyph. */
+  .modal-x {
+    width: 36px; height: 36px; min-width: 36px; min-height: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0;
+  }
   .modal h3 {
     color: var(--primary-800);
     margin-bottom: 18px;
     font-size: 19px;
     font-weight: 700;
-    /* P2: room for the absolute ✕ (top-right) so it never sits
-       on the title text. */
-    padding-right: 36px;
+    /* P2 + F12: room for the absolute 36px ✕ (top-right) so it
+       never sits on the title text. */
+    padding-right: 48px;
   }
   .modal .field { margin-bottom: 14px; }
   .modal .field label {
