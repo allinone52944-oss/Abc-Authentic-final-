@@ -226,6 +226,13 @@ describe('POST /api/qr-verify/verify — gateway outcomes', () => {
     expect(wa.notifyServiceFailed).toHaveBeenCalledTimes(1);
     expect(push.notifyAdmins).toHaveBeenCalledTimes(1);
     expect(push.notifyUser).toHaveBeenCalledTimes(1);
+    // C2: the failed push must NOT promise the receipt in
+    // History — a failed order's file reaches the customer
+    // through no path (download gate: NOT_DELIVERED_YET).
+    const failedPushMsg = push.notifyUser.mock.calls[0][3];
+    expect(failedPushMsg).toContain('কোনো টাকা কাটা হয়নি');
+    expect(failedPushMsg).not.toContain('ইতিহাসে');
+    expect(failedPushMsg).not.toContain('ইতিহাস');
     expect(wa.notifyServiceCompleted).not.toHaveBeenCalled();
   });
 
