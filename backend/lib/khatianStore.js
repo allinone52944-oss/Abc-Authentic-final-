@@ -39,6 +39,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { toStoredRecord, mapStoredToDisplay, storedRecordId, storedCollectedAt } = require('../../engines/land-khatian/store-server/storeMapping');
 
 const TIMEOUT_MS = 10000;
 
@@ -63,17 +64,9 @@ function filterRecords(records, q) {
   return (records || []).filter((r) => {
     if (khatianNo && toEn(r.khatianNo) !== khatianNo) return false;
     if (ownerName && !norm(r.owners).includes(ownerName)) return false;
-    if (dagNo && !String(r.dags || '').includes(dagNo)) return false;
+    if (dagNo && !toEn(String(r.dags || '')).includes(dagNo)) return false;
     return true;
   });
-}
-
-function maxCollectedAt(records) {
-  let best = null;
-  for (const r of records || []) {
-    if (r && r.collectedAt && (!best || String(r.collectedAt) > String(best))) best = r.collectedAt;
-  }
-  return best;
 }
 
 function scopeMatches(file, q) {
@@ -93,6 +86,9 @@ function scopeMatches(file, q) {
 }
 
 // ---------- local file store ----------
+// Stored records are RAW (see storeMapping.js): import
+// writes source payloads verbatim; delivery mapping runs
+// only inside search() below, never at write time.
 function fileName(jlId, surveyKey) {
   const safe = (v) => String(v).replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 80);
   return safe(jlId) + '__' + safe(surveyKey) + '.json';
@@ -113,9 +109,12 @@ function createLocalStore(dir) {
     kind: 'local',
     async upsert({ area, surveyKey, surveyName, jlId, mouzaId, jlNumber, records, source, merge }) {
       const now = new Date().toISOString();
-      const stamped = (records || []).map((r) => ({
-        ...r, surveyKey, surveyName, jlId, collectedAt: r.collectedAt || now,
-      }));
+      // Raw-verbatim: only toStoredRecord shapes what is
+      // written — source payloads pass through untouched,
+      // collection metadata lands in meta, never inside a
+      // source field. Legacy display-shaped rows pass
+      // through unchanged (pre-rule fixtures only).
+      const stamped = (records || []).map((r) => toStoredRecord(r, now));
       fs.mkdirSync(dir, { recursive: true });
       const target = path.join(dir, fileName(jlId, surveyKey));
       const existed = fs.existsSync(target);
@@ -128,8 +127,8 @@ function createLocalStore(dir) {
         try {
           const prev = JSON.parse(fs.readFileSync(target, 'utf8'));
           const byId = new Map();
-          for (const r of prev.records || []) byId.set(String(r.id), r);
-          for (const r of stamped) byId.set(String(r.id), r);
+          for (const r of prev.records || []) byId.set(storedRecordId(r), r);
+          for (const r of stamped) byId.set(storedRecordId(r), r);
           finalRecords = [...byId.values()];
         } catch (_) { finalRecords = stamped; }
       }
@@ -142,7 +141,7 @@ function createLocalStore(dir) {
       fs.renameSync(tmp, target);
       return { upserted: stamped.length, updated: existed, total: finalRecords.length };
     },
-    async search(q) {
+    async search(q, opts) {
       const files = readLocalFiles(dir).filter((f) => scopeMatches(f, q || {}));
       // A stored file for the scope counts as collected even
       // when its record list is empty (a mouza genuinely
@@ -150,9 +149,29 @@ function createLocalStore(dir) {
       // import) — otherwise a collected-but-empty mouza
       // would be misreported as "no stored data yet".
       const mouzaCollected = files.length > 0;
-      const all = files.flatMap((f) => f.records || []);
-      const records = filterRecords(all, q || {});
-      return { records, collectedAt: maxCollectedAt(records), totalMatches: records.length, mouzaCollected };
+      if (opts && opts.raw) {
+        // Raw mode (import merge-prune only): stored
+        // records verbatim, whole unit, no delivery
+        // mapping, no filters.
+        const stored = files.flatMap((f) => f.records || []);
+        return {
+          records: stored,
+          collectedAt: stored.map((r) => storedCollectedAt(r)).filter(Boolean).sort().pop() || null,
+          totalMatches: stored.length, mouzaCollected,
+        };
+      }
+      // Delivery mode: map at serve time, then filter.
+      const pairs = files.flatMap((f) => (f.records || []).map((stored) => ({
+        stored,
+        display: mapStoredToDisplay(stored, { surveyKey: f.surveyKey, surveyName: f.surveyName, jlId: f.jlId }),
+      })));
+      const kept = pairs.filter((p) => filterRecords([p.display], q || {}).length > 0);
+      const records = kept.map((p) => p.display);
+      return {
+        records,
+        collectedAt: kept.map((p) => storedCollectedAt(p.stored)).filter(Boolean).sort().pop() || null,
+        totalMatches: records.length, mouzaCollected,
+      };
     },
     // Distinct stored records for ONE unit (jlId ×
     // surveyKey), counted from the store itself — never a
@@ -162,7 +181,7 @@ function createLocalStore(dir) {
       if (!jlId || !surveyKey) return { count: 0 };
       const files = readLocalFiles(dir).filter((f) => sameId(f.jlId, jlId) && f.surveyKey === surveyKey);
       const ids = new Set();
-      for (const f of files) for (const r of f.records || []) if (r && r.id !== undefined) ids.add(r.id);
+      for (const f of files) for (const r of f.records || []) if (storedRecordId(r) !== '') ids.add(storedRecordId(r));
       return { count: ids.size };
     },
     async ping() { return { ok: true }; },
@@ -201,7 +220,7 @@ function createHttpStore(baseUrl, storeKey, fetchImpl) {
         merge: !!args.merge,
       });
     },
-    async search(q) {
+    async search(q, opts) {
       const p = new URLSearchParams();
       if (q.jlId) p.set('jl_id', String(q.jlId));
       if (q.mouzaId) p.set('mouza_id', String(q.mouzaId));
@@ -209,6 +228,10 @@ function createHttpStore(baseUrl, storeKey, fetchImpl) {
       if (q.khatianNo) p.set('khatian_no', String(q.khatianNo));
       if (q.ownerName) p.set('owner_name', String(q.ownerName));
       if (q.dagNo) p.set('dag_no', String(q.dagNo));
+      // Raw mode (import merge-prune only): the server
+      // returns stored records verbatim, whole unit, no
+      // delivery mapping, no filters.
+      if (opts && opts.raw) p.set('raw', '1');
       const data = await call('GET', '/v1/records/search?' + p.toString());
       return {
         records: data.records || [], collectedAt: data.collectedAt || null,

@@ -36,9 +36,7 @@
 // anywhere here.
 // ============================================================
 
-const BN_DIGIT_MAP = { '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9' };
-const toEn = (s) => String(s == null ? '' : s).replace(/[০-৯]/g, (d) => BN_DIGIT_MAP[d]);
-const norm = (s) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+const { toStoredRecord, mapStoredToDisplay, storedRecordId, storedCollectedAt, toEn, norm } = require('./storeMapping');
 const sameId = (a, b) => a !== null && a !== undefined && b !== null && b !== undefined &&
   String(a) !== '' && String(a) === String(b);
 
@@ -64,7 +62,7 @@ function filterRecords(records, q) {
   return (records || []).filter((r) => {
     if (q.khatian_no && toEn(r.khatianNo) !== toEn(q.khatian_no)) return false;
     if (q.owner_name && !norm(r.owners).includes(norm(q.owner_name))) return false;
-    if (q.dag_no && !String(r.dags || '').includes(toEn(q.dag_no))) return false;
+    if (q.dag_no && !toEn(String(r.dags || '')).includes(toEn(q.dag_no))) return false;
     return true;
   });
 }
@@ -85,23 +83,19 @@ function normalizeQuery(q) {
   };
 }
 
-function maxCollectedAt(records) {
-  let best = null;
-  for (const r of records || []) {
-    if (r && r.collectedAt && (!best || String(r.collectedAt) > String(best))) best = r.collectedAt;
-  }
-  return best;
-}
-
-function toRecordRow(unit, r) {
+function toRecordRow(unit, stored, now) {
+  // Helper columns come from DELIVERY mapping (for
+  // observability only) — the stored record itself is the
+  // JSONB verbatim payload, never these columns.
+  const display = mapStoredToDisplay(stored, unit);
   return {
     jl_id: String(unit.jlId), survey_key: unit.surveyKey,
-    record_id: String(r.id),
-    khatian_no: r.khatianNo != null ? String(r.khatianNo) : null,
-    owners: r.owners != null ? String(r.owners) : null,
-    dags: r.dags != null ? String(r.dags) : null,
-    total_land: r.totalLand != null ? String(r.totalLand) : null,
-    record: r, collected_at: r.collectedAt,
+    record_id: storedRecordId(stored),
+    khatian_no: display && display.khatianNo != null ? String(display.khatianNo) : null,
+    owners: display && display.owners != null ? String(display.owners) : null,
+    dags: display && display.dags != null ? String(display.dags) : null,
+    total_land: display && display.totalLand != null ? String(display.totalLand) : null,
+    record: stored, collected_at: storedCollectedAt(stored) || now || null,
   };
 }
 
@@ -125,9 +119,9 @@ function createPgBackend(pool) {
     async upsert({ area, surveyKey, surveyName, jlId, mouzaId, jlNumber, records, source, merge }) {
       await ensureSchema();
       const now = new Date().toISOString();
-      const stamped = (records || []).map((r) => ({
-        ...r, surveyKey, surveyName, jlId, collectedAt: r.collectedAt || now,
-      }));
+      // Raw-verbatim: toStoredRecord is the only shaping
+      // applied — source payloads pass through untouched.
+      const stamped = (records || []).map((r) => toStoredRecord(r, now));
       const jl = String(jlId);
       const unit = { jlId: jl, surveyKey };
       const existed = await pool.query(
@@ -153,7 +147,7 @@ function createPgBackend(pool) {
         );
       }
       for (const r of stamped) {
-        const row = toRecordRow(unit, r);
+        const row = toRecordRow(unit, r, now);
         await pool.query(
           'INSERT INTO khatian_records '
           + '(jl_id, survey_key, record_id, khatian_no, owners, dags, total_land, record, collected_at) '
@@ -173,13 +167,13 @@ function createPgBackend(pool) {
       return { upserted: stamped.length, updated: existed, total };
     },
 
-    async search(q) {
+    async search(q, opts) {
       await ensureSchema();
       const query = normalizeQuery(q);
       let units;
       if (query.jl_id) {
         const params = [String(query.jl_id)];
-        let sql = 'SELECT jl_id, survey_key, mouza_id FROM khatian_units WHERE jl_id = $1';
+        let sql = 'SELECT jl_id, survey_key, survey_name, mouza_id FROM khatian_units WHERE jl_id = $1';
         if (query.survey_key && query.survey_key !== 'all') {
           sql += ' AND survey_key = $2';
           params.push(query.survey_key);
@@ -187,7 +181,7 @@ function createPgBackend(pool) {
         units = await pool.query(sql, params).then((res) => res.rows);
       } else if (query.mouza_id) {
         const params = [String(query.mouza_id)];
-        let sql = 'SELECT jl_id, survey_key, mouza_id FROM khatian_units WHERE mouza_id = $1';
+        let sql = 'SELECT jl_id, survey_key, survey_name, mouza_id FROM khatian_units WHERE mouza_id = $1';
         if (query.survey_key && query.survey_key !== 'all') {
           sql += ' AND survey_key = $2';
           params.push(query.survey_key);
@@ -201,23 +195,43 @@ function createPgBackend(pool) {
       // khatians in this survey) — same rule as the file
       // backend.
       const mouzaCollected = units.length > 0;
-      let all = [];
+      let stored = [];
       for (const u of units) {
         const rows = await pool.query(
           'SELECT record FROM khatian_records WHERE jl_id = $1 AND survey_key = $2 ORDER BY record_id',
           [u.jl_id, u.survey_key],
         ).then((res) => res.rows);
-        all = all.concat(rows.map((row) => row.record));
+        stored = stored.concat(rows.map((row) => ({
+          stored: row.record,
+          unit: { surveyKey: u.survey_key, surveyName: u.survey_name, jlId: u.jl_id },
+        })));
       }
-      const records = filterRecords(all, query);
+      if (opts && opts.raw) {
+        // Raw mode (import merge-prune only): stored
+        // records verbatim, whole scope, no delivery
+        // mapping, no filters.
+        const records = stored.map((p) => p.stored);
+        return {
+          records,
+          collectedAt: records.map((r) => storedCollectedAt(r)).filter(Boolean).sort().pop() || null,
+          totalMatches: records.length, mouzaCollected,
+        };
+      }
+      // Delivery mode: map at serve time, then filter.
+      const pairs = stored.map((p) => ({ stored: p.stored, display: mapStoredToDisplay(p.stored, p.unit) }));
+      const kept = pairs.filter((p) => filterRecords([p.display], query).length > 0);
+      const records = kept.map((p) => p.display);
       return {
-        records, collectedAt: maxCollectedAt(records),
+        records,
+        collectedAt: kept.map((p) => storedCollectedAt(p.stored)).filter(Boolean).sort().pop() || null,
         totalMatches: records.length, mouzaCollected,
       };
     },
 
-    async countForUnit({ jlId, surveyKey }) {
+    async countForUnit(args) {
       await ensureSchema();
+      const jlId = args ? (args.jlId !== undefined ? args.jlId : args.jl_id) : undefined;
+      const surveyKey = args ? (args.surveyKey !== undefined ? args.surveyKey : args.survey_key) : undefined;
       if (!jlId || !surveyKey) return { count: 0 };
       const n = await pool.query(
         'SELECT COUNT(DISTINCT record_id)::int AS n FROM khatian_records '

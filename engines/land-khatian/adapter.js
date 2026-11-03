@@ -114,23 +114,24 @@ function normalize(detail, surveyKey, surveyName, jlId) {
   };
 }
 
-/** Best-effort hal-sabek for one item: failure or empty
- *  leaves halSabek as [] and never fails the search. */
-async function attachHalSabek(item, area) {
+/** Best-effort hal-sabek rows for one record: failure or
+ *  empty leaves [] and never fails the search/import. The
+ *  rows are returned VERBATIM (source data) — the caller
+ *  stores them as-is and maps them only at delivery. */
+async function fetchHalSabekRows(area, surveyKey, jlId, khatianNo) {
   try {
     const rows = await client.halSabek({
       divisionBbs: area.divisionBbs,
       districtBbs: area.districtBbs,
       upazilaBbs: area.upazilaBbs,
-      surveyKey: item.surveyKey,
-      jlId: item.jlId,
-      khatianNo: item.khatianNo,
+      surveyKey,
+      jlId,
+      khatianNo,
     });
-    if (Array.isArray(rows)) item.halSabek = rows;
+    return Array.isArray(rows) ? rows : [];
   } catch (_) {
-    item.halSabek = [];
+    return [];
   }
-  return item;
 }
 
 /**
@@ -244,13 +245,25 @@ async function search(args) {
       if (mutationAttempted) mutationAttemptsWithJl += 1;
       if (hits && hits.length) {
         const items = [];
+        const rawItems = [];
         for (const hit of hits.slice(0, DETAIL_CAP)) {
           const det = await client.detail(sv.key, hit.ID);
           items.push(normalize(det, sv.key, sv.name, jl.ID));
+          // Raw payload, stored verbatim on collect — the
+          // display item above is delivery mapping only
+          // and must NEVER be what the store keeps.
+          rawItems.push({
+            rawIndex: hit, rawDetail: det, halSabek: [],
+            meta: { source: 'dlrms', jlId: jl.ID, surveyKey: sv.key, surveyName: sv.name },
+          });
         }
-        for (const item of items) await attachHalSabek(item, area);
+        for (let i = 0; i < items.length; i += 1) {
+          const rows = await fetchHalSabekRows(area, sv.key, jl.ID, items[i].khatianNo);
+          items[i].halSabek = rows;
+          rawItems[i].halSabek = rows;
+        }
         return {
-          items, totalMatches: items.length, totalCandidates: hits.length,
+          items, rawItems, totalMatches: items.length, totalCandidates: hits.length,
           capped: hits.length > DETAIL_CAP, surveysTried,
           mutationAttempted, mutationUnsupported: mutationAttempted && mutationUnsupportedCount > 0 && mutationAttemptsWithJl === 0,
         };
@@ -262,17 +275,18 @@ async function search(args) {
       throw typed('JL_NOT_FOUND', 'no JL entry for this mouza in the offered surveys');
     }
     if (mutationAttempted && mutationAttemptsWithJl === 0 && mutationUnsupportedCount > 0) {
-      return { items: [], totalMatches: 0, totalCandidates: 0, capped: false, surveysTried, mutationAttempted: true, mutationUnsupported: true };
+      return { items: [], rawItems: [], totalMatches: 0, totalCandidates: 0, capped: false, surveysTried, mutationAttempted: true, mutationUnsupported: true };
     }
     if (mutationAttempted && mutationAttemptsWithJl === 0 && !surveysTried.length) {
       throw typed('JL_NOT_FOUND', 'no JL entry for this mouza in the offered surveys');
     }
-    return { items: [], totalMatches: 0, totalCandidates: 0, capped: false, surveysTried, mutationAttempted, mutationUnsupported: false };
+    return { items: [], rawItems: [], totalMatches: 0, totalCandidates: 0, capped: false, surveysTried, mutationAttempted, mutationUnsupported: false };
   }
 
   // Owner-name and/or dag-number path: whole-mouza index,
   // local filters (OWNER_NAME is ignored server-side).
   const items = [];
+  const rawItems = [];
   let totalCandidates = 0;
   let jlResolved = false;
   for (const sv of attempts) {
@@ -300,6 +314,10 @@ async function search(args) {
       // rows carry owners, not dags.
       if (dagNo && !String(det.DAGS || '').includes(dagNo)) continue;
       items.push(normalize(det, sv.key, sv.name, jl.ID));
+      rawItems.push({
+        rawIndex: hit, rawDetail: det, halSabek: [],
+        meta: { source: 'dlrms', jlId: jl.ID, surveyKey: sv.key, surveyName: sv.name },
+      });
     }
     if (items.length >= DETAIL_CAP) break;
   }
@@ -307,9 +325,13 @@ async function search(args) {
     throw typed('JL_NOT_FOUND', 'no JL entry for this mouza in the offered surveys');
   }
   const capped = totalCandidates > DETAIL_CAP;
-  for (const item of items) await attachHalSabek(item, area);
+  for (let i = 0; i < items.length; i += 1) {
+    const rows = await fetchHalSabekRows(area, items[i].surveyKey, items[i].jlId, items[i].khatianNo);
+    items[i].halSabek = rows;
+    rawItems[i].halSabek = rows;
+  }
   return {
-    items, totalMatches: items.length, totalCandidates, capped, surveysTried,
+    items, rawItems, totalMatches: items.length, totalCandidates, capped, surveysTried,
     mutationAttempted,
     mutationUnsupported: mutationAttempted && mutationAttemptsWithJl === 0 && mutationUnsupportedCount > 0,
   };
@@ -402,7 +424,12 @@ async function importMouza(args) {
   const indexItems = (list || []).map((hit) => ({ id: hit.ID, khatianNo: hit.KHATIAN_NO }));
   const expected = indexItems.length;
   // Step 2: details per item; failures stay open, never abort.
-  const items = [];
+  // Records are stored RAW (see the header rule): the exact
+  // index item + exact detail item, plus verbatim hal-sabek
+  // rows and separate collection metadata. NOTHING here is
+  // renamed, dropped, or reformatted — presentation mapping
+  // happens only at delivery time (storeMapping.js).
+  const records = [];
   const failedDetails = [];
   for (const hit of list || []) {
     try {
@@ -410,7 +437,10 @@ async function importMouza(args) {
       if (!det || det.KHATIAN_NO === null || det.KHATIAN_NO === undefined || String(det.KHATIAN_NO) === '') {
         throw typed('UNREADABLE_DETAIL', 'detail returned no khatian number');
       }
-      items.push(normalize(det, sv.key, sv.name, jl.ID));
+      records.push({
+        rawIndex: hit, rawDetail: det, halSabek: [],
+        meta: { source: 'dlrms', jlId: jl.ID, surveyKey: sv.key, surveyName: sv.name },
+      });
     } catch (e) {
       failedDetails.push({ indexId: hit.ID, khatianNo: hit.KHATIAN_NO, reason: e.code || 'DETAIL_FAILED' });
     }
@@ -419,9 +449,14 @@ async function importMouza(args) {
   // hal-sabek response is UNPROVEN — the sample returns
   // 200 + EMPTY — so it never affects completeness).
   const area = { divisionBbs, districtBbs, upazilaBbs };
-  for (const item of items) await attachHalSabek(item, area);
+  for (const rec of records) {
+    rec.halSabek = await fetchHalSabekRows(
+      area, sv.key, jl.ID,
+      rec.rawDetail && rec.rawDetail.KHATIAN_NO,
+    );
+  }
   return {
-    records: items, expected, indexItems, failedDetails,
+    records, expected, indexItems, failedDetails,
     surveyKey: sv.key, surveyName: sv.name, jlId: jl.ID,
     mouzaId: jl.MOUZA_ID, jlNumber: jl.JL_NUMBER,
   };

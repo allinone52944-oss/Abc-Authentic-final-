@@ -86,7 +86,14 @@ documented in full in **`STORE.md`**, including hosting
 options and the provision-before-collection warning. The
 "server keeps running if the source goes off" goal holds
 only for data already collected — never claimed for
-uncollected areas.
+uncollected areas. **Raw-verbatim collection rule (Pankaj,
+2026-11-03):** source records are stored EXACTLY as the
+source returns them — `rawIndex` + `rawDetail` + verbatim
+hal-sabek rows + separate collection metadata — and
+presentation mapping runs only at delivery time
+(`storeMapping.js`); full rule, enforcement points, and
+tests in **`STORE.md`**. Import never renames, drops, or
+reformats a source field.
 
 ## What is NOT built
 

@@ -45,6 +45,7 @@ const { buildReceiptPdf } = require('../lib/receiptPdf');
 const { buildKhatianSummaryPdf } = require('../lib/khatianSummaryPdf');
 const { getStoreClient } = require('../lib/khatianStore');
 const adapter = require('../../engines/land-khatian/adapter');
+const { storedRecordId } = require('../../engines/land-khatian/store-server/storeMapping');
 const client = require('../../engines/land-core/client');
 
 // ---------- collection store: resolution order ----------
@@ -397,14 +398,21 @@ async function indexUpsertLive(area, group, storedCount) {
 // or PDF.
 async function collectLiveResult(area, result) {
   try {
+    // RAW-VERBATIM RULE: only rawItems may be stored — the
+    // display items are delivery mapping and must NEVER be
+    // written to the store. If the adapter did not return
+    // rawItems (older adapter, unexpected shape), SKIP the
+    // collect entirely rather than storing display rows.
+    if (!Array.isArray(result.rawItems) || result.rawItems.length === 0) return;
     const store = getStoreClient();
     const groups = new Map();
-    for (const item of result.items || []) {
-      const key = String(item.jlId) + '::' + item.surveyKey;
+    for (const raw of result.rawItems) {
+      const meta = raw.meta || {};
+      const key = String(meta.jlId) + '::' + meta.surveyKey;
       if (!groups.has(key)) {
-        groups.set(key, { jlId: item.jlId, surveyKey: item.surveyKey, surveyName: item.surveyName, records: [] });
+        groups.set(key, { jlId: meta.jlId, surveyKey: meta.surveyKey, surveyName: meta.surveyName, records: [] });
       }
-      groups.get(key).records.push(item);
+      groups.get(key).records.push(raw);
     }
     for (const group of groups.values()) {
       try {
@@ -719,12 +727,22 @@ router.post('/admin/import', requireAuth, requireAdmin, async (req, res) => {
         // index carries no dag count, so no expected dag
         // total exists; an unparseable DAGS string flags the
         // record and forces partial, never a guessed count).
+        // Keys come from the RAW payloads (rawDetail/rawIndex);
+        // the legacy display fields are a defensive fallback
+        // only and are never written anywhere.
         const dagIssues = [];
         let unitDags = 0;
         for (const rec of imp.records) {
-          const dc = adapter.countDags(rec.dags);
-          if (dc.unparseable) dagIssues.push({ khatianNo: rec.khatianNo, indexId: rec.id, reason: 'DAGS_UNPARSEABLE' });
-          else unitDags += dc.count;
+          const rawDetail = rec.rawDetail || {};
+          const rawIndex = rec.rawIndex || {};
+          const dc = adapter.countDags(rawDetail.DAGS !== undefined ? rawDetail.DAGS : rec.dags);
+          if (dc.unparseable) {
+            dagIssues.push({
+              khatianNo: rawDetail.KHATIAN_NO !== undefined ? rawDetail.KHATIAN_NO : rec.khatianNo,
+              indexId: rawIndex.ID !== undefined ? rawIndex.ID : rec.id,
+              reason: 'DAGS_UNPARSEABLE',
+            });
+          } else unitDags += dc.count;
         }
         // Merge-prune against the store: keep previously
         // stored rows still in this run's index (a transient
@@ -732,15 +750,17 @@ router.post('/admin/import', requireAuth, requireAdmin, async (req, res) => {
         // this run's collected rows, prune rows the portal
         // no longer lists. A later re-run re-fetches the
         // fresh expected count and reopens on any gap.
+        // The prune read is RAW (verbatim stored records),
+        // so no delivery mapping ever touches stored data.
         const indexIds = new Set((imp.indexItems || []).map((i) => String(i.id)));
         let existing = [];
         try {
-          const prev = await store.search({ jlId: imp.jlId, surveyKey: imp.surveyKey });
+          const prev = await store.search({ jlId: imp.jlId, surveyKey: imp.surveyKey }, { raw: true });
           existing = prev.records || [];
         } catch (_) { existing = []; }
         const byId = new Map();
-        for (const r of existing) if (indexIds.has(String(r.id))) byId.set(String(r.id), r);
-        for (const r of imp.records) byId.set(String(r.id), r);
+        for (const r of existing) if (indexIds.has(storedRecordId(r))) byId.set(storedRecordId(r), r);
+        for (const r of imp.records) byId.set(storedRecordId(r), r);
         const merged = [...byId.values()];
         await store.upsert({
           area, surveyKey: imp.surveyKey, surveyName: imp.surveyName,

@@ -38,6 +38,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { toStoredRecord, mapStoredToDisplay, storedRecordId, storedCollectedAt } = require('./storeMapping');
 
 const DATA_DIR = process.env.STORE_DATA_DIR || path.join(__dirname, 'data');
 const PORT = Number(process.env.PORT) || 3101;
@@ -80,28 +81,21 @@ function filterRecords(records, q) {
   return (records || []).filter((r) => {
     if (q.khatian_no && toEn(r.khatianNo) !== toEn(q.khatian_no)) return false;
     if (q.owner_name && !norm(r.owners).includes(norm(q.owner_name))) return false;
-    if (q.dag_no && !String(r.dags || '').includes(toEn(q.dag_no))) return false;
+    if (q.dag_no && !toEn(String(r.dags || '')).includes(toEn(q.dag_no))) return false;
     return true;
   });
 }
 
-function maxCollectedAt(records) {
-  let best = null;
-  for (const r of records || []) {
-    if (r && r.collectedAt && (!best || String(r.collectedAt) > String(best))) best = r.collectedAt;
-  }
-  return best;
-}
-
 // ---------- file backend (default) ----------
+// Stored records are RAW (see storeMapping.js): import
+// writes source payloads verbatim; delivery mapping runs
+// only inside search() below, never at write time.
 function createFileBackend() {
   return {
     kind: 'file',
     async upsert({ area, surveyKey, surveyName, jlId, mouzaId, jlNumber, records, source, merge }) {
       const now = new Date().toISOString();
-      const stamped = (records || []).map((r) => ({
-        ...r, surveyKey, surveyName, jlId, collectedAt: r.collectedAt || now,
-      }));
+      const stamped = (records || []).map((r) => toStoredRecord(r, now));
       fs.mkdirSync(DATA_DIR, { recursive: true });
       const target = path.join(DATA_DIR, fileName(jlId, surveyKey));
       const existed = fs.existsSync(target);
@@ -113,8 +107,8 @@ function createFileBackend() {
         try {
           const prev = JSON.parse(fs.readFileSync(target, 'utf8'));
           const byId = new Map();
-          for (const r of prev.records || []) byId.set(String(r.id), r);
-          for (const r of stamped) byId.set(String(r.id), r);
+          for (const r of prev.records || []) byId.set(storedRecordId(r), r);
+          for (const r of stamped) byId.set(storedRecordId(r), r);
           finalRecords = [...byId.values()];
         } catch (_) { finalRecords = stamped; }
       }
@@ -129,12 +123,30 @@ function createFileBackend() {
       fs.renameSync(tmp, target);
       return { upserted: stamped.length, updated: existed, total: finalRecords.length };
     },
-    async search(q) {
+    async search(q, opts) {
       const files = readFiles().filter((f) => scopeMatches(f, q || {}));
       const mouzaCollected = files.length > 0;
-      const records = filterRecords(files.flatMap((f) => f.records || []), q || {});
+      if (opts && opts.raw) {
+        // Raw mode (import merge-prune only): stored
+        // records verbatim, whole unit, no delivery
+        // mapping, no filters.
+        const stored = files.flatMap((f) => f.records || []);
+        return {
+          records: stored,
+          collectedAt: stored.map((r) => storedCollectedAt(r)).filter(Boolean).sort().pop() || null,
+          totalMatches: stored.length, mouzaCollected,
+        };
+      }
+      // Delivery mode: map at serve time, then filter.
+      const pairs = files.flatMap((f) => (f.records || []).map((stored) => ({
+        stored,
+        display: mapStoredToDisplay(stored, { surveyKey: f.surveyKey, surveyName: f.surveyName, jlId: f.jlId }),
+      })));
+      const kept = pairs.filter((p) => filterRecords([p.display], q || {}).length > 0);
+      const records = kept.map((p) => p.display);
       return {
-        records, collectedAt: maxCollectedAt(records),
+        records,
+        collectedAt: kept.map((p) => storedCollectedAt(p.stored)).filter(Boolean).sort().pop() || null,
         totalMatches: records.length, mouzaCollected,
       };
     },
@@ -142,7 +154,7 @@ function createFileBackend() {
       if (!jlId || !surveyKey) return { count: 0 };
       const files = readFiles().filter((f) => sameId(f.jlId, jlId) && f.surveyKey === surveyKey);
       const ids = new Set();
-      for (const f of files) for (const r of f.records || []) if (r && r.id !== undefined) ids.add(r.id);
+      for (const f of files) for (const r of f.records || []) if (storedRecordId(r) !== '') ids.add(storedRecordId(r));
       return { count: ids.size };
     },
     async ping() { return { ok: true }; },
@@ -220,7 +232,7 @@ function createServer(backend) {
       }
       if (req.method === 'GET' && url.pathname === '/v1/records/search') {
         const q = Object.fromEntries(url.searchParams.entries());
-        const out = await store.search(q);
+        const out = await store.search(q, { raw: q.raw === '1' || q.raw === 'true' });
         return send(res, 200, out);
       }
       return send(res, 404, { error: 'NOT_FOUND' });

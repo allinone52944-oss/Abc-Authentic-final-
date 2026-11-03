@@ -77,14 +77,21 @@ Request:
             "mouzaId": "72400", "mouza": "Test Mouza", "jl": "33" },
   "surveyKey": "RS", "surveyName": "আর এস",
   "jlId": "238686", "mouzaId": "72400", "jlNumber": "33",
-  "records": [ { "id": 900, "khatianNo": "8", "owners": "…",
-                 "dags": "1237", "totalLand": "0.0544",
-                 "surveyKey": "RS", "surveyName": "আর এস",
-                 "jlId": "238686", "halSabek": [] } ],
+  "records": [ {
+    "rawIndex": { "ID": 900, "KHATIAN_NO": "8", "OWNERS": "…" },
+    "rawDetail": { "ID": 900, "KHATIAN_NO": "8", "OWNERS": "…",
+                   "DAGS": "1237", "TOTAL_LAND": "0.0544" },
+    "halSabek": [],
+    "meta": { "source": "dlrms", "jlId": "238686",
+              "surveyKey": "RS", "surveyName": "আর এস" }
+  } ],
   "source": "dlrms"
 }
 ```
 
+Stored records are RAW (see `../STORE.md`, "RAW-VERBATIM
+COLLECTION RULE"): the exact portal index + detail JSON,
+verbatim hal-sabek rows, and separate collection metadata.
 `source` carries `dlrms` only. Response: `{ upserted: <n>,
 updated: <bool>, total: <n> }` (`updated` is true when a
 file for that `(jlId, surveyKey)` already existed; `total`
@@ -108,7 +115,12 @@ running increment.
   (the customer frontend sends `mouza_id` only).
 - `survey_key` is one survey key, or `all`/omitted for all.
 - Filters: `khatian_no` exact, `owner_name` substring,
-  `dag_no` substring on `DAGS`.
+  `dag_no` substring on `DAGS`. Filters run on delivery-
+  mapped rows (see `storeMapping.js`); stored payloads are
+  never rewritten to match a filter.
+- `raw=1` (import merge-prune ONLY): returns the stored
+  records verbatim for the whole unit, with NO delivery
+  mapping and NO filters. Default (absent) = display mode.
 
 Response:
 

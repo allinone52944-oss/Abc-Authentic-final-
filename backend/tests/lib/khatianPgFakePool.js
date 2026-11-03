@@ -55,7 +55,7 @@ function createFakePool() {
         }
         return { rows: [{ n: ids.size }] };
       }
-      if (sql.includes('SELECT jl_id, survey_key, mouza_id FROM khatian_units')) {
+      if (sql.includes('SELECT jl_id, survey_key, survey_name, mouza_id FROM khatian_units')) {
         const rows = [...units.values()].filter((u) => {
           if (sql.includes('WHERE jl_id')) return u.jl_id === p[0] && (p.length < 2 || u.survey_key === p[1]);
           return u.mouza_id === p[0] && (p.length < 2 || u.survey_key === p[1]);

@@ -94,6 +94,70 @@ Customer search
   store, read/written via an HTTP API
   (`backend/lib/khatianStore.js`).
 
+## RAW-VERBATIM COLLECTION RULE (Pankaj, 2026-11-03)
+
+**Source records are stored EXACTLY as the source site
+returns them. Arranging/presenting happens later, at
+delivery — never at import.**
+
+- **At import time, nothing is changed, arranged, or
+  rewritten into a new format.** No field is renamed,
+  dropped, or reformatted. The stored record is:
+  - `rawIndex` — the exact portal index item JSON, untouched
+    (including fields the old display mapping dropped, e.g.
+    `KHATIAN_ENTRY_ID`, area names, non-deliverable flags);
+  - `rawDetail` — the exact portal detail item JSON, untouched;
+  - `halSabek` — the exact hal-sabek rows (verbatim; `[]`
+    when none/failed, best-effort only);
+  - `meta` — collection metadata ONLY, kept separately:
+    `source` (`'dlrms'`), `collectedAt` (ISO), `jlId`,
+    `surveyKey`, `surveyName`. Metadata never rewrites a
+    source field, and unit scope (`jlId`/`surveyKey`) is also
+    carried by the unit itself (file name, PG unit row, index
+    row) and is authoritative for delivery mapping.
+- **Presentation/summary mapping happens ONLY at delivery
+  time**, in `store-server/storeMapping.js`
+  (`mapStoredToDisplay`): `id` from `rawIndex.ID`,
+  `khatianNo` from `rawDetail.KHATIAN_NO` (falling back to
+  `rawIndex.KHATIAN_NO` when the detail value is null/empty),
+  `owners`/`dags`/`totalLand` from the detail, `surveyKey`/
+  `surveyName`/`jlId` from unit context. Delivery filters
+  (khatian exact, owner substring, dag substring) run on the
+  mapped display rows, with Bengali-digit normalisation on
+  BOTH sides at filter time — the stored payload is never
+  rewritten to make a filter match.
+- **Where the rule is enforced:**
+  - `engines/land-khatian/adapter.js` — live `search()`
+    returns `rawItems` alongside display `items`; `importMouza()`
+    returns raw stored records (its `indexItems` are
+    reconciliation keys only, never stored).
+  - `backend/routes/land-khatian.js` — `collectLiveResult`
+    stores ONLY `result.rawItems` (grouped by `meta.jlId`/
+    `meta.surveyKey`) and SKIPS collecting entirely when
+    `rawItems` are absent, rather than storing display rows;
+    the import route counts dags from `rawDetail.DAGS` and
+    merge-prunes via a raw store search.
+  - All three store implementations (app-side local store,
+    store-server file backend, store-server PG backend) —
+    upserts pass through `toStoredRecord` (raw payloads
+    preserved exactly, non-payload keys dropped,
+    `meta.collectedAt` stamped when missing); display search
+    maps via `mapStoredToDisplay` then filters; raw search
+    (`search(q, { raw: true })`, HTTP `raw=1`) returns stored
+    records verbatim for the whole unit, with no mapping and
+    no filters — it exists ONLY for the import merge-prune.
+  - Dedupe/count key = `storedRecordId` = `String(rawIndex.ID)`
+    (legacy display rows fall back to their own `id`).
+- **Legacy rows:** display-shaped rows written before this
+  rule (pre-rule test fixtures only — collection has NOT
+  started, so no real records exist to migrate) pass through
+  `toStoredRecord`/`mapStoredToDisplay` unchanged, so old
+  reads keep working. NO new write may use the legacy shape.
+- **Tests:** `backend/tests/lib/khatian-raw-rule.test.js`
+  proves stored bytes deep-equal the source payload, delivery
+  mapping equals the old normalize output for the same
+  detail, and local/PG/HTTP round-trips in both modes.
+
 ## Stale-charge decision (Pankaj may overrule to free)
 
 A stale (store) delivery is **charged exactly like a normal
