@@ -568,6 +568,305 @@ router.get('/orders', async (req, res) => {
   }
 });
 
+// ============================================================
+// UNIFIED SERVICES (sidebar-unified-orders)
+// ============================================================
+// GET /api/admin/unified-services?type=&status=&q=&page=&limit=
+// The single order section: one date-DESC list merging three
+// sources — orders rows, engine_jobs instant-delivery records,
+// and bdris_applications application rows. Auth + pagination
+// style mirror GET /api/admin/orders above (pageParams).
+//
+// kind: 'order' | 'delivery' | 'application', plus the Bengali
+// kind_label ('অর্ডার' | 'ডেলিভারি' | 'আবেদন') for display.
+// NO dedupe is ever applied: a verification may legitimately
+// appear as both an order row and a delivery row — the kind
+// labels make that clear instead of hiding rows.
+//
+// Type rule is the orders list's rule, verbatim:
+//   manual: service type 'manual' OR order data contains
+//           '_manual_form' — orders only; delivery and
+//           application rows are excluded from this view.
+//   auto:   service type != 'manual' AND order data does NOT
+//           contain '_manual_form' — plus ALL delivery and
+//           application rows (they are instant-delivery /
+//           application records, not manual submissions).
+//   absent / '' / anything else: all three sources, no type
+//   condition (same as the orders list ignoring unknown types).
+//
+// Status applies to ORDER rows only. In সব/অটো views, delivery
+// and application rows always show regardless of ?status= — no
+// status mapping is invented for them (they carry status null).
+//
+// User search (q) mirrors the orders list: user name / phone
+// ILIKE, plus the digit-only phone equivalence (a 01… query
+// matches a stored 8801… number and vice versa, because the
+// stored digits contain the local form as a substring), plus
+// service names. Per source the search also covers that
+// source's own identifiers (order id, delivery ref_no /
+// subject name, application ack_no / applicant name), the
+// same coverage its standalone admin tab already had.
+//
+// userTotal: only when q is non-empty and resolves to a user
+// (name / phone match in the users table; a service-name-only
+// match yields null). Kept-money definition, extended from
+// the per-user manual summary to all types: COUNT + SUM(price)
+// over that user's orders with status completed/delivered
+// ONLY. Delivery and application rows have no price column
+// and contribute 0, so a row appearing twice (order +
+// delivery) is never double-counted. When the user has no
+// completed/delivered order, the object still returns with
+// service_count 0 and total_money 0. A name that matches
+// several users resolves to the full-phone match first
+// (stored digits equal the query digits, or equal to them
+// with the 880 prefix), else the first name in alphabetical
+// order.
+//
+// Response: { rows, total, page, pages, userTotal }
+//   rows: [{ kind, kind_label, id, service_label, user_name,
+//            user_phone, created_at (ISO), price, status }]
+//   price: order price for order rows, 0 otherwise.
+//   status: order status for order rows, null otherwise.
+//   Order rows also carry service_type, service_engine,
+//   is_manual, refund_balance and refund_at (same columns as
+//   GET /api/admin/orders) for the list badge + refund line.
+//   Delivery/application rows carry none of those.
+//   total: sum of the per-source counts (before pagination,
+//          after filters). Rows are merged in JS and sliced
+//          for the page, so the page boundary is exact
+//          across sources. This reads the full filtered set
+//          per source (no per-source LIMIT) — correct for a
+//          merged page, at the cost of a wider read on very
+//          large tables; acceptable for an admin list, and
+//          noted here rather than hidden behind a cap that
+//          would silently break total/pages.
+//   service_label: Bengali service name where available, else
+//          the engine/service id. Orders: s.name_bn, else
+//          s.name, else engine_id, else service id. Delivery
+//          rows: the engine's Bengali label (same map as
+//          routes/engine-jobs.js SERVICE_LABELS), else the
+//          engine_id. Application rows: 'জন্ম নিবন্ধন আবেদন'
+//          (the label the bdris-apply engine itself uses
+//          when it notifies the customer).
+// This endpoint is READ-ONLY. It touches no notification,
+// charge, refund, or delete logic, and GET /api/admin/orders
+// stays completely untouched.
+const UNIFIED_DELIVERY_LABELS = { 'bdris-certificate': 'জন্ম সনদ যাচাই', 'death-verify': 'মৃত্যু সনদ যাচাই' };
+const UNIFIED_APPLICATION_LABEL = 'জন্ম নিবন্ধন আবেদন';
+
+function unifiedIso(v) {
+  try {
+    if (v === null || v === undefined || v === '') return null;
+    const d = v instanceof Date ? v : new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  } catch (_) { return null; }
+}
+
+router.get('/unified-services', async (req, res) => {
+  try {
+    const { page, limit, offset } = pageParams(req);
+    const type = (req.query.type || '').trim();
+    const status = (req.query.status || '').trim();
+    const qRaw = (req.query.q || '').trim();
+    const qDigits = qRaw.replace(/\D/g, '');
+    const isManual = type === 'manual';
+    const isAuto = type === 'auto';
+
+    // ---- shared user-search fragment (orders-list approach) ----
+    // Returns { clause, params } for one source's WHERE, using
+    // param indexes starting at `i`. `textCols` are the ILIKE
+    // columns for this source; the digit-only phone clause is
+    // appended for the user-phone column `phoneCol`.
+    function userSearch(i, textCols, phoneCol) {
+      if (!qRaw) return { clause: '', params: [], next: i };
+      const params = ['%' + qRaw + '%'];
+      // NOTE: textCols are interpolated column names from this
+      // file only, never from the request — values stay params.
+      let clause = '(' + textCols.map((c) => `${c} ILIKE $${i}`).join(' OR ') + ')';
+      if (qDigits) {
+        clause += ` OR regexp_replace(${phoneCol}, '[^0-9]', '', 'g') LIKE $${i + 1}`;
+        params.push('%' + qDigits + '%');
+        return { clause, params, next: i + 2 };
+      }
+      return { clause, params, next: i + 1 };
+    }
+
+    // ---- orders source ----
+    let orderRows = [];
+    let orderCount = 0;
+    {
+      const conds = [];
+      const params = [];
+      let i = 1;
+      if (status) { conds.push(`o.status = $${i++}`); params.push(status); }
+      if (qRaw) {
+        const s = userSearch(i,
+          ['u.name', 'u.phone', 's.name', 's.name_bn', 'CAST(o.id AS TEXT)'], 'u.phone');
+        conds.push(s.clause); params.push(...s.params); i = s.next;
+      }
+      if (isManual) conds.push(`(s.type = 'manual' OR (o.data::text LIKE '%_manual_form%'))`);
+      else if (isAuto) conds.push(`(s.type != 'manual' AND NOT (o.data::text LIKE '%_manual_form%'))`);
+      const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+      const totalR = await db.query(
+        `SELECT COUNT(*) FROM orders o JOIN users u ON u.id = o.user_id
+         JOIN services s ON s.id = o.service_id ${where}`, params);
+      orderCount = parseInt(totalR.rows[0] && totalR.rows[0].count, 10) || 0;
+      const r = await db.query(
+        `SELECT o.id, o.created_at, o.price, o.status,
+                u.name AS user_name, u.phone AS user_phone,
+                s.id AS service_id, s.engine_id AS service_engine,
+                s.name AS service_name, s.name_bn AS service_name_bn,
+                s.type AS service_type,
+                (s.type = 'manual' OR o.data::text LIKE '%_manual_form%') AS is_manual,
+                (SELECT amount FROM transactions
+                  WHERE user_id = o.user_id AND trxid = 'refund-' || o.id::text
+                    AND status = 'approved' LIMIT 1) AS refund_balance,
+                (SELECT created_at FROM transactions
+                  WHERE user_id = o.user_id AND trxid = 'refund-' || o.id::text
+                    AND status = 'approved' LIMIT 1) AS refund_at
+         FROM orders o JOIN users u ON u.id = o.user_id
+         JOIN services s ON s.id = o.service_id
+         ${where} ORDER BY o.created_at DESC`, params);
+      orderRows = (r.rows || []).map((row) => ({
+        kind: 'order',
+        kind_label: 'অর্ডার',
+        id: row.id,
+        service_label: row.service_name_bn || row.service_name || row.service_engine || row.service_id || '',
+        user_name: row.user_name,
+        user_phone: row.user_phone,
+        created_at: unifiedIso(row.created_at),
+        price: Number(row.price) || 0,
+        status: row.status || null,
+        // List-display fields restored from GET /api/admin/orders
+        // (manual/auto badge + refund line). Order rows only —
+        // delivery/application rows carry no such fields.
+        service_type: row.service_type || null,
+        service_engine: row.service_engine || null,
+        is_manual: row.is_manual === true,
+        refund_balance: (row.refund_balance === null || row.refund_balance === undefined)
+          ? null : Number(row.refund_balance),
+        refund_at: unifiedIso(row.refund_at),
+      }));
+    }
+
+    // ---- instant-delivery source (engine_jobs) ----
+    // Skipped entirely in the manual view. No status filter
+    // is applied here, whatever ?status= says.
+    let deliveryRows = [];
+    let deliveryCount = 0;
+    if (!isManual) {
+      const conds = [];
+      const params = [];
+      let i = 1;
+      if (qRaw) {
+        const s = userSearch(i,
+          ['u.name', 'u.phone', 'j.subject_name', 'j.ref_no', 'j.engine_id', 'CAST(j.id AS TEXT)'], 'u.phone');
+        conds.push(s.clause); params.push(...s.params); i = s.next;
+      }
+      const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+      const totalR = await db.query(
+        `SELECT COUNT(*) FROM engine_jobs j JOIN users u ON u.id = j.user_id ${where}`, params);
+      deliveryCount = parseInt(totalR.rows[0] && totalR.rows[0].count, 10) || 0;
+      const r = await db.query(
+        `SELECT j.id, j.created_at, j.engine_id,
+                u.name AS user_name, u.phone AS user_phone
+         FROM engine_jobs j JOIN users u ON u.id = j.user_id
+         ${where} ORDER BY j.created_at DESC`, params);
+      deliveryRows = (r.rows || []).map((row) => ({
+        kind: 'delivery',
+        kind_label: 'ডেলিভারি',
+        id: row.id,
+        service_label: UNIFIED_DELIVERY_LABELS[row.engine_id] || row.engine_id || '',
+        user_name: row.user_name,
+        user_phone: row.user_phone,
+        created_at: unifiedIso(row.created_at),
+        price: 0,
+        status: null,
+      }));
+    }
+
+    // ---- application source (bdris_applications) ----
+    // Skipped entirely in the manual view. No status filter
+    // is applied here, whatever ?status= says.
+    let applicationRows = [];
+    let applicationCount = 0;
+    if (!isManual) {
+      const conds = [];
+      const params = [];
+      let i = 1;
+      if (qRaw) {
+        const s = userSearch(i,
+          ['u.name', 'u.phone', 'a.applicant_name', 'a.ack_no', 'CAST(a.id AS TEXT)'], 'u.phone');
+        conds.push(s.clause); params.push(...s.params); i = s.next;
+      }
+      const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+      const totalR = await db.query(
+        `SELECT COUNT(*) FROM bdris_applications a JOIN users u ON u.id = a.user_id ${where}`, params);
+      applicationCount = parseInt(totalR.rows[0] && totalR.rows[0].count, 10) || 0;
+      const r = await db.query(
+        `SELECT a.id, a.created_at, a.ack_no, a.applicant_name,
+                u.name AS user_name, u.phone AS user_phone
+         FROM bdris_applications a JOIN users u ON u.id = a.user_id
+         ${where} ORDER BY a.created_at DESC`, params);
+      applicationRows = (r.rows || []).map((row) => ({
+        kind: 'application',
+        kind_label: 'আবেদন',
+        id: row.id,
+        service_label: UNIFIED_APPLICATION_LABEL,
+        user_name: row.user_name,
+        user_phone: row.user_phone,
+        created_at: unifiedIso(row.created_at),
+        price: 0,
+        status: null,
+      }));
+    }
+
+    // ---- merge, date DESC (stable: ties keep source order
+    // orders, then deliveries, then applications), paginate ----
+    const total = orderCount + deliveryCount + applicationCount;
+    const merged = [...orderRows, ...deliveryRows, ...applicationRows]
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    const pages = Math.ceil(total / limit);
+    const rows = merged.slice(offset, offset + limit);
+
+    // ---- per-user kept-money summary (q only) ----
+    let userTotal = null;
+    if (qRaw) {
+      const uParams = ['%' + qRaw + '%'];
+      let uWhere = `(u.name ILIKE $1 OR u.phone ILIKE $1)`;
+      let uOrder = 'u.name ASC';
+      if (qDigits) {
+        // $2 = LIKE pattern for substring digit match,
+        // $3 = bare digits for exact-phone-first ranking.
+        uWhere += ` OR regexp_replace(u.phone, '[^0-9]', '', 'g') LIKE $2`;
+        uParams.push('%' + qDigits + '%', qDigits);
+        uOrder = `CASE WHEN regexp_replace(u.phone, '[^0-9]', '', 'g') IN ($3, '880' || $3) THEN 0 ELSE 1 END, u.name ASC`;
+      }
+      const cand = await db.query(
+        `SELECT u.id, u.name, u.phone FROM users u WHERE ${uWhere} ORDER BY ${uOrder} LIMIT 1`, uParams);
+      if (cand.rows && cand.rows.length) {
+        const user = cand.rows[0];
+        const sum = await db.query(
+          `SELECT COUNT(*) AS service_count, COALESCE(SUM(o.price), 0) AS total_money
+           FROM orders o WHERE o.user_id = $1 AND o.status IN ('completed', 'delivered')`,
+          [user.id]);
+        const s = (sum.rows && sum.rows[0]) || {};
+        userTotal = {
+          user_name: user.name,
+          user_phone: user.phone,
+          service_count: parseInt(s.service_count, 10) || 0,
+          total_money: Number(s.total_money) || 0,
+        };
+      }
+    }
+
+    res.json({ rows, total, page, pages, userTotal });
+  } catch (e) {
+    safeLog('[admin] unified services error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 // GET /api/admin/manual-user-summary — read-only per-user manual
 // summary for the manual-centric orders tab (P3 redesign). No
 // charge, transaction or order logic lives here: it only counts.

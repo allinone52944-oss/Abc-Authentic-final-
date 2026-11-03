@@ -1497,38 +1497,55 @@ const ORDER_LABELS_BN = {
 TABS.orders = async () => {
   const _f = TABS._f || '';
   const _q = TABS._q || '';
-  // P3 redesign: the orders section is manual-centric — first open
-  // defaults to manual. An explicit '' ("সব ধরন") is a real choice
-  // and must survive, so only undefined gets the default.
+  // Sidebar-unified orders (2026-11-03): the orders section is the
+  // ONLY order section now — the separate BDRIS / engine /
+  // instant-delivery sidebar sections are gone. Every row here
+  // comes from GET /api/admin/unified-services (backend-owned
+  // contract): { rows: [{ kind, id, service_label, user_name,
+  // user_phone, created_at, price, status }], total, page, pages,
+  // userTotal }. Rows are never hidden: a verification may
+  // legitimately appear twice (once as an order, once as a
+  // delivery) and both rows stay visible.
   if (TABS._orderType === undefined) TABS._orderType = 'manual';
   const _type = TABS._orderType;
   const _page = TABS._opage || 1;
   // P2: preserve scroll across list re-renders (after an action the
   // admin used to land back at the top). First load stays at top.
-  const _hadList = (TABS._orders || []).length > 0;
+  const _hadList = (TABS._unifiedRows || []).length > 0;
   const _scrollY = window.scrollY;
-  let url = '/admin/orders?limit=50&page=' + _page;
+  let url = '/admin/unified-services?limit=50&page=' + _page;
+  if (_type) url += '&type=' + encodeURIComponent(_type);
   if (_f) url += '&status=' + encodeURIComponent(_f);
   if (_q) url += '&q=' + encodeURIComponent(_q);
-  if (_type) url += '&type=' + encodeURIComponent(_type);
 
-  const [ordersRes, statsRes, summaryRes] = await Promise.all([
+  const [uniRes, statsRes, summaryRes] = await Promise.all([
     ABC.api(url),
     ABC.api('/admin/stats').catch(() => ({ ok: false })),
-    (_type === 'manual' ? ABC.api('/admin/manual-user-summary').catch(() => ({ ok: false })) : Promise.resolve(null))
+    ((_type === 'manual' && !_q) ? ABC.api('/admin/manual-user-summary').catch(() => ({ ok: false })) : Promise.resolve(null))
   ]);
 
-  const d = await ordersRes.json().catch(() => ({}));
-  if (!ordersRes.ok) throw new Error(d.error && d.error !== 'FAILED' ? d.error : 'অর্ডার লোড ব্যর্থ (সার্ভার সমস্যা)');
-  // F2: an out-of-range page (rows deleted / transitioned away
-  // since the page opened) steps back to the last real page
-  // instead of rendering an empty out-of-range page.
-  const _total0 = (d.total !== undefined && d.total !== null) ? Number(d.total) : (d.orders || []).length;
-  const _pages0 = Math.max(1, Math.ceil(_total0 / 50));
-  if (_page > _pages0) { TABS._opage = _pages0; return TABS.orders(); }
+  const d = await uniRes.json().catch(() => ({}));
+  if (!uniRes.ok) throw new Error(d.error && d.error !== 'FAILED' ? d.error : 'তালিকা লোড ব্যর্থ (সার্ভার সমস্যা)');
+  // Out-of-range page (rows deleted / transitioned away since the
+  // page opened) steps back to the last real page instead of
+  // rendering an empty out-of-range page.
+  const _rows = d.rows || [];
+  const _total = (d.total !== undefined && d.total !== null) ? Number(d.total) : _rows.length;
+  const _pages = Math.max(1, (d.pages !== undefined && d.pages !== null) ? Number(d.pages) : Math.ceil(_total / 50));
+  if (_page > _pages) { TABS._opage = _pages; return TABS.orders(); }
   const stats = statsRes.ok ? await statsRes.json().catch(() => ({})) : {};
   const summaryData = (summaryRes && summaryRes.ok) ? await summaryRes.json().catch(() => null) : null;
-  TABS._orders = d.orders || [];
+  TABS._unifiedRows = _rows;
+  // Order-kind rows keep the legacy list too: findOrder() and the
+  // order detail / pipeline actions read from it. service_label is
+  // aliased so the detail + delete dialogs show the service name.
+  TABS._orders = _rows.filter(r => r.kind === 'order').map(r => {
+    if (!r.service_name_bn && !r.service_name) r.service_name_bn = r.service_label;
+    return r;
+  });
+  // Selection is per rendered list: a new render (filter, search,
+  // page, reload) starts with nothing selected.
+  TABS._uniSelected = {};
   // P2: the manual type-tab badge counts paid manual ORDERS (the
   // tab's own rows), not the free submission queue. manual_new
   // (submission queue) is left untouched for its other uses.
@@ -1551,6 +1568,8 @@ TABS.orders = async () => {
     { key: 'refunded', label: 'রিফান্ডেড', count: stats.orders_refunded }
   ];
 
+  const KIND_LABEL = { order: 'অর্ডার', delivery: 'ডেলিভারি', application: 'আবেদন' };
+
   let html = '<div class="adm-orders-wrap">' +
     '<!-- Top Toolbar & Search -->' +
     '<div class="adm-orders-toolbar">' +
@@ -1572,12 +1591,30 @@ TABS.orders = async () => {
       '</div>' +
     '</div>' +
     '<div style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">ℹ️ ট্যাবের সংখ্যাগুলো মোট হিসাব — বর্তমান ফিল্টার/সার্চের নয়।</div>' +
+    // Status tabs apply to ORDER rows only (the endpoint already
+    // does this). In the manual view every shown row is an order
+    // row, so the note is unnecessary there.
+    (_type !== 'manual' ? '<div style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">ℹ️ স্ট্যাটাস ফিল্টার শুধু অর্ডার সারির ক্ষেত্রে প্রযোজ্য — ডেলিভারি ও আবেদন সারি স্ট্যাটাস ফিল্টারে লুকায় না।</div>' : '') +
+
+    (function () {
+      // User search total: display only — no button, no refund
+      // wording, no action of any kind.
+      if (!_q || !d.userTotal) return '';
+      const ut = d.userTotal;
+      return '<div class="adm-table-card" style="margin-top:14px;">' +
+        '<div style="font-size:15px;font-weight:700;margin-bottom:4px;">মোট কাজের টাকা (সম্পন্ন/ডেলিভার্ড)</div>' +
+        '<div style="font-size:13px;line-height:1.7;color:var(--text-main);">' +
+          '<div>👤 <b>গ্রাহক:</b> ' + esc(ut.user_name || 'গ্রাহক') + ' <span class="s">' + esc(ut.user_phone || '') + '</span></div>' +
+          '<div>📦 <b>মোট কাজ:</b> ' + bn(ut.service_count) + 'টি</div>' +
+          '<div>💰 <b>মোট টাকা:</b> <span class="adm-price-badge">৳' + bn(ut.total_money) + '</span></div>' +
+        '</div></div>';
+    })() +
 
     (function () {
       // P3 redesign: per-user manual summary, only on the manual
-      // filter (the default). Read-only counts from the backend
-      // endpoint; never a charge or transaction.
-      if (_type !== 'manual') return '';
+      // filter with no search active. Read-only counts from the
+      // backend endpoint; never a charge or transaction.
+      if (_type !== 'manual' || _q) return '';
       let inner = '<div style="font-size:15px;font-weight:700;margin-bottom:4px;">👥 ইউজারপ্রতি ম্যানুয়াল সারাংশ</div>' +
         '<div class="s" style="margin-bottom:10px;">শুধু সম্পন্ন ও ডেলিভার্ড ম্যানুয়াল অর্ডার গোনা হয়েছে — নতুন, অপেক্ষমান, প্রসেসিং, ব্যর্থ, বাতিল ও রিফান্ডেড অর্ডার এই হিসাবে নেই।</div>';
       if (!summaryData) {
@@ -1594,100 +1631,126 @@ TABS.orders = async () => {
           '<div class="s" style="margin-top:8px;">মোট ' + bn(summaryData.total_users) + ' জন ইউজার' +
           (summaryData.has_more ? ' · আরো ' + bn(summaryData.total_users - summaryData.shown) + ' জন ইউজার আছে — সেরা ৫০ জন দেখানো হচ্ছে' : '') + '</div>';
       }
-      return '<div class="adm-table-card" style="margin-bottom:14px;">' + inner + '</div>';
+      return '<div class="adm-table-card" style="margin-top:14px;">' + inner + '</div>';
     })() +
 
-    '<!-- Orders Table Card -->' +
-    '<div class="adm-table-card">' +
+    // Bulk bar: filled + shown by updateUniBulkBar() only while at
+    // least one row is selected; hidden otherwise.
+    '<div id="admUniBulkBar" style="display:none;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;"></div>' +
+
+    '<!-- Unified Table Card -->' +
+    '<div class="adm-table-card" style="margin-top:14px;">' +
       '<div style="overflow-x:auto;">' +
         '<table class="adm-table">' +
           '<thead><tr>' +
+            '<th style="width:34px;"><input type="checkbox" id="admUniSelAll" aria-label="এই পেজের সব সারি বাছাই করুন" onclick="AdmOrders.toggleUniSelAll(this)"></th>' +
+            '<th>ধরন</th>' +
             '<th>অর্ডার ও গ্রাহক</th>' +
             '<th>সেবা</th>' +
             '<th>মূল্য</th>' +
             '<th>স্ট্যাটাস</th>' +
             '<th>তারিখ ও সময়</th>' +
-            '<th style="text-align:right;">অ্যাকশন ও প্রসেসিং</th>' +
+            '<th style="text-align:right;">অ্যাকশন</th>' +
           '</tr></thead>' +
           '<tbody>';
 
-  if (!TABS._orders.length) {
-    html += '<tr><td colspan="6" style="text-align:center;padding:48px 20px;color:var(--text-muted);">' +
+  if (!_rows.length) {
+    html += '<tr><td colspan="8" style="text-align:center;padding:48px 20px;color:var(--text-muted);">' +
       '<div style="font-size:36px;margin-bottom:8px;">📦</div>' +
-      '<div style="font-size:15px;font-weight:600;">কোনো অর্ডার পাওয়া যায়নি</div>' +
+      '<div style="font-size:15px;font-weight:600;">কোনো সারি পাওয়া যায়নি</div>' +
       '<div style="font-size:12px;margin-top:4px;">অন্য কোনো ফিল্টার বা সার্চ দিয়ে চেষ্টা করুন।</div>' +
       '</td></tr>';
   } else {
-    for (const o of TABS._orders) {
-      const uName = o.user_name || 'গ্রাহক';
+    for (const r of _rows) {
+      const uName = r.user_name || 'গ্রাহক';
       const initials = uName.slice(0, 2).toUpperCase();
-      const stClass = 'st-' + (o.status || 'new');
-      const stText = STBN[o.status] || o.status;
+      const stClass = 'st-' + (r.status || 'new');
+      const stText = STBN[r.status] || (r.status === 'success' ? 'সম্পন্ন' : (r.status || '—'));
+      const priceHtml = (r.price === undefined || r.price === null)
+        ? '<span style="color:var(--text-muted);">—</span>'
+        : '<span class="adm-price-badge">৳' + bn(r.price) + '</span>';
 
-      // Smart Quick Action button
-      let quickActionBtn = '';
-      if (o.status === 'new' || o.status === 'pending') {
-        quickActionBtn = '<button class="btn-quick-primary" onclick="AdmOrders.startProcessing(\'' + o.id + '\', this)">▶️ গ্রহণ করুন</button>';
-      } else if (o.status === 'processing') {
-        quickActionBtn = '<button class="btn-quick-success" onclick="AdmOrders.openQuickComplete(\'' + o.id + '\')">✅ সম্পন্ন ও ডেলিভারি</button>';
-      } else if (o.status === 'completed') {
-        quickActionBtn = '<button class="btn-quick-emerald" onclick="AdmOrders.markDelivered(\'' + o.id + '\', this)">🚀 ডেলিভার্ড করুন</button>';
-      } else if (o.status === 'delivered') {
-        quickActionBtn = '<span style="color:#059669;font-weight:700;font-size:11px;">✓ ডেলিভার্ড সম্পন্ন</span>';
-      } else if (o.status === 'cancelled' || o.status === 'failed') {
-        // P1: dead rows get a useful action — refund (backend guard
-        // answers ALREADY_REFUNDED in Bengali when money is back).
-        quickActionBtn = '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\', this)">↩️ রিফান্ড</button>';
-      } else if (o.status === 'refunded') {
-        quickActionBtn = '<span style="color:#059669;font-weight:700;font-size:11px;">↩️ ফেরত সম্পন্ন</span>';
+      let actionsHtml = '';
+      if (r.kind === 'order') {
+        // Smart Quick Action button (same status logic as before —
+        // pipeline buttons live only on order rows, never on
+        // instant-delivery records).
+        let quickActionBtn = '';
+        if (r.status === 'new' || r.status === 'pending') {
+          quickActionBtn = '<button class="btn-quick-primary" onclick="AdmOrders.startProcessing(\'' + r.id + '\', this)">▶️ গ্রহণ করুন</button>';
+        } else if (r.status === 'processing') {
+          quickActionBtn = '<button class="btn-quick-success" onclick="AdmOrders.openQuickComplete(\'' + r.id + '\')">✅ সম্পন্ন ও ডেলিভারি</button>';
+        } else if (r.status === 'completed') {
+          quickActionBtn = '<button class="btn-quick-emerald" onclick="AdmOrders.markDelivered(\'' + r.id + '\', this)">🚀 ডেলিভার্ড করুন</button>';
+        } else if (r.status === 'delivered') {
+          quickActionBtn = '<span style="color:#059669;font-weight:700;font-size:11px;">✓ ডেলিভার্ড সম্পন্ন</span>';
+        } else if (r.status === 'cancelled' || r.status === 'failed') {
+          // Dead rows get a useful action — refund (backend guard
+          // answers ALREADY_REFUNDED in Bengali when money is back).
+          quickActionBtn = '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + r.id + '\', this)">↩️ রিফান্ড</button>';
+        } else if (r.status === 'refunded') {
+          quickActionBtn = '<span style="color:#059669;font-weight:700;font-size:11px;">↩️ ফেরত সম্পন্ন</span>';
+        }
+        actionsHtml = '<div class="adm-action-grp" style="justify-content:flex-end;">' +
+          quickActionBtn +
+          '<button class="adm-icon-btn" title="সম্পূর্ণ তথ্য পর্যালোচনা ও ডেলিভারি" aria-label="অর্ডারের বিস্তারিত দেখুন" onclick="AdmOrders.viewUnifiedOrder(\'' + r.id + '\')">👁️ বিস্তারিত</button>' +
+          '<button class="adm-icon-btn" title="গ্রাহকের সাথে সাপোর্ট চ্যাট" aria-label="গ্রাহকের সাথে সাপোর্ট চ্যাট" onclick="AdmOrders.supportForm(\'' + r.id + '\')">💬</button>' +
+          (['cancelled', 'refunded', 'failed'].includes(r.status)
+            ? '<button class="adm-icon-btn" title="বাতিল/ব্যর্থ/রিফান্ডেড অর্ডারে ডেলিভারি দেওয়া যায় না" aria-label="ডেলিভারি দেওয়া যায় না" disabled style="opacity:0.35;cursor:not-allowed;">📎</button>'
+            : '<button class="adm-icon-btn" title="ডেলিভারি ফাইল আপলোড" aria-label="ডেলিভারি ফাইল আপলোড" onclick="AdmOrders.deliForm(\'' + r.id + '\')">📎</button>') +
+          '<button class="adm-icon-btn danger" title="অর্ডার ডিলিট করুন" aria-label="অর্ডার ডিলিট করুন" onclick="AdmOrders.deleteOrder(\'' + r.id + '\')">🗑️</button>' +
+        '</div>';
+      } else {
+        // Instant-delivery records: only view + the same single
+        // delete the old sections offered — no pipeline buttons.
+        const delCall = r.kind === 'delivery' ? 'AdmOrders.deleteEngineJob' : 'AdmOrders.deleteBdrisApp';
+        actionsHtml = '<div class="adm-action-grp" style="justify-content:flex-end;">' +
+          '<button class="adm-icon-btn" title="বিস্তারিত দেখুন" aria-label="বিস্তারিত দেখুন" onclick="AdmOrders.viewUnifiedRecord(\'' + r.kind + '\',\'' + r.id + '\')">👁️ দেখুন</button>' +
+          '<button class="adm-icon-btn danger" title="ডিলিট করুন" aria-label="ডিলিট করুন" onclick="' + delCall + '(\'' + r.id + '\')">🗑️</button>' +
+        '</div>';
       }
 
       html += '<tr>' +
+        '<td><input type="checkbox" class="adm-uni-rowcb" data-kind="' + esc(r.kind) + '" data-id="' + esc(String(r.id)) + '" aria-label="সারি বাছাই করুন" onclick="AdmOrders.toggleUniSel(this)"></td>' +
+        '<td><span style="font-size:12px;font-weight:700;white-space:nowrap;">' + esc(KIND_LABEL[r.kind] || r.kind) + '</span></td>' +
         '<td>' +
           '<div class="adm-user-cell">' +
             '<div class="adm-user-avatar">' + esc(initials) + '</div>' +
             '<div>' +
               '<div class="adm-user-name">' + esc(uName) + '</div>' +
               '<div class="adm-user-phone">' +
-                '<span>📞 <a href="tel:' + esc(o.user_phone) + '" style="color:inherit;text-decoration:none;">' + esc(o.user_phone) + '</a></span>' +
-                '<span class="adm-order-tag" style="cursor:pointer;" title="অর্ডার নম্বর কপি করতে ক্লিক করুন" onclick="AdmOrders.copyVal(\'#' + esc(String(o.id).slice(0, 8)) + '\')">#' + esc(String(o.id).slice(0, 8)) + '</span>' +
+                '<span>📞 <a href="tel:' + esc(r.user_phone) + '" style="color:inherit;text-decoration:none;">' + esc(r.user_phone) + '</a></span>' +
+                '<span class="adm-order-tag" style="cursor:pointer;" title="অর্ডার নম্বর কপি করতে ক্লিক করুন" onclick="AdmOrders.copyVal(\'#' + esc(String(r.id).slice(0, 8)) + '\')">#' + esc(String(r.id).slice(0, 8)) + '</span>' +
               '</div>' +
             '</div>' +
           '</div>' +
         '</td>' +
         '<td>' +
-          '<div class="adm-svc-title">' + esc(o.service_name_bn || o.service_name || 'সেবা') + '</div>' +
-          '<div class="adm-order-meta">' +
-            (o.service_type === 'manual' || (o.data && (typeof o.data === 'object' ? o.data._manual_form : String(o.data).includes('_manual_form')))
-              ? '<span class="adm-type-badge manual">📝 ম্যানুয়াল</span>'
-              : '<span class="adm-type-badge auto">⚙️ অটো</span>') +
-            (o.service_engine ? '<span class="adm-engine-mini">' + esc(o.service_engine) + '</span>' : '') +
-          '</div>' +
-        '</td>' +
-        '<td>' +
-          '<span class="adm-price-badge">৳' + bn(o.price) + '</span>' +
-          (o.refund_balance !== undefined && o.refund_balance !== null
-            ? '<div style="font-size:11px;color:#059669;font-weight:700;margin-top:2px;">↩️ ' + (Number(o.refund_balance) > 0 ? ('ফেরত ৳' + bn(o.refund_balance)) : 'ফেরত দেওয়া হয়েছে (ক্রেডিটে)') + (o.refund_at ? ' · ' + new Date(o.refund_at).toLocaleDateString('bn-BD') : '') + '</div>'
+          '<div class="adm-svc-title">' + esc(r.service_label || 'সেবা') + '</div>' +
+          // Restored from the old orders list (unified row contract
+          // now carries these on ORDER rows only — never invented
+          // for delivery/application rows, which show no badge).
+          (r.kind === 'order'
+            ? '<div class="adm-order-meta">' +
+              (r.is_manual || r.service_type === 'manual'
+                ? '<span class="adm-type-badge manual">📝 ম্যানুয়াল</span>'
+                : '<span class="adm-type-badge auto">⚙️ অটো</span>') +
+              (r.service_engine ? '<span class="adm-engine-mini">' + esc(r.service_engine) + '</span>' : '') +
+            '</div>'
             : '') +
         '</td>' +
+        '<td>' + priceHtml +
+          (r.kind === 'order' && r.refund_balance !== undefined && r.refund_balance !== null
+            ? '<div style="font-size:11px;color:#059669;font-weight:700;margin-top:2px;">↩️ ' + (Number(r.refund_balance) > 0 ? ('ফেরত ৳' + bn(r.refund_balance)) : 'ফেরত দেওয়া হয়েছে (ক্রেডিটে)') + (r.refund_at ? ' · ' + new Date(r.refund_at).toLocaleDateString('bn-BD') : '') + '</div>'
+            : '') + '</td>' +
         '<td>' +
           '<span class="st-badge ' + stClass + '">' + esc(stText) + '</span>' +
         '</td>' +
         '<td>' +
-          '<div style="font-size:12px;font-weight:600;color:var(--text-main);">' + dhDate(o.created_at) + '</div>' +
-          '<div style="font-size:11px;color:var(--text-muted);">' + dhTime(o.created_at) + '</div>' +
+          '<div style="font-size:12px;font-weight:600;color:var(--text-main);">' + dhDate(r.created_at) + '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted);">' + dhTime(r.created_at) + '</div>' +
         '</td>' +
-        '<td>' +
-          '<div class="adm-action-grp" style="justify-content:flex-end;">' +
-            quickActionBtn +
-            '<button class="adm-icon-btn" title="সম্পূর্ণ তথ্য পর্যালোচনা ও ডেলিভারি" aria-label="অর্ডারের বিস্তারিত দেখুন" onclick="AdmOrders.view(\'' + o.id + '\')">👁️ বিস্তারিত</button>' +
-            '<button class="adm-icon-btn" title="গ্রাহকের সাথে সাপোর্ট চ্যাট" aria-label="গ্রাহকের সাথে সাপোর্ট চ্যাট" onclick="AdmOrders.supportForm(\'' + o.id + '\')">💬</button>' +
-            (['cancelled', 'refunded', 'failed'].includes(o.status)
-              ? '<button class="adm-icon-btn" title="বাতিল/ব্যর্থ/রিফান্ডেড অর্ডারে ডেলিভারি দেওয়া যায় না" aria-label="ডেলিভারি দেওয়া যায় না" disabled style="opacity:0.35;cursor:not-allowed;">📎</button>'
-              : '<button class="adm-icon-btn" title="ডেলিভারি ফাইল আপলোড" aria-label="ডেলিভারি ফাইল আপলোড" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎</button>') +
-            '<button class="adm-icon-btn danger" title="অর্ডার ডিলিট করুন" aria-label="অর্ডার ডিলিট করুন" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️</button>' +
-          '</div>' +
-        '</td>' +
+        '<td>' + actionsHtml + '</td>' +
       '</tr>';
     }
   }
@@ -1695,76 +1758,19 @@ TABS.orders = async () => {
   html += '</tbody></table></div></div></div>';
   // (scroll restore is applied after content.innerHTML below, once
   // the new rows exist — see the end of this function.)
-  // Admin-order fix (2026-11-03): the list used to stop at the first
-  // 50 rows with no way to reach the rest. The backend already
-  // returns total/page/limit — now the pager actually uses them.
-  const totalOrders = (d.total !== undefined && d.total !== null) ? Number(d.total) : (TABS._orders || []).length;
-  const totalPages = Math.max(1, Math.ceil(totalOrders / 50));
-  const curPage = Math.min(_page, totalPages);
+  // Pager from the endpoint's page/pages/total — rows past 50 are
+  // reachable instead of stopping at the first page.
+  const curPage = Math.min(_page, _pages);
   html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap;">' +
-    '<span style="font-size:12px;color:var(--text-muted);">মোট ' + bn(totalOrders) + 'টি অর্ডার · পেজ ' + bn(curPage) + '/' + bn(totalPages) + '</span>' +
+    '<span style="font-size:12px;color:var(--text-muted);">মোট ' + bn(_total) + 'টি সারি · পেজ ' + bn(curPage) + '/' + bn(_pages) + '</span>' +
     '<span style="display:flex;gap:8px;">' +
       (curPage > 1 ? '<button class="mini-btn" onclick="AdmOrders.page(' + (curPage - 1) + ')">← আগের পেজ</button>' : '') +
-      (curPage < totalPages ? '<button class="mini-btn" onclick="AdmOrders.page(' + (curPage + 1) + ')">পরের পেজ →</button>' : '') +
+      (curPage < _pages ? '<button class="mini-btn" onclick="AdmOrders.page(' + (curPage + 1) + ')">পরের পেজ →</button>' : '') +
     '</span></div>';
   content.innerHTML = html;
   // P2: restore the pre-render scroll position on re-renders so an
   // action does not throw the admin back to the top of the list.
   if (_hadList) { try { window.scrollTo(0, _scrollY); } catch (_) {} }
-};
-
-// Orders-page split (2026-11-03): BDRIS applications and engine
-// deliveries used to render as two extra cards BELOW the orders
-// table on every orders view, ignoring all filters — so "all orders"
-// showed three unlinked lists. They now live in their own sidebar
-// tabs (TABS.bdrisApps / TABS.engineJobs); the orders page shows
-// only the orders table + pager, so its counts match what is shown.
-TABS.bdrisApps = async () => {
-  const q = TABS._bdrisQ || '';
-  content.innerHTML = '<div class="card"><h3>🕘 BDRIS আবেদনসমূহ</h3>' +
-    '<div class="s" style="margin-bottom:10px;">এগুলো অর্ডার পাইপলাইনের অংশ নয় — BDRIS ইঞ্জিনে জমা হওয়া আবেদনের রেকর্ড। এখান থেকে দেখা আর ডিলিট করা যায়; স্ট্যাটাস বদল বা রিফান্ডের কাজ অর্ডার পেজে হয় না।</div>' +
-    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">' +
-      '<input type="text" id="admBdrisSearch" class="adm-search-input" placeholder="🔍 আবেদনকারীর নাম, মোবাইল বা আবেদন নম্বর খুঁজুন..." value="' + esc(q) + '" onkeydown="if(event.key===\'Enter\')AdmOrders.searchBdris(this.value)">' +
-      '<button class="mini-btn" onclick="AdmOrders.searchBdris(document.getElementById(\'admBdrisSearch\').value)">খুঁজুন</button>' +
-      (q ? '<button class="mini-btn danger" onclick="AdmOrders.clearBdrisSearch()">✕ ক্লিয়ার</button>' : '') +
-    '</div>' +
-    '<div id="admBdrisCount" class="s" style="margin-bottom:8px;"></div>' +
-    '<div id="admBdrisApps" class="s">⏳ লোড হচ্ছে…</div></div>';
-  AdmOrders.loadBdrisApps(q);
-};
-
-TABS.engineJobs = async () => {
-  const q = TABS._engineQ || '';
-  content.innerHTML = '<div class="card"><h3>🎓 Engine ডেলিভারি (সার্টিফিকেট / মৃত্যু সনদ)</h3>' +
-    '<div class="s" style="margin-bottom:10px;">এগুলো অর্ডার পাইপলাইনের অংশ নয় — জন্ম/মৃত্যু সনদ যাচাই ইঞ্জিনের ডেলিভারি রেকর্ড। এখান থেকে দেখা আর ডিলিট করা যায়; স্ট্যাটাস বদল বা রিফান্ডের কাজ অর্ডার পেজে হয় না।</div>' +
-    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">' +
-      '<input type="text" id="admEngineSearch" class="adm-search-input" placeholder="🔍 নাম, মোবাইল বা নম্বর (BRN/DRN) খুঁজুন..." value="' + esc(q) + '" onkeydown="if(event.key===\'Enter\')AdmOrders.searchEngine(this.value)">' +
-      '<button class="mini-btn" onclick="AdmOrders.searchEngine(document.getElementById(\'admEngineSearch\').value)">খুঁজুন</button>' +
-      (q ? '<button class="mini-btn danger" onclick="AdmOrders.clearEngineSearch()">✕ ক্লিয়ার</button>' : '') +
-    '</div>' +
-    '<div id="admEngineCount" class="s" style="margin-bottom:8px;"></div>' +
-    '<div id="admEngineJobs" class="s">⏳ লোড হচ্ছে…</div></div>';
-  AdmOrders.loadEngineJobs(q);
-};
-
-// P3 redesign: one auto-data view for the three engine/auto
-// sources. No pipeline buttons here — only view, download (where
-// an admin file endpoint already exists) and the same delete as
-// the standalone tabs. BDRIS + engine lists are filtered
-// client-side from the first fetch; auto orders use the server q.
-TABS.autoData = async () => {
-  const q = TABS._autoQ || '';
-  content.innerHTML = '<div class="card" id="admAutoDataBox"><h3>⚙️ অটো ডেটা</h3>' +
-    '<div class="s" style="margin-bottom:10px;">এগুলো অর্ডার পাইপলাইনের অংশ নয় — ইঞ্জিন রেকর্ড ও অটো অর্ডার-ডেটা। এখান থেকে শুধু দেখা, ডাউনলোড (যেখানে ফাইল আছে) আর ডিলিট করা যায়; গ্রহণ, সম্পন্ন বা ডেলিভারির কোনো পাইপলাইন-বোতাম এখানে নেই।</div>' +
-    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">' +
-      '<input type="text" id="admAutoSearch" class="adm-search-input" placeholder="🔍 নাম, মোবাইল, নম্বর বা সার্ভিস খুঁজুন..." value="' + esc(q) + '" onkeydown="if(event.key===\'Enter\')AdmOrders.searchAutoData(this.value)">' +
-      '<button class="mini-btn" onclick="AdmOrders.searchAutoData(document.getElementById(\'admAutoSearch\').value)">খুঁজুন</button>' +
-      (q ? '<button class="mini-btn danger" onclick="AdmOrders.clearAutoSearch()">✕ ক্লিয়ার</button>' : '') +
-    '</div>' +
-    '<div id="admAutoBdris" class="s">⏳ লোড হচ্ছে…</div>' +
-    '<div id="admAutoEngine" class="s">⏳ লোড হচ্ছে…</div>' +
-    '<div id="admAutoOrders" class="s">⏳ লোড হচ্ছে…</div></div>';
-  AdmOrders.loadAutoData(q, true);
 };
 
 window.AdmOrders = {
@@ -1816,13 +1822,14 @@ window.AdmOrders = {
     } catch (_) { return false; }
   },
 
-  // F3: one lookup across both lists — an auto-data order must
-  // never fall back to price 0 just because it is not in _orders.
+  // F3: one lookup across both lists — a unified-list order row
+  // must never fall back to price 0 just because it is not in
+  // _orders.
   // Also covers the detail order fetched by view()'s fallback (F1).
   findOrder(id) {
     const sid = String(id);
     const inList = (arr) => (arr || []).find(x => String(x.id) === sid);
-    return inList(TABS._orders) || inList(TABS._autoOrders)
+    return inList(TABS._orders) || inList(TABS._unifiedRows)
       || (TABS._detailOrder && String(TABS._detailOrder.id) === sid ? TABS._detailOrder : null);
   },
 
@@ -1875,281 +1882,199 @@ window.AdmOrders = {
     }
   },
 
-  async loadBdrisApps(q) {
-    const box = document.getElementById('admBdrisApps');
-    if (!box) return;
-    const countEl = document.getElementById('admBdrisCount');
-    try {
-      const url = '/admin/bdris-applications' + (q ? '?q=' + encodeURIComponent(q) : '');
-      const r = await ABC.api(url);
-      const d = await r.json();
-      const apps = d.applications || [];
-      if (countEl) countEl.textContent = 'মোট ' + bn(apps.length) + 'টি' + (apps.length >= 200 ? ' (সর্বোচ্চ ২০০টি দেখানো হচ্ছে)' : '');
-      if (!apps.length) { box.textContent = q ? 'এই খোঁজায় কোনো BDRIS আবেদন পাওয়া যায়নি।' : 'এখনো কোনো BDRIS আবেদন জমা হয়নি।'; return; }
-      box.innerHTML = '<div class="tw"><table><thead><tr><th>আবেদন নম্বর</th><th>আবেদনকারী</th><th>অবস্থা</th><th>গ্রাহক</th><th>সময়</th><th></th></tr></thead><tbody>' +
-        apps.map(a =>
-          '<tr><td>' + esc(a.status === 'failed' ? '—' : a.ack_no) + '</td><td>' + esc(a.applicant_name || '') + '</td>' +
-          '<td>' + (a.status === 'failed'
-            ? '<span style="color:#dc2626;font-weight:700;">❌ ব্যর্থ</span>' + (a.failure_reason ? '<div class="s">' + esc(a.failure_reason) + '</div>' : '')
-            : '<span style="color:#16a34a;font-weight:700;">✅ জমা হয়েছে</span>') + '</td>' +
-          '<td>' + esc(a.user_name || '') + ' <span class="s">' + esc(a.user_phone || '') + '</span></td>' +
-          '<td class="s">' + new Date(a.created_at).toLocaleString('bn-BD') + '</td>' +
-          '<td><button class="mini-btn danger" onclick="AdmOrders.deleteBdrisApp(' + jqAttr(a.id) + ')">🗑️ ডিলিট</button></td></tr>'
-        ).join('') + '</tbody></table></div>';
-    } catch (e) { box.textContent = 'লোড ব্যর্থ হয়েছে।'; }
-  },
+  // Unified-list single deletes for instant-delivery records.
+  // The confirm dialogs below are UNCHANGED from the old
+  // standalone sections — only the post-delete return target
+  // changed: the separate sections are gone, so a delete now
+  // returns to the unified orders list.
   async deleteBdrisApp(id) {
     if (!confirm('এই BDRIS আবেদনের রেকর্ড মুছে ফেলবেন? (আসল আবেদন সরকারি পোর্টালে থেকে যাবে — শুধু এখানের রেকর্ড মুছবে)')) return;
     const r = await ABC.api('/admin/bdris-applications/' + id, { method: 'DELETE' });
     if (!r.ok) { alert('ডিলিট ব্যর্থ হয়েছে'); return; }
-    // F6: invalidate the auto-data cache — the deleted row must
+    // F6: invalidate the cached lists — the deleted row must
     // never reappear from a stale cached list.
-    TABS._autoBdris = null; TABS._autoEngine = null;
-    if (document.getElementById('admAutoDataBox')) AdmOrders.loadAutoData(TABS._autoQ || '', true);
-    else AdmOrders.loadBdrisApps(TABS._bdrisQ || '');
-  },
-  async searchBdris(q) {
-    TABS._bdrisQ = (q || '').trim();
-    show('bdrisApps');
-  },
-  clearBdrisSearch() {
-    TABS._bdrisQ = '';
-    show('bdrisApps');
-  },
-  async loadEngineJobs(q) {
-    const box = document.getElementById('admEngineJobs');
-    if (!box) return;
-    const countEl = document.getElementById('admEngineCount');
-    const lbl = { 'bdris-certificate': 'জন্ম সনদ', 'death-verify': 'মৃত্যু সনদ' };
-    try {
-      const url = '/admin/engine-jobs' + (q ? '?q=' + encodeURIComponent(q) : '');
-      const r = await ABC.api(url);
-      const d = await r.json();
-      const jobs = d.jobs || [];
-      if (countEl) countEl.textContent = 'মোট ' + bn(jobs.length) + 'টি' + (jobs.length >= 100 ? ' (সর্বোচ্চ ১০০টি দেখানো হচ্ছে)' : '');
-      if (!jobs.length) { box.textContent = q ? 'এই খোঁজায় কোনো engine ডেলিভারি পাওয়া যায়নি।' : 'এখনো কোনো engine ডেলিভারি জমা হয়নি।'; return; }
-      box.innerHTML = '<div class="tw"><table><thead><tr><th>ধরন</th><th>নম্বর (BRN/DRN)</th><th>নাম</th><th>অবস্থা</th><th>গ্রাহক</th><th>সময়</th><th></th></tr></thead><tbody>' +
-        jobs.map(j =>
-          '<tr><td>' + esc(lbl[j.engine_id] || j.engine_id) + '</td><td>' + esc(j.ref_no || '') + '</td><td>' + esc(j.subject_name || '') + '</td>' +
-          '<td>' + (j.outcome === 'failed'
-            ? '<span style="color:#dc2626;font-weight:700;">❌ ব্যর্থ</span>' + (j.reason ? '<div class="s">' + esc(j.reason) + '</div>' : '')
-            : '<span style="color:#16a34a;font-weight:700;">✅ সম্পন্ন</span>') + '</td>' +
-          '<td>' + esc(j.user_name || '') + ' <span class="s">' + esc(j.user_phone || '') + '</span></td>' +
-          '<td class="s">' + new Date(j.created_at).toLocaleString('bn-BD') + '</td>' +
-          '<td><button class="mini-btn danger" onclick="AdmOrders.deleteEngineJob(' + jqAttr(j.id) + ')">🗑️ ডিলিট</button></td></tr>'
-        ).join('') + '</tbody></table></div>';
-    } catch (e) { box.textContent = 'লোড ব্যর্থ হয়েছে।'; }
+    TABS._autoBdris = null; TABS._autoEngine = null; TABS._autoOrders = null;
+    show('orders');
   },
   async deleteEngineJob(id) {
     if (!confirm('এই engine ডেলিভারির রেকর্ড ও ফাইল মুছে ফেলবেন? গ্রাহকের ইতিহাস থেকেও সরে যাবে।')) return;
     const r = await ABC.api('/admin/engine-jobs/' + id, { method: 'DELETE' });
     if (!r.ok) { alert('ডিলিট ব্যর্থ হয়েছে'); return; }
-    // F6: invalidate the auto-data cache — the deleted row must
+    // F6: invalidate the cached lists — the deleted row must
     // never reappear from a stale cached list.
-    TABS._autoBdris = null; TABS._autoEngine = null;
-    if (document.getElementById('admAutoDataBox')) AdmOrders.loadAutoData(TABS._autoQ || '', true);
-    else AdmOrders.loadEngineJobs(TABS._engineQ || '');
-  },
-  async searchEngine(q) {
-    TABS._engineQ = (q || '').trim();
-    show('engineJobs');
-  },
-  clearEngineSearch() {
-    TABS._engineQ = '';
-    show('engineJobs');
-  },
-  async loadAutoData(q, firstLoad) {
-    const bBox = document.getElementById('admAutoBdris');
-    const eBox = document.getElementById('admAutoEngine');
-    const oBox = document.getElementById('admAutoOrders');
-    if (!bBox && !eBox && !oBox) return;
-    const _page = Math.max(1, Number(TABS._autoPage) || 1);
-    // F9: BDRIS + engine load independently — one section's
-    // failure sets only its own error flag and never wipes the
-    // other sections (or the auto-orders section below).
-    if (firstLoad || !TABS._autoBdris || !TABS._autoEngine) {
-      const results = await Promise.allSettled([ABC.api('/admin/bdris-applications'), ABC.api('/admin/engine-jobs')]);
-      const loadOne = async (res, key, errKey, listKey) => {
-        if (res.status !== 'fulfilled') { TABS[errKey] = true; if (TABS[key] === undefined) TABS[key] = []; return; }
-        try {
-          const dd = await res.value.json().catch(() => ({}));
-          if (res.value.ok === false) { TABS[errKey] = true; if (TABS[key] === undefined) TABS[key] = []; return; }
-          TABS[key] = dd[listKey] || [];
-          TABS[errKey] = false;
-        } catch (_) { TABS[errKey] = true; if (TABS[key] === undefined) TABS[key] = []; }
-      };
-      await loadOne(results[0], '_autoBdris', '_autoBdrisError', 'applications');
-      await loadOne(results[1], '_autoEngine', '_autoEngineError', 'jobs');
-    }
-    // F8: auto orders use the server's page/limit/total.
-    try {
-      const or = await ABC.api('/admin/orders?type=auto&limit=50&page=' + _page + (q ? '&q=' + encodeURIComponent(q) : ''));
-      const od = await or.json().catch(() => ({}));
-      if (!or.ok) throw new Error('auto orders');
-      TABS._autoOrders = od.orders || [];
-      TABS._autoOrdersTotal = (od.total !== undefined && od.total !== null) ? Number(od.total) : TABS._autoOrders.length;
-      TABS._autoOrdersLimit = Number(od.limit) || 50;
-      TABS._autoOrdersPage = Number(od.page) || _page;
-      TABS._autoOrdersError = false;
-      // F2-style clamp: a shrunk page count steps back, never empty.
-      const _aPages = Math.max(1, Math.ceil(TABS._autoOrdersTotal / TABS._autoOrdersLimit));
-      if (_page > _aPages) { TABS._autoPage = _aPages; return AdmOrders.loadAutoData(q, false); }
-      TABS._autoPage = TABS._autoOrdersPage;
-    } catch (e) {
-      TABS._autoOrdersError = true;
-    }
-    AdmOrders.renderAutoData(q);
-  },
-  renderAutoData(q) {
-    const needle = (q || '').trim().toLowerCase();
-    const match = (...vals) => !needle || vals.some(v => String(v == null ? '' : v).toLowerCase().includes(needle));
-    const bBox = document.getElementById('admAutoBdris');
-    if (bBox && TABS._autoBdrisError) {
-      // F9: per-section load failure — never "no records".
-      bBox.innerHTML = '<div style="font-size:15px;font-weight:700;margin:16px 0 4px;">🕘 BDRIS আবেদন</div>' +
-        '<div class="s" style="color:#dc2626;">⚠️ BDRIS তালিকা লোড ব্যর্থ হয়েছে — অন্য সেকশনগুলো নিচে দেখুন, পেজ রিলোড করে আবার চেষ্টা করুন।</div>';
-    } else if (bBox) {
-      const apps = (TABS._autoBdris || []).filter(a => match(a.applicant_name, a.user_name, a.user_phone, a.ack_no));
-      let html = '<div style="font-size:15px;font-weight:700;margin:16px 0 4px;">🕘 BDRIS আবেদন</div>' +
-        '<div class="s" style="margin-bottom:8px;">এগুলো অর্ডার পাইপলাইনের অংশ নয় — BDRIS ইঞ্জিনে জমা হওয়া আবেদনের রেকর্ড। এই রেকর্ডগুলোর সঙ্গে কোনো ডাউনলোড-ফাইল থাকে না।</div>' +
-        '<div class="s" style="margin-bottom:8px;">' + (needle ? 'এই খোঁজায় মোট ' : 'মোট ') + bn(apps.length) + 'টি' +
-        ((TABS._autoBdris || []).length >= 200 ? ' ⚠️ শুধু নতুন ২০০টি সারি খোঁজা হয়েছে — এর বাইরের পুরনো সারি এই খোঁজায় আসবে না।' : '') + '</div>';
-      if (!apps.length) {
-        html += '<div class="s">' + (needle ? 'এই খোঁজায় কোনো BDRIS আবেদন পাওয়া যায়নি।' : 'এখনো কোনো BDRIS আবেদন জমা হয়নি।') + '</div>';
-      } else {
-        html += '<div class="tw"><table><thead><tr><th>আবেদন নম্বর</th><th>আবেদনকারী</th><th>অবস্থা</th><th>গ্রাহক</th><th>সময়</th><th></th></tr></thead><tbody>' +
-          apps.map(a =>
-            '<tr><td>' + esc(a.status === 'failed' ? '—' : a.ack_no) + '</td><td>' + esc(a.applicant_name || '') + '</td>' +
-            '<td>' + (a.status === 'failed'
-              ? '<span style="color:#dc2626;font-weight:700;">❌ ব্যর্থ</span>' + (a.failure_reason ? '<div class="s">' + esc(a.failure_reason) + '</div>' : '')
-              : '<span style="color:#16a34a;font-weight:700;">✅ জমা হয়েছে</span>') + '</td>' +
-            '<td>' + esc(a.user_name || '') + ' <span class="s">' + esc(a.user_phone || '') + '</span></td>' +
-            '<td class="s">' + new Date(a.created_at).toLocaleString('bn-BD') + '</td>' +
-            '<td><button class="mini-btn danger" onclick="AdmOrders.deleteBdrisApp(' + jqAttr(a.id) + ')">🗑️ ডিলিট</button></td></tr>'
-          ).join('') + '</tbody></table></div>';
-      }
-      bBox.innerHTML = html;
-    }
-    const eBox = document.getElementById('admAutoEngine');
-    if (eBox && TABS._autoEngineError) {
-      // F9: per-section load failure — never "no records".
-      eBox.innerHTML = '<div style="font-size:15px;font-weight:700;margin:16px 0 4px;">🎓 Engine ডেলিভারি (সার্টিফিকেট / মৃত্যু সনদ)</div>' +
-        '<div class="s" style="color:#dc2626;">⚠️ Engine তালিকা লোড ব্যর্থ হয়েছে — অন্য সেকশনগুলো দেখুন, পেজ রিলোড করে আবার চেষ্টা করুন।</div>';
-    } else if (eBox) {
-      const lbl = { 'bdris-certificate': 'জন্ম সনদ', 'death-verify': 'মৃত্যু সনদ' };
-      const jobs = (TABS._autoEngine || []).filter(j => match(j.subject_name, j.user_name, j.user_phone, j.ref_no, lbl[j.engine_id] || j.engine_id));
-      let html = '<div style="font-size:15px;font-weight:700;margin:16px 0 4px;">🎓 Engine ডেলিভারি (সার্টিফিকেট / মৃত্যু সনদ)</div>' +
-        '<div class="s" style="margin-bottom:8px;">এগুলো অর্ডার পাইপলাইনের অংশ নয় — জন্ম/মৃত্যু সনদ যাচাই ইঞ্জিনের ডেলিভারি রেকর্ড। অ্যাডমিনের জন্য ফাইল-ডাউনলোড এন্ডপয়েন্ট নেই, তাই এখানে ডাউনলোড বোতাম দেওয়া হয়নি।</div>' +
-        '<div class="s" style="margin-bottom:8px;">' + (needle ? 'এই খোঁজায় মোট ' : 'মোট ') + bn(jobs.length) + 'টি' +
-        ((TABS._autoEngine || []).length >= 100 ? ' ⚠️ শুধু নতুন ১০০টি সারি খোঁজা হয়েছে — এর বাইরের পুরনো সারি এই খোঁজায় আসবে না।' : '') + '</div>';
-      if (!jobs.length) {
-        html += '<div class="s">' + (needle ? 'এই খোঁজায় কোনো engine ডেলিভারি পাওয়া যায়নি।' : 'এখনো কোনো engine ডেলিভারি জমা হয়নি।') + '</div>';
-      } else {
-        html += '<div class="tw"><table><thead><tr><th>ধরন</th><th>নম্বর (BRN/DRN)</th><th>নাম</th><th>অবস্থা</th><th>গ্রাহক</th><th>সময়</th><th></th></tr></thead><tbody>' +
-          jobs.map(j =>
-            '<tr><td>' + esc(lbl[j.engine_id] || j.engine_id) + '</td><td>' + esc(j.ref_no || '') + '</td><td>' + esc(j.subject_name || '') + '</td>' +
-            '<td>' + (j.outcome === 'failed'
-              ? '<span style="color:#dc2626;font-weight:700;">❌ ব্যর্থ</span>' + (j.reason ? '<div class="s">' + esc(j.reason) + '</div>' : '')
-              : '<span style="color:#16a34a;font-weight:700;">✅ সম্পন্ন</span>') + '</td>' +
-            '<td>' + esc(j.user_name || '') + ' <span class="s">' + esc(j.user_phone || '') + '</span></td>' +
-            '<td class="s">' + new Date(j.created_at).toLocaleString('bn-BD') + '</td>' +
-            '<td><button class="mini-btn danger" onclick="AdmOrders.deleteEngineJob(' + jqAttr(j.id) + ')">🗑️ ডিলিট</button></td></tr>'
-          ).join('') + '</tbody></table></div>';
-      }
-      eBox.innerHTML = html;
-    }
-    const oBox = document.getElementById('admAutoOrders');
-    if (oBox && TABS._autoOrdersError) {
-      // F9: an auto-orders failure never wipes the other sections.
-      oBox.innerHTML = '<div style="font-size:15px;font-weight:700;margin:16px 0 4px;">📦 অটো অর্ডার-রেকর্ড</div>' +
-        '<div class="s" style="color:#dc2626;">⚠️ অটো অর্ডার তালিকা লোড ব্যর্থ হয়েছে — BDRIS ও engine সেকশন উপরে অটুট আছে, পেজ রিলোড করে আবার চেষ্টা করুন।</div>';
-    } else if (oBox) {
-      const orders = TABS._autoOrders || [];
-      const total = TABS._autoOrdersTotal !== undefined ? TABS._autoOrdersTotal : orders.length;
-      let html = '<div style="font-size:15px;font-weight:700;margin:16px 0 4px;">📦 অটো অর্ডার-রেকর্ড</div>' +
-        '<div class="s" style="margin-bottom:8px;">এগুলো অর্ডার পাইপলাইনের অংশ নয় — স্বয়ংক্রিয় সেবার অর্ডার-রেকর্ড। এখানে কোনো গ্রহণ, সম্পন্ন বা ডেলিভারি বোতাম নেই — শুধু দেখা, ফাইল ডাউনলোড আর ডিলিট।</div>' +
-        '<div class="s" style="margin-bottom:8px;">' + (needle ? 'এই খোঁজায় মোট ' : 'মোট ') + bn(total) + 'টি' +
-        (total > orders.length ? ' · পেজ ' + bn(TABS._autoPage || 1) + ' (এই পেজে ' + bn(orders.length) + 'টি)' : '') + '</div>';
-      if (!orders.length) {
-        html += '<div class="s">' + (needle ? 'এই খোঁজায় কোনো অটো অর্ডার-রেকর্ড পাওয়া যায়নি।' : 'এখনো কোনো অটো অর্ডার-রেকর্ড নেই।') + '</div>';
-      } else {
-        html += '<div class="tw"><table><thead><tr><th>অর্ডার ও গ্রাহক</th><th>সেবা</th><th>মূল্য</th><th>স্ট্যাটাস</th><th>তারিখ</th><th style="text-align:right;">অ্যাকশন</th></tr></thead><tbody>' +
-          orders.map(o => {
-            let docs = [];
-            try { docs = typeof o.documents === 'string' ? JSON.parse(o.documents || '[]') : (o.documents || []); } catch (_) { docs = []; }
-            if (!Array.isArray(docs)) docs = [];
-            const dlBtns = docs.map(d =>
-              '<button class="mini-btn" title="' + esc(d.originalname || d.filename) + '" onclick="AdmOrders.dlAutoDoc(' + jqAttr(o.id) + ',' + jqAttr(d.filename) + ',' + jqAttr(d.originalname || d.filename) + ')">📎 ডাউনলোড</button>'
-            ).join(' ');
-            return '<tr><td>' + esc(o.user_name || 'গ্রাহক') + ' <span class="s">#' + esc(String(o.id).slice(0, 8)) + ' · ' + esc(o.user_phone || '') + '</span></td>' +
-              '<td>' + esc(o.service_name_bn || o.service_name || 'সেবা') + '</td>' +
-              '<td><span class="adm-price-badge">৳' + bn(o.price) + '</span></td>' +
-              '<td><span class="st-badge st-' + (o.status || 'new') + '">' + esc(STBN[o.status] || o.status) + '</span></td>' +
-              '<td class="s">' + new Date(o.created_at).toLocaleString('bn-BD') + '</td>' +
-              '<td style="text-align:right;"><div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">' +
-                '<button class="mini-btn" onclick="AdmOrders.viewAutoOrder(' + jqAttr(o.id) + ')">👁️ দেখুন</button>' +
-                (dlBtns || '<span class="s">ফাইল নেই</span>') +
-                '<button class="mini-btn danger" onclick="AdmOrders.deleteAutoOrder(' + jqAttr(o.id) + ')">🗑️ ডিলিট</button>' +
-              '</div></td></tr>';
-          }).join('') + '</tbody></table></div>';
-      }
-      // F8: pager from the server's page/limit/total — rows past
-      // 50 are reachable instead of stopping at the first page.
-      const _aTotal = TABS._autoOrdersTotal !== undefined ? TABS._autoOrdersTotal : orders.length;
-      const _aLimit = TABS._autoOrdersLimit || 50;
-      const _aPages = Math.max(1, Math.ceil(_aTotal / _aLimit));
-      const _aCur = Math.min(Math.max(1, TABS._autoPage || 1), _aPages);
-      if (_aPages > 1) {
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap;">' +
-          '<span style="font-size:12px;color:var(--text-muted);">মোট ' + bn(_aTotal) + 'টি অটো অর্ডার · পেজ ' + bn(_aCur) + '/' + bn(_aPages) + '</span>' +
-          '<span style="display:flex;gap:8px;">' +
-            (_aCur > 1 ? '<button class="mini-btn" onclick="AdmOrders.pageAutoData(' + (_aCur - 1) + ')">← আগের পেজ</button>' : '') +
-            (_aCur < _aPages ? '<button class="mini-btn" onclick="AdmOrders.pageAutoData(' + (_aCur + 1) + ')">পরের পেজ →</button>' : '') +
-          '</span></div>';
-      }
-      oBox.innerHTML = html;
-    }
-  },
-  searchAutoData(q) {
-    TABS._autoQ = (q || '').trim();
-    TABS._autoPage = 1;
-    // BDRIS/engine filter from cache; only auto orders refetch.
-    AdmOrders.loadAutoData(TABS._autoQ, false);
-  },
-  pageAutoData(p) {
-    TABS._autoPage = Math.max(1, Number(p) || 1);
-    AdmOrders.loadAutoData(TABS._autoQ || '', false);
-  },
-  clearAutoSearch() {
-    TABS._autoQ = '';
-    TABS._autoPage = 1;
-    show('autoData');
-  },
-  deleteAutoOrder(id) {
-    // F3: no _orders clobbering — deleteOrder finds the order via
-    // findOrder (_orders + _autoOrders), so the refund option
-    // survives for auto orders; return to auto-data after delete.
-    AdmOrders.deleteOrder(id, 'autoData');
+    TABS._autoBdris = null; TABS._autoEngine = null; TABS._autoOrders = null;
+    show('orders');
   },
   viewAutoOrder(id) {
-    // Detail view opened from auto-data: deletes from inside the
-    // detail modal return to auto-data (see view() _detailBack).
-    TABS._detailBackTab = 'autoData';
+    // Repointed from the removed separate section: detail views
+    // opened from the unified list return to the orders list.
+    TABS._detailBackTab = 'orders';
     AdmOrders.view(id);
   },
-  async dlAutoDoc(orderId, filename, originalname) {
-    // Same admin download endpoint as the orders-page detail view,
-    // but with explicit arguments (no _viewDocs cache here).
+  deleteAutoOrder(id) {
+    // Repointed from the removed separate section: deletes from
+    // the unified list return to the orders list.
+    AdmOrders.deleteOrder(id, 'orders');
+  },
+  // Order-row detail from the unified list: the unified row only
+  // carries list fields, so fetch the full order record first and
+  // let the existing view() path render it. If the fetch fails,
+  // view() still opens with the list row (partial detail, never a
+  // false failure).
+  async viewUnifiedOrder(id) {
+    const row = (TABS._unifiedRows || []).find(x => x.kind === 'order' && String(x.id) === String(id));
     try {
-      const r = await ABC.api('/admin/orders/' + orderId + '/documents/' + encodeURIComponent(filename));
-      if (!r.ok) { alert('ডাউনলোড ব্যর্থ'); return; }
-      const blob = await r.blob();
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = originalname || filename;
-      document.body.appendChild(a); a.click();
-      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
-    } catch (e) { alert('ডাউনলোড ব্যর্থ'); }
+      const r = await ABC.api('/admin/orders/' + id);
+      if (r.ok) {
+        const sd = await r.json().catch(() => ({}));
+        if (sd.order) {
+          const full = sd.order;
+          if (!full.service_name_bn && !full.service_name) full.service_name_bn = row ? row.service_label : full.service_name_bn;
+          full.kind = 'order';
+          // The detail record lacks the unified list's display
+          // fields — carry them over so a later list render keeps
+          // the badge/refund line instead of dropping to defaults.
+          if (row) {
+            if (!full.service_label) full.service_label = row.service_label;
+            if (full.is_manual === undefined) full.is_manual = row.is_manual;
+            if (full.refund_balance === undefined) full.refund_balance = row.refund_balance;
+            if (full.refund_at === undefined) full.refund_at = row.refund_at;
+          }
+          const idx = (TABS._orders || []).findIndex(x => String(x.id) === String(id));
+          if (idx >= 0) TABS._orders[idx] = full;
+          else (TABS._orders = TABS._orders || []).push(full);
+          const uidx = (TABS._unifiedRows || []).findIndex(x => x.kind === 'order' && String(x.id) === String(id));
+          if (uidx >= 0) TABS._unifiedRows[uidx] = full;
+        }
+      }
+    } catch (_) {}
+    AdmOrders.view(id);
+  },
+  // Detail view for instant-delivery records (delivery /
+  // application rows): the old sections offered no detail modal
+  // and no file download for these rows, so this modal shows only
+  // the unified row's own fields plus the same single-delete the
+  // old sections offered. No pipeline buttons here.
+  viewUnifiedRecord(kind, id) {
+    const row = (TABS._unifiedRows || []).find(x => x.kind === kind && String(x.id) === String(id));
+    if (!row) { alert('সারিটি তালিকায় পাওয়া যায়নি — পেজ রিলোড করে আবার চেষ্টা করুন'); return; }
+    const isDelivery = kind === 'delivery';
+    const title = isDelivery ? '📦 ডেলিভারি বিস্তারিত' : '🕘 আবেদন বিস্তারিত';
+    const stText = STBN[row.status] || (row.status === 'success' ? 'সম্পন্ন' : (row.status || '—'));
+    const priceText = (row.price === undefined || row.price === null) ? '—' : ('৳' + bn(row.price));
+    const note = isDelivery
+      ? 'এটি একটি তাৎক্ষণিক ডেলিভারি রেকর্ড — অর্ডার পাইপলাইনের গ্রহণ/সম্পন্ন/ডেলিভার্ড বোতাম এখানে নেই।'
+      : 'এটি একটি BDRIS আবেদন রেকর্ড — অর্ডার পাইপলাইনের গ্রহণ/সম্পন্ন/ডেলিভার্ড বোতাম এখানে নেই।';
+    const delCall = isDelivery ? 'AdmOrders.deleteEngineJob' : 'AdmOrders.deleteBdrisApp';
+    // Close the modal first: the single-delete confirm below is
+    // the unchanged dialog, and it reloads the orders list after.
+    modal(title,
+      '<div style="font-size:13px;line-height:1.8;color:var(--text-main);">' +
+        '<div>📌 <b>ধরন:</b> ' + esc(isDelivery ? 'ডেলিভারি' : 'আবেদন') + '</div>' +
+        '<div>🛎️ <b>সেবা:</b> ' + esc(row.service_label || 'সেবা') + '</div>' +
+        '<div>👤 <b>গ্রাহক:</b> ' + esc(row.user_name || 'গ্রাহক') + ' <span class="s">' + esc(row.user_phone || '') + '</span></div>' +
+        '<div>🔖 <b>নম্বর:</b> #' + esc(String(row.id).slice(0, 8)) + '</div>' +
+        '<div>💰 <b>মূল্য:</b> ' + priceText + '</div>' +
+        '<div>📊 <b>স্ট্যাটাস:</b> ' + esc(stText) + '</div>' +
+        '<div>🕘 <b>তারিখ:</b> ' + esc(row.created_at ? new Date(row.created_at).toLocaleString('bn-BD') : '—') + '</div>' +
+      '</div>' +
+      '<div class="s" style="margin:10px 0 14px;">' + note + '</div>' +
+      '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
+        '<button class="btn-secondary" onclick="closeModal()">✕ বন্ধ করুন</button>' +
+        '<button class="mini-btn danger" onclick="closeModal();' + delCall + '(' + jqAttr(row.id) + ')">🗑️ ডিলিট</button>' +
+      '</div>');
+  },
+  // Bulk marking for the unified list (all type tabs, including
+  // সব ধরন): one checkbox per row, one page-level select-all,
+  // and a bar with the selected count + kind breakdown.
+  // Selection lives only for the current render — a new render
+  // (filter, search, page, reload) starts unselected.
+  toggleUniSel(el) {
+    if (!el) return;
+    if (!TABS._uniSelected) TABS._uniSelected = {};
+    const kind = el.getAttribute('data-kind');
+    const id = el.getAttribute('data-id');
+    const key = kind + ':' + String(id);
+    if (el.checked) {
+      const row = (TABS._unifiedRows || []).find(x => x.kind === kind && String(x.id) === String(id));
+      TABS._uniSelected[key] = { kind: kind, id: id, service_label: row ? row.service_label : '' };
+    } else {
+      delete TABS._uniSelected[key];
+    }
+    this.updateUniBulkBar();
+    const all = document.getElementById('admUniSelAll');
+    if (all) {
+      const boxes = document.querySelectorAll('.adm-uni-rowcb');
+      all.checked = boxes.length > 0 && Array.prototype.every.call(boxes, b => b.checked);
+    }
+  },
+  toggleUniSelAll(el) {
+    const on = !!(el && el.checked);
+    if (!TABS._uniSelected) TABS._uniSelected = {};
+    document.querySelectorAll('.adm-uni-rowcb').forEach(b => {
+      b.checked = on;
+      const kind = b.getAttribute('data-kind');
+      const id = b.getAttribute('data-id');
+      const key = kind + ':' + String(id);
+      if (on) {
+        const row = (TABS._unifiedRows || []).find(x => x.kind === kind && String(x.id) === String(id));
+        TABS._uniSelected[key] = { kind: kind, id: id, service_label: row ? row.service_label : '' };
+      } else {
+        delete TABS._uniSelected[key];
+      }
+    });
+    this.updateUniBulkBar();
+  },
+  updateUniBulkBar() {
+    const bar = document.getElementById('admUniBulkBar');
+    if (!bar) return;
+    const sel = TABS._uniSelected || {};
+    const keys = Object.keys(sel);
+    if (!keys.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+    const counts = { order: 0, delivery: 0, application: 0 };
+    keys.forEach(k => { const c = sel[k] && sel[k].kind; if (counts[c] !== undefined) counts[c]++; });
+    const parts = [];
+    if (counts.order) parts.push(bn(counts.order) + ' অর্ডার');
+    if (counts.delivery) parts.push(bn(counts.delivery) + ' ডেলিভারি');
+    if (counts.application) parts.push(bn(counts.application) + ' আবেদন');
+    bar.style.display = 'flex';
+    bar.innerHTML = '<span style="font-size:13px;font-weight:700;">☑️ ' + bn(keys.length) + 'টি বাছাই: ' + parts.join(', ') + '</span>' +
+      '<button class="mini-btn danger" onclick="AdmOrders.bulkDeleteUnified()">🗑️ বাছাই করা সব মুছুন</button>';
+  },
+  // Bulk delete: loops ONLY the existing single-delete request
+  // paths (no new endpoint, no refund preview, no refund option
+  // at all). Orders always use refund=no, so a bulk delete never
+  // returns money — the confirm says so plainly.
+  async bulkDeleteUnified() {
+    if (TABS._uniBulkBusy) return;
+    const sel = TABS._uniSelected || {};
+    const items = Object.keys(sel).map(k => sel[k]);
+    if (!items.length) { alert('কোনো সারি বাছাই করা হয়নি'); return; }
+    const counts = { order: 0, delivery: 0, application: 0 };
+    items.forEach(it => { if (counts[it.kind] !== undefined) counts[it.kind]++; });
+    const parts = [];
+    if (counts.order) parts.push(bn(counts.order) + ' অর্ডার');
+    if (counts.delivery) parts.push(bn(counts.delivery) + ' ডেলিভারি');
+    if (counts.application) parts.push(bn(counts.application) + ' আবেদন');
+    if (!confirm('বাছাই করা ' + bn(items.length) + 'টি সারি (' + parts.join(', ') + ') স্থায়ীভাবে মুছে ফেলবেন?\n⚠️ মুছলে কোনো টাকা ফেরত যাবে না — এই ডিলিটে টাকা ফেরে না।\nমুছে ফেলা সারি গ্রাহকের ইতিহাস থেকেও সরে যাবে।')) return;
+    TABS._uniBulkBusy = true;
+    let ok = 0, fail = 0;
+    for (const it of items) {
+      try {
+        let r;
+        if (it.kind === 'order') r = await ABC.api('/admin/orders/' + it.id + '?confirm=yes&refund=no', { method: 'DELETE' });
+        else if (it.kind === 'delivery') r = await ABC.api('/admin/engine-jobs/' + it.id, { method: 'DELETE' });
+        else r = await ABC.api('/admin/bdris-applications/' + it.id, { method: 'DELETE' });
+        if (r.ok) ok++; else fail++;
+      } catch (_) { fail++; }
+    }
+    // F6: invalidate the cached lists — deleted rows must never
+    // reappear from a stale cached list.
+    TABS._autoBdris = null; TABS._autoEngine = null; TABS._autoOrders = null;
+    TABS._uniSelected = {};
+    TABS._uniBulkBusy = false;
+    alert('✅ ' + bn(ok) + 'টি মুছেছে, ' + bn(fail) + 'টি ব্যর্থ');
+    show('orders');
   },
   copyData() {
     const t = TABS._viewRaw || '';
@@ -2437,8 +2362,8 @@ window.AdmOrders = {
     }
   },
 
-  // P3: backTab lets a delete started from auto-data return there;
-  // all existing callers omit it and return to the orders page.
+  // P3: backTab lets a delete return to the caller's list; all
+  // existing callers omit it and return to the orders page.
   // async because P1's refund-preview await lives in this body.
   async deleteOrder(id, backTab = 'orders') {
     const o = this.findOrder(id);
@@ -2628,9 +2553,9 @@ window.AdmOrders = {
     }
     if (!o) { alert('অর্ডার পাওয়া যায়নি'); return; }
 
-    // P3: a detail view opened from auto-data returns there after a
-    // delete from inside the detail modal. Captured + cleared here
-    // so a later orders-page view never inherits it.
+    // P3: a detail view opened from the unified list returns to
+    // the orders list after a delete from inside the detail modal.
+    // Captured + cleared here so a later view never inherits it.
     const _detailBack = TABS._detailBackTab || 'orders';
     TABS._detailBackTab = '';
     // F1+F4: the detail order itself, and the back tab the
