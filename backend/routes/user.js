@@ -47,6 +47,29 @@ function safeJsonArray(val) {
   return [];
 }
 
+// Customer-fix C3 (2026-11-03): was this order ever delivered?
+// A refunded order keeps its admin files ONLY if it reached
+// completed/delivered first (delivered→refunded goodwill). The
+// timeline proves it two ways: a row TO completed/delivered
+// (stepwise manual transition), or a refund row FROM
+// completed/delivered (an auto order inserted straight into
+// completed, then refunded by hand — it never got a TO row).
+// A failed/cancelled→refunded row has neither, so its
+// never-delivered admin files stay hidden. No history at all
+// (pre-timeline rows) also means no proof → hidden: the
+// conservative side, since the file was never delivered.
+async function orderWasDelivered(orderId) {
+  try {
+    const r = await db.query(
+      `SELECT 1 FROM order_status_history WHERE order_id = $1 AND
+        (to_status IN ('completed', 'delivered')
+         OR (to_status = 'refunded' AND from_status IN ('completed', 'delivered')))
+       LIMIT 1`,
+      [orderId]);
+    return r.rows.length > 0;
+  } catch (_) { return false; }
+}
+
 function pageParams(req) {
   const page = Math.max(1, parseInt(req.query.page || '1', 10) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || '10', 10) || 10));
@@ -220,6 +243,10 @@ router.post('/orders', async (req, res) => {
     // Web Push: notify admins of new order (async, non-blocking)
     push.notifyNewOrder(db, order, service.name_bn || service.name, req.user.id).catch(() => {});
 
+    // C1 (2026-11-03): INSERT ... RETURNING * carries admin_note
+    // (null at creation, but the column must never leave the server
+    // on a customer endpoint — same strip as the list/detail paths).
+    delete order.admin_note;
     res.status(201).json({ order });
   } catch (e) {
     safeLog('[user] order create error:', e.message);
@@ -235,7 +262,14 @@ router.post('/orders', async (req, res) => {
            ORDER BY created_at DESC LIMIT 1`,
           [req.user.id, String(clientKey)]
         );
-        if (ex.rows.length) return res.json({ order: ex.rows[0], duplicate: true });
+        // C1 (2026-11-03): the duplicate path used SELECT *, so the
+        // internal admin_note reached the customer — strip it
+        // before returning, like every other customer order path.
+        if (ex.rows.length) {
+          const dup = { ...ex.rows[0] };
+          delete dup.admin_note;
+          return res.json({ order: dup, duplicate: true });
+        }
       } catch (e2) { safeLog('[user] duplicate-order lookup skipped:', e2.message); }
     }
     res.status(500).json({ error: 'ORDER_FAILED' });
@@ -303,6 +337,12 @@ router.get('/orders/:id', async (req, res) => {
     // Belt-and-braces: even if the column list above ever widens,
     // the internal note is stripped here before responding.
     delete r.rows[0].admin_note;
+    // C3 (2026-11-03): the detail page shows admin files for a
+    // refunded order ONLY when it was delivered first — the flag
+    // carries the history verdict so the page never has to guess
+    // from the status alone (status 'refunded' alone proves
+    // nothing: failed/cancelled→refunded rows were never delivered).
+    r.rows[0].delivered_before_refund = await orderWasDelivered(req.params.id);
     res.json({ order: r.rows[0] });
   } catch (e) {
     safeLog('[user] order detail error:', e.message);
@@ -458,9 +498,20 @@ router.get('/orders/:id/documents/:filename', async (req, res) => {
     const docs = safeJsonArray(ord.rows[0].documents);
     const doc = docs.find(d => d && require('path').basename(d.filename) === fn);
     if (!doc) return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
-    if (doc.uploaded_by === 'admin' &&
-        !['completed', 'delivered', 'refunded'].includes(ord.rows[0].status)) {
-      return res.status(403).json({ error: 'NOT_DELIVERED_YET' });
+    // C3 (2026-11-03): a refunded order's admin file downloads
+    // ONLY if the order was completed/delivered first (goodwill).
+    // The old unconditional 'refunded' allowance exposed
+    // never-delivered admin files of hand-refunded failed/
+    // cancelled rows. Customer uploads are unaffected.
+    if (doc.uploaded_by === 'admin') {
+      const st = ord.rows[0].status;
+      if (st === 'completed' || st === 'delivered') {
+        // delivered — allowed
+      } else if (st === 'refunded' && await orderWasDelivered(orderId)) {
+        // delivered, then refunded — goodwill, allowed
+      } else {
+        return res.status(403).json({ error: 'NOT_DELIVERED_YET' });
+      }
     }
     const fp = require('path').join('/opt/all-in-one-abc-authentic/uploads/orders', fn);
     const fs = require('fs');
@@ -487,11 +538,18 @@ router.get('/history', async (req, res) => {
       // delivered — completed/delivered, or refunded after delivery
       // (goodwill: the file stays after a delivered→refunded).
       // new/pending/processing orders contribute no admin files.
+      // C3 (2026-11-03): 'refunded' alone is NOT enough — the
+      // EXISTS check proves delivery from the timeline, so a
+      // hand-refunded failed/cancelled row contributes nothing.
       db.query(
         `SELECT o.id, o.documents, o.created_at,
                 s.name AS service_name, s.name_bn AS service_name_bn
          FROM orders o LEFT JOIN services s ON s.id = o.service_id
-         WHERE o.user_id = $1 AND o.status IN ('completed', 'delivered', 'refunded')
+         WHERE o.user_id = $1 AND (o.status IN ('completed', 'delivered')
+           OR (o.status = 'refunded' AND EXISTS (
+             SELECT 1 FROM order_status_history h WHERE h.order_id = o.id AND
+               (h.to_status IN ('completed', 'delivered')
+                OR (h.to_status = 'refunded' AND h.from_status IN ('completed', 'delivered'))))))
          ORDER BY o.created_at DESC LIMIT 100`, [uid]),
       // P2: same rule for manual submissions — admin files only
       // once the submission is completed (no delivered state here;

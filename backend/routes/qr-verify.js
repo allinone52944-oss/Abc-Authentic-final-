@@ -240,9 +240,14 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
       // Gateway itself charged 0 for this — the customer pays 0
       // too. Premium flow (owner-approved sample, 2026-10-22):
       // the failure is still a recorded outcome — a 'failed'
-      // order carrying a failure receipt (→ History), a
-      // WhatsApp notice to the customer and a push to the
-      // admins. Notifications fire only on the FIRST insert.
+      // order carrying a failure receipt stored as an ADMIN-side
+      // record, a WhatsApp notice to the customer and a push to
+      // the admins. Notifications fire only on the FIRST insert.
+      // C2 (2026-11-03): the receipt is NOT in the customer's
+      // History — no customer path serves a failed order's file
+      // (download gate: NOT_DELIVERED_YET) — so the push must
+      // never promise "ইতিহাসে পাবেন". This fix promises less,
+      // it does not widen any gate.
       const reasonBn = failureReasonBn(result.message);
       const idemSlug = idem.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 48);
       let orderId = null;
@@ -277,10 +282,12 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
           wa.notifyServiceFailed(db, req.user.id, 'QR + ছবি যাচাই', reasonBn,
             'নতুন QR কোড দিয়ে আবার চেষ্টা করুন। সহায়তা লাগলে আমাদের সাপোর্টে যোগাযোগ করুন।').catch(() => {});
           push.notifyUser(db, req.user.id, '❌ QR যাচাই ব্যর্থ',
-            receiptUrl
-              ? 'আপনার QR + ছবি যাচাই সফল হয়নি — কোনো টাকা কাটা হয়নি। ব্যর্থতার রসিদটি ইতিহাসে পাবেন।'
-              : 'আপনার QR + ছবি যাচাই সফল হয়নি — কোনো টাকা কাটা হয়নি। রসিদ তৈরি হয়নি, সহায়তা লাগলে সাপোর্টে জানান।',
-            '/history.html').catch(() => {});
+            // C2: no History promise — a failed order's receipt
+            // reaches the customer through no path (kept only as
+            // an admin-side record). Point at orders, not History.
+            'আপনার QR + ছবি যাচাই সফল হয়নি — কোনো টাকা কাটা হয়নি।' +
+              (receiptUrl ? '' : ' রসিদ তৈরি হয়নি, সহায়তা লাগলে সাপোর্টে জানান।'),
+            '/orders.html').catch(() => {});
           push.notifyAdmins(db, '❌ QR যাচাই ব্যর্থ',
             'একটি QR + ছবি যাচাই সফল হয়নি — কোনো চার্জ কাটা হয়নি।', '/admin.html').catch(() => {});
         } else {

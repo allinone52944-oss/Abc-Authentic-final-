@@ -1101,8 +1101,16 @@ router.delete('/orders/:id', async (req, res) => {
       wa.notifyOrderRefunded(db,
         { id, user_id: result.user_id, price: result.price },
         { creditPart: split.creditPart || 0, balancePart: split.balancePart }).catch(() => {});
+      // C4 (2026-11-03): delete-with-refund push carries the
+      // wallet/credit split like the status-refund push does —
+      // the old flat "৳X ফেরত দেওয়া হয়েছে" hid where the
+      // money went. Same sentence builder as the status path,
+      // with the old flat text only as a fallback when no split
+      // was recorded (split-less refund must never push empty).
+      const refundSentence = autoRefundSentence(result.refundSplit, result.price)
+        || `৳${Number(result.price) || 0} ফেরত দেওয়া হয়েছে।`;
       push.notifyUser(db, result.user_id, '↩️ অর্ডার রিফান্ড হয়েছে',
-        `৳${Number(result.price) || 0} ফেরত দেওয়া হয়েছে।`, '/orders.html').catch(() => {});
+        refundSentence, '/orders.html').catch(() => {});
     }
 
     await logActivity(req.user.id, 'order.delete', {

@@ -157,7 +157,7 @@ describe('P2 item 6: delivery visibility by order status', () => {
     expect(r2.body.error).toBe('FILE_MISSING');
   });
 
-  test('history lists admin files only from completed/delivered/refunded orders', async () => {
+  test('history lists admin files only from completed/delivered/refunded-after-delivery orders (C3)', async () => {
     db.__routeQuery([
       ['FROM orders o LEFT JOIN services', { rows: [
         { id: 'oProc', documents: JSON.stringify([{ filename: 'early.pdf', uploaded_by: 'admin' }]), created_at: '2026-11-02T00:00:00Z', service_name: 'S', service_name_bn: 'সেবা' },
@@ -172,9 +172,39 @@ describe('P2 item 6: delivery visibility by order status', () => {
     const r = await withUser(request(app()).get('/api/history')).expect(200);
     expect(r.body.ok).toBe(true);
     const q = db.query.mock.calls.find((c) => /FROM orders o LEFT JOIN services/.test(c[0]));
-    expect(q[0]).toContain("o.status IN ('completed', 'delivered', 'refunded')");
+    // C3: 'refunded' alone no longer qualifies — the timeline
+    // EXISTS gate must prove the order was delivered first.
+    expect(q[0]).toContain("o.status IN ('completed', 'delivered')");
+    expect(q[0]).toContain("o.status = 'refunded' AND EXISTS");
+    expect(q[0]).toContain('order_status_history');
+    expect(q[0]).not.toContain("o.status IN ('completed', 'delivered', 'refunded')");
     const mq = db.query.mock.calls.find((c) => /FROM manual_submissions m LEFT JOIN services/.test(c[0]));
     expect(mq[0]).toContain("m.status = 'completed'");
+  });
+});
+
+describe('C4: delete-with-refund push carries the wallet/credit split', () => {
+  test('split refund (৳150 wallet + ৳100 credit) is named in the push, like the status-refund push', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM orders WHERE id', { rows: [{ id: 'o2', user_id: 'u1', price: 250, status: 'processing', documents: '[]', service_id: 's1', idempotency_key: 'k1' }] }],
+      // hasPriorRefund: exact refund-o2 marker → none yet.
+      [(text, params) => String(text).includes('SELECT 1 FROM transactions') && params && params[1] === 'refund-o2', { rows: [] }],
+      // reconstructChargeSplit candidate: balance leg 150 + credit leg 100.
+      [(text) => String(text).includes('SELECT trxid, amount FROM transactions'), { rows: [
+        { trxid: 'order-k1-u1', amount: -150 },
+        { trxid: 'order-k1-u1:svc', amount: -100 },
+      ] }],
+      ['FROM service_credits', { rows: [] }],
+      ['DELETE FROM orders WHERE id', { rowCount: 1 }],
+    ]);
+    const r = await withAdmin(request(app()).delete('/api/admin/orders/o2?confirm=yes&refund=yes')).expect(200);
+    expect(r.body.refunded).toBe(true);
+    expect(r.body.refund).toMatchObject({ balancePart: 150, creditPart: 100 });
+    expect(push.notifyUser).toHaveBeenCalledTimes(1);
+    const msg = push.notifyUser.mock.calls[0][3];
+    expect(msg).toContain('৳150 আপনার ওয়ালেটে');
+    expect(msg).toContain('৳100 ওই সেবার ক্রেডিটে');
+    expect(msg).not.toBe('৳250 ফেরত দেওয়া হয়েছে।');
   });
 });
 

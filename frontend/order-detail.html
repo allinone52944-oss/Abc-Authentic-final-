@@ -271,8 +271,14 @@ async function init(){
   let docs=[]; try{docs=JSON.parse(o.documents||'[]');}catch(_){}
   // P2 (2026-11-03): ডেলিভারি ফাইল শুধু সম্পন্ন/ডেলিভার্ড অর্ডারে
   // দেখাবে; ডেলিভার্ড-পরবর্তী রিফান্ডে ফাইল থাকে (সদিচ্ছা)।
-  const _deliveredStates=['completed','delivered','refunded'];
-  const adminDocs = _deliveredStates.includes(o.status) ? docs.filter(d=>d && d.uploaded_by==='admin') : [];
+  // C3 (2026-11-03): রিফান্ডেড অর্ডারে ফাইল শুধু তখনই, যখন
+  // ব্যাকএন্ডের delivered_before_refund ফ্ল্যাগ বলে অর্ডারটি আগে
+  // সম্পন্ন/ডেলিভার্ড হয়েছিল — হাতে-রিফান্ড হওয়া ব্যর্থ/বাতিল
+  // সারির কখনো-ডেলিভারি-না-হওয়া ফাইল এখানে দেখাবে না। সার্ভার
+  // ডাউনলোড-গেটই চূড়ান্ত রক্ষক; এটি শুধু দেখানো বন্ধ করে।
+  const _showAdminDocs = o.status==='completed' || o.status==='delivered' ||
+    (o.status==='refunded' && o.delivered_before_refund === true);
+  const adminDocs = _showAdminDocs ? docs.filter(d=>d && d.uploaded_by==='admin') : [];
   const userDocs = docs.filter(d=>d && d.uploaded_by!=='admin' && d.filename);
 
   window._adminDocs = adminDocs;
