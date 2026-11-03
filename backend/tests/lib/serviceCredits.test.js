@@ -103,6 +103,106 @@ describe('addServiceCredit / availableFor', () => {
   });
 });
 
+describe('refundOrderPrice — B1 engine refs (2026-11-03)', () => {
+  // Same shape as the refundClient above, but ledger rows are keyed
+  // by the ENGINE charge ref while the order carries only its key.
+  function engineClient({ ledger = {}, creditRows = [] } = {}) {
+    const calls = [];
+    return {
+      calls,
+      query: jest.fn(async (text, params) => {
+        calls.push([text, params]);
+        if (/FROM transactions/.test(text)) {
+          const ref = params[1];
+          return { rows: ledger[ref] || [] };
+        }
+        if (/FROM service_credits/.test(text)) return { rows: creditRows };
+        if (/UPDATE service_credits SET remaining/.test(text)) return { rows: [] };
+        if (/INSERT INTO service_credits/.test(text)) return { rows: [{ id: 'sc-ref' }] };
+        if (/wallet_apply/.test(text)) return { rows: [{ new_balance: 0 }] };
+        return { rows: [] };
+      }),
+    };
+  }
+
+  test('land client idem reconstructs via land-<mode>-<idem> (no full-balance fallback)', async () => {
+    const client = engineClient({
+      ledger: {
+        'land-search-idem1': [
+          { trxid: 'land-search-idem1', amount: -70 },
+          { trxid: 'land-search-idem1:svc', amount: -30 },
+        ],
+      },
+      creditRows: [{ id: 'c1', amount: 50, remaining: 20 }],
+    });
+    const out = await refundOrderPrice(client,
+      { id: 'oL', user_id: 'u1', service_id: 's1', price: 100, idempotency_key: 'idem1' }, 'refund');
+    expect(out).toEqual({ refunded: true, creditPart: 30, balancePart: 70 });
+    const w = client.calls.find((c) => /wallet_apply/.test(c[0]));
+    expect(w[1]).toEqual(['u1', 70, 'refund', 'refund-oL']); // NOT the full 100
+  });
+
+  test('land auto idem reconstructs via the doubled mode prefix', async () => {
+    const client = engineClient({
+      ledger: {
+        'land-scan-land-scan-uuid9': [
+          { trxid: 'land-scan-land-scan-uuid9', amount: -80 },
+          { trxid: 'land-scan-land-scan-uuid9:svc', amount: -20 },
+        ],
+      },
+      creditRows: [{ id: 'c1', amount: 100, remaining: 80 }],
+    });
+    const out = await refundOrderPrice(client,
+      { id: 'oS', user_id: 'u1', service_id: 's1', price: 100, idempotency_key: 'land-scan-uuid9' }, 'refund');
+    expect(out).toEqual({ refunded: true, creditPart: 20, balancePart: 80 });
+  });
+
+  test('nid order key nid-<jobId> reconstructs via nid-card-<jobId>', async () => {
+    const client = engineClient({
+      ledger: {
+        'nid-card-job9': [
+          { trxid: 'nid-card-job9', amount: -55 },
+          { trxid: 'nid-card-job9:svc', amount: -45 },
+        ],
+      },
+      creditRows: [{ id: 'c1', amount: 100, remaining: 55 }],
+    });
+    const out = await refundOrderPrice(client,
+      { id: 'oN', user_id: 'u1', service_id: 's1', price: 100, idempotency_key: 'nid-job9' }, 'refund');
+    expect(out).toEqual({ refunded: true, creditPart: 45, balancePart: 55 });
+  });
+
+  test('nid-server-copy order key IS the ref, so it reconstructs directly', async () => {
+    const client = engineClient({
+      ledger: {
+        'nidsc-job7-card': [
+          { trxid: 'nidsc-job7-card', amount: -60 },
+          { trxid: 'nidsc-job7-card:svc', amount: -40 },
+        ],
+      },
+      creditRows: [{ id: 'c1', amount: 100, remaining: 60 }],
+    });
+    const out = await refundOrderPrice(client,
+      { id: 'oC', user_id: 'u1', service_id: 's1', price: 100, idempotency_key: 'nidsc-job7-card' }, 'refund');
+    expect(out).toEqual({ refunded: true, creditPart: 40, balancePart: 60 });
+  });
+
+  test('qr-verify order key (idem) reconstructs via qr-verify-<idem>', async () => {
+    const client = engineClient({
+      ledger: {
+        'qr-verify-idemqr': [
+          { trxid: 'qr-verify-idemqr', amount: -90 },
+          { trxid: 'qr-verify-idemqr:svc', amount: -10 },
+        ],
+      },
+      creditRows: [{ id: 'c1', amount: 100, remaining: 90 }],
+    });
+    const out = await refundOrderPrice(client,
+      { id: 'oQ', user_id: 'u1', service_id: 's1', price: 100, idempotency_key: 'idemqr' }, 'refund');
+    expect(out).toEqual({ refunded: true, creditPart: 10, balancePart: 90 });
+  });
+});
+
 describe('refundOrderPrice (admin-order fix, 2026-11-03)', () => {
   // Focused mock: ledger rows keyed by the charge ref the refund
   // helper reconstructs, plus one service_credits row to top up.

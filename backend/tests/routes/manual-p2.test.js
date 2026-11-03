@@ -110,7 +110,7 @@ describe('P2 item 10: admin manual queue search + total', () => {
 describe('P2 item 13: rejected manual submission notifies on WhatsApp', () => {
   test('new → rejected: WhatsApp rejected + push, no completed wording', async () => {
     db.__routeQuery([
-      ['SELECT user_id, service_id, status, documents FROM manual_submissions', { rows: [{ user_id: 'u1', service_id: 7, status: 'new', documents: [] }] }],
+      ['SELECT user_id, service_id, status, documents, admin_note FROM manual_submissions', { rows: [{ user_id: 'u1', service_id: 7, status: 'new', documents: [] }] }],
       ['UPDATE manual_submissions SET', { rows: [{ id: 'm1', status: 'rejected' }] }],
       ['SELECT name_bn, name FROM services', { rows: [{ name_bn: 'পাসপোর্ট সেবা', name: 'Passport' }] }],
     ]);
