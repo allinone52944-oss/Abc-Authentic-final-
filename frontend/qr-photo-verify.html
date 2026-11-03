@@ -32,7 +32,6 @@
   }
   .err.on { display: block; }
   .err .res-line { font-weight: 700; margin-top: 8px; }
-  .err .res-btn { margin-top: 10px; padding: 9px 16px; }
   .ok {
     display: none; background: #f0fdf4; border: 1px solid #86efac; color: #15803d;
     padding: 14px; border-radius: var(--r-md); margin-bottom: 14px; font-size: 14px;
@@ -148,7 +147,10 @@
   // built '<br><b>…</b><button…>' and fed it to textContent-based
   // showErr, which displayed the tags literally and left the receipt
   // button dead). Message text always goes through textContent.
-  function showErrResult(msg, receipt) {
+  // Premium failure display on purpose: message + charge line only,
+  // NO receipt button on the failure screen (the failed receipt PDF
+  // is still stored in the customer's History by the backend).
+  function showErrResult(msg) {
     const e = document.getElementById('errBox');
     e.replaceChildren();
     const m = document.createElement('div');
@@ -158,14 +160,6 @@
     c.className = 'res-line';
     c.textContent = 'চার্জ: ৳০ — কোনো টাকা কাটা হয়নি';
     e.appendChild(c);
-    if (receipt) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'btn btn-secondary res-btn';
-      b.textContent = '📄 ব্যর্থতার রসিদ';
-      b.addEventListener('click', () => dlPdf(receipt, 'qr-receipt-failed.pdf'));
-      e.appendChild(b);
-    }
     e.classList.add('on');
     document.getElementById('okBox').classList.remove('on');
   }
@@ -254,8 +248,7 @@
         loadPrice();
       } else {
         showErrResult(
-          d.message || d.error || 'যাচাই সফল হয়নি — কোনো টাকা কাটা হয়নি।',
-          d.receipt || null
+          d.message || d.error || 'যাচাই সফল হয়নি — কোনো টাকা কাটা হয়নি।'
         );
       }
     } catch (err) {
