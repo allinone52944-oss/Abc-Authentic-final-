@@ -267,11 +267,15 @@ describe('F15 delete focus returns to a durable element', () => {
 });
 
 describe('sidebar-unified-orders: one orders section, bulk delete, userTotal', () => {
-  test('removed sidebar tabs are gone from admin.html; admin.js cache bumped to v=86', () => {
+  test('removed sidebar tabs are gone from admin.html; admin.js cache bumped to v=87', () => {
     expect(ADMIN_HTML).not.toContain('data-t="bdrisApps"');
     expect(ADMIN_HTML).not.toContain('data-t="engineJobs"');
     expect(ADMIN_HTML).not.toContain('data-t="autoData"');
-    expect(ADMIN_HTML).toContain('/js/admin.js?v=86');
+    expect(ADMIN_HTML).toContain('/js/admin.js?v=87');
+  });
+  test('admin engine dropdowns (create + edit) include land-khatian', () => {
+    expect(ADMIN_SRC.split('value="land-khatian"').length - 1).toBeGreaterThanOrEqual(2);
+    expect(ADMIN_SRC).toContain("s.engine_id === 'land-khatian' ? ' selected' : ''");
   });
   test('orders list fetches only the unified endpoint with kind labels', () => {
     expect(ADMIN_SRC).toContain("'/admin/unified-services?limit=50&page='");
