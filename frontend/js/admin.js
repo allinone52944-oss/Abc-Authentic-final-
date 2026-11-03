@@ -54,6 +54,27 @@ function admRefundText(split, price, done){
   }
   return parts.join(' + ') + ' ' + verb;
 }
+// P2 (2026-11-03) helpers — Dhaka-clock dates, WhatsApp numbers,
+// upload size gate. Dates render in Asia/Dhaka explicitly: a browser
+// in another timezone must never shift an order's day/time.
+function dhDate(x){return x ? new Date(x).toLocaleDateString('bn-BD', { timeZone: 'Asia/Dhaka' }) : '—';}
+function dhTime(x){return x ? new Date(x).toLocaleTimeString('bn-BD', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit' }) : '';}
+function dhDateTime(x){return x ? new Date(x).toLocaleString('bn-BD', { timeZone: 'Asia/Dhaka' }) : '—';}
+// WhatsApp number: digits only, always 880-prefixed, never doubled —
+// '017…' → '88017…', '88017…' stays '88017…', '+880 17…' → '88017…'.
+function waDigits(phone){
+  const d = String(phone || '').replace(/\D/g, '');
+  if (!d) return '';
+  if (d.startsWith('880')) return d;
+  if (d.startsWith('0')) return '880' + d.slice(1);
+  return '880' + d;
+}
+// Server upload cap: order docs default 10MB (security.js
+// orderDocUpload, settings may raise it); manual uploads fixed 10MB.
+// The client check uses the default so an oversize file is refused
+// before upload, with an honest message — never a silent failure.
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+function uploadTooBig(f){return !!(f && f.size > MAX_UPLOAD_BYTES);}
 
 function getAuthToken() {
   try {
@@ -158,7 +179,10 @@ async function show(tab) {
   } catch (e) {
     if (gen !== _showGen) return;
     const msg = String((e && e.message) || e);
-    content.innerHTML = '<div class="err">লোড ব্যর্থ: ' + esc(msg) + '</div>';
+    // P2: the orders list gets a retry button (a transient failure
+    // must not leave the admin with a dead page and no recourse).
+    content.innerHTML = '<div class="err">লোড ব্যর্থ: ' + esc(msg) + '</div>' +
+      (tab === 'orders' ? '<button class="mini-btn" style="margin-top:8px;" onclick="show(\'orders\')">🔄 আবার চেষ্টা করুন</button>' : '');
   }
 }
 window.show = show;
@@ -532,10 +556,11 @@ const VoiceAlert = {
                 message: 'গ্রাহক: <b>' + esc(latest.user_name || 'গ্রাহক') + '</b><br>সার্ভিস: <b>' + esc(latest.service_name_bn || latest.service_name || 'সেবা') + '</b> • ৳' + bn(latest.price || 0),
                 badge: 'নতুন',
                 actionText: 'অর্ডার খুলুন ➤',
-                onAction: () => {
-                  show('orders');
-                  setTimeout(() => AdmOrders.view(latest.id), 250);
-                }
+                // P2: no 250ms race — await the list load, then open
+                // by id (single-order fetch when the row is not on
+                // the loaded page/filter). view() on a cold cache
+                // used to alert "order not found".
+                onAction: () => { AdmOrders.openById(latest.id); }
               });
             }
           }
@@ -1037,8 +1062,10 @@ window.AdmUsers = {
       ? '<span style="display:inline-block; padding:2px 6px; border-radius:5px; background:#eff6ff; color:#1d4ed8; font-weight:700; font-size:10px;">🛡️ অ্যাডমিন</span>'
       : '<span style="color:#64748b; font-size:11px;">কাস্টমার</span>';
 
+    // P2: waDigits() — an already-880 number must not get a second
+    // 88 (the old 'wa.me/88' + digits doubled it to 88880…).
     const waLink = u.whatsapp
-      ? '<a href="https://wa.me/88' + esc(u.whatsapp.replace(/\D/g, '')) + '" target="_blank" style="color:#16a34a; font-weight:600; text-decoration:none;" title="হোয়াটসঅ্যাপে চ্যাট করুন">💬 ' + esc(u.whatsapp) + '</a>'
+      ? '<a href="https://wa.me/' + esc(waDigits(u.whatsapp)) + '" target="_blank" style="color:#16a34a; font-weight:600; text-decoration:none;" title="হোয়াটসঅ্যাপে চ্যাট করুন">💬 ' + esc(u.whatsapp) + '</a>'
       : '<span style="color:#94a3b8;">নেই</span>';
 
     return '<tr>' +
@@ -1471,6 +1498,10 @@ TABS.orders = async () => {
   const _q = TABS._q || '';
   const _type = TABS._orderType || '';
   const _page = TABS._opage || 1;
+  // P2: preserve scroll across list re-renders (after an action the
+  // admin used to land back at the top). First load stays at top.
+  const _hadList = (TABS._orders || []).length > 0;
+  const _scrollY = window.scrollY;
   let url = '/admin/orders?limit=50&page=' + _page;
   if (_f) url += '&status=' + encodeURIComponent(_f);
   if (_q) url += '&q=' + encodeURIComponent(_q);
@@ -1485,7 +1516,10 @@ TABS.orders = async () => {
   if (!ordersRes.ok) throw new Error(d.error && d.error !== 'FAILED' ? d.error : 'অর্ডার লোড ব্যর্থ (সার্ভার সমস্যা)');
   const stats = statsRes.ok ? await statsRes.json().catch(() => ({})) : {};
   TABS._orders = d.orders || [];
-  const pendingManual = Number(stats.manual_new) || 0;
+  // P2: the manual type-tab badge counts paid manual ORDERS (the
+  // tab's own rows), not the free submission queue. manual_new
+  // (submission queue) is left untouched for its other uses.
+  const pendingManual = Number(stats.orders_manual) || 0;
   const orderTypeTabs = [
     { key: '', label: 'সব ধরন', icon: '📦' },
     { key: 'auto', label: 'অটো সেবা', icon: '⚙️' },
@@ -1519,7 +1553,7 @@ TABS.orders = async () => {
         }).join('') +
       '</div>' +
       '<div style="display:flex;align-items:center;gap:8px;margin-left:auto;">' +
-        '<input type="text" id="admOrderSearch" class="adm-search-input" placeholder="🔍 গ্রাহকের নাম, মোবাইল, সার্ভিস বা অর্ডার নম্বর (#…) খুঁজুন..." value="' + esc(_q) + '" onkeydown="if(event.key===\'Enter\')AdmOrders.search(this.value)">' +
+        '<input type="text" id="admOrderSearch" class="adm-search-input" aria-label="অর্ডার খুঁজুন (নাম, মোবাইল, সার্ভিস বা অর্ডার নম্বর)" placeholder="🔍 গ্রাহকের নাম, মোবাইল, সার্ভিস বা অর্ডার নম্বর (#…) খুঁজুন..." value="' + esc(_q) + '" onkeydown="if(event.key===\'Enter\')AdmOrders.search(this.value)">' +
         '<button class="mini-btn" onclick="AdmOrders.search(document.getElementById(\'admOrderSearch\').value)">খুঁজুন</button>' +
         (_q ? '<button class="mini-btn danger" onclick="AdmOrders.clearSearch()">✕ ক্লিয়ার</button>' : '') +
       '</div>' +
@@ -1603,18 +1637,18 @@ TABS.orders = async () => {
           '<span class="st-badge ' + stClass + '">' + esc(stText) + '</span>' +
         '</td>' +
         '<td>' +
-          '<div style="font-size:12px;font-weight:600;color:var(--text-main);">' + new Date(o.created_at).toLocaleDateString('bn-BD') + '</div>' +
-          '<div style="font-size:11px;color:var(--text-muted);">' + new Date(o.created_at).toLocaleTimeString('bn-BD', {hour:'2-digit', minute:'2-digit'}) + '</div>' +
+          '<div style="font-size:12px;font-weight:600;color:var(--text-main);">' + dhDate(o.created_at) + '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted);">' + dhTime(o.created_at) + '</div>' +
         '</td>' +
         '<td>' +
           '<div class="adm-action-grp" style="justify-content:flex-end;">' +
             quickActionBtn +
-            '<button class="adm-icon-btn" title="সম্পূর্ণ তথ্য পর্যালোচনা ও ডেলিভারি" onclick="AdmOrders.view(\'' + o.id + '\')">👁️ বিস্তারিত</button>' +
-            '<button class="adm-icon-btn" title="গ্রাহকের সাথে সাপোর্ট চ্যাট" onclick="AdmOrders.supportForm(\'' + o.id + '\')">💬</button>' +
+            '<button class="adm-icon-btn" title="সম্পূর্ণ তথ্য পর্যালোচনা ও ডেলিভারি" aria-label="অর্ডারের বিস্তারিত দেখুন" onclick="AdmOrders.view(\'' + o.id + '\')">👁️ বিস্তারিত</button>' +
+            '<button class="adm-icon-btn" title="গ্রাহকের সাথে সাপোর্ট চ্যাট" aria-label="গ্রাহকের সাথে সাপোর্ট চ্যাট" onclick="AdmOrders.supportForm(\'' + o.id + '\')">💬</button>' +
             (['cancelled', 'refunded', 'failed'].includes(o.status)
-              ? '<button class="adm-icon-btn" title="বাতিল/ব্যর্থ/রিফান্ডেড অর্ডারে ডেলিভারি দেওয়া যায় না" disabled style="opacity:0.35;cursor:not-allowed;">📎</button>'
-              : '<button class="adm-icon-btn" title="ডেলিভারি ফাইল আপলোড" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎</button>') +
-            '<button class="adm-icon-btn danger" title="অর্ডার ডিলিট করুন" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️</button>' +
+              ? '<button class="adm-icon-btn" title="বাতিল/ব্যর্থ/রিফান্ডেড অর্ডারে ডেলিভারি দেওয়া যায় না" aria-label="ডেলিভারি দেওয়া যায় না" disabled style="opacity:0.35;cursor:not-allowed;">📎</button>'
+              : '<button class="adm-icon-btn" title="ডেলিভারি ফাইল আপলোড" aria-label="ডেলিভারি ফাইল আপলোড" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎</button>') +
+            '<button class="adm-icon-btn danger" title="অর্ডার ডিলিট করুন" aria-label="অর্ডার ডিলিট করুন" onclick="AdmOrders.deleteOrder(\'' + o.id + '\')">🗑️</button>' +
           '</div>' +
         '</td>' +
       '</tr>';
@@ -1622,6 +1656,8 @@ TABS.orders = async () => {
   }
 
   html += '</tbody></table></div></div></div>';
+  // (scroll restore is applied after content.innerHTML below, once
+  // the new rows exist — see the end of this function.)
   // Admin-order fix (2026-11-03): the list used to stop at the first
   // 50 rows with no way to reach the rest. The backend already
   // returns total/page/limit — now the pager actually uses them.
@@ -1635,6 +1671,9 @@ TABS.orders = async () => {
       (curPage < totalPages ? '<button class="mini-btn" onclick="AdmOrders.page(' + (curPage + 1) + ')">পরের পেজ →</button>' : '') +
     '</span></div>';
   content.innerHTML = html;
+  // P2: restore the pre-render scroll position on re-renders so an
+  // action does not throw the admin back to the top of the list.
+  if (_hadList) { try { window.scrollTo(0, _scrollY); } catch (_) {} }
 };
 
 // Orders-page split (2026-11-03): BDRIS applications and engine
@@ -2000,7 +2039,10 @@ window.AdmOrders = {
     try {
       const r = await ABC.api('/admin/orders/' + id + '/status', {
         method: 'PUT',
-        body: { status: 'cancelled', admin_note: note || 'এডমিন কর্তৃক বাতিল' }
+        // P2: the typed reason travels as cancel_reason so the
+        // customer notice can name it; admin_note stays internal.
+        // Empty prompt → no reason line (not the generic default).
+        body: { status: 'cancelled', admin_note: note || 'এডমিন কর্তৃক বাতিল', cancel_reason: note || undefined }
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'বাতিল ব্যর্থ');
@@ -2109,7 +2151,8 @@ window.AdmOrders = {
 
     let confirmHtml = '<div style="padding:10px 0;">' +
       '<div style="background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;padding:12px;border-radius:8px;margin-bottom:14px;font-size:13px;line-height:1.5;">' +
-        '⚠️ <b>সতর্কতা:</b> অর্ডার ' + esc(orderNum) + ' মুছে ফেললে এটি এবং এর সাথে সম্পর্কিত সব চ্যাট ও ডকুমেন্টস স্থায়ীভাবে ডাটাবেজ থেকে মুছে যাবে।' +
+        '⚠️ <b>সতর্কতা:</b> অর্ডার ' + esc(orderNum) + ' মুছে ফেললে এটি এবং এর সাথে সম্পর্কিত সব চ্যাট ও ডকুমেন্টস স্থায়ীভাবে ডাটাবেজ থেকে মুছে যাবে। ' +
+        'গ্রাহকের ইতিহাস (History) থেকেও এই অর্ডারের রেকর্ড ও ডেলিভারি ফাইল চিরতরে হারিয়ে যাবে — গ্রাহক আর তা ডাউনলোড করতে পারবেন না।' +
       '</div>' +
       '<div style="margin-bottom:16px;font-size:13px;line-height:1.6;color:var(--text-main);">' +
         '• <b>গ্রাহক:</b> ' + esc(userName) + '<br>' +
@@ -2174,15 +2217,18 @@ window.AdmOrders = {
     const txt = note.value.trim();
     let o = (TABS._orders || []).find(x => x.id === id);
     if (!o) {
-      // Admin-order fix (2026-11-03): NEVER guess 'processing' for a
-      // missing cache entry — that guess used to fail note saves on
-      // delivered orders (and could mislabel the transition). Refetch
-      // the list data (without re-rendering, so the open note modal
-      // survives) and retry once; if still missing, say so.
+      // P2: single-order fetch (GET /admin/orders/:id) replaces the
+      // old 50-row list refetch — same no-guess rule (never assume
+      // 'processing'), without re-rendering the open modal.
       try {
-        const lr = await ABC.api('/admin/orders?limit=50');
-        const ld = await lr.json().catch(() => ({}));
-        o = (ld.orders || []).find(x => x.id === id);
+        const sr = await ABC.api('/admin/orders/' + id);
+        if (sr.ok) {
+          const sd = await sr.json().catch(() => ({}));
+          if (sd.order) {
+            o = sd.order;
+            (TABS._orders = TABS._orders || []).push(o);
+          }
+        }
       } catch (_) {}
     }
     if (!o) { alert('অর্ডার তালিকায় পাওয়া যায়নি — পেজ রিলোড করে আবার চেষ্টা করুন'); this._setBusy(btn, false); return; }
@@ -2193,24 +2239,55 @@ window.AdmOrders = {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'নোট সংরক্ষণ ব্যর্থ');
-      // P1 (10ঙ): detail refresh from the server + clear the note
-      // box (the saved note lives on the order now, not in the box).
-      try {
-        const dr = await ABC.api('/admin/orders/' + id);
-        if (dr.ok) {
-          const dd = await dr.json();
-          const idx = (TABS._orders || []).findIndex(x => x.id === id);
-          if (idx >= 0 && dd.order) TABS._orders[idx] = Object.assign({}, TABS._orders[idx], dd.order);
-        }
-      } catch (_) {}
-      note.value = '';
-      try { this.loadHistory(id); } catch (_) {}
-      alert('✅ এডমিন নোট সংরক্ষিত হয়েছে');
+      // P1+P2: honest result + detail refresh. The backend reports
+      // whether the note actually moved — an empty/unchanged save
+      // must not claim success. On a real change, refresh the
+      // server cache, clear the note box (the saved note lives on
+      // the order now, not in the box) and reload the timeline.
+      if (d.noteChanged) {
+        o.admin_note = txt;
+        try {
+          const dr = await ABC.api('/admin/orders/' + id);
+          if (dr.ok) {
+            const dd = await dr.json();
+            const idx = (TABS._orders || []).findIndex(x => x.id === id);
+            if (idx >= 0 && dd.order) TABS._orders[idx] = Object.assign({}, TABS._orders[idx], dd.order);
+          }
+        } catch (_) {}
+        note.value = '';
+        try { this.loadHistory(id); } catch (_) {}
+        alert('✅ এডমিন নোট সংরক্ষিত হয়েছে');
+      } else {
+        alert('ℹ️ নোটে কোনো পরিবর্তন হয়নি — আগের নোটই আছে');
+      }
     } catch (e) {
       alert('❌ সংরক্ষণ ব্যর্থ: ' + admErrBn(e.message));
     } finally {
       this._setBusy(btn, false);
     }
+  },
+
+  // P2: open an order's detail after the list has actually loaded —
+  // await show(), then fall back to the single-order fetch when the
+  // row is not on the loaded page/filter. Replaces the old
+  // 250ms-timeout race in the new-order toast.
+  async openById(id) {
+    await show('orders');
+    let o = (TABS._orders || []).find(x => x.id === id);
+    if (!o) {
+      try {
+        const r = await ABC.api('/admin/orders/' + id);
+        if (r.ok) {
+          const d = await r.json().catch(() => ({}));
+          if (d.order) {
+            (TABS._orders = TABS._orders || []).push(d.order);
+            o = d.order;
+          }
+        }
+      } catch (_) {}
+    }
+    if (o) this.view(id);
+    else alert('অর্ডারটি তালিকায় পাওয়া যায়নি — সার্চ দিয়ে খুঁজুন');
   },
 
   openQuickComplete(id) {
@@ -2274,14 +2351,37 @@ window.AdmOrders = {
     // Customer Attached Documents
     let docsHtml = '';
     try {
-      const docs = typeof o.documents === 'string' ? JSON.parse(o.documents || '[]') : (o.documents || []);
-      const userDocs = docs.filter(d => !d.uploaded_by || d.uploaded_by === 'user');
-      const adminDocs = docs.filter(d => d.uploaded_by === 'admin' || d.type === 'delivery');
+      let docsParsed;
+      let docsBroken = false;
+      if (typeof o.documents === 'string') {
+        try { docsParsed = JSON.parse(o.documents || '[]'); }
+        catch (_) { docsParsed = []; docsBroken = true; }
+      } else {
+        docsParsed = o.documents || [];
+      }
+      // P2: bad entries are dropped, good files still show — a
+      // single corrupt entry used to hide nothing (it rendered
+      // blindly) or, on a broken string, the whole list. Only
+      // object entries with a filename survive; the rest are
+      // counted and warned about, never rendered.
+      const allDocs = Array.isArray(docsParsed) ? docsParsed : [];
+      const validDocs = allDocs.filter(d => d && typeof d === 'object' && (d.filename || d.originalname));
+      const dropped = allDocs.length - validDocs.length;
+      const docsWarn = (docsBroken || dropped > 0)
+        ? '<div style="color:#b45309;font-size:11px;padding:4px 0;">⚠️ কিছু ডকুমেন্ট তথ্য পড়া যায়নি — সেগুলো বাদ দিয়ে বাকি ফাইল দেখানো হয়েছে।</div>'
+        : '';
+      // P2: post-order customer uploads carry uploaded_by:
+      // 'customer' (user.js) — the old filter ('user' only) hid
+      // every file a customer sent after ordering.
+      const userDocs = validDocs.map((d, idx) => ({ d, idx }))
+        .filter(x => !x.d.uploaded_by || x.d.uploaded_by === 'user' || x.d.uploaded_by === 'customer');
+      const adminDocs = validDocs.map((d, idx) => ({ d, idx }))
+        .filter(x => x.d.uploaded_by === 'admin' || x.d.type === 'delivery');
 
       if (userDocs.length) {
         docsHtml = '<div class="adm-docs-grid">' +
-          userDocs.map((d, i) => {
-            const origIdx = docs.indexOf(d);
+          userDocs.map(x => {
+            const d = x.d;
             return '<div class="adm-doc-card">' +
               '<div style="display:flex;align-items:center;gap:8px;overflow:hidden;">' +
                 '<span style="font-size:22px;">📎</span>' +
@@ -2292,7 +2392,10 @@ window.AdmOrders = {
                   '<div style="font-size:10px;color:var(--text-muted);">গ্রাহকের ফাইল</div>' +
                 '</div>' +
               '</div>' +
-              '<button class="mini-btn ok" onclick="AdmOrders.dlDoc(\'' + o.id + '\',' + origIdx + ')">⬇️ ডাউনলোড</button>' +
+              // P2: index into the filtered validDocs array — the
+              // old docs.indexOf(d) returned the FIRST match, so a
+              // duplicated entry downloaded the wrong file.
+              '<button class="mini-btn ok" aria-label="ডকুমেন্ট ডাউনলোড" onclick="AdmOrders.dlDoc(\'' + o.id + '\',' + x.idx + ')">⬇️ ডাউনলোড</button>' +
             '</div>';
           }).join('') +
         '</div>';
@@ -2303,8 +2406,8 @@ window.AdmOrders = {
       let adminDocsHtml = '';
       if (adminDocs.length) {
         adminDocsHtml = '<div style="margin-top:14px;"><div style="font-weight:700;font-size:13px;color:#059669;margin-bottom:6px;">📤 ইতিমধ্যে ডেলিভারিকৃত ডকুমেন্ট:</div><div class="adm-docs-grid">' +
-          adminDocs.map((d, i) => {
-            const origIdx = docs.indexOf(d);
+          adminDocs.map(x => {
+            const d = x.d;
             return '<div class="adm-doc-card" style="border-color:#a7f3d0;background:#f0fdf4;">' +
               '<div style="display:flex;align-items:center;gap:8px;overflow:hidden;">' +
                 '<span style="font-size:22px;">✅</span>' +
@@ -2313,13 +2416,13 @@ window.AdmOrders = {
                   '<div style="font-size:10px;color:#16a34a;">ডেলিভারি ফাইল</div>' +
                 '</div>' +
               '</div>' +
-              '<button class="mini-btn ok" onclick="AdmOrders.dlDoc(\'' + o.id + '\',' + origIdx + ')">⬇️ ডাউনলোড</button>' +
+              '<button class="mini-btn ok" aria-label="ডেলিভারি ফাইল ডাউনলোড" onclick="AdmOrders.dlDoc(\'' + o.id + '\',' + x.idx + ')">⬇️ ডাউনলোড</button>' +
             '</div>';
           }).join('') +
         '</div></div>';
       }
-      docsHtml += adminDocsHtml;
-      TABS._viewDocs = docs;
+      docsHtml = docsWarn + docsHtml + adminDocsHtml;
+      TABS._viewDocs = validDocs;
     } catch (e) {
       docsHtml = '<div style="color:var(--danger);font-size:13px;">ডকুমেন্ট তালিকা লোড ব্যর্থ</div>';
     }
@@ -2493,10 +2596,14 @@ window.AdmOrders = {
           '<div style="font-size:18px;font-weight:800;color:var(--primary-800);">' + esc(o.service_name_bn || o.service_name || 'সেবা') + '</div>' +
           '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:13px;color:var(--text-muted);">' +
             '<span>👤 <b>' + esc(o.user_name || 'গ্রাহক') + '</b></span> • ' +
-            '<span>📞 <a href="tel:' + esc(o.user_phone) + '" style="color:var(--primary-600);text-decoration:none;font-weight:600;">' + esc(o.user_phone) + '</a></span> • ' +
-            '<span><a href="https://wa.me/' + esc(String(o.user_phone).replace(/[^0-9]/g, '')) + '" target="_blank" style="color:#16a34a;text-decoration:none;font-weight:700;">💬 WhatsApp</a></span>' +
+            '<span>📞 <a href="tel:' + esc(o.user_phone) + '" style="color:var(--primary-600);text-decoration:none;font-weight:600;">' + esc(o.user_phone) + '</a>' +
+            // P2: phone copy button next to the tel: link.
+            ' <button class="mini-btn" aria-label="ফোন নম্বর কপি করুন" style="padding:2px 7px;font-size:11px;" onclick="AdmOrders.copyVal(\'' + escJs(o.user_phone) + '\')">📋 কপি</button></span> • ' +
+            // P2: same waDigits() as the user section — an already
+            // -880 number must not get a second 88.
+            '<span><a href="https://wa.me/' + esc(waDigits(o.user_phone)) + '" target="_blank" style="color:#16a34a;text-decoration:none;font-weight:700;">💬 WhatsApp</a></span>' +
           '</div>' +
-          '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">🕘 জমাদানের তারিখ: ' + new Date(o.created_at).toLocaleString('bn-BD') + '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">🕘 জমাদানের তারিখ: ' + dhDateTime(o.created_at) + '</div>' +
         '</div>' +
         '<div style="text-align:right;">' +
           '<div class="adm-price-badge" style="font-size:16px;padding:4px 14px;">৳' + bn(o.price) + '</div>' +
@@ -2527,7 +2634,7 @@ window.AdmOrders = {
       '<div style="margin-top:20px;background:#f8fafc;padding:14px;border-radius:8px;border:1px solid var(--border-light);">' +
         '<div style="font-weight:700;font-size:13px;margin-bottom:6px;color:var(--text-main);">👨‍💼 এডমিন ইন্টারনাল নোট (শুধুমাত্র এডমিনদের জন্য দৃশ্যমান):</div>' +
         '<div style="display:flex;gap:6px;">' +
-          '<input type="text" id="admOrderNoteInput" value="' + esc(o.admin_note || '') + '" placeholder="এখানে ইন্টারনাল নোট লিখুন..." style="flex:1;font-size:12px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;">' +
+          '<input type="text" id="admOrderNoteInput" aria-label="এডমিন ইন্টারনাল নোট" value="' + esc(o.admin_note || '') + '" placeholder="এখানে ইন্টারনাল নোট লিখুন..." style="flex:1;font-size:12px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;">' +
           '<button class="mini-btn ok" style="padding:8px 14px;font-size:12px;" onclick="AdmOrders.saveAdminNote(\'' + o.id + '\', this)">💾 নোট সংরক্ষণ</button>' +
         '</div>' +
       '</div>' +
@@ -2540,7 +2647,11 @@ window.AdmOrders = {
         '</div>' +
         '<div style="margin-bottom:8px;">' +
           '<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:5px;">⚡ দ্রুত রেডিমেড টেমপ্লেট পাঠান (১-ক্লিক):</div>' +
-          '<div style="display:flex;flex-wrap:wrap;gap:6px;">' +
+          // P2: templates come from the server (/admin/support-
+          // templates) — one source, not a second hardcoded copy.
+          // The 5 buttons below are ONLY the fallback when that
+          // fetch fails; loadDetailTpls() replaces the row.
+          '<div id="admDetailTplRow_' + o.id + '" style="display:flex;flex-wrap:wrap;gap:6px;">' +
             '<button class="adm-icon-btn" onclick="AdmOrders.useInModalTpl(\'' + o.id + '\', \'🌐 সাময়িক সার্ভার সমস্যার কারণে কিছুটা বিলম্ব হচ্ছে, অনুগ্রহ করে অপেক্ষা করুন।\')">🌐 সার্ভার সমস্যা</button>' +
             '<button class="adm-icon-btn" onclick="AdmOrders.useInModalTpl(\'' + o.id + '\', \'⏳ আপনার অর্ডারের কাজ প্রসেসিং চলছে। অতি শীঘ্রই ডেলিভারি পাবেন।\')">⏳ কাজ চলছে</button>' +
             '<button class="adm-icon-btn" onclick="AdmOrders.useInModalTpl(\'' + o.id + '\', \'📄 অনুগ্রহ করে সঠিক তথ্য অথবা ক্লিয়ার ডকুমেন্টটি দিন।\')">📄 ডকুমেন্ট সমস্যা</button>' +
@@ -2552,7 +2663,7 @@ window.AdmOrders = {
           '<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:10px;">মেসেজ লোড হচ্ছে...</div>' +
         '</div>' +
         '<div style="display:flex;gap:8px;margin-top:10px;">' +
-          '<input type="text" id="admInModalSupMsg_' + o.id + '" placeholder="গ্রাহককে সরাসরি মেসেজ লিখুন..." style="flex:1;font-size:12px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:7px;" onkeydown="if(event.key===\'Enter\') AdmOrders.sendInModalSupport(\'' + o.id + '\')">' +
+          '<input type="text" id="admInModalSupMsg_' + o.id + '" aria-label="গ্রাহককে সরাসরি মেসেজ লিখুন" placeholder="গ্রাহককে সরাসরি মেসেজ লিখুন..." style="flex:1;font-size:12px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:7px;" onkeydown="if(event.key===\'Enter\') AdmOrders.sendInModalSupport(\'' + o.id + '\')">' +
           '<button class="btn-quick-primary" style="padding:8px 16px;font-size:12px;" onclick="AdmOrders.sendInModalSupport(\'' + o.id + '\')">পাঠান ➤</button>' +
         '</div>' +
       '</div>' +
@@ -2580,7 +2691,37 @@ window.AdmOrders = {
       AdmOrders.loadHistory(o.id);
       AdmOrders.loadInModalChat(o.id);
       if (document.getElementById('admRefundSummary_' + o.id)) AdmOrders.loadRefundSummary(o.id);
+      AdmOrders.loadDetailTpls(o.id);
     }, 60);
+  },
+
+  // P2: detail-modal quick templates from the server (single
+  // source). Fetch failure keeps the hardcoded fallback row.
+  _detailTpls: [],
+  async loadDetailTpls(orderId) {
+    const row = document.getElementById('admDetailTplRow_' + orderId);
+    if (!row) return;
+    try {
+      const r = await ABC.api('/admin/support-templates');
+      if (!r.ok) return;
+      const d = await r.json();
+      const tpls = d.templates || [];
+      if (!tpls.length) return;
+      this._detailTpls = tpls;
+      row.innerHTML = tpls.map((t, i) =>
+        '<button class="adm-icon-btn" onclick="AdmOrders.useDetailTpl(\'' + orderId + '\',' + i + ')">' +
+          esc(t.emoji || '') + ' ' + esc(String(t.bn || '').slice(0, 28)) + '…</button>'
+      ).join('');
+    } catch (_) { /* fallback row stays */ }
+  },
+  useDetailTpl(orderId, i) {
+    const t = this._detailTpls[i];
+    if (!t) return;
+    const inp = document.getElementById('admInModalSupMsg_' + orderId);
+    if (inp) {
+      inp.value = (t.emoji ? t.emoji + ' ' : '') + (t.bn || '');
+      inp.focus();
+    }
   },
 
   
@@ -2599,8 +2740,11 @@ window.AdmOrders = {
       el.innerHTML = list.map(item => {
         const fromSt = item.from_status ? (STBN[item.from_status] || item.from_status) : 'শুরু';
         const toSt = item.to_status ? (STBN[item.to_status] || item.to_status) : '—';
-        const dateStr = item.created_at ? new Date(item.created_at).toLocaleString('bn-BD') : '—';
+        const dateStr = dhDateTime(item.created_at);
         const adminName = item.admin_name || 'সিস্টেম এডমিন';
+        // Admin-side timeline still shows the note (admin eyes
+        // only; new rows carry none — history no longer copies
+        // the admin note). The customer timeline never sees it.
         const note = item.note ? ('<div style="color:#334155;margin-top:2px;font-style:italic;">নোট: ' + esc(item.note) + '</div>') : '';
         return '<div class="adm-timeline-item">' +
           '<div class="adm-timeline-dot"></div>' +
@@ -2635,7 +2779,7 @@ window.AdmOrders = {
       el.innerHTML = msgs.map(m => {
         const isAdmin = !!m.admin_id;
         const senderLabel = isAdmin ? (m.admin_name || 'এডমিন') : 'গ্রাহক';
-        const timeStr = m.created_at ? new Date(m.created_at).toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }) : '';
+        const timeStr = dhTime(m.created_at);
         return '<div class="adm-chat-bubble ' + (isAdmin ? 'from-admin' : 'from-user') + '">' +
           '<div style="font-weight:700;font-size:10px;opacity:0.8;margin-bottom:2px;">' + esc(senderLabel) + ':</div>' +
           '<div>' + esc(m.message) + '</div>' +
@@ -2644,7 +2788,9 @@ window.AdmOrders = {
       }).join('');
       el.scrollTop = el.scrollHeight;
     } catch (e) {
-      el.innerHTML = '<div style="font-size:11px;color:var(--danger);text-align:center;">চ্যাট লোড ব্যর্থ: ' + esc(e.message) + '</div>';
+      // P2: a failed chat load gets a retry button, not a dead box.
+      el.innerHTML = '<div style="font-size:11px;color:var(--danger);text-align:center;">চ্যাট লোড ব্যর্থ: ' + esc(e.message) +
+        '<br><button class="mini-btn" style="margin-top:6px;" onclick="AdmOrders.loadInModalChat(\'' + orderId + '\')">🔄 আবার চেষ্টা করুন</button></div>';
     }
   },
 
@@ -2681,6 +2827,12 @@ window.AdmOrders = {
   modalFileSelected(inp) {
     const f = inp.files[0];
     if (!f) return;
+    // P2: pre-upload size check (server default 10MB).
+    if (uploadTooBig(f)) {
+      alert('ফাইলটি ১০ মেগাবাইটের বেশি — সার্ভার এত বড় ফাইল নেবে না। ছোট ফাইল দিন।');
+      inp.value = '';
+      return;
+    }
     window._modalDeliFile = f;
     const pv = document.getElementById('admModalDeliPreview');
     const btn = document.getElementById('admModalUploadDeliverBtn');
@@ -2738,7 +2890,11 @@ window.AdmOrders = {
       // order and downloadable from History; only the status step
       // failed. Say exactly that.
       if (fileUploaded) {
-        alert('⚠️ ফাইল আপলোড হয়েছে এবং গ্রাহক ইতিহাস থেকে ডাউনলোড করতে পারবেন, কিন্তু স্ট্যাটাস ডেলিভার্ড হয়নি — আবার চেষ্টা করুন বা স্ট্যাটাস হাতে বদলান। (' + admErrBn(e.message) + ')');
+        // P2: honest wording — on a not-yet-delivered order the
+        // file is NOT downloadable until delivery (visibility
+        // rule), so the old "can download now" claim was false.
+        // P1: raw error mapped to Bengali via admErrBn.
+        alert('⚠️ ফাইল আপলোড হয়েছে, কিন্তু স্ট্যাটাস ডেলিভার্ড হয়নি — ডেলিভার্ড হলে গ্রাহক ইতিহাস থেকে ডাউনলোড করতে পারবেন। আবার চেষ্টা করুন বা স্ট্যাটাস হাতে বদলান। (' + admErrBn(e.message) + ')');
       } else {
         alert('❌ ডেলিভারি ব্যর্থ: ' + admErrBn(e.message));
       }
@@ -2767,6 +2923,12 @@ window.AdmOrders = {
   deliPreview(inp) {
     const f = inp.files[0];
     if (!f) return;
+    // P2: pre-upload size check (server default 10MB).
+    if (uploadTooBig(f)) {
+      alert('ফাইলটি ১০ মেগাবাইটের বেশি — সার্ভার এত বড় ফাইল নেবে না। ছোট ফাইল দিন।');
+      inp.value = '';
+      return;
+    }
     window._deliFile = f;
     const pv = document.getElementById('deliPreview');
     const btn = document.getElementById('deliUploadBtn');
@@ -2808,8 +2970,15 @@ window.AdmOrders = {
     });
     const d = await r.json();
     if (r.ok) {
-      alert('✅ ডকুমেন্ট আপলোড হয়েছে');
       const o = (TABS._orders || []).find(x => x.id === id);
+      // P2: on an already-delivered order the server notifies the
+      // customer about the new file — say so honestly.
+      if (o && o.status === 'delivered') {
+        alert('✅ ডকুমেন্ট আপলোড হয়েছে এবং গ্রাহককে জানানো হয়েছে');
+        closeModal(); show('orders');
+        return;
+      }
+      alert('✅ ডকুমেন্ট আপলোড হয়েছে');
       if (o && o.status !== 'delivered') {
         if (confirm('অর্ডার স্ট্যাটাস "ডেলিভার্ড" সম্পন্ন করতে চান?')) {
           try {
@@ -2842,7 +3011,7 @@ window.AdmOrders = {
     const m = mR.ok ? await mR.json() : { messages: [] };
     const hist = (m.messages || []).map((x) =>
       '<div class="sup-msg"><span class="sup-text">' + esc(x.message) + '</span>' +
-      '<div class="sup-time">' + new Date(x.created_at).toLocaleString('bn-BD') + '</div></div>'
+      '<div class="sup-time">' + dhDateTime(x.created_at) + '</div></div>'
     ).join('') || '<p style="color:var(--muted);font-size:13px;">এখনো কোনো মেসেজ পাঠানো হয়নি</p>';
     modal('💬 সাপোর্ট মেসেজ পাঠান',
       '<div class="field"><label>রেডিমেড টেমপ্লেট</label><div style="display:flex;flex-wrap:wrap;gap:6px;">' +
@@ -2879,16 +3048,29 @@ const MANUAL_CSS = '<style>' +
 
 TABS.manual = async () => {
   const f = TABS._mf || '';
-  const r = await ABC.api('/admin/manual' + (f ? '?status=' + f : ''));
+  const mq = TABS._mq || '';
+  const qs = [];
+  if (f) qs.push('status=' + encodeURIComponent(f));
+  if (mq) qs.push('q=' + encodeURIComponent(mq));
+  const r = await ABC.api('/admin/manual' + (qs.length ? '?' + qs.join('&') : ''));
   const d = await r.json();
   const list = d.list || [];
+  const total = (d.total !== undefined && d.total !== null) ? Number(d.total) : list.length;
   const stBn = { new: '🆕 নতুন', processing: '⏳ প্রসেসিং', completed: '✅ সম্পন্ন', rejected: '❌ বাতিল' };
   let html = MANUAL_CSS +
     '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">' +
     Object.keys(stBn).map(s =>
       '<button class="mini-btn' + (f === s ? ' ok' : '') + '" onclick="TABS._mf=\'' + s + '\';show(\'manual\')">' + stBn[s] + '</button>').join('') +
     '<button class="mini-btn' + (!f ? ' ok' : '') + '" onclick="TABS._mf=\'\';show(\'manual\')">সব</button>' +
-    '<button class="mini-btn" onclick="AdmManual.tplForm()" style="margin-left:auto;">📝 নমুনা ফরম্যাট</button></div>';
+    '<button class="mini-btn" onclick="AdmManual.tplForm()" style="margin-left:auto;">📝 নমুনা ফরম্যাট</button></div>' +
+    // P2: manual queue search (name/phone/number) + total line,
+    // mirroring the BDRIS/engine queue searches.
+    '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">' +
+    '<input type="text" id="admManualSearch" class="adm-search-input" aria-label="ম্যানুয়াল আবেদন খুঁজুন (নাম, ফোন বা নম্বর)" placeholder="🔍 নাম, ফোন বা নম্বর খুঁজুন..." value="' + esc(mq) + '" onkeydown="if(event.key===\'Enter\')AdmManual.search(this.value)">' +
+    '<button class="mini-btn" onclick="AdmManual.search(document.getElementById(\'admManualSearch\').value)">খুঁজুন</button>' +
+    (mq ? '<button class="mini-btn danger" onclick="AdmManual.search(\'\')">✕ ক্লিয়ার</button>' : '') +
+    '</div>' +
+    '<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">মোট ' + bn(total) + 'টি ম্যানুয়াল আবেদন' + (mq ? ' • সার্চ: "' + esc(mq) + '"' : '') + '</div>';
   if (!list.length) {
     html += '<div style="color:var(--muted);">কোনো ম্যানুয়াল আবেদন নেই।</div>';
   } else {
@@ -2898,7 +3080,7 @@ TABS.manual = async () => {
         '<td>' + esc(m.name_bn || '—') + '</td>' +
         '<td>📎 ' + (m.doc_count || 0) + '</td>' +
         '<td><span class="badge st-' + m.status + '">' + (stBn[m.status] || m.status) + '</span></td>' +
-        '<td><small>' + new Date(m.created_at).toLocaleString('bn-BD') + '</small></td>' +
+        '<td><small>' + dhDateTime(m.created_at) + '</small></td>' +
         '<td><button class="mini-btn" onclick="AdmManual.view(\'' + m.id + '\')">👁️ দেখুন</button></td></tr>';
     }
     html += '</table></div>';
@@ -2917,12 +3099,13 @@ window.AdmManual = {
       '<span style="font-size:20px;">' + (doc.uploaded_by === 'admin' ? '🎁' : '📎') + '</span>' +
       '<span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(doc.originalname || doc.filename) +
       (doc.uploaded_by === 'admin' ? ' <small style="color:#b45309;font-weight:700;">(ডেলিভারি)</small>' : ' <small style="color:var(--dim);">(গ্রাহকের)</small>') + '</span>' +
-      '<button class="mini-btn" onclick="AdmManual.dlDoc(\'' + d.id + '\',\'' + esc(doc.filename) + '\')">⬇️</button></div>'
+      '<button class="mini-btn" aria-label="ডকুমেন্ট ডাউনলোড" onclick="AdmManual.dlDoc(\'' + d.id + '\',\'' + esc(doc.filename) + '\')">⬇️</button></div>'
     ).join('');
     window._manualClean = d.clean_text || '';
+    window._manualStatus = d.status || '';
     modal('📝 ম্যানুয়াল আবেদন',
       '<div style="margin-bottom:10px;font-size:13px;color:var(--muted);">👤 ' + esc(d.user_name) + ' (' + esc(d.user_phone) + ') • ' +
-      new Date(d.created_at).toLocaleString('bn-BD') + ' • ' + (stBn[d.status] || d.status) + '</div>' +
+      dhDateTime(d.created_at) + ' • ' + (stBn[d.status] || d.status) + '</div>' +
       MANUAL_CSS + (d.html || '') +
       (docs ? '<div style="margin-top:12px;"><div style="color:var(--gold);font-weight:700;margin-bottom:8px;">📎 ডকুমেন্ট</div>' + docs + '</div>' : '') +
       '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
@@ -2937,9 +3120,13 @@ window.AdmManual = {
       '<button class="btn-secondary" onclick="AdmManual.setStatus(\'' + d.id + '\')">সংরক্ষণ</button>' +
       '<button class="btn-secondary" style="color:#b91c1c;border-color:#fca5a5;" onclick="AdmManual.del(\'' + d.id + '\')">🗑️ আবেদন মুছুন</button>' +
       '</div>' +
-      '<div class="field" style="margin-top:10px;"><label>অ্যাডমিন নোট</label>' +
+      '<div class="field" style="margin-top:10px;"><label for="mm_note">অ্যাডমিন নোট</label>' +
       '<textarea id="mm_note" rows="2">' + esc(d.admin_note || '') + '</textarea></div>'
     );
+  },
+  search(q) {
+    TABS._mq = (q || '').trim();
+    show('manual');
   },
   copyClean() {
     const t = window._manualClean || '';
@@ -2980,6 +3167,12 @@ window.AdmManual = {
   async uploadDelivery(id, input) {
     const file = input && input.files && input.files[0];
     if (!file) return;
+    // P2: pre-upload size check (manual server cap 10MB).
+    if (uploadTooBig(file)) {
+      alert('ফাইলটি ১০ মেগাবাইটের বেশি — সার্ভার এত বড় ফাইল নেবে না। ছোট ফাইল দিন।');
+      input.value = '';
+      return;
+    }
     try {
       const fd = new FormData();
       fd.append('file', file);
@@ -2990,7 +3183,13 @@ window.AdmManual = {
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) { alert('❌ ডেলিভারি আপলোড ব্যর্থ: ' + (d.error || 'UNKNOWN')); return; }
-      alert('✅ ডেলিভারি ফাইল পাঠানো হয়েছে — গ্রাহক এখন ডাউনলোড করতে পারবেন');
+      // P2: honest wording — the file is downloadable only once
+      // the submission is completed (visibility rule). The status
+      // is the saved one from the detail view, not the unsaved
+      // select value.
+      const st = window._manualStatus || '';
+      if (st === 'completed') alert('✅ ডেলিভারি ফাইল পাঠানো হয়েছে — গ্রাহক এখন ডাউনলোড করতে পারবেন');
+      else alert('✅ ডেলিভারি ফাইল পাঠানো হয়েছে — আবেদন সম্পন্ন হলে গ্রাহক ডাউনলোড করতে পারবেন');
       this.view(id);
     } catch (e) { alert('❌ ডেলিভারি আপলোড ব্যর্থ'); }
   },
@@ -5014,11 +5213,12 @@ window.AdmWa = {
 
 /* ---------------- helpers ---------------- */
 function fld(label, type, id, val) {
-  return '<div class="field"><label>' + label + '</label>' +
+  // P2: label programmatically tied to its input (for=).
+  return '<div class="field"><label for="' + id + '">' + label + '</label>' +
     '<input type="' + type + '" id="' + id + '" value="' + esc(val || '') + '"></div>';
 }
 function ta(label, id, val, hint) {
-  return '<div class="field"><label>' + label + '</label>' +
+  return '<div class="field"><label for="' + id + '">' + label + '</label>' +
     '<textarea id="' + id + '" rows="4" style="width:100%;resize:vertical;">' + esc(val || '') + '</textarea>' +
     (hint ? '<div style="color:#888;font-size:12px;margin-top:4px;">' + hint + '</div>' : '') + '</div>';
 }
@@ -5026,20 +5226,39 @@ function v(id) { const el = document.getElementById(id); return el ? el.value.tr
 function vr(id) { const el = document.getElementById(id); return el ? el.value : ''; }
 function modal(title, bodyHtml) {
   closeModal();
+  // P2: focus returns to the opener on close.
+  const returnTo = document.activeElement;
   const bg = document.createElement('div');
   bg.className = 'modal-bg'; bg.id = 'admModal';
-  bg.innerHTML = '<div class="modal"><button class="modal-x" onclick="closeModal()" style="position:absolute;top:8px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:#888;">✕</button><h3>' + esc(title) + '</h3>' + bodyHtml + '</div>';
+  bg.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="admModalTitle" tabindex="-1"><button class="modal-x" aria-label="মোডাল বন্ধ করুন" onclick="closeModal()" style="position:absolute;top:8px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:#888;">✕</button><h3 id="admModalTitle">' + esc(title) + '</h3>' + bodyHtml + '</div>';
   bg.onclick = (e) => { if (e.target === bg) closeModal(); };
   document.body.appendChild(bg);
   // Escape key closes modal
   bg._escHandler = (e) => { if (e.key === 'Escape') closeModal(); };
   document.addEventListener('keydown', bg._escHandler);
+  // P2: focus into the modal — first focusable control, else the
+  // dialog itself. The stored opener is restored by closeModal().
+  bg._returnTo = returnTo;
+  try {
+    const first = bg.querySelector('input, select, textarea, button:not(.modal-x)');
+    if (first) first.focus();
+    else {
+      const dlg = bg.querySelector('.modal');
+      if (dlg) dlg.focus();
+    }
+  } catch (_) {}
 }
 function closeModal() {
   const m = document.getElementById('admModal');
   if (m) {
     if (m._escHandler) document.removeEventListener('keydown', m._escHandler);
+    const returnTo = m._returnTo;
     m.remove();
+    // P2: return focus to the button that opened the modal, if it
+    // is still on the page.
+    try {
+      if (returnTo && returnTo.focus && document.body.contains(returnTo)) returnTo.focus();
+    } catch (_) {}
   }
 }
 window.closeModal = closeModal;
@@ -5058,6 +5277,11 @@ TABS.reports = async () => {
   const byStatus = sum.byStatus || {};
   const totalOrders = Object.values(byStatus).reduce((a, b) => a + Number(b), 0);
 
+  // P2: 'hold' removed — grep proves no backend path, transition
+  // map or status list ever sets it (ORDER_STATUSES has no hold),
+  // and the breakdown loop below iterates a fixed list without
+  // hold. A legacy hold row would still render via the ST_BN[s]
+  // || s fallback, raw — never as a labelled status.
   const ST_BN = {
     new: 'নতুন',
     pending: 'অপেক্ষমান',
@@ -5066,8 +5290,7 @@ TABS.reports = async () => {
     delivered: 'ডেলিভার্ড',
     failed: 'ব্যর্থ',
     cancelled: 'বাতিল',
-    refunded: 'রিফান্ডেড',
-    hold: 'হোল্ড'
+    refunded: 'রিফান্ডেড'
   };
 
   let html = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:10px;">' +

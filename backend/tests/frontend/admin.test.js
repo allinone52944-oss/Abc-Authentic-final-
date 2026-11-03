@@ -170,7 +170,7 @@ describe('modal() — FIX #7 title escaping (XSS)', () => {
     const bg = bodyChildren[0];
     expect(bg.className).toBe('modal-bg');
     expect(bg.id).toBe('admModal');
-    expect(bg.innerHTML).toContain('<h3>&lt;script&gt;alert(&quot;pwned&quot;)&lt;/script&gt;</h3>');
+    expect(bg.innerHTML).toContain('<h3 id="admModalTitle">&lt;script&gt;alert(&quot;pwned&quot;)&lt;/script&gt;</h3>');
     expect(bg.innerHTML).not.toContain('<script>alert');
   });
 
@@ -185,7 +185,7 @@ describe('modal() — FIX #7 title escaping (XSS)', () => {
     const { doc, bodyChildren } = makeDocument();
     const { modal } = loadHelpers(doc);
     expect(() => modal(null, '<p>b</p>')).not.toThrow();
-    expect(bodyChildren[0].innerHTML).toContain('<h3></h3>');
+    expect(bodyChildren[0].innerHTML).toContain('<h3 id="admModalTitle"></h3>');
   });
 
   test('bodyHtml is intentionally NOT escaped (trusted markup by design)', () => {
@@ -203,7 +203,7 @@ describe('modal() — FIX #7 title escaping (XSS)', () => {
     modal('two', '');
     expect(bodyChildren).toHaveLength(1);
     expect(first._removed).toBe(true);
-    expect(bodyChildren[0].innerHTML).toContain('<h3>two</h3>');
+    expect(bodyChildren[0].innerHTML).toContain('<h3 id="admModalTitle">two</h3>');
   });
 
   test('clicking the backdrop closes the modal; clicking inside does not', () => {

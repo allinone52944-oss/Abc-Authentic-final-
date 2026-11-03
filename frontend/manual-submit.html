@@ -296,8 +296,7 @@ async function loadMine(){
       return '<div style="padding:12px 0; border-bottom:1px solid var(--border-light); font-size:13px;">' +
       '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">' +
       '<div><b style="color:var(--text-main);">' + esc(m.service_name_bn||m.service_name||'ম্যানুয়াল সেবা') + '</b>' +
-      '<div style="color:#64748b; font-size:12px; margin-top:2px;">' + new Date(m.created_at).toLocaleString('bn-BD') +
-      (m.admin_note ? '<br><span style="color:var(--primary-700);">💬 অ্যাডমিন নোট: ' + esc(m.admin_note) + '</span>' : '') + '</div></div>' +
+      '<div style="color:#64748b; font-size:12px; margin-top:2px;">' + new Date(m.created_at).toLocaleString('bn-BD') + '</div></div>' +
       '<div><span class="st st-' + m.status + '">' + (stBn[m.status]||m.status) + '</span></div></div>' +
       (docs ? '<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">' + docs + '</div>' : '') +
       '</div>';
@@ -324,6 +323,9 @@ async function doSubmit(){
   if(!raw){ showErr('অনুগ্রহ করে পূরণকৃত তথ্য পেস্ট করুন।'); return; }
   const files = document.getElementById('docs').files;
   if(files.length > 6){ showErr('সর্বোচ্চ ৬টি ডকুমেন্ট ফাইল যুক্ত করতে পারবেন।'); return; }
+  // P2 (2026-11-03): আপলোডের আগেই সাইজ-যাচাই — সার্ভারের সীমা
+  // ১০ মেগাবাইট/ফাইল; বড় ফাইল সার্ভারে গিয়ে ব্যর্থ হওয়ার আগেই জানানো হয়।
+  for(const f of files){ if(f.size > 10 * 1024 * 1024){ showErr('"' + esc(f.name) + '" ফাইলটি ১০ মেগাবাইটের বেশি — ছোট ফাইল দিন।'); return; } }
   const btn = document.getElementById('submitBtn');
   btn.disabled = true; btn.textContent = 'পাঠানো হচ্ছে…';
   try {

@@ -139,11 +139,19 @@
   }
   @media (max-width: 768px) {
     #content table { min-width: 640px; }
+    /* P2: first-column sticky width matches the user cell
+       (170px) — the old 120px cap clipped name/phone inside a
+       170px cell. Inner name/phone wrap instead of ellipsis so
+       nothing is cut off. */
     #content th:first-child, #content td:first-child {
       position: sticky; left: 0; background: #fff; z-index: 1;
-      box-shadow: 2px 0 4px rgba(0,0,0,0.06); max-width: 120px;
+      box-shadow: 2px 0 4px rgba(0,0,0,0.06); max-width: 170px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
+    #content td:first-child .adm-user-cell { min-width: 0; }
+    #content td:first-child .adm-user-cell > div { min-width: 0; }
+    #content td:first-child .adm-user-name,
+    #content td:first-child .adm-user-phone { white-space: normal; overflow: visible; text-overflow: clip; }
   }
   #content th {
     text-align: left;
@@ -497,6 +505,9 @@
     margin-bottom: 18px;
     font-size: 19px;
     font-weight: 700;
+    /* P2: room for the absolute ✕ (top-right) so it never sits
+       on the title text. */
+    padding-right: 36px;
   }
   .modal .field { margin-bottom: 14px; }
   .modal .field label {
@@ -613,6 +624,10 @@
   .btn-quick-emerald { background:linear-gradient(135deg,#059669,#047857); color:#fff; box-shadow:0 2px 5px #05966933; }
   .btn-quick-primary:hover,.btn-quick-success:hover,.btn-quick-emerald:hover { transform:translateY(-1px); }
   .adm-modal-content { max-height:70vh; overflow-y:auto; padding-right:3px; }
+  /* P2: one scroll level inside a modal — the .modal itself
+     scrolls (max-height 88vh), so the inner content must not add
+     a second scrollbar. */
+  #admModal .adm-modal-content { max-height:none; overflow-y:visible; }
   #admModal .modal { max-width:850px; width:min(94vw,850px); padding:22px; }
   .adm-pipeline-steps { display:flex; align-items:center; justify-content:center; padding:14px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; margin-bottom:14px; }
   .adm-step-item { display:flex; flex-direction:column; align-items:center; gap:5px; min-width:62px; color:#94a3b8; }
@@ -637,6 +652,9 @@
   @media (max-width:900px) { .adm-search-input{width:220px;} .adm-action-grp{min-width:220px;} }
   @media (max-width:768px) {
     .adm-search-input { width:100%; }
+    /* P2: icon buttons get a real tap target on mobile. */
+    .adm-icon-btn { min-height:36px; padding:9px 11px; }
+    .adm-action-grp .mini-btn { min-height:36px; }
     .adm-orders-toolbar > div:last-child { margin-left:0 !important; flex-wrap:wrap; }
     .adm-fields-grid { grid-template-columns:1fr; }
     .adm-pipeline-steps { padding:10px 3px; }

@@ -257,6 +257,10 @@ router.get('/orders', async (req, res) => {
        FROM orders o JOIN services s ON s.id = o.service_id
        ${where} ORDER BY o.created_at DESC LIMIT $${i} OFFSET $${i + 1}`,
       [...params, limit, offset]);
+    // P2 (2026-11-03): the internal admin note never reaches a
+    // customer endpoint — not even inside a list payload no page
+    // currently renders.
+    for (const r of rows.rows) delete r.admin_note;
     res.json({ orders: rows.rows, total: parseInt(total.rows[0].count, 10), page, limit });
   } catch (e) {
     safeLog('[user] orders error:', e.message);
@@ -285,12 +289,20 @@ router.get('/order-counts', async (req, res) => {
 // GET /api/orders/:id — own order + timeline
 router.get('/orders/:id', async (req, res) => {
   try {
+    // P2 (2026-11-03): explicit columns, NOT o.* — admin_note must
+    // never leave the server on a customer endpoint. Every column
+    // the customer pages use is listed; nothing else is added.
     const r = await db.query(
-      `SELECT o.*, s.name AS service_name, s.name_bn AS service_name_bn
+      `SELECT o.id, o.user_id, o.service_id, o.status, o.data, o.documents,
+              o.notes, o.price, o.idempotency_key, o.created_at, o.updated_at,
+              s.name AS service_name, s.name_bn AS service_name_bn
        FROM orders o JOIN services s ON s.id = o.service_id
        WHERE o.id = $1 AND o.user_id = $2`,
       [req.params.id, req.user.id]);
     if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    // Belt-and-braces: even if the column list above ever widens,
+    // the internal note is stripped here before responding.
+    delete r.rows[0].admin_note;
     res.json({ order: r.rows[0] });
   } catch (e) {
     safeLog('[user] order detail error:', e.message);
@@ -299,16 +311,24 @@ router.get('/orders/:id', async (req, res) => {
 });
 
 // GET /api/orders/:id/history — status timeline for the order owner (H-1)
+// P2 (2026-11-03): the timeline carries only the system record
+// (from/to/time). The note column is NOT returned: every note ever
+// written here was a copy of the admin's free-text note, so
+// returning it would leak internal notes from old rows too.
 router.get('/orders/:id/history', async (req, res) => {
   try {
     const own = await db.query('SELECT id FROM orders WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
     if (!own.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
     const r = await db.query(
-      `SELECT from_status, to_status, note, created_at FROM order_status_history
+      `SELECT from_status, to_status, created_at FROM order_status_history
        WHERE order_id = $1 ORDER BY created_at ASC`,
       [req.params.id]
     );
-    res.json({ history: r.rows });
+    // Shape the payload explicitly: only the system record leaves
+    // the server, whatever the row carries.
+    res.json({ history: r.rows.map(h => ({
+      from_status: h.from_status, to_status: h.to_status, created_at: h.created_at,
+    })) });
   } catch (e) {
     safeLog('[user] order history error:', e.message);
     res.status(500).json({ error: 'FAILED' });
@@ -424,15 +444,24 @@ router.post('/orders/:id/documents', orderDocUpload(db, 'order'), async (req, re
 
 // GET /api/orders/:id/documents/:filename — download order document (owner only).
 // Validates: order belongs to user AND filename is in order.documents (no path traversal).
+// P2 (2026-11-03): an ADMIN-uploaded file downloads only once the
+// order reached completed/delivered — or refunded after delivery
+// (delivered→refunded goodwill: the file stays). On a
+// new/pending/processing order an admin file is not downloadable
+// yet. The customer's OWN uploads are always downloadable.
 router.get('/orders/:id/documents/:filename', async (req, res) => {
   try {
     const orderId = req.params.id;
     const fn = require('path').basename(req.params.filename);
-    const ord = await db.query('SELECT documents FROM orders WHERE id=$1 AND user_id=$2', [orderId, req.user.id]);
+    const ord = await db.query('SELECT status, documents FROM orders WHERE id=$1 AND user_id=$2', [orderId, req.user.id]);
     if (!ord.rows.length) return res.status(404).json({ error: 'ORDER_NOT_FOUND' });
     const docs = safeJsonArray(ord.rows[0].documents);
     const doc = docs.find(d => d && require('path').basename(d.filename) === fn);
     if (!doc) return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
+    if (doc.uploaded_by === 'admin' &&
+        !['completed', 'delivered', 'refunded'].includes(ord.rows[0].status)) {
+      return res.status(403).json({ error: 'NOT_DELIVERED_YET' });
+    }
     const fp = require('path').join('/opt/all-in-one-abc-authentic/uploads/orders', fn);
     const fs = require('fs');
     if (!fs.existsSync(fp)) return res.status(404).json({ error: 'FILE_MISSING' });
@@ -454,16 +483,25 @@ router.get('/history', async (req, res) => {
   try {
     const uid = req.user.id;
     const [orders, manual, engineJobs] = await Promise.all([
+      // P2 (2026-11-03): admin files surface in History only once
+      // delivered — completed/delivered, or refunded after delivery
+      // (goodwill: the file stays after a delivered→refunded).
+      // new/pending/processing orders contribute no admin files.
       db.query(
         `SELECT o.id, o.documents, o.created_at,
                 s.name AS service_name, s.name_bn AS service_name_bn
          FROM orders o LEFT JOIN services s ON s.id = o.service_id
-         WHERE o.user_id = $1 ORDER BY o.created_at DESC LIMIT 100`, [uid]),
+         WHERE o.user_id = $1 AND o.status IN ('completed', 'delivered', 'refunded')
+         ORDER BY o.created_at DESC LIMIT 100`, [uid]),
+      // P2: same rule for manual submissions — admin files only
+      // once the submission is completed (no delivered state here;
+      // rejected hides them like cancelled does for orders).
       db.query(
         `SELECT m.id, m.documents, m.created_at,
                 s.name AS service_name, s.name_bn AS service_name_bn
          FROM manual_submissions m LEFT JOIN services s ON s.id = m.service_id
-         WHERE m.user_id = $1 ORDER BY m.created_at DESC LIMIT 100`, [uid]),
+         WHERE m.user_id = $1 AND m.status = 'completed'
+         ORDER BY m.created_at DESC LIMIT 100`, [uid]),
       db.query(
         `SELECT id, engine_id, subject_name, filename, originalname, created_at, outcome
          FROM engine_jobs

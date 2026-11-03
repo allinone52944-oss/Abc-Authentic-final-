@@ -879,10 +879,12 @@ function renderTimeline(history, o) {
     // Fallback if no history records yet
     const currLabel = ST_TEXT[o.status] || o.status;
     const emoji = ST_EMOJI[o.status] || '📌';
+    // P2 (2026-11-03): এডমিনের ইন্টারনাল নোট এখানে দেখানো হয় না —
+    // টাইমলাইনে শুধু স্ট্যাটাস-তথ্য থাকে।
     items.push({
       title: emoji + ' বর্তমান অবস্থা: ' + currLabel,
       time: 'সর্বশেষ আপডেট: ' + new Date(o.updated_at).toLocaleString('bn-BD'),
-      note: o.admin_note ? 'অ্যাডমিন মেসেজ: ' + o.admin_note : null,
+      note: null,
       statusClass: 'on'
     });
   }
