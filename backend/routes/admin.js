@@ -568,6 +568,43 @@ router.get('/orders', async (req, res) => {
   }
 });
 
+// GET /api/admin/manual-user-summary — read-only per-user manual
+// summary for the manual-centric orders tab (P3 redesign). No
+// charge, transaction or order logic lives here: it only counts.
+// Definition: ONLY completed/delivered manual orders count, both
+// for the order count and the money sum. Refunded orders are out
+// (a refunded order has left completed/delivered status), as are
+// new/pending/processing/failed/cancelled orders. "Manual" is the
+// same rule as ?type=manual on the orders list (service type
+// manual, or a submitted manual form in the order data). Top 50
+// by total money; total_users + has_more stay honest about
+// users beyond the list.
+router.get('/manual-user-summary', async (req, res) => {
+  try {
+    const manualWhere = `(s.type = 'manual' OR (o.data::text LIKE '%_manual_form%')) AND o.status IN ('completed', 'delivered')`;
+    const totalR = await db.query(
+      `SELECT COUNT(*) AS total_users FROM (SELECT u.id FROM orders o JOIN users u ON u.id = o.user_id JOIN services s ON s.id = o.service_id WHERE ${manualWhere} GROUP BY u.id) t`);
+    const r = await db.query(
+      `SELECT u.id AS user_id, u.name AS user_name, u.phone AS user_phone,
+              COUNT(*) AS manual_order_count, COALESCE(SUM(o.price), 0) AS manual_total
+         FROM orders o JOIN users u ON u.id = o.user_id
+         JOIN services s ON s.id = o.service_id
+        WHERE ${manualWhere}
+        GROUP BY u.id, u.name, u.phone
+        ORDER BY manual_total DESC, manual_order_count DESC
+        LIMIT 50`);
+    const totalUsers = parseInt(totalR.rows[0] && totalR.rows[0].total_users, 10) || 0;
+    const summary = (r.rows || []).map(row => ({
+      user_id: row.user_id,
+      user_name: row.user_name,
+      user_phone: row.user_phone,
+      manual_order_count: Number(row.manual_order_count) || 0,
+      manual_total: Number(row.manual_total) || 0
+    }));
+    res.json({ summary, total_users: totalUsers, shown: summary.length, has_more: totalUsers > summary.length });
+  } catch (e) { safeLog('[admin] manual user summary error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
 // PUT /api/admin/orders/:id/status
 const ORDER_STATUSES = ['new', 'pending', 'processing', 'completed', 'delivered', 'failed', 'cancelled', 'refunded'];
 // H-1 fix (2026-10-15): allowed status transitions — any→any no longer permitted.

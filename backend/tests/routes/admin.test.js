@@ -1033,3 +1033,29 @@ describe('P1 premium gaps: refund fields, preview, processing count', () => {
     expect(r.body.total).toBe(0);
   });
 });
+describe('manual user summary (P3 read-only summary)', () => {
+  test('GET /api/admin/manual-user-summary counts only completed/delivered manual orders, top 50, honest has_more', async () => {
+    // The count subquery also contains GROUP BY, so it must match first.
+    db.__routeQuery([
+      ['AS total_users', { rows: [{ total_users: '60' }] }],
+      ['GROUP BY u.id, u.name, u.phone', { rows: [
+        { user_id: 'u1', user_name: 'করিম', user_phone: '01700000000', manual_order_count: '3', manual_total: '450' },
+        { user_id: 'u2', user_name: 'রহিম', user_phone: '01800000000', manual_order_count: '1', manual_total: '100' },
+      ] }],
+    ]);
+    const r = await withAdmin(request(app()).get('/api/admin/manual-user-summary')).expect(200);
+    expect(r.body.summary).toHaveLength(2);
+    expect(r.body.summary[0]).toEqual({ user_id: 'u1', user_name: 'করিম', user_phone: '01700000000', manual_order_count: 3, manual_total: 450 });
+    expect(r.body.total_users).toBe(60);
+    expect(r.body.shown).toBe(2);
+    expect(r.body.has_more).toBe(true);
+    const agg = db.query.mock.calls.find((c) => /GROUP BY u\.id, u\.name, u\.phone/.test(c[0]));
+    expect(agg[0]).toContain(`o.status IN ('completed', 'delivered')`);
+    expect(agg[0]).toContain(`s.type = 'manual'`);
+    expect(agg[0]).toContain('LIMIT 50');
+  });
+
+  test('GET /api/admin/manual-user-summary is admin-only', async () => {
+    await request(app()).get('/api/admin/manual-user-summary').expect(401);
+  });
+});
