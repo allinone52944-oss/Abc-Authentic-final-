@@ -69,7 +69,11 @@ index/metadata table `land_khatian_index` (migration 047) —
 bulk records live in a **separate store** reached via
 `backend/lib/khatianStore.js` (HTTP remote when
 `LAND_KHATIAN_STORE_URL` is set, ephemeral local file store
-otherwise). A store hit is delivered with stale flags in
+otherwise). The separate store server also has a
+PostgreSQL backend (`STORE_BACKEND=postgres`, separate
+database only — never production) and a no-rebuild
+transfer procedure (dump/restore + URL change), both
+documented in **`STORE.md**`. A store hit is delivered with stale flags in
 the response, the PDF, and a page banner — and charged
 exactly like a normal found result (Pankaj may overrule
 that to free; see `STORE.md`). Admin batch import

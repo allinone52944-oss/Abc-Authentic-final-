@@ -27,6 +27,39 @@ LAND_KHATIAN_STORE_KEY=your-secret-key   # same value as STORE_API_KEY
 Without `LAND_KHATIAN_STORE_URL` the app uses its ephemeral
 local file store instead (tmp dir, local dev only).
 
+## PostgreSQL backend (separate database, never production)
+
+The file backend above is the dev default. For a real
+deployment, run the same server against a **separate**
+PostgreSQL database — never the production database
+(`abc_authentic_new` holds only the index table):
+
+```sh
+cd engines/land-khatian/store-server
+npm install   # installs the pg dependency (package.json)
+STORE_BACKEND=postgres \
+STORE_PG_CONNECTION_STRING=<connection-string-from-env> \
+STORE_API_KEY=your-secret-key PORT=3101 node server.js
+```
+
+Or the component form instead of a connection string:
+`STORE_PG_HOST`, `STORE_PG_PORT` (default 5432),
+`STORE_PG_DATABASE`, `STORE_PG_USER`, `STORE_PG_PASSWORD`,
+plus optional `STORE_PG_POOL_MAX` (default 10) and
+`STORE_PG_SSL` (`true` for verified TLS, `insecure` for
+dev only). The schema (`khatian_units` + `khatian_records`,
+see `pgStore.js`) is created automatically on first use,
+in that separate database only. The HTTP contract is
+identical to the file backend, so the app-side client
+needs no change — point `LAND_KHATIAN_STORE_URL` at this
+server exactly as above. Connection values come from env
+only and are never logged.
+
+Transferring the store later (for example to a new Oracle
+account) is a database dump/restore plus a URL change —
+no engine rebuild; see the transfer procedure in
+`../STORE.md`.
+
 ## API contract
 
 All requests/responses are JSON. When `STORE_API_KEY` is set,

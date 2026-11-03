@@ -1,0 +1,1 @@
+{"dependencies":{"pg":"^8.12.0"},"description":"Separate khatian collection store server (file backend by default; PostgreSQL backend with STORE_BACKEND=postgres). Never the production database.","main":"server.js","name":"khatian-store-server","private":true,"scripts":{"start":"node server.js"},"version":"1.0.0"}

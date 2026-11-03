@@ -174,6 +174,80 @@ PORT=3101 node engines/land-khatian/store-server/server.js`
 (data dir is git-ignored; back it up like any data store —
 losing it only loses the fallback copy).
 
+## PostgreSQL backend for the separate store
+
+The file backend above is the dev default. For a real
+deployment the same store server runs against a **separate**
+PostgreSQL database (see `store-server/pgStore.js` +
+`store-server/README.md`):
+
+- Select with `STORE_BACKEND=postgres` plus either
+  `STORE_PG_CONNECTION_STRING` or the component form
+  (`STORE_PG_HOST` / `STORE_PG_PORT` / `STORE_PG_DATABASE` /
+  `STORE_PG_USER` / `STORE_PG_PASSWORD`, optional
+  `STORE_PG_POOL_MAX`, `STORE_PG_SSL`). Values come from
+  env only — never in code, logs, or docs.
+- Schema (auto-created on first use, in the separate
+  database only): `khatian_units` (one row per jl ×
+  survey) + `khatian_records` (one row per stored record,
+  keyed by jl × survey × record id). **Bulk records NEVER
+  go into production Postgres** — the production database
+  still holds only `land_khatian_index`.
+- The HTTP contract is identical to the file backend, so
+  the app-side client (`backend/lib/khatianStore.js`) needs
+  no change: the app still talks HTTP to the store server,
+  and the store server alone talks SQL to its database. A
+  managed Postgres therefore needs **no API shim** — the
+  store server connects to it directly.
+- Interim form (Pankaj, 2026-11-03): a separate database
+  on the existing Oracle server for now — never the
+  production database, never a code file. The later move
+  to a new Oracle account is the transfer below.
+
+## Transfer to another Oracle account (no engine rebuild)
+
+Goal: move the bulk store to a new Oracle account (for
+example, in Pankaj's brother's name) later, without
+rebuilding the engine. The engine is untouched throughout
+— it talks to the store only over the HTTP contract, so
+only the store's home and the app's store URL change:
+
+1. **Provision** on the new account: a server (same region
+   as the app server if possible) + a PostgreSQL database.
+   Install the store server there (`npm install` in
+   `store-server/`) and start it with
+   `STORE_BACKEND=postgres` + the new database's env
+   connection values + a `STORE_API_KEY`.
+2. **Pause imports** during cutover (admin import calls),
+   so no record lands in the old store mid-move.
+3. **Dump the old store database** (schema + data) from
+   the old store server, e.g. with `pg_dump` using the
+   old connection env value, and copy the dump file to
+   the new server over a secure channel.
+4. **Restore** into the new database (e.g. `psql` with
+   the new connection env value). The schema is the same
+   (`khatian_units` + `khatian_records`), so a plain
+   dump/restore works; no data conversion.
+5. **Verify before switching:** per-unit counts from the
+   new store (`/v1/records/count`) match the production
+   index table's `collected_count` for spot-checked units,
+   and the coverage endpoint output is unchanged (the
+   index table itself never moves — it is metadata, not
+   bulk data).
+6. **Switch the app:** set `LAND_KHATIAN_STORE_URL` to
+   the new store server's URL (and
+   `LAND_KHATIAN_STORE_KEY` to match the new server's
+   `STORE_API_KEY` if the key was rotated), then restart
+   the app. Verify the new store answers
+   `GET /v1/health` from the app server.
+7. **Keep the old store running (read-only)** until the
+   new one is verified in production, then decommission
+   it. If verification fails, switch the URL back — the
+   old store is untouched by the move.
+
+No app code, no engine, and no index-table change is
+needed at any step. The transfer moves bulk data only.
+
 ## Reconciliation (the unit rule — governs the importer)
 
 Unit = ONE (mouza JL × survey). Per unit, in this exact
