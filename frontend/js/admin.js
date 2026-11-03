@@ -1605,7 +1605,7 @@ TABS.orders = async () => {
         '<div style="font-size:15px;font-weight:700;margin-bottom:4px;">মোট কাজের টাকা (সম্পন্ন/ডেলিভার্ড)</div>' +
         '<div style="font-size:13px;line-height:1.7;color:var(--text-main);">' +
           '<div>👤 <b>গ্রাহক:</b> ' + esc(ut.user_name || 'গ্রাহক') + ' <span class="s">' + esc(ut.user_phone || '') + '</span></div>' +
-          '<div>📦 <b>মোট কাজ:</b> ' + bn(ut.service_count) + 'টি</div>' +
+          '<div>📦 <b>সম্পন্ন/ডেলিভার্ড অর্ডার:</b> ' + bn(ut.service_count) + 'টি</div>' +
           '<div>💰 <b>মোট টাকা:</b> <span class="adm-price-badge">৳' + bn(ut.total_money) + '</span></div>' +
         '</div></div>';
     })() +

@@ -267,11 +267,11 @@ describe('F15 delete focus returns to a durable element', () => {
 });
 
 describe('sidebar-unified-orders: one orders section, bulk delete, userTotal', () => {
-  test('removed sidebar tabs are gone from admin.html; admin.js cache bumped to v=85', () => {
+  test('removed sidebar tabs are gone from admin.html; admin.js cache bumped to v=86', () => {
     expect(ADMIN_HTML).not.toContain('data-t="bdrisApps"');
     expect(ADMIN_HTML).not.toContain('data-t="engineJobs"');
     expect(ADMIN_HTML).not.toContain('data-t="autoData"');
-    expect(ADMIN_HTML).toContain('/js/admin.js?v=85');
+    expect(ADMIN_HTML).toContain('/js/admin.js?v=86');
   });
   test('orders list fetches only the unified endpoint with kind labels', () => {
     expect(ADMIN_SRC).toContain("'/admin/unified-services?limit=50&page='");
