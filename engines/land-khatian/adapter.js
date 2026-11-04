@@ -465,4 +465,36 @@ async function importMouza(args) {
   };
 }
 
-module.exports = { search, offeredSurveys, importMouza, countDags, DETAIL_CAP, MUTATION_KEY };
+/** Mouza-map sheets for one mouza (proven live 2026-11-04,
+ *  guest token only). The map JL list is separate from the
+ *  khatian JL list, so the mouza is matched on MOUZA_ID —
+ *  never a khatian JL id. Returns the sheet list only
+ *  (id + sheet number); the preview PNG itself is served
+ *  by the route through client.mapPreview. An empty sheet
+ *  list means the portal has no map for this mouza — never
+ *  an error, never invented sheets. */
+async function searchMaps({ divisionBbs, districtBbs, upazilaBbs, surveyId, mouzaId }) {
+  const dv = toEn(divisionBbs || '');
+  const di = toEn(districtBbs || '');
+  const up = toEn(upazilaBbs || '');
+  const sv = Number(surveyId);
+  const mz = toEn(mouzaId || '');
+  if (!dv || !di || !up || !Number.isFinite(sv) || !mz) {
+    throw typed('BAD_AREA', 'division, district, upazila, survey and mouza are all required for maps');
+  }
+  const rows = await client.mapJlNumbers(dv, di, up, sv);
+  const jl = (rows || []).find((j) => Number(j.MOUZA_ID) === Number(mz)) || null;
+  if (!jl) {
+    throw typed('JL_NOT_FOUND', 'no map JL entry for this mouza in this survey');
+  }
+  const sheets = await client.mapSheets(jl.ID);
+  return {
+    jlId: jl.ID,
+    jlNumber: jl.JL_NUMBER,
+    mouzaId: jl.MOUZA_ID,
+    mouzaName: jl.MOUZA_NAME,
+    sheets: (sheets || []).map((sh) => ({ id: sh.ID, sheetNo: sh.SHEET_NO })),
+  };
+}
+
+module.exports = { search, searchMaps, offeredSurveys, importMouza, countDags, DETAIL_CAP, MUTATION_KEY };

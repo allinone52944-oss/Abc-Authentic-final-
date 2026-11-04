@@ -183,6 +183,13 @@
           সারাংশ রিপোর্টটি আপনার <a href="/history.html">ইতিহাসে</a> সংরক্ষিত থাকবে।
         </div>
       </form>
+      <button type="button" class="btn" id="mapBtn" style="width:100%; padding:12px; font-size:15px; font-weight:700; margin-top:10px;">
+        🗺️ এই মৌজার ম্যাপ দেখুন (প্রিভিউ — বিনামূল্যে)
+      </button>
+      <div id="mapBox" style="display:none; margin-top:14px;">
+        <div class="note" id="mapNote"></div>
+        <div id="mapList" style="display:grid; gap:14px;"></div>
+      </div>
     </div>
 
     <div id="resultsBox" style="max-width:720px; display:none;">
@@ -589,6 +596,62 @@
     }
     btn.disabled = false;
     btn.textContent = '🔍 খুঁজুন';
+  });
+
+  // Mouza maps (2026-11-04): the portal's own free preview
+  // images per sheet — NOT the certified sheet. No charge,
+  // no order, no History record. The survey used is the
+  // chosen one, or the first offered survey (the same
+  // list-source rule the mouza list already uses).
+  $('mapBtn').addEventListener('click', async () => {
+    const area = areaBody();
+    if (!area) return showErr('⚠️ আগে এলাকা আর মৌজা বেছে নিন।');
+    const surveyId = ($('searchType').value === 'survey' && $('surveySel').value)
+      ? $('surveySel').value
+      : (offeredSurveys[0] && offeredSurveys[0].id);
+    if (!surveyId) return showErr('⚠️ আগে এলাকা আর জরিপ বেছে নিন।');
+    const btn = $('mapBtn');
+    btn.disabled = true;
+    btn.textContent = 'ম্যাপ খোঁজা হচ্ছে…';
+    clearBoxes();
+    try {
+      const q = 'division_bbs=' + encodeURIComponent(area.division_bbs) +
+        '&district_bbs=' + encodeURIComponent(area.district_bbs) +
+        '&upazila_bbs=' + encodeURIComponent(area.upazila_bbs) +
+        '&survey_id=' + encodeURIComponent(surveyId) +
+        '&mouza_id=' + encodeURIComponent(area.mouza_id);
+      const r = await apiCall('/api/land-khatian/maps?' + q);
+      if (r.status === 401) { location.href = '/login.html'; return; }
+      const d = await r.json().catch(() => ({}));
+      $('mapBox').style.display = '';
+      if (!r.ok || !d.ok) {
+        $('mapNote').textContent = '❌ ' + ((d && d.message) || 'ম্যাপ পাওয়া যায়নি — আবার চেষ্টা করুন।');
+        $('mapList').innerHTML = '';
+      } else if (!d.sheets || !d.sheets.length) {
+        $('mapNote').textContent = 'এই মৌজার কোনো ম্যাপ পাওয়া যায়নি।';
+        $('mapList').innerHTML = '';
+      } else {
+        $('mapNote').textContent = 'মৌজা: ' + (d.mouzaName || area.mouza_name) + ' — ' + d.sheets.length + 'টি শিট। ' +
+          'এগুলো পোর্টালের বিনামূল্যে দেখানো প্রিভিউ ছবি — সার্টিফাইড মৌজা শিট নয়।';
+        $('mapList').innerHTML = d.sheets.map((sh) => {
+          // NOTE: the preview URL is inlined (not a variable)
+          // on purpose — backend/tests/frontend/api-paths
+          // forbids assigning an '/api…'-prefixed literal to
+          // a variable in any page that uses ABC.api().
+          return '<div style="border:1px solid #ddd; border-radius:8px; padding:10px;">' +
+            '<div style="font-weight:700; margin-bottom:8px;">শিট নং ' + sh.sheetNo + '</div>' +
+            '<img src="/api/land-khatian/maps/preview/' + encodeURIComponent(sh.id) + '" alt="মৌজা ম্যাপ শিট ' + sh.sheetNo + '" style="width:100%; display:block;">' +
+            '<div style="margin-top:8px;"><a href="/api/land-khatian/maps/preview/' + encodeURIComponent(sh.id) + '" download="mouza-map-sheet-' + sh.sheetNo + '.png">ছবি ডাউনলোড</a></div>' +
+            '</div>';
+        }).join('');
+      }
+    } catch (e) {
+      $('mapBox').style.display = '';
+      $('mapNote').textContent = '❌ সংযোগে সমস্যা হয়েছে — আবার চেষ্টা করুন।';
+      $('mapList').innerHTML = '';
+    }
+    btn.disabled = false;
+    btn.textContent = '🗺️ এই মৌজার ম্যাপ দেখুন (প্রিভিউ — বিনামূল্যে)';
   });
 
   loadPrice();

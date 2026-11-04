@@ -7,6 +7,7 @@ jest.mock('../../../engines/land-core/client', () => ({
   surveys: jest.fn(), upazilaSurveys: jest.fn(), jlNumbers: jest.fn(),
   indexList: jest.fn(), indexByKhatianNo: jest.fn(), detail: jest.fn(),
   halSabek: jest.fn(),
+  mapJlNumbers: jest.fn(), mapSheets: jest.fn(), mapPreview: jest.fn(),
   ownerMatches: (owners, name) => String(owners || '').includes(String(name || '').trim()),
   sumLand: (ds) => Math.round(ds.reduce((a, d) => a + (parseFloat(d.TOTAL_LAND) || 0), 0) * 10000) / 10000,
 }));
@@ -200,5 +201,41 @@ describe('portal errors propagate typed', () => {
     client.indexByKhatianNo.mockRejectedValue(portalError('LAND_UNREACHABLE'));
     await expect(adapter.search({ ...AREA, surveyId: 'all', mouzaId: '72400', khatianNo: '8' }))
       .rejects.toMatchObject({ code: 'LAND_UNREACHABLE' });
+  });
+});
+
+describe('mouza maps (searchMaps, 2026-11-04)', () => {
+  test('map JL matched on MOUZA_ID (never the khatian JL id) → sheet list', async () => {
+    client.mapJlNumbers.mockResolvedValue([
+      { ID: 238578, MOUZA_ID: 72389, MOUZA_NAME: 'গ্রাম ভাটুলিয়া', JL_NUMBER: '1' },
+      { ID: 238579, MOUZA_ID: 72400, MOUZA_NAME: 'পরীক্ষা মৌজা', JL_NUMBER: '2' },
+    ]);
+    client.mapSheets.mockResolvedValue([
+      { ID: 240249, SHEET_NO: 1, PREVIEW_FILE_PATH: 'x.png' },
+      { ID: 240250, SHEET_NO: 2, PREVIEW_FILE_PATH: 'y.png' },
+    ]);
+    const r = await adapter.searchMaps({ ...AREA, surveyId: 2, mouzaId: '72400' });
+    expect(client.mapSheets).toHaveBeenCalledWith(238579);
+    expect(r).toMatchObject({ jlId: 238579, jlNumber: '2', mouzaName: 'পরীক্ষা মৌজা' });
+    expect(r.sheets).toEqual([{ id: 240249, sheetNo: 1 }, { id: 240250, sheetNo: 2 }]);
+  });
+
+  test('mouza absent from the map JL list → JL_NOT_FOUND', async () => {
+    client.mapJlNumbers.mockResolvedValue([{ ID: 238578, MOUZA_ID: 72389 }]);
+    await expect(adapter.searchMaps({ ...AREA, surveyId: 2, mouzaId: '72400' }))
+      .rejects.toMatchObject({ code: 'JL_NOT_FOUND' });
+    expect(client.mapSheets).not.toHaveBeenCalled();
+  });
+
+  test('empty sheet list passes through (no map is not an error)', async () => {
+    client.mapJlNumbers.mockResolvedValue([{ ID: 238579, MOUZA_ID: 72400, JL_NUMBER: '2' }]);
+    client.mapSheets.mockResolvedValue([]);
+    const r = await adapter.searchMaps({ ...AREA, surveyId: 2, mouzaId: '72400' });
+    expect(r.sheets).toEqual([]);
+  });
+
+  test('missing survey or mouza → BAD_AREA', async () => {
+    await expect(adapter.searchMaps({ ...AREA, mouzaId: '72400' }))
+      .rejects.toMatchObject({ code: 'BAD_AREA' });
   });
 });

@@ -156,6 +156,50 @@ const halSabek = ({ divisionBbs, districtBbs, upazilaBbs, surveyKey, jlId, khati
       '&JL_NUMBER_ID=' + encodeURIComponent(jlId) +
       '&KHATIAN_NO=' + encodeURIComponent(khatianNo));
 
+// ---------- mouza maps (proven live 2026-11-04, guest token) ----------
+// Map JL list (per survey — the map JL ids are a SEPARATE
+// list from the khatian JL ids, but carry the same MOUZA_ID)
+// → sheet list per map JL (ID, SHEET_NO, PREVIEW_FILE_PATH)
+// → preview PNG per sheet id. The preview is the portal's
+// own free search-card image — NOT the certified sheet,
+// which stays a paid cart order (govt fee ৳545/sheet).
+const mapJlNumbers = (divisionBbs, districtBbs, upazilaBbs, surveyId) =>
+  api('/public/map-mouzas/jl-numbers?DIVISION_BBS_CODE=' + encodeURIComponent(divisionBbs) +
+      '&DISTRICT_BBS_CODE=' + encodeURIComponent(districtBbs) +
+      '&UPAZILA_BBS_CODE=' + encodeURIComponent(upazilaBbs) +
+      '&SURVEY_ID=' + encodeURIComponent(surveyId));
+const mapSheets = (jlId) =>
+  api('/public/maps?JL_NUMBER_ID=' + encodeURIComponent(jlId));
+
+/** Preview PNG bytes for one sheet id. Binary, not JSON —
+ *  so it does not go through api(): same token/renew rules,
+ *  same typed errors. Verified live: 200 + image/png. */
+async function mapPreview(sheetId, retried) {
+  const tok = await token(retried);
+  let res;
+  try {
+    res = await fetch(GATEWAY + '/public/maps/image-view-file/' + encodeURIComponent(sheetId), {
+      headers: { Authorization: 'Bearer ' + tok },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+  } catch (e) {
+    const err = new Error('LAND_UNREACHABLE: ' + e.message);
+    err.code = 'LAND_UNREACHABLE';
+    throw err;
+  }
+  if (res.status === 401 && !retried) {
+    await renew().catch(() => bootstrap());
+    return mapPreview(sheetId, true);
+  }
+  if (!res.ok) {
+    const err = new Error('LAND_API_ERROR (HTTP ' + res.status + ') on map preview');
+    err.code = 'LAND_API_ERROR';
+    throw err;
+  }
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return { buffer, contentType: res.headers.get('content-type') || 'image/png' };
+}
+
 // ---------- helpers ----------
 /** Owner-name match: whitespace-insensitive substring, both ways light-normalised. */
 function ownerMatches(owners, name) {
@@ -179,6 +223,7 @@ function sumLand(details) {
 module.exports = {
   divisions, districts, upazilas, surveys, upazilaSurveys, jlNumbers,
   indexList, indexByKhatianNo, detail, halSabek,
+  mapJlNumbers, mapSheets, mapPreview,
   ownerMatches, sumLand,
   _resetToken: () => { _tok = { access: '', refresh: '', at: 0 }; },
 };

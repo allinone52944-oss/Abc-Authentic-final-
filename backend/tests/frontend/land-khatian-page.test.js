@@ -92,6 +92,7 @@ describe('land-khatian page markup', () => {
     'errBox', 'okBox', 'resultsBox', 'resultsList',
     'totalLandLine', 'cappedNote', 'mutationNote',
     'disclaimer', 'resultsDisclaimer',
+    'mapBtn', 'mapBox', 'mapNote', 'mapList',
   ];
   test.each(IDS)('has element id %s', (id) => {
     expect(PAGE).toContain('id="' + id + '"');
@@ -234,6 +235,13 @@ describe('land-khatian page: simple form (2026-11-04)', () => {
     expect(nameDag).toContain('id="ownerName"');
     expect(nameDag).toContain('id="dagNo"');
   });
+  test('map section calls the maps endpoints and labels the preview honestly (2026-11-04)', () => {
+    expect(PAGE).toContain('/api/land-khatian/maps?');
+    expect(PAGE).toContain('/api/land-khatian/maps/preview/');
+    expect(PAGE).toContain('সার্টিফাইড মৌজা শিট নয়');
+    expect(PAGE).toContain('বিনামূল্যে');
+  });
+
   test('survey pick is top-level (no surveyPickWrap); default mode is all surveys again (2026-11-04)', () => {
     expect(PAGE).not.toContain('id="surveyPickWrap"');
     const m = PAGE.match(/id="searchType"[^>]*>([\s\S]*?)<\/select>/);
