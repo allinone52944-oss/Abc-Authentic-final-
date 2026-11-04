@@ -1,0 +1,278 @@
+// Regression tests for the premium gateway-style wallet recharge session
+// (2026-11-04): status-truth messages, same-user duplicate info, admin
+// auto-approve notification on both auto paths (never on session start,
+// never on manual match), stats signal for the admin dashboard toast,
+// and session/timer invariants in frontend/wallet.html.
+// Backend behavior is exercised through the real routers with the shared
+// mocked DB; wallet.html invariants are asserted on the shipped file text
+// (the page has no JS module harness — the session code is inline).
+jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
+
+const express = require('express');
+const request = require('supertest');
+const fs = require('fs');
+const path = require('path');
+const db = require('../../db');
+const auth = require('../../auth');
+const push = require('../../utils/push');
+const userRouter = require('../../routes/user');
+const { webhook, adminSms } = require('../../routes/sms');
+const adminRouter = require('../../routes/admin');
+
+function userApp() {
+  const a = express();
+  a.use(express.json());
+  a.use('/api', userRouter);
+  return a;
+}
+function webhookApp() {
+  const a = express();
+  a.use(express.json());
+  a.use('/api/sms', webhook);
+  return a;
+}
+function adminSmsApp() {
+  const a = express();
+  a.use(express.json());
+  // Production mounts adminSms behind requireAuth+requireAdmin, which sets
+  // req.user; the match handler reads req.user.id for its activity log.
+  a.use((req, _res, next) => { req.user = { id: 'admin1', role: 'admin' }; next(); });
+  a.use('/api/admin/sms', adminSms);
+  return a;
+}
+function adminApp() {
+  const a = express();
+  a.use(express.json());
+  a.use('/api/admin', adminRouter);
+  return a;
+}
+const userToken = (id = 'u1') => auth.signAccess({ id, role: 'user' });
+const adminToken = () => auth.signAccess({ id: 'admin1', role: 'admin' });
+const withUser = (req, id) => req.set('Authorization', 'Bearer ' + userToken(id));
+const withAdmin = (req) => req.set('Authorization', 'Bearer ' + adminToken());
+
+const GOOD = { method: 'bkash_personal', sender_no: '01712345678', trxid: 'TRX12345', amount: 500 };
+const SECRET = 'test-webhook-secret';
+const BKASH_MSG = 'You have received Tk 500.00 from 01712345678. TrxID 9HXK2LQM4N. New balance Tk 1200.00.';
+
+beforeEach(() => {
+  db.__reset();
+  process.env.SMS_WEBHOOK_SECRET = SECRET;
+  delete process.env.SMS_MAX_AUTO_APPROVE;
+  jest.restoreAllMocks();
+});
+afterEach(() => { jest.restoreAllMocks(); });
+
+// Slice a top-level function body out of wallet.html text for invariant
+// assertions (no JS harness exists for the inline page script).
+function walletHtml() {
+  return fs.readFileSync(path.join(__dirname, '../../../frontend/wallet.html'), 'utf8');
+}
+function fnSlice(src, startMarker) {
+  const start = src.indexOf(startMarker);
+  expect(start).toBeGreaterThan(-1);
+  const rest = src.slice(start);
+  const stops = ['\nfunction ', '\nasync function ', '\n// ==== End gateway session ===='].map(
+    (m) => rest.indexOf(m, 1)).filter((i) => i !== -1);
+  const next = stops.length ? Math.min(...stops) : -1;
+  return next === -1 ? rest : rest.slice(0, next);
+}
+
+describe('POST /api/wallet/recharge — DUP_TRXID same-user info', () => {
+  test('same user resubmits → 409 + existing_tx (amount, status, date)', async () => {
+    db.__routeQuery([
+      ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
+      ['FROM transactions WHERE trxid', { rows: [{
+        id: 't9', user_id: 'u1', amount: '500', status: 'approved',
+        created_at: '2026-11-04T10:00:00.000Z', trxid: 'TRX12345',
+      }] }],
+    ]);
+    const r = await withUser(request(userApp()).post('/api/wallet/recharge')).send(GOOD).expect(409);
+    expect(r.body.error).toBe('DUP_TRXID');
+    expect(r.body.existing_tx).toMatchObject({ amount: '500', status: 'approved', trxid: 'TRX12345' });
+    expect(r.body.existing_tx.created_at).toBe('2026-11-04T10:00:00.000Z');
+  });
+
+  test('another user\'s TrxID → 409 generic, NO existing_tx leaked', async () => {
+    db.__routeQuery([
+      ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
+      ['FROM transactions WHERE trxid', { rows: [{
+        id: 't9', user_id: 'u2', amount: '500', status: 'approved',
+        created_at: '2026-11-04T10:00:00.000Z', trxid: 'TRX12345',
+      }] }],
+    ]);
+    const r = await withUser(request(userApp()).post('/api/wallet/recharge')).send(GOOD).expect(409);
+    expect(r.body.error).toBe('DUP_TRXID');
+    expect(r.body.existing_tx).toBeUndefined();
+  });
+});
+
+describe('POST /api/wallet/recharge — submit response carries tx status', () => {
+  test('pending submit → 201 + transaction.status pending', async () => {
+    db.__routeQuery([
+      ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
+      ['FROM transactions WHERE trxid', { rows: [] }],
+      ['INSERT INTO transactions', { rows: [{ id: 't1', status: 'pending' }] }],
+    ]);
+    const r = await withUser(request(userApp()).post('/api/wallet/recharge')).send(GOOD).expect(201);
+    expect(r.body.transaction.status).toBe('pending');
+  });
+
+  test('submit-time auto-approve → 201 approved + admin auto-approve notified', async () => {
+    const spy = jest.spyOn(push, 'notifyAutoApproveRecharge').mockResolvedValue({ ok: true, sent: 0 });
+    db.__routeQuery([
+      ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
+      ['FROM transactions WHERE trxid', { rows: [] }],
+      ['INSERT INTO transactions', { rows: [{ id: 't1', user_id: 'u1', amount: 500, trxid: 'TRX12345', status: 'pending' }] }],
+      ['FROM incoming_sms', { rows: [{ id: 'sms1', amount: 500, trxid: 'TRX12345' }] }],
+      ['WHERE id = $1 AND status = \'pending\' AND type = \'recharge\'', { rows: [{ id: 't1', user_id: 'u1', amount: 500, trxid: 'TRX12345', status: 'pending' }] }],
+      ['SELECT * FROM wallet_apply', { rows: [{ new_balance: '600', tx_id: 't1' }] }],
+      ['UPDATE transactions SET admin_id = NULL', { rows: [] }],
+      ['UPDATE incoming_sms SET matched_recharge_id', { rows: [] }],
+      ['INSERT INTO activity_log', { rows: [] }],
+    ]);
+    const r = await withUser(request(userApp()).post('/api/wallet/recharge')).send(GOOD).expect(201);
+    expect(r.body.transaction.status).toBe('approved');
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][1]).toMatchObject({ id: 't1', trxid: 'TRX12345' });
+    expect(spy.mock.calls[0][2]).toBe('u1');
+  });
+
+  test('pending submit → admin auto-approve NOT notified (pending push path unchanged)', async () => {
+    const spy = jest.spyOn(push, 'notifyAutoApproveRecharge').mockResolvedValue({ ok: true, sent: 0 });
+    db.__routeQuery([
+      ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
+      ['FROM transactions WHERE trxid', { rows: [] }],
+      ['INSERT INTO transactions', { rows: [{ id: 't1', status: 'pending' }] }],
+    ]);
+    await withUser(request(userApp()).post('/api/wallet/recharge')).send(GOOD).expect(201);
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/sms/incoming — webhook auto-approve notifies admin', () => {
+  test('webhook form-first match → matched + admin auto-approve notified', async () => {
+    const spy = jest.spyOn(push, 'notifyAutoApproveRecharge').mockResolvedValue({ ok: true, sent: 0 });
+    const TX = { id: 't1', user_id: 'u1', amount: '500', trxid: '9HXK2LQM4N', status: 'pending' };
+    db.__routeQuery([
+      ['FROM incoming_sms', { rows: [] }],
+      ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
+      ['UPPER(trxid) = UPPER($1)', { rows: [TX] }],
+      ['SELECT * FROM transactions', { rows: [TX] }],
+    ]);
+    const r = await request(webhookApp()).post('/api/sms/incoming')
+      .send({ secret: SECRET, message: BKASH_MSG, sender: 'bKash' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, matched: true, how: 'trxid' });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][1]).toMatchObject({ id: 't1', trxid: '9HXK2LQM4N' });
+  });
+
+  test('manual admin match → admin auto-approve NOT notified (admin is the actor)', async () => {
+    const spy = jest.spyOn(push, 'notifyAutoApproveRecharge').mockResolvedValue({ ok: true, sent: 0 });
+    const TX = { id: 't1', user_id: 'u1', amount: 500, trxid: 'TRX12345', status: 'pending', type: 'recharge' };
+    db.__routeQuery([
+      ['FROM incoming_sms WHERE id', { rows: [{ id: 's1', amount: 500, matched_recharge_id: null }] }],
+      ['FROM transactions WHERE id', { rows: [TX] }],
+      ['WHERE id = $1 AND status = \'pending\' AND type = \'recharge\'', { rows: [TX] }],
+      ['SELECT * FROM wallet_apply', { rows: [{ new_balance: '600', tx_id: 't1' }] }],
+      ['UPDATE transactions SET admin_id', { rows: [] }],
+      ['UPDATE incoming_sms SET matched_recharge_id', { rows: [] }],
+      ['INSERT INTO activity_log', { rows: [] }],
+    ]);
+    const r = await withAdmin(request(adminSmsApp()).post('/api/admin/sms/s1/match'))
+      .send({ transaction_id: 't1' }).expect(200);
+    expect(r.body.ok).toBe(true);
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /api/admin/stats — auto-match dashboard signal', () => {
+  test('stats SQL computes auto_matched_recharge + latest_auto_match is surfaced', async () => {
+    db.__routeQuery([
+      ['details->>', { rows: [{ amount: '500', trxid: '9HXK2LQM4N', user_name: 'Rahim', user_phone: '01711223344' }] }],
+      ['pending_recharge', { rows: [{ auto_matched_recharge: '7', pending_recharge: '2' }] }],
+    ]);
+    const r = await withAdmin(request(adminApp()).get('/api/admin/stats')).expect(200);
+    expect(r.body.auto_matched_recharge).toBe('7');
+    expect(r.body.latest_auto_match).toMatchObject({
+      amount: '500', trxid: '9HXK2LQM4N', user_name: 'Rahim',
+    });
+    const statsSql = db.query.mock.calls.map((c) => c[0]).join('\n');
+    expect(statsSql).toContain("action = 'sms.auto_match'");
+  });
+});
+
+describe('frontend/wallet.html — gateway session invariants', () => {
+  test('classic-form success branches on transaction.status (approved vs pending)', () => {
+    const src = walletHtml();
+    const body = fnSlice(src, 'async function submitRecharge()');
+    expect(body).toContain('d.transaction');
+    expect(body).toContain("status==='approved'");
+    expect(body).toContain('যোগ হয়েছে');
+    expect(body).toContain('যাচাই');
+  });
+
+  test('session start performs NO network request (no admin notice possible)', () => {
+    const src = walletHtml();
+    const body = fnSlice(src, 'function gwStartSession(');
+    expect(body).not.toContain('ABC.api(');
+    expect(body).not.toContain('fetch(');
+  });
+
+  test('timer expiry performs NO network request and cancels nothing', () => {
+    const src = walletHtml();
+    const body = fnSlice(src, 'function gwExpireSession(');
+    expect(body).not.toContain('ABC.api(');
+    expect(body).not.toContain('fetch(');
+    // Expiry stops timers/polling through gwStopAll (no cancel API exists:
+    // a pending request simply stays pending for admin verification).
+    expect(body).toContain('gwStopAll()');
+    expect(fnSlice(src, 'function gwStopAll(')).toContain('clearInterval');
+  });
+
+  test('session timer is 10 minutes with a last-minute warning', () => {
+    const src = walletHtml();
+    expect(src).toContain('GW_SESSION_SECONDS = 600');
+    expect(src).toContain('GW_WARN_SECONDS = 60');
+  });
+
+  test('no forbidden word in the wallet page copy', () => {
+    expect(walletHtml().toLowerCase()).not.toContain('captcha');
+  });
+
+  test('auto is the default: session card precedes the classic manual card', () => {
+    const src = walletHtml();
+    expect(src.indexOf('id="gwCard"')).toBeGreaterThan(-1);
+    expect(src.indexOf('id="classicRechargeCard"')).toBeGreaterThan(-1);
+    expect(src.indexOf('id="gwCard"')).toBeLessThan(src.indexOf('id="classicRechargeCard"'));
+  });
+
+  test('manual button sits with the auto logic in step 1 and step 2', () => {
+    const src = walletHtml();
+    expect(src).toContain('onclick="gwGoManual()">📝 Manual-এ দিন');
+    const step1 = src.slice(src.indexOf('id="gwStep1"'), src.indexOf('id="gwStep2"'));
+    expect(step1).toContain('onclick="gwGoManual()"');
+    const step2 = src.slice(src.indexOf('id="gwStep2"'), src.indexOf('id="gwExpired"'));
+    expect(step2).toContain('onclick="gwGoManual()"');
+  });
+
+  test('manual guide: hidden by default, holds the manual steps with instructions', () => {
+    const src = walletHtml();
+    const guide = src.slice(src.indexOf('id="manualGuide"'));
+    expect(guide).toContain('display:none');
+    expect(guide).toContain('Manual-এ দেওয়ার নির্দেশনা');
+    expect(guide).toContain('যেকোনো নম্বরে টাকা পাঠান');
+    expect(guide).toContain('TrxID লিখুন');
+    expect(guide).toContain('রিকোয়েস্ট পাঠান');
+    expect(guide).toContain('এডমিন যাচাই করে ব্যালেন্স যোগ করবেন');
+  });
+
+  test('gwGoManual reveals the guide and scrolls to the manual card', () => {
+    const src = walletHtml();
+    const body = fnSlice(src, 'function gwGoManual(');
+    expect(body).toContain("getElementById('manualGuide')");
+    expect(body).toContain("style.display = 'block'");
+    expect(body).toContain("getElementById('classicRechargeCard')");
+    expect(body).toContain('scrollIntoView');
+  });
+});

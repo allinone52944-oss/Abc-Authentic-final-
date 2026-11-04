@@ -205,7 +205,7 @@ window.admToast = (title, message, type = 'info', badge = 'সফল') => {
 
 const VoiceAlert = {
   enabled: typeof localStorage !== 'undefined' && localStorage.getItem('abc_voice') !== 'off',
-  _last: { recharge: 0, order: 0, sms: 0 },
+  _last: { recharge: 0, order: 0, sms: 0, autoMatch: 0 },
   _voices: [],
   _audioCtx: null,
   _unlocked: false,
@@ -611,6 +611,33 @@ const VoiceAlert = {
 
       this._last.recharge = pr;
       this._last.order = no;
+
+      // Gateway-session premium (2026-11-04): an auto-approved recharge
+      // never enters the pending list, so the pending toast above never
+      // fires for it. Watch the auto-match count instead and toast on
+      // rise with amount + customer + TrxID. First poll only baselines
+      // (the _last.autoMatch guard), like the other counters. Session
+      // starts produce no signal here by design — no noise.
+      try {
+        const am = Number(s.auto_matched_recharge || 0);
+        if (this._last.autoMatch && am > this._last.autoMatch) {
+          this.playChime('recharge');
+          this.speak('Auto-match রিচার্জ সফল হয়েছে');
+          const lm = s.latest_auto_match || {};
+          this.showToast({
+            type: 'recharge',
+            icon: '✅',
+            title: 'Auto-match রিচার্জ সফল!',
+            message: lm.amount
+              ? 'গ্রাহক: <b>' + esc(lm.user_name || lm.user_phone || 'গ্রাহক') + '</b><br>পরিমাণ: <b>৳' + bn(lm.amount || 0) + '</b> (TrxID: ' + esc(lm.trxid || '—') + ')'
+              : am + 'টি রিচার্জ auto-match এ অনুমোদিত হয়েছে।',
+            badge: 'Auto-match',
+            actionText: 'SMS গেটওয়ে ➤',
+            onAction: () => show('sms')
+          });
+        }
+        this._last.autoMatch = am;
+      } catch (e) {}
 
       try {
         const sr = await ABC.api('/admin/stats/sms');

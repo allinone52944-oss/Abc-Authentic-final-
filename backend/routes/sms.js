@@ -235,6 +235,10 @@ webhook.post('/incoming', async (req, res) => {
             wa.notifyRechargeApproved(db, tx).catch(() => {});
             push.notifyUser(db, tx.user_id, '✅ রিচার্জ সফল!',
               '৳' + tx.amount + ' আপনার ওয়ালেটে যোগ হয়েছে।', '/wallet.html').catch(() => {});
+            // Admin: auto-approved recharges never reach the pending list,
+            // so without this the admin sees only the unmatched-SMS toast
+            // and then silence. Manual matches are excluded (admin actor).
+            push.notifyAutoApproveRecharge(db, tx, tx.user_id).catch(() => {});
             return res.json({ ok: true, matched: true, how: matchInfo.how, tx_id: tx.id });
           }
         }
@@ -425,6 +429,9 @@ async function tryAutoMatchRecharge(tx) {
       wa.notifyRechargeApproved(db, approvedTx).catch(() => {});
       push.notifyUser(db, approvedTx.user_id, '✅ রিচার্জ সফল!',
         '৳' + approvedTx.amount + ' আপনার ওয়ালেটে যোগ হয়েছে।', '/wallet.html').catch(() => {});
+      // Admin: same gap as the webhook path — an auto-approved recharge
+      // never reaches the pending list, so the admin must be told here.
+      push.notifyAutoApproveRecharge(db, approvedTx, approvedTx.user_id).catch(() => {});
       return approvedTx;
     }
     return null;

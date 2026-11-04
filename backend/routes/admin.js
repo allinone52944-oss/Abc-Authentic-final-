@@ -2318,6 +2318,14 @@ router.get('/stats', async (req, res) => {
             AND created_at >= (CURRENT_DATE AT TIME ZONE 'Asia/Dhaka')::timestamptz
             AND created_at < ((CURRENT_DATE + 1) AT TIME ZONE 'Asia/Dhaka')::timestamptz) AS users_today,
         (SELECT COUNT(*) FROM transactions WHERE status = 'pending' AND type = 'recharge') AS pending_recharge,
+        -- Gateway-session premium (2026-11-04): monotonic count of SMS
+        -- auto-matched approvals. The admin dashboard poller watches it
+        -- like pending_recharge and toasts on rise — without this signal
+        -- an auto-approved recharge produces no dashboard notice at all
+        -- (it never enters the pending list), which is the "request
+        -- asena" gap. Manual approvals are NOT counted (their action
+        -- is 'transaction.approve', not 'sms.auto_match').
+        (SELECT COUNT(*) FROM activity_log WHERE action = 'sms.auto_match') AS auto_matched_recharge,
         -- P2 (2026-11-03): revenue_today on the Dhaka day, like
         -- orders_today above (CURRENT_DATE is the DB server's day,
         -- which is not Dhaka's). DATE(timezone(...)) is Dhaka's
@@ -2343,6 +2351,28 @@ router.get('/stats', async (req, res) => {
     } catch (e) { /* ignore */ }
     const out = r.rows[0] || {};
     out.manual_new = manualNew;
+    // Gateway-session premium (2026-11-04): the latest auto-matched
+    // recharge, so the dashboard toast can name amount + customer +
+    // TrxID. Defensive like manualNew above: a failure here must never
+    // break the main stats endpoint.
+    try {
+      const lm = await db.query(
+        `SELECT t.amount, t.trxid, u.name AS user_name, u.phone AS user_phone
+         FROM activity_log a
+         JOIN transactions t ON t.id::text = a.details->>'tx_id'
+         JOIN users u ON u.id = t.user_id
+         WHERE a.action = 'sms.auto_match'
+         ORDER BY a.created_at DESC LIMIT 1`
+      );
+      // Project a fresh object (never the raw row): the stats response
+      // must not alias the main row object, and only these four fields
+      // are needed for the dashboard toast.
+      const row = lm.rows[0];
+      out.latest_auto_match = row ? {
+        amount: row.amount, trxid: row.trxid,
+        user_name: row.user_name, user_phone: row.user_phone,
+      } : null;
+    } catch (e) { out.latest_auto_match = null; }
     res.json(out);
   } catch (e) { safeLog('[admin] stats error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });

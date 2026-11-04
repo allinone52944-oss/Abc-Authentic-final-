@@ -186,6 +186,28 @@ async function notifyNewRecharge(db, tx, userId) {
   }
 }
 
+// A recharge was auto-approved by SMS match (submit-time pay-first or
+// webhook-time form-first). Admins get this INSTEAD of the pending push:
+// without it an auto-approved recharge never appears in the pending list,
+// so the admin sees the unmatched-SMS toast and then silence ("request
+// asena"). Never called for manual admin matches (the admin is the actor)
+// and never for session starts (the session is client-side only — there
+// is no server signal at session start to notify about).
+async function notifyAutoApproveRecharge(db, tx, userId) {
+  try {
+    const uname = await userLabel(db, userId);
+    return await notifyAdmins(
+      db,
+      '✅ Auto-match রিচার্জ!',
+      `৳${Number(tx.amount || 0).toLocaleString('bn-BD')} — ${uname} (TrxID: ${tx.trxid || '—'})`,
+      '/admin.html'
+    );
+  } catch (e) {
+    safeLog('[push] notifyAutoApproveRecharge failed:', e.message);
+    return { ok: false };
+  }
+}
+
 // A recharge was attempted with an already-used TrxID (double-claim
 // of one payment). The attempt is blocked; admins are alerted.
 async function notifyDuplicateTrxid(db, attempt, userId) {
@@ -278,6 +300,7 @@ module.exports = {
   notifyAdmins,
   notifyNewOrder,
   notifyNewRecharge,
+  notifyAutoApproveRecharge,
   notifyAmountMismatch,
   notifyDuplicateTrxid,
   notifyNewUser,
