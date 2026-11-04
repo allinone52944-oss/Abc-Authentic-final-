@@ -1,0 +1,47 @@
+// Static checks on frontend/land-mouza-map.html (SEPARATE
+// engine from land-khatian, 2026-11-04: own page, own
+// services row, own fee — never a button inside the khatian
+// page). No live calls; the page text is the contract.
+const fs = require('fs');
+const path = require('path');
+
+const PAGE = fs.readFileSync(
+  path.join(__dirname, '..', '..', '..', 'frontend', 'land-mouza-map.html'), 'utf8'
+);
+
+describe('land-mouza-map page markup', () => {
+  const IDS = [
+    'divisionSel', 'districtSel', 'upazilaSel', 'surveySel', 'mouzaSel',
+    'searchForm', 'searchBtn', 'priceText', 'priceLine', 'balVal',
+    'errBox', 'okBox', 'resultsBox', 'sheetsList',
+    'disclaimer', 'resultsDisclaimer',
+  ];
+  test.each(IDS)('has element id %s', (id) => {
+    expect(PAGE).toContain('id="' + id + '"');
+  });
+
+  test('calls the map engine endpoints (not the khatian ones)', () => {
+    expect(PAGE).toContain('/api/land-mouza-map/price');
+    expect(PAGE).toContain('/api/land-mouza-map/search');
+    expect(PAGE).toContain('/api/land-mouza-map/preview/');
+    expect(PAGE).not.toContain('/api/land-khatian/maps');
+  });
+
+  test('labels the preview honestly: not a certified sheet', () => {
+    expect(PAGE).toContain('সার্টিফাইড মৌজা শিট নয়');
+    expect(PAGE).toContain('প্রিভিউ');
+  });
+
+  test('preview images load authenticated (no raw img src → would 401)', () => {
+    // A plain <img src="/api/..."> sends no login header, so
+    // the order-gated preview would 401. Images must load via
+    // authenticated fetch → blob → object URL.
+    expect(PAGE).not.toContain('src="/api/land-mouza-map/preview');
+    expect(PAGE).toContain('createObjectURL');
+  });
+
+  test('survey is required (maps need exactly one survey)', () => {
+    expect(PAGE).toContain('id="surveySel"');
+    expect(PAGE).toContain('এলাকা, জরিপ ও মৌজা');
+  });
+});

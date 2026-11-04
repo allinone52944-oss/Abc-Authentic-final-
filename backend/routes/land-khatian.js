@@ -5,14 +5,11 @@
 // mount, same as /api/land).
 //
 //   GET  /api/land-khatian/price  price + balance
-//   GET  /api/land-khatian/maps  mouza-map sheets (FREE
-//        preview list — no charge, no order, no History)
-//   GET  /api/land-khatian/maps/preview/:id  one sheet's
-//        preview PNG, proxied with the server-side guest
-//        token (the portal's own free preview image —
-//        NOT the certified sheet, which stays a paid
-//        cart order and is not built here)
 //   POST /api/land-khatian/search  by khatian number and/or
+// NOTE: mouza maps used to live here (2026-11-04, commit
+// 448707e, never deployed); they moved to their own engine
+// land-mouza-map (own page, own services row, own fee) —
+// see backend/routes/land-mouza-map.js.
 //        owner name and/or dag number, across the surveys
 //        the portal offers in the upazila (surveyId 'all'),
 //        one survey, or the conditional MUTATION passthrough
@@ -363,63 +360,6 @@ router.post('/search', requireAuth, async (req, res) => {
   } catch (e) {
     safeLog('[land-khatian] search error:', e.message);
     res.status(500).json({ error: 'SEARCH_FAILED' });
-  }
-});
-
-// ---------- GET /maps + GET /maps/preview/:id ----------
-// Mouza maps are FREE here because the portal itself shows
-// these preview images free on its own search cards (proven
-// live 2026-11-04, guest token only). No charge, no order,
-// no History record — charging for them needs a price Pankaj
-// sets himself, like every other service. A portal failure
-// is a plain 502, same live-only rule as /search.
-router.get('/maps', requireAuth, async (req, res) => {
-  try {
-    const q = req.query || {};
-    const divisionBbs = toEn(String(q.division_bbs || '').trim().slice(0, 10));
-    const districtBbs = toEn(String(q.district_bbs || '').trim().slice(0, 10));
-    const upazilaBbs = toEn(String(q.upazila_bbs || '').trim().slice(0, 10));
-    const surveyId = toEn(String(q.survey_id || '').trim().slice(0, 20));
-    const mouzaId = toEn(String(q.mouza_id || '').trim().slice(0, 12));
-    if (!divisionBbs || !districtBbs || !upazilaBbs || !surveyId || !mouzaId) {
-      return res.status(400).json({ error: 'BAD_INPUT', message: 'এলাকা, জরিপ ও মৌজা লাগবে।' });
-    }
-    let result;
-    try {
-      result = await adapter.searchMaps({ divisionBbs, districtBbs, upazilaBbs, surveyId, mouzaId });
-    } catch (e) {
-      if (e.code === 'BAD_AREA' || e.code === 'JL_NOT_FOUND') {
-        return res.status(400).json({ error: e.code, message: 'এই মৌজার ম্যাপ পাওয়া যায়নি — এলাকা, জরিপ বা মৌজা ঠিক নয়।' });
-      }
-      safeLog('[land-khatian] maps error:', e.code || '', e.message);
-      return res.status(502).json({ error: 'LAND_UNREACHABLE', message: 'ভূমি পোর্টালে সংযোগ করা যাচ্ছে না — কিছুক্ষণ পর আবার চেষ্টা করুন।' });
-    }
-    return res.json({ ok: true, ...result });
-  } catch (e) {
-    safeLog('[land-khatian] maps error:', e.message);
-    return res.status(500).json({ error: 'MAPS_FAILED' });
-  }
-});
-
-router.get('/maps/preview/:id', requireAuth, async (req, res) => {
-  try {
-    const id = toEn(String(req.params.id || '').trim().slice(0, 12));
-    if (!/^\d+$/.test(id)) {
-      return res.status(400).json({ error: 'BAD_INPUT', message: 'শিট নম্বর ঠিক নয়।' });
-    }
-    let img;
-    try {
-      img = await client.mapPreview(id);
-    } catch (e) {
-      safeLog('[land-khatian] map preview error:', e.code || '', e.message);
-      return res.status(502).json({ error: 'LAND_UNREACHABLE', message: 'ভূমি পোর্টালে সংযোগ করা যাচ্ছে না — কিছুক্ষণ পর আবার চেষ্টা করুন।' });
-    }
-    res.set('Content-Type', img.contentType);
-    res.set('Cache-Control', 'no-store');
-    return res.send(img.buffer);
-  } catch (e) {
-    safeLog('[land-khatian] map preview error:', e.message);
-    return res.status(500).json({ error: 'MAP_PREVIEW_FAILED' });
   }
 });
 

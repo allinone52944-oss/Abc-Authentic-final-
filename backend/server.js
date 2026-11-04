@@ -364,6 +364,28 @@ try {
   safeLog('[engines] land-khatian not mounted:', e.message);
 }
 
+// ---- Mouza map (SEPARATE engine from land-khatian, 2026-11-04:
+// own page, own services row, own fee; preview images served
+// only against the completed order that the search created).
+//   GET  /api/land-mouza-map/price
+//   POST /api/land-mouza-map/search
+//   GET  /api/land-mouza-map/preview/:id?order_id=
+const landMouzaMapLimiter = rateLimit({
+  validate: { xForwardedForHeader: false },
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'RATE_LIMITED' },
+});
+try {
+  const landMouzaMapRoutes = require('./routes/land-mouza-map');
+  app.use('/api/land-mouza-map', requireAuth, landMouzaMapLimiter, landMouzaMapRoutes);
+  safeLog('[engines] mounted land-mouza-map at /api/land-mouza-map');
+} catch (e) {
+  safeLog('[engines] land-mouza-map not mounted:', e.message);
+}
+
 // ---- NID Server Copy (portal login + captcha relay, auth + limit) ---
 // A completely separate engine from nid-replica: the customer logs
 // in with their OWN NID portal (services.nidw.gov.bd/nid-pub) ID +

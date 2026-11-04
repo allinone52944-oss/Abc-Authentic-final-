@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+<link rel="stylesheet" href="/css/premium.css?v=1">
+<link rel="stylesheet" href="/css/motion.css?v=3">
+<meta name="theme-color" content="#1e40af">
+<title>মৌজা ম্যাপ - All In One</title>
+<style>
+  .form-card {
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-xl);
+    padding: 24px;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 20px;
+    max-width: 720px;
+  }
+  .spin {
+    display: inline-block; width: 20px; height: 20px;
+    border: 3px solid rgba(37,99,235,0.25); border-top-color: var(--primary-600);
+    border-radius: 50%; animation: sp 0.8s linear infinite;
+    vertical-align: -4px; margin-right: 8px;
+  }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .err {
+    display: none; background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c;
+    padding: 12px 14px; border-radius: var(--r-md); margin-bottom: 14px; font-size: 14px;
+  }
+  .err.on { display: block; }
+  .ok {
+    display: none; background: #f0fdf4; border: 1px solid #86efac; color: #15803d;
+    padding: 14px; border-radius: var(--r-md); margin-bottom: 14px; font-size: 14px;
+  }
+  .ok.on { display: block; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+  .field select {
+    width: 100%; padding: 11px 12px; border: 1px solid #cbd5e1; border-radius: 8px;
+    background: #ffffff; color: #0f172a; font-size: 15px; font-family: inherit;
+  }
+  .price-line {
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+    background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+    padding: 10px 14px; border-radius: var(--r-md); font-size: 13px; font-weight: 600;
+    margin-bottom: 18px;
+  }
+  .note { font-size: 12px; color: #64748b; margin-top: 10px; line-height: 1.7; }
+  .disclaimer {
+    background: #fefce8; border: 1px solid #fde68a; color: #854d0e;
+    padding: 12px 14px; border-radius: var(--r-md); font-size: 13px; line-height: 1.7;
+    margin-bottom: 18px;
+  }
+  .sheet-card {
+    background: #ffffff; border: 1px solid var(--border-light);
+    border-radius: var(--r-md); padding: 14px 16px; margin-bottom: 14px;
+  }
+  .sheet-card h4 { margin: 0 0 8px; font-size: 15px; color: #14532d; }
+  .sheet-card img { width: 100%; display: block; border: 1px solid #e2e8f0; border-radius: 8px; }
+</style>
+</head>
+<body>
+<div class="desktop">
+  <div class="sidebar">
+    <div class="side-logo">
+      <div class="logo-icon">🔷</div>
+      <div>
+        <h2>All In One</h2>
+        <p>বিশ্বাস ও সেবার ঠিকানা</p>
+      </div>
+    </div>
+    <nav>
+      <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico">🏠</span> ড্যাশবোর্ড</div>
+      <div class="side-link" onclick="location.href='/services.html'"><span class="ico">🧩</span> সকল সেবা</div>
+      <div class="side-link on"><span class="ico">🗺️</span> মৌজা ম্যাপ</div>
+      <div class="side-link" onclick="location.href='/orders.html'"><span class="ico">📦</span> আমার অর্ডার</div>
+      <div class="side-link" onclick="location.href='/history.html'"><span class="ico">🕘</span> ইতিহাস</div>
+      <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico">👛</span> ওয়ালেট ও রিচার্জ</div>
+      <div class="side-link" onclick="location.href='/profile.html'"><span class="ico">👤</span> পার্সোনাল প্রোফাইল</div>
+    </nav>
+  </div>
+
+  <div class="main">
+    <div class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+      <div>
+        <h2>🗺️ মৌজা ম্যাপ</h2>
+        <p>এলাকা আর মৌজা বেছে ম্যাপের শিট দেখুন</p>
+      </div>
+      <div id="walletBadge" style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">
+        💳 ব্যালেন্স: ৳<span id="balVal">০</span>
+      </div>
+    </div>
+
+    <div class="form-card">
+      <div class="price-line" id="priceLine">
+        <span id="priceText">সেবা চার্জ লোড হচ্ছে…</span>
+        <span>শিট না পেলে চার্জ ৳০</span>
+      </div>
+
+      <div class="disclaimer" id="disclaimer">
+        ⚠️ এই ছবিগুলো প্রিভিউ মাত্র — এগুলো সরকারি সার্টিফাইড মৌজা শিট নয়, মালিকানা / স্বত্ব / দখলের প্রমাণ নয়।
+        সার্টিফাইড শিট আলাদা অর্ডার। কোন শিটে কোন দাগ আছে, সেটা পোর্টাল দেয় না — শিট নম্বর দেখে বাছতে হবে।
+      </div>
+
+      <div class="err" id="errBox"></div>
+      <div class="ok" id="okBox"></div>
+
+      <form id="searchForm">
+        <div class="field">
+          <label for="divisionSel">বিভাগ *</label>
+          <select id="divisionSel"><option value="">— বেছে নিন —</option></select>
+        </div>
+        <div class="field">
+          <label for="districtSel">জেলা *</label>
+          <select id="districtSel"><option value="">— আগে বিভাগ —</option></select>
+        </div>
+        <div class="field">
+          <label for="upazilaSel">উপজেলা / থানা *</label>
+          <select id="upazilaSel"><option value="">— আগে জেলা —</option></select>
+        </div>
+        <div class="field">
+          <label for="surveySel">জরিপ *</label>
+          <select id="surveySel"><option value="">— আগে উপজেলা —</option></select>
+        </div>
+        <div class="field">
+          <label for="mouzaSel">মৌজা *</label>
+          <select id="mouzaSel"><option value="">— আগে জরিপ —</option></select>
+        </div>
+
+        <button type="submit" class="btn btn-primary" id="searchBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; margin-top:14px;">
+          🗺️ ম্যাপ খুঁজুন
+        </button>
+        <div class="note">
+          ℹ️ শিট পেলেই শুধু চার্জ কাটবে — না পেলে কোনো টাকা কাটা হবে না।
+          রসিদটি আপনার <a href="/history.html">ইতিহাসে</a> সংরক্ষিত থাকবে।
+        </div>
+      </form>
+    </div>
+
+    <div id="resultsBox" style="max-width:720px; display:none;">
+      <div class="ok" id="mapOk" style="display:none;"></div>
+      <div id="sheetsList"></div>
+      <div class="disclaimer" id="resultsDisclaimer">
+        ⚠️ এই ছবিগুলো প্রিভিউ মাত্র — এগুলো সরকারি সার্টিফাইড মৌজা শিট নয়।
+        অফিসিয়াল কাজে সরকারি পোর্টালে যাচাই করে নিন।
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js?v=18"></script>
+<script>
+  // API paths (full paths; ABC.api() prepends '/api' itself, so the
+  // '/api' prefix is stripped at the call site — see apiCall).
+  // The official government portal is the sole data source for
+  // this page: every cascade list and every sheet comes from it
+  // through these endpoints. No third-party source is used, and
+  // no cascade list or price is hardcoded here.
+  const bn = (n) => String(n).replace(/\d/g, (d) => '০১২৩৪৫৬৭৮৯'[d]);
+  const $ = (id) => document.getElementById(id);
+  let offeredSurveys = [];
+  let currentIdem = null;
+
+  // ABC.api() adds '/api' itself, so strip the leading '/api'
+  // from the full paths above before calling it.
+  function apiCall(path, opts) {
+    return ABC.api(String(path).replace(/^\/api/, ''), opts);
+  }
+
+  function showErr(msg) {
+    const e = $('errBox');
+    e.textContent = msg; e.classList.add('on');
+    $('okBox').classList.remove('on');
+  }
+  function clearBoxes() {
+    $('errBox').classList.remove('on');
+    $('okBox').classList.remove('on');
+    $('resultsBox').style.display = 'none';
+  }
+
+  const ERR_BN = {
+    BAD_INPUT: 'এলাকা, জরিপ ও মৌজা লাগবে — ক্যাসকেড থেকে আবার বেছে নিন।',
+    JL_NOT_FOUND: 'এই মৌজার ম্যাপ পাওয়া যায়নি — ক্যাসকেড থেকে আবার বেছে নিন।',
+    SERVICE_ACCESS_DISABLED: 'এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।',
+    INSUFFICIENT_BALANCE: 'পর্যাপ্ত ব্যালেন্স নেই — ওয়ালেট রিচার্জ করে আবার চেষ্টা করুন।',
+    NOT_FOUND: 'এই মৌজায় কোনো ম্যাপ পাওয়া যায়নি — কোনো টাকা কাটা হয়নি।',
+    LAND_UNREACHABLE: 'ভূমি পোর্টালে সংযোগ করা যাচ্ছে না — কিছুক্ষণ পর আবার চেষ্টা করুন। কোনো টাকা কাটা হয়নি।',
+  };
+
+  function fillSelect(sel, items, placeholder, valFn, labelFn) {
+    sel.innerHTML = '';
+    const ph = document.createElement('option');
+    ph.value = ''; ph.textContent = placeholder;
+    sel.appendChild(ph);
+    (items || []).forEach((it) => {
+      const o = document.createElement('option');
+      o.value = valFn(it); o.textContent = labelFn(it);
+      if (it.key) o.dataset.key = it.key;
+      if (it.jl !== undefined) o.dataset.jl = it.jl;
+      sel.appendChild(o);
+    });
+  }
+
+  async function loadPrice() {
+    try {
+      const r = await apiCall('/api/land-mouza-map/price');
+      if (r.status === 401) { location.href = '/login.html'; return; }
+      const d = await r.json();
+      if (d && d.ok) {
+        $('balVal').textContent = bn(d.balance || 0);
+        // Never a hardcoded amount: the line shows exactly what
+        // the price endpoint returns — free wording only at 0.
+        if (Number(d.price) === 0) {
+          $('priceText').textContent = 'সেবা চার্জ: আপাতত বিনামূল্যে';
+        } else {
+          $('priceText').textContent = 'সেবা চার্জ: ৳' + bn(d.price) + ' (শুধু শিট পেলেই কাটবে)';
+        }
+        if (!d.allowed) showErr('⚠️ এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।');
+      }
+    } catch (e) { /* price line stays as-is */ }
+  }
+
+  async function loadDivisions() {
+    try {
+      const r = await apiCall('/api/land/geo/divisions');
+      if (r.status === 401) { location.href = '/login.html'; return; }
+      const d = await r.json();
+      fillSelect($('divisionSel'), d.items, '— বেছে নিন —', (x) => x.bbs, (x) => x.name);
+    } catch (e) { showErr('এলাকার তালিকা লোড হয়নি — পেজটি আবার লোড করুন।'); }
+  }
+
+  $('divisionSel').addEventListener('change', async () => {
+    fillSelect($('districtSel'), [], 'লোড হচ্ছে…', (x) => x.bbs, (x) => x.name);
+    fillSelect($('upazilaSel'), [], '— আগে জেলা —', (x) => x.bbs, (x) => x.name);
+    fillSelect($('surveySel'), [], '— আগে উপজেলা —', (x) => x.id, (x) => x.name);
+    fillSelect($('mouzaSel'), [], '— আগে জরিপ —', (x) => x.mouza_id, (x) => x.name);
+    offeredSurveys = [];
+    if (!$('divisionSel').value) return;
+    try {
+      const r = await apiCall('/api/land/geo/districts?division=' + encodeURIComponent($('divisionSel').value));
+      const d = await r.json();
+      fillSelect($('districtSel'), d.items, '— বেছে নিন —', (x) => x.bbs, (x) => x.name);
+    } catch (e) { showErr('জেলার তালিকা লোড হয়নি — আবার চেষ্টা করুন।'); }
+  });
+
+  $('districtSel').addEventListener('change', async () => {
+    fillSelect($('upazilaSel'), [], 'লোড হচ্ছে…', (x) => x.bbs, (x) => x.name);
+    fillSelect($('surveySel'), [], '— আগে উপজেলা —', (x) => x.id, (x) => x.name);
+    fillSelect($('mouzaSel'), [], '— আগে জরিপ —', (x) => x.mouza_id, (x) => x.name);
+    offeredSurveys = [];
+    if (!$('districtSel').value) return;
+    try {
+      const r = await apiCall('/api/land/geo/upazilas?district=' + encodeURIComponent($('districtSel').value));
+      const d = await r.json();
+      // No filtering here on purpose: the portal's upazila list
+      // mixes revenue circles and real upazilas, and filtering
+      // circles out would break real searches.
+      fillSelect($('upazilaSel'), d.items, '— বেছে নিন —', (x) => x.bbs, (x) => x.name);
+    } catch (e) { showErr('উপজেলার তালিকা লোড হয়নি — আবার চেষ্টা করুন।'); }
+  });
+
+  // Mouza list needs one numeric survey id (the endpoint's rule);
+  // the map search itself runs in exactly that survey.
+  async function loadMouzasForSurvey(surveyId) {
+    fillSelect($('mouzaSel'), [], 'লোড হচ্ছে…', (x) => x.mouza_id, (x) => x.name);
+    if (!surveyId) return;
+    const q = 'district=' + encodeURIComponent($('districtSel').value) +
+      '&upazila=' + encodeURIComponent($('upazilaSel').value);
+    try {
+      const r = await apiCall('/api/land/geo/mouzas?' + q + '&survey_id=' + encodeURIComponent(surveyId));
+      const d = await r.json();
+      fillSelect($('mouzaSel'), d.items, '— বেছে নিন —', (x) => x.mouza_id,
+        (x) => x.name + (x.jl ? ' (জে. এল. ' + x.jl + ')' : ''));
+    } catch (e) { showErr('মৌজার তালিকা লোড হয়নি — আবার চেষ্টা করুন।'); }
+  }
+
+  $('upazilaSel').addEventListener('change', async () => {
+    fillSelect($('surveySel'), [], 'লোড হচ্ছে…', (x) => x.id, (x) => x.name);
+    fillSelect($('mouzaSel'), [], '— আগে জরিপ —', (x) => x.mouza_id, (x) => x.name);
+    offeredSurveys = [];
+    if (!$('upazilaSel').value) return;
+    const q = 'district=' + encodeURIComponent($('districtSel').value) +
+      '&upazila=' + encodeURIComponent($('upazilaSel').value);
+    try {
+      const r = await apiCall('/api/land/geo/surveys?' + q);
+      const d = await r.json();
+      offeredSurveys = d.items || [];
+      if (!offeredSurveys.length) { showErr('এই উপজেলায় কোনো জরিপের তথ্য পাওয়া যায়নি।'); return; }
+      fillSelect($('surveySel'), offeredSurveys, '— বেছে নিন —', (x) => x.id, (x) => x.name);
+      await loadMouzasForSurvey(offeredSurveys[0].id);
+    } catch (e) { showErr('জরিপের তালিকা লোড হয়নি — আবার চেষ্টা করুন।'); }
+  });
+
+  $('surveySel').addEventListener('change', () => {
+    if ($('surveySel').value) loadMouzasForSurvey($('surveySel').value);
+  });
+
+  function areaBody() {
+    const dv = $('divisionSel'), di = $('districtSel'), u = $('upazilaSel'), m = $('mouzaSel');
+    if (!dv.value || !di.value || !u.value || !m.value) return null;
+    const mo = m.options[m.selectedIndex] || {};
+    return {
+      division_bbs: dv.value, district_bbs: di.value, upazila_bbs: u.value,
+      mouza_id: m.value,
+      division_name: dv.options[dv.selectedIndex].textContent,
+      district_name: di.options[di.selectedIndex].textContent,
+      upazila_name: u.options[u.selectedIndex].textContent,
+      mouza_name: mo.textContent || '',
+    };
+  }
+
+  // Preview images need the login header, so a plain <img src>
+  // would 401: each sheet is fetched authenticated → blob →
+  // object URL, exactly like the History PDF download pattern.
+  async function loadSheetImage(card, sheet, orderId) {
+    const img = card.querySelector('img');
+    const note = card.querySelector('.img-note');
+    try {
+      const r = await apiCall('/api/land-mouza-map/preview/' + encodeURIComponent(sheet.id) +
+        '?order_id=' + encodeURIComponent(orderId));
+      if (!r.ok) throw new Error('preview failed');
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      img.src = url;
+      note.textContent = '';
+      const dl = card.querySelector('a.dl');
+      dl.href = url;
+      dl.download = 'mouza-map-sheet-' + sheet.sheetNo + '.png';
+    } catch (e) {
+      note.textContent = 'ছবি লোড হয়নি — আবার চেষ্টা করুন।';
+    }
+  }
+
+  $('searchForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const area = areaBody();
+    const surveyId = $('surveySel').value;
+    if (!area || !surveyId) {
+      return showErr('⚠️ এলাকা, জরিপ ও মৌজা — সব বেছে নিন।');
+    }
+    const btn = $('searchBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span>ম্যাপ খোঁজা হচ্ছে — কিছুটা সময় লাগতে পারে...';
+    clearBoxes();
+
+    if (!currentIdem) {
+      currentIdem = (crypto.randomUUID ? crypto.randomUUID()
+        : 'land-mouza-map-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10));
+    }
+    const body = Object.assign({}, area, {
+      survey_id: surveyId,
+      idempotency_key: currentIdem,
+    });
+
+    try {
+      const r = await apiCall('/api/land-mouza-map/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        timeout: 150000, skip503Retry: true,
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.status === 401) { location.href = '/login.html'; return; }
+      if (r.ok && d.ok) {
+        const ok = $('okBox');
+        ok.replaceChildren();
+        const m = document.createElement('div');
+        m.textContent = '✅ ' + d.sheets.length + 'টি শিট পাওয়া গেছে। চার্জ: ৳' + bn(d.charged || 0);
+        ok.appendChild(m);
+        const hist = document.createElement('div');
+        hist.style.marginTop = '10px';
+        const a = document.createElement('a');
+        a.href = '/history.html';
+        a.textContent = 'ইতিহাসে দেখুন →';
+        hist.appendChild(a);
+        ok.appendChild(hist);
+        ok.classList.add('on');
+        $('errBox').classList.remove('on');
+        $('resultsBox').style.display = '';
+        const list = $('sheetsList');
+        list.replaceChildren();
+        d.sheets.forEach((sh) => {
+          const card = document.createElement('div');
+          card.className = 'sheet-card';
+          const h = document.createElement('h4');
+          h.textContent = 'শিট নং ' + sh.sheetNo;
+          card.appendChild(h);
+          const img = document.createElement('img');
+          img.alt = 'মৌজা ম্যাপ শিট ' + sh.sheetNo;
+          card.appendChild(img);
+          const note = document.createElement('div');
+          note.className = 'img-note note';
+          note.textContent = 'ছবি লোড হচ্ছে…';
+          card.appendChild(note);
+          const dlWrap = document.createElement('div');
+          dlWrap.style.marginTop = '8px';
+          const dl = document.createElement('a');
+          dl.className = 'dl';
+          dl.href = '#';
+          dl.textContent = 'ছবি ডাউনলোড';
+          dlWrap.appendChild(dl);
+          card.appendChild(dlWrap);
+          list.appendChild(card);
+          loadSheetImage(card, sh, d.orderId);
+        });
+        loadPrice();
+      } else if (r.status === 422 && d.error === 'NOT_FOUND') {
+        showErr('❌ ' + 'এই মৌজায় কোনো ম্যাপ পাওয়া যায়নি — কোনো টাকা কাটা হয়নি।');
+        $('resultsBox').style.display = 'none';
+      } else if (r.status === 402) {
+        showErr('❌ ' + (d.message || ERR_BN.INSUFFICIENT_BALANCE) + ' ওয়ালেট রিচার্জ করে আবার চেষ্টা করুন।');
+      } else if (r.status === 403) {
+        showErr('❌ ' + (d.message || ERR_BN.SERVICE_ACCESS_DISABLED));
+      } else if (r.status === 502 || (d && d.error === 'LAND_UNREACHABLE')) {
+        showErr('❌ ' + ERR_BN.LAND_UNREACHABLE);
+      } else {
+        const msg = (d && d.message) || (d && d.error && ERR_BN[d.error]) ||
+          'ম্যাপ খোঁজা সফল হয়নি — আবার চেষ্টা করুন।';
+        showErr('❌ ' + msg);
+      }
+    } catch (err) {
+      // Network-level failure: keep the same idempotency key so a
+      // retry cannot double-charge if the first attempt landed.
+      showErr('❌ সংযোগে সমস্যা হয়েছে। আবার চেষ্টা করুন — একই চেষ্টায় দুবার চার্জ কাটবে না।');
+    }
+    btn.disabled = false;
+    btn.textContent = '🗺️ ম্যাপ খুঁজুন';
+  });
+
+  loadPrice();
+  loadDivisions();
+</script>
+</body>
+</html>

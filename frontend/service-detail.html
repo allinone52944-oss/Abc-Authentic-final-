@@ -255,6 +255,7 @@ async function init(){
     // gets both, so a routing regression can never send this
     // engine's customers to a nonexistent page / login page.
     else if (s.engine_id === 'land-khatian') { engineUrl = '/land-khatian.html'; engineLabel = '⚡ এখনই খতিয়ান অনুসন্ধান করুন →'; }
+    else if (s.engine_id === 'land-mouza-map') { engineUrl = '/land-mouza-map.html'; engineLabel = '⚡ এখনই মৌজা ম্যাপ দেখুন →'; }
     else if (s.engine_id === 'bdris-certificate') engineLabel = '⚡ এখনই সনদ তৈরি করুন →';
     else if (s.engine_id === 'bdris-apply') engineLabel = '⚡ এখনই জন্ম নিবন্ধন আবেদন শুরু করুন →';
     else if (s.engine_id === 'death-verify') engineLabel = '⚡ এখনই মৃত্যু সনদ যাচাই করুন →';
