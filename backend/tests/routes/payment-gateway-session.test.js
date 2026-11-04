@@ -256,10 +256,23 @@ describe('frontend/wallet.html — gateway session invariants', () => {
     expect(step2).toContain('onclick="gwGoManual()"');
   });
 
-  test('manual guide: hidden by default, holds the manual steps with instructions', () => {
+  test('manual section: hidden by default, holds the guide + classic form, auto shown', () => {
     const src = walletHtml();
-    const guide = src.slice(src.indexOf('id="manualGuide"'));
-    expect(guide).toContain('display:none');
+    // The manual section itself is hidden on load; the auto card is not.
+    const secOpen = src.slice(src.indexOf('id="manualSection"'), src.indexOf('id="manualSection"') + 120);
+    expect(secOpen).toContain('display:none');
+    const gwCardOpen = src.slice(src.indexOf('id="gwCard"'), src.indexOf('id="gwCard"') + 120);
+    expect(gwCardOpen).not.toContain('display:none');
+    // The section holds the back button, the classic form and the guide.
+    const sec = src.slice(src.indexOf('id="manualSection"'), src.indexOf('Recharge Cashback Hub Card'));
+    expect(sec).toContain('onclick="gwBackToAuto()"');
+    expect(sec).toContain('id="classicRechargeCard"');
+    expect(sec).toContain('id="manualGuide"');
+    // The guide itself is no longer an inline hidden block: it is always
+    // visible inside the manual section.
+    const guideOpen = src.slice(src.indexOf('id="manualGuide"'), src.indexOf('id="manualGuide"') + 200);
+    expect(guideOpen).not.toContain('display:none');
+    const guide = src.slice(src.indexOf('id="manualGuide"'), src.indexOf('id="methods"'));
     expect(guide).toContain('Manual-এ দেওয়ার নির্দেশনা');
     expect(guide).toContain('যেকোনো নম্বরে টাকা পাঠান');
     expect(guide).toContain('TrxID লিখুন');
@@ -267,12 +280,47 @@ describe('frontend/wallet.html — gateway session invariants', () => {
     expect(guide).toContain('এডমিন যাচাই করে ব্যালেন্স যোগ করবেন');
   });
 
-  test('gwGoManual reveals the guide and scrolls to the manual card', () => {
+  test('gwGoManual navigates to the manual section (auto hidden, no inline reveal)', () => {
     const src = walletHtml();
     const body = fnSlice(src, 'function gwGoManual(');
-    expect(body).toContain("getElementById('manualGuide')");
+    expect(body).toContain("getElementById('gwCard')");
+    expect(body).toContain("style.display = 'none'");
+    expect(body).toContain("getElementById('manualSection')");
     expect(body).toContain("style.display = 'block'");
-    expect(body).toContain("getElementById('classicRechargeCard')");
     expect(body).toContain('scrollIntoView');
+    // No inline expand on the auto view: the guide is never revealed here,
+    // and the classic card is never scrolled to directly.
+    expect(body).not.toContain('manualGuide');
+    expect(body).not.toContain('classicRechargeCard');
+  });
+
+  test('gwBackToAuto returns to the auto session card', () => {
+    const src = walletHtml();
+    const body = fnSlice(src, 'function gwBackToAuto(');
+    expect(body).toContain("getElementById('manualSection')");
+    expect(body).toContain("style.display = 'none'");
+    expect(body).toContain("getElementById('gwCard')");
+    expect(body).toContain("style.display = 'block'");
+    expect(body).toContain('scrollIntoView');
+  });
+
+  test('expired-state manual button also navigates to the manual section', () => {
+    const src = walletHtml();
+    const expired = src.slice(src.indexOf('id="gwExpired"'), src.indexOf('id="manualSection"'));
+    expect(expired).toContain('onclick="gwScrollManual()"');
+    expect(fnSlice(src, 'function gwScrollManual(')).toContain('gwGoManual()');
+  });
+
+  test('classic form submit path unchanged inside the manual section', () => {
+    const src = walletHtml();
+    const card = src.slice(src.indexOf('id="classicRechargeCard"'), src.indexOf('Recharge Cashback Hub Card'));
+    expect(card).toContain('id="amount"');
+    expect(card).toContain('id="sender"');
+    expect(card).toContain('id="trxid"');
+    expect(card).toContain('onclick="submitRecharge()"');
+    const body = fnSlice(src, 'async function submitRecharge()');
+    expect(body).toContain("'/wallet/recharge'");
+    expect(body).toContain('sender_no');
+    expect(body).toContain('trxid');
   });
 });

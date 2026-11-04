@@ -317,7 +317,7 @@
          Auto Match, through the classic /wallet/recharge flow. -->
     <div class="card gw-card" id="gwCard">
       <h3>⚡ দ্রুত পেমেন্ট</h3>
-      <p style="font-size:13px;color:#64748b;margin-bottom:16px;">গেটওয়ে স্টাইলে: নম্বর লিখুন → পে করুন → TrxID দিয়ে Auto Match — ১০ মিনিটের সেশনে। ম্যানুয়াল ফর্ম নিচে আগের মতোই আছে।</p>
+      <p style="font-size:13px;color:#64748b;margin-bottom:16px;">গেটওয়ে স্টাইলে: নম্বর লিখুন → পে করুন → TrxID দিয়ে Auto Match — ১০ মিনিটের সেশনে। ম্যানুয়াল দিতে চাইলে 'Manual-এ দিন' চাপ দিন — আলাদা manual section খুলবে।</p>
 
       <!-- Step 1: session setup -->
       <div id="gwStep1">
@@ -394,12 +394,21 @@
       </div>
     </div>
 
+    <!-- Manual section: its own clean view (2026-11-04 redesign).
+         The auto session card is hidden while this is shown; the
+         'Auto-তে ফিরুন' button returns to it. No inline expand. -->
+    <div id="manualSection" style="display:none;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <button class="btn-secondary" style="padding:10px 16px;" onclick="gwBackToAuto()">← Auto-তে ফিরুন</button>
+        <h3 style="margin:0;">📝 Manual-এ টাকা যোগ করুন</h3>
+      </div>
+
     <!-- Recharge Form Card -->
     <div class="card" id="classicRechargeCard">
       <h3>💰 টাকা যোগ করুন (ব্যালেন্স রিচার্জ)</h3>
       <p style="font-size:13px;color:#64748b;margin-bottom:16px;">নিচের যেকোনো মাধ্যমে টাকা পাঠিয়ে TrxID সাবমিট করুন। এডমিন ভেরিফাই করলেই ব্যালেন্স যোগ হবে।</p>
 
-      <div id="manualGuide" style="display:none;font-size:12.5px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.7;">
+      <div id="manualGuide" style="font-size:12.5px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.7;">
         <b style="color:#0f172a;">Manual-এ দেওয়ার নির্দেশনা:</b><br>
         ১️⃣ যেকোনো মাধ্যমে (bKash/Nagad/Rocket) যেকোনো নম্বরে টাকা পাঠান।<br>
         ২️⃣ নিচের ফর্মে method, টাকার পরিমাণ, যে নম্বর থেকে পাঠিয়েছেন ও TrxID লিখুন।<br>
@@ -461,6 +470,7 @@
       <div class="okmsg" id="ok"></div>
 
       <button class="btn" style="width:100%;margin-top:10px;padding:14px;" onclick="submitRecharge()">টাকা যোগ করার রিকোয়েস্ট পাঠান →</button>
+    </div>
     </div>
 
     <!-- Recharge Cashback Hub Card -->
@@ -969,14 +979,21 @@ function gwCopySuggest(){
 }
 
 function gwGoManual(){
-  const g = document.getElementById('manualGuide');
-  if (g) g.style.display = 'block';
-  const el = document.getElementById('classicRechargeCard');
-  if (el) el.scrollIntoView({ behavior: 'smooth' });
+  const gw = document.getElementById('gwCard');
+  if (gw) gw.style.display = 'none';
+  const ms = document.getElementById('manualSection');
+  if (ms) { ms.style.display = 'block'; ms.scrollIntoView({ behavior: 'smooth' }); }
 }
 
 function gwScrollManual(){
   gwGoManual();
+}
+
+function gwBackToAuto(){
+  const ms = document.getElementById('manualSection');
+  if (ms) ms.style.display = 'none';
+  const gw = document.getElementById('gwCard');
+  if (gw) { gw.style.display = 'block'; gw.scrollIntoView({ behavior: 'smooth' }); }
 }
 
 async function gwAutoMatch(){
