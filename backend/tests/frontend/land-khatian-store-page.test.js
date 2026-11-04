@@ -1,41 +1,32 @@
 // Static checks on frontend/land-khatian.html for the
-// collection-store UI: stale banner, public coverage box,
-// surveysPresent honesty, and the launch-gate wording.
+// LIVE-ONLY pivot (2026-11-04): no stored/stale UI, no
+// coverage box, no storeEmpty wording on the 502 path.
 // (Live-search behaviour — including the "সব জরিপ" survey
-// option — must stay untouched; the box only clarifies
-// that it means survey TYPES, not all-BD coverage.)
+// option — must stay untouched.)
 const fs = require('fs');
 const path = require('path');
 
 const PAGE = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'frontend', 'land-khatian.html'), 'utf8');
 
-describe('land-khatian page: store UI', () => {
-  test('stale banner element + surveysPresent handling exist', () => {
-    expect(PAGE).toContain('id="staleNote"');
-    expect(PAGE).toContain('surveysPresent');
-    expect(PAGE).toContain('সংরক্ষিত জরিপ:');
-    expect(PAGE).toContain('এর বাইরের জরিপ সংরক্ষিত নয়');
+describe('land-khatian page: live-only UI', () => {
+  test('no stale banner, no surveysPresent, no stored-survey wording', () => {
+    expect(PAGE).not.toContain('id="staleNote"');
+    expect(PAGE).not.toContain('surveysPresent');
+    expect(PAGE).not.toContain('সংরক্ষিত জরিপ:');
+    expect(PAGE).not.toContain('এর বাইরের জরিপ সংরক্ষিত নয়');
   });
-  test('coverage box exists, calls the public endpoint on load, states collection phase + NOT all-BD', () => {
-    expect(PAGE).toContain('id="coverageBox"');
-    expect(PAGE).toContain("apiCall('/api/land-khatian/coverage')");
-    expect(PAGE).toContain('loadCoverage()');
-    expect(PAGE).toContain('সংগ্রহের পর্যায়ে');
-    expect(PAGE).toContain('সারা-বাংলাদেশ সেবা নয়');
-    expect(PAGE).toContain('এখনো কোনো জেলার তথ্য সংগ্রহ হয়নি');
+  test('no coverage box, no coverage fetch on load', () => {
+    expect(PAGE).not.toContain('id="coverageBox"');
+    expect(PAGE).not.toContain("apiCall('/api/land-khatian/coverage')");
+    expect(PAGE).not.toContain('loadCoverage()');
+    expect(PAGE).not.toContain('সংগ্রহের পর্যায়ে');
   });
-  test('box clarifies live search runs separately and "সব জরিপ" means survey types, not coverage', () => {
-    expect(PAGE).toContain('লাইভ অনুসন্ধান এর বাইরে আলাদাভাবে চলে');
-    expect(PAGE).toContain('সব ধরনের জরিপ, সারা-বাংলাদেশ সংগ্রহ নয়');
-  });
-  test('live-search behaviour untouched: "সব জরিপ" option still present; storeEmpty wording on the 502 path', () => {
+  test('live-search behaviour untouched: "সব জরিপ" option still present; 502 path has no storeEmpty wording', () => {
     expect(PAGE).toContain('>সব জরিপ</option>');
-    expect(PAGE).toContain('storeEmpty');
-    expect(PAGE).toContain('কোনো সংরক্ষিত তথ্যও এখনো সংগ্রহ হয়নি');
+    expect(PAGE).not.toContain('storeEmpty');
+    expect(PAGE).not.toContain('কোনো সংরক্ষিত তথ্যও এখনো সংগ্রহ হয়নি');
   });
-  test('no all-BD claim: the only all-BD phrasing is the negation', () => {
-    expect(PAGE).toContain('সারা-বাংলাদেশ সেবা নয়');
-    expect(PAGE).not.toContain('সারা-বাংলাদেশ সেবা।');
-    expect(PAGE).not.toContain('সারা বাংলাদেশে পাওয়া যাবে');
+  test('summary disclaimer still states the report is not a certified copy', () => {
+    expect(PAGE).toContain('সরকারি সার্টিফাইড কপি নয়');
   });
 });

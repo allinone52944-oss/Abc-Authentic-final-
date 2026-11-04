@@ -1,5 +1,13 @@
 # land-khatian — collection store (fallback, not primary)
 
+> RETIRED 2026-11-04 (Pankaj's pivot): batch collection was
+> stopped as too time-costly, the collected data was deleted
+> from the server, and the engine went live-only. The search
+> route no longer consults or writes any store, and the
+> import/coverage routes are removed. Everything below
+> describes the retired design and is kept for history only
+> — do not re-enable it without a new decision from Pankaj.
+
 ## The goal, stated honestly
 
 **"Our server keeps running even if the source goes off" is a
