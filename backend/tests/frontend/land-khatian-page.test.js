@@ -218,3 +218,29 @@ describe('land-khatian inline script syntax', () => {
     }
   });
 });
+
+describe('land-khatian page: simple form (2026-11-04)', () => {
+  test('optional groups are collapsed <details>; all field ids unchanged', () => {
+    for (const id of ['divisionSel', 'districtSel', 'upazilaSel', 'mouzaSel',
+      'searchType', 'surveySel', 'surveyWrap',
+      'khatianNo', 'ownerName', 'dagNo']) {
+      expect(PAGE).toContain('id="' + id + '"');
+    }
+    expect(PAGE).toContain('id="nameDagWrap"');
+    expect(PAGE).toContain('id="surveyPickWrap"');
+    expect(PAGE).toContain('<details');
+  });
+  test('owner/dag and survey picks live inside their details blocks, not as top-level fields', () => {
+    const nameDag = PAGE.split('id="nameDagWrap"')[1].split('</details>')[0];
+    expect(nameDag).toContain('id="ownerName"');
+    expect(nameDag).toContain('id="dagNo"');
+    const surveyPick = PAGE.split('id="surveyPickWrap"')[1].split('</details>')[0];
+    expect(surveyPick).toContain('id="searchType"');
+    expect(surveyPick).toContain('id="surveySel"');
+  });
+  test('default search mode is still all surveys (first option)', () => {
+    const m = PAGE.match(/id="searchType"[^>]*>([\s\S]*?)<\/select>/);
+    expect(m).not.toBeNull();
+    expect(m[1].trim().startsWith('<option value="all">')).toBe(true);
+  });
+});

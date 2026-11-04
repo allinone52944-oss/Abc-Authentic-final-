@@ -38,6 +38,8 @@
   }
   .ok.on { display: block; }
   .field { margin-bottom: 16px; }
+  details.field summary { cursor: pointer; font-size: 13px; font-weight: 600; color: #1e40af; margin-bottom: 10px; }
+  details.field[open] summary { margin-bottom: 14px; }
   .field label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
   .field input[type=text], .field select {
     width: 100%; padding: 11px 12px; border: 1px solid #cbd5e1; border-radius: 8px;
@@ -133,18 +135,6 @@
           <select id="upazilaSel"><option value="">— আগে জেলা —</option></select>
         </div>
         <div class="field">
-          <label for="searchType">অনুসন্ধানের ধরন *</label>
-          <select id="searchType">
-            <option value="all">সব জরিপ</option>
-            <option value="survey">সার্ভে (একটি জরিপ বেছে নিন)</option>
-            <option value="mutation">নামজারি</option>
-          </select>
-        </div>
-        <div class="field" id="surveyWrap" style="display:none;">
-          <label for="surveySel">জরিপ *</label>
-          <select id="surveySel"><option value="">— আগে উপজেলা —</option></select>
-        </div>
-        <div class="field">
           <label for="mouzaSel">মৌজা *</label>
           <select id="mouzaSel"><option value="">— আগে উপজেলা —</option></select>
         </div>
@@ -152,14 +142,36 @@
           <label for="khatianNo">খতিয়ান নং</label>
           <input type="text" id="khatianNo" placeholder="যেমন: ৮ (বাংলা সংখ্যাও চলবে)">
         </div>
-        <div class="field">
-          <label for="ownerName">মালিকের নাম</label>
-          <input type="text" id="ownerName" placeholder="মালিকের নাম লিখুন">
-        </div>
-        <div class="field">
-          <label for="dagNo">দাগ নং</label>
-          <input type="text" id="dagNo" placeholder="যেমন: ১২৩ (বাংলা সংখ্যাও চলবে)">
-        </div>
+        <!-- Simple by default: the two optional groups below
+             stay collapsed. All field ids, values, and the
+             submit logic are unchanged — collapsing only
+             hides them until the customer needs them. -->
+        <details class="field" id="nameDagWrap">
+          <summary>নাম বা দাগ দিয়ে খুঁজুন (ঐচ্ছিক)</summary>
+          <div class="field">
+            <label for="ownerName">মালিকের নাম</label>
+            <input type="text" id="ownerName" placeholder="মালিকের নাম লিখুন">
+          </div>
+          <div class="field">
+            <label for="dagNo">দাগ নং</label>
+            <input type="text" id="dagNo" placeholder="যেমন: ১২৩ (বাংলা সংখ্যাও চলবে)">
+          </div>
+        </details>
+        <details class="field" id="surveyPickWrap">
+          <summary>জরিপ বাছাই (ঐচ্ছিক — না খুললে সব জরিপ)</summary>
+          <div class="field">
+            <label for="searchType">অনুসন্ধানের ধরন *</label>
+            <select id="searchType">
+              <option value="all">সব জরিপ</option>
+              <option value="survey">সার্ভে (একটি জরিপ বেছে নিন)</option>
+              <option value="mutation">নামজারি</option>
+            </select>
+          </div>
+          <div class="field" id="surveyWrap" style="display:none;">
+            <label for="surveySel">জরিপ *</label>
+            <select id="surveySel"><option value="">— আগে উপজেলা —</option></select>
+          </div>
+        </details>
         <div class="note">খতিয়ান নং, মালিকের নাম ও দাগ নং — এর মধ্যে অন্তত একটি দিতে হবে। একাধিক দিলে ফল আরও নির্দিষ্ট হবে।</div>
 
         <button type="submit" class="btn btn-primary" id="searchBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700; margin-top:14px;">
