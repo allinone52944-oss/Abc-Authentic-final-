@@ -1,8 +1,9 @@
 // Static checks on frontend/land-khatian.html for the
 // LIVE-ONLY pivot (2026-11-04): no stored/stale UI, no
 // coverage box, no storeEmpty wording on the 502 path.
-// (Live-search behaviour — including the "সব জরিপ" survey
-// option — must stay untouched.)
+// (Single-survey only since 2026-11-04: the "সব জরিপ"
+// option is gone from the form; the API-level 'all' mode
+// still exists but the form never sends it.)
 const fs = require('fs');
 const path = require('path');
 
@@ -21,8 +22,8 @@ describe('land-khatian page: live-only UI', () => {
     expect(PAGE).not.toContain('loadCoverage()');
     expect(PAGE).not.toContain('সংগ্রহের পর্যায়ে');
   });
-  test('live-search behaviour untouched: "সব জরিপ" option still present; 502 path has no storeEmpty wording', () => {
-    expect(PAGE).toContain('>সব জরিপ</option>');
+  test('live-search behaviour: no "সব জরিপ" option anymore (single-survey only); 502 path has no storeEmpty wording', () => {
+    expect(PAGE).not.toContain('>সব জরিপ</option>');
     expect(PAGE).not.toContain('storeEmpty');
     expect(PAGE).not.toContain('কোনো সংরক্ষিত তথ্যও এখনো সংগ্রহ হয়নি');
   });

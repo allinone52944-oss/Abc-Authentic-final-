@@ -138,14 +138,28 @@
           <label for="mouzaSel">মৌজা *</label>
           <select id="mouzaSel"><option value="">— আগে উপজেলা —</option></select>
         </div>
+        <!-- Single-survey only (2026-11-04): 'all' is not
+             offered anymore — the survey pick stays visible
+             because exactly one survey is now required. -->
+        <div class="field">
+          <label for="searchType">অনুসন্ধানের ধরন *</label>
+          <select id="searchType">
+            <option value="survey">সার্ভে (একটি জরিপ বেছে নিন)</option>
+            <option value="mutation">নামজারি</option>
+          </select>
+        </div>
+        <div class="field" id="surveyWrap">
+          <label for="surveySel">জরিপ *</label>
+          <select id="surveySel"><option value="">— আগে উপজেলা —</option></select>
+        </div>
         <div class="field">
           <label for="khatianNo">খতিয়ান নং</label>
           <input type="text" id="khatianNo" placeholder="যেমন: ৮ (বাংলা সংখ্যাও চলবে)">
         </div>
-        <!-- Simple by default: the two optional groups below
-             stay collapsed. All field ids, values, and the
-             submit logic are unchanged — collapsing only
-             hides them until the customer needs them. -->
+        <!-- Simple by default: the optional name/dag group
+             stays collapsed. All field ids and the submit
+             logic are unchanged — collapsing only hides
+             them until the customer needs them. -->
         <details class="field" id="nameDagWrap">
           <summary>নাম বা দাগ দিয়ে খুঁজুন (ঐচ্ছিক)</summary>
           <div class="field">
@@ -155,21 +169,6 @@
           <div class="field">
             <label for="dagNo">দাগ নং</label>
             <input type="text" id="dagNo" placeholder="যেমন: ১২৩ (বাংলা সংখ্যাও চলবে)">
-          </div>
-        </details>
-        <details class="field" id="surveyPickWrap">
-          <summary>জরিপ বাছাই (ঐচ্ছিক — না খুললে সব জরিপ)</summary>
-          <div class="field">
-            <label for="searchType">অনুসন্ধানের ধরন *</label>
-            <select id="searchType">
-              <option value="all">সব জরিপ</option>
-              <option value="survey">সার্ভে (একটি জরিপ বেছে নিন)</option>
-              <option value="mutation">নামজারি</option>
-            </select>
-          </div>
-          <div class="field" id="surveyWrap" style="display:none;">
-            <label for="surveySel">জরিপ *</label>
-            <select id="surveySel"><option value="">— আগে উপজেলা —</option></select>
           </div>
         </details>
         <div class="note">খতিয়ান নং, মালিকের নাম ও দাগ নং — এর মধ্যে অন্তত একটি দিতে হবে। একাধিক দিলে ফল আরও নির্দিষ্ট হবে।</div>
@@ -507,11 +506,14 @@
     if (!khatianNo && !ownerName && !dagNo) {
       return showErr('⚠️ খতিয়ান নং, মালিকের নাম ও দাগ নং — এর মধ্যে অন্তত একটি দিন।');
     }
+    // Single-survey only (2026-11-04): 'all' is not offered
+    // anymore — every search runs in exactly one survey
+    // (or the mutation passthrough).
     const type = $('searchType').value;
-    let surveyId = 'all';
+    let surveyId;
     let surveyKey = '';
     if (type === 'mutation') surveyId = 'mutation';
-    else if (type === 'survey') {
+    else {
       if (!$('surveySel').value) return showErr('⚠️ জরিপ বেছে নিন।');
       surveyId = $('surveySel').value;
       const so = $('surveySel').options[$('surveySel').selectedIndex] || {};

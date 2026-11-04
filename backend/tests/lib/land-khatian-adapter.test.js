@@ -111,6 +111,18 @@ describe('owner-name / dag local filters', () => {
     expect(r.items.map((i) => i.khatianNo)).toEqual(['2']);
   });
 
+  test('dag filter is an EXACT token match: a part-number never matches (2026-11-04)', async () => {
+    listSetup();
+    const r = await adapter.search({ ...AREA, surveyId: 'all', mouzaId: '72400', dagNo: '20' });
+    expect(r.items).toEqual([]);
+  });
+
+  test('dag filter normalizes Bengali digits before the exact match', async () => {
+    listSetup();
+    const r = await adapter.search({ ...AREA, surveyId: 'all', mouzaId: '72400', dagNo: '২০০' });
+    expect(r.items.map((i) => i.khatianNo)).toEqual(['2']);
+  });
+
   test('owner + dag combined', async () => {
     listSetup();
     const r = await adapter.search({ ...AREA, surveyId: 'all', mouzaId: '72400', ownerName: 'পরীক্ষক এক', dagNo: '300' });

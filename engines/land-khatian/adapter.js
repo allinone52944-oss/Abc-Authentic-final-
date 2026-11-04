@@ -311,8 +311,11 @@ async function search(args) {
       if (items.length >= DETAIL_CAP) break;
       const det = await client.detail(sv.key, hit.ID);
       // Dag filter applies on the detail record: the index
-      // rows carry owners, not dags.
-      if (dagNo && !String(det.DAGS || '').includes(dagNo)) continue;
+      // rows carry owners, not dags. EXACT token match only
+      // (2026-11-04: the searched dag must be one whole
+      // token of the DAGS list — '123' never matches
+      // '1237', and Bengali digits are normalized first).
+      if (dagNo && !toEn(String(det.DAGS || '')).split(/[,;]/).map((t) => t.trim()).filter(Boolean).includes(dagNo)) continue;
       items.push(normalize(det, sv.key, sv.name, jl.ID));
       rawItems.push({
         rawIndex: hit, rawDetail: det, halSabek: [],
