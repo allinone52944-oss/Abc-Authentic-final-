@@ -97,11 +97,11 @@ describe('land-khatian page markup', () => {
     expect(PAGE).toContain('id="' + id + '"');
   });
 
-  test('type selector offers survey / mutation only — no all-surveys option (2026-11-04)', () => {
-    expect(PAGE).not.toContain('value="all"');
-    expect(PAGE).not.toContain('সব জরিপ');
+  test('type selector offers survey / mutation / all — all-surveys restored 2026-11-04', () => {
+    expect(PAGE).toContain('value="all"');
     expect(PAGE).toContain('value="survey"');
     expect(PAGE).toContain('value="mutation"');
+    expect(PAGE).toContain('সব জরিপ');
     expect(PAGE).toContain('নামজারি');
   });
 
@@ -234,11 +234,11 @@ describe('land-khatian page: simple form (2026-11-04)', () => {
     expect(nameDag).toContain('id="ownerName"');
     expect(nameDag).toContain('id="dagNo"');
   });
-  test('survey pick is top-level and single-survey only (2026-11-04): no surveyPickWrap, first option is survey', () => {
+  test('survey pick is top-level (no surveyPickWrap); default mode is all surveys again (2026-11-04)', () => {
     expect(PAGE).not.toContain('id="surveyPickWrap"');
     const m = PAGE.match(/id="searchType"[^>]*>([\s\S]*?)<\/select>/);
     expect(m).not.toBeNull();
-    expect(m[1].trim().startsWith('<option value="survey">')).toBe(true);
-    expect(m[1]).not.toContain('value="all"');
+    expect(m[1].trim().startsWith('<option value="all">')).toBe(true);
+    expect(PAGE).toContain('id="surveyWrap" style="display:none;"');
   });
 });

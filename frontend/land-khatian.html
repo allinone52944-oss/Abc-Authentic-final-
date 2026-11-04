@@ -138,17 +138,19 @@
           <label for="mouzaSel">মৌজা *</label>
           <select id="mouzaSel"><option value="">— আগে উপজেলা —</option></select>
         </div>
-        <!-- Single-survey only (2026-11-04): 'all' is not
-             offered anymore — the survey pick stays visible
-             because exactly one survey is now required. -->
+        <!-- 'all' restored 2026-11-04 ~21:14 (Pankaj): all
+             surveys' matches come together again, as before.
+             The survey pick stays top-level; it shows only
+             when 'survey' is chosen. -->
         <div class="field">
           <label for="searchType">অনুসন্ধানের ধরন *</label>
           <select id="searchType">
+            <option value="all">সব জরিপ</option>
             <option value="survey">সার্ভে (একটি জরিপ বেছে নিন)</option>
             <option value="mutation">নামজারি</option>
           </select>
         </div>
-        <div class="field" id="surveyWrap">
+        <div class="field" id="surveyWrap" style="display:none;">
           <label for="surveySel">জরিপ *</label>
           <select id="surveySel"><option value="">— আগে উপজেলা —</option></select>
         </div>
@@ -506,14 +508,14 @@
     if (!khatianNo && !ownerName && !dagNo) {
       return showErr('⚠️ খতিয়ান নং, মালিকের নাম ও দাগ নং — এর মধ্যে অন্তত একটি দিন।');
     }
-    // Single-survey only (2026-11-04): 'all' is not offered
-    // anymore — every search runs in exactly one survey
-    // (or the mutation passthrough).
+    // 'all' restored 2026-11-04 ~21:14 (Pankaj): the default
+    // search again runs across all offered surveys together
+    // (or the mutation passthrough, or one chosen survey).
     const type = $('searchType').value;
-    let surveyId;
+    let surveyId = 'all';
     let surveyKey = '';
     if (type === 'mutation') surveyId = 'mutation';
-    else {
+    else if (type === 'survey') {
       if (!$('surveySel').value) return showErr('⚠️ জরিপ বেছে নিন।');
       surveyId = $('surveySel').value;
       const so = $('surveySel').options[$('surveySel').selectedIndex] || {};
