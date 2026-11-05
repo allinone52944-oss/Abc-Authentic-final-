@@ -230,6 +230,28 @@ describe('frontend/wallet.html — gateway session invariants', () => {
     expect(fnSlice(src, 'function gwStopAll(')).toContain('clearInterval');
   });
 
+  test('audit #20 — the session survives a reload: persisted + restored with polling', () => {
+    const src = walletHtml();
+    // persisted on start and on submit (TrxID + absolute deadline)
+    const save = fnSlice(src, 'function gwSaveSession(');
+    expect(save).toContain('localStorage.setItem');
+    expect(save).toContain('endsAt');
+    expect(save).toContain('submittedTrxid');
+    expect(fnSlice(src, 'function gwStartSession(')).toContain('gwSaveSession()');
+    expect(fnSlice(src, 'async function gwAutoMatch(')).toContain('gwSaveSession()');
+    // restored on page load, after the wallet loads
+    expect(src).toContain('loadWallet();\n  gwRestoreSession();');
+    const restore = fnSlice(src, 'function gwRestoreSession(');
+    expect(restore).toContain('localStorage.getItem');
+    expect(restore).toContain('s.endsAt <= Date.now()'); // expired while away → cleared, not restored
+    expect(restore).toContain('gw.timerId = setInterval(gwTick, 1000)');
+    expect(restore).toContain('gwStartPolling()');
+    expect(restore).toContain('gwPollOnce()'); // immediate flip-check, not 15s later
+    // a done/expired session is cleared, never restored
+    expect(src).toContain('gwClearSession(); // audit #20 — a done session is never restored');
+    expect(src).toContain('gwClearSession(); // audit #20 — an expired session is never restored');
+  });
+
   test('audit #19 — going to Manual pauses the timer/polling, returning resumes', () => {
     const src = walletHtml();
     const goManual = fnSlice(src, 'function gwGoManual(');

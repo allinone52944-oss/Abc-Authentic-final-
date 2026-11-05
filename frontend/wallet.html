@@ -602,6 +602,7 @@ async function init(){
   });
   updateRecvNum();
   loadWallet();
+  gwRestoreSession(); // audit #20 — resume a live gateway session after a reload
 }
 
 const bn = n => Number(n || 0).toLocaleString('bn-BD');
@@ -884,6 +885,60 @@ function gwStopPolling(){ if (gw && gw.pollId) { clearInterval(gw.pollId); gw.po
 // done: the success/reject paths used to stop only polling, so
 // the 10-minute timer kept running and gwTick expired the session
 // on top of the success card.
+// Audit #20 — the gateway session survives a reload: the live
+// session (method, own paying number, amount, absolute deadline,
+// submitted TrxID) is persisted in localStorage on start and on
+// submit, and restored on page load with the timer and the match
+// polling resumed. Only the user's own session values are stored
+// (same-origin localStorage; no token or password ever). A done
+// or expired session is cleared, never restored.
+var GW_STORE_KEY = 'abc_gw_session_v1';
+function gwSaveSession(){
+  try {
+    if (!gw || gw.done) { localStorage.removeItem(GW_STORE_KEY); return; }
+    localStorage.setItem(GW_STORE_KEY, JSON.stringify({
+      method: gw.method, sender: gw.sender, amount: gw.amount,
+      endsAt: gw.endsAt, submitted: !!gw.submitted, submittedTrxid: gw.submittedTrxid || null
+    }));
+  } catch (e) { /* storage unavailable — the session just won't survive a reload */ }
+}
+function gwClearSession(){
+  try { localStorage.removeItem(GW_STORE_KEY); } catch (e) {}
+}
+function gwRestoreSession(){
+  var raw = null;
+  try { raw = localStorage.getItem(GW_STORE_KEY); } catch (e) { return false; }
+  if (!raw) return false;
+  var s;
+  try { s = JSON.parse(raw); } catch (e) { gwClearSession(); return false; }
+  if (!s || !s.endsAt || !s.sender || !s.amount) { gwClearSession(); return false; }
+  if (s.endsAt <= Date.now()) { gwClearSession(); return false; } // expired while away
+  gw = { method: s.method || 'bkash_payment', sender: s.sender, amount: s.amount,
+         endsAt: s.endsAt, timerId: null, pollId: null,
+         submitted: !!s.submitted, submittedTrxid: s.submittedTrxid || null, done: false, pausedAt: null };
+  document.getElementById('gwSumMethod').textContent = GW_METHOD_NAMES[gw.method] || gw.method;
+  document.getElementById('gwSumAmount').textContent = '৳' + bn(gw.amount);
+  document.getElementById('gwSumSender').textContent = gw.sender;
+  var num = rechargeNums[gw.method] || '';
+  document.getElementById('gwRecvWrap').style.display = num ? 'block' : 'none';
+  if (num) document.getElementById('gwRecvNum').textContent = num;
+  document.getElementById('gwTrxid').value = gw.submittedTrxid || '';
+  document.getElementById('gwErr2').textContent = '';
+  document.getElementById('gwState').innerHTML = gw.submitted
+    ? '<div class="gw-state pending"><b>⏳ SMS এখনো আসেনি।</b><br>রিকোয়েস্ট জমা হয়েছে — SMS এলে স্বয়ংক্রিয়ভাবে মিলে যাবে, না হলে এডমিন যাচাই করবেন। টাকা হারাবে না।</div>'
+    : '';
+  gwRenderTimeline(gw.submitted ? 'sms' : 'pay');
+  document.getElementById('gwStep1').style.display = 'none';
+  document.getElementById('gwExpired').style.display = 'none';
+  document.getElementById('gwStep2').style.display = 'block';
+  gwTick();
+  gw.timerId = setInterval(gwTick, 1000);
+  if (gw.submitted && gw.submittedTrxid) {
+    gwStartPolling();
+    gwPollOnce(); // immediate flip-check — don't wait 15s after a reload
+  }
+  return true;
+}
 function gwStopTimer(){ if (gw && gw.timerId) { clearInterval(gw.timerId); gw.timerId = null; } }
 
 function gwRenderTimeline(active){
@@ -919,6 +974,7 @@ function gwStartSession(){
   gw = { method: gwMethod, sender: sender, amount: amt,
          endsAt: Date.now() + GW_SESSION_SECONDS * 1000,
          timerId: null, pollId: null, submitted: false, submittedTrxid: null, done: false, pausedAt: null };
+  gwSaveSession(); // audit #20 — persist so a reload resumes the session
   document.getElementById('gwSumMethod').textContent = GW_METHOD_NAMES[gwMethod] || gwMethod;
   document.getElementById('gwSumAmount').textContent = '৳' + bn(amt);
   document.getElementById('gwSumSender').textContent = sender;
@@ -954,6 +1010,7 @@ function gwExpireSession(){
   // request submitted before expiry stays pending for admin verification
   // and stays visible in the wallet history below — money never lost.
   gwStopAll();
+  gwClearSession(); // audit #20 — an expired session is never restored
   const wasPending = !!(gw && gw.submitted && !gw.done);
   document.getElementById('gwStep2').style.display = 'none';
   document.getElementById('gwExpiredNote').textContent = wasPending
@@ -1067,10 +1124,12 @@ async function gwAutoMatch(){
     const tx = d.transaction || {};
     gw.submitted = true;
     gw.submittedTrxid = trxid;
+    gwSaveSession(); // audit #20 — persist the submitted TrxID for reload-resume
     if (tx.status === 'approved') {
       gw.done = true;
       gwStopPolling();
       gwStopTimer();
+      gwClearSession(); // audit #20 — a done session is never restored
       const okLoad = await loadWallet();
       const balText = okLoad && document.getElementById('bal') ? document.getElementById('bal').textContent : '';
       stateEl.innerHTML = '<div class="gw-state success"><b>✅ সফল!</b> ৳' + bn(tx.amount) + ' আপনার ওয়ালেটে যোগ হয়েছে।' +
@@ -1112,6 +1171,7 @@ async function gwPollOnce(){
       gw.done = true;
       gwStopPolling();
       gwStopTimer();
+      gwClearSession(); // audit #20 — a done session is never restored
       const okLoad = await loadWallet();
       const balText = okLoad && document.getElementById('bal') ? document.getElementById('bal').textContent : '';
       document.getElementById('gwState').innerHTML = '<div class="gw-state success"><b>✅ সফল!</b> ৳' + bn(tx.amount) + ' আপনার ওয়ালেটে যোগ হয়েছে।' +
@@ -1121,6 +1181,7 @@ async function gwPollOnce(){
       gw.done = true;
       gwStopPolling();
       gwStopTimer();
+      gwClearSession(); // audit #20 — a done session is never restored
       document.getElementById('gwState').innerHTML = '<div class="gw-state failed"><b>❌ রিচার্জ সম্পন্ন হয়নি।</b><br>' +
         'এডমিন যাচাইয়ে অনুরোধটি বাতিল হয়েছে। নতুন সেশন বা ম্যানুয়াল ফর্মে আবার চেষ্টা করুন।</div>';
       gwRenderTimeline('match');
