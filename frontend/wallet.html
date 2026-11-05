@@ -1261,6 +1261,7 @@ async function submitRecharge(){
     } else {
       ok.textContent='⏳ রিচার্জ রিকোয়েস্ট জমা হয়েছে! এডমিন যাচাই করে দ্রুত ব্যালেন্স যুক্ত করবেন।';
       loadWallet();
+      manualStartPolling(trxid, ok); // audit #22 — poll until the pending flips
     }
     document.getElementById('amount').value = '';
     document.getElementById('sender').value = '';
@@ -1270,6 +1271,43 @@ async function submitRecharge(){
   } finally {
     if(btn){ btn.disabled = false; btn.textContent = 'রিচার্জ রিকোয়েস্ট পাঠান →'; }
   }
+}
+
+// Audit #22 — the manual form's pending gets the same treatment
+// as the gateway session: poll /wallet every 15s for the
+// submitted TrxID and flip the message on approve/reject, so the
+// user sees the outcome without refreshing. A new manual submit
+// replaces the poll (same as gwStartPolling); the poll never
+// cancels anything and never writes.
+let manualPollId = null;
+function manualStopPolling(){ if (manualPollId) { clearInterval(manualPollId); manualPollId = null; } }
+async function manualPollOnce(trxid, okEl){
+  try {
+    const r = await ABC.api('/wallet?limit=10');
+    if (!r.ok) return;
+    const d = await r.json();
+    const tx = (d.transactions || []).find(function(t){
+      return t.type === 'recharge' && String(t.trxid || '').toUpperCase() === String(trxid).toUpperCase();
+    });
+    if (!tx) return;
+    if (tx.status === 'approved') {
+      manualStopPolling();
+      const okLoad = await loadWallet();
+      const balText = okLoad && document.getElementById('bal') ? document.getElementById('bal').textContent : '';
+      okEl.textContent = '✅ সফল! ৳' + bn(tx.amount) + ' আপনার ওয়ালেটে যোগ হয়েছে।' + (balText ? ' বর্তমান ব্যালেন্স: ' + balText + '।' : '');
+    } else if (tx.status === 'rejected') {
+      manualStopPolling();
+      okEl.textContent = '';
+      const err = document.getElementById('err');
+      if (err) err.textContent = '❌ রিচার্জ সম্পন্ন হয়নি — এডমিন যাচাইয়ে অনুরোধটি বাতিল হয়েছে। নতুন করে রিকোয়েস্ট পাঠান।';
+      loadWallet();
+    }
+  } catch (e) { /* next tick retries silently — no spinner, no error noise */ }
+}
+function manualStartPolling(trxid, okEl){
+  manualStopPolling();
+  manualPollId = setInterval(function(){ manualPollOnce(trxid, okEl); }, 15000);
+  manualPollOnce(trxid, okEl); // immediate flip-check — don't wait 15s
 }
 
 async function redeem(){

@@ -300,6 +300,22 @@ describe('frontend/wallet.html — gateway session invariants', () => {
     expect(body.indexOf('if (gw.submitted && gw.submittedTrxid)')).toBeLessThan(body.indexOf('/wallet/recharge'));
   });
 
+  test('audit #22 — a manual-form pending is polled until it flips', () => {
+    const src = walletHtml();
+    const body = fnSlice(src, 'async function submitRecharge(');
+    // the pending branch starts the poll for the submitted TrxID
+    expect(body).toContain('manualStartPolling(trxid, ok)');
+    const poll = fnSlice(src, 'async function manualPollOnce(');
+    expect(poll).toContain("'/wallet?limit=10'");
+    expect(poll).toContain("tx.status === 'approved'");
+    expect(poll).toContain("tx.status === 'rejected'");
+    expect(poll).toContain('manualStopPolling()');
+    const start = fnSlice(src, 'function manualStartPolling(');
+    expect(start).toContain('setInterval');
+    expect(start).toContain('15000');
+    expect(start).toContain('manualPollOnce(trxid, okEl)');
+  });
+
   test('no forbidden word in the wallet page copy', () => {
     expect(walletHtml().toLowerCase()).not.toContain('captcha');
   });
