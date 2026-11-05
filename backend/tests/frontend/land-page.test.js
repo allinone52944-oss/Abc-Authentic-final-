@@ -404,7 +404,11 @@ describe('land.html — mouza data lazy-loaded, not inlined (audit #63)', () => 
   });
 
   test('a failed load keeps the wizard usable via the manual path, and says why', () => {
-    expect(html).toContain('MOUZA_OFFICES = {};');
+    // Bug-hunt F5 — a failed load must NOT poison the cache with
+    // {} (truthy, so the loader would short-circuit forever). The
+    // table stays null so the next open retries the fetch.
+    expect(html).toContain('MOUZA_OFFICES = null;');
+    expect(html).not.toContain('MOUZA_OFFICES = {};');
     expect(html).toContain('অফিসের তালিকা আসেনি');
     expect(html).toContain('"অন্য অফিস" বেছে নিয়ে নাম লিখে এগোনো যাবে');
   });

@@ -557,7 +557,15 @@
     try {
       await loadMouzaOffices();
     } catch (e) {
-      MOUZA_OFFICES = {};
+      // Bug-hunt F5 — leave MOUZA_OFFICES as null (and clear the
+      // promise) so the next mouza-mode open retries the fetch.
+      // The old `MOUZA_OFFICES = {}` was truthy, so
+      // loadMouzaOffices() short-circuited forever after one failed
+      // fetch and the office list never came back until a reload.
+      // The fills below are null-safe, so the wizard stays usable
+      // through the manual 'other office' path meanwhile.
+      MOUZA_OFFICES = null;
+      _mouzaOfficesPromise = null;
       $('wzOfficeNote').textContent = 'অফিসের তালিকা আসেনি (' + (e.message || 'নেটওয়ার্ক সমস্যা') + ') — "অন্য অফিস" বেছে নিয়ে নাম লিখে এগোনো যাবে।';
     }
     wzFillMouzas();
@@ -587,7 +595,7 @@
   function wzFillOffices() {
     const sel = $('mOffice');
     sel.innerHTML = '<option value="">— বেছে নিন —</option>';
-    Object.entries(MOUZA_OFFICES).forEach(([id, o]) => {
+    Object.entries(MOUZA_OFFICES || {}).forEach(([id, o]) => {
       const op = document.createElement('option');
       op.value = id;
       const dist = MOUZA_OFFICE_DISTRICTS[id];
@@ -607,13 +615,13 @@
       op.style.display = ok ? '' : 'none';
       if (ok) matched++;
     }
-    const total = Object.keys(MOUZA_OFFICES).length;
+    const total = Object.keys(MOUZA_OFFICES || {}).length;
     $('wzOfficeCount').textContent = !q
       ? bn(total) + 'টি অফিস'
       : (matched ? bn(matched) + 'টি মিলেছে' : 'কিছু মিলেনি — "অন্য অফিস" বেছে নিয়ে নাম লিখে এগোনো যাবে।');
   }
   function wzFillMouzas() {
-    const office = MOUZA_OFFICES[$('mOffice').value];
+    const office = (MOUZA_OFFICES || {})[$('mOffice').value];
     const sel = $('wzMouza');
     sel.innerHTML = '<option value="">— বেছে নিন —</option>';
     (office ? office.mouzas : []).forEach((m) => {
@@ -635,8 +643,8 @@
   function wzOnOffice() {
     const id = $('mOffice').value;
     WZ.office = id;
-    WZ.covered = !!MOUZA_OFFICES[id];
-    WZ.officeName = WZ.covered ? MOUZA_OFFICES[id].name : '';
+    WZ.covered = !!(MOUZA_OFFICES || {})[id];
+    WZ.officeName = WZ.covered ? (MOUZA_OFFICES || {})[id].name : '';
     WZ.card = null; WZ.miss = null; WZ.thana = null;
     $('wzOfficeManualWrap').style.display = id === MOUZA_OTHER_OFFICE ? '' : 'none';
     $('wzOfficeNote').textContent = id === MOUZA_OTHER_OFFICE

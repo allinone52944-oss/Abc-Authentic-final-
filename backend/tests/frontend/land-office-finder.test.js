@@ -273,3 +273,94 @@ describe('office search behaviour (real wizard functions)', () => {
     expect($('wzOfficeCount').textContent).toBe('৪৮৮টি অফিস');
   });
 });
+
+// Bug-hunt F5 — a failed mouza-table fetch must not poison the
+// lazy-load cache. The old catch set MOUZA_OFFICES = {}; (truthy,
+// so loadMouzaOffices short-circuited forever) and the fills threw
+// on null. Now the table stays null, the promise is cleared, the
+// next open retries, and the fills are null-safe.
+function setupRetry() {
+  const els = new Map();
+  const doc = {
+    getElementById: (id) => {
+      if (!els.has(id)) els.set(id, new El('DIV'));
+      return els.get(id);
+    },
+    createElement: (tag) => new El(tag.toUpperCase()),
+  };
+  let fetchCalls = 0;
+  const table = { testoffice: { name: 'টেস্ট অফিস', mouzas: ['মৌজা ১', 'মৌজা ২'] } };
+  const fetchStub = () => {
+    fetchCalls += 1;
+    if (fetchCalls === 1) return Promise.reject(new Error('network down'));
+    return Promise.resolve({ ok: true, json: async () => table });
+  };
+  const parts = [
+    "let MODE = 'mouza';",
+    slice('const BN =', 'const esc', 'BN+bn'),
+    slice('const $ =', 'function showErr', '$ helper'),
+    lineMatching(/function clearBoxes\(\) \{[^}]*\}/, 'clearBoxes'),
+    // Real loader + real null table (not the injected JSON).
+    slice('let MOUZA_OFFICES = null;', 'const MOUZA_CARD_CLASSES', 'real loader'),
+    lineMatching(/const MOUZA_OTHER_OFFICE = '[^']+';/, 'MOUZA_OTHER_OFFICE'),
+    lineMatching(/const MOUZA_MANUAL_MOUZA = '[^']+';/, 'MOUZA_MANUAL_MOUZA'),
+    slice('const WZ = {', '  const WZ_STEP_IDS', 'WZ'),
+    lineMatching(/const WZ_STEP_IDS = \{[^}]*\};/, 'WZ_STEP_IDS'),
+    lineMatching(/const WZ_TITLES = \{[^}]*\};/, 'WZ_TITLES'),
+    slice('function wzShowStep(step)', '  async function wzResetWizard()', 'wzShowStep'),
+    slice('async function wzResetWizard()', '  // Duplicate display names', 'wzResetWizard'),
+    slice('  // Duplicate display names', '  function wzFillMouzas()', 'district map + fill + filter'),
+    slice('function wzFillMouzas()', '  function wzFilterMouzas()', 'wzFillMouzas'),
+    slice('function wzFilterMouzas()', '  function wzOnOffice()', 'wzFilterMouzas'),
+    slice('function wzOnOffice()', '  function wzOnMouza()', 'wzOnOffice'),
+    'globalThis.__getOffices = () => MOUZA_OFFICES;',
+    'globalThis.__fn5 = { loadMouzaOffices, wzFillOffices, wzFilterOffices, wzFillMouzas, wzOnOffice, wzResetWizard };',
+  ];
+  const ctx = { document: doc, console, fetch: fetchStub };
+  vm.createContext(ctx);
+  vm.runInContext(parts.join('\n'), ctx);
+  const $ = (id) => doc.getElementById(id);
+  return { ctx, $, fn: ctx.__fn5, getOffices: ctx.__getOffices, fetchCalls: () => fetchCalls, table };
+}
+
+describe('mouza table load failure (bug-hunt F5)', () => {
+  test('a failed load leaves the table null and the next load retries (not poisoned)', async () => {
+    const t = setupRetry();
+    expect(t.getOffices()).toBeNull();
+    await expect(t.fn.loadMouzaOffices()).rejects.toThrow('network down');
+    expect(t.getOffices()).toBeNull(); // not {} — the loader retries
+    const d = await t.fn.loadMouzaOffices();
+    expect(d).toEqual(t.table);
+    expect(t.getOffices()).toEqual(t.table);
+    expect(t.fetchCalls()).toBe(2);
+    // A third call uses the cached table, no third fetch.
+    await t.fn.loadMouzaOffices();
+    expect(t.fetchCalls()).toBe(2);
+  });
+
+  test('the fills do not throw on a null table, and only the manual option is offered', () => {
+    const t = setupRetry();
+    expect(() => {
+      t.fn.wzFillOffices();
+      t.fn.wzFilterOffices();
+      t.fn.wzFillMouzas();
+      t.fn.wzOnOffice();
+    }).not.toThrow();
+    const values = t.$('mOffice').options.map((o) => o.value);
+    expect(values).toEqual(['', '__other__']);
+    expect(t.$('wzOfficeCount').textContent).toBe('০টি অফিস');
+  });
+
+  test('wzResetWizard survives a failed load (manual path, note says why) and retries on the next open', async () => {
+    const t = setupRetry();
+    await t.fn.wzResetWizard(); // first fetch fails
+    expect(t.getOffices()).toBeNull();
+    expect(t.$('wzOfficeNote').textContent).toContain('অফিসের তালিকা আসেনি');
+    expect(t.$('mOffice').options.map((o) => o.value)).toEqual(['', '__other__']);
+    await t.fn.wzResetWizard(); // second fetch succeeds
+    expect(t.getOffices()).toEqual(t.table);
+    expect(t.$('wzOfficeNote').textContent).toBe('');
+    expect(t.$('mOffice').options.map((o) => o.value)).toContain('testoffice');
+    expect(t.$('wzOfficeCount').textContent).toBe('১টি অফিস');
+  });
+});
