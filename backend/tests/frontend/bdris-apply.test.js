@@ -981,3 +981,21 @@ describe('OTP view send-proof (audit #16)', () => {
     expect(html).not.toMatch(/renderOtpCode\(\); return;/);
   });
 });
+
+describe('bdris-apply.html — global navigation (audit #54)', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'frontend', 'bdris-apply.html'), 'utf8');
+
+  test('the header has a Home button to the site dashboard', () => {
+    expect(html).toContain("location.href='/dashboard.html'");
+    expect(html).toContain('🏠 হোম');
+  });
+
+  test('the button sits in the header actions (reachable on mobile, where .hacts wraps full-width)', () => {
+    const hacts = html.slice(html.indexOf('<div class="hacts">'), html.indexOf('</div>', html.indexOf('<div class="hacts">')));
+    expect(hacts).toContain("location.href='/dashboard.html'");
+  });
+
+  test('the brand still goes to the in-page filing home (unchanged)', () => {
+    expect(html).toContain("('brandHome').onclick = () => renderHome();");
+  });
+});

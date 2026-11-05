@@ -431,6 +431,13 @@ input.bad, select.bad{border-color:var(--err); box-shadow:0 0 0 3px rgba(251,113
       </div>
     </div>
     <div class="hacts">
+      <!-- Audit #54 — the page has no global navigation (the brand
+           goes to the in-page filing home, the back button to the
+           entry step). This takes the user to the site dashboard,
+           where every section is reachable. The full m-tabbar needs
+           premium/motion.css — that migration is audit #80's job,
+           not this one. -->
+      <button class="btn ghost small" onclick="location.href='/dashboard.html'">🏠 হোম</button>
       <button class="btn ghost small" id="draftsBtn">🗂️ খসড়া <span id="draftsCnt"></span></button>
       <button class="btn ghost small" id="addrBtn">📍 ঠিকানা বই</button>
       <button class="btn ghost small" id="logoutBtn" title="লগআউট">⏻</button>
