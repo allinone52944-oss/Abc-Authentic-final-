@@ -1083,6 +1083,23 @@ async function gwAutoMatch(){
   const errEl = document.getElementById('gwErr2');
   const stateEl = document.getElementById('gwState');
   const btn = document.getElementById('gwMatchBtn');
+  // Audit #21 — one session, one pending: a submitted request
+  // that is still pending blocks a second Auto Match in the same
+  // session. The poll only tracks the latest TrxID, so a second
+  // pending would go untracked in the UI. Show the pending state
+  // (with the submitted TrxID) instead of submitting again.
+  // A rejected/approved request sets gw.done, so a fresh submit
+  // after the outcome is still allowed; an error return (DUP,
+  // mismatch, too-many-pending) never sets gw.submitted, so a
+  // retry after those is also still allowed.
+  if (gw.submitted && gw.submittedTrxid) {
+    errEl.textContent = '';
+    document.getElementById('gwTrxid').value = gw.submittedTrxid;
+    stateEl.innerHTML = '<div class="gw-state pending"><b>⏳ SMS এখনো আসেনি।</b><br>' +
+      'আপনার রিকোয়েস্টটি জমা আছে (TrxID: <b>' + esc(gw.submittedTrxid) + '</b>) — SMS এলে স্বয়ংক্রিয়ভাবে মিলে যাবে, না হলে এডমিন যাচাই করবেন। টাকা হারাবে না।</div>';
+    gwRenderTimeline('sms');
+    return;
+  }
   errEl.textContent = '';
   stateEl.innerHTML = '';
   const trxid = document.getElementById('gwTrxid').value.trim();

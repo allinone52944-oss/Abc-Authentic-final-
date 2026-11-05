@@ -289,6 +289,17 @@ describe('frontend/wallet.html — gateway session invariants', () => {
     expect(src).toContain('GW_WARN_SECONDS = 60');
   });
 
+  test('audit #21 — one session, one pending: a second Auto Match shows the pending state, no resubmit', () => {
+    const src = walletHtml();
+    const body = fnSlice(src, 'async function gwAutoMatch(');
+    // the guard runs before any /wallet/recharge call and returns
+    // after re-rendering the pending state with the submitted TrxID
+    expect(body).toContain('if (gw.submitted && gw.submittedTrxid) {');
+    expect(body).toContain('SMS এখনো আসেনি');
+    expect(body).toContain('esc(gw.submittedTrxid)');
+    expect(body.indexOf('if (gw.submitted && gw.submittedTrxid)')).toBeLessThan(body.indexOf('/wallet/recharge'));
+  });
+
   test('no forbidden word in the wallet page copy', () => {
     expect(walletHtml().toLowerCase()).not.toContain('captcha');
   });
