@@ -296,6 +296,37 @@
     border-radius: 6px;
   }
 
+  /* Audit #43 — chat + upload (same styles as order-detail.html) */
+  .chat-box {
+    max-height: 380px;
+    min-height: 180px;
+    overflow-y: auto;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-md);
+    padding: 16px;
+    margin-bottom: 14px;
+    background: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .chat-msg { display: flex; flex-direction: column; max-width: 80%; }
+  .chat-msg.user { align-self: flex-end; align-items: flex-end; }
+  .chat-msg.admin { align-self: flex-start; align-items: flex-start; }
+  .chat-msg .b {
+    padding: 10px 16px; border-radius: 16px; font-size: 14px; line-height: 1.5;
+    word-break: break-word; box-shadow: var(--shadow-xs);
+  }
+  .chat-msg.user .b { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; border-bottom-right-radius: 4px; }
+  .chat-msg.admin .b { background: #ffffff; color: #0f172a; border: 1px solid var(--border-light); border-bottom-left-radius: 4px; }
+  .chat-msg .tm { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+  .chat-input { display: flex; gap: 10px; }
+  .chat-input input {
+    flex: 1; padding: 12px 16px; border: 1px solid var(--border-light);
+    border-radius: var(--r-md); font-size: 14px; font-family: inherit;
+  }
+  .chat-input input:focus { outline: none; border-color: var(--primary-500); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15); }
+
   .sup-msg {
     background: #eff6ff;
     border: 1px solid #bfdbfe;
@@ -404,7 +435,7 @@
     </div>
 
     <div class="status-card">
-      <div id="docWarningBox" style="display:none;background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:14px;margin-bottom:20px;color:#92400e;font-size:13px;text-align:left;line-height:1.5;"><b>⚠️ অর্ডার সফলভাবে তৈরি হয়েছে!</b> তবে ফাইল সাইজ বা নেটওয়ার্ক সমস্যার কারণে কিছু ডকুমেন্ট ফাইল আপলোড বাকি থাকতে পারে। নিচের <b>"অর্ডার ডিটেইলস ও চ্যাট"</b> বাটনে গিয়ে চ্যাটে যেকোনো সময় ফাইল পাঠাতে পারেন।</div>
+      <div id="docWarningBox" style="display:none;background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:14px;margin-bottom:20px;color:#92400e;font-size:13px;text-align:left;line-height:1.5;"><b>⚠️ অর্ডার সফলভাবে তৈরি হয়েছে!</b> তবে ফাইল সাইজ বা নেটওয়ার্ক সমস্যার কারণে কিছু ডকুমেন্ট ফাইল আপলোড বাকি থাকতে পারে। নিচের <b>"ফাইল যোগ করুন"</b> বাটনে বা চ্যাটে যেকোনো সময় ফাইল পাঠাতে পারেন।</div>
       
       <div class="status-orb" id="orb">📦</div>
       <h2 style="color:var(--primary-700); font-size:22px; margin-bottom:4px;" id="stTitle">লোড হচ্ছে…</h2>
@@ -484,6 +515,29 @@
       <div style="margin-top:28px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
         <button class="btn btn-primary" onclick="location.href='/order-detail.html?id='+oid">📄 সম্পূর্ণ অর্ডার ডিটেইলস ও চ্যাট →</button>
         <button class="btn btn-secondary" onclick="location.href='/orders.html'">সকল অর্ডার তালিকা</button>
+      </div>
+    </div>
+
+    <!-- Audit #43 — chat + file upload live on this page too (they used
+         to exist only on order-detail.html, so tracking meant hopping
+         between two pages). Same /chat and /documents endpoints. -->
+    <div class="status-card" style="margin-top:20px;text-align:left;">
+      <h3 style="font-size:16px;font-weight:800;color:#0f172a;">📎 ফাইল যোগ করুন</h3>
+      <p style="font-size:13px;color:#64748b;margin:6px 0 12px;">অর্ডারের জন্য অতিরিক্ত কোনো ডকুমেন্ট থাকলে এখান থেকে পাঠান (সর্বোচ্চ ১০ মেগাবাইট)।</p>
+      <button type="button" class="btn btn-secondary" style="padding:10px 18px;font-size:13px;font-weight:700;" onclick="triggerExtraDoc()">+ নতুন ফাইল যোগ করুন</button>
+      <input type="file" id="extraDocInp" style="display:none;" onchange="uploadExtraDoc(this.files)">
+      <div id="extraDocNotice" style="font-size:12px;color:#2563eb;margin-top:8px;display:none;"></div>
+    </div>
+
+    <div class="status-card" style="margin-top:20px;text-align:left;">
+      <h3 style="font-size:16px;font-weight:800;color:#0f172a;">💬 এই অর্ডার নিয়ে এডমিনের সাথে লাইভ চ্যাট</h3>
+      <p style="font-size:13px;color:#64748b;margin:6px 0 12px;">অর্ডার সম্পর্কে কোনো জিজ্ঞাসা বা তথ্য দিতে সরাসরি এখানে বার্তা লিখুন।</p>
+      <div class="chat-box" id="chatBox">
+        <div style="color:#94a3b8;font-size:13px;text-align:center;padding:20px 0;">কোনো বার্তা নেই</div>
+      </div>
+      <div class="chat-input">
+        <input type="text" id="chatIn" placeholder="আপনার বার্তা লিখুন…" maxlength="2000">
+        <button class="btn" style="width:auto;padding:12px 24px;" onclick="sendChat()">পাঠান →</button>
       </div>
     </div>
   </div>
@@ -567,6 +621,8 @@ async function init() {
   await fetchAndRender();
   loadSupportMsgs();
   loadTimelineHistory();
+  loadChat(); // audit #43 — chat lives on this page too
+  document.getElementById('chatIn').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
 
   let _pollTimer = setInterval(async () => {
     if (window._isOrderTerminal) {
@@ -576,6 +632,7 @@ async function init() {
     await fetchAndRender();
     loadSupportMsgs();
     loadTimelineHistory();
+    loadChat();
   }, 5000);
 }
 
@@ -790,10 +847,14 @@ function render(o) {
   const refBox = document.getElementById('heroRefundBox');
   const procBox = document.getElementById('heroProcessingBox');
 
-  if (st === 'completed' || st === 'delivered') {
+  // Audit #43 — delivery-box rule is now the same as order-detail.html:
+  // completed/delivered, OR refunded after the delivery had happened
+  // (delivered_before_refund). Before this, a refunded-after-delivery
+  // order showed no files here while the detail page showed them.
+  const showDelivery = st === 'completed' || st === 'delivered' ||
+    (st === 'refunded' && o.delivered_before_refund === true);
+  if (showDelivery) {
     delBox.style.display = 'block';
-    refBox.style.display = 'none';
-    procBox.style.display = 'none';
     const filesContainer = document.getElementById('heroDeliveryFiles');
     window._heroAdminDocs = adminDocs;
     if (adminDocs.length) {
@@ -805,8 +866,10 @@ function render(o) {
     } else {
       filesContainer.innerHTML = '<div style="font-size:13px;color:#15803d;background:#ffffff;padding:10px;border-radius:8px;border:1px dashed #86efac;">ডেলিভারি সম্পন্ন হয়েছে। মূল ফাইল বা সার্টিফিকেট অর্ডারের ডিটেইলসে দেখতে পারেন।</div>';
     }
-  } else if (st === 'cancelled' || st === 'refunded') {
+  } else {
     delBox.style.display = 'none';
+  }
+  if (st === 'cancelled' || st === 'refunded') {
     refBox.style.display = 'block';
     procBox.style.display = 'none';
     const reasonLine = o.cancel_reason ? (' কারণ: ' + o.cancel_reason) : '';
@@ -821,7 +884,6 @@ function render(o) {
     // Audit #28 — failed orders had NO hero box (fell to else,
     // no box at all, stepper 0%). They get the refund box with
     // the real reason + the real refund split.
-    delBox.style.display = 'none';
     refBox.style.display = 'block';
     procBox.style.display = 'none';
     document.getElementById('refundTitle').textContent = 'অর্ডার সম্পন্ন হয়নি';
@@ -832,11 +894,9 @@ function render(o) {
       'দুঃখিত — আপনার অর্ডারটি সম্পন্ন করা যায়নি।' +
       ((bal > 0 || cr > 0) ? ' ' + refundDesc(o) : '') + reasonLine;
   } else if (['processing', 'registered'].includes(st)) {
-    delBox.style.display = 'none';
     refBox.style.display = 'none';
     procBox.style.display = 'flex';
   } else {
-    delBox.style.display = 'none';
     refBox.style.display = 'none';
     procBox.style.display = 'none';
   }
@@ -932,6 +992,68 @@ function renderTimeline(history, o) {
       '</div>' +
     '</div>'
   ).join('');
+}
+
+// Audit #43 — chat + file upload (same endpoints as order-detail.html).
+function triggerExtraDoc() {
+  const inp = document.getElementById('extraDocInp');
+  if (inp) inp.click();
+}
+
+async function uploadExtraDoc(files) {
+  if (!files || !files.length) return;
+  // P2 (2026-11-03): আপলোডের আগেই সাইজ-যাচাই (সার্ভারের সাধারণ সীমা ১০ মেগাবাইট)।
+  if (files[0].size > 10 * 1024 * 1024) { alert('ফাইলটি ১০ মেগাবাইটের বেশি — ছোট ফাইল দিন।'); return; }
+  const n = document.getElementById('extraDocNotice');
+  if (n) { n.style.display = 'block'; n.textContent = 'আপলোড হচ্ছে…'; }
+  const fd = new FormData();
+  fd.append('file', files[0]);
+  fd.append('doc_type', 'গ্রাহক সংযুক্ত ডকুমেন্ট');
+  const token = sessionStorage.getItem('abc_access_token') || '';
+  try {
+    const r = await fetch('/api/orders/' + oid + '/documents', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token },
+      body: fd
+    });
+    if (r.ok) {
+      if (n) n.textContent = '✅ ডকুমেন্ট আপলোড সম্পন্ন!';
+      setTimeout(() => fetchAndRender(), 1000);
+    } else {
+      alert('আপলোড ব্যর্থ হয়েছে');
+      if (n) n.style.display = 'none';
+    }
+  } catch (e) {
+    alert('আপলোড ত্রুটি');
+    if (n) n.style.display = 'none';
+  }
+}
+
+async function loadChat() {
+  const r = await ABC.api('/orders/' + oid + '/chat');
+  if (!r.ok) return;
+  const { messages } = await r.json();
+  const box = document.getElementById('chatBox');
+  if (!messages.length) {
+    box.innerHTML = '<div style="color:#94a3b8;font-size:13px;text-align:center;padding:20px 0;">কোনো বার্তা নেই</div>';
+    return;
+  }
+  box.innerHTML = messages.map(m =>
+    '<div class="chat-msg ' + m.sender + '">' +
+      '<span class="b">' + escapeHtml(m.message) + '</span>' +
+      '<div class="tm">' + new Date(m.created_at).toLocaleString('bn-BD') + '</div>' +
+    '</div>'
+  ).join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+async function sendChat() {
+  const inp = document.getElementById('chatIn');
+  const msg = inp.value.trim();
+  if (!msg) return;
+  inp.value = '';
+  const r = await ABC.api('/orders/' + oid + '/chat', { method: 'POST', body: { message: msg } });
+  if (r.ok) loadChat();
 }
 
 init();

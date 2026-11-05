@@ -182,6 +182,34 @@
   .detail-step.now .detail-step-text { color: #1e40af; font-weight: 700; }
   .detail-step.done .detail-step-text { color: #065f46; }
 
+  /* Audit #43 — timeline + support messages (same styles as order-status.html) */
+  .timeline { position: relative; padding-left: 28px; margin-top: 12px; text-align: left; }
+  .timeline::before {
+    content: ''; position: absolute; left: 8px; top: 10px; bottom: 10px;
+    width: 2px; background: #e2e8f0;
+  }
+  .tl-item { position: relative; margin-bottom: 16px; }
+  .tl-item:last-child { margin-bottom: 0; }
+  .tl-dot {
+    position: absolute; left: -28px; top: 4px; width: 18px; height: 18px;
+    border-radius: 50%; background: #ffffff; border: 2px solid #94a3b8;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tl-item.on .tl-dot { border-color: #2563eb; background: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); }
+  .tl-item.done .tl-dot { border-color: #10b981; background: #10b981; }
+  .tl-content { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 14px; }
+  .tl-item.on .tl-content { background: #eff6ff; border-color: #bfdbfe; }
+  .tl-title { font-size: 13px; font-weight: 700; color: #0f172a; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px; }
+  .tl-time { font-size: 11px; color: #64748b; font-weight: 500; }
+  .tl-note { font-size: 12px; color: #334155; margin-top: 4px; line-height: 1.4; background: rgba(255, 255, 255, 0.7); padding: 4px 8px; border-radius: 6px; }
+  .sup-msg {
+    background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #2563eb;
+    border-radius: var(--r-md); padding: 14px 16px; margin: 12px 0; text-align: left;
+  }
+  .sup-msg .sup-emoji { font-size: 20px; margin-right: 8px; }
+  .sup-msg .sup-text { color: #1e293b; font-size: 14px; line-height: 1.5; }
+  .sup-msg .sup-time { color: #94a3b8; font-size: 11px; margin-top: 6px; }
+
 </style>
 </head>
 <body>
@@ -210,6 +238,16 @@
     <div class="card" id="detail">
       <div class="skel" style="height:120px;margin-bottom:12px;"></div>
       <div class="skel" style="height:60px;"></div>
+    </div>
+
+    <!-- Audit #43 — live timeline + support messages (were only on
+         order-status.html, so the detail page had no progress history) -->
+    <div class="card">
+      <h3 style="margin-bottom:4px;">🕒 লাইভ অগ্রগতি টাইমলাইন</h3>
+      <div class="timeline" id="timeline">
+        <div style="font-size:13px;color:#94a3b8;padding:10px 0;">টাইমলাইন লোড হচ্ছে…</div>
+      </div>
+      <div id="supMsgs" style="margin-top:20px;"></div>
     </div>
 
     <!-- Live Order Support Chat -->
@@ -361,7 +399,98 @@ async function init(){
     (o.notes?'<div style="font-size:13px;margin-top:12px;background:#fffbeb;padding:10px 14px;border-radius:8px;color:#92400e;"><b>📝 আপনার নোট:</b> '+esc(o.notes)+'</div>':'')+docsHtml;
 
   loadChat();
+  loadTimelineHistory(o); // audit #43 — timeline was only on the status page
+  loadSupportMsgs(); // audit #43 — support messages were only on the status page
   document.getElementById('chatIn').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+}
+
+// Audit #43 — timeline + support messages (same endpoints and render
+// as order-status.html). Loaded once per visit: this page has no 5s
+// poll by design — the status page stays the live tracker, and the
+// user refreshes here for the newest history.
+const TL_TEXT = {
+  new: 'নতুন আবেদন', pending: 'অপেক্ষমান', waiting: 'অপেক্ষমান',
+  received: 'গৃহীত ও যাচাই', processing: 'প্রসেসিং চলমান',
+  registered: 'নিবন্ধিত', delivered: 'ডেলিভার্ড (ফাইল প্রস্তুত)',
+  completed: 'সম্পন্ন', failed: 'ব্যর্থ', cancelled: 'বাতিল', refunded: 'রিফান্ডেড'
+};
+const TL_EMOJI = {
+  new: '📥', pending: '⏳', waiting: '⏳', received: '📋',
+  processing: '⚙️', registered: '📝', delivered: '🎁',
+  completed: '✅', failed: '❌', cancelled: '🚫', refunded: '💸'
+};
+const TPL_EMOJI = { network: '🌐', processing: '⏰', verifying: '📄', done: '✅', failed: '❌', paid: '💰' };
+
+async function loadTimelineHistory(o) {
+  try {
+    const r = await ABC.api('/orders/' + oid + '/history');
+    if (!r.ok) return;
+    const { history } = await r.json();
+    renderTimeline(history, o);
+  } catch (e) {}
+}
+
+function renderTimeline(history, o) {
+  const tlEl = document.getElementById('timeline');
+  if (!o || !tlEl) return;
+  const items = [];
+  items.push({
+    title: '📥 আবেদন ও পেমেন্ট গৃহীত',
+    time: new Date(o.created_at).toLocaleString('bn-BD'),
+    note: o.notes ? 'গ্রাহক নোট: ' + o.notes : null,
+    statusClass: 'done'
+  });
+  if (history && history.length) {
+    history.forEach((h, idx) => {
+      const isLast = idx === history.length - 1;
+      const toLabel = TL_TEXT[h.to_status] || h.to_status;
+      const emoji = TL_EMOJI[h.to_status] || '📌';
+      items.push({
+        title: emoji + ' অবস্থা পরিবর্তন: ' + toLabel,
+        time: new Date(h.created_at).toLocaleString('bn-BD'),
+        note: h.note || null,
+        statusClass: isLast ? 'on' : 'done'
+      });
+    });
+  } else {
+    const currLabel = TL_TEXT[o.status] || o.status;
+    const emoji = TL_EMOJI[o.status] || '📌';
+    items.push({
+      title: emoji + ' বর্তমান অবস্থা: ' + currLabel,
+      time: 'সর্বশেষ আপডেট: ' + new Date(o.updated_at).toLocaleString('bn-BD'),
+      note: null,
+      statusClass: 'on'
+    });
+  }
+  tlEl.innerHTML = items.map(it =>
+    '<div class="tl-item ' + it.statusClass + '">' +
+      '<div class="tl-dot"></div>' +
+      '<div class="tl-content">' +
+        '<div class="tl-title">' +
+          '<span>' + esc(it.title) + '</span>' +
+          '<span class="tl-time">' + esc(it.time) + '</span>' +
+        '</div>' +
+        (it.note ? '<div class="tl-note">' + esc(it.note) + '</div>' : '') +
+      '</div>' +
+    '</div>'
+  ).join('');
+}
+
+async function loadSupportMsgs() {
+  try {
+    const r = await ABC.api('/orders/' + oid + '/messages');
+    if (!r.ok) return;
+    const d = await r.json();
+    const box = document.getElementById('supMsgs');
+    if (!d.messages || !d.messages.length) { box.innerHTML = ''; return; }
+    box.innerHTML = '<h4 style="color:var(--primary-700); font-size:15px; margin:0 0 8px; text-align:left;">💬 সাপোর্ট নোটিশ</h4>' +
+      d.messages.map(m => {
+        const emoji = TPL_EMOJI[m.template_key] || '💬';
+        return '<div class="sup-msg tpl-' + (m.template_key || 'x') + '"><span class="sup-emoji">' + emoji + '</span>' +
+          '<span class="sup-text">' + esc(m.message) + '</span>' +
+          '<div class="sup-time">' + new Date(m.created_at).toLocaleString('bn-BD') + '</div></div>';
+      }).join('');
+  } catch (e) {}
 }
 
 function viewLiveStatus(){
