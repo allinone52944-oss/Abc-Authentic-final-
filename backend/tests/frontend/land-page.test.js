@@ -331,3 +331,24 @@ describe('backend wiring', () => {
     }
   });
 });
+
+describe('land.html — mobile grids (audit #58)', () => {
+  const html = read('frontend/land.html');
+
+  test('the mode cards go 2-column at ≤560px (not 4-across)', () => {
+    const mq = html.slice(html.indexOf('@media (max-width:560px){'));
+    expect(mq).toContain('.modes { grid-template-columns:repeat(2,1fr);');
+    // the desktop rule is still 4 columns
+    expect(html).toContain('.modes { display:grid; grid-template-columns:repeat(4,1fr);');
+  });
+
+  test('the rate-card grid is 1 column at ≤560px, via the stylesheet (no inline columns)', () => {
+    expect(html).not.toContain('id="wzCardGrid" style=');
+    expect(html).toContain('#wzCardGrid { display:grid; grid-template-columns:1fr 1fr;');
+    // the 1-column override sits AFTER the base rule, or the base
+    // rule (same specificity) would win
+    const base = html.indexOf('#wzCardGrid { display:grid;');
+    const over = html.indexOf('@media (max-width:560px){ #wzCardGrid { grid-template-columns:1fr; } }');
+    expect(over).toBeGreaterThan(base);
+  });
+});

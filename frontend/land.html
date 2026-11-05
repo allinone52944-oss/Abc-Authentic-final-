@@ -26,13 +26,13 @@
   .ok { display:none; background:#f0fdf4; border:1px solid #86efac; color:#15803d; padding:14px; border-radius:12px; margin-bottom:14px; font-size:14px; }
   .ok.on { display:block; }
   .modes { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
-  /* Phones: keep the three modes side-by-side but compact —
-     stacking them full-width pushed the form far down the page.
-     Form padding tightens and fields go 16px (stops iOS zoom). */
+  /* Phones (audit #58): the 4 mode cards go 2-column — 4-across was
+     too cramped to read, and full stacking pushes the form far down
+     the page. Form padding tightens and fields go 16px (stops iOS zoom). */
   @media (max-width:560px){
     .form-card { padding:0 16px 18px; }
     .hero { margin:0 -16px 16px; padding:18px 16px 14px; }
-    .modes { gap:8px; }
+    .modes { grid-template-columns:repeat(2,1fr); gap:8px; }
     .mode-card { padding:10px 6px 9px; border-radius:13px; }
     .mode-card .ic { width:40px; height:40px; font-size:20px; }
     .mode-card .t { font-size:13px; margin-top:6px; }
@@ -53,6 +53,11 @@
   .field select, .field input[type=text] { width:100%; padding:12px; border:1.5px solid #cbd5e1; border-radius:12px; background:#fff; color:#0f172a; font-size:16px; font-family:inherit; transition:border-color .15s, box-shadow .15s; }
   .field select:focus, .field input[type=text]:focus { outline:none; border-color:#16a34a; box-shadow:0 0 0 3px rgba(22,163,74,.15); }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  #wzCardGrid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; }
+  /* Audit #58 — the rate-card grid stacks to 1 column on phones.
+     This sits AFTER the base rule above, or the base rule (same
+     specificity, later in the file) would win. */
+  @media (max-width:560px){ #wzCardGrid { grid-template-columns:1fr; } }
   @media (max-width:560px){ .grid2 { grid-template-columns:1fr; } }
   .price-line { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; background:linear-gradient(135deg,#fffbeb,#fef3c7); border:1px solid #f59e0b66; color:#92400e; padding:11px 14px; border-radius:12px; font-size:13px; font-weight:700; margin-bottom:18px; }
   #goBtn { background:linear-gradient(135deg,#14532d,#16a34a) !important; border:none; border-radius:14px; box-shadow:0 8px 20px rgba(20,83,45,.35); letter-spacing:.2px; }
@@ -218,7 +223,7 @@
               <div id="wzCardUnitBtns" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
             </div>
             <div id="wzCardHead" style="font-size:15px; margin-bottom:10px;"></div>
-            <div id="wzCardGrid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;"></div>
+            <div id="wzCardGrid"></div>
             <div id="wzCardNote" style="font-size:13.5px;color:#374151;margin-bottom:10px;"></div>
             <div style="margin-bottom:10px;">
               <button type="button" class="btn btn-primary" id="wzCardDownload" style="display:none; padding:10px 18px;">⬇ রেট-কার্ড ডাউনলোড</button>
