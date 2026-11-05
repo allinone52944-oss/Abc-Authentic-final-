@@ -62,10 +62,64 @@ function _pruneConsumedSubmitTokens(now) {
     _consumedSubmitTokens.delete(_consumedSubmitTokens.keys().next().value);
   }
 }
+// AUDIT #4 (2026-11-05): the store used to be process-local only —
+// an engine restart cleared it, so the SAME token could submit a
+// SECOND, different application within its 30-minute window (one
+// payment, two filings). Consumption is now durable: when a store
+// file is configured, every consume is written through to disk and
+// the file is (re)loaded on miss, so a restart keeps the record.
+// The engine has no DB access by design (no pg dependency, no
+// DATABASE_URL reaches it), so the durable store is a JSON file
+// next to OriginalFetcher's shared index — the engine's established
+// persistence pattern — not a new database connection. The file is
+// server-side only, never served. Writes are best-effort: a disk
+// failure never blocks a submit (memory still holds the token);
+// the failure mode then is exactly the old one, not worse.
+let _consumedTokensFile = null;
+function _setConsumedTokensFile(filePath) {
+  _consumedTokensFile = filePath ? String(filePath) : null;
+  if (_consumedTokensFile) _loadConsumedTokensFromFile();
+}
+function _loadConsumedTokensFromFile() {
+  if (!_consumedTokensFile) return;
+  try {
+    const m = JSON.parse(fs.readFileSync(_consumedTokensFile, 'utf8'));
+    if (m && typeof m === 'object') {
+      const now = Date.now();
+      for (const [t, exp] of Object.entries(m)) {
+        const e = Number(exp);
+        if (t && Number.isFinite(e) && e > now && !_consumedSubmitTokens.has(t)) {
+          _consumedSubmitTokens.set(t, e);
+        }
+      }
+      _pruneConsumedSubmitTokens(now);
+    }
+  } catch { /* missing/corrupt file: start from memory only */ }
+}
+function _persistConsumedTokens() {
+  if (!_consumedTokensFile) return;
+  try {
+    _pruneConsumedSubmitTokens(Date.now());
+    const tmp = _consumedTokensFile + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(Object.fromEntries(_consumedSubmitTokens)));
+    fs.renameSync(tmp, _consumedTokensFile);
+  } catch { /* disk failure must never block a submit */ }
+}
+// Test seam: clears ONLY the in-memory map, simulating an engine
+// restart's memory loss. The file is untouched, so a token consumed
+// before the "restart" must still read as consumed afterwards.
+function _clearConsumedTokensMemory() {
+  _consumedSubmitTokens.clear();
+}
 function isSubmitTokenConsumed(tok) {
   if (!tok) return false;
   _pruneConsumedSubmitTokens(Date.now());
-  return _consumedSubmitTokens.has(String(tok));
+  if (_consumedSubmitTokens.has(String(tok))) return true;
+  if (_consumedTokensFile) {
+    _loadConsumedTokensFromFile();
+    return _consumedSubmitTokens.has(String(tok));
+  }
+  return false;
 }
 // Returns false if the token was already consumed (caller must NOT
 // treat that as a success-path failure — the gate already rejects
@@ -80,6 +134,7 @@ function consumeSubmitToken(tok) {
   _pruneConsumedSubmitTokens(now);
   if (_consumedSubmitTokens.has(String(tok))) return false;
   _consumedSubmitTokens.set(String(tok), ts + 30 * 60 * 1000);
+  _persistConsumedTokens();
   return true;
 }
 
@@ -4122,4 +4177,4 @@ class StepHandler {
   }
 }
 
-module.exports = { StepHandler, verifyChargeToken, bnToArab, thChildSite, consumeSubmitToken, isSubmitTokenConsumed, extractAckNumber, normalizeBrn, brnWarning, isFamilyErrorText, isSubmitConfirmWarning, locateOthersFields, parentBrnSubmitAction, isParentBrnExempt, parentBrnExemptNote, PARENT_BRN_PRE2013_NOTE, PARENT_BRN_2013_NOTE, PARENT_BRN_FAMILY_NOTE, relaxParentBrnGate, parseSiteDateToIso, PARENT_GATE_FIELDS };
+module.exports = { StepHandler, verifyChargeToken, bnToArab, thChildSite, consumeSubmitToken, isSubmitTokenConsumed, _setConsumedTokensFile, _clearConsumedTokensMemory, extractAckNumber, normalizeBrn, brnWarning, isFamilyErrorText, isSubmitConfirmWarning, locateOthersFields, parentBrnSubmitAction, isParentBrnExempt, parentBrnExemptNote, PARENT_BRN_PRE2013_NOTE, PARENT_BRN_2013_NOTE, PARENT_BRN_FAMILY_NOTE, relaxParentBrnGate, parseSiteDateToIso, PARENT_GATE_FIELDS };

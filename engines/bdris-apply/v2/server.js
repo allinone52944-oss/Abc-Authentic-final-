@@ -98,7 +98,7 @@ const { CommandExecutor } = require('./core/CommandExecutor');
 const { toStepAck, shouldDropSession } = require('./core/stepAck');
 const { BdrisNavigator } = require('./services/BdrisNavigator');
 const { AddressService } = require('./services/AddressService');
-const { StepHandler, verifyChargeToken } = require('./services/StepHandler');
+const { StepHandler, verifyChargeToken, _setConsumedTokensFile } = require('./services/StepHandler');
 const { OriginalFetcher, STEP_LABELS } = require('./services/OriginalFetcher');
 const { runSubmitHttpChain, runStageAProbe, getHttpPathStatus, isHttpPathEnabled, HTTP_CANDIDATE_LABEL } = require('./services/HttpPathRunner');
 const { HttpGeoService } = require('./services/HttpGeoService');
@@ -269,6 +269,13 @@ class BdrisEngineV2 {
     // ── OriginalFetcher: আসল PDF (কার্যালয়ের কপি) ──
     // v1 original-fetcher.js থেকে migrate; নিজস্ব isolated browser context ব্যবহার করে,
     // চলমান আবেদন-সেশনে হাত দেয় না।
+    // AUDIT #4 (2026-11-05): durable consumed-submit-token store —
+    // the same token must stay consumed across engine restarts, so
+    // point the shared StepHandler store at a JSON file next to the
+    // originals index (same engine persistence pattern). One engine
+    // process owns the file; writes are best-effort (see StepHandler).
+    _setConsumedTokensFile(path.join(__dirname, '..', 'consumed-submit-tokens.json'));
+
     this.originalFetcher = new OriginalFetcher({
       browserManager: this.browserManager,
       // আসল PDF-এর ফাইল সার্ভ করা frontend ডিরেক্টরিতে লিখতে হবে (backend
