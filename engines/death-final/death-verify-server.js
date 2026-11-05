@@ -12,6 +12,26 @@ const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 let CE; try { CE = require('../shared/cert-engine-standalone.js'); } catch (_) { CE = require('./cert-engine-standalone.js'); }
 
+// AUDIT #5 (2026-11-05): engine-side render check — same rule as
+// the birth engine (see engines/shared/render-token.js). The backend
+// charge gate mints a short-lived render token for every render it
+// allows; this engine verifies it before building any certificate,
+// so a direct localhost hit on :3104 cannot render free. Standalone
+// copies without engines/shared/ fail CLOSED, never open.
+let verifyRenderToken = null;
+let RENDER_TOKEN_HEADER = 'x-engine-render-token';
+try {
+  ({ verifyRenderToken, RENDER_TOKEN_HEADER } = require('../shared/render-token'));
+} catch (_) { /* no shared module: renders fail closed below */ }
+function requireRenderToken(req, res) {
+  const tok = req.headers && req.headers[RENDER_TOKEN_HEADER];
+  if (!verifyRenderToken || !verifyRenderToken(tok, 'death')) {
+    json(res, 402, { success: false, error: 'CHARGE_REQUIRED', message: 'এই সনদের জন্য প্রথমে যাচাই ও পেমেন্ট সম্পন্ন করুন, তারপর প্রিভিউ/PDF খুলবে।' });
+    return false;
+  }
+  return true;
+}
+
 // everify.bdris.gov.bd-er TLS 1.3 handshake kichu network-e bhange
 // ("bad ecpoint") — tai shob HTTPS call TLS 1.2 diye.
 require('node:tls').DEFAULT_MAX_VERSION = 'TLSv1.2';
@@ -1091,6 +1111,7 @@ function toTemplateFields(d) {
 
 /* ---------------- preview (death replica HTML) ---------------- */
 async function routePreview(req, res) {
+    if (!requireRenderToken(req, res)) return;
     try {
         const d = await readJson(req);
         const html = buildDeathCertificateHtml(toTemplateFields(d), await buildAssets(d));
@@ -1102,6 +1123,7 @@ async function routePreview(req, res) {
 
 /* ---------------- PDF (system Chrome, vector) ---------------- */
 async function routePdf(req, res) {
+    if (!requireRenderToken(req, res)) return;
     let tmpHtml = null, tmpPdf = null, prof = null;
     try {
         const d = await readJson(req);
@@ -1197,7 +1219,11 @@ server.on('error', (e) => {
     }
     logLine('SERVER ERROR: ' + (e && e.stack || e));
 });
-server.listen(PORT, '127.0.0.1', () => {
+if (require.main === module) {
+  server.listen(PORT, '127.0.0.1', () => {
     console.log('Death verify tool: http://localhost:' + PORT);
-});
+  });
+}
+
+module.exports = { server, verifyRenderToken, RENDER_TOKEN_HEADER };
 

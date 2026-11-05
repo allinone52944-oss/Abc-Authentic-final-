@@ -25,6 +25,7 @@ const db = require('../../db');
 const serviceCredits = require('../../lib/serviceCredits');
 const {
   chargeGate, isVerifySuccess, policyFor,
+  mintRenderToken, verifyRenderToken, RENDER_TOKEN_HEADER,
 } = require('../../lib/engineChargeGate');
 
 const ENGINE = 'bdris-certificate';
@@ -32,10 +33,12 @@ const MOUNT = '/api/bdris-engine';
 
 // Fake downstream: mimics the engine proxy. `mode` controls the verify
 // response; preview/captcha always succeed. Counts calls so tests can
-// prove the engine was (or was not) reached.
-function downstream(mode, calls) {
+// prove the engine was (or was not) reached. `tokens` collects the
+// render-token header the gate attaches (audit #5).
+function downstream(mode, calls, tokens) {
   return (req, res) => {
     calls.push(req.url);
+    if (tokens && req.headers[RENDER_TOKEN_HEADER]) tokens.push(req.headers[RENDER_TOKEN_HEADER]);
     if (req.url === '/api/verify') {
       if (mode === 'success') {
         return res.json({ success: true, data: { brn: '19900101123456789', nameEn: 'Test Person' } });
@@ -54,11 +57,12 @@ function downstream(mode, calls) {
 
 function appWith({ mode = 'success', authed = true, engine = ENGINE, mount = MOUNT, kind = 'birth' } = {}) {
   const calls = [];
+  const tokens = [];
   const a = express();
   a.use(express.json());
   if (authed) a.use((req, _res, next) => { req.user = { id: 'u1', role: 'user' }; next(); });
-  a.use(mount, chargeGate(engine, kind, mount, { db, serviceCredits }), downstream(mode, calls));
-  return { app: a, calls };
+  a.use(mount, chargeGate(engine, kind, mount, { db, serviceCredits }), downstream(mode, calls, tokens));
+  return { app: a, calls, tokens };
 }
 
 // Route db answers per test. `opts`: serviceRow (null = no row),
@@ -278,5 +282,74 @@ describe('charge gate', () => {
       .send({ brn: '1', nameEn: 'X', idempotency_key: 'd-pay' });
     expect(p.status).toBe(200);
     expect(serviceCredits.payForService).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('render token (audit #5)', () => {
+  // tests/setup.js sets JWT_SECRET=test-jwt-secret; the gate mints
+  // with ABC_JWT_SECRET || JWT_SECRET, so the same secret verifies.
+  const SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
+
+  test('mint/verify roundtrip through the gate exports', () => {
+    const tok = mintRenderToken('birth', 'u1', 'k-pay');
+    expect(typeof tok).toBe('string');
+    expect(verifyRenderToken(tok, 'birth')).toBe(true);
+    expect(verifyRenderToken(tok, 'death')).toBe(false);
+    expect(verifyRenderToken(tok + 'x', 'birth')).toBe(false);
+  });
+
+  test('preview with charged attempt -> downstream receives a verifiable token', async () => {
+    routeDb({ chargedOrder: true });
+    const { app, tokens } = appWith({});
+    const r = await request(app).post('/api/bdris-engine/api/preview')
+      .send({ brn: '1', nameEn: 'X', idempotency_key: 'k-pay' });
+    expect(r.status).toBe(200);
+    expect(tokens).toHaveLength(1);
+    expect(verifyRenderToken(tokens[0], 'birth', { secret: SECRET })).toBe(true);
+    const parts = tokens[0].split('.');
+    expect(parts[1]).toBe('birth');
+    expect(parts[2]).toBe(Buffer.from('u1', 'utf8').toString('base64url'));
+    expect(parts[3]).toBe(Buffer.from('k-pay', 'utf8').toString('base64url'));
+  });
+
+  test('preview without charged attempt -> 402, no token minted', async () => {
+    routeDb();
+    const { app, calls, tokens } = appWith({});
+    const r = await request(app).post('/api/bdris-engine/api/preview')
+      .send({ brn: '1', nameEn: 'X', idempotency_key: 'k-unpaid' });
+    expect(r.status).toBe(402);
+    expect(calls).toHaveLength(0);
+    expect(tokens).toHaveLength(0);
+  });
+
+  test('preview free when price 0 -> token still minted (gate attestation)', async () => {
+    routeDb({ serviceRow: null });
+    const { app, tokens } = appWith({});
+    const r = await request(app).post('/api/bdris-engine/api/preview').send({ brn: '1' });
+    expect(r.status).toBe(200);
+    expect(tokens).toHaveLength(1);
+    expect(verifyRenderToken(tokens[0], 'birth', { secret: SECRET })).toBe(true);
+  });
+
+  test('death engine pdf with charged key -> token verifies for death', async () => {
+    routeDb({ chargedOrder: true });
+    const { app, tokens } = appWith({ engine: 'death-verify', mount: '/api/death-engine', kind: 'death' });
+    const r = await request(app).post('/api/death-engine/api/pdf')
+      .send({ brn: '1', nameEn: 'X', idempotency_key: 'd-pay' });
+    expect(r.status).toBe(200);
+    expect(tokens).toHaveLength(1);
+    expect(verifyRenderToken(tokens[0], 'death', { secret: SECRET })).toBe(true);
+    expect(verifyRenderToken(tokens[0], 'birth', { secret: SECRET })).toBe(false);
+  });
+
+  test('verify/captcha paths get no render token', async () => {
+    routeDb();
+    const { app, tokens } = appWith({ mode: 'success' });
+    const v = await request(app).post('/api/bdris-engine/api/verify')
+      .send({ sessionId: 's', brn: '1', dob: '2000-01-01', captcha: 'x', idempotency_key: 'k-pay' });
+    expect(v.status).toBe(200);
+    const c = await request(app).get('/api/bdris-engine/api/captcha');
+    expect(c.status).toBe(200);
+    expect(tokens).toHaveLength(0);
   });
 });

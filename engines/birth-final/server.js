@@ -12,6 +12,26 @@ const crypto = require('crypto');
 const os = require('os');
 const { spawn, spawnSync } = require('child_process');
 
+// AUDIT #5 (2026-11-05): engine-side render check. The backend
+// charge gate mints a short-lived render token for every render it
+// allows; this engine verifies it before building any certificate,
+// so a direct localhost hit on :3000 cannot render free. Standalone
+// copies without engines/shared/ fail CLOSED (no verifier -> no
+// render), never open.
+let verifyRenderToken = null;
+let RENDER_TOKEN_HEADER = 'x-engine-render-token';
+try {
+    ({ verifyRenderToken, RENDER_TOKEN_HEADER } = require('../shared/render-token'));
+} catch (_) { /* no shared module: renders fail closed below */ }
+function requireRenderToken(req, res) {
+    const tok = req.headers && req.headers[RENDER_TOKEN_HEADER];
+    if (!verifyRenderToken || !verifyRenderToken(tok, 'birth')) {
+        res.status(402).json({ success: false, error: 'CHARGE_REQUIRED', message: 'এই সনদের জন্য প্রথমে যাচাই ও পেমেন্ট সম্পন্ন করুন, তারপর প্রিভিউ/PDF খুলবে।' });
+        return false;
+    }
+    return true;
+}
+
 // Embedded certificate fonts (assets/fonts.css — @font-face + base64 woff2).
 // The certificate carries its own fonts: same render on every machine,
 // no font install needed. Read once, cache.
@@ -61,12 +81,16 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 const sessions = new Map();
 const SESSION_TTL_MS = 5 * 60 * 1000;
 
-setInterval(() => {
+const _sessionSweep = setInterval(() => {
     const now = Date.now();
     for (const [id, s] of sessions) {
         if (now - s.createdAt > SESSION_TTL_MS) sessions.delete(id);
     }
 }, 60 * 1000);
+// unref: the sweep must not keep the process alive on its own (the
+// listening socket does that in production); without this, requiring
+// the app in a test hangs teardown after server.close().
+if (typeof _sessionSweep.unref === 'function') _sessionSweep.unref();
 
 // --- minimal cookie jar -----------------------------------------------------
 function storeCookies(setCookieHeaders, jar) {
@@ -1136,6 +1160,7 @@ function toTemplateFields(d) {
 }
 
 app.post('/api/preview', async (req, res) => {
+    if (!requireRenderToken(req, res)) return;
     try {
         const d = toTemplateFields(req.body || {});
         const html = buildCertificateHtml(d, await buildAssets(d));
@@ -1146,6 +1171,7 @@ app.post('/api/preview', async (req, res) => {
 });
 
 app.post('/generate-pdf', async (req, res) => {
+    if (!requireRenderToken(req, res)) return;
     const d = toTemplateFields(req.body || {});
     let browser;
     try {
@@ -1208,4 +1234,4 @@ function logLine(s) {
 process.on('uncaughtException', (e) => { logLine('UNCAUGHT: ' + (e && e.stack || e)); });
 process.on('unhandledRejection', (e) => { logLine('UNHANDLED: ' + (e && e.stack || e)); });
 
-module.exports = { app, buildCertificateHtml, buildAssets, normalizeBdrisData };
+module.exports = { app, buildCertificateHtml, buildAssets, normalizeBdrisData, verifyRenderToken, RENDER_TOKEN_HEADER };

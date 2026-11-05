@@ -55,6 +55,8 @@
 
 const crypto = require('crypto');
 
+const { mintRenderToken, verifyRenderToken, RENDER_TOKEN_HEADER } = require('../../engines/shared/render-token');
+
 const dbModule = require('../db');
 const serviceCreditsModule = require('./serviceCredits');
 
@@ -314,10 +316,31 @@ function chargeGate(engineId, engineKind, mount, deps) {
         // only proof that lets preview/PDF through without a second
         // charge. The check happens BEFORE the engine runs, so the
         // engine cannot render from self-supplied fields unpaid.
-        if (price <= 0 || !serviceId) return next();
+        // AUDIT #5 (2026-11-05): every allowed render also mints a
+        // short-lived render token (header x-engine-render-token)
+        // that the ENGINE verifies before rendering — defense in
+        // depth, so a direct localhost hit on the engine port cannot
+        // render a certificate free. The engine proxies forward
+        // req.headers as-is, so no proxy change is needed. Minted
+        // even when the price is 0: the token attests "the gate
+        // allowed this", it does not charge.
         const key = attemptKeyOf(req.body);
-        if (key && (await hasChargedOrder(db, userId, orderKeyOf(engineId, key)))) return next();
-        return gateError(res, 402, 'CHARGE_REQUIRED', 'এই সনদের জন্য প্রথমে যাচাই ও পেমেন্ট সম্পন্ন করুন, তারপর প্রিভিউ/PDF খুলবে।');
+        let allowed = false;
+        if (price <= 0 || !serviceId) allowed = true;
+        else if (key && (await hasChargedOrder(db, userId, orderKeyOf(engineId, key)))) allowed = true;
+        if (!allowed) {
+          return gateError(res, 402, 'CHARGE_REQUIRED', 'এই সনদের জন্য প্রথমে যাচাই ও পেমেন্ট সম্পন্ন করুন, তারপর প্রিভিউ/PDF খুলবে।');
+        }
+        const token = mintRenderToken(engineKind, userId, key || 'no-key');
+        if (!token) {
+          // No shared secret: the engine would reject the render
+          // anyway — fail here with a clear gate error instead of a
+          // confusing engine 402. (Unreachable in production:
+          // backend/auth.js refuses to start without JWT_SECRET.)
+          return gateError(res, 500, 'GATE_FAILED', 'চার্জ যাচাইয়ে সমস্যা হয়েছে — আবার চেষ্টা করুন।');
+        }
+        req.headers[RENDER_TOKEN_HEADER] = token;
+        return next();
       }
 
       // policy === 'verify'
@@ -402,4 +425,7 @@ module.exports = {
   orderKeyOf,
   txRefOf,
   policyFor,
+  mintRenderToken,
+  verifyRenderToken,
+  RENDER_TOKEN_HEADER,
 };
