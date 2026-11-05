@@ -225,14 +225,17 @@ async function notifyDuplicateTrxid(db, attempt, userId) {
   }
 }
 
-// Recharge cancelled because the SMS amount and the claimed amount disagree.
-async function notifyAmountMismatch(db, tx, smsAmount) {
+// Recharge amount-mismatch: the SMS amount and the claimed amount
+// disagree. `held` (audit #26): the request is HELD for admin
+// review, not cancelled. Default false keeps the submit-refusal
+// wording used by routes/user.js.
+async function notifyAmountMismatch(db, tx, smsAmount, held = false) {
   try {
     const uname = await userLabel(db, tx.user_id);
     return await notifyAdmins(
       db,
       '⚠️ রিচার্জ অমিল ধরা পড়েছে!',
-      `${uname}: ৳${Number(tx.amount).toLocaleString('bn-BD')} লিখেছে, কিন্তু SMS এ ৳${Number(smsAmount).toLocaleString('bn-BD')} এসেছে। রিকোয়েস্ট বাতিল হয়েছে (TrxID: ${tx.trxid || '—'})`,
+      `${uname}: ৳${Number(tx.amount).toLocaleString('bn-BD')} লিখেছে, কিন্তু SMS এ ৳${Number(smsAmount).toLocaleString('bn-BD')} এসেছে। ${held ? 'রিকোয়েস্ট আটকে আছে — যাচাই করুন' : 'রিকোয়েস্ট বাতিল হয়েছে'} (TrxID: ${tx.trxid || '—'})`,
       '/admin.html'
     );
   } catch (e) {

@@ -77,7 +77,10 @@ function amountsEqual(a, b) {
 }
 
 // Cancel a pending recharge without touching the wallet.
-// Amount-mismatch path: the request is voided, nobody is credited.
+// Retained for manual/admin cancellation. The webhook no longer
+// calls it: an amount mismatch HELDS the request (audit #26)
+// instead of voiding it, so a parser misread cannot destroy a
+// real recharge.
 async function cancelRechargeTx(client, txId) {
   const r = await client.query(
     `UPDATE transactions SET status = 'rejected', admin_id = NULL
@@ -208,21 +211,28 @@ webhook.post('/incoming', async (req, res) => {
               return res.json({ ok: true, held_for_review: true, reason: 'AMOUNT_UNPARSED' });
             }
             if (!amountsEqual(parsed.amount, matchInfo.tx.amount)) {
-              const cancelled = await cancelRechargeTx(client, matchInfo.tx.id);
+              // Audit #26 — HOLD, never cancel: the parser takes
+              // the first amount in the SMS, which may not be the
+              // received amount (a fee or a balance can come
+              // first), and cancelling destroys the customer's
+              // real request on a parser misread. The pending
+              // stays pending and the SMS stays unmatched, both
+              // visible to the admin for a manual decision. No
+              // credit is given — the fraud guard's purpose
+              // (never credit on a mismatch) is preserved.
               await client.query('COMMIT');
-              await logActivity(null, 'sms.amount_mismatch_cancel', {
+              await logActivity(null, 'sms.amount_mismatch_hold', {
                 sms_id: smsId, tx_id: matchInfo.tx.id, user_id: matchInfo.tx.user_id,
                 claimed_amount: Number(matchInfo.tx.amount), sms_amount: parsed.amount,
               });
               // Notify customer (WhatsApp + own-device push) + admins
-              // (Web Push). Async, never breaks the webhook.
-              if (cancelled) {
-                wa.notifyRechargeMismatch(db, cancelled, parsed.amount).catch(() => {});
-                push.notifyUser(db, cancelled.user_id, '⚠️ রিচার্জে পরিমাণের অমিল',
-                  'রিচার্জের অনুরোধে লেখা পরিমাণের সঙ্গে প্রাপ্ত SMS-এর পরিমাণ মেলেনি — অনুরোধটি বাতিল হয়েছে, টাকা যোগ হয়নি।', '/wallet.html').catch(() => {});
-                push.notifyAmountMismatch(db, cancelled, parsed.amount).catch(() => {});
-              }
-              return res.json({ ok: true, mismatch_cancelled: true, sms_id: smsId });
+              // (Web Push). Async, never breaks the webhook. The
+              // request is NOT cancelled — the messages say so.
+              wa.notifyRechargeMismatch(db, matchInfo.tx, parsed.amount, true).catch(() => {});
+              push.notifyUser(db, matchInfo.tx.user_id, '⚠️ রিচার্জে পরিমাণের অমিল',
+                'রিচার্জের অনুরোধে লেখা পরিমাণের সঙ্গে প্রাপ্ত SMS-এর পরিমাণ মেলেনি — অনুরোধটি বাতিল হয়নি, এডমিন যাচাই করছেন।', '/wallet.html').catch(() => {});
+              push.notifyAmountMismatch(db, matchInfo.tx, parsed.amount, true).catch(() => {});
+              return res.json({ ok: true, held_for_review: true, reason: 'AMOUNT_MISMATCH', sms_id: smsId });
             }
           }
           // Anomaly protection: large amounts require manual review

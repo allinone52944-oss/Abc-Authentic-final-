@@ -604,9 +604,13 @@ async function notifyRechargeApproved(db, tx) {
 }
 
 
-// Recharge request cancelled because the SMS amount and the claimed
+// Recharge request amount-mismatch: the SMS amount and the claimed
 // amount disagree. More informative than the generic rejected message.
-async function notifyRechargeMismatch(db, tx, smsAmount) {
+// `held` (audit #26): the request is HELD for admin review, not
+// cancelled — the parser may have misread the amount. Default
+// false keeps the submit-refusal wording used by routes/user.js
+// (no request exists there to hold).
+async function notifyRechargeMismatch(db, tx, smsAmount, held = false) {
   try {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
     if (!(await isNotifyEnabled(db, 'recharge_rejected'))) return { ok: false, error: 'NOTIFY_OFF' };
@@ -617,8 +621,9 @@ async function notifyRechargeMismatch(db, tx, smsAmount) {
     if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
     const msg =
       `${greetingFor(user)}\n` +
-      `আপনার রিচার্জের অনুরোধে ৳${Number(tx.amount)} লেখা ছিল, কিন্তু প্রাপ্ত SMS অনুযায়ী এসেছে ৳${Number(smsAmount)} — পরিমাণে অমিল থাকায় অনুরোধটি বাতিল হয়েছে, টাকা যোগ হয়নি।\n` +
-      'সঠিক পরিমাণ লিখে আবার চেষ্টা করুন।';
+      (held
+        ? `আপনার রিচার্জের অনুরোধে ৳${Number(tx.amount)} লেখা ছিল, কিন্তু প্রাপ্ত SMS অনুযায়ী এসেছে ৳${Number(smsAmount)} — পরিমাণে অমিল থাকায় অনুরোধটি আটকে আছে, এডমিন যাচাই করছেন। টাকা এখনো যোগ হয়নি।`
+        : `আপনার রিচার্জের অনুরোধে ৳${Number(tx.amount)} লেখা ছিল, কিন্তু প্রাপ্ত SMS অনুযায়ী এসেছে ৳${Number(smsAmount)} — পরিমাণে অমিল থাকায় অনুরোধটি বাতিল হয়েছে, টাকা যোগ হয়নি।\nসঠিক পরিমাণ লিখে আবার চেষ্টা করুন।`);
     return dispatch(db, 'recharge_mismatch', user, {
       text: msg,
       params: [greetingFor(user), Number(tx.amount), Number(smsAmount)],

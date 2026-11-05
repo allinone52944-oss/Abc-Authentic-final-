@@ -241,24 +241,26 @@ describe('adminSms routes', () => {
 
 // ============================================================
 // Fraud guard: TrxID match must also agree on the amount
-// (claimed amount vs SMS amount) — mismatch => auto-cancel + notify.
+// (claimed amount vs SMS amount) — mismatch => HOLD + notify
+// (audit #26: never auto-cancel — the parser may have misread
+// the amount, and cancelling destroys the real request).
 // ============================================================
 describe('POST /api/sms/incoming — TrxID amount fraud guard', () => {
   const TX = { id: 't1', user_id: 'u1', amount: '500', trxid: '9HXK2LQM4N', status: 'pending' };
   const SMS50 = 'You have received Tk 50.00 from 01712345678. TrxID 9HXK2LQM4N.';
 
-  test('SMS amount ≠ claimed amount → auto-cancel, NO wallet credit', async () => {
+  test('SMS amount ≠ claimed amount → HELD (not cancelled), NO wallet credit (audit #26)', async () => {
     db.__routeQuery([
       ['FROM incoming_sms', { rows: [] }], // dup check
       ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
       ['UPPER(trxid) = UPPER($1)', { rows: [TX] }],
-      ["UPDATE transactions SET status = 'rejected'", { rows: [{ ...TX, status: 'rejected' }] }],
     ]);
     const r = await postIncoming({ secret: SECRET, message: SMS50, sender: 'bKash' }).expect(200);
-    expect(r.body).toMatchObject({ ok: true, mismatch_cancelled: true, sms_id: 's1' });
+    expect(r.body).toMatchObject({ ok: true, held_for_review: true, reason: 'AMOUNT_MISMATCH', sms_id: 's1' });
     expect(db.__client.query.mock.calls.filter((c) => /wallet_apply/.test(c[0]))).toHaveLength(0);
+    // the pending is NOT cancelled — no reject update runs
     const cancel = db.__client.query.mock.calls.find((c) => /UPDATE transactions SET status = 'rejected'/.test(c[0]));
-    expect(cancel).toBeDefined();
+    expect(cancel).toBeUndefined();
     const log = db.query.mock.calls.find((c) => /INSERT INTO activity_log/.test(c[0]));
     expect(log).toBeDefined();
     expect(JSON.parse(log[1][2])).toMatchObject({ claimed_amount: 500, sms_amount: 50 });
