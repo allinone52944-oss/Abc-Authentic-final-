@@ -169,19 +169,6 @@
       <!-- Special instructions from admin -->
       <div id="instWrap" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px 16px;margin-bottom:20px;color:#1e40af;font-size:13px;line-height:1.6;"></div>
 
-      <!-- Sample / Instruction Preview -->
-      <div id="sampleWrap" style="display:none;margin-bottom:20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-          <label style="font-size:14px;font-weight:700;color:#1e293b;">📋 সেবার নমুনা ফরম্যাট (Format Template)</label>
-          <div style="display:flex;gap:6px;">
-            <button type="button" class="btn btn-secondary" onclick="copySampleText()" style="padding:5px 12px;font-size:12px;">📋 ফরম্যাট কপি করুন</button>
-            <button type="button" class="btn btn-secondary" onclick="applySampleToInput()" style="padding:5px 12px;font-size:12px;background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8;">📥 ফরম্যাট ইনপুটে বসান</button>
-          </div>
-        </div>
-        <pre id="samplePre" class="sample-code"></pre>
-        <div style="font-size:12px;color:#64748b;">টিপস: উপরের ফরম্যাট কপি করে নিচের বক্সে আপনার সঠিক তথ্য বসিয়ে সাবমিট করুন।</div>
-      </div>
-
       <!-- Dynamic or fallback fields container -->
       <div id="fieldsContainer">
         <!-- Rendered dynamically -->
@@ -362,20 +349,6 @@ function updateDocFeedback(inp, idx){
   }
 }
 
-function applySampleToInput(){
-  if(!rawSampleText) return;
-  const input = document.getElementById('manualDetailsInput');
-  if(input){
-    if(input.value && input.value.trim() !== rawSampleText.trim()){
-      if(!confirm("আপনি কি মূল নমুনা ফরম্যাটে ফিরে যেতে চান? আপনার টাইপ করা তথ্য মুছে যাবে।")) return;
-    }
-    input.value = rawSampleText;
-    input.focus();
-    triggerDraftSave();
-  }
-}
-
-
 const LocalDraft = {
   get(k) {
     try {
@@ -530,23 +503,17 @@ async function init(){
       }
     }
 
-       // Format sample
+       // Format sample (audit #46 — shown ONLY as a read-only reference
+    // in the fallback form below; never beside structured fields)
     rawSampleText = svc.manual_sample || svc.sample_format || "";
-    const sw = document.getElementById("sampleWrap");
-    const sp = document.getElementById("samplePre");
 
     // Fields Rendering with safeArray
     const fields = safeArray(svc.fields_required);
     const fieldsContainer = document.getElementById("fieldsContainer");
 
     if(fields && fields.length > 0){
-      // Admin configured structured fields
-      if(rawSampleText && sw && sp){
-        sw.style.display = "block";
-        sp.textContent = rawSampleText;
-      } else if(sw){
-        sw.style.display = "none";
-      }
+      // Admin configured structured fields — the fields ARE the guided
+      // form; the free-text template is not shown here.
       fieldsContainer.innerHTML = fields.map(f=>
         '<div class="field" style="margin-bottom:14px;"><label style="font-size:13px;font-weight:600;color:#334155;display:block;margin-bottom:6px;">'+esc(f.label||f.name)+(f.required?' <span style="color:#ef4444;">*</span>':'')+'</label>'+
         (f.type==='textarea'?
@@ -555,10 +522,11 @@ async function init(){
         '</div>'
       ).join('');
     } else {
-      // Manual / General fallback: prominent details textarea
-      // Hide standalone sampleWrap so user never sees duplicate format box on order page
-      if(sw) sw.style.display = "none";
-
+      // Manual / General fallback: ONE guided form. The sample appears
+      // once, as a read-only reference above the box; the box itself
+      // starts EMPTY — the user writes their own info (the old
+      // auto-fill put the template in the box to edit line by line,
+      // so a wrong line could survive into the order).
       fieldsContainer.innerHTML =
         '<div class="field" style="margin-bottom:18px;">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">' +
@@ -566,22 +534,16 @@ async function init(){
               '📝 আবেদনের ফরম / প্রয়োজনীয় তথ্য পূরণ <span style="color:#ef4444;">*</span>' +
             '</label>' +
             (rawSampleText ?
-              '<div style="display:flex;gap:6px;">' +
-                '<button type="button" class="btn btn-secondary" onclick="copySampleText()" style="padding:4px 10px;font-size:12px;">📋 ফরম্যাট কপি</button>' +
-                '<button type="button" class="btn btn-secondary" onclick="applySampleToInput()" style="padding:4px 10px;font-size:12px;background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8;">🔄 ফরম্যাট রিসেট</button>' +
-              '</div>' : '') +
+              '<button type="button" class="btn btn-secondary" onclick="copySampleText()" style="padding:4px 10px;font-size:12px;">📋 ফরম্যাট কপি</button>' : '') +
           '</div>' +
+          (rawSampleText ?
+            '<div style="margin-bottom:10px;"><div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:6px;">📋 নমুনা ফরম্যাট (শুধু দেখার জন্য)</div>' +
+            '<pre class="sample-code" style="margin:0;">' + esc(rawSampleText) + '</pre></div>' : '') +
           '<textarea id="manualDetailsInput" data-field="_manual_form" rows="8" placeholder="এখানে নাম, মোবাইল নম্বর এবং প্রয়োজনীয় আবেদন ফরম্যাটের তথ্য লিখে পূরণ করুন…" style="width:100%;padding:12px 14px;border:1px solid #cbd5e1;border-radius:12px;font-size:14px;line-height:1.6;font-family:inherit;"></textarea>' +
           (rawSampleText ?
-            '<div style="font-size:12px;color:#64748b;margin-top:4px;">💡 নিচে নমুনা ফরম্যাটটি দেওয়া হয়েছে। প্রতিটি লাইনে আপনার সঠিক তথ্য বসিয়ে এডিট করুন।</div>' :
+            '<div style="font-size:12px;color:#64748b;margin-top:4px;">💡 উপরের নমুনা ফরম্যাটটি দেখে নিচের বক্সে আপনার সঠিক তথ্য লিখুন।</div>' :
             '<div style="font-size:12px;color:#64748b;margin-top:4px;">(প্রয়োজনীয় নাম, মোবাইল ও আবেদনের তথ্যাদি লিখে পূরণ করুন)</div>') +
         '</div>';
-
-      // Auto-fill sample if empty
-      if(rawSampleText){
-        const mdi = document.getElementById("manualDetailsInput");
-        if(mdi && !mdi.value) mdi.value = rawSampleText;
-      }
     }
 
     // Named required documents with safeArray

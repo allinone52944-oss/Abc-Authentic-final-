@@ -122,3 +122,39 @@ describe('order-create.html — coupon note + redeem link at checkout (audit #45
     expect(wallet).toContain('id="couponCode"');
   });
 });
+
+describe('order-create.html — one sample, one guided form (audit #46)', () => {
+  const html = read('frontend/order-create.html');
+  const script = html.slice(html.indexOf('<script>', html.indexOf('app.js')));
+  const initFn = script.slice(script.indexOf('async function init(){'), script.indexOf('function triggerDraftSave(){'));
+
+  test('the duplicate sample box is gone (no sampleWrap, no samplePre, no fill-into-input)', () => {
+    expect(html).not.toContain('sampleWrap');
+    expect(html).not.toContain('samplePre');
+    expect(html).not.toContain('applySampleToInput');
+    expect(html).not.toContain('ফরম্যাট ইনপুটে বসান');
+    expect(html).not.toContain('ফরম্যাট রিসেট');
+    expect(html).not.toContain('আপনার টাইপ করা তথ্য মুছে যাবে');
+  });
+
+  test('structured fields never show the free-text template', () => {
+    // the structured branch renders only the fields; the sample is
+    // referenced nowhere in it
+    const structBranch = initFn.slice(initFn.indexOf("if(fields && fields.length > 0){"), initFn.indexOf('} else {'));
+    expect(structBranch).not.toContain('rawSampleText');
+  });
+
+  test('the fallback is one guided form: read-only reference + EMPTY box, no auto-fill', () => {
+    const fallback = initFn.slice(initFn.indexOf('} else {'));
+    expect(fallback).toContain('নমুনা ফরম্যাট (শুধু দেখার জন্য)');
+    expect(fallback).toContain("esc(rawSampleText)");
+    expect(fallback).not.toContain('mdi.value = rawSampleText');
+    expect(fallback).not.toContain('Auto-fill sample');
+    expect(fallback).toContain('ফরম্যাট কপি');
+    expect(fallback).toContain('উপরের নমুনা ফরম্যাটটি দেখে নিচের বক্সে আপনার সঠিক তথ্য লিখুন');
+  });
+
+  test('copySampleText still works (the one remaining sample action)', () => {
+    expect(script).toContain('function copySampleText(){');
+  });
+});
