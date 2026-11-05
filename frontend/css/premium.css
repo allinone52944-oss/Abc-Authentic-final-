@@ -817,6 +817,10 @@ tr:hover td {
   }
   .main {
     padding: 16px;
+  }
+  /* Audit #61 — the 84px room for the fixed tabbar belongs only to
+     tabbar pages; the other pages got an empty 84px strip. */
+  body.has-tabbar .main {
     padding-bottom: 84px;
   }
   .stat-grid {

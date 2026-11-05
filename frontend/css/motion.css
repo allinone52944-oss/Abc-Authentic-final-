@@ -116,7 +116,10 @@ button, .btn, .btn-add, .m-tab, .side-link, .svc2, .stat { touch-action: manipul
    the tabbar in the 769–900px band. */
 @media (max-width: 900px) {
   .m-tabbar { display: flex; }
-  body { padding-bottom: 76px; } /* room for fixed tabbar */
+  /* Audit #61 — the room for the fixed tabbar is reserved ONLY on
+     pages that actually have one; tabbar-less pages (bdris-apply,
+     land, login, admin, ...) used to get 76px of dead space. */
+  body.has-tabbar { padding-bottom: 76px; } /* room for fixed tabbar */
 }
 
 /* ---- WhatsApp floating button (Premium Verified Look) ---- */

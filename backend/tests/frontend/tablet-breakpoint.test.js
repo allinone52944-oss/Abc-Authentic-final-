@@ -26,7 +26,8 @@ describe('one tablet breakpoint: 900px (audit #56)', () => {
     expect(css).not.toContain('@media (max-width: 768px)');
     const tabbar = css.slice(css.indexOf('@media (max-width: 900px)'));
     expect(tabbar).toContain('.m-tabbar { display: flex; }');
-    expect(tabbar).toContain('body { padding-bottom: 76px; }');
+    // Audit #61 scoped the body padding to tabbar pages only.
+    expect(tabbar).toContain('body.has-tabbar { padding-bottom: 76px; }');
     expect(tabbar).toContain('bottom: 84px;');
   });
 
