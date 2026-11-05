@@ -37,3 +37,35 @@ describe('orders.html — ?status= deep link (audit #41)', () => {
     expect(dashboard).toContain("'/orders.html?status=processing'");
   });
 });
+
+describe('orders.html — every status has a filter button (audit #42)', () => {
+  const html = read('frontend/orders.html');
+  const buttons = [...html.matchAll(/<button class="fbtn[^"]*" data-st="([^"]*)">([^<]*)<\/button>/g)];
+
+  test('ব্যর্থ / গৃহীত / নিবন্ধিত each have their own button', () => {
+    const bySt = Object.fromEntries(buttons.map(([, st, label]) => [st, label]));
+    expect(bySt.failed).toBe('ব্যর্থ');
+    expect(bySt.received).toBe('গৃহীত');
+    expect(bySt.registered).toBe('নিবন্ধিত');
+  });
+
+  test('বাতিল and রিফান্ড are separate buttons (no merged বাতিল/রিফান্ড)', () => {
+    const bySt = Object.fromEntries(buttons.map(([, st, label]) => [st, label]));
+    expect(bySt.cancelled).toBe('বাতিল');
+    expect(bySt.refunded).toBe('রিফান্ডেড');
+    // no button label merges two statuses (the HTML comment above
+    // the row still mentions the old merged label, by design)
+    for (const [, , label] of buttons) expect(label).not.toContain('/');
+  });
+
+  test('every button label matches the status word the list shows (STBN)', () => {
+    const stbn = { new: 'নতুন', pending: 'অপেক্ষমান', received: 'গৃহীত', processing: 'প্রসেসিং', registered: 'নিবন্ধিত', completed: 'সম্পন্ন', delivered: 'ডেলিভার্ড', failed: 'ব্যর্থ', cancelled: 'বাতিল', refunded: 'রিফান্ডেড' };
+    for (const [, st, label] of buttons) {
+      if (!st) continue; // "সব অর্ডার" has no status
+      expect(label).toBe(stbn[st]);
+    }
+    // the #41 deep link works for the new buttons too (whitelisted
+    // against the DOM buttons, not a hardcoded list)
+    expect(html).toContain('querySelector(\'#filters .fbtn[data-st="\' + wantStatus + \'"]\')');
+  });
+});

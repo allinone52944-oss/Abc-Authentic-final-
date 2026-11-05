@@ -134,14 +134,23 @@
     </div>
 
     <!-- Status Filter Buttons -->
+    <!-- Audit #42 — every status the list can show has a button: ব্যর্থ,
+         গৃহীত and নিবন্ধিত were only findable via "সব অর্ডার", and
+         বাতিল/রিফান্ড shared one button though they are different
+         statuses. The row scrolls horizontally (premium.css .filters),
+         so the extra buttons need no layout change. -->
     <div class="filters" id="filters">
       <button class="fbtn on" data-st="">সব অর্ডার</button>
       <button class="fbtn" data-st="new">নতুন</button>
       <button class="fbtn" data-st="pending">অপেক্ষমান</button>
+      <button class="fbtn" data-st="received">গৃহীত</button>
       <button class="fbtn" data-st="processing">প্রসেসিং</button>
+      <button class="fbtn" data-st="registered">নিবন্ধিত</button>
       <button class="fbtn" data-st="completed">সম্পন্ন</button>
       <button class="fbtn" data-st="delivered">ডেলিভার্ড</button>
-      <button class="fbtn" data-st="cancelled">বাতিল/রিফান্ড</button>
+      <button class="fbtn" data-st="failed">ব্যর্থ</button>
+      <button class="fbtn" data-st="cancelled">বাতিল</button>
+      <button class="fbtn" data-st="refunded">রিফান্ডেড</button>
     </div>
 
     <!-- Orders Table -->
