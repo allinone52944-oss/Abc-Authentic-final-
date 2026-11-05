@@ -1023,7 +1023,9 @@ describe('audit #65 — no blocking head script, geo loads lazily', () => {
   test('socket.io is NOT in <head> (it blocked parsing/paint)', () => {
     const head = html.slice(0, html.indexOf('</head>'));
     expect(head).not.toContain('socket.io.min.js');
-    expect(html).toContain('<script src="/js/socket.io.min.js"></script>');
+    // Audit #68 — the moved script is versioned (?v=1) so the
+    // immutable cache rule applies to it.
+    expect(html).toContain('<script src="/js/socket.io.min.js?v=1"></script>');
   });
 
   test('socket.io still loads BEFORE the main script reads io synchronously', () => {

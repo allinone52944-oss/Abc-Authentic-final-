@@ -55,19 +55,20 @@ app.use(sameOrigin);
 // anonymously; the gate requires a charge token for that file or an
 // owned server record with the original flagged available.
 app.use(require('./middleware/originalPdfGate').originalPdfGate(db));
+// Audit #68 — one cache rule for both mounts (see lib/staticCache.js):
+// immutable ONLY when the URL is versioned (?v=); unversioned assets
+// get a short cache instead, so a changed file is never stuck stale.
+const { cacheControlFor } = require('./lib/staticCache');
+function staticCacheHeaders(res, filePath) {
+  const cc = cacheControlFor(res.req && res.req.url, filePath);
+  if (cc) res.setHeader('Cache-Control', cc);
+}
 app.use(express.static(path.join(__dirname, '..', 'frontend'), {
-  setHeaders: (res, filePath) => {
-    // HTML: always revalidate (no stale ?v= references)
-    if (filePath.endsWith('.html')) {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    }
-    // Versioned assets (?v=): cache aggressively (version changes on update)
-    else if (/\.(css|js)$/.test(filePath)) {
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    }
-  },
+  setHeaders: staticCacheHeaders,
 }));
-app.use('/assets', express.static(path.join(__dirname, '..', 'assets')));
+app.use('/assets', express.static(path.join(__dirname, '..', 'assets'), {
+  setHeaders: staticCacheHeaders,
+}));
 
 // Load modular engines (NID, BDRIS, ... added later)
 const engines = loadEngines();
