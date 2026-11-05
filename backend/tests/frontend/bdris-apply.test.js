@@ -1093,3 +1093,18 @@ describe('audit #78 — DONE page: one driven path for the original PDF', () => 
     expect(bgPdf).not.toContain('_origWantDl');
   });
 });
+
+describe('audit #79 — message-less errors name the type, time and support line', () => {
+  test('both fallbacks go through noMsgError with their event type', () => {
+    expect(html).toContain("noMsgError('STATUS_ERROR', 'সাময়িক সমস্যা — আবার চেষ্টা করুন')");
+    expect(html).toContain("noMsgError('ERROR', 'সাময়িক সমস্যা হয়েছে')");
+  });
+
+  test('noMsgError appends the kind + fmtTime + the support line', () => {
+    expect(html).toMatch(/noMsgError = \(kind, fallback\) => fallback \+ ' \(' \+ kind \+ ' • ' \+ fmtTime\(new Date\(\)\.toISOString\(\)\) \+ ' — সাপোর্টে এই লাইনটি জানান\)'/);
+  });
+
+  test('a server message still wins untouched (no enrichment when a message exists)', () => {
+    expect(html).toContain('d.message || noMsgError');
+  });
+});

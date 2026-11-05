@@ -5695,6 +5695,10 @@ function handleFreshReady(d) {
 socket.on('BOT_STATUS', (d) => {
   d = (d && typeof d === 'object') ? d : {};
   const st = d.status;
+  // Audit #79 — when the server sends no message, the fallback is
+  // not just generic: it names the error type + time and tells the
+  // user what to quote to support, so the failure is diagnosable.
+  const noMsgError = (kind, fallback) => fallback + ' (' + kind + ' • ' + fmtTime(new Date().toISOString()) + ' — সাপোর্টে এই লাইনটি জানান)';
   // চলন্ত অপের জীবিত-খবর — guardOpBusy-র সময়সীমা রিফ্রেশ করি
   if (S._opBusy && (st === 'PROGRESS' || st === 'LOADING' || st === 'OTP_WAITING' || st === 'READY')) S._opStartedAt = Date.now();
   if (st === 'READY') {
@@ -5802,7 +5806,7 @@ socket.on('BOT_STATUS', (d) => {
   if (st === 'STATUS_RESULT') { busy(false); renderStatusResult(d); return; }
   if (st === 'STATUS_ERROR') {
     busy(false);
-    const smsg = san(d.message || 'সাময়িক সমস্যা — আবার চেষ্টা করুন');
+    const smsg = san(d.message || noMsgError('STATUS_ERROR', 'সাময়িক সমস্যা — আবার চেষ্টা করুন'));
     if (S.view === 'status' && (S.status || {}).stage === 'otp') {
       renderStatusOtp();
       showFail([smsg.replace(/^❌\s*/, '')]);
@@ -5856,7 +5860,7 @@ socket.on('BOT_STATUS', (d) => {
   if (st === 'ERROR') {
     busy(false);
     const diedOp = S._waitingAck;
-    const msg = String(d.message || 'সাময়িক সমস্যা হয়েছে');
+    const msg = String(d.message || noMsgError('ERROR', 'সাময়িক সমস্যা হয়েছে'));
     if (/চালু হয়নি|সংযোগ নেই/.test(msg)) { sessionLost(); return; }
     // চূড়ান্ত জমার মুহূর্তের ব্যর্থতা — সার্ভারে রেকর্ড + অ্যাডমিন push।
     // OTP-ভুলের শাখাটি বাদ (ওটা কোড বসানোর পর্দায় ফেরে, আবেদন মরে না)।
