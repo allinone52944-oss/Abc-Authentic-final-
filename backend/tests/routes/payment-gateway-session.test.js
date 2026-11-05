@@ -348,6 +348,57 @@ describe('frontend/wallet.html — gateway session invariants', () => {
     expect(gw).not.toContain("(d.error || 'ব্যর্থ')");
   });
 
+  test('audit #35 — history: full TrxID, method/sender, pending elapsed + SMS state, load-more + filters', () => {
+    const src = walletHtml();
+    // every transaction type has a Bengali label (no raw English type)
+    for (const [type, bn] of [['cashback', 'ক্যাশব্যাক'], ['promo', 'প্রোমো'], ['debit', 'ডেবিট'], ['bonus', 'বোনাস']]) {
+      expect(src).toContain(type + ":'" + bn + "'");
+    }
+    // the full TrxID is shown — the 24-char truncation is gone
+    expect(src).not.toContain('x.slice(0, 24)');
+    // method + paying number on the row
+    expect(src).toContain('GW_METHOD_NAMES[t.method]');
+    expect(src).toContain('t.sender_no');
+    // pending rows: elapsed + SMS-arrived state
+    const row = fnSlice(src, 'async function loadWallet(');
+    expect(row).toContain('fmtElapsed(t.created_at)');
+    expect(row).toContain('SMS এসেছে');
+    expect(row).toContain('SMS এখনো আসেনি');
+    expect(row).toContain('t.sms_arrived');
+    // load-more + filters (the history list is no longer a hardcoded 10-row fetch;
+    // the two remaining limit=10 fetches are the gateway/manual polls — item #38)
+    const load = fnSlice(src, 'async function loadWallet(');
+    expect(load).not.toContain("'/wallet?limit=10'");
+    expect(load).toContain('TX_PAGE_SIZE');
+    expect(src).toContain("id=\"txFilterType\"");
+    expect(src).toContain("id=\"txFilterStatus\"");
+    expect(src).toContain("id=\"txMoreBtn\"");
+    expect(src).toContain('txLoadMore()');
+    expect(src).toContain('txApplyFilter()');
+  });
+
+  test('audit #35 — the wallet + history inline scripts parse (no stray braces)', () => {
+    // the #30 edit once left a stray `}` that closed submitRecharge
+    // early; a syntax check keeps a broken page from shipping silently
+    const inlineScript = (html) => {
+      const start = html.indexOf('<script>', html.indexOf('app.js')) + '<script>'.length;
+      const end = html.indexOf('</script>', start);
+      return html.slice(start, end);
+    };
+    expect(() => new Function(inlineScript(walletHtml()))).not.toThrow();
+    const historyHtml = fs.readFileSync(path.join(__dirname, '../../../frontend/history.html'), 'utf8');
+    expect(() => new Function(inlineScript(historyHtml))).not.toThrow();
+    // history page: search + kind filter + paged render
+    expect(historyHtml).toContain('id="histSearch"');
+    expect(historyHtml).toContain('id="histKind"');
+    expect(historyHtml).toContain('id="histMoreBtn"');
+    expect(historyHtml).toContain('HIST_PAGE = 20');
+    expect(historyHtml).toContain('histFiltered()');
+    // the deliverable PDF copy stays downloadable; records with no
+    // documents show no download button (no fake link)
+    expect(historyHtml).toContain("docs ? '<div class=\"hist-docs\">'");
+  });
+
   test('no forbidden word in the wallet page copy', () => {
     expect(walletHtml().toLowerCase()).not.toContain('captcha');
   });

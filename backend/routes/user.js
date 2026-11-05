@@ -631,14 +631,30 @@ router.get('/wallet', async (req, res) => {
   try {
     const u = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
     const { page, limit, offset } = pageParams(req);
-    const total = await db.query('SELECT COUNT(*) FROM transactions WHERE user_id = $1', [req.user.id]);
+    // Audit #35 — history filters (type/status, whitelisted) + an
+    // SMS-arrived flag on pending recharges, so the row can say
+    // whether its SMS came.
+    const VALID_TYPES = ['recharge', 'order_payment', 'refund', 'coupon', 'cashback', 'promo', 'debit', 'bonus', 'admin_adjustment'];
+    const VALID_STATUSES = ['pending', 'approved', 'rejected'];
+    const fType = VALID_TYPES.includes(req.query.type) ? req.query.type : null;
+    const fStatus = VALID_STATUSES.includes(req.query.status) ? req.query.status : null;
+    const conds = ['user_id = $1'];
+    const cparams = [req.user.id];
+    if (fType) { conds.push(`type = $${cparams.length + 1}`); cparams.push(fType); }
+    if (fStatus) { conds.push(`status = $${cparams.length + 1}`); cparams.push(fStatus); }
+    const where = 'WHERE ' + conds.join(' AND ');
+    const total = await db.query(`SELECT COUNT(*) FROM transactions ${where}`, cparams);
     const rows = await db.query(
       `SELECT id, type, amount, method, sender_no, trxid, status, created_at, cancel_reason,
               (SELECT json_build_object('id', c.id, 'code', c.code, 'status', c.status, 'amount', c.amount)
-               FROM coupons c WHERE c.recharge_id = transactions.id LIMIT 1) AS coupon
-       FROM transactions WHERE user_id = $1
-       ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
-      [req.user.id, limit, offset]);
+               FROM coupons c WHERE c.recharge_id = transactions.id LIMIT 1) AS coupon,
+              CASE WHEN type = 'recharge' AND status = 'pending' THEN EXISTS (
+                SELECT 1 FROM incoming_sms s
+                WHERE s.trxid IS NOT NULL AND UPPER(s.trxid) = UPPER(transactions.trxid)
+              ) ELSE false END AS sms_arrived
+       FROM transactions ${where}
+       ORDER BY created_at DESC LIMIT $${cparams.length + 1} OFFSET $${cparams.length + 2}`,
+      [...cparams, limit, offset]);
 
     let cashback = { enabled: false, percent: 0 };
     try {

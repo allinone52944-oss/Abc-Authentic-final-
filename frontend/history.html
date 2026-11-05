@@ -63,7 +63,18 @@
     </div>
 
     <div class="card">
+      <!-- Audit #35 — search + filter + load-more: the list used to render every item at once with no way to find one -->
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <input id="histSearch" type="text" placeholder="খুঁজুন (সেবা / ফাইলের নাম)" oninput="histApplyFilter()" style="flex:1;min-width:0;padding:10px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px;">
+        <select id="histKind" onchange="histApplyFilter()" style="padding:10px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px;">
+          <option value="">সব</option>
+          <option value="manual">ম্যানুয়াল</option>
+          <option value="order">অর্ডার</option>
+          <option value="engine">ইঞ্জিন</option>
+        </select>
+      </div>
       <div id="histList" style="color:var(--text-muted); font-size:13px;">লোড হচ্ছে…</div>
+      <button id="histMoreBtn" class="btn" style="width:100%;margin-top:12px;display:none;" onclick="histLoadMore()">আরও দেখুন</button>
     </div>
   </div>
 </div>
@@ -87,14 +98,45 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 const ICON = { manual:'📝', order:'📦', engine:'🎓' };
 
 let _items = [];
+let _histShown = 20;
+const HIST_PAGE = 20;
+
+// Audit #35 — search + kind filter over the loaded records, rendered
+// 20 at a time. The list keeps the ORIGINAL _items index (gi) so the
+// download buttons still point at the right record.
+function histFiltered(){
+  const q = ((document.getElementById('histSearch') || {}).value || '').trim().toLowerCase();
+  const k = (document.getElementById('histKind') || {}).value || '';
+  const out = [];
+  _items.forEach((it, gi) => {
+    if (k && it.kind !== k) return;
+    if (q && !((it.title || '').toLowerCase().includes(q) ||
+      (it.documents || []).some(d => (d.originalname || d.filename || '').toLowerCase().includes(q)))) return;
+    out.push(gi);
+  });
+  return out;
+}
+function histApplyFilter(){ _histShown = HIST_PAGE; render(); }
+function histLoadMore(){ _histShown += HIST_PAGE; render(); }
 
 function render(){
   const box = document.getElementById('histList');
+  const more = document.getElementById('histMoreBtn');
   if(!_items.length){
     box.innerHTML = '<div style="padding:16px 0; color:#94a3b8;">এখনো কোনো ডেলিভারি ফাইল পাননি। সেবা সম্পন্ন হলে ডেলিভারি ফাইল এখানে পাবেন।</div>';
+    if (more) more.style.display = 'none';
     return;
   }
-  box.innerHTML = _items.map((it, gi) => {
+  const list = histFiltered();
+  if(!list.length){
+    box.innerHTML = '<div style="padding:16px 0; color:#94a3b8;">খুঁজে কিছু পাওয়া যায়নি — অন্য শব্দে বা ধরনে খুঁজে দেখুন।</div>';
+    if (more) more.style.display = 'none';
+    return;
+  }
+  const shown = list.slice(0, _histShown);
+  if (more) more.style.display = (list.length > _histShown) ? '' : 'none';
+  box.innerHTML = shown.map(gi => {
+    const it = _items[gi];
     const docs = (it.documents || []).map((d, di) =>
       '<button class="hist-doc delivery" onclick="dlHist(' + gi + ',' + di + ')">🎁 ' + esc(d.originalname || d.filename) + ' ⬇️</button>'
     ).join('');

@@ -508,10 +508,32 @@
     <!-- Transaction History -->
     <div class="card">
       <h3>📜 লেনদেনের ইতিহাস</h3>
+      <!-- Audit #35 — filter + load-more: the list used to stop at 10 rows -->
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <select id="txFilterType" onchange="txApplyFilter()" style="flex:1;min-width:0;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;">
+          <option value="">সব ধরন</option>
+          <option value="recharge">রিচার্জ</option>
+          <option value="order_payment">অর্ডার ফি</option>
+          <option value="refund">রিফান্ড</option>
+          <option value="coupon">কুপন</option>
+          <option value="cashback">ক্যাশব্যাক</option>
+          <option value="promo">প্রোমো</option>
+          <option value="debit">ডেবিট</option>
+          <option value="bonus">বোনাস</option>
+          <option value="admin_adjustment">এডমিন সমন্বয়</option>
+        </select>
+        <select id="txFilterStatus" onchange="txApplyFilter()" style="flex:1;min-width:0;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;">
+          <option value="">সব অবস্থা</option>
+          <option value="pending">পেন্ডিং</option>
+          <option value="approved">অনুমোদিত</option>
+          <option value="rejected">প্রত্যাখ্যাত</option>
+        </select>
+      </div>
       <div id="txList">
         <div class="skel" style="height:40px;margin-bottom:8px;"></div>
         <div class="skel" style="height:40px;"></div>
       </div>
+      <button id="txMoreBtn" class="btn" style="width:100%;margin-top:12px;display:none;" onclick="txLoadMore()">আরও দেখুন</button>
     </div>
 
     <!-- Policy Card -->
@@ -555,7 +577,7 @@
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
-const TYPBN={recharge:'রিচার্জ',order_payment:'অর্ডার ফি',refund:'রিফান্ড',coupon:'কুপন',admin_adjustment:'এডমিন সমন্বয়'};
+const TYPBN={recharge:'রিচার্জ',order_payment:'অর্ডার ফি',refund:'রিফান্ড',coupon:'কুপন',admin_adjustment:'এডমিন সমন্বয়',cashback:'ক্যাশব্যাক',promo:'প্রোমো',debit:'ডেবিট',bonus:'বোনাস'}; // audit #35 — cashback/promo/debit/bonus showed raw English
 let method='bkash_payment', rechargeNums={};
 
 function setAmount(n){
@@ -608,11 +630,26 @@ async function init(){
 const bn = n => Number(n || 0).toLocaleString('bn-BD');
 
 
+// Audit #35 — the full TrxID is shown: a recharge TrxID can be 40
+// characters, and truncating it made it unverifiable. Only order
+// references (order-<uuid>) keep their short #hash form.
 const shortRef = x => {
   x = String(x || '');
   const m = x.match(/^order-([0-9a-f]{8})/i);
-  return m ? '#' + m[1] : (x.length > 24 ? x.slice(0, 24) + '…' : x);
+  return m ? '#' + m[1] : x;
 };
+
+// Audit #35 — "কতক্ষণ ধরে পেন্ডিং" in plain words.
+function fmtElapsed(s) {
+  const ms = Date.now() - new Date(s).getTime();
+  if (isNaN(ms) || ms < 0) return 'কিছুক্ষণ';
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return '১ মিনিটের কম';
+  if (m < 60) return bn(m) + ' মিনিট';
+  const h = Math.floor(m / 60);
+  if (h < 24) return bn(h) + ' ঘণ্টা';
+  return bn(Math.floor(h / 24)) + ' দিন';
+}
 
 function renderCashbackHub(d) {
   const cbCfg = (d && d.cashback) || { enabled: false, percent: 0 };
@@ -702,9 +739,26 @@ function renderCashbackHub(d) {
   body.innerHTML = html;
 }
 
-async function loadWallet(){
+// Audit #35 — paged history with filters. loadWallet() refreshes page 1
+// (and the balance); txLoadMore() appends the next page.
+let txPage = 1, txTotal = 0;
+const TX_PAGE_SIZE = 20;
+function txFilters() {
+  return {
+    type: (document.getElementById('txFilterType') || {}).value || '',
+    status: (document.getElementById('txFilterStatus') || {}).value || '',
+  };
+}
+async function txApplyFilter(){ txPage = 1; await loadWallet(); }
+async function txLoadMore(){ txPage += 1; await loadWallet(false); }
+
+async function loadWallet(reset = true){
   try {
-    const r=await ABC.api('/wallet?limit=10');
+    if (reset) txPage = 1;
+    const _f = txFilters();
+    const r = await ABC.api('/wallet?limit=' + TX_PAGE_SIZE + '&page=' + txPage
+      + (_f.type ? '&type=' + encodeURIComponent(_f.type) : '')
+      + (_f.status ? '&status=' + encodeURIComponent(_f.status) : ''));
     if(!r.ok){
       const tx = document.getElementById('txList');
       if(tx) tx.innerHTML = '<div style="color:#ef4444;padding:16px 0;">ওয়ালেট তথ্য লোড করা সম্ভব হয়নি। পেজ রিফ্রেশ করুন।</div>';
@@ -717,14 +771,17 @@ async function loadWallet(){
   const fmtDt=s=>{try{return new Date(s).toLocaleString('bn-BD').replace(' PM',' পিএম').replace(' AM',' এএম');}catch(e){return '';}};
 
   const cbCfg = d.cashback || { enabled: false, percent: 0 };
-  renderCashbackHub(d);
-  loadDailyCashback();
+  if (reset) { renderCashbackHub(d); loadDailyCashback(); } // page 1 only — later pages must not re-render the hub from a slice
 
-  document.getElementById('txList').innerHTML = d.transactions.map(t => {
+  txTotal = d.total || 0;
+  const _rowsHtml = d.transactions.map(t => {
     let cbHtml = '';
     if (t.type === 'recharge') {
       if (t.status === 'pending') {
-        cbHtml = '<div class="cb-badge pending">⏳ পেন্ডিং — SMS মিললে স্বয়ংক্রিয়ভাবে অনুমোদিত হবে, না হলে এডমিন যাচাই করবেন' +
+        // Audit #35 — how long it has waited + whether its SMS arrived.
+        cbHtml = '<div class="cb-badge pending">⏳ পেন্ডিং — ' + esc(fmtElapsed(t.created_at)) + ' ধরে অপেক্ষায়' +
+          (t.sms_arrived ? ' • 📩 SMS এসেছে' : ' • 📩 SMS এখনো আসেনি') +
+          '<br>SMS মিললে স্বয়ংক্রিয়ভাবে অনুমোদিত হবে, না হলে এডমিন যাচাই করবেন' +
           (cbCfg.enabled && cbCfg.percent > 0 ? ' (অনুমোদন হলে ' + bn(cbCfg.percent) + '% ক্যাশব্যাক পাবেন)' : '') +
           '</div>';
       } else if (t.status === 'approved') {
@@ -749,17 +806,29 @@ async function loadWallet(){
       }
     }
 
-    return '<div class="tx"><div style="flex:1;"><b style="font-size:14px;color:#0f172a;">' +
-      esc(TYPBN[t.type] || t.type) + '</b> <small style="color:#94a3b8;margin-left:6px;">' +
-      esc(shortRef(t.trxid)) + '</small><br><small style="color:#64748b;">' +
+    // Audit #35 — method + paying number on the row (the API already
+    // returned them; the row just never showed them).
+    const methodLine = t.type === 'recharge'
+      ? '<br><small style="color:#64748b;">' + esc(GW_METHOD_NAMES[t.method] || t.method || '') + (t.sender_no ? ' • ' + esc(t.sender_no) : '') + '</small>'
+      : '';
+    return '<div class="tx"><div style="flex:1;min-width:0;"><b style="font-size:14px;color:#0f172a;">' +
+      esc(TYPBN[t.type] || t.type) + '</b> <small style="color:#94a3b8;margin-left:6px;word-break:break-all;">' +
+      esc(shortRef(t.trxid)) + '</small>' + methodLine + '<br><small style="color:#64748b;">' +
       fmtDt(t.created_at) + '</small>' + cbHtml + '</div>' +
       '<b style="font-size:16px;color:' + (Number(t.amount) >= 0 ? '#059669' : '#dc2626') + '">' +
       fmtAmt(t.amount) + '</b></div>';
-  }).join('') || '<div style="color:#64748b;padding:12px 0;">কোনো লেনদেনের ইতিহাস পাওয়া যায়নি</div>';
+  }).join('') || (reset ? '<div style="color:#64748b;padding:12px 0;">কোনো লেনদেনের ইতিহাস পাওয়া যায়নি</div>' : '');
+  const _list = document.getElementById('txList');
+  if (_list) _list.innerHTML = reset ? _rowsHtml : _list.innerHTML + _rowsHtml;
+  const _more = document.getElementById('txMoreBtn');
+  if (_more) _more.style.display = (txPage * TX_PAGE_SIZE < txTotal) ? '' : 'none';
     return true;
   } catch(e) {
-    const tx = document.getElementById('txList');
-    if(tx) tx.innerHTML = '<div style="color:#ef4444;padding:16px 0;">নেটওয়ার্ক সমস্যা হয়েছে।</div>';
+    // an append failure must not wipe the rows already shown
+    if (reset) {
+      const tx = document.getElementById('txList');
+      if(tx) tx.innerHTML = '<div style="color:#ef4444;padding:16px 0;">নেটওয়ার্ক সমস্যা হয়েছে।</div>';
+    }
     return false;
   }
 }
@@ -1250,7 +1319,6 @@ async function submitRecharge(){
   if(!trxid || trxid.length < 4){
     err.textContent = '❌ ট্রানজ্যাকশন আইডি (TrxID) লিখুন';
     return;
-  }
   }
 
   if(btn){ btn.disabled = true; btn.textContent = '⏳ সাবমিট হচ্ছে…'; }

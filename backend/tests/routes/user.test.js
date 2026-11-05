@@ -217,6 +217,39 @@ describe('wallet', () => {
     expect(r.body.total).toBe(1);
   });
 
+  test('GET /api/wallet?type=&status= filters server-side; pending rows carry sms_arrived (audit #35)', async () => {
+    db.__routeQuery([
+      ['SELECT balance FROM users WHERE id', { rows: [{ balance: '250.5' }] }],
+      ['SELECT COUNT(*) FROM transactions WHERE user_id', { rows: [{ count: '1' }] }],
+      ['FROM transactions WHERE user_id', { rows: [{
+        id: 't1', type: 'recharge', amount: 500, method: 'bkash_payment', sender_no: '01712345678',
+        trxid: 'TRX12345', status: 'pending', created_at: '2026-11-04T10:00:00.000Z', cancel_reason: null,
+        coupon: null, sms_arrived: true,
+      }] }],
+    ]);
+    const r = await withUser(request(app()).get('/api/wallet?type=recharge&status=pending')).expect(200);
+    expect(r.body.transactions[0]).toMatchObject({ type: 'recharge', status: 'pending', sms_arrived: true });
+    const countQ = db.query.mock.calls.find((c) => /SELECT COUNT\(\*\) FROM transactions/.test(c[0]));
+    expect(countQ[0]).toContain('type = $2');
+    expect(countQ[0]).toContain('status = $3');
+    const rowsQ = db.query.mock.calls.find((c) => /SELECT id, type, amount, method/.test(c[0]));
+    expect(rowsQ[0]).toContain('sms_arrived');
+    expect(rowsQ[0]).toContain('type = $2');
+    expect(rowsQ[0]).toContain('status = $3');
+  });
+
+  test('GET /api/wallet ignores unknown filter values (audit #35)', async () => {
+    db.__routeQuery([
+      ['SELECT balance FROM users WHERE id', { rows: [{ balance: '0' }] }],
+      ['SELECT COUNT(*) FROM transactions WHERE user_id', { rows: [{ count: '0' }] }],
+      ['FROM transactions WHERE user_id', { rows: [] }],
+    ]);
+    await withUser(request(app()).get('/api/wallet?type=nope&status=nope')).expect(200);
+    const countQ = db.query.mock.calls.find((c) => /SELECT COUNT\(\*\) FROM transactions/.test(c[0]));
+    expect(countQ[0]).not.toContain('type = $');
+    expect(countQ[0]).not.toContain('status = $');
+  });
+
   describe('POST /api/wallet/recharge validation', () => {
     const GOOD = { method: 'bkash_personal', sender_no: '01712345678', trxid: 'TRX12345', amount: 500 };
     test.each([
