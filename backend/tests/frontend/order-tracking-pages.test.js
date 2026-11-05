@@ -137,3 +137,26 @@ describe('order tracking — "এরপর কী" per step (audit #48)', () => 
     expect(detailHtml).toContain('এরপর কী: ');
   });
 });
+
+describe('order-status.html — status words unified (audit #52)', () => {
+  const status = read('frontend/order-status.html');
+  const detail = read('frontend/order-detail.html');
+
+  test('ST_TEXT uses the same short words as the list/detail STBN', () => {
+    const stText = status.slice(status.indexOf('const ST_TEXT'), status.indexOf('const ST_EMOJI'));
+    expect(stText).toContain("new: 'নতুন',");
+    expect(stText).toContain("received: 'গৃহীত',");
+    expect(stText).toContain("processing: 'প্রসেসিং',");
+    expect(stText).toContain("delivered: 'ডেলিভার্ড',");
+    expect(stText).not.toContain('নতুন আবেদন');
+    expect(stText).not.toContain('গৃহীত ও যাচাই');
+    expect(stText).not.toContain('প্রসেসিং চলমান');
+    expect(stText).not.toContain('ডেলিভার্ড (ফাইল প্রস্তুত)');
+    // the pipeline stepper's step-2 label uses the same word
+    expect(status).toContain('<div class="step-text">গৃহীত</div>');
+    expect(status).not.toContain('<div class="step-text">গৃহীত ও যাচাই</div>');
+    // the detail page's STBN already used these words
+    expect(detail).toContain("new:'নতুন'");
+    expect(detail).toContain("received:'গৃহীত'");
+  });
+});

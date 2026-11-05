@@ -303,14 +303,22 @@ router.get('/orders', async (req, res) => {
     const where = 'WHERE ' + conds.join(' AND ');
     const total = await db.query(`SELECT COUNT(*) FROM orders o ${where}`, params);
     const rows = await db.query(
-      `SELECT o.*, s.name AS service_name, s.name_bn AS service_name_bn
+      `SELECT o.*, s.name AS service_name, s.name_bn AS service_name_bn,
+              s.type AS service_type
        FROM orders o JOIN services s ON s.id = o.service_id
        ${where} ORDER BY o.created_at DESC LIMIT $${i} OFFSET $${i + 1}`,
       [...params, limit, offset]);
     // P2 (2026-11-03): the internal admin note never reaches a
     // customer endpoint — not even inside a list payload no page
     // currently renders.
-    for (const r of rows.rows) delete r.admin_note;
+    for (const r of rows.rows) {
+      delete r.admin_note;
+      // Audit #52 — the list's 'ফাইল প্রস্তুত' mark needs the same
+      // verdict the detail page uses: a refunded order counts as
+      // delivered only when the history says it was delivered first
+      // (orderWasDelivered). Only refunded rows need the lookup.
+      if (r.status === 'refunded') r.delivered_before_refund = await orderWasDelivered(r.id);
+    }
     res.json({ orders: rows.rows, total: parseInt(total.rows[0].count, 10), page, limit });
   } catch (e) {
     safeLog('[user] orders error:', e.message);

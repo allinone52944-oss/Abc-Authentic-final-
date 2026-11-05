@@ -69,3 +69,33 @@ describe('orders.html — every status has a filter button (audit #42)', () => {
     expect(html).toContain('querySelector(\'#filters .fbtn[data-st="\' + wantStatus + \'"]\')');
   });
 });
+
+describe('orders.html — list row details (audit #52)', () => {
+  const html = read('frontend/orders.html');
+
+  test('the date cell shows date + time, like detail/status', () => {
+    expect(html).toContain("new Date(o.created_at).toLocaleString('bn-BD')");
+    expect(html).not.toContain('toLocaleDateString');
+  });
+
+  test('each row carries an auto/manual badge from service_type', () => {
+    expect(html).toContain('o.service_type');
+    expect(html).toContain("'📝 ম্যানুয়াল'");
+    expect(html).toContain("'⚡ স্বয়ংক্রিয়'");
+  });
+
+  test('a file-ready mark shows on rows with delivery files (detail rule)', () => {
+    expect(html).toContain('hasDeliveryFile');
+    expect(html).toContain('📁 ফাইল প্রস্তুত');
+    // only admin-uploaded docs count as delivery files
+    expect(html).toContain("d.uploaded_by === 'admin'");
+    // refunded counts only when delivered first
+    expect(html).toContain("o.status === 'refunded' && o.delivered_before_refund === true");
+  });
+
+  test('status words are the short canonical set', () => {
+    expect(html).toContain("new:'নতুন'");
+    expect(html).toContain("received:'গৃহীত'");
+    expect(html).toContain("delivered:'ডেলিভার্ড'");
+  });
+});

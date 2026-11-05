@@ -177,6 +177,21 @@ describe('orders read + chat', () => {
     expect(r.body.limit).toBe(5);
   });
 
+  test('audit #52 — list rows carry service_type, and a refunded row carries delivered_before_refund', async () => {
+    db.__routeQuery([
+      ['SELECT COUNT(*) FROM orders o', { rows: [{ count: '2' }] }],
+      ['FROM orders o JOIN services', { rows: [
+        { id: 'o1', status: 'completed', service_type: 'manual' },
+        { id: 'o2', status: 'refunded', service_type: 'automated' },
+      ] }],
+      ['FROM order_status_history', { rows: [{ '1': 1 }] }],
+    ]);
+    const r = await withUser(request(app()).get('/api/orders')).expect(200);
+    expect(r.body.orders[0]).toMatchObject({ service_type: 'manual' });
+    expect(r.body.orders[0].delivered_before_refund).toBeUndefined();
+    expect(r.body.orders[1]).toMatchObject({ service_type: 'automated', delivered_before_refund: true });
+  });
+
   test('GET /api/orders/:id of another user → 404 NOT_FOUND', async () => {
     db.__routeQuery([['WHERE o.id = $1 AND o.user_id = $2', { rows: [] }]]);
     await withUser(request(app()).get('/api/orders/other-id')).expect(404);

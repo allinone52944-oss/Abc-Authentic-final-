@@ -483,7 +483,8 @@
           </div>
           <div class="pipeline-step" id="step-2">
             <div class="step-icon-circle">📋</div>
-            <div class="step-text">গৃহীত ও যাচাই</div>
+            <!-- Audit #52 — step label uses the unified status word -->
+            <div class="step-text">গৃহীত</div>
           </div>
           <div class="pipeline-step" id="step-3">
             <div class="step-icon-circle">⚙️</div>
@@ -578,14 +579,18 @@
 <script>
 const oid = new URLSearchParams(location.search).get('id');
 
+// Audit #52 — status words unified with the list + detail pages
+// (their STBN): one word per status everywhere. The longer phrases
+// ('নতুন আবেদন', 'গৃহীত ও যাচাই', 'প্রসেসিং চলমান',
+// 'ডেলিভার্ড (ফাইল প্রস্তুত)') said the same statuses differently.
 const ST_TEXT = {
-  new: 'নতুন আবেদন',
+  new: 'নতুন',
   pending: 'অপেক্ষমান',
   waiting: 'অপেক্ষমান',
-  received: 'গৃহীত ও যাচাই',
-  processing: 'প্রসেসিং চলমান',
+  received: 'গৃহীত',
+  processing: 'প্রসেসিং',
   registered: 'নিবন্ধিত',
-  delivered: 'ডেলিভার্ড (ফাইল প্রস্তুত)',
+  delivered: 'ডেলিভার্ড',
   completed: 'সম্পন্ন',
   failed: 'ব্যর্থ',
   cancelled: 'বাতিল',
