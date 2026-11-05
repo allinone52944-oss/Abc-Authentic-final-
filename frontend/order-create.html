@@ -162,6 +162,7 @@
         <div style="text-align:right;">
           <span class="st st-new" id="svcPrice" style="font-size:18px;font-weight:800;padding:6px 16px;">—</span>
           <div id="userBalSub" style="font-size:12px;color:#64748b;margin-top:4px;">ওয়ালেট: লোড হচ্ছে…</div>
+          <div id="feeBreakdown" style="font-size:12px;color:#475569;margin-top:2px;"></div>
         </div>
       </div>
 
@@ -259,6 +260,7 @@ function formatBytes(bytes){
 const sid=new URLSearchParams(location.search).get('service');
 let svc=null;
 let userBal=0;
+let lockedCredit=0; // audit #44 — service-locked credit for this service (spent first by payForService)
 let rawSampleText='';
 let selectedFiles=[];
 
@@ -422,6 +424,19 @@ const LocalIdem = {
   }
 };
 
+// Audit #44 — fee split: locked credit for this service is spent
+// first (payForService), the rest comes from the wallet.
+function feeSplit(price){
+  const fromCredit = Math.min(lockedCredit, price);
+  return { fromCredit, fromBalance: Math.round((price - fromCredit) * 100) / 100 };
+}
+function renderFeeBreakdown(price){
+  const el = document.getElementById('feeBreakdown');
+  if(!el) return;
+  const sp = feeSplit(price);
+  el.textContent = 'ফি ৳' + bnNum(price) + ' = লকড ক্রেডিট ৳' + bnNum(sp.fromCredit) + ' + ওয়ালেট ৳' + bnNum(sp.fromBalance);
+}
+
 async function init(){
   try {
     const me=await ABC.api('/auth/me');
@@ -460,17 +475,32 @@ async function init(){
     svc=d.service;
     const svcPrice = Number(svc.price || 0);
 
+    // Audit #44 — locked credit for THIS service (GET /wallet returns
+    // it per service). A failed fetch leaves it 0 (old behaviour);
+    // it never blocks the page.
+    try {
+      const wr = await ABC.api('/wallet?limit=1');
+      if (wr.ok) {
+        const wj = await wr.json();
+        const row = (wj.service_credits || []).find(x => x.service_id === sid);
+        lockedCredit = Number((row && row.amount) || 0);
+      }
+    } catch (_) { lockedCredit = 0; }
+
     document.getElementById('svcName').textContent=svc.name_bn||svc.name;
     document.getElementById('svcPrice').textContent='৳'+bnNum(svcPrice);
     document.getElementById('userBalSub').textContent='ওয়ালেট: ৳'+bnNum(userBal);
+    renderFeeBreakdown(svcPrice);
 
-    // Check balance affordability
-    if (userBal < svcPrice) {
-      const diff = svcPrice - userBal;
+    // Check balance affordability — on the REAL total (locked credit
+    // + wallet), not the wallet alone. A low wallet with enough locked
+    // credit is NOT a shortage (the old check warned anyway).
+    if (userBal + lockedCredit < svcPrice) {
+      const diff = svcPrice - userBal - lockedCredit;
       const bw = document.getElementById('balWarning');
       if(bw){
         bw.style.display = 'block';
-        document.getElementById('balWarningText').textContent = 'আপনার ওয়ালেটে ৳' + bnNum(diff) + ' ঘাটতি রয়েছে (ব্যালেন্স: ৳' + bnNum(userBal) + ', সেবার ফি: ৳' + bnNum(svcPrice) + ')। অর্ডার করার পূর্বে রিচার্জ সম্পন্ন করুন।';
+        document.getElementById('balWarningText').textContent = 'আপনার ওয়ালেটে ৳' + bnNum(diff) + ' ঘাটতি রয়েছে (লকড ক্রেডিট ৳' + bnNum(lockedCredit) + ' + ব্যালেন্স: ৳' + bnNum(userBal) + ', সেবার ফি: ৳' + bnNum(svcPrice) + ')। অর্ডার করার পূর্বে রিচার্জ সম্পন্ন করুন।';
       }
     }
 
@@ -696,7 +726,9 @@ function showReview(){
   const c = collectOrder();
   if(!c) return;
   const price = Number((svc && svc.price) || 0);
-  const after = userBal - price;
+  const sp = feeSplit(price); // audit #44 — credit first, then wallet
+  const after = userBal - sp.fromBalance;
+  const short = userBal + lockedCredit < price;
   const fields = svc.fields_required || [];
   const infoRows = fields.length > 0
     ? fields.map(f=>{
@@ -713,9 +745,11 @@ function showReview(){
     '<div style="margin-bottom:12px;"><div style="font-weight:700;margin-bottom:4px;">📎 ফাইল (' + c.files.length + 'টি)</div>' + fileRows + '</div>' +
     '<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">' +
       '<div style="display:flex;justify-content:space-between;"><span>সেবার ফি</span><b>৳' + bnNum(price) + '</b></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-top:4px;"><span>লকড ক্রেডিট থেকে</span><span>৳' + bnNum(sp.fromCredit) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-top:4px;"><span>ওয়ালেট থেকে</span><span>৳' + bnNum(sp.fromBalance) + '</span></div>' +
       '<div style="display:flex;justify-content:space-between;margin-top:4px;"><span>ওয়ালেট ব্যালেন্স</span><span>৳' + bnNum(userBal) + '</span></div>' +
-      '<div style="display:flex;justify-content:space-between;margin-top:4px;border-top:1px solid #e2e8f0;padding-top:6px;"><span>কনফার্ম করলে কাটার পর থাকবে</span><b style="color:' + (after < 0 ? '#b91c1c' : '#15803d') + ';">৳' + bnNum(after) + '</b></div>' +
-      (after < 0 ? '<div style="color:#b91c1c;font-size:13px;margin-top:6px;">⚠️ ব্যালেন্স অপর্যাপ্ত — কনফার্ম করলে ব্যালেন্সের অভাবে অর্ডার হবে না, আগে রিচার্জ করুন।</div>' : '') +
+      '<div style="display:flex;justify-content:space-between;margin-top:4px;border-top:1px solid #e2e8f0;padding-top:6px;"><span>কনফার্ম করলে ওয়ালেটে থাকবে</span><b style="color:' + (short ? '#b91c1c' : '#15803d') + ';">৳' + bnNum(after) + '</b></div>' +
+      (short ? '<div style="color:#b91c1c;font-size:13px;margin-top:6px;">⚠️ ব্যালেন্স অপর্যাপ্ত — কনফার্ম করলে ব্যালেন্সের অভাবে অর্ডার হবে না, আগে রিচার্জ করুন।</div>' : '') +
     '</div>';
   document.getElementById('reviewBox').style.display = 'block';
   document.getElementById('submitBtn').style.display = 'none';

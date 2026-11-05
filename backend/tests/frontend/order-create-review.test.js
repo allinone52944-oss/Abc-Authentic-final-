@@ -36,7 +36,7 @@ describe('order-create.html — review step before payment (audit #40)', () => {
     expect(showReviewFn).toContain('ফাইল');
     expect(showReviewFn).toContain('সেবার ফি');
     expect(showReviewFn).toContain('ওয়ালেট ব্যালেন্স');
-    expect(showReviewFn).toContain('কনফার্ম করলে কাটার পর থাকবে');
+    expect(showReviewFn).toContain('কনফার্ম করলে ওয়ালেটে থাকবে'); // audit #44 — wallet part only, after the credit split
     expect(showReviewFn).toContain('কাটা হবে');
   });
 
@@ -56,5 +56,43 @@ describe('order-create.html — review step before payment (audit #40)', () => {
 
   test('the review warns when the balance cannot cover the fee', () => {
     expect(showReviewFn).toContain('ব্যালেন্স অপর্যাপ্ত');
+  });
+});
+
+describe('order-create.html — fee breakdown with locked credit (audit #44)', () => {
+  const html = read('frontend/order-create.html');
+  const script = html.slice(html.indexOf('<script>', html.indexOf('app.js')));
+  const initFn = script.slice(script.indexOf('async function init(){'), script.indexOf('function triggerDraftSave(){'));
+  const showReviewFn = script.slice(script.indexOf('function showReview(){'), script.indexOf('function editAgain(){'));
+
+  test('the page reads the per-service locked credit from GET /wallet', () => {
+    expect(script).toContain("ABC.api('/wallet?limit=1')");
+    expect(script).toContain('service_credits');
+    expect(script).toContain('x.service_id === sid');
+    expect(script).toContain('lockedCredit = Number');
+  });
+
+  test('the fee breakdown is shown (locked credit + wallet = total)', () => {
+    expect(html).toContain('id="feeBreakdown"');
+    expect(script).toContain('function feeSplit(price)');
+    expect(script).toContain('function renderFeeBreakdown(price)');
+    expect(script).toContain('লকড ক্রেডিট ৳');
+    expect(script).toContain("+ ওয়ালেট ৳");
+  });
+
+  test('the balance warning is based on credit + wallet, not the wallet alone', () => {
+    expect(initFn).toContain('userBal + lockedCredit < svcPrice');
+    expect(initFn).toContain('svcPrice - userBal - lockedCredit');
+    expect(initFn).not.toContain('if (userBal < svcPrice)');
+    expect(initFn).toContain('লকড ক্রেডিট ৳');
+  });
+
+  test('the review uses the same split (credit first, then wallet)', () => {
+    expect(showReviewFn).toContain('feeSplit(price)');
+    expect(showReviewFn).toContain('লকড ক্রেডিট থেকে');
+    expect(showReviewFn).toContain('ওয়ালেট থেকে');
+    expect(showReviewFn).toContain('কনফার্ম করলে ওয়ালেটে থাকবে');
+    // the shortfall flag counts the credit too
+    expect(showReviewFn).toContain('userBal + lockedCredit < price');
   });
 });
