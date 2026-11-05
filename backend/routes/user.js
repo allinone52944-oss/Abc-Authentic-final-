@@ -389,6 +389,111 @@ router.get('/orders/:id/history', async (req, res) => {
   }
 });
 
+// POST /api/orders/:id/cancel — the customer cancels their OWN order.
+// Audit #48 — only new/pending can be cancelled by the customer (the
+// cancel policy itself — until which step — is the owner's call; the
+// admin PUT allows more transitions, this endpoint deliberately allows
+// only the two pre-work states). Cancelling auto-refunds in the same
+// transaction via refundOrderPrice (the same helper the admin PUT
+// uses), stores the refund split, and writes the history row.
+// Idempotent: cancelling an already-cancelled order returns the order
+// with already:true and moves no money (the refund helper +
+// wallet_apply DUPLICATE guard make a second credit a no-op, and the
+// prior-refund check below skips it outright).
+router.post('/orders/:id/cancel', async (req, res) => {
+  try {
+    const reason = (req.body && typeof req.body.reason === 'string' && req.body.reason.trim() !== '')
+      ? req.body.reason.trim().slice(0, 500) : null;
+    let result;
+    try {
+      result = await db.withTransaction(async (client) => {
+        const cur = await client.query(
+          'SELECT * FROM orders WHERE id = $1 FOR UPDATE', [req.params.id]);
+        if (!cur.rows.length || cur.rows[0].user_id !== req.user.id) {
+          const e = new Error('NOT_FOUND'); e.statusCode = 404; throw e;
+        }
+        const order = cur.rows[0];
+        if (order.status === 'cancelled') {
+          return { order, already: true, refunded: false, refundSplit: null };
+        }
+        if (!['new', 'pending'].includes(order.status)) {
+          const e = new Error('CANNOT_CANCEL');
+          e.statusCode = 409; e.status = order.status; throw e;
+        }
+        const upd = await client.query(
+          `UPDATE orders SET status = 'cancelled',
+           cancel_reason = COALESCE($1, cancel_reason), updated_at = NOW()
+           WHERE id = $2 AND status = $3 RETURNING *`,
+          [reason, req.params.id, order.status]);
+        if (upd.rows.length !== 1) {
+          const e = new Error('STALE_WRITE'); e.statusCode = 409; throw e;
+        }
+        // Auto-refund, same as the admin PUT: skip when the money
+        // already came back (legacy/manual edge).
+        let refundSplit = null;
+        const prior = await client.query(
+          `SELECT 1 FROM transactions
+            WHERE user_id = $1 AND trxid = $2 AND status = 'approved' LIMIT 1`,
+          [order.user_id, 'refund-' + order.id]);
+        if (!prior.rows.length) {
+          refundSplit = await serviceCredits.refundOrderPrice(client, upd.rows[0], 'refund');
+          if (refundSplit && refundSplit.refunded) {
+            await client.query(
+              'UPDATE orders SET refund_balance = $1, refund_credit = $2 WHERE id = $3',
+              [refundSplit.balancePart || 0, refundSplit.creditPart || 0, req.params.id]);
+          }
+        }
+        await client.query(
+          `INSERT INTO order_status_history (order_id, from_status, to_status, admin_id, note)
+           VALUES ($1, $2, 'cancelled', $3, NULL)`,
+          [req.params.id, order.status, req.user.id]);
+        return { order: upd.rows[0], already: false,
+          refunded: !!(refundSplit && refundSplit.refunded), refundSplit };
+      });
+    } catch (e) {
+      if (e.statusCode) {
+        const body = { error: e.message };
+        if (e.status) body.status = e.status;
+        return res.status(e.statusCode).json(body);
+      }
+      throw e;
+    }
+    // Notifications AFTER commit, fire-and-forget (admin PUT pattern):
+    // the admins learn a customer cancelled; the customer gets the
+    // refund sentence. No notification on an idempotent re-cancel.
+    if (!result.already) {
+      const split = result.refundSplit || {};
+      const bal = Number(split.balancePart) || 0;
+      const cr = Number(split.creditPart) || 0;
+      const sentence = result.refunded
+        ? (cr > 0 && bal > 0 ? `৳${bal} আপনার ওয়ালেটে এবং ৳${cr} ওই সেবার ক্রেডিটে ফেরত দেওয়া হয়েছে।`
+          : cr > 0 ? `৳${cr} ওই সেবার ক্রেডিটে ফেরত দেওয়া হয়েছে।`
+          : bal > 0 ? `৳${bal} আপনার ওয়ালেটে ফেরত দেওয়া হয়েছে।` : '')
+        : '';
+      push.notifyAdmins(db, '🛑 অর্ডার বাতিল',
+        'গ্রাহক অর্ডার #' + String(req.params.id).slice(0, 8) + ' বাতিল করেছেন।' + (sentence ? ' ' + sentence : ''),
+        '/admin.html').catch(() => {});
+      push.notifyUser(db, req.user.id, 'অর্ডার বাতিল হয়েছে',
+        'আপনার অর্ডারটি বাতিল করা হয়েছে।' +
+        (reason ? ' কারণ: ' + reason : '') + (sentence ? ' ' + sentence : ''),
+        '/orders.html').catch(() => {});
+      wa.notifyOrderCancelled(db, result.order, {
+        creditPart: cr, balancePart: bal,
+        refunded: result.refunded, cancelReason: reason,
+      }).catch(() => {});
+    }
+    res.json({ ok: true, order: result.order, already: result.already,
+      refunded: result.refunded,
+      refund: result.refundSplit ? {
+        balancePart: Number(result.refundSplit.balancePart) || 0,
+        creditPart: Number(result.refundSplit.creditPart) || 0,
+      } : null });
+  } catch (e) {
+    safeLog('[user] order cancel error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 // ============================================================
 // CHAT (contextual: order complaints / reviews — order page only)
 // ============================================================

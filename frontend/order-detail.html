@@ -377,6 +377,9 @@ async function init(){
     '<div style="color:#64748b;font-size:13px;background:#f8fafc;padding:12px;border-radius:8px;">অর্ডারের কাজ সম্পন্ন হলে এডমিন এখানে আপনার ডেলিভারি ডকুমেন্ট বা ফাইল আপলোড করবেন।</div>')+'</div>';
 
   document.getElementById('detail').innerHTML=
+    // Audit #48 — the refund sentence after a customer cancel (the
+    // status page shows it in its hero box; this page shows it here).
+    (window._cancelMsg ? '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:12px 14px;color:#15803d;font-size:13px;margin-bottom:14px;">' + esc(window._cancelMsg) + '</div>' : '') +
     '<div class="order-header">' +
       '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">' +
         '<button type="button" class="btn btn-secondary" style="padding:5px 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;" onclick="viewLiveStatus()">⚡ লাইভ ট্র্যাকার দেখুন →</button>' +
@@ -392,6 +395,10 @@ async function init(){
         '<div><span style="font-size:12px;color:#64748b;">চার্জ:</span> <b style="font-size:18px;color:#1e40af;">৳'+Number(o.price).toLocaleString('bn-BD')+'</b></div>' +
         '<div style="font-size:12px;color:#64748b;">🕘 তারিখ: '+new Date(o.created_at).toLocaleString('bn-BD')+'</div>' +
       '</div>' +
+      // Audit #48 — customer cancel, new/pending only, auto-refund.
+      (['new','pending'].includes(o.status)
+        ? '<div style="margin-top:14px;"><button type="button" class="btn btn-secondary" style="padding:8px 16px;font-size:13px;font-weight:700;color:#b91c1c;border-color:#fecaca;background:#fef2f2;" onclick="cancelOrder()">❌ অর্ডার বাতিল করুন</button> <span style="font-size:12px;color:#64748b;">বাতিল করলে ফি স্বয়ংক্রিয়ভাবে ফেরত যাবে।</span></div>'
+        : '') +
     '</div>' +
     manualFormHtml +
     (data ? '<div style="margin-top:12px;"><div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#0f172a;">প্রদত্ত তথ্যাবলি:</div>'+data+'</div>' : '') +
@@ -421,6 +428,22 @@ const TL_EMOJI = {
 };
 const TPL_EMOJI = { network: '🌐', processing: '⏰', verifying: '📄', done: '✅', failed: '❌', paid: '💰' };
 
+// Audit #48 — "এরপর কী" (same map as order-status.html; process steps,
+// not a time promise — no per-service ETA data exists yet).
+const NEXT_STEP = {
+  new: 'এডমিন আবেদনটি দেখে গৃহীত করবেন।',
+  pending: 'যাচাই শেষে প্রসেসিং শুরু হবে।',
+  waiting: 'যাচাই শেষে প্রসেসিং শুরু হবে।',
+  received: 'প্রসেসিং শুরু হবে।',
+  processing: 'কাজ শেষ হলে ডেলিভারি ফাইল দেওয়া হবে।',
+  registered: 'কাজ শেষ হলে ডেলিভারি ফাইল দেওয়া হবে।',
+  delivered: 'ফাইলটি ডাউনলোড করে যাচাই করে নিন।',
+  completed: 'আর কিছু করতে হবে না — ফাইলটি ইতিহাস থেকে যেকোনো সময় ডাউনলোড করতে পারবেন।',
+  failed: 'ফেরতের অবস্থা উপরের বক্সে দেখুন; আবার আবেদন করতে চাইলে সেবা তালিকা থেকে নতুন অর্ডার করুন।',
+  cancelled: 'ফেরতের অবস্থা উপরের বক্সে দেখুন।',
+  refunded: 'ফেরতের অবস্থা উপরের বক্সে দেখুন।'
+};
+
 async function loadTimelineHistory(o) {
   try {
     const r = await ABC.api('/orders/' + oid + '/history');
@@ -449,6 +472,7 @@ function renderTimeline(history, o) {
         title: emoji + ' অবস্থা পরিবর্তন: ' + toLabel,
         time: new Date(h.created_at).toLocaleString('bn-BD'),
         note: h.note || null,
+        next: isLast ? (NEXT_STEP[h.to_status] || null) : null, // audit #48
         statusClass: isLast ? 'on' : 'done'
       });
     });
@@ -459,6 +483,7 @@ function renderTimeline(history, o) {
       title: emoji + ' বর্তমান অবস্থা: ' + currLabel,
       time: 'সর্বশেষ আপডেট: ' + new Date(o.updated_at).toLocaleString('bn-BD'),
       note: null,
+      next: NEXT_STEP[o.status] || null, // audit #48
       statusClass: 'on'
     });
   }
@@ -471,6 +496,7 @@ function renderTimeline(history, o) {
           '<span class="tl-time">' + esc(it.time) + '</span>' +
         '</div>' +
         (it.note ? '<div class="tl-note">' + esc(it.note) + '</div>' : '') +
+        (it.next ? '<div class="tl-note" style="background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;">➡️ এরপর কী: ' + esc(it.next) + '</div>' : '') +
       '</div>' +
     '</div>'
   ).join('');
@@ -491,6 +517,35 @@ async function loadSupportMsgs() {
           '<div class="sup-time">' + new Date(m.created_at).toLocaleString('bn-BD') + '</div></div>';
       }).join('');
   } catch (e) {}
+}
+
+// Audit #48 — customer cancel (new/pending only). The server refunds
+// in the same transaction; a 409 means the order moved past the
+// cancellable states while the page was open.
+async function cancelOrder(){
+  if(!confirm('অর্ডারটি বাতিল করতে চান? বাতিল করলে ফি স্বয়ংক্রিয়ভাবে ফেরত যাবে (ওয়ালেট/ক্রেডিট)।')) return;
+  const r = await ABC.api('/orders/' + oid + '/cancel', { method: 'POST', body: {} });
+  const d = await r.json().catch(() => ({}));
+  if(!r.ok){
+    if(r.status === 409 && d.error === 'CANNOT_CANCEL'){
+      alert('এই অবস্থায় অর্ডার বাতিল করা যায় না (বর্তমান অবস্থা: ' + (STBN[d.status] || d.status) + ')।');
+    } else if(r.status === 404){
+      alert('অর্ডারটি খুঁজে পাওয়া যায়নি।');
+    } else {
+      alert('বাতিল করা যায়নি — আবার চেষ্টা করুন।');
+    }
+    return;
+  }
+  let msg = '✅ অর্ডার বাতিল হয়েছে।';
+  if(d.refunded && d.refund){
+    const bal = Number(d.refund.balancePart) || 0;
+    const cr = Number(d.refund.creditPart) || 0;
+    if(cr > 0 && bal > 0) msg += ' ৳' + bal + ' আপনার ওয়ালেটে এবং ৳' + cr + ' ওই সেবার ক্রেডিটে ফেরত দেওয়া হয়েছে।';
+    else if(cr > 0) msg += ' ৳' + cr + ' ওই সেবার ক্রেডিটে ফেরত দেওয়া হয়েছে।';
+    else if(bal > 0) msg += ' ৳' + bal + ' আপনার ওয়ালেটে ফেরত দেওয়া হয়েছে।';
+  }
+  window._cancelMsg = msg;
+  init();
 }
 
 function viewLiveStatus(){

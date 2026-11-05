@@ -81,3 +81,59 @@ describe('order-detail.html — timeline + support messages (audit #43)', () => 
     expect(html).toContain("'/order-status.html?id='");
   });
 });
+
+describe('order tracking — customer cancel, new/pending only (audit #48)', () => {
+  const statusHtml = read('frontend/order-status.html');
+  const detailHtml = read('frontend/order-detail.html');
+
+  test('both pages offer cancel, gated to new/pending, via POST /orders/:id/cancel', () => {
+    for (const html of [statusHtml, detailHtml]) {
+      expect(html).toContain('function cancelOrder()');
+      expect(html).toContain("'/orders/' + oid + '/cancel'");
+      expect(html).toMatch(/\['new',\s*'pending'\]\.includes\(/);
+      expect(html).toContain('CANNOT_CANCEL');
+      expect(html).toContain('অর্ডার বাতিল করুন');
+    }
+    expect(statusHtml).toContain('id="cancelBtn"');
+  });
+
+  test('the cancel confirm names the auto-refund', () => {
+    expect(statusHtml).toContain('বাতিল করলে ফি স্বয়ংক্রিয়ভাবে ফেরত যাবে');
+    expect(detailHtml).toContain('বাতিল করলে ফি স্বয়ংক্রিয়ভাবে ফেরত যাবে');
+  });
+
+  test('after a cancel the user sees the real refund split (status hero box / detail banner)', () => {
+    expect(statusHtml).toContain('await fetchAndRender();');
+    expect(detailHtml).toContain('_cancelMsg');
+    expect(detailHtml).toContain('ওই সেবার ক্রেডিটে ফেরত দেওয়া হয়েছে');
+  });
+});
+
+describe('order tracking — "এরপর কী" per step (audit #48)', () => {
+  const statusHtml = read('frontend/order-status.html');
+  const detailHtml = read('frontend/order-detail.html');
+
+  test('a NEXT_STEP map exists on both pages (process steps, never a time promise)', () => {
+    for (const html of [statusHtml, detailHtml]) {
+      expect(html).toContain('const NEXT_STEP = {');
+      expect(html).toContain('এডমিন আবেদনটি দেখে গৃহীত করবেন');
+      expect(html).toContain('কাজ শেষ হলে ডেলিভারি ফাইল দেওয়া হবে');
+      expect(html).toContain('আর কিছু করতে হবে না');
+    }
+    // no invented ETA anywhere on either page
+    expect(statusHtml).not.toMatch(/আনুমানিক সময়|দিন লাগবে|ঘণ্টা লাগবে/);
+    expect(detailHtml).not.toMatch(/আনুমানিক সময়|দিন লাগবে|ঘণ্টা লাগবে/);
+  });
+
+  test('the status page shows the next step under the stepper and on the current timeline item', () => {
+    expect(statusHtml).toContain('id="nextStep"');
+    expect(statusHtml).toContain("➡️ এরপর কী: ' + NEXT_STEP[st]");
+    expect(statusHtml).toContain("next: isLast ? (NEXT_STEP[h.to_status] || null) : null");
+    expect(statusHtml).toContain('এরপর কী: ');
+  });
+
+  test('the detail timeline carries the same next-step note', () => {
+    expect(detailHtml).toContain("next: isLast ? (NEXT_STEP[h.to_status] || null) : null");
+    expect(detailHtml).toContain('এরপর কী: ');
+  });
+});
