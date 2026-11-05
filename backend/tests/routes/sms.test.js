@@ -6,6 +6,7 @@ const express = require('express');
 const request = require('supertest');
 const db = require('../../db');
 const auth = require('../../auth');
+const push = require('../../utils/push');
 const { webhook, adminSms } = require('../../routes/sms');
 
 function webhookApp() {
@@ -125,6 +126,7 @@ describe('POST /api/sms/incoming — auto-match', () => {
 
   test('security fix: amount > SMS_MAX_AUTO_APPROVE → held_for_review, NO wallet credit', async () => {
     process.env.SMS_MAX_AUTO_APPROVE = '100';
+    const spy = jest.spyOn(push, 'notifyUser').mockResolvedValue({ ok: true, sent: 0 });
     db.__routeQuery(matchHandlers());
     const r = await postIncoming({ secret: SECRET, message: BKASH_MSG, sender: 'bKash' }).expect(200);
     expect(r.body).toMatchObject({ ok: true, held_for_review: true });
@@ -134,6 +136,10 @@ describe('POST /api/sms/incoming — auto-match', () => {
     const log = db.query.mock.calls.find((c) => /INSERT INTO activity_log/.test(c[0]));
     expect(log).toBeDefined();
     expect(JSON.parse(log[1][2]).amount).toBe(500);
+    // audit #27 — the hold is not silent: the customer is told why
+    expect(spy).toHaveBeenCalledWith(expect.anything(), 'u1', expect.stringContaining('যাচাই'),
+      expect.stringContaining('ম্যানুয়াল যাচাই'), '/wallet.html');
+    spy.mockRestore();
   });
 
   test('amount == threshold → still auto-approved (boundary)', async () => {
@@ -279,6 +285,7 @@ describe('POST /api/sms/incoming — TrxID amount fraud guard', () => {
   });
 
   test('amount unparseable → held for review, NO wallet credit', async () => {
+    const spy = jest.spyOn(push, 'notifyUser').mockResolvedValue({ ok: true, sent: 0 });
     db.__routeQuery([
       ['FROM incoming_sms', { rows: [] }],
       ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
@@ -291,6 +298,10 @@ describe('POST /api/sms/incoming — TrxID amount fraud guard', () => {
     }).expect(200);
     expect(r.body).toMatchObject({ ok: true, held_for_review: true, reason: 'AMOUNT_UNPARSED' });
     expect(db.__client.query.mock.calls.filter((c) => /wallet_apply/.test(c[0]))).toHaveLength(0);
+    // audit #27 — the hold is not silent: the customer is told why
+    expect(spy).toHaveBeenCalledWith(expect.anything(), 'u1', expect.stringContaining('যাচাই'),
+      expect.stringContaining('পরিমাণ পড়া যায়নি'), '/wallet.html');
+    spy.mockRestore();
   });
 });
 

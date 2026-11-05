@@ -208,6 +208,10 @@ webhook.post('/incoming', async (req, res) => {
               await logActivity(null, 'sms.amount_unverified_hold', {
                 sms_id: smsId, tx_id: matchInfo.tx.id, amount: Number(matchInfo.tx.amount),
               });
+              // Audit #27 — a hold must not be silent: tell the
+              // customer why their request is waiting.
+              push.notifyUser(db, matchInfo.tx.user_id, '⏳ রিচার্জ যাচাইয়ে আছে',
+                'আপনার SMS-এর পরিমাণ পড়া যায়নি — অনুরোধটি আটকে আছে, এডমিন দেখছেন।', '/wallet.html').catch(() => {});
               return res.json({ ok: true, held_for_review: true, reason: 'AMOUNT_UNPARSED' });
             }
             if (!amountsEqual(parsed.amount, matchInfo.tx.amount)) {
@@ -242,6 +246,10 @@ webhook.post('/incoming', async (req, res) => {
             await logActivity(null, 'sms.large_amount_hold', {
               sms_id: smsId, tx_id: matchInfo.tx.id, amount: Number(matchInfo.tx.amount),
             });
+            // Audit #27 — a hold must not be silent: tell the
+            // customer why their request is waiting.
+            push.notifyUser(db, matchInfo.tx.user_id, '⏳ রিচার্জ যাচাইয়ে আছে',
+              'বড় অঙ্কের রিচার্জ — ম্যানুয়াল যাচাই হবে, এডমিন দেখছেন।', '/wallet.html').catch(() => {});
             return res.json({ ok: true, held_for_review: true });
           }
           const tx = await approveRechargeTx(client, matchInfo.tx.id, smsId);
@@ -273,6 +281,12 @@ webhook.post('/incoming', async (req, res) => {
         await logActivity(null, 'sms.direction_unknown_hold', {
           sms_id: smsId, trxid: parsed.trxid, amount: parsed.amount,
         });
+        // Audit #27 note: no customer notification is possible
+        // here — no transaction is matched yet, so there is no
+        // identified customer to tell. The SMS stays unmatched
+        // for the admin, and the owner is told when their pending
+        // is reviewed. (The two holds above DO have a matched tx
+        // and notify that customer.)
         return res.json({ ok: true, held_for_review: true, reason: 'DIRECTION_UNKNOWN' });
       }
 
