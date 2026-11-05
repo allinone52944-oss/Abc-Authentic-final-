@@ -513,3 +513,14 @@ describe('jqAttr() — JSON values inside double-quoted onclick attributes', () 
     expect(JSON.parse(back)).toBe('a & "b"');
   });
 });
+
+describe('SMS hub match labels (audit #33)', () => {
+  test('manual matches say so; only auto matches say "অটো প্রসেসড"', () => {
+    expect(ADMIN_SRC).toContain("s.matched_via === 'manual'");
+    expect(ADMIN_SRC).toContain('🔗 ম্যানুয়াল ম্যাচ');
+    expect(ADMIN_SRC).toContain("s.matched_via === 'auto'");
+    expect(ADMIN_SRC).toContain('✓ অটো প্রসেসড');
+    // legacy rows (no matched_via) get a neutral label, never a false claim
+    expect(ADMIN_SRC).toContain('✓ মিলেছে');
+  });
+});

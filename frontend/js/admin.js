@@ -4198,7 +4198,15 @@ TABS.sms = async () => {
                   '<button class="mini-btn ok" onclick="AdmSms.match(\'' + s.id + '\')">🔗 ম্যাচ করুন</button>' +
                   '<button class="mini-btn danger" onclick="AdmSms.ignore(\'' + s.id + '\')">🙈 বাদ দিন</button>' +
                 '</div>'
-              : '<span style="color:#059669;font-size:12px;font-weight:700;">✓ অটো প্রসেসড</span>') +
+              // Audit #33 — the label tells HOW the SMS matched: only an
+              // auto-match is "অটো প্রসেসড"; a manual match says so, and
+              // a legacy row (matched before matched_via existed) says
+              // only that it matched.
+              : (s.matched_via === 'manual'
+                  ? '<span style="color:#2563eb;font-size:12px;font-weight:700;">🔗 ম্যানুয়াল ম্যাচ</span>'
+                  : s.matched_via === 'auto'
+                    ? '<span style="color:#059669;font-size:12px;font-weight:700;">✓ অটো প্রসেসড</span>'
+                    : '<span style="color:#059669;font-size:12px;font-weight:700;">✓ মিলেছে</span>')) +
           '</div>' +
         '</div>' +
       '</div>';

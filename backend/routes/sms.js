@@ -44,7 +44,7 @@ async function logActivity(adminId, action, details) {
 // ---- shared atomic approve -----------------------------------
 // Locks the pending recharge row; credits wallet idempotently;
 // links the SMS. Returns the tx row or null if already processed.
-async function approveRechargeTx(client, txId, smsId) {
+async function approveRechargeTx(client, txId, smsId, via = 'auto') {
   const r = await client.query(
     `SELECT * FROM transactions
      WHERE id = $1 AND status = 'pending' AND type = 'recharge' FOR UPDATE`,
@@ -63,9 +63,11 @@ async function approveRechargeTx(client, txId, smsId) {
   );
   if (smsId) {
     await client.query(
-      `UPDATE incoming_sms SET matched_recharge_id = $1, matched_at = NOW()
+      // Audit #33 — record how the match happened, so the admin hub
+      // can tell an auto-match from a manual one.
+      `UPDATE incoming_sms SET matched_recharge_id = $1, matched_at = NOW(), matched_via = $3
        WHERE id = $2`,
-      [tx.id, smsId]
+      [tx.id, smsId, via]
     );
   }
   return { ...tx, status: 'approved' };
@@ -373,7 +375,7 @@ adminSms.post('/:id/match', async (req, res) => {
           });
         }
       }
-      const tx = await approveRechargeTx(client, txId, smsId);
+      const tx = await approveRechargeTx(client, txId, smsId, 'manual'); // audit #33 — a manual match is recorded as manual
       await client.query('COMMIT');
       if (!tx) return res.status(400).json({ error: 'TX_NOT_PENDING' });
       await logActivity(req.user.id, 'sms.manual_match', {

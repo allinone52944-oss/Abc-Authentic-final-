@@ -122,6 +122,11 @@ describe('POST /api/sms/incoming — auto-match', () => {
     expect(upd).toBeDefined();
     const legacyFlip = db.__client.query.mock.calls.find((c) => /UPDATE transactions SET status = 'approved'/.test(c[0]));
     expect(legacyFlip).toBeUndefined(); // old double-row path must be gone
+    // audit #33 — the auto-match is recorded as auto
+    const smsUpd = db.__client.query.mock.calls.find((c) => /UPDATE incoming_sms SET matched_recharge_id/.test(c[0]));
+    expect(smsUpd).toBeDefined();
+    expect(smsUpd[0]).toContain('matched_via');
+    expect(smsUpd[1]).toEqual(['t1', 's1', 'auto']);
   });
 
   test('security fix: amount > SMS_MAX_AUTO_APPROVE → held_for_review, NO wallet credit', async () => {
@@ -342,5 +347,38 @@ describe('findMatch fuzzy branch ordering (audit #24)', () => {
   test('fuzzy match orders newest first', () => {
     expect(fuzzy).toContain('ORDER BY created_at DESC');
     expect(fuzzy.indexOf('ORDER BY created_at DESC')).toBeLessThan(fuzzy.indexOf('LIMIT 1'));
+  });
+});
+
+describe('POST /api/admin/sms/:id/match — manual match (audit #33)', () => {
+  const TX = { id: 't1', type: 'recharge', amount: 500, status: 'pending', user_id: 'u1', trxid: 'TRX1' };
+  test('manual match records matched_via = manual', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', amount: 500, matched_recharge_id: null }] }],
+      ['SELECT * FROM transactions WHERE id = $1 FOR UPDATE', { rows: [TX] }],
+      ["AND status = 'pending' AND type = 'recharge' FOR UPDATE", { rows: [TX] }],
+    ]);
+    const r = await withAdmin(request(adminApp()).post('/api/admin/sms/s1/match'))
+      .send({ transaction_id: 't1' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, tx_id: 't1' });
+    const smsUpd = db.__client.query.mock.calls.find((c) => /UPDATE incoming_sms SET matched_recharge_id/.test(c[0]));
+    expect(smsUpd).toBeDefined();
+    expect(smsUpd[0]).toContain('matched_via');
+    expect(smsUpd[1]).toEqual(['t1', 's1', 'manual']);
+    // the manual-match activity is logged under its own action
+    const log = db.query.mock.calls.find((c) => /INSERT INTO activity_log/.test(c[0]));
+    expect(log).toBeDefined();
+    expect(JSON.parse(log[1][2]).sms_id).toBe('s1');
+  });
+});
+
+describe('migration 051_sms_matched_via.sql (audit #33)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const mig = fs.readFileSync(
+    path.join(__dirname, '../../../database/migrations/051_sms_matched_via.sql'), 'utf8');
+  test('adds the matched_via column with the auto/manual check', () => {
+    expect(mig).toContain('ALTER TABLE incoming_sms ADD COLUMN IF NOT EXISTS matched_via VARCHAR(10)');
+    expect(mig).toContain("CHECK (matched_via IN ('auto', 'manual'))");
   });
 });
