@@ -799,6 +799,13 @@ tr:hover td {
   .field input, .field select, .field textarea {
     font-size: 16px;
   }
+  /* Audit #60 — tap targets: secondary/mini buttons are at least
+     36px tall on touch screens (admin precedent). Inline paddings
+     on the filing-flow copy buttons shrink them below this, but
+     none sets min-height, so the floor reaches them. */
+  .btn-secondary, .mini-btn {
+    min-height: 36px;
+  }
   html, body {
     overflow-x: hidden;
   }
