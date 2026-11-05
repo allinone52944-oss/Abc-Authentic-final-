@@ -106,6 +106,10 @@ function freshNavLogLine(logs) {
 }
 
 describe('dedicated-page fresh navigation before submit (step 5c)', () => {
+  // AUDIT #3 (2026-11-05): every fake submit in this file returns a
+  // success shape with no application number, so each chain run now
+  // reports SUBMIT_OUTCOME_UNKNOWN (not success). The assertions
+  // below pin that; the navigation/close assertions are unchanged.
   it('dedicated page: created, homepage-route navigated, re-seeded from it, closed; session.page never navigated', async () => {
     const order = [];
     const refreshSeeds = [];
@@ -124,7 +128,8 @@ describe('dedicated-page fresh navigation before submit (step 5c)', () => {
       closeDedicatedPage: async (p) => { closed.push(p); await p.close(); },
       log: (...a) => logs.push(a.join(' ')),
     });
-    assert.strictEqual(out.ok, true);
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
     // Only the dedicated page is navigated, to the homepage.
     assert.deepStrictEqual(dedicated.calls.goto, ['https://bdris.gov.bd/']);
     assert.deepStrictEqual(warm.calls.goto, [], 'the shared session.page must never be navigated');
@@ -159,7 +164,8 @@ describe('dedicated-page fresh navigation before submit (step 5c)', () => {
       closeDedicatedPage: async (p) => { closed.push(p); },
       log: (...a) => logs.push(a.join(' ')),
     });
-    assert.strictEqual(out.ok, true);
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
     assert.ok(order.includes('submit'), 'submit must still proceed');
     assert.deepStrictEqual(closed, [], 'nothing was created, so nothing closes');
     const line = freshNavLogLine(logs);
@@ -184,7 +190,8 @@ describe('dedicated-page fresh navigation before submit (step 5c)', () => {
       closeDedicatedPage: async (p) => { closed.push(p); await p.close(); },
       log: (...a) => logs.push(a.join(' ')),
     });
-    assert.strictEqual(out.ok, true);
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
     assert.strictEqual(dedicated.calls.goto.length, 1, 'navigation must be attempted once');
     assert.strictEqual(closed.length, 1, 'a failed navigation must still close its page');
     assert.ok(order.includes('submit'), 'submit must still proceed');
@@ -210,7 +217,8 @@ describe('dedicated-page fresh navigation before submit (step 5c)', () => {
       closeDedicatedPage: async (p) => { closed.push(p); await p.close(); },
       log: (...a) => logs.push(a.join(' ')),
     });
-    assert.strictEqual(out.ok, true);
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
     assert.strictEqual(closed.length, 1, 'a tokenless page must still be closed');
     assert.ok(order.includes('submit'), 'submit must still proceed');
     const line = freshNavLogLine(logs);
@@ -231,7 +239,8 @@ describe('dedicated-page fresh navigation before submit (step 5c)', () => {
       reseedPage: warm.page,
       log: (...a) => logs.push(a.join(' ')),
     });
-    assert.strictEqual(out.ok, true);
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
     assert.ok(order.includes('submit'));
     const line = freshNavLogLine(logs);
     assert.ok(line && line.includes('no dedicated-page factory'), `expected a no-factory skip line, got: ${line}`);
@@ -256,7 +265,8 @@ describe('dedicated-page fresh navigation before submit (step 5c)', () => {
       closeDedicatedPage: async (p) => { await p.close(); },
       log: (...a) => logs.push(a.join(' ')),
     });
-    assert.strictEqual(out.ok, true);
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
     assert.deepStrictEqual(decoyCalls, [], 'no page other than the dedicated page may be navigated');
     assert.deepStrictEqual(warm.calls.goto, [], 'the shared session.page must never be navigated');
     assert.strictEqual(dedicated.calls.goto.length, 1);
@@ -281,7 +291,8 @@ describe('dedicated-page fresh navigation before submit (step 5c)', () => {
         } : {}),
         log: (...a) => logs.push(a.join(' ')),
       });
-      assert.strictEqual(out.ok, true);
+      assert.strictEqual(out.ok, false);
+      assert.strictEqual(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
       return submitInputs[0];
     };
     const a = await mkRun('ref-dnav-7a', true);

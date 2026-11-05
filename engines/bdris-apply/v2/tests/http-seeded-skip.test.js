@@ -76,7 +76,11 @@ describe('Gate fix: seeded client skips bootstrap', () => {
       playwrightRunner: async () => { throw new Error('fallback must not run on success'); },
       log: (m) => logs.push(String(m)),
     });
-    assert.strictEqual(out.ok, true);
+    // AUDIT #3: the fake submit returns a success shape with no
+    // application number, so the chain reports SUBMIT_OUTCOME_UNKNOWN
+    // (not success); the bootstrap-skip assertions are unchanged.
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
     assert.strictEqual(out.path, 'http');
     assert.ok(!client.calls.includes('bootstrap'), 'bootstrap must not run for a seeded client');
     assert.deepStrictEqual(out.steps, ['geo', 'upload', 'otp-send', 'verify', 'submit']);
@@ -93,7 +97,10 @@ describe('Gate fix: seeded client skips bootstrap', () => {
       playwrightRunner: async () => { throw new Error('fallback must not run on success'); },
       log: () => {},
     });
-    assert.strictEqual(out.ok, true);
+    // AUDIT #3: same as above — success shape without an application
+    // number is outcome-unknown; the bootstrap assertions stand.
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
     assert.strictEqual(client.calls[0], 'bootstrap');
     assert.strictEqual(out.steps[0], 'bootstrap');
   });

@@ -101,7 +101,11 @@ describe('family retry gate (isFallbackSafe + strict tag)', () => {
     });
     assert.strictEqual(seen.length, 2);
     assert.strictEqual(seen[1]._familyNamesOnly, true);
-    assert.strictEqual(out.ok, true);
+    // AUDIT #3: the retry's success shape carries no application
+    // number, so the chain reports SUBMIT_OUTCOME_UNKNOWN (not
+    // success); the retry + family-note assertions are unchanged.
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
     assert.strictEqual(out.familyNamesOnly, true);
     assert.strictEqual(out.familyNote, DIRECT_FAMILY_NOTE);
   });
@@ -121,7 +125,10 @@ describe('family retry gate (isFallbackSafe + strict tag)', () => {
       log: () => {},
     });
     assert.strictEqual(seen.length, 2, 'an explicit JSON failure is a definitive rejection, so the family retry applies');
-    assert.strictEqual(out.ok, true);
+    // AUDIT #3: the retry's success shape carries no application
+    // number, so the chain reports SUBMIT_OUTCOME_UNKNOWN (not success).
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
   });
 
   it('does NOT retry a definitive rejection without the family tag', async () => {

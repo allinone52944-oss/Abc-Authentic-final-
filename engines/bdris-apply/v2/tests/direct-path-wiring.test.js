@@ -241,8 +241,11 @@ describe('direct wiring: phased chain', () => {
       data: { ...draft(), documents: REFS, otp: '123456', _chargeToken: validChargeToken(userId, secret, 'direct-submit-1') },
       userId, secret, client, log: () => {}, phase: 'submit',
     });
-    assert.equal(r.ok, true);
-    assert.equal(r.success, true);
+    // AUDIT #3: the fake submit returns a success shape with no
+    // application number, so the chain reports SUBMIT_OUTCOME_UNKNOWN
+    // (not success); the phase assertions below are unchanged.
+    assert.equal(r.ok, false);
+    assert.equal(r.error, 'SUBMIT_OUTCOME_UNKNOWN');
     assert.deepEqual(client.calls, ['verify', 'submit']);
   });
 

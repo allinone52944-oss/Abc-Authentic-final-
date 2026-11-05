@@ -194,7 +194,11 @@ describe('runner: skip-verify retry + pre-submit reseed', () => {
 
   it('alreadyVerified skips verifyOtp but keeps otp in the submit payload', async () => {
     const { out, calls } = await runSubmit({ alreadyVerified: true });
-    assert.equal(out.ok, true);
+    // AUDIT #3: the fake submit returns a success shape with no
+    // application number, so the chain reports SUBMIT_OUTCOME_UNKNOWN
+    // (not success); the verify-skip assertions below are unchanged.
+    assert.equal(out.ok, false);
+    assert.equal(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
     assert.equal(calls.verify || 0, 0, 'a consumed code must never be re-verified');
     assert.equal(calls.submit, 1);
     assert.equal(calls.submitInput.otp, '123456', 'otp still rides in the submit payload');
@@ -203,7 +207,10 @@ describe('runner: skip-verify retry + pre-submit reseed', () => {
 
   it('a first attempt always verifies', async () => {
     const { out, calls } = await runSubmit({});
-    assert.equal(out.ok, true);
+    // AUDIT #3: see above — success shape without an application
+    // number is outcome-unknown, not success.
+    assert.equal(out.ok, false);
+    assert.equal(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
     assert.equal(calls.verify, 1);
     assert.equal(calls.submit, 1);
     assert.ok(out.steps.includes('verify'));
@@ -217,14 +224,21 @@ describe('runner: skip-verify retry + pre-submit reseed', () => {
 
   it('reseed runs before submit from the live warm page without failing the chain', async () => {
     const { out, calls } = await runSubmit({}, { reseedPage: fakeWarmPage() });
-    assert.equal(out.ok, true);
+    // AUDIT #3: the fake submit returns a success shape with no
+    // application number, so the chain reports SUBMIT_OUTCOME_UNKNOWN;
+    // the reseed assertions below are unchanged — reseed still ran.
+    assert.equal(out.ok, false);
+    assert.equal(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
     assert.equal(calls.submit, 1);
     assert.equal(calls.refreshed.csrfToken, 'warm-csrf', 'reseed must refresh the client from the page');
   });
 
   it('a missing warm page only logs the skip — the submit still proceeds', async () => {
     const { out, calls } = await runSubmit({}, {});
-    assert.equal(out.ok, true, 'never fail the submit on a missing warm page');
+    // AUDIT #3: same as above — the submit proceeded (calls.submit 1)
+    // even though its outcome is unproven without an application number.
+    assert.equal(out.ok, false, 'a success shape without an application number is outcome-unknown, not success');
+    assert.equal(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
     assert.equal(calls.submit, 1);
     assert.equal(calls.refreshed, undefined);
   });

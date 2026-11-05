@@ -837,20 +837,30 @@ async function runHttpChain(opts = {}) {
     }
     stepsDone.push('submit');
 
-    // FINAL-SOLUTION (problem-map #1): success also logs its
-    // shape — a later existence check compares against this.
+    // AUDIT #3 (2026-11-05): a "success shape" without an
+    // application number is NOT a proven filing. The client never
+    // extracts an ack number (format unverified), so ackNumber
+    // would always be null here — and FETCH_ORIGINAL cannot run
+    // without an ack or a saved record, so the premium
+    // deliverable (original Form-1 PDF) would be unreachable.
+    // Reporting this as success fakes a filing. Return
+    // SUBMIT_OUTCOME_UNKNOWN instead: the server answered, but
+    // filing is unproven — existence check first, no automatic
+    // retry (same shape as fail()'s unknown branch, which the
+    // frontend already routes to directSubmitUnknown). The
+    // charge token is NOT consumed: clean success is the only
+    // consume point, and this is not one — so a retry after an
+    // existence check keeps the token.
     if (submitted && submitted.responseSummary) {
-      candidateLog(log, 'submit', `SUBMIT-RESPONSE ${submitSummaryText(submitted.responseSummary)} outcome=success`);
+      candidateLog(log, 'submit', `SUBMIT-RESPONSE ${submitSummaryText(submitted.responseSummary)} outcome=success-shape-no-ack`);
     }
-    candidateLog(log, 'decision', 'DIRECT-DECISION step=submit outcome=direct-success');
-    candidateLog(log, 'done', `HTTP chain complete (steps: ${stepsDone.join(', ')}); success accepted only on the verified success shape`);
-    // Clean success point ONLY (same rule as submitS4): consume here,
-    // never on attempt, so retries after a failed chain keep the token.
-    consumeSubmitToken(data._chargeToken);
+    candidateLog(log, 'decision', 'DIRECT-DECISION step=submit outcome=submit-outcome-unknown-no-ack');
+    candidateLog(log, 'submit', 'SUBMIT_OUTCOME_UNKNOWN — success-shaped response carried no application number; filing unproven, automatic Playwright fallback SUPPRESSED to avoid a duplicate submission');
     return {
-      ...baseResult, ...routeInfo, ok: true, success: true, hasPrintLink: !!submitted.hasPrintLink,
-      steps: stepsDone, ackNumber: null, // never extracted: format unverified
-      message: '✅ HTTP পথে সাবমিট সফল (প্রার্থী পে-লোড — লাইভ নিশ্চিতকরণ বাকি)।',
+      ...baseResult, ...routeInfo, ok: false, error: 'SUBMIT_OUTCOME_UNKNOWN',
+      message: 'সার্ভার সাফল্যের বার্তা দিলেও আবেদন নম্বর পাওয়া যায়নি — আবেদন হয়েছে কিনা নিশ্চিত নয়; ডাবল আবেদন এড়াতে স্বয়ংক্রিয় পুনঃচেষ্টা বন্ধ রাখা হয়েছে; আবেদন হয়েছে কিনা যাচাই করে আবার চেষ্টা করুন।',
+      httpStep: 'submit', httpReason: 'success-shaped response without application number',
+      hasPrintLink: !!(submitted && submitted.hasPrintLink), steps: stepsDone,
       familyNamesOnly: familyAdvance,
       familyNote: familyAdvance ? 'সাইটের পারিবারিক নিয়ম: পিতামাতার BRN ছাড়াই (নাম + জাতীয়তা দিয়ে) এগোনো হয়েছে — BRN ড্রাফটে রাখা আছে।' : null,
     };

@@ -557,6 +557,7 @@ describe('success-page parsing (later step)', () => {
 // ---- HttpPathRunner integration (mock server only, no browser) ----
 const nodeCrypto = require('node:crypto');
 const { runHttpChain, runSubmitHttpChain, getHttpPathStatus, isHttpPathEnabled, HTTP_CANDIDATE_LABEL } = require('../../services/HttpPathRunner');
+const { isSubmitTokenConsumed } = require('../../services/StepHandler');
 
 function mockGeoChain() {
   return {
@@ -590,28 +591,39 @@ function validChargeToken(userId, secret, ref = 'ref-1') {
 }
 
 describe('HttpPathRunner (HTTP primary, Playwright fallback)', () => {
-  it('runs the full chain against mocks and returns candidate-labelled success', async () => {
+  // AUDIT #3 (2026-11-05): a success-shaped submit response that
+  // carries no application number is NOT a proven filing — the
+  // runner must return SUBMIT_OUTCOME_UNKNOWN (existence check
+  // first, no auto-retry), never a fake success. The mock submit
+  // page has the success phrase + print link but no ack number,
+  // exactly the shape the old code reported as success.
+  it('runs the full chain against mocks and returns SUBMIT_OUTCOME_UNKNOWN when the success shape carries no application number', async () => {
     const logs = [];
     const client = new BdrisHttpClient({ base });
     const submitBefore = state.submitHits;
+    const token = validChargeToken('user-1', 'test-secret');
     const out = await runHttpChain({
-      data: runnerInput({ _chargeToken: validChargeToken('user-1', 'test-secret') }),
+      data: runnerInput({ _chargeToken: token }),
       userId: 'user-1',
       secret: 'test-secret',
       client,
-      playwrightRunner: async () => { throw new Error('fallback must not run on success'); },
+      playwrightRunner: async () => { throw new Error('fallback must not run on outcome-unknown'); },
       log: (m) => logs.push(String(m)),
     });
-    assert.strictEqual(out.ok, true);
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
+    assert.strictEqual(out.httpStep, 'submit');
     assert.strictEqual(out.path, 'http');
     assert.strictEqual(out.candidate, true);
     assert.strictEqual(out.candidateLabel, HTTP_CANDIDATE_LABEL);
-    assert.strictEqual(out.hasPrintLink, true);
-    assert.strictEqual(out.ackNumber, null, 'no application number is ever extracted (format unverified)');
+    assert.strictEqual(out.hasPrintLink, true, 'print-link presence is still reported for the journal');
+    assert.strictEqual(out.ackNumber, undefined, 'no application number is ever reported when none was extracted');
+    assert.match(out.message, /আবেদন নম্বর/);
     assert.deepStrictEqual(out.steps, ['bootstrap', 'geo', 'upload', 'otp-send', 'verify', 'submit']);
-    assert.strictEqual(state.submitHits, submitBefore + 1);
+    assert.strictEqual(state.submitHits, submitBefore + 1, 'the submit POST still happened once; only the success claim changed');
+    assert.strictEqual(isSubmitTokenConsumed(token), false, 'an unproven submit must not consume the charge token — a retry after an existence check keeps it');
     assert.ok(logs.length > 0 && logs.every((l) => l.includes('CANDIDATE')), 'every HTTP-path log line carries CANDIDATE');
-    assert.ok(logs.some((l) => /submit/.test(l) && /CANDIDATE/.test(l)));
+    assert.ok(logs.some((l) => l.includes('SUBMIT_OUTCOME_UNKNOWN') && l.includes('no application number')));
   });
 
   it('falls back to Playwright on a geo failure, naming the step and reason', async () => {
@@ -712,22 +724,29 @@ describe('HttpPathRunner (HTTP primary, Playwright fallback)', () => {
     assert.strictEqual(out.error, 'HTTP_PATH_DISABLED');
   });
 
-  it('enabled runSubmitHttpChain delegates to the full HTTP chain (mock server, no browser)', async () => {
+  // AUDIT #3: same rule via runSubmitHttpChain — the mock success
+  // page carries no application number, so the chain must not
+  // report success even though the submit POST landed.
+  it('enabled runSubmitHttpChain returns SUBMIT_OUTCOME_UNKNOWN when the success shape carries no application number (mock server, no browser)', async () => {
     const client = new BdrisHttpClient({ base });
     const submitBefore = state.submitHits;
+    const token = validChargeToken('user-1', 'test-secret');
     const out = await runSubmitHttpChain({
-      data: runnerInput({ _chargeToken: validChargeToken('user-1', 'test-secret') }),
+      data: runnerInput({ _chargeToken: token }),
       userId: 'user-1',
       secret: 'test-secret',
       env: { BDRIS_HTTP_PATH: 'on' },
       client,
-      playwrightRunner: async () => { throw new Error('fallback must not run on success'); },
+      playwrightRunner: async () => { throw new Error('fallback must not run on outcome-unknown'); },
       log: () => {},
     });
-    assert.strictEqual(out.ok, true);
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
+    assert.strictEqual(out.httpStep, 'submit');
     assert.strictEqual(out.path, 'http');
     assert.strictEqual(out.candidate, true);
     assert.strictEqual(state.submitHits, submitBefore + 1);
+    assert.strictEqual(isSubmitTokenConsumed(token), false, 'an unproven submit must not consume the charge token');
   });
 
   it('isHttpPathEnabled defaults OFF (opt-in only) and honours on/off values', () => {

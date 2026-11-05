@@ -221,7 +221,11 @@ describe('runHttpChain end-to-end with live shapes (fake client)', () => {
       client: fakeClient,
       log: () => {},
     });
-    assert.strictEqual(out.ok, true);
+    // AUDIT #3: the fake submit returns a success shape with no
+    // application number, so the chain reports SUBMIT_OUTCOME_UNKNOWN
+    // (not success); the officeId/geo assertions are unchanged.
+    assert.strictEqual(out.ok, false);
+    assert.strictEqual(out.error, 'SUBMIT_OUTCOME_UNKNOWN');
     assert.ok(out.steps.includes('otp-send'));
     assert.ok(out.steps.includes('verify'));
     assert.ok(out.steps.includes('submit'));
