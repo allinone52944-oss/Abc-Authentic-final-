@@ -749,6 +749,22 @@ async function dlDeliveryDoc(filename, originalname) {
   }
 }
 
+// Audit #28 — the real refund sentence from the stored split
+// (refund_balance = wallet, refund_credit = locked service
+// credit). Both 0 = no refund ran (price 0, or a legacy refund
+// from before the split was stored) → a neutral fallback that
+// never claims the full price went to the wallet.
+function refundDesc(o) {
+  const bal = Number(o.refund_balance || 0);
+  const cr = Number(o.refund_credit || 0);
+  const fmt = (n) => '৳' + Number(n).toLocaleString('bn-BD');
+  if (bal > 0 && cr > 0) return fmt(bal) + ' আপনার ওয়ালেটে এবং ' + fmt(cr) + ' ওই সেবার ক্রেডিটে ফেরত দেওয়া হয়েছে।';
+  if (cr > 0) return fmt(cr) + ' ওই সেবার ক্রেডিটে ফেরত দেওয়া হয়েছে।';
+  if (bal > 0) return fmt(bal) + ' আপনার ওয়ালেটে ফেরত দেওয়া হয়েছে।';
+  if (Number(o.price || 0) > 0) return 'রিফান্ড সম্পন্ন হয়েছে।';
+  return 'এই অর্ডারের মূল্য ০ — কোনো টাকা ফেরত যায়নি।';
+}
+
 function render(o) {
   const st = o.status;
   if ((st === 'completed' || st === 'delivered') && !alreadyCelebrated(oid)) {
@@ -793,13 +809,28 @@ function render(o) {
     delBox.style.display = 'none';
     refBox.style.display = 'block';
     procBox.style.display = 'none';
+    const reasonLine = o.cancel_reason ? (' কারণ: ' + o.cancel_reason) : '';
     if (st === 'cancelled') {
       document.getElementById('refundTitle').textContent = 'অর্ডার বাতিল ও রিফান্ড সম্পন্ন';
-      document.getElementById('refundDesc').textContent = 'আপনার অর্ডারের সম্পূর্ণ ৳' + Number(o.price || 0).toLocaleString('bn-BD') + ' ওয়ালেটে ফেরত দেওয়া হয়েছে।';
+      document.getElementById('refundDesc').textContent = refundDesc(o) + reasonLine;
     } else {
       document.getElementById('refundTitle').textContent = 'অর্ডার রিফান্ডেড';
-      document.getElementById('refundDesc').textContent = '৳' + Number(o.price || 0).toLocaleString('bn-BD') + ' আপনার ওয়ালেট ব্যালেন্সে ক্রেডিট হয়েছে।';
+      document.getElementById('refundDesc').textContent = refundDesc(o) + reasonLine;
     }
+  } else if (st === 'failed') {
+    // Audit #28 — failed orders had NO hero box (fell to else,
+    // no box at all, stepper 0%). They get the refund box with
+    // the real reason + the real refund split.
+    delBox.style.display = 'none';
+    refBox.style.display = 'block';
+    procBox.style.display = 'none';
+    document.getElementById('refundTitle').textContent = 'অর্ডার সম্পন্ন হয়নি';
+    const reasonLine = o.cancel_reason ? (' কারণ: ' + o.cancel_reason) : '';
+    const bal = Number(o.refund_balance || 0);
+    const cr = Number(o.refund_credit || 0);
+    document.getElementById('refundDesc').textContent =
+      'দুঃখিত — আপনার অর্ডারটি সম্পন্ন করা যায়নি।' +
+      ((bal > 0 || cr > 0) ? ' ' + refundDesc(o) : '') + reasonLine;
   } else if (['processing', 'registered'].includes(st)) {
     delBox.style.display = 'none';
     refBox.style.display = 'none';

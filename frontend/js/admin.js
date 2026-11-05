@@ -4306,6 +4306,8 @@ window.AdmTx = {
     modal('❌ রিচার্জ বাতিল করুন',
       '<div style="text-align:center; padding:10px 0;">' +
         '<div style="font-size:15px; color:#334155; margin-bottom:14px;">আপনি কি <b>' + esc(name || 'গ্রাহক') + '</b>-এর <b>৳' + bn(amount || 0) + '</b> রিচার্জ রিকোয়েস্ট বাতিল করতে চান?</div>' +
+        // Audit #28 — the reject reason, shown to the customer.
+        '<textarea id="admTxRejectReason" placeholder="বাতিলের কারণ (গ্রাহককে দেখানো হবে)" style="width:100%;min-height:56px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:14px;"></textarea>' +
         '<div style="display:flex; gap:10px; justify-content:center;">' +
           '<button class="btn danger" style="background:#dc2626; font-weight:700;" onclick="AdmTx._doReject(\'' + id + '\')">বাতিল নিশ্চিত করুন</button>' +
           '<button class="btn-secondary" onclick="closeModal()">ফিরে যান</button>' +
@@ -4314,9 +4316,11 @@ window.AdmTx = {
     );
   },
   async _doReject(id) {
+    const reasonEl = document.getElementById('admTxRejectReason');
+    const reason = reasonEl ? reasonEl.value.trim() : '';
     closeModal();
     try {
-      const r = await ABC.api('/admin/transactions/' + id + '/reject', { method: 'PUT' });
+      const r = await ABC.api('/admin/transactions/' + id + '/reject', { method: 'PUT', body: reason ? { cancel_reason: reason } : {} });
       const d = await r.json();
       if (!r.ok) {
         admToast('বাতিল ব্যর্থ', 'ত্রুটি: ' + (d.error || 'NOT_PENDING'), 'error');

@@ -108,6 +108,12 @@ describe('P2 item 2: cancel reason reaches the customer notice', () => {
     expect(wa.notifyOrderCancelled.mock.calls[0][2]).toMatchObject({ cancelReason: 'তথ্য ভুল ছিল' });
     expect(push.notifyUser).toHaveBeenCalledTimes(1);
     expect(push.notifyUser.mock.calls[0][3]).toContain('কারণ: তথ্য ভুল ছিল');
+    // audit #28 — the reason is STORED, not just notified
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    const upd = allCalls.find((c) => /UPDATE orders SET status/.test(c[0]));
+    expect(upd).toBeDefined();
+    expect(upd[0]).toContain('cancel_reason');
+    expect(upd[1]).toContain('তথ্য ভুল ছিল');
   });
 });
 

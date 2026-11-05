@@ -695,6 +695,18 @@ describe('transactions (security fix: filter allowlist)', () => {
     const r2 = await withAdmin(request(app()).put('/api/admin/transactions/t1/reject')).expect(200);
     expect(r2.body.ok).toBe(true);
   });
+
+  test('reject with cancel_reason → stored on the transaction (audit #28)', async () => {
+    db.__routeQuery([['UPDATE transactions SET status = ', { rows: [{ id: 't1', user_id: 'u1', type: 'recharge', amount: 500 }] }]]);
+    const r = await withAdmin(request(app()).put('/api/admin/transactions/t1/reject'))
+      .send({ cancel_reason: 'ভুল তথ্য' }).expect(200);
+    expect(r.body.ok).toBe(true);
+    const allCalls = [...db.query.mock.calls, ...db.__client.query.mock.calls];
+    const upd = allCalls.find((c) => /UPDATE transactions SET status = 'rejected'/.test(c[0]));
+    expect(upd).toBeDefined();
+    expect(upd[0]).toContain('cancel_reason');
+    expect(upd[1]).toContain('ভুল তথ্য');
+  });
 });
 
 describe('coupons / banners / notices', () => {

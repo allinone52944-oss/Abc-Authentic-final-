@@ -744,7 +744,8 @@ async function loadWallet(){
         // No per-recharge create button: cashback is claimed once per
         // day on the combined total from the hub card above (2026-10-21).
       } else if (t.status === 'rejected') {
-        cbHtml = '<div class="cb-badge pending" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;">❌ ব্যর্থ — এডমিন যাচাইয়ে বাতিল হয়েছে। নতুন সেশন বা ম্যানুয়াল ফর্মে আবার চেষ্টা করুন।</div>';
+        // Audit #28 — the stored cancel reason, when the admin gave one.
+        cbHtml = '<div class="cb-badge pending" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;">❌ ব্যর্থ — এডমিন যাচাইয়ে বাতিল হয়েছে।' + (t.cancel_reason ? '<br>কারণ: ' + esc(t.cancel_reason) + '<br>' : ' ') + 'নতুন সেশন বা ম্যানুয়াল ফর্মে আবার চেষ্টা করুন।</div>';
       }
     }
 
@@ -1122,6 +1123,8 @@ async function gwAutoMatch(){
         stateEl.innerHTML = '<div class="gw-state duplicate"><b>ℹ️ এই TrxID-র রিচার্জ আগেই আছে।</b><br>' +
           'পরিমাণ: <b>৳' + bn(ex.amount) + '</b> • তারিখ: <b>' + esc(gwFmtDt(ex.created_at)) + '</b> • অবস্থা: <b>' + stTxt + '</b>' +
           (ex.status === 'approved' ? '<br>✅ এই টাকা already ব্যালেন্সে যোগ হয়েছে।' : '') +
+          // Audit #28 — a rejected original shows WHY it was rejected.
+          (ex.status === 'rejected' && ex.cancel_reason ? '<br>কারণ: ' + esc(ex.cancel_reason) : '') +
           '</div>';
         if (ex.status === 'approved') gwRenderTimelineDone(); else gwRenderTimeline('match');
       } else if (d.error === 'DUP_TRXID') {
@@ -1200,7 +1203,7 @@ async function gwPollOnce(){
       gwStopTimer();
       gwClearSession(); // audit #20 — a done session is never restored
       document.getElementById('gwState').innerHTML = '<div class="gw-state failed"><b>❌ রিচার্জ সম্পন্ন হয়নি।</b><br>' +
-        'এডমিন যাচাইয়ে অনুরোধটি বাতিল হয়েছে। নতুন সেশন বা ম্যানুয়াল ফর্মে আবার চেষ্টা করুন।</div>';
+        'এডমিন যাচাইয়ে অনুরোধটি বাতিল হয়েছে।' + (tx.cancel_reason ? '<br>কারণ: ' + esc(tx.cancel_reason) + '<br>' : ' ') + 'নতুন সেশন বা ম্যানুয়াল ফর্মে আবার চেষ্টা করুন।</div>';
       gwRenderTimeline('match');
       loadWallet();
     }
@@ -1245,6 +1248,8 @@ async function submitRecharge(){
         err.innerHTML='<div class="gw-state duplicate" style="margin-bottom:0;"><b>ℹ️ এই TrxID-র রিচার্জ আগেই আছে।</b><br>' +
           'পরিমাণ: <b>৳'+bn(ex.amount)+'</b> • তারিখ: <b>'+esc(gwFmtDt(ex.created_at))+'</b> • অবস্থা: <b>'+stTxt+'</b>' +
           (ex.status==='approved'?'<br>✅ এই টাকা already ব্যালেন্সে যোগ হয়েছে।':'') +
+          // Audit #28 — a rejected original shows WHY it was rejected.
+          (ex.status==='rejected' && ex.cancel_reason ? '<br>কারণ: ' + esc(ex.cancel_reason) : '') +
           '</div>';
       } else {
         err.textContent='❌ '+(d.error==='DUP_TRXID'?'এই ট্রানজ্যাকশন আইডি (TrxID) ইতিপূর্বে ব্যবহার করা হয়েছে। ⚠️ বারবার ডুপ্লিকেট বা ভুল TrxID দিলে অ্যাকাউন্ট ব্লক হতে পারে।':d.error==='TRXID_AMOUNT_MISMATCH'?('আপনার পাঠানো টাকার SMS এ ৳'+(d.sms_amount||'')+' এসেছে — আপনি যে পরিমাণ লিখেছেন তার সাথে মেলে না। সঠিক পরিমাণ লিখে আবার চেষ্টা করুন। ⚠️ বারবার ভুল তথ্য দিলে অ্যাকাউন্ট ব্লক হতে পারে।'):(d.error||'ব্যর্থ'));
@@ -1299,7 +1304,7 @@ async function manualPollOnce(trxid, okEl){
       manualStopPolling();
       okEl.textContent = '';
       const err = document.getElementById('err');
-      if (err) err.textContent = '❌ রিচার্জ সম্পন্ন হয়নি — এডমিন যাচাইয়ে অনুরোধটি বাতিল হয়েছে। নতুন করে রিকোয়েস্ট পাঠান।';
+      if (err) err.textContent = '❌ রিচার্জ সম্পন্ন হয়নি — এডমিন যাচাইয়ে অনুরোধটি বাতিল হয়েছে।' + (tx.cancel_reason ? ' কারণ: ' + tx.cancel_reason : '') + ' নতুন করে রিকোয়েস্ট পাঠান।';
       loadWallet();
     }
   } catch (e) { /* next tick retries silently — no spinner, no error noise */ }

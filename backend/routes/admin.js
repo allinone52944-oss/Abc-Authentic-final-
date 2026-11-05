@@ -1122,9 +1122,16 @@ router.put('/orders/:id/status', async (req, res) => {
           throw e;
         }
         const r = await client.query(
-          `UPDATE orders SET status = $1, admin_note = COALESCE($2, admin_note), updated_at = NOW()
-           WHERE id = $3 AND status = $4 RETURNING *`,
-          [status, note, req.params.id, from]
+          // Audit #28 — the cancel reason is STORED now, not just
+          // notified: the old UPDATE dropped it, so after the
+          // notification the reason was gone. Only a cancelled /
+          // failed transition stores one (a reason on any other
+          // transition is ignored); COALESCE keeps an earlier
+          // reason when a later transition carries none.
+          `UPDATE orders SET status = $1, admin_note = COALESCE($2, admin_note),
+           cancel_reason = COALESCE($3, cancel_reason), updated_at = NOW()
+           WHERE id = $4 AND status = $5 RETURNING *`,
+          [status, note, (status === 'cancelled' || status === 'failed') ? reason : null, req.params.id, from]
         );
         if (r.rows.length !== 1) {
           const e = new Error('STALE_WRITE'); e.statusCode = 409; throw e;
@@ -1152,6 +1159,17 @@ router.put('/orders/:id/status', async (req, res) => {
             refundSplit = await serviceCredits.refundOrderPrice(client, r.rows[0], 'refund');
             autoRefunded = !!(refundSplit && refundSplit.refunded);
           }
+        }
+        // Audit #28 — store the actual refund split on the order,
+        // so the status page can show the wallet/credit breakdown
+        // instead of claiming the full price went to the wallet.
+        // (A prior refund leaves the stored split untouched: the
+        // money already moved under the old rows.)
+        if (refundSplit && refundSplit.refunded) {
+          await client.query(
+            'UPDATE orders SET refund_balance = $1, refund_credit = $2 WHERE id = $3',
+            [refundSplit.balancePart || 0, refundSplit.creditPart || 0, req.params.id]
+          );
         }
         // Status history (H-1) — inside the transaction now, so a
         // status change can never exist without its timeline row.
@@ -2083,18 +2101,25 @@ router.put('/transactions/:id/approve', async (req, res) => {
 
 router.put('/transactions/:id/reject', async (req, res) => {
   try {
+    // Audit #28 — the reject reason is stored (transactions.
+    // cancel_reason) and told to the customer; before, only the
+    // status changed and the reason was lost.
+    const rawReason = req.body ? req.body.cancel_reason : undefined;
+    const txReason = (rawReason !== undefined && rawReason !== null && String(rawReason).trim() !== '')
+      ? String(rawReason).trim().slice(0, 500) : null;
     const r = await db.query(
-      `UPDATE transactions SET status = 'rejected', admin_id = $1
-       WHERE id = $2 AND status = 'pending' RETURNING *`,
-      [req.user.id, req.params.id]
+      `UPDATE transactions SET status = 'rejected', cancel_reason = COALESCE($1, cancel_reason), admin_id = $2
+       WHERE id = $3 AND status = 'pending' RETURNING *`,
+      [txReason, req.user.id, req.params.id]
     );
     if (!r.rows.length) return res.status(400).json({ error: 'NOT_PENDING' });
-    await logActivity(req.user.id, 'transaction.reject', { tx_id: req.params.id });
+    await logActivity(req.user.id, 'transaction.reject', { tx_id: req.params.id, cancel_reason: txReason });
     // Customer notifications: recharge rejected (WhatsApp + push)
     wa.notifyRechargeRejected(db, r.rows[0]).catch(() => {});
     if (r.rows[0].type === 'recharge') {
       push.notifyUser(db, r.rows[0].user_id, '❌ রিচার্জ সম্পন্ন হয়নি',
-        'দুঃখিত — আপনার ৳' + r.rows[0].amount + ' রিচার্জের অনুরোধটি সম্পন্ন করা যায়নি।', '/wallet.html').catch(() => {});
+        'দুঃখিত — আপনার ৳' + r.rows[0].amount + ' রিচার্জের অনুরোধটি সম্পন্ন করা যায়নি।' +
+        (txReason ? ' কারণ: ' + txReason : ''), '/wallet.html').catch(() => {});
     }
     res.json({ ok: true });
   } catch (e) {

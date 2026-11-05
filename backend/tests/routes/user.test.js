@@ -165,6 +165,20 @@ describe('orders read + chat', () => {
     await withUser(request(app()).get('/api/orders/other-id')).expect(404);
   });
 
+  test('GET /api/orders/:id returns cancel_reason + refund split (audit #28)', async () => {
+    db.__routeQuery([['WHERE o.id = $1 AND o.user_id = $2', { rows: [{
+      id: 'o1', user_id: 'u1', service_id: 's1', status: 'cancelled', data: {}, documents: '[]',
+      notes: null, price: 100, idempotency_key: 'k1', created_at: '2026-11-04T10:00:00.000Z',
+      updated_at: '2026-11-04T10:00:00.000Z', cancel_reason: 'তথ্য ভুল ছিল',
+      refund_balance: 60, refund_credit: 40, service_name: 'Test', service_name_bn: 'টেস্ট',
+    }] }]]);
+    const r = await withUser(request(app()).get('/api/orders/o1')).expect(200);
+    expect(r.body.order).toMatchObject({
+      status: 'cancelled', cancel_reason: 'তথ্য ভুল ছিল', refund_balance: 60, refund_credit: 40,
+    });
+    expect(r.body.order.admin_note).toBeUndefined();
+  });
+
   test('POST /api/orders/:id/chat: empty/too-long → 400 INVALID_MESSAGE', async () => {
     const r1 = await withUser(request(app()).post('/api/orders/o1/chat')).send({ message: '  ' }).expect(400);
     expect(r1.body.error).toBe('INVALID_MESSAGE');

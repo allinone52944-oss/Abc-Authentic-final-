@@ -329,6 +329,7 @@ router.get('/orders/:id', async (req, res) => {
     const r = await db.query(
       `SELECT o.id, o.user_id, o.service_id, o.status, o.data, o.documents,
               o.notes, o.price, o.idempotency_key, o.created_at, o.updated_at,
+              o.cancel_reason, o.refund_balance, o.refund_credit,
               s.name AS service_name, s.name_bn AS service_name_bn
        FROM orders o JOIN services s ON s.id = o.service_id
        WHERE o.id = $1 AND o.user_id = $2`,
@@ -619,7 +620,7 @@ router.get('/wallet', async (req, res) => {
     const { page, limit, offset } = pageParams(req);
     const total = await db.query('SELECT COUNT(*) FROM transactions WHERE user_id = $1', [req.user.id]);
     const rows = await db.query(
-      `SELECT id, type, amount, method, sender_no, trxid, status, created_at,
+      `SELECT id, type, amount, method, sender_no, trxid, status, created_at, cancel_reason,
               (SELECT json_build_object('id', c.id, 'code', c.code, 'status', c.status, 'amount', c.amount)
                FROM coupons c WHERE c.recharge_id = transactions.id LIMIT 1) AS coupon
        FROM transactions WHERE user_id = $1
@@ -695,7 +696,9 @@ router.post('/wallet/recharge', async (req, res) => {
       // Audit #23 — case-folded: 'abc123' must match a stored
       // 'ABC123', or a case change bypasses the DUP check and the
       // same TrxID can be credited twice.
-      'SELECT id, user_id, amount, status, created_at FROM transactions WHERE UPPER(trxid) = UPPER($1) LIMIT 1', [String(trxid).trim()]);
+      // Audit #28 — cancel_reason travels with the duplicate, so
+      // a rejected original shows WHY it was rejected.
+      'SELECT id, user_id, amount, status, created_at, cancel_reason FROM transactions WHERE UPPER(trxid) = UPPER($1) LIMIT 1', [String(trxid).trim()]);
     if (dup.rows.length) {
       // Fraud attempt: warn the attempter (WhatsApp) + alert admins
       // (push), throttled per user+trxid. The attempt itself is blocked.
@@ -718,6 +721,7 @@ router.post('/wallet/recharge', async (req, res) => {
           existing_tx: {
             amount: orig.amount, status: orig.status,
             created_at: orig.created_at, trxid: String(trxid).trim(),
+            cancel_reason: orig.cancel_reason || undefined,
           },
         });
       }

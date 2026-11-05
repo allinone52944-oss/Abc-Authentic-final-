@@ -646,6 +646,8 @@ async function notifyRechargeRejected(db, tx) {
     const msg =
       `${greetingFor(user)}\n` +
       `দুঃখিত — আপনার ৳${Number(tx.amount)} রিচার্জের অনুরোধটি সম্পন্ন করা যায়নি ❌\n` +
+      // Audit #28 — the stored cancel reason, when the admin gave one.
+      (tx.cancel_reason ? ('কারণ: ' + tx.cancel_reason + '\n') : '') +
       'তথ্য যাচাই করে আবার চেষ্টা করুন। প্রয়োজনে আমাদের সাপোর্টে যোগাযোগ করুন।';
     return dispatch(db, 'recharge_rejected', user, {
       text: msg,
