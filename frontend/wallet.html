@@ -1190,7 +1190,7 @@ async function gwAutoMatch(){
         const stTxt = ex.status === 'approved' ? 'পাস (অনুমোদিত)' : (ex.status === 'rejected' ? 'প্রত্যাখ্যাত' : 'পেন্ডিং');
         stateEl.innerHTML = '<div class="gw-state duplicate"><b>ℹ️ এই TrxID-র রিচার্জ আগেই আছে।</b><br>' +
           'পরিমাণ: <b>৳' + bn(ex.amount) + '</b> • তারিখ: <b>' + esc(gwFmtDt(ex.created_at)) + '</b> • অবস্থা: <b>' + stTxt + '</b>' +
-          (ex.status === 'approved' ? '<br>✅ এই টাকা already ব্যালেন্সে যোগ হয়েছে।' : '') +
+          (ex.status === 'approved' ? '<br>✅ এই টাকা ইতিমধ্যে ব্যালেন্সে যোগ হয়েছে।' : '') +
           // Audit #28 — a rejected original shows WHY it was rejected.
           (ex.status === 'rejected' && ex.cancel_reason ? '<br>কারণ: ' + esc(ex.cancel_reason) : '') +
           '</div>';
@@ -1335,7 +1335,7 @@ async function submitRecharge(){
         const stTxt=ex.status==='approved'?'পাস (অনুমোদিত)':(ex.status==='rejected'?'প্রত্যাখ্যাত':'পেন্ডিং');
         err.innerHTML='<div class="gw-state duplicate" style="margin-bottom:0;"><b>ℹ️ এই TrxID-র রিচার্জ আগেই আছে।</b><br>' +
           'পরিমাণ: <b>৳'+bn(ex.amount)+'</b> • তারিখ: <b>'+esc(gwFmtDt(ex.created_at))+'</b> • অবস্থা: <b>'+stTxt+'</b>' +
-          (ex.status==='approved'?'<br>✅ এই টাকা already ব্যালেন্সে যোগ হয়েছে।':'') +
+          (ex.status==='approved'?'<br>✅ এই টাকা ইতিমধ্যে ব্যালেন্সে যোগ হয়েছে।':'') +
           // Audit #28 — a rejected original shows WHY it was rejected.
           (ex.status==='rejected' && ex.cancel_reason ? '<br>কারণ: ' + esc(ex.cancel_reason) : '') +
           '</div>';

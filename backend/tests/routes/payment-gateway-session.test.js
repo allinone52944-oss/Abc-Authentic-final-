@@ -500,3 +500,11 @@ describe('frontend/wallet.html — gateway session invariants', () => {
     expect(body).toContain('trxid');
   });
 });
+
+describe('audit #81 — duplicate display is pure Bengali (no "already")', () => {
+  test('both DUP displays say "ইতিমধ্যে ব্যালেন্সে যোগ হয়েছে"', () => {
+    const html = walletHtml();
+    expect(html).not.toContain('already ব্যালেন্সে');
+    expect(html.split('✅ এই টাকা ইতিমধ্যে ব্যালেন্সে যোগ হয়েছে।').length - 1).toBe(2);
+  });
+});
