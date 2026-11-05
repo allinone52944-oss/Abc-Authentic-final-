@@ -408,3 +408,17 @@ describe('GET /api/admin/sms — unmatched list (audit #34)', () => {
     expect(fn).toContain("AND parse_status = 'parsed'");
   });
 });
+
+describe('GET /api/admin/sms — pagination (audit #36)', () => {
+  test('page=2&limit=30 → LIMIT 30 OFFSET 30', async () => {
+    db.__routeQuery([
+      ['SELECT COUNT(*) FROM incoming_sms s', { rows: [{ count: '61' }] }],
+      ['FROM incoming_sms s', { rows: [{ id: 's1' }] }],
+    ]);
+    const r = await withAdmin(request(adminApp()).get('/api/admin/sms?matched=no&page=2&limit=30')).expect(200);
+    expect(r.body.total).toBe(61);
+    expect(r.body.page).toBe(2);
+    const rowsQ = db.query.mock.calls.find((c) => /FROM incoming_sms s/.test(c[0]) && /LIMIT/.test(c[0]));
+    expect(rowsQ[1]).toEqual([30, 30]); // limit, offset
+  });
+});

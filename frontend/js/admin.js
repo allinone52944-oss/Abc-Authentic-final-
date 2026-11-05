@@ -4131,9 +4131,16 @@ TABS.recharge = async () => {
 };
 
 /* ---------------- SMS AUTO-MATCH ---------------- */
+// Audit #36 — short method label for the manual-match dropdown.
+function smsMethodBn(m) {
+  return { bkash_payment: 'bKash', bkash_personal: 'bKash', nagad: 'Nagad', rocket: 'Rocket' }[(m || '').toLowerCase()] || (m || '—');
+}
 TABS.sms = async () => {
   const f = window._smsFilter || 'no';
-  const r = await ABC.api('/admin/sms?matched=' + f + '&limit=30');
+  // Audit #36 — the hub is paged (the backend already returns
+  // total/page/limit; the tab just never asked for a page).
+  const page = Math.max(1, window._smsPage || 1);
+  const r = await ABC.api('/admin/sms?matched=' + f + '&limit=30&page=' + page);
   const d = await r.json();
   const pr = await (await ABC.api('/admin/sms/pending-recharges')).json();
   const pend = pr.pending || [];
@@ -4145,9 +4152,9 @@ TABS.sms = async () => {
       '<p class="adm-page-sub">ব্যাংকিং SMS পর্যালোচনা ও রিচার্জ অটোমেশন অডিট</p>' +
     '</div>' +
     '<div class="adm-head-actions">' +
-      '<button class="mini-btn' + (f === 'no' ? ' ok' : '') + '" onclick="window._smsFilter=\'no\';show(\'sms\')">⏳ আনম্যাচড</button>' +
-      '<button class="mini-btn' + (f === 'yes' ? ' ok' : '') + '" onclick="window._smsFilter=\'yes\';show(\'sms\')">✅ ম্যাচড</button>' +
-      '<button class="mini-btn' + (f === '' ? ' ok' : '') + '" onclick="window._smsFilter=\'\';show(\'sms\')">📋 সব SMS</button>' +
+      '<button class="mini-btn' + (f === 'no' ? ' ok' : '') + '" onclick="window._smsFilter=\'no\';window._smsPage=1;show(\'sms\')">⏳ আনম্যাচড</button>' +
+      '<button class="mini-btn' + (f === 'yes' ? ' ok' : '') + '" onclick="window._smsFilter=\'yes\';window._smsPage=1;show(\'sms\')">✅ ম্যাচড</button>' +
+      '<button class="mini-btn' + (f === '' ? ' ok' : '') + '" onclick="window._smsFilter=\'\';window._smsPage=1;show(\'sms\')">📋 সব SMS</button>' +
     '</div>' +
   '</div>';
 
@@ -4190,9 +4197,9 @@ TABS.sms = async () => {
           '</div>' +
           '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">' +
             (!matched
-              ? '<select id="sms-tx-' + s.id + '" class="mini-btn" style="max-width:200px;font-size:12px;">' +
+              ? '<select id="sms-tx-' + s.id + '" class="mini-btn" style="max-width:300px;font-size:12px;">' +
                   '<option value="">পেন্ডিং রিচার্জ বাছুন…</option>' +
-                  pend.map(p => '<option value="' + p.id + '">৳' + bn(p.amount) + ' • ' + esc(p.user_name) + ' • ' + esc(p.trxid || '') + '</option>').join('') +
+                  pend.map(p => '<option value="' + p.id + '">৳' + bn(p.amount) + ' • ' + esc(smsMethodBn(p.method)) + ' • ' + esc(p.sender_no || '—') + ' • ' + esc(p.user_name) + ' • ' + esc(p.trxid || '') + '</option>').join('') +
                 '</select>' +
                 '<div style="display:flex;gap:6px;">' +
                   '<button class="mini-btn ok" onclick="AdmSms.match(\'' + s.id + '\')">🔗 ম্যাচ করুন</button>' +
@@ -4212,6 +4219,17 @@ TABS.sms = async () => {
       '</div>';
     }
     html += '</div>';
+  }
+
+  // Audit #36 — pager (30 per page, from d.total)
+  const _smsTotal = d.total || 0;
+  const _smsPages = Math.max(1, Math.ceil(_smsTotal / 30));
+  if (list.length || _smsTotal > 0) {
+    html += '<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:20px;">' +
+      '<button class="mini-btn"' + (page <= 1 ? ' disabled' : '') + ' onclick="window._smsPage=' + (page - 1) + ';show(\'sms\')">← আগের</button>' +
+      '<span style="font-size:13px;color:#475569;">পৃষ্ঠা ' + bn(page) + ' / ' + bn(_smsPages) + ' • মোট ' + bn(_smsTotal) + 'টি SMS</span>' +
+      '<button class="mini-btn"' + (page >= _smsPages ? ' disabled' : '') + ' onclick="window._smsPage=' + (page + 1) + ';show(\'sms\')">পরের →</button>' +
+    '</div>';
   }
 
   // Forwarding setup instructions
