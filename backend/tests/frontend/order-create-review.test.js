@@ -96,3 +96,29 @@ describe('order-create.html — fee breakdown with locked credit (audit #44)', (
     expect(showReviewFn).toContain('userBal + lockedCredit < price');
   });
 });
+
+describe('order-create.html — coupon note + redeem link at checkout (audit #45)', () => {
+  const html = read('frontend/order-create.html');
+  const wallet = read('frontend/wallet.html');
+  const script = html.slice(html.indexOf('<script>', html.indexOf('app.js')));
+  const initFn = script.slice(script.indexOf('async function init(){'), script.indexOf('function triggerDraftSave(){'));
+
+  test('a coupon note box with a redeem link sits on the order page', () => {
+    expect(html).toContain('id="couponBox"');
+    expect(html).toContain('কুপন কোড আছে?');
+    expect(html).toContain('href="/wallet.html#couponCard"');
+    expect(html).toContain('ওয়ালেটে রিডিম করুন →');
+  });
+
+  test('when this service has locked credit, the note says so in words', () => {
+    expect(html).toContain('id="couponCreditNote"');
+    expect(initFn).toContain('if (lockedCredit > 0)');
+    expect(initFn).toContain("couponCreditNote");
+    expect(initFn).toContain('লকড ক্রেডিট আছে — কনফার্ম করলে প্রথমে এখান থেকে কাটবে');
+  });
+
+  test('the wallet coupon card is the link target', () => {
+    expect(wallet).toContain('id="couponCard"');
+    expect(wallet).toContain('id="couponCode"');
+  });
+});
