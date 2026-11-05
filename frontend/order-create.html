@@ -276,9 +276,21 @@ if(dropArea){
   }, false);
 }
 
+// Audit #47 — ONE file-size rule for every upload path on this page
+// (multi-dropzone + drag-drop + named docs): 10 MB, the same limit
+// manual-submit.html, order-detail.html and order-status.html use.
+// Checked at selection time AND again in collectOrder(), so an
+// oversized file can never reach the paid submit.
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+function fileTooBig(f){ return f && f.size > MAX_FILE_BYTES; }
+
 function handleFileSelect(files){
   if(!files) return;
   for(let i=0; i<files.length; i++){
+    if(fileTooBig(files[i])){
+      alert('"' + files[i].name + '" ফাইলটি ১০ মেগাবাইটের বেশি — ছোট ফাইল দিন।');
+      continue;
+    }
     if(selectedFiles.length >= 6){
       alert('⚠️ সর্বোচ্চ ৬টি ফাইল নির্বাচন করা যাবে।');
       break;
@@ -336,6 +348,15 @@ function updateDocFeedback(inp, idx){
   if(!fb) return;
   if(inp.files && inp.files[0]){
     const f = inp.files[0];
+    if(fileTooBig(f)){ // audit #47 — same 10 MB rule as the multi-uploader
+      inp.value = '';
+      fb.innerHTML = '<span style="font-size:20px;color:#dc2626;">⚠️</span>' +
+        '<div>' +
+          '<div style="font-weight:700;color:#b91c1c;">"' + esc(f.name) + '" ফাইলটি ১০ মেগাবাইটের বেশি — ছোট ফাইল দিন।</div>' +
+          '<div style="font-size:11px;color:#64748b;">পরিবর্তন করতে পুনরায় ক্লিক করুন</div>' +
+        '</div>';
+      return;
+    }
     fb.innerHTML = '<span style="font-size:20px;color:#16a34a;">✅</span>' +
       '<div>' +
         '<div style="font-weight:700;color:#15803d;">' + esc(f.name) + ' (' + formatBytes(f.size) + ')</div>' +
@@ -679,6 +700,19 @@ function collectOrder(){
       err.style.display = 'block';
       return null;
     }
+  }
+
+  // Audit #47 — backstop: no file over 10 MB reaches the paid submit,
+  // even if a selection path missed it.
+  const oversized = [];
+  document.querySelectorAll('[data-doc]').forEach(inp=>{
+    if(inp.files && inp.files.length && fileTooBig(inp.files[0])) oversized.push(inp.files[0].name);
+  });
+  selectedFiles.forEach(f=>{ if(fileTooBig(f)) oversized.push(f.name); });
+  if(oversized.length){
+    err.textContent = '⚠️ "' + oversized[0] + '" ফাইলটি ১০ মেগাবাইটের বেশি — ছোট ফাইল দিন।';
+    err.style.display = 'block';
+    return null;
   }
 
   const orderDocs = [];

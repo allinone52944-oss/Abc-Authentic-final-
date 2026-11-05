@@ -158,3 +158,46 @@ describe('order-create.html — one sample, one guided form (audit #46)', () => 
     expect(script).toContain('function copySampleText(){');
   });
 });
+
+describe('order-create.html — 10 MB check before submit, every path (audit #47)', () => {
+  const html = read('frontend/order-create.html');
+  const statusHtml = read('frontend/order-status.html');
+  const script = html.slice(html.indexOf('<script>', html.indexOf('app.js')));
+  const selectFn = script.slice(script.indexOf('function handleFileSelect(files){'), script.indexOf('function removeSelectedFile('));
+  const docFbFn = script.slice(script.indexOf('function updateDocFeedback(inp, idx){'), script.indexOf('const LocalDraft'));
+  const collectFn = script.slice(script.indexOf('function collectOrder(){'), script.indexOf('// Audit #40 — step 1'));
+
+  test('one shared rule: 10 MB, the same limit the other pages use', () => {
+    expect(script).toContain('const MAX_FILE_BYTES = 10 * 1024 * 1024;');
+    expect(script).toContain('function fileTooBig(f)');
+    expect(script).toContain('f.size > MAX_FILE_BYTES');
+  });
+
+  test('the multi-uploader (click + drag-drop) skips oversized files at selection', () => {
+    expect(selectFn).toContain('fileTooBig(files[i])');
+    expect(selectFn).toContain('১০ মেগাবাইটের বেশি');
+    expect(selectFn).toContain('continue;');
+  });
+
+  test('a named-doc input rejects an oversized file at selection (clears it, shows why)', () => {
+    expect(docFbFn).toContain('fileTooBig(f)');
+    expect(docFbFn).toContain("inp.value = '';");
+    expect(docFbFn).toContain('১০ মেগাবাইটের বেশি');
+  });
+
+  test('collectOrder re-checks every file before the paid POST (backstop)', () => {
+    expect(collectFn).toContain('oversized');
+    expect(collectFn).toContain('fileTooBig(inp.files[0])');
+    expect(collectFn).toContain('fileTooBig(f)');
+    expect(collectFn).toContain('১০ মেগাবাইটের বেশি');
+    expect(collectFn).toContain('return null;');
+  });
+
+  test('recovery: the status-page warning points at the in-page upload, not the detail chat', () => {
+    // fixed by #43 (in-page upload) and pinned here as #47's second half
+    const box = statusHtml.slice(statusHtml.indexOf('id="docWarningBox"'), statusHtml.indexOf('id="docWarningBox"') + 600);
+    expect(box).toContain('ফাইল যোগ করুন');
+    expect(box).not.toContain('অর্ডার ডিটেইলস ও চ্যাট');
+    expect(statusHtml).toContain('function uploadExtraDoc(files)');
+  });
+});
