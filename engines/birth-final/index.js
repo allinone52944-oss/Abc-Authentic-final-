@@ -97,6 +97,4 @@ function getApp() {
 function getInfo() { return { engine: 'birth-proxy', port: ENGINE_PORT }; }
 async function generate() { return { ok: false, error: 'Use API' }; }
 async function run() { return { ok: false, error: 'Use API' }; }
-function maskBrn(b) { return b; }
-
-module.exports = { init, getInfo, getApp, generate, run, maskBrn };
+module.exports = { init, getInfo, getApp, generate, run };
