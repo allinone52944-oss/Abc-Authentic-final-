@@ -274,7 +274,50 @@ async function refundOrderPrice(client, order, refPrefix) {
   return { refunded: true, creditPart, balancePart };
 }
 
+// ---- Hold release (audit #9, QR double-fee trap) -----------------
+//
+// A hold is a charge taken BEFORE the risky step (the QR gateway
+// call, up to 120s) under the attempt's idempotency ref, via
+// payForService. If the step then fails, the hold is released here:
+// the exact split the hold consumed (locked credit first, then
+// wallet balance) is read back from the ledger and returned, so a
+// failed verification costs ৳0 net. Idempotent: the release rows
+// carry their own refs ('release-' + ref), so a second release is
+// a no-op (DUPLICATE_TRANSACTION on the balance leg, headroom-capped
+// on the credit leg, ON CONFLICT DO NOTHING on the refund row).
+// All queries run on the caller's transaction client, so the
+// credit restore, the balance credit and the caller's own writes
+// commit or roll back together.
+async function releaseHold(client, { userId, serviceId, ref }) {
+  if (!ref) return { released: false, creditPart: 0, balancePart: 0 };
+  const r = await client.query(
+    `SELECT trxid, amount FROM transactions
+      WHERE user_id = $1 AND trxid IN ($2, $3) AND status = 'approved'`,
+    [userId, ref, ref + ':svc']
+  );
+  const svc = r.rows.find((x) => x.trxid === ref + ':svc');
+  const bal = r.rows.find((x) => x.trxid === ref);
+  const creditPart = svc ? Math.round(Math.abs(Number(svc.amount)) * 100) / 100 : 0;
+  const balancePart = bal ? Math.round(Math.abs(Number(bal.amount)) * 100) / 100 : 0;
+  if (creditPart <= 0 && balancePart <= 0) return { released: false, creditPart: 0, balancePart: 0 };
+  if (creditPart > 0 && serviceId) {
+    await restoreServiceCredit(client, userId, serviceId, creditPart, 'release-' + ref);
+  }
+  // Balance leg (plus a zero-amount marker row for a credit-only
+  // hold, so the release always leaves an audit trace — same rule
+  // as refundOrderPrice's zero-balance leg).
+  try {
+    await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4)', [
+      userId, balancePart, 'refund', 'release-' + ref,
+    ]);
+  } catch (e) {
+    if (!/DUPLICATE_TRANSACTION/.test(e.message)) throw e;
+    // A concurrent release already credited the balance leg once.
+  }
+  return { released: true, creditPart, balancePart };
+}
+
 module.exports = {
   addServiceCredit, availableFor, payForService, lockedCreditRows,
-  refundOrderPrice, reconstructChargeSplit,
+  refundOrderPrice, reconstructChargeSplit, releaseHold,
 };

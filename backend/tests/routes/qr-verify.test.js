@@ -61,6 +61,49 @@ function postVerify(req, { subject = 'NID-123', idem = 'idem-1', withFiles = tru
   return withUser(r);
 }
 
+// Stateful wallet ledger for hold tests (audit #9): the mock DB is
+// stateless, but production Postgres remembers the hold. These
+// handlers simulate it — wallet_apply debits record the hold, and
+// the ledger lookups then report it, so the post-gateway
+// already-paid check and the release see the hold exactly as the
+// real DB would. `movements` records every wallet_apply call
+// (amount/type/ref) so tests can prove the net movement is ৳0 on
+// failure and exactly one debit on success.
+function holdLedger({ ref, price }) {
+  const state = { held: false, movements: [] };
+  return {
+    state,
+    routes: [
+      ['wallet_apply', (text, params) => {
+        state.movements.push({ amount: params[1], type: params[2], ref: params[3] });
+        if (params[1] < 0) state.held = true;
+        return { rows: [{ balance: 150 }] };
+      }],
+      [(text) => text.includes('SELECT 1 FROM transactions'), () => ({
+        rows: state.held ? [{ '1': 1 }] : [],
+      })],
+      [(text) => text.includes('SELECT trxid, amount FROM transactions'), () => ({
+        rows: state.held ? [{ trxid: ref, amount: -price }] : [],
+      })],
+    ],
+  };
+}
+
+// Standard routes for hold tests (explicit array — NOT baseRoutes,
+// so the stateful ledger handlers above win over the generic
+// 'FROM transactions WHERE' route).
+function holdRoutes(ledger, extra = []) {
+  return [
+    ...ledger.routes,
+    ['FROM orders WHERE user_id', { rows: [] }],
+    ['FROM services WHERE', { rows: [{ id: 20, price: 50 }] }],
+    ['FROM user_services WHERE', { rows: [] }],
+    ['FROM users WHERE', { rows: [{ balance: 200 }] }],
+    ['FROM settings WHERE', { rows: [{ value: { api_key: 'test-key' } }] }],
+    ...extra,
+  ];
+}
+
 beforeEach(() => {
   db.__reset();
   adapter.verify.mockReset();
@@ -153,6 +196,24 @@ describe('POST /api/qr-verify/verify — guards before any gateway call', () => 
     expect(adapter.verify).not.toHaveBeenCalled();
   });
 
+  test('balance drops between pre-check and hold → 402 before gateway, QR untouched (audit #9)', async () => {
+    // The pre-check reads ৳200 (enough), but the hold's locked
+    // re-read sees ৳10 — the race the old code only caught AFTER
+    // the gateway had charged its fee and consumed the QR. The
+    // hold fails here instead, before any gateway cost.
+    db.__routeQuery([
+      [(text) => text.includes('FROM users WHERE') && text.includes('FOR UPDATE'), { rows: [{ balance: 10 }] }],
+      ['FROM orders WHERE user_id', { rows: [] }],
+      ['FROM services WHERE', { rows: [{ id: 20, price: 50 }] }],
+      ['FROM user_services WHERE', { rows: [] }],
+      ['FROM users WHERE', { rows: [{ balance: 200 }] }],
+      ['FROM settings WHERE', { rows: [{ value: { api_key: 'test-key' } }] }],
+    ]);
+    const r = await postVerify(request(app()), { idem: 'idem-drop' }).expect(402);
+    expect(r.body.error).toBe('INSUFFICIENT_BALANCE');
+    expect(adapter.verify).not.toHaveBeenCalled();
+  });
+
   test('gateway key not configured → 503 GATEWAY_NOT_CONFIGURED, adapter not called', async () => {
     db.__routeQuery([
       ['FROM orders WHERE user_id', { rows: [] }],
@@ -180,23 +241,28 @@ describe('POST /api/qr-verify/verify — guards before any gateway call', () => 
 });
 
 describe('POST /api/qr-verify/verify — gateway outcomes', () => {
-  test('gateway transport error → 502 GATEWAY_ERROR, no charge, no order', async () => {
-    let charged = false; let ordered = false;
-    db.__routeQuery(baseRoutes([
-      ['wallet_apply', () => { charged = true; return { rows: [] }; }],
+  test('gateway transport error → 502 GATEWAY_ERROR, hold taken then released (net ৳0), no order', async () => {
+    const ledger = holdLedger({ ref: 'qr-verify-idem-1', price: 50 });
+    let ordered = false;
+    db.__routeQuery(holdRoutes(ledger, [
       ['INSERT INTO orders', () => { ordered = true; return { rows: [] }; }],
     ]));
     adapter.verify.mockResolvedValue({ ok: false, error: 'GATEWAY_UNREACHABLE: timeout' });
     const r = await postVerify(request(app())).expect(502);
     expect(r.body.error).toBe('GATEWAY_ERROR');
-    expect(charged).toBe(false);
     expect(ordered).toBe(false);
+    // Audit #9: the hold is taken before the gateway call and
+    // released when the gateway fails — the customer pays ৳0 net.
+    expect(ledger.state.movements).toHaveLength(2);
+    expect(ledger.state.movements[0]).toMatchObject({ amount: -50, type: 'debit' });
+    expect(ledger.state.movements[1]).toMatchObject({ amount: 50, type: 'refund' });
+    expect(ledger.state.movements.reduce((s, m) => s + m.amount, 0)).toBe(0);
   });
 
-  test('gateway says no match → 422 NOT_VERIFIED, no charge, failed order + failure receipt + notifications', async () => {
-    let charged = false; let insertSql = null; let insertParams = null; let updatedDocs = null;
-    db.__routeQuery(baseRoutes([
-      ['wallet_apply', () => { charged = true; return { rows: [] }; }],
+  test('gateway says no match → 422 NOT_VERIFIED, hold released (net ৳0), failed order + failure receipt + notifications', async () => {
+    const ledger = holdLedger({ ref: 'qr-verify-idem-f1', price: 50 });
+    let insertSql = null; let insertParams = null; let updatedDocs = null;
+    db.__routeQuery(holdRoutes(ledger, [
       ['INSERT INTO orders', (text, params) => { insertSql = text; insertParams = params; return { rows: [{ id: 'oF1' }] }; }],
       ['SELECT documents FROM orders', { rows: [{ documents: '[]' }] }],
       ['UPDATE orders SET documents', (text, params) => { updatedDocs = params[0]; return { rows: [] }; }],
@@ -210,7 +276,12 @@ describe('POST /api/qr-verify/verify — gateway outcomes', () => {
     expect(r.body.orderId).toBe('oF1');
     // the customer sees a Bengali reason, never the raw gateway text
     expect(r.body.message).toContain('কোনো রেকর্ড পাওয়া যায়নি');
-    expect(charged).toBe(false);
+    // Audit #9: the hold is taken before the gateway call and
+    // released when it does not verify — the customer pays ৳0 net.
+    expect(ledger.state.movements).toHaveLength(2);
+    expect(ledger.state.movements[0]).toMatchObject({ amount: -50, type: 'debit' });
+    expect(ledger.state.movements[1]).toMatchObject({ amount: 50, type: 'refund' });
+    expect(ledger.state.movements.reduce((s, m) => s + m.amount, 0)).toBe(0);
     // a FAILED order is recorded (no charge) with the failure receipt
     expect(insertSql).toContain("'failed'");
     expect(insertSql).toMatch(/ON CONFLICT \(user_id, idempotency_key\) WHERE idempotency_key IS NOT NULL DO NOTHING/);
@@ -262,10 +333,9 @@ describe('POST /api/qr-verify/verify — gateway outcomes', () => {
     expect(adapter.verify).not.toHaveBeenCalled();
   });
 
-  test('order insert keeps failing after charge → 500 ORDER_RECORD_FAILED, never a record-less success', async () => {
-    db.__routeQuery(baseRoutes([
-      ['FROM transactions WHERE', { rows: [] }],
-      ['wallet_apply', () => ({ rows: [{ balance: 150 }] })],
+  test('order insert keeps failing after charge → 500 ORDER_RECORD_FAILED, hold released (net ৳0), never a record-less success', async () => {
+    const ledger = holdLedger({ ref: 'qr-verify-idem-norec', price: 50 });
+    db.__routeQuery(holdRoutes(ledger, [
       ['INSERT INTO orders', () => ({ rows: [] })],
     ]));
     adapter.verify.mockResolvedValue({
@@ -275,6 +345,10 @@ describe('POST /api/qr-verify/verify — gateway outcomes', () => {
     const r = await postVerify(request(app()), { idem: 'idem-norec' }).expect(500);
     expect(r.body.error).toBe('ORDER_RECORD_FAILED');
     expect(r.body.message).toContain('রেকর্ড তৈরি হয়নি');
+    // Audit #9: no order row means no charge either — the hold is
+    // released instead of leaving money taken with a 500.
+    expect(ledger.state.movements).toHaveLength(2);
+    expect(ledger.state.movements.reduce((s, m) => s + m.amount, 0)).toBe(0);
   });
 
   test('duplicate idempotency_key of a FAILED attempt → stored 422 + receipt, gateway NOT called again', async () => {
@@ -291,10 +365,9 @@ describe('POST /api/qr-verify/verify — gateway outcomes', () => {
   });
 
   test('verified → charge once + order (partial-index SQL) + receipt stored', async () => {
-    let charged = false; let insertSql = null; let updatedDocs = null;
-    db.__routeQuery(baseRoutes([
-      ['FROM transactions WHERE', { rows: [] }],
-      ['wallet_apply', () => { charged = true; return { rows: [{ balance: 150 }] }; }],
+    const ledger = holdLedger({ ref: 'qr-verify-idem-9', price: 50 });
+    let insertSql = null; let updatedDocs = null;
+    db.__routeQuery(holdRoutes(ledger, [
       ['INSERT INTO orders', (text) => { insertSql = text; return { rows: [{ id: 'o9' }] }; }],
       ['SELECT documents FROM orders', { rows: [{ documents: '[]' }] }],
       ['UPDATE orders SET documents', (text, params) => { updatedDocs = params[0]; return { rows: [] }; }],
@@ -306,7 +379,11 @@ describe('POST /api/qr-verify/verify — gateway outcomes', () => {
     const r = await postVerify(request(app()), { idem: 'idem-9' }).expect(200);
     expect(r.body).toMatchObject({ ok: true, verified: true, charged: 50, orderId: 'o9' });
     expect(r.body.receipt).toContain('/api/orders/o9/documents/delivery-qr-idem-9.pdf');
-    expect(charged).toBe(true);
+    // Audit #9: the hold taken before the gateway call IS the
+    // charge — exactly one wallet debit, no second charge after
+    // the gateway verifies.
+    expect(ledger.state.movements).toHaveLength(1);
+    expect(ledger.state.movements[0]).toMatchObject({ amount: -50, type: 'debit', ref: 'qr-verify-idem-9' });
     expect(insertSql).toMatch(/ON CONFLICT \(user_id, idempotency_key\) WHERE idempotency_key IS NOT NULL DO NOTHING/);
     // adapter received the settings key + both buffers
     expect(adapter.verify).toHaveBeenCalledTimes(1);

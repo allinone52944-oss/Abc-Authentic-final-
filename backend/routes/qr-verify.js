@@ -5,9 +5,11 @@
 // GET  /api/qr-verify/price  → { ok, allowed, price, balance }
 // POST /api/qr-verify/verify (multipart: photo, qr_image,
 //        subject_ref, idempotency_key)
-//        → gateway verification; the wallet is charged ONLY
-//          when the gateway verifies (the gateway itself also
-//          charges only on success). A completed order + a
+//        → gateway verification; the wallet amount is HELD before
+//          the gateway call (audit #9) and kept only when the
+//          gateway verifies — a failed verification releases the
+//          hold, so it still costs ৳0 net. The gateway itself also
+//          charges only on success. A completed order + a
 //          receipt PDF (delivery document) are recorded, so
 //          the work shows up in the customer's History.
 //
@@ -138,6 +140,34 @@ async function storeReceipt(orderId, fn, pdfArgs) {
   return '/api/orders/' + orderId + '/documents/' + fn;
 }
 
+// Has this attempt's charge already been taken (the hold, or a
+// completed charge) under the idempotency ref? Same ledger check
+// the post-gateway charge used to run inline — factored out so
+// the hold, the release and the final charge all read one rule.
+async function hasApprovedCharge(dbConn, userId, ref) {
+  const r = await dbConn.query(
+    `SELECT 1 FROM transactions WHERE user_id = $1 AND trxid IN ($2, $3) AND status = 'approved' LIMIT 1`,
+    [userId, ref, ref + ':svc']
+  );
+  return r.rows.length > 0;
+}
+
+// Release a hold, best-effort: the money must come back even if
+// the release itself hits a transient error, so failures are
+// logged loudly for admin reconciliation (the hold ref is in the
+// log) instead of failing the customer's response.
+async function releaseHoldBestEffort(userId, serviceId, ref) {
+  try {
+    await db.withTransaction((client) => serviceCredits.releaseHold(client, {
+      userId, serviceId, ref,
+    }));
+    return true;
+  } catch (e) {
+    safeLog('[qr-verify] HOLD RELEASE FAILED (user', userId, 'ref', ref, '):', e.message, '— reconcile from the ledger');
+    return false;
+  }
+}
+
 router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) => {
   try {
     const photoFile = req.files && req.files.photo && req.files.photo[0];
@@ -224,12 +254,64 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
       });
     }
 
-    const result = await adapter.verify({
-      apiKey,
-      photo: { buffer: photoFile.buffer, name: photoFile.originalname, mime: photoFile.mimetype },
-      qr: { buffer: qrFile.buffer, name: qrFile.originalname, mime: qrFile.mimetype },
-    });
+    // AUDIT #9 (2026-11-05): HOLD the wallet amount BEFORE the
+    // gateway call. The gateway charges its own ৳30 fee on success
+    // and the QR is single-use, so a balance drop between the
+    // pre-check above and the post-gateway charge used to leave the
+    // customer with a spent gateway fee + a consumed QR and no
+    // result (CHARGE_FAILED_AFTER_GATEWAY). Taking the charge first
+    // — under the same idempotency ref — closes that window: the
+    // post-gateway charge below is then a no-op (already paid), and
+    // a gateway failure releases the hold, so a failed verification
+    // still costs ৳0 net. A retry with the same key finds the hold
+    // and never double-charges.
+    const ref = 'qr-verify-' + idem;
+    let held = false;
+    if (price > 0) {
+      held = await hasApprovedCharge(db, req.user.id, ref);
+      if (!held) {
+        try {
+          await db.withTransaction((client) => serviceCredits.payForService(client, {
+            userId: req.user.id, serviceId, amount: Math.abs(price), ref,
+          }));
+          held = true;
+        } catch (e) {
+          if (/DUPLICATE_TRANSACTION/.test(e.message)) {
+            // A concurrent request for the same attempt already held it.
+            held = true;
+          } else if (/INSUFFICIENT_BALANCE/.test(e.message)) {
+            // Balance moved between the pre-check and the hold — the
+            // gateway was never called, so no fee and no QR were
+            // spent: fail here, before any gateway cost.
+            return res.status(402).json({
+              error: 'INSUFFICIENT_BALANCE',
+              message: `পর্যাপ্ত ব্যালেন্স নেই। যাচাই করতে ৳${price} প্রয়োজন।`,
+              required: price,
+            });
+          } else throw e;
+        }
+      }
+    }
+
+    let result;
+    try {
+      result = await adapter.verify({
+        apiKey,
+        photo: { buffer: photoFile.buffer, name: photoFile.originalname, mime: photoFile.mimetype },
+        qr: { buffer: qrFile.buffer, name: qrFile.originalname, mime: qrFile.mimetype },
+      });
+    } catch (e) {
+      // Transport throw (not a gateway verdict): release the hold
+      // first, then report a gateway error — the customer paid ৳0.
+      if (held) await releaseHoldBestEffort(req.user.id, serviceId, ref);
+      safeLog('[qr-verify] gateway error for user', req.user.id, ':', e.message);
+      return res.status(502).json({
+        error: 'GATEWAY_ERROR',
+        message: 'যাচাই সার্ভারে সমস্যা হয়েছে — কোনো টাকা কাটা হয়নি। কিছুক্ষণ পর আবার চেষ্টা করুন।',
+      });
+    }
     if (!result.ok) {
+      if (held) await releaseHoldBestEffort(req.user.id, serviceId, ref);
       safeLog('[qr-verify] gateway error for user', req.user.id, ':', result.error);
       return res.status(502).json({
         error: 'GATEWAY_ERROR',
@@ -238,7 +320,10 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
     }
     if (!result.verified) {
       // Gateway itself charged 0 for this — the customer pays 0
-      // too. Premium flow (owner-approved sample, 2026-10-22):
+      // too. Release the hold first, so the failed outcome is
+      // ৳0 net (audit #9).
+      if (held) await releaseHoldBestEffort(req.user.id, serviceId, ref);
+      // Premium flow (owner-approved sample, 2026-10-22):
       // the failure is still a recorded outcome — a 'failed'
       // order carrying a failure receipt stored as an ADMIN-side
       // record, a WhatsApp notice to the customer and a push to
@@ -313,14 +398,15 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
       });
     }
 
-    // Verified → charge (once), record the order, store the receipt.
-    const ref = 'qr-verify-' + idem;
+    // Verified → the hold taken before the gateway call IS the
+    // charge (same idempotency ref), so there is nothing left to
+    // charge here — the already-paid check below only fires for a
+    // hold taken by an earlier attempt of this same key. The
+    // CHARGE_FAILED_AFTER_GATEWAY branch survives as a safety net:
+    // with the hold in place it cannot trigger in the normal flow.
     if (price > 0) {
-      const alreadyPaid = await db.query(
-        `SELECT 1 FROM transactions WHERE user_id = $1 AND trxid IN ($2, $3) AND status = 'approved' LIMIT 1`,
-        [req.user.id, ref, ref + ':svc']
-      );
-      if (!alreadyPaid.rows.length) {
+      const alreadyPaid = await hasApprovedCharge(db, req.user.id, ref);
+      if (!alreadyPaid) {
         try {
           await db.withTransaction((client) => serviceCredits.payForService(client, {
             userId: req.user.id, serviceId, amount: Math.abs(price), ref,
@@ -404,10 +490,14 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
     }
 
     if (serviceId && !orderId) {
-      safeLog('[qr-verify] ORDER RECORD FAILED after charge (user', req.user.id, 'ref', ref, ') — money taken, no order row');
+      // No order row: release the hold, so the failure is
+      // money-neutral too (audit #9) — the old code left the
+      // charge in place with a 500 and nothing in History.
+      if (held) await releaseHoldBestEffort(req.user.id, serviceId, ref);
+      safeLog('[qr-verify] ORDER RECORD FAILED after charge (user', req.user.id, 'ref', ref, ') — hold released, no order row');
       return res.status(500).json({
         error: 'ORDER_RECORD_FAILED',
-        message: 'চার্জ কাটা হয়েছে কিন্তু রেকর্ড তৈরি হয়নি — সাপোর্টে জানান।',
+        message: 'রেকর্ড তৈরি হয়নি — টাকা ফেরত দেওয়া হয়েছে। আবার চেষ্টা করুন, আর সমস্যা থাকলে সাপোর্টে জানান।',
       });
     }
 

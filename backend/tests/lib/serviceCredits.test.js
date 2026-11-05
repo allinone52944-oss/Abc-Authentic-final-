@@ -2,7 +2,7 @@
 // credit rule (owner, 2026-10-21): scoped coupon/cashback money can
 // pay ONLY for its own service, is consumed before wallet balance,
 // and can never fund another service.
-const { payForService, addServiceCredit, availableFor, refundOrderPrice } = require('../../lib/serviceCredits');
+const { payForService, addServiceCredit, availableFor, refundOrderPrice, releaseHold } = require('../../lib/serviceCredits');
 
 function mockClient({ balance = 0, credits = [], dup = false } = {}) {
   const calls = [];
@@ -297,5 +297,69 @@ describe('refundOrderPrice (admin-order fix, 2026-11-03)', () => {
       { id: 'o4', user_id: 'u1', service_id: 's1', price: 0, idempotency_key: 'ck0' }, 'refund');
     expect(out.refunded).toBe(false);
     expect(client.calls).toEqual([]);
+  });
+});
+
+describe('releaseHold (audit #9)', () => {
+  // Same static fake as refundClient (which lives inside the
+  // refund describes): ledger rows keyed by ref, credit rows as
+  // given. releaseHold only reads the ledger + restores credit +
+  // credits the balance, so this is enough to prove the split.
+  function releaseClient({ ledger = {}, creditRows = [] } = {}) {
+    const calls = [];
+    return {
+      calls,
+      query: jest.fn(async (text, params) => {
+        calls.push([text, params]);
+        if (/FROM transactions/.test(text)) {
+          const ref = params[1];
+          return { rows: ledger[ref] || [] };
+        }
+        if (/FROM service_credits/.test(text)) return { rows: creditRows };
+        if (/UPDATE service_credits SET remaining/.test(text)) return { rows: [] };
+        if (/INSERT INTO service_credits/.test(text)) return { rows: [{ id: 'sc-ref' }] };
+        if (/wallet_apply/.test(text)) return { rows: [{ new_balance: 0 }] };
+        return { rows: [] };
+      }),
+    };
+  }
+
+  test('release returns the exact split the hold consumed', async () => {
+    const client = releaseClient({
+      ledger: {
+        'qr-verify-k1': [
+          { trxid: 'qr-verify-k1', amount: -60 },
+          { trxid: 'qr-verify-k1:svc', amount: -40 },
+        ],
+      },
+      creditRows: [{ id: 'c1', amount: 50, remaining: 10 }],
+    });
+    const out = await releaseHold(client, { userId: 'u1', serviceId: 's1', ref: 'qr-verify-k1' });
+    expect(out).toEqual({ released: true, creditPart: 40, balancePart: 60 });
+    const upd = client.calls.find((c) => /UPDATE service_credits SET remaining/.test(c[0]));
+    expect(upd[1]).toEqual([40, 'c1']); // headroom was 50-10=40
+    const w = client.calls.find((c) => /wallet_apply/.test(c[0]));
+    expect(w[1]).toEqual(['u1', 60, 'refund', 'release-qr-verify-k1']);
+  });
+
+  test('no hold rows → released false, no money moved', async () => {
+    const client = releaseClient({ ledger: {}, creditRows: [{ id: 'c1', amount: 50, remaining: 50 }] });
+    const out = await releaseHold(client, { userId: 'u1', serviceId: 's1', ref: 'qr-verify-k9' });
+    expect(out).toEqual({ released: false, creditPart: 0, balancePart: 0 });
+    expect(client.calls.find((c) => /wallet_apply/.test(c[0]))).toBeFalsy();
+    expect(client.calls.find((c) => /UPDATE service_credits/.test(c[0]))).toBeFalsy();
+  });
+
+  test('credit-only hold → credit restored + zero-amount marker row', async () => {
+    const client = releaseClient({
+      ledger: {
+        'qr-verify-k2': [{ trxid: 'qr-verify-k2:svc', amount: -100 }],
+      },
+      creditRows: [{ id: 'c1', amount: 100, remaining: 0 }],
+    });
+    const out = await releaseHold(client, { userId: 'u1', serviceId: 's1', ref: 'qr-verify-k2' });
+    expect(out).toEqual({ released: true, creditPart: 100, balancePart: 0 });
+    const w = client.calls.find((c) => /wallet_apply/.test(c[0]));
+    expect(w[1]).toEqual(['u1', 0, 'refund', 'release-qr-verify-k2']);
   });
 });
