@@ -1952,7 +1952,10 @@ async function loadNotices() {
 async function loadBanners() {
   try {
     const r = await ABC.api('/banners');
-    const d = r.ok ? await r.json() : { banners: [] };
+    // Audit #76 — like loadNotices: a non-OK response is a failure,
+    // not an empty banner list.
+    if (!r.ok) throw new Error('bad');
+    const d = await r.json();
     const act = (d.banners || []).filter(b => b.active);
     const stripBanners = act.filter(b => b.type === 'banner' || b.type === 'ad' || !b.type);
     const popupBanners = act.filter(b => b.type === 'popup');
@@ -1966,7 +1969,14 @@ async function loadBanners() {
     if (popupBanners.length && window.BannerRender && typeof BannerRender.showPopup === 'function') {
       BannerRender.showPopup(popupBanners[0]);
     }
-  } catch (e) {}
+  } catch (e) {
+    // Audit #76 — like loadNotices: a failed banner load shows a
+    // retry box on both strips instead of failing silently.
+    const ds = document.getElementById('bnStrip');
+    if (ds) { ds.style.display = 'block'; ds.innerHTML = retryBox('loadBanners'); requestAnimationFrame(() => ds.classList.add('show')); }
+    const ms = document.getElementById('bnStripM');
+    if (ms) { ms.style.display = 'block'; ms.innerHTML = retryBox('loadBanners'); requestAnimationFrame(() => ms.classList.add('show')); }
+  }
 }
 
 async function loadSettings() {
