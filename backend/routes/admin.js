@@ -692,6 +692,12 @@ router.get('/unified-services', async (req, res) => {
     }
 
     // ---- orders source ----
+    // Audit #67 — each source below is capped at offset+limit rows.
+    // The merge takes the newest offset+limit rows across sources,
+    // and a row outside its own source's top offset+limit can never
+    // be inside the merged top offset+limit (offset+limit newer rows
+    // of its own source stand ahead of it) — so the page is
+    // identical, without pulling whole tables into memory.
     let orderRows = [];
     let orderCount = 0;
     {
@@ -711,6 +717,8 @@ router.get('/unified-services', async (req, res) => {
         `SELECT COUNT(*) FROM orders o JOIN users u ON u.id = o.user_id
          JOIN services s ON s.id = o.service_id ${where}`, params);
       orderCount = parseInt(totalR.rows[0] && totalR.rows[0].count, 10) || 0;
+// Audit #67 — cap the source at offset+limit rows (see note above).
+      params.push(offset + limit);
       const r = await db.query(
         `SELECT o.id, o.created_at, o.price, o.status,
                 u.name AS user_name, u.phone AS user_phone,
@@ -726,7 +734,7 @@ router.get('/unified-services', async (req, res) => {
                     AND status = 'approved' LIMIT 1) AS refund_at
          FROM orders o JOIN users u ON u.id = o.user_id
          JOIN services s ON s.id = o.service_id
-         ${where} ORDER BY o.created_at DESC`, params);
+         ${where} ORDER BY o.created_at DESC LIMIT $${params.length}`, params);
       orderRows = (r.rows || []).map((row) => ({
         kind: 'order',
         kind_label: 'অর্ডার',
@@ -767,11 +775,13 @@ router.get('/unified-services', async (req, res) => {
       const totalR = await db.query(
         `SELECT COUNT(*) FROM engine_jobs j JOIN users u ON u.id = j.user_id ${where}`, params);
       deliveryCount = parseInt(totalR.rows[0] && totalR.rows[0].count, 10) || 0;
+// Audit #67 — cap the source at offset+limit rows (see note above).
+      params.push(offset + limit);
       const r = await db.query(
         `SELECT j.id, j.created_at, j.engine_id,
                 u.name AS user_name, u.phone AS user_phone
          FROM engine_jobs j JOIN users u ON u.id = j.user_id
-         ${where} ORDER BY j.created_at DESC`, params);
+         ${where} ORDER BY j.created_at DESC LIMIT $${params.length}`, params);
       deliveryRows = (r.rows || []).map((row) => ({
         kind: 'delivery',
         kind_label: 'ডেলিভারি',
@@ -803,11 +813,13 @@ router.get('/unified-services', async (req, res) => {
       const totalR = await db.query(
         `SELECT COUNT(*) FROM bdris_applications a JOIN users u ON u.id = a.user_id ${where}`, params);
       applicationCount = parseInt(totalR.rows[0] && totalR.rows[0].count, 10) || 0;
+// Audit #67 — cap the source at offset+limit rows (see note above).
+      params.push(offset + limit);
       const r = await db.query(
         `SELECT a.id, a.created_at, a.ack_no, a.applicant_name,
                 u.name AS user_name, u.phone AS user_phone
          FROM bdris_applications a JOIN users u ON u.id = a.user_id
-         ${where} ORDER BY a.created_at DESC`, params);
+         ${where} ORDER BY a.created_at DESC LIMIT $${params.length}`, params);
       applicationRows = (r.rows || []).map((row) => ({
         kind: 'application',
         kind_label: 'আবেদন',

@@ -239,3 +239,28 @@ describe('unified-services: pagination', () => {
     expect(r.body).toEqual({ rows: [], total: 0, page: 1, pages: 0, userTotal: null });
   });
 });
+
+describe('unified-services: audit #67 — each source capped at offset+limit', () => {
+  test('all three source SELECTs carry a LIMIT, cap = offset+limit', async () => {
+    setFixtures();
+    await asAdmin(request(app()).get('/api/admin/unified-services?limit=2&page=1')).expect(200);
+    const calls = db.query.mock.calls;
+    const sourceCall = (key) => calls.find((c) => c[0].includes(key) && c[0].includes('ORDER BY'));
+    // page 1, limit 2 -> offset 0, cap 2
+    for (const key of ['FROM orders o JOIN users', 'FROM engine_jobs j JOIN users', 'FROM bdris_applications a JOIN users']) {
+      const call = sourceCall(key);
+      expect(call[0]).toMatch(/ORDER BY \w+\.created_at DESC LIMIT \$\d+/);
+      expect(call[1][call[1].length - 1]).toBe(2);
+    }
+  });
+
+  test('page 2 cap grows with the offset (offset+limit, not just limit)', async () => {
+    setFixtures();
+    await asAdmin(request(app()).get('/api/admin/unified-services?limit=50&page=2')).expect(200);
+    const calls = db.query.mock.calls;
+    const orderCall = calls.find((c) => c[0].includes('FROM orders o JOIN users') && c[0].includes('ORDER BY'));
+    expect(orderCall[0]).toMatch(/LIMIT \$\d+/);
+    // offset 50 + limit 50 = 100
+    expect(orderCall[1][orderCall[1].length - 1]).toBe(100);
+  });
+});
