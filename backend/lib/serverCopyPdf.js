@@ -108,7 +108,10 @@ const val = (data, key) => {
  * @param {Buffer|null} photoBuffer
  * @returns {Promise<Buffer>} PDF buffer
  */
-async function buildServerCopyPdf(data, photoBuffer) {
+async function buildServerCopyPdf(data, photoBuffer, opts) {
+  // opts.editedFields?: string[] — labels of fields the customer
+  // edited vs the portal profile (audit #10). When non-empty the copy
+  // is stamped "সম্পাদিত" in the footer; empty/absent -> unchanged.
   data = data || {};
   const doc = new PDFDocument({ size: 'LETTER', margin: 0, autoFirstPage: true });
   try {
@@ -289,6 +292,38 @@ async function buildServerCopyPdf(data, photoBuffer) {
   const footBn = setFont(doc, 'উপরে প্রদর্শিত তথ্যসমূহ জাতীয় পরিচয়পত্র সংশ্লিষ্ট, ভোটার তালিকার সাথে সরাসরি সম্পর্কযুক্ত নয়।', false);
   doc.fillColor('#f00000').fontSize(8.5)
     .text(footBn, 36, 739, { width: 540, align: 'center' });
+  // Audit #10 — "সম্পাদিত" label (third footer line, red bold):
+  // when the customer edited profile fields, the copy must say so,
+  // otherwise it reads as an exact official copy. Field labels only
+  // (never values) so no profile data leaks into the label.
+  const edited = Array.isArray(opts && opts.editedFields) ? opts.editedFields.filter(Boolean) : [];
+  if (edited.length) {
+    const shown = edited.slice(0, 3);
+    const extra = edited.length - shown.length;
+    // One centred line, drawn as three runs: the Bengali words in
+    // the Bengali bold font, the field labels in Times-Bold.
+    // (PDFKit's subset cmap drops Latin glyphs inside a Bengali-font
+    // run, so the labels would render but never extract/search; and
+    // `continued` text does not centre a mixed-font line, so the
+    // runs are measured and placed by hand.)
+    const useBnBold = () => { try { doc.font('bn-bold'); } catch (_) { doc.font('Times-Bold'); } };
+    const head = setFont(doc, 'সম্পাদিত — সম্পাদিত তথ্য: ', true);
+    useBnBold(); doc.fontSize(10);
+    const wHead = doc.widthOfString(head);
+    const labels = shown.join(', ');
+    doc.font('Times-Bold').fontSize(10);
+    const wLabels = doc.widthOfString(labels);
+    const tail = extra > 0 ? setFont(doc, ' ও আরও ' + extra + 'টি', true) : '';
+    let wTail = 0;
+    if (tail) { useBnBold(); doc.fontSize(10); wTail = doc.widthOfString(tail); }
+    let x = (612 - wHead - wLabels - wTail) / 2;
+    doc.fillColor('#dc2626').fontSize(10);
+    useBnBold(); doc.text(head, x, 752);
+    x += wHead;
+    doc.font('Times-Bold').text(labels, x, 752);
+    x += wLabels;
+    if (tail) { useBnBold(); doc.text(tail, x, 752); }
+  }
 
   doc.end();
   return done;

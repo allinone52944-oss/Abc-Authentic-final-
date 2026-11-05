@@ -907,6 +907,43 @@ def replace_photos_and_signatures(page, imgmap, fields,
             print("Authority sign replace error:", e)
 
 
+def _stamp_edited(page, H):
+    """Audit #10 — "সম্পাদিত" label on a card whose fields were edited.
+
+    The Node callers (nid-replica adapter buildCard, nid-server-copy
+    renderFromProfile) write work/edited.json
+    {"edited": true, "fields": [<edited field labels>]} only when the
+    delivered fields actually DIFFER from the portal-extracted
+    originals. Absent / edited:false / empty list -> no stamp, so an
+    unedited card is byte-for-byte the old output.
+    The card occupies the top ~230pt of the LETTER page (barcode ends
+    ~201pt from the top); the stamp sits just below it, in the free
+    margin, left-aligned with the card's left edge (x 59.35).
+    A stamp failure must never break the card: warn and continue.
+    """
+    try:
+        ep = _w("edited.json")
+        if not os.path.exists(ep):
+            return
+        with open(ep, encoding="utf-8") as f:
+            info = json.load(f)
+        if not info.get("edited"):
+            return
+        labels = [str(x).strip() for x in (info.get("fields") or []) if str(x).strip()]
+        if not labels:
+            return
+        shown = labels[:3]
+        extra = len(labels) - len(shown)
+        txt = "সম্পাদিত — " + ", ".join(shown)
+        if extra > 0:
+            txt += " ও আরও %dটি" % extra
+        fp, t2 = _bn_font_and_text(txt, FONT_BN)
+        # baseline is measured from the BOTTOM: H-260 == 260pt from top.
+        insert_bn_native(page, t2, fp, 12, "#dc2626", 0.0, 59.35, H - 260, H, 480)
+    except Exception as e:
+        print("WARNING: edited stamp failed: %s" % str(e)[:120])
+
+
 def build_card(fields, assets_dir=None, work_dir=None, out_pdf=None,
                photo_path=None, sign_path=None, authority_sign_path=None):
     """Build the NID card PDF from {slot_label: value}. Returns output pdf path.
@@ -960,6 +997,9 @@ def build_card(fields, assets_dir=None, work_dir=None, out_pdf=None,
     render_vector_barcode(page, fields)
     # 4. Render all text fields with exact baselines, font strokes, sizes, and colors
     render_all_fields(page, fields, H, needs_render)
+    # 4b. Audit #10 — "সম্পাদিত" stamp when fields were edited
+    # (see _stamp_edited; no-op when work/edited.json is absent).
+    _stamp_edited(page, H)
     # 5. Save output pdf with deflation and garbage collection
     output_pdf = out_pdf or _w("output.pdf")
     doc.save(output_pdf, deflate=True, garbage=3)

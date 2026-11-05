@@ -205,7 +205,18 @@ describe('POST /api/nid-server-copy/deliver with edits', () => {
     const input = engine.renderFromProfile.mock.calls[0][0];
     expect(input['Name(Bangla)']).toBe('এডিট করা নাম');
     expect(input.HACK).toBeUndefined();
+    // Audit #10 — the renderer is told which fields were edited, so
+    // the card is stamped "সম্পাদিত" (diff vs the portal profile).
+    expect(engine.renderFromProfile.mock.calls[0][3]).toEqual({ editedFields: ['Name(Bangla)'] });
     expect(walletCalls()).toHaveLength(1);
+  });
+
+  test('edits identical to the profile -> no edited fields (no label)', async () => {
+    engine.getJob.mockReturnValue({ ...JOB });
+    engine.renderFromProfile.mockResolvedValue({ ok: true, pdfBuffer: Buffer.from('%PDF-1.4 fake'), fields: {} });
+    await withUser(request(app()).post('/api/nid-server-copy/deliver'))
+      .send({ jobId: 'j1', kind: 'card', edits: { 'Name(Bangla)': 'মোঃ পরীক্ষা রহমান', 'Date of Birth': '12/03/1990' } }).expect(200);
+    expect(engine.renderFromProfile.mock.calls[0][3]).toEqual({ editedFields: [] });
   });
 
   test('photo null → render called with no photo', async () => {
@@ -268,6 +279,85 @@ describe('POST /api/nid-server-copy/deliver with edits', () => {
       .send({ jobId: 'j1', kind: 'card', edits: { 'Name(Bangla)': '', 'Name(English)': '' } }).expect(422);
     expect(r.body.error).toBe('PROFILE_INCOMPLETE');
     expect(walletCalls()).toHaveLength(0);
+  });
+});
+
+// Audit #10 — the edited-fields diff (only a real difference vs the
+// portal profile labels the output "সম্পাদিত").
+describe('editedFieldsOf', () => {
+  const base = { 'Name(Bangla)': 'মোঃ পরীক্ষা রহমান', 'Date of Birth': '12/03/1990' };
+
+  test('changed value -> listed; same value -> not listed; non-whitelisted key -> dropped', () => {
+    expect(router.editedFieldsOf(
+      { 'Name(Bangla)': 'নতুন নাম', 'Date of Birth': '12/03/1990', HACK: 'x' }, base))
+      .toEqual(['Name(Bangla)']);
+  });
+
+  test('whitespace-only difference is not an edit', () => {
+    expect(router.editedFieldsOf({ 'Name(Bangla)': '  মোঃ পরীক্ষা রহমান  ' }, base)).toEqual([]);
+  });
+
+  test('empty / missing edits -> no fields', () => {
+    expect(router.editedFieldsOf({}, base)).toEqual([]);
+    expect(router.editedFieldsOf(null, base)).toEqual([]);
+  });
+
+  test('a field the profile does not have yet counts as edited', () => {
+    expect(router.editedFieldsOf({ 'Blood Group': 'O+' }, base)).toEqual(['Blood Group']);
+  });
+});
+
+// Audit #10 end-to-end (server copy): the delivered PDF itself carries
+// the "সম্পাদিত" stamp when an edit changed a profile value, and
+// carries no stamp when nothing changed.
+describe('POST /api/nid-server-copy/deliver server-copy stamp', () => {
+  const JOB = { id: 'j1', ownerId: 'u1', pairs: CORE_PAIRS, photo: null, downloadPdf: null, createdAt: Date.now() };
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { execFileSync } = require('child_process');
+
+  function rawParser(res, callback) {
+    const chunks = [];
+    res.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+    res.on('end', () => callback(null, Buffer.concat(chunks)));
+  }
+
+  function pdfText(buf) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nidsc-'));
+    const p = path.join(dir, 'out.pdf');
+    fs.writeFileSync(p, buf);
+    try {
+      return execFileSync('pdftotext', ['-layout', p, '-'], { encoding: 'utf8', timeout: 15000 });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  function normBn(s) {
+    return String(s).replace(/[া-ৌ্\s]/g, '');
+  }
+
+  test('edited server copy -> stamped PDF; unedited -> no stamp', async () => {
+    try {
+      execFileSync('pdftotext', ['-v'], { stdio: 'ignore' });
+    } catch (_) {
+      console.warn('pdftotext missing — skipping stamp assertion');
+      return;
+    }
+    engine.getJob.mockReturnValue({ ...JOB });
+    const edited = await withUser(request(app()).post('/api/nid-server-copy/deliver').parse(rawParser))
+      .send({ jobId: 'j1', kind: 'server', edits: { 'Name(Bangla)': 'এডিট করা নাম' } }).expect(200);
+    expect(edited.headers['content-type']).toMatch(/application\/pdf/);
+    expect(Buffer.isBuffer(edited.body)).toBe(true);
+    const editedText = pdfText(edited.body);
+    expect(normBn(editedText)).toContain(normBn('সম্পাদিত'));
+    expect(editedText).toContain('Name(Bangla)');
+
+    engine.getJob.mockReturnValue({ ...JOB });
+    const plain = await withUser(request(app()).post('/api/nid-server-copy/deliver').parse(rawParser))
+      .send({ jobId: 'j1', kind: 'server' }).expect(200);
+    expect(normBn(pdfText(plain.body))).not.toContain(normBn('সম্পাদিত'));
   });
 });
 

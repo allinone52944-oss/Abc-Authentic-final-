@@ -59,9 +59,13 @@ function runPython(scriptName, cwd) {
  * @param {Buffer|null} photoBuffer  citizen photo bytes (any format PIL reads)
  * @param {Buffer|null} signBuffer  applicant signature bytes (optional;
  *   the shared pipeline picks up work/images/sign.png as xref 11)
+ * @param {object} [opts]  { editedFields?: string[] } — labels of the
+ *   fields the customer edited vs the portal profile. Audit #10: when
+ *   non-empty, build_output.py stamps the card "সম্পাদিত" (see
+ *   work/edited.json); empty/absent -> no stamp, output unchanged.
  * @returns {Promise<{ok:boolean, pdfBuffer?, fields?, jobId?, error?}>}
  */
-async function renderFromProfile(inputData, photoBuffer, signBuffer) {
+async function renderFromProfile(inputData, photoBuffer, signBuffer, opts) {
   if (!inputData || typeof inputData !== 'object') {
     return { ok: false, error: 'NO_PROFILE_DATA' };
   }
@@ -71,6 +75,12 @@ async function renderFromProfile(inputData, photoBuffer, signBuffer) {
   try {
     fs.mkdirSync(path.join(dir, 'work', 'images'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'work', 'input_data.json'), JSON.stringify(inputData, null, 1), 'utf8');
+    // Audit #10 — edited-fields sidecar for build_output.py's stamp.
+    // Written fresh for every render (no stale stamp from another job).
+    const editedFields = Array.isArray(opts && opts.editedFields)
+      ? opts.editedFields.filter((f) => typeof f === 'string' && f.trim()).slice(0, 60) : [];
+    fs.writeFileSync(path.join(dir, 'work', 'edited.json'),
+      JSON.stringify({ edited: editedFields.length > 0, fields: editedFields }, null, 1), 'utf8');
     // The pipeline's template (card slots) — same file the NID
     // card engine extracts from its output template.
     fs.copyFileSync(

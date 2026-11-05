@@ -198,6 +198,24 @@ function sanitizeEdits(edits) {
   return out;
 }
 
+// Audit #10 — which whitelisted fields the customer actually CHANGED
+// vs the portal profile. Only a real difference labels the output
+// "সম্পাদিত": an edit form submitted with the same values as the
+// profile is not an edit. Comparison is trimmed-string equality;
+// the stamp lists these field labels (not values) so no profile
+// data leaks into the label.
+function editedFieldsOf(edits, base) {
+  if (!edits || typeof edits !== 'object') return [];
+  const out = [];
+  for (const key of Object.keys(edits)) {
+    if (!EDITABLE_FIELDS.includes(key)) continue;
+    const a = String(edits[key] == null ? '' : edits[key]).trim();
+    const b = String(base && base[key] == null ? '' : base ? base[key] : '').trim();
+    if (a !== b) out.push(key);
+  }
+  return out;
+}
+
 function sniffPhotoMime(buf) {
   if (!buf || buf.length < 4) return 'image/jpeg';
   if (buf[0] === 0xff && buf[1] === 0xd8) return 'image/jpeg';
@@ -247,7 +265,10 @@ async function buildDocument(job, kind, edits, photoOverride, signOverride) {
       return { ok: false, error: 'PROFILE_INCOMPLETE' };
     }
     const signBuf = signOverride === undefined ? null : signOverride;
-    const r = await engine.renderFromProfile(inputData, photoBuf, signBuf);
+    // Audit #10 — the card is labelled "সম্পাদিত" only when an edit
+    // actually changed a profile value (diff vs the portal profile).
+    const editedFields = editedFieldsOf(edits, engine.profileMap.buildInputData(job.pairs || []));
+    const r = await engine.renderFromProfile(inputData, photoBuf, signBuf, { editedFields });
     if (!r.ok) return { ok: false, error: r.error || 'RENDER_FAILED' };
     return { ok: true, pdfBuffer: r.pdfBuffer, fields: r.fields, via: 'profile' };
   }
@@ -257,7 +278,9 @@ async function buildDocument(job, kind, edits, photoOverride, signOverride) {
     return { ok: false, error: 'PROFILE_INCOMPLETE' };
   }
   try {
-    const pdfBuffer = await buildServerCopyPdf(inputData, photoBuf);
+    const pdfBuffer = await buildServerCopyPdf(inputData, photoBuf, {
+      editedFields: editedFieldsOf(edits, engine.profileMap.buildInputData(job.pairs || [])),
+    });
     if (!pdfBuffer || pdfBuffer.length < 500) return { ok: false, error: 'RENDER_FAILED' };
     return { ok: true, pdfBuffer, fields: inputData, via: 'server-copy' };
   } catch (e) {
@@ -417,3 +440,7 @@ router.post('/deliver', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+// Test hooks (same pattern as other routes): the edited-fields diff
+// for the "সম্পাদিত" label (audit #10).
+router.editedFieldsOf = editedFieldsOf;
+router.sanitizeEdits = sanitizeEdits;
