@@ -651,16 +651,31 @@ async function init() {
   loadChat(); // audit #43 — chat lives on this page too
   document.getElementById('chatIn').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
 
-  let _pollTimer = setInterval(async () => {
-    if (window._isOrderTerminal) {
-      clearInterval(_pollTimer);
-      return;
-    }
+  // Audit #66 — the tracker polled 4 endpoints every 5s (48 req/min
+  // with the tab open). Now 15s, and paused while the tab is hidden:
+  // a hidden tab's updates wait until the user comes back, when one
+  // tick runs immediately and polling resumes.
+  let _pollTimer = null;
+  async function _pollTick() {
+    if (window._isOrderTerminal) { stopPolling(); return; }
+    if (document.hidden) return;
     await fetchAndRender();
     loadSupportMsgs();
     loadTimelineHistory();
     loadChat();
-  }, 5000);
+  }
+  function startPolling() {
+    stopPolling();
+    _pollTimer = setInterval(_pollTick, 15000);
+  }
+  function stopPolling() {
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopPolling();
+    else { _pollTick(); startPolling(); }
+  });
+  startPolling();
 }
 
 function copyTrackingId() {

@@ -160,3 +160,26 @@ describe('order-status.html — status words unified (audit #52)', () => {
     expect(detail).toContain("received:'গৃহীত'");
   });
 });
+
+describe('audit #66 — order-status polling: 15s, paused while hidden', () => {
+  const html = read('frontend/order-status.html');
+  test('the tracker polls every 15s, not every 5s', () => {
+    expect(html).toContain('setInterval(_pollTick, 15000)');
+    expect(html).not.toContain('}, 5000)');
+  });
+
+  test('polling stops while the tab is hidden and resumes with an immediate tick', () => {
+    expect(html).toContain("document.addEventListener('visibilitychange'");
+    expect(html).toContain('if (document.hidden) stopPolling();');
+    expect(html).toContain('if (document.hidden) return;');
+    expect(html).toContain('else { _pollTick(); startPolling(); }');
+  });
+
+  test('the tick still refreshes all four sections and stops at a terminal status', () => {
+    expect(html).toContain('await fetchAndRender();');
+    expect(html).toContain('loadSupportMsgs();');
+    expect(html).toContain('loadTimelineHistory();');
+    expect(html).toContain('loadChat();');
+    expect(html).toContain('if (window._isOrderTerminal) { stopPolling(); return; }');
+  });
+});
