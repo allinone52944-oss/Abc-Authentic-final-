@@ -207,28 +207,6 @@ async function buildCard(jobId, fieldsJson, images, ownerId) {
         if (!fs.existsSync(path.join(dir, 'work', 'input_data.json'))) {
             return { ok: false, error: 'JOB_NOT_FOUND' };
         }
-        // Audit #10 — "সম্পাদিত" label: diff the submitted fields
-        // against the EXTRACTED originals. The baseline is preserved
-        // on the first build (fields-extracted.json) because this
-        // build overwrites fields.json — a second build must still
-        // diff against the extraction, not the previous build's edits.
-        // No diff / no baseline -> no label (cannot prove an edit).
-        let editedFields = [];
-        try {
-            const baselinePath = path.join(dir, 'work', 'fields-extracted.json');
-            let original = null;
-            if (fs.existsSync(baselinePath)) {
-                original = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
-            } else if (fs.existsSync(fieldsPath)) {
-                original = JSON.parse(fs.readFileSync(fieldsPath, 'utf8'));
-                fs.writeFileSync(baselinePath, JSON.stringify(original, null, 1), 'utf8');
-            }
-            editedFields = editedFieldsOf(clean, original);
-        } catch (_) { editedFields = []; }
-        // Always write the sidecar fresh (a stale one from an earlier
-        // build must not stamp a later unedited build).
-        fs.writeFileSync(path.join(dir, 'work', 'edited.json'),
-            JSON.stringify({ edited: editedFields.length > 0, fields: editedFields }, null, 1), 'utf8');
         fs.writeFileSync(fieldsPath, JSON.stringify(clean, null, 1), 'utf8');
         const r = runPython('build_output.py', [], dir);
         if (!r.ok) {
@@ -281,18 +259,4 @@ function getInfo() {
     };
 }
 
-// Audit #10 — which submitted fields actually DIFFER from the
-// extracted originals (trimmed-string equality). A key the original
-// does not have counts as edited; a missing/non-object original
-// means "cannot prove an edit" -> no fields. The stamp lists these
-// field labels (not values) so no profile data leaks into the label.
-function editedFieldsOf(submitted, original) {
-    if (!submitted || typeof submitted !== 'object' || !original || typeof original !== 'object') return [];
-    return Object.keys(submitted).filter((k) => {
-        const a = String(submitted[k] === undefined ? '' : submitted[k]).trim();
-        const b = String(original[k] === undefined ? '' : original[k]).trim();
-        return a !== b;
-    });
-}
-
-module.exports = { init, getInfo, extractFields, buildCard, editedFieldsOf };
+module.exports = { init, getInfo, extractFields, buildCard };
