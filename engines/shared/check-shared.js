@@ -25,5 +25,16 @@ return CE.selftest().then((r) => {
     if (fs.existsSync(path.join(root, 'engines', eng, 'templates.json'))) fail(eng + ' still has local templates.json');
   }
   console.log('both engines resolve shared solver, no local solver/templates copies remain');
+  // Audit #70 — shared certificate assets (one copy, both engines).
+  for (const f of ['fonts.css', 'logo.png', 'seal.jpg']) {
+    if (!fs.existsSync(path.join(shared, 'assets', f))) fail('missing shared asset ' + f);
+  }
+  for (const eng of ['birth-final', 'death-final']) {
+    const server = path.join(root, 'engines', eng, eng === 'birth-final' ? 'server.js' : 'death-verify-server.js');
+    const src2 = fs.readFileSync(server, 'utf8');
+    if (!src2.includes("'shared', 'assets'")) fail(eng + ' does not resolve shared assets');
+    if (fs.existsSync(path.join(root, 'engines', eng, 'assets'))) fail(eng + ' still has a local assets/ dir');
+  }
+  console.log('both engines resolve shared assets, no local asset copies remain');
   console.log('shared md5 templates:', md5(path.join(shared, 'templates.json')));
 });

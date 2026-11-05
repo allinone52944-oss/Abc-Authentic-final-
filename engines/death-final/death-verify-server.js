@@ -60,7 +60,7 @@ const CHROME = CHROME_CANDIDATES.find(p => fs.existsSync(p)) || 'chrome';
 let _fontsCss = null;
 function fontsCss() {
     if (_fontsCss === null) {
-        _fontsCss = fs.readFileSync(path.join(__dirname, 'assets', 'fonts.css'), 'utf8');
+        _fontsCss = fs.readFileSync(path.join(__dirname, '..', 'shared', 'assets', 'fonts.css'), 'utf8');
     }
     return _fontsCss;
 }
@@ -663,8 +663,8 @@ const KNOWN_DEATH = {
 };
 
 async function buildAssets(d) {
-    const sealBase64 = fs.readFileSync(path.join(__dirname, 'assets', 'seal.jpg')).toString('base64');
-    const logoBase64 = fs.readFileSync(path.join(__dirname, 'assets', 'logo.png')).toString('base64');
+    const sealBase64 = fs.readFileSync(path.join(__dirname, '..', 'shared', 'assets', 'seal.jpg')).toString('base64');
+    const logoBase64 = fs.readFileSync(path.join(__dirname, '..', 'shared', 'assets', 'logo.png')).toString('base64');
     const brnText = String(d.brn == null ? '' : d.brn).trim();
     const knownRec = KNOWN_DEATH[brnText];
     let qrDataUrl = '', barcodeDataUrl = '';

@@ -38,7 +38,7 @@ function requireRenderToken(req, res) {
 let _fontsCss = null;
 function fontsCss() {
     if (_fontsCss === null) {
-        _fontsCss = fs.readFileSync(path.join(__dirname, 'assets', 'fonts.css'), 'utf8');
+        _fontsCss = fs.readFileSync(path.join(__dirname, '..', 'shared', 'assets', 'fonts.css'), 'utf8');
     }
     return _fontsCss;
 }
@@ -1096,8 +1096,8 @@ function buildCertificateHtml(d, assets) {
 
 
 async function buildAssets(d) {
-    const sealBase64 = fs.readFileSync(path.join(__dirname, 'assets', 'seal.jpg')).toString('base64');
-    const logoBase64 = fs.readFileSync(path.join(__dirname, 'assets', 'logo.png')).toString('base64');
+    const sealBase64 = fs.readFileSync(path.join(__dirname, '..', 'shared', 'assets', 'seal.jpg')).toString('base64');
+    const logoBase64 = fs.readFileSync(path.join(__dirname, '..', 'shared', 'assets', 'logo.png')).toString('base64');
     const brnText = String(d.brn || '').trim();
     let qrDataUrl;
     let barcodeDataUrl = '';

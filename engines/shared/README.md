@@ -12,6 +12,10 @@ helpers are shared, because they are byte-identical in both engines:
   does not contain birth or death record data. The bank is already
   full at 120 entries, so the solver's harvest step returns early
   and does not write to this file.
+- `assets/` — the certificate assets both engines embed
+  (fonts.css, logo.png, seal.jpg). Audit #70: they were byte-identical
+  in both engines (same md5s), so one shared copy replaces two. Both
+  engines read them from here; neither keeps a local copy.
 - `cert-engine-standalone.js` — QR/barcode code engine. It takes
   only a certificate number and an optional official URL, and
   returns key, code, QR and barcode. It does not know birth from
