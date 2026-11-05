@@ -278,12 +278,15 @@ describe('mouza-value mode (land-mouza-value)', () => {
   });
   test('mouza wizard batch 1: 5 new offices in the form, thana question, pouro note, qualified submit', () => {
     const html = read('frontend/land.html');
+    // Audit #63 — the offices moved out of the HTML into
+    // mouza-offices.json; the data assertions read that file now.
+    const offices = JSON.parse(fs.readFileSync(path.join(ROOT, 'frontend', 'mouza-offices.json'), 'utf8'));
     // New offices + a sample mouza name from each batch-1 office.
     for (const id of ['chandgaon', 'sandwip', 'gachbaria', 'rangunia', 'pahartali']) {
-      expect(html).toContain('"' + id + '"');
+      expect(offices[id]).toBeDefined();
     }
     for (const name of ['বাকলিয়া', 'হরামিয়া', 'জামিরজুরী', 'সৈয়দবাড়ী', 'উত্তর কাট্টলী']) {
-      expect(html).toContain(name);
+      expect(JSON.stringify(offices)).toContain(name);
     }
     // Thana question: an ordinary step shown only on an
     // ambiguous card response, re-fetching with the thana.
@@ -350,5 +353,37 @@ describe('land.html — mobile grids (audit #58)', () => {
     const base = html.indexOf('#wzCardGrid { display:grid;');
     const over = html.indexOf('@media (max-width:560px){ #wzCardGrid { grid-template-columns:1fr; } }');
     expect(over).toBeGreaterThan(base);
+  });
+});
+
+describe('land.html — mouza data lazy-loaded, not inlined (audit #63)', () => {
+  const html = read('frontend/land.html');
+
+  test('no huge inline line remains in the page', () => {
+    const longest = Math.max(...html.split('\n').map((l) => l.length));
+    expect(longest).toBeLessThan(100000);
+    expect(html).not.toContain('const MOUZA_OFFICES = {');
+  });
+
+  test('the office list lives in a separate JSON file with the full data', () => {
+    const data = JSON.parse(fs.readFileSync(path.join(ROOT, 'frontend', 'mouza-offices.json'), 'utf8'));
+    expect(Object.keys(data).length).toBe(488);
+    expect(data.boalkhali.name).toBe('বোয়ালখালী');
+    expect(Array.isArray(data.boalkhali.mouzas)).toBe(true);
+  });
+
+  test('the page fetches the JSON lazily when the mouza mode opens', () => {
+    expect(html).toContain("fetch('/mouza-offices.json?v=1')");
+    expect(html).toContain('async function loadMouzaOffices()');
+    expect(html).toContain('async function wzResetWizard()');
+    expect(html).toContain('await loadMouzaOffices();');
+    // the data is not fetched at page load — only from the wizard reset
+    expect(html.indexOf("fetch('/mouza-offices.json")).toBeGreaterThan(html.indexOf('async function loadMouzaOffices'));
+  });
+
+  test('a failed load keeps the wizard usable via the manual path, and says why', () => {
+    expect(html).toContain('MOUZA_OFFICES = {};');
+    expect(html).toContain('অফিসের তালিকা আসেনি');
+    expect(html).toContain('"অন্য অফিস" বেছে নিয়ে নাম লিখে এগোনো যাবে');
   });
 });
