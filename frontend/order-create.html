@@ -211,7 +211,18 @@
 
       <div class="err" id="err" style="display:none;margin-top:14px;padding:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;color:#b91c1c;font-size:14px;"></div>
 
-      <button class="btn" id="submitBtn" style="width:100%;padding:14px;font-size:16px;font-weight:700;margin-top:14px;">অর্ডার নিশ্চিত করুন →</button>
+      <!-- Audit #40 — review step: তথ্য + ফাইল + ফি দেখে নিশ্চিত করুন। নিশ্চিত করার আগে কোনো টাকা কাটা হয় না। -->
+      <div id="reviewBox" style="display:none;margin-top:14px;padding:16px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:12px;">
+        <div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:10px;">🔍 অর্ডার পর্যালোচনা করুন</div>
+        <div id="reviewBody"></div>
+        <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+          <button type="button" class="btn btn-secondary" id="reviewBackBtn" onclick="editAgain()" style="flex:1;padding:12px;font-weight:700;">✏️ ফিরে গিয়ে ঠিক করুন</button>
+          <button type="button" class="btn" id="reviewConfirmBtn" onclick="submit()" style="flex:2;padding:12px;font-weight:700;">✅ নিশ্চিত করুন</button>
+        </div>
+        <div style="font-size:12px;color:#64748b;margin-top:8px;text-align:center;">নিশ্চিত করলেই ওয়ালেট থেকে ফি কাটা হবে — তার আগে কোনো টাকা কাটা হয় না।</div>
+      </div>
+
+      <button class="btn" id="submitBtn" style="width:100%;padding:14px;font-size:16px;font-weight:700;margin-top:14px;">পর্যালোচনা করুন →</button>
       
       <div id="submitNotice" style="display:none;margin-top:12px;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;color:#1e40af;font-size:13px;text-align:center;"></div>
     </div>
@@ -569,7 +580,7 @@ async function init(){
 
   // Always bind submit button regardless of draft state
   const sbBtn = document.getElementById('submitBtn');
-  if(sbBtn) sbBtn.onclick = submit;
+  if(sbBtn) sbBtn.onclick = showReview; // audit #40 — review first, confirm after
 
   // Restore draft safely (isolated from submit button binding)
   try {
@@ -607,12 +618,13 @@ function triggerDraftSave(){
   } catch(_) {}
 }
 
-async function submit(){
+// Audit #40 — collect + validate the order once, so the review
+// render and the confirm post share one source of truth. Returns
+// null (with the error shown) when something is missing/invalid.
+function collectOrder(){
   const err = document.getElementById('err');
-  const notice = document.getElementById('submitNotice');
   err.style.display = 'none';
   err.textContent = '';
-  notice.style.display = 'none';
 
   const data = {};
   document.querySelectorAll('[data-field]').forEach(el=>{ data[el.dataset.field] = el.value.trim(); });
@@ -624,12 +636,12 @@ async function submit(){
       if(f.required && !v){
         err.textContent = '⚠️ ' + (f.label || f.name) + ' পূরণ করুন';
         err.style.display = 'block';
-        return;
+        return null;
       }
       if(/brn/i.test(f.name) && v && !/^\d{17}$/.test(v)){
         err.textContent = '⚠️ BRN ১৭ সংখ্যার হতে হবে';
         err.style.display = 'block';
-        return;
+        return null;
       }
     }
   } else {
@@ -638,7 +650,7 @@ async function submit(){
     if(!manualVal){
       err.textContent = '⚠️ অনুগ্রহ করে আবেদনের প্রয়োজনীয় তথ্য বা পূরণকৃত ফরমটি প্রদান করুন';
       err.style.display = 'block';
-      return;
+      return null;
     }
     data._manual_form = manualVal;
   }
@@ -656,21 +668,84 @@ async function submit(){
     if(missingDocs.length > 0){
       err.textContent = '⚠️ অনুগ্রহ করে আবশ্যক ডকুমেন্ট যুক্ত করুন: ' + missingDocs.join(', ');
       err.style.display = 'block';
-      return;
+      return null;
     }
   }
 
   const orderDocs = [];
+  const files = [];
   document.querySelectorAll('[data-doc]').forEach(inp=>{
     if(inp.files && inp.files.length){
       orderDocs.push({ type: inp.dataset.doctype || 'ডকুমেন্ট', ref: inp.files[0].name });
+      files.push({ type: inp.dataset.doctype || 'ডকুমেন্ট', name: inp.files[0].name, size: inp.files[0].size });
     }
   });
   selectedFiles.forEach((f, idx)=>{
     orderDocs.push({ type: 'সংযুক্ত ডকুমেন্ট ' + (idx + 1), ref: f.name });
+    files.push({ type: 'সংযুক্ত ডকুমেন্ট ' + (idx + 1), name: f.name, size: f.size });
   });
 
-  const btn = document.getElementById('submitBtn');
+  return { data, orderDocs, files };
+}
+
+// Audit #40 — step 1: show the "তথ্য + ফাইল + ফি" review. Nothing is
+// charged here; the wallet is cut only on the confirm click.
+function showReview(){
+  const notice = document.getElementById('submitNotice');
+  notice.style.display = 'none';
+  const c = collectOrder();
+  if(!c) return;
+  const price = Number((svc && svc.price) || 0);
+  const after = userBal - price;
+  const fields = svc.fields_required || [];
+  const infoRows = fields.length > 0
+    ? fields.map(f=>{
+        const v = c.data[f.name] || '';
+        return v ? '<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #f1f5f9;"><span style="color:#64748b;">' + esc(f.label || f.name) + '</span><span style="font-weight:600;text-align:right;">' + esc(v) + '</span></div>' : '';
+      }).join('')
+    : '<div style="padding:6px 0;white-space:pre-wrap;">' + esc(c.data._manual_form || '') + '</div>';
+  const notes = document.getElementById('notes').value.trim();
+  const fileRows = c.files.length
+    ? c.files.map(f=>'<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #f1f5f9;"><span>📄 ' + esc(f.name) + '</span><span style="color:#64748b;font-size:12px;">' + esc(f.type) + ' • ' + formatBytes(f.size) + '</span></div>').join('')
+    : '<div style="padding:6px 0;color:#64748b;">কোনো ফাইল যুক্ত করা হয়নি</div>';
+  document.getElementById('reviewBody').innerHTML =
+    '<div style="margin-bottom:12px;"><div style="font-weight:700;margin-bottom:4px;">📋 তথ্য</div>' + infoRows + (notes ? '<div style="padding:6px 0;"><span style="color:#64748b;">নোট: </span>' + esc(notes) + '</div>' : '') + '</div>' +
+    '<div style="margin-bottom:12px;"><div style="font-weight:700;margin-bottom:4px;">📎 ফাইল (' + c.files.length + 'টি)</div>' + fileRows + '</div>' +
+    '<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">' +
+      '<div style="display:flex;justify-content:space-between;"><span>সেবার ফি</span><b>৳' + bnNum(price) + '</b></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-top:4px;"><span>ওয়ালেট ব্যালেন্স</span><span>৳' + bnNum(userBal) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-top:4px;border-top:1px solid #e2e8f0;padding-top:6px;"><span>কনফার্ম করলে কাটার পর থাকবে</span><b style="color:' + (after < 0 ? '#b91c1c' : '#15803d') + ';">৳' + bnNum(after) + '</b></div>' +
+      (after < 0 ? '<div style="color:#b91c1c;font-size:13px;margin-top:6px;">⚠️ ব্যালেন্স অপর্যাপ্ত — কনফার্ম করলে ব্যালেন্সের অভাবে অর্ডার হবে না, আগে রিচার্জ করুন।</div>' : '') +
+    '</div>';
+  document.getElementById('reviewBox').style.display = 'block';
+  document.getElementById('submitBtn').style.display = 'none';
+  const confirmBtn = document.getElementById('reviewConfirmBtn');
+  confirmBtn.disabled = false;
+  confirmBtn.textContent = '✅ নিশ্চিত করুন — ৳' + bnNum(price) + ' কাটা হবে';
+  document.getElementById('reviewBox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function editAgain(){
+  document.getElementById('reviewBox').style.display = 'none';
+  document.getElementById('submitBtn').style.display = 'block';
+}
+
+// Audit #40 — step 2 (confirm): the wallet is cut only here, after the
+// review. Re-collects at confirm time — the review is a snapshot, the
+// post uses the current form values.
+async function submit(){
+  const err = document.getElementById('err');
+  const notice = document.getElementById('submitNotice');
+  err.style.display = 'none';
+  err.textContent = '';
+  notice.style.display = 'none';
+
+  const c = collectOrder();
+  if(!c){ editAgain(); return; }
+  const data = c.data;
+  const orderDocs = c.orderDocs;
+
+  const btn = document.getElementById('reviewConfirmBtn');
   btn.disabled = true;
   btn.textContent = 'অর্ডার প্রসেস হচ্ছে…';
 
@@ -691,8 +766,7 @@ async function submit(){
     });
     d = await r.json();
   } catch (netErr) {
-    btn.disabled = false;
-    btn.textContent = 'অর্ডার নিশ্চিত করুন →';
+    editAgain();
     notice.style.display = 'none';
     err.style.display = 'block';
     err.textContent = '❌ নেটওয়ার্ক সমস্যা বা সার্ভার সংযোগ বিঘ্নিত হয়েছে। পুনরায় চেষ্টা করুন।';
@@ -700,8 +774,7 @@ async function submit(){
   }
 
   if(!r.ok){
-    btn.disabled = false;
-    btn.textContent = 'অর্ডার নিশ্চিত করুন →';
+    editAgain();
     notice.style.display = 'none';
     err.style.display = 'block';
     err.textContent = d.error === 'INSUFFICIENT_BALANCE' ? '⚠️ ওয়ালেটে পর্যাপ্ত ব্যালেন্স নেই! আগে টাকা রিচার্জ করুন।' :
