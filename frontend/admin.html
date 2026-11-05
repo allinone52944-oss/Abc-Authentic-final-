@@ -603,6 +603,17 @@
   .adm-tab-chip { padding:1px 6px; border-radius:999px; background:#e2e8f0; color:#475569; font-size:10px; }
   .adm-tab-btn.active .adm-tab-chip { background:#2563eb; color:#fff; }
   .adm-search-input { width:min(360px, 100%); font-size:12px !important; padding:8px 12px !important; border-radius:9px !important; }
+  /* Audit #57 — DECISION (kept, not card-view): admin tables stay
+     horizontally scrollable on mobile, deliberately. Reasons:
+     (1) these tables have 6–10 columns with row actions — a generic
+     display:block card conversion without per-cell labels would stack
+     values with no labels, which is worse than scroll for admin work;
+     (2) a proper card-view needs per-table data-label work across
+     9 tables in admin.js (372K) — a large refactor of the admin's
+     core working surface, not a polish item; converting one table
+     would be inconsistent. The scroll already works: every table
+     sits in an overflow-x:auto wrapper and the first (identity)
+     column stays sticky below, so nothing is cut off. */
   .adm-table-card { background:#fff; border:1px solid var(--border-light); border-radius:var(--r-lg); box-shadow:var(--shadow-sm); overflow:hidden; }
   .adm-table { width:100%; border-collapse:separate !important; border-spacing:0; min-width:900px; }
   .adm-table th { background:#f8fafc !important; color:#64748b !important; font-size:11px !important; font-weight:700 !important; padding:12px 14px !important; border-bottom:1px solid #e2e8f0 !important; white-space:nowrap; }
