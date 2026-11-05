@@ -1893,7 +1893,7 @@ function renderAddrBook(pickFn, backFn) {
     '<div class="mt8"><button class="btn" id="abSave">💾 সেভ করুন</button></div>'
   );
   setBtns([{ html: '← ফিরে যান', cls: 'ghost', fn: () => S.addrBack() }]);
-  loadGeoData().then(() => addrBookWire()).catch(() => {});
+  loadGeoData().then(() => addrBookWire()).catch(warmFailNote);
   $('abSave').onclick = () => {
     const nm = $('ab_name').value.trim();
     if (!nm) { note('নাম দিন', 'err'); $('ab_name').classList.add('bad'); return; }
@@ -2745,10 +2745,10 @@ async function geoChanged(k, Ls, data) {
   // এখন: error state-এ খালি বাছাই মানে retry — সংরক্ষিত parent-সহ
   // পুরো cascade warm আবার চালাও, data না ছুঁয়ে।
   if (!label && getGeoState(k, Ls) === 'error') {
-    if (Ls === GEO_LEVELS) { warmFromData().catch(() => {}); }
+    if (Ls === GEO_LEVELS) { warmFromData().catch(warmFailNote); }
     else {
       const pfx = String(L.ui || '').split('_')[0];
-      if (pfx === 'sp' || pfx === 'rp') addrWarm(pfx, addrRec(pfx)).catch(() => {});
+      if (pfx === 'sp' || pfx === 'rp') addrWarm(pfx, addrRec(pfx)).catch(warmFailNote);
     }
     return;
   }
@@ -2777,6 +2777,14 @@ async function geoChanged(k, Ls, data) {
 }
 let _warmRunning = false;
 let _warmQueued = false;
+// Audit #85 — warmFromData / addrWarm can reject (their try has
+// a finally but no catch, so a throw before the unfilled-levels
+// banner check leaves empty cascades with no message). Every
+// caller used to swallow that rejection with .catch(() => {}).
+// The shared handler says it once, as a warn note — never silent,
+// and never a second voice on top of the flow's own banner (the
+// note only fires when the warm THREW, i.e. when no banner ran).
+function warmFailNote() { note('⚠️ ঠিকানার তালিকা আসেনি — আবার চেষ্টা করুন', 'warn'); }
 async function warmFromData() {
   // CASCADE-FIX (2026-11-01): concurrent run guard — আগের কোড
   // চলমান warm-এর সময় নতুন render-এর warm-কে DROP করত, আর চলমান
@@ -2875,7 +2883,7 @@ async function warmFromData() {
       const bn = $('sysBanner');
       const sessionMsg = bn && /সেশন শেষ/.test(bn.textContent || '');
       if (unfilled.length && !sessionMsg) {
-        showBanner('err', 'ঠিকানার তালিকা আসেনি: ' + unfilled.map(L => L.lbl).join(', ') + ' — সংরক্ষিত মান বসানো যায়নি', () => { hideBanner(); warmFromData().catch(() => {}); }, 'আবার চেষ্টা করুন');
+        showBanner('err', 'ঠিকানার তালিকা আসেনি: ' + unfilled.map(L => L.lbl).join(', ') + ' — সংরক্ষিত মান বসানো যায়নি', () => { hideBanner(); warmFromData().catch(warmFailNote); }, 'আবার চেষ্টা করুন');
       }
     } catch (e) {}
   }
@@ -2883,7 +2891,7 @@ async function warmFromData() {
     _warmRunning = false;
     // Queue drain: render-এর সময় চাওয়া warm এখনই চালাও — এতে
     // সর্বশেষ render-এর cascade পুরোপুরি ভরে, placeholder-এ আটকে থাকে না।
-    if (_warmQueued) { _warmQueued = false; warmFromData().catch(() => {}); }
+    if (_warmQueued) { _warmQueued = false; warmFromData().catch(warmFailNote); }
   }
 }
 /* স্থায়ী/বর্তমান ঠিকানা — এক চাপে (বা খসড়া থেকে) ক্যাসকেড ভরাট + সাইটে মিরর */
@@ -2981,7 +2989,7 @@ function renderStep2() {
   );
   S.d.s1 = S.d.s1 || {};
   GEO_LEVELS.forEach(L => { const n = $(L.ui); if (n) n.onchange = () => geoChanged(L.k, GEO_LEVELS, S.d.s1); });
-  warmFromData().catch(() => {});
+  warmFromData().catch(warmFailNote);
   // ঠিকানা বই থেকে জন্মস্থানে বসানো (2026-10-17)
   const gb = $('gBook'); if (gb) gb.onclick = () => {
     collectStep2();
@@ -3170,7 +3178,7 @@ function fillPrefixFrom(prefix, rec) {
   });
   // ম্যানুয়াল স্টেপে জিও-ঘরগুলো SELECT — সাইট-মিররসহ পুরো ক্যাসকেড আবার বসাই
   const d0 = $(prefix + '_division');
-  if (d0 && d0.tagName === 'SELECT') addrWarm(prefix, rec).catch(() => {});
+  if (d0 && d0.tagName === 'SELECT') addrWarm(prefix, rec).catch(warmFailNote);
 }
 function fillPrefixFromBirth(prefix) {
   const s1 = S.d.s1 || {};
@@ -3215,7 +3223,7 @@ function renderStep4() {
   };
   const addrWire = (prefix, rec) => {
     addrWireOnly(prefix);
-    addrWarm(prefix, rec || {}).catch(() => {});
+    addrWarm(prefix, rec || {}).catch(warmFailNote);
   };
   const toggle = () => {
     const spChecked = $('sp_same').checked;
@@ -3255,8 +3263,8 @@ function renderStep4() {
     } else if (rpPreview) {
       rpPreview.style.display = 'none';
     }
-    if (!spChecked) { addrWireOnly('sp'); if ($('sp_division') && $('sp_division').options.length <= 1) addrWarm('sp', z.perm || {}).catch(() => {}); }
-    if (!rpChecked) { addrWireOnly('rp'); if ($('rp_division') && $('rp_division').options.length <= 1) addrWarm('rp', z.pres || {}).catch(() => {}); }
+    if (!spChecked) { addrWireOnly('sp'); if ($('sp_division') && $('sp_division').options.length <= 1) addrWarm('sp', z.perm || {}).catch(warmFailNote); }
+    if (!rpChecked) { addrWireOnly('rp'); if ($('rp_division') && $('rp_division').options.length <= 1) addrWarm('rp', z.pres || {}).catch(warmFailNote); }
   };
   $('sp_same').onchange = toggle;
   $('rp_same').onchange = toggle;

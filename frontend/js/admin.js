@@ -127,9 +127,9 @@ async function init() {
       };
     }
     show('stats');
-    try { VoiceAlert.init(); } catch (e) {}
-    try { PushNotify.ensure(); } catch (e) {}
-    try { PushNotify.autoPrompt(); } catch (e) {}
+    try { VoiceAlert.init(); } catch (e) { console.warn('[abc-admin] VoiceAlert.init ব্যর্থ:', e); }
+    try { PushNotify.ensure(); } catch (e) { console.warn('[abc-admin] PushNotify.ensure ব্যর্থ:', e); }
+    try { PushNotify.autoPrompt(); } catch (e) { console.warn('[abc-admin] PushNotify.autoPrompt ব্যর্থ:', e); }
   } catch (e) {
     const c = document.getElementById('content');
     if (c) c.innerHTML = '<div class="err">লোড ব্যর্থ: ' + esc(e.message) + ' <button onclick="location.reload()">পুনরায় চেষ্টা</button></div>';

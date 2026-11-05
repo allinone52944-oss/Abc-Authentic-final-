@@ -564,3 +564,16 @@ describe('activity label for the rate-limit hold (audit #37)', () => {
     expect(ADMIN_SRC).toContain('SMS হোল্ড (হার-সীমা)');
   });
 });
+
+describe('audit #85 — admin sound/push init failures warn to console', () => {
+  test('a failed VoiceAlert / PushNotify init is visible, not swallowed', () => {
+    // Audit #85 cites admin.js:130-132. These are not
+    // user-facing (admin working surface, not a customer page),
+    // so the fix is a console warning, not a banner: a failed
+    // init means the admin silently loses new-order alerts.
+    expect(ADMIN_SRC).toContain("console.warn('[abc-admin] VoiceAlert.init ব্যর্থ:'");
+    expect(ADMIN_SRC).toContain("console.warn('[abc-admin] PushNotify.ensure ব্যর্থ:'");
+    expect(ADMIN_SRC).toContain("console.warn('[abc-admin] PushNotify.autoPrompt ব্যর্থ:'");
+    expect(ADMIN_SRC).not.toContain('try { VoiceAlert.init(); } catch (e) {}');
+  });
+});

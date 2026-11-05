@@ -898,7 +898,7 @@ describe('CASCADE-RELATION cycle (2026-11-01): cascade survives resume/re-render
   test('warmFromData queues a re-warm instead of dropping it mid-run', () => {
     expect(html).toMatch(/let _warmQueued = false;/);
     expect(html).toMatch(/if \(_warmRunning\) \{ _warmQueued = true; return; \}/);
-    expect(html).toMatch(/if \(_warmQueued\) \{ _warmQueued = false; warmFromData\(\)\.catch\(\(\) => \{\}\); \}/);
+    expect(html).toMatch(/if \(_warmQueued\) \{ _warmQueued = false; warmFromData\(\)\.catch\(warmFailNote\); \}/);
   });
 
   test('warmFromData finally shows unfilled saved levels with a working retry button', () => {
@@ -910,7 +910,7 @@ describe('CASCADE-RELATION cycle (2026-11-01): cascade survives resume/re-render
 
   test('geoChanged error-state retry re-runs the cascade instead of wiping the saved value', () => {
     expect(html).toMatch(/if \(!label && getGeoState\(k, Ls\) === 'error'\) \{/);
-    expect(html).toMatch(/if \(Ls === GEO_LEVELS\) \{ warmFromData\(\)\.catch\(\(\) => \{\}\); \}/);
+    expect(html).toMatch(/if \(Ls === GEO_LEVELS\) \{ warmFromData\(\)\.catch\(warmFailNote\); \}/);
   });
 
   test('no render site silently resets relation to the first list item', () => {
@@ -1177,5 +1177,34 @@ describe('audit #83 — WhatsApp help on the filing page', () => {
     const page = html;
     expect(page).toContain('.wa-fab{position:fixed;bottom:24px;right:24px');
     expect(page).not.toMatch(/\.wa-fab\s*\{[^}]*bottom:\s*78px/);
+  });
+});
+
+describe('audit #85 — silent warm/geo catches say something', () => {
+  test('a failed address warm warns the user instead of swallowing the rejection', () => {
+    // warmFromData / addrWarm can reject (try/finally, no catch),
+    // so a throw before the unfilled-levels banner check left
+    // empty cascades with no message at all.
+    expect(html).toContain('function warmFailNote()');
+    expect(html).toContain("note('⚠️ ঠিকানার তালিকা আসেনি — আবার চেষ্টা করুন', 'warn')");
+    expect(html).toContain('warmFromData().catch(warmFailNote)');
+    expect(html).toContain('addrWarm(prefix, rec).catch(warmFailNote)');
+    expect(html).toContain('loadGeoData().then(() => addrBookWire()).catch(warmFailNote)');
+  });
+
+  test('no silent catch remains on any warm/geo call', () => {
+    expect(html).not.toContain('warmFromData().catch(() => {})');
+    expect(html).not.toMatch(/addrWarm\([^;]*\)\.catch\(\(\) => \{\}\)/);
+    expect(html).not.toContain('loadGeoData().then(() => addrBookWire()).catch(() => {})');
+  });
+
+  test('the deliberately silent catches stay silent (documented, not leftovers)', () => {
+    // Token refresh retries on the next interval/focus — a note
+    // every 12 minutes would spam, and the next API call surfaces
+    // a real auth problem. Ack/failure reporting is best-effort
+    // telemetry the user cannot act on. gwPollOnce's silent catch
+    // is the audit's own named exception (retries next tick).
+    expect(html).toContain('refreshAccessToken().catch(() => {})');
+    expect(html).toContain("body: JSON.stringify({ ack_no: String(ackNo), name: '', original_pdf_available: true })");
   });
 });
