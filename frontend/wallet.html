@@ -1137,7 +1137,7 @@ async function gwAutoMatch(){
       } else if (d.error === 'TOO_MANY_PENDING') {
         stateEl.innerHTML = '<div class="gw-state failed"><b>❌ ৩টি পেন্ডিং রিকোয়েস্ট ইতিমধ্যে আছে।</b><br>আগেরগুলো নিষ্পত্তি হলে আবার চেষ্টা করুন।</div>';
       } else {
-        errEl.textContent = '❌ ' + (d.error || 'ব্যর্থ');
+        errEl.textContent = rechargeErrText(d.error); // audit #30 — never a raw code
       }
       return;
     }
@@ -1211,6 +1211,19 @@ async function gwPollOnce(){
 }
 // ==== End gateway session ====
 
+// Audit #30 — every recharge error code gets a Bengali message, so no
+// raw English code ever reaches the customer (classic + gateway paths).
+function rechargeErrText(code) {
+  switch (code) {
+    case 'TOO_MANY_PENDING': return '❌ আপনার ৩টি রিচার্জ ইতিমধ্যে পেন্ডিং আছে। আগের একটির ফলাফল আসার পর আবার চেষ্টা করুন।';
+    case 'INVALID_SENDER': return '❌ যে নম্বর থেকে টাকা পাঠিয়েছেন তা সঠিকভাবে লিখুন (01XXXXXXXXX)';
+    case 'INVALID_AMOUNT': return '❌ অনুগ্রহ করে ৳১০ - ৳১,০০,০০০ এর মধ্যে পরিমাণ লিখুন';
+    case 'INVALID_TRXID': return '❌ ট্রানজ্যাকশন আইডি (TrxID) সঠিকভাবে লিখুন (কমপক্ষে ৪ অক্ষর)';
+    case 'INVALID_METHOD': return '❌ পেমেন্ট মাধ্যমটি সঠিক নয় — পেজ রিফ্রেশ করে আবার চেষ্টা করুন';
+    default: return '❌ ব্যর্থ হয়েছে — আবার চেষ্টা করুন';
+  }
+}
+
 async function submitRecharge(){
   const err=document.getElementById('err'),ok=document.getElementById('ok');
   const btn = document.querySelector('button[onclick*="submitRecharge"]');
@@ -1219,17 +1232,25 @@ async function submitRecharge(){
   const sender = document.getElementById('sender').value.trim();
   const trxid = document.getElementById('trxid').value.trim();
 
-  if(!amt || Number(amt) < 10){
-    err.textContent = '❌ অনুগ্রহ করে সর্বনিম্ন ১০ টাকা বা তার বেশি পরিমাণ লিখুন';
+  // Audit #30 — the same validation the gateway session enforces
+  // (gwStartSession / gwAutoMatch): amount ৳10–৳100,000, sender
+  // 01XXXXXXXXX, TrxID at least 4 characters.
+  if(!amt || Number(amt) < 10 || Number(amt) > 100000){
+    err.textContent = '❌ অনুগ্রহ করে ৳১০ - ৳১,০০,০০০ এর মধ্যে পরিমাণ লিখুন';
     return;
   }
   if(!sender){
-    err.textContent = '❌ যে নম্বর থেকে টাকা পাঠিয়েছেন তা লিখুন';
+    err.textContent = '❌ যে নম্বর থেকে টাকা পাঠিয়েছেন তা লিখুন';
     return;
   }
-  if(!trxid){
+  if(!/^01[3-9]\d{8}$/.test(sender)){
+    err.textContent = '❌ যে নম্বর থেকে টাকা পাঠিয়েছেন তা সঠিকভাবে লিখুন (01XXXXXXXXX)';
+    return;
+  }
+  if(!trxid || trxid.length < 4){
     err.textContent = '❌ ট্রানজ্যাকশন আইডি (TrxID) লিখুন';
     return;
+  }
   }
 
   if(btn){ btn.disabled = true; btn.textContent = '⏳ সাবমিট হচ্ছে…'; }
@@ -1252,7 +1273,14 @@ async function submitRecharge(){
           (ex.status==='rejected' && ex.cancel_reason ? '<br>কারণ: ' + esc(ex.cancel_reason) : '') +
           '</div>';
       } else {
-        err.textContent='❌ '+(d.error==='DUP_TRXID'?'এই ট্রানজ্যাকশন আইডি (TrxID) ইতিপূর্বে ব্যবহার করা হয়েছে। ⚠️ বারবার ডুপ্লিকেট বা ভুল TrxID দিলে অ্যাকাউন্ট ব্লক হতে পারে।':d.error==='TRXID_AMOUNT_MISMATCH'?('আপনার পাঠানো টাকার SMS এ ৳'+(d.sms_amount||'')+' এসেছে — আপনি যে পরিমাণ লিখেছেন তার সাথে মেলে না। সঠিক পরিমাণ লিখে আবার চেষ্টা করুন। ⚠️ বারবার ভুল তথ্য দিলে অ্যাকাউন্ট ব্লক হতে পারে।'):(d.error||'ব্যর্থ'));
+        if (d.error === 'DUP_TRXID') {
+          err.textContent = '❌ এই ট্রানজ্যাকশন আইডি (TrxID) ইতিপূর্বে ব্যবহার করা হয়েছে। ⚠️ বারবার ডুপ্লিকেট বা ভুল TrxID দিলে অ্যাকাউন্ট ব্লক হতে পারে।';
+        } else if (d.error === 'TRXID_AMOUNT_MISMATCH') {
+          err.textContent = 'আপনার পাঠানো টাকার SMS এ ৳' + (d.sms_amount||'') + ' এসেছে — আপনি যে পরিমাণ লিখেছেন তার সাথে মেলে না। সঠিক পরিমাণ লিখে আবার চেষ্টা করুন। ⚠️ বারবার ভুল তথ্য দিলে অ্যাকাউন্ট ব্লক হতে পারে।';
+        } else {
+          // Audit #30 — every other code gets its Bengali message, never the raw code.
+          err.textContent = rechargeErrText(d.error);
+        }
       }
       return;
     }

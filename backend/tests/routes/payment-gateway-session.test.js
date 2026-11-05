@@ -328,6 +328,26 @@ describe('frontend/wallet.html — gateway session invariants', () => {
     expect(src).toContain('SMS মিললে স্বয়ংক্রিয়ভাবে মিলে যাবে, না হলে এডমিন যাচাই করবেন');
   });
 
+  test('audit #30 — classic form validates like the gateway and maps every recharge code', () => {
+    const src = walletHtml();
+    const classic = fnSlice(src, 'async function submitRecharge(');
+    // gateway-level validation in the classic form
+    expect(classic).toContain('Number(amt) > 100000');
+    expect(classic).toContain("/^01[3-9]\\d{8}$/.test(sender)");
+    expect(classic).toContain('trxid.length < 4');
+    // the shared Bengali map covers every recharge error code
+    const map = fnSlice(src, 'function rechargeErrText(');
+    for (const code of ['TOO_MANY_PENDING', 'INVALID_SENDER', 'INVALID_AMOUNT', 'INVALID_TRXID', 'INVALID_METHOD']) {
+      expect(map).toContain("case '" + code + "'");
+    }
+    expect(classic).toContain('rechargeErrText(d.error)');
+    const gw = fnSlice(src, 'async function gwAutoMatch(');
+    expect(gw).toContain('rechargeErrText(d.error)');
+    // no raw code reaches the customer on either recharge path
+    expect(classic).not.toContain("(d.error||'ব্যর্থ')");
+    expect(gw).not.toContain("(d.error || 'ব্যর্থ')");
+  });
+
   test('no forbidden word in the wallet page copy', () => {
     expect(walletHtml().toLowerCase()).not.toContain('captcha');
   });
