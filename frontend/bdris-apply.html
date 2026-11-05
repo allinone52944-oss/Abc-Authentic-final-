@@ -4025,8 +4025,12 @@ function sendOtp() {
   // নইলে নোটে “আবার চাপুন” লেখা থাকলেও বাটন নিষ্ক্রিয় থেকে চিরতরে আটকে যায়
   if (emitStep('SUBMIT_S4_PREP', payloadFor('SUBMIT_S4_PREP')) === false) busy(false);
 }
-/* sent=false (default) = 'sending' text; sent=true = 'code sent' text.
-   Only call with true after an otpSent:true ack — never before. */
+/* sent=true = 'code sent' text — only call with true after an
+   otpSent:true ack, never before. sent=false must NEVER claim a
+   send is in flight (audit #16): no caller renders this view at
+   send time — the view opens only on proof, or from a post-send
+   fallback — so the no-proof text says plainly that no code was
+   sent yet and points at the re-send button. */
 function renderOtpCode(sent) {
   sent = sent === true;
   // FINAL-SOLUTION (#2): a 'sent' render marks the OTP session
@@ -4047,7 +4051,7 @@ function renderOtpCode(sent) {
   const tail = ph.length >= 4 ? ph.slice(-4) : ph;
   showBody(
     '<div class="sec"><div class="sub-h"><span class="snum">🔐</span> কোড বসান</div>' +
-    '<p class="hint" id="otpSentHint">' + esc(tail) + '-এ শেষ হওয়া নম্বরে ' + (sent ? 'কোড পাঠানো হয়েছে। না এলে “আবার কোড পাঠান” চাপুন।' : 'কোড পাঠানো হচ্ছে… কোড এলে নিচের ঘরে বসান।') + ' <b>কোড কারও সাথে শেয়ার করবেন না।</b></p></div>' +
+    '<p class="hint" id="otpSentHint">' + esc(tail) + '-এ শেষ হওয়া নম্বরে ' + (sent ? 'কোড পাঠানো হয়েছে। না এলে “আবার কোড পাঠান” চাপুন।' : 'কোড এখনো পাঠানো হয়নি — “আবার কোড পাঠান” চাপলে কোড আসবে, তারপর নিচের ঘরে বসান।') + ' <b>কোড কারও সাথে শেয়ার করবেন না।</b></p></div>' +
     '<div class="otpboxes">' + [0,1,2,3,4,5].map(i => '<input class="otpbox" id="ob' + i + '" inputmode="numeric" maxlength="1" autocomplete="one-time-code">').join('') + '</div>'
   );
   const boxes = els('.otpbox');
@@ -4219,7 +4223,11 @@ function renderPreview(backFn, editable) {
 function showPvOtp() {
   S.pvMode = true; S.otpStage = 'code';
   const sec = $('pvOtpSec');
-  if (!sec) { renderOtpCode(); return; }
+  // Audit #16 — showPvOtp runs only after a send (otpSent:true
+  // ack, or the still-valid unexpired code): the fallback must
+  // render the SENT view. renderOtpCode() (sent=false) would claim
+  // "কোড পাঠানো হচ্ছে…" with no send in flight.
+  if (!sec) { renderOtpCode(true); return; }
   const ph = S.d.phone || '';
   const tail = ph.length >= 4 ? ph.slice(-4) : ph;
   sec.innerHTML =

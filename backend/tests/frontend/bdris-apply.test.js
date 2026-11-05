@@ -958,3 +958,26 @@ describe('Stage A probe removed from the customer UI (audit #12)', () => {
     expect(html).toContain('HTTP_PATH_STATUS');
   });
 });
+
+// Audit #16 — the OTP view must never claim a send is in flight
+// without otpSent:true proof. The code view opens only on proof
+// (or the still-valid unexpired code); resume lands on the step-6
+// REVIEW (send) screen, never on the code view.
+describe('OTP view send-proof (audit #16)', () => {
+  test('the no-proof hint never says "sending"', () => {
+    expect(html).not.toContain('কোড পাঠানো হচ্ছে… কোড এলে নিচের ঘরে বসান');
+    expect(html).toContain('কোড এখনো পাঠানো হয়নি');
+  });
+
+  test('showPvOtp fallback renders the sent view (it runs only post-send)', () => {
+    expect(html).toMatch(/if \(!sec\) \{ renderOtpCode\(true\); return; \}/);
+  });
+
+  test('resume with uiStep>=6 lands on the step-6 review screen, not the code view', () => {
+    expect(html).toMatch(/if \(n >= 6\) \{ S\.cur = 6; S\.otpStage = 'review'; goStep\(6\); return; \}/);
+  });
+
+  test('no bare renderOtpCode() fallback remains', () => {
+    expect(html).not.toMatch(/renderOtpCode\(\); return;/);
+  });
+});
