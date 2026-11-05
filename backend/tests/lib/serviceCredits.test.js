@@ -362,4 +362,61 @@ describe('releaseHold (audit #9)', () => {
     const w = client.calls.find((c) => /wallet_apply/.test(c[0]));
     expect(w[1]).toEqual(['u1', 0, 'refund', 'release-qr-verify-k2']);
   });
+
+  test('double release restores locked credit exactly once (bug-hunt F2)', async () => {
+    // Stateful fake: the credit row's remaining actually moves, and
+    // the release marker appears after the first release — the two
+    // things the static releaseClient above cannot model. The old
+    // code restored the credit a second time here (fresh row when
+    // the first release had already filled the headroom).
+    const state = {
+      debit: [
+        { trxid: 'qr-verify-k3', amount: -60 },
+        { trxid: 'qr-verify-k3:svc', amount: -40 },
+      ],
+      released: false,
+      credit: { id: 'c1', amount: 50, remaining: 10 }, // 40 consumed by the hold
+      freshRows: 0,
+    };
+    const calls = [];
+    const client = {
+      calls, state,
+      query: jest.fn(async (text, params) => {
+        calls.push([text, params]);
+        if (/SELECT 1 FROM transactions/.test(text)) {
+          return { rows: state.released ? [{ '1': 1 }] : [] };
+        }
+        if (/FROM transactions/.test(text)) return { rows: state.debit };
+        if (/FROM service_credits/.test(text)) {
+          return { rows: [{ id: state.credit.id, amount: state.credit.amount, remaining: state.credit.remaining }] };
+        }
+        if (/UPDATE service_credits SET remaining/.test(text)) {
+          state.credit.remaining += params[0];
+          return { rows: [] };
+        }
+        if (/INSERT INTO service_credits/.test(text)) {
+          state.freshRows += 1;
+          return { rows: [{ id: 'sc-ref' }] };
+        }
+        if (/wallet_apply/.test(text)) {
+          if (typeof params[3] === 'string' && params[3].indexOf('release-') === 0) state.released = true;
+          return { rows: [{ new_balance: 0 }] };
+        }
+        return { rows: [] };
+      }),
+    };
+    const first = await releaseHold(client, { userId: 'u1', serviceId: 's1', ref: 'qr-verify-k3' });
+    expect(first).toEqual({ released: true, creditPart: 40, balancePart: 60 });
+    expect(state.credit.remaining).toBe(50); // topped up once, to full
+    expect(state.freshRows).toBe(0);
+    const second = await releaseHold(client, { userId: 'u1', serviceId: 's1', ref: 'qr-verify-k3' });
+    expect(second).toEqual({ released: false, creditPart: 0, balancePart: 0 });
+    // Second release is a true no-op: no second top-up, no fresh
+    // credit row, no second balance refund.
+    expect(state.credit.remaining).toBe(50);
+    expect(state.freshRows).toBe(0);
+    const walletCalls = calls.filter((c) => /wallet_apply/.test(c[0]));
+    expect(walletCalls).toHaveLength(1);
+    expect(walletCalls[0][1]).toEqual(['u1', 60, 'refund', 'release-qr-verify-k3']);
+  });
 });

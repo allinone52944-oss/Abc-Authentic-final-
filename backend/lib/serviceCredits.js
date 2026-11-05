@@ -281,15 +281,32 @@ async function refundOrderPrice(client, order, refPrefix) {
 // payForService. If the step then fails, the hold is released here:
 // the exact split the hold consumed (locked credit first, then
 // wallet balance) is read back from the ledger and returned, so a
-// failed verification costs ৳0 net. Idempotent: the release rows
-// carry their own refs ('release-' + ref), so a second release is
-// a no-op (DUPLICATE_TRANSACTION on the balance leg, headroom-capped
-// on the credit leg, ON CONFLICT DO NOTHING on the refund row).
-// All queries run on the caller's transaction client, so the
-// credit restore, the balance credit and the caller's own writes
-// commit or roll back together.
+// failed verification costs ৳0 net. Idempotent: a release writes
+// an approved 'release-'+ref marker row (via wallet_apply, even
+// for a credit-only hold), and a second release returns early
+// when that marker exists — so the credit leg can never restore
+// twice (bug-hunt F2). All queries run on the caller's
+// transaction client, so the credit restore, the balance credit
+// and the caller's own writes commit or roll back together.
 async function releaseHold(client, { userId, serviceId, ref }) {
   if (!ref) return { released: false, creditPart: 0, balancePart: 0 };
+  // Bug-hunt F2 — a second release must be a TRUE no-op. The old
+  // comment claimed it was, but only the balance leg was
+  // protected (wallet_apply dedupes on the 'release-'+ref trxid).
+  // The credit leg was not: when the first release already
+  // restored the consumed rows to full, restoreServiceCredit
+  // minted a FRESH service_credits row — creating locked credit
+  // from nothing. The release marker row (approved
+  // 'release-'+ref, written by wallet_apply on every release,
+  // including a 0-amount marker for a credit-only hold) is the
+  // proof a release already completed — return early when it
+  // exists. (The marker is written in the same transaction as
+  // the restore, so it exists exactly when a release committed.)
+  const prior = await client.query(
+    `SELECT 1 FROM transactions WHERE user_id = $1 AND trxid = $2 AND status = 'approved' LIMIT 1`,
+    [userId, 'release-' + ref]
+  );
+  if (prior.rows.length) return { released: false, creditPart: 0, balancePart: 0 };
   const r = await client.query(
     `SELECT trxid, amount FROM transactions
       WHERE user_id = $1 AND trxid IN ($2, $3) AND status = 'approved'`,
