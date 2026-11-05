@@ -201,3 +201,19 @@ describe('order-create.html — 10 MB check before submit, every path (audit #47
     expect(statusHtml).toContain('function uploadExtraDoc(files)');
   });
 });
+
+describe('audit #74 — partial success headline is honest', () => {
+  const html = read('frontend/order-create.html');
+  test('when uploads remain, the headline says the documents are pending', () => {
+    expect(html).toContain('if (uploadErrors > 0) {');
+    expect(html).toContain('অর্ডার তৈরি হয়েছে, ডকুমেন্ট বাকি');
+    // The partial headline is amber, not the green success styling.
+    expect(html).toContain("notice.style.background = '#fffbeb';");
+  });
+
+  test('the full-success headline stays for the clean path', () => {
+    expect(html).toContain('✅ অর্ডার সফলভাবে সম্পন্ন হয়েছে!');
+    // The pending-docs detail + doc_warning redirect are unchanged.
+    expect(html).toContain("location.href = '/order-status.html?id=' + orderId + '&doc_warning=1';");
+  });
+});

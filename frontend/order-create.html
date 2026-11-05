@@ -901,10 +901,19 @@ async function submit(){
   LocalIdem.clear('order_submit_' + sid);
   LocalDraft.clear('order_' + sid);
 
-  notice.style.background = '#f0fdf4';
-  notice.style.borderColor = '#86efac';
-  notice.style.color = '#15803d';
-  notice.textContent = '✅ অর্ডার সফলভাবে সম্পন্ন হয়েছে! অর্ডার ট্র্যাকিং পেজে নিয়ে যাওয়া হচ্ছে…';
+  // Audit #74 — the headline must not claim "সম্পন্ন" when documents
+  // are still pending: the order is created, the documents are not.
+  if (uploadErrors > 0) {
+    notice.style.background = '#fffbeb';
+    notice.style.borderColor = '#fcd34d';
+    notice.style.color = '#92400e';
+    notice.textContent = '⚠️ অর্ডার তৈরি হয়েছে, ডকুমেন্ট বাকি — অর্ডার ট্র্যাকিং পেজে নিয়ে যাওয়া হচ্ছে…';
+  } else {
+    notice.style.background = '#f0fdf4';
+    notice.style.borderColor = '#86efac';
+    notice.style.color = '#15803d';
+    notice.textContent = '✅ অর্ডার সফলভাবে সম্পন্ন হয়েছে! অর্ডার ট্র্যাকিং পেজে নিয়ে যাওয়া হচ্ছে…';
+  }
 
   setTimeout(()=>{
     if(uploadErrors > 0){
