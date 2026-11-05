@@ -188,8 +188,12 @@ webhook.post('/incoming', async (req, res) => {
       );
       const smsId = ins.rows[0].id;
 
-      // Only auto-match money-IN messages with a usable parse
-      if (parsed && parseStatus === 'parsed' && parsed.direction !== 'out') {
+      // Only auto-match money-IN messages with a usable parse.
+      // Audit #25 — direction 'unknown' is NOT money-in: the old
+      // `!== 'out'` gate auto-matched any SMS the parser could
+      // not classify, so a money-out wording the parser misses
+      // could credit a pending recharge.
+      if (parsed && parseStatus === 'parsed' && parsed.direction === 'in') {
         matchInfo = await findMatch(client, parsed);
         if (matchInfo) {
           // Fraud guard: a TrxID match must also agree on the amount.
@@ -248,6 +252,18 @@ webhook.post('/incoming', async (req, res) => {
             return res.json({ ok: true, matched: true, how: matchInfo.how, tx_id: tx.id });
           }
         }
+      }
+
+      // Audit #25 — direction unknown: not money-in until proven.
+      // Never auto-match; hold for admin review (the SMS stays
+      // stored as unmatched and visible in the admin hub), in the
+      // same shape as the amount-unparsed / large-amount holds.
+      if (parsed && parseStatus === 'parsed' && parsed.direction === 'unknown') {
+        await client.query('COMMIT');
+        await logActivity(null, 'sms.direction_unknown_hold', {
+          sms_id: smsId, trxid: parsed.trxid, amount: parsed.amount,
+        });
+        return res.json({ ok: true, held_for_review: true, reason: 'DIRECTION_UNKNOWN' });
       }
 
       await client.query('COMMIT');

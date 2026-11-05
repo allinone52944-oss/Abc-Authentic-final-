@@ -153,6 +153,21 @@ describe('POST /api/sms/incoming — auto-match', () => {
     expect(r.body.matched).toBe(false);
     expect(db.__client.query.mock.calls.filter((c) => /wallet_apply/.test(c[0]))).toHaveLength(0);
   });
+
+  test('audit #25 — direction unknown never auto-matches: held for review', async () => {
+    db.__routeQuery(matchHandlers());
+    // No in-words (received/credited/cash in) and no out-words:
+    // the direction is 'unknown', yet the TrxID + amount match a
+    // pending recharge exactly. Before the fix this auto-approved.
+    const unknown = 'Tk 500.00 TrxID 9HXK2LQM4N. Balance Tk 1200.00.';
+    const r = await postIncoming({ secret: SECRET, message: unknown, sender: 'bKash' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, held_for_review: true, reason: 'DIRECTION_UNKNOWN' });
+    expect(r.body.matched).toBeUndefined();
+    expect(db.__client.query.mock.calls.filter((c) => /wallet_apply/.test(c[0]))).toHaveLength(0);
+    // the hold is logged for the admin
+    const log = db.query.mock.calls.find((c) => /INSERT INTO activity_log/.test(c[0]));
+    expect(log).toBeDefined();
+  });
 });
 
 describe('adminSms routes', () => {
