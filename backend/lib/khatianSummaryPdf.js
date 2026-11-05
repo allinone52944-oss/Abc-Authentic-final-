@@ -31,6 +31,13 @@ function staleLine(source, collectedAt) {
   return 'সংরক্ষিত তথ্য — শেষ আপডেট: ' + staleBn + ' — লাইভ পোর্টাল থেকে যাচাই করা হয়নি';
 }
 
+// Audit #11 — the hal-sabek row wording. A populated hal-sabek
+// response is UNPROVEN (the verified sample returns 200 + EMPTY),
+// so the row is labelled as unverified, never as confirmed history.
+function halSabekRow(count) {
+  return { label: 'হাল-সাবেক তথ্য (অপ্রমাণিত)', value: toBn(count) + 'টি রেকর্ড পাওয়া গেছে' };
+}
+
 function buildKhatianSummaryPdf({ ref, when, area, items, totalLand, totalMatches, capped, source, collectedAt }) {
   return new Promise((resolve, reject) => {
     try {
@@ -111,7 +118,8 @@ function buildKhatianSummaryPdf({ ref, when, area, items, totalLand, totalMatche
         row('দাগ নম্বর', r.dags || '—');
         row('জমির পরিমাণ', landText(r.totalLand));
         if (Array.isArray(r.halSabek) && r.halSabek.length) {
-          row('হাল-সাবেক তথ্য', toBn(r.halSabek.length) + 'টি রেকর্ড পাওয়া গেছে');
+          const hs = halSabekRow(r.halSabek.length);
+          row(hs.label, hs.value);
         }
         if (i < list.length - 1) divider();
       });
@@ -143,4 +151,4 @@ function buildKhatianSummaryPdf({ ref, when, area, items, totalLand, totalMatche
   });
 }
 
-module.exports = { buildKhatianSummaryPdf, staleLine };
+module.exports = { buildKhatianSummaryPdf, staleLine, halSabekRow };

@@ -31,8 +31,8 @@
 //   - The upazilas endpoint mixes revenue circles
 //     (IS_CIRCLE=1) and real upazilas (IS_CIRCLE=0); e.g.
 //     Mirpur is UPAZILA_BBS_CODE 48 (Mirpur Revenue Circle).
-//     Nothing here filters circles out — the caller passes
-//     whatever BBS code the cascade returned.
+//     client.upazilas() filters circles out (audit #11), so
+//     the BBS codes reaching this adapter are real upazilas.
 //
 // Survey keys come ONLY from the portal's surveys /
 // upazilaSurveys lists (offeredSurveys below). A client-

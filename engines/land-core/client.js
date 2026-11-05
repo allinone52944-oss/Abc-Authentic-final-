@@ -13,6 +13,8 @@
 //   3. Cascade (all realtime, nothing hardcoded):
 //      /public/divisions → /public/districts?DIVISION_BBS_CODE=
 //      → /public/upazilas?DISTRICT_BBS_CODE=
+//        (mixes real upazilas with revenue circles —
+//        upazilas() drops IS_CIRCLE=1 rows, audit #11)
 //      → /public/upazilas/surveys?DISTRICT_BBS_CODE=&UPAZILA_BBS_CODE=
 //      → /public/mouzas/jl-numbers?...&SURVEY_ID=<id>
 //      ⚠️ jl-numbers filters by SURVEY_ID (numeric). SURVEY_TYPE
@@ -127,8 +129,22 @@ async function api(pathname, retried) {
 const divisions = () => api('/public/divisions');
 const districts = (divisionBbs) =>
   api('/public/districts?DIVISION_BBS_CODE=' + encodeURIComponent(divisionBbs));
-const upazilas = (districtBbs) =>
-  api('/public/upazilas?DISTRICT_BBS_CODE=' + encodeURIComponent(districtBbs));
+const upazilas = async (districtBbs) => {
+  const rows = await api('/public/upazilas?DISTRICT_BBS_CODE=' + encodeURIComponent(districtBbs));
+  return filterUpazilas(rows);
+};
+
+/** Audit #11 — the portal's upazila list mixes real upazilas
+ *  (IS_CIRCLE=0) with revenue circles (IS_CIRCLE=1); e.g. Mirpur
+ *  is UPAZILA_BBS_CODE 48 (Mirpur Revenue Circle). A circle is
+ *  not an upazila: picking it as the area would search the wrong
+ *  place. Drop circle rows here — the single chokepoint for the
+ *  geo cascade. A row without IS_CIRCLE is kept: unclassifiable
+ *  rows are never dropped silently. */
+function filterUpazilas(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows.filter((r) => r && Number(r.IS_CIRCLE) !== 1);
+}
 const surveys = () => api('/public/surveys'); // [{ID, NAME, NAME_EN, KEY}]
 const upazilaSurveys = (districtBbs, upazilaBbs) =>
   api('/public/upazilas/surveys?DISTRICT_BBS_CODE=' + encodeURIComponent(districtBbs) +
@@ -240,7 +256,7 @@ function sumLand(details) {
 }
 
 module.exports = {
-  divisions, districts, upazilas, surveys, upazilaSurveys, jlNumbers,
+  divisions, districts, upazilas, filterUpazilas, surveys, upazilaSurveys, jlNumbers,
   indexList, indexByKhatianNo, detail, halSabek,
   mapJlNumbers, mapSheets, mapPreview,
   ownerMatches, ownerMatchDetail, sumLand,

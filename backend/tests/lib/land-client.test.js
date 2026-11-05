@@ -2,6 +2,27 @@
 // (no network — owner matching + land totals only).
 const client = require('../../../engines/land-core/client');
 
+describe('filterUpazilas (audit #11)', () => {
+  test('revenue circles (IS_CIRCLE=1) are dropped', () => {
+    const rows = [
+      { BBS_CODE: '48', NAME: 'Mirpur', IS_CIRCLE: 1 },
+      { BBS_CODE: '49', NAME: 'Mirpur Upazila', IS_CIRCLE: 0 },
+      { BBS_CODE: '50', NAME: 'Other Circle', IS_CIRCLE: '1' },
+    ];
+    expect(client.filterUpazilas(rows)).toEqual([
+      { BBS_CODE: '49', NAME: 'Mirpur Upazila', IS_CIRCLE: 0 },
+    ]);
+  });
+  test('rows without IS_CIRCLE are kept (never dropped silently)', () => {
+    const rows = [{ BBS_CODE: '49', NAME: 'Upazila' }];
+    expect(client.filterUpazilas(rows)).toEqual(rows);
+  });
+  test('non-array input -> empty list', () => {
+    expect(client.filterUpazilas(null)).toEqual([]);
+    expect(client.filterUpazilas(undefined)).toEqual([]);
+  });
+});
+
 describe('ownerMatches', () => {
   test('exact name inside owners string', () => {
     expect(client.ownerMatches('আকবর আলী', 'আকবর আলী')).toBe(true);

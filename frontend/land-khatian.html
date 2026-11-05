@@ -147,9 +147,15 @@
           <select id="searchType">
             <option value="all">সব জরিপ</option>
             <option value="survey">সার্ভে (একটি জরিপ বেছে নিন)</option>
-            <option value="mutation">নামজারি</option>
+            <option value="mutation">নামজারি (অপ্রমাণিত)</option>
           </select>
         </div>
+        <!-- Audit #11 — mutation is an unproven passthrough (the
+             portal returned 0 items for the verified sample, and
+             other areas answer 'Survey Is Not Valid'); the option
+             is labelled at the choice point, and this hint shows
+             while it is selected — never only after the search. -->
+        <div class="note" id="mutationHint" style="display:none;">⚠️ নামজারি অনুসন্ধান এখনো পরীক্ষামূলক — এই পোর্টালে সব এলাকায় ফল মেলে না। না পেলে কোনো চার্জ কাটা হয় না।</div>
         <div class="field" id="surveyWrap" style="display:none;">
           <label for="surveySel">জরিপ *</label>
           <select id="surveySel"><option value="">— আগে উপজেলা —</option></select>
@@ -425,6 +431,9 @@
   $('searchType').addEventListener('change', () => {
     const isSurvey = $('searchType').value === 'survey';
     $('surveyWrap').style.display = isSurvey ? '' : 'none';
+    // Audit #11 — show the unproven-mutation hint while mutation
+    // is the chosen type (the option label alone is not enough).
+    $('mutationHint').style.display = $('searchType').value === 'mutation' ? '' : 'none';
     // Switching back to all/mutation: the mouza list stays as
     // loaded (first offered survey's list) — the search mode,
     // not the list source, decides what is searched.
