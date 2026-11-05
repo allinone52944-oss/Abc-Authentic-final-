@@ -544,3 +544,10 @@ describe('SMS hub pagination + manual-match dropdown (audit #36)', () => {
     expect(ADMIN_SRC).toContain("bkash_payment: 'bKash'");
   });
 });
+
+describe('activity label for the rate-limit hold (audit #37)', () => {
+  test('sms.rate_limited_hold has a Bengali label', () => {
+    expect(ADMIN_SRC).toContain("'sms.rate_limited_hold'");
+    expect(ADMIN_SRC).toContain('SMS হোল্ড (হার-সীমা)');
+  });
+});

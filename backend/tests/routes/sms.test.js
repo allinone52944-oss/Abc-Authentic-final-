@@ -422,3 +422,62 @@ describe('GET /api/admin/sms — pagination (audit #36)', () => {
     expect(rowsQ[1]).toEqual([30, 30]); // limit, offset
   });
 });
+
+describe('holdRateLimitedSms — over-cap SMS are held, not lost (audit #37)', () => {
+  const { holdRateLimitedSms } = require('../../routes/sms');
+  const fakeRes = () => {
+    const res = { statusCode: null, body: null };
+    res.status = jest.fn((c) => { res.statusCode = c; return res; });
+    res.json = jest.fn((b) => { res.body = b; return res; });
+    return res;
+  };
+  const fakeReq = (body) => ({ body, query: {}, headers: {} });
+
+  test('valid secret + room in the hold queue → 202 held, stored as unparsed', async () => {
+    db.__routeQuery([
+      ["parse_status = 'unparsed' AND created_at", { rows: [{ count: '3' }] }],
+      ['INSERT INTO incoming_sms', { rows: [{ id: 's99' }] }],
+    ]);
+    const res = fakeRes();
+    await holdRateLimitedSms(fakeReq({ secret: SECRET, message: BKASH_MSG, sender: 'bKash' }), res);
+    expect(res.statusCode).toBe(202);
+    expect(res.body).toMatchObject({ ok: true, held_for_review: true, reason: 'RATE_LIMITED', sms_id: 's99' });
+    const ins = db.query.mock.calls.find((c) => /INSERT INTO incoming_sms/.test(c[0]));
+    expect(ins[0]).toContain("'unparsed'"); // parse_status is a literal in the SQL
+    expect(ins[1][0]).toBe(BKASH_MSG); // raw_message
+    expect(ins[1][1]).toBe('bKash'); // raw_sender
+    const log = db.query.mock.calls.find((c) => /INSERT INTO activity_log/.test(c[0]));
+    expect(JSON.parse(log[1][2]).sms_id).toBe('s99');
+  });
+
+  test('invalid secret → 429, nothing stored', async () => {
+    const res = fakeRes();
+    await holdRateLimitedSms(fakeReq({ secret: 'wrong', message: BKASH_MSG }), res);
+    expect(res.statusCode).toBe(429);
+    expect(res.body).toEqual({ error: 'RATE_LIMITED' });
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  test('hold queue full → 429, nothing stored', async () => {
+    db.__routeQuery([["parse_status = 'unparsed' AND created_at", { rows: [{ count: '50' }] }]]);
+    const res = fakeRes();
+    await holdRateLimitedSms(fakeReq({ secret: SECRET, message: BKASH_MSG }), res);
+    expect(res.statusCode).toBe(429);
+    expect(db.query.mock.calls.filter((c) => /INSERT INTO incoming_sms/.test(c[0]))).toHaveLength(0);
+  });
+
+  test('no message → 429, nothing stored', async () => {
+    const res = fakeRes();
+    await holdRateLimitedSms(fakeReq({ secret: SECRET, message: '   ' }), res);
+    expect(res.statusCode).toBe(429);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  test('the limiter wires the hold handler (not a bare 429 message)', () => {
+    const fs = require('fs');
+    const src = fs.readFileSync(require('path').join(__dirname, '../../routes/sms.js'), 'utf8');
+    expect(src).toContain('handler: (req, res) => { void holdRateLimitedSms(req, res); }');
+    expect(src).toContain('max: 120');
+    expect(src).not.toContain("message: { error: 'RATE_LIMITED' }");
+  });
+});

@@ -4962,6 +4962,7 @@ const ACT_LABELS = {
   'sms.manual_match': { label: '📩 SMS ম্যানুয়াল ম্যাচ', cls: 'st-badge active' },
   'sms.amount_mismatch_cancel': { label: '⚠️ অঙ্ক অমিলে রিচার্জ বাতিল', cls: 'st-badge danger' },
   'sms.amount_unverified_hold': { label: '⏸️ SMS হোল্ড (যাচাই হয়নি)', cls: 'st-badge pending' },
+  'sms.rate_limited_hold': { label: '⏳ SMS হোল্ড (হার-সীমা)', cls: 'st-badge pending' }, // audit #37 — an over-cap SMS is held, not lost
   'sms.large_amount_hold': { label: '⏸️ SMS হোল্ড (বড় অঙ্ক)', cls: 'st-badge pending' },
   'sms.ignore': { label: '🚫 SMS উপেক্ষা', cls: 'st-badge info' },
   'sms.secret_reveal': { label: '🔓 SMS গোপন তথ্য দেখা', cls: 'st-badge pending' },

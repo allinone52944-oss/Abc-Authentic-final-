@@ -23,8 +23,45 @@ const smsLimiter = rateLimit({
   max: 120, // SMS forwarding apps retry; 120/hour is generous but bounded
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'RATE_LIMITED' },
+  // Audit #37 — over the cap, a VALID SMS is HELD, not dropped: the
+  // handler stores it as 'unparsed' so it stays visible in the admin
+  // hub for a manual match, and the forwarder gets a 202
+  // (accepted-held) instead of a 429 it would retry. Invalid-secret
+  // traffic is still dropped with 429 and never stored. The hold
+  // itself is capped (SMS_RATE_HOLD_MAX, default 50/hour) so a flood
+  // cannot fill the table; past the cap the 429 returns.
+  handler: (req, res) => { void holdRateLimitedSms(req, res); },
 });
+
+// Over-cap SMS, held for the admin instead of lost. Exported for tests.
+const SMS_RATE_HOLD_MAX = Math.max(0, parseInt(process.env.SMS_RATE_HOLD_MAX || '50', 10) || 50);
+async function holdRateLimitedSms(req, res) {
+  try {
+    if (!checkSecret(req)) return res.status(429).json({ error: 'RATE_LIMITED' });
+    const rawMessage = String(req.body?.message || '').slice(0, 2000).trim();
+    const rawSender = String(req.body?.sender || '').slice(0, 60).trim();
+    if (!rawMessage) return res.status(429).json({ error: 'RATE_LIMITED' });
+    // The cap bounds the unprocessed pile (held + genuinely unparsed
+    // SMS together): past it, the old drop behaviour returns.
+    const held = await db.query(
+      `SELECT COUNT(*) FROM incoming_sms
+        WHERE parse_status = 'unparsed' AND created_at >= NOW() - INTERVAL '1 hour'`,
+      []);
+    if (parseInt(held.rows[0].count, 10) >= SMS_RATE_HOLD_MAX) {
+      return res.status(429).json({ error: 'RATE_LIMITED' });
+    }
+    const ins = await db.query(
+      `INSERT INTO incoming_sms (method, amount, sender, trxid, raw_message, raw_sender, parse_status)
+       VALUES ('unknown', NULL, NULL, NULL, $1, $2, 'unparsed') RETURNING id`,
+      [rawMessage, rawSender || null]);
+    const smsId = ins.rows[0].id;
+    await logActivity(null, 'sms.rate_limited_hold', { sms_id: smsId, reason: 'RATE_LIMITED' });
+    return res.status(202).json({ ok: true, held_for_review: true, reason: 'RATE_LIMITED', sms_id: smsId });
+  } catch (e) {
+    safeLog('[sms] rate-limit hold failed:', e.message);
+    return res.status(429).json({ error: 'RATE_LIMITED' });
+  }
+}
 
 function pageParams(req) {
   const page = Math.max(1, parseInt(req.query.page || '1', 10) || 1);
@@ -503,4 +540,4 @@ async function tryAutoMatchRecharge(tx) {
   }
 }
 
-module.exports = { webhook, adminSms, tryAutoMatchRecharge, approveRechargeTx };
+module.exports = { webhook, adminSms, tryAutoMatchRecharge, approveRechargeTx, holdRateLimitedSms };
