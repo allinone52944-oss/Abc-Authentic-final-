@@ -4124,6 +4124,35 @@ window.AdmBn = {
     if (box) box.style.display = (chk && chk.checked) ? 'grid' : 'none';
     this.updatePreview();
   },
+  // Audit #84: banner picker groups designs by category instead of a flat
+  // list, so the admin sees 6 groups instead of 24 in a row. Category
+  // order follows the catalog's first-appearance order; any category not
+  // listed here falls through to an "অন্যান্য" group at the end.
+  _catOrder: ['promo', 'offer', 'announcement', 'festival', 'welcome', 'maintenance'],
+  _catLabel: {
+    promo: '📣 প্রোমো',
+    offer: '🏷️ অফার',
+    announcement: '📢 ঘোষণা',
+    festival: '🎉 উৎসব',
+    welcome: '👋 স্বাগতম',
+    maintenance: '🔧 রক্ষণাবেক্ষণ',
+  },
+  designGridHtml(designs, selId) {
+    const groups = {};
+    (designs || []).forEach((d) => {
+      const c = d.category || 'অন্যান্য';
+      (groups[c] = groups[c] || []).push(d);
+    });
+    const order = this._catOrder.concat(Object.keys(groups).filter((c) => this._catOrder.indexOf(c) === -1));
+    return order.filter((c) => groups[c] && groups[c].length).map((c) =>
+      '<div class="bn-design-group">' + esc(this._catLabel[c] || c) + ' (' + groups[c].length + 'টি)</div>' +
+      '<div class="bn-design-grid">' +
+      groups[c].map((d) =>
+        '<div class="bn-design-opt' + (d.id === selId ? ' sel' : '') + '" data-id="' + d.id + '" onclick="AdmBn.pick(' + d.id + ')">' +
+        '<div class="dname">#' + d.id + ' ' + esc(d.name) + '</div><div class="dcat">' + esc(d.category) + '</div></div>'
+      ).join('') + '</div>'
+    ).join('');
+  },
   async createForm() {
     this._selDesign = 1;
     const cat = await this._cat();
@@ -4151,11 +4180,7 @@ window.AdmBn = {
         '</div>' +
       '</div>' +
       '<div class="field"><label>ডিজাইন টেমপ্লেট বেছে নিন (' + cat.designs.length + 'টি রেডি ডিজাইন)</label>' +
-        '<div class="bn-design-grid" id="bnDesignGrid">' +
-        cat.designs.map((d) =>
-          '<div class="bn-design-opt' + (d.id === 1 ? ' sel' : '') + '" data-id="' + d.id + '" onclick="AdmBn.pick(' + d.id + ')">' +
-          '<div class="dname">#' + d.id + ' ' + esc(d.name) + '</div><div class="dcat">' + esc(d.category) + '</div></div>'
-        ).join('') + '</div>' +
+        '<div class="bn-design-groups" id="bnDesignGrid">' + this.designGridHtml(cat.designs, 1) + '</div>' +
       '</div>' +
       '<div class="field"><label>লাইভ প্রিভিউ (Live Preview)</label><div class="bn-preview" id="bnPreview"></div></div>' +
       fld('মূল বার্তা (বাংলা)', 'text', 'bn_text_bn') +
@@ -4256,11 +4281,7 @@ window.AdmBn = {
         '</div>' +
       '</div>' +
       '<div class="field"><label>ডিজাইন টেমপ্লেট বেছে নিন</label>' +
-        '<div class="bn-design-grid" id="bnDesignGrid">' +
-        cat.designs.map((x) =>
-          '<div class="bn-design-opt' + (x.id === b.design_id ? ' sel' : '') + '" data-id="' + x.id + '" onclick="AdmBn.pick(' + x.id + ')">' +
-          '<div class="dname">#' + x.id + ' ' + esc(x.name) + '</div><div class="dcat">' + esc(x.category) + '</div></div>'
-        ).join('') + '</div>' +
+        '<div class="bn-design-groups" id="bnDesignGrid">' + this.designGridHtml(cat.designs, b.design_id) + '</div>' +
       '</div>' +
       '<div class="field"><label>লাইভ প্রিভিউ</label><div class="bn-preview" id="bnPreview"></div></div>' +
       fld('মূল বার্তা (বাংলা)', 'text', 'bn_text_bn', c.text_bn || '') +
