@@ -685,13 +685,6 @@ router.post('/wallet/recharge', async (req, res) => {
     if (!trxid || String(trxid).trim().length < 4) {
       return res.status(400).json({ error: 'INVALID_TRXID' });
     }
-    // Guards: max 3 pending, duplicate trxid
-    const pending = await db.query(
-      `SELECT COUNT(*) FROM transactions
-       WHERE user_id = $1 AND type = 'recharge' AND status = 'pending'`, [req.user.id]);
-    if (parseInt(pending.rows[0].count, 10) >= 3) {
-      return res.status(400).json({ error: 'TOO_MANY_PENDING' });
-    }
     const dup = await db.query(
       // Audit #23 — case-folded: 'abc123' must match a stored
       // 'ABC123', or a case change bypasses the DUP check and the
@@ -726,6 +719,15 @@ router.post('/wallet/recharge', async (req, res) => {
         });
       }
       return res.status(409).json({ error: 'DUP_TRXID' });
+    }
+    // Audit #31 — the cap check runs AFTER the duplicate check: a
+    // resubmit of an existing TrxID must answer DUP_TRXID (with the
+    // original transaction), never TOO_MANY_PENDING.
+    const pending = await db.query(
+      `SELECT COUNT(*) FROM transactions
+       WHERE user_id = $1 AND type = 'recharge' AND status = 'pending'`, [req.user.id]);
+    if (parseInt(pending.rows[0].count, 10) >= 3) {
+      return res.status(400).json({ error: 'TOO_MANY_PENDING' });
     }
 
     // Fraud guard: if an SMS with this TrxID already arrived, the reported

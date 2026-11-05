@@ -257,6 +257,16 @@ describe('wallet', () => {
       expect(r.body.existing_tx).toMatchObject({ amount: 500, status: 'approved' });
     });
 
+    test('duplicate trxid + 3 pending → 409 DUP_TRXID, not TOO_MANY_PENDING (audit #31)', async () => {
+      db.__routeQuery([
+        ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '3' }] }],
+        ['FROM transactions WHERE UPPER(trxid)', { rows: [{ id: 't9', user_id: 'u1', amount: 500, status: 'pending', created_at: '2026-11-04T10:00:00.000Z' }] }],
+      ]);
+      const r = await withUser(request(app()).post('/api/wallet/recharge')).send(GOOD).expect(409);
+      expect(r.body.error).toBe('DUP_TRXID');
+      expect(r.body.existing_tx).toMatchObject({ amount: 500, status: 'pending' });
+    });
+
     test('SMS with same TrxID but different amount → 409 TRXID_AMOUNT_MISMATCH', async () => {
       db.__routeQuery([
         ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
