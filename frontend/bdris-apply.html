@@ -1400,6 +1400,10 @@ async function fetchHomeOriginal(b, ackNo) {
     S._pdfTok = S._pdfTok || {}; S._pdfTok[key] = { tok: token, at: Date.now() };
     b.textContent = '⏳ PDF আসছে…';
     S._origAutoDl = canon;
+    // Audit #78 — the home button was clicked, so the user asked
+    // for this download: it downloads when ready. The DONE page's
+    // background fetch never sets this, so it never auto-downloads.
+    S._origWantDl = canon;
     emitted = true;
     socket.emit('FETCH_ORIGINAL', { ack: canon, _chargeToken: token });
     armHomeOrigWatch(b, canon, Date.now() + 360000);
@@ -1417,6 +1421,7 @@ function armHomeOrigWatch(b, canon, until) {
     const fresh = prog && (Date.now() - prog < 120000);
     if (fresh && Date.now() < until) { armHomeOrigWatch(b, canon, until); return; }
     if (S._origAutoDl === canon) S._origAutoDl = null;
+    if (S._origWantDl === canon) S._origWantDl = null;
     b.disabled = false; b.textContent = '⬇️ আসল PDF';
     note('⚠️ আসল PDF আসেনি — আবার চেষ্টা করুন', 'err');
   }, 120000);
@@ -4421,7 +4426,8 @@ function showDone(d, restore) {
     S._pdfTok = S._pdfTok || {}; S._pdfTok[key] = { tok: token, at: Date.now() };
     downloadOriginal(origUrl, no);
   };
-  // bot পেছনে PDF তৈরি করে রাখে — পেজ খুলতেই fetch শুরু, ready হলেই auto-download
+  // Audit #78 — bot পেছনে PDF তৈরি করে রাখে: পেজ খুলতেই fetch
+  // শুরু, প্রস্তুত হলে বোতামই ডাউনলোডের পথ হয় — auto-download নয়।
   (function bgPdf() {
     const el = $('akOrigPend'); if (!el || origUrl) return;
     const key = String(no || '').replace(/\D/g, '');
@@ -4432,10 +4438,10 @@ function showDone(d, restore) {
       return;
     }
     el.disabled = false; el.style.opacity = '.8';
-    el.textContent = '⏳ PDF তৈরি হচ্ছে… (হয়ে গেলেই নেমে যাবে)';
+    el.textContent = '⏳ PDF তৈরি হচ্ছে…';
     S._origAutoDl = key;
     socket.emit('FETCH_ORIGINAL', { ack: key });
-    el.onclick = () => { note('⏳ PDF তৈরি হচ্ছে — হয়ে গেলেই নেমে যাবে', 'info'); socket.emit('FETCH_ORIGINAL', { ack: key }); };
+    el.onclick = () => { note('⏳ PDF তৈরি হচ্ছে — প্রস্তুত হলে এই বোতামেই নামানো যাবে', 'info'); socket.emit('FETCH_ORIGINAL', { ack: key }); };
     // ALL-BUGS (d): ONE driven path for the original PDF — the
     // button itself is the state (preparing → ready → failed),
     // never a separate auto-download promise beside it. The
@@ -4467,8 +4473,9 @@ function showDone(d, restore) {
   ]);
 }
 
-/* আসল PDF (কার্যালয়ের কপি) — সার্ভার নীরবে অটো-এনে দেয়; প্রস্তুত হলেই
-   বোতাম চালু, কেউ অপেক্ষা করে ক্লিক করলে প্রস্তুত হওয়ামাত্রই নেমে যায় */
+/* আসল PDF (কার্যালয়ের কপি) — সার্ভার নীরবে এনে দেয়; প্রস্তুত হলেই
+   বোতাম চালু হয়, ডাউনলোড শুধু বোতাম চাপলে (হোমের বোতাম চাপা থাকলে
+   প্রস্তুত হলেই নেমে যায়) */
 const ORIG_READY = {};
 const ORIG_AUTODLED = {};
 function downloadOriginal(url, no) {
@@ -5765,11 +5772,14 @@ socket.on('BOT_STATUS', (d) => {
         el.textContent = '⬇️ আসল PDF (কার্যালয়ের কপি)';
         el.onclick = () => downloadOriginal(u, ono);
       }
-      // অটো-ডাউনলোড শুধু কেউ চাইলে: অঙ্ক-মিল অথবা খালি (সর্বশেষ রেকর্ড) চাওয়া হলে
-      const wantDl = S._origAutoDl != null
-        && (String(S._origAutoDl).replace(/\D/g, '') === ono || String(S._origAutoDl).replace(/\D/g, '') === '');
+      // Audit #78 — auto-download শুধু কেউ চাইলে (হোমের বোতাম চাপা):
+      // DONE পেজের ব্যাকগ্রাউন্ড fetch-এ wantDl থাকে না, তাই প্রস্তুত
+      // হলে বোতামই ডাউনলোডের পথ — অটো-ডাউনলোড নয়।
+      const wantDl = S._origWantDl != null
+        && (String(S._origWantDl).replace(/\D/g, '') === ono || String(S._origWantDl).replace(/\D/g, '') === '');
       if (ono && wantDl) {
         if (!ORIG_AUTODLED[ono]) { ORIG_AUTODLED[ono] = 1; downloadOriginal(u, ono); }
+        S._origWantDl = null;
       } else {
         note('✅ আসল PDF (কার্যালয়ের কপি) প্রস্তুত', 'ok');
       }

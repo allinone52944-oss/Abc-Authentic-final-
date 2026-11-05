@@ -1075,3 +1075,21 @@ describe('audit #75 — footer states the real charge rule', () => {
     expect(html).toContain('ফি জমা/আসল পিডিএফ-এর আগে একবারই কাটে — চার্জ ব্যর্থ হলে ৳০, একই কাজে দুবার নয়');
   });
 });
+
+describe('audit #78 — DONE page: one driven path for the original PDF', () => {
+  test('no auto-download promise text anywhere on the page', () => {
+    expect(html).not.toContain('হয়ে গেলেই নেমে যাবে');
+  });
+
+  test('the DONE pending button is just the preparing state', () => {
+    expect(html).toContain("el.textContent = '⏳ PDF তৈরি হচ্ছে…';");
+  });
+
+  test('auto-download fires only when the user asked (home click sets _origWantDl)', () => {
+    expect(html).toContain('S._origWantDl = canon;');
+    expect(html).toContain('const wantDl = S._origWantDl != null');
+    // The DONE background fetch never marks a download want.
+    const bgPdf = html.slice(html.indexOf('(function bgPdf()'), html.indexOf('S._origProgressAt = Date.now();'));
+    expect(bgPdf).not.toContain('_origWantDl');
+  });
+});
