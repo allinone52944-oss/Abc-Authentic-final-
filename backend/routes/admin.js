@@ -2407,8 +2407,11 @@ router.get('/stats', async (req, res) => {
 router.get('/stats/sms', async (req, res) => {
   try {
     const r = await db.query(
+      // Audit #34 — the unmatched count includes unparsed SMS: they
+      // arrived, matched nothing, and need admin attention. (The
+      // admin toast fires when this count rises.)
       `SELECT COUNT(*) FROM incoming_sms
-       WHERE matched_recharge_id IS NULL AND parse_status = 'parsed'`
+       WHERE matched_recharge_id IS NULL AND parse_status IN ('parsed', 'unparsed')`
     );
     res.json({ unmatched_sms: parseInt(r.rows[0].count, 10) });
   } catch (e) {

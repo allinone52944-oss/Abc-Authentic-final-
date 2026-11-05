@@ -73,6 +73,9 @@ describe('POST /api/sms/incoming — parsing', () => {
     db.__routeQuery([['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }]]);
     const r = await postIncoming({ secret: SECRET, message: 'hello world', sender: 'bKash' }).expect(200);
     expect(r.body).toMatchObject({ ok: true, matched: false, sms_id: 's1', parsed: false });
+    // audit #34 — an unparsed SMS is stored as 'unparsed', never 'parsed'
+    const ins = db.__client.query.mock.calls.find((c) => /INSERT INTO incoming_sms/.test(c[0]));
+    expect(ins[1][6]).toBe('unparsed'); // parse_status
   });
 
   test('parsed but no matching recharge → matched:false', async () => {
@@ -84,6 +87,9 @@ describe('POST /api/sms/incoming — parsing', () => {
     ]);
     const r = await postIncoming({ secret: SECRET, message: BKASH_MSG, sender: 'bKash' }).expect(200);
     expect(r.body).toMatchObject({ ok: true, matched: false, parsed: true });
+    // audit #34 — a parsed SMS is still stored as 'parsed'
+    const ins = db.__client.query.mock.calls.find((c) => /INSERT INTO incoming_sms/.test(c[0]));
+    expect(ins[1][6]).toBe('parsed'); // parse_status
   });
 
   test('duplicate trxid (already matched) → stored as duplicate, no re-match', async () => {
@@ -198,7 +204,7 @@ describe('adminSms routes', () => {
     expect(r.body.total).toBe(2);
     expect(r.body.sms).toHaveLength(1);
     const countQ = db.query.mock.calls.find((c) => /SELECT COUNT\(\*\) FROM incoming_sms/.test(c[0]));
-    expect(countQ[0]).toContain("parse_status = 'parsed'");
+    expect(countQ[0]).toContain("parse_status IN ('parsed', 'unparsed')"); // audit #34
   });
 
   test('POST /:id/match: missing transaction → 400; sms 404; already matched → 400', async () => {
@@ -380,5 +386,25 @@ describe('migration 051_sms_matched_via.sql (audit #33)', () => {
   test('adds the matched_via column with the auto/manual check', () => {
     expect(mig).toContain('ALTER TABLE incoming_sms ADD COLUMN IF NOT EXISTS matched_via VARCHAR(10)');
     expect(mig).toContain("CHECK (matched_via IN ('auto', 'manual'))");
+  });
+});
+
+describe('GET /api/admin/sms — unmatched list (audit #34)', () => {
+  test('matched=no includes unparsed SMS, not just parsed ones', async () => {
+    db.__routeQuery([
+      ['SELECT COUNT(*) FROM incoming_sms', { rows: [{ count: '2' }] }],
+      ['FROM incoming_sms s', { rows: [] }],
+    ]);
+    const r = await withAdmin(request(adminApp()).get('/api/admin/sms?matched=no')).expect(200);
+    expect(r.body.total).toBe(2);
+    const list = db.query.mock.calls.find((c) => /FROM incoming_sms s/.test(c[0]));
+    expect(list[0]).toContain("s.parse_status IN ('parsed', 'unparsed')");
+  });
+
+  test('the late-submit lookup still needs a parsed SMS (trxid + amount)', () => {
+    const fs = require('fs');
+    const src = fs.readFileSync(require('path').join(__dirname, '../../routes/sms.js'), 'utf8');
+    const fn = src.slice(src.indexOf('async function tryAutoMatchRecharge'));
+    expect(fn).toContain("AND parse_status = 'parsed'");
   });
 });

@@ -168,7 +168,13 @@ webhook.post('/incoming', async (req, res) => {
       // Dedupe: same trxid already matched before → ignore.
       // Audit #23 — case-folded: a re-delivered SMS whose TrxID
       // differs only in case is the same SMS, not a fresh one.
-      let parseStatus = 'parsed';
+      // Audit #34 — an SMS the parser could not read is 'unparsed',
+      // never 'parsed': the old default lied, and the unmatched
+      // counts/list (which filter on the status) then treated it as
+      // a normal parsed-but-unmatched SMS. The CHECK constraint in
+      // migration 005 already allows 'unparsed' — only the code
+      // never used it.
+      let parseStatus = parsed ? 'parsed' : 'unparsed';
       let matchInfo = null;
       if (parsed && parsed.trxid) {
         const dup = await client.query(
@@ -321,7 +327,12 @@ adminSms.get('/', async (req, res) => {
     let i = 1;
     if (req.query.matched === 'yes') conds.push('s.matched_recharge_id IS NOT NULL');
     if (req.query.matched === 'no') {
-      conds.push(`s.matched_recharge_id IS NULL AND s.parse_status = 'parsed'`);
+      // Audit #34 — unparsed SMS are unmatched too (they still need
+      // admin attention; the hub shows their raw message), so the
+      // unmatched list includes both statuses. The late-submit
+      // auto-match lookup below keeps `= 'parsed'` on purpose: it
+      // needs a TrxID + amount, which an unparsed SMS never has.
+      conds.push(`s.matched_recharge_id IS NULL AND s.parse_status IN ('parsed', 'unparsed')`);
     }
     if (req.query.q) {
       conds.push(`(s.trxid ILIKE $${i} OR s.sender ILIKE $${i} OR s.raw_message ILIKE $${i})`);
