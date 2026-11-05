@@ -2,7 +2,7 @@
   "name": "bdris-automation-backend",
   "version": "1.0.0",
   "description": "BDRIS জন্ম নিবন্ধন স্বয়ংক্রিয় আবেদন সার্ভার",
-  "main": "server.js",
+  "main": "v2/server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"

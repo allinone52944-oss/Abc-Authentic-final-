@@ -71,12 +71,12 @@ function scheduleRestart() {
 
 function init() {
   if (_proc || _installing || _stopping) return;
-  // v2 enabled (2026-10-18): startup bootstrap fixed + verified (10 checks)
-  const v2ServerJs = path.join(engineDir(), 'v2', 'server.js');
-  const v1ServerJs = path.join(engineDir(), 'server.js');
-  const serverJs = fs.existsSync(v2ServerJs) ? v2ServerJs : v1ServerJs;
+  // AUDIT #8 (2026-11-05): v2 is the only engine — the v1 server.js
+  // (and its v1-only helpers) were removed, so there is no fallback.
+  // If v2 is missing, fail loudly instead of silently running stale code.
+  const serverJs = path.join(engineDir(), 'v2', 'server.js');
   if (!fs.existsSync(serverJs)) {
-    console.error('[bdris-apply] server.js not found, engine not started');
+    console.error('[bdris-apply] v2/server.js not found, engine not started');
     return;
   }
   // Auto-install node_modules on first run (no manual VM step needed)
@@ -117,10 +117,8 @@ function init() {
 
 function startEngine() {
   if (_proc) return;
-  // v2 enabled (2026-10-18): startup bootstrap fixed + verified
-  const v2ServerJs = path.join(engineDir(), 'v2', 'server.js');
-  const v1ServerJs = path.join(engineDir(), 'server.js');
-  const serverJs = fs.existsSync(v2ServerJs) ? v2ServerJs : v1ServerJs;
+  // AUDIT #8 (2026-11-05): v2 is the only engine — no v1 fallback.
+  const serverJs = path.join(engineDir(), 'v2', 'server.js');
   _proc = spawn(process.execPath, [serverJs], {
     cwd: engineDir(),
     env: Object.assign({}, process.env, {

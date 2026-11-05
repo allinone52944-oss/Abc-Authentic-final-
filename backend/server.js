@@ -445,7 +445,7 @@ try {
   //   GET  /api/bdris-apply/prices
   // Everything else falls through to the engine subprocess proxy.
   // Socket.IO auth is enforced by the engine itself (io.use handshake check in
-  // engines/bdris-apply/server.js) — the client sends its JWT in handshake.auth.
+  // engines/bdris-apply/v2/server.js) — the client sends its JWT in handshake.auth.
   // MUST come before the authenticated routes (Express matches in order)
   app.use('/api/bdris-apply/socket.io', bdrisApplyAdapter.getApp());
   app.use('/api/bdris-apply', requireAuth, bdrisApplyLimiter, bdrisApplyRoutes);
