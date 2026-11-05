@@ -999,3 +999,22 @@ describe('bdris-apply.html — global navigation (audit #54)', () => {
     expect(html).toContain("('brandHome').onclick = () => renderHome();");
   });
 });
+
+describe('bdris-apply.html — 381–760px band (audit #59)', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'frontend', 'bdris-apply.html'), 'utf8');
+
+  test('the form is 1-column at ≤760px (not 2-column)', () => {
+    const mq = html.slice(html.indexOf('@media (max-width:760px){'));
+    expect(mq).toContain('.row2,.row3{grid-template-columns:1fr;');
+    expect(mq).not.toContain('.row2,.row3{grid-template-columns:1fr 1fr;');
+  });
+
+  test('the stepper wraps instead of hiding in a horizontal scroll', () => {
+    const mq = html.slice(html.indexOf('@media (max-width:760px){'));
+    expect(mq).toContain('.stepper{flex-wrap:wrap; overflow-x:visible}');
+    expect(mq).toContain('.stp{flex:1 1 45%;');
+    expect(mq).not.toContain('.stp{flex:none; min-width:118px}');
+    // the base stepper still scrolls on desktop widths where all six steps fit
+    expect(html).toContain('.stepper{display:flex; gap:8px; margin-bottom:20px; overflow-x:auto;');
+  });
+});

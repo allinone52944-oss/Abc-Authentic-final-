@@ -351,17 +351,21 @@ input.bad, select.bad{border-color:var(--err); box-shadow:0 0 0 3px rgba(251,113
   .card{padding:19px 14px; border-radius:18px}
   .htitle{font-size:23px}
   .modes{grid-template-columns:1fr}
-  .row2,.row3{grid-template-columns:1fr 1fr; gap:10px}
+  /* Audit #59 — the 381–760px band kept a 2-column form (cramped
+     fields) and the stepper hid in a horizontal scroll. The form is
+     1-column here now, and the stepper wraps (2 per row) instead of
+     scrolling, so every step is visible. */
+  .row2,.row3{grid-template-columns:1fr; gap:10px}
   .hacts{width:100%}
   .hacts .btn{flex:1}
-  .stp{flex:none; min-width:118px}
+  .stepper{flex-wrap:wrap; overflow-x:visible}
+  .stp{flex:1 1 45%; min-width:0; white-space:normal}
   .otpbox{width:41px; height:50px; font-size:20px}
   .docrow{grid-template-columns:46px 1fr auto; }
   .docrow .dtype{grid-column:2 / -1}
   /* মোবাইল-সহজ: iOS-এর অটো-জুম বন্ধে ইনপুট ১৬px; প্রতিটি বাটন পুরো চওড়া ও বড় */
   input[type=text], input[type=tel], input[type=email], input[type=date], input[type=number], input:not([type]), select, textarea{font-size:16px}
   #btnRow .btn{width:100%; padding:13px 18px}
-  .stepper{-webkit-overflow-scrolling:touch}
   .pvrow{grid-template-columns:112px 1fr; font-size:13.5px}
   .pvsec{margin:13px 0 2px}
 }
@@ -369,7 +373,7 @@ input.bad, select.bad{border-color:var(--err); box-shadow:0 0 0 3px rgba(251,113
   .wrap{padding:12px 8px 46px}
   .otpbox{width:34px; height:44px; font-size:18px; border-radius:10px}
   .otpboxes{gap:6px}
-  .row2,.row3{grid-template-columns:1fr} /* খুব ছোট ফোনে ১ কলাম — পড়তে সুবিধা */
+  /* Audit #59 — .row2/.row3 are already 1-column at ≤760px now. */
 }
 .wrap{padding-bottom:calc(60px + env(safe-area-inset-bottom))}
 /* ── dashboard: স্ক্রল ছাড়া এক পর্দা ── */
