@@ -118,12 +118,14 @@ describe('nid-server-copy.html', () => {
 });
 
 describe('dashboard + admin + service-detail wiring', () => {
-  test('dashboard links to /nid-server-copy.html twice (desktop + mobile)', () => {
+  test('dashboard links to /nid-server-copy.html (one ENGINE_CARDS entry, both grids)', () => {
     const dash = read('frontend/dashboard.html');
-    expect(dash.split("location.href='/nid-server-copy.html'").length - 1).toBe(2);
+    expect(dash.split("href: '/nid-server-copy.html'").length - 1).toBe(1);
     expect(dash).toContain("s.engine_id === 'nid-server-copy'");
-    expect(dash).toContain('engChargeNidSc');
-    expect(dash).toContain('mEngChargeNidSc');
+    expect(dash).toContain("chargeId: 'engChargeNidSc'");
+    // Audit #82 — the mobile id is derived ('m' + capitalised
+    // chargeId), not a second hardcoded span.
+    expect(dash).toContain("'m' + c.chargeId[0].toUpperCase()");
   });
   test('admin engine dropdowns offer nid-server-copy (create + edit)', () => {
     const admin = read('frontend/js/admin.js');

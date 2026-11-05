@@ -30,8 +30,10 @@ describe('audit #14 — gate IDs are the directory names', () => {
     expect(sd).toContain("s.engine_id === 'birth-final'");
     expect(sd).toContain("s.engine_id === 'death-final'");
     const dash = read('frontend/dashboard.html');
-    expect(dash.split("location.href='/birth-final.html'").length - 1).toBe(2);
-    expect(dash.split("location.href='/death-final.html'").length - 1).toBe(2);
+    // Audit #82 — each card lives once in ENGINE_CARDS (both
+    // grids render from it), so each href appears once.
+    expect(dash.split("href: '/birth-final.html'").length - 1).toBe(1);
+    expect(dash.split("href: '/death-final.html'").length - 1).toBe(1);
   });
 
   test('the charge-rule map keys the new IDs (11-engine closed set)', () => {

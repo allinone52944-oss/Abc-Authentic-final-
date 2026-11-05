@@ -68,11 +68,14 @@ describe('dashboard mechanism (as actually built)', () => {
     expect(DASHBOARD).toContain('function renderServiceGrid');
   });
 
-  test('the hardcoded land card links to the new khatian page (audit #6)', () => {
+  test('the land card links to the new khatian page (audit #6 + #82)', () => {
     // Audit #6 — the dashboard land card is the khatian-search
-    // entry point, so it links straight to land-khatian.html
-    // (desktop + mobile); the service grid still routes by id.
-    expect(DASHBOARD.split("location.href='/land-khatian.html'").length - 1).toBe(2);
+    // entry point, so it links straight to land-khatian.html.
+    // Audit #82 — the card lives once in ENGINE_CARDS and renders
+    // into both grids; the service grid still routes by id.
+    expect(DASHBOARD.split("href: '/land-khatian.html'").length - 1).toBe(1);
+    expect(DASHBOARD).toContain('id="engineGridDesk"');
+    expect(DASHBOARD).toContain('id="engineGridMob"');
   });
 });
 

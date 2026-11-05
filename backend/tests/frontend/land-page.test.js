@@ -38,12 +38,15 @@ describe('land.html', () => {
 });
 
 describe('dashboard + admin wiring', () => {
-  test('dashboard links to /land-khatian.html twice (desktop + mobile)', () => {
+  test('dashboard links to /land-khatian.html (one ENGINE_CARDS entry, both grids)', () => {
     // Audit #6 — the dashboard land card is the khatian-search
-    // entry point now, so it goes to the new page.
+    // entry point now. Audit #82 — the card lives once in the
+    // ENGINE_CARDS array and renders into both grids.
     const dash = read('frontend/dashboard.html');
-    expect(dash.split("location.href='/land-khatian.html'").length - 1).toBe(2);
+    expect(dash.split("href: '/land-khatian.html'").length - 1).toBe(1);
     expect(dash).not.toContain("location.href='/land.html'");
+    expect(dash).toContain('id="engineGridDesk"');
+    expect(dash).toContain('id="engineGridMob"');
   });
   test('admin engine dropdowns offer the land engines (land-search removed)', () => {
     // Audit #14 — land-search left the dropdowns with its route

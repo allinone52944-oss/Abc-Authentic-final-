@@ -33,3 +33,34 @@ describe('dashboard loaders fail visibly (audit #76)', () => {
     expect(fnBody('loadNotices')).toContain("box.innerHTML = retryBox('loadNotices');");
   });
 });
+
+describe('audit #82 — engine cards render once from ENGINE_CARDS', () => {
+  const DASH = fs.readFileSync(
+    path.join(__dirname, '..', '..', '..', 'frontend', 'dashboard.html'),
+    'utf8',
+  );
+
+  test('one array holds all seven cards; no hardcoded card blocks remain', () => {
+    const m = DASH.match(/const ENGINE_CARDS = \[([\s\S]*?)\];/);
+    expect(m).toBeTruthy();
+    expect(m[1].split('href:').length - 1).toBe(7);
+    // The only '<div class="engine-card"' left is the renderer's
+    // own template string — the 14 hardcoded blocks are gone.
+    expect(DASH.split('<div class="engine-card"').length - 1).toBe(1);
+    expect(DASH).not.toContain('<!-- Engine 1:');
+    expect(DASH).not.toContain('<!-- M Engine 1');
+  });
+
+  test('both grids render from the array, before loadServices updates charges', () => {
+    expect(DASH).toContain('id="engineGridDesk"');
+    expect(DASH).toContain('id="engineGridMob"');
+    expect(DASH).toContain('function renderEngineCards()');
+    const init = DASH.slice(DASH.indexOf('async function init()'));
+    expect(init.indexOf('renderEngineCards();')).toBeLessThan(init.indexOf('loadServices();'));
+  });
+
+  test('the land card price reads the live land-khatian row, not the removed land-search row', () => {
+    expect(DASH).toContain("s.engine_id === 'land-khatian'");
+    expect(DASH).not.toContain("s.engine_id === 'land-search'");
+  });
+});
