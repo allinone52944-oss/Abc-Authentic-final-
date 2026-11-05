@@ -2,13 +2,16 @@
 // All In One (Abc Authentic) - Land services (DLRMS) routes
 // Mounted at /api/land (JWT auth + rate limit at mount).
 //
-// Three automated services, all reading the OFFICIAL land
+// Automated services, all reading the OFFICIAL land
 // record through the portal's public guest channel (see
 // engines/land-core/client.js — proven live 2026-10-23):
+// Audit #6 — the khatian-number search moved to
+// backend/routes/land-khatian.js (adapter.search:
+// khatian/name/dag + survey validation); this file keeps
+// the other land services only.
 //
 //   GET  /api/land/geo/*        realtime cascade for the form
 //   GET  /api/land/price?mode=  price + balance for one mode
-//   POST /api/land/search       by khatian number (engine land-search)
 //   POST /api/land/scan         by owner name, whole mouza,
 //                               all survey types (engine land-scan)
 //   POST /api/land/verify       claim vs record report
@@ -54,7 +57,6 @@ const router = express.Router();
 const UPLOAD_DIR = '/opt/all-in-one-abc-authentic/uploads/orders';
 
 const MODES = {
-  search: { engineId: 'land-search', label: 'খতিয়ান খোঁজ' },
   scan: { engineId: 'land-scan', label: 'নামে সম্পত্তি সন্ধান' },
   verify: { engineId: 'land-verify', label: 'জমি যাচাই রিপোর্ট' },
   mouza: { engineId: 'land-mouza-value', label: 'মৌজা মূল্য রিপোর্ট' },
@@ -88,7 +90,7 @@ async function getServicePrice(engineId, userId) {
 
 router.get('/price', requireAuth, async (req, res) => {
   try {
-    const mode = MODES[req.query.mode] ? req.query.mode : 'search';
+    const mode = MODES[req.query.mode] ? req.query.mode : 'scan';
     const { allowed, price, serviceId } = await getServicePrice(MODES[mode].engineId, req.user.id);
     const u = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
     res.json({ ok: true, mode, allowed, price, serviceId, balance: u.rows[0] ? Number(u.rows[0].balance) : 0 });
@@ -202,7 +204,9 @@ function cleanArea(body) {
   return area;
 }
 
-/** Find one khatian (by number) across every survey offered in the upazila. */
+/** Find one khatian (by number) across every survey offered in the upazila.
+ *  Audit #6 — the khatian search moved to land-khatian
+ *  (adapter.search); this helper now serves /verify only. */
 async function findKhatian(area, khatianNo) {
   const surveys = await offeredSurveys(area.districtBbs, area.upazilaBbs);
   for (const sv of surveys) {
@@ -389,37 +393,9 @@ function idemOf(body, mode) {
   return idem;
 }
 
-// ---------- POST /search ----------
-router.post('/search', requireAuth, async (req, res) => {
-  try {
-    const area = cleanArea(req.body || {});
-    const khatianNo = toEn(String((req.body || {}).khatian_no || '').trim().slice(0, 20));
-    if (!area || !khatianNo) {
-      return res.status(400).json({ error: 'BAD_INPUT', message: 'এলাকা ও খতিয়ান নম্বর — দুটোই লাগবে।' });
-    }
-    const idem = idemOf(req.body, 'search');
-    if (await replayIfExists(req, res, idem)) return;
-    const chk = await precheck(req, res, 'search');
-    if (!chk) return;
-    let det = null;
-    try { det = await findKhatian(area, khatianNo); } catch (e) { return geoFail(res, e); }
-    if (!det) return notFound(req, res, 'search', chk, idem, area);
-    const record = {
-      KHATIAN_NO: det.KHATIAN_NO, OWNERS: det.OWNERS, DAGS: det.DAGS,
-      TOTAL_LAND: det.TOTAL_LAND, _surveyName: det._surveyName,
-    };
-    return succeed(req, res, 'search', chk, idem, area,
-      { records: [record] },
-      { kind: 'search', area: { ...area }, records: [record] },
-      'delivery-land-search-' + slug(idem) + '.pdf');
-  } catch (e) {
-    safeLog('[land] search error:', e.message);
-    res.status(500).json({ error: 'SEARCH_FAILED' });
-  }
-});
-
 // ---------- POST /scan ----------
-const SCAN_DETAIL_CAP = 60;
+// Audit #6 — same cap as the khatian search (adapter.js DETAIL_CAP).
+const SCAN_DETAIL_CAP = 50;
 router.post('/scan', requireAuth, async (req, res) => {
   try {
     const area = cleanArea(req.body || {});

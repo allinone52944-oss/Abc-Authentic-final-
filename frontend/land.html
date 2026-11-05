@@ -25,8 +25,8 @@
   .err.on { display:block; }
   .ok { display:none; background:#f0fdf4; border:1px solid #86efac; color:#15803d; padding:14px; border-radius:12px; margin-bottom:14px; font-size:14px; }
   .ok.on { display:block; }
-  .modes { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
-  /* Phones (audit #58): the 4 mode cards go 2-column — 4-across was
+  .modes { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:18px; }
+  /* Phones (audit #58): the 3 mode cards go 2-column — 3-across was
      too cramped to read, and full stacking pushes the form far down
      the page. Form padding tightens and fields go 16px (stops iOS zoom). */
   @media (max-width:560px){
@@ -122,12 +122,7 @@
         </div>
       </div>
       <div class="modes" id="modes">
-        <div class="mode-card on" data-mode="search">
-          <div class="ic">🔍</div><div class="t">খতিয়ান খোঁজ</div>
-          <div class="p">৳<span data-price="search">–</span></div>
-          <div class="d">নম্বর দিলেই মালিক, দাগ ও মোট জমি</div>
-        </div>
-        <div class="mode-card" data-mode="scan">
+        <div class="mode-card on" data-mode="scan">
           <div class="ic">👤</div><div class="t">নামে সন্ধান</div>
           <div class="p">৳<span data-price="scan">–</span></div>
           <div class="d">এক নামে পুরো মৌজার সব খতিয়ান</div>
@@ -160,9 +155,6 @@
           <div class="field"><label>মৌজা *</label><select id="fMouza"><option value="">— আগে উপজেলা —</option></select></div>
         </div>
 
-        <div id="pane-search">
-          <div class="field"><label>খতিয়ান নম্বর *</label><input type="text" id="fKhatianNo" inputmode="numeric" placeholder="যেমন: ৮"></div>
-        </div>
         <div id="pane-scan" style="display:none">
           <div class="field"><label>মালিকের নাম *</label><input type="text" id="fOwnerName" placeholder="যেমন: আকবর আলী"></div>
         </div>
@@ -301,7 +293,7 @@
   const BN = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
   const bn = (v) => String(v == null ? '' : v).replace(/[0-9]/g, (d) => BN[Number(d)]);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  let MODE = 'search';
+  let MODE = 'scan';
   const prices = {};
 
   const $ = (id) => document.getElementById(id);
@@ -345,14 +337,14 @@
     } catch (e) { /* price stays as-is */ }
   }
   function updateBtn() {
-    const labels = { search: '🔍 খুঁজুন', scan: '👤 সন্ধান করুন', verify: '✅ যাচাই করুন', mouza: '📋 রিপোর্ট তৈরি করুন' };
+    const labels = { scan: '👤 সন্ধান করুন', verify: '✅ যাচাই করুন', mouza: '📋 রিপোর্ট তৈরি করুন' };
     $('goBtn').textContent = labels[MODE] + (prices[MODE] != null ? ' — ৳' + bn(prices[MODE]) : '');
   }
   function setMode(mode) {
     MODE = mode;
     if (prices[mode] == null) loadPrice(mode);
     document.querySelectorAll('.mode-card').forEach((c) => c.classList.toggle('on', c.dataset.mode === mode));
-    ['search', 'scan', 'verify', 'mouza'].forEach((m) => { $('pane-' + m).style.display = m === mode ? '' : 'none'; });
+    ['scan', 'verify', 'mouza'].forEach((m) => { $('pane-' + m).style.display = m === mode ? '' : 'none'; });
     // Mouza mode has its own single flow (office → mouza → class
     // → amount → rate): the shared DLRMS cascade is hidden HERE
     // ONLY. The other modes still need it, so it is never removed.
@@ -1087,10 +1079,7 @@
       const area = areaBody();
       if (!area) { showErr('বিভাগ, জেলা, উপজেলা ও মৌজা — সবগুলো বেছে নিন।'); return; }
       body = { ...area, idempotency_key: 'land-' + MODE + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9) };
-      if (MODE === 'search') {
-        body.khatian_no = $('fKhatianNo').value.trim();
-        if (!body.khatian_no) { showErr('খতিয়ান নম্বর লিখুন।'); return; }
-      } else if (MODE === 'scan') {
+      if (MODE === 'scan') {
         body.owner_name = $('fOwnerName').value.trim();
         if (!body.owner_name) { showErr('মালিকের নাম লিখুন।'); return; }
       } else {
@@ -1130,8 +1119,12 @@
   loadDivisions();
   // Arriving from a service page preselects that service's mode
   // (/land.html?mode=scan etc.); the cards remain switchable.
+  // Audit #6 — the khatian search moved to land-khatian.html, so
+  // an old ?mode=search link lands there instead of on a page
+  // with no search mode.
   const _qm = new URLSearchParams(location.search).get('mode');
-  setMode(['search', 'scan', 'verify', 'mouza'].includes(_qm) ? _qm : 'search');
+  if (_qm === 'search') { location.replace('/land-khatian.html'); }
+  setMode(['scan', 'verify', 'mouza'].includes(_qm) ? _qm : 'scan');
   // The other prices arrive a breath later — firing every
   // call at once can collide with a token refresh on page open.
   setTimeout(() => { loadPrice('scan'); loadPrice('verify'); loadPrice('mouza'); }, 1500);

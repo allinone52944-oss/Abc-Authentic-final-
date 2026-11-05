@@ -20,9 +20,13 @@ describe('land.html', () => {
     expect(html).not.toContain('"/api/land"');
   });
   test('has the three modes and calls all three endpoints', () => {
-    for (const m of ['search', 'scan', 'verify']) {
+    // Audit #6 — the search mode moved to land-khatian.html; the
+    // three modes left are scan / verify / mouza.
+    for (const m of ['scan', 'verify', 'mouza']) {
       expect(html).toContain('data-mode="' + m + '"');
     }
+    expect(html).not.toContain('data-mode="search"');
+    expect(html).not.toContain('id="pane-search"');
     expect(html).toContain("API + '/' + MODE");
     expect(html).toContain("API + '/price?mode='");
     expect(html).toContain("API + '/geo/divisions'");
@@ -34,9 +38,12 @@ describe('land.html', () => {
 });
 
 describe('dashboard + admin wiring', () => {
-  test('dashboard links to /land.html twice (desktop + mobile)', () => {
+  test('dashboard links to /land-khatian.html twice (desktop + mobile)', () => {
+    // Audit #6 — the dashboard land card is the khatian-search
+    // entry point now, so it goes to the new page.
     const dash = read('frontend/dashboard.html');
-    expect(dash.split("location.href='/land.html'").length - 1).toBe(2);
+    expect(dash.split("location.href='/land-khatian.html'").length - 1).toBe(2);
+    expect(dash).not.toContain("location.href='/land.html'");
   });
   test('admin engine dropdowns offer the three land engines', () => {
     const admin = read('frontend/js/admin.js');
@@ -54,14 +61,19 @@ describe('service-detail routing (the logout bug)', () => {
   // non-existent /land-search.html etc. — unknown .html paths
   // fall back to the login page (looked like a forced logout).
   const sd = read('frontend/service-detail.html');
-  test('each land engine maps to land.html with its mode', () => {
-    expect(sd).toContain("s.engine_id === 'land-search') { engineUrl = '/land.html?mode=search'");
+  test('each land engine maps to its page (search lives on land-khatian.html)', () => {
+    // Audit #6 — land-search goes to the new page; scan/verify
+    // stay on land.html with their mode.
+    expect(sd).toContain("s.engine_id === 'land-search') { engineUrl = '/land-khatian.html'");
     expect(sd).toContain("s.engine_id === 'land-scan') { engineUrl = '/land.html?mode=scan'");
     expect(sd).toContain("s.engine_id === 'land-verify') { engineUrl = '/land.html?mode=verify'");
   });
   test('land.html honours the ?mode= preselect', () => {
     const html = read('frontend/land.html');
     expect(html).toContain("new URLSearchParams(location.search).get('mode')");
+    // Audit #6 — an old ?mode=search link lands on the new page.
+    expect(html).toContain("if (_qm === 'search') { location.replace('/land-khatian.html'); }");
+    expect(html).toContain("setMode(['scan', 'verify', 'mouza'].includes(_qm) ? _qm : 'scan')");
   });
 });
 
@@ -89,8 +101,11 @@ describe('catalog shows land ONCE (the duplicate complaint)', () => {
     expect(svcs).toContain("_landGroup: true");
   });
   test('the group card names mouza, and mouza stays searchable', () => {
-    expect(svcs).toContain('খতিয়ান খোঁজ · নামে সন্ধান · জমি যাচাই · মৌজা মূল্য');
-    expect(svcs).toContain("_landSearch: 'খতিয়ান খোঁজ নামে সন্ধান জমি যাচাই মৌজা মূল্য মৌজা মূল্য রিপোর্ট'");
+    // Audit #6 — the group card opens land.html (scan/verify/mouza);
+    // the khatian search is its own card now, so it leaves the subtitle.
+    expect(svcs).toContain('নামে সন্ধান · জমি যাচাই · মৌজা মূল্য');
+    expect(svcs).not.toContain('খতিয়ান খোঁজ · নামে সন্ধান');
+    expect(svcs).toContain("_landSearch: 'নামে সন্ধান জমি যাচাই মৌজা মূল্য মৌজা মূল্য রিপোর্ট'");
     expect(svcs).toContain("extra.includes(q)");
   });
   test('the group card opens the single land page', () => {
@@ -147,7 +162,7 @@ describe('mouza-value mode (land-mouza-value)', () => {
     expect(html).toContain('data-mode="mouza"');
     expect(html).toContain('মৌজা মূল্য');
     expect(html).toContain('id="pane-mouza"');
-    expect(html).toContain("'search', 'scan', 'verify', 'mouza'");
+    expect(html).toContain("'scan', 'verify', 'mouza'");
     expect(html).toContain("loadPrice('mouza')");
     expect(html).toContain("API + '/' + MODE");
   });
@@ -342,8 +357,8 @@ describe('land.html — mobile grids (audit #58)', () => {
   test('the mode cards go 2-column at ≤560px (not 4-across)', () => {
     const mq = html.slice(html.indexOf('@media (max-width:560px){'));
     expect(mq).toContain('.modes { grid-template-columns:repeat(2,1fr);');
-    // the desktop rule is still 4 columns
-    expect(html).toContain('.modes { display:grid; grid-template-columns:repeat(4,1fr);');
+    // the desktop rule is still 3 columns (audit #6 removed search)
+    expect(html).toContain('.modes { display:grid; grid-template-columns:repeat(3,1fr);');
   });
 
   test('the rate-card grid is 1 column at ≤560px, via the stylesheet (no inline columns)', () => {

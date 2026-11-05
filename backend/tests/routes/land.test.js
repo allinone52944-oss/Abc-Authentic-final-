@@ -59,7 +59,7 @@ const AREA = {
   division_name: 'ঢাকা', district_name: 'ঢাকা', upazila_name: 'মিরপুর রাজস্ব সার্কেল',
   mouza_name: 'মিরপুর', jl_no: '33',
 };
-const PRICES = { 'land-search': { id: 31, price: 20 }, 'land-scan': { id: 32, price: 50 }, 'land-verify': { id: 33, price: 100 },
+const PRICES = { 'land-scan': { id: 32, price: 50 }, 'land-verify': { id: 33, price: 100 },
   // Fixture only for the mouza route tests — NOT a decided
   // service price (the admin price decision is still open).
   'land-mouza-value': { id: 34, price: 30 } };
@@ -114,60 +114,36 @@ describe('GET /api/land/geo/divisions', () => {
   });
 });
 
-describe('POST /api/land/search', () => {
-  test('found → 200, charged 20, record returned', async () => {
-    portalFound();
+describe('POST /api/land/search is gone (audit #6)', () => {
+  test('the old khatian-number-only route answers 404', async () => {
     const r = await withUser(request(app()).post('/api/land/search'))
-      .send({ ...AREA, khatian_no: '8', idempotency_key: 't-search-1' }).expect(200);
-    expect(r.body).toMatchObject({ ok: true, charged: 20, orderId: 'o1' });
-    expect(r.body.records).toHaveLength(1);
-    expect(r.body.records[0]).toMatchObject({ KHATIAN_NO: '8', OWNERS: 'আকবর আলী', DAGS: '1237' });
-  });
-
-  test('not found → 422 NOT_FOUND, charged 0, wallet untouched', async () => {
-    portalFound();
-    client.indexByKhatianNo.mockResolvedValue([]);
-    const r = await withUser(request(app()).post('/api/land/search'))
-      .send({ ...AREA, khatian_no: '999', idempotency_key: 't-search-2' }).expect(422);
-    expect(r.body).toMatchObject({ error: 'NOT_FOUND', charged: 0 });
-    const walletCalls = db.__client.query.mock.calls.filter((c) => String(c[0]).includes('wallet_apply'));
-    expect(walletCalls).toHaveLength(0);
-  });
-
-  test('insufficient balance → 402 BEFORE any portal lookup', async () => {
-    db.__routeQuery(baseRoutes([['FROM users WHERE', { rows: [{ balance: 5 }] }]]));
-    portalFound();
-    const r = await withUser(request(app()).post('/api/land/search'))
-      .send({ ...AREA, khatian_no: '8', idempotency_key: 't-search-3' }).expect(402);
-    expect(r.body.error).toBe('INSUFFICIENT_BALANCE');
+      .send({ ...AREA, khatian_no: '8', idempotency_key: 't-search-gone' });
+    expect(r.status).toBe(404);
     expect(client.indexByKhatianNo).not.toHaveBeenCalled();
   });
 
-  test('Bengali-digit khatian number is normalised before the portal lookup', async () => {
-    portalFound();
-    const r = await withUser(request(app()).post('/api/land/search'))
-      .send({ ...AREA, khatian_no: '৮', idempotency_key: 't-search-bn' }).expect(200);
-    expect(r.body.ok).toBe(true);
-    expect(client.indexByKhatianNo).toHaveBeenCalledWith('RS', 238686, '8');
+  test('GET /price?mode=search falls back to the first live mode (scan)', async () => {
+    const r = await withUser(request(app()).get('/api/land/price?mode=search')).expect(200);
+    expect(r.body).toMatchObject({ ok: true, mode: 'scan', price: 50, balance: 500, serviceId: 32 });
   });
 
-  test('bad area → 400', async () => {
-    const r = await withUser(request(app()).post('/api/land/search'))
-      .send({ khatian_no: '8' }).expect(400);
-    expect(r.body.error).toBe('BAD_INPUT');
+  test('the scan cap is unified with the khatian adapter DETAIL_CAP (50)', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const landSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'routes', 'land.js'), 'utf8');
+    expect(landSrc).toContain('const SCAN_DETAIL_CAP = 50;');
+    expect(landSrc).not.toContain("router.post('/search'");
+    const adapterSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'engines', 'land-khatian', 'adapter.js'), 'utf8');
+    expect(adapterSrc).toContain('const DETAIL_CAP = 50;');
   });
 
-  test('replay of a completed key → stored outcome, no new lookup', async () => {
-    db.__routeQuery(baseRoutes([
-      ['status, data, documents FROM orders', {
-        rows: [{ id: 'o9', price: 20, status: 'completed', data: JSON.stringify({ records: [{ KHATIAN_NO: '8' }] }), documents: '[]' }],
-      }],
-    ]));
+  test('findKhatian stays for /verify (the kept helper, not the removed search)', async () => {
     portalFound();
-    const r = await withUser(request(app()).post('/api/land/search'))
-      .send({ ...AREA, khatian_no: '8', idempotency_key: 't-search-1' }).expect(200);
-    expect(r.body).toMatchObject({ ok: true, duplicate: true, charged: 20, orderId: 'o9' });
-    expect(client.indexByKhatianNo).not.toHaveBeenCalled();
+    const r = await withUser(request(app()).post('/api/land/verify'))
+      .send({ ...AREA, khatian_no: '8', claim: { owner: 'আকবর আলী' }, idempotency_key: 't-verify-kept' })
+      .expect(200);
+    expect(r.body).toMatchObject({ ok: true, charged: 100 });
+    expect(client.indexByKhatianNo).toHaveBeenCalled();
   });
 });
 
