@@ -692,7 +692,10 @@ router.post('/wallet/recharge', async (req, res) => {
       return res.status(400).json({ error: 'TOO_MANY_PENDING' });
     }
     const dup = await db.query(
-      'SELECT id, user_id, amount, status, created_at FROM transactions WHERE trxid = $1 LIMIT 1', [String(trxid).trim()]);
+      // Audit #23 — case-folded: 'abc123' must match a stored
+      // 'ABC123', or a case change bypasses the DUP check and the
+      // same TrxID can be credited twice.
+      'SELECT id, user_id, amount, status, created_at FROM transactions WHERE UPPER(trxid) = UPPER($1) LIMIT 1', [String(trxid).trim()]);
     if (dup.rows.length) {
       // Fraud attempt: warn the attempter (WhatsApp) + alert admins
       // (push), throttled per user+trxid. The attempt itself is blocked.

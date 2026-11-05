@@ -156,13 +156,15 @@ webhook.post('/incoming', async (req, res) => {
     try {
       await client.query('BEGIN');
 
-      // Dedupe: same trxid already matched before → ignore
+      // Dedupe: same trxid already matched before → ignore.
+      // Audit #23 — case-folded: a re-delivered SMS whose TrxID
+      // differs only in case is the same SMS, not a fresh one.
       let parseStatus = 'parsed';
       let matchInfo = null;
       if (parsed && parsed.trxid) {
         const dup = await client.query(
           `SELECT id FROM incoming_sms
-           WHERE trxid = $1 AND matched_recharge_id IS NOT NULL LIMIT 1`,
+           WHERE UPPER(trxid) = UPPER($1) AND matched_recharge_id IS NOT NULL LIMIT 1`,
           [parsed.trxid]
         );
         if (dup.rows.length) parseStatus = 'duplicate';

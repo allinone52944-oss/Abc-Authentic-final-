@@ -82,7 +82,7 @@ describe('POST /api/wallet/recharge — DUP_TRXID same-user info', () => {
   test('same user resubmits → 409 + existing_tx (amount, status, date)', async () => {
     db.__routeQuery([
       ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
-      ['FROM transactions WHERE trxid', { rows: [{
+      ['FROM transactions WHERE UPPER(trxid)', { rows: [{
         id: 't9', user_id: 'u1', amount: '500', status: 'approved',
         created_at: '2026-11-04T10:00:00.000Z', trxid: 'TRX12345',
       }] }],
@@ -96,7 +96,7 @@ describe('POST /api/wallet/recharge — DUP_TRXID same-user info', () => {
   test('another user\'s TrxID → 409 generic, NO existing_tx leaked', async () => {
     db.__routeQuery([
       ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
-      ['FROM transactions WHERE trxid', { rows: [{
+      ['FROM transactions WHERE UPPER(trxid)', { rows: [{
         id: 't9', user_id: 'u2', amount: '500', status: 'approved',
         created_at: '2026-11-04T10:00:00.000Z', trxid: 'TRX12345',
       }] }],
@@ -111,7 +111,7 @@ describe('POST /api/wallet/recharge — submit response carries tx status', () =
   test('pending submit → 201 + transaction.status pending', async () => {
     db.__routeQuery([
       ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
-      ['FROM transactions WHERE trxid', { rows: [] }],
+      ['FROM transactions WHERE UPPER(trxid)', { rows: [] }],
       ['INSERT INTO transactions', { rows: [{ id: 't1', status: 'pending' }] }],
     ]);
     const r = await withUser(request(userApp()).post('/api/wallet/recharge')).send(GOOD).expect(201);
@@ -122,7 +122,7 @@ describe('POST /api/wallet/recharge — submit response carries tx status', () =
     const spy = jest.spyOn(push, 'notifyAutoApproveRecharge').mockResolvedValue({ ok: true, sent: 0 });
     db.__routeQuery([
       ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
-      ['FROM transactions WHERE trxid', { rows: [] }],
+      ['FROM transactions WHERE UPPER(trxid)', { rows: [] }],
       ['INSERT INTO transactions', { rows: [{ id: 't1', user_id: 'u1', amount: 500, trxid: 'TRX12345', status: 'pending' }] }],
       ['FROM incoming_sms', { rows: [{ id: 'sms1', amount: 500, trxid: 'TRX12345' }] }],
       ['WHERE id = $1 AND status = \'pending\' AND type = \'recharge\'', { rows: [{ id: 't1', user_id: 'u1', amount: 500, trxid: 'TRX12345', status: 'pending' }] }],
@@ -142,7 +142,7 @@ describe('POST /api/wallet/recharge — submit response carries tx status', () =
     const spy = jest.spyOn(push, 'notifyAutoApproveRecharge').mockResolvedValue({ ok: true, sent: 0 });
     db.__routeQuery([
       ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
-      ['FROM transactions WHERE trxid', { rows: [] }],
+      ['FROM transactions WHERE UPPER(trxid)', { rows: [] }],
       ['INSERT INTO transactions', { rows: [{ id: 't1', status: 'pending' }] }],
     ]);
     await withUser(request(userApp()).post('/api/wallet/recharge')).send(GOOD).expect(201);

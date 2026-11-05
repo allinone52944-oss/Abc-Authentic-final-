@@ -226,16 +226,27 @@ describe('wallet', () => {
     test('duplicate trxid → 409 DUP_TRXID', async () => {
       db.__routeQuery([
         ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
-        ['FROM transactions WHERE trxid', { rows: [{ id: 't9' }] }],
+        ['FROM transactions WHERE UPPER(trxid)', { rows: [{ id: 't9' }] }],
       ]);
       const r = await withUser(request(app()).post('/api/wallet/recharge')).send(GOOD).expect(409);
       expect(r.body.error).toBe('DUP_TRXID');
     });
 
+    test('duplicate trxid in different case → 409 DUP_TRXID (audit #23)', async () => {
+      db.__routeQuery([
+        ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
+        // the stored row is 'TRX12345'; the submit below sends 'trx12345'
+        ['FROM transactions WHERE UPPER(trxid)', { rows: [{ id: 't9', user_id: 'u1', amount: 500, status: 'approved', created_at: '2026-11-04T10:00:00.000Z' }] }],
+      ]);
+      const r = await withUser(request(app()).post('/api/wallet/recharge')).send({ ...GOOD, trxid: 'trx12345' }).expect(409);
+      expect(r.body.error).toBe('DUP_TRXID');
+      expect(r.body.existing_tx).toMatchObject({ amount: 500, status: 'approved' });
+    });
+
     test('SMS with same TrxID but different amount → 409 TRXID_AMOUNT_MISMATCH', async () => {
       db.__routeQuery([
         ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
-        ['FROM transactions WHERE trxid', { rows: [] }],
+        ['FROM transactions WHERE UPPER(trxid)', { rows: [] }],
         ['FROM incoming_sms', { rows: [{ amount: '50' }] }],
       ]);
       const r = await withUser(request(app()).post('/api/wallet/recharge')).send(GOOD).expect(409);
@@ -245,7 +256,7 @@ describe('wallet', () => {
     test('happy path → 201', async () => {
       db.__routeQuery([
         ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
-        ['FROM transactions WHERE trxid', { rows: [] }],
+        ['FROM transactions WHERE UPPER(trxid)', { rows: [] }],
         ['INSERT INTO transactions', { rows: [{ id: 't1', status: 'pending' }] }],
       ]);
       const r = await withUser(request(app()).post('/api/wallet/recharge')).send(GOOD).expect(201);
@@ -254,7 +265,7 @@ describe('wallet', () => {
     test('auto-match late-arriving form: amount > SMS_MAX_AUTO_APPROVE stays pending', async () => {
       db.__routeQuery([
         ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
-        ['FROM transactions WHERE trxid', { rows: [] }],
+        ['FROM transactions WHERE UPPER(trxid)', { rows: [] }],
         ['INSERT INTO transactions', { rows: [{ id: 't2', user_id: 'u1', amount: 60000, trxid: 'TRXBIG', status: 'pending' }] }],
         ['FROM incoming_sms', { rows: [{ id: 'sms2', amount: 60000, trxid: 'TRXBIG' }] }],
         ['INSERT INTO activity_log', { rows: [] }],
@@ -268,7 +279,7 @@ describe('wallet', () => {
     test('auto-match late-arriving form path → approved without double notification', async () => {
       db.__routeQuery([
         ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
-        ['FROM transactions WHERE trxid', { rows: [] }],
+        ['FROM transactions WHERE UPPER(trxid)', { rows: [] }],
         ['INSERT INTO transactions', { rows: [{ id: 't1', user_id: 'u1', amount: 500, trxid: 'TRX12345', status: 'pending' }] }],
         ['FROM incoming_sms', { rows: [{ id: 'sms1', amount: 500, trxid: 'TRX12345' }] }],
         ['WHERE id = $1 AND status = \'pending\' AND type = \'recharge\'', { rows: [{ id: 't1', user_id: 'u1', amount: 500, trxid: 'TRX12345', status: 'pending' }] }],
