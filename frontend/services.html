@@ -270,6 +270,15 @@ function groupLand(list){
   return rest;
 }
 
+// Audit #49 — small charge-rule label under the price (when the fee
+// is cut: upfront vs success-only). Shown only for priced services
+// with a known rule — never guessed.
+function chargeRuleHtml(s){
+  const r = s.charge_rule;
+  if(!r || !(Number(s.price) > 0)) return '';
+  return '<div style="font-size:11px;color:#64748b;font-weight:600;margin-top:2px;">💳 ' + esc(r.label) + ' · ' + esc(r.detail) + '</div>';
+}
+
 function card(s){
   if (s._landGroup) {
     return '<div class="svc-card" onclick="location.href=\'/land.html\'">' +
@@ -278,7 +287,7 @@ function card(s){
       '<div style="font-size:12px;color:#64748b;margin-top:2px;">খতিয়ান খোঁজ · নামে সন্ধান · জমি যাচাই · মৌজা মূল্য</div>' +
       '<div style="margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">' +
       '<span class="ptype auto">⚡ স্বয়ংক্রিয়</span>' + (s.open ? '' : '<span class="ptype closed">সাময়িক বন্ধ</span>') + '</div></div>' +
-      '<div class="svc-pr">৳' + bnNum(s.price) + ' থেকে</div></div>';
+      '<div class="svc-pr">৳' + bnNum(s.price) + ' থেকে' + chargeRuleHtml(s) + '</div></div>';
   }
   const closed = s.open ? '' : '<span class="ptype closed">সাময়িক বন্ধ</span>';
   const catName = s.category_name_bn || s.category_name;
@@ -289,7 +298,7 @@ function card(s){
     '<div class="svc-info"><h4>'+esc(s.name_bn||s.name)+'</h4>'+
     '<div style="margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">' + catHtml +
     '<span class="ptype '+(isAuto?'auto':'manual')+'">'+(isAuto?'⚡ স্বয়ংক্রিয়':'📝 ম্যানুয়াল')+'</span>'+closed+'</div></div>'+
-    '<div class="svc-pr">৳'+bnNum(s.price)+(s.open?'':'<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:2px;">বন্ধ আছে</div>')+'</div></div>';
+    '<div class="svc-pr">৳'+bnNum(s.price)+(s.open?'':'<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:2px;">বন্ধ আছে</div>')+chargeRuleHtml(s)+'</div></div>';
 }
 
 let GROUPS = [];

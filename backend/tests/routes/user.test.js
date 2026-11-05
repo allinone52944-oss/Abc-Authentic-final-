@@ -61,6 +61,23 @@ describe('GET /api/services', () => {
     const r = await withUser(request(app()).get('/api/services')).expect(500);
     expect(r.body.error).toBe('FAILED');
   });
+
+  test('audit #49 — each service carries its charge rule (when the fee is cut)', async () => {
+    const manual = { ...SERVICE, id: 's1', engine_id: null, type: 'manual' };
+    const land = { ...SERVICE, id: 's2', engine_id: 'land-search', type: 'automated' };
+    const unknown = { ...SERVICE, id: 's3', engine_id: 'something-new', type: 'automated' };
+    db.__routeQuery([
+      ['FROM services s', { rows: [manual, land, unknown] }],
+      ['FROM user_services WHERE user_id', { rows: [] }],
+    ]);
+    const r = await withUser(request(app()).get('/api/services')).expect(200);
+    expect(r.body.services).toHaveLength(3);
+    expect(r.body.services[0].charge_rule).toEqual(
+      { rule: 'upfront', label: 'আগে কাটবে', detail: 'অর্ডার কনফার্মের সাথে সাথে' });
+    expect(r.body.services[1].charge_rule).toEqual(
+      { rule: 'success', label: 'সফল হলেই কাটবে', detail: 'রেকর্ড পেলেই' });
+    expect(r.body.services[2].charge_rule).toBeNull(); // never guessed
+  });
 });
 
 describe('GET /api/services/:id', () => {

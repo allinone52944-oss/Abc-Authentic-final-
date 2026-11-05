@@ -293,6 +293,10 @@ async function init(){
         '<div style="font-size:14px;color:#475569;font-weight:600;">সেবার মূল্য / সরকারি ফি:</div>' +
         '<div style="font-size:24px;font-weight:800;color:#1e40af;">৳' + bnNum(price) + '</div>' +
       '</div>' +
+      // Audit #49 — when the fee is cut (never guessed; only when the
+      // API carries a rule and the service is priced).
+      ((price > 0 && s.charge_rule) ?
+        '<div style="margin-top:8px;padding:10px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;font-size:13px;color:#1e40af;">💳 <b>' + esc(s.charge_rule.label) + '</b> — ' + esc(s.charge_rule.detail) + (s.charge_rule.rule === 'success' ? '। না পেলে ৳০ — কোনো টাকা কাটা হবে না।' : '।') + '</div>' : '') +
     '</div>' +
 
     balBoxHtml +

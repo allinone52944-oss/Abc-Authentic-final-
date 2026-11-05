@@ -15,6 +15,7 @@ const fs = require('fs');
 // Order document uploads: settings-driven via orderDocUpload(db, 'order') (H-12).
 // Filenames stay random (C-2: never embed req.params.id).
 const push = require('../utils/push');
+const { chargeRuleFor } = require('../lib/chargeRule'); // audit #49
 const wa = require('../utils/whatsapp');
 const { tryAutoMatchRecharge } = require('./sms');
 const serviceCredits = require('../lib/serviceCredits');
@@ -155,6 +156,7 @@ router.get('/services', async (req, res) => {
         fields_required: safeJsonArray(s.fields_required),
         schedule: s.schedule, rules_text: s.rules_text,
         engine_id: s.engine_id, open: serviceOpen(s.schedule),
+        charge_rule: chargeRuleFor(s), // audit #49 — when the fee is cut
         manual_instructions: s.manual_instructions || null,
         manual_sample: s.manual_sample || null,
         manual_doc_count: s.manual_doc_count || 1,
@@ -185,6 +187,7 @@ router.get('/services/:id', async (req, res) => {
         fields_required: safeJsonArray(s.fields_required), schedule: s.schedule,
         rules_text: s.rules_text, engine_id: s.engine_id,
         open: serviceOpen(s.schedule),
+        charge_rule: chargeRuleFor(s), // audit #49 — when the fee is cut
         category_id: s.cat_id || null,
         category_name: s.cat_name || null,
         category_name_bn: s.cat_name_bn || null,
