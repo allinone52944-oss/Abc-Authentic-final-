@@ -1,6 +1,6 @@
 // ============================================================
 // Stored delivery copies of standalone engine results
-// (birth-certificate / death-verify PDFs).
+// (birth-certificate / death-final PDFs).
 // Those engines stream the PDF straight to the browser and keep
 // no record, so the finished work could never appear in the
 // customer's History (delivery files only). After a successful
@@ -22,8 +22,8 @@ const { buildReceiptPdf } = require('../lib/receiptPdf');
 const { requireAuth, requireAdmin } = require('../auth');
 const { safeLog } = require('../security');
 
-const SERVICE_LABELS = { 'bdris-certificate': 'জন্ম সনদ যাচাই', 'death-verify': 'মৃত্যু সনদ যাচাই' };
-const SUBJECT_LABELS = { 'bdris-certificate': 'জন্ম নিবন্ধন নম্বর', 'death-verify': 'মৃত্যু নিবন্ধন নম্বর' };
+const SERVICE_LABELS = { 'birth-final': 'জন্ম সনদ যাচাই', 'death-final': 'মৃত্যু সনদ যাচাই' };
+const SUBJECT_LABELS = { 'birth-final': 'জন্ম নিবন্ধন নম্বর', 'death-final': 'মৃত্যু নিবন্ধন নম্বর' };
 
 // Bengali rendering of an engine failure — the engine's own
 // message may be English or system-flavoured; the customer only
@@ -38,7 +38,7 @@ function failureReasonBn(raw) {
 }
 
 const UPLOAD_DIR = '/opt/all-in-one-abc-authentic/uploads/engine-jobs';
-const ENGINES = ['bdris-certificate', 'death-verify'];
+const ENGINES = ['birth-final', 'death-final'];
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -199,9 +199,9 @@ customerEngineJobs.post('/', (req, res) => {
       // First stored copy of this document → customer confirmation
       // (WhatsApp + own-device push).
       wa.notifyServiceCompleted(db, req.user.id,
-        engineId === 'death-verify' ? 'মৃত্যু সনদ' : 'জন্ম সনদ (সার্টিফিকেট)').catch(() => {});
+        engineId === 'death-final' ? 'মৃত্যু সনদ' : 'জন্ম সনদ (সার্টিফিকেট)').catch(() => {});
       push.notifyUser(db, req.user.id,
-        '✅ ' + (engineId === 'death-verify' ? 'মৃত্যু সনদ' : 'জন্ম সনদ') + ' তৈরি হয়েছে',
+        '✅ ' + (engineId === 'death-final' ? 'মৃত্যু সনদ' : 'জন্ম সনদ') + ' তৈরি হয়েছে',
         'আপনার সনদটি তৈরি হয়েছে — ইতিহাস থেকে যেকোনো সময় ডাউনলোড করতে পারবেন।', '/history.html').catch(() => {});
       res.status(201).json({ ok: true, id: r.rows[0].id });
     } catch (e) {

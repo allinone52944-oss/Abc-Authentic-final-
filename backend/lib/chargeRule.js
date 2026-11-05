@@ -29,11 +29,10 @@
 const RULES = {
   // engine_id: [rule, detail]
   'bdris-apply': ['upfront', 'জমা দেওয়ার সময়'],
-  'bdris-certificate': ['success', 'যাচাই সফল হলেই'],
-  'death-verify': ['success', 'যাচাই সফল হলেই'],
+  'birth-final': ['success', 'যাচাই সফল হলেই'],
+  'death-final': ['success', 'যাচাই সফল হলেই'],
   'nid-replica': ['success', 'কার্ড তৈরি হলেই'],
   'nid-server-copy': ['success', 'প্রতিটি সফল ডাউনলোডে'],
-  'land-search': ['success', 'রেকর্ড পেলেই'],
   'land-scan': ['success', 'রেকর্ড পেলেই'],
   'land-verify': ['success', 'রেকর্ড পেলেই'],
   'land-mouza-value': ['success', 'রিপোর্ট তৈরি হলেই'],

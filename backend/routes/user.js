@@ -657,7 +657,7 @@ router.get('/orders/:id/documents/:filename', async (req, res) => {
 // (2026-10-21) History keeps NO work details at all: just the files the
 // customer received as deliveries — admin-uploaded files on orders and
 // manual submissions, NID card PDFs stored on their orders, and stored
-// certificate / death-verify engine PDFs — so a delivered file can
+// certificate / death-final engine PDFs — so a delivered file can
 // always be found and re-downloaded from one place, whatever
 // phone/browser they use.
 // Audit #39 (2026-11-05) reverses the BDRIS half of that call: a filed
@@ -755,7 +755,7 @@ router.get('/history', async (req, res) => {
     for (const j of engineJobs.rows) {
       items.push({
         kind: 'engine', id: j.id,
-        title: (j.engine_id === 'death-verify' ? 'মৃত্যু সনদ' : 'জন্ম সনদ (সার্টিফিকেট)') +
+        title: (j.engine_id === 'death-final' ? 'মৃত্যু সনদ' : 'জন্ম সনদ (সার্টিফিকেট)') +
           (j.subject_name ? ' — ' + j.subject_name : '') +
           (j.outcome === 'failed' ? ' — ব্যর্থ' : ''),
         created_at: j.created_at,

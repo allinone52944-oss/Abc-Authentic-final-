@@ -8,14 +8,14 @@ describe('chargeRuleFor (audit #49)', () => {
   test('every known engine_id maps to its true rule', () => {
     expect(chargeRuleFor({ engine_id: 'bdris-apply' })).toEqual(
       { rule: 'upfront', label: 'আগে কাটবে', detail: 'জমা দেওয়ার সময়' });
-    for (const id of ['bdris-certificate', 'death-verify', 'qr-photo-verify']) {
+    for (const id of ['birth-final', 'death-final', 'qr-photo-verify']) {
       expect(chargeRuleFor({ engine_id: id }).rule).toBe('success');
       expect(chargeRuleFor({ engine_id: id }).detail).toBe('যাচাই সফল হলেই');
     }
     expect(chargeRuleFor({ engine_id: 'nid-replica' })).toEqual(
       { rule: 'success', label: 'সফল হলেই কাটবে', detail: 'কার্ড তৈরি হলেই' });
     expect(chargeRuleFor({ engine_id: 'nid-server-copy' }).detail).toBe('প্রতিটি সফল ডাউনলোডে');
-    for (const id of ['land-search', 'land-scan', 'land-verify']) {
+    for (const id of ['land-scan', 'land-verify']) {
       expect(chargeRuleFor({ engine_id: id }).detail).toBe('রেকর্ড পেলেই');
     }
     expect(chargeRuleFor({ engine_id: 'land-mouza-value' }).detail).toBe('রিপোর্ট তৈরি হলেই');
@@ -23,10 +23,12 @@ describe('chargeRuleFor (audit #49)', () => {
     expect(chargeRuleFor({ engine_id: 'land-mouza-map' }).detail).toBe('ম্যাপ পেলেই');
   });
 
-  test('the map covers the whole closed engine set (12 IDs)', () => {
+  test('the map covers the whole closed engine set (11 IDs)', () => {
+    // Audit #14 — land-search left the set with its route (audit #6);
+    // birth/death carry their directory names now.
     expect(Object.keys(RULES).sort()).toEqual([
-      'bdris-apply', 'bdris-certificate', 'death-verify', 'land-khatian',
-      'land-mouza-map', 'land-mouza-value', 'land-scan', 'land-search',
+      'bdris-apply', 'birth-final', 'death-final', 'land-khatian',
+      'land-mouza-map', 'land-mouza-value', 'land-scan',
       'land-verify', 'nid-replica', 'nid-server-copy', 'qr-photo-verify',
     ]);
   });

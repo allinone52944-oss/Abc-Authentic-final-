@@ -247,14 +247,14 @@ describe('refundOrderPrice (admin-order fix, 2026-11-03)', () => {
   test('gate ref reconstructs too (engineId:attemptKey → engineId-attemptKey)', async () => {
     const client = refundClient({
       ledger: {
-        'bdris-certificate-att1': [
-          { trxid: 'bdris-certificate-att1:svc', amount: -30 },
+        'birth-final-att1': [
+          { trxid: 'birth-final-att1:svc', amount: -30 },
         ],
       },
       creditRows: [{ id: 'c1', amount: 100, remaining: 70 }],
     });
     const out = await refundOrderPrice(client,
-      { id: 'o2', user_id: 'u1', service_id: 's1', price: 100, idempotency_key: 'bdris-certificate:att1' }, 'refund');
+      { id: 'o2', user_id: 'u1', service_id: 's1', price: 100, idempotency_key: 'birth-final:att1' }, 'refund');
     expect(out).toEqual({ refunded: true, creditPart: 30, balancePart: 70 });
   });
 

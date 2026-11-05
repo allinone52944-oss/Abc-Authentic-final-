@@ -234,7 +234,7 @@ try {
   const bdrisEngine = require('../engines/birth-final/index.js');
   bdrisEngine.init({});
   app.use('/api/bdris-engine', requireAuth, bdrisEngineLimiter,
-    chargeGate('bdris-certificate', 'birth', '/api/bdris-engine'), bdrisEngine.getApp());
+    chargeGate('birth-final', 'birth', '/api/bdris-engine'), bdrisEngine.getApp());
   safeLog('[engines] mounted birth-final at /api/bdris-engine');
 } catch (e) {
   safeLog('[engines] birth-final not mounted:', e.message);
@@ -264,7 +264,7 @@ try {
   deathEngine = require('../engines/death-final/index.js');
   deathEngine.init({});
   app.use('/api/death-engine', requireAuth, deathEngineLimiter,
-    chargeGate('death-verify', 'death', '/api/death-engine'), deathEngine.getApp());
+    chargeGate('death-final', 'death', '/api/death-engine'), deathEngine.getApp());
   safeLog('[engines] mounted death-final at /api/death-engine');
 } catch (e) {
   safeLog('[engines] death-final not mounted:', e.message);
@@ -469,7 +469,7 @@ const { customerManual, adminManual } = require('./routes/manual');
 app.use('/api/manual', apiLimiter, customerManual);
 app.use('/api/admin/manual', apiLimiter, adminManual);
 
-// ---- Stored engine delivery copies (certificate / death-verify PDFs) --
+// ---- Stored engine delivery copies (certificate / death-final PDFs) --
 const { customerEngineJobs, adminEngineJobs } = require('./routes/engine-jobs');
 app.use('/api/engine-jobs', apiLimiter, customerEngineJobs);
 app.use('/api/admin/engine-jobs', apiLimiter, adminEngineJobs);

@@ -660,7 +660,7 @@ async function notifyRechargeRejected(db, tx) {
 }
 
 // A standalone engine service finished (NID card built, BDRIS
-// application submitted, certificate / death-verify PDF issued).
+// application submitted, certificate / death-final PDF issued).
 // One generic notifier so every service a customer takes from any
 // engine confirms back to them on WhatsApp.
 async function notifyServiceCompleted(db, userId, serviceLabel, opts) {

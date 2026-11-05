@@ -651,7 +651,7 @@ router.get('/orders', async (req, res) => {
 // This endpoint is READ-ONLY. It touches no notification,
 // charge, refund, or delete logic, and GET /api/admin/orders
 // stays completely untouched.
-const UNIFIED_DELIVERY_LABELS = { 'bdris-certificate': 'জন্ম সনদ যাচাই', 'death-verify': 'মৃত্যু সনদ যাচাই' };
+const UNIFIED_DELIVERY_LABELS = { 'birth-final': 'জন্ম সনদ যাচাই', 'death-final': 'মৃত্যু সনদ যাচাই' };
 const UNIFIED_APPLICATION_LABEL = 'জন্ম নিবন্ধন আবেদন';
 
 function unifiedIso(v) {

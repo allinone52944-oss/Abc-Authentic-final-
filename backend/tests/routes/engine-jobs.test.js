@@ -1,5 +1,5 @@
 // Route tests for stored engine delivery copies (migration 035) and
-// their appearance in /api/history. Certificate / death-verify engines
+// their appearance in /api/history. Certificate / death-final engines
 // stream PDFs to the browser and keep no record — the engine pages now
 // report a copy to POST /api/engine-jobs so the delivery file stays in
 // the customer's History (owner-downloadable, admin can delete).
@@ -61,15 +61,15 @@ describe('POST /api/engine-jobs — report a delivery copy', () => {
       ['INSERT INTO engine_jobs', (text, params) => { insertParams = params; return { rows: [{ id: 'j1' }] }; }],
     ]);
     const r = await asUser(request(app()).post('/api/engine-jobs'))
-      .field('engine_id', 'bdris-certificate')
+      .field('engine_id', 'birth-final')
       .field('ref_no', '12345678901234567')
       .field('name', 'Test Name')
-      .field('idempotency_key', 'bdris-certificate-12345678901234567')
+      .field('idempotency_key', 'birth-final-12345678901234567')
       .attach('file', Buffer.from('%PDF-1.4 cert'), 'Certificate_123.pdf')
       .expect(201);
     expect(r.body).toMatchObject({ ok: true, id: 'j1' });
     expect(insertParams[0]).toBe('u1');
-    expect(insertParams[1]).toBe('bdris-certificate');
+    expect(insertParams[1]).toBe('birth-final');
     expect(insertParams[4]).toMatch(/^engine-.+\.pdf$/);
     expect(fs.existsSync(path.join(UPLOAD_DIR, insertParams[4]))).toBe(true);
     dropFile(insertParams[4]);
@@ -81,9 +81,9 @@ describe('POST /api/engine-jobs — report a delivery copy', () => {
     ]);
     const before = dirCount();
     const r = await asUser(request(app()).post('/api/engine-jobs'))
-      .field('engine_id', 'death-verify')
+      .field('engine_id', 'death-final')
       .field('ref_no', '999')
-      .field('idempotency_key', 'death-verify-999')
+      .field('idempotency_key', 'death-final-999')
       .attach('file', Buffer.from('%PDF-1.4 cert'), 'Death_999.pdf')
       .expect(200);
     expect(r.body).toMatchObject({ ok: true, duplicate: true });
@@ -102,14 +102,14 @@ describe('POST /api/engine-jobs — report a delivery copy', () => {
 
   test('non-PDF file → 400', async () => {
     const r = await asUser(request(app()).post('/api/engine-jobs'))
-      .field('engine_id', 'bdris-certificate')
+      .field('engine_id', 'birth-final')
       .attach('file', Buffer.from('plain text'), 'x.txt');
     expect(r.status).toBe(400);
   });
 
   test('no file → 400 NO_FILE', async () => {
     const r = await asUser(request(app()).post('/api/engine-jobs'))
-      .field('engine_id', 'bdris-certificate')
+      .field('engine_id', 'birth-final')
       .expect(400);
     expect(r.body.error).toBe('NO_FILE');
   });
@@ -121,8 +121,8 @@ describe('POST /api/engine-jobs — report a delivery copy', () => {
 
 describe('POST /api/engine-jobs/failure — record a failed verification', () => {
   const failBody = {
-    engine_id: 'bdris-certificate', ref_no: '12345678901234567',
-    reason: 'Record not found', idempotency_key: 'bdris-certificate-fail-sess1',
+    engine_id: 'birth-final', ref_no: '12345678901234567',
+    reason: 'Record not found', idempotency_key: 'birth-final-fail-sess1',
   };
 
   test('records a failed row + failure receipt + notifies customer and admins', async () => {
@@ -163,7 +163,7 @@ describe('POST /api/engine-jobs/failure — record a failed verification', () =>
     await asUser(request(app()).post('/api/engine-jobs/failure'))
       .send({ ...failBody, engine_id: 'bdris-apply' }).expect(400);
     await asUser(request(app()).post('/api/engine-jobs/failure'))
-      .send({ engine_id: 'death-verify', ref_no: '9' }).expect(400);
+      .send({ engine_id: 'death-final', ref_no: '9' }).expect(400);
   });
 
   test('a later SUCCESS report in the same session supersedes the failure record', async () => {
@@ -173,13 +173,13 @@ describe('POST /api/engine-jobs/failure — record a failed verification', () =>
       ['DELETE FROM engine_jobs', (text, params) => { deleteParams = params; return { rows: [{ filename: 'engine-fail-gone.pdf' }] }; }],
     ]);
     const r = await asUser(request(app()).post('/api/engine-jobs'))
-      .field('engine_id', 'bdris-certificate')
+      .field('engine_id', 'birth-final')
       .field('ref_no', '12345678901234567')
-      .field('idempotency_key', 'bdris-certificate-sess1')
+      .field('idempotency_key', 'birth-final-sess1')
       .attach('file', Buffer.from('%PDF-1.4 cert'), 'Certificate_123.pdf')
       .expect(201);
     expect(r.body).toMatchObject({ ok: true, id: 'j9' });
-    expect(deleteParams[2]).toBe('bdris-certificate-fail-sess1');
+    expect(deleteParams[2]).toBe('birth-final-fail-sess1');
   });
 });
 
@@ -210,7 +210,7 @@ describe('GET /api/engine-jobs/:id/file — owner download', () => {
 describe('admin engine-jobs', () => {
   test('list returns jobs for admin, 403 for users', async () => {
     db.__routeQuery([
-      ['FROM engine_jobs j JOIN users', { rows: [{ id: 'j1', engine_id: 'death-verify', ref_no: '999', subject_name: 'X', created_at: '2026-10-21T00:00:00Z', user_name: 'U', user_phone: '01' }] }],
+      ['FROM engine_jobs j JOIN users', { rows: [{ id: 'j1', engine_id: 'death-final', ref_no: '999', subject_name: 'X', created_at: '2026-10-21T00:00:00Z', user_name: 'U', user_phone: '01' }] }],
     ]);
     const r = await asAdmin(request(app()).get('/api/admin/engine-jobs')).expect(200);
     expect(r.body.jobs).toHaveLength(1);
@@ -250,8 +250,8 @@ describe('GET /api/history — engine deliveries are included', () => {
       ['FROM orders o LEFT JOIN services', { rows: [] }],
       ['FROM manual_submissions m LEFT JOIN services', { rows: [] }],
       ['FROM engine_jobs', { rows: [
-        { id: 'j1', engine_id: 'bdris-certificate', subject_name: 'Rahim', filename: 'engine-a.pdf', originalname: 'Certificate_1.pdf', created_at: '2026-10-21T08:00:00Z' },
-        { id: 'j2', engine_id: 'death-verify', subject_name: 'Karim', filename: 'engine-b.pdf', originalname: 'Death_2.pdf', created_at: '2026-10-21T09:00:00Z' },
+        { id: 'j1', engine_id: 'birth-final', subject_name: 'Rahim', filename: 'engine-a.pdf', originalname: 'Certificate_1.pdf', created_at: '2026-10-21T08:00:00Z' },
+        { id: 'j2', engine_id: 'death-final', subject_name: 'Karim', filename: 'engine-b.pdf', originalname: 'Death_2.pdf', created_at: '2026-10-21T09:00:00Z' },
       ] }],
       // Audit #39 — BDRIS filings are a history source now (the
       // 2026-10-21 "stay out" call is reversed for filings).
@@ -287,7 +287,7 @@ describe('GET /api/history — engine deliveries are included', () => {
       ['FROM orders o LEFT JOIN services', { rows: [] }],
       ['FROM manual_submissions m LEFT JOIN services', { rows: [] }],
       ['FROM engine_jobs', { rows: [
-        { id: 'jF', engine_id: 'death-verify', subject_name: '', filename: 'engine-fail-x.pdf', originalname: 'verification-failed-receipt.pdf', created_at: '2026-10-22T09:00:00Z', outcome: 'failed' },
+        { id: 'jF', engine_id: 'death-final', subject_name: '', filename: 'engine-fail-x.pdf', originalname: 'verification-failed-receipt.pdf', created_at: '2026-10-22T09:00:00Z', outcome: 'failed' },
       ] }],
     ]);
     const r = await asUser(request(app()).get('/api/history')).expect(200);

@@ -13,7 +13,7 @@ const TABBAR_PAGES = ['dashboard', 'history', 'land-khatian', 'land-mouza-map', 
   'nid-replica', 'order-create', 'order-detail', 'order-status', 'orders',
   'profile', 'qr-photo-verify', 'service-detail', 'services', 'wallet'];
 const NO_TABBAR_PAGES = ['bdris-apply', 'land', 'login', 'admin', 'nid-server-copy',
-  'bdris-certificate', 'death-verify', 'index'];
+  'birth-final', 'death-final', 'index'];
 
 describe('tabbar bottom padding only on tabbar pages (audit #61)', () => {
   test('motion.css reserves body room only for body.has-tabbar', () => {

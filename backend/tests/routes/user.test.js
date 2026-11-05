@@ -64,7 +64,7 @@ describe('GET /api/services', () => {
 
   test('audit #49 — each service carries its charge rule (when the fee is cut)', async () => {
     const manual = { ...SERVICE, id: 's1', engine_id: null, type: 'manual' };
-    const land = { ...SERVICE, id: 's2', engine_id: 'land-search', type: 'automated' };
+    const land = { ...SERVICE, id: 's2', engine_id: 'land-scan', type: 'automated' }; // audit #14 — land-search left the rule map with its route
     const unknown = { ...SERVICE, id: 's3', engine_id: 'something-new', type: 'automated' };
     db.__routeQuery([
       ['FROM services s', { rows: [manual, land, unknown] }],

@@ -266,7 +266,7 @@ async function step2(){
     }).join('')+'<div class="s full" style="color:var(--muted);font-size:12px;">✏️ সব তথ্য এডিট করা যাবে</div>';
     fields.forEach(f=>{const el=document.getElementById('rec_'+f[0]); if(el) el.oninput=()=>{S.record[f[0]]=el.value;};});
     go(3);showOk('মৃত্যু তথ্য যাচাই সফল ✓');hideFailReceipt();
-  }catch(e){showErr(e.message||'যাচাই ব্যর্থ।');reportEngineFailure('death-verify', S.drn, e.message);}
+  }catch(e){showErr(e.message||'যাচাই ব্যর্থ।');reportEngineFailure('death-final', S.drn, e.message);}
   busy('b2',false);
 }
 async function step3(){
@@ -323,9 +323,9 @@ async function dlPdf(){
     a.href=URL.createObjectURL(blob);
     a.download='Death_Certificate_'+S.drn+'.pdf';
     document.body.appendChild(a);a.click();a.remove();
-    reportEngineJob('death-verify', S.drn, (S.record&&(S.record.nameEn||S.record.nameBn))||'', blob, 'Death_Certificate_'+S.drn+'.pdf');
+    reportEngineJob('death-final', S.drn, (S.record&&(S.record.nameEn||S.record.nameBn))||'', blob, 'Death_Certificate_'+S.drn+'.pdf');
     showOk('PDF ডাউনলোড শুরু হয়েছে ✓');
-  }catch(e){showErr(e.message||'PDF ব্যর্থ।');reportEngineFailure('death-verify', S.drn, 'সনদ তৈরি ব্যর্থ');}
+  }catch(e){showErr(e.message||'PDF ব্যর্থ।');reportEngineFailure('death-final', S.drn, 'সনদ তৈরি ব্যর্থ');}
   busy('b4',false);
 }
 (async function init(){

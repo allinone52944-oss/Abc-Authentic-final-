@@ -1,6 +1,6 @@
 'use strict';
 
-// Server-side charge gate for the birth-certificate and death-verify
+// Server-side charge gate for the birth-certificate and death-final
 // engines (2026-10-30 payment-bypass audit, item 3).
 //
 // Problem: /api/bdris-engine (engines/birth-final) and /api/death-engine
@@ -291,7 +291,7 @@ function gateError(res, status, error, message) {
   return res.status(status).json({ success: false, error, message });
 }
 
-// engineId: 'bdris-certificate' | 'death-verify' (services table).
+// engineId: 'birth-final' | 'death-final' (services table).
 // engineKind: 'birth' | 'death' (path shapes differ per engine).
 // mount: '/api/bdris-engine' | '/api/death-engine'.
 // deps: { db, serviceCredits } — injectable for tests.

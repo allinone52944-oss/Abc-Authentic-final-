@@ -1,5 +1,5 @@
 // Route tests for backend/lib/engineChargeGate.js (2026-10-30 charge gate
-// for the birth-certificate and death-verify engines).
+// for the birth-certificate and death-final engines).
 //
 // The gate is tested with a fake downstream (standing in for the engine
 // proxy) and mocked db/serviceCredits — no real portal calls, no real
@@ -28,7 +28,7 @@ const {
   mintRenderToken, verifyRenderToken, RENDER_TOKEN_HEADER,
 } = require('../../lib/engineChargeGate');
 
-const ENGINE = 'bdris-certificate';
+const ENGINE = 'birth-final';
 const MOUNT = '/api/bdris-engine';
 
 // Fake downstream: mimics the engine proxy. `mode` controls the verify
@@ -134,7 +134,7 @@ describe('charge gate', () => {
     const args = serviceCredits.payForService.mock.calls[0][1];
     expect(args.userId).toBe('u1');
     expect(args.amount).toBe(100);
-    expect(args.ref).toBe('bdris-certificate-k-pay');
+    expect(args.ref).toBe('birth-final-k-pay');
   });
 
   test('retry same attempt key -> forwarded, no second charge', async () => {
@@ -263,7 +263,7 @@ describe('charge gate', () => {
     const a = express();
     a.use(express.json());
     a.use((req, _res, next) => { req.user = { id: 'u1', role: 'user' }; next(); });
-    a.use('/api/death-engine', chargeGate('death-verify', 'death', '/api/death-engine', { db, serviceCredits }),
+    a.use('/api/death-engine', chargeGate('death-final', 'death', '/api/death-engine', { db, serviceCredits }),
       (req, res) => {
         calls.push(req.url);
         if (req.url === '/api/verify') {
@@ -275,7 +275,7 @@ describe('charge gate', () => {
       .send({ sessionId: 's', drn: '1', dod: '01-01-2020', captcha: 'x', idempotency_key: 'd-pay' });
     expect(v.status).toBe(200);
     expect(serviceCredits.payForService).toHaveBeenCalledTimes(1);
-    expect(serviceCredits.payForService.mock.calls[0][1].ref).toBe('death-verify-d-pay');
+    expect(serviceCredits.payForService.mock.calls[0][1].ref).toBe('death-final-d-pay');
     // Now the pdf path: charged order exists for the same key.
     routeDb({ chargedOrder: true });
     const p = await request(a).post('/api/death-engine/api/pdf')
@@ -333,7 +333,7 @@ describe('render token (audit #5)', () => {
 
   test('death engine pdf with charged key -> token verifies for death', async () => {
     routeDb({ chargedOrder: true });
-    const { app, tokens } = appWith({ engine: 'death-verify', mount: '/api/death-engine', kind: 'death' });
+    const { app, tokens } = appWith({ engine: 'death-final', mount: '/api/death-engine', kind: 'death' });
     const r = await request(app).post('/api/death-engine/api/pdf')
       .send({ brn: '1', nameEn: 'X', idempotency_key: 'd-pay' });
     expect(r.status).toBe(200);

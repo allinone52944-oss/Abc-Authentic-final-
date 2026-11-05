@@ -1083,7 +1083,7 @@
         </div>
 
         <!-- Engine 2: Birth Certificate -->
-        <div class="engine-card" onclick="location.href='/bdris-certificate.html'">
+        <div class="engine-card" onclick="location.href='/birth-final.html'">
           <div class="engine-card-top">
             <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #f0fdf4, #dcfce7);color:#15803d;">📜</div>
             <span class="engine-tag" style="background:#dcfce7;color:#166534;">তাৎক্ষণিক সনদ</span>
@@ -1125,7 +1125,7 @@
         </div>
 
         <!-- Engine 4: Death Verify -->
-        <div class="engine-card" onclick="location.href='/death-verify.html'">
+        <div class="engine-card" onclick="location.href='/death-final.html'">
           <div class="engine-card-top">
             <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #fff7ed, #ffedd5);color:#c2410c;">🕊️</div>
             <span class="engine-tag" style="background:#ffedd5;color:#9a3412;">যাচাই ও কপি</span>
@@ -1298,7 +1298,7 @@
       </div>
 
       <!-- M Engine 2 -->
-      <div class="engine-card" onclick="location.href='/bdris-certificate.html'">
+      <div class="engine-card" onclick="location.href='/birth-final.html'">
         <div class="engine-card-top">
           <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #f0fdf4, #dcfce7);color:#15803d;">📜</div>
           <span class="engine-tag" style="background:#dcfce7;color:#166534;">সনদ</span>
@@ -1337,7 +1337,7 @@
       </div>
 
       <!-- M Engine 4 -->
-      <div class="engine-card" onclick="location.href='/death-verify.html'">
+      <div class="engine-card" onclick="location.href='/death-final.html'">
         <div class="engine-card-top">
           <div class="engine-icon-wrap" style="background:linear-gradient(135deg, #fff7ed, #ffedd5);color:#c2410c;">🕊️</div>
           <span class="engine-tag" style="background:#ffedd5;color:#9a3412;">যাচাই</span>
@@ -1883,7 +1883,7 @@ async function loadServices() {
       setText('engChargeApply', 'চার্জ: ৳' + bnNum(applySvc.price));
       setText('mEngChargeApply', '৳' + bnNum(applySvc.price));
     }
-    const certSvc = _allServices.find(s => s.engine_id === 'bdris-certificate');
+    const certSvc = _allServices.find(s => s.engine_id === 'birth-final');
     if (certSvc && certSvc.price) {
       setText('engChargeCert', 'চার্জ: ৳' + bnNum(certSvc.price));
       setText('mEngChargeCert', '৳' + bnNum(certSvc.price));
@@ -1898,7 +1898,7 @@ async function loadServices() {
       setText('engChargeNidSc', 'চার্জ: ৳' + bnNum(nidScSvc.price));
       setText('mEngChargeNidSc', '৳' + bnNum(nidScSvc.price));
     }
-    const deathSvc = _allServices.find(s => s.engine_id === 'death-verify');
+    const deathSvc = _allServices.find(s => s.engine_id === 'death-final');
     if (deathSvc && deathSvc.price) {
       setText('engChargeDeath', 'চার্জ: ৳' + bnNum(deathSvc.price));
       setText('mEngChargeDeath', '৳' + bnNum(deathSvc.price));

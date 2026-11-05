@@ -45,9 +45,12 @@ describe('dashboard + admin wiring', () => {
     expect(dash.split("location.href='/land-khatian.html'").length - 1).toBe(2);
     expect(dash).not.toContain("location.href='/land.html'");
   });
-  test('admin engine dropdowns offer the three land engines', () => {
+  test('admin engine dropdowns offer the land engines (land-search removed)', () => {
+    // Audit #14 — land-search left the dropdowns with its route
+    // (audit #6); scan/verify stay, each in both dropdowns.
     const admin = read('frontend/js/admin.js');
-    for (const id of ['land-search', 'land-scan', 'land-verify']) {
+    expect(admin).not.toContain('land-search');
+    for (const id of ['land-scan', 'land-verify']) {
       expect(admin.split('value="' + id + '"').length - 1).toBeGreaterThanOrEqual(1);
       expect(admin.split('value=\\"' + id + '\\"').length - 1 + admin.split('value="' + id + '"').length - 1).toBeGreaterThanOrEqual(2);
     }

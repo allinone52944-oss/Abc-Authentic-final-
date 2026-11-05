@@ -4,8 +4,8 @@
 // {"error":"NO_TOKEN"}. History downloads via ABC.api → blob; every
 // page that shows a receipt button must do the same.
 // (First shipped in land.html — fixed in 0d0ee36; the same pattern was
-// then found in qr-photo-verify.html, bdris-certificate.html and
-// death-verify.html.)
+// then found in qr-photo-verify.html, birth-final.html and
+// death-final.html.)
 const fs = require('fs');
 const path = require('path');
 
@@ -33,8 +33,8 @@ describe('qr-photo-verify.html receipt downloads', () => {
   });
 });
 
-describe('bdris-certificate.html failure-receipt download', () => {
-  const html = read('frontend/bdris-certificate.html');
+describe('birth-final.html failure-receipt download', () => {
+  const html = read('frontend/birth-final.html');
   test('failure receipt uses an authenticated blob fetch (dlReceipt)', () => {
     expect(html).toContain('async function dlReceipt(');
     expect(html).toContain('URL.createObjectURL(blob)');
@@ -50,8 +50,8 @@ describe('bdris-certificate.html failure-receipt download', () => {
   });
 });
 
-describe('death-verify.html failure-receipt download', () => {
-  const html = read('frontend/death-verify.html');
+describe('death-final.html failure-receipt download', () => {
+  const html = read('frontend/death-final.html');
   test('failure receipt uses an authenticated blob fetch (dlReceipt)', () => {
     expect(html).toContain('async function dlReceipt(');
     expect(html).toContain('URL.createObjectURL(blob)');

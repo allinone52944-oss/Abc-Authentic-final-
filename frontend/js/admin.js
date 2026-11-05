@@ -3262,12 +3262,11 @@ window.AdmSvc = {
         '<div style="font-size:12px;color:#6b21a8;font-weight:700;margin-bottom:8px;">⚡ অটোমেটেড ইঞ্জিন কনফিগারেশন</div>' +
         '<div class="field" style="margin-bottom:6px;"><label>🔌 অটোমেশন ইঞ্জিন বেছে নিন *</label><select id="sv_engine">' +
           '<option value="">-- ইঞ্জিন বেছে নিন --</option>' +
-          '<option value="bdris-certificate">জন্মনিবন্ধন সনদ ইঞ্জিন (Port 3000)</option>' +
-          '<option value="death-verify">মৃত্যুনিবন্ধন যাচাই ইঞ্জিন (Port 3104)</option>' +
+          '<option value="birth-final">জন্মনিবন্ধন সনদ ইঞ্জিন</option>' +
+          '<option value="death-final">মৃত্যুনিবন্ধন যাচাই ইঞ্জিন (Port 3104)</option>' +
           '<option value="nid-replica">এনআইডি রেপ্লিকা ইঞ্জিন</option>' +
           '<option value="bdris-apply">BDRIS অনলাইন আবেদন ইঞ্জিন (Port 3102)</option>' +
           '<option value="qr-photo-verify">QR + ছবি যাচাই ইঞ্জিন (Gateway)</option>' +
-          '<option value="land-search">খতিয়ান খোঁজ ইঞ্জিন (DLRMS)</option>' +
           '<option value="land-scan">নামে সম্পত্তি সন্ধান ইঞ্জিন (DLRMS)</option>' +
           '<option value="land-verify">জমি যাচাই রিপোর্ট ইঞ্জিন (DLRMS)</option>' +
           '<option value="land-mouza-value">মৌজা মূল্য রিপোর্ট ইঞ্জিন</option>' +
@@ -3335,12 +3334,11 @@ window.AdmSvc = {
         '<div style="font-size:12px;color:#6b21a8;font-weight:700;margin-bottom:8px;">⚡ অটোমেটেড ইঞ্জিন কনফিগারেশন</div>' +
         '<div class="field" style="margin-bottom:6px;"><label>🔌 অটোমেশন ইঞ্জিন</label><select id="esv_engine">' +
           '<option value="">-- ইঞ্জিন বেছে নিন --</option>' +
-          '<option value="bdris-certificate"' + (s.engine_id === 'bdris-certificate' ? ' selected' : '') + '>জন্মনিবন্ধন সনদ ইঞ্জিন (Port 3000)</option>' +
-          '<option value="death-verify"' + (s.engine_id === 'death-verify' ? ' selected' : '') + '>মৃত্যুনিবন্ধন যাচাই ইঞ্জিন (Port 3104)</option>' +
+          '<option value="birth-final"' + (s.engine_id === 'birth-final' ? ' selected' : '') + '>জন্মনিবন্ধন সনদ ইঞ্জিন</option>' +
+          '<option value="death-final"' + (s.engine_id === 'death-final' ? ' selected' : '') + '>মৃত্যুনিবন্ধন যাচাই ইঞ্জিন (Port 3104)</option>' +
           '<option value="nid-replica"' + (s.engine_id === 'nid-replica' ? ' selected' : '') + '>এনআইডি রেপ্লিকা ইঞ্জিন</option>' +
           '<option value="bdris-apply"' + (s.engine_id === 'bdris-apply' ? ' selected' : '') + '>BDRIS অনলাইন আবেদন ইঞ্জিন (Port 3102)</option>' +
           '<option value="qr-photo-verify"' + (s.engine_id === 'qr-photo-verify' ? ' selected' : '') + '>QR + ছবি যাচাই ইঞ্জিন (Gateway)</option>' +
-          '<option value="land-search"' + (s.engine_id === 'land-search' ? ' selected' : '') + '>খতিয়ান খোঁজ ইঞ্জিন (DLRMS)</option>' +
           '<option value="land-scan"' + (s.engine_id === 'land-scan' ? ' selected' : '') + '>নামে সম্পত্তি সন্ধান ইঞ্জিন (DLRMS)</option>' +
           '<option value="land-verify"' + (s.engine_id === 'land-verify' ? ' selected' : '') + '>জমি যাচাই রিপোর্ট ইঞ্জিন (DLRMS)</option>' +
           '<option value="land-mouza-value"' + (s.engine_id === 'land-mouza-value' ? ' selected' : '') + '>মৌজা মূল্য রিপোর্ট ইঞ্জিন</option>' +
