@@ -226,12 +226,7 @@ function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdict
 
       y += 10;
       divider();
-      const footers = kind === 'mouza' ? [
-        'সীমা (পরিষ্কার করে): এই রিপোর্ট সার্টিফাইড কপি নয়, মালিকানা / স্বত্ব / দখলের প্রমাণ নয়, বাজারমূল্য নয়, চূড়ান্ত দলিল বিল নয়।',
-        'হারগুলো তালিকা-খোঁজা (যেখানে তালিকায় পাওয়া গেছে — লাইনে "তালিকা" লেখা থাকে) অথবা দোকানদারের যাচাই করা তালিকা থেকে বসানো হয়েছে ("নিজে বসানো")। দলিল করার আগে শ্রেণি, পরিমাণ ও বর্তমান তালিকা সাব-রেজিস্ট্রার অফিসে মিলিয়ে নিন।',
-        'দলিলের ফি / করের হার এখানে সরকারি হার হিসেবে ধরা হয়নি — সেগুলো অফিস থেকে নিশ্চিত করে হিসাব করতে হবে।',
-        'যাচাই তালিকা: (১) শ্রেণি ঠিক আছে কিনা, (২) পরিমাণ ঠিক আছে কিনা, (৩) বর্তমান তালিকার সংস্করণ ঠিক আছে কিনা, (৪) সাব-রেজিস্ট্রার অফিসে হার মিলেছে কিনা।',
-      ] : [
+      const footers = kind === 'mouza' ? mouzaFooters() : [
         'তথ্য সূত্র: ভূমি মন্ত্রণালয়ের ডিজিটাল ভূমি রেকর্ড পোর্টালের সরকারি রেকর্ড।',
         'দ্রষ্টব্য: এই রিপোর্টটি তথ্যের সারাংশ — এটি সরকারি সার্টিফাইড কপি নয়। অফিসিয়াল কাজে (নামজারি, ঋণ, আদালত) সার্টিফাইড কপি প্রয়োজন হবে।',
       ];
@@ -245,4 +240,20 @@ function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdict
   });
 }
 
-module.exports = { buildLandReportPdf, toBn, landText, headerMouzaFor };
+module.exports = { buildLandReportPdf, toBn, landText, headerMouzaFor, mouzaFooters };
+
+// Audit #13 — the mouza-value report footers. The rates come from
+// a MANUAL rate table (engines/land-mouza-value/rates.js, hand-
+// entered) — a portal schedule lookup is NOT built, so no rate in
+// this report was ever checked against the government portal. The
+// footers must say so in plain words: manual table, not portal-
+// verified. (The per-line source already says "তালিকা" vs "নিজে
+// বসানো"; this is the table's provenance, not the line's.)
+function mouzaFooters() {
+  return [
+    'সীমা (পরিষ্কার করে): এই রিপোর্ট সার্টিফাইড কপি নয়, মালিকানা / স্বত্ব / দখলের প্রমাণ নয়, বাজারমূল্য নয়, চূড়ান্ত দলিল বিল নয়।',
+    'হারগুলো ম্যানুয়াল হার-টেবিল থেকে নেওয়া (যেখানে তালিকায় পাওয়া গেছে — লাইনে "তালিকা" লেখা থাকে) অথবা দোকানদার নিজে বসিয়েছে ("নিজে বসানো")। এই হার সরকারি পোর্টাল থেকে যাচাই করা হয়নি। দলিল করার আগে শ্রেণি, পরিমাণ ও বর্তমান তালিকা সাব-রেজিস্ট্রার অফিসে মিলিয়ে নিন।',
+    'দলিলের ফি / করের হার এখানে সরকারি হার হিসেবে ধরা হয়নি — সেগুলো অফিস থেকে নিশ্চিত করে হিসাব করতে হবে।',
+    'যাচাই তালিকা: (১) শ্রেণি ঠিক আছে কিনা, (২) পরিমাণ ঠিক আছে কিনা, (৩) বর্তমান তালিকার সংস্করণ ঠিক আছে কিনা, (৪) সাব-রেজিস্ট্রার অফিসে হার মিলেছে কিনা।',
+  ];
+}

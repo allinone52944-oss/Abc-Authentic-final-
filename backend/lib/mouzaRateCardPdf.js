@@ -150,8 +150,7 @@ function buildMouzaRateCardPdf({ card, unit, when }) {
       divider();
       ensure(48);
       doc.font('bn').fontSize(11).fillColor('#374151').text(
-        'এই তালিকা সার্টিফাইড কপি নয় — এটি তালিকার হারের একটি অনুলিপি মাত্র। ' +
-        'চূড়ান্ত তথ্যের জন্য সাব-রেজিস্ট্রার অফিসে যাচাই করুন।',
+        rateCardDisclaimer(),
         X, y, { width: W });
       doc.end();
     } catch (e) {
@@ -163,4 +162,13 @@ function buildMouzaRateCardPdf({ card, unit, when }) {
 module.exports = {
   RATE_CARD_UNIT_LABELS, RATE_CARD_UNITS,
   toBn, groupBn, convertCardRate, rateCardRows, buildMouzaRateCardPdf,
+  rateCardDisclaimer,
 };
+
+// Audit #13 — the rate card IS the manual table's copy: say so.
+// The table is hand-entered (engines/land-mouza-value/rates.js);
+// no portal schedule lookup exists, so the card is never
+// portal-verified — the disclaimer must not imply otherwise.
+function rateCardDisclaimer() {
+  return 'এই তালিকা সার্টিফাইড কপি নয় — এটি ম্যানুয়াল হার-টেবিলের একটি অনুলিপি মাত্র; সরকারি পোর্টাল থেকে যাচাই করা হয়নি। চূড়ান্ত তথ্যের জন্য সাব-রেজিস্ট্রার অফিসে যাচাই করুন।';
+}

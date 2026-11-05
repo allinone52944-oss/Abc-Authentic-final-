@@ -720,7 +720,7 @@
     const ulab = MOUZA_UNIT_LABELS[unit] || 'শতাংশ';
     const f = MOUZA_FACTORS[unit] || 1;
     $('wzCardHead').innerHTML = '<b>' + esc(WZ.card.mouza) + (WZ.card.thana ? ' (' + esc(WZ.card.thana) + ')' : '') + '</b> · ' +
-      esc(WZ.card.officeName) + ' অফিস · ' + esc(WZ.card.period) + ' তালিকা থেকে';
+      esc(WZ.card.officeName) + ' অফিস · ' + esc(WZ.card.period) + ' ম্যানুয়াল তালিকা থেকে';
     let h = '';
     MOUZA_CARD_CLASSES.forEach((cls) => {
       const r = (WZ.card.rates && WZ.card.rates[cls]) || { rate: null, p: false };
@@ -833,7 +833,7 @@
     const box = $('wzRateBox');
     if (WZ.rateIsTable) {
       box.innerHTML = '<div class="rec" style="padding:12px"><b>শতাংশপ্রতি ' + bnGrouped(WZ.tableRate) + ' টাকা</b>' +
-        '<div style="font-size:13.5px;color:#374151;margin-top:4px">' + esc(WZ.card.officeName) + ' অফিসের ' + esc(WZ.card.period) + ' তালিকা থেকে' +
+        '<div style="font-size:13.5px;color:#374151;margin-top:4px">' + esc(WZ.card.officeName) + ' অফিসের ' + esc(WZ.card.period) + ' ম্যানুয়াল তালিকা থেকে' +
         (WZ.pNote ? '<br>' + esc(WZ.pNote) : '') +
         (WZ.pouroNote ? '<br>' + esc(WZ.pouroNote) : '') + '</div></div>';
       $('wzRateManualWrap').style.display = 'none';

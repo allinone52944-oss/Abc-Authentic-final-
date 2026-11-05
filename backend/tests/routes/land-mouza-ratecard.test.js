@@ -27,7 +27,7 @@ const db = require('../../db');
 const landRouter = require('../../routes/land');
 const { lookupMouzaCard } = require('../../../engines/land-mouza-value/rates');
 const {
-  convertCardRate, rateCardRows, groupBn, buildMouzaRateCardPdf,
+  convertCardRate, rateCardRows, groupBn, buildMouzaRateCardPdf, rateCardDisclaimer,
 } = require('../../lib/mouzaRateCardPdf');
 
 function app() {
@@ -50,6 +50,18 @@ const cardUrl = (office, mouza, thana) =>
   '/api/land/mouza-rates?office=' + encodeURIComponent(office) +
   '&mouza=' + encodeURIComponent(mouza) +
   (thana ? '&thana=' + encodeURIComponent(thana) : '');
+
+// Audit #13 — the rate card IS the manual table's copy: the
+// disclaimer must say so, and that no portal lookup verified it.
+describe('rateCardDisclaimer', () => {
+  test('names the manual table and the missing portal verification', () => {
+    const d = rateCardDisclaimer();
+    expect(d).toContain('ম্যানুয়াল হার-টেবিল');
+    expect(d).toContain('সরকারি পোর্টাল থেকে যাচাই করা হয়নি');
+    expect(d).toContain('সার্টিফাইড কপি নয়');
+    expect(d).toContain('সাব-রেজিস্ট্রার অফিসে যাচাই করুন');
+  });
+});
 
 describe('rate-card unit conversion (same factors as calc.js)', () => {
   test('every unit against the Boalkhali proof rate 121421', () => {

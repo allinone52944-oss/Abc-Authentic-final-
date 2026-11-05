@@ -189,6 +189,9 @@ describe('mouza-value mode (land-mouza-value)', () => {
     // Offices with data are marked; an uncovered office is a
     // plain sentence + the manual path, never an error.
     expect(html).toContain('তালিকার হার আছে');
+    // Audit #13 — the rate source is labelled as the MANUAL table,
+    // in the card header and in the picked-rate line.
+    expect((html.match(/ম্যানুয়াল তালিকা থেকে/g) || []).length).toBe(2);
     expect(html).toContain('অন্য অফিস (তালিকা এখনো যোগ হয়নি)');
     expect(html).toContain('এই অফিসের তালিকা এখনো যোগ হয়নি');
     expect(html).toContain('অন্য মৌজা (হার নিজে বসাবো)');
