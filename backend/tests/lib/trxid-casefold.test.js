@@ -40,6 +40,9 @@ describe('migration 049_tx_trxid_unique_casefold.sql', () => {
   test('it is the next migration number (runs after 048)', () => {
     const files = fs.readdirSync(path.join(repoRoot, 'database', 'migrations'))
       .filter((f) => f.endsWith('.sql')).sort();
-    expect(files[files.length - 1]).toBe('049_tx_trxid_unique_casefold.sql');
+    // Pin the position in the sequence, not "is last" — later
+    // migrations (050, 051) broke the old last-file assertion.
+    expect(files.indexOf('049_tx_trxid_unique_casefold.sql'))
+      .toBe(files.indexOf('048_land_mouza_map.sql') + 1);
   });
 });

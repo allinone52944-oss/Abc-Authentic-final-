@@ -21,7 +21,10 @@ describe('migration 050_cancel_reason_refund_split.sql', () => {
   test('it is the next migration number (runs after 049)', () => {
     const files = fs.readdirSync(path.join(repoRoot, 'database', 'migrations'))
       .filter((f) => f.endsWith('.sql')).sort();
-    expect(files[files.length - 1]).toBe('050_cancel_reason_refund_split.sql');
+    // Pin the position in the sequence, not "is last" — later
+    // migrations (051) broke the old last-file assertion.
+    expect(files.indexOf('050_cancel_reason_refund_split.sql'))
+      .toBe(files.indexOf('049_tx_trxid_unique_casefold.sql') + 1);
   });
 });
 
