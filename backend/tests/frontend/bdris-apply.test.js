@@ -1050,3 +1050,16 @@ describe('audit #65 — no blocking head script, geo loads lazily', () => {
     expect(html).toContain('let opts = staticGeoOpts(k, data)');
   });
 });
+
+describe('audit #72 — manual-mode banner shows the step + real reason', () => {
+  test('the banner carries opLabel(diedOp) and the server message, not a generic line', () => {
+    expect(html).toContain("'⚠️ ' + esc(opLabel(diedOp)) + ' — ' + esc(san(msg))");
+    expect(html).not.toContain('একটি ধাপ শেষ হয়নি — ঠিক করা দরকার।');
+  });
+
+  test('opLabel exists and maps the manual-mode ops to Bengali step names', () => {
+    expect(html).toContain('function opLabel(op)');
+    expect(html).toContain("if (op === 'SUBMIT_S4_PREP') return 'কোড পাঠানো';");
+    expect(html).toContain("if (op === 'SUBMIT_S4_OTP') return 'কোড জমা দেওয়া';");
+  });
+});

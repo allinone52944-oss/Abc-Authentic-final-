@@ -5876,7 +5876,11 @@ socket.on('BOT_STATUS', (d) => {
     note(san(msg), 'err');
     // ম্যানুয়াল মোড: ধাপটি সার্ভারে শেষ হয়নি — এক চাপে আবার পাঠানোর সুযোগ
     if (S.view === 'flow' && diedOp && diedOp !== 'SUBMIT_S4_OTP' && diedOp !== 'SUBMIT_S4_PREP') {
-      showBanner('err', '⚠️ একটি ধাপ শেষ হয়নি — ঠিক করা দরকার।', () => {
+      // Audit #72 — the banner used to hide the real reason: the step
+      // name + server message only reached the small note() line.
+      // Now the banner itself carries both (escaped — showBanner
+      // injects raw HTML), via the existing opLabel() step names.
+      showBanner('err', '⚠️ ' + esc(opLabel(diedOp)) + ' — ' + esc(san(msg)), () => {
         hideBanner(); note('⏳ আবার পাঠানো হচ্ছে…', 'info'); emitStep(diedOp, payloadFor(diedOp));
       }, 'আবার চেষ্টা করুন');
     }
