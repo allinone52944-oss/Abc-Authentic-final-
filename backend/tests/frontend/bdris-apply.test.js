@@ -1068,3 +1068,10 @@ describe('audit #72 — manual-mode banner shows the step + real reason', () => 
     expect(html).toContain("if (op === 'SUBMIT_S4_OTP') return 'কোড জমা দেওয়া';");
   });
 });
+
+describe('audit #75 — footer states the real charge rule', () => {
+  test('the "no extra fee" claim is gone; the footer states when the fee is cut', () => {
+    expect(html).not.toContain('কোনো অতিরিক্ত ফি নেই');
+    expect(html).toContain('ফি জমা/আসল পিডিএফ-এর আগে একবারই কাটে — চার্জ ব্যর্থ হলে ৳০, একই কাজে দুবার নয়');
+  });
+});
