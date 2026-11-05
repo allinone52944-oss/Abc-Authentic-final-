@@ -1004,8 +1004,7 @@ function gwRestoreSession(){
   gwTick();
   gw.timerId = setInterval(gwTick, 1000);
   if (gw.submitted && gw.submittedTrxid) {
-    gwStartPolling();
-    gwPollOnce(); // immediate flip-check — don't wait 15s after a reload
+    gwStartPolling(); // audit #38 — starts with an immediate flip-check
   }
   return true;
 }
@@ -1244,17 +1243,17 @@ function gwStartPolling(){
   gwStopPolling();
   if (!gw) return;
   gw.pollId = setInterval(gwPollOnce, 15000);
+  gwPollOnce(); // audit #38 — immediate flip-check, don't wait 15s
 }
 
 async function gwPollOnce(){
   if (!gw || gw.done || !gw.submittedTrxid) return;
   try {
-    const r = await ABC.api('/wallet?limit=10');
+    // Audit #38 — look the submitted transaction up by TrxID directly;
+    // scanning the latest 10 rows could miss it entirely.
+    const r = await ABC.api('/wallet/recharge/' + encodeURIComponent(gw.submittedTrxid));
     if (!r.ok) return;
-    const d = await r.json();
-    const tx = (d.transactions || []).find(function(t){
-      return t.type === 'recharge' && String(t.trxid || '').toUpperCase() === String(gw.submittedTrxid).toUpperCase();
-    });
+    const tx = (await r.json()).transaction;
     if (!tx) return;
     if (tx.status === 'approved') {
       gw.done = true;
@@ -1384,12 +1383,11 @@ let manualPollId = null;
 function manualStopPolling(){ if (manualPollId) { clearInterval(manualPollId); manualPollId = null; } }
 async function manualPollOnce(trxid, okEl){
   try {
-    const r = await ABC.api('/wallet?limit=10');
+    // Audit #38 — look the submitted transaction up by TrxID directly;
+    // scanning the latest 10 rows could miss it entirely.
+    const r = await ABC.api('/wallet/recharge/' + encodeURIComponent(trxid));
     if (!r.ok) return;
-    const d = await r.json();
-    const tx = (d.transactions || []).find(function(t){
-      return t.type === 'recharge' && String(t.trxid || '').toUpperCase() === String(trxid).toUpperCase();
-    });
+    const tx = (await r.json()).transaction;
     if (!tx) return;
     if (tx.status === 'approved') {
       manualStopPolling();

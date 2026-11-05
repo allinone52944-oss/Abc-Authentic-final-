@@ -245,8 +245,7 @@ describe('frontend/wallet.html — gateway session invariants', () => {
     expect(restore).toContain('localStorage.getItem');
     expect(restore).toContain('s.endsAt <= Date.now()'); // expired while away → cleared, not restored
     expect(restore).toContain('gw.timerId = setInterval(gwTick, 1000)');
-    expect(restore).toContain('gwStartPolling()');
-    expect(restore).toContain('gwPollOnce()'); // immediate flip-check, not 15s later
+    expect(restore).toContain('gwStartPolling()'); // audit #38 — starts with an immediate flip-check, not 15s later
     // a done/expired session is cleared, never restored
     expect(src).toContain('gwClearSession(); // audit #20 — a done session is never restored');
     expect(src).toContain('gwClearSession(); // audit #20 — an expired session is never restored');
@@ -306,7 +305,7 @@ describe('frontend/wallet.html — gateway session invariants', () => {
     // the pending branch starts the poll for the submitted TrxID
     expect(body).toContain('manualStartPolling(trxid, ok)');
     const poll = fnSlice(src, 'async function manualPollOnce(');
-    expect(poll).toContain("'/wallet?limit=10'");
+    expect(poll).toContain("'/wallet/recharge/' + encodeURIComponent(trxid)"); // audit #38 — direct lookup
     expect(poll).toContain("tx.status === 'approved'");
     expect(poll).toContain("tx.status === 'rejected'");
     expect(poll).toContain('manualStopPolling()');
@@ -397,6 +396,20 @@ describe('frontend/wallet.html — gateway session invariants', () => {
     // the deliverable PDF copy stays downloadable; records with no
     // documents show no download button (no fake link)
     expect(historyHtml).toContain("docs ? '<div class=\"hist-docs\">'");
+  });
+
+  test('audit #38 — polls check immediately and look the transaction up by TrxID', () => {
+    const src = walletHtml();
+    // the gateway poll starts with an immediate check (submit, reload, resume all use gwStartPolling)
+    const start = fnSlice(src, 'function gwStartPolling(');
+    expect(start).toContain('setInterval(gwPollOnce, 15000)');
+    expect(start).toContain('gwPollOnce(); // audit #38');
+    // both polls fetch the one transaction directly — no more scanning the latest 10 rows
+    const gw = fnSlice(src, 'async function gwPollOnce(');
+    expect(gw).toContain("'/wallet/recharge/' + encodeURIComponent(gw.submittedTrxid)");
+    const manual = fnSlice(src, 'async function manualPollOnce(');
+    expect(manual).toContain("'/wallet/recharge/' + encodeURIComponent(trxid)");
+    expect(src).not.toContain('/wallet?limit=10');
   });
 
   test('no forbidden word in the wallet page copy', () => {

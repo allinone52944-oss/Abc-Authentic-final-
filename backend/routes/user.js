@@ -698,6 +698,26 @@ router.get('/wallet', async (req, res) => {
   }
 });
 
+// Audit #38 — direct lookup of one recharge by TrxID, for the wallet
+// polls. The old polls scanned the latest 10 rows and could miss the
+// submitted transaction entirely. Own user only; case-insensitive.
+router.get('/wallet/recharge/:trxid', async (req, res) => {
+  try {
+    const trxid = String(req.params.trxid || '').trim();
+    if (!trxid) return res.status(400).json({ error: 'INVALID_TRXID' });
+    const r = await db.query(
+      `SELECT id, type, amount, method, sender_no, trxid, status, created_at, cancel_reason
+       FROM transactions
+       WHERE user_id = $1 AND type = 'recharge' AND UPPER(trxid) = UPPER($2) LIMIT 1`,
+      [req.user.id, trxid]);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    res.json({ transaction: r.rows[0] });
+  } catch (e) {
+    safeLog('[user] recharge lookup error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 // POST /api/wallet/recharge — bkash/nagad/rocket request (pending → admin approves)
 router.post('/wallet/recharge', async (req, res) => {
   try {

@@ -250,6 +250,24 @@ describe('wallet', () => {
     expect(countQ[0]).not.toContain('status = $');
   });
 
+  test('GET /api/wallet/recharge/:trxid → own transaction, case-insensitive (audit #38)', async () => {
+    db.__routeQuery([
+      ['UPPER(trxid) = UPPER($2)', { rows: [{
+        id: 't1', type: 'recharge', amount: 500, method: 'bkash_payment', sender_no: '01712345678',
+        trxid: 'TRX12345', status: 'approved', created_at: '2026-11-04T10:00:00.000Z', cancel_reason: null,
+      }] }],
+    ]);
+    const r = await withUser(request(app()).get('/api/wallet/recharge/trx12345')).expect(200);
+    expect(r.body.transaction).toMatchObject({ id: 't1', trxid: 'TRX12345', status: 'approved' });
+    const q = db.query.mock.calls.find((c) => /UPPER\(trxid\) = UPPER\(\$2\)/.test(c[0]));
+    expect(q[1]).toEqual(['u1', 'trx12345']); // own user only, case folded
+  });
+
+  test('GET /api/wallet/recharge/:trxid → 404 when absent (audit #38)', async () => {
+    db.__routeQuery([['UPPER(trxid) = UPPER($2)', { rows: [] }]]);
+    await withUser(request(app()).get('/api/wallet/recharge/NOPE123')).expect(404);
+  });
+
   describe('POST /api/wallet/recharge validation', () => {
     const GOOD = { method: 'bkash_personal', sender_no: '01712345678', trxid: 'TRX12345', amount: 500 };
     test.each([
