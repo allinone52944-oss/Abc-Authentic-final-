@@ -271,10 +271,11 @@ describe('mouza-value mode (land-mouza-value)', () => {
     expect(route).toContain("router.get('/mouza-rate'");
     expect(route).toContain('LOOKUP_RATE_MISMATCH');
     expect(route).toContain('lookupMouzaRate');
-    const rates = read('engines/land-mouza-value/rates.js');
-    expect(rates).toContain('boalkhali');
-    expect(rates).toContain('কধুরখীল');
-    expect(rates).toContain('2025-2026');
+    // Audit #64 — the data moved out of rates.js into per-office
+    // shards; the sample office now lives in its shard.
+    const shard = read('engines/land-mouza-value/rates/boalkhali.json');
+    expect(shard).toContain('কধুরখীল');
+    expect(shard).toContain('2025-2026');
   });
   test('mouza wizard batch 1: 5 new offices in the form, thana question, pouro note, qualified submit', () => {
     const html = read('frontend/land.html');
