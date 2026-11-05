@@ -3041,9 +3041,9 @@ window.AdmOrders = {
         return '<div class="adm-timeline-item">' +
           '<div class="adm-timeline-dot"></div>' +
           '<div class="adm-timeline-title">' +
-            '<span class="st-badge st-' + (item.from_status || 'new') + '" style="font-size:9px;padding:2px 6px;">' + esc(fromSt) + '</span>' +
+            '<span class="st-badge st-' + (item.from_status || 'new') + '" style="font-size:11px;padding:2px 6px;" /* audit #62 — mobile labels minimum 11px */>' + esc(fromSt) + '</span>' +
             ' ➔ ' +
-            '<span class="st-badge st-' + (item.to_status || 'processing') + '" style="font-size:9px;padding:2px 6px;">' + esc(toSt) + '</span>' +
+            '<span class="st-badge st-' + (item.to_status || 'processing') + '" style="font-size:11px;padding:2px 6px;" /* audit #62 — mobile labels minimum 11px */>' + esc(toSt) + '</span>' +
           '</div>' +
           '<div class="adm-timeline-meta">' +
             '<span>🕒 ' + esc(dateStr) + '</span> • <span>👤 <b>' + esc(adminName) + '</b></span>' +

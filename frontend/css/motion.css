@@ -79,7 +79,7 @@ button, .btn, .btn-add, .m-tab, .side-link, .svc2, .stat { touch-action: manipul
 .m-tab {
   flex: 1;
   text-align: center;
-  font-size: 11px;
+  font-size: 12px; /* audit #62 — mobile labels minimum 11–12px */
   color: #64748b;
   cursor: pointer;
   display: flex;
