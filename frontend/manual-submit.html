@@ -137,6 +137,15 @@
       </div>
     </div>
 
+    <!-- Audit #51 — this is the payment-free manual track: no fee is
+         cut here (POST /api/manual/submit charges nothing), and a
+         submission lands in the list below — NOT in 'আমার অর্ডার'.
+         The same service ordered from the service list IS charged
+         (see #49) and appears in 'আমার অর্ডার'. -->
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#1e40af;line-height:1.7;">
+      🆓 <b>এই পথে কোনো ফি কাটা হয় না</b> — এটি ম্যানুয়াল আবেদনের বিনা-ফি জমা দেওয়ার পথ। জমা দেওয়া আবেদন নিচের 'আমার প্রেরিত আবেদনসমূহ' তালিকায় থাকবে, 'আমার অর্ডার'-এ নয়। ফি দিয়ে অর্ডার হিসেবে জমা দিতে চাইলে <a href="/services.html" style="color:#1e40af;font-weight:700;">সেবা তালিকা থেকে অর্ডার করুন →</a>
+    </div>
+
     <div class="err" id="err"></div>
     <div class="ok" id="ok"></div>
 
@@ -192,7 +201,7 @@
 
     <!-- My Applications -->
     <div class="card">
-      <h3>📁 আমার প্রেরিত আবেদনসমূহ</h3>
+      <h3>📁 আমার প্রেরিত আবেদনসমূহ <a href="/orders.html" style="font-size:12px;font-weight:600;">(আমার অর্ডার দেখুন →)</a></h3>
       <div id="myList" style="color:var(--text-muted); font-size:13px; margin-top:8px;">লোড হচ্ছে…</div>
     </div>
   </div>
@@ -220,9 +229,19 @@ let allManualServices = [];
 async function loadTemplateForService(svcId){
   const instBox = document.getElementById('svcInst');
   const matched = allManualServices.find(s => s.id === svcId);
+  // Audit #51 — the note box carries the fee truth for the picked
+  // service: the order fee (charged on the order flow, #49) is NOT
+  // cut on this free manual track. Shown even without instructions.
+  let note = '';
   if (matched && matched.manual_instructions) {
+    note += '<b>📋 সেবার বিশেষ নির্দেশনা:</b><div style="margin-top:4px;white-space:pre-wrap;">' + esc(matched.manual_instructions) + '</div>';
+  }
+  if (matched && Number(matched.price) > 0) {
+    note += '<div style="margin-top:8px;">💳 এই সেবার অর্ডার ফি ৳' + matched.price + ' — অর্ডার করলে কাটবে, তবে এই ম্যানুয়াল পথে জমা দিলে এখন কোনো ফি কাটা হয় না। ফি দিয়ে অর্ডার হিসেবে জমা দিতে <a href="/order-create.html?service=' + encodeURIComponent(matched.id) + '" style="font-weight:700;">অর্ডার করুন →</a></div>';
+  }
+  if (note) {
     instBox.style.display = 'block';
-    instBox.innerHTML = '<b>📋 সেবার বিশেষ নির্দেশনা:</b><div style="margin-top:4px;white-space:pre-wrap;">' + esc(matched.manual_instructions) + '</div>';
+    instBox.innerHTML = note;
   } else {
     instBox.style.display = 'none';
     instBox.innerHTML = '';
@@ -252,7 +271,10 @@ async function init(){
       allManualServices.forEach(s => {
         const opt = document.createElement('option');
         opt.value = s.id;
-        opt.textContent = (s.name_bn || s.name) + (s.price ? ' (৳' + s.price + ')' : '');
+        // Audit #51 — no price suffix: nothing is charged on this
+        // free track, so '(৳দাম)' would imply a fee that never applies.
+        // The order fee is shown in the note box once a service is picked.
+        opt.textContent = (s.name_bn || s.name);
         if (paramSvc && (paramSvc === s.id || paramSvc === s.name)) opt.selected = true;
         sel.appendChild(opt);
       });
