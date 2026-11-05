@@ -63,14 +63,14 @@ describe('audit #73 — shared component in app.js', () => {
     expect(app).toContain("id = 'abc-page-msg'");
   });
 
-  test('every page that loads app.js loads the new version (v=19)', () => {
+  test('every page that loads app.js loads the new version (v=20)', () => {
     // Pages that never loaded app.js (login, bdris-apply, 404/offline,
     // auth pages) are out of this pin — they use their own inline code.
     for (const f of fs.readdirSync(FRONTEND).filter((x) => x.endsWith('.html'))) {
       const html = read(f);
       if (!html.includes('/js/app.js?v=')) continue;
-      expect(html).toContain('/js/app.js?v=19');
-      expect(html).not.toContain('/js/app.js?v=18');
+      expect(html).toContain('/js/app.js?v=20');
+      expect(html).not.toContain('/js/app.js?v=19');
     }
   });
 });
@@ -90,8 +90,8 @@ describe('audit #73 — shared component behavior (stubbed DOM)', () => {
         addEventListener(ev, fn) { (this._listeners[ev] = this._listeners[ev] || []).push(fn); },
         remove() { this._removed = true; if (this.id) delete els[this.id]; },
         querySelector(sel) {
-          if (sel === '#abc-page-msg-text') return this.children.find((c) => c.id === 'abc-page-msg-text') || null;
-          return null;
+          const id = String(sel || '').replace(/^#/, '');
+          return this.children.find((c) => c.id === id) || null;
         },
       };
       return el;
@@ -165,6 +165,32 @@ describe('audit #73 — shared component behavior (stubbed DOM)', () => {
     expect(ABC.httpErrBn(413, 'আপলোড')).toContain('১০ মেগাবাইট');
     expect(ABC.httpErrBn(0, 'ডাউনলোড')).toContain('সংযোগ');
     expect(ABC.httpErrBn(418, 'ডাউনলোড')).not.toContain('418');
+  });
+
+  test('audit #77 — a JS error shows only a friendly line + reload; detail goes to the console', () => {
+    const ABC = loadApp();
+    expect(ABC).toBeTruthy();
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const errorHandler = global.window.addEventListener.mock.calls.find((c) => c[0] === 'error')[1];
+    global.location = { reload: jest.fn() };
+    errorHandler({ message: 'boom: undefined is not a function', lineno: 42 });
+    const d = global.document.getElementById('abc-fatal');
+    expect(d).toBeTruthy();
+    const text = d.querySelector('#abc-fatal-text').textContent;
+    expect(text).toBe('⚠️ পেজে সমস্যা হয়েছে — রিফ্রেশ করুন।');
+    expect(text).not.toContain('boom');
+    expect(text).not.toContain('42');
+    expect(text).not.toContain('পেজ ত্রুটি');
+    // Technical detail stays in the console.
+    expect(errSpy).toHaveBeenCalledWith('[abc-fatal]', expect.stringContaining('boom'));
+    expect(errSpy).toHaveBeenCalledWith('[abc-fatal]', expect.stringContaining('42'));
+    // The reload button reloads the page.
+    const btn = d.children.find((c) => c.tagName === 'BUTTON');
+    expect(btn.textContent).toContain('রিফ্রেশ করুন');
+    btn._listeners.click[0]();
+    expect(global.location.reload).toHaveBeenCalled();
+    errSpy.mockRestore();
+    delete global.location;
   });
 
   test('apiErrBn maps known codes, falls back in Bengali, never leaks a raw code', () => {

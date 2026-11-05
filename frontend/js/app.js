@@ -7,18 +7,31 @@
 (function () {
   'use strict';
 
-  // Visible JS error reporter: if any script throws on load/refresh, show it
-  // on the page so the cause is visible without DevTools.
+  // Audit #77 — a JS error must never show its technical detail
+  // (message + line number) to the user. The detail goes to the
+  // console only; the user sees one friendly line plus a reload
+  // button. (Before: the banner read "⚠️ পেজ ত্রুটি: <message>
+  // (লাইন N)" on screen.)
   function showFatal(msg) {
     try {
+      if (typeof console !== 'undefined' && console.error) console.error('[abc-fatal]', msg);
       let d = document.getElementById('abc-fatal');
       if (!d) {
         d = document.createElement('div');
         d.id = 'abc-fatal';
-        d.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#3a0d0d;color:#ffb4b4;border:1px solid #a33;padding:10px 12px;border-radius:8px;font-size:13px;white-space:pre-wrap;';
+        d.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#3a0d0d;color:#ffb4b4;border:1px solid #a33;padding:10px 12px;border-radius:8px;font-size:13px;white-space:pre-wrap;display:flex;gap:10px;align-items:center;';
+        const s = document.createElement('span');
+        s.id = 'abc-fatal-text';
+        s.textContent = '⚠️ পেজে সমস্যা হয়েছে — রিফ্রেশ করুন।';
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = '🔄 রিফ্রেশ করুন';
+        b.style.cssText = 'margin-left:auto;background:#fff;color:#3a0d0d;border:none;border-radius:6px;padding:6px 12px;font-size:13px;font-weight:bold;cursor:pointer;flex:none;';
+        b.addEventListener('click', () => { try { location.reload(); } catch (e) {} });
+        d.appendChild(s);
+        d.appendChild(b);
         (document.body || document.documentElement).appendChild(d);
       }
-      d.textContent = '⚠️ পেজ ত্রুটি: ' + msg;
     } catch (e) {}
   }
   window.addEventListener('error', function (ev) {
