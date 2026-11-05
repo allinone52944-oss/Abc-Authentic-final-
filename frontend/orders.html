@@ -203,6 +203,19 @@ async function init(){
     };
   });
   document.getElementById('moreBtn').onclick=()=>{page++;load();};
+  // Audit #41 — dashboard status cards link here with ?status=… (e.g.
+  // ?status=completed); honour it on load instead of always showing
+  // all orders. The value must match a real filter button; anything
+  // else (or none) falls back to "সব অর্ডার".
+  const wantStatus = new URLSearchParams(location.search).get('status') || '';
+  const wantBtn = (/^[a-z]+$/.test(wantStatus) && wantStatus)
+    ? document.querySelector('#filters .fbtn[data-st="' + wantStatus + '"]')
+    : null;
+  if (wantBtn) {
+    document.querySelectorAll('#filters .fbtn').forEach(x => x.classList.remove('on'));
+    wantBtn.classList.add('on');
+    status = wantStatus;
+  }
   load();
 }
 
