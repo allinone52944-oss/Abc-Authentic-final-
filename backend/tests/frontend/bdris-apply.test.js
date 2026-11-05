@@ -1152,3 +1152,30 @@ describe('audit #80 — filing page speaks the premium token vocabulary', () => 
     expect(tokenValue(rootBlock(html), '--rlg')).toBe('22px');
   });
 });
+
+describe('audit #83 — WhatsApp help on the filing page', () => {
+  test('the filing page has the same WhatsApp help FAB as wallet / order-status', () => {
+    const page = html;
+    expect(page).toContain('id="waFab"');
+    expect(page).toContain('class="wa-fab"');
+    expect(page).toContain('/icons/whatsapp.svg');
+    expect(page).toContain('wa.me/8801835414122');
+    expect(page).toContain('function setupWhatsApp()');
+  });
+
+  test('the FAB opens with a page-context message and is wired in init', () => {
+    const page = html;
+    // No name is invented: this page never calls /auth/me and the
+    // typed BDRIS username is not sent to support — the message
+    // names the page, like order-status names the order.
+    expect(page).toContain('জন্ম নিবন্ধন আবেদন পাতা থেকে সাহায্য চাই');
+    const init = page.slice(page.indexOf('wrapSocketEmit();'));
+    expect(init.indexOf('setupWhatsApp();')).toBeLessThan(init.indexOf('showPrices();'));
+  });
+
+  test('the FAB keeps bottom 24px — no tabbar lift on this tabbar-less page', () => {
+    const page = html;
+    expect(page).toContain('.wa-fab{position:fixed;bottom:24px;right:24px');
+    expect(page).not.toMatch(/\.wa-fab\s*\{[^}]*bottom:\s*78px/);
+  });
+});

@@ -439,6 +439,14 @@ input.bad, select.bad{border-color:var(--status-danger); box-shadow:0 0 0 3px rg
 .gstep .n{flex:none; width:26px; height:26px; border-radius:50%; background:var(--grad); color:var(--text-light); font-weight:700; display:flex; align-items:center; justify-content:center; font-size:14px}
 .gstep .t{font-size:14px; line-height:1.6}
 .gstep .t b{color:var(--primary-600)}
+
+/* Audit #83 — WhatsApp help FAB (same pattern as wallet /
+   order-status / dashboard). Copied from motion.css .wa-fab:
+   this page loads neither motion.css nor premium.css. */
+.wa-fab{position:fixed;bottom:24px;right:24px;width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,#25D366 0%,#128C7E 100%);border:2px solid #fff;box-shadow:0 10px 25px -3px rgba(18,140,126,.4),0 4px 14px rgba(37,211,102,.35);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:100;padding:0;transition:transform .22s cubic-bezier(.34,1.56,.64,1),box-shadow .22s ease}
+.wa-fab:hover{transform:translateY(-2px) scale(1.08);box-shadow:0 14px 30px -3px rgba(18,140,126,.5),0 8px 18px rgba(37,211,102,.45)}
+.wa-fab:active{transform:scale(.93)}
+.wa-fab img,.wa-fab svg{width:28px;height:28px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.15))}
 </style>
 <!-- cache-bust 2026-10-13: force fresh document load -->
 </head>
@@ -6024,6 +6032,8 @@ $('logoutBtn').onclick = async () => {
   location.href = '/login.html';
 };
 </script>
+<!-- Audit #83 — WhatsApp help (same button as wallet / order-status / dashboard) -->
+<button class="wa-fab" id="waFab" aria-label="WhatsApp-এ সাহায্য চান" title="WhatsApp-এ সরাসরি সাহায্য চান"><img src="/icons/whatsapp.svg" alt="WhatsApp"></button>
 <script>
 /* ═══════════ ABC Authentic: wallet charging + charge receipts (C-1 fix, 2026-10-15) ═══════════
    Main-page shim. (আগের shim ভুল করে ডকুমেন্ট-ভিউয়ার popup-এর ভেতরে ছিল — কখনো চলত না।)
@@ -6218,8 +6228,18 @@ $('logoutBtn').onclick = async () => {
     try { if (S.draftId) localStorage.setItem('bdris_submit_key_for_' + S.draftId, submitChargeKey()); } catch (e) {}
     return tok;
   };
+
+function setupWhatsApp() {
+  const waBtn = document.getElementById('waFab');
+  if (waBtn) {
+    waBtn.onclick = () => {
+      window.open('https://wa.me/8801835414122?text=' + encodeURIComponent('আসসালামু আলাইকুম! জন্ম নিবন্ধন আবেদন পাতা থেকে সাহায্য চাই।'), '_blank');
+    };
+  }
+}
   wrapEmitStep();
   wrapSocketEmit();
+  setupWhatsApp();
   showPrices();
 })();
 </script>
