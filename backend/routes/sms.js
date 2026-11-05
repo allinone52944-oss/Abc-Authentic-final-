@@ -107,12 +107,16 @@ async function findMatch(client, parsed) {
     if (r.rows[0]) return { tx: r.rows[0], how: 'trxid' };
   }
   // 2) Fuzzy: same amount + same sender number
+  // Audit #24 — newest first (ORDER BY created_at DESC), like
+  // the late-submit path below: without it LIMIT 1 picks an
+  // arbitrary pending when several share amount + sender.
   if (parsed.amount != null && parsed.sender) {
     const methods = SMS_METHODS[parsed.method] || SMS_METHODS.unknown;
     const r = await client.query(
       `SELECT * FROM transactions
        WHERE type = 'recharge' AND status = 'pending'
          AND amount = $1 AND sender_no = $2 AND method = ANY($3)
+       ORDER BY created_at DESC
        LIMIT 1`,
       [parsed.amount, parsed.sender, methods]
     );

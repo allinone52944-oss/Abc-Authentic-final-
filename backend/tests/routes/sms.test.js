@@ -299,3 +299,20 @@ describe('adminSms manual match — amount fraud guard', () => {
     expect(r.body).toMatchObject({ ok: true, tx_id: 't1' });
   });
 });
+
+// Audit #24 — the fuzzy (amount+sender) match must pick the
+// NEWEST pending, like the late-submit path: without ORDER BY,
+// LIMIT 1 returns an arbitrary row when several pendings share
+// amount + sender. The mock DB cannot simulate row order, so the
+// SQL itself is pinned here.
+describe('findMatch fuzzy branch ordering (audit #24)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, '../../routes/sms.js'), 'utf8');
+  const fuzzy = src.slice(src.indexOf('// 2) Fuzzy'), src.indexOf('return null;', src.indexOf('// 2) Fuzzy')));
+
+  test('fuzzy match orders newest first', () => {
+    expect(fuzzy).toContain('ORDER BY created_at DESC');
+    expect(fuzzy.indexOf('ORDER BY created_at DESC')).toBeLessThan(fuzzy.indexOf('LIMIT 1'));
+  });
+});
