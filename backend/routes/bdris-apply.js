@@ -206,7 +206,7 @@ router.get('/prices', requireAuth, async (req, res) => {
 // tracking number instead of living only in the engine page's
 // session. Best-effort: a failed order insert never fails the
 // filing record itself.
-async function recordBdrisOrder(userId, { ackNo, name, status, price, originalPdfAvailable, reason }) {
+async function recordBdrisOrder(userId, { ackNo, name, status, price, originalPdfAvailable, reason, chargeKey }) {
   try {
     const svc = await db.query(
       `SELECT id, price FROM services WHERE engine_id = 'bdris-apply' AND status = 'active' LIMIT 1`);
@@ -217,12 +217,40 @@ async function recordBdrisOrder(userId, { ackNo, name, status, price, originalPd
     const idem = 'bdris-apply-' + String(ackNo || '').slice(0, 100);
     const data = { kind: 'bdris-apply', ack_no: ackNo, applicant_name: name, original_pdf_available: !!originalPdfAvailable };
     if (reason) data.failure_reason = reason;
+    let effPrice = price == null ? (Number(svc.rows[0].price) || 0) : price;
+    // Bug-hunt F3 — price the order from the amount ACTUALLY
+    // charged, not the services row at record time. The submit
+    // charge runs under ref 'bdris-apply-submit-<key>-<userId>'
+    // (client key, carried by the frontend with the record call);
+    // the ledger split for that ref is the truth, so a price
+    // change between charge and record — or a charge taken partly
+    // from locked credit — no longer lands as a wrong History
+    // amount or a refund basis that over-refunds. The ref is
+    // stored on the order so reconstructChargeSplit can find the
+    // real split at refund time. Without a key (old client, lost
+    // session) the old services-price fallback stands; a failed
+    // order with no ledger hit keeps price 0.
+    if (chargeKey) {
+      const ref = 'bdris-apply-submit-' + String(chargeKey).slice(0, 64) + '-' + userId;
+      const led = await db.query(
+        `SELECT trxid, amount FROM transactions
+          WHERE user_id = $1 AND trxid IN ($2, $3) AND status = 'approved'`,
+        [userId, ref, ref + ':svc']
+      ).catch(() => null);
+      if (led && led.rows.length) {
+        const total = led.rows.reduce((s, x) => s + Math.abs(Number(x.amount) || 0), 0);
+        if (total > 0) {
+          effPrice = Math.round(total * 100) / 100;
+          data.charge_ref = ref;
+        }
+      }
+    }
     const ins = await db.query(
       `INSERT INTO orders (user_id, service_id, status, data, price, idempotency_key)
        VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
        RETURNING id`,
-      [userId, svc.rows[0].id, status, JSON.stringify(data), price == null ? (Number(svc.rows[0].price) || 0) : price, idem]);
+      [userId, svc.rows[0].id, status, JSON.stringify(data), effPrice, idem]);
     if (ins.rows.length) return ins.rows[0].id;
     const again = await db.query(
       'SELECT id FROM orders WHERE user_id = $1 AND idempotency_key = $2', [userId, idem]);
@@ -254,7 +282,12 @@ router.post('/applications', requireAuth, async (req, res) => {
     );
     // Audit #39 — the filing gets an orders row (tracking-ID lookup
     // in "আমার অর্ডার"); a re-POST (flag upgrade) is a no-op there.
-    await recordBdrisOrder(req.user.id, { ackNo, name, status: 'completed', originalPdfAvailable: origFlag });
+    // Bug-hunt F3 — carry the submit-charge key so the order is
+    // priced from the ledger amount actually charged.
+    await recordBdrisOrder(req.user.id, {
+      ackNo, name, status: 'completed', originalPdfAvailable: origFlag,
+      chargeKey: (req.body && req.body.charge_key) ? String(req.body.charge_key).slice(0, 80) : null,
+    });
     if (r.rows.length && r.rows[0].inserted) {
       // First record of this submission → customer confirmation
       // (WhatsApp + own-device push).
@@ -299,7 +332,10 @@ router.post('/applications/failure', requireAuth, async (req, res) => {
        RETURNING id, created_at`,
       [req.user.id, marker, name, reason]
     );
-    await recordBdrisOrder(req.user.id, { ackNo: marker, name, status: 'failed', price: 0, reason });
+    await recordBdrisOrder(req.user.id, {
+      ackNo: marker, name, status: 'failed', price: 0, reason,
+      chargeKey: (req.body && req.body.charge_key) ? String(req.body.charge_key).slice(0, 80) : null,
+    });
     push.notifyAdmins(db, '❌ জন্ম নিবন্ধন আবেদন ব্যর্থ',
       'চূড়ান্ত জমার সময় একটি আবেদন ব্যর্থ হয়েছে' + (name ? ' (' + name + ')' : '') + ': ' + reason,
       '/admin.html').catch(() => {});

@@ -320,6 +320,47 @@ describe('POST/GET/DELETE /api/bdris-apply/applications (আবেদনের �
     expect(r.body.application.ack_no).toBe('265530312');
     expect(db.query.mock.calls.filter((c) => /INSERT INTO orders/.test(c[0]))).toHaveLength(0);
   });
+
+  test('bug-hunt F3 — order priced from the ledger amount actually charged (not the services row), charge_ref stored', async () => {
+    // Services price is 100, but the submit charge actually took
+    // 90 (70 balance + 20 locked credit). The order must show 90.
+    db.__routeQuery([
+      ['INSERT INTO bdris_applications', { rows: [{ id: 'a1', ack_no: '265530312', applicant_name: 'টেস্ট', created_at: 'x', inserted: true }] }],
+      ['SELECT id, price FROM services WHERE engine_id', { rows: [{ id: 'svc-bdris', price: 100 }] }],
+      ['SELECT trxid, amount FROM transactions', { rows: [
+        { trxid: 'bdris-apply-submit-draft-x-submit-u1', amount: -70 },
+        { trxid: 'bdris-apply-submit-draft-x-submit-u1:svc', amount: -20 },
+      ] }],
+      ['INSERT INTO orders', { rows: [{ id: 'o3' }] }],
+    ]);
+    const r = await withUser(request(app()).post('/api/bdris-apply/applications'))
+      .send({ ack_no: '265530312', name: 'টেস্ট', charge_key: 'draft-x-submit' }).expect(201);
+    expect(r.body.application.ack_no).toBe('265530312');
+    const ord = db.query.mock.calls.find((c) => /INSERT INTO orders/.test(c[0]));
+    expect(ord).toBeDefined();
+    expect(ord[1][2]).toBe('completed');
+    expect(ord[1][4]).toBe(90); // ledger total, NOT the services 100
+    expect(JSON.parse(ord[1][3]).charge_ref).toBe('bdris-apply-submit-draft-x-submit-u1');
+  });
+
+  test('bug-hunt F3 — failed order priced at the submit charge already taken (not ৳0)', async () => {
+    db.__routeQuery([
+      ['INSERT INTO bdris_applications', { rows: [{ id: 'f1', created_at: 'x' }] }],
+      ['SELECT id, price FROM services WHERE engine_id', { rows: [{ id: 'svc-bdris', price: 100 }] }],
+      ['SELECT trxid, amount FROM transactions', { rows: [
+        { trxid: 'bdris-apply-submit-draft-x-submit-u1', amount: -90 },
+      ] }],
+      ['INSERT INTO orders', { rows: [{ id: 'o4' }] }],
+    ]);
+    const r = await withUser(request(app()).post('/api/bdris-apply/applications/failure'))
+      .send({ name: 'টেস্ট আবেদনকারী', reason: 'সার্ভার ব্যস্ত', charge_key: 'draft-x-submit' }).expect(201);
+    expect(r.body).toMatchObject({ ok: true, id: 'f1' });
+    const ord = db.query.mock.calls.find((c) => /INSERT INTO orders/.test(c[0]));
+    expect(ord).toBeDefined();
+    expect(ord[1][2]).toBe('failed');
+    expect(ord[1][4]).toBe(90); // the submit charge already ran
+    expect(JSON.parse(ord[1][3]).charge_ref).toBe('bdris-apply-submit-draft-x-submit-u1');
+  });
 });
 
 describe('MONEY/PDF cycle 4 (2026-11-03)', () => {

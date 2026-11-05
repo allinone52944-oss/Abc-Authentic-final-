@@ -1208,3 +1208,13 @@ describe('audit #85 — silent warm/geo catches say something', () => {
     expect(html).toContain("body: JSON.stringify({ ack_no: String(ackNo), name: '', original_pdf_available: true })");
   });
 });
+
+describe('bug-hunt F3 — record calls carry the submit-charge key', () => {
+  test('applications + failure reports send charge_key so the order is priced from the ledger', () => {
+    expect(html).toContain('charge_key: submitChargeKeyForRecord()');
+    expect(html).toContain('function submitChargeKeyForRecord()');
+    // Draft flows use the deterministic draft key; other flows the
+    // session key kept in S._submitKey.
+    expect(html).toContain("if (S.draftId) return 'draft-' + S.draftId + '-submit';");
+  });
+});

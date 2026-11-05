@@ -165,6 +165,18 @@ async function reconstructChargeSplit(client, userId, order) {
   const key = order.idempotency_key ? String(order.idempotency_key) : '';
   if (!key || !(price > 0)) return null;
   const candidates = ['order-' + key + '-' + userId];
+  // bdris-apply: the order records its submit-charge ref in data
+  // (bug-hunt F3) — the ref carries the client key, so it cannot
+  // be rebuilt from the order key alone. It is the most specific
+  // candidate, so it is tried first; the ledger-agreement check
+  // below still rejects it if the recorded price does not match
+  // the real charge (e.g. an order priced before this fix).
+  let chargeRef = null;
+  try {
+    const d = typeof order.data === 'string' ? JSON.parse(order.data) : order.data;
+    if (d && typeof d.charge_ref === 'string' && d.charge_ref) chargeRef = d.charge_ref;
+  } catch (e) { /* no usable charge ref */ }
+  if (chargeRef) candidates.unshift(chargeRef);
   const colon = key.indexOf(':');
   if (colon > 0) candidates.push(key.slice(0, colon) + '-' + key.slice(colon + 1));
   // land.js: mode unknown from the row alone — try all four.

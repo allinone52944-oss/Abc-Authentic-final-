@@ -201,6 +201,29 @@ describe('refundOrderPrice — B1 engine refs (2026-11-03)', () => {
       { id: 'oQ', user_id: 'u1', service_id: 's1', price: 100, idempotency_key: 'idemqr' }, 'refund');
     expect(out).toEqual({ refunded: true, creditPart: 10, balancePart: 90 });
   });
+
+  test('bdris order data.charge_ref reconstructs the real split (bug-hunt F3)', async () => {
+    // The bdris charge ref carries the client key, so it cannot
+    // be rebuilt from the order key — it is recorded on the order
+    // instead. Without it, this refund would fall back to the
+    // whole 90 to balance (locked credit widened into free
+    // balance); with it, the 20 credit part goes back to credit.
+    const client = engineClient({
+      ledger: {
+        'bdris-apply-submit-draft-d9-submit-u1': [
+          { trxid: 'bdris-apply-submit-draft-d9-submit-u1', amount: -70 },
+          { trxid: 'bdris-apply-submit-draft-d9-submit-u1:svc', amount: -20 },
+        ],
+      },
+      creditRows: [{ id: 'c1', amount: 50, remaining: 30 }],
+    });
+    const out = await refundOrderPrice(client,
+      { id: 'oB', user_id: 'u1', service_id: 's1', price: 90, idempotency_key: 'bdris-apply-265530312',
+        data: { kind: 'bdris-apply', charge_ref: 'bdris-apply-submit-draft-d9-submit-u1' } }, 'refund');
+    expect(out).toEqual({ refunded: true, creditPart: 20, balancePart: 70 });
+    const w = client.calls.find((c) => /wallet_apply/.test(c[0]));
+    expect(w[1]).toEqual(['u1', 70, 'refund', 'refund-oB']); // NOT the full 90
+  });
 });
 
 describe('refundOrderPrice (admin-order fix, 2026-11-03)', () => {

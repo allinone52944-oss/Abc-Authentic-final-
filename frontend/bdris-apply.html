@@ -1026,6 +1026,18 @@ function chargeCatchReason(e) {
   if (e && e.message) return e.message;
   return 'অজানা কারণ';
 }
+function submitChargeKeyForRecord() {
+  // Bug-hunt F3 — the submit charge's idempotency key, so the
+  // server can price the order from the ledger amount actually
+  // charged. Draft flows use the deterministic draft key; other
+  // flows keep it in S._submitKey. Absent → the server falls back
+  // to the services price (old behaviour).
+  try {
+    if (S._submitKey) return S._submitKey;
+    if (S.draftId) return 'draft-' + S.draftId + '-submit';
+  } catch (e) {}
+  return null;
+}
 function reportAckToServer(a) {
   // জমা হওয়া আবেদন সার্ভারেও জমা হয় — যাতে admin সব আবেদন দেখতে
   // পান (শুধু এই ব্রাউজারের তালিকায় নয়)। ব্যর্থ হলে স্থানীয়
@@ -1045,7 +1057,7 @@ function reportAckToServer(a) {
     fetch('/api/bdris-apply/applications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
-      body: JSON.stringify({ ack_no: canonicalAck(a.no), name: a.name || '' })
+      body: JSON.stringify({ ack_no: canonicalAck(a.no), name: a.name || '', charge_key: submitChargeKeyForRecord() })
     }).then(r => {
       if (r && r.ok) clearAckPending(a); else markAckPending(a);
     }).catch(() => { markAckPending(a); });
@@ -1090,7 +1102,7 @@ function reportApplicationFailure(reason) {
     fetch('/api/bdris-apply/applications/failure', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
-      body: JSON.stringify({ name: nm, reason: String(reason || '').slice(0, 240) })
+      body: JSON.stringify({ name: nm, reason: String(reason || '').slice(0, 240), charge_key: submitChargeKeyForRecord() })
     }).catch(() => {});
   } catch {}
 }
