@@ -267,6 +267,34 @@ describe('wallet', () => {
       expect(r.body.existing_tx).toMatchObject({ amount: 500, status: 'pending' });
     });
 
+    test('duplicate → user is told the original status, neutrally (audit #32)', async () => {
+      // fresh TrxID: fraudAlertOnce throttles per user+trxid, and the
+      // earlier DUP tests already consumed 'TRX12345'
+      const push = require('../../utils/push');
+      const wa = require('../../utils/whatsapp');
+      const userSpy = jest.spyOn(push, 'notifyUser').mockResolvedValue({ ok: true });
+      const waSpy = jest.spyOn(wa, 'notifyDuplicateTrxid').mockResolvedValue({ ok: true });
+      const adminSpy = jest.spyOn(push, 'notifyDuplicateTrxid').mockResolvedValue({ ok: true });
+      db.__routeQuery([
+        ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
+        ['FROM transactions WHERE UPPER(trxid)', { rows: [{ id: 't9', user_id: 'u1', amount: 500, status: 'pending', created_at: '2026-11-04T10:00:00.000Z' }] }],
+      ]);
+      try {
+        const r = await withUser(request(app()).post('/api/wallet/recharge')).send({ ...GOOD, trxid: 'TRX99999' }).expect(409);
+        expect(r.body.error).toBe('DUP_TRXID');
+        expect(userSpy).toHaveBeenCalledWith(expect.anything(), 'u1', 'ℹ️ এই TrxID-র রিচার্জ আগেই আছে',
+          expect.stringContaining('অবস্থা: পেন্ডিং'), '/wallet.html');
+        expect(userSpy.mock.calls[0][3]).not.toContain('সম্পন্ন হয়ে গেছে');
+        expect(userSpy.mock.calls[0][3]).not.toContain('ব্লক');
+        expect(waSpy).toHaveBeenCalledWith(expect.anything(), 'u1',
+          expect.objectContaining({ status: 'pending', sameUser: true }));
+        expect(adminSpy).toHaveBeenCalledWith(expect.anything(),
+          expect.objectContaining({ status: 'pending' }), 'u1');
+      } finally {
+        userSpy.mockRestore(); waSpy.mockRestore(); adminSpy.mockRestore();
+      }
+    });
+
     test('SMS with same TrxID but different amount → 409 TRXID_AMOUNT_MISMATCH', async () => {
       db.__routeQuery([
         ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],

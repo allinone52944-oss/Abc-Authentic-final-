@@ -210,13 +210,19 @@ async function notifyAutoApproveRecharge(db, tx, userId) {
 
 // A recharge was attempted with an already-used TrxID (double-claim
 // of one payment). The attempt is blocked; admins are alerted.
+// Audit #32 — neutral factual record of a duplicate-TrxID submit:
+// the original transaction's status, no fraud verdict. A duplicate
+// is usually a confused resubmit of the user's own TrxID.
 async function notifyDuplicateTrxid(db, attempt, userId) {
   try {
     const uname = await userLabel(db, userId);
+    const stTxt = attempt.status === 'approved' ? 'অনুমোদিত'
+      : attempt.status === 'rejected' ? 'প্রত্যাখ্যাত'
+      : attempt.status === 'pending' ? 'পেন্ডিং' : 'অজানা';
     return await notifyAdmins(
       db,
-      '🚨 ডুপ্লিকেট TrxID-এ রিচার্জের চেষ্টা!',
-      `${uname}: ইতিমধ্যে ব্যবহৃত TrxID (${attempt.trxid || '—'}) দিয়ে আবার ৳${Number(attempt.amount || 0).toLocaleString('bn-BD')} রিচার্জের চেষ্টা করেছে। চেষ্টাটি আটকে দেওয়া হয়েছে।`,
+      'ℹ️ ডুপ্লিকেট TrxID জমা',
+      `${uname}: TrxID (${attempt.trxid || '—'}) ইতিমধ্যে ব্যবহৃত — আগের রিচার্জের অবস্থা: ${stTxt}। আবার ৳${Number(attempt.amount || 0).toLocaleString('bn-BD')} জমা দেওয়া হয়েছে।`,
       '/admin.html'
     );
   } catch (e) {

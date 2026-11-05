@@ -792,7 +792,14 @@ async function notifyServiceFailed(db, userId, serviceLabel, reason, retryHint) 
 
 // Fraud guard: a recharge was attempted with an already-used TrxID
 // (one payment claimed twice). The attempt is blocked by the caller;
-// this warns the attempter on WhatsApp.
+// Audit #32 — neutral duplicate notice: the original transaction's
+// status, never a fraud/block warning. A duplicate is usually a
+// confused resubmit of the user's own TrxID. Another user's TrxID
+// stays generic — its status must never leak to the attempter.
+// NOTE: the live message is the Meta template 'abc_trxid_notice'
+// (params: greeting, trxid) — if its wording still warns/blocks,
+// it needs an admin-side Meta template edit, not code. This `text`
+// is only the fallback when the template send fails or is off.
 async function notifyDuplicateTrxid(db, userId, attempt) {
   try {
     if (!(await canSend(db))) return { ok: false, error: 'DISABLED' };
@@ -803,10 +810,15 @@ async function notifyDuplicateTrxid(db, userId, attempt) {
     const user = u.rows[0];
     if (!user || !user.whatsapp) return { ok: false, error: 'NO_WHATSAPP' };
     const trxid = String((attempt && attempt.trxid) || '');
+    const statusTxt = attempt && attempt.sameUser
+      ? (attempt.status === 'approved' ? 'অবস্থা: অনুমোদিত — টাকা ইতিমধ্যে ব্যালেন্সে যোগ হয়েছে।'
+        : attempt.status === 'rejected' ? 'অবস্থা: প্রত্যাখ্যাত।' + (attempt.cancel_reason ? ' কারণ: ' + attempt.cancel_reason : '')
+        : 'অবস্থা: পেন্ডিং — SMS মিললে স্বয়ংক্রিয়ভাবে অনুমোদিত হবে, না হলে এডমিন যাচাই করবেন।')
+      : null;
     const text =
       `${greetingFor(user)}\n` +
-      `⚠️ সতর্কবার্তা: এই TrxID (${trxid}) ইতিমধ্যে একবার ব্যবহার করা হয়েছে — একই পেমেন্ট দিয়ে দ্বিতীয়বার রিচার্জ করা যাবে না। আপনার চেষ্টাটি আটকে দেওয়া হয়েছে।\n` +
-      'বারবার এমন চেষ্টা করলে অ্যাকাউন্ট ব্লক করা হতে পারে। কোনো ভুল হয়ে থাকলে আমাদের সাপোর্টে যোগাযোগ করুন।';
+      `ℹ️ এই TrxID (${trxid}) ইতিমধ্যে একবার ব্যবহার করা হয়েছে — একই পেমেন্ট দিয়ে দ্বিতীয়বার রিচার্জ করা যাবে না।` +
+      (statusTxt ? `\n${statusTxt} নতুন করে জমা দেওয়ার দরকার নেই; ওয়ালেট হিস্ট্রিতে দেখুন।` : '\nকোনো ভুল হয়ে থাকলে আমাদের সাপোর্টে যোগাযোগ করুন।');
     return dispatch(db, 'trxid_warning', user, {
       text,
       params: [greetingFor(user), trxid],

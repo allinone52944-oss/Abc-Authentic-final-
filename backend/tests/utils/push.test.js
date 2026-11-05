@@ -150,3 +150,24 @@ describe('notifyAdmins', () => {
     expect(r.ok).toBe(false);
   });
 });
+
+describe('notifyDuplicateTrxid (audit #32)', () => {
+  test('neutral factual alert with the original status', async () => {
+    process.env.VAPID_PUBLIC_KEY = 'pub'; process.env.VAPID_PRIVATE_KEY = 'priv';
+    const push = freshPush();
+    wp().sendNotification.mockReset();
+    wp().sendNotification.mockResolvedValue({});
+    const db = stubDb(async (text) => {
+      if (/FROM push_subscriptions/.test(text)) return { rows: [{ endpoint: 'https://push.example/admin', p256dh: 'p', auth: 'a' }] };
+      if (/FROM users/.test(text)) return { rows: [{ name: 'Karim', phone: '0171' }] };
+      return { rows: [] };
+    });
+    const r = await push.notifyDuplicateTrxid(db, { trxid: 'TXDUP123', amount: 500, status: 'pending' }, 'u1');
+    expect(r).toEqual({ ok: true, sent: 1 });
+    const payload = JSON.parse(wp().sendNotification.mock.calls[0][1]);
+    expect(payload.title).toBe('ℹ️ ডুপ্লিকেট TrxID জমা');
+    expect(payload.body).toContain('আগের রিচার্জের অবস্থা: পেন্ডিং');
+    expect(payload.body).not.toContain('আটকে দেওয়া হয়েছে');
+    expect(payload.body).not.toContain('চেষ্টা করেছে');
+  });
+});

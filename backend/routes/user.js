@@ -32,6 +32,19 @@ function fraudAlertOnce(key) {
   return true;
 }
 
+// Audit #32 — neutral duplicate guidance: the original transaction's
+// status, never a fraud warning. A duplicate is usually a confused
+// resubmit of the user's own TrxID (e.g. right after an instant
+// auto-approve), not fraud. Another user's TrxID stays generic —
+// its status must never leak to the attempter.
+function duplicateGuidance(orig, sameUser) {
+  if (!sameUser) return 'এই TrxID ইতিমধ্যে ব্যবহার করা হয়েছে — একই TrxID দিয়ে দ্বিতীয়বার রিচার্জ করা যায় না।';
+  const st = orig.status === 'approved' ? 'অনুমোদিত — টাকা ইতিমধ্যে ব্যালেন্সে যোগ হয়েছে'
+    : orig.status === 'rejected' ? 'প্রত্যাখ্যাত' + (orig.cancel_reason ? ' — কারণ: ' + orig.cancel_reason : '')
+    : 'পেন্ডিং — SMS মিললে স্বয়ংক্রিয়ভাবে অনুমোদিত হবে, না হলে এডমিন যাচাই করবেন';
+  return 'এই TrxID-এর রিচার্জটি ইতিমধ্যে আছে — অবস্থা: ' + st + '। নতুন করে জমা দেওয়ার দরকার নেই; ওয়ালেট হিস্ট্রিতে দেখুন।';
+}
+
 const router = express.Router();
 router.use(requireAuth);
 
@@ -693,13 +706,17 @@ router.post('/wallet/recharge', async (req, res) => {
       // a rejected original shows WHY it was rejected.
       'SELECT id, user_id, amount, status, created_at, cancel_reason FROM transactions WHERE UPPER(trxid) = UPPER($1) LIMIT 1', [String(trxid).trim()]);
     if (dup.rows.length) {
-      // Fraud attempt: warn the attempter (WhatsApp) + alert admins
-      // (push), throttled per user+trxid. The attempt itself is blocked.
+      const orig = dup.rows[0];
+      const sameUser = orig.user_id === req.user.id;
+      // Audit #32 — a duplicate is usually a confused resubmit of the
+      // user's own TrxID, not fraud: tell the submitter the ORIGINAL's
+      // status (neutral guidance), never a block warning. Admins still
+      // get the factual alert, throttled per user+trxid.
       if (fraudAlertOnce('dup:' + req.user.id + ':' + String(trxid).trim().toUpperCase())) {
-        wa.notifyDuplicateTrxid(db, req.user.id, { trxid: String(trxid).trim(), amount: amt }).catch(() => {});
-        push.notifyUser(db, req.user.id, '⚠️ সতর্কবার্তা',
-          'এই TrxID দিয়ে আগেই একটি রিচার্জ সম্পন্ন হয়ে গেছে — একই TrxID দিয়ে দ্বিতীয়বার টাকা যোগ করা যায়নি।', '/wallet.html').catch(() => {});
-        push.notifyDuplicateTrxid(db, { trxid: String(trxid).trim(), amount: amt }, req.user.id).catch(() => {});
+        wa.notifyDuplicateTrxid(db, req.user.id, { trxid: String(trxid).trim(), amount: amt, status: orig.status, sameUser, cancel_reason: orig.cancel_reason }).catch(() => {});
+        push.notifyUser(db, req.user.id, 'ℹ️ এই TrxID-র রিচার্জ আগেই আছে',
+          duplicateGuidance(orig, sameUser), '/wallet.html').catch(() => {});
+        push.notifyDuplicateTrxid(db, { trxid: String(trxid).trim(), amount: amt, status: orig.status }, req.user.id).catch(() => {});
       }
       // Gateway-session premium display (2026-11-04): when the SAME user
       // resubmits their own TrxID, the client shows the ORIGINAL
@@ -707,7 +724,6 @@ router.post('/wallet/recharge', async (req, res) => {
       // a confused resubmit after an instant auto-approve is the common
       // case, not fraud. Another user's TrxID stays generic: its details
       // must never leak to the attempter.
-      const orig = dup.rows[0];
       if (orig.user_id === req.user.id) {
         return res.status(409).json({
           error: 'DUP_TRXID',

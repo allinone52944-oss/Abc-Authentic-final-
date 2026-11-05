@@ -319,6 +319,29 @@ describe('template-first dispatch (24h-window fix, 2026-10-21)', () => {
     const params = body.template.components[0].parameters.map((p) => p.text);
     expect(params).toEqual(['আসসালামু আলাইকুম Karim', 'TXDUP123']);
   });
+
+  test('notifyDuplicateTrxid fallback text is neutral and states the status (audit #32)', async () => {
+    // template send fails → the plain-text fallback is used
+    global.fetch = jest.fn(async () => ({ ok: false, status: 400, json: async () => ({ error: { message: 'template failed' } }) }));
+    const db = notifyDb({ name: 'Karim', whatsapp: '01712345678', religion: 'islam' });
+    await wa.notifyDuplicateTrxid(db, 'u1', { trxid: 'TXDUP123', amount: 500, status: 'pending', sameUser: true });
+    expect(global.fetch.mock.calls.length).toBe(2);
+    const body = JSON.parse(global.fetch.mock.calls[1][1].body);
+    expect(body.type).toBe('text');
+    expect(body.text.body).toContain('অবস্থা: পেন্ডিং');
+    expect(body.text.body).not.toContain('আটকে দেওয়া হয়েছে');
+    expect(body.text.body).not.toContain('ব্লক');
+  });
+
+  test('notifyDuplicateTrxid fallback text stays generic for another user (audit #32)', async () => {
+    global.fetch = jest.fn(async () => ({ ok: false, status: 400, json: async () => ({ error: { message: 'template failed' } }) }));
+    const db = notifyDb({ name: 'Karim', whatsapp: '01712345678', religion: 'islam' });
+    await wa.notifyDuplicateTrxid(db, 'u1', { trxid: 'TXDUP123', amount: 500, status: 'approved', sameUser: false });
+    const body = JSON.parse(global.fetch.mock.calls[1][1].body);
+    expect(body.text.body).not.toContain('অবস্থা:');
+    expect(body.text.body).not.toContain('আটকে দেওয়া হয়েছে');
+    expect(body.text.body).not.toContain('ব্লক');
+  });
 });
 
 describe('greetingFor (religion-aware)', () => {
