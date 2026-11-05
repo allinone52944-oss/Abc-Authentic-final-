@@ -630,6 +630,31 @@ async function init(){
     console.warn('Draft restore warning:', err);
   }
 
+  // Audit #50 — prefill the applicant's own name/phone from the
+  // profile (editable). Runs AFTER the draft restore, and only fills
+  // fields still EMPTY, so a saved draft always wins. The match is a
+  // closed exact-match list on the field name/label: 'পিতার নাম' /
+  // 'মাতার নাম' / 'অভিভাবকের নাম' must never receive the user's own
+  // name, so no substring matching is used here.
+  try {
+    const NAME_KEYS = ['নাম','আবেদনকারীর নাম','আপনার নাম','নিজের নাম','পুরো নাম','name','applicant name','your name','full name','applicant_name','full_name'];
+    const PHONE_KEYS = ['মোবাইল','মোবাইল নম্বর','মোবাইল নাম্বার','ফোন','ফোন নম্বর','আপনার মোবাইল','নিজের মোবাইল','phone','mobile','phone number','mobile number','mobile_number','phone_number'];
+    const keyOf = (el) => {
+      const field = (el.dataset.field || '').trim().toLowerCase();
+      const label = (el.closest('.field') || {}).textContent || '';
+      const lab = label.replace(/\s*\*\s*$/, '').trim().toLowerCase();
+      return [field, lab];
+    };
+    document.querySelectorAll('[data-field]').forEach(el => {
+      if (el.value) return; // draft (or anything typed) wins
+      const keys = keyOf(el);
+      if (u.name && NAME_KEYS.some(k => keys.includes(k.toLowerCase()))) el.value = u.name;
+      else if (u.phone && PHONE_KEYS.some(k => keys.includes(k.toLowerCase()))) el.value = u.phone;
+    });
+  } catch(err) {
+    console.warn('Profile prefill warning:', err);
+  }
+
   // Auto-save draft on input
   const cardEl = document.querySelector('.card');
   if(cardEl) cardEl.addEventListener('input', triggerDraftSave);

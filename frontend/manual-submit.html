@@ -161,6 +161,16 @@
           </select>
         </div>
         <div id="svcInst" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin-bottom:14px;color:#1e40af;font-size:13px;line-height:1.6;"></div>
+        <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label>আপনার নাম</label>
+            <input type="text" id="msName" placeholder="প্রোফাইল থেকে বসেছে — ঠিক করতে পারেন" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px;">
+          </div>
+          <div>
+            <label>মোবাইল নম্বর</label>
+            <input type="text" id="msPhone" placeholder="প্রোফাইল থেকে বসেছে — ঠিক করতে পারেন" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px;">
+          </div>
+        </div>
         <div class="field">
           <label>পূরণকৃত তথ্য *</label>
           <textarea id="rawText" rows="9" placeholder="নমুনা অনুযায়ী পূরণকৃত তথ্য এখানে পেস্ট করুন…"></textarea>
@@ -259,6 +269,10 @@ async function init(){
   const me = await ABC.api('/auth/me');
   if (me.ok) {
     const u = (await me.json()).user || {};
+    // Audit #50 — prefill the applicant's own name/phone from the
+    // profile (editable). doSubmit() carries them into the text.
+    if (u.name) document.getElementById('msName').value = u.name;
+    if (u.phone) document.getElementById('msPhone').value = u.phone;
     document.getElementById('waFab').onclick = () => {
       window.open('https://wa.me/8801835414122?text=' + encodeURIComponent('আসসালামু আলাইকুম! আমি ' + u.name + ' (ফোন: ' + u.phone + ')। ম্যানুয়াল আবেদন নিয়ে সাহায্য দরকার।'), '_blank');
     };
@@ -319,7 +333,15 @@ async function dlMineDoc(mi, di){
 }
 
 async function doSubmit(){
-  const raw = document.getElementById('rawText').value.trim();
+  // Audit #50 — the prefilled name/phone ride along with the text
+  // (only lines the text does not already contain).
+  let raw = document.getElementById('rawText').value.trim();
+  const nm = document.getElementById('msName').value.trim();
+  const ph = document.getElementById('msPhone').value.trim();
+  const head = [];
+  if (nm && !raw.includes(nm)) head.push('নাম: ' + nm);
+  if (ph && !raw.includes(ph)) head.push('মোবাইল: ' + ph);
+  if (head.length) raw = head.join('\n') + '\n' + raw;
   if(!raw){ showErr('অনুগ্রহ করে পূরণকৃত তথ্য পেস্ট করুন।'); return; }
   const files = document.getElementById('docs').files;
   if(files.length > 6){ showErr('সর্বোচ্চ ৬টি ডকুমেন্ট ফাইল যুক্ত করতে পারবেন।'); return; }
