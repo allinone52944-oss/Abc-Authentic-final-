@@ -270,6 +270,56 @@ describe('POST/GET/DELETE /api/bdris-apply/applications (আবেদনের �
       .send({ name: 'x', reason: 'y' }).expect(401);
     expect(push.notifyAdmins).not.toHaveBeenCalled();
   });
+
+  // Audit #39 — every filing also gets an orders row, so it is
+  // findable in "আমার অর্ডার" by its tracking number.
+  test('audit #39 — submitted application also writes a completed orders row', async () => {
+    db.__routeQuery([
+      ['INSERT INTO bdris_applications', { rows: [{ id: 'a1', ack_no: '265530312', applicant_name: 'টেস্ট', created_at: 'x', inserted: true }] }],
+      ['SELECT id, price FROM services WHERE engine_id', { rows: [{ id: 'svc-bdris', price: 100 }] }],
+      ['INSERT INTO orders', { rows: [{ id: 'o1' }] }],
+    ]);
+    const r = await withUser(request(app()).post('/api/bdris-apply/applications'))
+      .send({ ack_no: '265530312', name: 'টেস্ট' }).expect(201);
+    expect(r.body.application.ack_no).toBe('265530312');
+    const ord = db.query.mock.calls.find((c) => /INSERT INTO orders/.test(c[0]));
+    expect(ord).toBeDefined();
+    expect(ord[0]).toContain("ON CONFLICT (user_id, idempotency_key)");
+    expect(ord[1][0]).toBe('u1');
+    expect(ord[1][1]).toBe('svc-bdris');
+    expect(ord[1][2]).toBe('completed');
+    expect(JSON.parse(ord[1][3])).toMatchObject({ kind: 'bdris-apply', ack_no: '265530312', applicant_name: 'টেস্ট' });
+    expect(ord[1][4]).toBe(100);
+    expect(ord[1][5]).toBe('bdris-apply-265530312');
+  });
+
+  test('audit #39 — failure report also writes a failed orders row (price 0)', async () => {
+    db.__routeQuery([
+      ['INSERT INTO bdris_applications', { rows: [{ id: 'f1', created_at: 'x' }] }],
+      ['SELECT id, price FROM services WHERE engine_id', { rows: [{ id: 'svc-bdris', price: 100 }] }],
+      ['INSERT INTO orders', { rows: [{ id: 'o2' }] }],
+    ]);
+    const r = await withUser(request(app()).post('/api/bdris-apply/applications/failure'))
+      .send({ name: 'টেস্ট আবেদনকারী', reason: 'সার্ভার ব্যস্ত' }).expect(201);
+    expect(r.body).toMatchObject({ ok: true, id: 'f1' });
+    const ord = db.query.mock.calls.find((c) => /INSERT INTO orders/.test(c[0]));
+    expect(ord).toBeDefined();
+    expect(ord[1][2]).toBe('failed');
+    expect(ord[1][4]).toBe(0);
+    expect(JSON.parse(ord[1][3]).failure_reason).toBe('সার্ভার ব্যস্ত');
+    expect(ord[1][5]).toMatch(/^bdris-apply-FAIL-[0-9A-F]{8}$/);
+  });
+
+  test('audit #39 — no active bdris-apply service → filing still succeeds, no orders row', async () => {
+    db.__routeQuery([
+      ['INSERT INTO bdris_applications', { rows: [{ id: 'a1', ack_no: '265530312', applicant_name: 'টেস্ট', created_at: 'x', inserted: true }] }],
+      ['SELECT id, price FROM services WHERE engine_id', { rows: [] }],
+    ]);
+    const r = await withUser(request(app()).post('/api/bdris-apply/applications'))
+      .send({ ack_no: '265530312', name: 'টেস্ট' }).expect(201);
+    expect(r.body.application.ack_no).toBe('265530312');
+    expect(db.query.mock.calls.filter((c) => /INSERT INTO orders/.test(c[0]))).toHaveLength(0);
+  });
 });
 
 describe('MONEY/PDF cycle 4 (2026-11-03)', () => {

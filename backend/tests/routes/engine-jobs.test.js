@@ -245,7 +245,7 @@ describe('admin engine-jobs', () => {
 });
 
 describe('GET /api/history — engine deliveries are included', () => {
-  test('certificate + death jobs appear as delivery files; BDRIS applications do not exist as a source', async () => {
+  test('certificate + death jobs appear as delivery files; a filed BDRIS application appears with its tracking number', async () => {
     db.__routeQuery([
       ['FROM orders o LEFT JOIN services', { rows: [] }],
       ['FROM manual_submissions m LEFT JOIN services', { rows: [] }],
@@ -253,18 +253,33 @@ describe('GET /api/history — engine deliveries are included', () => {
         { id: 'j1', engine_id: 'bdris-certificate', subject_name: 'Rahim', filename: 'engine-a.pdf', originalname: 'Certificate_1.pdf', created_at: '2026-10-21T08:00:00Z' },
         { id: 'j2', engine_id: 'death-verify', subject_name: 'Karim', filename: 'engine-b.pdf', originalname: 'Death_2.pdf', created_at: '2026-10-21T09:00:00Z' },
       ] }],
+      // Audit #39 — BDRIS filings are a history source now (the
+      // 2026-10-21 "stay out" call is reversed for filings).
+      ['FROM bdris_applications', { rows: [
+        { id: 'b1', ack_no: '265530312', applicant_name: 'টেস্ট', created_at: '2026-10-21T10:00:00Z', original_pdf_available: true },
+      ] }],
     ]);
     const r = await asUser(request(app()).get('/api/history')).expect(200);
-    expect(r.body.items).toHaveLength(2);
-    expect(r.body.items.map(i => i.id)).toEqual(['j2', 'j1']);
+    expect(r.body.items).toHaveLength(3);
+    expect(r.body.items.map(i => i.id)).toEqual(['b1', 'j2', 'j1']);
     expect(r.body.items[0].title).not.toContain('ব্যর্থ');
-    expect(r.body.items[0].kind).toBe('engine');
-    expect(r.body.items[0].title).toContain('মৃত্যু সনদ');
-    expect(r.body.items[1].title).toContain('জন্ম সনদ');
-    expect(r.body.items[1].documents[0].url).toBe('/engine-jobs/j1/file');
-    // history must not query BDRIS applications at all
+    expect(r.body.items[0].kind).toBe('bdris');
+    expect(r.body.items[0].title).toContain('265530312');
+    expect(r.body.items[0].title).toContain('টেস্ট');
+    expect(r.body.items[0].link).toBe('/bdris-apply.html');
+    expect(r.body.items[0].original_pdf_available).toBe(true);
+    // No fake download link: the original PDF needs a fresh charge
+    // token from the filing page.
+    expect(r.body.items[0].documents).toEqual([]);
+    expect(r.body.items[1].kind).toBe('engine');
+    expect(r.body.items[1].title).toContain('মৃত্যু সনদ');
+    expect(r.body.items[2].title).toContain('জন্ম সনদ');
+    expect(r.body.items[2].documents[0].url).toBe('/engine-jobs/j1/file');
+    // the history endpoint queries BDRIS applications for the
+    // customer's own submitted filings
     const bdrisQueries = db.query.mock.calls.filter(c => /bdris_applications/.test(c[0]));
-    expect(bdrisQueries).toHaveLength(0);
+    expect(bdrisQueries).toHaveLength(1);
+    expect(bdrisQueries[0][0]).toContain("status = 'submitted'");
   });
 
   test('a failed engine job appears in history marked ব্যর্থ with its receipt', async () => {

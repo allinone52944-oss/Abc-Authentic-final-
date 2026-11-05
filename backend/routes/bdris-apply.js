@@ -201,6 +201,38 @@ router.get('/prices', requireAuth, async (req, res) => {
 // the admin sees all applications (Admin → অর্ডার tab) and can
 // delete a record; the customer can fetch/delete their own.
 
+// Audit #39 — every BDRIS filing also gets an orders row (the land
+// recordOrder pattern), so it appears in "আমার অর্ডার" with its
+// tracking number instead of living only in the engine page's
+// session. Best-effort: a failed order insert never fails the
+// filing record itself.
+async function recordBdrisOrder(userId, { ackNo, name, status, price, originalPdfAvailable, reason }) {
+  try {
+    const svc = await db.query(
+      `SELECT id, price FROM services WHERE engine_id = 'bdris-apply' AND status = 'active' LIMIT 1`);
+    if (!svc.rows.length) {
+      safeLog('[bdris-apply] order skipped: no active bdris-apply service row');
+      return null;
+    }
+    const idem = 'bdris-apply-' + String(ackNo || '').slice(0, 100);
+    const data = { kind: 'bdris-apply', ack_no: ackNo, applicant_name: name, original_pdf_available: !!originalPdfAvailable };
+    if (reason) data.failure_reason = reason;
+    const ins = await db.query(
+      `INSERT INTO orders (user_id, service_id, status, data, price, idempotency_key)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+       RETURNING id`,
+      [userId, svc.rows[0].id, status, JSON.stringify(data), price == null ? (Number(svc.rows[0].price) || 0) : price, idem]);
+    if (ins.rows.length) return ins.rows[0].id;
+    const again = await db.query(
+      'SELECT id FROM orders WHERE user_id = $1 AND idempotency_key = $2', [userId, idem]);
+    return again.rows.length ? again.rows[0].id : null;
+  } catch (e) {
+    safeLog('[bdris-apply] order record error:', e.message);
+    return null;
+  }
+}
+
 // POST /api/bdris-apply/applications { ack_no, name, original_pdf_available? } — idempotent
 // ALL-BUGS (i): the flag-only re-POST (sent when the Form-1 PDF
 // lands) used to be a DO NOTHING on conflict — the record never
@@ -220,6 +252,9 @@ router.post('/applications', requireAuth, async (req, res) => {
        RETURNING id, ack_no, applicant_name, created_at, (xmax = 0) AS inserted`,
       [req.user.id, ackNo, name, origFlag]
     );
+    // Audit #39 — the filing gets an orders row (tracking-ID lookup
+    // in "আমার অর্ডার"); a re-POST (flag upgrade) is a no-op there.
+    await recordBdrisOrder(req.user.id, { ackNo, name, status: 'completed', originalPdfAvailable: origFlag });
     if (r.rows.length && r.rows[0].inserted) {
       // First record of this submission → customer confirmation
       // (WhatsApp + own-device push).
@@ -250,6 +285,9 @@ router.post('/applications', requireAuth, async (req, res) => {
 // admins also get a push. NOTE: the submit charge runs BEFORE
 // the portal submission, so this record deliberately makes no
 // claim about money either way — the admin checks the wallet.
+// Audit #39: the failure ALSO gets an orders row (status failed,
+// price 0, like the land pattern), so the customer can find the
+// failed filing in "আমার অর্ডার" instead of silence.
 router.post('/applications/failure', requireAuth, async (req, res) => {
   try {
     const name = String((req.body && req.body.name) || '').trim().slice(0, 160);
@@ -261,6 +299,7 @@ router.post('/applications/failure', requireAuth, async (req, res) => {
        RETURNING id, created_at`,
       [req.user.id, marker, name, reason]
     );
+    await recordBdrisOrder(req.user.id, { ackNo: marker, name, status: 'failed', price: 0, reason });
     push.notifyAdmins(db, '❌ জন্ম নিবন্ধন আবেদন ব্যর্থ',
       'চূড়ান্ত জমার সময় একটি আবেদন ব্যর্থ হয়েছে' + (name ? ' (' + name + ')' : '') + ': ' + reason,
       '/admin.html').catch(() => {});

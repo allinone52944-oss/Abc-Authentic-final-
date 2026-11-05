@@ -71,6 +71,7 @@
           <option value="manual">ম্যানুয়াল</option>
           <option value="order">অর্ডার</option>
           <option value="engine">ইঞ্জিন</option>
+          <option value="bdris">বিডিআরআইএস আবেদন</option>
         </select>
       </div>
       <div id="histList" style="color:var(--text-muted); font-size:13px;">লোড হচ্ছে…</div>
@@ -95,7 +96,7 @@
 <script>
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-const ICON = { manual:'📝', order:'📦', engine:'🎓' };
+const ICON = { manual:'📝', order:'📦', engine:'🎓', bdris:'📋' }; // audit #39 — BDRIS filings appear in History
 
 let _items = [];
 let _histShown = 20;
@@ -140,12 +141,20 @@ function render(){
     const docs = (it.documents || []).map((d, di) =>
       '<button class="hist-doc delivery" onclick="dlHist(' + gi + ',' + di + ')">🎁 ' + esc(d.originalname || d.filename) + ' ⬇️</button>'
     ).join('');
+    // Audit #39 — a BDRIS filing shows its tracking number, a link to
+    // the filing page, and whether its original PDF is ready. No
+    // download button: the PDF needs a fresh charge token from the
+    // filing page, so a direct link here would be fake.
+    const extra = (it.kind === 'bdris'
+      ? (it.original_pdf_available ? '<div class="hist-meta" style="color:#059669;">✅ আসল PDF তৈরি — আবেদন পাতা থেকে নামান</div>' : '') +
+        (it.link ? '<div class="hist-docs"><button class="hist-doc" onclick="location.href=\'' + esc(it.link) + '\'">📄 আবেদন দেখুন</button></div>' : '')
+      : '');
     return '<div class="hist-item">' +
       '<div class="hist-head"><div>' +
         '<div class="hist-title">' + (ICON[it.kind] || '📄') + ' ' + esc(it.title) + '</div>' +
         '<div class="hist-meta">' + new Date(it.created_at).toLocaleString('bn-BD') + '</div>' +
       '</div></div>' +
-      (docs ? '<div class="hist-docs">' + docs + '</div>' : '') +
+      (docs ? '<div class="hist-docs">' + docs + '</div>' : '') + extra +
     '</div>';
   }).join('');
 }

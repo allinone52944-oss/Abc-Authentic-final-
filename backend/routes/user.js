@@ -543,11 +543,19 @@ router.get('/orders/:id/documents/:filename', async (req, res) => {
 // manual submissions, NID card PDFs stored on their orders, and stored
 // certificate / death-verify engine PDFs — so a delivered file can
 // always be found and re-downloaded from one place, whatever
-// phone/browser they use. (BDRIS applications stay out by his call.)
+// phone/browser they use.
+// Audit #39 (2026-11-05) reverses the BDRIS half of that call: a filed
+// BDRIS application now appears here with its tracking number and a
+// link to the filing page. The original Form-1 PDF itself is NOT
+// linked as a download: it needs JWT + a paid charge token, which
+// History does not hold — a bare link would fail (a fake download
+// link). The filing page is where the PDF is fetched with a fresh
+// token; when a stored-PDF download endpoint exists, the documents
+// array is where its link goes.
 router.get('/history', async (req, res) => {
   try {
     const uid = req.user.id;
-    const [orders, manual, engineJobs] = await Promise.all([
+    const [orders, manual, engineJobs, bdrisApps] = await Promise.all([
       // P2 (2026-11-03): admin files surface in History only once
       // delivered — completed/delivered, or refunded after delivery
       // (goodwill: the file stays after a delivered→refunded).
@@ -578,6 +586,14 @@ router.get('/history', async (req, res) => {
         `SELECT id, engine_id, subject_name, filename, originalname, created_at, outcome
          FROM engine_jobs
          WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`, [uid]),
+      // Audit #39 — filed BDRIS applications, so the tracking number
+      // is findable in History too (submitted only; failures stay
+      // admin-side, as in the applications list).
+      db.query(
+        `SELECT id, ack_no, applicant_name, created_at, original_pdf_available
+         FROM bdris_applications
+         WHERE user_id = $1 AND status = 'submitted'
+         ORDER BY created_at DESC LIMIT 100`, [uid]),
     ]);
     const deliveryDocs = (raw, base) => safeJsonArray(raw)
       .filter(d => d && d.filename && d.uploaded_by === 'admin')
@@ -603,6 +619,21 @@ router.get('/history', async (req, res) => {
         kind: 'manual', id: m.id,
         title: m.service_name_bn || m.service_name || 'ম্যানুয়াল সেবা',
         created_at: m.created_at, documents,
+      });
+    }
+    // Audit #39 — BDRIS filings carry their tracking number and a
+    // link to the filing page. No documents array: the original PDF
+    // needs a fresh charge token from the filing page, so a direct
+    // download link here would be fake.
+    for (const a of bdrisApps.rows) {
+      items.push({
+        kind: 'bdris', id: a.id,
+        title: 'জন্ম নিবন্ধন আবেদন' +
+          (a.applicant_name ? ' — ' + a.applicant_name : '') +
+          ' (আবেদন নম্বর: ' + a.ack_no + ')',
+        created_at: a.created_at, documents: [],
+        link: '/bdris-apply.html',
+        original_pdf_available: !!a.original_pdf_available,
       });
     }
     for (const j of engineJobs.rows) {
