@@ -9,11 +9,13 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..', '..', '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
-const TABBAR_PAGES = ['dashboard', 'history', 'land-khatian', 'land-mouza-map', 'manual-submit',
+const TABBAR_PAGES = ['dashboard', 'history', 'land-khatian', 'land-mouza-map',
   'nid-replica', 'order-create', 'order-detail', 'order-status', 'orders',
   'profile', 'qr-photo-verify', 'service-detail', 'services', 'wallet'];
 const NO_TABBAR_PAGES = ['bdris-apply', 'land', 'login', 'admin', 'nid-server-copy',
-  'birth-final', 'death-final', 'index'];
+  'birth-final', 'death-final', 'index', 'manual-submit'];
+// Audit #51: manual-submit is a redirect page now — no tabbar, no
+// has-tabbar class, so it belongs in the no-tabbar list.
 
 describe('tabbar bottom padding only on tabbar pages (audit #61)', () => {
   test('motion.css reserves body room only for body.has-tabbar', () => {

@@ -12,7 +12,7 @@ const read = (p) => fs.readFileSync(path.join(FRONTEND, p), 'utf8');
 
 const CUSTOMER_PAGES = [
   'order-status.html', 'order-detail.html', 'history.html',
-  'manual-submit.html', 'bdris-apply.html', 'wallet.html',
+  'bdris-apply.html', 'wallet.html',
   'order-create.html', 'dashboard.html', 'login.html',
   'service-detail.html',
 ];
@@ -30,7 +30,7 @@ describe('audit #73 — no alert() on customer pages', () => {
   test('each page routes its former alerts through the inline component', () => {
     const counts = {
       'order-status.html': 8, 'order-detail.html': 10, 'history.html': 2,
-      'manual-submit.html': 2, 'wallet.html': 3, 'order-create.html': 5,
+      'wallet.html': 3, 'order-create.html': 5,
       'dashboard.html': 2, 'service-detail.html': 2,
     };
     for (const [file, n] of Object.entries(counts)) {

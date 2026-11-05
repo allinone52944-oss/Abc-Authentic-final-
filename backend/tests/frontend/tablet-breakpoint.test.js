@@ -38,7 +38,11 @@ describe('one tablet breakpoint: 900px (audit #56)', () => {
   });
 
   test('the pages that already reflowed at 900px are unchanged', () => {
-    for (const p of ['frontend/wallet.html', 'frontend/login.html', 'frontend/manual-submit.html']) {
+    // Audit #51 unified manual-submit.html into the order flow — it
+    // is a redirect page now, with no grid to reflow, so it is out
+    // of this pin. order-create.html never had its own 900px rule
+    // (it uses the global collapse), so it is not added here either.
+    for (const p of ['frontend/wallet.html', 'frontend/login.html']) {
       expect(read(p)).toContain('@media (max-width: 900px)');
     }
   });
