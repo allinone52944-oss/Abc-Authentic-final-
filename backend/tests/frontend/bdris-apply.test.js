@@ -929,3 +929,32 @@ describe('CASCADE-RELATION cycle (2026-11-01): cascade survives resume/re-render
     expect((html.match(/আবেদনকারী কে তা বেছে নিন \(সম্পর্ক\)/g) || []).length).toBe(2);
   });
 });
+
+// Audit #12 — the Stage A diagnostic probe must NOT be in the
+// customer UI (removal decided 2026-10-30). The panel, its buttons
+// and its socket emit are all gone. The filing flow's own
+// HTTP-path status probe (probeHttpPath / HTTP_PATH_STATUS) is a
+// different thing and must stay — this test does NOT forbid the
+// word "probe" itself.
+describe('Stage A probe removed from the customer UI (audit #12)', () => {
+  test('no probe panel, buttons, output or office input', () => {
+    expect(html).not.toContain('Stage A প্রোব');
+    expect(html).not.toContain('probeBtn');
+    expect(html).not.toContain('probeOut');
+    expect(html).not.toContain('probeOfficeGeoId');
+    expect(html).not.toContain('scriptProbeBtn');
+  });
+
+  test('no Stage A socket emit or probe-only helpers', () => {
+    expect(html).not.toContain('HTTP_PROBE_STAGE_A');
+    expect(html).not.toContain('runStageAProbeBtn');
+    expect(html).not.toContain('runScriptProbeBtn');
+    expect(html).not.toContain('probeChainFromBirthplace');
+    expect(html).not.toContain('emitProbeOnce');
+  });
+
+  test('the filing flow HTTP-path probe is untouched', () => {
+    expect(html).toContain('probeHttpPath');
+    expect(html).toContain('HTTP_PATH_STATUS');
+  });
+});
