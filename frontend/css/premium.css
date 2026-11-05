@@ -788,8 +788,13 @@ tr:hover td {
 }
 .okmsg:empty { display: none; }
 
-/* Responsive Overrides */
-@media (max-width: 768px) {
+/* Responsive Overrides — audit #56: ONE tablet breakpoint, 900px.
+   The pages already reflow at 900px (wallet/login/manual-submit/
+   admin), but this global collapse was at 768px, so 769–900px was
+   half-collapsed (sidebar still shown over a collapsed layout).
+   The 16px input rule (#55) moves with the block — iOS zooms on
+   tablets too, so 16px at ≤900px is still the right guard. */
+@media (max-width: 900px) {
   /* Audit #55 — iOS auto-zooms when a focused input is under 16px. */
   .field input, .field select, .field textarea {
     font-size: 16px;

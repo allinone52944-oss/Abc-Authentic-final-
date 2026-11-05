@@ -111,7 +111,10 @@ button, .btn, .btn-add, .m-tab, .side-link, .svc2, .stat { touch-action: manipul
   transform: translateY(-1px);
 }
 .m-tab:active { transform: scale(.92); }
-@media (max-width: 768px) {
+/* Audit #56 — tabbar appears at the 900px tablet breakpoint (was
+   768px); the body padding moves with it, or content hides under
+   the tabbar in the 769–900px band. */
+@media (max-width: 900px) {
   .m-tabbar { display: flex; }
   body { padding-bottom: 76px; } /* room for fixed tabbar */
 }
@@ -163,7 +166,8 @@ button, .btn, .btn-add, .m-tab, .side-link, .svc2, .stat { touch-action: manipul
   70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
   100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
-@media (max-width: 768px) {
+/* Audit #56 — the FAB lifts above the tabbar wherever the tabbar shows. */
+@media (max-width: 900px) {
   .wa-fab {
     bottom: 84px;
     right: 16px;

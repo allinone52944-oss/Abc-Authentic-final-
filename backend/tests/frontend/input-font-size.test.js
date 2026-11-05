@@ -7,9 +7,11 @@ const ROOT = path.join(__dirname, '..', '..', '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
 describe('form inputs are 16px at the mobile breakpoint (audit #55)', () => {
-  test('premium.css sets 16px for .field inputs/selects/textareas ≤768px', () => {
+  test('premium.css sets 16px for .field inputs/selects/textareas at the tablet breakpoint', () => {
     const css = read('frontend/css/premium.css');
-    const mq = css.slice(css.indexOf('@media (max-width: 768px)'));
+    // Audit #56 moved the responsive block from 768px to the 900px
+    // tablet breakpoint; the 16px guard moves with it.
+    const mq = css.slice(css.indexOf('@media (max-width: 900px)'));
     expect(mq).toContain('.field input, .field select, .field textarea');
     expect(mq).toContain('font-size: 16px;');
   });
