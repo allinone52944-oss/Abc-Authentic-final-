@@ -1018,3 +1018,33 @@ describe('bdris-apply.html — 381–760px band (audit #59)', () => {
     expect(html).toContain('.stepper{display:flex; gap:8px; margin-bottom:20px; overflow-x:auto;');
   });
 });
+
+describe('audit #65 — no blocking head script, geo loads lazily', () => {
+  test('socket.io is NOT in <head> (it blocked parsing/paint)', () => {
+    const head = html.slice(0, html.indexOf('</head>'));
+    expect(head).not.toContain('socket.io.min.js');
+    expect(html).toContain('<script src="/js/socket.io.min.js"></script>');
+  });
+
+  test('socket.io still loads BEFORE the main script reads io synchronously', () => {
+    // A bare `defer` would break the live socket: the main script reads
+    // `typeof io` at parse time and registers handlers on that one object,
+    // so a deferred io would leave the page on the stub socket forever.
+    // The tag sits just before the main script instead — same order, head unblocked.
+    expect(html.indexOf('socket.io.min.js')).toBeLessThan(html.indexOf('const socket ='));
+    expect(html).toContain("const socket = (typeof io !== 'undefined')");
+  });
+
+  test('bd-geo.json is NOT preloaded at page load', () => {
+    // No bare top-level loadGeoData() call remains; the fetch starts on
+    // first use (warmFromData / geoLoad await it before staticGeoOpts).
+    const bare = html.split('\n').some((l) => /^\s*loadGeoData\(\);\s*$/.test(l));
+    expect(bare).toBe(false);
+    expect(html).not.toContain('পেজ খুলতেই ব্যাকগ্রাউন্ডে preload');
+  });
+
+  test('the address step still awaits the geo load before using it', () => {
+    expect(html).toContain('await loadGeoData()');
+    expect(html).toContain('let opts = staticGeoOpts(k, data)');
+  });
+});

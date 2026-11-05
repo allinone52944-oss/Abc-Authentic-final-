@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="bn">
 <head>
-<script src="/js/socket.io.min.js"></script>
 <script>
 /* DARK-MODE PASSWORD FIX: Chromium paints type=password via UA !important
    (beats author CSS). Swap to text+disc on focus/input (keeps
@@ -464,6 +463,7 @@ input.bad, select.bad{border-color:var(--err); box-shadow:0 0 0 3px rgba(251,113
     বিডিআরআইএস-এ আবেদন <span class="fl">•</span> কোনো অতিরিক্ত ফি নেই
   </div>
 </div>
+<script src="/js/socket.io.min.js"></script>
 <script>
 /* ═══════════ state & helpers ═══════════ */
 /* ═══════════ token refresh + socket reconnect (2026-10-15) ═══════════
@@ -739,8 +739,12 @@ function loadGeoData() {
   }
   return GEO_PROM;
 }
-// পেজ খুলতেই ব্যাকগ্রাউন্ডে preload — ঠিকানার ধাপে গেলে আর অপেক্ষা নেই
-loadGeoData();
+// Audit #65 — NO page-load preload: bd-geo.json (151KB) now loads
+// lazily, on first use. Every address-step entry already awaits it
+// (warmFromData / geoLoad call loadGeoData() before staticGeoOpts),
+// so the cascade still fills — the first address-step open waits for
+// the one cached fetch instead of every page visit paying for it.
+// (The old preload comment lived here; the call itself is gone.)
 function geoNorm(s) {
   return String(s || '')
     .replace(/।/g, '').replace(/[‌‍]/g, '')
