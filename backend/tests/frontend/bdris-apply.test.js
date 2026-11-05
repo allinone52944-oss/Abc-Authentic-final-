@@ -672,7 +672,7 @@ describe('PARENT-VERIFY cycle (2026-10-31): real verify outcome reaches the step
     expect(html).toMatch(/const badge = \(v, r\)/);
     expect(html).toMatch(/v === false \? '<span class="vbadge warn">✖ যাচাই হয়নি<\/span>' \+ \(r \? '<div class="vreason">' \+ esc\(r\) \+ '<\/div>' : ''\)/);
     expect(html).toMatch(/person\('father', f, vf, rf\) \+ person\('mother', m, vm, rm\)/);
-    expect(html).toMatch(/\.vreason\{font-size:12px; color:var\(--warn\)/);
+    expect(html).toMatch(/\.vreason\{font-size:12px; color:var\(--status-warn\)/);
   });
 
   test('the deliberately-skipped family advance has its own badge case (not pending)', () => {
@@ -1106,5 +1106,49 @@ describe('audit #79 — message-less errors name the type, time and support line
 
   test('a server message still wins untouched (no enrichment when a message exists)', () => {
     expect(html).toContain('d.message || noMsgError');
+  });
+});
+
+describe('audit #80 — filing page speaks the premium token vocabulary', () => {
+  const PREMIUM = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'frontend', 'css', 'premium.css'), 'utf8');
+
+  function rootBlock(text) {
+    const m = text.match(/:root\s*\{([\s\S]*?)\}/);
+    expect(m).toBeTruthy();
+    return m[1];
+  }
+
+  function tokenValue(root, name) {
+    const m = root.match(new RegExp(name.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '\\s*:\\s*([^;]+);'));
+    return m ? m[1].trim() : null;
+  }
+
+  test('no old token names are used or defined (var(--gold) was blue, not gold)', () => {
+    for (const old of ['--gold-deep', '--gold', '--brand', '--line2', '--line', '--card2', '--paper', '--card', '--bg', '--ink', '--muted', '--ok', '--warn', '--err', '--info', '--r']) {
+      expect(html).not.toContain('var(' + old + ')');
+      expect(rootBlock(html)).not.toContain(old + ':');
+    }
+  });
+
+  test('the page :root values equal premium.css values for every shared token', () => {
+    const pageRoot = rootBlock(html);
+    const premiumRoot = rootBlock(PREMIUM);
+    for (const name of ['--bg-page', '--bg-surface', '--bg-subtle', '--primary-100', '--primary-500', '--primary-600', '--primary-700', '--primary-800', '--primary-900', '--text-main', '--text-muted', '--text-dim', '--text-light', '--border-light', '--status-success', '--status-warn', '--status-danger', '--status-info', '--r-lg']) {
+      expect(tokenValue(pageRoot, name)).toBe(tokenValue(premiumRoot, name));
+    }
+  });
+
+  test('no brand hex lives outside :root (values belong to the tokens)', () => {
+    const withoutRoot = html.replace(/:root\{[\s\S]*?\}/, '');
+    for (const hex of ['#2563eb', '#1d4ed8', '#1e3a8a', '#1e40af', '#3b82f6', '#f8fafc', '#f1f5f9', '#ffffff', '#0f172a', '#475569', '#e2e8f0', '#10b981', '#f59e0b', '#ef4444', '#0284c7', '#94a3b8', '#dbeafe']) {
+      expect(withoutRoot).not.toContain(hex);
+    }
+    // #0f2a5c is the one exception: the hero gradient navy has no
+    // premium token, so it stays hardcoded (flagged in the commit).
+    expect(withoutRoot).toContain('#0f2a5c');
+  });
+
+  test('--rlg stays 22px (premium --r-xl is 20px — renaming would change the radius)', () => {
+    expect(tokenValue(rootBlock(html), '--rlg')).toBe('22px');
   });
 });
