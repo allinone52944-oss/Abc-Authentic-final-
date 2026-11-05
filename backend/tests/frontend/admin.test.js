@@ -5,6 +5,8 @@
  * be unit-tested without a browser. The genuinely pure/testable units are
  * `esc`, `bn`, `urlBase64ToUint8Array`, and `modal`/`closeModal` — but they
  * are NOT exported (only window.Adm*, window.VoiceAlert, window.PushNotify).
+ * Audit #69 moved urlBase64ToUint8Array (with VoiceAlert/PushNotify)
+ * into frontend/js/admin-notify.js; loadHelpers reads it from there.
  *
  * Approach (no source modification): read the real file, extract the exact
  * function definitions by brace-matching, and evaluate them with a stubbed
@@ -19,6 +21,11 @@ const path = require('path');
 
 const ADMIN_SRC = fs.readFileSync(
   path.join(__dirname, '../../../frontend/js/admin.js'),
+  'utf8',
+);
+// Audit #69 — notify chunk (VoiceAlert + PushNotify + admToast).
+const ADMIN_NOTIFY_SRC = fs.readFileSync(
+  path.join(__dirname, '../../../frontend/js/admin-notify.js'),
   'utf8',
 );
 
@@ -85,8 +92,9 @@ function makeDocument() {
 }
 
 function loadHelpers(doc) {
-  const names = ['esc', 'bn', 'closeModal', 'modal', 'urlBase64ToUint8Array'];
-  const code = names.map((n) => extractFn(ADMIN_SRC, n)).join('\n');
+  const names = ['esc', 'bn', 'closeModal', 'modal'];
+  const code = names.map((n) => extractFn(ADMIN_SRC, n)).join('\n')
+    + '\n' + extractFn(ADMIN_NOTIFY_SRC, 'urlBase64ToUint8Array');
   const factory = new Function('document', code + '\nreturn { esc, bn, modal, closeModal, urlBase64ToUint8Array };');
   return factory(doc);
 }
@@ -286,6 +294,7 @@ describe('admin.js full-script smoke test', () => {
       body: { appendChild() {} },
       head: { appendChild() {} },
     };
+    require('../../../frontend/js/admin-notify.js');
     require('../../../frontend/js/admin.js');
   });
 
@@ -383,8 +392,12 @@ describe('init() — selective redirect on /auth/me failure (static guard)', () 
  * Static tests on frontend/js/admin.js: verify button + handler + status badge.
  */
 const ADMIN_JS = path.join(__dirname, '..', '..', '..', 'frontend', 'js', 'admin.js');
+const ADMIN_NOTIFY_JS = path.join(__dirname, '..', '..', '..', 'frontend', 'js', 'admin-notify.js');
 let ajs;
-beforeAll(() => { ajs = fs.readFileSync(ADMIN_JS, 'utf8'); });
+beforeAll(() => {
+  // Audit #69 — the VoiceAlert chime code lives in admin-notify.js now.
+  ajs = fs.readFileSync(ADMIN_JS, 'utf8') + fs.readFileSync(ADMIN_NOTIFY_JS, 'utf8');
+});
 
 describe('admin one-click email verify (2026-10-15)', () => {
   test('edit modal shows verify button for unverified users only', () => {

@@ -271,7 +271,7 @@ describe('sidebar-unified-orders: one orders section, bulk delete, userTotal', (
     expect(ADMIN_HTML).not.toContain('data-t="bdrisApps"');
     expect(ADMIN_HTML).not.toContain('data-t="engineJobs"');
     expect(ADMIN_HTML).not.toContain('data-t="autoData"');
-    expect(ADMIN_HTML).toContain('/js/admin.js?v=88');
+    expect(ADMIN_HTML).toContain('/js/admin.js?v=89'); // Audit #69 — version bumped after the notify split
   });
   test('admin engine dropdowns (create + edit) include land-khatian', () => {
     expect(ADMIN_SRC.split('value="land-khatian"').length - 1).toBeGreaterThanOrEqual(2);
@@ -309,10 +309,13 @@ describe('sidebar-unified-orders: one orders section, bulk delete, userTotal', (
   });
   test('no new "auto order" wording (one pre-existing toast comment only)', () => {
     // The unified diff itself adds zero occurrences; the single
-    // occurrence in the whole file is the pre-existing, untouched
-    // stats-toast comment ("a new AUTO order must not be hidden").
-    // Pinning the count at 1 fails if any new one is introduced.
-    expect((ADMIN_SRC.match(/auto order/gi) || []).length).toBe(1);
-    expect(ADMIN_SRC).toContain('a new AUTO order');
+    // occurrence is the pre-existing, untouched stats-toast comment
+    // ("a new AUTO order must not be hidden"). Audit #69 moved that
+    // comment with the notify chunk into admin-notify.js, so the
+    // count runs across both files. Pinning the count at 1 fails if
+    // any new one is introduced.
+    const ADMIN_NOTIFY_SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'frontend', 'js', 'admin-notify.js'), 'utf8');
+    expect(((ADMIN_SRC + ADMIN_NOTIFY_SRC).match(/auto order/gi) || []).length).toBe(1);
+    expect(ADMIN_NOTIFY_SRC).toContain('a new AUTO order');
   });
 });

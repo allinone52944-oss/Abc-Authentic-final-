@@ -609,7 +609,7 @@
      display:block card conversion without per-cell labels would stack
      values with no labels, which is worse than scroll for admin work;
      (2) a proper card-view needs per-table data-label work across
-     9 tables in admin.js (372K) — a large refactor of the admin's
+     9 tables in admin.js (353K after the #69 split) — a large refactor of the admin's
      core working surface, not a polish item; converting one table
      would be inconsistent. The scroll already works: every table
      sits in an overflow-x:auto wrapper and the first (identity)
@@ -1739,7 +1739,8 @@
 
 <script src="/js/app.js?v=18"></script>
 <script src="/banners/render.js?v=6"></script>
-<script src="/js/admin.js?v=88"></script>
+<script src="/js/admin-notify.js?v=1"></script>
+<script src="/js/admin.js?v=89"></script>
 <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
