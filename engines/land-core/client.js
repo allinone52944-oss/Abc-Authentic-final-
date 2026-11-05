@@ -201,13 +201,32 @@ async function mapPreview(sheetId, retried) {
 }
 
 // ---------- helpers ----------
-/** Owner-name match: whitespace-insensitive substring, both ways light-normalised. */
+/** Owner-name match: whole-token match inside ONE owner entry.
+ * The owners string is a comma-separated list of full names. A query
+ * matches when ONE owner's name contains EVERY query word as a whole
+ * word (order-free). This replaces the old one-way substring check
+ * (a.includes(q)), which matched inside words ('করিম' in 'আকরিম',
+ * 'আল' in 'আলী') and across the comma between two owners
+ * ('আলী, রহিম'). A single-word query still finds its owner
+ * ('আকবর' in 'আকবর আলী') — that is whole-token search, not a
+ * substring accident. */
+function _ownerTokens(s) {
+  return String(s || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+}
+function ownerMatchDetail(owners, name) {
+  const qTokens = _ownerTokens(name);
+  if (!qTokens.length) return { match: false, matchedOwner: null, matchedTokens: [] };
+  const entries = String(owners || '').split(',').map((e) => e.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  for (const entry of entries) {
+    const eTokens = _ownerTokens(entry);
+    if (qTokens.every((t) => eTokens.includes(t))) {
+      return { match: true, matchedOwner: entry, matchedTokens: qTokens };
+    }
+  }
+  return { match: false, matchedOwner: null, matchedTokens: [] };
+}
 function ownerMatches(owners, name) {
-  const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
-  const a = norm(owners);
-  const q = norm(name);
-  if (!a || !q) return false;
-  return a.includes(q);
+  return ownerMatchDetail(owners, name).match;
 }
 
 /** Sum TOTAL_LAND strings like '0.0544' — returns a number (acres). */
@@ -224,6 +243,6 @@ module.exports = {
   divisions, districts, upazilas, surveys, upazilaSurveys, jlNumbers,
   indexList, indexByKhatianNo, detail, halSabek,
   mapJlNumbers, mapSheets, mapPreview,
-  ownerMatches, sumLand,
+  ownerMatches, ownerMatchDetail, sumLand,
   _resetToken: () => { _tok = { access: '', refresh: '', at: 0 }; },
 };

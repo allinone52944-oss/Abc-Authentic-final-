@@ -11,7 +11,19 @@ jest.mock('../../../engines/land-core/client', () => ({
   surveys: jest.fn(), upazilaSurveys: jest.fn(), jlNumbers: jest.fn(),
   indexList: jest.fn(), indexByKhatianNo: jest.fn(), detail: jest.fn(),
   halSabek: jest.fn(),
-  ownerMatches: (owners, name) => String(owners || '').includes(String(name || '').trim()),
+  // Test double mirrors the real ownerMatches: whole-token match
+  // inside ONE comma-separated owner entry (audit #7), not a raw
+  // substring — 'দুই' still finds 'পরীক্ষক দুই', 'আল' must not
+  // find 'আলী'.
+  ownerMatches: (owners, name) => {
+    const toks = (s) => String(s || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    const q = toks(name);
+    if (!q.length) return false;
+    return String(owners || '').split(',').some((e) => {
+      const et = toks(e);
+      return q.every((t) => et.includes(t));
+    });
+  },
   sumLand: (ds) => Math.round(ds.reduce((a, d) => a + (parseFloat(d.TOTAL_LAND) || 0), 0) * 10000) / 10000,
 }));
 

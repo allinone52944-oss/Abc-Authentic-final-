@@ -20,6 +20,36 @@ describe('ownerMatches', () => {
     expect(client.ownerMatches('আকবর আলী', '')).toBe(false);
     expect(client.ownerMatches(null, null)).toBe(false);
   });
+  test('single word is a whole-token match, not a substring accident', () => {
+    expect(client.ownerMatches('আকবর আলী', 'আকবর')).toBe(true);
+    expect(client.ownerMatches('পরীক্ষক দুই', 'দুই')).toBe(true);
+  });
+  test('partial word never matches (audit #7)', () => {
+    expect(client.ownerMatches('আকবর আলী', 'আল')).toBe(false);
+    expect(client.ownerMatches('আকবর আলী', 'আক')).toBe(false);
+  });
+  test('substring inside a different word never matches', () => {
+    expect(client.ownerMatches('আকরিম উদ্দিন', 'করিম')).toBe(false);
+  });
+  test('query spanning two owners never matches', () => {
+    expect(client.ownerMatches('আকবর আলী, রহিম উদ্দিন', 'আলী, রহিম')).toBe(false);
+    expect(client.ownerMatches('আকবর আলী, রহিম উদ্দিন', 'আলী রহিম')).toBe(false);
+  });
+  test('token order does not matter; extra query word blocks', () => {
+    expect(client.ownerMatches('রহিম উদ্দিন', 'উদ্দিন রহিম')).toBe(true);
+    expect(client.ownerMatches('আকবর আলী', 'আকবর আলী মিয়া')).toBe(false);
+  });
+});
+
+describe('ownerMatchDetail', () => {
+  test('names the matched owner entry and the matched tokens', () => {
+    const d = client.ownerMatchDetail('আকবর আলী, রহিম উদ্দিন', 'রহিম উদ্দিন');
+    expect(d).toEqual({ match: true, matchedOwner: 'রহিম উদ্দিন', matchedTokens: ['রহিম', 'উদ্দিন'] });
+  });
+  test('non-match names no owner', () => {
+    const d = client.ownerMatchDetail('আকবর আলী', 'করিম শেখ');
+    expect(d).toEqual({ match: false, matchedOwner: null, matchedTokens: [] });
+  });
 });
 
 describe('sumLand', () => {

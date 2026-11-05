@@ -143,6 +143,7 @@ function buildLandReportPdf({ kind, ref, when, area, records, totalLand, verdict
           y += 20;
           row('  দাবি', v.claim == null || v.claim === '' ? '—' : v.claim, { h: 20 });
           row('  রেকর্ড', v.record == null || v.record === '' ? '—' : v.record, { h: 22 });
+          if (v.basis) row('  মিলের ভিত্তি', v.basis, { h: 22 });
         }
         if (claimNote) {
           ensure(30);

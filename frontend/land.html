@@ -1013,7 +1013,7 @@
     if (r.verdicts) {
       h += '<div class="rec"><div class="rec-hd"><div class="seal">✓</div><h4 style="color:#0f172a">যাচাইয়ের ফল</h4></div>';
       r.verdicts.forEach((v) => {
-        h += '<div class="verdict"><span>' + esc(v.label) + ': দাবি ' + esc(bn(v.claim)) + ' · রেকর্ড ' + esc(bn(v.record)) + '</span>' +
+        h += '<div class="verdict"><span>' + esc(v.label) + ': দাবি ' + esc(bn(v.claim)) + ' · রেকর্ড ' + esc(bn(v.record)) + (v.basis ? ' · ' + esc(v.basis) : '') + '</span>' +
           '<span class="m" style="color:' + (v.match ? '#16a34a' : '#dc2626') + '">' + (v.match ? 'মিলেছে' : 'মেলেনি') + '</span></div>';
       });
       h += '</div>';

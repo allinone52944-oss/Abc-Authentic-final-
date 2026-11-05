@@ -479,7 +479,20 @@ router.post('/verify', requireAuth, async (req, res) => {
     if (!det) return notFound(req, res, 'verify', chk, idem, area);
     const verdicts = [];
     if (cOwner) {
-      verdicts.push({ label: 'মালিকের নাম', claim: cOwner, record: det.OWNERS || '—', match: client.ownerMatches(det.OWNERS, cOwner) });
+      // AUDIT #7: the verdict carries the match BASIS — which single
+      // owner entry matched (or that none did) — so the report shows
+      // HOW the name matched, not just মিলেছে/মেলেনি. The detail
+      // helper is preferred; a boolean-only client (old mocks) falls
+      // back to a generic basis instead of crashing.
+      const om = typeof client.ownerMatchDetail === 'function'
+        ? client.ownerMatchDetail(det.OWNERS, cOwner)
+        : { match: client.ownerMatches(det.OWNERS, cOwner), matchedOwner: null };
+      verdicts.push({
+        label: 'মালিকের নাম', claim: cOwner, record: det.OWNERS || '—', match: om.match,
+        basis: om.match
+          ? (om.matchedOwner ? 'মিলেছে: "' + om.matchedOwner + '"' : 'মিলেছে')
+          : 'কোনো একক মালিকের নামে সব শব্দ মেলেনি',
+      });
     }
     if (cDag) {
       const dags = String(det.DAGS || '').split(',').map((s) => s.trim().replace('...', ''));

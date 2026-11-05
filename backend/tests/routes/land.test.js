@@ -6,14 +6,29 @@
 //   - insufficient balance blocks BEFORE any portal lookup
 //   - an idempotency_key replay never looks up or charges twice
 jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
-jest.mock('../../../engines/land-core/client', () => ({
-  divisions: jest.fn(), districts: jest.fn(), upazilas: jest.fn(),
-  surveys: jest.fn(), upazilaSurveys: jest.fn(), jlNumbers: jest.fn(),
-  indexList: jest.fn(), indexByKhatianNo: jest.fn(), detail: jest.fn(),
-  halSabek: jest.fn(),
-  ownerMatches: (owners, name) => String(owners || '').includes(String(name || '').trim()),
-  sumLand: (ds) => Math.round(ds.reduce((a, d) => a + (parseFloat(d.TOTAL_LAND) || 0), 0) * 10000) / 10000,
-}));
+jest.mock('../../../engines/land-core/client', () => {
+  // Test double mirrors the real client: whole-token match inside
+  // ONE comma-separated owner entry (audit #7), not a raw substring.
+  const toks = (s) => String(s || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  const detail = (owners, name) => {
+    const q = toks(name);
+    if (!q.length) return { match: false, matchedOwner: null, matchedTokens: [] };
+    const entry = String(owners || '').split(',').map((e) => e.replace(/\s+/g, ' ').trim())
+      .find((e) => { const et = toks(e); return q.every((t) => et.includes(t)); });
+    return entry
+      ? { match: true, matchedOwner: entry, matchedTokens: q }
+      : { match: false, matchedOwner: null, matchedTokens: [] };
+  };
+  return {
+    divisions: jest.fn(), districts: jest.fn(), upazilas: jest.fn(),
+    surveys: jest.fn(), upazilaSurveys: jest.fn(), jlNumbers: jest.fn(),
+    indexList: jest.fn(), indexByKhatianNo: jest.fn(), detail: jest.fn(),
+    halSabek: jest.fn(),
+    ownerMatches: (owners, name) => detail(owners, name).match,
+    ownerMatchDetail: detail,
+    sumLand: (ds) => Math.round(ds.reduce((a, d) => a + (parseFloat(d.TOTAL_LAND) || 0), 0) * 10000) / 10000,
+  };
+});
 jest.mock('../../utils/whatsapp', () => ({
   notifyServiceCompleted: jest.fn().mockResolvedValue({ ok: true }),
   notifyServiceFailed: jest.fn().mockResolvedValue({ ok: true }),
@@ -255,6 +270,19 @@ describe('POST /api/land/verify', () => {
     expect(r.body).toMatchObject({ ok: true, charged: 100 });
     expect(r.body.verdicts).toHaveLength(3);
     expect(r.body.verdicts.every((v) => v.match)).toBe(true);
+    // Audit #7: the owner verdict shows the match basis.
+    expect(r.body.verdicts[0]).toMatchObject({ label: 'মালিকের নাম', match: true });
+    expect(r.body.verdicts[0].basis).toMatch('আকবর আলী');
+  });
+
+  test('owner mismatch verdict carries a no-match basis (audit #7)', async () => {
+    portalFound();
+    const r = await withUser(request(app()).post('/api/land/verify'))
+      .send({ ...AREA, khatian_no: '8', claim: { owner: 'অন্য কেউ' }, idempotency_key: 't-verify-nomatch' })
+      .expect(200);
+    expect(r.body.verdicts).toHaveLength(1);
+    expect(r.body.verdicts[0].match).toBe(false);
+    expect(r.body.verdicts[0].basis).toMatch('মেলেনি');
   });
 
   test('Bengali-digit claims are normalised (dag + land match)', async () => {
