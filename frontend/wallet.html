@@ -880,6 +880,11 @@ function gwStopAll(){
   gw.pollId = null;
 }
 function gwStopPolling(){ if (gw && gw.pollId) { clearInterval(gw.pollId); gw.pollId = null; } }
+// Audit #18 — the session timer must stop when the session is
+// done: the success/reject paths used to stop only polling, so
+// the 10-minute timer kept running and gwTick expired the session
+// on top of the success card.
+function gwStopTimer(){ if (gw && gw.timerId) { clearInterval(gw.timerId); gw.timerId = null; } }
 
 function gwRenderTimeline(active){
   const steps = [['pay', '💳 পেমেন্ট'], ['sms', '📩 SMS'], ['match', '🔍 ম্যাচ'], ['balance', '💰 ব্যালেন্স']];
@@ -932,7 +937,10 @@ function gwStartSession(){
 }
 
 function gwTick(){
-  if (!gw) return;
+  // Audit #18 — a done session never expires: even if some path
+  // sets gw.done without stopping the timer, the tick must not
+  // turn a success/reject card into the expired view.
+  if (!gw || gw.done) return;
   const rem = Math.max(0, Math.round((gw.endsAt - Date.now()) / 1000));
   document.getElementById('gwTimerText').textContent = gwFmtTimer(rem);
   const ring = document.getElementById('gwRingFg');
@@ -1045,6 +1053,7 @@ async function gwAutoMatch(){
     if (tx.status === 'approved') {
       gw.done = true;
       gwStopPolling();
+      gwStopTimer();
       const okLoad = await loadWallet();
       const balText = okLoad && document.getElementById('bal') ? document.getElementById('bal').textContent : '';
       stateEl.innerHTML = '<div class="gw-state success"><b>✅ সফল!</b> ৳' + bn(tx.amount) + ' আপনার ওয়ালেটে যোগ হয়েছে।' +
@@ -1085,6 +1094,7 @@ async function gwPollOnce(){
     if (tx.status === 'approved') {
       gw.done = true;
       gwStopPolling();
+      gwStopTimer();
       const okLoad = await loadWallet();
       const balText = okLoad && document.getElementById('bal') ? document.getElementById('bal').textContent : '';
       document.getElementById('gwState').innerHTML = '<div class="gw-state success"><b>✅ সফল!</b> ৳' + bn(tx.amount) + ' আপনার ওয়ালেটে যোগ হয়েছে।' +
@@ -1093,6 +1103,7 @@ async function gwPollOnce(){
     } else if (tx.status === 'rejected') {
       gw.done = true;
       gwStopPolling();
+      gwStopTimer();
       document.getElementById('gwState').innerHTML = '<div class="gw-state failed"><b>❌ রিচার্জ সম্পন্ন হয়নি।</b><br>' +
         'এডমিন যাচাইয়ে অনুরোধটি বাতিল হয়েছে। নতুন সেশন বা ম্যানুয়াল ফর্মে আবার চেষ্টা করুন।</div>';
       gwRenderTimeline('match');

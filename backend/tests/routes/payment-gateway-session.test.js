@@ -230,6 +230,21 @@ describe('frontend/wallet.html — gateway session invariants', () => {
     expect(fnSlice(src, 'function gwStopAll(')).toContain('clearInterval');
   });
 
+  test('audit #18 — a done session never expires: the timer stops when done', () => {
+    const src = walletHtml();
+    // gwTick bails out on a done session, so expiry can never fire
+    // on top of a success/reject card even if a path forgets to
+    // stop the timer.
+    const tick = fnSlice(src, 'function gwTick(');
+    expect(tick).toContain('if (!gw || gw.done) return;');
+    // every gw.done = true site stops the timer as well as polling
+    const doneSites = src.split('gw.done = true;').length - 1;
+    expect(doneSites).toBe(3);
+    const timerStops = (src.match(/gwStopTimer\(\);/g) || []).length;
+    expect(timerStops).toBeGreaterThanOrEqual(3);
+    expect(fnSlice(src, 'function gwStopTimer(')).toContain('clearInterval(gw.timerId)');
+  });
+
   test('session timer is 10 minutes with a last-minute warning', () => {
     const src = walletHtml();
     expect(src).toContain('GW_SESSION_SECONDS = 600');
