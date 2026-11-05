@@ -790,6 +790,10 @@ tr:hover td {
 
 /* Responsive Overrides */
 @media (max-width: 768px) {
+  /* Audit #55 — iOS auto-zooms when a focused input is under 16px. */
+  .field input, .field select, .field textarea {
+    font-size: 16px;
+  }
   html, body {
     overflow-x: hidden;
   }
