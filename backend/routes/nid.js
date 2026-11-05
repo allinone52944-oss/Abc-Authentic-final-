@@ -11,6 +11,7 @@ const { requireAuth } = require('../auth');
 const { safeLog, uploadMiddleware, safeJsonArray } = require('../security');
 const db = require('../db');
 const serviceCredits = require('../lib/serviceCredits');
+const { alertMissingPrice } = require('../lib/missingPriceAlert');
 const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
 const nidAdapter = require('../../engines/nid-replica/adapter');
@@ -34,7 +35,13 @@ async function getNidServicePrice(userId) {
   const r = await db.query(
     `SELECT id, price FROM services WHERE engine_id = 'nid-replica' AND status = 'active' LIMIT 1`
   );
-  if (!r.rows.length) return { allowed: true, price: 0, serviceId: null };
+  if (!r.rows.length) {
+    // Audit #17 — no active price row: the service runs free.
+    // Price 0 is the design decision, so the gate stays open;
+    // the admin is alerted (throttled, once per engine per hour).
+    alertMissingPrice(db, 'nid-replica');
+    return { allowed: true, price: 0, serviceId: null };
+  }
   const service = r.rows[0];
   const serviceId = service.id;
   const basePrice = Number(service.price) || 0;

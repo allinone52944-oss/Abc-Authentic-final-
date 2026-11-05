@@ -176,7 +176,11 @@ describe('POST /api/nid-engine/build', () => {
     expect(r.body.error).toBe('JOB_NOT_FOUND');
     // a stale job id is a session error, not a service failure
     expect(wa.notifyServiceFailed).not.toHaveBeenCalled();
-    expect(push.notifyAdmins).not.toHaveBeenCalled();
+    // the only admin push here is the missing-price alert
+    // (audit #17): this setup has no services row, so the price
+    // lookup alerts once — the job error itself notifies no one
+    expect(push.notifyAdmins).toHaveBeenCalledTimes(1);
+    expect(push.notifyAdmins.mock.calls[0][1]).toContain('দাম ছাড়া সেবা চলছে');
   });
 
   test('NOT_YOUR_JOB → 403', async () => {

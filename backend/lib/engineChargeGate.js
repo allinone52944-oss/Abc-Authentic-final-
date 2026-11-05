@@ -58,6 +58,7 @@ const crypto = require('crypto');
 const { mintRenderToken, verifyRenderToken, RENDER_TOKEN_HEADER } = require('../../engines/shared/render-token');
 
 const dbModule = require('../db');
+const { alertMissingPrice } = require('./missingPriceAlert');
 const serviceCreditsModule = require('./serviceCredits');
 
 // Paths (relative to the engine mount) and their gate policy.
@@ -105,7 +106,14 @@ async function getEngineServicePrice(db, engineId, userId) {
     'SELECT id, price FROM services WHERE engine_id = $1 AND status = \'active\' LIMIT 1',
     [engineId]
   );
-  if (!r.rows.length) return { allowed: true, price: 0, serviceId: null };
+  if (!r.rows.length) {
+    // Audit #17 — no active price row: the service runs free.
+    // Price 0 is the design decision, so the gate stays open;
+    // the admin is alerted (throttled, once per engine per hour)
+    // instead, so a wrong engine_id cannot stay free silently.
+    alertMissingPrice(db, engineId);
+    return { allowed: true, price: 0, serviceId: null };
+  }
   const serviceId = r.rows[0].id;
   const basePrice = Number(r.rows[0].price) || 0;
   const ov = await db.query(
