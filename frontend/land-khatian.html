@@ -248,7 +248,10 @@
       c.textContent = chargeText;
       e.appendChild(c);
     }
-    appendReceiptAndHistory(e, receiptUrl);
+    // Audit R1 — the failure receipt is NOT offered here: it
+    // still lands in History (backend), and the error message +
+    // charge line above is the informing. Only the history link.
+    appendDownloadAndHistory(e, null);
     e.classList.add('on');
     $('okBox').classList.remove('on');
   }
@@ -265,11 +268,15 @@
       c.textContent = chargeText;
       o.appendChild(c);
     }
-    appendReceiptAndHistory(o, receiptUrl);
+    appendDownloadAndHistory(o, receiptUrl);
     o.classList.add('on');
     $('errBox').classList.remove('on');
   }
-  function appendReceiptAndHistory(box, receiptUrl) {
+  // Audit R1 — renamed: this appends the DELIVERABLE download
+  // (the khatian summary report on success) plus the history
+  // link. On failure the caller passes null, so no download is
+  // offered — the failure receipt lives in History only.
+  function appendDownloadAndHistory(box, receiptUrl) {
     if (receiptUrl) {
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -287,7 +294,7 @@
     hist.appendChild(a);
     box.appendChild(hist);
   }
-  // Receipts live behind login (owner-only documents endpoint):
+  // Documents live behind login (owner-only documents endpoint):
   // a plain <a href> sends no login header, so download the
   // History way: authenticated fetch → blob → save.
   async function dlPdf(url) {

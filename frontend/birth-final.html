@@ -163,22 +163,6 @@ function busy(id,on,txt){
   if(on){b.dataset.t=b.innerHTML;b.innerHTML='<span class="spin"></span>'+(txt||'অপেক্ষা করুন…');b.disabled=true;}
   else{b.innerHTML=b.dataset.t||b.innerHTML;b.disabled=false;}
 }
-// ব্যর্থতার রসিদ owner-only endpoint-এ থাকে (header auth): plain <a href>
-// login header পাঠায় না, সার্ভার {"error":"NO_TOKEN"} দেয় — History-র
-// পদ্ধতিতে ABC.api fetch → blob → save। (ABC.api নিজে '/api' বসায়।)
-const _qesc=(s)=>String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-async function dlReceipt(url,name){
-  try{
-    const r=await ABC.api(String(url).replace(/^\/api/,''));
-    if(!r.ok){showErr('❌ ডাউনলোড ব্যর্থ হয়েছে — আবার চেষ্টা করুন।');return;}
-    const blob=await r.blob();
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
-    a.download=name||'receipt.pdf';
-    document.body.appendChild(a);a.click();
-    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);
-  }catch(e){showErr('❌ ডাউনলোড ব্যর্থ হয়েছে — আবার চেষ্টা করুন।');}
-}
 
 async function step1(retry){
   const brn=document.getElementById('brn').value.trim();
@@ -269,8 +253,9 @@ async function step3(){
 }
 // তৈরি PDF-এর এক কপি সার্ভারে জমা হয় — ডেলিভারি ফাইল হিসেবে
 // গ্রাহকের ইতিহাসে থেকে যায়, যেকোনো ডিভাইস থেকে আবার নামানো যায়।
-// যাচাই ব্যর্থ হলে সার্ভারে রিপোর্ট যায় — ব্যর্থতার রসিদ
-// (ইতিহাসে থেকে যায়), WhatsApp বার্তা ও অ্যাডমিন push যায়।
+// যাচাই ব্যর্থ হলে সার্ভারে রিপোর্ট যায় — রেকর্ড ইতিহাসে
+// থেকে যায়, WhatsApp বার্তা ও অ্যাডমিন push যায়। (Audit R1:
+// ব্যর্থতার রসিদ-ডাউনলোড বোতাম নেই — শুধু জানানো হয়।)
 // একই সেশনে পরে সফল হলে সার্ভার ব্যর্থ রেকর্ডটি সরিয়ে দেয়।
 function reportEngineFailure(engineId, refNo, reason){
   try{
@@ -281,7 +266,7 @@ function reportEngineFailure(engineId, refNo, reason){
     })}).then(r=>r.json()).then(d=>{
       if(d&&d.receipt){
         const box=document.getElementById('failReceipt');
-        if(box){box.style.display='block';box.innerHTML='<button type="button" onclick="dlReceipt(\'+_qesc(d.receipt)+\',\'cert-receipt-failed.pdf\')" style="display:inline-block;padding:9px 16px;border:1px solid #d6c9ae;border-radius:8px;background:#fff7ed;color:#9a3412;font-weight:600;text-decoration:none;cursor:pointer;">📄 ব্যর্থতার রসিদ ডাউনলোড</button> <span style="color:#6b7280;font-size:12px;">কোনো টাকা কাটা হয়নি — রসিদটি ইতিহাসেও থাকবে</span>';}
+        if(box){box.style.display='block';box.innerHTML='<span style="color:#166534;font-size:13px;font-weight:600;">✅ কোনো টাকা কাটা হয়নি</span> <span style="color:#6b7280;font-size:12px;">— এই চেষ্টার রেকর্ড আপনার ইতিহাসে থাকবে।</span> <a href="/history.html" style="font-size:12px;">ইতিহাসে দেখুন →</a>';}
       }
     }).catch(()=>{});
   }catch(e){}

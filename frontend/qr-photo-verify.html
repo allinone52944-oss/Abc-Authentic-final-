@@ -124,7 +124,7 @@
         </button>
         <div class="note">
           ℹ️ প্রতিটি QR কোড মাত্র একবার ব্যবহারযোগ্য — যাচাইয়ে ব্যর্থ হলে নতুন QR দিয়ে চেষ্টা করুন।
-          যাচাই সফল হলে রসিদটি আপনার <a href="/history.html">ইতিহাসে</a> সংরক্ষিত থাকবে।
+          সফল যাচাইয়ের রেকর্ড আপনার <a href="/history.html">ইতিহাসে</a> থাকবে।
         </div>
       </form>
     </div>
@@ -196,34 +196,10 @@
     else if ((d && CHARGE_UNCERTAIN_CODES.indexOf(d.error) >= 0) || status >= 500) charge = 'uncertain';
     showErrResult(msg, charge);
   }
-  // Download errors must NOT wipe the success box (the old dlPdf
-  // called showErr, which hid okBox and took the receipt button
-  // with it). The receipt stays reachable from History either way.
-  function showErrKeepOk(msg) {
-    const e = document.getElementById('errBox');
-    e.textContent = msg; e.classList.add('on');
-  }
   function showOk(html) {
     const o = document.getElementById('okBox');
     o.innerHTML = html; o.classList.add('on');
     document.getElementById('errBox').classList.remove('on');
-  }
-  // Receipts live behind login (owner-only documents endpoint): a plain
-  // <a href> sends no login header and the server answers {"error":"NO_TOKEN"}.
-  // Download the History way: authenticated fetch → blob → save.
-  // (ABC.api adds '/api' itself.)
-  const qesc = (s) => String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  async function dlPdf(url, name) {
-    try {
-      const r = await ABC.api(String(url).replace(/^\/api/, ''));
-      if (!r.ok) { showErrKeepOk('❌ ডাউনলোড ব্যর্থ হয়েছে — ইতিহাস থেকে আবার চেষ্টা করুন।'); return; }
-      const blob = await r.blob();
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = name || 'qr-receipt.pdf';
-      document.body.appendChild(a); a.click();
-      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
-    } catch (e) { showErrKeepOk('❌ ডাউনলোড ব্যর্থ হয়েছে — ইতিহাস থেকে আবার চেষ্টা করুন।'); }
   }
   // Client-side file check, mirroring the server's 10MB / jpg+png
   // rule — so a too-big or webp file fails here in Bengali instead
@@ -296,9 +272,10 @@
         let html = '✅ <b>যাচাই সফল!</b> ছবির ব্যক্তির সঙ্গে QR-এর মালিক মিলেছে।'
           + '<br>চার্জ কাটা হয়েছে: ৳' + bn(d.charged || 0)
           + (d.balance !== null && d.balance !== undefined ? ' · বর্তমান ব্যালেন্স: ৳' + bn(d.balance) : '');
-        if (d.receipt) {
-          html += '<br><button type="button" class="btn btn-secondary" style="display:inline-block; margin-top:10px; padding:9px 16px;" onclick="dlPdf(\'' + qesc(d.receipt) + '\', \'qr-receipt.pdf\')">📄 রসিদ ডাউনলোড</button>';
-        }
+        // Audit R1 — no receipt button on success: the verified +
+        // charge + balance lines above are the informing, and the
+        // receipt still lands in History (backend).
+        html += '<br><a href="/history.html">ইতিহাসে দেখুন →</a>';
         showOk(html);
         loadPrice();
       } else {

@@ -1104,9 +1104,11 @@
         renderResult(r);
       } else {
         showErr(r.message || 'কোনো রেকর্ড পাওয়া যায়নি — কোনো টাকা কাটা হয়নি।');
-        if (r.receipt) {
-          $('result').innerHTML = '<div style="margin-top:10px"><button type="button" class="dl-btn" onclick="dlPdf(\'' + esc(r.receipt) + '\', \'land-receipt.pdf\')">📄 রসিদ (PDF) ডাউনলোড করুন</button></div>';
-        }
+        // Audit R1 — no receipt button on a failed lookup: the
+        // failure receipt still lands in History (backend), and
+        // the reason + 'কোনো টাকা কাটা হয়নি' above is the
+        // informing. The history link is how the record is reached.
+        $('result').innerHTML = '<div style="margin-top:10px"><a href="/history.html">ইতিহাসে দেখুন →</a></div>';
       }
     } catch (e) {
       showErr('সংযোগে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
