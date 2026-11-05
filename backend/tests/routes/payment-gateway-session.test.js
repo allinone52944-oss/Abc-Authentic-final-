@@ -243,7 +243,12 @@ describe('frontend/wallet.html — gateway session invariants', () => {
     expect(src).toContain('loadWallet();\n  gwRestoreSession();');
     const restore = fnSlice(src, 'function gwRestoreSession(');
     expect(restore).toContain('localStorage.getItem');
-    expect(restore).toContain('s.endsAt <= Date.now()'); // expired while away → cleared, not restored
+    // Bug-hunt F4 — the expiry check now runs on the deadline
+    // shifted by the paused duration (a paused session's frozen
+    // deadline must not read as expired on reload); an un-paused
+    // expired session is still cleared, not restored.
+    expect(restore).toContain('endsAt = s.endsAt + (Date.now() - s.pausedAt)');
+    expect(restore).toContain('endsAt <= Date.now()'); // expired while away → cleared, not restored
     expect(restore).toContain('gw.timerId = setInterval(gwTick, 1000)');
     expect(restore).toContain('gwStartPolling()'); // audit #38 — starts with an immediate flip-check, not 15s later
     // a done/expired session is cleared, never restored
