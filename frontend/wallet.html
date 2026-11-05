@@ -968,7 +968,8 @@ function gwSaveSession(){
     if (!gw || gw.done) { localStorage.removeItem(GW_STORE_KEY); return; }
     localStorage.setItem(GW_STORE_KEY, JSON.stringify({
       method: gw.method, sender: gw.sender, amount: gw.amount,
-      endsAt: gw.endsAt, submitted: !!gw.submitted, submittedTrxid: gw.submittedTrxid || null
+      endsAt: gw.endsAt, submitted: !!gw.submitted, submittedTrxid: gw.submittedTrxid || null,
+      pausedAt: gw.pausedAt || null
     }));
   } catch (e) { /* storage unavailable — the session just won't survive a reload */ }
 }
@@ -982,9 +983,20 @@ function gwRestoreSession(){
   var s;
   try { s = JSON.parse(raw); } catch (e) { gwClearSession(); return false; }
   if (!s || !s.endsAt || !s.sender || !s.amount) { gwClearSession(); return false; }
-  if (s.endsAt <= Date.now()) { gwClearSession(); return false; } // expired while away
+  // Bug-hunt F4 — a paused session's deadline was frozen at pause
+  // time: shift it by the paused duration BEFORE the expiry check,
+  // or a session paused near its deadline would be cleared as
+  // expired on reload even though the pause should have frozen it.
+  // The reload itself resumes the session (the page loads on the
+  // auto card), so pausedAt is cleared — and the resumed session
+  // is saved below, so a second reload does not shift it again.
+  var endsAt = s.endsAt;
+  if (s.pausedAt && s.pausedAt > 0 && s.pausedAt <= Date.now()) {
+    endsAt = s.endsAt + (Date.now() - s.pausedAt);
+  }
+  if (endsAt <= Date.now()) { gwClearSession(); return false; } // expired while away
   gw = { method: s.method || 'bkash_payment', sender: s.sender, amount: s.amount,
-         endsAt: s.endsAt, timerId: null, pollId: null,
+         endsAt: endsAt, timerId: null, pollId: null,
          submitted: !!s.submitted, submittedTrxid: s.submittedTrxid || null, done: false, pausedAt: null };
   document.getElementById('gwSumMethod').textContent = GW_METHOD_NAMES[gw.method] || gw.method;
   document.getElementById('gwSumAmount').textContent = '৳' + bn(gw.amount);
@@ -1006,6 +1018,8 @@ function gwRestoreSession(){
   if (gw.submitted && gw.submittedTrxid) {
     gwStartPolling(); // audit #38 — starts with an immediate flip-check
   }
+  gwSaveSession(); // bug-hunt F4 — persist the resumed deadline so a
+  // second reload does not shift it again
   return true;
 }
 function gwStopTimer(){ if (gw && gw.timerId) { clearInterval(gw.timerId); gw.timerId = null; } }
@@ -1120,6 +1134,8 @@ function gwGoManual(){
   if (gw && !gw.done && !gw.pausedAt) {
     gw.pausedAt = Date.now();
     gwStopAll();
+    gwSaveSession(); // bug-hunt F4 — persist the pause, or a reload
+    // would restore an un-paused session ticking on the old deadline
   }
   const gwCard = document.getElementById('gwCard');
   if (gwCard) gwCard.style.display = 'none';
@@ -1142,6 +1158,8 @@ function gwBackToAuto(){
   if (gw && !gw.done && gw.pausedAt) {
     gw.endsAt += Date.now() - gw.pausedAt;
     gw.pausedAt = null;
+    gwSaveSession(); // bug-hunt F4 — persist the extended deadline,
+    // or a reload would restore the stale pre-pause deadline
     if (!gw.timerId) { gwTick(); gw.timerId = setInterval(gwTick, 1000); }
     if (gw.submitted && !gw.pollId) gwStartPolling();
   }
