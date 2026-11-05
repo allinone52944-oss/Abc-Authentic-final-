@@ -38,6 +38,8 @@ const express = require('express');
 const request = require('supertest');
 const db = require('../../db');
 const auth = require('../../auth');
+const push = require('../../utils/push');
+const { _resetForTests } = require('../../lib/missingPriceAlert');
 const mapRouter = require('../../routes/land-mouza-map');
 const client = require('../../../engines/land-core/client');
 
@@ -97,6 +99,16 @@ describe('GET /api/land-mouza-map/price', () => {
   test('price + balance → 200 (migration default 0)', async () => {
     const r = await withUser(request(app()).get('/api/land-mouza-map/price')).expect(200);
     expect(r.body).toMatchObject({ ok: true, engineId: 'land-mouza-map', price: 0, balance: 500, serviceId: 42, allowed: true });
+  });
+  test('no services row → price 0 AND admin missing-price alert fires (audit #17)', async () => {
+    _resetForTests(); // the alert is throttled once per engine per hour
+    db.__routeQuery(baseRoutes([
+      ['FROM services WHERE', { rows: [] }],
+    ]));
+    const r = await withUser(request(app()).get('/api/land-mouza-map/price')).expect(200);
+    expect(r.body).toMatchObject({ ok: true, price: 0, serviceId: null, allowed: true });
+    expect(push.notifyAdmins).toHaveBeenCalledTimes(1);
+    expect(push.notifyAdmins.mock.calls[0][1]).toContain('land-mouza-map');
   });
 });
 

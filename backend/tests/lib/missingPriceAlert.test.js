@@ -60,6 +60,8 @@ const WIRED = [
   ['routes/nid.js', "alertMissingPrice(db, 'nid-replica')"],
   ['routes/nid-server-copy.js', "alertMissingPrice(db, 'nid-server-copy')"],
   ['routes/qr-verify.js', 'alertMissingPrice(db, ENGINE_ID)'],
+  ['routes/land-khatian.js', 'alertMissingPrice(db, ENGINE_ID)'],
+  ['routes/land-mouza-map.js', 'alertMissingPrice(db, ENGINE_ID)'],
 ];
 test.each(WIRED)('%s alerts on the missing-row branch', (file, call) => {
   const src = fs.readFileSync(path.join(__dirname, '..', '..', file), 'utf8');

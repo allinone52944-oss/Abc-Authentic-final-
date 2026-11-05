@@ -40,6 +40,7 @@ const serviceCredits = require('../lib/serviceCredits');
 const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
 const { buildReceiptPdf } = require('../lib/receiptPdf');
+const { alertMissingPrice } = require('../lib/missingPriceAlert');
 const adapter = require('../../engines/land-khatian/adapter');
 const client = require('../../engines/land-core/client');
 
@@ -55,7 +56,13 @@ async function getServicePrice(userId) {
   const r = await db.query(
     `SELECT id, price FROM services WHERE engine_id = $1 AND status = 'active' LIMIT 1`, [ENGINE_ID]
   );
-  if (!r.rows.length) return { allowed: true, price: 0, serviceId: null };
+  if (!r.rows.length) {
+    // Audit #17 — no active price row: the service runs free.
+    // Price 0 is the design decision, so the gate stays open;
+    // the admin is alerted (throttled, once per engine per hour).
+    alertMissingPrice(db, ENGINE_ID);
+    return { allowed: true, price: 0, serviceId: null };
+  }
   const serviceId = r.rows[0].id;
   const basePrice = Number(r.rows[0].price) || 0;
   const ov = await db.query(
