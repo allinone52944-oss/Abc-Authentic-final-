@@ -406,7 +406,7 @@
     <!-- Recharge Form Card -->
     <div class="card" id="classicRechargeCard">
       <h3>💰 টাকা যোগ করুন (ব্যালেন্স রিচার্জ)</h3>
-      <p style="font-size:13px;color:#64748b;margin-bottom:16px;">নিচের যেকোনো মাধ্যমে টাকা পাঠিয়ে TrxID সাবমিট করুন। এডমিন ভেরিফাই করলেই ব্যালেন্স যোগ হবে।</p>
+      <p style="font-size:13px;color:#64748b;margin-bottom:16px;">নিচের যেকোনো মাধ্যমে টাকা পাঠিয়ে TrxID সাবমিট করুন। SMS মিললে স্বয়ংক্রিয়ভাবে ব্যালেন্স যোগ হবে, না হলে এডমিন যাচাই করে যোগ করবেন।</p>
 
       <div id="manualGuide" style="font-size:12.5px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.7;">
         <b style="color:#0f172a;">Manual-এ দেওয়ার নির্দেশনা:</b><br>
@@ -519,7 +519,7 @@
       <h3>🛡️ রিফান্ড ও ব্যালেন্স পলিসি</h3>
       <div style="font-size:13px;line-height:1.8;color:#475569;">
         <p>• সেবা শুরু হওয়ার আগে যেকোনো সময় অর্ডার বাতিল করলে সম্পূর্ণ টাকা ইনস্ট্যান্ট ওয়ালেটে ফেরত আসবে।</p>
-        <p>• ম্যানুয়াল রিচার্জ সাধারণত ৫ থেকে ১৫ মিনিটের মধ্যে এডমিন দ্বারা যাচাই করে জমা করা হয়।</p>
+        <p>• SMS মিললে রিচার্জ স্বয়ংক্রিয়ভাবে অনুমোদিত হয়, না হলে এডমিন যাচাই করে জমা করেন।</p>
         <p>• যেকোনো রিচার্জ বা লেনদেন সম্পর্কিত জটিলতায় নিচের WhatsApp বাটনে যোগাযোগ করতে পারেন।</p>
       </div>
     </div>
@@ -1015,7 +1015,7 @@ function gwExpireSession(){
   const wasPending = !!(gw && gw.submitted && !gw.done);
   document.getElementById('gwStep2').style.display = 'none';
   document.getElementById('gwExpiredNote').textContent = wasPending
-    ? 'আপনার রিকোয়েস্ট পেন্ডিং আছে — এডমিন যাচাই করবেন, টাকা হারাবে না। নতুন সেশন শুরু করুন, অথবা ম্যানুয়াল ফর্মে TrxID দিয়ে রিকোয়েস্ট পাঠান।'
+    ? 'আপনার রিকোয়েস্ট পেন্ডিং আছে — SMS মিললে স্বয়ংক্রিয়ভাবে মিলে যাবে, না হলে এডমিন যাচাই করবেন, টাকা হারাবে না। নতুন সেশন শুরু করুন, অথবা ম্যানুয়াল ফর্মে TrxID দিয়ে রিকোয়েস্ট পাঠান।'
     : 'নতুন সেশন শুরু করুন, অথবা ম্যানুয়াল ফর্মে TrxID দিয়ে রিকোয়েস্ট পাঠান।';
   document.getElementById('gwExpired').style.display = 'block';
   loadWallet();
@@ -1264,7 +1264,7 @@ async function submitRecharge(){
       const balText=okLoad&&document.getElementById('bal')?document.getElementById('bal').textContent:'';
       ok.textContent='✅ সফল! ৳'+bn(tx.amount)+' আপনার ওয়ালেটে যোগ হয়েছে।'+(balText?' বর্তমান ব্যালেন্স: '+balText+'।':'');
     } else {
-      ok.textContent='⏳ রিচার্জ রিকোয়েস্ট জমা হয়েছে! এডমিন যাচাই করে দ্রুত ব্যালেন্স যুক্ত করবেন।';
+      ok.textContent='⏳ রিচার্জ রিকোয়েস্ট জমা হয়েছে! SMS মিললে স্বয়ংক্রিয়ভাবে ব্যালেন্স যোগ হবে, না হলে এডমিন যাচাই করে যোগ করবেন।';
       loadWallet();
       manualStartPolling(trxid, ok); // audit #22 — poll until the pending flips
     }

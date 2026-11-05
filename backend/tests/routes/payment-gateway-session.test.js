@@ -316,6 +316,18 @@ describe('frontend/wallet.html — gateway session invariants', () => {
     expect(start).toContain('manualPollOnce(trxid, okEl)');
   });
 
+  test('audit #29 — all wallet copy says SMS-auto first, admin only as fallback; no SLA claim', () => {
+    const src = walletHtml();
+    // the contradicting lines are gone
+    expect(src).not.toContain('এডমিন ভেরিফাই করলেই');
+    expect(src).not.toContain('৫ থেকে ১৫ মিনিট');
+    expect(src).not.toContain('এডমিন যাচাই করে দ্রুত ব্যালেন্স যুক্ত করবেন');
+    // every spot now leads with the auto-approve truth
+    expect(src).toContain('SMS মিললে স্বয়ংক্রিয়ভাবে ব্যালেন্স যোগ হবে, না হলে এডমিন যাচাই করে যোগ করবেন');
+    expect(src).toContain('SMS মিললে রিচার্জ স্বয়ংক্রিয়ভাবে অনুমোদিত হয়, না হলে এডমিন যাচাই করে জমা করেন');
+    expect(src).toContain('SMS মিললে স্বয়ংক্রিয়ভাবে মিলে যাবে, না হলে এডমিন যাচাই করবেন');
+  });
+
   test('no forbidden word in the wallet page copy', () => {
     expect(walletHtml().toLowerCase()).not.toContain('captcha');
   });
