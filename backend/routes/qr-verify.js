@@ -152,12 +152,24 @@ async function storeReceipt(orderId, fn, pdfArgs) {
 // completed charge) under the idempotency ref? Same ledger check
 // the post-gateway charge used to run inline — factored out so
 // the hold, the release and the final charge all read one rule.
+//
+// Bug-hunt F1 — a released hold leaves its debit rows 'approved'
+// in the ledger (releaseHold only adds refund rows), so a debit
+// row is a STANDING charge only while no approved
+// 'release-<ref>' refund row exists for the same attempt. Without
+// this, a retry after a release reads the stale debit as "already
+// paid" and gets a verified result for ৳0.
 async function hasApprovedCharge(dbConn, userId, ref) {
   const r = await dbConn.query(
     `SELECT 1 FROM transactions WHERE user_id = $1 AND trxid IN ($2, $3) AND status = 'approved' LIMIT 1`,
     [userId, ref, ref + ':svc']
   );
-  return r.rows.length > 0;
+  if (!r.rows.length) return false;
+  const rel = await dbConn.query(
+    `SELECT 1 FROM transactions WHERE user_id = $1 AND trxid = $2 AND status = 'approved' LIMIT 1`,
+    [userId, 'release-' + ref]
+  );
+  return rel.rows.length === 0;
 }
 
 // Release a hold, best-effort: the money must come back even if
@@ -174,6 +186,27 @@ async function releaseHoldBestEffort(userId, serviceId, ref) {
     safeLog('[qr-verify] HOLD RELEASE FAILED (user', userId, 'ref', ref, '):', e.message, '— reconcile from the ledger');
     return false;
   }
+}
+
+// Insert a 'failed' order row for this idempotency key (best
+// effort, never throws): a same-key retry must REPLAY a stored
+// outcome instead of re-entering the gateway with a released hold
+// behind it (bug-hunt F1). Returns the order id or null.
+async function recordFailedOrder(userId, serviceId, idem, data) {
+  if (!serviceId) return null;
+  const ins = await db.query(
+    `INSERT INTO orders (user_id, service_id, status, data, price, idempotency_key)
+     VALUES ($1, $2, 'failed', $3, 0, $4)
+     ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+     RETURNING id`,
+    [userId, serviceId, JSON.stringify(data), idem]
+  ).catch((e) => { safeLog('[qr-verify] failed-order insert error:', e.message); return null; });
+  if (ins && ins.rows.length) return ins.rows[0].id;
+  const again = await db.query(
+    'SELECT id FROM orders WHERE user_id = $1 AND idempotency_key = $2',
+    [userId, idem]
+  ).catch(() => null);
+  return again && again.rows.length ? again.rows[0].id : null;
 }
 
 router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) => {
@@ -215,6 +248,12 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
         let replayMsg = 'যাচাই সফল হয়নি — কোনো টাকা কাটা হয়নি।';
         if (prevData.charge_failed_after_gateway) {
           replayMsg = 'গেটওয়েতে যাচাই সফল হয়েছিল, কিন্তু ওয়ালেট চার্জ কাটা যায়নি — এই QR এখন ব্যবহৃত, নতুন QR দিয়ে চেষ্টা করুন বা সাপোর্টে জানান।';
+        } else if (prevData.gateway_error) {
+          // Bug-hunt F1 — a gateway outage is a stored outcome too:
+          // the retry replays this instead of re-entering the
+          // gateway. The message says the gateway failed (not that
+          // the photo mismatched) and points at a fresh attempt.
+          replayMsg = 'যাচাই সার্ভারে সমস্যা হয়েছিল — কোনো টাকা কাটা হয়নি। নতুন করে চেষ্টা করুন।';
         } else if (prevData.reason) {
           replayMsg = 'যাচাই সফল হয়নি: ' + failureReasonBn(prevData.reason) + ' — কোনো টাকা কাটা হয়নি।';
         }
@@ -285,8 +324,21 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
           held = true;
         } catch (e) {
           if (/DUPLICATE_TRANSACTION/.test(e.message)) {
-            // A concurrent request for the same attempt already held it.
-            held = true;
+            // Bug-hunt F1 — a duplicate is a live hold ONLY while
+            // it is still standing. A hold released by an earlier
+            // attempt of this key is STALE (the money is back, and
+            // the ledger's trxid uniqueness means this ref can
+            // never hold again): fail fast before any gateway cost
+            // instead of pretending the money is held.
+            if (await hasApprovedCharge(db, req.user.id, ref)) {
+              // A concurrent request for the same attempt already held it.
+              held = true;
+            } else {
+              return res.status(409).json({
+                error: 'STALE_ATTEMPT',
+                message: 'এই চেষ্টাটি আগেই শেষ হয়েছে (রেকর্ড তৈরি হয়নি) — কোনো টাকা কাটা হয়নি। নতুন QR দিয়ে নতুন করে চেষ্টা করুন।',
+              });
+            }
           } else if (/INSUFFICIENT_BALANCE/.test(e.message)) {
             // Balance moved between the pre-check and the hold — the
             // gateway was never called, so no fee and no QR were
@@ -311,19 +363,32 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
     } catch (e) {
       // Transport throw (not a gateway verdict): release the hold
       // first, then report a gateway error — the customer paid ৳0.
+      // Bug-hunt F1 — record the failed outcome too, so a
+      // same-key retry replays it instead of re-entering the
+      // gateway with a released hold behind it.
       if (held) await releaseHoldBestEffort(req.user.id, serviceId, ref);
+      const orderId = await recordFailedOrder(req.user.id, serviceId, idem, {
+        subject_ref: subjectRef || null, verified: false, gateway_error: true,
+        reason: String(e.message || '').slice(0, 200), gateway_charged: 0,
+      });
       safeLog('[qr-verify] gateway error for user', req.user.id, ':', e.message);
       return res.status(502).json({
         error: 'GATEWAY_ERROR',
         message: 'যাচাই সার্ভারে সমস্যা হয়েছে — কোনো টাকা কাটা হয়নি। কিছুক্ষণ পর আবার চেষ্টা করুন।',
+        orderId,
       });
     }
     if (!result.ok) {
       if (held) await releaseHoldBestEffort(req.user.id, serviceId, ref);
+      const orderId = await recordFailedOrder(req.user.id, serviceId, idem, {
+        subject_ref: subjectRef || null, verified: false, gateway_error: true,
+        reason: String(result.error || '').slice(0, 200), gateway_charged: 0,
+      });
       safeLog('[qr-verify] gateway error for user', req.user.id, ':', result.error);
       return res.status(502).json({
         error: 'GATEWAY_ERROR',
         message: 'যাচাই সার্ভারে সমস্যা হয়েছে — কোনো টাকা কাটা হয়নি। কিছুক্ষণ পর আবার চেষ্টা করুন।',
+        orderId,
       });
     }
     if (!result.verified) {
@@ -420,7 +485,18 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
             userId: req.user.id, serviceId, amount: Math.abs(price), ref,
           }));
         } catch (e) {
-          if (/INSUFFICIENT_BALANCE/.test(e.message)) {
+          const isBalance = /INSUFFICIENT_BALANCE/.test(e.message);
+          const isDup = /DUPLICATE_TRANSACTION/.test(e.message);
+          let staleDup = false;
+          if (isDup) {
+            // Bug-hunt F1 — a live duplicate means a concurrent
+            // attempt already charged: the hold IS the charge.
+            // A stale duplicate means the hold was released by an
+            // earlier attempt of this key, so no money is held at
+            // all: that is a charge failure, never a payment.
+            staleDup = !(await hasApprovedCharge(db, req.user.id, ref));
+          }
+          if (isBalance || staleDup) {
             // The gateway already took its fee for this success and
             // the QR is now consumed — the old code returned with
             // NO record at all, so a retry (new idempotency key)
@@ -428,34 +504,22 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
             // Record a failed outcome under this idempotency key so
             // the case is visible to admin and a retry replays the
             // honest explanation instead of re-burning anything.
-            safeLog('[qr-verify] CHARGE FAILED after gateway success (gateway charged', result.charged, ') user', req.user.id, 'ref', ref);
-            let failedId = null;
-            if (serviceId) {
-              const fins = await db.query(
-                `INSERT INTO orders (user_id, service_id, status, data, price, idempotency_key)
-                 VALUES ($1, $2, 'failed', $3, 0, $4)
-                 ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
-                 RETURNING id`,
-                [req.user.id, serviceId,
-                 JSON.stringify({ subject_ref: subjectRef || null, verified: false, charge_failed_after_gateway: true, gateway_charged: result.charged }),
-                 idem]
-              ).catch(() => null);
-              if (fins && fins.rows.length) failedId = fins.rows[0].id;
-              else {
-                const ag = await db.query(
-                  'SELECT id FROM orders WHERE user_id = $1 AND idempotency_key = $2',
-                  [req.user.id, idem]
-                ).catch(() => null);
-                if (ag && ag.rows.length) failedId = ag.rows[0].id;
-              }
-            }
+            safeLog('[qr-verify] CHARGE FAILED after gateway success (gateway charged', result.charged, ') user', req.user.id, 'ref', ref, staleDup ? '(stale duplicate: hold was released)' : '');
+            const failedId = await recordFailedOrder(req.user.id, serviceId, idem, {
+              subject_ref: subjectRef || null, verified: false,
+              charge_failed_after_gateway: true, gateway_charged: result.charged,
+            });
             return res.status(402).json({
               error: 'CHARGE_FAILED_AFTER_GATEWAY',
-              message: 'গেটওয়েতে যাচাই সফল হয়েছিল, কিন্তু ওয়ালেটে পর্যাপ্ত ব্যালেন্স না থাকায় চার্জ কাটা যায়নি। এই QR এখন ব্যবহৃত — নতুন QR দিয়ে চেষ্টা করুন, আর গেটওয়ে-ফি নিয়ে সাপোর্টে জানান।',
+              message: isBalance
+                ? 'গেটওয়েতে যাচাই সফল হয়েছিল, কিন্তু ওয়ালেটে পর্যাপ্ত ব্যালেন্স না থাকায় চার্জ কাটা যায়নি। এই QR এখন ব্যবহৃত — নতুন QR দিয়ে চেষ্টা করুন, আর গেটওয়ে-ফি নিয়ে সাপোর্টে জানান।'
+                : 'গেটওয়েতে যাচাই সফল হয়েছিল, কিন্তু চার্জ কাটা যায়নি — এই QR এখন ব্যবহৃত, নতুন QR দিয়ে চেষ্টা করুন বা সাপোর্টে জানান।',
               orderId: failedId,
             });
           }
-          if (!/DUPLICATE_TRANSACTION/.test(e.message)) throw e;
+          if (!isDup) throw e;
+          // Live duplicate: a concurrent attempt already charged —
+          // fall through, the hold is the charge.
         }
       }
     }

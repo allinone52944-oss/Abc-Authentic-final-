@@ -69,19 +69,29 @@ function postVerify(req, { subject = 'NID-123', idem = 'idem-1', withFiles = tru
 // real DB would. `movements` records every wallet_apply call
 // (amount/type/ref) so tests can prove the net movement is ৳0 on
 // failure and exactly one debit on success.
+// Bug-hunt F1 — the ledger also models the RELEASE: a release
+// writes a 'release-<ref>' refund row but leaves the debit rows
+// 'approved' (exactly like production). The debit check and the
+// release-marker check are separate queries; hasApprovedCharge
+// combines them in JS (standing charge = debit rows AND no
+// release row), while payForService's duplicate check sees the
+// debit rows alone (a stale duplicate still throws).
 function holdLedger({ ref, price }) {
-  const state = { held: false, movements: [] };
+  const state = { held: false, released: false, movements: [] };
   return {
     state,
     routes: [
       ['wallet_apply', (text, params) => {
         state.movements.push({ amount: params[1], type: params[2], ref: params[3] });
         if (params[1] < 0) state.held = true;
+        if (typeof params[3] === 'string' && params[3].indexOf('release-') === 0) state.released = true;
         return { rows: [{ balance: 150 }] };
       }],
-      [(text) => text.includes('SELECT 1 FROM transactions'), () => ({
-        rows: state.held ? [{ '1': 1 }] : [],
-      })],
+      [(text) => text.includes('SELECT 1 FROM transactions'), (text, params) => {
+        const isReleaseQ = (params || []).some((p) => typeof p === 'string' && p.indexOf('release-') === 0);
+        const found = isReleaseQ ? state.released : state.held;
+        return { rows: found ? [{ '1': 1 }] : [] };
+      }],
       [(text) => text.includes('SELECT trxid, amount FROM transactions'), () => ({
         rows: state.held ? [{ trxid: ref, amount: -price }] : [],
       })],
@@ -241,21 +251,98 @@ describe('POST /api/qr-verify/verify — guards before any gateway call', () => 
 });
 
 describe('POST /api/qr-verify/verify — gateway outcomes', () => {
-  test('gateway transport error → 502 GATEWAY_ERROR, hold taken then released (net ৳0), no order', async () => {
+  test('gateway error (ok:false) → 502 + failed order recorded, same-key retry replays it (no second gateway call)', async () => {
     const ledger = holdLedger({ ref: 'qr-verify-idem-1', price: 50 });
-    let ordered = false;
+    let failedData = null;
     db.__routeQuery(holdRoutes(ledger, [
-      ['INSERT INTO orders', () => { ordered = true; return { rows: [] }; }],
+      ['INSERT INTO orders', (text, params) => { failedData = JSON.parse(params[2]); return { rows: [{ id: 'oT1' }] }; }],
     ]));
     adapter.verify.mockResolvedValue({ ok: false, error: 'GATEWAY_UNREACHABLE: timeout' });
     const r = await postVerify(request(app())).expect(502);
     expect(r.body.error).toBe('GATEWAY_ERROR');
-    expect(ordered).toBe(false);
+    expect(r.body.orderId).toBe('oT1');
+    // Bug-hunt F1 — the failed outcome is recorded, so a retry
+    // replays it instead of re-entering the gateway with a
+    // released hold behind it.
+    expect(failedData).toMatchObject({ verified: false, gateway_error: true });
     // Audit #9: the hold is taken before the gateway call and
     // released when the gateway fails — the customer pays ৳0 net.
     expect(ledger.state.movements).toHaveLength(2);
     expect(ledger.state.movements[0]).toMatchObject({ amount: -50, type: 'debit' });
     expect(ledger.state.movements[1]).toMatchObject({ amount: 50, type: 'refund' });
+    expect(ledger.state.movements.reduce((s, m) => s + m.amount, 0)).toBe(0);
+    // Retry with the same key → replays the stored failure.
+    db.__routeQuery([
+      ['FROM orders WHERE user_id', { rows: [{ id: 'oT1', price: 0, status: 'failed', data: JSON.stringify(failedData), documents: '[]' }] }],
+    ]);
+    const r2 = await postVerify(request(app())).expect(422);
+    expect(r2.body).toMatchObject({ verified: false, duplicate: true, orderId: 'oT1', charged: 0 });
+    expect(r2.body.message).toContain('সার্ভারে সমস্যা');
+    expect(adapter.verify).toHaveBeenCalledTimes(1);
+  });
+
+  test('gateway transport throw → 502 + failed order recorded, same-key retry replays it', async () => {
+    const ledger = holdLedger({ ref: 'qr-verify-idem-throw', price: 50 });
+    let failedData = null;
+    db.__routeQuery(holdRoutes(ledger, [
+      ['INSERT INTO orders', (text, params) => { failedData = JSON.parse(params[2]); return { rows: [{ id: 'oT2' }] }; }],
+    ]));
+    adapter.verify.mockRejectedValue(new Error('connect timeout'));
+    const r = await postVerify(request(app()), { idem: 'idem-throw' }).expect(502);
+    expect(r.body.error).toBe('GATEWAY_ERROR');
+    expect(r.body.orderId).toBe('oT2');
+    expect(failedData).toMatchObject({ verified: false, gateway_error: true });
+    expect(ledger.state.movements.reduce((s, m) => s + m.amount, 0)).toBe(0);
+    db.__routeQuery([
+      ['FROM orders WHERE user_id', { rows: [{ id: 'oT2', price: 0, status: 'failed', data: JSON.stringify(failedData), documents: '[]' }] }],
+    ]);
+    const r2 = await postVerify(request(app()), { idem: 'idem-throw' }).expect(422);
+    expect(r2.body).toMatchObject({ verified: false, duplicate: true, orderId: 'oT2', charged: 0 });
+    expect(r2.body.message).toContain('সার্ভারে সমস্যা');
+    expect(adapter.verify).toHaveBeenCalledTimes(1);
+  });
+
+  test('order insert keeps failing, then same-key retry → 409 STALE_ATTEMPT, gateway NOT called again, never free', async () => {
+    const ledger = holdLedger({ ref: 'qr-verify-idem-norec2', price: 50 });
+    db.__routeQuery(holdRoutes(ledger, [
+      ['INSERT INTO orders', () => ({ rows: [] })],
+    ]));
+    adapter.verify.mockResolvedValue({
+      ok: true, verified: true, message: 'Verification completed successfully',
+      charged: 30, remainingBalance: 440,
+    });
+    const r1 = await postVerify(request(app()), { idem: 'idem-norec2' }).expect(500);
+    expect(r1.body.error).toBe('ORDER_RECORD_FAILED');
+    expect(ledger.state.movements.reduce((s, m) => s + m.amount, 0)).toBe(0);
+    // Bug-hunt F1 — the hold was released and this ref can never
+    // hold again (ledger trxid uniqueness): fail fast instead of
+    // pretending the money is held and handing out a free result.
+    const r2 = await postVerify(request(app()), { idem: 'idem-norec2' }).expect(409);
+    expect(r2.body.error).toBe('STALE_ATTEMPT');
+    expect(adapter.verify).toHaveBeenCalledTimes(1);
+    expect(ledger.state.movements).toHaveLength(2); // hold + release only
+  });
+
+  test('concurrent release during the gateway call → post-gateway stale duplicate is a charge failure, never free', async () => {
+    const ledger = holdLedger({ ref: 'qr-verify-idem-race', price: 50 });
+    let failedData = null;
+    db.__routeQuery(holdRoutes(ledger, [
+      ['INSERT INTO orders', (text, params) => { failedData = JSON.parse(params[2]); return { rows: [{ id: 'oRace' }] }; }],
+    ]));
+    // A concurrent same-key request releases the hold while this
+    // request is inside the gateway call: the release marker lands
+    // and the refund is recorded, as the real ledger would.
+    adapter.verify.mockImplementation(async () => {
+      ledger.state.released = true;
+      ledger.state.movements.push({ amount: 50, type: 'refund', ref: 'release-qr-verify-idem-race' });
+      return { ok: true, verified: true, message: 'Verification completed successfully', charged: 30, remainingBalance: 440 };
+    });
+    const r = await postVerify(request(app()), { idem: 'idem-race' }).expect(402);
+    expect(r.body.error).toBe('CHARGE_FAILED_AFTER_GATEWAY');
+    expect(r.body.orderId).toBe('oRace');
+    expect(failedData).toMatchObject({ verified: false, charge_failed_after_gateway: true });
+    // The hold was released by the concurrent request, so no
+    // second charge was taken: debit + refund = ৳0 net.
     expect(ledger.state.movements.reduce((s, m) => s + m.amount, 0)).toBe(0);
   });
 
