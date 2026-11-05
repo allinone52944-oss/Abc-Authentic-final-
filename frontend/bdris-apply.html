@@ -985,8 +985,14 @@ function clearServerAcksStatus() { const st = $('srvAckStatus'); if (st && st.pa
 function chargeErrorText(status, d) {
   d = d || {};
   if (d.message) return 'চার্জ ব্যর্থ হয়েছে — ' + d.message;
-  if (d.error) return 'চার্জ ব্যর্থ হয়েছে — ' + d.error;
-  if (status) return 'চার্জ ব্যর্থ হয়েছে — সার্ভার জবাব ' + status;
+  // Audit #73 — a raw error code (or bare status) never reaches the
+  // user: known charge codes map to Bengali, anything else is the
+  // generic Bengali fallback.
+  if (d.error === 'INSUFFICIENT_BALANCE') return 'ব্যালেন্স অপর্যাপ্ত — রিচার্জ করুন';
+  if (d.error === 'CHARGE_FAILED') return 'চার্জ ব্যর্থ হয়েছে — আবার চেষ্টা করুন';
+  if (d.error === 'PRICE_FETCH_FAILED') return 'সেবার ফি আনা যায়নি — আবার চেষ্টা করুন';
+  if (d.error === 'SERVICE_NOT_FOUND') return 'সেবাটি পাওয়া যায়নি';
+  if (status) return 'চার্জ ব্যর্থ হয়েছে — সার্ভারে সমস্যা হয়েছে, আবার চেষ্টা করুন';
   return 'চার্জ ব্যর্থ হয়েছে — অজানা কারণ';
 }
 function chargeCatchReason(e) {
@@ -6031,7 +6037,7 @@ $('logoutBtn').onclick = async () => {
       // (2026-10-28 লাইভ: সার্ভারে চার্জ সফল, তবু ক্লায়েন্ট কখনো ফেরেনি) —
       // চার্জ ডিবি-কাজ মিলিসেকেন্ডের, তাই 30s উদার সীমা। টাইমআউট হলে
       // catch → null → বোতাম ফেরে + রিট্রাইয়ে DUPLICATE সাথে সাথে টোকেন দেয়।
-      // এটা বোতাম-লুকানো টাইমার নয়: ব্যর্থতা alert-এ দেখায়, রিট্রাই খোলা থাকে।
+      // এটা বোতাম-লুকানো টাইমার নয়: ব্যর্থতা note-এ দেখায়, রিট্রাই খোলা থাকে।
       var sig = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(30000) : undefined;
       var r = await fetch('/api/bdris-apply/charge/' + kind, {
         method: 'POST',
@@ -6041,13 +6047,13 @@ $('logoutBtn').onclick = async () => {
       });
       var d = await r.json().catch(function () { return {}; });
       if (r.status === 402 || d.error === 'INSUFFICIENT_BALANCE') {
-        alert(d.message || 'ব্যালেন্স অপর্যাপ্ত — রিচার্জ করুন');
+        note(d.message || 'ব্যালেন্স অপর্যাপ্ত — রিচার্জ করুন', 'err');
         return null;
       }
       if (!r.ok || d.ok === false || !d.chargeToken) {
         const reason = chargeErrorText(r.status, d);
         try { if (typeof S !== 'undefined' && S) S._lastChargeError = reason; } catch (e2) {}
-        alert(reason);
+        note(reason, 'err');
         return null;
       }
       // FINAL-SOLUTION (#10): DUPLICATE is token-ok, not an
@@ -6062,7 +6068,7 @@ $('logoutBtn').onclick = async () => {
         : (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) ? 'ইন্টারনেট সংযোগ নেই — সংযোগ ফিরলে আবার চেষ্টা করুন'
         : 'নেটওয়ার্ক সমস্যা — আবার চেষ্টা করুন';
       try { if (typeof S !== 'undefined' && S) S._lastChargeError = reason; } catch (e2) {}
-      alert(reason);
+      note(reason, 'err');
       return null;
     }
   }
@@ -6090,7 +6096,7 @@ $('logoutBtn').onclick = async () => {
           // until the 90s busy watchdog, and otpStage stuck on
           // 'submitting'. The wrapper must recover itself: release
           // the buttons and put the OTP screen back to 'code' so
-          // the user can retry immediately (charge() already alerted).
+          // the user can retry immediately (charge() already noted).
           if (!tok) { busy(false); if (S.otpStage === 'submitting') S.otpStage = 'code'; return false; }
           S._submitTok = tok; S._submitTokAt = Date.now();
           try { if (S.draftId) localStorage.setItem('bdris_submit_key_for_' + S.draftId, submitChargeKey()); } catch (e) {}

@@ -129,7 +129,7 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
 </div>
 
-<script src="/js/app.js?v=18"></script>
+<script src="/js/app.js?v=19"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -321,9 +321,9 @@ async function init(){
 function copySample(){
   if (!window._sample) return;
   navigator.clipboard.writeText(window._sample).then(()=>{
-    alert('📋 নমুনা ফরম্যাট কপি করা হয়েছে!');
+    ABC.showPageMsg('📋 নমুনা ফরম্যাট কপি করা হয়েছে!', 'ok');
   }).catch(()=>{
-    alert('কপি করা সম্ভব হয়নি।');
+    ABC.showPageMsg('কপি করা সম্ভব হয়নি — আবার চেষ্টা করুন।', 'err');
   });
 }
 

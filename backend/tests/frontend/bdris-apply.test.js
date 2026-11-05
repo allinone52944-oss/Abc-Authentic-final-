@@ -632,11 +632,16 @@ describe('HOME-LIST cycle (2026-10-31): duplicate cards, silent server-fetch fai
     expect(html).toMatch(/location\.href = '\/login\.html'/);
   });
 
-  test('(3) chargeErrorText carries the server reason: message, then error, then status, then generic', () => {
+  test('(3) chargeErrorText carries the server reason in Bengali, never a raw code/status (audit #73)', () => {
     const chargeErrorText = extract('chargeErrorText', 'status, d');
     expect(chargeErrorText(400, { message: 'ব্যালেন্স অপর্যাপ্ত' })).toMatch(/ব্যালেন্স অপর্যাপ্ত/);
-    expect(chargeErrorText(500, { error: 'DB_DOWN' })).toMatch(/DB_DOWN/);
-    expect(chargeErrorText(503, {})).toMatch(/503/);
+    expect(chargeErrorText(402, { error: 'INSUFFICIENT_BALANCE' })).toMatch(/ব্যালেন্স অপর্যাপ্ত/);
+    expect(chargeErrorText(500, { error: 'CHARGE_FAILED' })).toMatch(/চার্জ ব্যর্থ হয়েছে — আবার চেষ্টা করুন/);
+    // An unknown code or a bare status never reaches the user.
+    expect(chargeErrorText(500, { error: 'DB_DOWN' })).not.toMatch(/DB_DOWN/);
+    expect(chargeErrorText(500, { error: 'DB_DOWN' })).toMatch(/সার্ভারে সমস্যা/);
+    expect(chargeErrorText(503, {})).not.toMatch(/503/);
+    expect(chargeErrorText(503, {})).toMatch(/সার্ভারে সমস্যা/);
     expect(chargeErrorText(0, {})).toMatch(/অজানা কারণ/);
   });
 

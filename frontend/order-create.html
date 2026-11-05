@@ -234,7 +234,7 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
 </div>
 
-<script src="/js/app.js?v=18"></script>
+<script src="/js/app.js?v=19"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -288,11 +288,11 @@ function handleFileSelect(files){
   if(!files) return;
   for(let i=0; i<files.length; i++){
     if(fileTooBig(files[i])){
-      alert('"' + files[i].name + '" ফাইলটি ১০ মেগাবাইটের বেশি — ছোট ফাইল দিন।');
+      ABC.showPageMsg('"' + files[i].name + '" ফাইলটি ১০ মেগাবাইটের বেশি — ছোট ফাইল দিন।', 'err');
       continue;
     }
     if(selectedFiles.length >= 6){
-      alert('⚠️ সর্বোচ্চ ৬টি ফাইল নির্বাচন করা যাবে।');
+      ABC.showPageMsg('⚠️ সর্বোচ্চ ৬টি ফাইল নির্বাচন করা যাবে।', 'err');
       break;
     }
     // Prevent duplicate filenames
@@ -330,7 +330,7 @@ function renderSelectedFiles(){
 function copySampleText(){
   if(!rawSampleText) return;
   navigator.clipboard.writeText(rawSampleText).then(()=>{
-    alert('📋 নমুনা ফরম্যাট কপি হয়েছে!');
+    ABC.showPageMsg('📋 নমুনা ফরম্যাট কপি হয়েছে!', 'ok');
   }).catch(()=>{
     const ta=document.createElement('textarea');
     ta.value=rawSampleText;
@@ -338,7 +338,7 @@ function copySampleText(){
     ta.select();
     document.execCommand('copy');
     ta.remove();
-    alert('📋 নমুনা ফরম্যাট কপি হয়েছে!');
+    ABC.showPageMsg('📋 নমুনা ফরম্যাট কপি হয়েছে!', 'ok');
   });
 }
 
@@ -908,7 +908,7 @@ async function submit(){
 
   setTimeout(()=>{
     if(uploadErrors > 0){
-      alert('⚠️ আপনার অর্ডারটি তৈরি হয়েছে (ID: #' + orderId.slice(0,8) + ')! তবে ফাইল সাইজ বা নেটওয়ার্ক সমস্যার কারণে কিছু ডকুমেন্ট আপলোড বাকি থাকতে পারে। আপনি অর্ডার পেজে গিয়ে চ্যাটে ফাইলগুলো দিতে পারবেন।');
+      ABC.showPageMsg('⚠️ আপনার অর্ডারটি তৈরি হয়েছে (ID: #' + orderId.slice(0,8) + ')! তবে ফাইল সাইজ বা নেটওয়ার্ক সমস্যার কারণে কিছু ডকুমেন্ট আপলোড বাকি থাকতে পারে। আপনি অর্ডার পেজে গিয়ে চ্যাটে ফাইলগুলো দিতে পারবেন।', 'info');
       location.href = '/order-status.html?id=' + orderId + '&doc_warning=1';
     } else {
       location.href = '/order-status.html?id=' + orderId;

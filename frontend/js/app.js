@@ -29,6 +29,82 @@
     showFatal('Promise ব্যর্থ: ' + (r && r.message ? r.message : String(r)));
   });
 
+  // Audit #73 — one inline-message component for all customer pages.
+  // alert() blocks the page and shows no reason or retry; showPageMsg
+  // renders the same message as a dismissible banner at the top of the
+  // page (textContent only — no HTML injection). Errors stay until
+  // dismissed; ok/info auto-hide after 6s.
+  let _pageMsgTimer = null;
+  function showPageMsg(text, kind) {
+    try {
+      kind = (kind === 'ok' || kind === 'info') ? kind : 'err';
+      let d = document.getElementById('abc-page-msg');
+      if (!d) {
+        d = document.createElement('div');
+        d.id = 'abc-page-msg';
+        d.setAttribute('role', 'status');
+        const s = document.createElement('span');
+        s.id = 'abc-page-msg-text';
+        const x = document.createElement('button');
+        x.type = 'button';
+        x.setAttribute('aria-label', 'বন্ধ');
+        x.textContent = '✕';
+        x.style.cssText = 'margin-left:auto;background:transparent;border:none;font-size:16px;cursor:pointer;color:inherit;flex:none;padding:0 0 0 10px;';
+        x.addEventListener('click', () => { d.remove(); });
+        d.appendChild(s);
+        d.appendChild(x);
+        (document.body || document.documentElement).appendChild(d);
+      }
+      d.style.cssText = 'position:fixed;left:12px;right:12px;top:12px;z-index:99998;display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;font-size:14px;line-height:1.5;box-shadow:0 8px 30px rgba(0,0,0,.25);' + (
+        kind === 'ok' ? 'background:#f0fdf4;border:1px solid #86efac;color:#166534;' :
+        kind === 'info' ? 'background:#eff6ff;border:1px solid #93c5fd;color:#1e40af;' :
+        'background:#fef2f2;border:1px solid #fca5a5;color:#991b1b;');
+      d.querySelector('#abc-page-msg-text').textContent = String(text || '');
+      if (_pageMsgTimer) { clearTimeout(_pageMsgTimer); _pageMsgTimer = null; }
+      if (kind !== 'err') _pageMsgTimer = setTimeout(() => { try { d.remove(); } catch (e) {} }, 6000);
+    } catch (e) {}
+  }
+
+  // Bengali mapping for HTTP failures (download/upload/cancel).
+  // Never shows a raw status or code — only the Bengali reason + retry.
+  function httpErrBn(status, action) {
+    const a = action || 'কাজটি';
+    if (!status) return 'ইন্টারনেট সংযোগ নেই — সংযোগ ফিরলে আবার চেষ্টা করুন।';
+    if (status === 404) return a + ' ব্যর্থ হয়েছে — ফাইলটি পাওয়া যায়নি।';
+    if (status === 403) return a + ' ব্যর্থ হয়েছে — অনুমতি নেই।';
+    if (status === 413) return 'ফাইলটি অনেক বড় — ১০ মেগাবাইটের কম ফাইল দিন।';
+    if (status === 429) return 'অনেক রিকোয়েস্ট — একটু পরে আবার চেষ্টা করুন।';
+    if (status >= 500) return a + ' ব্যর্থ হয়েছে — সার্ভারে সমস্যা হয়েছে, আবার চেষ্টা করুন।';
+    return a + ' ব্যর্থ হয়েছে — আবার চেষ্টা করুন।';
+  }
+
+  // Bengali mapping for API error codes. A server Bengali message
+  // (d.message) wins; a known code maps; anything else gets the
+  // generic Bengali fallback — a raw code never reaches the user.
+  const API_ERR_BN = {
+    ALREADY_REDEEMED_TODAY: 'আজকের ক্যাশব্যাক ইতোমধ্যে সংগ্রহ করা হয়েছে।',
+    ALREADY_REDEEMED: 'কুপনটি ইতোমধ্যে রিডিম করা হয়েছে।',
+    INVALID_CODE: 'কুপন কোডটি সঠিক নয় — আবার দেখে বসান।',
+    EXPIRED_CODE: 'কুপন কোডটির মেয়াদ শেষ হয়ে গেছে।',
+    NOT_YOUR_CODE: 'এই কুপন কোডটি আপনার নয়।',
+    INSUFFICIENT_BALANCE: 'ব্যালেন্স অপর্যাপ্ত — রিচার্জ করুন।',
+    CHARGE_FAILED: 'চার্জ ব্যর্থ হয়েছে — আবার চেষ্টা করুন।',
+    PRICE_FETCH_FAILED: 'সেবার ফি আনা যায়নি — আবার চেষ্টা করুন।',
+    SERVICE_NOT_FOUND: 'সেবাটি পাওয়া যায়নি।',
+    NOT_FOUND: 'পাওয়া যায়নি।',
+    NO_ACCESS: 'এই কাজের অনুমতি নেই।',
+    NETWORK_ERROR: 'ইন্টারনেট সংযোগ নেই — সংযোগ ফিরলে আবার চেষ্টা করুন।',
+    RATE_LIMITED: 'অনেক রিকোয়েস্ট — একটু পরে আবার চেষ্টা করুন।',
+    FAILED: 'ব্যর্থ হয়েছে — আবার চেষ্টা করুন।',
+    ORDER_FAILED: 'অর্ডার তৈরি হয়নি — আবার চেষ্টা করুন।',
+  };
+  function apiErrBn(d, fallback) {
+    d = d || {};
+    if (d.message) return String(d.message);
+    if (d.error && API_ERR_BN[d.error]) return API_ERR_BN[d.error];
+    return fallback || 'ব্যর্থ হয়েছে — আবার চেষ্টা করুন।';
+  }
+
   const LS_ACCESS = 'abc_access_token';
   const LS_REFRESH = 'abc_refresh_token';
 
@@ -231,7 +307,7 @@
     },
   };
 
-  window.ABC = { api, setTokens, clearTokens, refreshAccess, Drafts, Idempotency, getAccessToken: () => accessToken };
+  window.ABC = { api, setTokens, clearTokens, refreshAccess, Drafts, Idempotency, getAccessToken: () => accessToken, showPageMsg, httpErrBn, apiErrBn };
 
   // ---- PWA: service worker (v6, push-only, no caching) ----
   if ('serviceWorker' in navigator) {

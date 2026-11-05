@@ -19,6 +19,13 @@ const LAND_HTML = fs.readFileSync(
   path.join(__dirname, '../../../frontend/land.html'),
   'utf8',
 );
+// Audit #63 — the office table moved out of land.html into
+// mouza-offices.json, fetched lazily when the mouza mode opens.
+// The tests inject it directly (no network in the vm).
+const MOUZA_JSON = fs.readFileSync(
+  path.join(__dirname, '../../../frontend/mouza-offices.json'),
+  'utf8',
+);
 
 function slice(from, to, label) {
   const a = LAND_HTML.indexOf(from);
@@ -85,14 +92,17 @@ function setup() {
     slice('const BN =', 'const esc', 'BN+bn'),
     slice('const $ =', 'function showErr', '$ helper'),
     lineMatching(/function clearBoxes\(\) \{[^}]*\}/, 'clearBoxes'),
-    slice('const MOUZA_OFFICES =', '  const MOUZA_CARD_CLASSES', 'MOUZA_OFFICES'),
+    // Audit #63 — table from the JSON file, not the HTML.
+    'let MOUZA_OFFICES = ' + MOUZA_JSON + ';',
+    // Audit #63 — the real loader fetches; the tests run offline.
+    'async function loadMouzaOffices() { return MOUZA_OFFICES; }',
     lineMatching(/const MOUZA_OTHER_OFFICE = '[^']+';/, 'MOUZA_OTHER_OFFICE'),
     lineMatching(/const MOUZA_MANUAL_MOUZA = '[^']+';/, 'MOUZA_MANUAL_MOUZA'),
     slice('const WZ = {', '  const WZ_STEP_IDS', 'WZ'),
     lineMatching(/const WZ_STEP_IDS = \{[^}]*\};/, 'WZ_STEP_IDS'),
     lineMatching(/const WZ_TITLES = \{[^}]*\};/, 'WZ_TITLES'),
-    slice('function wzShowStep(step)', '  function wzResetWizard()', 'wzShowStep'),
-    slice('function wzResetWizard()', '  // Duplicate display names', 'wzResetWizard'),
+    slice('function wzShowStep(step)', '  async function wzResetWizard()', 'wzShowStep'),
+    slice('async function wzResetWizard()', '  // Duplicate display names', 'wzResetWizard'),
     slice('  // Duplicate display names', '  function wzFillMouzas()', 'district map + fill + filter'),
     slice('function wzFillMouzas()', '  function wzFilterMouzas()', 'wzFillMouzas'),
     slice('function wzFilterMouzas()', '  function wzOnOffice()', 'wzFilterMouzas'),
@@ -246,7 +256,7 @@ describe('office search behaviour (real wizard functions)', () => {
     expect(mouzaValues).toContain('__manual__');
   });
 
-  test('(f) reset restores the full list and clears the search box', () => {
+  test('(f) reset restores the full list and clears the search box', async () => {
     const { $, fn } = setup();
     fn.wzFillOffices();
     fn.wzFilterOffices();
@@ -255,7 +265,8 @@ describe('office search behaviour (real wizard functions)', () => {
     $('mOffice').value = 'kachua';
     fn.wzOnOffice();
     expect(visibleOfficeOptions($).length).toBeLessThan(488);
-    fn.wzResetWizard();
+    // Audit #63 — the reset awaits the lazy office-list load.
+    await fn.wzResetWizard();
     expect($('wzOfficeSearch').value).toBe('');
     expect($('mOffice').value).toBe('');
     expect(visibleOfficeOptions($)).toHaveLength(488);

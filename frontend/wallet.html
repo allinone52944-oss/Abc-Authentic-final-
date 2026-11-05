@@ -573,7 +573,7 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
 </div>
 
-<script src="/js/app.js?v=18"></script>
+<script src="/js/app.js?v=19"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
@@ -872,7 +872,7 @@ async function claimDailyCashback(btnEl) {
     const r = await ABC.api('/cashback/redeem', { method: 'POST', body: {} });
     const d = await r.json();
     if (!r.ok) {
-      alert('❌ ' + (d.error === 'ALREADY_REDEEMED_TODAY' ? 'আজকের ক্যাশব্যাক ইতোমধ্যে সংগ্রহ করা হয়েছে।' : (d.error || 'ব্যর্থ হয়েছে')));
+      ABC.showPageMsg(ABC.apiErrBn(d, 'ক্যাশব্যাক সংগ্রহ হয়নি — আবার চেষ্টা করুন।'), 'err');
       loadWallet();
       return;
     }
@@ -892,7 +892,7 @@ async function instantRedeemCode(code) {
   const r = await ABC.api('/wallet/coupon', { method: 'POST', body: { code } });
   const d = await r.json();
   if (!r.ok) {
-    alert('❌ ' + (d.error === 'ALREADY_REDEEMED' ? 'কুপনটি ইতোমধ্যে রিডিম করা হয়েছে' : (d.error || 'ব্যর্থ')));
+    ABC.showPageMsg(ABC.apiErrBn(d, 'কুপন রিডিম হয়নি — আবার চেষ্টা করুন।'), 'err');
     loadWallet();
     return;
   }
@@ -908,7 +908,7 @@ async function instantRedeemCode(code) {
 function copyCode(code) {
   if (navigator.clipboard) {
     navigator.clipboard.writeText(code).then(() => {
-      alert('📋 কুপন কোড ' + code + ' কপি করা হয়েছে!');
+      ABC.showPageMsg('📋 কুপন কোড ' + code + ' কপি করা হয়েছে!', 'ok');
     }).catch(() => {
       prompt('কুপন কোডটি কপি করুন:', code);
     });

@@ -92,7 +92,7 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
 </div>
 
-<script src="/js/app.js?v=18"></script>
+<script src="/js/app.js?v=19"></script>
 <script>
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -164,14 +164,14 @@ async function dlHist(i, di){
   const d = (it.documents || [])[di]; if(!d) return;
   try{
     const r = await ABC.api(d.url);
-    if(!r.ok){ alert('ডাউনলোড ব্যর্থ হয়েছে'); return; }
+    if(!r.ok){ ABC.showPageMsg(ABC.httpErrBn(r.status, 'ডাউনলোড'), 'err'); return; }
     const blob = await r.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = d.originalname || d.filename;
     document.body.appendChild(a); a.click();
     setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
-  }catch(e){ alert('ডাউনলোড ব্যর্থ হয়েছে'); }
+  }catch(e){ ABC.showPageMsg(ABC.httpErrBn(0, 'ডাউনলোড'), 'err'); }
 }
 
 async function init(){

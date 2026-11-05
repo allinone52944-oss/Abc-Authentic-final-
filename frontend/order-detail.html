@@ -274,7 +274,7 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico">👤</div>প্রোফাইল</div>
 </div>
 
-<script src="/js/app.js?v=18"></script>
+<script src="/js/app.js?v=19"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 const STBN={new:'নতুন',pending:'অপেক্ষমান',received:'গৃহীত',processing:'প্রসেসিং',registered:'নিবন্ধিত',completed:'সম্পন্ন',delivered:'ডেলিভার্ড',failed:'ব্যর্থ',cancelled:'বাতিল',refunded:'রিফান্ডেড'};
@@ -528,11 +528,11 @@ async function cancelOrder(){
   const d = await r.json().catch(() => ({}));
   if(!r.ok){
     if(r.status === 409 && d.error === 'CANNOT_CANCEL'){
-      alert('এই অবস্থায় অর্ডার বাতিল করা যায় না (বর্তমান অবস্থা: ' + (STBN[d.status] || d.status) + ')।');
+      ABC.showPageMsg('এই অবস্থায় অর্ডার বাতিল করা যায় না (বর্তমান অবস্থা: ' + (STBN[d.status] || 'অজানা') + ')।', 'err');
     } else if(r.status === 404){
-      alert('অর্ডারটি খুঁজে পাওয়া যায়নি।');
+      ABC.showPageMsg('অর্ডারটি খুঁজে পাওয়া যায়নি।', 'err');
     } else {
-      alert('বাতিল করা যায়নি — আবার চেষ্টা করুন।');
+      ABC.showPageMsg('বাতিল করা যায়নি — আবার চেষ্টা করুন।', 'err');
     }
     return;
   }
@@ -561,19 +561,19 @@ async function dlUserDoc(i){
   const d=(window._userDocs||[])[i]; if(!d)return;
   try{
     const r=await ABC.api('/orders/'+oid+'/documents/'+encodeURIComponent(d.filename));
-    if(!r.ok){alert('ডাউনলোড ব্যর্থ হয়েছে');return;}
+    if(!r.ok){ABC.showPageMsg(ABC.httpErrBn(r.status, 'ডাউনলোড'), 'err');return;}
     const blob=await r.blob();
     const a=document.createElement('a');
     a.href=URL.createObjectURL(blob); a.download=d.originalname||d.filename;
     document.body.appendChild(a); a.click();
     setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);
-  }catch(e){alert('ডাউনলোড ব্যর্থ হয়েছে');}
+  }catch(e){ABC.showPageMsg(ABC.httpErrBn(0, 'ডাউনলোড'), 'err');}
 }
 
 async function uploadExtraDoc(files){
   if(!files || !files.length) return;
   // P2 (2026-11-03): আপলোডের আগেই সাইজ-যাচাই (সার্ভারের সাধারণ সীমা ১০ মেগাবাইট)।
-  if(files[0].size > 10 * 1024 * 1024){ alert('ফাইলটি ১০ মেগাবাইটের বেশি — ছোট ফাইল দিন।'); return; }
+  if(files[0].size > 10 * 1024 * 1024){ ABC.showPageMsg('ফাইলটি ১০ মেগাবাইটের বেশি — ছোট ফাইল দিন।', 'err'); return; }
   const n = document.getElementById('extraDocNotice');
   if(n){ n.style.display='block'; n.textContent='আপলোড হচ্ছে…'; }
   const fd = new FormData();
@@ -590,11 +590,11 @@ async function uploadExtraDoc(files){
       if(n) n.textContent = '✅ ডকুমেন্ট আপলোড সম্পন্ন!';
       setTimeout(()=>init(), 1000);
     } else {
-      alert('আপলোড ব্যর্থ হয়েছে');
+      ABC.showPageMsg(ABC.httpErrBn(r.status, 'আপলোড'), 'err');
       if(n) n.style.display='none';
     }
   } catch(e) {
-    alert('আপলোড ত্রুটি');
+    ABC.showPageMsg(ABC.httpErrBn(0, 'আপলোড'), 'err');
     if(n) n.style.display='none';
   }
 }
@@ -603,13 +603,13 @@ async function dlDoc(i){
   const d=(window._adminDocs||[])[i]; if(!d)return;
   try{
     const r=await ABC.api('/orders/'+oid+'/documents/'+encodeURIComponent(d.filename));
-    if(!r.ok){alert('ডাউনলোড ব্যর্থ হয়েছে');return;}
+    if(!r.ok){ABC.showPageMsg(ABC.httpErrBn(r.status, 'ডাউনলোড'), 'err');return;}
     const blob=await r.blob();
     const a=document.createElement('a');
     a.href=URL.createObjectURL(blob); a.download=d.originalname||d.filename;
     document.body.appendChild(a); a.click();
     setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);
-  }catch(e){alert('ডাউনলোড ব্যর্থ হয়েছে');}
+  }catch(e){ABC.showPageMsg(ABC.httpErrBn(0, 'ডাউনলোড'), 'err');}
 }
 
 async function loadChat(){
