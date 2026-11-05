@@ -918,7 +918,7 @@ function gwStartSession(){
   gwStopAll();
   gw = { method: gwMethod, sender: sender, amount: amt,
          endsAt: Date.now() + GW_SESSION_SECONDS * 1000,
-         timerId: null, pollId: null, submitted: false, submittedTrxid: null, done: false };
+         timerId: null, pollId: null, submitted: false, submittedTrxid: null, done: false, pausedAt: null };
   document.getElementById('gwSumMethod').textContent = GW_METHOD_NAMES[gwMethod] || gwMethod;
   document.getElementById('gwSumAmount').textContent = '৳' + bn(amt);
   document.getElementById('gwSumSender').textContent = sender;
@@ -987,8 +987,16 @@ function gwCopySuggest(){
 }
 
 function gwGoManual(){
-  const gw = document.getElementById('gwCard');
-  if (gw) gw.style.display = 'none';
+  // Audit #19 — leaving for Manual PAUSES the auto session: the
+  // timer and the match polling stop, and the deadline is frozen
+  // (pausedAt) so the session does not die while the user reads
+  // the manual instructions. gwBackToAuto resumes it.
+  if (gw && !gw.done && !gw.pausedAt) {
+    gw.pausedAt = Date.now();
+    gwStopAll();
+  }
+  const gwCard = document.getElementById('gwCard');
+  if (gwCard) gwCard.style.display = 'none';
   const ms = document.getElementById('manualSection');
   if (ms) { ms.style.display = 'block'; ms.scrollIntoView({ behavior: 'smooth' }); }
 }
@@ -1000,8 +1008,17 @@ function gwScrollManual(){
 function gwBackToAuto(){
   const ms = document.getElementById('manualSection');
   if (ms) ms.style.display = 'none';
-  const gw = document.getElementById('gwCard');
-  if (gw) { gw.style.display = 'block'; gw.scrollIntoView({ behavior: 'smooth' }); }
+  const gwCard = document.getElementById('gwCard');
+  if (gwCard) { gwCard.style.display = 'block'; gwCard.scrollIntoView({ behavior: 'smooth' }); }
+  // Audit #19 — resume the paused auto session: shift the
+  // deadline by the time spent in Manual, restart the timer
+  // (and the match polling, if a request was submitted).
+  if (gw && !gw.done && gw.pausedAt) {
+    gw.endsAt += Date.now() - gw.pausedAt;
+    gw.pausedAt = null;
+    if (!gw.timerId) { gwTick(); gw.timerId = setInterval(gwTick, 1000); }
+    if (gw.submitted && !gw.pollId) gwStartPolling();
+  }
 }
 
 async function gwAutoMatch(){

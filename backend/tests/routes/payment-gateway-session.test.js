@@ -230,6 +230,22 @@ describe('frontend/wallet.html — gateway session invariants', () => {
     expect(fnSlice(src, 'function gwStopAll(')).toContain('clearInterval');
   });
 
+  test('audit #19 — going to Manual pauses the timer/polling, returning resumes', () => {
+    const src = walletHtml();
+    const goManual = fnSlice(src, 'function gwGoManual(');
+    // pause: freeze the deadline and stop both intervals
+    expect(goManual).toContain('gw.pausedAt = Date.now()');
+    expect(goManual).toContain('gwStopAll()');
+    const back = fnSlice(src, 'function gwBackToAuto(');
+    // resume: shift the deadline by the Manual dwell, restart
+    // the timer (with an immediate tick) and the match polling
+    expect(back).toContain('gw.endsAt += Date.now() - gw.pausedAt');
+    expect(back).toContain('gwTick(); gw.timerId = setInterval(gwTick, 1000)');
+    expect(back).toContain('if (gw.submitted && !gw.pollId) gwStartPolling()');
+    // the session tracks the pause state from the start
+    expect(src).toContain('done: false, pausedAt: null');
+  });
+
   test('audit #18 — a done session never expires: the timer stops when done', () => {
     const src = walletHtml();
     // gwTick bails out on a done session, so expiry can never fire
