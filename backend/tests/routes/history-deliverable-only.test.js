@@ -3,6 +3,11 @@
 // still generated and stored (backend untouched) but get NO download
 // link in History; records with no deliverable show status informing
 // with no download link (no fake link).
+// R1 follow-up #2 (2026-11-07, user decision): a completed record
+// with no output STAYS in History as written text only — the
+// documents-length skip is gone, so receipt-only completed orders
+// and manual submissions appear with documents: [] instead of
+// dropping out of History entirely.
 // Route tests for GET /api/history (backend/routes/user.js).
 jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
 
@@ -38,22 +43,53 @@ describe('GET /api/history — deliverable PDF only (R1 follow-up)', () => {
     expect(r.body.items[0].documents).toEqual([]);
   });
 
-  test('(a2) an order with only receipt PDFs shows no receipt link anywhere in History', async () => {
+  test('(a2) a receipt-only completed QR-success order stays in History as status-only text, with NO download link', async () => {
     db.__routeQuery([
       ['FROM orders o LEFT JOIN services', { rows: [
         { id: 'oR', documents: JSON.stringify([
           { filename: 'delivery-qr-x.pdf', originalname: 'qr-verification-receipt.pdf', uploaded_by: 'admin', type: 'delivery' },
-          { filename: 'delivery-land-failed-y.pdf', originalname: 'land-not-found-receipt.pdf', uploaded_by: 'admin', type: 'delivery' },
         ]), created_at: '2026-10-22T09:00:00Z', service_name: 'QR Verify', service_name_bn: 'কিউআর যাচাই' },
       ] }],
     ]);
     const r = await asUser(request(app()).get('/api/history')).expect(200);
-    // History lists delivered files: an order with no deliverable file
-    // has no entry, and no receipt filename may appear as a download
+    // R1 follow-up #2 (2026-11-07): a completed record with no output
+    // stays as written text only — it is NOT dropped from History.
+    // The receipt itself still gets no download link.
+    expect(r.body.items).toHaveLength(1);
+    expect(r.body.items[0]).toMatchObject({ kind: 'order', id: 'oR' });
+    expect(r.body.items[0].title).toContain('কিউআর যাচাই');
+    expect(r.body.items[0].documents).toEqual([]);
     const allDocs = r.body.items.flatMap(i => i.documents || []);
     expect(allDocs.map(d => d.filename)).not.toContain('delivery-qr-x.pdf');
-    expect(allDocs.map(d => d.filename)).not.toContain('delivery-land-failed-y.pdf');
-    expect(r.body.items.map(i => i.id)).not.toContain('oR');
+  });
+
+  test('(a3) a receipt-only mouza-map-success order stays in History as status-only text', async () => {
+    db.__routeQuery([
+      ['FROM orders o LEFT JOIN services', { rows: [
+        { id: 'oM', documents: JSON.stringify([
+          { filename: 'delivery-land-mouza-map-x.pdf', originalname: 'land-mouza-map-receipt.pdf', uploaded_by: 'admin', type: 'delivery' },
+        ]), created_at: '2026-10-22T09:00:00Z', service_name: 'Mouza Map', service_name_bn: 'মৌজা ম্যাপ' },
+      ] }],
+    ]);
+    const r = await asUser(request(app()).get('/api/history')).expect(200);
+    expect(r.body.items).toHaveLength(1);
+    expect(r.body.items[0]).toMatchObject({ kind: 'order', id: 'oM' });
+    expect(r.body.items[0].title).toContain('মৌজা ম্যাপ');
+    expect(r.body.items[0].documents).toEqual([]);
+  });
+
+  test('(a4) a receipt-only completed manual submission stays in History as status-only text', async () => {
+    db.__routeQuery([
+      ['FROM manual_submissions m LEFT JOIN services', { rows: [
+        { id: 'mR', documents: JSON.stringify([
+          { filename: 'delivery-manual-x.pdf', originalname: 'manual-receipt.pdf', uploaded_by: 'admin', type: 'delivery' },
+        ]), created_at: '2026-10-22T09:00:00Z', service_name: 'Manual', service_name_bn: 'ম্যানুয়াল সেবা' },
+      ] }],
+    ]);
+    const r = await asUser(request(app()).get('/api/history')).expect(200);
+    expect(r.body.items).toHaveLength(1);
+    expect(r.body.items[0]).toMatchObject({ kind: 'manual', id: 'mR' });
+    expect(r.body.items[0].documents).toEqual([]);
   });
 
   test('(b) a record with a deliverable shows exactly its deliverable PDF download', async () => {

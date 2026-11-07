@@ -726,9 +726,14 @@ router.get('/history', async (req, res) => {
         url: base + encodeURIComponent(d.filename),
       }));
     const items = [];
+    // R1 follow-up #2 (2026-11-07, user decision): a completed record
+    // with no output stays in History as written text only — the row
+    // is pushed with documents: [] and no download link. The SQL
+    // gates above (completed/delivered, refunded-after-delivery;
+    // manual completed) are what keep in-progress records out, NOT
+    // a documents-length skip — so there is no skip here.
     for (const o of orders.rows) {
       const documents = deliveryDocs(o.documents, '/orders/' + o.id + '/documents/');
-      if (!documents.length) continue;
       items.push({
         kind: 'order', id: o.id,
         title: o.service_name_bn || o.service_name || 'সেবা অর্ডার',
@@ -737,7 +742,6 @@ router.get('/history', async (req, res) => {
     }
     for (const m of manual.rows) {
       const documents = deliveryDocs(m.documents, '/manual/' + m.id + '/documents/');
-      if (!documents.length) continue;
       items.push({
         kind: 'manual', id: m.id,
         title: m.service_name_bn || m.service_name || 'ম্যানুয়াল সেবা',
