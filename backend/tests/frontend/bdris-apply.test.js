@@ -1218,3 +1218,41 @@ describe('bug-hunt F3 — record calls carry the submit-charge key', () => {
     expect(html).toContain("if (S.draftId) return 'draft-' + S.draftId + '-submit';");
   });
 });
+
+describe('audit #71 — submit progress visible (2026-11-05)', () => {
+  test("busy() shows its waiting message: reclassified from info (dropped) to warn", () => {
+    // note() drops every 'info' message (silent mode), and busy() used to
+    // pass its message as 'info' — so login, OTP-send, photo-add and
+    // submit all waited behind a disabled button with no message at all.
+    // 'warn' (amber) is the waiting state; 'ok' would claim success.
+    expect(html).toContain("if (on && msg) note(msg, 'warn');");
+    expect(html).not.toContain("if (on && msg) note(msg, 'info');");
+  });
+
+  test('30s submit tick is warn so a long submit does not look frozen', () => {
+    // directSubmit ticks elapsed time every 30s; as 'info' it never
+    // displayed and a 200s submit showed only a disabled button.
+    const tick = html.match(/S\._submitProgressTimer = setInterval\(\(\) => \{([\s\S]*?)\}, 30000\)/);
+    expect(tick).not.toBeNull();
+    expect(tick[1]).toContain("আবেদন জমা হচ্ছে…");
+    // Assert on the note() call's class, not the raw block (the fix's own
+    // comment mentions 'info' as the dropped class).
+    expect(tick[1]).toMatch(/note\('⏳ আবেদন জমা হচ্ছে…[\s\S]*?', 'warn'\)/);
+    expect(tick[1]).not.toMatch(/note\('⏳ আবেদন জমা হচ্ছে…[\s\S]*?', 'info'\)/);
+  });
+
+  test('submit busy() calls pass the submitting message (direct + bot paths)', () => {
+    expect(html).toContain("busy(true, '⏳ আবেদন জমা হচ্ছে… একটু অপেক্ষা করুন', DIRECT_HTTP_SUBMIT_TIMEOUT_MS)");
+    const botBusy = (html.match(/busy\(true, '⏳ আবেদন জমা হচ্ছে… একটু অপেক্ষা করুন'\)/g) || []).length;
+    expect(botBusy).toBeGreaterThanOrEqual(2);
+  });
+
+  test("note() still drops info — silent mode stays for other messages", () => {
+    expect(html).toContain("if (cls !== 'ok' && cls !== 'warn' && cls !== 'err') return;");
+    // Other info notes are untouched by the #71 fix and stay dropped:
+    // background login progress and the PDF-pending click-notes.
+    expect(html).toContain("note('⏳ সরকারি সাইটে লগইন করে আপনার কোড পাঠানো হচ্ছে…', 'info')");
+    expect(html).toContain("note('⏳ PDF তৈরি হচ্ছে — প্রস্তুত হলে এই বোতামেই নামানো যাবে', 'info')");
+    expect(html).toContain("note('⏳ আসল কপি আনা হচ্ছে…', 'info')");
+  });
+});

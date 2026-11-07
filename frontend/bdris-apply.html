@@ -854,7 +854,11 @@ function busy(on, msg, watchdogMs) {
   // (same policy as the submit fetch) — a 90s watchdog here used
   // to re-enable buttons mid-submit while the server kept working.
   if (on) S._busyWdog = setTimeout(() => { busy(false); note('⏳ একটু দেরি হচ্ছে — আবার চেষ্টা করুন', 'warn'); }, watchdogMs || 90000);
-  if (on && msg) note(msg, 'info');
+  // AUDIT #71 (2026-11-05): a busy message is the user waiting (login, OTP
+  // send, submit…) — it must be VISIBLE, not dropped by note()'s info
+  // filter. 'warn' (amber) is the waiting state; 'ok' would lie that the
+  // work already succeeded. The watchdog's own late message is 'warn' too.
+  if (on && msg) note(msg, 'warn');
 }
 function showFail(list) {
   const f = $('failBox');
@@ -3952,7 +3956,10 @@ async function directSubmit(otp, alreadyVerified) {
   try { clearInterval(S._submitProgressTimer); } catch (e) {}
   const _submitT0 = Date.now();
   S._submitProgressTimer = setInterval(() => {
-    try { note('⏳ আবেদন জমা হচ্ছে… (' + Math.round((Date.now() - _submitT0) / 1000) + ' সেকেন্ড)', 'info'); } catch (e) {}
+    // AUDIT #71 (2026-11-05): the 30s submit tick must be VISIBLE — 'info'
+    // is dropped by note(), so a 200s submit looked frozen. 'warn' passes
+    // the gate; the tick itself is the elapsed-time progress.
+    try { note('⏳ আবেদন জমা হচ্ছে… (' + Math.round((Date.now() - _submitT0) / 1000) + ' সেকেন্ড)', 'warn'); } catch (e) {}
   }, 30000);
   S.otpStage = 'submitting'; S._failReported = false;
   hideFail(); hideBanner(); noteOff();
