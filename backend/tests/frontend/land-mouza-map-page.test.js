@@ -44,4 +44,14 @@ describe('land-mouza-map page markup', () => {
     expect(PAGE).toContain('id="surveySel"');
     expect(PAGE).toContain('এলাকা, জরিপ ও মৌজা');
   });
+
+  test('premium two-column on wide PC: form left, results right (audit P0 #1)', () => {
+    expect(PAGE).toContain('class="land-layout"');
+    expect(PAGE).toContain('@media (min-width: 1200px)');
+    expect(PAGE).toContain('grid-template-columns: minmax(360px, 420px) minmax(0, 1fr)');
+    expect(PAGE).toContain('.land-layout #resultsBox { max-width: none; }');
+    // The 720px cap must not survive as an inline style (a
+    // stylesheet rule cannot beat it): it lives in CSS now.
+    expect(PAGE).not.toContain('max-width:720px; display:none');
+  });
 });

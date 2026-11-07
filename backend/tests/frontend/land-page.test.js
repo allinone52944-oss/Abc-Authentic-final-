@@ -143,6 +143,19 @@ describe('mobile + PC layout', () => {
   test('the form card is centred on wide PC screens', () => {
     expect(html).toContain('margin:0 auto 20px; max-width:680px');
   });
+  test('wide PC gets two-column: wizard left, result right (audit P0 #1)', () => {
+    expect(html).toContain('class="land-layout"');
+    expect(html).toContain('@media (min-width:1200px)');
+    expect(html).toContain('grid-template-columns:minmax(360px,420px) minmax(0,1fr)');
+    expect(html).toContain('.land-layout .form-card { max-width:none; margin:0; }');
+    // The result leaves the 680px card so the right column can
+    // hold it: it must be a sibling of the form card, not inside it.
+    const layOpen = html.indexOf('class="land-layout"');
+    const resAt = html.indexOf('id="result"', layOpen);
+    const formClose = html.indexOf('</form>', layOpen);
+    expect(layOpen).toBeGreaterThan(-1);
+    expect(resAt).toBeGreaterThan(formClose);
+  });
 });
 
 describe('verify runs on address + khatian number alone', () => {

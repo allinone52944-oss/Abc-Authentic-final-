@@ -19,6 +19,19 @@
     margin-bottom: 20px;
     max-width: 720px;
   }
+  #resultsBox { max-width: 720px; }
+  /* Premium two-column (audit P0 #1, 2026-11-07): on a wide PC
+     the form stays in the left column and the results fill the
+     right — no more 720px column with ~300px dead space on the
+     right, no more results stacked far below the form. Below
+     1200px the single-column layout is unchanged. No sticky
+     positioning: the form is taller than short laptop screens,
+     and sticky would hide its submit button. */
+  @media (min-width: 1200px) {
+    .land-layout { display: grid; grid-template-columns: minmax(360px, 420px) minmax(0, 1fr); gap: 24px; align-items: start; }
+    .land-layout .form-card { max-width: none; margin-bottom: 0; }
+    .land-layout #resultsBox { max-width: none; }
+  }
   .spin {
     display: inline-block; width: 20px; height: 20px;
     border: 3px solid rgba(37,99,235,0.25); border-top-color: var(--primary-600);
@@ -107,6 +120,7 @@
       </div>
     </div>
 
+    <div class="land-layout">
     <div class="form-card">
       <div class="price-line" id="priceLine">
         <span id="priceText">সেবা চার্জ লোড হচ্ছে…</span>
@@ -191,7 +205,7 @@
       </form>
     </div>
 
-    <div id="resultsBox" style="max-width:720px; display:none;">
+    <div id="resultsBox" style="display:none;">
       <div class="totals" id="totalLandLine"></div>
       <div class="capped-note" id="cappedNote" style="display:none;"></div>
       <div class="mutation-note" id="mutationNote" style="display:none;"></div>
@@ -200,6 +214,7 @@
         ⚠️ এই রিপোর্টটি তথ্যের সারাংশ মাত্র — এটি সরকারি সার্টিফাইড কপি নয়, মালিকানা / স্বত্ব / দখলের প্রমাণ নয়।
         অফিসিয়াল কাজে সরকারি পোর্টালে যাচাই করে নিন।
       </div>
+    </div>
     </div>
   </div>
 </div>

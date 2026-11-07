@@ -11,6 +11,17 @@
 <title>ভূমি সেবা - All In One</title>
 <style>
   .form-card { background:#fff; border:1px solid var(--border-light); border-radius:20px; padding:0 24px 24px; box-shadow:0 12px 32px rgba(15,23,42,.08); margin:0 auto 20px; max-width:680px; overflow:hidden; }
+  /* Premium two-column (audit P0 #1, 2026-11-07): on a wide PC
+     the wizard stays in the left column and the result fills the
+     right — no more 680px column with dead space on the right,
+     no more result stacked far below the form. Below 1200px the
+     single-column layout is unchanged. No sticky positioning:
+     the wizard is taller than short laptop screens, and sticky
+     would hide its submit button. */
+  @media (min-width:1200px){
+    .land-layout { display:grid; grid-template-columns:minmax(360px,420px) minmax(0,1fr); gap:24px; align-items:start; }
+    .land-layout .form-card { max-width:none; margin:0; }
+  }
   .hero { margin:0 -24px 20px; padding:22px 24px 18px; background:linear-gradient(135deg,#052e16 0%,#14532d 55%,#166534 100%); color:#ecfdf5; position:relative; }
   .hero:after { content:''; position:absolute; inset:0; background:radial-gradient(circle at 85% 20%, rgba(250,204,21,.22) 0%, transparent 55%); pointer-events:none; }
   .hero h3 { margin:0 0 4px; font-size:19px; color:#fff; }
@@ -111,6 +122,7 @@
       </div>
     </div>
 
+    <div class="land-layout">
     <div class="form-card">
       <div class="hero">
         <h3>সরকারি ভূমি রেকর্ড — সরাসরি আপনার হাতে</h3>
@@ -281,8 +293,9 @@
           এই রিপোর্ট সরকারি রেকর্ডের তথ্যের সারাংশ — সার্টিফাইড কপি নয়।
         </div>
       </form>
+    </div>
 
-      <div id="result"></div>
+    <div id="result"></div>
     </div>
   </div>
 </div>
