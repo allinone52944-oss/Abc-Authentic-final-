@@ -711,17 +711,29 @@ router.get('/history', async (req, res) => {
          WHERE user_id = $1 AND status = 'submitted'
          ORDER BY created_at DESC LIMIT 100`, [uid]),
     ]);
+    // R1 follow-up (2026-11-05): History shows ONLY the deliverable PDF
+    // per record. Generated receipt PDFs (success or failure) are stored
+    // as order documents with originalname '*-receipt.pdf' — they are the
+    // record's receipt, not its deliverable, and get no download link
+    // here. The record itself keeps its status informing; backend records
+    // and stored files are untouched.
+    const isReceiptPdf = (d) => /-receipt\.pdf$/i.test(String((d && d.originalname) || ''));
     const deliveryDocs = (raw, base) => safeJsonArray(raw)
-      .filter(d => d && d.filename && d.uploaded_by === 'admin')
+      .filter(d => d && d.filename && d.uploaded_by === 'admin' && !isReceiptPdf(d))
       .map(d => ({
         filename: d.filename,
         originalname: d.originalname || d.filename,
         url: base + encodeURIComponent(d.filename),
       }));
     const items = [];
+    // R1 follow-up #2 (2026-11-07, user decision): a completed record
+    // with no output stays in History as written text only — the row
+    // is pushed with documents: [] and no download link. The SQL
+    // gates above (completed/delivered, refunded-after-delivery;
+    // manual completed) are what keep in-progress records out, NOT
+    // a documents-length skip — so there is no skip here.
     for (const o of orders.rows) {
       const documents = deliveryDocs(o.documents, '/orders/' + o.id + '/documents/');
-      if (!documents.length) continue;
       items.push({
         kind: 'order', id: o.id,
         title: o.service_name_bn || o.service_name || 'সেবা অর্ডার',
@@ -730,7 +742,6 @@ router.get('/history', async (req, res) => {
     }
     for (const m of manual.rows) {
       const documents = deliveryDocs(m.documents, '/manual/' + m.id + '/documents/');
-      if (!documents.length) continue;
       items.push({
         kind: 'manual', id: m.id,
         title: m.service_name_bn || m.service_name || 'ম্যানুয়াল সেবা',
@@ -759,7 +770,11 @@ router.get('/history', async (req, res) => {
           (j.subject_name ? ' — ' + j.subject_name : '') +
           (j.outcome === 'failed' ? ' — ব্যর্থ' : ''),
         created_at: j.created_at,
-        documents: [{
+        // R1 follow-up (2026-11-05): a failed engine job's file is a
+        // generated failure receipt, not a deliverable — the record
+        // stays in History (title carries '— ব্যর্থ') but gets no
+        // download link. A completed job's certificate keeps its link.
+        documents: j.outcome === 'failed' ? [] : [{
           filename: j.filename,
           originalname: j.originalname || j.filename,
           url: '/engine-jobs/' + j.id + '/file',

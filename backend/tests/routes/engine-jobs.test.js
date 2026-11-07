@@ -282,7 +282,7 @@ describe('GET /api/history — engine deliveries are included', () => {
     expect(bdrisQueries[0][0]).toContain("status = 'submitted'");
   });
 
-  test('a failed engine job appears in history marked ব্যর্থ with its receipt', async () => {
+  test('a failed engine job appears in history marked ব্যর্থ with NO download link (R1 follow-up: the receipt is not a deliverable)', async () => {
     db.__routeQuery([
       ['FROM orders o LEFT JOIN services', { rows: [] }],
       ['FROM manual_submissions m LEFT JOIN services', { rows: [] }],
@@ -293,6 +293,8 @@ describe('GET /api/history — engine deliveries are included', () => {
     const r = await asUser(request(app()).get('/api/history')).expect(200);
     expect(r.body.items).toHaveLength(1);
     expect(r.body.items[0].title).toContain('ব্যর্থ');
-    expect(r.body.items[0].documents[0].url).toBe('/engine-jobs/jF/file');
+    // the record stays (status informing) but its failure receipt gets
+    // no download link in History — only deliverables do
+    expect(r.body.items[0].documents).toEqual([]);
   });
 });

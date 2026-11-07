@@ -197,7 +197,7 @@ describe('DELETE /api/admin/manual/:id — admin delete with file cleanup', () =
 });
 
 describe('GET /api/history — delivery files only, no work details', () => {
-  test('only orders/manual submissions WITH admin delivery files appear; customer files and detail fields stay out', async () => {
+  test('records WITH an admin delivery file show it; records with no deliverable stay as status-only text; customer files and detail fields stay out', async () => {
     db.__routeQuery([
       ['FROM orders o LEFT JOIN services', { rows: [
         { id: 'o1', documents: JSON.stringify([
@@ -218,10 +218,13 @@ describe('GET /api/history — delivery files only, no work details', () => {
     ]);
     const r = await asUser(request(app()).get('/api/history')).expect(200);
     expect(r.body.ok).toBe(true);
-    // o2 (no delivery file) and m2 (no delivery file) are excluded even
-    // though they are the newest records; newest-first among the rest.
-    expect(r.body.items.map(i => i.id)).toEqual(['m1', 'o1', 'o3']);
+    // R1 follow-up #2 (2026-11-07, user decision): o2 (no delivery
+    // file) and m2 (no delivery file) STAY as written text only —
+    // the documents-length skip is gone. Newest-first among all.
+    expect(r.body.items.map(i => i.id)).toEqual(['m2', 'o2', 'm1', 'o1', 'o3']);
     const byId = Object.fromEntries(r.body.items.map(i => [i.id, i]));
+    expect(byId.o2.documents).toEqual([]);
+    expect(byId.m2.documents).toEqual([]);
     // the order carries ONLY its delivery file, not the customer's upload
     expect(byId.o1.documents).toHaveLength(1);
     expect(byId.o1.documents[0]).toMatchObject({ filename: 'delivery-x.pdf', url: '/orders/o1/documents/delivery-x.pdf' });
