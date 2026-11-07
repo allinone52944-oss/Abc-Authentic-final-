@@ -3955,10 +3955,10 @@ async function directSubmit(otp, alreadyVerified) {
   // time until an ack (or unknown) clears it.
   try { clearInterval(S._submitProgressTimer); } catch (e) {}
   const _submitT0 = Date.now();
+  // AUDIT #71 (2026-11-05): the 30s submit tick must be VISIBLE — 'info'
+  // is dropped by note(), so a 200s submit looked frozen. 'warn' passes
+  // the gate; the tick itself is the elapsed-time progress.
   S._submitProgressTimer = setInterval(() => {
-    // AUDIT #71 (2026-11-05): the 30s submit tick must be VISIBLE — 'info'
-    // is dropped by note(), so a 200s submit looked frozen. 'warn' passes
-    // the gate; the tick itself is the elapsed-time progress.
     try { note('⏳ আবেদন জমা হচ্ছে… (' + Math.round((Date.now() - _submitT0) / 1000) + ' সেকেন্ড)', 'warn'); } catch (e) {}
   }, 30000);
   S.otpStage = 'submitting'; S._failReported = false;
