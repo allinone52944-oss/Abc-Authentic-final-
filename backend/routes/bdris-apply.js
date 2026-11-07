@@ -21,6 +21,7 @@ const { safeLog } = require('../security');
 const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
 const db = require('../db');
+const { storedOriginalAvailable, storedOriginalPath, originalFileKey } = require('../lib/storedOriginal');
 
 const router = express.Router();
 
@@ -361,6 +362,37 @@ router.get('/applications', requireAuth, async (req, res) => {
   } catch (e) {
     safeLog('[bdris-apply] applications list error:', e.message);
     return res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// GET /api/bdris-apply/applications/:ackNo/original — re-download
+// one's own stored original Form-1 PDF (past-applications list,
+// 2026-11-07). No new charge: this is the already-paid copy the
+// engine fetched at submit time — the originalPdfGate already
+// allows exactly this re-download (owner + record + flag). Owner
+// only: the record must belong to the caller, be submitted, and
+// flag the original available — and the file must still be on
+// disk as a real PDF. Anything else is a 404 with no entitlement
+// detail leaked. The filename is digits-only (storedOriginal
+// helper), so a crafted ack can never escape the directory.
+router.get('/applications/:ackNo/original', requireAuth, async (req, res) => {
+  try {
+    const ackNo = canonicalAckNo(req.params.ackNo || '');
+    if (!ackNo) return res.status(400).json({ error: 'MISSING_ACK' });
+    const r = await db.query(
+      `SELECT original_pdf_available FROM bdris_applications
+       WHERE user_id = $1 AND status = 'submitted'
+       AND (ack_no = $2 OR regexp_replace(ack_no, '\\D', '', 'g') = $2) LIMIT 1`,
+      [req.user.id, ackNo]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    if (!r.rows[0].original_pdf_available) return res.status(404).json({ error: 'PDF_NOT_AVAILABLE' });
+    const fp = storedOriginalPath(ackNo);
+    if (!fp || !storedOriginalAvailable(ackNo)) return res.status(404).json({ error: 'FILE_MISSING' });
+    res.download(fp, 'bdris-original-' + originalFileKey(ackNo) + '.pdf');
+  } catch (e) {
+    safeLog('[bdris-apply] original download error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
   }
 });
 

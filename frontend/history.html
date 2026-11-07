@@ -141,13 +141,19 @@ function render(){
     const docs = (it.documents || []).map((d, di) =>
       '<button class="hist-doc delivery" onclick="dlHist(' + gi + ',' + di + ')">🎁 ' + esc(d.originalname || d.filename) + ' ⬇️</button>'
     ).join('');
-    // Audit #39 — a BDRIS filing shows its tracking number, a link to
-    // the filing page, and whether its original PDF is ready. No
-    // download button: the PDF needs a fresh charge token from the
-    // filing page, so a direct link here would be fake.
+    // Past-applications list (2026-11-07) — a BDRIS filing shows its
+    // tracking number, a link to the filing page, and its stored
+    // original PDF when retrievable: the documents array (rendered
+    // above via dlHist) is the download, and this view button opens
+    // the same copy in a new tab. When the copy is not retrievable
+    // the row keeps the filing-page note (the page can re-fetch it).
+    const hasPdf = it.kind === 'bdris' && (it.documents || []).length > 0;
     const extra = (it.kind === 'bdris'
-      ? (it.original_pdf_available ? '<div class="hist-meta" style="color:#059669;">✅ আসল PDF তৈরি — আবেদন পাতা থেকে নামান</div>' : '') +
-        (it.link ? '<div class="hist-docs"><button class="hist-doc" onclick="location.href=\'' + esc(it.link) + '\'">📄 আবেদন দেখুন</button></div>' : '')
+      ? (it.original_pdf_available ? '<div class="hist-meta" style="color:#059669;">✅ আসল PDF তৈরি — ' + (hasPdf ? 'এখানেই দেখুন / নামান' : 'আবেদন পাতা থেকে নামান') + '</div>' : '') +
+        ((hasPdf || it.link) ? '<div class="hist-docs">' +
+          (hasPdf ? '<button class="hist-doc" onclick="viewHist(' + gi + ',0)">👁️ আসল PDF দেখুন</button>' : '') +
+          (it.link ? '<button class="hist-doc" onclick="location.href=\'' + esc(it.link) + '\'">📄 আবেদন দেখুন</button>' : '') +
+          '</div>' : '')
       : '');
     return '<div class="hist-item">' +
       '<div class="hist-head"><div>' +
@@ -172,6 +178,22 @@ async function dlHist(i, di){
     document.body.appendChild(a); a.click();
     setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
   }catch(e){ ABC.showPageMsg(ABC.httpErrBn(0, 'ডাউনলোড'), 'err'); }
+}
+
+// Past-applications list (2026-11-07): view a stored PDF in a new
+// tab — same owner-only URL as the download (blob via JWT, never a
+// bare static link, so no token ever sits in a URL).
+async function viewHist(i, di){
+  const it = _items[i]; if(!it) return;
+  const d = (it.documents || [])[di]; if(!d) return;
+  try{
+    const r = await ABC.api(d.url);
+    if(!r.ok){ ABC.showPageMsg(ABC.httpErrBn(r.status, 'খোলা'), 'err'); return; }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(()=>{ URL.revokeObjectURL(url); }, 60000);
+  }catch(e){ ABC.showPageMsg(ABC.httpErrBn(0, 'খোলা'), 'err'); }
 }
 
 async function init(){

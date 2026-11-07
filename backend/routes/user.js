@@ -19,6 +19,7 @@ const { chargeRuleFor } = require('../lib/chargeRule'); // audit #49
 const wa = require('../utils/whatsapp');
 const { tryAutoMatchRecharge } = require('./sms');
 const serviceCredits = require('../lib/serviceCredits');
+const { bdrisOriginalDoc } = require('../lib/storedOriginal'); // past-applications list (2026-11-07)
 
 // Fraud alerts (duplicate TrxID / amount mismatch at submit) notify
 // the attempter + admins at most once per user+trxid per hour, so a
@@ -662,12 +663,12 @@ router.get('/orders/:id/documents/:filename', async (req, res) => {
 // phone/browser they use.
 // Audit #39 (2026-11-05) reverses the BDRIS half of that call: a filed
 // BDRIS application now appears here with its tracking number and a
-// link to the filing page. The original Form-1 PDF itself is NOT
-// linked as a download: it needs JWT + a paid charge token, which
-// History does not hold — a bare link would fail (a fake download
-// link). The filing page is where the PDF is fetched with a fresh
-// token; when a stored-PDF download endpoint exists, the documents
-// array is where its link goes.
+// link to the filing page. Past-applications list (2026-11-07): the
+// stored original Form-1 PDF is linked as a download when it is
+// retrievable on disk — the owner-only endpoint serves the
+// already-paid copy with the caller's JWT, no new charge. When the
+// copy is not retrievable the row stays as text-only with the
+// filing-page link (the filing page can still re-fetch it).
 router.get('/history', async (req, res) => {
   try {
     const uid = req.user.id;
@@ -749,16 +750,20 @@ router.get('/history', async (req, res) => {
       });
     }
     // Audit #39 — BDRIS filings carry their tracking number and a
-    // link to the filing page. No documents array: the original PDF
-    // needs a fresh charge token from the filing page, so a direct
-    // download link here would be fake.
+    // link to the filing page. Past-applications list (2026-11-07):
+    // when the stored original Form-1 PDF is retrievable on disk,
+    // the documents array carries its owner-only download link
+    // (a re-download of the already-paid copy, no new charge).
+    // When the copy is not retrievable the row stays as text-only
+    // with the filing-page link (R1 follow-up #2: no fake link).
     for (const a of bdrisApps.rows) {
+      const origDoc = a.original_pdf_available ? bdrisOriginalDoc(a.ack_no) : null;
       items.push({
         kind: 'bdris', id: a.id,
         title: 'জন্ম নিবন্ধন আবেদন' +
           (a.applicant_name ? ' — ' + a.applicant_name : '') +
           ' (আবেদন নম্বর: ' + a.ack_no + ')',
-        created_at: a.created_at, documents: [],
+        created_at: a.created_at, documents: origDoc ? [origDoc] : [],
         link: '/bdris-apply.html',
         original_pdf_available: !!a.original_pdf_available,
       });

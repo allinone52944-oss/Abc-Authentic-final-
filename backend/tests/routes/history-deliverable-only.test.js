@@ -13,6 +13,8 @@ jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
 
 const express = require('express');
 const request = require('supertest');
+const fs = require('fs');
+const path = require('path');
 const db = require('../../db');
 const auth = require('../../auth');
 const userRouter = require('../../routes/user');
@@ -140,5 +142,45 @@ describe('GET /api/history — deliverable PDF only (R1 follow-up)', () => {
     expect(r.body.items[0].documents).toEqual([]);
     expect(r.body.items[0].link).toBe('/bdris-apply.html');
     expect(r.body.items[0].original_pdf_available).toBe(false);
+  });
+
+  // Past-applications list (2026-11-07): a filed BDRIS application
+  // whose stored original is retrievable gets a real download link
+  // in History; without the file on disk it stays text-only.
+  test('(e) BDRIS filing with a stored original → documents carries the owner-only download link', async () => {
+    const KEY = '265530312';
+    const FP = path.join(__dirname, '..', '..', '..', 'frontend', 'bdris-original-' + KEY + '.pdf');
+    fs.writeFileSync(FP, '%PDF-1.4\n' + 'A'.repeat(8100));
+    try {
+      db.__routeQuery([
+        ['FROM bdris_applications', { rows: [
+          { id: 'b1', ack_no: KEY, applicant_name: 'টেস্ট', created_at: '2026-10-21T10:00:00Z', original_pdf_available: true },
+        ] }],
+      ]);
+      const r = await asUser(request(app()).get('/api/history')).expect(200);
+      expect(r.body.items).toHaveLength(1);
+      expect(r.body.items[0].kind).toBe('bdris');
+      expect(r.body.items[0].documents).toHaveLength(1);
+      expect(r.body.items[0].documents[0]).toMatchObject({
+        filename: 'bdris-original-' + KEY + '.pdf',
+        url: '/api/bdris-apply/applications/' + KEY + '/original',
+      });
+    } finally {
+      try { fs.unlinkSync(FP); } catch {}
+    }
+  });
+
+  test('(e2) BDRIS filing flagged ready but file missing on disk → no download link, row stays', async () => {
+    db.__routeQuery([
+      ['FROM bdris_applications', { rows: [
+        { id: 'b1', ack_no: '265530312', applicant_name: 'টেস্ট', created_at: '2026-10-21T10:00:00Z', original_pdf_available: true },
+      ] }],
+    ]);
+    const r = await asUser(request(app()).get('/api/history')).expect(200);
+    expect(r.body.items).toHaveLength(1);
+    expect(r.body.items[0].kind).toBe('bdris');
+    expect(r.body.items[0].documents).toEqual([]);
+    expect(r.body.items[0].link).toBe('/bdris-apply.html');
+    expect(r.body.items[0].original_pdf_available).toBe(true);
   });
 });

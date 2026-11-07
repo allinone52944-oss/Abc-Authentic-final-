@@ -9,10 +9,13 @@ jest.mock('../../utils/push', () => ({
 
 const express = require('express');
 const request = require('supertest');
+const fs = require('fs');
+const path = require('path');
 const db = require('../../db');
 const auth = require('../../auth');
 const bdrisRouter = require('../../routes/bdris-apply');
 const push = require('../../utils/push');
+const storedOriginal = require('../../lib/storedOriginal');
 
 function app() {
   const a = express();
@@ -360,6 +363,66 @@ describe('POST/GET/DELETE /api/bdris-apply/applications (আবেদনের �
     expect(ord[1][2]).toBe('failed');
     expect(ord[1][4]).toBe(90); // the submit charge already ran
     expect(JSON.parse(ord[1][3]).charge_ref).toBe('bdris-apply-submit-draft-x-submit-u1');
+  });
+});
+
+// Past-applications list (2026-11-07): re-download of one's own
+// stored original Form-1 PDF. No new charge — the copy was already
+// paid for at submit time. Owner-only + flag + file-on-disk, or 404.
+describe('GET /api/bdris-apply/applications/:ackNo/original — stored original re-download', () => {
+  const KEY = '999000111';
+  const FN = 'bdris-original-' + KEY + '.pdf';
+  const FP = path.join(__dirname, '..', '..', '..', 'frontend', FN);
+  const PDF = '%PDF-1.4\n' + 'A'.repeat(8100); // over the 8000-byte real-PDF floor
+  beforeEach(() => { fs.writeFileSync(FP, PDF); });
+  afterEach(() => { try { fs.unlinkSync(FP); } catch {} });
+
+  test('requires auth → 401', async () => {
+    await request(app()).get('/api/bdris-apply/applications/' + KEY + '/original').expect(401);
+  });
+
+  test('unknown ack → 404 NOT_FOUND', async () => {
+    db.__routeQuery([
+      ['FROM bdris_applications', { rows: [] }],
+    ]);
+    const r = await withUser(request(app()).get('/api/bdris-apply/applications/' + KEY + '/original')).expect(404);
+    expect(r.body.error).toBe('NOT_FOUND');
+  });
+
+  test('record without the original flag → 404 PDF_NOT_AVAILABLE', async () => {
+    db.__routeQuery([
+      ['FROM bdris_applications', { rows: [{ original_pdf_available: false }] }],
+    ]);
+    const r = await withUser(request(app()).get('/api/bdris-apply/applications/' + KEY + '/original')).expect(404);
+    expect(r.body.error).toBe('PDF_NOT_AVAILABLE');
+  });
+
+  test('flagged record but no file on disk → 404 FILE_MISSING', async () => {
+    db.__routeQuery([
+      ['FROM bdris_applications', { rows: [{ original_pdf_available: true }] }],
+    ]);
+    const r = await withUser(request(app()).get('/api/bdris-apply/applications/999000112/original')).expect(404);
+    expect(r.body.error).toBe('FILE_MISSING');
+  });
+
+  test('owner + flag + file → 200, real PDF bytes, attachment filename', async () => {
+    db.__routeQuery([
+      ['FROM bdris_applications', { rows: [{ original_pdf_available: true }] }],
+    ]);
+    const r = await withUser(request(app()).get('/api/bdris-apply/applications/' + KEY + '/original')).expect(200);
+    expect(r.headers['content-type']).toMatch(/application\/pdf/);
+    expect(r.headers['content-disposition']).toContain(FN);
+    expect(Buffer.isBuffer(r.body) ? r.body.toString('utf8') : r.text).toContain('%PDF-1.4');
+  });
+
+  test('a crafted ack can never escape the originals dir', () => {
+    const dir = storedOriginal.originalsDir();
+    for (const hostile of ['../../etc/passwd', '/etc/passwd', KEY + '/../../x', '..\\..\\win']) {
+      const p = storedOriginal.storedOriginalPath(hostile);
+      if (p) expect(p.startsWith(dir + path.sep)).toBe(true);
+    }
+    expect(storedOriginal.storedOriginalPath('../../etc/passwd')).toBe(null);
+    expect(storedOriginal.storedOriginalPath('')).toBe(null);
   });
 });
 
