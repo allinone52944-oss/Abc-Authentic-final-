@@ -222,7 +222,10 @@ app.get('/api/captcha', async (req, res) => {
                 captchaMime: imgRes.headers.get('content-type') || 'image/png',
                 createdAt: Date.now()
             });
-            setTimeout(() => sessions.delete(id), SESSION_TTL_MS);
+            // unref so a stale session timer never keeps the process alive
+            // (matters for tests; in production the server runs forever,
+            // so the timer still fires on schedule).
+            setTimeout(() => sessions.delete(id), SESSION_TTL_MS).unref();
 
             const mime = (imgRes.headers.get('content-type') || 'image/png').split(';')[0];
             return res.json({
@@ -765,9 +768,16 @@ app.post('/api/verify', async (req, res) => {
             body
         });
         const html = await r.text();
-        // Verify page save — shudhu fail korle thake (structure dekhe fix kora jabe).
-        // Success-e niche file-ta delete hoy, jate shofol record-er personal page disk-e pore na thake.
-        try { require('fs').writeFileSync(require('path').join(__dirname, 'last-result.html'), html); } catch (_) {}
+        // Verify diagnostic (audit item 2, 2026-11-07): the BDRIS result
+        // page is NO LONGER written to disk. It used to be saved as
+        // last-result.html and only deleted on success — a failed verify
+        // left a full page of personal data on disk, and the single shared
+        // filename raced between concurrent verifies (one attempt's success
+        // deleted another's diagnostic). The page now lives only in this
+        // request's memory (this `html` variable) and is dropped when the
+        // handler returns. A parse failure still returns the same debug
+        // excerpt (`debug: tds.slice(0, 40)` — cell texts only, no raw
+        // page) in the response, so nothing is lost for debugging.
 
         if (/error in data retr/i.test(html)) {
             return res.json({ success: false, error: 'BDRIS error: Error in Data retrieving. Please retry another time.' });
@@ -816,15 +826,15 @@ app.post('/api/verify', async (req, res) => {
             data.qrImageSrc = qrImgMatch[1];
         }
         if (!data.brn && !data.nameEn) {
-            return res.json({ success: false, error: 'Could not read the result. Fetch a new captcha and try again. (last-result.html saved)', debug: tds.slice(0, 40) });
+            return res.json({ success: false, error: 'Could not read the result. Fetch a new captcha and try again. (no file saved; see debug excerpt)', debug: tds.slice(0, 40) });
         }
         // Missing-field diagnostic — builder app-e ki ki parse hocche dekhte parben.
         // (registrationOffice NA — output-e office1+office2 i canonical address.)
         const miss = ['registrationDate', 'issuanceDate', 'office1', 'office2']
             .filter(k => !data[k]);
         if (miss.length) data.missingFields = miss;
-        // Success: last-result.html rakha dorkar nei — data frontend-e geche.
-        try { require('fs').unlinkSync(require('path').join(__dirname, 'last-result.html')); } catch (_) {}
+        // Success: data frontend-e geche; the in-memory result page (html)
+        // is dropped when this handler returns — nothing on disk.
         res.json({ success: true, data });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
