@@ -23,6 +23,13 @@ const path = require('node:path');
 const { app } = require('../server');
 const { mintRenderToken, RENDER_TOKEN_HEADER } = require('../../shared/render-token');
 
+// Audit item 1 (2026-11-07): the engine now also requires the shared
+// secret header (set by the backend proxy). These render-token tests
+// include it so they exercise the render-token check, not the secret gate;
+// the secret gate itself is tested in engine-secret.test.js.
+const ENGINE_SECRET_HEADER = 'x-engine-secret';
+const ENGINE_SECRET = 'test-render-secret';
+
 let base;
 let server;
 
@@ -40,7 +47,7 @@ const payload = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'sample-pa
 async function postPreview(headers) {
   return fetch(base + '/api/preview', {
     method: 'POST',
-    headers: Object.assign({ 'Content-Type': 'application/json' }, headers || {}),
+    headers: Object.assign({ 'Content-Type': 'application/json', [ENGINE_SECRET_HEADER]: ENGINE_SECRET }, headers || {}),
     body: JSON.stringify(payload),
   });
 }
@@ -77,7 +84,7 @@ describe('birth render token gate (audit #5)', () => {
   it('generate-pdf without a token -> 402 (no browser launched)', async () => {
     const r = await fetch(base + '/generate-pdf', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', [ENGINE_SECRET_HEADER]: ENGINE_SECRET },
       body: JSON.stringify(payload),
     });
     assert.strictEqual(r.status, 402);

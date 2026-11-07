@@ -1,6 +1,5 @@
 const express = require('express');
 const puppeteer = require('puppeteer'); // only for local PDF rendering
-const cors = require('cors');
 const bodyParser = require('body-parser');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const QRCode = require('qrcode');
@@ -19,9 +18,10 @@ const { spawn, spawnSync } = require('child_process');
 // copies without engines/shared/ fail CLOSED (no verifier -> no
 // render), never open.
 let verifyRenderToken = null;
+let renderTokenSecret = null;
 let RENDER_TOKEN_HEADER = 'x-engine-render-token';
 try {
-    ({ verifyRenderToken, RENDER_TOKEN_HEADER } = require('../shared/render-token'));
+    ({ verifyRenderToken, RENDER_TOKEN_HEADER, renderTokenSecret } = require('../shared/render-token'));
 } catch (_) { /* no shared module: renders fail closed below */ }
 function requireRenderToken(req, res) {
     const tok = req.headers && req.headers[RENDER_TOKEN_HEADER];
@@ -30,6 +30,35 @@ function requireRenderToken(req, res) {
         return false;
     }
     return true;
+}
+
+// Engine shared-secret gate (audit item 1, 2026-11-07): the standalone
+// engine listens on 127.0.0.1:3000 with no auth of its own. The ONLY
+// legitimate caller is the backend proxy (engines/birth-final/index.js
+// getApp()), which sets the x-engine-secret header from the backend's
+// env secret (ABC_JWT_SECRET || JWT_SECRET — the same secret the render
+// token uses, passed to this spawned child via spawn env). Direct
+// localhost calls without the valid secret are rejected with 401.
+// Fail CLOSED: no secret configured -> every API call is rejected.
+// The render-token check on /api/preview and /generate-pdf is untouched
+// (defense in depth). The Studio UI page (GET /) still loads — it serves
+// no data; its API calls are rejected like any other direct call.
+const ENGINE_SECRET_HEADER = 'x-engine-secret';
+function requireEngineSecret(req, res, next) {
+    const secret = (typeof renderTokenSecret === 'function') ? renderTokenSecret() : '';
+    const got = req.headers && req.headers[ENGINE_SECRET_HEADER];
+    let ok = false;
+    if (secret && got) {
+        try {
+            const a = Buffer.from(String(got), 'utf8');
+            const b = Buffer.from(String(secret), 'utf8');
+            ok = a.length === b.length && crypto.timingSafeEqual(a, b);
+        } catch (_) { ok = false; }
+    }
+    if (!ok) {
+        return res.status(401).json({ success: false, error: 'ENGINE_AUTH_REQUIRED', message: 'Engine calls must come through the backend.' });
+    }
+    next();
 }
 
 // Embedded certificate fonts (assets/fonts.css — @font-face + base64 woff2).
@@ -51,8 +80,12 @@ require('node:tls').DEFAULT_MAX_VERSION = 'TLSv1.2';
 const app = express();
 const port = parseInt(process.env.BIRTH_ENGINE_PORT || '3000', 10);
 
-app.use(cors());
 app.use(bodyParser.json({ limit: '10mb' }));
+
+// Engine API calls must come through the backend proxy (shared secret).
+// GET / (Studio UI page) stays open — it serves no data.
+app.use('/api', requireEngineSecret);
+app.use('/generate-pdf', requireEngineSecret);
 
 // Serve the Studio UI
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));

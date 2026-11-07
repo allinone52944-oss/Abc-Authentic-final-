@@ -13,6 +13,14 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
+// Engine shared-secret header (audit item 1): the proxy sets this from the
+// backend's env secret so the engine accepts proxied calls. Set AFTER
+// spreading the incoming headers so a client cannot inject its own value.
+// No shared module -> no header -> the engine rejects (fail closed).
+let renderTokenSecret = null;
+try { ({ renderTokenSecret } = require('../shared/render-token')); } catch (_) { /* fail closed */ }
+const ENGINE_SECRET_HEADER = 'x-engine-secret';
+
 const ENGINE_PORT = parseInt(process.env.BIRTH_ENGINE_PORT || '3000', 10);
 
 let _proc = null;
@@ -74,6 +82,8 @@ function getApp() {
   return (req, res) => {
     const bodyData = req.body ? JSON.stringify(req.body) : null;
     const headers = { ...req.headers, host: '127.0.0.1:3000' };
+    const engineSecret = (typeof renderTokenSecret === 'function') ? renderTokenSecret() : '';
+    if (engineSecret) headers[ENGINE_SECRET_HEADER] = engineSecret;
     delete headers['content-length'];
     delete headers['transfer-encoding'];
     if (bodyData) headers['content-length'] = Buffer.byteLength(bodyData);
