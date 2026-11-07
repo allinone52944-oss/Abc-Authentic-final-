@@ -80,6 +80,24 @@ describe('GET /api/history — deliverable PDF only (R1 follow-up)', () => {
     expect(r.body.items[0].documents).toEqual([]);
   });
 
+  test('(a5) P0 #2: a mouza-map-success order WITH stored sheet PNGs shows both PNG downloads', async () => {
+    db.__routeQuery([
+      ['FROM orders o LEFT JOIN services', { rows: [
+        { id: 'oM2', documents: JSON.stringify([
+          { filename: 'delivery-land-mouza-map-sheet-1-t.png', originalname: 'mouza-map-sheet-1.png', uploaded_by: 'admin', type: 'delivery' },
+          { filename: 'delivery-land-mouza-map-sheet-2-t.png', originalname: 'mouza-map-sheet-2.png', uploaded_by: 'admin', type: 'delivery' },
+        ]), created_at: '2026-10-22T09:00:00Z', service_name: 'Mouza Map', service_name_bn: 'মৌজা ম্যাপ' },
+      ] }],
+    ]);
+    const r = await asUser(request(app()).get('/api/history')).expect(200);
+    expect(r.body.items).toHaveLength(1);
+    expect(r.body.items[0]).toMatchObject({ kind: 'order', id: 'oM2' });
+    expect(r.body.items[0].documents).toHaveLength(2);
+    expect(r.body.items[0].documents.map((d) => d.originalname).sort()).toEqual([
+      'mouza-map-sheet-1.png', 'mouza-map-sheet-2.png',
+    ]);
+  });
+
   test('(a4) a receipt-only completed manual submission stays in History as status-only text', async () => {
     db.__routeQuery([
       ['FROM manual_submissions m LEFT JOIN services', { rows: [

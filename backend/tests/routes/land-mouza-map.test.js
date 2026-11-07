@@ -13,6 +13,13 @@
 //     order that the search created (order_id + sheet id must
 //     match that order's sheets) — otherwise 403
 //     NOT_DELIVERED_YET; a sheet id alone never opens an image
+// Premium audit P0 #2 (2026-11-07): the found sheets ARE the
+// delivery — each sheet's PNG is stored as a delivery file on
+// the order at search time (History re-downloads it, no
+// re-search, no re-charge) and there is NO success receipt
+// PDF anymore (it was invisible in History under R1 and never
+// shown on the search page). The failure receipt stays: a
+// ৳0 not-found order still gets its failure receipt.
 // Price 0 below is the MIGRATION DEFAULT (048 seeds 0);
 // Pankaj sets the fee himself in Admin → Services.
 jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
@@ -81,10 +88,23 @@ function mapFound() {
   client.mapSheets.mockResolvedValue([
     { ID: 240249, SHEET_NO: 1 }, { ID: 240250, SHEET_NO: 2 },
   ]);
+  // P0 #2: the success path stores each sheet's PNG bytes.
+  client.mapPreview.mockResolvedValue({
+    buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    contentType: 'image/png',
+  });
 }
 
 const walletCalls = () => db.__client.query.mock.calls.filter((c) => String(c[0]).includes('wallet_apply'));
 const orderInserts = () => db.query.mock.calls.filter((c) => String(c[0]).includes('INSERT INTO orders'));
+// P0 #2: every storePdf call UPDATEs orders.documents with one
+// more doc (the mock SELECT always returns '[]', so each UPDATE
+// carries a single doc) — the union across UPDATEs is what was
+// stored on the order. These go through db.query (the route's
+// own calls), NOT the withTransaction client.
+const storedDocs = () => db.query.mock.calls
+  .filter((c) => String(c[0]).includes('UPDATE orders SET documents'))
+  .flatMap((c) => { try { return JSON.parse(c[1][0]); } catch { return []; } });
 
 beforeEach(() => {
   db.__reset();
@@ -121,6 +141,47 @@ describe('POST /api/land-mouza-map/search', () => {
     expect(r.body.sheets).toEqual([{ id: 240249, sheetNo: 1 }, { id: 240250, sheetNo: 2 }]);
     expect(walletCalls()).toHaveLength(0);
     expect(orderInserts().length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('P0 #2: success stores one PNG delivery per sheet, NO receipt PDF', async () => {
+    mapFound();
+    const r = await withUser(request(app()).post('/api/land-mouza-map/search'))
+      .send({ ...AREA, survey_id: 2, idempotency_key: 't-mm-png' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, orderId: 'o1', receipt: null });
+    const docs = storedDocs();
+    expect(docs).toHaveLength(2);
+    expect(docs.map((d) => d.originalname).sort()).toEqual([
+      'mouza-map-sheet-1.png', 'mouza-map-sheet-2.png',
+    ]);
+    expect(docs.every((d) => d.type === 'delivery' && d.uploaded_by === 'admin')).toBe(true);
+    expect(docs.map((d) => d.filename).join(' ')).not.toContain('.pdf');
+    expect(client.mapPreview).toHaveBeenCalledTimes(2);
+    expect(client.mapPreview).toHaveBeenCalledWith('240249');
+    expect(client.mapPreview).toHaveBeenCalledWith('240250');
+  });
+
+  test('P0 #2: all sheet fetches fail → still 200, nothing stored, no receipt', async () => {
+    mapFound();
+    client.mapPreview.mockRejectedValue(new Error('LAND_UNREACHABLE'));
+    const r = await withUser(request(app()).post('/api/land-mouza-map/search'))
+      .send({ ...AREA, survey_id: 2, idempotency_key: 't-mm-pngfail' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, orderId: 'o1', receipt: null });
+    expect(storedDocs()).toHaveLength(0);
+  });
+
+  test('P0 #2: partial sheet failure → the good sheet is stored, no receipt', async () => {
+    mapFound();
+    client.mapPreview
+      .mockResolvedValueOnce({
+        buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47]), contentType: 'image/png',
+      })
+      .mockRejectedValueOnce(new Error('LAND_UNREACHABLE'));
+    const r = await withUser(request(app()).post('/api/land-mouza-map/search'))
+      .send({ ...AREA, survey_id: 2, idempotency_key: 't-mm-pngpart' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, orderId: 'o1', receipt: null });
+    const docs = storedDocs();
+    expect(docs).toHaveLength(1);
+    expect(docs[0].originalname).toBe('mouza-map-sheet-1.png');
   });
 
   test('sheets found at price 50 → charged 50 once', async () => {

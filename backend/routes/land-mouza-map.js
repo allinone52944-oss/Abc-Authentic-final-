@@ -15,13 +15,23 @@
 // least one sheet is found — "not found" is a ৳0 failed
 // order, exactly like land-khatian.
 //
-// Delivery discipline (same as land-khatian): the preview
-// PNGs are served ONLY against the completed order that the
-// search created (order_id + sheet id must match that
-// order's sheets) — otherwise 403 NOT_DELIVERED_YET. A plain
-// sheet id alone never opens an image. Idempotency: a
-// repeated idempotency_key replays the stored outcome —
-// never a second lookup charge.
+// Delivery discipline (same as land-khatian): the sheet PNGs
+// are STORED as the order's delivery files at search time
+// (uploads/orders, orders.documents type 'delivery') — so
+// History can re-download them with one click, no re-search,
+// no re-charge (premium audit P0 #2, 2026-11-07). The PNGs
+// pass History's R1 deliverable filter (originalname does not
+// end in '-receipt.pdf'); there is NO success receipt PDF —
+// the old one was invisible in History anyway (R1 filters
+// receipts out) and never shown on the search page. A sheet
+// whose fetch fails is logged and skipped; the order still
+// completes (the search page shows it live via /preview).
+// The live /preview endpoint stays as the search-page display
+// path, still gated the same way: order_id + sheet id must
+// match that order's sheets — otherwise 403
+// NOT_DELIVERED_YET. A plain sheet id alone never opens an
+// image. Idempotency: a repeated idempotency_key replays the
+// stored outcome — never a second lookup charge.
 //
 // Honest limits, shown on the page: these are PREVIEW
 // images, NOT the certified sheet (the certified sheet
@@ -234,6 +244,27 @@ async function notFound(req, res, chk, idem, area) {
   });
 }
 
+// Premium audit P0 #2 (2026-11-07): store each found sheet's
+// PNG as a delivery file on the order, so History can
+// re-download it with one click — no re-search, no re-charge.
+// A sheet whose portal fetch fails is logged and skipped (the
+// search page still shows it live via /preview); the order
+// still completes. Returns how many PNGs were stored.
+async function storeSheetPngs(orderId, idem, sheets) {
+  let stored = 0;
+  for (const sh of sheets) {
+    try {
+      const img = await client.mapPreview(String(sh.id));
+      const fn = 'delivery-land-mouza-map-sheet-' + sh.sheetNo + '-' + slug(idem) + '.png';
+      await storePdf(orderId, fn, img.buffer, 'mouza-map-sheet-' + sh.sheetNo + '.png');
+      stored += 1;
+    } catch (e) {
+      safeLog('[land-mouza-map] sheet store error:', sh.sheetNo, e.message);
+    }
+  }
+  return stored;
+}
+
 async function succeed(req, res, chk, idem, area, result) {
   try {
     await chargeOnce(req, chk.price, chk.serviceId, idem);
@@ -247,26 +278,19 @@ async function succeed(req, res, chk, idem, area, result) {
     area, found: true, sheets: result.sheets,
     jlId: result.jlId, jlNumber: result.jlNumber, mouzaName: result.mouzaName,
   };
-  let orderId = null; let receiptUrl = null;
+  let orderId = null;
   if (chk.serviceId) {
     orderId = await recordOrder(req, chk.serviceId, 'completed', chk.price, idem, payload);
     if (orderId) {
       notifyDone(req, chk.price, false);
-      try {
-        const pdf = await buildReceiptPdf({
-          noBrand: true,
-          serviceLabel: LABEL, outcome: 'completed',
-          successLine: `${result.sheets.length}টি মৌজা ম্যাপ শিট পাওয়া গেছে — প্রিভিউ ছবি এই পেজেই দেখুন।`,
-          subjectLabel: 'মৌজা', subjectValue: area.mouza || '—',
-          chargeText: `৳${chk.price}`, ref: idem, when: nowBn(),
-          footers: ['এই ছবিগুলো প্রিভিউ — সার্টিফাইড মৌজা শিট নয়। অফিসিয়াল কাজে সরকারি পোর্টালে যাচাই করে নিন।'],
-        });
-        receiptUrl = await storePdf(orderId, 'delivery-land-mouza-map-' + slug(idem) + '.pdf', pdf, 'land-mouza-map-receipt.pdf');
-      } catch (e) { safeLog('[land-mouza-map] receipt error:', e.message); }
+      // P0 #2: the sheets ARE the delivery — no success receipt
+      // PDF anymore (it was invisible in History under R1 and
+      // never shown on the search page).
+      await storeSheetPngs(orderId, idem, result.sheets);
     }
   }
   return res.json({
-    ok: true, charged: chk.price, orderId, receipt: receiptUrl,
+    ok: true, charged: chk.price, orderId, receipt: null,
     sheets: result.sheets, jlId: result.jlId, jlNumber: result.jlNumber, mouzaName: result.mouzaName,
   });
 }
