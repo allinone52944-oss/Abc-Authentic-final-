@@ -547,6 +547,10 @@
   }
 
   /* Banner design picker */
+  .bn-design-groups { max-height: 300px; overflow-y: auto; padding: 4px; }
+  .bn-design-group { font-size: 13px; font-weight: 700; color: var(--text-main); margin: 14px 0 6px; }
+  .bn-design-group:first-child { margin-top: 0; }
+  .bn-design-groups .bn-design-grid { max-height: none; overflow: visible; }
   .bn-design-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
