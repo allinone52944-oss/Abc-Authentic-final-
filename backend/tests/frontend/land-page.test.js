@@ -12,6 +12,30 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..', '..', '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
+// Structural check: is the results container a DIRECT CHILD of
+// .land-layout? Strips <script> blocks first — their JS strings
+// contain '</div>' — and comments, then tracks <div> depth.
+function layoutHasResults(html, resultId) {
+  const clean = html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '');
+  const re = /<div\b[^>]*>|<\/div>/gi;
+  let depth = 0;
+  let layoutDepth = -1;
+  let m;
+  while ((m = re.exec(clean))) {
+    if (m[0].startsWith('</')) {
+      if (depth === layoutDepth) layoutDepth = -1;
+      depth -= 1;
+    } else {
+      depth += 1;
+      if (m[0].includes('land-layout')) layoutDepth = depth;
+      if (layoutDepth !== -1 && depth === layoutDepth + 1 && m[0].includes(resultId)) return true;
+    }
+  }
+  return false;
+}
+
 describe('land.html', () => {
   const html = read('frontend/land.html');
   test('uses ABC.api-relative base, never a hard-coded /api path', () => {
@@ -155,6 +179,11 @@ describe('mobile + PC layout', () => {
     const formClose = html.indexOf('</form>', layOpen);
     expect(layOpen).toBeGreaterThan(-1);
     expect(resAt).toBeGreaterThan(formClose);
+    // Structural proof: #result must be a DIRECT CHILD of
+    // .land-layout, not merely somewhere after the form. A naive
+    // parser breaks on the JS strings inside <script> blocks, so
+    // strip scripts and comments first, then track <div> depth.
+    expect(layoutHasResults(html, 'id="result"')).toBe(true);
   });
 });
 

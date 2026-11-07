@@ -21,6 +21,10 @@
   @media (min-width:1200px){
     .land-layout { display:grid; grid-template-columns:minmax(360px,420px) minmax(0,1fr); gap:24px; align-items:start; }
     .land-layout .form-card { max-width:none; margin:0; }
+    /* The form column is only 360-420px wide: the two-column area
+       fields would cramp to ~165px each (seen live at 1315px), so
+       they stack full-width here. */
+    .land-layout .grid2 { grid-template-columns:1fr; }
   }
   .hero { margin:0 -24px 20px; padding:22px 24px 18px; background:linear-gradient(135deg,#052e16 0%,#14532d 55%,#166534 100%); color:#ecfdf5; position:relative; }
   .hero:after { content:''; position:absolute; inset:0; background:radial-gradient(circle at 85% 20%, rgba(250,204,21,.22) 0%, transparent 55%); pointer-events:none; }

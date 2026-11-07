@@ -9,6 +9,30 @@ const PAGE = fs.readFileSync(
   path.join(__dirname, '..', '..', '..', 'frontend', 'land-mouza-map.html'), 'utf8'
 );
 
+// Structural check: is the results container a DIRECT CHILD of
+// .land-layout? Strips <script> blocks first — their JS strings
+// contain '</div>' — and comments, then tracks <div> depth.
+function layoutHasResults(html, resultId) {
+  const clean = html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '');
+  const re = /<div\b[^>]*>|<\/div>/gi;
+  let depth = 0;
+  let layoutDepth = -1;
+  let m;
+  while ((m = re.exec(clean))) {
+    if (m[0].startsWith('</')) {
+      if (depth === layoutDepth) layoutDepth = -1;
+      depth -= 1;
+    } else {
+      depth += 1;
+      if (m[0].includes('land-layout')) layoutDepth = depth;
+      if (layoutDepth !== -1 && depth === layoutDepth + 1 && m[0].includes(resultId)) return true;
+    }
+  }
+  return false;
+}
+
 describe('land-mouza-map page markup', () => {
   const IDS = [
     'divisionSel', 'districtSel', 'upazilaSel', 'surveySel', 'mouzaSel',
@@ -53,5 +77,10 @@ describe('land-mouza-map page markup', () => {
     // The 720px cap must not survive as an inline style (a
     // stylesheet rule cannot beat it): it lives in CSS now.
     expect(PAGE).not.toContain('max-width:720px; display:none');
+    // Structural proof (not just the class existing): the results
+    // box must be a DIRECT CHILD of .land-layout. A naive parser
+    // breaks on the JS strings inside <script> blocks, so strip
+    // scripts and comments first, then track <div> depth.
+    expect(layoutHasResults(PAGE, 'id="resultsBox"')).toBe(true);
   });
 });
