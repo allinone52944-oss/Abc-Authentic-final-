@@ -846,3 +846,13 @@ tr:hover td {
     margin-bottom: 18px;
   }
 }
+
+/* Premium audit §2 — tablet band 901-1200px: the 250px sidebar +
+   32/36px main padding left ~650px of content at 1000px wide.
+   Narrow the shell so the main area breathes again. (The ≤900px
+   collapse already exists — audit #56 — this only tunes the band
+   between tablet and the 1200px two-column land layout.) */
+@media (min-width: 901px) and (max-width: 1200px) {
+  .sidebar { width: 200px; padding: 24px 12px; }
+  .main { padding: 24px 20px; }
+}
