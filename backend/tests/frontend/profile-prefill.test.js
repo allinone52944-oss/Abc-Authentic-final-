@@ -1,6 +1,8 @@
 // Audit #50 — profile name/phone are prefilled in the order form
-// (editable), and in the manual-submit form, instead of being typed
-// again on every order.
+// (editable), instead of being typed again on every order.
+// (The old manual-submit form had the same prefill; audit #51
+// unified that page into the order flow, so the order form is now
+// the only prefill surface and is pinned by the describe below.)
 const fs = require('fs');
 const path = require('path');
 
@@ -39,20 +41,3 @@ describe('order-create.html — profile prefill (audit #50)', () => {
   });
 });
 
-describe('manual-submit.html — profile prefill (audit #50)', () => {
-  const html = read('frontend/manual-submit.html');
-
-  test('name/phone inputs exist, prefilled from the profile', () => {
-    expect(html).toContain('id="msName"');
-    expect(html).toContain('id="msPhone"');
-    expect(html).toContain("document.getElementById('msName').value = u.name");
-    expect(html).toContain("document.getElementById('msPhone').value = u.phone");
-  });
-
-  test('the submit carries them into the text, without duplicating lines already present', () => {
-    expect(html).toContain("head.push('নাম: ' + nm)");
-    expect(html).toContain("head.push('মোবাইল: ' + ph)");
-    expect(html).toContain('!raw.includes(nm)');
-    expect(html).toContain('!raw.includes(ph)');
-  });
-});

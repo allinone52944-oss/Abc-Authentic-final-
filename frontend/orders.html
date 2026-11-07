@@ -174,6 +174,17 @@
     </div>
 
     <button class="btn-more" id="moreBtn" style="display:none;">আরো লোড করুন ↓</button>
+
+    <!-- Audit #51 — legacy manual submissions: rows created on the old
+         free manual track (manual_submissions) stay viewable here, in
+         the single orders view. New manual applications go through
+         the order flow (order-create.html) and appear in the table
+         above. Hidden when there are no legacy rows. -->
+    <div id="legacyManualCard" style="display:none;margin-top:20px;background:#ffffff;border:1px solid var(--border-light);border-radius:var(--r-lg);padding:20px;box-shadow:var(--shadow-sm);">
+      <h3 style="font-size:16px;font-weight:700;color:var(--text-main);margin-bottom:4px;">📁 আগের ম্যানুয়াল আবেদনসমূহ</h3>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:8px;line-height:1.5;">আগে ম্যানুয়াল পথে জমা দেওয়া আবেদনগুলো — নতুন আবেদন অর্ডার হিসেবে উপরের তালিকায় আসে।</p>
+      <div id="legacyManualList" style="color:var(--text-muted);font-size:13px;">লোড হচ্ছে…</div>
+    </div>
   </div>
 </div>
 
@@ -226,6 +237,53 @@ async function init(){
     status = wantStatus;
   }
   load();
+  loadLegacyManual();
+}
+
+// Audit #51 — legacy manual submissions (manual_submissions rows
+// from before the unification) stay viewable in this single orders
+// view. Fed by GET /manual/mine; the card stays hidden when there
+// are no legacy rows or the fetch fails.
+const LEGACY_MANUAL_ST = { new:'🆕 নতুন', processing:'⏳ প্রসেসিং', completed:'✅ সম্পন্ন', rejected:'❌ বাতিল' };
+async function loadLegacyManual(){
+  const card = document.getElementById('legacyManualCard');
+  const box = document.getElementById('legacyManualList');
+  try {
+    const r = await ABC.api('/manual/mine');
+    if (!r.ok) return;
+    const d = await r.json();
+    const list = (d && d.list) || [];
+    if (!list.length) return;
+    window._legacyManualList = list;
+    card.style.display = 'block';
+    box.innerHTML = list.map((m, mi) => {
+      const docs = (m.documents || []).map((doc, di) =>
+        '<button onclick="dlLegacyManualDoc(' + mi + ',' + di + ')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;border:1px solid ' + (doc.uploaded_by === 'admin' ? '#fde68a' : '#e2e8f0') + ';background:' + (doc.uploaded_by === 'admin' ? '#fffbeb' : '#f8fafc') + ';color:#0f172a;padding:5px 9px;border-radius:8px;cursor:pointer;font-family:inherit;">' +
+        (doc.uploaded_by === 'admin' ? '🎁 ডেলিভারি: ' : '📎 ') + esc(doc.originalname || doc.filename) + ' ⬇️</button>'
+      ).join('');
+      return '<div style="padding:12px 0; border-bottom:1px solid var(--border-light); font-size:13px;">' +
+      '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">' +
+      '<div><b style="color:var(--text-main);">' + esc(m.service_name_bn || m.service_name || 'ম্যানুয়াল সেবা') + '</b>' +
+      '<div style="color:#64748b; font-size:12px; margin-top:2px;">' + new Date(m.created_at).toLocaleString('bn-BD') + '</div></div>' +
+      '<div><span class="st st-' + m.status + '">' + (LEGACY_MANUAL_ST[m.status] || m.status) + '</span></div></div>' +
+      (docs ? '<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">' + docs + '</div>' : '') +
+      '</div>';
+    }).join('');
+  } catch(e) { /* legacy section stays hidden */ }
+}
+
+async function dlLegacyManualDoc(mi, di){
+  const m = (window._legacyManualList || [])[mi]; if(!m) return;
+  const d = (m.documents || [])[di]; if(!d) return;
+  try{
+    const r = await ABC.api('/manual/' + m.id + '/documents/' + encodeURIComponent(d.filename));
+    if(!r.ok){ ABC.showPageMsg(ABC.httpErrBn(r.status, 'ডাউনলোড'), 'err'); return; }
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = d.originalname || d.filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  }catch(e){ ABC.showPageMsg(ABC.httpErrBn(0, 'ডাউনলোড'), 'err'); }
 }
 
 async function load(){
