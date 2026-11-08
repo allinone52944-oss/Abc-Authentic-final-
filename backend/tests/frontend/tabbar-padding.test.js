@@ -35,7 +35,7 @@ describe('tabbar bottom padding only on tabbar pages (audit #61)', () => {
     for (const name of TABBAR_PAGES) {
       const html = read(`frontend/${name}.html`);
       expect(html).toContain('<div class="m-tabbar">');
-      expect(html).toContain('<body class="has-tabbar">');
+      expect(html).toMatch(/<body class="(?:[^"]* )?has-tabbar(?: [^"]*)?">/);
     }
   });
 

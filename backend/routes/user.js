@@ -17,7 +17,7 @@ const fs = require('fs');
 const push = require('../utils/push');
 const { chargeRuleFor } = require('../lib/chargeRule'); // audit #49
 const wa = require('../utils/whatsapp');
-const { tryAutoMatchRecharge } = require('./sms');
+const { tryAutoMatchRecharge, tryAutoMatchBySender } = require('./sms');
 const serviceCredits = require('../lib/serviceCredits');
 const { bdrisOriginalDoc } = require('../lib/storedOriginal'); // past-applications list (2026-11-07)
 
@@ -885,6 +885,43 @@ router.get('/wallet/recharge/:trxid', async (req, res) => {
   }
 });
 
+// POST /api/wallet/recharge/auto — number-only Auto payment: method,
+// sender number and amount, NO TrxID. A placeholder 'AUTO-…' ref is
+// stored; the SMS webhook matches it by amount + sender (or this call
+// matches an SMS that already arrived), else it waits for the admin.
+router.post('/wallet/recharge/auto', async (req, res) => {
+  try {
+    const { method, sender_no, amount } = req.body || {};
+    const methods = ['bkash_payment', 'bkash_personal', 'nagad', 'rocket'];
+    if (!methods.includes(method)) return res.status(400).json({ error: 'INVALID_METHOD' });
+    const sender = String(sender_no || '').trim();
+    if (!/^01[3-9]\d{8}$/.test(sender)) return res.status(400).json({ error: 'INVALID_SENDER' });
+    const amt = Number(amount);
+    if (!amt || amt < 10 || amt > 100000) return res.status(400).json({ error: 'INVALID_AMOUNT' });
+    const pending = await db.query(
+      `SELECT COUNT(*) FROM transactions
+       WHERE user_id = $1 AND type = 'recharge' AND status = 'pending'`, [req.user.id]);
+    if (parseInt(pending.rows[0].count, 10) >= 3) {
+      return res.status(400).json({ error: 'TOO_MANY_PENDING' });
+    }
+    const ref = 'AUTO-' + crypto.randomBytes(6).toString('hex').toUpperCase();
+    const r = await db.query(
+      `INSERT INTO transactions (user_id, type, amount, method, sender_no, trxid, status)
+       VALUES ($1, 'recharge', $2, $3, $4, $5, 'pending') RETURNING *`,
+      [req.user.id, amt, method, sender, ref]);
+    let tx = r.rows[0];
+    try {
+      const matched = await tryAutoMatchBySender(tx);
+      if (matched) tx = matched;
+    } catch (err) { safeLog('[user] auto sender-match error:', err.message); }
+    if (tx.status === 'pending') push.notifyNewRecharge(db, tx, req.user.id).catch(() => {});
+    res.status(201).json({ transaction: tx, ref: ref });
+  } catch (e) {
+    safeLog('[user] auto recharge error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 // POST /api/wallet/recharge — bkash/nagad/rocket request (pending → admin approves)
 router.post('/wallet/recharge', async (req, res) => {
   try {
@@ -939,6 +976,14 @@ router.post('/wallet/recharge', async (req, res) => {
       }
       return res.status(409).json({ error: 'DUP_TRXID' });
     }
+    // An SMS already used to credit a recharge (e.g. a number-only
+    // Auto request) can never be claimed again by its TrxID.
+    const usedSms = await db.query(
+      `SELECT 1 FROM public.incoming_sms s
+       WHERE s.trxid IS NOT NULL AND UPPER(s.trxid) = UPPER($1)
+         AND s.matched_recharge_id IS NOT NULL LIMIT 1`, [String(trxid).trim()]);
+    if (usedSms.rows.length) return res.status(409).json({ error: 'DUP_TRXID' });
+
     // Audit #31 — the cap check runs AFTER the duplicate check: a
     // resubmit of an existing TrxID must answer DUP_TRXID (with the
     // original transaction), never TOO_MANY_PENDING.

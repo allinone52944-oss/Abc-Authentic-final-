@@ -540,4 +540,55 @@ async function tryAutoMatchRecharge(tx) {
   }
 }
 
-module.exports = { webhook, adminSms, tryAutoMatchRecharge, approveRechargeTx, holdRateLimitedSms };
+// Auto (number-only) late submit: the SMS arrived BEFORE the user's
+// auto request. Match an unmatched money-in SMS with the same amount,
+// sender number and method family from the last 30 minutes.
+async function tryAutoMatchBySender(tx) {
+  if (!tx || !tx.id || tx.status !== 'pending' || !tx.sender_no) return null;
+  const fam = String(tx.method || '').startsWith('bkash') ? 'bkash' : tx.method;
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const r = await client.query(
+      `SELECT * FROM incoming_sms
+       WHERE matched_recharge_id IS NULL AND parse_status = 'parsed'
+         AND amount = $1 AND sender = $2 AND method = $3
+         AND created_at >= NOW() - INTERVAL '30 minutes'
+       ORDER BY created_at DESC LIMIT 5
+       FOR UPDATE`,
+      [Number(tx.amount), String(tx.sender_no).trim(), fam]
+    );
+    // Never credit on an SMS that is not clearly money-in.
+    const sms = r.rows.find(function (row) {
+      const p = parseSms(row.raw_message, row.raw_sender);
+      return p && p.direction === 'in';
+    });
+    const MAX_AUTO_APPROVE = Number(process.env.SMS_MAX_AUTO_APPROVE || 50000);
+    if (!sms || Number(tx.amount) > MAX_AUTO_APPROVE) {
+      await client.query('COMMIT');
+      return null;
+    }
+    const approvedTx = await approveRechargeTx(client, tx.id, sms.id);
+    await client.query('COMMIT');
+    if (approvedTx) {
+      await logActivity(null, 'sms.auto_match', {
+        sms_id: sms.id, tx_id: approvedTx.id, user_id: approvedTx.user_id,
+        amount: Number(approvedTx.amount), how: 'sender_late_submit', trxid: approvedTx.trxid,
+      });
+      wa.notifyRechargeApproved(db, approvedTx).catch(() => {});
+      push.notifyUser(db, approvedTx.user_id, '✅ রিচার্জ সফল!',
+        '৳' + approvedTx.amount + ' আপনার ওয়ালেটে যোগ হয়েছে।', '/wallet.html').catch(() => {});
+      push.notifyAutoApproveRecharge(db, approvedTx, approvedTx.user_id).catch(() => {});
+      return approvedTx;
+    }
+    return null;
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    safeLog('[sms] tryAutoMatchBySender failed:', e.message);
+    return null;
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { webhook, adminSms, tryAutoMatchRecharge, tryAutoMatchBySender, approveRechargeTx, holdRateLimitedSms };

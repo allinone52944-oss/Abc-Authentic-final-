@@ -321,7 +321,7 @@
          Auto Match, through the classic /wallet/recharge flow. -->
     <div class="card gw-card" id="gwCard">
       <h3>⚡ দ্রুত পেমেন্ট</h3>
-      <p style="font-size:13px;color:#64748b;margin-bottom:16px;">গেটওয়ে স্টাইলে: নম্বর লিখুন → পে করুন → TrxID দিয়ে Auto Match — ১০ মিনিটের সেশনে। ম্যানুয়াল দিতে চাইলে 'Manual-এ দিন' চাপ দিন — আলাদা manual section খুলবে।</p>
+      <p style="font-size:13px;color:#64748b;margin-bottom:16px;">গেটওয়ে স্টাইলে: নম্বর লিখুন → পে করুন → Auto Match (TrxID লাগবে না, SMS-এ নম্বর মিলে যাবে) — ১০ মিনিটের সেশনে। ম্যানুয়াল দিতে চাইলে 'Manual-এ দিন' চাপ দিন — আলাদা manual section খুলবে।</p>
 
       <!-- Step 1: session setup -->
       <div id="gwStep1">
@@ -373,12 +373,12 @@
           <div style="font-size:12px;color:#475569;margin-top:6px;">যে কোনো নম্বরে পাঠাতে পারেন — উপরের নম্বর শুধু সাজেশন, বাধ্যতামূলক নয়।</div>
         </div>
         <div style="font-size:12.5px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.7;">
-          ১️⃣ উপরের সাজেশন বা আপনার পছন্দের যে কোনো নম্বরে টাকা পাঠান। &nbsp;২️⃣ পেমেন্টের পর পাওয়া <b>TrxID</b> নিচে লিখে <b>Auto Match</b> চাপ দিন।
+          ১️⃣ উপরের সাজেশন বা আপনার পছন্দের যে কোনো নম্বরে টাকা পাঠান। &nbsp;২️⃣ টাকা পাঠানোর পর শুধু <b>Auto Match</b> চাপ দিন — যে নম্বর থেকে পাঠিয়েছেন সেটি ও টাকার পরিমাণ SMS-এর সঙ্গে মিলে যাবে।
         </div>
 
         <div class="field">
-          <label>পেমেন্টের পর পাওয়া ট্রানজ্যাকশন আইডি (TrxID)</label>
-          <input type="text" id="gwTrxid" placeholder="যেমন: BL10293847" maxlength="40">
+          <label>ট্রানজ্যাকশন আইডি (TrxID) — ঐচ্ছিক</label>
+          <input type="text" id="gwTrxid" placeholder="খালি রাখতে পারেন" maxlength="40">
         </div>
         <div class="err" id="gwErr2"></div>
         <div id="gwState"></div>
@@ -1195,19 +1195,27 @@ async function gwAutoMatch(){
   }
   errEl.textContent = '';
   stateEl.innerHTML = '';
-  const trxid = document.getElementById('gwTrxid').value.trim();
-  if (!trxid || trxid.length < 4) {
-    errEl.textContent = '❌ ট্রানজ্যাকশন আইডি (TrxID) লিখুন';
+  // Auto = number-only: TrxID is optional. Empty → the server
+  // matches the SMS by sender number + amount (no TrxID needed).
+  let trxid = document.getElementById('gwTrxid').value.trim();
+  if (trxid && trxid.length < 4) {
+    errEl.textContent = '❌ TrxID সঠিকভাবে লিখুন, অথবা ঘরটি খালি রাখুন';
     return;
   }
   btn.disabled = true;
   btn.textContent = '⏳ মিলিয়ে দেখা হচ্ছে…';
   try {
-    const r = await ABC.api('/wallet/recharge', {
-      method: 'POST',
-      body: { method: gw.method, sender_no: gw.sender, trxid: trxid, amount: gw.amount }
-    });
+    const r = trxid
+      ? await ABC.api('/wallet/recharge', {
+          method: 'POST',
+          body: { method: gw.method, sender_no: gw.sender, trxid: trxid, amount: gw.amount }
+        })
+      : await ABC.api('/wallet/recharge/auto', {
+          method: 'POST',
+          body: { method: gw.method, sender_no: gw.sender, amount: gw.amount }
+        });
     const d = await r.json();
+    if (r.ok && !trxid) trxid = (d.transaction && d.transaction.trxid) || d.ref || '';
     if (!r.ok) {
       if (d.error === 'DUP_TRXID' && d.existing_tx) {
         const ex = d.existing_tx;
