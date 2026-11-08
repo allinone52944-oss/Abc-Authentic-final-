@@ -731,8 +731,12 @@ def join_fragments(cands):
     return text.strip()
 
 
-def right_value(label_span, spans, stop_set, max_x0=600):
-    """লেবেলের ডান পাশে একই লাইনের মান পড়ো; পরের লেবেল/সাইডবার এলে থামো।"""
+def right_value(label_span, spans, stop_set, max_x0=600, multi_line=False,
+                multi_line_labels=None):
+    """লেবেলের ডান পাশে একই লাইনের মান পড়ো; পরের লেবেল/সাইডবার এলে থামো।
+    multi_line=True হলে নিচের লাইনের continuation-ও জোড়া হয় (শুধু address-table পথে)।
+    continuation লাইনে পরের row-এর লেবেল থাকলে থামো; তবে বর্তমান লেবেলের
+    টুকরো (যেমন 'Home/Holding' + 'No') থাকলে থামা যাবে না।"""
     b = label_span
     yc = (b["y0"] + b["y1"]) / 2
     cands = []
@@ -748,7 +752,89 @@ def right_value(label_span, spans, stop_set, max_x0=600):
         if c["text"].strip() in stop_set:
             break  # পরের লেবেল এসে গেছে, থামো
         cands.append(c)
-    return join_fragments(cands) if cands else ""
+    if not cands:
+        return ""
+    if not multi_line:
+        return join_fragments(cands)
+    # --- multi-line continuation (address-table only) ---
+    # প্রথম লাইনের মানের centre-ই anchor; continuation তার ঠিক নিচের লাইন(গুলো)।
+    val_yc = sum((c["y0"] + c["y1"]) / 2 for c in cands) / len(cands)
+    val_x0 = cands[0]["x0"]
+    # value-কলামের ডান সীমা: পরের label-কলামের x0 (না থাকলে max_x0)।
+    # দুই-কলাম টেবিলে অন্য কলামের মান যেন continuation-এ না ঢোকে।
+    lbl_set = multi_line_labels if multi_line_labels is not None else stop_set
+    next_lbl_x0 = None
+    for s in spans:
+        if s["page"] != b["page"] or s is b or s is b.get("_orig"):
+            continue
+        if s["text"].strip() in lbl_set and s["x0"] > val_x0:
+            if next_lbl_x0 is None or s["x0"] < next_lbl_x0:
+                next_lbl_x0 = s["x0"]
+    val_x1_max = (next_lbl_x0 - 15) if next_lbl_x0 is not None else max_x0
+    lines = [join_fragments(cands)]
+    # নিচের স্প্যানগুলো লাইনে ভাগ করো (y-centre দিয়ে)
+    below = []
+    for c in spans:
+        if c["page"] != b["page"] or c is b or c is b.get("_orig"):
+            continue
+        if (c["y0"] + c["y1"]) / 2 <= yc + b["size"] * 0.7:
+            continue  # একই লাইন বা উপরের লাইন
+        below.append(c)
+    below.sort(key=lambda s: ((s["y0"] + s["y1"]) / 2, s["x0"]))
+    grouped, cur = [], []
+    for s in below:
+        sc = (s["y0"] + s["y1"]) / 2
+        if cur and abs(sc - (cur[-1]["y0"] + cur[-1]["y1"]) / 2) > 6:
+            grouped.append(cur)
+            cur = []
+        cur.append(s)
+    if cur:
+        grouped.append(cur)
+    last_yc = val_yc
+    # continuation লাইনে থামার শর্ত: সম্পূর্ণ লেবেল, বা stop word — তবে
+    # বর্তমান লেবেলের টুকরো (যেমন 'Home/Holding' + 'No' = 'Home/Holding No')
+    # হলে থামা যাবে না; আর 'Region'-এর মতো আসল পরের ফিল্ডে থামতে হবে।
+    lbl_text = b["text"].strip()
+
+    def _is_new_row(span_text):
+        t = span_text.strip()
+        if t in lbl_set:
+            return True  # সম্পূর্ণ লেবেল — পরের row
+        if t not in stop_set:
+            return False
+        # stop word: বর্তমান লেবেলের টুকরো হলে নতুন row নয়
+        if ((lbl_text + " " + t) in lbl_set or (lbl_text + t) in lbl_set
+                or (t + " " + lbl_text) in lbl_set):
+            return False
+        return True
+
+    for line in grouped:
+        if len(lines) - 1 >= 2:
+            break  # সর্বোচ্চ ২টি continuation লাইন
+        line_yc = sum((s["y0"] + s["y1"]) / 2 for s in line) / len(line)
+        if line_yc > last_yc + 30:
+            break  # পরের লাইন অনেক নিচে — continuation নয়
+        # থামার শর্ত শুধু এই value-এর নিজের label-কলামে (value-র ঠিক বামে) দেখো —
+        # দুই-কলাম টেবিলে অন্য কলামের লেবেল একই y-তে থাকলেও তা নতুন row নয়।
+        lbl_x_lo = b["x0"] - 20
+        lbl_x_hi = val_x0 - 15
+        if any(_is_new_row(s["text"]) for s in line
+               if lbl_x_lo <= s["x0"] <= lbl_x_hi):
+            break  # এই লাইনে পরের row-এর লেবেল আছে — থামো
+        # continuation মান অবশ্যই এই লাইনের সব লেবেলের ডানে হতে হবে —
+        # লেবেলের বামে থাকা span অন্য ফিল্ডের (বা orphan) মান, continuation
+        # নয় (যেমন RMO-র নিচের লাইনে Corporation লেবেলের বামে থাকা
+        # city-মানের অংশ)।
+        line_label_x1 = [s["x1"] for s in line if s["text"].strip() in stop_set]
+        label_x1_max = max(line_label_x1) if line_label_x1 else -1
+        vals = [s for s in sorted(line, key=lambda s: s["x0"])
+                if val_x0 - 15 <= s["x0"] <= val_x1_max
+                and s["x0"] > label_x1_max]
+        if not vals:
+            break  # value-কলামে কিছু নেই — continuation নয়
+        lines.append(join_fragments(vals))
+        last_yc = line_yc
+    return " ".join(t for t in lines if t)
 
 
 def parse_present_address(all_spans, page_heights):
@@ -860,7 +946,8 @@ def parse_address_table(all_spans, page_heights, anchor, end_anchor=None):
             else:
                 search_c = c
                 
-            val = right_value(search_c, band, ADDR_LABELS | ADDR_STOP_EXTRA)
+            val = right_value(search_c, band, ADDR_LABELS | ADDR_STOP_EXTRA,
+                              multi_line=True, multi_line_labels=ADDR_LABELS)
             if val:
                 addr[target_key] = val
     return addr
