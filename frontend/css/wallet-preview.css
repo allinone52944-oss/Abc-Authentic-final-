@@ -173,3 +173,10 @@ body.wp-as-is .wp-tx-details summary[data-status="failed"] { color:var(--wp-fail
 body.wp-as-is #walletHistory select { background:var(--pv-bg); border-color:var(--pv-line) !important; color:var(--pv-muted); font-size:13px !important; }
 body.wp-as-is .wp-more-content .card { margin:0; padding:24px; border-color:var(--pv-line) !important; background:var(--pv-card) !important; box-shadow:var(--pv-soft-shadow); }
 body.wp-as-is #cbHubCard p, body.wp-as-is #couponCard p { color:var(--pv-muted) !important; }
+/* Explicit contrasting roles survive old shared and browser theme overrides. */
+body.wp-as-is .wp-payment-stack > .hero-blue { background-color:var(--pv-sidebar) !important; color:var(--pv-light) !important; }
+body.wp-as-is .hero-blue :is(#bal,.wb) { color:var(--pv-light) !important; opacity:1; }
+body.wp-as-is :is(#gwAmount,#gwSender,#amount,#sender,#trxid) { color:var(--pv-ink) !important; -webkit-text-fill-color:var(--pv-ink); }
+body.wp-as-is #walletHistory .tx > b { color:var(--pv-primary-deep) !important; }
+body.wp-as-is #walletHistory .tx:has(.wp-tx-details summary[data-status="failed"]) > b { color:var(--wp-failed) !important; }
+body.wp-as-is #cbOverlay :is(.congrats,.won,.code,.note) { opacity:1; }
