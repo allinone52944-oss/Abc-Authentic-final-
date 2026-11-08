@@ -3504,7 +3504,6 @@ TABS.recharge = async () => {
     '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">' +
       '<div><h3 style="margin:0; font-size:18px; font-weight:800; color:#0f172a;">💳 রিচার্জ ও ডিপোজিট কন্ট্রোল</h3>' +
       '<p style="margin:4px 0 0; font-size:12px; color:#64748b;">গ্রাহকদের ওয়ালেট রিচার্জ যাচাই, অনুমোদন ও লেনদেন অডিট</p></div>' +
-      '<button class="mini-btn" onclick="show(\'sms\')" style="display:inline-flex; align-items:center; gap:6px;">📩 SMS গেটওয়ে অডিট লগ</button>' +
     '</div>' +
 
     '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; background:#fff; padding:12px 14px; border:1px solid #e2e8f0; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">' +
