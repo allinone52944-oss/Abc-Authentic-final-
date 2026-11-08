@@ -8,6 +8,9 @@
   document.querySelectorAll('#methods [data-m] > div').forEach(function (node) { node.textContent = names[node.parentElement.dataset.m] || node.textContent; });
   function sync() {
     var pending = typeof gw !== 'undefined' && gw && gw.submitted && !gw.done;
+    var card = document.getElementById('gwCard');
+    var expired = document.getElementById('gwExpired');
+    if (card) card.setAttribute('data-wp-session', expired && expired.style.display === 'block' ? 'expired' : pending ? 'pending' : typeof gw !== 'undefined' && gw && gw.done ? 'done' : 'ready');
     if (submit) { submit.disabled = busy || !!pending; submit.textContent = busy ? 'পাঠানো হচ্ছে…' : pending ? 'রিকোয়েস্ট জমা আছে' : 'রিকোয়েস্ট পাঠান'; }
     var balance = document.getElementById('bal');
     var headerBalance = document.getElementById('wpHeaderBalance');
@@ -24,9 +27,9 @@
       await gwAutoMatch(); // Original number+amount POST, SMS match, atomic credit and polling.
     } finally { busy = false; sync(); }
   }, true);
-  ['gwState', 'bal'].forEach(function (id) {
+  ['gwState', 'bal', 'gwExpired', 'gwStep2'].forEach(function (id) {
     var node = document.getElementById(id);
-    if (node) new MutationObserver(sync).observe(node, { childList: true, subtree: true, characterData: true });
+    if (node) new MutationObserver(sync).observe(node, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['style'] });
   });
   document.querySelectorAll('#methods .method').forEach(function (node) {
     node.setAttribute('role', 'button'); node.tabIndex = 0;

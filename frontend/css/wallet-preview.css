@@ -84,7 +84,7 @@ body.page-wallet .wp-inputs .field { margin-bottom:0; min-width:0; }
 body.page-wallet .wp-inputs .wp-sender { order:2; }
 body.page-wallet .wp-submit { background:var(--pv-gold-fill) !important; color:var(--pv-gold-ink) !important; box-shadow:var(--pv-gold-shadow); margin-top:20px; }
 body.page-wallet #gwStep1 > button[onclick="gwGoManual()"], body.page-wallet #manualSection > div:first-child { display:none; }
-body.page-wallet #walletHistory { min-height:100%; }
+body.page-wallet #walletHistory { min-height:0; align-self:start; }
 @media(max-width:1000px) { body.page-wallet #walletHistory { min-height:0; } }
 @media(max-width:767px) { body.page-wallet .main { padding:20px; } body.page-wallet .wp-inputs { grid-template-columns:minmax(0,1fr); } body.page-wallet .gw-chips { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 
@@ -98,18 +98,21 @@ body.wp-as-is .wp-account-header h2 { font-size:20px; margin:0; }
 body.wp-as-is .wp-header-balance { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; background:var(--pv-soft); color:var(--pv-primary); font-size:14px; font-weight:600; text-decoration:none; }
 body.wp-as-is .wp-mobile-brand { display:none; }
 body.wp-as-is .wallet-workspace { margin:0; padding:32px; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:24px; }
-body.wp-as-is .wallet-workspace > .hero-blue { min-height:132px; border-radius:16px; padding:28px; }
+body.wp-as-is .wallet-workspace > .hero-blue { min-height:132px; border-radius:8px; padding:28px; }
 body.wp-as-is #gwCard, body.wp-as-is #manualSection { grid-column:1; grid-row:2; }
-body.wp-as-is #walletHistory { grid-column:2; grid-row:1 / 3; min-height:100%; padding:24px; }
+body.wp-as-is #walletHistory { grid-column:2; grid-row:1 / 3; min-height:0; padding:24px; align-self:start; }
 body.wp-as-is #gwCard, body.wp-as-is #classicRechargeCard { padding:24px; }
 body.wp-as-is #gwCard h3, body.wp-as-is #classicRechargeCard h3, body.wp-as-is #walletHistory h3 { font-size:18px; font-weight:600; margin:0; }
-body.wp-as-is .wp-inputs label, body.wp-as-is .wp-manual-inputs label { display:none; }
+body.wp-as-is .wp-inputs label, body.wp-as-is .wp-manual-inputs label { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 body.wp-as-is .wp-inputs input, body.wp-as-is .wp-manual-inputs input { background:var(--pv-bg); padding:12px 16px; }
 body.wp-as-is .wp-submit { min-height:52px; font-size:14px; font-weight:600; }
 body.wp-as-is #gwStep1 { display:block !important; }
-body.wp-as-is #gwStep2 { display:none !important; }
-body.wp-as-is #gwExpired { display:none !important; }
-body.wp-as-is #gwCard:has(#gwStep1[style*="none"]) #gwStep1 { display:block !important; }
+/* Keep feedback and expiry governed by the original inline state styles.
+   Only the obsolete two-step presentation is hidden, never its result nodes. */
+body.wp-as-is #gwStep2 > :not(#gwErr2):not(#gwState):not(button[onclick="gwNewSession()"]) { display:none !important; }
+body.wp-as-is #gwStep2 { margin-top:16px; }
+body.wp-as-is #gwCard[data-wp-session="pending"] #gwStep2 > button[onclick="gwNewSession()"] { display:none; }
+body.wp-as-is #gwCard[data-wp-session="expired"] #gwStep1 .wp-submit { display:none; }
 body.wp-as-is .method-card-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
 body.wp-as-is .pay-method { min-height:64px; padding:12px 6px; justify-content:center; }
 body.wp-as-is .pay-method img { display:none; }
@@ -117,6 +120,8 @@ body.wp-as-is #classicRechargeCard > p, body.wp-as-is #manualGuide, body.wp-as-i
 body.wp-as-is .wp-manual-inputs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
 body.wp-as-is .wp-manual-inputs .field { min-width:0; margin:0; }
 body.wp-as-is #recvNumWrap { margin:20px 0; padding:16px; }
+body.wp-as-is #recvNumWrap { background:var(--pv-soft); border-color:var(--pv-primary); }
+body.wp-as-is #recvNumWrap :is(#recvNum,div:first-child) { color:var(--pv-primary) !important; }
 body.wp-as-is #walletHistory > div:has(#txFilterType) { margin-top:20px; }
 body.wp-as-is .wp-more { margin:0 32px 32px; border-top:1px solid var(--pv-line); }
 body.wp-as-is .wp-more summary { padding:16px 0; font-size:14px; font-weight:600; color:var(--pv-primary); cursor:pointer; }
