@@ -1,0 +1,73 @@
+/* All In One (Abc Authentic): presentation only.
+   Never override display, visibility, opacity, positioning or engine state. */
+:root {
+  --result-success: #11734f; --result-success-bg: #edf9f2; --result-success-line: #b4dfc7;
+  --result-warn: #8a5a0b; --result-warn-bg: #fff8e7; --result-warn-line: #efd592;
+  --result-danger: #a62f42; --result-danger-bg: #fff0f2; --result-danger-line: #edbdc5;
+  --result-info: #176680; --result-info-bg: #edf7fb; --result-info-line: #b5dce8;
+  --result-neutral: #53625c; --result-neutral-bg: #f2f5f3; --result-neutral-line: #d6dfd9;
+  --result-surface: #ffffff; --result-ink: #163a2c; --result-gold: #eeb746;
+  --result-shadow: 0 8px 24px -16px #163a2c45;
+  --result-track: #e3ebe6;
+}
+body :is(.st,.st-badge,.vbadge,.gw-badge) {
+  border-radius: 6px; padding: 5px 10px; font-weight: 700;
+  line-height: 1.5; letter-spacing: 0; border: 1px solid var(--result-neutral-line);
+  box-shadow: var(--result-shadow); white-space: normal; overflow-wrap: anywhere;
+}
+body :is(.st-new,.st-pending,.st-badge.pending,.st-badge.new,.st-badge.warn,.vbadge.wait,.vbadge.warn,.gw-state.pending) {
+  color: var(--result-warn); background: var(--result-warn-bg); border-color: var(--result-warn-line);
+}
+body :is(.st-processing,.st-registered,.st-received,.st-badge.info,.st-badge.processing,.gw-state.duplicate) {
+  color: var(--result-info); background: var(--result-info-bg); border-color: var(--result-info-line);
+}
+body :is(.st-completed,.st-delivered,.st-success,.st-approved,.st-badge.completed,.st-badge.approved,.st-badge.success,.st-badge.active,.vbadge.ok,.gw-badge.pass,.gw-state.success,.okmsg,.ok,.banner.ok,.livenote.ok,.adm-alert-card.success,.hero-delivery-box) {
+  color: var(--result-success); background: var(--result-success-bg); border-color: var(--result-success-line);
+}
+body :is(.st-failed,.st-cancelled,.st-rejected,.st-badge.disabled,.st-badge.cancelled,.st-badge.rejected,.st-badge.danger,.gw-badge.fail,.gw-state.failed,.err,.banner.err,.livenote.err,.prow.err,.adm-alert-card.urgent) {
+  color: var(--result-danger); background: var(--result-danger-bg); border-color: var(--result-danger-line);
+}
+body :is(.st-refunded,.st-expired,.gw-state.expired) {
+  color: var(--result-neutral); background: var(--result-neutral-bg); border-color: var(--result-neutral-line);
+}
+body :is(.gw-state,.err,.ok,.okmsg,.banner,.livenote,.adm-alert-card,.hero-delivery-box,.hero-refund-box,.hero-processing-box) {
+  border-radius: 8px; border-width: 1px; border-style: solid;
+  box-shadow: var(--result-shadow); line-height: 1.7; overflow-wrap: anywhere;
+}
+body .hero-refund-box { background: var(--result-neutral-bg); border-color: var(--result-neutral-line); color: var(--result-neutral); }
+body .gw-state { padding: 14px 16px; margin-bottom: 12px; font-size: 14px; }
+body .hero-processing-box { background: var(--result-info-bg); border-color: var(--result-info-line); color: var(--result-info); }
+body .status-card { border-color: var(--result-neutral-line); box-shadow: var(--result-shadow); }
+body .status-orb { border-radius: 20px; background: var(--result-info-bg); border-color: var(--result-info-line); box-shadow: var(--result-shadow); }
+body .status-orb.completed { background: var(--result-success-bg); border-color: var(--result-success-line); }
+body .status-orb.cancelled { background: var(--result-danger-bg); border-color: var(--result-danger-line); }
+body .pipeline-line-bg { background: var(--result-track); }
+body .pipeline-line-fill { background: var(--result-success); }
+body .pipeline-step.done .step-icon-circle { background: var(--result-success); border-color: var(--result-success); color: var(--result-surface); box-shadow: var(--result-shadow); }
+body .pipeline-step.now .step-icon-circle { background: var(--result-info); border-color: var(--result-info); color: var(--result-surface); box-shadow: var(--result-shadow); }
+body .pipeline-step.terminal .step-icon-circle { background: var(--result-danger); border-color: var(--result-danger); color: var(--result-surface); box-shadow: var(--result-shadow); }
+body .pipeline-step.now .step-text { color: var(--result-info); }
+body .pipeline-step.done .step-text { color: var(--result-success); }
+body .gw-step.done { color: var(--result-success); }
+body .gw-step.done::before, body .gw-step.done::after { background: var(--result-success); border-color: var(--result-success); }
+body .gw-step.active { color: var(--result-info); }
+body .gw-step.active::before { background: var(--result-info); border-color: var(--result-info); }
+body :is(.modal,.adm-toast) { border-radius: 8px; border-color: var(--result-neutral-line); box-shadow: var(--result-shadow); overflow-wrap: anywhere; }
+body .adm-toast-icon { border-radius: 8px; }
+body .toast-order .adm-toast-icon { background: var(--result-info-bg); }
+body .toast-recharge .adm-toast-icon { background: var(--result-success-bg); }
+body .toast-chat .adm-toast-icon { background: var(--result-warn-bg); }
+#abc-page-msg { border-radius: 8px !important; box-shadow: var(--result-shadow) !important; overflow-wrap: anywhere; }
+body .hist-doc { border-color: var(--result-neutral-line); background: var(--result-neutral-bg); color: var(--result-ink); }
+body .hist-doc.delivery { border-color: var(--result-success-line); background: var(--result-success-bg); color: var(--result-success); }
+body #failReceipt { border: 1px solid var(--result-neutral-line); border-radius: 8px; padding: 12px 14px; background: var(--result-neutral-bg); box-shadow: var(--result-shadow); overflow-wrap: anywhere; }
+body .spin { border-top-color: var(--result-gold); }
+@media (max-width: 600px) {
+  body :is(.st,.st-badge,.vbadge,.gw-badge) { font-size: 12px; padding: 4px 8px; }
+  body .status-card { padding: 24px 16px; }
+  body .step-text { font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body :is(.status-orb,.step-icon-circle,.hero-delivery-box,.gw-step)::before,
+  body :is(.status-orb,.step-icon-circle,.hero-delivery-box,.pipeline-line-fill,.modal,.adm-toast) { animation: none; transition: none; }
+}
