@@ -38,6 +38,29 @@
     dialog.querySelector('.wp-result-body').textContent = text;
     if (!dialog.open) { focusBefore = document.activeElement; dialog.showModal(); }
   }
+  // Reframe rendered history only; original status and coupon actions stay intact.
+  function compactHistory() {
+    document.querySelectorAll('#txList .tx:not([data-wp-ready])').forEach(function(row) {
+      var content=row.firstElementChild, amount=row.lastElementChild;
+      if(!content || !amount || content===amount) return;
+      row.setAttribute('data-wp-ready','true');
+      var title=content.querySelector('b');
+      var date=Array.from(content.children).filter(function(el){return el.tagName==='SMALL';}).pop();
+      var icon=document.createElement('span'); icon.className='wp-tx-icon'; icon.setAttribute('aria-hidden','true');
+      icon.textContent=amount.textContent.trim().charAt(0)==='-'?'↗':'↙'; row.insertBefore(icon,content);
+      var details=document.createElement('details'); details.className='wp-tx-details';
+      var summary=document.createElement('summary');
+      var failed=content.querySelector('.cb-badge[style*="991b1b"]'), pending=content.querySelector('.cb-badge.pending'), approved=content.querySelector('.gw-badge.pass');
+      summary.textContent=failed?'ব্যর্থ · বিস্তারিত':pending?'অপেক্ষমান · বিস্তারিত':approved?'সফল · বিস্তারিত':'বিস্তারিত';
+      summary.dataset.status=failed?'failed':pending?'pending':approved?'success':'neutral'; details.appendChild(summary);
+      Array.from(content.childNodes).forEach(function(node){if(node!==title && node!==date) details.appendChild(node);});
+      if(title) content.appendChild(title);
+      if(date){date.classList.add('wp-tx-date');content.appendChild(date);}
+      content.appendChild(details);
+    });
+  }
+  var history=document.getElementById('txList');
+  if(history){new MutationObserver(compactHistory).observe(history,{childList:true});compactHistory();}
   // These nodes are the existing engine's feedback contract. Never infer new credits from history.
   ['gwState', 'ok', 'err', 'gwErr', 'gwErr2', 'cerr'].forEach(function (id) {
     var node = document.getElementById(id);

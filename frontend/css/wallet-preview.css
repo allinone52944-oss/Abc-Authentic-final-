@@ -147,3 +147,25 @@ body.wp-as-is .wp-account-header { flex-direction:row !important; text-align:lef
 body.wp-as-is .wp-account-header > div { min-width:0; }
 body.wp-as-is .wp-account-header h2 { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 body.wp-as-is .wp-header-balance { flex-shrink:0; }
+
+/* Compact reference-style history; expanded details retain all original actions. */
+body.wp-as-is .sidebar { position:sticky; top:0; height:100dvh; }
+body.wp-as-is .sidebar nav { margin-top:40px; }
+body.wp-as-is .side-link { min-height:44px; padding:10px 12px; font-size:14px; }
+body.wp-as-is .side-link.on { border-radius:12px; }
+body.wp-as-is .hero-blue .amt { margin-top:8px; line-height:1; }
+body.wp-as-is .gw-chip, body.wp-as-is .pay-method { min-height:56px; }
+body.wp-as-is .wp-submit { min-height:48px; }
+body.wp-as-is #walletHistory .tx { gap:12px; align-items:flex-start; padding:12px 0; border-color:var(--pv-line); }
+body.wp-as-is .wp-tx-icon { flex:0 0 36px; height:36px; display:grid; place-items:center; border-radius:6px; color:var(--pv-primary); background:var(--pv-soft); font-size:20px; }
+body.wp-as-is #walletHistory .tx > div > b { display:block; color:var(--pv-ink) !important; font-weight:500; }
+body.wp-as-is #walletHistory .tx > b { padding-top:3px; font-size:14px !important; }
+body.wp-as-is .wp-tx-date { display:block; font-size:12px; color:var(--pv-muted) !important; }
+body.wp-as-is .wp-tx-details { margin-top:6px; font-size:12px; line-height:1.7; overflow-wrap:anywhere; }
+body.wp-as-is .wp-tx-details summary { cursor:pointer; color:var(--pv-muted); }
+body.wp-as-is .wp-tx-details summary[data-status="success"] { color:var(--wp-success); }
+body.wp-as-is .wp-tx-details summary[data-status="pending"] { color:var(--wp-pending); }
+body.wp-as-is .wp-tx-details summary[data-status="failed"] { color:var(--wp-failed); }
+body.wp-as-is #walletHistory select { background:var(--pv-bg); border-color:var(--pv-line) !important; color:var(--pv-muted); font-size:13px !important; }
+body.wp-as-is .wp-more-content .card { margin:0; padding:24px; border-color:var(--pv-line) !important; background:var(--pv-card) !important; box-shadow:var(--pv-soft-shadow); }
+body.wp-as-is #cbHubCard p, body.wp-as-is #couponCard p { color:var(--pv-muted) !important; }
