@@ -364,58 +364,40 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261108">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261108-2">
 </head>
-<body class="flagship-login">
+<body class="flagship-login preview-auth">
 <div class="login-wrapper">
-  <!-- Left Brand Showcase -->
+  <!-- Preview brand panel: presentation only; authentication remains below. -->
   <div class="brand-panel">
-    <div class="brand-header">
-      <div class="logo-box">
-        <img src="/icons/abc-uncommon.svg" alt="ABC Logo">
+    <a class="brand-header" href="/" aria-label="All In One হোম">
+      <div class="logo-box" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></svg>
       </div>
       <div>
-        <h1>ALL IN ONE</h1>
-        <p>ABC AUTHENTIC</p>
+        <h1>All In One</h1>
+        <p>(Abc Authentic)</p>
       </div>
-    </div>
+    </a>
 
     <div class="brand-hero">
-      <div class="brand-badge">✨ বিশ্বস্ত ও আধুনিক ডিজিটাল সেবা প্ল্যাটফর্ম</div>
-      <h2>All In One <span>(Abc Authentic)</span></h2>
-      <p>জন্ম নিবন্ধন, মৃত্যু সনদ, ভোটার ও জাতীয় পরিচয়পত্রসহ প্রয়োজনীয় সব পাবলিক ও সরকারি সেবা পান দ্রুততম সময়ে।</p>
-    </div>
-
-    <div class="feature-list">
-      <div class="feature-item">
-        <div class="feature-check">✓</div>
-        <span>অটোমেটেড ও ম্যানুয়াল হাই-স্পিড সার্ভিস প্রসেসিং</span>
-      </div>
-      <div class="feature-item">
-        <div class="feature-check">✓</div>
-        <span>বিকাশ, নগদ ও রকেট ইনস্ট্যান্ট ওয়ালেট রিচার্জ</span>
-      </div>
-      <div class="feature-item">
-        <div class="feature-check">✓</div>
-        <span>লাইভ চ্যাট সাপোর্ট ও ২৪/৭ ডেডিকেটেড হেল্পলাইন</span>
-      </div>
-    </div>
-
-    <div class="brand-footer">
-      © 2026 All In One (Abc Authentic). সর্বস্বত্ব সংরক্ষিত।
+      <h2>সব সরকারি সেবা,<br><span>এক জায়গায়।</span></h2>
+      <p><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>আপনার তথ্য সম্পূর্ণ নিরাপদ</p>
     </div>
   </div>
 
   <!-- Right Form Card -->
   <div class="form-panel">
     <div class="form-card">
-      <div class="tabs">
-        <div class="tab active" onclick="showTab('login',this)">প্রবেশ (Login)</div>
-        <div class="tab" onclick="showTab('reg',this)">নিবন্ধন (Register)</div>
-      </div>
+      <a class="mobile-auth-brand" href="/" aria-label="All In One হোম">
+        <div class="logo-box" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></svg>
+        </div>
+        <div><h1>All In One</h1><p>(Abc Authentic)</p></div>
+      </a>
 
       <!-- Login Tab -->
       <div id="tab-login">
-        <div class="form-title">অ্যাকাউন্টে লগইন করুন</div>
-        <div class="form-sub">আপনার মোবাইল নম্বর অথবা ইমেইল দিয়ে প্রবেশ করুন</div>
+        <div class="form-title">আবার স্বাগতম</div>
+        <div class="form-sub">আপনার অ্যাকাউন্টে লগইন করুন</div>
 
         <div class="field">
           <label>মোবাইল নম্বর / ইমেইল</label>
@@ -427,6 +409,9 @@
           <input type="password" id="lg_pw" placeholder="আপনার গোপন পাসওয়ার্ড" autocomplete="current-password">
         </div>
 
+        <div class="forgot-link">
+          <a href="#" onclick="showForgot();return false;">পাসওয়ার্ড ভুলে গেছেন?</a>
+        </div>
         <button class="btn-submit" id="lg_btn" onclick="doLogin()">লগইন করুন →</button>
         <div class="err" id="lg_err"></div>
 
@@ -442,10 +427,6 @@
           <div class="forgot-link"><a href="#" onclick="resendVerifyLink();return false;">✉️ যাচাই লিংক আবার পাঠান</a></div>
         </div>
 
-        <div class="forgot-link">
-          <a href="#" onclick="showForgot();return false;">🔑 পাসওয়ার্ড ভুলে গেছেন?</a>
-        </div>
-
         <div id="forgotWrap" class="forgot-box" style="display:none;">
           <div class="field">
             <label>আপনার রেজিস্টার্ড ইমেইল দিন</label>
@@ -459,8 +440,8 @@
 
       <!-- Registration Tab -->
       <div id="tab-reg" style="display:none;">
-        <div class="form-title">নতুন অ্যাকাউন্ট খুলুন</div>
-        <div class="form-sub">কয়েক সেকেন্ডেই তৈরি করুন আপনার পার্সোনাল প্রোফাইল</div>
+        <div class="form-title">নতুন অ্যাকাউন্ট</div>
+        <div class="form-sub">১ মিনিটে ফ্রি রেজিস্ট্রেশন</div>
 
         <div class="field">
           <label>পূর্ণ নাম *</label>
@@ -489,6 +470,11 @@
 
         <button class="btn-submit" onclick="doRegister()">রেজিস্টার করুন →</button>
         <div class="err" id="rg_err"></div>
+      </div>
+
+      <div class="tabs" aria-label="লগইন বা রেজিস্ট্রেশন বেছে নিন">
+        <div class="tab active" onclick="showTab('login',this)">লগইন করুন</div>
+        <div class="tab" onclick="showTab('reg',this)">রেজিস্ট্রেশন করুন</div>
       </div>
     </div>
   </div>
