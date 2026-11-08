@@ -42,6 +42,9 @@
 .flagship-dashboard .stat-card .ico { width: 40px; height: 40px; border-radius: 10px; font-size: 20px; }
 .flagship-dashboard .stat-card .num { font-size: 28px; line-height: 1.2; }
 .flagship-dashboard .stat-card .lbl { font-size: 13px; margin-top: 5px; }
+.flagship-dashboard .sidebar nav { overflow-y: auto; min-height: 0; }
+.flagship-dashboard .m-tab.on .ico svg { color: var(--layout-gold-ink); }
+.flagship-login .login-wrapper .field input { color: var(--layout-ink); }
 .flagship-dashboard .engine-hub-section { margin-bottom: 32px; }
 .flagship-dashboard .engine-hub-header { padding: 0 0 14px; margin-bottom: 18px; border-bottom: 1px solid var(--layout-line); gap: 12px; flex-wrap: wrap; }
 .flagship-dashboard .engine-hub-title h3 { font-size: 19px; }
