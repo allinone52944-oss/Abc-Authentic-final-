@@ -87,3 +87,58 @@ body.page-wallet #gwStep1 > button[onclick="gwGoManual()"], body.page-wallet #ma
 body.page-wallet #walletHistory { min-height:100%; }
 @media(max-width:1000px) { body.page-wallet #walletHistory { min-height:0; } }
 @media(max-width:767px) { body.page-wallet .main { padding:20px; } body.page-wallet .wp-inputs { grid-template-columns:minmax(0,1fr); } body.page-wallet .gw-chips { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+
+/* Complete requested /wallet presentation, retaining legacy features in an accessible disclosure. */
+body.wp-as-is .desktop { display:flex; }
+body.wp-as-is .sidebar { width:256px !important; flex:0 0 256px; padding:20px; }
+body.wp-as-is .main { padding:0 !important; min-width:0; flex:1; }
+body.wp-as-is .wp-account-header { position:sticky; top:0; z-index:20; padding:16px 32px; margin:0; min-height:81px; display:flex; align-items:center; justify-content:space-between; background:var(--pv-bg); border-bottom:1px solid var(--pv-line); }
+body.wp-as-is .wp-account-header p { font-size:14px; margin:0; color:var(--pv-muted); }
+body.wp-as-is .wp-account-header h2 { font-size:20px; margin:0; }
+body.wp-as-is .wp-header-balance { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; background:var(--pv-soft); color:var(--pv-primary); font-size:14px; font-weight:600; text-decoration:none; }
+body.wp-as-is .wp-mobile-brand { display:none; }
+body.wp-as-is .wallet-workspace { margin:0; padding:32px; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:24px; }
+body.wp-as-is .wallet-workspace > .hero-blue { min-height:132px; border-radius:16px; padding:28px; }
+body.wp-as-is #gwCard, body.wp-as-is #manualSection { grid-column:1; grid-row:2; }
+body.wp-as-is #walletHistory { grid-column:2; grid-row:1 / 3; min-height:100%; padding:24px; }
+body.wp-as-is #gwCard, body.wp-as-is #classicRechargeCard { padding:24px; }
+body.wp-as-is #gwCard h3, body.wp-as-is #classicRechargeCard h3, body.wp-as-is #walletHistory h3 { font-size:18px; font-weight:600; margin:0; }
+body.wp-as-is .wp-inputs label, body.wp-as-is .wp-manual-inputs label { display:none; }
+body.wp-as-is .wp-inputs input, body.wp-as-is .wp-manual-inputs input { background:var(--pv-bg); padding:12px 16px; }
+body.wp-as-is .wp-submit { min-height:52px; font-size:14px; font-weight:600; }
+body.wp-as-is #gwStep1 { display:block !important; }
+body.wp-as-is #gwStep2 { display:none !important; }
+body.wp-as-is #gwExpired { display:none !important; }
+body.wp-as-is #gwCard:has(#gwStep1[style*="none"]) #gwStep1 { display:block !important; }
+body.wp-as-is .method-card-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+body.wp-as-is .pay-method { min-height:64px; padding:12px 6px; justify-content:center; }
+body.wp-as-is .pay-method img { display:none; }
+body.wp-as-is #classicRechargeCard > p, body.wp-as-is #manualGuide, body.wp-as-is .quick-amounts, body.wp-as-is .wp-manual-inputs .field > div:not(.quick-amounts) { display:none; }
+body.wp-as-is .wp-manual-inputs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+body.wp-as-is .wp-manual-inputs .field { min-width:0; margin:0; }
+body.wp-as-is #recvNumWrap { margin:20px 0; padding:16px; }
+body.wp-as-is #walletHistory > div:has(#txFilterType) { margin-top:20px; }
+body.wp-as-is .wp-more { margin:0 32px 32px; border-top:1px solid var(--pv-line); }
+body.wp-as-is .wp-more summary { padding:16px 0; font-size:14px; font-weight:600; color:var(--pv-primary); cursor:pointer; }
+body.wp-as-is .wp-more-content { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+body.wp-as-is .wp-more-content > :last-child { grid-column:1 / -1; }
+@media(max-width:1023px) {
+ body.wp-as-is .sidebar { display:none !important; }
+ body.wp-as-is .wallet-workspace { grid-template-columns:minmax(0,1fr); }
+ body.wp-as-is .wallet-workspace > :is(.hero-blue,#gwCard,#manualSection,#walletHistory) { grid-column:1; grid-row:auto; }
+ body.wp-as-is #walletHistory { min-height:0; }
+ body.wp-as-is .wp-mobile-brand { display:block; color:var(--pv-ink); font-size:14px; font-weight:700; margin-bottom:8px; text-decoration:none; }
+ body.wp-as-is .wp-mobile-brand small { font-size:10px; color:var(--pv-muted); }
+}
+@media(max-width:767px) {
+ body.wp-as-is .wallet-workspace { padding:20px; }
+ body.wp-as-is .wp-account-header { padding:16px 20px; }
+ body.wp-as-is .wp-inputs, body.wp-as-is .wp-manual-inputs { grid-template-columns:minmax(0,1fr); }
+ body.wp-as-is .gw-chips, body.wp-as-is .method-card-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ body.wp-as-is .wp-more { margin:0 20px 100px; }
+ body.wp-as-is .wp-more-content { grid-template-columns:minmax(0,1fr); }
+}
+body.wp-as-is .wp-account-header { flex-direction:row !important; text-align:left !important; gap:16px; }
+body.wp-as-is .wp-account-header > div { min-width:0; }
+body.wp-as-is .wp-account-header h2 { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+body.wp-as-is .wp-header-balance { flex-shrink:0; }

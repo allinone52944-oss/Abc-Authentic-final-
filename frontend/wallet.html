@@ -276,9 +276,9 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261108">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261108-2">
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261108-1">
-<link rel="stylesheet" href="/css/wallet-preview.css?v=20261109-2">
+<link rel="stylesheet" href="/css/wallet-preview.css?v=20261109-3">
 </head>
-<body class="has-tabbar flagship-app page-wallet">
+<body class="has-tabbar flagship-app page-wallet wp-as-is">
 <div class="desktop">
   <div class="sidebar">
     <div class="side-logo">
@@ -299,12 +299,7 @@
   </div>
 
   <div class="main">
-    <div class="topbar">
-      <div>
-        <h2>💳 আমার ওয়ালেট</h2>
-        <p>ব্যালেন্স রিচার্জ, কুপন রিডিম এবং ট্রানজ্যাকশন হিস্ট্রি</p>
-      </div>
-    </div>
+    <div class="topbar wp-account-header"><div><a class="wp-mobile-brand" href="/">All In One <small>(Abc Authentic)</small></a><p>স্বাগতম 👋</p><h2 id="wpAccountName">আপনার অ্যাকাউন্ট</h2></div><a class="wp-header-balance" href="/wallet.html"><span aria-hidden="true">▱</span><span id="wpHeaderBalance">৳০</span></a></div>
 
     <div class="wallet-workspace">
     <!-- Balance Hero -->
@@ -333,15 +328,15 @@
           <button type="button" class="gw-chip" data-m="rocket" onclick="gwSelectMethod(this)">Rocket</button>
         </div>
         <div class="wp-receiving"><small id="wpReceiveLabel">বিকাশ পেমেন্ট নম্বর</small><strong id="wpReceiveNumber">নম্বর লোড হচ্ছে…</strong></div>
-        <ol class="wp-instructions"><li>পেমেন্টের নম্বরে টাকা পাঠান।</li><li>যে নম্বর থেকে পাঠিয়েছেন সেটি ও পরিমাণ দিন।</li><li>SMS মিললে ব্যালেন্স যোগ হবে।</li></ol>
+        <ol class="wp-instructions"><li>পেমেন্টের নম্বরে টাকা পাঠান।</li><li>যে নম্বর থেকে পাঠিয়েছেন সেটি ও পরিমাণ দিন।</li><li>SMS মিললেই ব্যালেন্স অটো যোগ হবে।</li></ol>
         <div class="wp-inputs">
         <div class="field wp-sender">
           <label>যে নম্বর থেকে টাকা পাঠাবেন</label>
-          <input type="text" id="gwSender" placeholder="01XXXXXXXXX" maxlength="15">
+          <input type="text" id="gwSender" placeholder="যে নম্বর থেকে পাঠিয়েছেন" maxlength="15">
         </div>
         <div class="field">
           <label>টাকার পরিমাণ (৳১০ - ৳১,০০,০০০)</label>
-          <input type="number" id="gwAmount" placeholder="যেমন: 500" min="10" max="100000">
+          <input type="number" id="gwAmount" placeholder="পরিমাণ (৳)" min="10" max="100000">
         </div>
         </div>
         <div class="err" id="gwErr"></div>
@@ -449,9 +444,10 @@
         </div>
       </div>
 
+      <div class="wp-manual-inputs">
       <div class="field">
         <label>টাকার পরিমাণ (৳১০ - ৳১,০০,০০০)</label>
-        <input type="number" id="amount" placeholder="যেমন: 500" min="10" max="100000">
+        <input type="number" id="amount" placeholder="পরিমাণ (৳)" min="10" max="100000">
         <div class="quick-amounts">
           <div class="amount-chip" onclick="setAmount(100)">+ ৳১০০</div>
           <div class="amount-chip" onclick="setAmount(500)">+ ৳৫০০</div>
@@ -463,7 +459,7 @@
 
       <div class="field">
         <label>যে নম্বর থেকে টাকা পাঠিয়েছেন (সেন্ডার নম্বর)</label>
-        <input type="text" id="sender" placeholder="01XXXXXXXXX" maxlength="15">
+        <input type="text" id="sender" placeholder="যে নম্বর থেকে পাঠিয়েছেন" maxlength="15">
       </div>
 
       <div class="field">
@@ -472,43 +468,12 @@
         <div style="margin-top:8px;padding:10px 12px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:12.5px;line-height:1.6;">⚠️ <b>সতর্কতা:</b> ডুপ্লিকেট (আগে ব্যবহৃত) বা ভুল/ভুয়া ট্রানজ্যাকশন আইডি (TrxID) দিয়ে বারবার চেষ্টা করলে আপনার অ্যাকাউন্ট <b>স্থায়ীভাবে ব্লক</b> করা হতে পারে। শুধুমাত্র সঠিক TrxID ও সঠিক টাকার পরিমাণ লিখুন।</div>
       </div>
 
+      </div>
       <div class="err" id="err"></div>
       <div class="okmsg" id="ok"></div>
 
       <button class="btn wp-submit" style="width:100%;margin-top:10px;padding:14px;" onclick="submitRecharge()">টাকা যোগ করার রিকোয়েস্ট পাঠান →</button>
     </div>
-    </div>
-
-    <!-- Recharge Cashback Hub Card -->
-    <div class="card" id="cbHubCard" style="background:linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);border:1.5px solid #a7f3d0;box-shadow:0 4px 14px rgba(16, 185, 129, 0.08);">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-size:24px;">🎁</span>
-          <div>
-            <h3 style="margin:0;font-size:16px;color:#065f46;font-weight:800;">রিচার্জ ক্যাশব্যাক অফার</h3>
-            <p style="margin:2px 0 0;font-size:12px;color:#047857;">অনুমোদিত প্রতিটি রিচার্জে আকর্ষণীয় কুপন বোনাস</p>
-          </div>
-        </div>
-        <div id="cbRateBadge" style="background:#059669;color:#ffffff;font-size:12px;font-weight:800;padding:4px 12px;border-radius:20px;box-shadow:0 2px 4px rgba(5,150,105,0.25);">
-          ক্যাশব্যাক অফার
-        </div>
-      </div>
-
-      <div id="cbHubBody" style="background:#ffffff;border:1px solid #d1fae5;border-radius:12px;padding:16px;">
-        <div class="skel" style="height:36px;width:100%;border-radius:8px;"></div>
-      </div>
-    </div>
-
-    <!-- Coupon Code Card -->
-    <div class="card" id="couponCard">
-      <h3>🎟️ প্রমোশন বা উপহার কুপন</h3>
-      <p style="font-size:13px;color:#64748b;margin-bottom:12px;">আপনার কাছে ডিসকাউন্ট বা গিফট কুপন থাকলে কোড লিখুন:</p>
-      <div style="display:flex;gap:10px;">
-        <input type="text" id="couponCode" placeholder="কুপন কোড লিখুন (যেমন: WELCOME50)" style="flex:1;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;">
-        <button class="btn" style="width:auto;padding:12px 24px;" onclick="redeem()">রিডিম করুন</button>
-      </div>
-      <div class="err" id="cerr"></div>
-      <div class="okmsg" id="cok"></div>
     </div>
 
     <!-- Transaction History -->
@@ -543,6 +508,39 @@
     </div>
 
     </div>
+    <details class="wp-more"><summary>ক্যাশব্যাক, কুপন ও ব্যালেন্স পলিসি</summary><div class="wp-more-content">
+    <!-- Recharge Cashback Hub Card -->
+    <div class="card" id="cbHubCard" style="background:linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);border:1.5px solid #a7f3d0;box-shadow:0 4px 14px rgba(16, 185, 129, 0.08);">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:24px;">🎁</span>
+          <div>
+            <h3 style="margin:0;font-size:16px;color:#065f46;font-weight:800;">রিচার্জ ক্যাশব্যাক অফার</h3>
+            <p style="margin:2px 0 0;font-size:12px;color:#047857;">অনুমোদিত প্রতিটি রিচার্জে আকর্ষণীয় কুপন বোনাস</p>
+          </div>
+        </div>
+        <div id="cbRateBadge" style="background:#059669;color:#ffffff;font-size:12px;font-weight:800;padding:4px 12px;border-radius:20px;box-shadow:0 2px 4px rgba(5,150,105,0.25);">
+          ক্যাশব্যাক অফার
+        </div>
+      </div>
+
+      <div id="cbHubBody" style="background:#ffffff;border:1px solid #d1fae5;border-radius:12px;padding:16px;">
+        <div class="skel" style="height:36px;width:100%;border-radius:8px;"></div>
+      </div>
+    </div>
+
+    <!-- Coupon Code Card -->
+    <div class="card" id="couponCard">
+      <h3>🎟️ প্রমোশন বা উপহার কুপন</h3>
+      <p style="font-size:13px;color:#64748b;margin-bottom:12px;">আপনার কাছে ডিসকাউন্ট বা গিফট কুপন থাকলে কোড লিখুন:</p>
+      <div style="display:flex;gap:10px;">
+        <input type="text" id="couponCode" placeholder="কুপন কোড লিখুন (যেমন: WELCOME50)" style="flex:1;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;">
+        <button class="btn" style="width:auto;padding:12px 24px;" onclick="redeem()">রিডিম করুন</button>
+      </div>
+      <div class="err" id="cerr"></div>
+      <div class="okmsg" id="cok"></div>
+    </div>
+
     <!-- Policy Card -->
     <div class="card" style="background:#f8fafc;">
       <h3>🛡️ রিফান্ড ও ব্যালেন্স পলিসি</h3>
@@ -552,6 +550,7 @@
         <p>• যেকোনো রিচার্জ বা লেনদেন সম্পর্কিত জটিলতায় নিচের WhatsApp বাটনে যোগাযোগ করতে পারেন।</p>
       </div>
     </div>
+    </div></details>
   </div>
 </div>
 
@@ -1502,6 +1501,7 @@ function celebrate(amount,code,opts){
 
 init();
 </script>
-<script src="/js/wallet-presentation.js?v=20261109-2"></script>
+<script src="/js/wallet-presentation.js?v=20261109-3"></script>
+<script src="/js/wallet-preview-adapter.js?v=20261109-3"></script>
 </body>
 </html>
