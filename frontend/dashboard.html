@@ -939,8 +939,9 @@
   }
 </style>
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261108">
+<link rel="stylesheet" href="/css/flagship-layout.css?v=20261108-1">
 </head>
-<body class="has-tabbar">
+<body class="has-tabbar flagship-dashboard">
 
 <!-- ==========================================================
      DESKTOP LAYOUT
@@ -993,6 +994,7 @@
     <!-- Banner Strip (Desktop) -->
     <div class="bn-strip" id="bnStrip" style="display:none;"></div>
 
+    <div class="account-overview">
     <!-- Fintech Balance Hero -->
     <div class="hero-blue">
       <div class="hero-flex">
@@ -1059,6 +1061,8 @@
       </div>
     </div>
 
+    </div>
+
     <!-- 4 Core Automated Engines Hub (Desktop) -->
     <div class="engine-hub-section">
       <div class="engine-hub-header">
@@ -1071,6 +1075,7 @@
       <div class="engine-cards-grid" id="engineGridDesk"></div>
     </div>
 
+    <div class="workspace-overview">
     <!-- Active / Recent Orders Tracker (Desktop) -->
     <div class="recent-orders-card">
       <div class="recent-orders-hdr">
@@ -1082,9 +1087,8 @@
       </div>
     </div>
 
-    <!-- 2 Column Section: Popular Services & Notices -->
-    <div class="two-col">
-      <div class="card">
+    <!-- Popular services and notices retain every original data container. -->
+      <div class="card popular-panel">
         <h3>
           <span>🛎️ জনপ্রিয় ডিজিটাল সেবাসমূহ</span>
           <a href="/services.html" style="color:#2563eb;font-weight:700;font-size:13px;text-decoration:none;">সবগুলো দেখুন →</a>
@@ -1101,7 +1105,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card notices-panel">
         <h3>
           <span>🔔 জরুরি নোটিশ বোর্ড</span>
           <a href="#" onclick="showNotices();return false;" style="color:#2563eb;font-weight:700;font-size:13px;text-decoration:none;">সব নোটিশ</a>
