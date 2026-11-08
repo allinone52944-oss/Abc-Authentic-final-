@@ -60,3 +60,30 @@ body.page-wallet #cbOverlay #cbCopyBtn { width:100%; background:var(--pv-primary
 @media(prefers-reduced-motion:reduce) { body.page-wallet .wp-result-icon { animation:none; } }
 body.page-wallet dialog.wp-result { position:fixed; inset:0; margin:auto; }
 body.page-wallet .wp-cashback-panel:focus { outline:none; }
+
+/* Authenticated /wallet parity: match real page, not design sample. */
+body.page-wallet .sidebar { width:256px; flex-basis:256px; }
+body.page-wallet .main { padding:32px; }
+body.page-wallet .hero-blue { min-height:144px; }
+body.page-wallet .hero-blue > div:last-child:not(.amt) { display:none; }
+body.page-wallet .hero-blue .wb { font-size:14px; font-weight:400; }
+body.page-wallet .wp-mode-selector { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; background:var(--pv-muted-bg); padding:6px; border-radius:8px; margin:20px 0; }
+body.page-wallet .wp-mode { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:5px; min-height:80px; border:0; background:transparent; color:var(--pv-muted); border-radius:6px; padding:12px; font:inherit; text-align:left; cursor:pointer; }
+body.page-wallet .wp-mode strong { font-size:14px; }
+body.page-wallet .wp-mode small { font-size:12px; }
+body.page-wallet .wp-mode.selected { background:var(--pv-card); box-shadow:var(--pv-soft-shadow); }
+body.page-wallet .wp-mode.selected strong { color:var(--pv-primary); }
+body.page-wallet .gw-chips { grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+body.page-wallet .gw-chip { min-height:64px; padding:12px 6px; border-radius:8px; }
+body.page-wallet .wp-receiving { border:1px dashed var(--pv-primary); border-radius:8px; padding:16px; background:var(--pv-soft); margin:20px 0; }
+body.page-wallet .wp-receiving small { display:block; color:var(--pv-muted); font-size:12px; }
+body.page-wallet .wp-receiving strong { display:block; margin-top:4px; font-size:24px; color:var(--pv-primary); overflow-wrap:anywhere; }
+body.page-wallet .wp-instructions { padding:16px 16px 16px 32px; background:var(--pv-muted-bg); border-radius:8px; font-size:14px; line-height:1.8; color:var(--pv-muted); margin-bottom:20px; }
+body.page-wallet .wp-inputs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+body.page-wallet .wp-inputs .field { margin-bottom:0; min-width:0; }
+body.page-wallet .wp-inputs .wp-sender { order:2; }
+body.page-wallet .wp-submit { background:var(--pv-gold-fill) !important; color:var(--pv-gold-ink) !important; box-shadow:var(--pv-gold-shadow); margin-top:20px; }
+body.page-wallet #gwStep1 > button[onclick="gwGoManual()"], body.page-wallet #manualSection > div:first-child { display:none; }
+body.page-wallet #walletHistory { min-height:100%; }
+@media(max-width:1000px) { body.page-wallet #walletHistory { min-height:0; } }
+@media(max-width:767px) { body.page-wallet .main { padding:20px; } body.page-wallet .wp-inputs { grid-template-columns:minmax(0,1fr); } body.page-wallet .gw-chips { grid-template-columns:repeat(2,minmax(0,1fr)); } }

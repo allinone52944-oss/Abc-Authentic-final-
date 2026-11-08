@@ -276,7 +276,7 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261108">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261108-2">
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261108-1">
-<link rel="stylesheet" href="/css/wallet-preview.css?v=20261109-1">
+<link rel="stylesheet" href="/css/wallet-preview.css?v=20261109-2">
 </head>
 <body class="has-tabbar flagship-app page-wallet">
 <div class="desktop">
@@ -309,7 +309,7 @@
     <div class="wallet-workspace">
     <!-- Balance Hero -->
     <div class="hero-blue">
-      <div class="wb">✨ উপলব্ধ ব্যালেন্স</div>
+      <div class="wb">বর্তমান ব্যালেন্স</div>
       <div class="amt" id="bal">৳০</div>
       <div style="font-size:13px;color:rgba(255,255,255,0.85);margin-top:4px;">অর্ডার করার সময় এই ব্যালেন্স থেকে স্বয়ংক্রিয়ভাবে ফি পরিশোধ হবে।</div>
     </div>
@@ -322,8 +322,7 @@
          Auto Match, through the classic /wallet/recharge flow. -->
     <div class="card gw-card" id="gwCard">
       <h3>টাকা যোগ করুন</h3>
-      <div class="wp-mode-label">অটো পেমেন্ট · নম্বর + পরিমাণ</div>
-      <p class="wp-auto-intro">যে নম্বর থেকে পাঠাবেন সেটি ও পরিমাণ দিন। SMS মিললে ব্যালেন্স যোগ হবে।</p>
+      <div class="wp-mode-selector"><button type="button" class="wp-mode selected" onclick="gwBackToAuto()"><strong>অটো পেমেন্ট</strong><small>শুধু নম্বর দিন</small></button><button type="button" class="wp-mode" onclick="gwGoManual()"><strong>TrxID দিয়ে</strong><small>নম্বর + ট্রানজেকশন আইডি</small></button></div>
 
       <!-- Step 1: session setup -->
       <div id="gwStep1">
@@ -333,7 +332,10 @@
           <button type="button" class="gw-chip" data-m="nagad" onclick="gwSelectMethod(this)">Nagad</button>
           <button type="button" class="gw-chip" data-m="rocket" onclick="gwSelectMethod(this)">Rocket</button>
         </div>
-        <div class="field">
+        <div class="wp-receiving"><small id="wpReceiveLabel">বিকাশ পেমেন্ট নম্বর</small><strong id="wpReceiveNumber">নম্বর লোড হচ্ছে…</strong></div>
+        <ol class="wp-instructions"><li>পেমেন্টের নম্বরে টাকা পাঠান।</li><li>যে নম্বর থেকে পাঠিয়েছেন সেটি ও পরিমাণ দিন।</li><li>SMS মিললে ব্যালেন্স যোগ হবে।</li></ol>
+        <div class="wp-inputs">
+        <div class="field wp-sender">
           <label>যে নম্বর থেকে টাকা পাঠাবেন</label>
           <input type="text" id="gwSender" placeholder="01XXXXXXXXX" maxlength="15">
         </div>
@@ -341,8 +343,9 @@
           <label>টাকার পরিমাণ (৳১০ - ৳১,০০,০০০)</label>
           <input type="number" id="gwAmount" placeholder="যেমন: 500" min="10" max="100000">
         </div>
+        </div>
         <div class="err" id="gwErr"></div>
-        <button class="btn" style="width:100%;padding:14px;" onclick="gwStartSession()">পেমেন্ট শুরু করুন →</button>
+        <button class="btn wp-submit" style="width:100%;padding:14px;" onclick="gwStartSession()">পেমেন্ট শুরু করুন →</button>
         <button class="btn-secondary" style="width:100%;margin-top:10px;padding:12px;" onclick="gwGoManual()">📝 Manual-এ দিন</button>
       </div>
 
@@ -408,7 +411,7 @@
 
     <!-- Recharge Form Card -->
     <div class="card" id="classicRechargeCard">
-      <h3>💰 টাকা যোগ করুন (ব্যালেন্স রিচার্জ)</h3>
+      <h3>টাকা যোগ করুন</h3><div class="wp-mode-selector"><button type="button" class="wp-mode" onclick="gwBackToAuto()"><strong>অটো পেমেন্ট</strong><small>শুধু নম্বর দিন</small></button><button type="button" class="wp-mode selected" onclick="gwGoManual()"><strong>TrxID দিয়ে</strong><small>নম্বর + ট্রানজেকশন আইডি</small></button></div>
       <p style="font-size:13px;color:#64748b;margin-bottom:16px;">নিচের যেকোনো মাধ্যমে টাকা পাঠিয়ে TrxID সাবমিট করুন। SMS মিললে স্বয়ংক্রিয়ভাবে ব্যালেন্স যোগ হবে, না হলে এডমিন যাচাই করে যোগ করবেন।</p>
 
       <div id="manualGuide" style="font-size:12.5px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.7;">
@@ -472,7 +475,7 @@
       <div class="err" id="err"></div>
       <div class="okmsg" id="ok"></div>
 
-      <button class="btn" style="width:100%;margin-top:10px;padding:14px;" onclick="submitRecharge()">টাকা যোগ করার রিকোয়েস্ট পাঠান →</button>
+      <button class="btn wp-submit" style="width:100%;margin-top:10px;padding:14px;" onclick="submitRecharge()">টাকা যোগ করার রিকোয়েস্ট পাঠান →</button>
     </div>
     </div>
 
@@ -1499,6 +1502,6 @@ function celebrate(amount,code,opts){
 
 init();
 </script>
-<script src="/js/wallet-presentation.js?v=20261109-1"></script>
+<script src="/js/wallet-presentation.js?v=20261109-2"></script>
 </body>
 </html>

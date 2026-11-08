@@ -1,6 +1,20 @@
 /* Presentation-only observers: no API calls, financial writes, or legacy function replacement. */
 (function () {
   'use strict';
+  function syncReceiving() {
+    var active = document.querySelector('#gwMethods .sel');
+    var number = document.getElementById('wpReceiveNumber');
+    var label = document.getElementById('wpReceiveLabel');
+    if (!active || !number || !label) return;
+    var names = { bkash_payment: 'বিকাশ পেমেন্ট', bkash_personal: 'বিকাশ পার্সোনাল', nagad: 'নগদ', rocket: 'রকেট' };
+    label.textContent = (names[active.dataset.m] || active.textContent) + ' নম্বর';
+    number.textContent = typeof rechargeNums !== 'undefined' && rechargeNums[active.dataset.m] ? rechargeNums[active.dataset.m] : 'শীঘ্রই যোগ হবে';
+  }
+  var methods = document.getElementById('gwMethods');
+  if (methods) new MutationObserver(syncReceiving).observe(methods, { attributes: true, subtree: true, attributeFilter: ['class'] });
+  var receive = document.getElementById('recvNum');
+  if (receive) new MutationObserver(syncReceiving).observe(receive, { childList: true, characterData: true, subtree: true });
+  syncReceiving();
   var dialog = document.createElement('dialog');
   dialog.className = 'wp-result';
   dialog.setAttribute('aria-labelledby', 'wpResultTitle');
