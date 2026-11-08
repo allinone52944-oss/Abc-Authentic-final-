@@ -1,0 +1,62 @@
+/* Approved /wallet composition. Presentation only; state visibility belongs to legacy scripts. */
+body.page-wallet {
+ --wp-success: oklch(.43 .105 158); --wp-success-soft: oklch(.94 .025 165);
+ --wp-failed: oklch(.58 .22 27); --wp-failed-soft: oklch(.96 .025 27);
+ --wp-pending: oklch(.48 .105 65); --wp-pending-soft: oklch(.97 .03 85);
+ --wp-reward: oklch(.48 .12 315); --wp-reward-soft: oklch(.95 .025 315);
+ --wp-overlay: oklch(.245 .014 175 / .7);
+}
+body.page-wallet .main { max-width: 1600px; }
+body.page-wallet .wallet-workspace { grid-template-columns: minmax(0,3fr) minmax(0,2fr); gap:24px; align-items:start; }
+body.page-wallet .wallet-workspace > .hero-blue { grid-column:1; grid-row:1; border-radius:8px; padding:28px; }
+body.page-wallet :is(#gwCard,#manualSection) { grid-column:1; grid-row:2; }
+body.page-wallet #walletHistory { grid-column:2; grid-row:1 / 4; min-width:0; margin:0; }
+body.page-wallet #cbHubCard { grid-column:1; grid-row:3; }
+body.page-wallet #couponCard { grid-column:1; grid-row:4; }
+body.page-wallet :is(.card,.gw-card) { border-radius:8px; }
+body.page-wallet .hero-blue .amt { font-size:48px; line-height:1.3; }
+body.page-wallet .gw-chips { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+body.page-wallet :is(.gw-chip,.pay-method) { border-radius:8px; min-height:52px; white-space:normal; }
+body.page-wallet :is(.btn,.btn-secondary) { border-radius:6px; min-height:44px; }
+body.page-wallet :is(.field input,.field select) { border-radius:6px; min-height:48px; }
+body.page-wallet #cbHubCard { background:var(--pv-card) !important; }
+body.page-wallet #cbHubBody { border:0 !important; background:transparent !important; padding:0 !important; }
+body.page-wallet #cbHubCard h3 { color:var(--wp-reward) !important; }
+body.page-wallet #cbRateBadge { background:var(--wp-reward-soft) !important; color:var(--wp-reward) !important; box-shadow:none !important; }
+body.page-wallet .wp-auto-intro { color:var(--pv-muted); font-size:13px; margin-bottom:20px; line-height:1.7; }
+body.page-wallet .wp-mode-label { color:var(--pv-primary); font-size:13px; margin-bottom:16px; border-bottom:1px solid var(--pv-line); padding-bottom:14px; }
+body.page-wallet #walletHistory h3 { margin-bottom:20px; }
+body.page-wallet .tx { gap:12px; align-items:flex-start; }
+body.page-wallet .tx > b { flex-shrink:0; font-size:14px !important; }
+body.page-wallet .tx small { overflow-wrap:anywhere; }
+body.page-wallet .wp-result { --wp-tone:var(--wp-success); --wp-surface:var(--wp-success-soft); width:calc(100% - 32px); max-width:448px; max-height:90dvh; padding:0; border:1px solid var(--pv-line); border-radius:8px; background:var(--pv-card); color:var(--pv-ink); box-shadow:var(--pv-lift-shadow); overflow:auto; }
+body.page-wallet .wp-result::backdrop { background:var(--wp-overlay); backdrop-filter:blur(5px); }
+body.page-wallet .wp-result[data-outcome=failed] { --wp-tone:var(--wp-failed); --wp-surface:var(--wp-failed-soft); }
+body.page-wallet .wp-result[data-outcome=pending] { --wp-tone:var(--wp-pending); --wp-surface:var(--wp-pending-soft); }
+body.page-wallet .wp-result-head { background:var(--wp-surface); padding:36px 24px 26px; text-align:center; border-bottom:1px solid var(--pv-line); }
+body.page-wallet .wp-result-icon { width:80px; height:80px; border:2px solid currentColor; border-radius:50%; display:grid; place-items:center; margin:0 auto 20px; color:var(--wp-tone); font-size:36px; animation:wp-pop .35s ease-out; }
+body.page-wallet .wp-result h2 { font-size:24px; margin:0; color:var(--pv-ink); line-height:1.4; }
+body.page-wallet .wp-result-body { font-size:14px; line-height:1.85; padding:24px; overflow-wrap:anywhere; color:var(--pv-muted); }
+body.page-wallet .wp-result-footer { padding:0 24px 24px; }
+body.page-wallet .wp-result-footer button { width:100%; background:var(--pv-primary); color:var(--pv-light); border:0; font:inherit; font-weight:600; padding:14px; border-radius:6px; cursor:pointer; }
+body.page-wallet .wp-result-footer p { text-align:center; font-size:12px; color:var(--pv-muted); margin:14px 0 0; }
+body.page-wallet .wp-close { position:absolute; top:10px; right:10px; width:40px; height:40px; border:0; background:transparent; color:var(--pv-muted); font-size:24px; cursor:pointer; }
+body.page-wallet #cbOverlay { background:var(--wp-overlay); }
+body.page-wallet .wp-cashback-panel { position:relative; width:100%; max-width:448px; max-height:90dvh; overflow:auto; border-radius:8px; background:var(--pv-card); padding:32px 24px; box-shadow:var(--pv-lift-shadow); }
+body.page-wallet #cbOverlay .big { width:80px; height:80px; display:grid; place-items:center; margin:auto; border:2px solid var(--wp-reward); border-radius:50%; font-size:36px; background:var(--wp-reward-soft); }
+body.page-wallet #cbOverlay .congrats { font-size:24px; color:var(--pv-ink); line-height:1.4; }
+body.page-wallet #cbOverlay .won { font-size:40px; color:var(--wp-reward); margin:18px 0; }
+body.page-wallet #cbOverlay :is(.code,.note) { color:var(--wp-reward) !important; letter-spacing:0 !important; overflow-wrap:anywhere; }
+body.page-wallet #cbOverlay .wp-cashback-panel > div:last-child { color:var(--pv-muted) !important; padding:12px; }
+body.page-wallet #cbOverlay .coin { display:none; }
+body.page-wallet #cbOverlay #cbCopyBtn { width:100%; background:var(--pv-primary) !important; color:var(--pv-light) !important; }
+@keyframes wp-pop { from { opacity:0; transform:scale(.8); } to { opacity:1; transform:scale(1); } }
+@media(max-width:1000px) {
+ body.page-wallet .wallet-workspace { grid-template-columns:minmax(0,1fr); }
+ body.page-wallet .wallet-workspace > :is(.hero-blue,#gwCard,#manualSection,#cbHubCard,#couponCard,#walletHistory) { grid-column:1; grid-row:auto; }
+ body.page-wallet #walletHistory { order:5; }
+}
+@media(max-width:600px) { body.page-wallet .hero-blue .amt { font-size:40px; } body.page-wallet :is(#gwCard,#classicRechargeCard,#walletHistory) { padding:20px; } }
+@media(prefers-reduced-motion:reduce) { body.page-wallet .wp-result-icon { animation:none; } }
+body.page-wallet dialog.wp-result { position:fixed; inset:0; margin:auto; }
+body.page-wallet .wp-cashback-panel:focus { outline:none; }

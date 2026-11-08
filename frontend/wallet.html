@@ -276,6 +276,7 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261108">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261108-2">
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261108-1">
+<link rel="stylesheet" href="/css/wallet-preview.css?v=20261109-1">
 </head>
 <body class="has-tabbar flagship-app page-wallet">
 <div class="desktop">
@@ -320,8 +321,9 @@
          nothing on the server. The server request happens once, at
          Auto Match, through the classic /wallet/recharge flow. -->
     <div class="card gw-card" id="gwCard">
-      <h3>⚡ দ্রুত পেমেন্ট</h3>
-      <p style="font-size:13px;color:#64748b;margin-bottom:16px;">গেটওয়ে স্টাইলে: নম্বর লিখুন → পে করুন → Auto Match (TrxID লাগবে না, SMS-এ নম্বর মিলে যাবে) — ১০ মিনিটের সেশনে। ম্যানুয়াল দিতে চাইলে 'Manual-এ দিন' চাপ দিন — আলাদা manual section খুলবে।</p>
+      <h3>টাকা যোগ করুন</h3>
+      <div class="wp-mode-label">অটো পেমেন্ট · নম্বর + পরিমাণ</div>
+      <p class="wp-auto-intro">যে নম্বর থেকে পাঠাবেন সেটি ও পরিমাণ দিন। SMS মিললে ব্যালেন্স যোগ হবে।</p>
 
       <!-- Step 1: session setup -->
       <div id="gwStep1">
@@ -506,10 +508,9 @@
       <div class="okmsg" id="cok"></div>
     </div>
 
-    </div>
     <!-- Transaction History -->
-    <div class="card">
-      <h3>📜 লেনদেনের ইতিহাস</h3>
+    <div class="card" id="walletHistory">
+      <h3>লেনদেনের ইতিহাস</h3>
       <!-- Audit #35 — filter + load-more: the list used to stop at 10 rows -->
       <div style="display:flex;gap:8px;margin-bottom:12px;">
         <select id="txFilterType" onchange="txApplyFilter()" style="flex:1;min-width:0;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;">
@@ -538,6 +539,7 @@
       <button id="txMoreBtn" class="btn" style="width:100%;margin-top:12px;display:none;" onclick="txLoadMore()">আরও দেখুন</button>
     </div>
 
+    </div>
     <!-- Policy Card -->
     <div class="card" style="background:#f8fafc;">
       <h3>🛡️ রিফান্ড ও ব্যালেন্স পলিসি</h3>
@@ -552,6 +554,7 @@
 
 <!-- Cashback Win Overlay -->
 <div id="cbOverlay">
+  <div class="wp-cashback-panel">
   <div class="big">🎉</div>
   <div class="congrats" id="cbTitle">অভিনন্দন! ক্যাশব্যাক কুপন তৈরি হয়েছে!</div>
   <div class="won" id="cbWon">৳০</div>
@@ -561,6 +564,7 @@
     <button class="btn" id="cbCopyBtn" onclick="copyCelebrationCode()" style="background:#ffffff;color:#1e293b;font-weight:700;padding:12px 20px;">📋 কোড কপি করুন</button>
   </div>
   <div style="font-size:12px;color:#94a3b8;margin-top:16px;cursor:pointer;" onclick="document.getElementById('cbOverlay').classList.remove('show')">✕ বন্ধ করুন</div>
+  </div>
 </div>
 
 <!-- WhatsApp Support Button -->
@@ -1495,5 +1499,6 @@ function celebrate(amount,code,opts){
 
 init();
 </script>
+<script src="/js/wallet-presentation.js?v=20261109-1"></script>
 </body>
 </html>
