@@ -3553,6 +3553,11 @@ TABS.recharge = async () => {
         actionBlock = '<span class="badge">' + esc(t.status) + '</span>';
       }
 
+      const isAutoRecharge = !t.trxid || /^AUTO-[0-9A-F]{12}$/i.test(String(t.trxid));
+      const trxBlock = isAutoRecharge
+        ? '<span>⚡ Auto • নম্বর + পরিমাণের SMS match</span>'
+        : '<span>TrxID: <button style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:1px 6px; font-family:monospace; font-size:12px; cursor:pointer;" onclick="navigator.clipboard.writeText(' + jqAttr(t.trxid) + ');admToast(\'কপি সফল\', \'TrxID কপি করা হয়েছে\')">📋 ' + esc(t.trxid) + '</button></span>';
+
       html += '<div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; display:flex; gap:14px; align-items:center; flex-wrap:wrap; box-shadow:0 1px 3px rgba(0,0,0,0.03);">' +
         '<div style="flex:1; min-width:240px;">' +
           '<div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">' +
@@ -3560,8 +3565,7 @@ TABS.recharge = async () => {
             mBadge +
           '</div>' +
           '<div style="font-size:13px; color:#475569; display:flex; flex-wrap:wrap; gap:12px; align-items:center;">' +
-            '<span>📞 ' + esc(t.sender_no || t.user_phone) + '</span>' +
-            '<span>TrxID: <button style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:1px 6px; font-family:monospace; font-size:12px; cursor:pointer;" onclick="navigator.clipboard.writeText(' + jqAttr(t.trxid) + ');admToast(\'কপি সফল\', \'TrxID কপি করা হয়েছে\')">📋 ' + esc(t.trxid) + '</button></span>' +
+            '<span>📞 ' + esc(t.sender_no || t.user_phone) + '</span>' + trxBlock +
           '</div>' +
           '<div style="font-size:11px; color:#94a3b8; margin-top:4px;">🕒 ' + new Date(t.created_at).toLocaleString('bn-BD') + '</div>' +
         '</div>' +

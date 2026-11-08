@@ -376,10 +376,7 @@
           ১️⃣ উপরের সাজেশন বা আপনার পছন্দের যে কোনো নম্বরে টাকা পাঠান। &nbsp;২️⃣ টাকা পাঠানোর পর শুধু <b>Auto Match</b> চাপ দিন — যে নম্বর থেকে পাঠিয়েছেন সেটি ও টাকার পরিমাণ SMS-এর সঙ্গে মিলে যাবে।
         </div>
 
-        <div class="field">
-          <label>ট্রানজ্যাকশন আইডি (TrxID) — ঐচ্ছিক</label>
-          <input type="text" id="gwTrxid" placeholder="খালি রাখতে পারেন" maxlength="40">
-        </div>
+        <div class="gw-auto-note">🔒 Auto-তে TrxID লাগবে না। নম্বর ও পরিমাণ মিললে SMS-এর আসল TrxID নিজে থেকেই সংরক্ষিত হবে।</div>
         <div class="err" id="gwErr2"></div>
         <div id="gwState"></div>
         <button class="btn" id="gwMatchBtn" style="width:100%;padding:14px;" onclick="gwAutoMatch()">🔍 Auto Match</button>
@@ -644,6 +641,8 @@ const shortRef = x => {
   const m = x.match(/^order-([0-9a-f]{8})/i);
   return m ? '#' + m[1] : x;
 };
+const isAutoRechargeRef = t => t.type === 'recharge' &&
+  (!t.trxid || /^AUTO-[0-9A-F]{12}$/i.test(String(t.trxid)));
 
 // Audit #35 — "কতক্ষণ ধরে পেন্ডিং" in plain words.
 function fmtElapsed(s) {
@@ -711,7 +710,7 @@ function renderCashbackHub(d) {
       '<span style="font-size:20px;">⏳</span>' +
       '<div>' +
         '<b>আপনার ৳' + bn(p.amount) + ' ব্যালেন্স রিচার্জ ভেরিফিকেশন পেন্ডিং রয়েছে।</b>' +
-        '<div style="font-size:12px;color:#b45309;margin-top:2px;">এডমিন TrxID ভেরিফাই করলেই লেনদেনের তালিকায় রিচার্জের পাশে ১-ক্লিকে ক্যাশব্যাক কুপনের বাটন চলে আসবে!' + expText + '</div>' +
+        '<div style="font-size:12px;color:#b45309;margin-top:2px;">পেমেন্ট যাচাই সম্পন্ন হলে লেনদেনের তালিকায় রিচার্জের পাশে ১-ক্লিকে ক্যাশব্যাক কুপনের বাটন চলে আসবে!' + expText + '</div>' +
       '</div>' +
     '</div>';
   }
@@ -723,7 +722,7 @@ function renderCashbackHub(d) {
         '<div style="font-size:32px;line-height:1;">⚡</div>' +
         '<div style="font-size:13px;line-height:1.6;">' +
           '<b style="color:#0f172a;">প্রতিটি সফল ব্যালেন্স রিচার্জে পাবেন ' + bn(cbCfg.percent) + '% ক্যাশব্যাক কুপন!</b><br>' +
-          '<span style="color:#64748b;">উপরে যেকোনো পেমেন্ট মেথডে টাকা পাঠিয়ে TrxID সাবমিট করুন। রিচার্জ অনুমোদিত হলেই এই কার্ড থেকে সেদিনের মোটের ওপর ক্যাশব্যাক সংগ্রহ করে সরাসরি ওয়ালেট ব্যালেন্সে নিতে পারবেন। মনে রাখবেন — ক্যাশব্যাক শুধু রিচার্জের দিনই সংগ্রহ করা যায়।</span>' +
+          '<span style="color:#64748b;">উপরে Auto-তে নম্বর ও পরিমাণ দিন, অথবা Manual-তে পেমেন্টের আসল TrxID দিন। রিচার্জ অনুমোদিত হলেই এই কার্ড থেকে সেদিনের মোটের ওপর ক্যাশব্যাক সংগ্রহ করে সরাসরি ওয়ালেট ব্যালেন্সে নিতে পারবেন। মনে রাখবেন — ক্যাশব্যাক শুধু রিচার্জের দিনই সংগ্রহ করা যায়।</span>' +
         '</div>' +
       '</div>';
     } else {
@@ -817,9 +816,10 @@ async function loadWallet(reset = true){
     const methodLine = t.type === 'recharge'
       ? '<br><small style="color:#64748b;">' + esc(GW_METHOD_NAMES[t.method] || t.method || '') + (t.sender_no ? ' • ' + esc(t.sender_no) : '') + '</small>'
       : '';
+    const refLabel = isAutoRechargeRef(t) ? 'Auto • নম্বর + পরিমাণের SMS match' : shortRef(t.trxid);
     return '<div class="tx"><div style="flex:1;min-width:0;"><b style="font-size:14px;color:#0f172a;">' +
       esc(TYPBN[t.type] || t.type) + '</b> <small style="color:#94a3b8;margin-left:6px;word-break:break-all;">' +
-      esc(shortRef(t.trxid)) + '</small>' + methodLine + '<br><small style="color:#64748b;">' +
+      esc(refLabel) + '</small>' + methodLine + '<br><small style="color:#64748b;">' +
       fmtDt(t.created_at) + '</small>' + cbHtml + '</div>' +
       '<b style="font-size:16px;color:' + (Number(t.amount) >= 0 ? '#059669' : '#dc2626') + '">' +
       fmtAmt(t.amount) + '</b></div>';
@@ -930,8 +930,8 @@ function copyCode(code) {
 // can fire at session start. Timer expiry likewise calls NO API and
 // cancels nothing — a submitted pending request stays pending for
 // admin verification and stays visible in the wallet history below.
-// The only server call is the classic POST /wallet/recharge at Auto
-// Match (exact TrxID + exact amount, same rules as the manual form).
+// Auto Match calls POST /wallet/recharge/auto with only method, sender
+// number and amount. Manual has its own exact-TrxID form below.
 // No receipt view: the wallet history below is the record.
 // ============================================================
 const GW_SESSION_SECONDS = 600;
@@ -963,7 +963,7 @@ function gwStopPolling(){ if (gw && gw.pollId) { clearInterval(gw.pollId); gw.po
 // on top of the success card.
 // Audit #20 — the gateway session survives a reload: the live
 // session (method, own paying number, amount, absolute deadline,
-// submitted TrxID) is persisted in localStorage on start and on
+// submitted transaction ID) is persisted in localStorage on start and on
 // submit, and restored on page load with the timer and the match
 // polling resumed. Only the user's own session values are stored
 // (same-origin localStorage; no token or password ever). A done
@@ -974,7 +974,8 @@ function gwSaveSession(){
     if (!gw || gw.done) { localStorage.removeItem(GW_STORE_KEY); return; }
     localStorage.setItem(GW_STORE_KEY, JSON.stringify({
       method: gw.method, sender: gw.sender, amount: gw.amount,
-      endsAt: gw.endsAt, submitted: !!gw.submitted, submittedTrxid: gw.submittedTrxid || null,
+      endsAt: gw.endsAt, submitted: !!gw.submitted,
+      submittedId: gw.submittedId || null, legacyRef: gw.legacyRef || null,
       pausedAt: gw.pausedAt || null
     }));
   } catch (e) { /* storage unavailable — the session just won't survive a reload */ }
@@ -1003,14 +1004,17 @@ function gwRestoreSession(){
   if (endsAt <= Date.now()) { gwClearSession(); return false; } // expired while away
   gw = { method: s.method || 'bkash_payment', sender: s.sender, amount: s.amount,
          endsAt: endsAt, timerId: null, pollId: null,
-         submitted: !!s.submitted, submittedTrxid: s.submittedTrxid || null, done: false, pausedAt: null };
+         submitted: !!s.submitted, submittedId: s.submittedId || null,
+         // Sessions created before the no-TrxID fix only stored AUTO-*.
+         // Keep polling those through the legacy lookup; never show the
+         // placeholder as a payment-provider TrxID.
+         legacyRef: s.legacyRef || s.submittedTrxid || null, done: false, pausedAt: null };
   document.getElementById('gwSumMethod').textContent = GW_METHOD_NAMES[gw.method] || gw.method;
   document.getElementById('gwSumAmount').textContent = '৳' + bn(gw.amount);
   document.getElementById('gwSumSender').textContent = gw.sender;
   var num = rechargeNums[gw.method] || '';
   document.getElementById('gwRecvWrap').style.display = num ? 'block' : 'none';
   if (num) document.getElementById('gwRecvNum').textContent = num;
-  document.getElementById('gwTrxid').value = gw.submittedTrxid || '';
   document.getElementById('gwErr2').textContent = '';
   document.getElementById('gwState').innerHTML = gw.submitted
     ? '<div class="gw-state pending"><b>⏳ SMS এখনো আসেনি।</b><br>রিকোয়েস্ট জমা হয়েছে — SMS এলে স্বয়ংক্রিয়ভাবে মিলে যাবে, না হলে এডমিন যাচাই করবেন। টাকা হারাবে না।</div>'
@@ -1021,7 +1025,7 @@ function gwRestoreSession(){
   document.getElementById('gwStep2').style.display = 'block';
   gwTick();
   gw.timerId = setInterval(gwTick, 1000);
-  if (gw.submitted && gw.submittedTrxid) {
+  if (gw.submitted && (gw.submittedId || gw.legacyRef)) {
     gwStartPolling(); // audit #38 — starts with an immediate flip-check
   }
   gwSaveSession(); // bug-hunt F4 — persist the resumed deadline so a
@@ -1062,7 +1066,8 @@ function gwStartSession(){
   gwStopAll();
   gw = { method: gwMethod, sender: sender, amount: amt,
          endsAt: Date.now() + GW_SESSION_SECONDS * 1000,
-         timerId: null, pollId: null, submitted: false, submittedTrxid: null, done: false, pausedAt: null };
+         timerId: null, pollId: null, submitted: false,
+         submittedId: null, legacyRef: null, done: false, pausedAt: null };
   gwSaveSession(); // audit #20 — persist so a reload resumes the session
   document.getElementById('gwSumMethod').textContent = GW_METHOD_NAMES[gwMethod] || gwMethod;
   document.getElementById('gwSumAmount').textContent = '৳' + bn(amt);
@@ -1070,7 +1075,6 @@ function gwStartSession(){
   const num = rechargeNums[gwMethod] || '';
   document.getElementById('gwRecvWrap').style.display = num ? 'block' : 'none';
   if (num) document.getElementById('gwRecvNum').textContent = num;
-  document.getElementById('gwTrxid').value = '';
   document.getElementById('gwErr2').textContent = '';
   document.getElementById('gwState').innerHTML = '';
   gwRenderTimeline('pay');
@@ -1116,7 +1120,6 @@ function gwNewSession(){
   document.getElementById('gwExpired').style.display = 'none';
   document.getElementById('gwStep1').style.display = 'block';
   document.getElementById('gwErr').textContent = '';
-  document.getElementById('gwTrxid').value = '';
 }
 
 function gwCopySuggest(){
@@ -1176,46 +1179,25 @@ async function gwAutoMatch(){
   const errEl = document.getElementById('gwErr2');
   const stateEl = document.getElementById('gwState');
   const btn = document.getElementById('gwMatchBtn');
-  // Audit #21 — one session, one pending: a submitted request
-  // that is still pending blocks a second Auto Match in the same
-  // session. The poll only tracks the latest TrxID, so a second
-  // pending would go untracked in the UI. Show the pending state
-  // (with the submitted TrxID) instead of submitting again.
-  // A rejected/approved request sets gw.done, so a fresh submit
-  // after the outcome is still allowed; an error return (DUP,
-  // mismatch, too-many-pending) never sets gw.submitted, so a
-  // retry after those is also still allowed.
-  if (gw.submitted && gw.submittedTrxid) {
+  // One session, one pending request. Tracking uses the immutable
+  // transaction ID, never a provider TrxID or an invented AUTO-* value.
+  if (gw.submitted) {
     errEl.textContent = '';
-    document.getElementById('gwTrxid').value = gw.submittedTrxid;
     stateEl.innerHTML = '<div class="gw-state pending"><b>⏳ SMS এখনো আসেনি।</b><br>' +
-      'আপনার রিকোয়েস্টটি জমা আছে (TrxID: <b>' + esc(gw.submittedTrxid) + '</b>) — SMS এলে স্বয়ংক্রিয়ভাবে মিলে যাবে, না হলে এডমিন যাচাই করবেন। টাকা হারাবে না।</div>';
+      'আপনার রিকোয়েস্টটি জমা আছে — SMS এলে স্বয়ংক্রিয়ভাবে মিলে যাবে, না হলে এডমিন যাচাই করবেন। টাকা হারাবে না।</div>';
     gwRenderTimeline('sms');
     return;
   }
   errEl.textContent = '';
   stateEl.innerHTML = '';
-  // Auto = number-only: TrxID is optional. Empty → the server
-  // matches the SMS by sender number + amount (no TrxID needed).
-  let trxid = document.getElementById('gwTrxid').value.trim();
-  if (trxid && trxid.length < 4) {
-    errEl.textContent = '❌ TrxID সঠিকভাবে লিখুন, অথবা ঘরটি খালি রাখুন';
-    return;
-  }
   btn.disabled = true;
   btn.textContent = '⏳ মিলিয়ে দেখা হচ্ছে…';
   try {
-    const r = trxid
-      ? await ABC.api('/wallet/recharge', {
-          method: 'POST',
-          body: { method: gw.method, sender_no: gw.sender, trxid: trxid, amount: gw.amount }
-        })
-      : await ABC.api('/wallet/recharge/auto', {
-          method: 'POST',
-          body: { method: gw.method, sender_no: gw.sender, amount: gw.amount }
-        });
+    const r = await ABC.api('/wallet/recharge/auto', {
+      method: 'POST',
+      body: { method: gw.method, sender_no: gw.sender, amount: gw.amount }
+    });
     const d = await r.json();
-    if (r.ok && !trxid) trxid = (d.transaction && d.transaction.trxid) || d.ref || '';
     if (!r.ok) {
       if (d.error === 'DUP_TRXID' && d.existing_tx) {
         const ex = d.existing_tx;
@@ -1243,8 +1225,9 @@ async function gwAutoMatch(){
     }
     const tx = d.transaction || {};
     gw.submitted = true;
-    gw.submittedTrxid = trxid;
-    gwSaveSession(); // audit #20 — persist the submitted TrxID for reload-resume
+    gw.submittedId = tx.id || d.request_id || null;
+    gw.legacyRef = null;
+    gwSaveSession(); // persist the transaction ID for reload-resume
     if (tx.status === 'approved') {
       gw.done = true;
       gwStopPolling();
@@ -1279,11 +1262,14 @@ function gwStartPolling(){
 }
 
 async function gwPollOnce(){
-  if (!gw || gw.done || !gw.submittedTrxid) return;
+  if (!gw || gw.done || (!gw.submittedId && !gw.legacyRef)) return;
   try {
-    // Audit #38 — look the submitted transaction up by TrxID directly;
-    // scanning the latest 10 rows could miss it entirely.
-    const r = await ABC.api('/wallet/recharge/' + encodeURIComponent(gw.submittedTrxid));
+    // New Auto requests poll by immutable transaction ID. legacyRef is
+    // only for sessions created before the no-TrxID fix.
+    const lookup = gw.submittedId
+      ? '/wallet/recharge/request/' + encodeURIComponent(gw.submittedId)
+      : '/wallet/recharge/' + encodeURIComponent(gw.legacyRef);
+    const r = await ABC.api(lookup);
     if (!r.ok) return;
     const tx = (await r.json()).transaction;
     if (!tx) return;

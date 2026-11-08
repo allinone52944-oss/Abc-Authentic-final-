@@ -415,12 +415,14 @@ describe('wallet', () => {
       db.__routeQuery([
         ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
         ['FROM transactions WHERE UPPER(trxid)', { rows: [] }],
-        ['INSERT INTO transactions', { rows: [{ id: 't1', user_id: 'u1', amount: 500, trxid: 'TRX12345', status: 'pending' }] }],
-        ['FROM incoming_sms', { rows: [{ id: 'sms1', amount: 500, trxid: 'TRX12345' }] }],
-        ['WHERE id = $1 AND status = \'pending\' AND type = \'recharge\'', { rows: [{ id: 't1', user_id: 'u1', amount: 500, trxid: 'TRX12345', status: 'pending' }] }],
+        ['INSERT INTO transactions', { rows: [{ id: 't1', user_id: 'u1', amount: 500, method: 'bkash_personal', trxid: 'TRX12345', status: 'pending' }] }],
+        ['SELECT id, trxid, matched_recharge_id FROM incoming_sms', { rows: [{ id: 'sms1', trxid: 'TRX12345', matched_recharge_id: null }] }],
+        ['WHERE id <> $1', { rows: [] }],
+        ['FROM incoming_sms', { rows: [{ id: 'sms1', amount: 500, trxid: 'TRX12345', raw_message: 'You have received Tk 500.00 from 01712345678. TrxID TRX12345.', raw_sender: 'bKash' }] }],
+        ['WHERE id = $1 AND status = \'pending\' AND type = \'recharge\'', { rows: [{ id: 't1', user_id: 'u1', amount: 500, method: 'bkash_personal', trxid: 'TRX12345', status: 'pending' }] }],
         ['SELECT * FROM wallet_apply', { rows: [{ new_balance: '600', tx_id: 't1' }] }],
         ['UPDATE transactions SET admin_id = NULL', { rows: [] }],
-        ['UPDATE incoming_sms SET matched_recharge_id', { rows: [] }],
+        ['UPDATE incoming_sms SET matched_recharge_id', { rows: [{ id: 'sms1' }] }],
         ['INSERT INTO activity_log', { rows: [] }],
       ]);
       const r = await withUser(request(app()).post('/api/wallet/recharge')).send(GOOD).expect(201);

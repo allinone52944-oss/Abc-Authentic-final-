@@ -37,12 +37,14 @@ const BIG_MSG = 'You have received Tk 60000.00 from 01712345678. TrxID HOLD99XYZ
 const SMALL_MSG = 'You have received Tk 500.00 from 01712345678. TrxID OK123ABC4. Fee Tk 0.00. New balance Tk 1200.00.';
 
 function incomingHandlers(tx) {
+  const matchedTx = { method: 'bkash_personal', ...tx };
   return [
     ['INSERT INTO incoming_sms', { rows: [{ id: 'sms1' }] }],
-    ['SELECT id FROM incoming_sms', { rows: [] }], // not a duplicate
-    ['UPPER(trxid)', { rows: [tx] }], // findMatch: exact TrxID
-    ['FOR UPDATE', { rows: [tx] }], // approveRechargeTx lock
+    ['SELECT id FROM incoming_sms', { rows: [] }], // not a duplicate/consumed payment
+    ['UPPER(trxid)', { rows: [matchedTx] }], // findMatch: exact TrxID
+    ['FOR UPDATE', { rows: [matchedTx] }], // recharge + SMS locks
     ['wallet_apply', { rows: [{}] }],
+    ['UPDATE incoming_sms SET matched_recharge_id', { rows: [{ id: 'sms1' }] }],
     ['SELECT name, whatsapp, balance FROM users', { rows: [] }],
   ];
 }

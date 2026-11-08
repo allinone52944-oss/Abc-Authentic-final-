@@ -14,14 +14,13 @@ const SENDER_METHOD = {
   rocket: 'rocket', dbbl: 'rocket', '16216': 'rocket',
 };
 
-// First money figure in the message is the received amount:
 // "Tk 500.00", "TK 1,250.50", "BDT 500", "৳৫০০"
-const AMOUNT_RE = /(?:Tk|TK|BDT|৳)\s*([\d,]+(?:\.\d{1,2})?)/;
+const AMOUNT_RE = /(?:Tk|TK|BDT|৳)\s*([\d,]+(?:\.\d{1,2})?)/i;
+const RECEIVED_AMOUNT_RE = /(?:received|credited|cash\s*in)[\s\S]{0,40}?(?:Tk|TK|BDT|৳)\s*[\d,]+(?:\.\d{1,2})?/i;
 
-// Transaction reference:
-// "TrxID 9HXK2LQM4N", "TrxID: ABC123DEFG", "TxnID: ABCD1234",
-// "Txn ID ABCD1234", "Ref: TRX123456", "Reference 9HXK2LQM4N"
-const TRXID_RE = /(?:TrxID|TxnID|Txn\s*ID|Reference|Ref)\s*:?\s*([A-Z0-9]{6,24})/i;
+// Complete bounded token: never silently truncate a long provider ID.
+// The manual form accepts up to 40 characters, so the parser does too.
+const TRXID_RE = /(?:TrxID|TxnID|Txn\s*ID|Reference|Ref)\s*:?\s*([A-Z0-9]{6,40})(?![A-Z0-9])/i;
 
 // Sender mobile: "from 017XXXXXXXX"
 const FROM_RE = /from\s+(01[3-9]\d{8})/i;
@@ -39,15 +38,28 @@ function detectMethod(rawMessage, rawSender) {
   return 'unknown';
 }
 
+function normalizeDigits(value) {
+  return String(value || '').replace(/[০-৯]/g, d => String('০১২৩৪৫৬৭৮৯'.indexOf(d)));
+}
+
 function detectDirection(rawMessage) {
   const m = String(rawMessage || '');
-  if (/receiv|credited|cash\s*in/i.test(m)) return 'in';
-  if (/debited|\bsent\b|payment\s+.*\bto\b|cash\s*out/i.test(m)) return 'out';
+  // Negated or contradictory wording is not proof of money-in.
+  if (/\b(?:not|never)\s+(?:received|credited)\b/i.test(m)) return 'unknown';
+  const incoming = /receiv|credited|cash\s*in/i.test(m);
+  const outgoing = /debited|\bsent\b|payment\s+.*\bto\b|cash\s*out/i.test(m);
+  if (incoming && outgoing) return 'unknown';
+  if (incoming) return 'in';
+  if (outgoing) return 'out';
   return 'unknown';
 }
 
 function parseAmount(rawMessage) {
-  const m = String(rawMessage || '').match(AMOUNT_RE);
+  const normalized = normalizeDigits(rawMessage);
+  // Prefer the amount attached to received/credited/cash-in wording, so a
+  // leading fee or balance cannot become the recharge amount by accident.
+  const received = normalized.match(RECEIVED_AMOUNT_RE);
+  const m = (received ? received[0] : normalized).match(AMOUNT_RE);
   if (!m) return null;
   const n = parseFloat(m[1].replace(/,/g, ''));
   if (!Number.isFinite(n) || n <= 0) return null;

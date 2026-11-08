@@ -596,6 +596,47 @@ body.page-wallet .gw-chip.sel,
 body.page-wallet .pay-method.sel { border-color: var(--pv-primary); background: var(--pv-soft); color: var(--pv-primary); }
 body.page-wallet .recv-box { border-color: var(--pv-primary); background: var(--pv-soft); }
 body.page-wallet :is(#gwRecvNum,#recvNum) { color: var(--pv-primary) !important; }
+body.page-wallet :is(.card,.gw-card) {
+  border: 1px solid var(--pv-line) !important;
+  border-radius: 16px;
+  background: var(--pv-card) !important;
+  box-shadow: var(--pv-soft-shadow) !important;
+}
+body.page-wallet #cbHubCard { background: var(--pv-soft) !important; }
+body.page-wallet :is(.field input,.field select) {
+  min-height: 48px;
+  border-color: var(--pv-line);
+  border-radius: 12px;
+  background: var(--pv-card);
+  color: var(--pv-ink);
+}
+body.page-wallet :is(.field input,.field select):focus {
+  border-color: var(--pv-primary);
+  box-shadow: 0 0 0 3px oklch(0.42 0.1 163 / 12%);
+}
+body.page-wallet :is(.gw-chip,.pay-method) {
+  border-color: var(--pv-line);
+  background: var(--pv-card);
+  box-shadow: none;
+}
+body.page-wallet :is(.gw-chip,.pay-method):hover { border-color: var(--pv-primary); }
+body.page-wallet .gw-auto-note {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--pv-line);
+  border-radius: 12px;
+  background: var(--pv-soft);
+  color: var(--pv-primary-deep);
+  font-size: 13px;
+  line-height: 1.7;
+}
+body.page-wallet :is(.gw-timer-row,.gw-timeline) {
+  border-color: var(--pv-line);
+  background: var(--pv-muted-bg);
+}
+body.page-wallet .tx { padding: 16px 4px; border-bottom-color: var(--pv-line); }
+body.page-wallet .tx:last-child { border-bottom: 0; }
+body.page-wallet :is(.gw-state,.cb-badge) { border-radius: 12px; }
 
 /* Profile and service presentation. */
 body.page-profile .profile-grid {

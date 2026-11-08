@@ -41,6 +41,11 @@ afterEach(() => {
 
 const postIncoming = (body) => request(webhookApp()).post('/api/sms/incoming').send(body);
 const BKASH_MSG = 'You have received Tk 500.00 from 01712345678. TrxID 9HXK2LQM4N. New balance Tk 1200.00.';
+const atomicSmsHandlers = (trxid = null) => [
+  ['SELECT id, trxid, matched_recharge_id FROM incoming_sms', { rows: [{ id: 's1', trxid, matched_recharge_id: null }] }],
+  ['WHERE id <> $1', { rows: [] }],
+  ['UPDATE incoming_sms SET matched_recharge_id', { rows: [{ id: 's1' }] }],
+];
 
 describe('POST /api/sms/incoming — auth', () => {
   test('no SMS_WEBHOOK_SECRET configured → 503 SMS_NOT_CONFIGURED', async () => {
@@ -80,6 +85,7 @@ describe('POST /api/sms/incoming — parsing', () => {
 
   test('parsed but no matching recharge → matched:false', async () => {
     db.__routeQuery([
+      ...atomicSmsHandlers('9HXK2LQM4N'),
       ['FROM incoming_sms', { rows: [] }], // dup check
       ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
       ['UPPER(trxid) = UPPER($1)', { rows: [] }], // exact trxid
@@ -94,6 +100,7 @@ describe('POST /api/sms/incoming — parsing', () => {
 
   test('duplicate trxid (already matched) → stored as duplicate, no re-match', async () => {
     db.__routeQuery([
+      ...atomicSmsHandlers('9HXK2LQM4N'),
       ['FROM incoming_sms', { rows: [{ id: 's0' }] }], // dup found
       ['INSERT INTO incoming_sms', { rows: [{ id: 's9' }] }],
     ]);
@@ -105,9 +112,10 @@ describe('POST /api/sms/incoming — parsing', () => {
 });
 
 describe('POST /api/sms/incoming — auto-match', () => {
-  const TX = { id: 't1', user_id: 'u1', amount: '500', trxid: '9HXK2LQM4N', status: 'pending' };
+  const TX = { id: 't1', user_id: 'u1', amount: '500', method: 'bkash_personal', trxid: '9HXK2LQM4N', status: 'pending' };
   function matchHandlers(tx = TX) {
     return [
+      ...atomicSmsHandlers('9HXK2LQM4N'),
       ['FROM incoming_sms', { rows: [] }],
       ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
       ['UPPER(trxid) = UPPER($1)', { rows: [tx] }],
@@ -160,8 +168,38 @@ describe('POST /api/sms/incoming — auto-match', () => {
     expect(r.body.matched).toBe(true);
   });
 
+  test('two identical Auto claims are ambiguous: no wallet credit', async () => {
+    const auto = { id: 'auto1', user_id: 'u1', amount: 500, method: 'bkash_personal', sender_no: '01712345678', trxid: null, status: 'pending' };
+    db.__routeQuery([
+      ...atomicSmsHandlers('9HXK2LQM4N'),
+      ['FROM incoming_sms', { rows: [] }],
+      ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
+      ['UPPER(trxid) = UPPER($1)', { rows: [] }],
+      ['AND amount = $1 AND sender_no = $2', { rows: [auto, { ...auto, id: 'auto2', user_id: 'u2' }] }],
+    ]);
+    const r = await postIncoming({ secret: SECRET, message: BKASH_MSG, sender: 'bKash' }).expect(200);
+    expect(r.body.matched).toBe(false);
+    expect(db.__client.query.mock.calls.filter(c => /wallet_apply/.test(c[0]))).toHaveLength(0);
+  });
+
+  test('an already consumed provider TrxID cannot credit another request', async () => {
+    db.__routeQuery([
+      ['SELECT id, trxid, matched_recharge_id FROM incoming_sms', { rows: [{ id: 's1', trxid: '9HXK2LQM4N', matched_recharge_id: null }] }],
+      ['WHERE id <> $1', { rows: [{ id: 'older-sms' }] }],
+      ['FROM incoming_sms', { rows: [] }],
+      ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
+      ['UPPER(trxid) = UPPER($1)', { rows: [TX] }],
+      ['SELECT * FROM transactions', { rows: [TX] }],
+    ]);
+    const r = await postIncoming({ secret: SECRET, message: BKASH_MSG, sender: 'bKash' }).expect(409);
+    expect(r.body.error).toBe('SMS_ALREADY_MATCHED');
+    expect(db.__client.query.mock.calls.filter(c => /wallet_apply/.test(c[0]))).toHaveLength(0);
+    expect(db.__client.query.mock.calls.some(c => c[0] === 'ROLLBACK')).toBe(true);
+  });
+
   test('money-OUT messages never auto-match', async () => {
     db.__routeQuery([
+      ...atomicSmsHandlers('9HXK2LQM4N'),
       ['FROM incoming_sms', { rows: [] }],
       ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
     ]);
@@ -224,6 +262,7 @@ describe('adminSms routes', () => {
   test('POST /:id/match happy → 200; tx not pending → 400 TX_NOT_PENDING', async () => {
     const TX = { id: 't1', user_id: 'u1', amount: '500', trxid: 'X', status: 'pending' };
     db.__routeQuery([
+      ...atomicSmsHandlers(),
       ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', matched_recharge_id: null }] }],
       ['SELECT * FROM transactions', { rows: [TX] }],
     ]);
@@ -233,6 +272,7 @@ describe('adminSms routes', () => {
 
     db.__reset();
     db.__routeQuery([
+      ...atomicSmsHandlers(),
       ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', matched_recharge_id: null }] }],
       ['SELECT * FROM transactions', { rows: [] }],
     ]);
@@ -263,11 +303,12 @@ describe('adminSms routes', () => {
 // the amount, and cancelling destroys the real request).
 // ============================================================
 describe('POST /api/sms/incoming — TrxID amount fraud guard', () => {
-  const TX = { id: 't1', user_id: 'u1', amount: '500', trxid: '9HXK2LQM4N', status: 'pending' };
+  const TX = { id: 't1', user_id: 'u1', amount: '500', method: 'bkash_personal', trxid: '9HXK2LQM4N', status: 'pending' };
   const SMS50 = 'You have received Tk 50.00 from 01712345678. TrxID 9HXK2LQM4N.';
 
   test('SMS amount ≠ claimed amount → HELD (not cancelled), NO wallet credit (audit #26)', async () => {
     db.__routeQuery([
+      ...atomicSmsHandlers('9HXK2LQM4N'),
       ['FROM incoming_sms', { rows: [] }], // dup check
       ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
       ['UPPER(trxid) = UPPER($1)', { rows: [TX] }],
@@ -285,6 +326,7 @@ describe('POST /api/sms/incoming — TrxID amount fraud guard', () => {
 
   test('SMS amount == claimed amount → still auto-approved', async () => {
     db.__routeQuery([
+      ...atomicSmsHandlers('9HXK2LQM4N'),
       ['FROM incoming_sms', { rows: [] }],
       ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
       ['UPPER(trxid) = UPPER($1)', { rows: [TX] }],
@@ -298,6 +340,7 @@ describe('POST /api/sms/incoming — TrxID amount fraud guard', () => {
   test('amount unparseable → held for review, NO wallet credit', async () => {
     const spy = jest.spyOn(push, 'notifyUser').mockResolvedValue({ ok: true, sent: 0 });
     db.__routeQuery([
+      ...atomicSmsHandlers('9HXK2LQM4N'),
       ['FROM incoming_sms', { rows: [] }],
       ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
       ['UPPER(trxid) = UPPER($1)', { rows: [TX] }],
@@ -319,6 +362,7 @@ describe('POST /api/sms/incoming — TrxID amount fraud guard', () => {
 describe('adminSms manual match — amount fraud guard', () => {
   test('SMS amount ≠ request amount → 400 AMOUNT_MISMATCH, NO wallet credit', async () => {
     db.__routeQuery([
+      ...atomicSmsHandlers(),
       ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', matched_recharge_id: null, amount: '50' }] }],
       ['SELECT * FROM transactions', { rows: [{ id: 't1', user_id: 'u1', amount: '500', trxid: 'X', status: 'pending', type: 'recharge' }] }],
     ]);
@@ -330,6 +374,7 @@ describe('adminSms manual match — amount fraud guard', () => {
 
   test('SMS amount == request amount → match proceeds', async () => {
     db.__routeQuery([
+      ...atomicSmsHandlers(),
       ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', matched_recharge_id: null, amount: '500' }] }],
       ['SELECT * FROM transactions', { rows: [{ id: 't1', user_id: 'u1', amount: '500', trxid: 'X', status: 'pending', type: 'recharge' }] }],
     ]);
@@ -339,20 +384,20 @@ describe('adminSms manual match — amount fraud guard', () => {
   });
 });
 
-// Audit #24 — the fuzzy (amount+sender) match must pick the
-// NEWEST pending, like the late-submit path: without ORDER BY,
-// LIMIT 1 returns an arbitrary row when several pendings share
-// amount + sender. The mock DB cannot simulate row order, so the
-// SQL itself is pinned here.
-describe('findMatch fuzzy branch ordering (audit #24)', () => {
+describe('findMatch amount+sender safety', () => {
   const fs = require('fs');
   const path = require('path');
   const src = fs.readFileSync(path.join(__dirname, '../../routes/sms.js'), 'utf8');
-  const fuzzy = src.slice(src.indexOf('// 2) Fuzzy'), src.indexOf('return null;', src.indexOf('// 2) Fuzzy')));
+  const fuzzyStart = src.indexOf('// 2) Number-only Auto');
+  const fuzzy = src.slice(fuzzyStart, src.indexOf('\n}\n', fuzzyStart) + 2);
 
-  test('fuzzy match orders newest first', () => {
-    expect(fuzzy).toContain('ORDER BY created_at DESC');
-    expect(fuzzy.indexOf('ORDER BY created_at DESC')).toBeLessThan(fuzzy.indexOf('LIMIT 1'));
+  test('sender fallback is Auto-only, recent, real-TrxID and ambiguity-safe', () => {
+    expect(fuzzy).toContain('parsed.trxid');
+    expect(fuzzy).toContain("(trxid IS NULL OR trxid ~ '^AUTO-[0-9A-F]{12}$')");
+    expect(fuzzy).toContain("created_at >= NOW() - INTERVAL '30 minutes'");
+    expect(fuzzy).toContain('LIMIT 2');
+    expect(fuzzy).toContain('r.rows.length === 1');
+    expect(fuzzy).not.toContain('LIMIT 1');
   });
 });
 
@@ -360,6 +405,7 @@ describe('POST /api/admin/sms/:id/match — manual match (audit #33)', () => {
   const TX = { id: 't1', type: 'recharge', amount: 500, status: 'pending', user_id: 'u1', trxid: 'TRX1' };
   test('manual match records matched_via = manual', async () => {
     db.__routeQuery([
+      ...atomicSmsHandlers(),
       ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', amount: 500, matched_recharge_id: null }] }],
       ['SELECT * FROM transactions WHERE id = $1 FOR UPDATE', { rows: [TX] }],
       ["AND status = 'pending' AND type = 'recharge' FOR UPDATE", { rows: [TX] }],

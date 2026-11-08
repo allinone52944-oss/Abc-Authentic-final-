@@ -54,6 +54,11 @@ const withAdmin = (req) => req.set('Authorization', 'Bearer ' + adminToken());
 const GOOD = { method: 'bkash_personal', sender_no: '01712345678', trxid: 'TRX12345', amount: 500 };
 const SECRET = 'test-webhook-secret';
 const BKASH_MSG = 'You have received Tk 500.00 from 01712345678. TrxID 9HXK2LQM4N. New balance Tk 1200.00.';
+const atomicSmsHandlers = (trxid = null) => [
+  ['SELECT id, trxid, matched_recharge_id FROM incoming_sms', { rows: [{ id: 's1', trxid, matched_recharge_id: null }] }],
+  ['WHERE id <> $1', { rows: [] }],
+  ['UPDATE incoming_sms SET matched_recharge_id', { rows: [{ id: 's1' }] }],
+];
 
 beforeEach(() => {
   db.__reset();
@@ -123,9 +128,10 @@ describe('POST /api/wallet/recharge — submit response carries tx status', () =
     db.__routeQuery([
       ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
       ['FROM transactions WHERE UPPER(trxid)', { rows: [] }],
-      ['INSERT INTO transactions', { rows: [{ id: 't1', user_id: 'u1', amount: 500, trxid: 'TRX12345', status: 'pending' }] }],
-      ['FROM incoming_sms', { rows: [{ id: 'sms1', amount: 500, trxid: 'TRX12345' }] }],
-      ['WHERE id = $1 AND status = \'pending\' AND type = \'recharge\'', { rows: [{ id: 't1', user_id: 'u1', amount: 500, trxid: 'TRX12345', status: 'pending' }] }],
+      ['INSERT INTO transactions', { rows: [{ id: 't1', user_id: 'u1', amount: 500, method: 'bkash_personal', trxid: 'TRX12345', status: 'pending' }] }],
+      ...atomicSmsHandlers('TRX12345'),
+      ['FROM incoming_sms', { rows: [{ id: 'sms1', amount: 500, trxid: 'TRX12345', raw_message: 'You have received Tk 500.00 from 01712345678. TrxID TRX12345.', raw_sender: 'bKash' }] }],
+      ['WHERE id = $1 AND status = \'pending\' AND type = \'recharge\'', { rows: [{ id: 't1', user_id: 'u1', amount: 500, method: 'bkash_personal', trxid: 'TRX12345', status: 'pending' }] }],
       ['SELECT * FROM wallet_apply', { rows: [{ new_balance: '600', tx_id: 't1' }] }],
       ['UPDATE transactions SET admin_id = NULL', { rows: [] }],
       ['UPDATE incoming_sms SET matched_recharge_id', { rows: [] }],
@@ -136,6 +142,20 @@ describe('POST /api/wallet/recharge — submit response carries tx status', () =
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0][1]).toMatchObject({ id: 't1', trxid: 'TRX12345' });
     expect(spy.mock.calls[0][2]).toBe('u1');
+  });
+
+  test('SMS-first money-OUT never auto-approves a manual recharge', async () => {
+    db.__routeQuery([
+      ['FROM transactions WHERE UPPER(trxid)', { rows: [] }],
+      ['FROM public.incoming_sms', { rows: [] }],
+      ["type = 'recharge' AND status = 'pending'", { rows: [{ count: '0' }] }],
+      ['SELECT amount FROM incoming_sms', { rows: [] }],
+      ['INSERT INTO transactions', { rows: [{ id: 't1', user_id: 'u1', amount: 500, method: 'bkash_personal', trxid: 'TRX12345', status: 'pending' }] }],
+      ['WHERE matched_recharge_id IS NULL', { rows: [{ id: 'sms-out', amount: 500, trxid: 'TRX12345', raw_message: 'Cash Out Tk 500 sent to 01712345678. TrxID TRX12345.', raw_sender: 'bKash' }] }],
+    ]);
+    const r = await withUser(request(userApp()).post('/api/wallet/recharge')).send(GOOD).expect(201);
+    expect(r.body.transaction.status).toBe('pending');
+    expect(db.__client.query.mock.calls.filter(c => /wallet_apply/.test(c[0]))).toHaveLength(0);
   });
 
   test('pending submit → admin auto-approve NOT notified (pending push path unchanged)', async () => {
@@ -153,8 +173,9 @@ describe('POST /api/wallet/recharge — submit response carries tx status', () =
 describe('POST /api/sms/incoming — webhook auto-approve notifies admin', () => {
   test('webhook form-first match → matched + admin auto-approve notified', async () => {
     const spy = jest.spyOn(push, 'notifyAutoApproveRecharge').mockResolvedValue({ ok: true, sent: 0 });
-    const TX = { id: 't1', user_id: 'u1', amount: '500', trxid: '9HXK2LQM4N', status: 'pending' };
+    const TX = { id: 't1', user_id: 'u1', amount: '500', method: 'bkash_personal', trxid: '9HXK2LQM4N', status: 'pending' };
     db.__routeQuery([
+      ...atomicSmsHandlers('9HXK2LQM4N'),
       ['FROM incoming_sms', { rows: [] }],
       ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
       ['UPPER(trxid) = UPPER($1)', { rows: [TX] }],
@@ -171,6 +192,7 @@ describe('POST /api/sms/incoming — webhook auto-approve notifies admin', () =>
     const spy = jest.spyOn(push, 'notifyAutoApproveRecharge').mockResolvedValue({ ok: true, sent: 0 });
     const TX = { id: 't1', user_id: 'u1', amount: 500, trxid: 'TRX12345', status: 'pending', type: 'recharge' };
     db.__routeQuery([
+      ...atomicSmsHandlers(),
       ['FROM incoming_sms WHERE id', { rows: [{ id: 's1', amount: 500, matched_recharge_id: null }] }],
       ['FROM transactions WHERE id', { rows: [TX] }],
       ['WHERE id = $1 AND status = \'pending\' AND type = \'recharge\'', { rows: [TX] }],
@@ -232,11 +254,11 @@ describe('frontend/wallet.html — gateway session invariants', () => {
 
   test('audit #20 — the session survives a reload: persisted + restored with polling', () => {
     const src = walletHtml();
-    // persisted on start and on submit (TrxID + absolute deadline)
+    // persisted on start and on submit (transaction ID + absolute deadline)
     const save = fnSlice(src, 'function gwSaveSession(');
     expect(save).toContain('localStorage.setItem');
     expect(save).toContain('endsAt');
-    expect(save).toContain('submittedTrxid');
+    expect(save).toContain('submittedId');
     expect(fnSlice(src, 'function gwStartSession(')).toContain('gwSaveSession()');
     expect(fnSlice(src, 'async function gwAutoMatch(')).toContain('gwSaveSession()');
     // restored on page load, after the wallet loads
@@ -293,15 +315,26 @@ describe('frontend/wallet.html — gateway session invariants', () => {
     expect(src).toContain('GW_WARN_SECONDS = 60');
   });
 
-  test('audit #21 — one session, one pending: a second Auto Match shows the pending state, no resubmit', () => {
+  test('one session, one pending: a second Auto Match shows pending without resubmitting', () => {
     const src = walletHtml();
     const body = fnSlice(src, 'async function gwAutoMatch(');
-    // the guard runs before any /wallet/recharge call and returns
-    // after re-rendering the pending state with the submitted TrxID
-    expect(body).toContain('if (gw.submitted && gw.submittedTrxid) {');
+    expect(body).toContain('if (gw.submitted) {');
     expect(body).toContain('SMS এখনো আসেনি');
-    expect(body).toContain('esc(gw.submittedTrxid)');
-    expect(body.indexOf('if (gw.submitted && gw.submittedTrxid)')).toBeLessThan(body.indexOf('/wallet/recharge'));
+    expect(body).not.toContain('submittedTrxid');
+    expect(body.indexOf('if (gw.submitted)')).toBeLessThan(body.indexOf('/wallet/recharge/auto'));
+  });
+
+  test('Auto never asks for or fabricates a TrxID; Manual keeps its real TrxID form', () => {
+    const src = walletHtml();
+    const auto = src.slice(src.indexOf('id="gwStep2"'), src.indexOf('id="gwExpired"'));
+    const body = fnSlice(src, 'async function gwAutoMatch(');
+    expect(auto).not.toContain('id="gwTrxid"');
+    expect(body).toContain("'/wallet/recharge/auto'");
+    expect(body).not.toContain("'/wallet/recharge'");
+    expect(body).not.toContain('d.ref');
+    expect(body).toContain('gw.submittedId = tx.id || d.request_id || null');
+    expect(src).toContain('id="trxid"');
+    expect(src).not.toContain('(d.transaction && d.transaction.trxid) || d.ref');
   });
 
   test('audit #22 — a manual-form pending is polled until it flips', () => {
@@ -403,15 +436,15 @@ describe('frontend/wallet.html — gateway session invariants', () => {
     expect(historyHtml).toContain("docs ? '<div class=\"hist-docs\">'");
   });
 
-  test('audit #38 — polls check immediately and look the transaction up by TrxID', () => {
+  test('polls check immediately: Auto by transaction ID, Manual by real TrxID', () => {
     const src = walletHtml();
-    // the gateway poll starts with an immediate check (submit, reload, resume all use gwStartPolling)
     const start = fnSlice(src, 'function gwStartPolling(');
     expect(start).toContain('setInterval(gwPollOnce, 15000)');
     expect(start).toContain('gwPollOnce(); // audit #38');
-    // both polls fetch the one transaction directly — no more scanning the latest 10 rows
     const gw = fnSlice(src, 'async function gwPollOnce(');
-    expect(gw).toContain("'/wallet/recharge/' + encodeURIComponent(gw.submittedTrxid)");
+    expect(gw).toContain("'/wallet/recharge/request/' + encodeURIComponent(gw.submittedId)");
+    expect(gw).toContain("'/wallet/recharge/' + encodeURIComponent(gw.legacyRef)");
+    expect(gw).not.toContain('submittedTrxid');
     const manual = fnSlice(src, 'async function manualPollOnce(');
     expect(manual).toContain("'/wallet/recharge/' + encodeURIComponent(trxid)");
     expect(src).not.toContain('/wallet?limit=10');

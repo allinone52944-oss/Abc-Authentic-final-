@@ -58,6 +58,20 @@ describe('parseSms — amount formats', () => {
     expect(parseAmount('Tk 0 received')).toBeNull();
     expect(parseAmount('no money here')).toBeNull();
   });
+  test('Bengali digits are normalized', () => {
+    expect(parseAmount('Received ৳৫০০ from 01712345678')).toBe(500);
+  });
+  test('received amount wins over a leading fee', () => {
+    expect(parseAmount('Fee Tk 5. Received Tk 500. TrxID ABCDEF1234')).toBe(500);
+  });
+  test('a long TrxID is complete, never truncated', () => {
+    const id = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ1234';
+    expect(parseSms('Received Tk 500. TrxID ' + id, 'bKash').trxid).toBe(id);
+  });
+  test('an over-40-character TrxID is rejected instead of truncated', () => {
+    const p = parseSms('Received Tk 500. TrxID ' + 'A'.repeat(41), 'bKash');
+    expect(p.trxid).toBeNull();
+  });
 });
 
 describe('parseSms — direction', () => {
@@ -70,6 +84,12 @@ describe('parseSms — direction', () => {
   });
   test('no signal is "unknown"', () => {
     expect(detectDirection('TrxID ABC123XYZ')).toBe('unknown');
+  });
+  test('negated received wording is not money-in', () => {
+    expect(detectDirection('You have not received Tk 500')).toBe('unknown');
+  });
+  test('contradictory incoming/outgoing wording is held as unknown', () => {
+    expect(detectDirection('Received Tk 500 after Cash Out')).toBe('unknown');
   });
 });
 

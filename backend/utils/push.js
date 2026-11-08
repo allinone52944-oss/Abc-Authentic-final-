@@ -174,10 +174,12 @@ async function notifyNewOrder(db, order, serviceName, userId) {
 async function notifyNewRecharge(db, tx, userId) {
   try {
     const uname = await userLabel(db, userId);
+    const isAuto = !tx.trxid || /^AUTO-[0-9A-F]{12}$/i.test(String(tx.trxid));
+    const ref = isAuto ? `Auto: ${tx.sender_no || 'নম্বর + পরিমাণ'}` : `TrxID: ${tx.trxid}`;
     return await notifyAdmins(
       db,
       '💰 নতুন রিচার্জ রিকোয়েস্ট!',
-      `৳${Number(tx.amount || 0).toLocaleString('bn-BD')} — ${uname} (TrxID: ${tx.trxid || '—'})`,
+      `৳${Number(tx.amount || 0).toLocaleString('bn-BD')} — ${uname} (${ref})`,
       '/admin.html'
     );
   } catch (e) {

@@ -5,7 +5,6 @@
 // (atomic, no negative, idempotent).
 // ============================================================
 const express = require('express');
-const crypto = require('crypto');
 const db = require('../db');
 const { requireAuth } = require('../auth');
 const { safeLog, uploadMiddleware, orderDocUpload } = require('../security');
@@ -817,7 +816,18 @@ router.get('/wallet', async (req, res) => {
                FROM coupons c WHERE c.recharge_id = transactions.id LIMIT 1) AS coupon,
               CASE WHEN type = 'recharge' AND status = 'pending' THEN EXISTS (
                 SELECT 1 FROM incoming_sms s
-                WHERE s.trxid IS NOT NULL AND UPPER(s.trxid) = UPPER(transactions.trxid)
+                WHERE (
+                  (transactions.trxid IS NOT NULL
+                   AND transactions.trxid !~ '^AUTO-[0-9A-F]{12}$'
+                   AND UPPER(s.trxid) = UPPER(transactions.trxid))
+                  OR (
+                    (transactions.trxid IS NULL OR transactions.trxid ~ '^AUTO-[0-9A-F]{12}$')
+                    AND s.trxid IS NOT NULL
+                    AND s.amount = transactions.amount AND s.sender = transactions.sender_no
+                    AND s.method = CASE WHEN transactions.method LIKE 'bkash%' THEN 'bkash' ELSE transactions.method END
+                    AND s.created_at >= NOW() - INTERVAL '30 minutes'
+                  )
+                )
               ) ELSE false END AS sms_arrived
        FROM transactions ${where}
        ORDER BY created_at DESC LIMIT $${cparams.length + 1} OFFSET $${cparams.length + 2}`,
@@ -865,9 +875,29 @@ router.get('/wallet', async (req, res) => {
   }
 });
 
-// Audit #38 — direct lookup of one recharge by TrxID, for the wallet
-// polls. The old polls scanned the latest 10 rows and could miss the
-// submitted transaction entirely. Own user only; case-insensitive.
+// Number-only Auto requests have no TrxID, so their reload/poll path uses
+// the immutable transaction ID. The user scope prevents reading another
+// customer's recharge even when its ID is known.
+router.get('/wallet/recharge/request/:id', async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+      return res.status(400).json({ error: 'INVALID_REQUEST_ID' });
+    }
+    const r = await db.query(
+      `SELECT id, type, amount, method, sender_no, trxid, status, created_at, cancel_reason
+       FROM transactions
+       WHERE user_id = $1 AND type = 'recharge' AND id = $2 LIMIT 1`,
+      [req.user.id, id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    res.json({ transaction: r.rows[0] });
+  } catch (e) {
+    safeLog('[user] auto recharge lookup error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// Manual recharge lookup by its real TrxID. Own user only; case-insensitive.
 router.get('/wallet/recharge/:trxid', async (req, res) => {
   try {
     const trxid = String(req.params.trxid || '').trim();
@@ -886,9 +916,10 @@ router.get('/wallet/recharge/:trxid', async (req, res) => {
 });
 
 // POST /api/wallet/recharge/auto — number-only Auto payment: method,
-// sender number and amount, NO TrxID. A placeholder 'AUTO-…' ref is
-// stored; the SMS webhook matches it by amount + sender (or this call
-// matches an SMS that already arrived), else it waits for the admin.
+// sender number and amount, NO TrxID and no invented placeholder. The SMS
+// webhook matches by amount + sender (or this call matches an SMS that
+// already arrived). A matched SMS supplies the real TrxID; otherwise the
+// request waits for admin review with trxid = NULL.
 router.post('/wallet/recharge/auto', async (req, res) => {
   try {
     const { method, sender_no, amount } = req.body || {};
@@ -904,18 +935,17 @@ router.post('/wallet/recharge/auto', async (req, res) => {
     if (parseInt(pending.rows[0].count, 10) >= 3) {
       return res.status(400).json({ error: 'TOO_MANY_PENDING' });
     }
-    const ref = 'AUTO-' + crypto.randomBytes(6).toString('hex').toUpperCase();
     const r = await db.query(
-      `INSERT INTO transactions (user_id, type, amount, method, sender_no, trxid, status)
-       VALUES ($1, 'recharge', $2, $3, $4, $5, 'pending') RETURNING *`,
-      [req.user.id, amt, method, sender, ref]);
+      `INSERT INTO transactions (user_id, type, amount, method, sender_no, status)
+       VALUES ($1, 'recharge', $2, $3, $4, 'pending') RETURNING *`,
+      [req.user.id, amt, method, sender]);
     let tx = r.rows[0];
     try {
       const matched = await tryAutoMatchBySender(tx);
       if (matched) tx = matched;
     } catch (err) { safeLog('[user] auto sender-match error:', err.message); }
     if (tx.status === 'pending') push.notifyNewRecharge(db, tx, req.user.id).catch(() => {});
-    res.status(201).json({ transaction: tx, ref: ref });
+    res.status(201).json({ transaction: tx, request_id: tx.id });
   } catch (e) {
     safeLog('[user] auto recharge error:', e.message);
     res.status(500).json({ error: 'FAILED' });

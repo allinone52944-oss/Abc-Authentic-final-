@@ -99,7 +99,7 @@ function setup() {
   const liveSession = (over = {}) => ({
     method: 'bkash_payment', sender: '01700000000', amount: 100,
     endsAt: Date.now() + 60000, timerId: null, pollId: null,
-    submitted: false, submittedTrxid: null, done: false, pausedAt: null,
+    submitted: false, submittedId: null, legacyRef: null, done: false, pausedAt: null,
     ...over,
   });
   return { fn, getGw, setGw, stored, seedStored, liveSession, calls, store };
@@ -178,6 +178,20 @@ describe('gateway pause/resume deadline persistence (bug-hunt F4)', () => {
     expect(t.fn.gwRestoreSession()).toBe(true);
     expect(t.getGw().endsAt).toBeGreaterThanOrEqual(now + 49000);
     expect(t.getGw().endsAt).toBeLessThanOrEqual(now + 51000);
+  });
+
+  test('a submitted Auto session resumes polling by transaction ID', () => {
+    const t = setup();
+    const id = '123e4567-e89b-42d3-a456-426614174000';
+    t.seedStored({
+      method: 'bkash_payment', sender: '01700000000', amount: 100,
+      endsAt: Date.now() + 60000, submitted: true, submittedId: id,
+    });
+    expect(t.fn.gwRestoreSession()).toBe(true);
+    expect(t.getGw().submittedId).toBe(id);
+    expect(t.getGw().legacyRef).toBeNull();
+    expect(t.calls.polling).toBe(1);
+    expect(t.stored().submittedId).toBe(id);
   });
 
   test('an un-paused expired session is still cleared on restore', () => {

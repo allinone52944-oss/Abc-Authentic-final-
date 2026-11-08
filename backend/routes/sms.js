@@ -79,8 +79,9 @@ async function logActivity(adminId, action, details) {
 }
 
 // ---- shared atomic approve -----------------------------------
-// Locks the pending recharge row; credits wallet idempotently;
-// links the SMS. Returns the tx row or null if already processed.
+// Locks the recharge AND the SMS, serializes consumption of the provider
+// TrxID, then credits and links both in the same transaction. Any consumed
+// or concurrently claimed SMS aborts the wallet credit as well.
 async function approveRechargeTx(client, txId, smsId, via = 'auto') {
   const r = await client.query(
     `SELECT * FROM transactions
@@ -89,25 +90,65 @@ async function approveRechargeTx(client, txId, smsId, via = 'auto') {
   );
   const tx = r.rows[0];
   if (!tx) return null;
+
+  let sms = null;
+  if (smsId) {
+    const lockedSms = await client.query(
+      `SELECT id, trxid, matched_recharge_id FROM incoming_sms
+       WHERE id = $1 FOR UPDATE`,
+      [smsId]
+    );
+    sms = lockedSms.rows[0];
+    if (!sms) throw new Error('SMS_NOT_FOUND');
+    if (sms.matched_recharge_id) throw new Error('SMS_ALREADY_MATCHED');
+    if (sms.trxid) {
+      // Two duplicate SMS rows can represent one provider payment. The
+      // advisory lock plus consumed check makes that TrxID single-use
+      // across webhook, late-submit and admin-match entry points.
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['sms-payment:' + String(sms.trxid).toUpperCase()]);
+      const consumed = await client.query(
+        `SELECT id FROM incoming_sms
+         WHERE id <> $1 AND UPPER(trxid) = UPPER($2)
+           AND matched_recharge_id IS NOT NULL LIMIT 1`,
+        [sms.id, sms.trxid]
+      );
+      if (consumed.rows.length) throw new Error('SMS_ALREADY_MATCHED');
+    }
+  }
+
   // wallet_apply is atomic + idempotent (raises DUPLICATE_TRANSACTION)
   // C-4 fix (2026-10-15): existing pending row reuse — ডবল ledger row নয়
   await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4, $5)', [
     tx.user_id, Number(tx.amount), 'recharge', tx.trxid || ('tx-' + tx.id), tx.id,
   ]);
+  // Number-only Auto starts with no TrxID. Once a real SMS is matched,
+  // store that SMS's actual TrxID instead of leaving an invented AUTO-*
+  // placeholder. Manual requests already have a TrxID and stay unchanged.
+  const realTrx = smsId ? await client.query(
+    `UPDATE transactions AS t
+        SET trxid = s.trxid
+       FROM incoming_sms AS s
+      WHERE t.id = $1 AND s.id = $2 AND s.trxid IS NOT NULL
+        AND (t.trxid IS NULL OR t.trxid ~ '^AUTO-[0-9A-F]{12}$')
+      RETURNING t.trxid`,
+    [tx.id, smsId]
+  ) : null;
   await client.query(
     `UPDATE transactions SET admin_id = NULL WHERE id = $1`,
     [tx.id]
   );
   if (smsId) {
-    await client.query(
+    const linked = await client.query(
       // Audit #33 — record how the match happened, so the admin hub
-      // can tell an auto-match from a manual one.
+      // can tell an auto-match from a manual one. The conditional link
+      // is the final atomic guard against two actors using one SMS row.
       `UPDATE incoming_sms SET matched_recharge_id = $1, matched_at = NOW(), matched_via = $3
-       WHERE id = $2`,
+       WHERE id = $2 AND matched_recharge_id IS NULL RETURNING id`,
       [tx.id, smsId, via]
     );
+    if (!linked.rows.length) throw new Error('SMS_ALREADY_MATCHED');
   }
-  return { ...tx, status: 'approved' };
+  return { ...tx, status: 'approved', trxid: realTrx?.rows[0]?.trxid || tx.trxid };
 }
 
 // Amount equality with 2-decimal tolerance (NUMERIC column vs parsed float).
@@ -137,32 +178,36 @@ const SMS_METHODS = {
 };
 
 async function findMatch(client, parsed) {
-  // 1) Exact TrxID (case-insensitive)
+  // 1) Exact TrxID (case-insensitive). Multiple pending claims are
+  // ambiguous and must be reviewed instead of selecting an arbitrary user.
   if (parsed.trxid) {
     const r = await client.query(
       `SELECT * FROM transactions
        WHERE type = 'recharge' AND status = 'pending'
          AND trxid IS NOT NULL AND UPPER(trxid) = UPPER($1)
-       LIMIT 1`,
+       LIMIT 2`,
       [parsed.trxid]
     );
-    if (r.rows[0]) return { tx: r.rows[0], how: 'trxid' };
+    if (r.rows.length === 1) return { tx: r.rows[0], how: 'trxid' };
+    if (r.rows.length > 1) return null;
   }
-  // 2) Fuzzy: same amount + same sender number
-  // Audit #24 — newest first (ORDER BY created_at DESC), like
-  // the late-submit path below: without it LIMIT 1 picks an
-  // arbitrary pending when several share amount + sender.
-  if (parsed.amount != null && parsed.sender) {
-    const methods = SMS_METHODS[parsed.method] || SMS_METHODS.unknown;
+  // 2) Number-only Auto: amount + sender + provider + real SMS TrxID.
+  // A manual request with a wrong TrxID must NEVER fall back to this path.
+  // Only a unique, recent Auto request is eligible; ambiguity stays pending.
+  if (parsed.amount != null && parsed.sender && parsed.trxid) {
+    const methods = SMS_METHODS[parsed.method] || [];
+    if (!methods.length) return null;
     const r = await client.query(
       `SELECT * FROM transactions
        WHERE type = 'recharge' AND status = 'pending'
+         AND (trxid IS NULL OR trxid ~ '^AUTO-[0-9A-F]{12}$')
          AND amount = $1 AND sender_no = $2 AND method = ANY($3)
+         AND created_at >= NOW() - INTERVAL '30 minutes'
        ORDER BY created_at DESC
-       LIMIT 1`,
+       LIMIT 2`,
       [parsed.amount, parsed.sender, methods]
     );
-    if (r.rows[0]) return { tx: r.rows[0], how: 'amount+sender' };
+    if (r.rows.length === 1) return { tx: r.rows[0], how: 'amount+sender' };
   }
   return null;
 }
@@ -244,6 +289,16 @@ webhook.post('/incoming', async (req, res) => {
       if (parsed && parseStatus === 'parsed' && parsed.direction === 'in') {
         matchInfo = await findMatch(client, parsed);
         if (matchInfo) {
+          // The provider family must agree as well as TrxID/amount. This
+          // prevents a same-looking reference from another MFS being used.
+          const allowedMethods = SMS_METHODS[parsed.method] || [];
+          if (!allowedMethods.includes(matchInfo.tx.method)) {
+            await client.query('COMMIT');
+            await logActivity(null, 'sms.method_mismatch_hold', {
+              sms_id: smsId, tx_id: matchInfo.tx.id, sms_method: parsed.method,
+            });
+            return res.json({ ok: true, held_for_review: true, reason: 'METHOD_MISMATCH' });
+          }
           // Fraud guard: a TrxID match must also agree on the amount.
           // Without this, a customer could submit ৳5,000 against a ৳50 SMS.
           if (matchInfo.how === 'trxid') {
@@ -345,6 +400,9 @@ webhook.post('/incoming', async (req, res) => {
     }
   } catch (e) {
     safeLog('[sms] incoming error:', e.message);
+    if (e.message === 'SMS_ALREADY_MATCHED') {
+      return res.status(409).json({ ok: false, error: 'SMS_ALREADY_MATCHED' });
+    }
     res.status(500).json({ error: 'FAILED' });
   }
 });
@@ -504,6 +562,14 @@ async function tryAutoMatchRecharge(tx) {
       await client.query('COMMIT');
       return null;
     }
+    // The request-first webhook applies these same guards. SMS-first
+    // manual/Auto submission must never bypass money-IN or provider checks.
+    const parsed = parseSms(sms.raw_message, sms.raw_sender);
+    const allowedMethods = parsed ? (SMS_METHODS[parsed.method] || []) : [];
+    if (!parsed || parsed.direction !== 'in' || !allowedMethods.includes(tx.method)) {
+      await client.query('COMMIT');
+      return null;
+    }
 
     const MAX_AUTO_APPROVE = Number(process.env.SMS_MAX_AUTO_APPROVE || 50000);
     if (Number(tx.amount) > MAX_AUTO_APPROVE) {
@@ -552,6 +618,7 @@ async function tryAutoMatchBySender(tx) {
     const r = await client.query(
       `SELECT * FROM incoming_sms
        WHERE matched_recharge_id IS NULL AND parse_status = 'parsed'
+         AND trxid IS NOT NULL
          AND amount = $1 AND sender = $2 AND method = $3
          AND created_at >= NOW() - INTERVAL '30 minutes'
        ORDER BY created_at DESC LIMIT 5
