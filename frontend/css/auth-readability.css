@@ -1,4 +1,5 @@
-/* Keep existing auth controls visible; no authentication changes. */
-body.preview-auth .login-wrapper .form-card > .tabs .tab:not(.active) { display:block !important; cursor:pointer; color:var(--pv-primary-deep); }
+/* Respect inline registration visibility controlled by administrator settings. */
+body.preview-auth .login-wrapper .form-card > .tabs .tab:not(.active) { cursor:pointer; color:var(--pv-primary-deep); }
+body.preview-auth .login-wrapper .form-card > .tabs:has(.tab:nth-child(2)[style*="display: none"]) { display:none; }
 body.preview-auth .login-wrapper .field input::placeholder { color:var(--pv-muted); opacity:1; }
 body.preview-auth .login-wrapper .brand-header .logo-box { border-radius:50%; }
