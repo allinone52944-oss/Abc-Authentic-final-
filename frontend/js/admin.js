@@ -3195,6 +3195,13 @@ TABS.services = async () => {
             '<button class="mini-btn" onclick="AdmSvc.toggleStatus(\'' + s.id + '\',\'' + s.status + '\')" style="padding:6px 10px;" title="চালু/বন্ধ">' + (isActive ? '🔴 বন্ধ' : '🟢 চালু') + '</button>' +
             '<button class="mini-btn danger" onclick="AdmSvc.del(\'' + s.id + '\')" style="padding:6px 10px;" title="ডিলিট">🗑️</button>' +
           '</div>' +
+          '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding-top:8px;">' +
+            '<span style="font-size:12px;font-weight:700;color:#64748b;">ড্যাশবোর্ড:</span>' +
+            '<button class="mini-btn" onclick="AdmSvc.moveSvc(\'' + s.id + '\',-1)" title="উপরে আনুন" style="padding:6px 10px;">▲</button>' +
+            '<button class="mini-btn" onclick="AdmSvc.moveSvc(\'' + s.id + '\',1)" title="নিচে নিন" style="padding:6px 10px;">▼</button>' +
+            '<button class="mini-btn' + (s.featured ? ' ok' : '') + '" onclick="AdmSvc.setDisplay(\'' + s.id + '\',{featured:' + (!s.featured) + '})" style="padding:6px 10px;">' + (s.featured ? '⭐ হাইলাইট চালু' : '☆ হাইলাইট বন্ধ') + '</button>' +
+            '<button class="mini-btn' + (s.show_on_dashboard !== false ? ' ok' : '') + '" onclick="AdmSvc.setDisplay(\'' + s.id + '\',{show_on_dashboard:' + (s.show_on_dashboard === false) + '})" style="padding:6px 10px;">' + (s.show_on_dashboard !== false ? '👁 দেখাবে' : '🚫 লুকানো') + '</button>' +
+          '</div>' +
         '</div>';
       });
       html += '</div>';
@@ -3211,6 +3218,22 @@ TABS.cats = async () => {
 };
 
 window.AdmSvc = {
+  async moveSvc(id, dir) {
+    const r = await ABC.api('/admin/services');
+    const list = (await r.json()).services || [];
+    const order = list.map(x => x.id);
+    const i = order.indexOf(id), j = i + dir;
+    if (i < 0 || j < 0 || j >= order.length) return;
+    const t = order[i]; order[i] = order[j]; order[j] = t;
+    const rr = await ABC.api('/admin/services/reorder', { method: 'PUT', body: { order } });
+    if (!rr.ok) { alert('ক্রম পরিবর্তন ব্যর্থ'); return; }
+    show('services');
+  },
+  async setDisplay(id, body) {
+    const r = await ABC.api('/admin/services/' + id + '/display', { method: 'PUT', body });
+    if (!r.ok) { alert('সংরক্ষণ ব্যর্থ'); return; }
+    show('services');
+  },
   onSearch(val) {
     TABS._svcSearch = val;
     clearTimeout(window._svcSearchTimer);

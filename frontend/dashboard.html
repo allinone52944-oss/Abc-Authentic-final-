@@ -430,6 +430,8 @@
     gap: 14px;
   }
 
+  .svc2.svc2-featured { border: 2px solid #d4a017 !important; box-shadow: 0 6px 18px rgba(212,160,23,.18) !important; position: relative; }
+  .svc2-badge { position: absolute; top: 8px; right: 8px; background: #fef3c7; color: #92400e; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
   .svc2 {
     background: #ffffff;
     border: 1px solid var(--border-light);
@@ -1699,6 +1701,12 @@ function renderEngineCards() {
   if (mob) mob.innerHTML = ENGINE_CARDS.map((c) => engineCardHtml(c, true)).join('\n');
 }
 
+// Admin-controlled dashboard list: hidden ones out, highlighted first, then admin serial order.
+function dashboardServices() {
+  const shown = _allServices.filter(s => s.show_on_dashboard !== false);
+  return shown.filter(s => s.featured).concat(shown.filter(s => !s.featured));
+}
+
 function renderServiceGrid(containerId, list) {
   const el = document.getElementById(containerId);
   if (!el) return;
@@ -1709,8 +1717,9 @@ function renderServiceGrid(containerId, list) {
   el.innerHTML = list.map(s => {
     const name = escapeHtml(s.name_bn || s.name);
     const ico = escapeHtml((s.icon && s.icon !== '🛎️') ? s.icon : autoIcon(name));
-    return '<div class="svc2" onclick="location.href=\'/service-detail.html?id=' + encodeURIComponent(s.id) + '\'">' +
+    return '<div class="svc2' + (s.featured ? ' svc2-featured' : '') + '" onclick="location.href=\'/service-detail.html?id=' + encodeURIComponent(s.id) + '\'">' +
       '<div class="ico">' + ico + '</div>' +
+      (s.featured ? '<span class="svc2-badge">⭐ বিশেষ</span>' : '') +
       '<h4>' + name + '</h4>' +
       '<div class="pr">৳' + bnNum(s.price) + '</div>' +
     '</div>';
@@ -1721,7 +1730,7 @@ function onSvcFilter(val, containerId) {
   const q = String(val || '').trim().toLowerCase();
   if (!q) {
     const limit = containerId === 'popularServices' ? 4 : 6;
-    renderServiceGrid(containerId, _allServices.slice(0, limit));
+    renderServiceGrid(containerId, dashboardServices().slice(0, limit));
     return;
   }
   const filtered = _allServices.filter(s => {
@@ -1779,8 +1788,8 @@ async function loadServices() {
       setText('mEngChargeQr', '৳' + bnNum(qrSvc.price));
     }
 
-    renderServiceGrid('popularServices', _allServices.slice(0, 4));
-    renderServiceGrid('mobileServices', _allServices.slice(0, 6));
+    renderServiceGrid('popularServices', dashboardServices().slice(0, 4));
+    renderServiceGrid('mobileServices', dashboardServices().slice(0, 6));
   } catch (e) {
     setText('hubServices', '–');
     if (pop) pop.innerHTML = retryBox('loadServices');

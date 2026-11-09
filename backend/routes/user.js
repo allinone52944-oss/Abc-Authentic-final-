@@ -146,6 +146,7 @@ router.get('/services', async (req, res) => {
       out.push({
         id: s.id, name: s.name, name_bn: s.name_bn, type: s.type,
         price: eff.price, serial: s.serial,
+        featured: s.featured === true, show_on_dashboard: s.show_on_dashboard !== false,
         // category (null when uncategorized or category disabled -> grouped under অন্যান্য)
         category_id: s.cat_id || null,
         category_name: s.cat_name || null,

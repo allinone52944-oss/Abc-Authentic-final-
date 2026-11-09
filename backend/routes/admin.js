@@ -1795,6 +1795,27 @@ router.put('/services/reorder', async (req, res) => {
   }
 });
 
+// PUT /api/admin/services/:id/display { featured?, show_on_dashboard? }
+// Dashboard presentation only — never touches price, access or status.
+router.put('/services/:id/display', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const f = typeof b.featured === 'boolean' ? b.featured : null;
+    const d = typeof b.show_on_dashboard === 'boolean' ? b.show_on_dashboard : null;
+    if (f === null && d === null) return res.status(400).json({ error: 'NOTHING_TO_UPDATE' });
+    const r = await db.query(
+      `UPDATE services SET featured = COALESCE($1, featured),
+              show_on_dashboard = COALESCE($2, show_on_dashboard), updated_at = NOW()
+        WHERE id = $3 RETURNING id, featured, show_on_dashboard`, [f, d, req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    await logActivity(req.user.id, 'service.display', { service_id: req.params.id, featured: f, show_on_dashboard: d });
+    res.json({ service: r.rows[0] });
+  } catch (e) {
+    safeLog('[admin] service display error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 router.put('/services/:id', async (req, res) => {
   try {
     const { name, name_bn, type, price, status, documents_required, fields_required, schedule, rules_text, engine_id, category_id, manual_instructions, manual_sample, manual_doc_count } = req.body || {};
