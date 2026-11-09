@@ -92,7 +92,7 @@
       const engine = document.querySelector('.engine-hub-section');
       const notices = document.querySelector('.notices-panel');
       const help = document.querySelector('.help-card-desk');
-      [engine, stats, notices, help].forEach(n => { if (n && n.parentElement) ws.appendChild(n); });
+      [notices, engine, stats, help].forEach(n => { if (n && n.parentElement) ws.appendChild(n); });
     }
     const mBal = document.querySelector('.m-bal');
     if (mBal) mBal.insertAdjacentElement('afterend', el(QUICK.replace('dv2-quick', 'dv2-quick dv2-quick-m')));

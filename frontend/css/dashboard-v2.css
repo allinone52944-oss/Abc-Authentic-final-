@@ -92,3 +92,7 @@ body.dash-v2 .svc2-badge::before { content: "🔥 হাইলাইট"; font-s
 body.dash-v2.flagship-dashboard #popularServices .svc2-badge { position: absolute !important; top: -10px; right: 12px; }
 body.dash-v2.flagship-dashboard #popularServices .svc2 { overflow: visible; }
 @media (max-width: 900px) { body.dash-v2 .mobile-only .m-content > *:has(> #engineGridMob) { padding-top: 20px !important; } body.dash-v2 .mobile-only .m-content > *:has(> #engineGridMob) > *:first-child { margin-top: 0 !important; position: static !important; } }
+/* Closer match to the approved picture */
+body.dash-v2.flagship-dashboard .popular-panel .svc-search-wrap { display: none; }
+body.dash-v2.flagship-dashboard #popularServices .svc2 .pr { background: transparent !important; padding: 0 !important; border: 0 !important; }
+body.dash-v2.flagship-dashboard .workspace-overview > .stats { margin-top: 8px !important; }
