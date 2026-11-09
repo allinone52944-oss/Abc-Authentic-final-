@@ -1,0 +1,58 @@
+/* Presentation only: leave wizard visibility, scripts and document frames untouched. */
+:is(.page-birth-final,.page-death-final,.page-bdris-apply) { background: var(--layout-canvas); color: var(--layout-ink); }
+:is(.page-birth-final,.page-death-final) .app-shell { max-width: 1040px; padding: 32px 28px 80px; }
+:is(.page-birth-final,.page-death-final) .app-header { flex-wrap: wrap; gap: 16px; padding: 24px 0; border-bottom: 2px solid var(--layout-emerald); }
+:is(.page-birth-final,.page-death-final) .brand { min-width: 0; color: var(--layout-emerald); overflow-wrap: anywhere; font-size: 24px; }
+:is(.page-birth-final,.page-death-final) .icon-btn { min-height: 44px; background: var(--layout-gold-fill); border-color: var(--layout-gold); color: var(--layout-gold-ink); }
+:is(.page-birth-final,.page-death-final) .page { max-width: 900px; margin: 0 auto; }
+:is(.page-birth-final,.page-death-final) .steps { gap: 16px; margin: 28px 0 36px; }
+:is(.page-birth-final,.page-death-final) .step { font-size: 14px; padding-top: 40px; min-width: 0; }
+:is(.page-birth-final,.page-death-final) .step .dot { width: 32px; height: 32px; }
+:is(.page-birth-final,.page-death-final) .step.on { color: var(--layout-emerald); }
+:is(.page-birth-final,.page-death-final) .step.on .dot { background: var(--layout-gold-fill); border-color: var(--layout-gold); color: var(--layout-gold-ink); box-shadow: none; }
+:is(.page-birth-final,.page-death-final) .form-card { padding: 28px; border: 0; border-top: 1px solid var(--layout-line); border-radius: 0; box-shadow: none; background: var(--layout-paper); }
+:is(.page-birth-final,.page-death-final) #w1 .form-card { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px 24px; }
+:is(.page-birth-final,.page-death-final) #w1 .form-card > :is(.btn,.hint) { grid-column: 1 / -1; }
+:is(.page-birth-final,.page-death-final) .back-link { color: var(--layout-emerald); }
+:is(.page-birth-final,.page-death-final) .field { min-width: 0; margin-bottom: 20px; }
+:is(.page-birth-final,.page-death-final) .field label { font-size: 14px; margin-bottom: 8px; }
+:is(.page-birth-final,.page-death-final) .field :is(input,select,textarea) { min-width: 0; max-width: 100%; min-height: 48px; font-size: 16px; border-color: var(--layout-line); border-radius: 8px; }
+:is(.page-birth-final,.page-death-final) .field :is(input,select,textarea):focus { outline: 2px solid var(--layout-emerald); outline-offset: 2px; border-color: var(--layout-emerald); box-shadow: none; }
+:is(.page-birth-final,.page-death-final) .btn { min-height: 48px; background: var(--layout-emerald); border-radius: 8px; }
+:is(.page-birth-final,.page-death-final) .btn:hover { background: var(--layout-deep); }
+:is(.page-birth-final,.page-death-final) .btn-secondary { min-height: 44px; background: var(--layout-soft); border-color: var(--layout-line); color: var(--layout-emerald); border-radius: 8px; }
+:is(.page-birth-final,.page-death-final) .btn-secondary:hover { background: var(--layout-line); }
+:is(.page-birth-final,.page-death-final) #recView { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
+:is(.page-birth-final,.page-death-final) #recView .field { min-width: 0; }
+:is(.page-birth-final,.page-death-final) #recView .field :is(input,select,textarea) { font-size: 16px; }
+.page-bdris-apply > .wrap { max-width: 1120px; padding: 32px 28px 90px; }
+.page-bdris-apply .wrap > .topbar { padding-bottom: 24px; margin-bottom: 28px; border-bottom: 2px solid var(--layout-emerald); }
+.page-bdris-apply .wrap > main.card { border: 0; border-radius: 0; padding: 28px; box-shadow: none; background: var(--layout-paper); }
+.page-bdris-apply .wrap > main.card::before { background: var(--layout-gold-fill); }
+.page-bdris-apply .blogo { background: var(--layout-gold-fill); color: var(--layout-gold-ink); box-shadow: none; border-radius: 8px; }
+.page-bdris-apply .bname { background: none; color: var(--layout-emerald); letter-spacing: 0; }
+.page-bdris-apply .hero { background: var(--layout-wallet); box-shadow: none; }
+.page-bdris-apply .stp.active { background: var(--layout-soft); border-color: var(--layout-emerald); color: var(--layout-emerald); }
+.page-bdris-apply .stp.active .n { background: var(--layout-gold-fill); color: var(--layout-gold-ink); }
+.page-bdris-apply .btn:not(.ghost):not(.danger) { background: var(--layout-emerald); box-shadow: none; }
+.page-bdris-apply .btn.ghost { background: var(--layout-soft); color: var(--layout-emerald); border-color: var(--layout-line); }
+.page-bdris-apply .btn { min-height: 44px; border-radius: 8px; }
+.page-bdris-apply :is(.row2,.row3,.docrow,.pvrow) > * { min-width: 0; }
+.page-bdris-apply .pvrow { grid-template-columns: 165px minmax(0,1fr); }
+.page-bdris-apply .mode-card { border-radius: 8px; box-shadow: none; border-color: var(--layout-line); }
+@media (max-width: 760px) {
+  .page-bdris-apply > .wrap { padding: 20px 16px 90px; }
+  .page-bdris-apply .wrap > main.card { padding: 20px 12px; }
+  .page-bdris-apply .pvrow { grid-template-columns: 100px minmax(0,1fr); }
+}
+@media (max-width: 600px) {
+  :is(.page-birth-final,.page-death-final) .app-shell { padding: 20px 16px 90px; }
+  :is(.page-birth-final,.page-death-final) .app-header { padding: 16px 0; gap: 12px; }
+  :is(.page-birth-final,.page-death-final) .brand { font-size: 20px; }
+  :is(.page-birth-final,.page-death-final) .form-card { padding: 22px 16px; }
+  :is(.page-birth-final,.page-death-final) #w1 .form-card { grid-template-columns: minmax(0,1fr); }
+  :is(.page-birth-final,.page-death-final) .steps { gap: 8px; }
+  :is(.page-birth-final,.page-death-final) #recView { grid-template-columns: minmax(0,1fr); }
+  :is(.page-birth-final,.page-death-final) .row2 { flex-wrap: wrap; }
+  :is(.page-birth-final,.page-death-final) .row2 :is(.btn,.btn-secondary) { flex: 1 1 100%; min-width: 0; }
+}

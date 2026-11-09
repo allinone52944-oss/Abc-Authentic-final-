@@ -1,0 +1,25 @@
+/* Scoped execution-shell presentation; never style generated documents or alter states. */
+.service-workspace .main { min-width: 0; }
+.service-workspace :is(.form-card,.land-layout,#resultsBox) { min-width: 0; }
+.service-workspace .form-card { border-top: 2px solid var(--layout-emerald); padding: 28px; }
+.service-workspace :is(.price-line,.order-meta) { background: var(--layout-soft); border-color: var(--layout-line); }
+.service-workspace .field :is(input,select,textarea) { min-width: 0; }
+.service-workspace :is(.drop,.multi-dropzone,.file-drop) { background: var(--layout-soft); border-color: var(--layout-emerald); border-radius: 8px; }
+.service-workspace :is(.drop,.multi-dropzone,.file-drop):hover { background: var(--layout-paper); }
+.service-workspace .note { line-height: 1.8; }
+.service-workspace .land-layout > .form-card { max-width: none; margin: 0 0 24px; }
+.service-workspace.page-land .form-card { padding-top: 0; }
+.service-workspace.page-land .hero { margin: 0 -28px 24px; padding: 24px 28px; background: var(--layout-wallet); }
+.service-workspace.page-land .hero::after { background: none; }
+.service-workspace :is(.result-card,.file-chip) { min-width: 0; overflow-wrap: anywhere; border-radius: 8px; }
+.service-workspace :is(.back-nav,.btn,.btn-secondary):focus-visible { outline: 2px solid var(--layout-emerald); outline-offset: 3px; }
+.service-workspace.page-order-create .main > .card { margin-inline: auto; }
+@media (min-width: 1200px) {
+  .service-workspace .land-layout { grid-template-columns: minmax(320px,400px) minmax(0,1fr); gap: 28px; }
+  .service-workspace .land-layout > .form-card { margin-bottom: 0; }
+}
+@media (max-width: 768px) {
+  .service-workspace .form-card { padding: 22px 18px; }
+  .service-workspace.page-land .hero { margin-inline: -18px; padding: 22px 18px; }
+  .service-workspace .land-layout { min-width: 0; }
+}
