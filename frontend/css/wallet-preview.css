@@ -106,16 +106,16 @@ body.wp-as-is .wp-payment-stack > :is(.hero-blue,#gwCard,#manualSection) { margi
 body.wp-as-is .wp-payment-stack > .hero-blue { min-height:132px; border-radius:8px; padding:28px; background:var(--pv-card-deep); }
 body.wp-as-is #gwCard, body.wp-as-is #classicRechargeCard { padding:24px; }
 body.wp-as-is #gwCard h3, body.wp-as-is #classicRechargeCard h3, body.wp-as-is #walletHistory h3 { font-size:18px; font-weight:600; margin:0; }
-body.wp-as-is .wp-inputs label, body.wp-as-is .wp-manual-inputs label { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+
 body.wp-as-is .wp-inputs input, body.wp-as-is .wp-manual-inputs input { background:var(--pv-bg); padding:12px 16px; }
 body.wp-as-is .wp-submit { min-height:52px; font-size:14px; font-weight:600; }
-body.wp-as-is #gwStep1 { display:block !important; }
+
 /* Keep feedback and expiry governed by the original inline state styles.
    Only the obsolete two-step presentation is hidden, never its result nodes. */
-body.wp-as-is #gwStep2 > :not(#gwErr2):not(#gwState):not(button[onclick="gwNewSession()"]) { display:none !important; }
+
 body.wp-as-is #gwStep2 { margin-top:16px; }
-body.wp-as-is #gwCard[data-wp-session="pending"] #gwStep2 > button[onclick="gwNewSession()"] { display:none; }
-body.wp-as-is #gwCard[data-wp-session="expired"] #gwStep1 .wp-submit { display:none; }
+
+
 body.wp-as-is .method-card-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
 body.wp-as-is .pay-method { min-height:64px; padding:12px 6px; justify-content:center; }
 body.wp-as-is .pay-method img { display:none; }
@@ -180,3 +180,39 @@ body.wp-as-is :is(#gwAmount,#gwSender,#amount,#sender,#trxid) { color:var(--pv-i
 body.wp-as-is #walletHistory .tx > b { color:var(--pv-primary-deep) !important; }
 body.wp-as-is #walletHistory .tx:has(.wp-tx-details summary[data-status="failed"]) > b { color:var(--wp-failed) !important; }
 body.wp-as-is #cbOverlay :is(.congrats,.won,.code,.note) { opacity:1; }
+
+/* Wallet refinement: presentation follows original inline state, never overrides it. */
+body.wp-as-is .wp-wallet-title { margin:0; padding:28px 32px 0; font-size:28px; line-height:1.4; color:var(--pv-ink); }
+body.wp-as-is .wallet-workspace { padding-top:24px; gap:32px; }
+body.wp-as-is .wp-payment-stack { gap:28px; }
+body.wp-as-is .wp-payment-stack > .hero-blue { box-shadow:none; min-height:152px; display:flex; flex-direction:column; justify-content:center; }
+body.wp-as-is :is(#gwCard,#classicRechargeCard,#walletHistory) { box-shadow:none; border-color:var(--pv-line); }
+body.wp-as-is :is(#gwCard,#classicRechargeCard) { border-top:3px solid var(--pv-primary); padding:28px; }
+body.wp-as-is .wp-mode-selector { margin:24px 0; }
+body.wp-as-is .wp-mode { min-height:72px; }
+body.wp-as-is .wp-inputs label, body.wp-as-is .wp-manual-inputs label { display:block; font-size:13px; line-height:1.6; margin-bottom:8px; color:var(--pv-ink); }
+body.wp-as-is :is(#gwSender,#sender) { font-size:16px; }
+body.wp-as-is .wp-inputs input, body.wp-as-is .wp-manual-inputs input { min-height:50px; }
+body.wp-as-is .wp-instructions { line-height:1.9; }
+body.wp-as-is .gw-timer-row { background:var(--pv-soft); border:1px solid var(--pv-line); border-radius:8px; padding:18px; gap:16px; flex-wrap:wrap; }
+body.wp-as-is .gw-timeline { margin:24px 0; gap:8px; }
+body.wp-as-is .gw-step { border-radius:6px; font-size:13px; min-width:0; }
+body.wp-as-is .gw-state { border-radius:8px; padding:18px; line-height:1.85; }
+body.wp-as-is :is(#gwErr,#gwErr2,#gwState,#err,#ok) { overflow-wrap:anywhere; }
+body.wp-as-is .recv-box { border-radius:8px; }
+body.wp-as-is #walletHistory { padding:28px; }
+body.wp-as-is #walletHistory select { min-height:44px; font-size:14px !important; }
+body.wp-as-is #walletHistory .tx > div { min-width:0; flex:1; overflow-wrap:anywhere; }
+body.wp-as-is :is(button,[role=button],summary):focus-visible { outline:2px solid var(--pv-primary); outline-offset:3px; }
+body.wp-as-is .wp-more { margin-top:8px; }
+body.wp-as-is .wp-more summary { min-height:48px; }
+@media(max-width:1023px) { body.wp-as-is .wallet-workspace { gap:28px; } }
+@media(max-width:767px) {
+ body.wp-as-is .wp-wallet-title { padding:24px 20px 0; font-size:24px; }
+ body.wp-as-is .wallet-workspace { padding-top:20px; }
+ body.wp-as-is :is(#gwCard,#classicRechargeCard,#walletHistory) { padding:22px 20px; }
+ body.wp-as-is .gw-timer-row { padding:14px; gap:12px; }
+ body.wp-as-is .gw-step { font-size:12px; }
+ body.wp-as-is .wp-more { margin-bottom:calc(112px + env(safe-area-inset-bottom)); }
+ body.wp-as-is .wp-account-header h2 { max-width:190px; }
+}

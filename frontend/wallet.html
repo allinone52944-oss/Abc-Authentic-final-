@@ -276,7 +276,7 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261108">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261108-2">
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261108-1">
-<link rel="stylesheet" href="/css/wallet-preview.css?v=20261109-7">
+<link rel="stylesheet" href="/css/wallet-preview.css?v=20261109-8">
 </head>
 <body class="has-tabbar flagship-app page-wallet wp-as-is">
 <div class="desktop">
@@ -301,6 +301,7 @@
   <div class="main">
     <div class="topbar wp-account-header"><div><a class="wp-mobile-brand" href="/">All In One <small>(Abc Authentic)</small></a><p>স্বাগতম 👋</p><h2 id="wpAccountName">আপনার অ্যাকাউন্ট</h2></div><a class="wp-header-balance" href="/wallet.html"><span aria-hidden="true">▱</span><span id="wpHeaderBalance">৳০</span></a></div>
 
+    <h1 class="wp-wallet-title">ওয়ালেট</h1>
     <div class="wallet-workspace">
     <div class="wp-payment-stack">
     <!-- Balance Hero -->
@@ -333,7 +334,7 @@
         <div class="wp-inputs">
         <div class="field wp-sender">
           <label>যে নম্বর থেকে টাকা পাঠাবেন</label>
-          <input type="text" id="gwSender" placeholder="যে নম্বর থেকে পাঠিয়েছেন" maxlength="15">
+          <input type="text" inputmode="tel" id="gwSender" placeholder="যে নম্বর থেকে পাঠিয়েছেন" maxlength="15">
         </div>
         <div class="field">
           <label>টাকার পরিমাণ (৳১০ - ৳১,০০,০০০)</label>
@@ -461,7 +462,7 @@
 
       <div class="field">
         <label>যে নম্বর থেকে টাকা পাঠিয়েছেন (সেন্ডার নম্বর)</label>
-        <input type="text" id="sender" placeholder="যে নম্বর থেকে পাঠিয়েছেন" maxlength="15">
+        <input type="text" inputmode="tel" id="sender" placeholder="যে নম্বর থেকে পাঠিয়েছেন" maxlength="15">
       </div>
 
       <div class="field">
