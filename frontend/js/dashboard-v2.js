@@ -16,7 +16,6 @@
   const QUICK =
     '<div class="dv2-quick">' +
       '<a class="dv2-q dv2-q-gold" href="/services.html"><span class="dv2-q-ico">🛎️</span><span><b>সেবা নিন</b><small>সব সেবা এক জায়গায়</small></span><span class="dv2-arrow">→</span></a>' +
-      '<a class="dv2-q" href="/history.html"><span class="dv2-q-ico">⚡</span><span><b>ইতিহাস</b><small>ইঞ্জিনের সেবা — সাথে সাথে ডাউনলোড</small></span><span class="dv2-arrow">→</span></a>' +
       '<a class="dv2-q" href="/orders.html"><span class="dv2-q-ico">📝</span><span><b>আমার অর্ডার</b><small>হাতে করা কাজের অবস্থা</small></span><span class="dv2-arrow">→</span></a>' +
     '</div>';
   const HIST = suffix =>
@@ -80,8 +79,21 @@
     document.body.classList.add('dash-v2');
     const hero = document.querySelector('.hero-blue');
     if (hero && !document.querySelector('.dv2-quick')) hero.insertAdjacentElement('afterend', el(QUICK));
+    // Approved order: top cards -> history -> my orders -> special services -> rest -> notices
+    const ws = document.querySelector('.workspace-overview');
     const ro = document.querySelector('.recent-orders-card');
-    if (ro) ro.insertAdjacentElement('beforebegin', el(HIST('D')));
+    if (ws && ro) {
+      const hist = el(HIST('D'));
+      ws.insertBefore(hist, ws.firstChild);
+      hist.insertAdjacentElement('afterend', ro);
+      const pop = document.querySelector('.popular-panel');
+      if (pop) ro.insertAdjacentElement('afterend', pop);
+      const stats = document.querySelector('.account-overview > .stats');
+      const engine = document.querySelector('.engine-hub-section');
+      const notices = document.querySelector('.notices-panel');
+      const help = document.querySelector('.help-card-desk');
+      [engine, stats, notices, help].forEach(n => { if (n && n.parentElement) ws.appendChild(n); });
+    }
     const mBal = document.querySelector('.m-bal');
     if (mBal) mBal.insertAdjacentElement('afterend', el(QUICK.replace('dv2-quick', 'dv2-quick dv2-quick-m')));
     const mOrders = document.getElementById('recentOrdersMob');
