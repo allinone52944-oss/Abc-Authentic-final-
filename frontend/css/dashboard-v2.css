@@ -139,3 +139,32 @@ body.dash-v2.flagship-dashboard .dv2-row { padding: 14px 0; }
   body.dash-v2 .dv2-m-title small { font-size: 12px; color: #64748b; font-weight: 600; }
   body.dash-v2 .mobile-only .svc-search-wrap { display: none !important; }
 }
+/* Keep long service names, fees and highlight labels in separate tracks. */
+body.dash-v2.flagship-dashboard #popularServices .svc2,
+body.dash-v2.flagship-dashboard #mobileServices .svc2 {
+  display: grid; grid-template-columns: 24px minmax(0, 1fr);
+  align-content: start; align-items: start; gap: 8px 10px;
+  min-width: 0; padding: 18px 14px; text-align: left;
+}
+body.dash-v2.flagship-dashboard #popularServices .svc2 .ico,
+body.dash-v2.flagship-dashboard #mobileServices .svc2 .ico {
+  grid-column: 1; grid-row: 1; width: 24px; font-size: 20px;
+  margin: 0; background: transparent;
+}
+body.dash-v2.flagship-dashboard #popularServices .svc2 h4,
+body.dash-v2.flagship-dashboard #mobileServices .svc2 h4 {
+  grid-column: 2; grid-row: 1; width: auto; min-width: 0;
+  margin: 0; white-space: normal; overflow: visible;
+  overflow-wrap: anywhere; font-size: 14px; line-height: 1.5;
+}
+body.dash-v2.flagship-dashboard #popularServices .svc2 .pr,
+body.dash-v2.flagship-dashboard #mobileServices .svc2 .pr {
+  grid-column: 2; grid-row: 2; justify-self: start;
+  margin: 0; padding: 0; background: transparent;
+  border: 0; color: var(--pv-primary); white-space: nowrap;
+}
+body.dash-v2.flagship-dashboard #popularServices .svc2-badge,
+body.dash-v2.flagship-dashboard #mobileServices .svc2-badge {
+  position: static !important; grid-column: 1 / -1; grid-row: 3;
+  justify-self: start; background: var(--pv-gold); color: var(--pv-gold-ink);
+}

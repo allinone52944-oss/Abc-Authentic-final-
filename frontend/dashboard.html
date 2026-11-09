@@ -943,7 +943,7 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/dashboard-polish.css?v=20261110-1">
-<link rel="stylesheet" href="/css/dashboard-v2.css?v=20261110-7">
+<link rel="stylesheet" href="/css/dashboard-v2.css?v=20261110-8">
 </head>
 <body class="has-tabbar flagship-dashboard">
 
@@ -1652,8 +1652,8 @@ async function loadRecentOrders() {
       }
     }
   } catch (e) {
-    if (desk) desk.innerHTML = '<div style="color:#64748b;font-size:12px;padding:8px 0;">অর্ডার তথ্য লোড করা যায়নি</div>';
-    if (mob) mob.innerHTML = '';
+    if (desk) desk.innerHTML = retryBox('loadRecentOrders');
+    if (mob) mob.innerHTML = retryBox('loadRecentOrders');
   }
 }
 
