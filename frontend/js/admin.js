@@ -1180,6 +1180,10 @@ TABS.orders = async () => {
         // delete the old sections offered — no pipeline buttons.
         const delCall = r.kind === 'delivery' ? 'AdmOrders.deleteEngineJob' : 'AdmOrders.deleteBdrisApp';
         actionsHtml = '<div class="adm-action-grp" style="justify-content:flex-end;">' +
+          (r.kind === 'delivery' ? (r.auto_status === 'failed'
+            ? '<span style="color:#dc2626;font-weight:700;font-size:11px;">⚡ অটো: ব্যর্থ</span>'
+            : '<span style="color:#059669;font-weight:700;font-size:11px;">⚡ অটো সম্পন্ন</span>') : '') +
+          (r.kind === 'delivery' && r.file_url ? '<button class="adm-icon-btn" title="গ্রাহক যে ফাইল পেয়েছে" aria-label="ফাইল" onclick="AdmOrders.openEngineFile(\'' + r.id + '\')">📄</button>' : '') +
           '<button class="adm-icon-btn" title="বিস্তারিত দেখুন" aria-label="বিস্তারিত দেখুন" onclick="AdmOrders.viewUnifiedRecord(\'' + r.kind + '\',\'' + r.id + '\')">👁️ দেখুন</button>' +
           '<button class="adm-icon-btn danger" title="ডিলিট করুন" aria-label="ডিলিট করুন" onclick="' + delCall + '(\'' + r.id + '\')">🗑️</button>' +
         '</div>';
@@ -1430,12 +1434,24 @@ window.AdmOrders = {
   // and no file download for these rows, so this modal shows only
   // the unified row's own fields plus the same single-delete the
   // old sections offered. No pipeline buttons here.
+  // Opens the customer's own stored engine file (auth header needs fetch -> blob).
+  async openEngineFile(id) {
+    const w = window.open('', '_blank');
+    try {
+      const r = await ABC.api('/admin/engine-jobs/' + id + '/file');
+      if (!r.ok) throw new Error('bad');
+      const url = URL.createObjectURL(await r.blob());
+      if (w) w.location.href = url; else location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) { if (w) w.close(); alert('ফাইল পাওয়া যায়নি'); }
+  },
   viewUnifiedRecord(kind, id) {
     const row = (TABS._unifiedRows || []).find(x => x.kind === kind && String(x.id) === String(id));
     if (!row) { alert('সারিটি তালিকায় পাওয়া যায়নি — পেজ রিলোড করে আবার চেষ্টা করুন'); return; }
     const isDelivery = kind === 'delivery';
     const title = isDelivery ? '📦 ডেলিভারি বিস্তারিত' : '🕘 আবেদন বিস্তারিত';
-    const stText = STBN[row.status] || (row.status === 'success' ? 'সম্পন্ন' : (row.status || '—'));
+    const stText = isDelivery ? (row.auto_status === 'failed' ? 'অটো: ব্যর্থ' : 'অটো সম্পন্ন (ইঞ্জিন)')
+      : (STBN[row.status] || (row.status === 'success' ? 'সম্পন্ন' : (row.status || '—')));
     const priceText = (row.price === undefined || row.price === null) ? '—' : ('৳' + bn(row.price));
     const note = isDelivery
       ? 'এটি একটি তাৎক্ষণিক ডেলিভারি রেকর্ড — অর্ডার পাইপলাইনের গ্রহণ/সম্পন্ন/ডেলিভার্ড বোতাম এখানে নেই।'
@@ -1455,6 +1471,7 @@ window.AdmOrders = {
       '</div>' +
       '<div class="s" style="margin:10px 0 14px;">' + note + '</div>' +
       '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
+        (isDelivery ? '<button class="mini-btn ok" onclick="AdmOrders.openEngineFile(' + jqAttr(row.id) + ')">📄 ফাইল</button>' : '') +
         '<button class="btn-secondary" onclick="closeModal()">✕ বন্ধ করুন</button>' +
         '<button class="mini-btn danger" onclick="closeModal();' + delCall + '(' + jqAttr(row.id) + ')">🗑️ ডিলিট</button>' +
       '</div>');

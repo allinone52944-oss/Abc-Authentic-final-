@@ -778,7 +778,7 @@ router.get('/unified-services', async (req, res) => {
 // Audit #67 — cap the source at offset+limit rows (see note above).
       params.push(offset + limit);
       const r = await db.query(
-        `SELECT j.id, j.created_at, j.engine_id,
+        `SELECT j.id, j.created_at, j.engine_id, j.outcome,
                 u.name AS user_name, u.phone AS user_phone
          FROM engine_jobs j JOIN users u ON u.id = j.user_id
          ${where} ORDER BY j.created_at DESC LIMIT $${params.length}`, params);
@@ -792,6 +792,10 @@ router.get('/unified-services', async (req, res) => {
         created_at: unifiedIso(row.created_at),
         price: 0,
         status: null,
+        // Order processing: an engine result is an auto-completed
+        // order — no admin step. Same stored file the customer got.
+        auto_status: row.outcome === 'failed' ? 'failed' : 'completed',
+        file_url: '/api/admin/engine-jobs/' + row.id + '/file',
       }));
     }
 

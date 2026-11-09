@@ -253,6 +253,19 @@ adminEngineJobs.get('/', async (req, res) => {
   } catch (e) { safeLog('[engine-jobs] admin list error:', e.message); res.status(500).json({ error: 'FAILED' }); }
 });
 
+// GET /api/admin/engine-jobs/:id/file — the SAME stored file the
+// customer downloads (read-only; no copy, no charge, no status change).
+adminEngineJobs.get('/:id/file', async (req, res) => {
+  try {
+    const r = await db.query('SELECT filename, originalname FROM engine_jobs WHERE id = $1', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    const fn = path.basename(r.rows[0].filename);
+    const fp = path.join(UPLOAD_DIR, fn);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'FILE_MISSING' });
+    res.download(fp, r.rows[0].originalname || fn);
+  } catch (e) { safeLog('[engine-jobs] admin download error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+});
+
 // DELETE /api/admin/engine-jobs/:id — record first, file second (an
 // unlink failure then leaves only a harmless orphan file).
 adminEngineJobs.delete('/:id', async (req, res) => {
