@@ -16,7 +16,7 @@
   const QUICK =
     '<div class="dv2-quick">' +
       '<a class="dv2-q dv2-q-gold" href="/services.html"><span class="dv2-q-ico">🚀</span><span><b>সেবা নিন</b><small>সব সেবা এক জায়গায় →</small></span></a>' +
-      '<a class="dv2-q" href="/orders.html"><span class="dv2-q-ico">📦</span><span><b>অর্ডার ও ইতিহাস</b><small>হাতে করা কাজের অবস্থা →</small></span></a>' +
+      '<a class="dv2-q" href="/orders.html"><span class="dv2-q-ico">📦</span><span><b>আমার অর্ডার</b><small>হাতে করা কাজের অবস্থা →</small></span></a>' +
     '</div>';
   const HIST = suffix =>
     '<div class="dv2-hist card">' +
@@ -64,7 +64,10 @@
       const d = await r.json();
       items.length = 0;
       (d.items || []).forEach(x => items.push(x));
-      const top = items.map((it, i) => ({ it, i })).slice(0, 3);
+      // /history is a unified archive. This panel is only instant engine work;
+      // keep original indices so downloads still address the correct stored file.
+      const top = items.map((it, i) => ({ it, i }))
+        .filter(({ it }) => it.kind === 'engine' || it.kind === 'bdris').slice(0, 3);
       render(top, document.getElementById('dv2HistD'));
       render(top, document.getElementById('dv2HistM'));
     } catch (e) {

@@ -8,9 +8,9 @@ test('hidden services never appear on dashboard', () => {
   const out = run([{ id: 'a' }, { id: 'b', show_on_dashboard: false }]);
   expect(out.map(s => s.id)).toEqual(['a']);
 });
-test('highlighted services come first, rest keep admin order', () => {
+test('highlighted services keep the admin order', () => {
   const out = run([{ id: 'a' }, { id: 'b', featured: true }, { id: 'c' }]);
-  expect(out.map(s => s.id)).toEqual(['b', 'a', 'c']);
+  expect(out.map(s => s.id)).toEqual(['a', 'b', 'c']);
 });
 test('display endpoint never updates price or status', () => {
   const src = fs.readFileSync(path.join(__dirname, '../routes/admin.js'), 'utf8');

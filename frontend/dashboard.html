@@ -943,7 +943,7 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/dashboard-polish.css?v=20261110-1">
-<link rel="stylesheet" href="/css/dashboard-v2.css?v=20261110-6">
+<link rel="stylesheet" href="/css/dashboard-v2.css?v=20261110-7">
 </head>
 <body class="has-tabbar flagship-dashboard">
 
@@ -1702,10 +1702,9 @@ function renderEngineCards() {
   if (mob) mob.innerHTML = ENGINE_CARDS.map((c) => engineCardHtml(c, true)).join('\n');
 }
 
-// Admin-controlled dashboard list: hidden ones out, highlighted first, then admin serial order.
+// Admin-controlled dashboard list: visibility and serial order; highlight is decoration only.
 function dashboardServices() {
-  const shown = _allServices.filter(s => s.show_on_dashboard !== false);
-  return shown.filter(s => s.featured).concat(shown.filter(s => !s.featured));
+  return _allServices.filter(s => s.show_on_dashboard !== false);
 }
 
 function renderServiceGrid(containerId, list) {
@@ -1734,7 +1733,7 @@ function onSvcFilter(val, containerId) {
     renderServiceGrid(containerId, dashboardServices().slice(0, limit));
     return;
   }
-  const filtered = _allServices.filter(s => {
+  const filtered = dashboardServices().filter(s => {
     const n1 = String(s.name_bn || '').toLowerCase();
     const n2 = String(s.name || '').toLowerCase();
     return n1.includes(q) || n2.includes(q);
@@ -1913,6 +1912,6 @@ async function showNotices() {
 
 init();
 </script>
-<script src="/js/dashboard-v2.js?v=20261110-6"></script>
+<script src="/js/dashboard-v2.js?v=20261110-7"></script>
 </body>
 </html>
