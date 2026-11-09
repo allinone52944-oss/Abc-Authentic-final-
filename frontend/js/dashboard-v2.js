@@ -15,8 +15,8 @@
   }
   const QUICK =
     '<div class="dv2-quick">' +
-      '<a class="dv2-q dv2-q-gold" href="/services.html"><span class="dv2-q-ico">🛎️</span><span><b>সেবা নিন</b><small>সব সেবা এক জায়গায়</small></span><span class="dv2-arrow">→</span></a>' +
-      '<a class="dv2-q" href="/orders.html"><span class="dv2-q-ico">📝</span><span><b>আমার অর্ডার</b><small>হাতে করা কাজের অবস্থা</small></span><span class="dv2-arrow">→</span></a>' +
+      '<a class="dv2-q dv2-q-gold" href="/services.html"><span class="dv2-q-ico">🚀</span><span><b>সেবা নিন</b><small>সব সেবা এক জায়গায় →</small></span></a>' +
+      '<a class="dv2-q" href="/orders.html"><span class="dv2-q-ico">📦</span><span><b>অর্ডার ও ইতিহাস</b><small>হাতে করা কাজের অবস্থা →</small></span></a>' +
     '</div>';
   const HIST = suffix =>
     '<div class="dv2-hist card">' +
@@ -98,6 +98,12 @@
     if (mBal) mBal.insertAdjacentElement('afterend', el(QUICK.replace('dv2-quick', 'dv2-quick dv2-quick-m')));
     const mOrders = document.getElementById('recentOrdersMob');
     if (mOrders) mOrders.insertAdjacentElement('beforebegin', el(HIST('M')));
+    const mc = document.querySelector('.mobile-only .m-content');
+    const mHelp = mc && mc.querySelector('.help-card-desk');
+    const mEng = document.getElementById('engineGridMob');
+    const mEngSec = mEng && mEng.parentElement;
+    const mStats = mc && mc.querySelector('.m-stats-grid');
+    if (mc && mHelp) { [mEngSec, mStats].forEach(n => { if (n && n !== mc) mc.insertBefore(n, mHelp); }); }
     if (window.ABC && ABC.api) loadHistory();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();

@@ -33,20 +33,62 @@ body.dash-v2 .dv2-quick-m { display: none; }
   body.dash-v2 .mobile-only .dv2-hist { margin: 0 0 14px; }
   body.dash-v2 .dv2-q { padding: 14px; min-height: 64px; }
 }
-/* Desktop: approved single-flow composition */
-body.dash-v2.flagship-dashboard .account-overview { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; align-items: stretch; }
-body.dash-v2.flagship-dashboard .account-overview > .dv2-quick { grid-column: 2; grid-row: 1; grid-template-columns: 1fr; margin: 0; }
-body.dash-v2.flagship-dashboard .account-overview > .dv2-quick .dv2-q { min-height: 0; height: 100%; }
-body.dash-v2.flagship-dashboard .workspace-overview { display: flex !important; flex-direction: column; gap: 16px; }
-body.dash-v2.flagship-dashboard .workspace-overview > * { width: auto !important; max-width: none !important; grid-column: auto !important; grid-row: auto !important; margin: 0 !important; box-sizing: border-box; }
-body.dash-v2.flagship-dashboard .workspace-overview > .stats { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
-body.dash-v2.flagship-dashboard .workspace-overview > .dv2-hist h3 { border: 0; padding: 0; font-size: 16px; }
-@media (max-width: 1100px) { body.dash-v2.flagship-dashboard .account-overview { grid-template-columns: 1fr; } body.dash-v2.flagship-dashboard .account-overview > .dv2-quick { grid-column: 1; grid-row: auto; grid-template-columns: 1fr 1fr; } body.dash-v2.flagship-dashboard .workspace-overview > .stats { grid-template-columns: repeat(2, minmax(0,1fr)); } }
-@media (max-width: 900px) { body.dash-v2 .dv2-quick-m { grid-template-columns: 1.2fr 1fr; } }
-body.dash-v2.flagship-dashboard .workspace-overview { align-items: stretch !important; width: 100%; }
-body.dash-v2.flagship-dashboard .workspace-overview > * { width: 100% !important; justify-self: stretch !important; align-self: stretch !important; }
+/* ===== Approved composition (matches dashboard-v2 mockup) ===== */
+body.dash-v2 .dv2-q { flex-direction: column; align-items: flex-start; justify-content: center; gap: 10px; padding: 24px; border-radius: 20px; }
+body.dash-v2 .dv2-q-ico { background: transparent !important; width: auto; height: auto; font-size: 30px; }
+body.dash-v2 .dv2-q b { font-size: 21px; }
+body.dash-v2 .dv2-q small { font-size: 12.5px; margin-top: 8px; }
+body.dash-v2 .dv2-q-gold { background: linear-gradient(135deg, #f6c35b, #e79a2c); border-color: #e9a53a; }
+
+body.dash-v2.flagship-dashboard .account-overview { display: grid !important; grid-template-columns: 1.3fr 1fr 1fr !important; gap: 16px; align-items: stretch; }
+body.dash-v2.flagship-dashboard .account-overview > .hero-blue { grid-column: 1; grid-row: 1; margin: 0; border-radius: 20px; display: flex; flex-direction: column; justify-content: center; }
+body.dash-v2.flagship-dashboard .account-overview > .dv2-quick { display: contents; }
+body.dash-v2.flagship-dashboard .account-overview > .dv2-quick > .dv2-q { grid-row: 1; height: auto; min-height: 175px; }
+body.dash-v2.flagship-dashboard .hero-blue .btn-hero-glass,
+body.dash-v2.flagship-dashboard .hero-blue .hero-micro-bar { display: none; }
+body.dash-v2.flagship-dashboard .hero-blue .hero-flex { flex-direction: column; align-items: flex-start; gap: 16px; }
+
+body.dash-v2.flagship-dashboard .workspace-overview { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 16px; align-items: start; }
+body.dash-v2.flagship-dashboard .workspace-overview > * { grid-column: 1 / -1 !important; grid-row: auto !important; width: auto !important; max-width: none !important; margin: 0 !important; box-sizing: border-box; }
+body.dash-v2.flagship-dashboard .workspace-overview > .dv2-hist { grid-column: 1 !important; grid-row: 1 !important; }
+body.dash-v2.flagship-dashboard .workspace-overview > .recent-orders-card { grid-column: 2 !important; grid-row: 1 !important; }
 body.dash-v2.flagship-dashboard .workspace-overview > .dv2-hist,
+body.dash-v2.flagship-dashboard .workspace-overview > .recent-orders-card,
 body.dash-v2.flagship-dashboard .workspace-overview > .popular-panel,
-body.dash-v2.flagship-dashboard .workspace-overview > .notices-panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 18px 20px !important; box-shadow: 0 4px 14px rgba(6,78,59,.05); }
-body.dash-v2.flagship-dashboard .workspace-overview .svc-search-wrap { max-width: 420px; }
-@media (max-width: 900px) { body.dash-v2 .dv2-quick-m .dv2-q small { display: none; } body.dash-v2 .dv2-quick-m .dv2-q { padding: 12px; gap: 10px; } body.dash-v2 .dv2-quick-m .dv2-q-ico { width: 38px; height: 38px; font-size: 19px; } }
+body.dash-v2.flagship-dashboard .workspace-overview > .notices-panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 18px 20px !important; box-shadow: 0 4px 14px rgba(6,78,59,.05); min-height: 0; }
+body.dash-v2.flagship-dashboard .workspace-overview > .stats { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
+body.dash-v2.flagship-dashboard .workspace-overview h3 { border: 0 !important; padding: 0 !important; font-size: 16px; }
+/* Special services: compact name + price tiles in one row */
+body.dash-v2.flagship-dashboard #popularServices { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
+body.dash-v2.flagship-dashboard #popularServices .svc2 { display: flex; align-items: center; gap: 8px; padding: 14px 16px; min-height: 0; height: auto; border-radius: 14px; text-align: left; position: relative; }
+body.dash-v2.flagship-dashboard #popularServices .svc2 .ico { width: auto; height: auto; font-size: 18px; margin: 0; background: transparent; }
+body.dash-v2.flagship-dashboard #popularServices .svc2 h4 { flex: 1; margin: 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.dash-v2.flagship-dashboard #popularServices .svc2 .pr { margin: 0; font-weight: 800; color: #065f46; }
+body.dash-v2.flagship-dashboard #popularServices .svc2-featured { border: 2px solid #f0b443 !important; box-shadow: 0 6px 18px rgba(240,180,67,.25); }
+body.dash-v2.flagship-dashboard #popularServices .svc2-badge { position: static; font-size: 11px; padding: 3px 8px; border-radius: 999px; background: #fde7b0; color: #7a4a00; }
+body.dash-v2.flagship-dashboard .popular-panel .svc-search-wrap { max-width: 380px; }
+@media (max-width: 1100px) {
+  body.dash-v2.flagship-dashboard .account-overview { grid-template-columns: 1fr 1fr !important; }
+  body.dash-v2.flagship-dashboard .account-overview > .hero-blue { grid-column: 1 / -1; }
+  body.dash-v2.flagship-dashboard .account-overview > .dv2-quick > .dv2-q { grid-row: 2; }
+  body.dash-v2.flagship-dashboard .workspace-overview { grid-template-columns: 1fr !important; }
+  body.dash-v2.flagship-dashboard .workspace-overview > .dv2-hist, body.dash-v2.flagship-dashboard .workspace-overview > .recent-orders-card { grid-column: 1 !important; grid-row: auto !important; }
+  body.dash-v2.flagship-dashboard #popularServices, body.dash-v2.flagship-dashboard .workspace-overview > .stats { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+/* Mobile */
+@media (max-width: 900px) {
+  body.dash-v2 .m-quick-actions { display: none !important; }
+  body.dash-v2 .dv2-quick-m { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 16px; }
+  body.dash-v2 .dv2-quick-m .dv2-q { padding: 18px; min-height: 140px; }
+  body.dash-v2 .dv2-quick-m .dv2-q b { font-size: 18px; }
+  body.dash-v2 .dv2-quick-m .dv2-q small { display: block; font-size: 11.5px; }
+  body.dash-v2 .mobile-only .m-content > .engine-hub-section, body.dash-v2 .mobile-only .m-content > div:has(> #engineGridMob) { margin: 0 0 16px; }
+}
+/* Highlighted service: gold border + 🔥 */
+body.dash-v2 .svc2-featured { border: 2px solid #f0b443 !important; }
+body.dash-v2 .svc2-badge { font-size: 0 !important; }
+body.dash-v2 .svc2-badge::before { content: "🔥 হাইলাইট"; font-size: 11px; }
+@media (max-width: 900px) { body.dash-v2 .mobile-only .m-content > *:has(> #engineGridMob) { margin: 16px 0 !important; background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 14px 16px; } }
+body.dash-v2.flagship-dashboard #popularServices .svc2-badge { position: absolute !important; top: -10px; right: 12px; }
+body.dash-v2.flagship-dashboard #popularServices .svc2 { overflow: visible; }
+@media (max-width: 900px) { body.dash-v2 .mobile-only .m-content > *:has(> #engineGridMob) { padding-top: 20px !important; } body.dash-v2 .mobile-only .m-content > *:has(> #engineGridMob) > *:first-child { margin-top: 0 !important; position: static !important; } }
