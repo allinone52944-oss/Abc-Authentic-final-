@@ -96,3 +96,46 @@ body.dash-v2.flagship-dashboard #popularServices .svc2 { overflow: visible; }
 body.dash-v2.flagship-dashboard .popular-panel .svc-search-wrap { display: none; }
 body.dash-v2.flagship-dashboard #popularServices .svc2 .pr { background: transparent !important; padding: 0 !important; border: 0 !important; }
 body.dash-v2.flagship-dashboard .workspace-overview > .stats { margin-top: 8px !important; }
+/* ===== Exact match pass: titles above white boxes, no extra blocks ===== */
+body.dash-v2.flagship-dashboard .dash-top { border-bottom: 0 !important; background: transparent !important; padding-top: 28px !important; }
+body.dash-v2.flagship-dashboard .dash-top-title h2 { font-size: 26px !important; }
+body.dash-v2.flagship-dashboard .dash-top-title p { font-size: 15px !important; color: #64748b !important; }
+body.dash-v2.flagship-dashboard .quick-bal-pill { display: none !important; }
+body.dash-v2.flagship-dashboard .workspace-overview > .engine-hub-section,
+body.dash-v2.flagship-dashboard .workspace-overview > .stats,
+body.dash-v2 .mobile-only .m-content > *:has(> #engineGridMob),
+body.dash-v2 .mobile-only .m-stats-grid { display: none !important; }
+body.dash-v2.flagship-dashboard .workspace-overview > .dv2-hist,
+body.dash-v2.flagship-dashboard .workspace-overview > .recent-orders-card,
+body.dash-v2.flagship-dashboard .workspace-overview > .popular-panel,
+body.dash-v2.flagship-dashboard .workspace-overview > .notices-panel { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; }
+body.dash-v2.flagship-dashboard .workspace-overview .dv2-hist-hdr,
+body.dash-v2.flagship-dashboard .workspace-overview .recent-orders-hdr,
+body.dash-v2.flagship-dashboard .workspace-overview .popular-panel > h3,
+body.dash-v2.flagship-dashboard .workspace-overview .notices-panel > h3 { margin: 0 0 12px !important; padding: 0 !important; border: 0 !important; display: flex; align-items: baseline; gap: 10px; justify-content: flex-start; }
+body.dash-v2.flagship-dashboard .workspace-overview .dv2-hist-hdr h3,
+body.dash-v2.flagship-dashboard .workspace-overview .recent-orders-hdr h3,
+body.dash-v2.flagship-dashboard .workspace-overview .popular-panel > h3,
+body.dash-v2.flagship-dashboard .workspace-overview .notices-panel > h3 { font-size: 17px !important; font-weight: 800; }
+body.dash-v2.flagship-dashboard .workspace-overview .dv2-hist-hdr a,
+body.dash-v2.flagship-dashboard .workspace-overview .recent-orders-hdr > a,
+body.dash-v2.flagship-dashboard .workspace-overview .popular-panel > h3 a,
+body.dash-v2.flagship-dashboard .workspace-overview .notices-panel > h3 a { display: none !important; }
+body.dash-v2.flagship-dashboard #dv2HistD,
+body.dash-v2.flagship-dashboard #recentOrdersDesk,
+body.dash-v2.flagship-dashboard #noticeList { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 8px 20px; box-shadow: 0 4px 14px rgba(6,78,59,.06); min-height: 0; }
+body.dash-v2.flagship-dashboard #noticeList { padding: 16px 20px; }
+body.dash-v2.flagship-dashboard #popularServices .svc2 { background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 4px 14px rgba(6,78,59,.06); }
+body.dash-v2.flagship-dashboard .workspace-overview > .help-card-desk { display: none !important; }
+body.dash-v2.flagship-dashboard .dv2-row { padding: 14px 0; }
+@media (max-width: 900px) {
+  body.dash-v2 .m-bal-row { flex-direction: column !important; align-items: flex-start !important; gap: 14px; }
+  body.dash-v2 .m-bal { padding: 22px !important; border-radius: 20px !important; }
+  body.dash-v2 .mobile-only .dv2-hist { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; }
+  body.dash-v2 .mobile-only .dv2-hist-hdr { margin-bottom: 10px; }
+  body.dash-v2 .mobile-only .dv2-hist-hdr a { display: none; }
+  body.dash-v2 .mobile-only #dv2HistM { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 6px 18px; box-shadow: 0 4px 14px rgba(6,78,59,.06); }
+  body.dash-v2 .dv2-m-title { font-size: 16px; font-weight: 800; color: #0f172a; margin: 18px 0 10px; }
+  body.dash-v2 .dv2-m-title small { font-size: 12px; color: #64748b; font-weight: 600; }
+  body.dash-v2 .mobile-only .svc-search-wrap { display: none !important; }
+}

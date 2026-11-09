@@ -77,6 +77,7 @@
 
   function mount() {
     document.body.classList.add('dash-v2');
+    const sub = document.querySelector('.dash-top-title p'); if (sub) sub.textContent = 'আজ কী করতে চান?';
     const hero = document.querySelector('.hero-blue');
     if (hero && !document.querySelector('.dv2-quick')) hero.insertAdjacentElement('afterend', el(QUICK));
     // Approved order: top cards -> history -> my orders -> special services -> rest -> notices
@@ -97,7 +98,7 @@
     const mBal = document.querySelector('.m-bal');
     if (mBal) mBal.insertAdjacentElement('afterend', el(QUICK.replace('dv2-quick', 'dv2-quick dv2-quick-m')));
     const mOrders = document.getElementById('recentOrdersMob');
-    if (mOrders) mOrders.insertAdjacentElement('beforebegin', el(HIST('M')));
+    if (mOrders) { mOrders.insertAdjacentElement('beforebegin', el(HIST('M'))); mOrders.insertAdjacentElement('beforebegin', el('<h3 class="dv2-m-title">📦 আমার অর্ডার <small>(হাতে করা কাজ)</small></h3>')); }
     const mc = document.querySelector('.mobile-only .m-content');
     const mHelp = mc && mc.querySelector('.help-card-desk');
     const mEng = document.getElementById('engineGridMob');
