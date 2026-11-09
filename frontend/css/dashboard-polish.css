@@ -1,0 +1,18 @@
+/* Dashboard presentation polish only. Scripts, IDs, handlers and inline state remain original. */
+@media (max-width: 900px) {
+  body.flagship-dashboard .m-top button {
+    background: #eef4f0 !important; border: 1px solid #dae4de !important; color: #086749 !important;
+    min-height: 40px; border-radius: 12px !important;
+  }
+  body.flagship-dashboard .m-top > div { gap: 12px; }
+  body.flagship-dashboard .m-top > div > div:first-child { min-width: 0; }
+}
+/* Count boxes: Lovable composition — label above, large number, small arrow, no emoji tile */
+body.flagship-dashboard .stat-card { align-items: flex-start; border: 1px solid #dae4de; transition: border-color .2s, transform .2s; }
+body.flagship-dashboard .stat-card:hover { border-color: #086749; transform: translateY(-2px); }
+body.flagship-dashboard .stat-card .ico { display: none !important; }
+body.flagship-dashboard .stat-card-left > div { display: flex; flex-direction: column-reverse; gap: 10px; }
+body.flagship-dashboard .stat-card .lbl { margin: 0; font-size: 13px; color: #68786f; font-weight: 600; }
+body.flagship-dashboard .stat-card .num { font-size: 30px; color: #19372d; }
+body.flagship-dashboard .stat-arrow { color: #086749; font-size: 15px; transform: rotate(-45deg); }
+body.flagship-dashboard .m-stat-card { border: 1px solid #dae4de; border-radius: 14px; }
