@@ -1,0 +1,35 @@
+/* Engine execution pages: presentation only. Never touches scripts, IDs, inline state styles or generated documents. */
+:root { --ep-emerald:#065f46; --ep-deep:#022c22; --ep-gold:#f5b942; --ep-soft:#ecfdf5; --ep-line:#d1e7dd; }
+
+/* 1. Land hero: heading was dark text on dark green. */
+.page-land .hero :is(h1,h2,h3,.hero-title) { color:#ecfdf5 !important; }
+
+/* 2. Land pages: before any result exists the empty right column left the form squeezed on one side. */
+@media (min-width: 901px) {
+  .land-layout:has(> #result:empty),
+  .land-layout:has(> #resultsBox[style*="none"]) { grid-template-columns:minmax(0,760px) !important; }
+  .land-layout:has(> #result:empty) .grid2,
+  .land-layout:has(> #resultsBox[style*="none"]) .grid2 { grid-template-columns:1fr 1fr !important; }
+}
+
+/* 3. One emerald identity: blue heroes and pills replaced. */
+.page-nid-server-copy .hero,
+.page-bdris-apply .hero { background:linear-gradient(135deg,var(--ep-deep),var(--ep-emerald) 60%,#047857) !important; border-color:transparent !important; box-shadow:0 12px 30px -14px rgba(2,44,34,.55) !important; }
+.page-bdris-apply .hero::before { opacity:.18 !important; filter:hue-rotate(-70deg) saturate(.6); }
+.page-bdris-apply .hero::after { background:radial-gradient(circle,rgba(245,185,66,.22),transparent) !important; }
+.page-bdris-apply .hero :is(.hico,.htitle) { filter:none !important; text-shadow:none !important; }
+.service-workspace :is(.wallet-pill,.bal-pill,.balance-pill) { background:var(--ep-soft) !important; color:var(--ep-emerald) !important; border-color:var(--ep-line) !important; }
+.page-nid-server-copy .hero .wallet-pill { background:rgba(255,255,255,.14) !important; color:#fff !important; border-color:rgba(255,255,255,.3) !important; }
+
+/* 4. Same width for hero, steps and form so the page reads as one column. */
+@media (min-width: 901px) {
+  .page-nid-server-copy :is(.hero,.steps,.form-card),
+  .page-qr-photo-verify .form-card,
+  .page-nid-replica :is(.form-card,.steps,.stepper) { max-width:760px !important; }
+}
+
+/* 5. Comfortable mobile touch targets. */
+@media (max-width: 768px) {
+  .service-workspace :is(input,select,textarea), .page-birth-final input, .page-death-final input { min-height:48px; font-size:16px; }
+  .service-workspace .btn, .page-birth-final .btn, .page-death-final .btn { min-height:48px; }
+}
