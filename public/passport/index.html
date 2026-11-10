@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; font-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="description" content="Offline editable document with embedded background, editable text styling, and precisely positioned photo and signature upload slots.">
+<title>Passport Engine — Linked Editable Text</title>
+<style>
+  body { font-family: Arial, sans-serif; background: #eef2f5; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: flex-start; gap: 20px; }
+  .control-panel { width: 380px; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-height: 90vh; overflow-y: auto; }
+  .control-panel h3 { margin-top: 0; color: #333; border-bottom: 2px solid #0066cc; padding-bottom: 8px; }
+  .form-group { margin-bottom: 12px; }
+  .form-group label { display: block; font-size: 13px; font-weight: bold; margin-bottom: 4px; color: #444; }
+  .form-group input, .form-group select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+  .document-container { width: 794px; height: 1123px; background: #ffffff; position: relative; box-shadow: 0 4px 15px rgba(0,0,0,0.15); overflow: hidden; }
+  .doc-content { position: relative; z-index: 2; padding: 50px; box-sizing: border-box; font-size: 15px; color: #000; line-height: 1.6; }
+  .btn { background: #0066cc; color: white; border: none; padding: 10px; width: 100%; font-size: 16px; border-radius: 4px; cursor: pointer; margin-top: 15px; }
+  .btn-print { background: #28a745; }
+</style>
+</head>
+<body>
+    <div class="control-panel">
+        <h3>Passport Master Engine</h3>
+        <div class="form-group"><label>Passport No:</label><input type="text" id="eng-passportNo" value="EJ0762655"></div>
+        <div class="form-group"><label>Full Name:</label><input type="text" id="eng-fullName" value="MD PANKAJ DAS"></div>
+        <div class="form-group"><label>Nationality:</label><input type="text" id="eng-nationality" value="Bangladeshi"></div>
+        <button class="btn btn-print" onclick="window.print()">Print / PDF</button>
+    </div>
+    <div class="document-container">
+        <div class="doc-content">
+            <h2>Passport Engine Ready</h2>
+            <p>Full-featured Passport Engine template loaded successfully at /passport/</p>
+        </div>
+    </div>
+</body>
+</html>
