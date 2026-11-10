@@ -55,6 +55,7 @@ const GOOD = { method: 'bkash_personal', sender_no: '01712345678', trxid: 'TRX12
 const SECRET = 'test-webhook-secret';
 const BKASH_MSG = 'You have received Tk 500.00 from 01712345678. TrxID 9HXK2LQM4N. New balance Tk 1200.00.';
 const atomicSmsHandlers = (trxid = null) => [
+  ["status = 'approved' AND type = 'recharge'", { rows: [] }],
   ['SELECT id, trxid, matched_recharge_id FROM incoming_sms', { rows: [{ id: 's1', trxid, matched_recharge_id: null }] }],
   ['WHERE id <> $1', { rows: [] }],
   ['UPDATE incoming_sms SET matched_recharge_id', { rows: [{ id: 's1' }] }],
@@ -86,6 +87,7 @@ function fnSlice(src, startMarker) {
 describe('POST /api/wallet/recharge — DUP_TRXID same-user info', () => {
   test('same user resubmits → 409 + existing_tx (amount, status, date)', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
       ['FROM transactions WHERE UPPER(trxid)', { rows: [{
         id: 't9', user_id: 'u1', amount: '500', status: 'approved',
@@ -100,6 +102,7 @@ describe('POST /api/wallet/recharge — DUP_TRXID same-user info', () => {
 
   test('another user\'s TrxID → 409 generic, NO existing_tx leaked', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
       ['FROM transactions WHERE UPPER(trxid)', { rows: [{
         id: 't9', user_id: 'u2', amount: '500', status: 'approved',
@@ -115,6 +118,7 @@ describe('POST /api/wallet/recharge — DUP_TRXID same-user info', () => {
 describe('POST /api/wallet/recharge — submit response carries tx status', () => {
   test('pending submit → 201 + transaction.status pending', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
       ['FROM transactions WHERE UPPER(trxid)', { rows: [] }],
       ['INSERT INTO transactions', { rows: [{ id: 't1', status: 'pending' }] }],
@@ -126,6 +130,7 @@ describe('POST /api/wallet/recharge — submit response carries tx status', () =
   test('submit-time auto-approve → 201 approved + admin auto-approve notified', async () => {
     const spy = jest.spyOn(push, 'notifyAutoApproveRecharge').mockResolvedValue({ ok: true, sent: 0 });
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
       ['FROM transactions WHERE UPPER(trxid)', { rows: [] }],
       ['INSERT INTO transactions', { rows: [{ id: 't1', user_id: 'u1', amount: 500, method: 'bkash_personal', trxid: 'TRX12345', status: 'pending' }] }],
@@ -146,6 +151,7 @@ describe('POST /api/wallet/recharge — submit response carries tx status', () =
 
   test('SMS-first money-OUT never auto-approves a manual recharge', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ['FROM transactions WHERE UPPER(trxid)', { rows: [] }],
       ['FROM public.incoming_sms', { rows: [] }],
       ["type = 'recharge' AND status = 'pending'", { rows: [{ count: '0' }] }],
@@ -161,6 +167,7 @@ describe('POST /api/wallet/recharge — submit response carries tx status', () =
   test('pending submit → admin auto-approve NOT notified (pending push path unchanged)', async () => {
     const spy = jest.spyOn(push, 'notifyAutoApproveRecharge').mockResolvedValue({ ok: true, sent: 0 });
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ['type = \'recharge\' AND status = \'pending\'', { rows: [{ count: '0' }] }],
       ['FROM transactions WHERE UPPER(trxid)', { rows: [] }],
       ['INSERT INTO transactions', { rows: [{ id: 't1', status: 'pending' }] }],
@@ -175,6 +182,7 @@ describe('POST /api/sms/incoming — webhook auto-approve notifies admin', () =>
     const spy = jest.spyOn(push, 'notifyAutoApproveRecharge').mockResolvedValue({ ok: true, sent: 0 });
     const TX = { id: 't1', user_id: 'u1', amount: '500', method: 'bkash_personal', trxid: '9HXK2LQM4N', status: 'pending' };
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ...atomicSmsHandlers('9HXK2LQM4N'),
       ['FROM incoming_sms', { rows: [] }],
       ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
@@ -192,6 +200,7 @@ describe('POST /api/sms/incoming — webhook auto-approve notifies admin', () =>
     const spy = jest.spyOn(push, 'notifyAutoApproveRecharge').mockResolvedValue({ ok: true, sent: 0 });
     const TX = { id: 't1', user_id: 'u1', amount: 500, trxid: 'TRX12345', status: 'pending', type: 'recharge' };
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ...atomicSmsHandlers(),
       ['FROM incoming_sms WHERE id', { rows: [{ id: 's1', amount: 500, matched_recharge_id: null }] }],
       ['FROM transactions WHERE id', { rows: [TX] }],
@@ -211,6 +220,7 @@ describe('POST /api/sms/incoming — webhook auto-approve notifies admin', () =>
 describe('GET /api/admin/stats — auto-match dashboard signal', () => {
   test('stats SQL computes auto_matched_recharge + latest_auto_match is surfaced', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ['details->>', { rows: [{ amount: '500', trxid: '9HXK2LQM4N', user_name: 'Rahim', user_phone: '01711223344' }] }],
       ['pending_recharge', { rows: [{ auto_matched_recharge: '7', pending_recharge: '2' }] }],
     ]);

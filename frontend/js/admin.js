@@ -3808,7 +3808,14 @@ window.AdmTx = {
       const r = await ABC.api('/admin/transactions/' + id + '/approve', { method: 'PUT' });
       const d = await r.json();
       if (!r.ok) {
-        admToast('অনুমোদন ব্যর্থ', d.error === 'DUPLICATE_TRANSACTION' ? 'এই রিচার্জটি ইতিমধ্যে অন্য অ্যাডমিন দ্বারা অনুমোদিত হয়েছে।' : 'ব্যর্থ: ' + (d.error || 'UNKNOWN'), 'error');
+        const messages = {
+          DUPLICATE_TRANSACTION: 'এই পেমেন্টের টাকা আগে জমা হয়েছে — আবার জমা হয়নি।',
+          SMS_ALREADY_MATCHED: 'এই SMS অন্য রিচার্জে ব্যবহার হয়েছে — আবার জমা হয়নি।',
+          AUTO_REQUIRES_SMS_MATCH: 'অটো অনুরোধে TrxID নেই। SMS তালিকা থেকে সঠিক পেমেন্ট মিলিয়ে অনুমোদন করুন, অথবা গ্রাহককে ম্যানুয়ালে আসল TrxID দিতে বলুন।',
+          AMOUNT_MISMATCH: 'SMS ও অনুরোধের পরিমাণ মিলছে না — টাকা জমা হয়নি।',
+          ALREADY_PROCESSED: 'এই অনুরোধের সিদ্ধান্ত আগেই হয়েছে। তালিকা নতুন করে দেখুন।',
+        };
+        admToast('অনুমোদন হয়নি', messages[d.error] || 'ব্যর্থ: ' + (d.error || 'UNKNOWN'), 'error');
         return;
       }
       admToast('রিচার্জ সফল 🎉', 'গ্রাহকের ওয়ালেটে সফলভাবে ব্যালেন্স যোগ হয়েছে।', 'recharge');

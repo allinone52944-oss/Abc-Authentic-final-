@@ -83,9 +83,9 @@ async function logActivity(adminId, action, details) {
 // TrxID, then credits and links both in the same transaction. Any consumed
 // or concurrently claimed SMS aborts the wallet credit as well.
 async function approveRechargeTx(client, txId, smsId, via = 'auto') {
+  await client.query("SELECT pg_advisory_xact_lock(hashtext('recharge-credit'))");
   const r = await client.query(
-    `SELECT * FROM transactions
-     WHERE id = $1 AND status = 'pending' AND type = 'recharge' FOR UPDATE`,
+    `SELECT * FROM transactions WHERE id = $1 AND status = 'pending' AND type = 'recharge' FOR UPDATE`,
     [txId]
   );
   const tx = r.rows[0];
@@ -114,6 +114,14 @@ async function approveRechargeTx(client, txId, smsId, via = 'auto') {
       );
       if (consumed.rows.length) throw new Error('SMS_ALREADY_MATCHED');
     }
+  }
+
+  const paymentRef = sms?.trxid || tx.trxid;
+  if (paymentRef) {
+    const paid = await client.query(
+      `SELECT id FROM transactions WHERE status = 'approved' AND type = 'recharge'
+       AND UPPER(trxid) = UPPER($1) AND id <> $2 LIMIT 1`, [paymentRef, tx.id]);
+    if (paid.rows.length) throw new Error('DUPLICATE_TRANSACTION');
   }
 
   // wallet_apply is atomic + idempotent (raises DUPLICATE_TRANSACTION)
@@ -246,6 +254,7 @@ webhook.post('/incoming', async (req, res) => {
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('recharge-credit'))");
 
       // Dedupe: same trxid already matched before → ignore.
       // Audit #23 — case-folded: a re-delivered SMS whose TrxID
@@ -461,6 +470,7 @@ adminSms.post('/:id/match', async (req, res) => {
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('recharge-credit'))");
       const s = await client.query('SELECT * FROM incoming_sms WHERE id = $1', [smsId]);
       const sms = s.rows[0];
       if (!sms) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'SMS_NOT_FOUND' }); }
@@ -546,6 +556,7 @@ async function tryAutoMatchRecharge(tx) {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('recharge-credit'))");
     // Lock matching unmatched SMS (exact TrxID + matching amount)
     const r = await client.query(
       `SELECT * FROM incoming_sms
@@ -615,6 +626,7 @@ async function tryAutoMatchBySender(tx) {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('recharge-credit'))");
     const r = await client.query(
       `SELECT * FROM incoming_sms
        WHERE matched_recharge_id IS NULL AND parse_status = 'parsed'
@@ -626,10 +638,11 @@ async function tryAutoMatchBySender(tx) {
       [Number(tx.amount), String(tx.sender_no).trim(), fam]
     );
     // Never credit on an SMS that is not clearly money-in.
-    const sms = r.rows.find(function (row) {
+    const candidates = r.rows.filter(function (row) {
       const p = parseSms(row.raw_message, row.raw_sender);
       return p && p.direction === 'in';
     });
+    const sms = candidates.length === 1 ? candidates[0] : null;
     const MAX_AUTO_APPROVE = Number(process.env.SMS_MAX_AUTO_APPROVE || 50000);
     if (!sms || Number(tx.amount) > MAX_AUTO_APPROVE) {
       await client.query('COMMIT');

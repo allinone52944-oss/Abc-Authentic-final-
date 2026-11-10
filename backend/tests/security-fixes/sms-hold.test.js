@@ -39,7 +39,7 @@ const SMALL_MSG = 'You have received Tk 500.00 from 01712345678. TrxID OK123ABC4
 function incomingHandlers(tx) {
   const matchedTx = { method: 'bkash_personal', ...tx };
   return [
-    ['INSERT INTO incoming_sms', { rows: [{ id: 'sms1' }] }],
+    ["status = 'approved' AND type = 'recharge'", { rows: [] }],    ['INSERT INTO incoming_sms', { rows: [{ id: 'sms1' }] }],
     ['SELECT id FROM incoming_sms', { rows: [] }], // not a duplicate/consumed payment
     ['UPPER(trxid)', { rows: [matchedTx] }], // findMatch: exact TrxID
     ['FOR UPDATE', { rows: [matchedTx] }], // recharge + SMS locks

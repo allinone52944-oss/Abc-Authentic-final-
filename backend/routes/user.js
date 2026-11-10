@@ -933,16 +933,23 @@ router.post('/wallet/recharge/auto', async (req, res) => {
     if (!/^01[3-9]\d{8}$/.test(sender)) return res.status(400).json({ error: 'INVALID_SENDER' });
     const amt = Number(amount);
     if (!amt || amt < 10 || amt > 100000) return res.status(400).json({ error: 'INVALID_AMOUNT' });
-    const pending = await db.query(
-      `SELECT COUNT(*) FROM transactions
-       WHERE user_id = $1 AND type = 'recharge' AND status = 'pending'`, [req.user.id]);
-    if (parseInt(pending.rows[0].count, 10) >= 3) {
-      return res.status(400).json({ error: 'TOO_MANY_PENDING' });
-    }
-    const r = await db.query(
-      `INSERT INTO transactions (user_id, type, amount, method, sender_no, status)
-       VALUES ($1, 'recharge', $2, $3, $4, 'pending') RETURNING *`,
-      [req.user.id, amt, method, sender]);
+    const r = await db.withTransaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('recharge-credit'))");
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ['recharge-submit:' + req.user.id]);
+      const existing = await client.query(
+        `SELECT * FROM transactions WHERE user_id = $1 AND type = 'recharge'
+         AND trxid IS NULL AND status = 'pending' AND amount = $2 AND method = $3
+         AND sender_no = $4 AND created_at >= NOW() - INTERVAL '30 minutes'
+         ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, [req.user.id, amt, method, sender]);
+      if (existing.rows.length) return existing;
+      const pending = await client.query(
+        `SELECT COUNT(*) FROM transactions WHERE user_id = $1 AND type = 'recharge' AND status = 'pending'`, [req.user.id]);
+      if (parseInt(pending.rows[0].count, 10) >= 3) throw new Error('TOO_MANY_PENDING');
+      return client.query(
+        `INSERT INTO transactions (user_id, type, amount, method, sender_no, status)
+         VALUES ($1, 'recharge', $2, $3, $4, 'pending') RETURNING *`,
+        [req.user.id, amt, method, sender]);
+    });
     let tx = r.rows[0];
     try {
       const matched = await tryAutoMatchBySender(tx);
@@ -952,6 +959,7 @@ router.post('/wallet/recharge/auto', async (req, res) => {
     res.status(201).json({ transaction: tx, request_id: tx.id });
   } catch (e) {
     safeLog('[user] auto recharge error:', e.message);
+    if (e.message === 'TOO_MANY_PENDING') return res.status(400).json({ error: e.message });
     res.status(500).json({ error: 'FAILED' });
   }
 });
@@ -1021,13 +1029,6 @@ router.post('/wallet/recharge', async (req, res) => {
     // Audit #31 — the cap check runs AFTER the duplicate check: a
     // resubmit of an existing TrxID must answer DUP_TRXID (with the
     // original transaction), never TOO_MANY_PENDING.
-    const pending = await db.query(
-      `SELECT COUNT(*) FROM transactions
-       WHERE user_id = $1 AND type = 'recharge' AND status = 'pending'`, [req.user.id]);
-    if (parseInt(pending.rows[0].count, 10) >= 3) {
-      return res.status(400).json({ error: 'TOO_MANY_PENDING' });
-    }
-
     // Fraud guard: if an SMS with this TrxID already arrived, the reported
     // amount must equal it — tell the user immediately instead of at approval.
     const smsArrived = await db.query(
@@ -1052,10 +1053,30 @@ router.post('/wallet/recharge', async (req, res) => {
       }
     }
 
-    const r = await db.query(
-      `INSERT INTO transactions (user_id, type, amount, method, sender_no, trxid, screenshot, status)
-       VALUES ($1, 'recharge', $2, $3, $4, $5, $6, 'pending') RETURNING *`,
-      [req.user.id, amt, method, String(sender_no).trim(), String(trxid).trim(), screenshot || null]);
+    const r = await db.withTransaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('recharge-credit'))");
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ['recharge-submit:' + req.user.id]);
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ['recharge-reference:' + String(trxid).trim().toUpperCase()]);
+      const duplicate = await client.query('SELECT id FROM transactions WHERE UPPER(trxid) = UPPER($1) LIMIT 1', [String(trxid).trim()]);
+      if (duplicate.rows.length) throw new Error('DUP_TRXID');
+      const existing = await client.query(
+        `SELECT * FROM transactions WHERE user_id = $1 AND trxid IS NULL AND type = 'recharge'
+         AND status = 'pending' AND amount = $2 AND method = $3 AND sender_no = $4
+         AND created_at >= NOW() - INTERVAL '30 minutes'
+         ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
+        [req.user.id, amt, method, String(sender_no).trim()]);
+      if (existing.rows.length) {
+        return client.query('UPDATE transactions SET trxid = $1, screenshot = $2 WHERE id = $3 RETURNING *',
+          [String(trxid).trim(), screenshot || null, existing.rows[0].id]);
+      }
+      const pending = await client.query(
+        `SELECT COUNT(*) FROM transactions WHERE user_id = $1 AND type = 'recharge' AND status = 'pending'`, [req.user.id]);
+      if (parseInt(pending.rows[0].count, 10) >= 3) throw new Error('TOO_MANY_PENDING');
+      return client.query(
+        `INSERT INTO transactions (user_id, type, amount, method, sender_no, trxid, screenshot, status)
+         VALUES ($1, 'recharge', $2, $3, $4, $5, $6, 'pending') RETURNING *`,
+        [req.user.id, amt, method, String(sender_no).trim(), String(trxid).trim(), screenshot || null]);
+    });
 
     let tx = r.rows[0];
 
@@ -1075,6 +1096,8 @@ router.post('/wallet/recharge', async (req, res) => {
     res.status(201).json({ transaction: tx });
   } catch (e) {
     safeLog('[user] recharge error:', e.message);
+    if (e.message === 'TOO_MANY_PENDING') return res.status(400).json({ error: e.message });
+    if (e.message === 'DUP_TRXID') return res.status(409).json({ error: e.message });
     res.status(500).json({ error: 'FAILED' });
   }
 });

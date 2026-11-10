@@ -42,6 +42,7 @@ afterEach(() => {
 const postIncoming = (body) => request(webhookApp()).post('/api/sms/incoming').send(body);
 const BKASH_MSG = 'You have received Tk 500.00 from 01712345678. TrxID 9HXK2LQM4N. New balance Tk 1200.00.';
 const atomicSmsHandlers = (trxid = null) => [
+  ["status = 'approved' AND type = 'recharge'", { rows: [] }],
   ['SELECT id, trxid, matched_recharge_id FROM incoming_sms', { rows: [{ id: 's1', trxid, matched_recharge_id: null }] }],
   ['WHERE id <> $1', { rows: [] }],
   ['UPDATE incoming_sms SET matched_recharge_id', { rows: [{ id: 's1' }] }],
@@ -59,11 +60,13 @@ describe('POST /api/sms/incoming — auth', () => {
   });
   test('secret via query param and x-sms-secret header also accepted', async () => {
     db.__reset();
-    db.__routeQuery([['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }]]);
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }]]);
     await request(webhookApp()).post('/api/sms/incoming?secret=' + SECRET)
       .send({ message: 'garbage text' }).expect(200);
     db.__reset();
-    db.__routeQuery([['INSERT INTO incoming_sms', { rows: [{ id: 's2' }] }]]);
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],['INSERT INTO incoming_sms', { rows: [{ id: 's2' }] }]]);
     await request(webhookApp()).post('/api/sms/incoming')
       .set('x-sms-secret', SECRET).send({ message: 'garbage text' }).expect(200);
   });
@@ -75,7 +78,8 @@ describe('POST /api/sms/incoming — auth', () => {
 
 describe('POST /api/sms/incoming — parsing', () => {
   test('unparseable message → stored, matched:false', async () => {
-    db.__routeQuery([['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }]]);
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }]]);
     const r = await postIncoming({ secret: SECRET, message: 'hello world', sender: 'bKash' }).expect(200);
     expect(r.body).toMatchObject({ ok: true, matched: false, sms_id: 's1', parsed: false });
     // audit #34 — an unparsed SMS is stored as 'unparsed', never 'parsed'
@@ -85,6 +89,7 @@ describe('POST /api/sms/incoming — parsing', () => {
 
   test('parsed but no matching recharge → matched:false', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ...atomicSmsHandlers('9HXK2LQM4N'),
       ['FROM incoming_sms', { rows: [] }], // dup check
       ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
@@ -100,6 +105,7 @@ describe('POST /api/sms/incoming — parsing', () => {
 
   test('duplicate trxid (already matched) → stored as duplicate, no re-match', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ...atomicSmsHandlers('9HXK2LQM4N'),
       ['FROM incoming_sms', { rows: [{ id: 's0' }] }], // dup found
       ['INSERT INTO incoming_sms', { rows: [{ id: 's9' }] }],
@@ -115,7 +121,7 @@ describe('POST /api/sms/incoming — auto-match', () => {
   const TX = { id: 't1', user_id: 'u1', amount: '500', method: 'bkash_personal', trxid: '9HXK2LQM4N', status: 'pending' };
   function matchHandlers(tx = TX) {
     return [
-      ...atomicSmsHandlers('9HXK2LQM4N'),
+    ["status = 'approved' AND type = 'recharge'", { rows: [] }],      ...atomicSmsHandlers('9HXK2LQM4N'),
       ['FROM incoming_sms', { rows: [] }],
       ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
       ['UPPER(trxid) = UPPER($1)', { rows: [tx] }],
@@ -171,6 +177,7 @@ describe('POST /api/sms/incoming — auto-match', () => {
   test('two identical Auto claims are ambiguous: no wallet credit', async () => {
     const auto = { id: 'auto1', user_id: 'u1', amount: 500, method: 'bkash_personal', sender_no: '01712345678', trxid: null, status: 'pending' };
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ...atomicSmsHandlers('9HXK2LQM4N'),
       ['FROM incoming_sms', { rows: [] }],
       ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
@@ -184,6 +191,7 @@ describe('POST /api/sms/incoming — auto-match', () => {
 
   test('an already consumed provider TrxID cannot credit another request', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ['SELECT id, trxid, matched_recharge_id FROM incoming_sms', { rows: [{ id: 's1', trxid: '9HXK2LQM4N', matched_recharge_id: null }] }],
       ['WHERE id <> $1', { rows: [{ id: 'older-sms' }] }],
       ['FROM incoming_sms', { rows: [] }],
@@ -199,6 +207,7 @@ describe('POST /api/sms/incoming — auto-match', () => {
 
   test('money-OUT messages never auto-match', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ...atomicSmsHandlers('9HXK2LQM4N'),
       ['FROM incoming_sms', { rows: [] }],
       ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
@@ -235,6 +244,7 @@ describe('adminSms routes', () => {
 
   test('GET / lists with matched filter', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ['SELECT COUNT(*) FROM incoming_sms s', { rows: [{ count: '2' }] }],
       ['FROM incoming_sms s', { rows: [{ id: 's1' }] }],
     ]);
@@ -248,12 +258,14 @@ describe('adminSms routes', () => {
   test('POST /:id/match: missing transaction → 400; sms 404; already matched → 400', async () => {
     const r1 = await withAdmin(request(adminApp()).post('/api/admin/sms/s1/match')).send({}).expect(400);
     expect(r1.body.error).toBe('MISSING_TRANSACTION');
-    db.__routeQuery([['SELECT * FROM incoming_sms WHERE id', { rows: [] }]]);
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],['SELECT * FROM incoming_sms WHERE id', { rows: [] }]]);
     const r2 = await withAdmin(request(adminApp()).post('/api/admin/sms/s1/match'))
       .send({ transaction_id: 't1' }).expect(404);
     expect(r2.body.error).toBe('SMS_NOT_FOUND');
     db.__reset();
-    db.__routeQuery([['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', matched_recharge_id: 't9' }] }]]);
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', matched_recharge_id: 't9' }] }]]);
     const r3 = await withAdmin(request(adminApp()).post('/api/admin/sms/s1/match'))
       .send({ transaction_id: 't1' }).expect(400);
     expect(r3.body.error).toBe('ALREADY_MATCHED');
@@ -262,6 +274,7 @@ describe('adminSms routes', () => {
   test('POST /:id/match happy → 200; tx not pending → 400 TX_NOT_PENDING', async () => {
     const TX = { id: 't1', user_id: 'u1', amount: '500', trxid: 'X', status: 'pending' };
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ...atomicSmsHandlers(),
       ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', matched_recharge_id: null }] }],
       ['SELECT * FROM transactions', { rows: [TX] }],
@@ -272,6 +285,7 @@ describe('adminSms routes', () => {
 
     db.__reset();
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ...atomicSmsHandlers(),
       ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', matched_recharge_id: null }] }],
       ['SELECT * FROM transactions', { rows: [] }],
@@ -282,15 +296,18 @@ describe('adminSms routes', () => {
   });
 
   test('POST /:id/ignore: not found → 404; ok → 200', async () => {
-    db.__routeQuery([['UPDATE incoming_sms SET parse_status', { rows: [] }]]);
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],['UPDATE incoming_sms SET parse_status', { rows: [] }]]);
     await withAdmin(request(adminApp()).post('/api/admin/sms/s1/ignore')).expect(404);
     db.__reset();
-    db.__routeQuery([['UPDATE incoming_sms SET parse_status', { rows: [{ id: 's1' }] }]]);
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],['UPDATE incoming_sms SET parse_status', { rows: [{ id: 's1' }] }]]);
     await withAdmin(request(adminApp()).post('/api/admin/sms/s1/ignore')).expect(200);
   });
 
   test('GET /pending-recharges → 200', async () => {
-    db.__routeQuery([['FROM transactions t JOIN users u', { rows: [{ id: 't1' }] }]]);
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],['FROM transactions t JOIN users u', { rows: [{ id: 't1' }] }]]);
     const r = await withAdmin(request(adminApp()).get('/api/admin/sms/pending-recharges')).expect(200);
     expect(r.body.pending).toHaveLength(1);
   });
@@ -308,6 +325,7 @@ describe('POST /api/sms/incoming — TrxID amount fraud guard', () => {
 
   test('SMS amount ≠ claimed amount → HELD (not cancelled), NO wallet credit (audit #26)', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ...atomicSmsHandlers('9HXK2LQM4N'),
       ['FROM incoming_sms', { rows: [] }], // dup check
       ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
@@ -326,6 +344,7 @@ describe('POST /api/sms/incoming — TrxID amount fraud guard', () => {
 
   test('SMS amount == claimed amount → still auto-approved', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ...atomicSmsHandlers('9HXK2LQM4N'),
       ['FROM incoming_sms', { rows: [] }],
       ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
@@ -340,6 +359,7 @@ describe('POST /api/sms/incoming — TrxID amount fraud guard', () => {
   test('amount unparseable → held for review, NO wallet credit', async () => {
     const spy = jest.spyOn(push, 'notifyUser').mockResolvedValue({ ok: true, sent: 0 });
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ...atomicSmsHandlers('9HXK2LQM4N'),
       ['FROM incoming_sms', { rows: [] }],
       ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
@@ -362,6 +382,7 @@ describe('POST /api/sms/incoming — TrxID amount fraud guard', () => {
 describe('adminSms manual match — amount fraud guard', () => {
   test('SMS amount ≠ request amount → 400 AMOUNT_MISMATCH, NO wallet credit', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ...atomicSmsHandlers(),
       ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', matched_recharge_id: null, amount: '50' }] }],
       ['SELECT * FROM transactions', { rows: [{ id: 't1', user_id: 'u1', amount: '500', trxid: 'X', status: 'pending', type: 'recharge' }] }],
@@ -374,6 +395,7 @@ describe('adminSms manual match — amount fraud guard', () => {
 
   test('SMS amount == request amount → match proceeds', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ...atomicSmsHandlers(),
       ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', matched_recharge_id: null, amount: '500' }] }],
       ['SELECT * FROM transactions', { rows: [{ id: 't1', user_id: 'u1', amount: '500', trxid: 'X', status: 'pending', type: 'recharge' }] }],
@@ -405,6 +427,7 @@ describe('POST /api/admin/sms/:id/match — manual match (audit #33)', () => {
   const TX = { id: 't1', type: 'recharge', amount: 500, status: 'pending', user_id: 'u1', trxid: 'TRX1' };
   test('manual match records matched_via = manual', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ...atomicSmsHandlers(),
       ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', amount: 500, matched_recharge_id: null }] }],
       ['SELECT * FROM transactions WHERE id = $1 FOR UPDATE', { rows: [TX] }],
@@ -438,6 +461,7 @@ describe('migration 051_sms_matched_via.sql (audit #33)', () => {
 describe('GET /api/admin/sms — unmatched list (audit #34)', () => {
   test('matched=no includes unparsed SMS, not just parsed ones', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ['SELECT COUNT(*) FROM incoming_sms', { rows: [{ count: '2' }] }],
       ['FROM incoming_sms s', { rows: [] }],
     ]);
@@ -458,6 +482,7 @@ describe('GET /api/admin/sms — unmatched list (audit #34)', () => {
 describe('GET /api/admin/sms — pagination (audit #36)', () => {
   test('page=2&limit=30 → LIMIT 30 OFFSET 30', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ['SELECT COUNT(*) FROM incoming_sms s', { rows: [{ count: '61' }] }],
       ['FROM incoming_sms s', { rows: [{ id: 's1' }] }],
     ]);
@@ -481,6 +506,7 @@ describe('holdRateLimitedSms — over-cap SMS are held, not lost (audit #37)', (
 
   test('valid secret + room in the hold queue → 202 held, stored as unparsed', async () => {
     db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ["parse_status = 'unparsed' AND created_at", { rows: [{ count: '3' }] }],
       ['INSERT INTO incoming_sms', { rows: [{ id: 's99' }] }],
     ]);
@@ -505,7 +531,8 @@ describe('holdRateLimitedSms — over-cap SMS are held, not lost (audit #37)', (
   });
 
   test('hold queue full → 429, nothing stored', async () => {
-    db.__routeQuery([["parse_status = 'unparsed' AND created_at", { rows: [{ count: '50' }] }]]);
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],["parse_status = 'unparsed' AND created_at", { rows: [{ count: '50' }] }]]);
     const res = fakeRes();
     await holdRateLimitedSms(fakeReq({ secret: SECRET, message: BKASH_MSG }), res);
     expect(res.statusCode).toBe(429);

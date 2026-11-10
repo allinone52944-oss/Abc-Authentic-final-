@@ -13,6 +13,7 @@ const { safeLog, orderDocUpload, safeJsonArray } = require('../security');
 const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
 const serviceCredits = require('../lib/serviceCredits');
+const { approveRechargeTx } = require('./sms');
 
 // Delivery document uploads: settings-driven via orderDocUpload(db, 'delivery') (H-12).
 // Filenames stay random (C-2: never embed req.params.id).
@@ -2111,9 +2112,23 @@ router.put('/transactions/:id/approve', async (req, res) => {
     await db.withTransaction(async (client) => {
       // C-4 fix (2026-10-15): existing pending row reuse করা হয় — ডবল ledger row নয়।
       // Idempotent atomic credit; raises DUPLICATE_TRANSACTION if already applied
-      await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4, $5)', [
-        tx.user_id, Number(tx.amount), tx.type, tx.trxid || ('tx-' + tx.id), tx.id,
-      ]);
+      if (tx.type === 'recharge') {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext('recharge-credit'))");
+        const sms = tx.trxid ? await client.query(
+          `SELECT * FROM incoming_sms WHERE UPPER(trxid) = UPPER($1)
+           ORDER BY created_at DESC LIMIT 1`, [tx.trxid]) : { rows: [] };
+        if (!tx.trxid) throw new Error('AUTO_REQUIRES_SMS_MATCH');
+        const row = sms.rows[0];
+        if (row?.matched_recharge_id) throw new Error('DUPLICATE_TRANSACTION');
+        if (row?.amount != null && Math.abs(Number(row.amount) - Number(tx.amount)) >= 0.005)
+          throw new Error('AMOUNT_MISMATCH');
+        const approved = await approveRechargeTx(client, tx.id, row?.id || null, 'manual');
+        if (!approved) throw new Error('ALREADY_PROCESSED');
+      } else {
+        await client.query('SELECT * FROM wallet_apply($1, $2, $3, $4, $5)', [
+          tx.user_id, Number(tx.amount), tx.type, tx.trxid || ('tx-' + tx.id), tx.id,
+        ]);
+      }
       await client.query(
         `UPDATE transactions SET admin_id = $1 WHERE id = $2`,
         [req.user.id, tx.id]
@@ -2131,7 +2146,7 @@ router.put('/transactions/:id/approve', async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     safeLog('[admin] approve error:', e.message);
-    const msg = /DUPLICATE_TRANSACTION|INSUFFICIENT_BALANCE/.test(e.message) ? e.message : 'APPROVE_FAILED';
+    const msg = /DUPLICATE_TRANSACTION|INSUFFICIENT_BALANCE|AUTO_REQUIRES_SMS_MATCH|AMOUNT_MISMATCH|SMS_ALREADY_MATCHED|ALREADY_PROCESSED/.test(e.message) ? e.message : 'APPROVE_FAILED';
     res.status(400).json({ error: msg });
   }
 });
