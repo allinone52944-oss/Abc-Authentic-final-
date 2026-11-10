@@ -115,6 +115,7 @@
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/service-workspace.css?v=20261110-1">
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
+<link rel="stylesheet" href="/css/manual-order.css?v=20261110-12">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
 </head>
 <body class="has-tabbar flagship-app service-workspace page-order-create">
@@ -443,6 +444,7 @@ function renderFeeBreakdown(price){
   const el = document.getElementById('feeBreakdown');
   if(!el) return;
   const sp = feeSplit(price);
+  if(!sp.fromCredit){ el.textContent = ''; return; } // no locked credit: the zero split is noise
   el.textContent = 'ফি ৳' + bnNum(price) + ' = লকড ক্রেডিট ৳' + bnNum(sp.fromCredit) + ' + ওয়ালেট ৳' + bnNum(sp.fromBalance);
 }
 
@@ -518,7 +520,7 @@ async function init(){
       const bw = document.getElementById('balWarning');
       if(bw){
         bw.style.display = 'block';
-        document.getElementById('balWarningText').textContent = 'আপনার ওয়ালেটে ৳' + bnNum(diff) + ' ঘাটতি রয়েছে (লকড ক্রেডিট ৳' + bnNum(lockedCredit) + ' + ব্যালেন্স: ৳' + bnNum(userBal) + ', সেবার ফি: ৳' + bnNum(svcPrice) + ')। অর্ডার করার পূর্বে রিচার্জ সম্পন্ন করুন।';
+        document.getElementById('balWarningText').textContent = 'সেবার ফি ৳' + bnNum(svcPrice) + ', আপনার ব্যালেন্স ৳' + bnNum(userBal) + (lockedCredit > 0 ? ' + লকড ক্রেডিট ৳' + bnNum(lockedCredit) : '') + '। আরও ৳' + bnNum(diff) + ' রিচার্জ করলে অর্ডার করতে পারবেন — ফর্মের তথ্য সংরক্ষিত থাকবে।';
       }
     }
 
@@ -680,6 +682,17 @@ function triggerDraftSave(){
   } catch(_) {}
 }
 
+// Point the user at the field that blocked review (presentation only).
+function flagField(name){
+  document.querySelectorAll('.field-invalid').forEach(x=>x.classList.remove('field-invalid'));
+  const el = Array.from(document.querySelectorAll('[data-field]')).find(x=>x.dataset.field===name);
+  if(!el) return;
+  el.classList.add('field-invalid');
+  el.addEventListener('input', ()=>el.classList.remove('field-invalid'), { once: true });
+  el.focus({ preventScroll: true });
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 // Audit #40 — collect + validate the order once, so the review
 // render and the confirm post share one source of truth. Returns
 // null (with the error shown) when something is missing/invalid.
@@ -698,11 +711,13 @@ function collectOrder(){
       if(f.required && !v){
         err.textContent = '⚠️ ' + (f.label || f.name) + ' পূরণ করুন';
         err.style.display = 'block';
+        flagField(f.name);
         return null;
       }
       if(/brn/i.test(f.name) && v && !/^\d{17}$/.test(v)){
         err.textContent = '⚠️ BRN ১৭ সংখ্যার হতে হবে';
         err.style.display = 'block';
+        flagField(f.name);
         return null;
       }
     }
@@ -790,7 +805,7 @@ function showReview(){
     '<div style="margin-bottom:12px;"><div style="font-weight:700;margin-bottom:4px;">📎 ফাইল (' + c.files.length + 'টি)</div>' + fileRows + '</div>' +
     '<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">' +
       '<div style="display:flex;justify-content:space-between;"><span>সেবার ফি</span><b>৳' + bnNum(price) + '</b></div>' +
-      '<div style="display:flex;justify-content:space-between;margin-top:4px;"><span>লকড ক্রেডিট থেকে</span><span>৳' + bnNum(sp.fromCredit) + '</span></div>' +
+      (sp.fromCredit ? '<div style="display:flex;justify-content:space-between;margin-top:4px;"><span>লকড ক্রেডিট থেকে</span><span>৳' + bnNum(sp.fromCredit) + '</span></div>' : '') +
       '<div style="display:flex;justify-content:space-between;margin-top:4px;"><span>ওয়ালেট থেকে</span><span>৳' + bnNum(sp.fromBalance) + '</span></div>' +
       '<div style="display:flex;justify-content:space-between;margin-top:4px;"><span>ওয়ালেট ব্যালেন্স</span><span>৳' + bnNum(userBal) + '</span></div>' +
       '<div style="display:flex;justify-content:space-between;margin-top:4px;border-top:1px solid #e2e8f0;padding-top:6px;"><span>কনফার্ম করলে ওয়ালেটে থাকবে</span><b style="color:' + (short ? '#b91c1c' : '#15803d') + ';">৳' + bnNum(after) + '</b></div>' +
@@ -799,8 +814,9 @@ function showReview(){
   document.getElementById('reviewBox').style.display = 'block';
   document.getElementById('submitBtn').style.display = 'none';
   const confirmBtn = document.getElementById('reviewConfirmBtn');
-  confirmBtn.disabled = false;
-  confirmBtn.textContent = '✅ নিশ্চিত করুন — ৳' + bnNum(price) + ' কাটা হবে';
+  // Short balance: the server refuses anyway, so don't offer a confirm that can only fail.
+  confirmBtn.disabled = short;
+  confirmBtn.textContent = short ? 'ব্যালেন্স কম — আগে রিচার্জ করুন' : '✅ নিশ্চিত করুন — ৳' + bnNum(price) + ' কাটা হবে';
   document.getElementById('reviewBox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 

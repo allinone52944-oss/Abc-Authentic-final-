@@ -1,0 +1,30 @@
+/* Manual order page: scoped presentation; inline state (display) is never overridden. */
+.page-order-create .main > .bal-warning-box,
+.page-order-create .main > .card { max-width: 780px !important; margin-inline: auto; }
+.page-order-create .main > .back-nav, .page-order-create .main > .topbar { max-width: 780px; margin-inline: auto; display: flex; }
+.page-order-create .main > .back-nav { width: fit-content; margin-left: max(0px, calc((100% - 780px) / 2)); }
+.page-order-create .topbar { border-bottom: 0 !important; padding-bottom: 0 !important; }
+.page-order-create .order-meta { background: var(--layout-wallet, #064e3b) !important; border: 0 !important; color: #fff; }
+.page-order-create .order-meta #svcName { color: #fff !important; }
+.page-order-create .order-meta > div:first-child > div { color: rgba(255,255,255,.72) !important; }
+.page-order-create .order-meta #userBalSub, .page-order-create .order-meta #feeBreakdown { color: rgba(255,255,255,.8) !important; }
+.page-order-create #svcPrice { background: #f5c451 !important; color: #3b2a00 !important; border: 0 !important; }
+.page-order-create #instWrap { background: #fffbeb !important; border: 1px solid #fde68a !important; border-left: 4px solid #d4a017 !important; color: #713f12 !important; }
+.page-order-create #instWrap b { color: #713f12; }
+.page-order-create #dropArea div[style*="1d4ed8"] { color: #065f46 !important; }
+.page-order-create #couponBox { background: #f8faf9 !important; border: 1px dashed #cfe3da !important; color: #475569 !important; }
+.page-order-create #couponBox a { color: #065f46 !important; }
+.page-order-create #fieldsContainer .field label { font-size: 14px !important; color: #0f172a !important; }
+.page-order-create [data-field] { font-size: 16px; min-height: 48px; border-radius: 12px !important; }
+.page-order-create [data-field]:focus { outline: none; border-color: #059669 !important; box-shadow: 0 0 0 3px rgba(5,150,105,.18); }
+.page-order-create .field-invalid { border-color: #dc2626 !important; box-shadow: 0 0 0 3px rgba(220,38,38,.15) !important; }
+.page-order-create #reviewBox { border: 2px solid #059669 !important; background: #f6fbf8 !important; }
+.page-order-create #reviewConfirmBtn:disabled { opacity: .55; cursor: not-allowed; }
+.page-order-create #submitBtn, .page-order-create #reviewConfirmBtn { min-height: 52px; }
+@media (max-width: 768px) {
+  .page-order-create .main > .back-nav { margin-left: 0; }
+  .page-order-create .order-meta { flex-direction: column; align-items: stretch !important; }
+  .page-order-create .order-meta > div:last-child { text-align: left !important; display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; align-items: center; }
+  .page-order-create .order-meta #svcPrice { grid-row: span 2; justify-self: start; }
+  .page-order-create #submitBtn { position: sticky; bottom: 84px; z-index: 5; box-shadow: 0 8px 24px rgba(6,78,59,.25); }
+}
