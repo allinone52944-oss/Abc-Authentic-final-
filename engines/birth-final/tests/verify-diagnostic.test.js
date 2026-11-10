@@ -21,7 +21,7 @@
 
 process.env.ABC_JWT_SECRET = 'test-diagnostic-secret';
 
-const { describe, it, before, after } = require('node:test');
+const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -45,8 +45,11 @@ const RESULT_SUCCESS = '<html><body><table>' +
   '<tr><td>Registered Person Name</td><td>TEST PERSON</td></tr>' +
   '</table></body></html>';
 const RESULT_PARSE_FAIL = '<html><body><p>Some page with no recognizable record table.</p></body></html>';
+const RESULT_UPSTREAM_ERROR = '<html><head><title>Error</title></head><body>' +
+  '<h1>Error.</h1><h2>An error occurred while processing your request.</h2></body></html>';
 
 let mockResultHtml = RESULT_SUCCESS;
+let mockResultStatus = 200;
 
 function mockResp({ text, buf, contentType, status = 200 }) {
   return {
@@ -66,7 +69,7 @@ global.fetch = async (url, opts) => {
   if (u.startsWith('http://127.0.0.1')) return realFetch(u, opts); // this test's own calls to the local engine
   if (u === 'https://everify.bdris.gov.bd/') return mockResp({ text: FORM_PAGE });
   if (u.startsWith('https://everify.bdris.gov.bd/DefaultCaptcha/Generate')) return mockResp({ buf: GIF_1X1, contentType: 'image/gif' });
-  if (u === 'https://everify.bdris.gov.bd/UBRNVerification/Search' && opts && opts.method === 'POST') return mockResp({ text: mockResultHtml });
+  if (u === 'https://everify.bdris.gov.bd/UBRNVerification/Search' && opts && opts.method === 'POST') return mockResp({ text: mockResultHtml, status: mockResultStatus });
   throw new Error('Unexpected fetch in test: ' + u);
 };
 
@@ -105,6 +108,11 @@ async function doVerify(sessionId) {
 }
 
 describe('birth verify diagnostic (audit item 2)', () => {
+  beforeEach(() => {
+    mockResultHtml = RESULT_SUCCESS;
+    mockResultStatus = 200;
+  });
+
   it('successful verify leaves no last-result.html on disk', async () => {
     mockResultHtml = RESULT_SUCCESS;
     assert.strictEqual(fs.existsSync(LAST_RESULT), false);
@@ -127,6 +135,31 @@ describe('birth verify diagnostic (audit item 2)', () => {
     assert.strictEqual(b.success, false);
     assert.ok(b.error && b.error.includes('no file saved'));
     assert.ok(Array.isArray(b.debug));
+    assert.strictEqual(fs.existsSync(LAST_RESULT), false);
+  });
+
+  it('reports an upstream HTTP 500 instead of blaming captcha or result parsing', async () => {
+    mockResultHtml = RESULT_UPSTREAM_ERROR;
+    mockResultStatus = 500;
+    const sessionId = await newSession();
+    const r = await doVerify(sessionId);
+    assert.strictEqual(r.status, 200);
+    const b = await r.json();
+    assert.strictEqual(b.success, false);
+    assert.strictEqual(b.code, 'BDRIS_UPSTREAM_ERROR');
+    assert.ok(b.error.includes('HTTP 500'));
+    assert.ok(!b.error.includes('Could not read the result'));
+    assert.strictEqual(fs.existsSync(LAST_RESULT), false);
+  });
+
+  it('detects the BDRIS generic error page even when it returns HTTP 200', async () => {
+    mockResultHtml = RESULT_UPSTREAM_ERROR;
+    const sessionId = await newSession();
+    const r = await doVerify(sessionId);
+    const b = await r.json();
+    assert.strictEqual(b.success, false);
+    assert.strictEqual(b.code, 'BDRIS_UPSTREAM_ERROR');
+    assert.ok(!b.error.includes('Could not read the result'));
     assert.strictEqual(fs.existsSync(LAST_RESULT), false);
   });
 

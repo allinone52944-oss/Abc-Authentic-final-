@@ -768,6 +768,21 @@ app.post('/api/verify', async (req, res) => {
             body
         });
         const html = await r.text();
+
+        // An upstream HTTP error is not a captcha or result-parser failure.
+        // BDRIS can also return its generic ASP.NET error page with HTTP 200;
+        // detect both before trying to scrape cells from that page.
+        const upstreamErrorPage = /<title>\s*Error\s*<\/title>/i.test(html)
+            && /An error occurred while processing your request/i.test(html);
+        if (!r.ok || upstreamErrorPage) {
+            const statusNote = r.ok ? '' : ` (HTTP ${r.status})`;
+            return res.json({
+                success: false,
+                code: 'BDRIS_UPSTREAM_ERROR',
+                error: 'BDRIS সার্ভার এই মুহূর্তে ফলাফল দিতে পারেনি। কিছুক্ষণ পর নতুন ক্যাপচা নিয়ে আবার চেষ্টা করুন।' + statusNote
+            });
+        }
+
         // Verify diagnostic (audit item 2, 2026-11-07): the BDRIS result
         // page is NO LONGER written to disk. It used to be saved as
         // last-result.html and only deleted on success — a failed verify
