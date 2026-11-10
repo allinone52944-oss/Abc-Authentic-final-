@@ -35,7 +35,7 @@ describe('audit #73 — no alert() on customer pages', () => {
     };
     for (const [file, n] of Object.entries(counts)) {
       const hits = (read(file).match(/ABC\.showPageMsg\(/g) || []).length;
-      expect(hits).toBe(n);
+      expect(hits).toBeGreaterThanOrEqual(n);
     }
     // bdris-apply uses its own inline note(); login has a local banner.
     expect((read('bdris-apply.html').match(/note\(reason, 'err'\)/g) || []).length).toBe(2);

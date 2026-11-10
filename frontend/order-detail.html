@@ -214,8 +214,9 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
-<link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-10">
+<link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
+<link rel="stylesheet" href="/css/customer-sections.css?v=20261110-11">
 </head>
 <body class="has-tabbar flagship-app page-order-detail">
 <div class="desktop">
@@ -307,7 +308,7 @@ async function init(){
 
   const dataEntries = Object.entries(dataObj);
   const data = dataEntries.length ? dataEntries.map(([k,v])=>
-    '<div style="font-size:13px;color:#475569;margin:6px 0;display:flex;justify-content:space-between;border-bottom:1px solid #f1f5f9;padding-bottom:4px;">' +
+    '<div class="order-data-row" style="font-size:13px;color:#475569;margin:6px 0;display:flex;justify-content:space-between;border-bottom:1px solid #f1f5f9;padding-bottom:4px;">' +
       '<span>'+esc(k)+'</span> <b style="color:#0f172a;">'+esc(v)+'</b>' +
     '</div>'
   ).join('') : (manualFormHtml ? '' : '<div style="color:#64748b;font-size:13px;">কোনো পৃথক ফিল্ড তথ্য নেই</div>');
@@ -451,12 +452,15 @@ const NEXT_STEP = {
 };
 
 async function loadTimelineHistory(o) {
+  if (o) window._timelineOrder = o;
   try {
     const r = await ABC.api('/orders/' + oid + '/history');
-    if (!r.ok) return;
+    if (!r.ok) throw new Error('timeline');
     const { history } = await r.json();
-    renderTimeline(history, o);
-  } catch (e) {}
+    renderTimeline(history, window._timelineOrder);
+  } catch (e) {
+    document.getElementById('timeline').innerHTML = '<div class="section-recovery" role="alert">অগ্রগতির তথ্য আনা যায়নি। <button class="btn btn-secondary" onclick="loadTimelineHistory()">আবার চেষ্টা</button></div>';
+  }
 }
 
 function renderTimeline(history, o) {
@@ -619,8 +623,9 @@ async function dlDoc(i){
 }
 
 async function loadChat(){
-  const r=await ABC.api('/orders/'+oid+'/chat'); if(!r.ok)return;
-  const {messages}=await r.json();
+  try {
+  const r=await ABC.api('/orders/'+oid+'/chat'); if (!r.ok) throw new Error('chat');
+  const {messages=[]}=await r.json();
   const box=document.getElementById('chatBox');
   if(!messages.length){
     box.innerHTML='<div style="color:#94a3b8;font-size:13px;text-align:center;padding:20px 0;">কোনো বার্তা নেই</div>';
@@ -633,13 +638,30 @@ async function loadChat(){
     '</div>'
   ).join('');
   box.scrollTop=box.scrollHeight;
+  } catch (e) {
+    document.getElementById('chatBox').innerHTML = '<div class="section-recovery" role="alert">বার্তা আনা যায়নি। <button class="btn btn-secondary" onclick="loadChat()">আবার চেষ্টা</button></div>';
+  }
 }
 
-async function sendChat(){
-  const inp=document.getElementById('chatIn');
-  const msg=inp.value.trim(); if(!msg)return; inp.value='';
-  const r=await ABC.api('/orders/'+oid+'/chat',{method:'POST',body:{message:msg}});
-  if(r.ok)loadChat();
+let _chatSending = false;
+async function sendChat() {
+  const inp = document.getElementById('chatIn');
+  const msg = inp.value.trim();
+  if (!msg || _chatSending) return;
+  _chatSending = true;
+  const btn = document.querySelector('button[onclick="sendChat()"]');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await ABC.api('/orders/' + oid + '/chat', { method: 'POST', body: { message: msg } });
+    if (!r.ok) { ABC.showPageMsg('বার্তা পাঠানো যায়নি — আবার চেষ্টা করুন।', 'err'); return; }
+    if (inp.value.trim() === msg) inp.value = '';
+    await loadChat();
+  } catch (e) {
+    ABC.showPageMsg('বার্তা পাঠানো যায়নি — সংযোগ ফিরলে আবার চেষ্টা করুন।', 'err');
+  } finally {
+    _chatSending = false;
+    if (btn) btn.disabled = false;
+  }
 }
 
 init();

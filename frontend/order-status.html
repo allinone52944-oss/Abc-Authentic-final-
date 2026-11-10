@@ -405,8 +405,9 @@
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/service-workspace.css?v=20261110-1">
-<link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-10">
+<link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
+<link rel="stylesheet" href="/css/customer-sections.css?v=20261110-11">
 </head>
 <body class="has-tabbar flagship-app service-workspace page-order-status">
 <div class="desktop">
@@ -718,12 +719,15 @@ async function fetchAndRender() {
 }
 
 async function loadTimelineHistory() {
+  if (window._currentOrder) window._timelineOrder = window._currentOrder;
   try {
     const r = await ABC.api('/orders/' + oid + '/history');
-    if (!r.ok) return;
+    if (!r.ok) throw new Error('timeline');
     const { history } = await r.json();
-    renderTimeline(history, window._currentOrder);
-  } catch (e) {}
+    renderTimeline(history, window._timelineOrder);
+  } catch (e) {
+    document.getElementById('timeline').innerHTML = '<div class="section-recovery" role="alert">অগ্রগতির তথ্য আনা যায়নি। <button class="btn btn-secondary" onclick="loadTimelineHistory()">আবার চেষ্টা</button></div>';
+  }
 }
 
 const TPL_EMOJI = { network: '🌐', processing: '⏰', verifying: '📄', done: '✅', failed: '❌', paid: '💰' };
@@ -1095,9 +1099,10 @@ async function uploadExtraDoc(files) {
 }
 
 async function loadChat() {
+  try {
   const r = await ABC.api('/orders/' + oid + '/chat');
-  if (!r.ok) return;
-  const { messages } = await r.json();
+  if (!r.ok) throw new Error('chat');
+  const { messages = [] } = await r.json();
   const box = document.getElementById('chatBox');
   if (!messages.length) {
     box.innerHTML = '<div style="color:#94a3b8;font-size:13px;text-align:center;padding:20px 0;">কোনো বার্তা নেই</div>';
@@ -1110,15 +1115,30 @@ async function loadChat() {
     '</div>'
   ).join('');
   box.scrollTop = box.scrollHeight;
+  } catch (e) {
+    document.getElementById('chatBox').innerHTML = '<div class="section-recovery" role="alert">বার্তা আনা যায়নি। <button class="btn btn-secondary" onclick="loadChat()">আবার চেষ্টা</button></div>';
+  }
 }
 
+let _chatSending = false;
 async function sendChat() {
   const inp = document.getElementById('chatIn');
   const msg = inp.value.trim();
-  if (!msg) return;
-  inp.value = '';
-  const r = await ABC.api('/orders/' + oid + '/chat', { method: 'POST', body: { message: msg } });
-  if (r.ok) loadChat();
+  if (!msg || _chatSending) return;
+  _chatSending = true;
+  const btn = document.querySelector('button[onclick="sendChat()"]');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await ABC.api('/orders/' + oid + '/chat', { method: 'POST', body: { message: msg } });
+    if (!r.ok) { ABC.showPageMsg('বার্তা পাঠানো যায়নি — আবার চেষ্টা করুন।', 'err'); return; }
+    if (inp.value.trim() === msg) inp.value = '';
+    await loadChat();
+  } catch (e) {
+    ABC.showPageMsg('বার্তা পাঠানো যায়নি — সংযোগ ফিরলে আবার চেষ্টা করুন।', 'err');
+  } finally {
+    _chatSending = false;
+    if (btn) btn.disabled = false;
+  }
 }
 
 // Audit #48 — customer cancel (new/pending only). On success the

@@ -10,3 +10,7 @@ body:is(.flagship-app,.flagship-dashboard) .sidebar .side-link.side-sub .ico { d
 body:is(.flagship-app,.flagship-dashboard) .side-user-card { flex: 0 0 auto; margin-top: 12px; }
 .side-logout { flex: 0 0 auto; margin-top: 12px; min-height: 44px; width: 100%; border: 1px solid rgba(255,255,255,.14); border-radius: 12px; background: transparent; color: inherit; font: inherit; font-size: 14px; cursor: pointer; text-align: left; padding: 10px 14px; opacity: .85; }
 .side-logout:hover { background: rgba(255,255,255,.08); opacity: 1; }
+/* Keep the existing mobile bottom navigation, not the desktop sidebar. */
+@media (max-width: 1023px) {
+  body:is(.flagship-app,.flagship-dashboard) .sidebar { display: none; }
+}

@@ -20,8 +20,9 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
-<link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-10">
+<link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
+<link rel="stylesheet" href="/css/customer-sections.css?v=20261110-11">
 </head>
 <body class="has-tabbar flagship-app page-profile">
 <div class="desktop">
@@ -56,20 +57,20 @@
       <div class="card profile-info">
         <h3>👤 ব্যক্তিগত তথ্যাবলি</h3>
         <div class="field">
-          <label>আপনার পূর্ণ নাম</label>
-          <input type="text" id="name" placeholder="নাম লিখুন">
+          <label for="name">আপনার পূর্ণ নাম</label>
+          <input type="text" id="name" autocomplete="name" placeholder="নাম লিখুন">
         </div>
         <div class="field">
-          <label>মোবাইল নম্বর (লগইন আইডি - পরিবর্তনযোগ্য নয়)</label>
+          <label for="phone">মোবাইল নম্বর (লগইন আইডি - পরিবর্তনযোগ্য নয়)</label>
           <input type="text" id="phone" disabled>
         </div>
         <div class="field">
-          <label>WhatsApp নম্বর</label>
-          <input type="text" id="whatsapp" placeholder="01XXXXXXXXX">
+          <label for="whatsapp">WhatsApp নম্বর</label>
+          <input type="text" id="whatsapp" inputmode="tel" autocomplete="tel" placeholder="01XXXXXXXXX">
         </div>
         <div class="field">
-          <label>ইমেইল এড্রেস</label>
-          <input type="email" id="email" placeholder="email@example.com">
+          <label for="email">ইমেইল এড্রেস</label>
+          <input type="email" id="email" autocomplete="email" placeholder="email@example.com">
         </div>
 
         <div class="err" id="err"></div>
@@ -83,12 +84,12 @@
       <div class="card">
         <h3>🔒 পাসওয়ার্ড পরিবর্তন</h3>
         <div class="field">
-          <label>বর্তমান পাসওয়ার্ড</label>
-          <input type="password" id="cur" placeholder="বর্তমান পাসওয়ার্ড দিন">
+          <label for="cur">বর্তমান পাসওয়ার্ড</label>
+          <input type="password" id="cur" autocomplete="current-password" placeholder="বর্তমান পাসওয়ার্ড দিন">
         </div>
         <div class="field">
-          <label>নতুন পাসওয়ার্ড</label>
-          <input type="password" id="nw" placeholder="কমপক্ষে ৬ অক্ষরের নতুন পাসওয়ার্ড">
+          <label for="nw">নতুন পাসওয়ার্ড</label>
+          <input type="password" id="nw" autocomplete="new-password" placeholder="কমপক্ষে ৬ অক্ষরের নতুন পাসওয়ার্ড">
         </div>
         <div class="err" id="perr"></div>
         <div class="okmsg" id="pok"></div>

@@ -36,8 +36,9 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
-<link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-10">
+<link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
+<link rel="stylesheet" href="/css/customer-sections.css?v=20261110-11">
 </head>
 <body class="has-tabbar flagship-app page-history">
 <div class="desktop">
@@ -70,8 +71,8 @@
     <div class="card">
       <!-- Audit #35 — search + filter + load-more: the list used to render every item at once with no way to find one -->
       <div style="display:flex;gap:8px;margin-bottom:12px;">
-        <input id="histSearch" type="text" placeholder="খুঁজুন (সেবা / ফাইলের নাম)" oninput="histApplyFilter()" style="flex:1;min-width:0;padding:10px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;">
-        <select id="histKind" onchange="histApplyFilter()" style="padding:10px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;">
+        <input aria-label="সেবা বা ফাইল খুঁজুন" id="histSearch" type="text" placeholder="খুঁজুন (সেবা / ফাইলের নাম)" oninput="histApplyFilter()" style="flex:1;min-width:0;padding:10px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;">
+        <select aria-label="সেবার ধরন" id="histKind" onchange="histApplyFilter()" style="padding:10px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;">
           <option value="">সব</option>
           <option value="manual">ম্যানুয়াল</option>
           <option value="order">অর্ডার</option>
@@ -201,9 +202,7 @@ async function viewHist(i, di){
   }catch(e){ ABC.showPageMsg(ABC.httpErrBn(0, 'খোলা'), 'err'); }
 }
 
-async function init(){
-  const auth = await ABC.api('/auth/me').catch(()=>null);
-  if(auth && auth.status===401){ location.href='/login.html'; return; }
+async function loadHistory(){
   try{
     const r = await ABC.api('/history');
     if(!r.ok) throw new Error('load');
@@ -211,8 +210,15 @@ async function init(){
     _items = d.items || [];
     render();
   }catch(e){
-    document.getElementById('histList').innerHTML = '<div style="color:#b91c1c;">ইতিহাস লোড করা যায়নি। আবার চেষ্টা করুন।</div>';
+    document.getElementById('histList').innerHTML = '<div class="section-recovery" role="alert">ইতিহাস আনা যায়নি। <button class="btn btn-secondary" onclick="loadHistory()">আবার চেষ্টা</button></div>';
+    document.getElementById('histMoreBtn').style.display = 'none';
   }
+}
+
+async function init(){
+  const auth = await ABC.api('/auth/me').catch(()=>null);
+  if(auth && auth.status===401){ location.href='/login.html'; return; }
+  await loadHistory();
   try{
     const me = await ABC.api('/auth/me');
     if(me.ok){

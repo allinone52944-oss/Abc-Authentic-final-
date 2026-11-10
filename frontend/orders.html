@@ -107,8 +107,9 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
-<link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-10">
+<link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
+<link rel="stylesheet" href="/css/customer-sections.css?v=20261110-11">
 </head>
 <body class="has-tabbar flagship-app page-orders">
 <div class="desktop">
@@ -210,6 +211,8 @@
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 const STBN={new:'নতুন',pending:'অপেক্ষমান',received:'গৃহীত',processing:'প্রসেসিং',registered:'নিবন্ধিত',completed:'সম্পন্ন',delivered:'ডেলিভার্ড',failed:'ব্যর্থ',cancelled:'বাতিল',refunded:'রিফান্ডেড'};
 let page=1,status='';
+let _ordersLoading = false;
+let _ordersPageLoaded = false;
 
 async function init(){
   const me=await ABC.api('/auth/me');
@@ -220,15 +223,16 @@ async function init(){
   };
   document.querySelectorAll('#filters .fbtn').forEach(b=>{
     b.onclick=()=>{
+      if (_ordersLoading) return;
       document.querySelectorAll('#filters .fbtn').forEach(x=>x.classList.remove('on'));
       b.classList.add('on');
       status=b.dataset.st;
-      page=1;
+      page=1; _ordersPageLoaded=false;
       document.getElementById('list').innerHTML='';
       load();
     };
   });
-  document.getElementById('moreBtn').onclick=()=>{page++;load();};
+  document.getElementById('moreBtn').onclick=()=>{if (_ordersLoading) return; if (_ordersPageLoaded) { page++; _ordersPageLoaded=false; } load();};
   // Audit #41 — dashboard status cards link here with ?status=… (e.g.
   // ?status=completed); honour it on load instead of always showing
   // all orders. The value must match a real filter button; anything
@@ -293,16 +297,18 @@ async function dlLegacyManualDoc(mi, di){
 }
 
 async function load(){
+  if (_ordersLoading) return;
+  _ordersLoading = true;
+  const more = document.getElementById('moreBtn');
+  more.disabled = true;
+  document.querySelectorAll('#filters .fbtn').forEach(b => { b.disabled = true; });
   try {
     const r=await ABC.api('/orders?limit=10&page='+page+(status?'&status='+status:''));
-    if(!r.ok){
-      if(page===1){
-        document.getElementById('list').innerHTML='<tr><td colspan="5" style="text-align:center;padding:30px 0;color:#ef4444;">অর্ডার তালিকা লোড করা সম্ভব হয়নি। পেজ রিফ্রেশ করুন।</td></tr>';
-      }
-      return;
-    }
+    if(!r.ok) throw new Error('orders');
     const d=await r.json();
     const orders = (d && d.orders) ? d.orders : [];
+    _ordersPageLoaded = true;
+    more.textContent = 'আরো লোড করুন ↓';
     if(!orders.length && page===1){
       document.getElementById('list').innerHTML='<tr><td colspan="5" style="text-align:center;color:#64748b;padding:40px;">কোনো অর্ডার পাওয়া যায়নি</td></tr>';
       document.getElementById('moreBtn').style.display='none';
@@ -346,8 +352,16 @@ async function load(){
     document.getElementById('moreBtn').style.display=(page*10>=(d.total||0))?'none':'block';
   } catch(e) {
     if(page===1){
-      document.getElementById('list').innerHTML='<tr><td colspan="5" style="text-align:center;padding:30px 0;color:#ef4444;">নেটওয়ার্ক সমস্যা হয়েছে। পুনরায় চেষ্টা করুন।</td></tr>';
+      document.getElementById('list').innerHTML='<tr><td colspan="5"><div class="section-recovery" role="alert">অর্ডার তালিকা আনা যায়নি। <button class="btn btn-secondary" onclick="load()">আবার চেষ্টা</button></div></td></tr>';
+      more.style.display = 'none';
+    } else {
+      more.style.display = 'block';
+      more.textContent = 'আবার চেষ্টা — পরের অর্ডারগুলো আনুন';
     }
+  } finally {
+    _ordersLoading = false;
+    more.disabled = false;
+    document.querySelectorAll('#filters .fbtn').forEach(b => { b.disabled = false; });
   }
 }
 
