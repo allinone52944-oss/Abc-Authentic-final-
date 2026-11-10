@@ -1,0 +1,5 @@
+/* Focus only: do not change visibility, frame geometry or document fonts. */
+.service-workspace :is(label.drop,label.btn-img):focus-visible {
+  outline: 2px solid var(--layout-emerald);
+  outline-offset: 4px;
+}
