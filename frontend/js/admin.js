@@ -4847,6 +4847,11 @@ TABS.settings = async () => {
             '<div class="s" style="margin-bottom:14px;line-height:1.6;">সর্বশেষ ব্যাকআপ: <b style="color:var(--text-main);">' + esc(backupLastText) + '</b><br>নিয়মিত ব্যাকআপ সার্ভার ক্র্যাশ বা অনিচ্ছাকৃত তথ্য হারানোর হাত থেকে ডাটাবেস সম্পূর্ণ সুরক্ষিত রাখে।</div>' +
             '<button class="mini-btn ok" style="padding:10px 18px;font-size:13px;" onclick="AdmSt.triggerBackup()">⚡ এখনই নতুন ব্যাকআপ তৈরি করুন</button>' +
           '</div>' +
+          '<div style="padding:18px;border-radius:10px;border:1px solid #fecaca;background:#fff7f7;">' +
+            '<div style="font-weight:700;font-size:15px;margin-bottom:6px;color:#b91c1c;">🧹 সেবার ইতিহাস ও অর্ডার মুছুন</div>' +
+            '<div class="s" style="margin-bottom:12px;line-height:1.6;">সব সেবার ইতিহাস, অর্ডার, অর্ডারের বার্তা ও জমা থাকা ফাইল/PDF চিরতরে মুছে যাবে। গ্রাহক, ব্যালেন্স, পেমেন্ট ও সেটিংস থাকবে। আগে ২৪ ঘণ্টার মধ্যে ব্যাকআপ লাগবে, আর চলমান অর্ডার থাকলে মুছবে না।</div>' +
+            '<button class="mini-btn" style="padding:10px 18px;font-size:13px;background:#b91c1c;color:#fff;border-color:#b91c1c;" onclick="admResetHistory()">সব ইতিহাস মুছুন</button>' +
+          '</div>' +
         '</div>' +
       '</div>' +
     '</div>' +

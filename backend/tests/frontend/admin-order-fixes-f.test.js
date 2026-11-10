@@ -271,7 +271,7 @@ describe('sidebar-unified-orders: one orders section, bulk delete, userTotal', (
     expect(ADMIN_HTML).not.toContain('data-t="bdrisApps"');
     expect(ADMIN_HTML).not.toContain('data-t="engineJobs"');
     expect(ADMIN_HTML).not.toContain('data-t="autoData"');
-    expect(ADMIN_HTML).toContain('/js/admin.js?v=20261111-1'); // Single-SMS-gateway navigation update
+    expect(ADMIN_HTML).toContain('/js/admin.js?v=20261111-2'); // Single-SMS-gateway navigation update
   });
   test('admin engine dropdowns (create + edit) include land-khatian', () => {
     expect(ADMIN_SRC.split('value="land-khatian"').length - 1).toBeGreaterThanOrEqual(2);

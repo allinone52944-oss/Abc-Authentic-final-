@@ -2838,4 +2838,59 @@ router.get('/monitor', async (req, res) => {
   }
 });
 
+// ---- History reset (admin, irreversible) -------------------------
+// Wipes service history + customer orders + their stored files only.
+// Users, balances, payments and settings are untouched. Requires the
+// admin password, a typed confirmation, a backup from the last 24h and
+// no in-progress orders (paid work must not be silently discarded).
+const RESET_CONFIRM_TEXT = 'সব মুছুন';
+const RESET_FILE_DIRS = [
+  '/opt/all-in-one-abc-authentic/uploads/orders',
+  '/opt/all-in-one-abc-authentic/uploads/manual',
+  '/opt/all-in-one-abc-authentic/uploads/engine-jobs',
+];
+router.post('/reset-history', async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (String(b.confirm_text || '').trim() !== RESET_CONFIRM_TEXT) return res.status(400).json({ error: 'CONFIRM_TEXT' });
+    const ur = await db.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
+    const hash = ur.rows[0] && ur.rows[0].password_hash;
+    const ok = hash && b.admin_password ? await verifyPassword(String(b.admin_password), hash) : false;
+    if (!ok) return res.status(403).json({ error: 'WRONG_PASSWORD' });
+    const br = await db.query("SELECT value FROM settings WHERE key = 'backup.last' LIMIT 1");
+    let last = br.rows[0] && br.rows[0].value;
+    try { if (typeof last === 'string') last = JSON.parse(last); } catch (_) { last = null; }
+    const at = last && last.at ? Date.parse(last.at) : NaN;
+    if (!Number.isFinite(at) || Date.now() - at > 24 * 3600 * 1000) return res.status(409).json({ error: 'BACKUP_REQUIRED' });
+    let counts;
+    await db.withTransaction(async (client) => {
+      const act = await client.query("SELECT COUNT(*)::int AS n FROM orders WHERE status IN ('new','pending','processing')");
+      const n = Number(act.rows[0] && act.rows[0].n) || 0;
+      if (n > 0) { const e = new Error('ACTIVE_ORDERS'); e.active = n; throw e; }
+      counts = {};
+      for (const t of ['order_support_messages', 'chat_messages', 'order_status_history', 'orders', 'engine_jobs', 'manual_submissions', 'bdris_applications']) {
+        const where = t === 'chat_messages' ? ' WHERE order_id IS NOT NULL' : '';
+        const r = await client.query('DELETE FROM ' + t + where);
+        counts[t] = r.rowCount || 0;
+      }
+    });
+    let files = 0;
+    const path = require('path');
+    for (const dir of RESET_FILE_DIRS) {
+      try {
+        for (const f of fs.readdirSync(dir)) {
+          const fp = path.join(dir, f);
+          try { if (fs.statSync(fp).isFile()) { fs.unlinkSync(fp); files++; } } catch (_) {}
+        }
+      } catch (_) { /* dir may not exist */ }
+    }
+    await logActivity(req.user.id, 'history.reset', { counts, files });
+    res.json({ ok: true, counts, files });
+  } catch (e) {
+    if (e.message === 'ACTIVE_ORDERS') return res.status(409).json({ error: 'ACTIVE_ORDERS', active: e.active });
+    safeLog('[admin] history reset error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
 module.exports = router;
