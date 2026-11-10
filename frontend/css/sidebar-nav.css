@@ -1,0 +1,12 @@
+/* Sidebar: steady order, current sub-page nested under its parent, always-reachable logout. */
+body:is(.flagship-app,.flagship-dashboard) .sidebar { position: sticky; top: 0; height: 100svh; display: flex; flex-direction: column; overflow: hidden; }
+body:is(.flagship-app,.flagship-dashboard) .sidebar nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+body:is(.flagship-app,.flagship-dashboard) .sidebar .side-link { cursor: pointer; user-select: none; }
+body:is(.flagship-app,.flagship-dashboard) .sidebar .side-link:focus-visible,
+body:is(.flagship-app,.flagship-dashboard) .side-logout:focus-visible { outline: 2px solid var(--pv-gold-fill, #e7b94a); outline-offset: 2px; }
+body:is(.flagship-app,.flagship-dashboard) .sidebar .side-link.side-sub { margin: -2px 0 6px 22px; min-height: 38px; font-size: 13px; padding-left: 14px; position: relative; }
+body:is(.flagship-app,.flagship-dashboard) .sidebar .side-link.side-sub::before { content: ''; position: absolute; left: -10px; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: currentColor; opacity: .35; }
+body:is(.flagship-app,.flagship-dashboard) .sidebar .side-link.side-sub .ico { display: none; }
+body:is(.flagship-app,.flagship-dashboard) .side-user-card { flex: 0 0 auto; margin-top: 12px; }
+.side-logout { flex: 0 0 auto; margin-top: 12px; min-height: 44px; width: 100%; border: 1px solid rgba(255,255,255,.14); border-radius: 12px; background: transparent; color: inherit; font: inherit; font-size: 14px; cursor: pointer; text-align: left; padding: 10px 14px; opacity: .85; }
+.side-logout:hover { background: rgba(255,255,255,.08); opacity: 1; }
