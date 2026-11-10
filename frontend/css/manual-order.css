@@ -28,3 +28,26 @@
   .page-order-create .order-meta #svcPrice { grid-row: span 2; justify-self: start; }
   .page-order-create #submitBtn { position: sticky; bottom: 84px; z-index: 5; box-shadow: 0 8px 24px rgba(6,78,59,.25); }
 }
+
+/* Unframed application composition; state containers retain inline visibility. */
+.page-order-create { --manual-error: #b91c1c; }
+.page-order-create .main > .manual-workspace { background: transparent; border: 0; padding: 0; box-shadow: none; }
+.page-order-create .manual-workspace .order-meta { border-radius: 8px; padding: 24px; gap: 20px; }
+.page-order-create .manual-section { padding-block: 24px; border-bottom: 1px solid var(--layout-line); }
+.page-order-create .manual-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; font-size: 18px; color: var(--layout-ink); }
+.page-order-create .manual-heading > span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--layout-emerald); color: var(--layout-light); font-size: 14px; }
+.page-order-create .multi-dropzone { border-color: var(--layout-line); border-radius: 8px; background: var(--layout-paper); }
+.page-order-create .multi-dropzone:hover { border-color: var(--layout-emerald); background: var(--layout-soft); }
+.page-order-create .multi-dropzone:focus-visible { outline: 3px solid var(--layout-emerald); outline-offset: 4px; }
+.page-order-create #namedDocs .field { background: transparent !important; border: 0 !important; border-bottom: 1px solid var(--layout-line) !important; padding-inline: 0 !important; }
+.page-order-create #reviewBody { overflow-wrap: anywhere; }
+.page-order-create #reviewBox { border-radius: 8px !important; }
+.page-order-create .manual-load-error { padding: 24px 0; color: var(--manual-error); }
+.page-order-create .manual-load-error .btn { margin-top: 12px; }
+.page-order-create #submitBtn { position: static; box-shadow: none; }
+@media (max-width: 768px) {
+  .page-order-create .manual-workspace .order-meta { padding: 20px; }
+  .page-order-create #reviewBox > div:nth-child(3) { flex-direction: column; }
+  .page-order-create #reviewBox .btn { width: 100%; white-space: normal; }
+  .page-order-create #universalUploadSection > label { flex-direction: column; align-items: flex-start; gap: 4px; }
+}

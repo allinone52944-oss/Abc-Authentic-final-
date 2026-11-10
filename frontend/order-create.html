@@ -115,7 +115,7 @@
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/service-workspace.css?v=20261110-1">
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
-<link rel="stylesheet" href="/css/manual-order.css?v=20261110-12">
+<link rel="stylesheet" href="/css/manual-order.css?v=20261110-13">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
 </head>
 <body class="has-tabbar flagship-app service-workspace page-order-create">
@@ -144,8 +144,8 @@
 
     <div class="topbar">
       <div>
-        <h2>🛒 নতুন সেবার আবেদন / অর্ডার</h2>
-        <p>প্রয়োজনীয় তথ্য ও ডকুমেন্টস প্রদান করে সরাসরি অর্ডার সম্পন্ন করুন</p>
+        <h2>নতুন অর্ডার</h2>
+        
       </div>
     </div>
 
@@ -160,7 +160,7 @@
       </div>
     </div>
 
-    <div class="card" style="max-width:780px;">
+    <div class="card manual-workspace" style="max-width:780px;">
       <div class="order-meta">
         <div>
           <h2 id="svcName" style="font-size:20px;font-weight:800;color:#0f172a;margin-bottom:4px;">লোড হচ্ছে…</h2>
@@ -176,11 +176,16 @@
       <!-- Special instructions from admin -->
       <div id="instWrap" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px 16px;margin-bottom:20px;color:#1e40af;font-size:13px;line-height:1.6;"></div>
 
+      <section class="manual-section" aria-labelledby="detailsHeading">
+      <h3 id="detailsHeading" class="manual-heading"><span>১</span> প্রয়োজনীয় তথ্য</h3>
       <!-- Dynamic or fallback fields container -->
       <div id="fieldsContainer">
         <!-- Rendered dynamically -->
       </div>
 
+      </section>
+      <section class="manual-section" aria-labelledby="documentsHeading">
+      <h3 id="documentsHeading" class="manual-heading"><span>২</span> ডকুমেন্ট</h3>
       <!-- Named required documents (if defined by admin) -->
       <div id="namedDocs"></div>
 
@@ -190,7 +195,7 @@
           <span>📎 প্রয়োজনীয় ডকুমেন্টস ও ফাইল আপলোড</span>
           <span style="font-size:12px;font-weight:normal;color:#64748b;">(ছবি বা PDF — সর্বোচ্চ ৬টি)</span>
         </label>
-        <div class="multi-dropzone" onclick="document.getElementById('multiDocsInput').click()" id="dropArea">
+        <div class="multi-dropzone" onclick="document.getElementById('multiDocsInput').click()" id="dropArea" role="button" tabindex="0" aria-label="ডকুমেন্ট নির্বাচন করুন">
           <input type="file" id="multiDocsInput" multiple accept=".pdf,.jpg,.jpeg,.png" style="display:none;" onchange="handleFileSelect(this.files)">
           <div style="font-size:32px;margin-bottom:6px;">📤</div>
           <div style="font-weight:700;font-size:14px;color:#1d4ed8;">ফাইল নির্বাচন করতে এখানে ক্লিক করুন</div>
@@ -199,8 +204,9 @@
         <div id="fileListContainer" style="margin-top:10px;display:flex;flex-direction:column;gap:6px;"></div>
       </div>
 
+      </section>
       <div class="field" style="margin-top:16px;">
-        <label style="font-size:13px;font-weight:600;color:#334155;">অতিরিক্ত নোট বা নির্দেশনা (ঐচ্ছিক)</label>
+        <label for="notes" style="font-size:13px;font-weight:600;color:#334155;">অতিরিক্ত নোট বা নির্দেশনা (ঐচ্ছিক)</label>
         <textarea id="notes" rows="3" placeholder="অর্ডারের বিষয়ে আপনার কোনো বিশেষ অনুরোধ বা নোট থাকলে এখানে লিখুন…"></textarea>
       </div>
 
@@ -212,7 +218,7 @@
         <div>🎟️ কুপন কোড আছে? <a href="/wallet.html#couponCard" style="color:#1d4ed8;font-weight:700;">ওয়ালেটে রিডিম করুন →</a> — রিডিমের পর এই পাতায় ফিরে এলে এই সেবার ক্রেডিট এখানে দেখাবে।</div>
       </div>
 
-      <div class="err" id="err" style="display:none;margin-top:14px;padding:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;color:#b91c1c;font-size:14px;"></div>
+      <div class="err" id="err" role="alert" style="display:none;margin-top:14px;padding:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;color:#b91c1c;font-size:14px;"></div>
 
       <!-- Audit #40 — review step: তথ্য + ফাইল + ফি দেখে নিশ্চিত করুন। নিশ্চিত করার আগে কোনো টাকা কাটা হয় না। -->
       <div id="reviewBox" style="display:none;margin-top:14px;padding:16px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:12px;">
@@ -225,7 +231,7 @@
         <div style="font-size:12px;color:#64748b;margin-top:8px;text-align:center;">নিশ্চিত করলেই ওয়ালেট থেকে ফি কাটা হবে — তার আগে কোনো টাকা কাটা হয় না।</div>
       </div>
 
-      <button class="btn" id="submitBtn" style="width:100%;padding:14px;font-size:16px;font-weight:700;margin-top:14px;">পর্যালোচনা করুন →</button>
+      <button class="btn" id="submitBtn" disabled style="width:100%;padding:14px;font-size:16px;font-weight:700;margin-top:14px;">পর্যালোচনা করুন →</button>
       
       <div id="submitNotice" style="display:none;margin-top:12px;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;color:#1e40af;font-size:13px;text-align:center;"></div>
     </div>
@@ -263,6 +269,8 @@ function formatBytes(bytes){
 const sid=new URLSearchParams(location.search).get('service');
 let svc=null;
 let userBal=0;
+let applicant=null;
+let draftKey=null;
 let lockedCredit=0; // audit #44 — service-locked credit for this service (spent first by payForService)
 let rawSampleText='';
 let selectedFiles=[];
@@ -270,6 +278,7 @@ let selectedFiles=[];
 // Drag & drop handlers
 const dropArea=document.getElementById('dropArea');
 if(dropArea){
+  dropArea.addEventListener('keydown', e=>{ if(e.target === dropArea && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); document.getElementById('multiDocsInput').click(); } });
   ['dragenter','dragover'].forEach(name=>{
     dropArea.addEventListener(name, e=>{ e.preventDefault(); e.stopPropagation(); dropArea.style.borderColor='var(--primary-600)'; dropArea.style.background='#dbeafe'; }, false);
   });
@@ -449,10 +458,14 @@ function renderFeeBreakdown(price){
 }
 
 async function init(){
+  const reviewButton = document.getElementById('submitBtn');
+  if(reviewButton) reviewButton.disabled = true;
   try {
     const me=await ABC.api('/auth/me');
     if(!me.ok){location.href='/login.html';return;}
     const u=(await me.json()).user;
+    applicant=u;
+    draftKey = u.id ? 'order_' + u.id + '_' + sid : null;
     userBal=Number(u.balance || 0);
 
     if(!sid){
@@ -484,6 +497,7 @@ async function init(){
     }
     const d=await r.json();
     svc=d.service;
+    svc.fields_required = safeArray(svc.fields_required);
     const svcPrice = Number(svc.price || 0);
 
     // Audit #44 — locked credit for THIS service (GET /wallet returns
@@ -592,7 +606,7 @@ async function init(){
               '<span>📄 ' + esc(doc) + ' <span style="color:#ef4444;">*</span></span>' +
               '<span style="font-size:11px;font-weight:normal;color:#64748b;">(JPG, PNG বা PDF)</span>' +
             '</label>' +
-            '<div class="file-drop" style="background:#ffffff;border:1.5px dashed #cbd5e1;border-radius:10px;padding:12px 14px;cursor:pointer;" onclick="this.querySelector(\'input\').click()">' +
+            '<div class="file-drop" style="background:#ffffff;border:1.5px dashed #cbd5e1;border-radius:10px;padding:12px 14px;cursor:pointer;" role="button" tabindex="0" aria-label="ডকুমেন্ট নির্বাচন করুন" onkeydown="if(event.target===this &amp;&amp; (event.key===\'Enter\' || event.key===\' \')){event.preventDefault();this.querySelector(\'input\').click()}" onclick="if(event.target===this || !event.target.matches(\'input\'))this.querySelector(\'input\').click()">' +
               '<input type="file" data-doc="' + i + '" data-doctype="' + esc(doc) + '" accept="image/*,.pdf" style="display:none;" onchange="updateDocFeedback(this, \'' + i + '\')">' +
               '<div id="docFeedback_' + i + '" style="display:flex;align-items:center;gap:10px;color:#475569;font-size:13px;">' +
                 '<span style="font-size:22px;">📤</span>' +
@@ -610,20 +624,23 @@ async function init(){
       document.getElementById('namedDocs').innerHTML = '';
     }
   } catch(e) {
+    svc = null;
     console.error('Init error:', e);
     const fc = document.getElementById('fieldsContainer');
     if(fc){
-      fc.innerHTML = '<div style="background:#fef2f2;border:1px solid #fecaca;padding:16px;border-radius:10px;color:#991b1b;">⚠️ পেজ লোড করতে ত্রুটি: ' + esc(e.message||e) + '</div>';
+      fc.innerHTML = '<div class="manual-load-error" role="alert"><p>সেবার তথ্য লোড হয়নি। আবার চেষ্টা করুন।</p><button type="button" class="btn btn-secondary" onclick="location.reload()">আবার চেষ্টা করুন</button></div>';
     }
   }
 
+  if(!svc) return;
+
   // Always bind submit button regardless of draft state
   const sbBtn = document.getElementById('submitBtn');
-  if(sbBtn) sbBtn.onclick = showReview; // audit #40 — review first, confirm after
+  if(sbBtn){ sbBtn.onclick = showReview; sbBtn.disabled = false; } // audit #40 — review first, confirm after
 
   // Restore draft safely (isolated from submit button binding)
   try {
-    const draft = LocalDraft.get('order_' + sid);
+    const draft = draftKey ? LocalDraft.get(draftKey) : null;
     if(draft){
       document.querySelectorAll('[data-field]').forEach(el=>{
         if(draft[el.dataset.field] !== undefined) el.value = draft[el.dataset.field];
@@ -646,6 +663,7 @@ async function init(){
   // 'মাতার নাম' / 'অভিভাবকের নাম' must never receive the user's own
   // name, so no substring matching is used here.
   try {
+    const u = applicant || {};
     const NAME_KEYS = ['নাম','আবেদনকারীর নাম','আপনার নাম','নিজের নাম','পুরো নাম','name','applicant name','your name','full name','applicant_name','full_name'];
     const PHONE_KEYS = ['মোবাইল','মোবাইল নম্বর','মোবাইল নাম্বার','ফোন','ফোন নম্বর','আপনার মোবাইল','নিজের মোবাইল','phone','mobile','phone number','mobile number','mobile_number','phone_number'];
     const keyOf = (el) => {
@@ -678,7 +696,7 @@ function triggerDraftSave(){
       manualDetails: manualEl ? manualEl.value : ''
     };
     document.querySelectorAll('[data-field]').forEach(el=>{ d[el.dataset.field] = el.value; });
-    LocalDraft.save('order_' + sid, d);
+    if(draftKey) LocalDraft.save(draftKey, d);
   } catch(_) {}
 }
 
@@ -697,6 +715,7 @@ function flagField(name){
 // render and the confirm post share one source of truth. Returns
 // null (with the error shown) when something is missing/invalid.
 function collectOrder(){
+  if(!svc) return null;
   const err = document.getElementById('err');
   err.style.display = 'none';
   err.textContent = '';
@@ -704,7 +723,7 @@ function collectOrder(){
   const data = {};
   document.querySelectorAll('[data-field]').forEach(el=>{ data[el.dataset.field] = el.value.trim(); });
 
-  const fields = svc.fields_required || [];
+  const fields = safeArray(svc.fields_required);
   if(fields && fields.length > 0){
     for(const f of fields){
       const v = data[f.name] || '';
@@ -727,6 +746,7 @@ function collectOrder(){
     if(!manualVal){
       err.textContent = '⚠️ অনুগ্রহ করে আবেদনের প্রয়োজনীয় তথ্য বা পূরণকৃত ফরমটি প্রদান করুন';
       err.style.display = 'block';
+      flagField('_manual_form');
       return null;
     }
     data._manual_form = manualVal;
@@ -789,7 +809,7 @@ function showReview(){
   const sp = feeSplit(price); // audit #44 — credit first, then wallet
   const after = userBal - sp.fromBalance;
   const short = userBal + lockedCredit < price;
-  const fields = svc.fields_required || [];
+  const fields = safeArray(svc.fields_required);
   const infoRows = fields.length > 0
     ? fields.map(f=>{
         const v = c.data[f.name] || '';
@@ -922,7 +942,7 @@ async function submit(){
 
   // Clear drafts & idempotency key safely
   LocalIdem.clear('order_submit_' + sid);
-  LocalDraft.clear('order_' + sid);
+  if(draftKey) LocalDraft.clear(draftKey);
 
   // Audit #74 — the headline must not claim "সম্পন্ন" when documents
   // are still pending: the order is created, the documents are not.
