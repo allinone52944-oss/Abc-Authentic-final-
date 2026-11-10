@@ -1,51 +1,141 @@
-<!DOCTYPE html>
-<html lang="bn">
+<!doctype html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>ইউনিভার্সাল সনদ জেনারেটর ইঞ্জিন</title>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
-    <style>
-        body { font-family: Arial, sans-serif; background: #eef2f5; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: flex-start; gap: 20px; }
-        .control-panel { width: 380px; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-height: 90vh; overflow-y: auto; }
-        .control-panel h3 { margin-top: 0; color: #333; border-bottom: 2px solid #0066cc; padding-bottom: 8px; }
-        .form-group { margin-bottom: 12px; }
-        .form-group label { display: block; font-size: 13px; font-weight: bold; margin-bottom: 4px; color: #444; }
-        .form-group input { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
-        .document-container { width: 794px; height: 1123px; background: #ffffff; position: relative; box-shadow: 0 4px 15px rgba(0,0,0,0.15); overflow: hidden; }
-        .doc-content { position: relative; z-index: 2; padding: 50px; box-sizing: border-box; font-size: 15px; color: #000; line-height: 1.6; }
-        .qr-slot { position: absolute; bottom: 60px; left: 50px; width: 90px; height: 90px; }
-        .qr-slot canvas { width: 100% !important; height: 100% !important; }
-        .cert-title { text-align: center; font-size: 20px; font-weight: bold; margin: 20px 0; text-decoration: underline; }
-        .print-btn { background: #28a745; color: white; border: none; padding: 10px; width: 100%; font-size: 16px; border-radius: 4px; cursor: pointer; margin-top: 15px; }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Universal BD Sanad & Certificate Engine</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+<style>
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #e2e8f0; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: flex-start; gap: 25px; }
+  .control-panel { width: 400px; background: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-height: 90vh; overflow-y: auto; }
+  .control-panel h2 { margin-top: 0; color: #1e293b; font-size: 18px; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; }
+  .form-group { margin-bottom: 12px; }
+  .form-group label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 4px; color: #475569; }
+  .form-group input, .form-group select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 13px; }
+  .btn { background: #3b82f6; color: white; border: none; padding: 10px; width: 100%; font-size: 14px; font-weight: bold; border-radius: 5px; cursor: pointer; margin-top: 10px; }
+  .btn-print { background: #10b981; }
+  .certificate-container { width: 794px; height: 1123px; background: #ffffff; position: relative; box-shadow: 0 4px 25px rgba(0,0,0,0.15); box-sizing: border-box; padding: 50px; border: 8px double #1e3a8a; display: flex; flex-direction: column; justify-content: space-between; }
+  .cert-header { text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 15px; }
+  .cert-header h2 { margin: 0; color: #1e3a8a; font-size: 24px; text-transform: uppercase; }
+  .cert-header p { margin: 5px 0 0; color: #64748b; font-size: 13px; font-weight: bold; }
+  .cert-meta { display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; color: #334155; margin-top: 15px; }
+  .cert-body { text-align: center; margin: 10px 0; }
+  .cert-body h1 { font-size: 26px; color: #b91c1c; margin: 10px 0; letter-spacing: 1px; }
+  .cert-body .content-text { text-align: justify; font-size: 15px; color: #1e293b; line-height: 1.8; margin-top: 20px; }
+  .cert-footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 30px; border-top: 2px solid #e2e8f0; padding-top: 20px; }
+  .qr-box { text-align: center; }
+  .qr-box span { display: block; font-size: 10px; color: #64748b; margin-top: 2px; }
+  .signature-box { text-align: center; font-size: 13px; font-weight: bold; color: #1e293b; }
+  .signature-line { border-top: 1px solid #1e293b; width: 180px; margin-top: 45px; padding-top: 5px; }
+  @media print {
+    body { background: none; padding: 0; display: block; }
+    .control-panel { display: none; }
+  }
+</style>
 </head>
 <body>
     <div class="control-panel">
-        <h3>ইউনিভার্সাল মাষ্টার ইঞ্জিন</h3>
-        <div class="form-group"><label>সনদের শিরোনাম:</label><input type="text" id="inputCertTitle" value="“জাতীয়তা সনদ”" oninput="syncData()"></div>
-        <div class="form-group"><label>নাম:</label><input type="text" id="inputName" value="মোসাম্মৎ তানিয়া আকতার" oninput="syncData()"></div>
-        <div class="form-group"><label>পিতার নাম:</label><input type="text" id="inputFather" value="মোহাম্মদ আলমগীর হোসেন" oninput="syncData()"></div>
-        <div class="form-group"><label>QR কোড URL:</label><input type="text" id="inputUrl" value="https://www.southmadarshaup.com/verify?id=1081" oninput="updateQR()"></div>
-        <button class="print-btn" onclick="window.print()">প্রিন্ট / PDF করুন</button>
-    </div>
-    <div class="document-container">
-        <div class="doc-content">
-            <div class="cert-title" id="valCertTitle">“জাতীয়তা সনদ”</div>
-            <p>নাম: <span id="valName" style="font-weight:bold;">মোসাম্মৎ তানিয়া আকতার</span></p>
-            <p>পিতার নাম: <span id="valFather">মোহাম্মদ আলমগীর হোসেন</span></p>
+        <h2>BD Sanad Engine Control</h2>
+        <div class="form-group">
+            <label>Select Union / Portal:</label>
+            <select id="sel-union" onchange="updateEngine()">
+                <option value="https://unionportals.gov.bd/union-1">1 No. Madhyapara Union Parishad</option>
+                <option value="https://unionportals.gov.bd/union-2">2 No. South Sadar Union Parishad</option>
+                <option value="https://unionportals.gov.bd/paurashava">Sadar Paurashava Office</option>
+            </select>
         </div>
-        <div class="qr-slot"><canvas id="qrcodeCanvas"></canvas></div>
+        <div class="form-group">
+            <label>Sanad Type:</label>
+            <select id="sel-type" onchange="updateEngine()">
+                <option value="চারিত্রিক সনদপত্র">চারিত্রিক সনদপত্র (Character Certificate)</option>
+                <option value="নাগরিক সনদপত্র">নাগরিক সনদপত্র (Citizenship Certificate)</option>
+                <option value="ওয়ারিশান সনদপত্র">ওয়ারিশান সনদপত্র (Succession Certificate)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Memo / Smarak No:</label>
+            <input type="text" id="inp-memo" value="সাপো/ইউপি/২০২৬/৮৫২" oninput="updateEngine()">
+        </div>
+        <div class="form-group">
+            <label>Applicant Name:</label>
+            <input type="text" id="inp-name" value="মোঃ পঙ্কজ দাস" oninput="updateEngine()">
+        </div>
+        <div class="form-group">
+            <label>Father's Name:</label>
+            <input type="text" id="inp-father" value="মৃত হরেন্দ্র দাস" oninput="updateEngine()">
+        </div>
+        <div class="form-group">
+            <label>Mother's Name:</label>
+            <input type="text" id="inp-mother" value="বাসনা রানী দাস" oninput="updateEngine()">
+        </div>
+        <div class="form-group">
+            <label>Village / Address:</label>
+            <input type="text" id="inp-address" value="গ্রাম: উত্তর পাড়া, ডাকঘর: সদর - ৪০০০" oninput="updateEngine()">
+        </div>
+        <div class="form-group">
+            <label>Issue Date:</label>
+            <input type="date" id="inp-date" value="2026-11-11" oninput="updateEngine()">
+        </div>
+        <button class="btn btn-print" onclick="window.print()">Print / Save PDF</button>
     </div>
-    <script>
-        function syncData() {
-            document.getElementById("valCertTitle").innerText = document.getElementById("inputCertTitle").value;
-            document.getElementById("valName").innerText = document.getElementById("inputName").value;
-            document.getElementById("valFather").innerText = document.getElementById("inputFather").value;
-        }
-        function updateQR() {
-            QRCode.toCanvas(document.getElementById("qrcodeCanvas"), document.getElementById("inputUrl").value, { width: 90, margin: 0 });
-        }
-        window.onload = updateQR;
-    </script>
+
+    <div class="certificate-container">
+        <div>
+            <div class="cert-header">
+                <h2 id="prev-union-name">1 No. Madhyapara Union Parishad</h2>
+                <p>উপজেলা: সদর, জেলা: বাংলাদেশ</p>
+            </div>
+            <div class="cert-meta">
+                <span>স্মারক নম্বর: <span id="prev-memo">সাপো/ইউপি/২০২৬/৮৫২</span></span>
+                <span>তারিখ: <span id="prev-date">2026-11-11</span></span>
+            </div>
+        </div>
+        <div class="cert-body">
+            <h1 id="prev-type">চারিত্রিক সনদপত্র</h1>
+            <div class="content-text">
+                এই মর্মে প্রত্যয়ন করা যাচ্ছে যে, <strong id="prev-name">মোঃ পঙ্কজ দাস</strong>, পিতা: <strong id="prev-father">মৃত হরেন্দ্র দাস</strong>, মাতা: <strong id="prev-mother">বাসনা রানী দাস</strong>, স্থায়ী ঠিকানা: <strong id="prev-address">গ্রাম: উত্তর পাড়া, ডাকঘর: সদর - ৪০০০</strong>, অত্র ইউনিয়নের একজন স্থায়ী বাসিন্দা এবং আমার পরিচিতি মতে তিনি চরিত্রগতভাবে একজন ভালো ও সৎ স্বভাবের ব্যক্তি। রাষ্ট্রবিরোধী বা সমাজবিরোধী কোনো কাজের সাথে তাঁর কখনো সংশ্লিষ্টতা পাওয়া যায়নি। 
+                <br><br>
+                আমি তাঁর সর্বাঙ্গীন মঙ্গল ও উজ্জ্বল ভবিষ্যৎ কামনা করি।
+            </div>
+        </div>
+        <div class="cert-footer">
+            <div class="qr-box">
+                <canvas id="qrcode"></canvas>
+                <span>সরাসরি স্ক্যান করুন</span>
+            </div>
+            <div class="signature-box">
+                প্রশাসনিক কর্মকর্তা / সচিব<br>
+                <span id="prev-sign-union">ইউনিয়ন পরিষদ</span>
+                <div class="signature-line">চেয়ারম্যানের স্বাক্ষর</div>
+            </div>
+        </div>
+    </div>
+
+<script>
+  function updateEngine() {
+    const unionSelect = document.getElementById('sel-union');
+    const unionText = unionSelect.options[unionSelect.selectedIndex].text;
+    const unionUrl = unionSelect.value;
+
+    document.getElementById('prev-union-name').innerText = unionText;
+    document.getElementById('prev-sign-union').innerText = unionText;
+    
+    document.getElementById('prev-type').innerText = document.getElementById('sel-type').value;
+    document.getElementById('prev-memo').innerText = document.getElementById('inp-memo').value;
+    document.getElementById('prev-date').innerText = document.getElementById('inp-date').value;
+    document.getElementById('prev-name').innerText = document.getElementById('inp-name').value;
+    document.getElementById('prev-father').innerText = document.getElementById('inp-father').value;
+    document.getElementById('prev-mother').innerText = document.getElementById('inp-mother').value;
+    document.getElementById('prev-address').innerText = document.getElementById('inp-address').value;
+
+    const verificationData = unionUrl + '?verify=true&name=' + encodeURIComponent(document.getElementById('inp-name').value) + '&memo=' + encodeURIComponent(document.getElementById('inp-memo').value);
+    const canvas = document.getElementById('qrcode');
+    
+    QRCode.toCanvas(canvas, verificationData, { width: 100, margin: 1 }, function (error) {
+      if (error) console.error(error);
+    });
+  }
+  updateEngine();
+</script>
 </body>
 </html>
