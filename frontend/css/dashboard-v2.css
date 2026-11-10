@@ -168,3 +168,17 @@ body.dash-v2.flagship-dashboard #mobileServices .svc2-badge {
   position: static !important; grid-column: 1 / -1; grid-row: 3;
   justify-self: start; background: var(--pv-gold); color: var(--pv-gold-ink);
 }
+/* Restore complete-list navigation without changing the approved section order. */
+body.dash-v2.flagship-dashboard .workspace-overview .recent-orders-hdr > a,
+body.dash-v2.flagship-dashboard .workspace-overview .popular-panel > h3 a,
+body.dash-v2.flagship-dashboard .workspace-overview .notices-panel > h3 a {
+  display: inline-flex !important; margin-left: auto; min-height: 44px;
+  align-items: center; flex-shrink: 0; color: var(--pv-primary) !important;
+}
+body.dash-v2 .dv2-hist-hdr { flex-wrap: wrap; gap: 8px; }
+body.dash-v2 .dv2-hist-hdr a { min-height: 44px; align-items: center; }
+body.dash-v2 .dv2-row { flex-wrap: wrap; }
+body.dash-v2 .dv2-row-main b { white-space: normal; overflow: visible; overflow-wrap: anywhere; line-height: 1.6; }
+body.dash-v2 .dv2-tag { white-space: normal; }
+body.dash-v2 :is(.hero-bal-toggle,#greetVoiceBtn,#greetVoiceBtnM) { min-height: 44px; min-width: 44px; }
+body.dash-v2 :is(.svc2,.dv2-q):focus-visible { outline: 2px solid var(--pv-primary); outline-offset: 3px; }
