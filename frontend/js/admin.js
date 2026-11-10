@@ -17,6 +17,9 @@ const content = document.getElementById('content');
 let me = null;
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+// Engine services deliver instantly; the manual "delivered" step must not
+// re-notify the customer for them.
+function isEngineOrder(o){return !!o&&(String(o.service_engine==null?'':o.service_engine).trim()!==''||o.service_type==='automated');}
 function escJs(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"').replace(/\n/g,'\\n');}
 // JSON value for use INSIDE a double-quoted HTML attribute (e.g. onclick="fn(...)").
 // Raw JSON.stringify output contains " characters that terminate the attribute
@@ -1155,6 +1158,8 @@ TABS.orders = async () => {
           quickActionBtn = '<button class="btn-quick-primary" onclick="AdmOrders.startProcessing(\'' + r.id + '\', this)">▶️ গ্রহণ করুন</button>';
         } else if (r.status === 'processing') {
           quickActionBtn = '<button class="btn-quick-success" onclick="AdmOrders.openQuickComplete(\'' + r.id + '\')">✅ সম্পন্ন ও ডেলিভারি</button>';
+        } else if (r.status === 'completed' && isEngineOrder(r)) {
+          quickActionBtn = '<span style="color:#059669;font-weight:700;font-size:11px;">⚡ ইঞ্জিনে ডেলিভার্ড</span>';
         } else if (r.status === 'completed') {
           quickActionBtn = '<button class="btn-quick-emerald" onclick="AdmOrders.markDelivered(\'' + r.id + '\', this)">🚀 ডেলিভার্ড করুন</button>';
         } else if (r.status === 'delivered') {
@@ -1725,6 +1730,7 @@ window.AdmOrders = {
     if (this._setBusy(btn, true) === false) return;
     const _backTab = this._backTabForAction();
     const o = this.findOrder(id);
+    if (isEngineOrder(o)) { alert('ℹ️ ইঞ্জিনের সেবা গ্রাহক সাথে সাথেই পেয়েছেন — আলাদা ডেলিভার্ড করার দরকার নেই।'); this._setBusy(btn, false); return; }
     if (!confirm('অর্ডারটি গ্রাহককে ডেলিভার্ড হিসেবে মার্ক করতে চান?')) { this._setBusy(btn, false); return; }
     try {
       await this.smartTransition(id, o ? o.status : 'completed', 'delivered');
@@ -2271,7 +2277,7 @@ window.AdmOrders = {
         '</div>' +
         '<p style="color:var(--text-muted);font-size:12px;margin:4px 0 10px;">অর্ডারটির কাজ সম্পন্ন হয়েছে। গ্রাহককে চূড়ান্ত ডেলিভারি কনফার্ম করুন।</p>' +
         '<div class="adm-hub-actions">' +
-          '<button class="btn-quick-emerald" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.markDelivered(\'' + o.id + '\', this)">🚀 ডেলিভার্ড মার্ক করুন ও নোটিফিকেশন দিন</button>' +
+          (isEngineOrder(o) ? '' : '<button class="btn-quick-emerald" style="padding:10px 18px;font-size:13px;" onclick="AdmOrders.markDelivered(\'' + o.id + '\', this)">🚀 ডেলিভার্ড মার্ক করুন ও নোটিফিকেশন দিন</button>') +
           '<button class="mini-btn" onclick="AdmOrders.deliForm(\'' + o.id + '\')">📎 অতিরিক্ত ডেলিভারি ফাইল যোগ করুন</button>' +
           '<button class="mini-btn danger" onclick="AdmOrders.refundOrder(\'' + o.id + '\', this)">↩️ রিফান্ড করুন</button>' +
           '<button class="mini-btn danger" onclick="AdmOrders.deleteOrder(\'' + o.id + '\', \'' + _detailBack + '\')">🗑️ মুছে ফেলুন</button>' +
