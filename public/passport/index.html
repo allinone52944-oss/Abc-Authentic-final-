@@ -6,31 +6,80 @@
 <meta name="description" content="Offline editable document with embedded background, editable text styling, and precisely positioned photo and signature upload slots.">
 <title>Passport Engine — Linked Editable Text</title>
 <style>
-  body { font-family: Arial, sans-serif; background: #eef2f5; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: flex-start; gap: 20px; }
-  .control-panel { width: 380px; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-height: 90vh; overflow-y: auto; }
-  .control-panel h3 { margin-top: 0; color: #333; border-bottom: 2px solid #0066cc; padding-bottom: 8px; }
-  .form-group { margin-bottom: 12px; }
-  .form-group label { display: block; font-size: 13px; font-weight: bold; margin-bottom: 4px; color: #444; }
-  .form-group input, .form-group select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
-  .document-container { width: 794px; height: 1123px; background: #ffffff; position: relative; box-shadow: 0 4px 15px rgba(0,0,0,0.15); overflow: hidden; }
-  .doc-content { position: relative; z-index: 2; padding: 50px; box-sizing: border-box; font-size: 15px; color: #000; line-height: 1.6; }
-  .btn { background: #0066cc; color: white; border: none; padding: 10px; width: 100%; font-size: 16px; border-radius: 4px; cursor: pointer; margin-top: 15px; }
-  .btn-print { background: #28a745; }
-</style>
+@font-face{font-family:ScanSans;font-style:normal;font-weight:400;font-display:block;src:url(data:font/woff2;base64,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>...</style>
 </head>
 <body>
     <div class="control-panel">
-        <h3>Passport Master Engine</h3>
-        <div class="form-group"><label>Passport No:</label><input type="text" id="eng-passportNo" value="EJ0762655"></div>
-        <div class="form-group"><label>Full Name:</label><input type="text" id="eng-fullName" value="MD PANKAJ DAS"></div>
-        <div class="form-group"><label>Nationality:</label><input type="text" id="eng-nationality" value="Bangladeshi"></div>
-        <button class="btn btn-print" onclick="window.print()">Print / PDF</button>
+        <h3>Passport Engine Control</h3>
+        <div class="form-group"><label>Passport No:</label><input type="text" id="inp-passNo" value="EJ0762655" oninput="updatePassport()"></div>
+        <div class="form-group"><label>Full Name:</label><input type="text" id="inp-name" value="MD PANKAJ DAS" oninput="updatePassport()"></div>
+        <div class="form-group"><label>Nationality:</label><input type="text" id="inp-nationality" value="BANGLADESHI" oninput="updatePassport()"></div>
+        <div class="form-group"><label>Date of Birth:</label><input type="text" id="inp-dob" value="15 JAN 1990" oninput="updatePassport()"></div>
+        <div class="form-group"><label>Sex:</label><input type="text" id="inp-sex" value="M" oninput="updatePassport()"></div>
+        <div class="form-group"><label>Personal No / NID:</label><input type="text" id="inp-nid" value="19901234567890123" oninput="updatePassport()"></div>
+        <div class="form-group"><label>Expiry Date:</label><input type="text" id="inp-expiry" value="14 JAN 2036" oninput="updatePassport()"></div>
+        <div class="form-group"><label>Upload Photo:</label><input type="file" id="inp-photo" accept="image/*" onchange="loadPhoto(event)"></div>
+        <button class="btn btn-print" onclick="window.print()">Print Passport / PDF</button>
     </div>
+
     <div class="document-container">
-        <div class="doc-content">
-            <h2>Passport Engine Ready</h2>
-            <p>Full-featured Passport Engine template loaded successfully at /passport/</p>
+        <div class="passport-page">
+            <div class="pass-header">
+                <h2>PEOPLE'S REPUBLIC OF BANGLADESH</h2>
+                <span style="font-weight:bold; color:#003366;">PASSPORT</span>
+            </div>
+            <div class="pass-body">
+                <div class="photo-box" id="photo-preview">Photo Slot</div>
+                <div class="details-table">
+                    <table>
+                        <tr><td class="label">Passport No:</td><td id="prev-passNo" style="font-weight:bold; color:#b91c1c;">EJ0762655</td></tr>
+                        <tr><td class="label">Surname / Name:</td><td id="prev-name" style="font-weight:bold;">MD PANKAJ DAS</td></tr>
+                        <tr><td class="label">Nationality:</td><td id="prev-nationality">BANGLADESHI</td></tr>
+                        <tr><td class="label">Date of Birth:</td><td id="prev-dob">15 JAN 1990</td></tr>
+                        <tr><td class="label">Sex:</td><td id="prev-sex">M</td></tr>
+                        <tr><td class="label">Personal No:</td><td id="prev-nid">19901234567890123</td></tr>
+                        <tr><td class="label">Date of Expiry:</td><td id="prev-expiry">14 JAN 2036</td></tr>
+                    </table>
+                </div>
+            </div>
+            <div class="mrz-section" id="prev-mrz">
+                P<BGDMDPANKAJ<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+EJ0762655<4BGD9001157M3601149<<<<<<<<<<<<<<06
+            </div>
         </div>
     </div>
+
+<script>
+  function updatePassport() {
+    const pNo = document.getElementById('inp-passNo').value;
+    const name = document.getElementById('inp-name').value;
+    const nat = document.getElementById('inp-nationality').value;
+    const dob = document.getElementById('inp-dob').value;
+    const sex = document.getElementById('inp-sex').value;
+    const nid = document.getElementById('inp-nid').value;
+    const exp = document.getElementById('inp-expiry').value;
+
+    document.getElementById('prev-passNo').innerText = pNo;
+    document.getElementById('prev-name').innerText = name;
+    document.getElementById('prev-nationality').innerText = nat;
+    document.getElementById('prev-dob').innerText = dob;
+    document.getElementById('prev-sex').innerText = sex;
+    document.getElementById('prev-nid').innerText = nid;
+    document.getElementById('prev-expiry').innerText = exp;
+
+    const mrzFormattedName = name.replace(/\s+/g, '<');
+    document.getElementById('prev-mrz').innerText = 'P<BGD' + mrzFormattedName + '<<
+' + pNo + '<4BGD' + '9001157' + sex + '3601149' + '<<<<<<<<<<<<<<06';
+  }
+
+  function loadPhoto(event) {
+    const reader = new FileReader();
+    reader.onload = function(){
+      const output = document.getElementById('photo-preview');
+      output.innerHTML = '<img src="' + reader.result + '">';
+    };
+    reader.readAsDataURL(event.target.files[0]);
+  }
+</script>
 </body>
 </html>
