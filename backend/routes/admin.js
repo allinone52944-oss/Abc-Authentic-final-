@@ -1592,29 +1592,38 @@ router.post('/orders/:id/delivery-docs', orderDocUpload(db, 'delivery'), async (
   try {
     const orderId = req.params.id;
     if (!req.file) return res.status(400).json({ error: 'NO_FILE' });
-    const ord = await db.query('SELECT * FROM orders WHERE id=$1', [orderId]);
-    if (!ord.rows.length) {
-      unlinkUpload();
-      return res.status(404).json({ error: 'NOT_FOUND' });
-    }
-    const order = ord.rows[0];
-    // Admin-order fix (2026-11-03): a cancelled/refunded/failed order
-    // must not receive new delivery files — the customer could
-    // download a "delivery" after the money came back.
-    if (['cancelled', 'refunded', 'failed'].includes(order.status)) {
-      unlinkUpload();
-      return res.status(400).json({ error: 'INVALID_STATUS', status: order.status });
-    }
-    const docs = safeJsonArray(order.documents);
-    docs.push({
-      type: req.body.doc_type || 'delivery',
-      filename: req.file.filename,
-      originalname: req.file.originalname,
-      path: req.file.path,
-      uploaded_at: new Date().toISOString(),
-      uploaded_by: 'admin'
+    // Lost-update fix: read-modify-write of orders.documents now runs on
+    // the row locked FOR UPDATE, so two uploads at once (double click,
+    // two admins) both land instead of the later one erasing the earlier.
+    const outcome = await db.withTransaction(async (client) => {
+      const ord = await client.query('SELECT * FROM orders WHERE id=$1 FOR UPDATE', [orderId]);
+      if (!ord.rows.length) return { code: 404, error: 'NOT_FOUND' };
+      const cur = ord.rows[0];
+      // A cancelled/refunded/failed order must not receive new delivery
+      // files — the customer could download a "delivery" after the money
+      // came back. Checked on the locked row, so a concurrent cancel wins.
+      if (['cancelled', 'refunded', 'failed'].includes(cur.status)) {
+        return { code: 400, error: 'INVALID_STATUS', status: cur.status };
+      }
+      const list = safeJsonArray(cur.documents);
+      list.push({
+        type: req.body.doc_type || 'delivery',
+        filename: req.file.filename,
+        originalname: req.file.originalname,
+        path: req.file.path,
+        uploaded_at: new Date().toISOString(),
+        uploaded_by: 'admin'
+      });
+      await client.query('UPDATE orders SET documents=$1 WHERE id=$2', [JSON.stringify(list), orderId]);
+      return { order: cur };
     });
-    await db.query('UPDATE orders SET documents=$1 WHERE id=$2', [JSON.stringify(docs), orderId]);
+    if (outcome.error) {
+      unlinkUpload();
+      const body = { error: outcome.error };
+      if (outcome.status) body.status = outcome.status;
+      return res.status(outcome.code).json(body);
+    }
+    const order = outcome.order;
     // P2 (2026-11-03) + B4 (2026-11-03): a file added to an
     // ALREADY-completed or ALREADY-delivered order must tell the
     // customer — otherwise they never look again. This cannot

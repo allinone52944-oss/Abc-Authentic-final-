@@ -436,32 +436,34 @@ adminManual.post('/:id/delivery-docs', (req, res) => {
     if (err) return res.status(400).json({ error: err.message || 'UPLOAD_FAILED' });
     try {
       if (!req.file) return res.status(400).json({ error: 'NO_FILE' });
-      const r = await db.query('SELECT user_id, service_id, status, documents FROM manual_submissions WHERE id = $1', [req.params.id]);
-      if (!r.rows.length) {
-        try { fs.unlinkSync(req.file.path); } catch (_) {}
-        return res.status(404).json({ error: 'NOT_FOUND' });
-      }
-      // B3 (2026-11-03): status gate, mirroring the order
-      // delivery-docs gate (cancelled/refunded/failed there).
-      // A rejected submission must not receive new files — the
-      // customer was already told it will not be done — and the
-      // uploaded file is cleaned up like the 404 path above.
-      if (r.rows[0].status === 'rejected') {
-        try { fs.unlinkSync(req.file.path); } catch (_) {}
-        return res.status(400).json({ error: 'INVALID_STATUS', status: 'rejected' });
-      }
-      const wasCompleted = r.rows[0].status === 'completed';
-      const docs = parseDocs(r.rows[0].documents);
-      docs.push({
-        filename: req.file.filename,
-        originalname: req.file.originalname,
-        size: req.file.size,
-        mimetype: req.file.mimetype,
-        uploaded_by: 'admin',
-        type: 'delivery',
+      // Lost-update fix: lock the submission row while appending, so two
+      // uploads at once both land (the later one used to erase the earlier).
+      const out = await db.withTransaction(async (client) => {
+        const r = await client.query('SELECT user_id, service_id, status, documents FROM manual_submissions WHERE id = $1 FOR UPDATE', [req.params.id]);
+        if (!r.rows.length) return { code: 404, error: 'NOT_FOUND' };
+        // B3 (2026-11-03): a rejected submission must not receive new files.
+        if (r.rows[0].status === 'rejected') return { code: 400, error: 'INVALID_STATUS', status: 'rejected' };
+        const list = parseDocs(r.rows[0].documents);
+        list.push({
+          filename: req.file.filename,
+          originalname: req.file.originalname,
+          size: req.file.size,
+          mimetype: req.file.mimetype,
+          uploaded_by: 'admin',
+          type: 'delivery',
+        });
+        await client.query('UPDATE manual_submissions SET documents = $1, updated_at = NOW() WHERE id = $2',
+          [JSON.stringify(list), req.params.id]);
+        return { row: r.rows[0] };
       });
-      await db.query('UPDATE manual_submissions SET documents = $1, updated_at = NOW() WHERE id = $2',
-        [JSON.stringify(docs), req.params.id]);
+      if (out.error) {
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+        const body = { error: out.error };
+        if (out.status) body.status = out.status;
+        return res.status(out.code).json(body);
+      }
+      const r = { rows: [out.row] };
+      const wasCompleted = r.rows[0].status === 'completed';
       // A file added to an ALREADY-completed submission must tell
       // the customer — otherwise they never look again (the order
       // delivered late-file branch). Files added while the
