@@ -74,3 +74,19 @@ describe('wallet cashback — daily claim, one button, one place', () => {
     expect(txList).toContain('ব্যালেন্সে জমা হয়েছে');
   });
 });
+
+describe('wallet offers clarity', () => {
+  test('coupon network failure shows a retry message instead of failing silently', () => {
+    const redeem = slice('async function redeem()', 'let cbCurrentCode');
+    expect(redeem).toContain('catch(e)');
+    expect(redeem).toContain('কুপন জমা হয়নি');
+  });
+  test('policy explains service-credit refunds and once-daily cashback', () => {
+    expect(SRC).toContain('সেই অংশ আবার ওই সেবার ক্রেডিটে ফেরত যায়');
+    expect(SRC).toContain('সংগ্রহের পরে সেদিনের নতুন রিচার্জে আর ক্যাশব্যাক যোগ হয় না');
+  });
+  test('claimable daily cashback opens the collapsed offers section', () => {
+    expect(daily).toContain("closest('details')");
+    expect(daily).toContain('more.open=true');
+  });
+});

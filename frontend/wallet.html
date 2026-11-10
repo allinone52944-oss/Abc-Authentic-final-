@@ -514,7 +514,7 @@
     </div>
 
     </div>
-    <details class="wp-more"><summary>ক্যাশব্যাক, কুপন ও ব্যালেন্স পলিসি</summary><div class="wp-more-content">
+    <details class="wp-more"><summary>ক্যাশব্যাক, কুপন ও ব্যালেন্স পলিসি <small id="cbSummaryHint"></small></summary><div class="wp-more-content">
     <!-- Recharge Cashback Hub Card -->
     <div class="card" id="cbHubCard" style="background:linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);border:1.5px solid #a7f3d0;box-shadow:0 4px 14px rgba(16, 185, 129, 0.08);">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
@@ -553,6 +553,8 @@
       <div style="font-size:13px;line-height:1.8;color:#475569;">
         <p>• সেবা শুরু হওয়ার আগে যেকোনো সময় অর্ডার বাতিল করলে সম্পূর্ণ টাকা ইনস্ট্যান্ট ওয়ালেটে ফেরত আসবে।</p>
         <p>• SMS মিললে রিচার্জ স্বয়ংক্রিয়ভাবে অনুমোদিত হয়, না হলে এডমিন যাচাই করে জমা করেন।</p>
+        <p>• নির্দিষ্ট সেবার ক্রেডিট দিয়ে নেওয়া অর্ডার বাতিল হলে সেই অংশ আবার ওই সেবার ক্রেডিটে ফেরত যায়; সাধারণ ব্যালেন্সে যায় না।</p>
+        <p>• ক্যাশব্যাক দিনে একবার সংগ্রহ করা যায়; সংগ্রহের পরে সেদিনের নতুন রিচার্জে আর ক্যাশব্যাক যোগ হয় না।</p>
         <p>• যেকোনো রিচার্জ বা লেনদেন সম্পর্কিত জটিলতায় নিচের WhatsApp বাটনে যোগাযোগ করতে পারেন।</p>
       </div>
     </div>
@@ -868,6 +870,8 @@ async function loadDailyCashback() {
     const d = await r.json();
     if (!d.enabled || !(Number(d.percent) > 0)) { slot.innerHTML = ''; return; }
     if (d.can_redeem) {
+      const hint=document.getElementById('cbSummaryHint'); if(hint) hint.textContent='— আজকের ক্যাশব্যাক সংগ্রহের অপেক্ষায়';
+      const more=slot.closest && slot.closest('details'); if(more) more.open=true;
       slot.innerHTML = '<div style="margin-top:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:12px 14px;">' +
         '<button class="cb-btn" style="width:100%;font-size:14px;padding:10px;" onclick="claimDailyCashback(this)">🎁 আজকের ক্যাশব্যাক সংগ্রহ করুন (৳' + bn(d.cashback_amount) + ')</button>' +
         '<div style="font-size:12px;color:#047857;margin-top:8px;text-align:center;">আজকের ' + bn(d.recharge_count) + 'টি রিচার্জের মোট ৳' + bn(d.recharge_total) + '-এর ওপর ' + bn(d.percent) + '% — দিনে একবারই সংগ্রহ করা যায়।</div>' +
@@ -1444,9 +1448,10 @@ async function redeem(){
   cerr.textContent='';cok.textContent='';
   const code=document.getElementById('couponCode').value.trim();
   if(!code){cerr.textContent='⚠️ কুপন কোড লিখুন';return;}
-  const r=await ABC.api('/wallet/coupon',{method:'POST',body:{code}});
-  const d=await r.json();
-  if(!r.ok){cerr.textContent='❌ '+(d.error||'ব্যর্থ');return;}
+  let r,d;
+  try{ r=await ABC.api('/wallet/coupon',{method:'POST',body:{code}}); d=await r.json(); }
+  catch(e){ cerr.textContent='❌ সংযোগে সমস্যা — কুপন জমা হয়নি, আবার চেষ্টা করুন।'; return; }
+  if(!r.ok){cerr.textContent='❌ '+ABC.apiErrBn(d,'কুপন রিডিম হয়নি — আবার চেষ্টা করুন।');return;}
   cok.textContent = d.service_locked
     ? '🔒 ৳'+Number(d.credited).toLocaleString('bn-BD')+' শুধু "' + (d.service_name||'নির্দিষ্ট সেবা') + '" সেবার জন্য সংরক্ষিত ক্রেডিটে যোগ হয়েছে — শুধু ওই সেবাতেই খরচ হবে।'
     : '🎉 ৳'+Number(d.credited).toLocaleString('bn-BD')+' ব্যালেন্সে যোগ হয়েছে!';
