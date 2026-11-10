@@ -297,12 +297,12 @@ router.post('/orders', async (req, res) => {
 router.get('/orders', async (req, res) => {
   try {
     const { page, limit, offset } = pageParams(req);
-    const conds = ['o.user_id = $1'];
+    const conds = ['o.user_id = $1', "s.type = 'manual'", "NULLIF(BTRIM(s.engine_id), '') IS NULL"];
     const params = [req.user.id];
     let i = 2;
     if (req.query.status) { conds.push(`o.status = $${i++}`); params.push(req.query.status); }
     const where = 'WHERE ' + conds.join(' AND ');
-    const total = await db.query(`SELECT COUNT(*) FROM orders o ${where}`, params);
+    const total = await db.query(`SELECT COUNT(*) FROM orders o JOIN services s ON s.id = o.service_id ${where}`, params);
     const rows = await db.query(
       `SELECT o.*, s.name AS service_name, s.name_bn AS service_name_bn,
               s.type AS service_type
@@ -333,9 +333,11 @@ router.get('/order-counts', async (req, res) => {
   try {
     const r = await db.query(
       `SELECT COUNT(*) AS total,
-              COUNT(*) FILTER (WHERE status IN ('completed','delivered')) AS done,
-              COUNT(*) FILTER (WHERE status IN ('new','pending','processing')) AS active
-       FROM orders WHERE user_id = $1`,
+              COUNT(*) FILTER (WHERE o.status IN ('completed','delivered')) AS done,
+              COUNT(*) FILTER (WHERE o.status IN ('new','pending','processing')) AS active
+       FROM orders o JOIN services s ON s.id = o.service_id
+       WHERE o.user_id = $1 AND s.type = 'manual'
+         AND NULLIF(BTRIM(s.engine_id), '') IS NULL`,
       [req.user.id]);
     const c = r.rows[0];
     res.json({ total: Number(c.total), done: Number(c.done), active: Number(c.active) });
@@ -682,7 +684,8 @@ router.get('/history', async (req, res) => {
       // hand-refunded failed/cancelled row contributes nothing.
       db.query(
         `SELECT o.id, o.documents, o.created_at,
-                s.name AS service_name, s.name_bn AS service_name_bn
+                s.name AS service_name, s.name_bn AS service_name_bn,
+                s.type AS service_type, s.engine_id
          FROM orders o LEFT JOIN services s ON s.id = o.service_id
          WHERE o.user_id = $1 AND (o.status IN ('completed', 'delivered')
            OR (o.status = 'refunded' AND EXISTS (
@@ -736,7 +739,7 @@ router.get('/history', async (req, res) => {
     for (const o of orders.rows) {
       const documents = deliveryDocs(o.documents, '/orders/' + o.id + '/documents/');
       items.push({
-        kind: 'order', id: o.id,
+        kind: (String(o.engine_id || '').trim() || o.service_type === 'automated') ? 'engine' : 'order', id: o.id,
         title: o.service_name_bn || o.service_name || 'সেবা অর্ডার',
         created_at: o.created_at, documents,
       });
