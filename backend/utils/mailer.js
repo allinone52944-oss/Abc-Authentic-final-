@@ -1,6 +1,6 @@
 // ============================================================
 // All In One (Abc Authentic) - Mailer (Phase 3)
-// nodemailer + Gmail SMTP from .env. Coffee-themed Bengali HTML.
+// Existing nodemailer SMTP with shared branded Bengali account emails.
 // Never throws to callers: returns { ok, error }.
 // ============================================================
 const nodemailer = require('nodemailer');
@@ -25,63 +25,82 @@ function isConfigured() {
   return !!getTransporter();
 }
 
-function emailShell(innerHtml) {
-  return `<!DOCTYPE html><html lang="bn"><head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#1a120b;font-family:'Noto Sans Bengali',Arial,sans-serif;">
-<div style="max-width:480px;margin:0 auto;padding:32px 20px;">
-  <div style="background:linear-gradient(135deg,#2b1d14,#3d2b1f);border:1px solid #d4af37;border-radius:16px;padding:32px 28px;text-align:center;box-shadow:0 8px 32px rgba(212,175,55,.15);">
-    <div style="font-size:40px;margin-bottom:8px;">☕</div>
-    <div style="color:#d4af37;font-size:20px;font-weight:bold;letter-spacing:2px;">ALL IN ONE</div>
-    <div style="color:#c9a961;font-size:12px;letter-spacing:4px;margin-bottom:4px;">ABC AUTHENTIC</div>
-    <div style="color:#8a7a5f;font-size:12px;margin-bottom:24px;">বিশ্বাস ও সেবার ঠিকানা</div>
-    ${innerHtml}
-  </div>
-  <p style="text-align:center;color:#5a4f3d;font-size:11px;margin-top:16px;">© All In One (Abc Authentic)</p>
-</div>
-</body></html>`;
+// Email-safe semantic palette shared by every account email.
+const palette = {
+  canvas: '#f1f5f3', paper: '#ffffff', brand: '#075e46', ink: '#172b24',
+  muted: '#566b61', border: '#dce6e0', accent: '#e8bd57', soft: '#edf6f0',
+};
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[char]));
+}
+
+function emailShell(innerHtml, preheader) {
+  const c = palette;
+  return `<!DOCTYPE html><html lang="bn"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>All In One (Abc Authentic)</title></head>
+<body style="margin:0;padding:0;background:${c.canvas};font-family:'Noto Sans Bengali','Nirmala UI',Arial,sans-serif;color:${c.ink};">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${escapeHtml(preheader)}</div>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:${c.canvas};"><tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:560px;background:${c.paper};border:1px solid ${c.border};border-radius:8px;overflow:hidden;">
+<tr><td style="padding:28px 24px;background:${c.brand};border-bottom:4px solid ${c.accent};"><div style="font-size:22px;line-height:1.4;font-weight:700;color:${c.paper};">All In One</div><div style="margin-top:4px;font-size:13px;line-height:1.6;color:${c.paper};">Abc Authentic · বিশ্বাস ও সেবার ঠিকানা</div></td></tr>
+<tr><td style="padding:28px 24px;">${innerHtml}</td></tr>
+<tr><td style="padding:20px 24px;border-top:1px solid ${c.border};font-size:12px;line-height:1.8;color:${c.muted};">নিরাপত্তার জন্য আপনার পাসওয়ার্ড বা যাচাই কোড কাউকে দেবেন না।<br>All In One (Abc Authentic)</td></tr>
+</table>
+<p style="margin:18px 0 0;font-size:11px;line-height:1.7;color:${c.muted};">এটি আপনার অ্যাকাউন্টের নিরাপত্তা-সংক্রান্ত ইমেইল।</p>
+</td></tr></table></body></html>`;
+}
+
+function greeting(name) {
+  return `<p style="margin:0 0 16px;font-size:14px;line-height:1.8;color:${palette.muted};">আসসালামু আলাইকুম, ${escapeHtml(name || 'প্রিয় গ্রাহক')}!</p>`;
+}
+
+function linkEmail({ link, name, title, description, button, expiry, safety, preheader }) {
+  const c = palette;
+  const safeLink = escapeHtml(link);
+  return emailShell(`
+    ${greeting(name)}
+    <h1 style="margin:0 0 12px;font-size:24px;line-height:1.5;font-weight:700;color:${c.ink};">${title}</h1>
+    <p style="margin:0 0 20px;font-size:15px;line-height:1.9;color:${c.muted};">${description}</p>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td bgcolor="${c.brand}" style="border-radius:6px;text-align:center;"><a href="${safeLink}" style="display:inline-block;padding:15px 22px;font-size:15px;font-weight:700;line-height:1.5;color:${c.paper};text-decoration:none;">${button}</a></td></tr></table>
+    <p style="margin:14px 0 24px;font-size:13px;line-height:1.8;color:${c.muted};">লিংকের মেয়াদ: <strong style="color:${c.ink};">${expiry}</strong></p>
+    <div style="padding:16px;background:${c.soft};border-left:3px solid ${c.brand};font-size:13px;line-height:1.9;color:${c.ink};">${safety}</div>
+    <p style="margin:24px 0 8px;font-size:12px;line-height:1.8;color:${c.muted};">বাটন কাজ না করলে নিচের লিংক কপি করে ব্রাউজারে খুলুন:</p>
+    <p style="margin:0;font-size:12px;line-height:1.8;word-break:break-all;overflow-wrap:anywhere;"><a href="${safeLink}" style="color:${c.brand};text-decoration:underline;">${safeLink}</a></p>
+  `, preheader);
 }
 
 function verificationEmailHtml(link, name) {
-  const safeName = String(name || 'প্রিয় গ্রাহক').replace(/[<>&"]/g, '');
-  return emailShell(`
-    <div style="color:#f5ead6;font-size:16px;margin-bottom:8px;">আসসালামু আলাইকুম, ${safeName}!</div>
-    <p style="color:#c9bfa8;font-size:14px;line-height:1.7;">রেজিস্ট্রেশন সম্পন্ন করতে আপনার ইমেইল যাচাই করুন। নিচের বাটনে ক্লিক করুন — লিংকটি <b style="color:#d4af37;">২৪ ঘণ্টা</b> কার্যকর থাকবে।</p>
-    <a href="${link}" style="display:inline-block;background:linear-gradient(135deg,#d4af37,#b8941f);color:#1a120b;font-weight:bold;font-size:16px;padding:14px 36px;border-radius:12px;text-decoration:none;margin:16px 0;">✅ ইমেইল যাচাই করুন</a>
-    <p style="color:#8a7a5f;font-size:12px;line-height:1.6;">বাটনে ক্লিক না হলে এই লিংকটি ব্রাউজারে পেস্ট করুন:<br><span style="color:#c9a961;word-break:break-all;">${link}</span></p>
-    <p style="color:#8a7a5f;font-size:12px;">আপনি রেজিস্টার না করে থাকলে এই ইমেইল উপেক্ষা করুন।</p>
-  `);
+  return linkEmail({
+    link, name, title: 'আপনার ইমেইল যাচাই করুন',
+    description: 'All In One (Abc Authentic)-এ স্বাগতম। নিবন্ধন সম্পন্ন করতে আপনার ইমেইল ঠিকানাটি নিশ্চিত করুন।',
+    button: 'ইমেইল যাচাই করুন', expiry: '২৪ ঘণ্টা',
+    safety: 'আপনি নিবন্ধন না করে থাকলে এই ইমেইল উপেক্ষা করুন।',
+    preheader: 'নিবন্ধন সম্পন্ন করুন — ইমেইল যাচাইয়ের লিংক ২৪ ঘণ্টা কার্যকর।',
+  });
 }
 
 function passwordResetEmailHtml(link, name) {
-  const safeName = String(name || 'প্রিয় গ্রাহক').replace(/[<>&"]/g, '');
-  return emailShell(`
-    <div style="color:#f5ead6;font-size:16px;margin-bottom:8px;">আসসালামু আলাইকুম, ${safeName}!</div>
-    <p style="color:#c9bfa8;font-size:14px;line-height:1.7;">পাসওয়ার্ড রিসেটের অনুরোধ পেয়েছি। নতুন পাসওয়ার্ড সেট করতে নিচের বাটনে ক্লিক করুন — লিংকটি <b style="color:#d4af37;">১ ঘণ্টা</b> কার্যকর থাকবে।</p>
-    <a href="${link}" style="display:inline-block;background:linear-gradient(135deg,#d4af37,#b8941f);color:#1a120b;font-weight:bold;font-size:16px;padding:14px 36px;border-radius:12px;text-decoration:none;margin:16px 0;">🔑 পাসওয়ার্ড রিসেট করুন</a>
-    <p style="color:#8a7a5f;font-size:12px;line-height:1.6;">বাটনে ক্লিক না হলে এই লিংকটি ব্রাউজারে পেস্ট করুন:<br><span style="color:#c9a961;word-break:break-all;">${link}</span></p>
-    <p style="color:#8a7a5f;font-size:12px;">আপনি এই অনুরোধ না করে থাকলে এই ইমেইল উপেক্ষা করুন — আপনার পাসওয়ার্ড অপরিবর্তিত থাকবে।</p>
-  `);
+  return linkEmail({
+    link, name, title: 'নতুন পাসওয়ার্ড সেট করুন',
+    description: 'আপনার অ্যাকাউন্টের পাসওয়ার্ড রিসেটের অনুরোধ পেয়েছি। নিচের বাটন থেকে নতুন পাসওয়ার্ড সেট করতে পারবেন।',
+    button: 'পাসওয়ার্ড রিসেট করুন', expiry: '১ ঘণ্টা',
+    safety: 'এই অনুরোধ আপনি না করলে কিছু করার দরকার নেই। আপনার পাসওয়ার্ড অপরিবর্তিত থাকবে। রিসেট লিংক কাউকে দেবেন না।',
+    preheader: 'নিরাপদে নতুন পাসওয়ার্ড সেট করুন — লিংক ১ ঘণ্টা কার্যকর।',
+  });
 }
+
 function otpEmailHtml(code, name) {
-  const safeName = String(name || 'প্রিয় গ্রাহক').replace(/[<>&"]/g, '');
-  return `<!DOCTYPE html><html lang="bn"><head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#1a120b;font-family:'Noto Sans Bengali',Arial,sans-serif;">
-<div style="max-width:480px;margin:0 auto;padding:32px 20px;">
-  <div style="background:linear-gradient(135deg,#2b1d14,#3d2b1f);border:1px solid #d4af37;border-radius:16px;padding:32px 28px;text-align:center;box-shadow:0 8px 32px rgba(212,175,55,.15);">
-    <div style="font-size:40px;margin-bottom:8px;">☕</div>
-    <div style="color:#d4af37;font-size:20px;font-weight:bold;letter-spacing:2px;">ALL IN ONE</div>
-    <div style="color:#c9a961;font-size:12px;letter-spacing:4px;margin-bottom:4px;">ABC AUTHENTIC</div>
-    <div style="color:#8a7a5f;font-size:12px;margin-bottom:24px;">বিশ্বাস ও সেবার ঠিকানা</div>
-    <div style="color:#f5ead6;font-size:16px;margin-bottom:8px;">আসসালামু আলাইকুম, ${safeName}!</div>
-    <p style="color:#c9bfa8;font-size:14px;line-height:1.7;">আপনার ইমেইল যাচাই করতে নিচের OTP কোডটি ব্যবহার করুন। এই কোডটি <b style="color:#d4af37;">৫ মিনিট</b> পর্যন্ত কার্যকর থাকবে।</p>
-    <div style="background:#1a120b;border:2px dashed #d4af37;border-radius:12px;padding:18px;margin:20px 0;">
-      <div style="color:#d4af37;font-size:38px;font-weight:bold;letter-spacing:10px;font-family:monospace;">${code}</div>
-    </div>
-    <p style="color:#8a7a5f;font-size:12px;">এই কোডটি কাউকে শেয়ার করবেন না।<br>আপনি এই অনুরোধ না করে থাকলে এই ইমেইল উপেক্ষা করুন।</p>
-  </div>
-  <p style="text-align:center;color:#5a4f3d;font-size:11px;margin-top:16px;">© All In One (Abc Authentic)</p>
-</div>
-</body></html>`;
+  const c = palette;
+  return emailShell(`
+    ${greeting(name)}
+    <h1 style="margin:0 0 12px;font-size:24px;line-height:1.5;color:${c.ink};">ইমেইল যাচাইয়ের কোড</h1>
+    <p style="margin:0 0 20px;font-size:15px;line-height:1.9;color:${c.muted};">আপনার ইমেইল যাচাই করতে নিচের একবার ব্যবহারযোগ্য কোডটি দিন।</p>
+    <div style="padding:20px 12px;background:${c.soft};border:1px solid ${c.border};border-radius:6px;text-align:center;font-size:32px;font-weight:700;line-height:1.5;font-family:Consolas,monospace;color:${c.brand};">${escapeHtml(code)}</div>
+    <p style="margin:14px 0 24px;font-size:13px;line-height:1.8;color:${c.muted};">কোডের মেয়াদ: <strong style="color:${c.ink};">৫ মিনিট</strong></p>
+    <p style="margin:0;font-size:13px;line-height:1.9;color:${c.muted};">কোডটি কাউকে দেবেন না। আপনি এই অনুরোধ না করে থাকলে ইমেইলটি উপেক্ষা করুন।</p>
+  `, 'আপনার ইমেইল যাচাইয়ের কোড — ৫ মিনিট কার্যকর।');
 }
 
 async function sendMail({ to, subject, html, text }) {

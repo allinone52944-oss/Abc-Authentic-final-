@@ -97,4 +97,14 @@ describe('HTML builders escape names (XSS safety)', () => {
   test('passwordResetEmailHtml contains the link', () => {
     expect(freshMailer().passwordResetEmailHtml('http://r', 'R')).toContain('http://r');
   });
+  test.each(['verificationEmailHtml', 'passwordResetEmailHtml'])('%s prevents a supplied link from injecting attributes', builder => {
+    const html = freshMailer()[builder]('https://example.com/?token=test" onclick="attack', 'R');
+    expect(html).not.toContain(' onclick="attack');
+    expect(html).toContain('test&quot; onclick=&quot;attack');
+  });
+  test('OTP content cannot inject executable HTML', () => {
+    const html = freshMailer().otpEmailHtml('<script>attack()</script>', 'R');
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
 });
