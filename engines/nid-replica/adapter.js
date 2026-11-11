@@ -99,6 +99,46 @@ function readImages(dir) {
     return out;
 }
 
+// Core-data gate (blank-card fix, audit 2026-11-08 #1): an NID card
+// is meaningless without a name, an ID number and a date of birth.
+// make_fields.py always emits these slots (empty string when the
+// extract found nothing), and "প্রদানের তারিখ:" defaults to today's
+// date — so it must NEVER count as core data. A blank/garbage
+// extract must never build a card or be charged.
+// Rule (stricter than nid-server-copy's name + (NID or DOB)):
+//   name = "নাম:" OR "Name:" non-empty
+//   id   = "ID NO:" OR "Pin" non-empty
+//   dob  = "Date of Birth:" non-empty
+// All three groups are required. A missing key counts as empty
+// (the default template always emits these slots).
+const CORE_NAME_KEYS = ['নাম:', 'Name:'];
+const CORE_ID_KEYS = ['ID NO:', 'Pin'];
+const CORE_DOB_KEYS = ['Date of Birth:'];
+
+const NO_CORE_DATA_MESSAGE = 'তথ্য অসম্পূর্ণ — নাম, জাতীয় পরিচয়পত্র নম্বর ও জন্মতারিখ ছাড়া কার্ড তৈরি করা যাবে না। সঠিক NID ফর্ম PDF আপলোড করুন। কোনো টাকা কাটা হয়নি।';
+
+function _hasText(v) {
+    return v !== null && v !== undefined && String(v).trim().length > 0;
+}
+
+function hasCoreData(fields) {
+    if (!fields || typeof fields !== 'object' || Array.isArray(fields)) return false;
+    const name = CORE_NAME_KEYS.some((k) => _hasText(fields[k]));
+    const id = CORE_ID_KEYS.some((k) => _hasText(fields[k]));
+    const dob = CORE_DOB_KEYS.some((k) => _hasText(fields[k]));
+    return Boolean(name && id && dob);
+}
+
+// Bengali labels of the missing core-data groups (for diagnostics).
+function missingCoreGroups(fields) {
+    const f = (fields && typeof fields === 'object' && !Array.isArray(fields)) ? fields : {};
+    const missing = [];
+    if (!CORE_NAME_KEYS.some((k) => _hasText(f[k]))) missing.push('নাম');
+    if (!CORE_ID_KEYS.some((k) => _hasText(f[k]))) missing.push('জাতীয় পরিচয়পত্র নম্বর');
+    if (!CORE_DOB_KEYS.some((k) => _hasText(f[k]))) missing.push('জন্মতারিখ');
+    return missing;
+}
+
 /**
  * Run the 3-step extract pipeline on an uploaded NID form PDF.
  * @param {Buffer} pdfBuffer
@@ -145,6 +185,14 @@ async function extractFields(pdfBuffer, ownerId) {
             return { ok: false, error: 'EXTRACT_FAILED' };
         }
         const fields = JSON.parse(fs.readFileSync(fieldsPath, 'utf8'));
+        // Core-data gate: a blank/garbage extract (fields.json present
+        // but no name/ID/DOB) is rejected here, before any job exists
+        // to build from — so it can never reach the build/charge step.
+        if (!hasCoreData(fields)) {
+            console.warn(`[nid-replica] extract has no core data (job ${id}): missing ${missingCoreGroups(fields).join(', ')}`);
+            try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+            return { ok: false, error: 'NO_CORE_DATA' };
+        }
         const images = readImages(dir);
         return { ok: true, jobId: id, fields, images };
     } catch (e) {
@@ -173,6 +221,14 @@ async function buildCard(jobId, fieldsJson, images, ownerId) {
         let owner = null;
         try { owner = fs.readFileSync(path.join(dir, '.owner'), 'utf8').trim(); } catch (_) {}
         if (owner && owner !== String(ownerId)) return { ok: false, error: 'NOT_YOUR_JOB' };
+    }
+    // Core-data gate (authoritative): the fields may have been edited
+    // in the UI after a good extract, so a blanked-out build is
+    // rejected here too — BEFORE any build runs and therefore before
+    // any charge (the route charges only after a successful build).
+    if (!hasCoreData(fieldsJson)) {
+        console.warn(`[nid-replica] build rejected, no core data (job ${jobId}): missing ${missingCoreGroups(fieldsJson).join(', ')}`);
+        return { ok: false, error: 'NO_CORE_DATA' };
     }
     // Optional: replace extracted images with user-uploaded ones (dataURLs)
     if (Array.isArray(images)) {
@@ -259,4 +315,4 @@ function getInfo() {
     };
 }
 
-module.exports = { init, getInfo, extractFields, buildCard };
+module.exports = { init, getInfo, extractFields, buildCard, hasCoreData, missingCoreGroups, NO_CORE_DATA_MESSAGE };

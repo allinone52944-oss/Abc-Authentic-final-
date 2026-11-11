@@ -89,7 +89,11 @@ router.post('/extract', requireAuth, pdfOnly, multerError, async (req, res) => {
       // pattern of extract failures (engine trouble) is visible.
       push.notifyAdmins(db, '⚠️ NID তথ্য তোলা ব্যর্থ',
         'একটি NID PDF থেকে তথ্য তোলা যায়নি (' + String(r.error || 'EXTRACT_ERROR') + ')।', '/admin.html').catch(() => {});
-      return res.status(422).json({ error: r.error });
+      // Blank-card gate: tell the customer the real reason, not a
+      // generic failure — no core data was found in the PDF.
+      const body = { error: r.error };
+      if (r.error === 'NO_CORE_DATA') body.message = nidAdapter.NO_CORE_DATA_MESSAGE;
+      return res.status(422).json(body);
     }
     res.json({ ok: true, jobId: r.jobId, fields: r.fields, images: r.images });
   } catch (e) {
@@ -143,7 +147,10 @@ router.post('/build', requireAuth, async (req, res) => {
         push.notifyAdmins(db, '❌ NID কার্ড তৈরি ব্যর্থ',
           'একটি NID কার্ড তৈরি করা যায়নি (' + String(r.error || 'BUILD_ERROR') + ') — কোনো চার্জ কাটা হয়নি।', '/admin.html').catch(() => {});
       }
-      return res.status(status).json({ error: r.error });
+      // Blank-card gate: the customer sees the real reason in the UI.
+      const body = { error: r.error };
+      if (r.error === 'NO_CORE_DATA') body.message = nidAdapter.NO_CORE_DATA_MESSAGE;
+      return res.status(status).json(body);
     }
 
     if (price > 0) {

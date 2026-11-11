@@ -371,6 +371,13 @@
 <script>
 const API='/nid-engine';
 let S={jobId:null,fields:{},photo:null,sign:null,pdfBlob:null};
+// Core-data gate (backend adapter-এর নিয়মের mirror): কার্ডের জন্য নাম,
+// আইডি নম্বর ও জন্মতারিখ — তিনটাই লাগে। build-এর আগেই খালি ফর্ম
+// আটকায়, যাতে চার্জের ধাপ পর্যন্ত না যায়। "প্রদানের তারিখ:" আজকের
+// তারিখে default হয় বলে ওটা core data নয়।
+const CORE_NAME_KEYS=['নাম:','Name:'],CORE_ID_KEYS=['ID NO:','Pin'],CORE_DOB_KEYS=['Date of Birth:'];
+const NO_CORE_DATA_MSG='তথ্য অসম্পূর্ণ — নাম, জাতীয় পরিচয়পত্র নম্বর ও জন্মতারিখ ছাড়া কার্ড তৈরি করা যাবে না। সঠিক NID ফর্ম PDF আপলোড করুন। কোনো টাকা কাটা হয়নি।';
+function hasCoreData(f){const t=v=>v!=null&&String(v).trim().length>0;return f&&typeof f==='object'&&CORE_NAME_KEYS.some(k=>t(f[k]))&&CORE_ID_KEYS.some(k=>t(f[k]))&&CORE_DOB_KEYS.some(k=>t(f[k]));}
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function showErr(m){const e=document.getElementById('err');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),6000);}
 function showOk(m){const e=document.getElementById('ok');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),4000);}
@@ -522,7 +529,7 @@ async function doExtract(){
     const fd=new FormData();fd.append('pdf',f,f.name);
     const r=await ABC.api(API+'/extract',{method:'POST',body:fd,timeout:60000});
     const j=await r.json();
-    if(!r.ok||!j.ok)throw new Error(j.error==='PDF_TOO_LARGE'?'ফাইল অনেক বড়।':j.error==='NOT_A_PDF'?'শুধু PDF দিন।':'তথ্য বের করা যায়নি। আবার চেষ্টা করুন।');
+    if(!r.ok||!j.ok)throw new Error(j.message||(j.error==='NO_CORE_DATA'?NO_CORE_DATA_MSG:j.error==='PDF_TOO_LARGE'?'ফাইল অনেক বড়।':j.error==='NOT_A_PDF'?'শুধু PDF দিন।':'তথ্য বের করা যায়নি। আবার চেষ্টা করুন।'));
     S.jobId=j.jobId;
     S.fields=j.fields||{};
     S.photo = null;
@@ -568,6 +575,9 @@ async function updateBalance(){
 }
 
 async function doBuild(){
+  // Core-data gate (frontend): খালি/অসম্পূর্ণ ফর্ম build-এ পাঠিও না —
+  // backend-ও একই নিয়মে আটকাবে, এটা শুধু আগেভাগে জানায়।
+  if(!hasCoreData(collectFields())){showErr(NO_CORE_DATA_MSG);return;}
   busy('b3',true,'কার্ড তৈরি হচ্ছে…');
   try{
     const imgs = [];

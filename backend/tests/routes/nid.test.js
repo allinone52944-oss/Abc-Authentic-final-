@@ -4,6 +4,7 @@ jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
 jest.mock('../../../engines/nid-replica/adapter', () => ({
   extractFields: jest.fn(),
   buildCard: jest.fn(),
+  NO_CORE_DATA_MESSAGE: 'তথ্য অসম্পূর্ণ — নাম, জাতীয় পরিচয়পত্র নম্বর ও জন্মতারিখ ছাড়া কার্ড তৈরি করা যাবে না। সঠিক NID ফর্ম PDF আপলোড করুন। কোনো টাকা কাটা হয়নি।',
 }));
 jest.mock('../../utils/whatsapp', () => ({
   notifyServiceCompleted: jest.fn().mockResolvedValue({ ok: true }),
@@ -126,6 +127,16 @@ describe('POST /api/nid-engine/extract', () => {
     expect(push.notifyAdmins).toHaveBeenCalledTimes(1);
     expect(wa.notifyServiceFailed).not.toHaveBeenCalled();
   });
+
+  test('blank extract → 422 NO_CORE_DATA with a clear message', async () => {
+    adapter.extractFields.mockResolvedValue({ ok: false, error: 'NO_CORE_DATA' });
+    const r = await withUser(request(app()).post('/api/nid-engine/extract'))
+      .attach('pdf', PDF_BUF, 'form.pdf').expect(422);
+    expect(r.body.error).toBe('NO_CORE_DATA');
+    expect(r.body.message).toMatch(/নাম/);
+    expect(push.notifyAdmins).toHaveBeenCalledTimes(1);
+    expect(wa.notifyServiceFailed).not.toHaveBeenCalled();
+  });
 });
 
 describe('POST /api/nid-engine/build', () => {
@@ -207,6 +218,26 @@ describe('POST /api/nid-engine/build', () => {
     expect(wa.notifyServiceFailed).toHaveBeenCalledTimes(1);
     expect(push.notifyAdmins).toHaveBeenCalledTimes(1);
     expect(push.notifyUser).toHaveBeenCalledTimes(1);
+  });
+
+  test('blank build → 422 NO_CORE_DATA, no charge attempted', async () => {
+    let walletDebitCalled = false;
+    let orderInsertCalled = false;
+    db.__routeQuery([
+      ['FROM services WHERE', { rows: [{ id: 10, price: 40 }] }],
+      ['FROM user_services WHERE', { rows: [] }],
+      ['FROM users WHERE', { rows: [{ balance: 100 }] }],
+      ['wallet_apply', () => { walletDebitCalled = true; return { rows: [] }; }],
+      ['INSERT INTO orders', () => { orderInsertCalled = true; return { rows: [] }; }],
+    ]);
+    adapter.buildCard.mockResolvedValue({ ok: false, error: 'NO_CORE_DATA' });
+    const r = await withUser(request(app()).post('/api/nid-engine/build'))
+      .send({ jobId: 'j1', fields: {} }).expect(422);
+    expect(r.body.error).toBe('NO_CORE_DATA');
+    expect(r.body.message).toMatch(/নাম/);
+    // the build never succeeded, so the charge + order steps never ran
+    expect(walletDebitCalled).toBe(false);
+    expect(orderInsertCalled).toBe(false);
   });
 
   test('happy path with wallet debit and order creation → 200 application/pdf', async () => {
