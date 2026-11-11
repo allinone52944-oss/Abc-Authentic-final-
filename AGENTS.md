@@ -10,5 +10,5 @@
 
 - Admin voice alerts use null counter baselines, serialized reusable audio and explicit gesture recovery; retain mute choice and original APIs. Why: first events after zero must notify without overlapping voice or bypassing browser autoplay rules.
 
-- Admin banner previews render in sandboxed frames, action errors retain user input and refresh only after acknowledgment, and previews discard stale renders. Why: template CSS must not leak and failed requests must not appear saved.
+- Banner templates share a versioned scoped theme in dashboard and sandboxed previews; thumbnails scale the full layout rather than changing its typography, and action errors retain input until acknowledgment. Why: preview and production must match without clipping or leaking styles.
 - Banner carousels cancel completed animation effects, serialize transitions and dispose previous timers/listeners on reload. Why: outgoing fill must never keep later banners invisible or let stale transitions overwrite current content.

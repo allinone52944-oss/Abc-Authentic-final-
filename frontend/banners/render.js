@@ -8,6 +8,14 @@
 // ============================================================
 (function () {
   let catalog = null;
+  let theme = null;
+  async function getTheme() {
+    if (theme !== null) return theme;
+    const r = await fetch('/banners/theme.css?v=20261111-1');
+    if (!r.ok) throw new Error('Banner theme unavailable');
+    theme = await r.text();
+    return theme;
+  }
 
   async function getCatalog() {
     if (catalog) return catalog;
@@ -45,7 +53,7 @@
     let html;
     try {
       const fileName = String(d.file || '').replace(/^samples\//, '');
-      const r = await fetch('/banners/samples/' + fileName);
+      const r = await fetch('/banners/samples/' + fileName + '?v=20261111-1');
       if (!r.ok) throw new Error('Fetch status ' + r.status);
       html = await r.text();
     } catch (e) {
@@ -59,13 +67,13 @@
     body = body.split('{{text_bn}}').join(textBn).split('{{text_en}}').join(textEn);
 
     const uid = 'bn-u' + Math.random().toString(36).slice(2, 8);
-    body = body.replace(/class="bn"/g, 'class="bn ' + uid + '"');
+    body = body.replace(/class="bn(?=\s|")/g, 'class="bn ' + uid);
 
     let customCss = '.' + uid + '{max-width:100% !important;width:100% !important;border:none !important;border-radius:0 !important;box-sizing:border-box !important;}';
     if (safeBg) customCss += ' .' + uid + '{background:' + safeBg + ' !important;}';
     if (safeText) customCss += ' .' + uid + ' h2,.' + uid + ' p{color:' + safeText + ' !important;}';
 
-    const inner = '<style>' + css + customCss + '</style>' + body;
+    const inner = '<style>' + await getTheme() + css + customCss + '</style>' + body;
     const link = c.link ? String(c.link).trim() : '';
     if (link && isSafeUrl(link)) {
       return '<a href="' + esc(link) + '" target="_blank" rel="noopener" style="text-decoration:none;display:block;">' + inner + '</a>';

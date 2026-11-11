@@ -4133,7 +4133,7 @@ window.AdmBn = {
     const frame = document.createElement('iframe');
     frame.title = title || 'ব্যানার প্রিভিউ';
     frame.setAttribute('sandbox', '');
-    frame.srcdoc = '<!doctype html><html lang="bn"><head><meta charset="utf-8"></head><body>' + html + '<style>html,body{margin:0;overflow-x:hidden}body{background:transparent}h2,p{overflow-wrap:anywhere}h2{font-size:22px!important}*{box-sizing:border-box}.bn{min-height:150px!important;display:flex!important;flex-direction:column;justify-content:center}@media(prefers-reduced-motion:reduce){*{animation:none!important}}</style></body></html>';
+    frame.srcdoc = '<!doctype html><html lang="bn"><head><meta charset="utf-8"></head><body>' + html + '<style>html,body{margin:0}body{background:transparent}.bn{min-height:180px!important}@media(prefers-reduced-motion:reduce){*{animation:none!important}}</style></body></html>';
     el.replaceChildren(frame);
   },
   setupEditor() {
@@ -4157,7 +4157,22 @@ window.AdmBn = {
       try {
         const html = await BannerRender.render({ design_id: id });
         const thumb = option.querySelector('iframe');
-        if (thumb && option.isConnected) thumb.srcdoc = '<!doctype html><html lang="bn"><body>' + html + '<style>html,body{margin:0;overflow:hidden}.bn{padding:10px!important;min-height:90px!important}.bn h2{font-size:13px!important;overflow-wrap:anywhere}.bn p{font-size:10px!important}.bn .en{display:none!important}*{animation:none!important}</style></body></html>';
+        if (thumb && option.isConnected) {
+          thumb.srcdoc = '<!doctype html><html lang="bn"><body>' + html + '<style>html,body{margin:0;overflow:hidden}body{width:640px}.bn{min-height:220px!important}*{animation:none!important}</style></body></html>';
+          const fit = () => {
+            const scale = option.clientWidth / 640;
+            thumb.style.transform = 'scale(' + scale + ')';
+            thumb.parentElement.style.height = (220 * scale) + 'px';
+          };
+          fit();
+          const observer = new ResizeObserver(fit); observer.observe(option);
+          thumb.addEventListener('load', fit);
+          const modalRoot = document.getElementById('admModal');
+          if (modalRoot) {
+            const previous = modalRoot._bnThumbCleanup;
+            modalRoot._bnThumbCleanup = () => { if (previous) previous(); observer.disconnect(); };
+          }
+        }
       } catch (_) {}
     });
   },
@@ -4216,7 +4231,7 @@ window.AdmBn = {
       '<div class="bn-design-grid">' +
       groups[c].map((d) =>
         '<button type="button" class="bn-design-opt' + (d.id === selId ? ' sel' : '') + '" data-id="' + d.id + '" onclick="AdmBn.pick(' + d.id + ')">' +
-        '<iframe loading="lazy" tabindex="-1" sandbox="" title="' + esc(d.name) + '"></iframe><div class="dname">#' + d.id + ' ' + esc(d.name) + '</div><div class="dcat">' + esc(d.category) + '</div></button>'
+        '<div class="bn-thumb"><iframe loading="lazy" tabindex="-1" sandbox="" title="' + esc(d.name) + '"></iframe></div><div class="dname">#' + d.id + ' ' + esc(d.name) + '</div><div class="dcat">' + esc(d.category) + '</div></button>'
       ).join('') + '</div>'
     ).join('');
   },
@@ -5144,6 +5159,7 @@ function closeModal() {
   if (m) {
     if (m._escHandler) document.removeEventListener('keydown', m._escHandler);
     const returnTo = m._returnTo;
+    if (m._bnThumbCleanup) m._bnThumbCleanup();
     m.remove();
     // P2: return focus to the button that opened the modal, if it
     // is still on the page.

@@ -22,3 +22,8 @@
 @media(prefers-reduced-motion:reduce){.bn-manager *,.bn-editor *{transition:none!important}}
 .page-admin .bn-manager-head .btn{background:var(--bn-accent)!important;color:var(--bn-on-accent)!important;border-radius:6px!important}
 .bn-editor .field input[type=range]{padding:0;background:transparent;accent-color:var(--bn-accent)}
+/* Preview uses the same natural layout as the customer display. */
+.bn-item-preview{height:230px}.bn-editor .bn-preview{height:240px}.bn-preview iframe,.bn-item-preview iframe{height:100%;width:100%;border:0}
+.bn-editor .bn-design-opt .bn-thumb{position:relative;width:100%;height:90px;overflow:hidden;margin-bottom:8px;background:var(--bn-soft)}
+.bn-editor .bn-thumb iframe{position:absolute;inset:0;width:640px;height:220px;transform-origin:top left;border:0;margin:0;pointer-events:none}
+@media(max-width:760px){.bn-editor .bn-preview{height:260px}.bn-item-preview{height:260px}}
