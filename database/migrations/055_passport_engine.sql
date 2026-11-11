@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS passport_applications (
     id SERIAL PRIMARY KEY,
     user_id INTEGER,
+    order_id VARCHAR(100),
     passport_type VARCHAR(10) DEFAULT 'P',
     country_code VARCHAR(10) DEFAULT 'BGD',
     given_name VARCHAR(150),
@@ -20,6 +21,10 @@ CREATE TABLE IF NOT EXISTS passport_applications (
     previous_passport_no VARCHAR(100),
     photo_url TEXT,
     signature_url TEXT,
+    payment_trxid VARCHAR(100),
+    payment_status VARCHAR(50) DEFAULT 'unpaid',
+    delivery_status VARCHAR(50) DEFAULT 'pending',
+    admin_note TEXT,
     status VARCHAR(50) DEFAULT 'pending',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
