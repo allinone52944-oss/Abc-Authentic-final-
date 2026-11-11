@@ -11,7 +11,7 @@
   let theme = null;
   async function getTheme() {
     if (theme !== null) return theme;
-    const r = await fetch('/banners/theme.css?v=20261111-1');
+    const r = await fetch('/banners/theme.css?v=20261111-2');
     if (!r.ok) throw new Error('Banner theme unavailable');
     theme = await r.text();
     return theme;
@@ -53,7 +53,7 @@
     let html;
     try {
       const fileName = String(d.file || '').replace(/^samples\//, '');
-      const r = await fetch('/banners/samples/' + fileName + '?v=20261111-1');
+      const r = await fetch('/banners/samples/' + fileName + '?v=20261111-2');
       if (!r.ok) throw new Error('Fetch status ' + r.status);
       html = await r.text();
     } catch (e) {
