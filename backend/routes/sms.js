@@ -510,7 +510,11 @@ adminSms.post('/:id/match', async (req, res) => {
     }
   } catch (e) {
     safeLog('[sms] match error:', e.message);
-    const msg = /DUPLICATE_TRANSACTION|INSUFFICIENT_BALANCE/.test(e.message) ? e.message : 'MATCH_FAILED';
+    // Recharge Bug 4: SMS_ALREADY_MATCHED is a real answer, not a generic
+    // failure — a racing actor (auto-match/webhook/another admin) can link
+    // this SMS after the early ALREADY_MATCHED check but before
+    // approveRechargeTx's conditional link. Preserve it so the admin sees why.
+    const msg = /DUPLICATE_TRANSACTION|INSUFFICIENT_BALANCE|SMS_ALREADY_MATCHED/.test(e.message) ? e.message : 'MATCH_FAILED';
     res.status(400).json({ error: msg });
   }
 });

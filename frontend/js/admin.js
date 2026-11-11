@@ -3749,7 +3749,9 @@ window.AdmSms = {
       method: 'POST', body: { transaction_id: sel.value },
     });
     const d = await r.json();
-    if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
+    // Recharge Bug 4: SMS_ALREADY_MATCHED means a racing actor linked this
+    // SMS to another recharge — say so plainly instead of the raw code.
+    if (!r.ok) { alert(d.error === 'SMS_ALREADY_MATCHED' ? 'এই SMS ইতিমধ্যে অন্য একটি রিচার্জে ব্যবহৃত হয়েছে। তালিকা নতুন করে দেখুন।' : 'ব্যর্থ: ' + d.error); return; }
     alert('✅ ম্যাচ সফল! টাকা যোগ হয়েছে।');
     show('sms');
   },
