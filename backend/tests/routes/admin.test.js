@@ -686,6 +686,56 @@ describe('transactions (security fix: filter allowlist)', () => {
     expect(r.body.error).toBe('DUPLICATE_TRANSACTION');
   });
 
+  // Recharge Bug 1 (2026-11-11): a TrxID-less Auto recharge (trxid NULL,
+  // number-only Auto) must be manually approvable — before the fix the
+  // endpoint threw AUTO_REQUIRES_SMS_MATCH and the money was stuck
+  // forever when the SMS never arrived. Guards must still hold.
+  test('approve: TrxID-less Auto recharge approves (wallet credited, traceable ref)', async () => {
+    db.__routeQuery([['SELECT * FROM transactions WHERE id', {
+      rows: [{ id: 't1', status: 'pending', user_id: 'u1', amount: '100', type: 'recharge', trxid: null }],
+    }]]);
+    const r = await withAdmin(request(app()).put('/api/admin/transactions/t1/approve')).expect(200);
+    expect(r.body.ok).toBe(true);
+    expect(db.withTransaction).toHaveBeenCalled();
+    const w = db.__client.query.mock.calls.find((c) => /wallet_apply/.test(c[0]));
+    // No TrxID → no SMS to check; credit uses the traceable 'tx-<id>' ref.
+    expect(w[1]).toEqual(['u1', 100, 'recharge', 'tx-t1', 't1']);
+  });
+
+  test('approve: amount mismatch still rejected (SMS proof beats the request)', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM transactions WHERE id', {
+        rows: [{ id: 't1', status: 'pending', user_id: 'u1', amount: '100', type: 'recharge', trxid: 'TRX1' }],
+      }],
+      ['SELECT amount FROM incoming_sms', { rows: [{ amount: '999' }] }],
+    ]);
+    const r = await withAdmin(request(app()).put('/api/admin/transactions/t1/approve')).expect(400);
+    expect(r.body.error).toBe('AMOUNT_MISMATCH');
+    expect(r.body.sms_amount).toBe(999);
+    expect(r.body.requested_amount).toBe(100);
+    expect(db.__client.query.mock.calls.find((c) => /wallet_apply/.test(c[0]))).toBeUndefined();
+  });
+
+  test('approve: duplicate still rejected after the Bug 1 fix', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM transactions WHERE id', {
+        rows: [{ id: 't1', status: 'pending', user_id: 'u1', amount: '100', type: 'recharge', trxid: 'TRX1' }],
+      }],
+      ['wallet_apply', () => { throw new Error('DUPLICATE_TRANSACTION'); }],
+    ]);
+    const r = await withAdmin(request(app()).put('/api/admin/transactions/t1/approve')).expect(400);
+    expect(r.body.error).toBe('DUPLICATE_TRANSACTION');
+  });
+
+  test('approve: TrxID-less but already processed → ALREADY_PROCESSED (status check first)', async () => {
+    db.__routeQuery([['SELECT * FROM transactions WHERE id', {
+      rows: [{ id: 't1', status: 'approved', user_id: 'u1', amount: '100', type: 'recharge', trxid: null }],
+    }]]);
+    const r = await withAdmin(request(app()).put('/api/admin/transactions/t1/approve')).expect(400);
+    expect(r.body.error).toBe('ALREADY_PROCESSED');
+    expect(db.withTransaction).not.toHaveBeenCalled();
+  });
+
   test('reject: not pending → 400 NOT_PENDING; happy → 200', async () => {
     db.__routeQuery([['UPDATE transactions SET status = \'rejected\'', { rows: [] }]]);
     const r1 = await withAdmin(request(app()).put('/api/admin/transactions/t1/reject')).expect(400);

@@ -2126,7 +2126,15 @@ router.put('/transactions/:id/approve', async (req, res) => {
         const sms = tx.trxid ? await client.query(
           `SELECT * FROM incoming_sms WHERE UPPER(trxid) = UPPER($1)
            ORDER BY created_at DESC LIMIT 1`, [tx.trxid]) : { rows: [] };
-        if (!tx.trxid) throw new Error('AUTO_REQUIRES_SMS_MATCH');
+        // Manual approve (2026-11-11, recharge Bug 1): a TrxID-less Auto
+        // recharge must NOT be a hard block. The admin confirms deliberately
+        // in the modal after verifying the payment in their own statement,
+        // and with no TrxID there is no SMS to check — so the flow proceeds
+        // with smsId=null. approveRechargeTx credits via wallet_apply with
+        // the traceable reference 'tx-<id>', and the row-level FOR UPDATE
+        // + wallet_apply idempotency still prevent double credit. All fraud
+        // guards below still run whenever an SMS IS present (a matched SMS
+        // or an amount mismatch still blocks).
         const row = sms.rows[0];
         if (row?.matched_recharge_id) throw new Error('DUPLICATE_TRANSACTION');
         if (row?.amount != null && Math.abs(Number(row.amount) - Number(tx.amount)) >= 0.005)
