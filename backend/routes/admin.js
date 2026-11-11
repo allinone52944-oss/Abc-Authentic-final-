@@ -2098,12 +2098,18 @@ router.put('/transactions/:id/approve', async (req, res) => {
 
     // Recharge fraud guard: an SMS with the same TrxID but a different
     // amount must never be approved — reject it instead.
+    // Recharge Bug 2 (2026-11-11): prefer an UNMATCHED SMS over a matched
+    // one — latest-first among the same match state. Before, both lookups
+    // took only the latest SMS by TrxID, so a newer SMS matched to ANOTHER
+    // recharge blocked a valid approve with a wrong AMOUNT_MISMATCH /
+    // DUPLICATE_TRANSACTION even though an older unmatched SMS was the
+    // correct proof for this recharge.
     if (tx.type === 'recharge' && tx.trxid) {
       const sms = await db.query(
         `SELECT amount FROM incoming_sms
          WHERE trxid IS NOT NULL AND UPPER(trxid) = UPPER($1) AND amount IS NOT NULL
            AND matched_recharge_id IS DISTINCT FROM $2
-         ORDER BY created_at DESC LIMIT 1`,
+         ORDER BY (matched_recharge_id IS NULL) DESC, created_at DESC LIMIT 1`,
         [String(tx.trxid).trim(), tx.id]
       );
       if (sms.rows.length) {
@@ -2123,9 +2129,13 @@ router.put('/transactions/:id/approve', async (req, res) => {
       // Idempotent atomic credit; raises DUPLICATE_TRANSACTION if already applied
       if (tx.type === 'recharge') {
         await client.query("SELECT pg_advisory_xact_lock(hashtext('recharge-credit'))");
+        // Recharge Bug 2 (2026-11-11): same unmatched-first preference as
+        // the pre-check above — an older unmatched SMS is the proof for
+        // this recharge; a newer SMS matched to another recharge must not
+        // be picked (it would wrongly throw DUPLICATE_TRANSACTION).
         const sms = tx.trxid ? await client.query(
           `SELECT * FROM incoming_sms WHERE UPPER(trxid) = UPPER($1)
-           ORDER BY created_at DESC LIMIT 1`, [tx.trxid]) : { rows: [] };
+           ORDER BY (matched_recharge_id IS NULL) DESC, created_at DESC LIMIT 1`, [tx.trxid]) : { rows: [] };
         // Manual approve (2026-11-11, recharge Bug 1): a TrxID-less Auto
         // recharge must NOT be a hard block. The admin confirms deliberately
         // in the modal after verifying the payment in their own statement,

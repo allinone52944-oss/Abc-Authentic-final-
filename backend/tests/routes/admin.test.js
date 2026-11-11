@@ -736,6 +736,88 @@ describe('transactions (security fix: filter allowlist)', () => {
     expect(db.withTransaction).not.toHaveBeenCalled();
   });
 
+  // Recharge Bug 2 (2026-11-11): latest-SMS-only — both SMS lookups in
+  // the approve endpoint took only the LATEST SMS by TrxID, so a newer
+  // SMS matched to ANOTHER recharge blocked a valid approve with a wrong
+  // AMOUNT_MISMATCH / DUPLICATE_TRANSACTION even though an older unmatched
+  // SMS was the correct proof. The fix prefers an UNMATCHED SMS in both
+  // lookups. The routes below simulate the real DB: which row LIMIT 1
+  // returns depends on the SQL's ORDER BY, so reverting the fix makes
+  // these tests fail with the old wrong errors.
+  const BUG2_TX = { id: 't1', status: 'pending', user_id: 'u1', amount: '100', type: 'recharge', trxid: 'TRX2' };
+  // SMS rows oldest → newest for one shared (fake) TrxID.
+  const pickSms = (sql, rows) => {
+    const s = String(sql);
+    if (s.includes('(matched_recharge_id IS NULL) DESC')) {
+      const unmatched = rows.filter((r) => r.matched_recharge_id == null);
+      if (unmatched.length) return unmatched[unmatched.length - 1];
+      return rows[rows.length - 1];
+    }
+    return rows[rows.length - 1];
+  };
+  const bug2Routes = (rows) => ([
+    ['SELECT * FROM transactions WHERE id', { rows: [BUG2_TX] }],
+    ['SELECT amount FROM incoming_sms', (sql) => ({ rows: [{ amount: pickSms(sql, rows).amount }] })],
+    ['SELECT * FROM incoming_sms', (sql) => ({ rows: [pickSms(sql, rows)] })],
+    ['SELECT id, trxid, matched_recharge_id FROM incoming_sms', (sql, params) => {
+      const row = rows.find((r) => r.id === params[0]);
+      return { rows: row ? [row] : [] };
+    }],
+    ['UPDATE incoming_sms SET matched_recharge_id', (sql, params) => ({ rows: [{ id: params[1] }] })],
+  ]);
+  const bug2WalletApply = () => db.__client.query.mock.calls.find((c) => /wallet_apply/.test(c[0]));
+  const bug2LinkedSms = () => {
+    const c = db.__client.query.mock.calls.find((cc) => /UPDATE incoming_sms SET matched_recharge_id/.test(cc[0]));
+    return c ? c[1][1] : null; // link params: [txId, smsId, via]
+  };
+
+  test('approve Bug 2: old unmatched SMS (amount matches) + newer matched SMS (different amount) → approves via the old SMS', async () => {
+    const rows = [
+      { id: 's-old', trxid: 'TRX2', amount: '100', matched_recharge_id: null },
+      { id: 's-new', trxid: 'TRX2', amount: '999', matched_recharge_id: 'r-other' },
+    ];
+    db.__routeQuery(bug2Routes(rows));
+    const r = await withAdmin(request(app()).put('/api/admin/transactions/t1/approve')).expect(200);
+    expect(r.body.ok).toBe(true);
+    expect(bug2WalletApply()[1]).toEqual(['u1', 100, 'recharge', 'TRX2', 't1']);
+    expect(bug2LinkedSms()).toBe('s-old');
+  });
+
+  test('approve Bug 2: old unmatched SMS + newer matched SMS of the SAME amount → approves, no DUPLICATE_TRANSACTION', async () => {
+    const rows = [
+      { id: 's-old', trxid: 'TRX2', amount: '100', matched_recharge_id: null },
+      { id: 's-new', trxid: 'TRX2', amount: '100', matched_recharge_id: 'r-other' },
+    ];
+    db.__routeQuery(bug2Routes(rows));
+    const r = await withAdmin(request(app()).put('/api/admin/transactions/t1/approve')).expect(200);
+    expect(r.body.ok).toBe(true);
+    expect(bug2WalletApply()[1]).toEqual(['u1', 100, 'recharge', 'TRX2', 't1']);
+    expect(bug2LinkedSms()).toBe('s-old');
+  });
+
+  test('approve Bug 2: ALL SMS matched to other recharges → still DUPLICATE_TRANSACTION (guard intact)', async () => {
+    const rows = [
+      { id: 's-new', trxid: 'TRX2', amount: '100', matched_recharge_id: 'r-other' },
+    ];
+    db.__routeQuery(bug2Routes(rows));
+    const r = await withAdmin(request(app()).put('/api/admin/transactions/t1/approve')).expect(400);
+    expect(r.body.error).toBe('DUPLICATE_TRANSACTION');
+    expect(bug2WalletApply()).toBeUndefined();
+  });
+
+  test('approve Bug 2: unmatched SMS amount differs → still AMOUNT_MISMATCH (guard intact)', async () => {
+    const rows = [
+      { id: 's-old', trxid: 'TRX2', amount: '999', matched_recharge_id: null },
+      { id: 's-new', trxid: 'TRX2', amount: '100', matched_recharge_id: 'r-other' },
+    ];
+    db.__routeQuery(bug2Routes(rows));
+    const r = await withAdmin(request(app()).put('/api/admin/transactions/t1/approve')).expect(400);
+    expect(r.body.error).toBe('AMOUNT_MISMATCH');
+    expect(r.body.sms_amount).toBe(999);
+    expect(r.body.requested_amount).toBe(100);
+    expect(bug2WalletApply()).toBeUndefined();
+  });
+
   test('reject: not pending → 400 NOT_PENDING; happy → 200', async () => {
     db.__routeQuery([['UPDATE transactions SET status = \'rejected\'', { rows: [] }]]);
     const r1 = await withAdmin(request(app()).put('/api/admin/transactions/t1/reject')).expect(400);
