@@ -1050,6 +1050,82 @@ def classify_input_image(w, h):
     return "other"
 
 
+def assign_photo_sign(candidates):
+    """Decide which image candidate is the photo and which is the
+    signature. Returns a dict with 'photo' and/or 'sign' keys.
+
+    Priority (permanent — input j rokom e thakbe logic a kaj korte hobe):
+      1. POSITION — the NID form puts the photo in the top-right box
+         and the signature directly below it, in the same column
+         (both test forms: x0=611..730, photo y0 ~40-70, sign
+         y0 ~230-270). So among candidates stacked in the same
+         column (x-ranges overlap), the TOPMOST is the photo and the
+         one below it is the signature. This holds for ANY aspect
+         ratio or size — a large signature scan (800x750) no longer
+         outranks the smaller portrait photo (480x630), and a wide
+         photo no longer gets called a signature.
+      2. ASPECT RATIO — wide (r >= 1.25) is a signature, portrait
+         (0.45 <= r < 1.25) is a photo. Used only when position
+         does not resolve it (images side by side / different
+         pages / no rect available).
+      3. AREA — only as a last tie-breaker, never to overrule
+         position. Two portraits are therefore NEVER ranked by
+         area (that is exactly what swapped photo/sign on the
+         40065719.pdf form).
+    """
+    if not candidates:
+        return {}
+
+    def _y0(c):
+        r = c.get("rect")
+        return r[1] if r else None
+
+    # 1. Position: same page, same column (x-overlap), top-to-bottom.
+    with_rect = [c for c in candidates if c.get("rect")]
+    by_page = {}
+    for c in with_rect:
+        by_page.setdefault(c["pno"], []).append(c)
+    for pno in sorted(by_page):
+        col = sorted(by_page[pno], key=lambda c: c["rect"][1])
+        for i in range(len(col) - 1):
+            a, b = col[i], col[i + 1]
+            if a["rect"][0] < b["rect"][2] and b["rect"][0] < a["rect"][2]:
+                return {"photo": a, "sign": b}
+
+    # 2. Aspect ratio.
+    wide = [c for c in candidates if c["r"] >= 1.25]
+    port = [c for c in candidates if 0.45 <= c["r"] < 1.25]
+    if wide and port:
+        # Photo = the portrait; if several, the topmost (by y0) else
+        # the first. A wide image is the signature here.
+        port.sort(key=lambda c: (_y0(c) if _y0(c) is not None else 1e9))
+        return {"photo": port[0], "sign": wide[0]}
+    if len(port) >= 2:
+        # Two portraits: topmost (by y0) is the photo — NOT the
+        # largest. If no rect is available, fall through to area.
+        if all(_y0(c) is not None for c in port):
+            port.sort(key=lambda c: _y0(c))
+            return {"photo": port[0], "sign": port[1]}
+    if wide and not port:
+        out = {"sign": wide[0]}
+        others = [c for c in candidates if c is not wide[0]]
+        if others:
+            out["photo"] = others[0]
+        return out
+
+    # 3. Area — last resort only.
+    if len(candidates) >= 2:
+        s = sorted(candidates, key=lambda c: c["area"], reverse=True)
+        return {"photo": s[0], "sign": s[1]}
+    if len(port) == 1:
+        return {"photo": port[0]}
+    if len(wide) == 1:
+        return {"sign": wide[0]}
+    if candidates:
+        return {"photo": candidates[0]}
+    return {}
+
+
 def extract(pdf_path="input.pdf", work_dir="work"):
     """Extract form fields + photo/signature. Returns (data_dict, images_dict)."""
     if not os.path.exists(pdf_path):
@@ -1184,40 +1260,23 @@ def extract(pdf_path="input.pdf", work_dir="work"):
             r = w_px / max(1, h_px)
             if r > 6.0 or r < 0.2:
                 continue
+            # Page rect: position is the primary photo/sign signal
+            # (photo box sits above the signature box, same column).
+            rect = None
+            try:
+                rects = page.get_image_rects(xref)
+                if rects:
+                    rc = rects[0]
+                    rect = (rc.x0, rc.y0, rc.x1, rc.y1)
+            except Exception:
+                rect = None
             candidates.append({
                 "page": page, "xref": xref, "smask": smask,
                 "w": w_px, "h": h_px, "r": r,
-                "area": w_px * h_px, "pno": pno,
+                "area": w_px * h_px, "pno": pno, "rect": rect,
             })
 
-    assigned = {}
-    if candidates:
-        wide_signs = [c for c in candidates if c["r"] >= 1.25]
-        portraits = [c for c in candidates if 0.45 <= c["r"] < 1.25]
-
-        if wide_signs and portraits:
-            portraits.sort(key=lambda c: c["area"], reverse=True)
-            assigned["photo"] = portraits[0]
-            assigned["sign"] = wide_signs[0]
-        elif len(portraits) >= 2:
-            portraits.sort(key=lambda c: c["area"], reverse=True)
-            assigned["photo"] = portraits[0]
-            assigned["sign"] = portraits[1]
-        elif wide_signs and not portraits:
-            assigned["sign"] = wide_signs[0]
-            others = [c for c in candidates if c != wide_signs[0]]
-            if others:
-                assigned["photo"] = others[0]
-        elif len(candidates) >= 2:
-            cands_sorted = sorted(candidates, key=lambda c: c["area"], reverse=True)
-            assigned["photo"] = cands_sorted[0]
-            assigned["sign"] = cands_sorted[1]
-        elif len(portraits) == 1:
-            assigned["photo"] = portraits[0]
-        elif len(wide_signs) == 1:
-            assigned["sign"] = wide_signs[0]
-        elif candidates:
-            assigned["photo"] = candidates[0]
+    assigned = assign_photo_sign(candidates)
 
     images = {}
     for kind, c in assigned.items():
