@@ -6,4 +6,23 @@
 .bn.bn-notice{background:var(--banner-primary);color:var(--banner-on-dark);border-bottom:4px solid var(--banner-gold)}
 .bn.bn-festival .bn-mark{color:var(--banner-gold)}.bn.bn-maintenance .bn-edge{color:var(--banner-accent-soft)}
 @media(max-width:480px){.bn{grid-template-columns:40px minmax(0,1fr);gap:14px;padding:22px 18px;min-height:180px}.bn .bn-mark{width:40px;height:40px;font-size:23px}.bn h2{font-size:20px}.bn p{font-size:13px}.bn .bn-edge{display:none}.bn .bn-brand{font-size:11px;line-height:1.6}}
-@media(prefers-reduced-motion:no-preference){.bn .bn-edge{animation:banner-emphasis 4s ease-in-out infinite}@keyframes banner-emphasis{0%,100%{transform:rotate(0)}50%{transform:rotate(20deg)}}}
+/* Decoration moves independently: copy and layout never animate. */
+.bn::after{content:"";position:absolute;left:0;bottom:0;width:32%;height:3px;background:var(--banner-gold);pointer-events:none;z-index:0}
+@media(prefers-reduced-motion:no-preference){
+.bn::after{animation:banner-sweep 4.8s ease-in-out infinite alternate}
+.bn .bn-mark{animation:banner-float 3.2s ease-in-out infinite}
+.bn-split .bn-mark{animation-name:banner-tilt;animation-duration:3.6s}
+.bn-outline .bn-mark{animation-name:banner-pulse;animation-duration:2.8s}
+.bn-notice .bn-mark{animation-name:banner-tilt;animation-duration:4s}
+.bn-festival .bn-mark{animation-name:banner-celebrate;animation-duration:3.4s}
+.bn-maintenance .bn-mark{animation-name:banner-turn;animation-duration:8s}
+.bn .bn-edge{animation:banner-emphasis 4s ease-in-out infinite}
+.bn:hover::after,.bn:hover .bn-mark,.bn:hover .bn-edge,.bn:focus-within::after,.bn:focus-within .bn-mark,.bn:focus-within .bn-edge{animation-play-state:paused}
+@keyframes banner-sweep{from{transform:translateX(0)}to{transform:translateX(210%)}}
+@keyframes banner-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+@keyframes banner-tilt{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg)}}
+@keyframes banner-pulse{0%,100%{transform:scale(.92)}50%{transform:scale(1.06)}}
+@keyframes banner-celebrate{0%,100%{transform:translateY(0) rotate(-8deg)}50%{transform:translateY(-6px) rotate(8deg)}}
+@keyframes banner-turn{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes banner-emphasis{0%,100%{transform:rotate(0)}50%{transform:rotate(20deg)}}
+}
