@@ -40,8 +40,8 @@ describe('admin notify split (audit #69)', () => {
   test('admin.html loads the notify chunk BEFORE admin.js (and bumps its version)', () => {
     const html = read('admin.html');
     expect(html).toContain('<script src="/js/admin-notify.js?v=1"></script>');
-    expect(html).toContain('<script src="/js/admin.js?v=20261111-3"></script>');
-    expect(html.indexOf('admin-notify.js')).toBeLessThan(html.indexOf('/js/admin.js?v=20261111-3'));
+    expect(html).toContain('<script src="/js/admin.js?v=20261111-4"></script>');
+    expect(html.indexOf('admin-notify.js')).toBeLessThan(html.indexOf('/js/admin.js?v=20261111-4'));
   });
 
   test('admin.js still drives the notify init and still calls admToast', () => {

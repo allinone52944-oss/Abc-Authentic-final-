@@ -240,8 +240,21 @@ function orderDocUpload(db, kind) {
           cb(null, true);
         },
       }).single('file');
+      // Upload rejections are the uploader's problem (type/size), not a
+      // server fault: answer 400 with a stable code instead of letting the
+      // global handler turn them into a generic 500 INTERNAL_ERROR.
+      const reject = (code) => {
+        if (req.file) { try { fs.unlinkSync(req.file.path); } catch (_) {} }
+        return res.status(400).json({ error: code, max_mb: cfg.maxMb, allowed: cfg.allowed });
+      };
       up(req, res, (err) => {
-        if (err || !req.file) return next(err);
+        if (err) {
+          if (err.code === 'LIMIT_FILE_SIZE') return reject('FILE_TOO_LARGE');
+          if (err.message === 'FILE_TYPE_NOT_ALLOWED') return reject('FILE_TYPE_NOT_ALLOWED');
+          if (err.code && String(err.code).startsWith('LIMIT_')) return reject('UPLOAD_LIMIT');
+          return next(err);
+        }
+        if (!req.file) return next();
         // L-8: verify magic bytes match the extension; delete spoofed files.
         try {
           const ext = path.extname(req.file.filename).toLowerCase();
@@ -252,8 +265,7 @@ function orderDocUpload(db, kind) {
             fs.readSync(fd, head, 0, 8, 0);
             fs.closeSync(fd);
             if (!check(head)) {
-              fs.unlinkSync(req.file.path);
-              return next(new Error('FILE_TYPE_NOT_ALLOWED'));
+              return reject('FILE_TYPE_NOT_ALLOWED');
             }
           }
         } catch (e) { return next(e); }

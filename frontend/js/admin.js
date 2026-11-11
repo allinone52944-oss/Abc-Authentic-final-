@@ -29,12 +29,10 @@ function escJs(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g
 function jqAttr(v){const s=JSON.stringify(v);return (s===undefined?'""':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');}
 function bn(n){return Number(n||0).toLocaleString('bn-BD');}
 
-// P1 premium gaps (2026-11-03): ONE Bengali mapper for order-action
-// errors — raw codes / HTTP numbers must never reach the admin UI.
-// Unknown code-like tokens fall back to a generic Bengali message.
+// One Bengali mapper for admin action error codes.
 function admErrBn(msg){
   const s = String(msg == null ? '' : msg);
-  const MAP = { ALREADY_REFUNDED: 'এই অর্ডারের টাকা আগেই ফেরত দেওয়া হয়েছে', INVALID_TRANSITION: 'এই অবস্থা থেকে ওই অবস্থায় নেওয়া যাবে না', INVALID_STATUS: 'অবৈধ স্ট্যাটাস — আবার চেষ্টা করুন', NOT_FOUND: 'অর্ডার পাওয়া যায়নি', CONFIRM_REQUIRED: 'ডিলিট নিশ্চিত করা হয়নি', STALE_WRITE: 'তথ্য এর মধ্যে বদলে গেছে — পেজ রিফ্রেশ করে আবার চেষ্টা করুন', FAILED: 'সার্ভার সমস্যা হয়েছে — একটু পরে আবার চেষ্টা করুন', NO_FILE: 'কোনো ফাইল বেছে নেওয়া হয়নি', RATE_LIMITED: 'অনেক রিকোয়েস্ট হয়েছে — একটু পরে আবার চেষ্টা করুন' };
+  const MAP = { ALREADY_REFUNDED: 'এই অর্ডারের টাকা আগেই ফেরত দেওয়া হয়েছে', INVALID_TRANSITION: 'এই অবস্থা থেকে ওই অবস্থায় নেওয়া যাবে না', INVALID_STATUS: 'অবৈধ স্ট্যাটাস — আবার চেষ্টা করুন', NOT_FOUND: 'অর্ডার পাওয়া যায়নি', CONFIRM_REQUIRED: 'ডিলিট নিশ্চিত করা হয়নি', STALE_WRITE: 'তথ্য এর মধ্যে বদলে গেছে — পেজ রিফ্রেশ করে আবার চেষ্টা করুন', FAILED: 'সার্ভার সমস্যা হয়েছে — একটু পরে আবার চেষ্টা করুন', NO_FILE: 'কোনো ফাইল বেছে নেওয়া হয়নি', FILE_TYPE_NOT_ALLOWED: 'শুধু আসল PDF/JPG/PNG ফাইল দিন', FILE_TOO_LARGE: 'ফাইল বেশি বড়', UPLOAD_LIMIT: 'একটি ফাইল দিন', INTERNAL_ERROR: 'ফাইল রাখা যায়নি', RATE_LIMITED: 'অনেক রিকোয়েস্ট হয়েছে — একটু পরে আবার চেষ্টা করুন' };
   for (const k of Object.keys(MAP)) if (s.includes(k)) return MAP[k];
   const m = s.match(/\b(400|401|403|404|409|429|500|502|503)\b/);
   if (m) return 'সার্ভার সমস্যা হয়েছে (কোড ' + m[1] + ') — একটু পরে আবার চেষ্টা করুন';
