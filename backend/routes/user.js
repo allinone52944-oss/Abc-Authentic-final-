@@ -1287,12 +1287,6 @@ router.post('/promos/claim', async (req,res) => {
   try {
     const {service_id,code,idempotency_key} = req.body || {};
     if (!idempotency_key || String(idempotency_key).length > 64) promotions.fail('INVALID_INPUT');
-    const sr = await db.query("SELECT * FROM services WHERE id = $1 AND status = 'active'",[service_id]);
-    if (!sr.rows.length) return res.status(404).json({error:'SERVICE_NOT_FOUND'});
-    const service=sr.rows[0], eff = await effectivePrice(req.user.id,service);
-    if (!eff.allowed) return res.status(403).json({error:'NO_ACCESS'});
-    if (!service.engine_id) promotions.fail('USE_AT_CHECKOUT');
-    if (!serviceOpen(service.schedule)) promotions.fail('SERVICE_CLOSED');
     const result = await db.withTransaction(async client => {
       await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE',[req.user.id]);
       const ref='promo-claim-'+req.user.id+'-'+idempotency_key;
@@ -1302,6 +1296,12 @@ router.post('/promos/claim', async (req,res) => {
         if(prior.service_id !== service_id || prior.code !== String(code || '').trim().toUpperCase()) promotions.fail('IDEMPOTENCY_CONFLICT',409);
         return {ok:true,already:true,credited:Number(prior.amount),expires_at:prior.expires_at};
       }
+    const sr = await client.query("SELECT * FROM services WHERE id = $1 AND status = 'active'",[service_id]);
+    if (!sr.rows.length) return res.status(404).json({error:'SERVICE_NOT_FOUND'});
+    const service=sr.rows[0], eff = await effectivePrice(req.user.id,service);
+    if (!eff.allowed) return res.status(403).json({error:'NO_ACCESS'});
+    if (!service.engine_id) promotions.fail('USE_AT_CHECKOUT');
+    if (!serviceOpen(service.schedule)) promotions.fail('SERVICE_CLOSED');
       const q=await promotions.quote(client,code,req.user.id,service_id,eff.price,true);
       const outstanding=await serviceCredits.availableFor(client,req.user.id,service_id);
       if(outstanding > 0) promotions.fail('CREDIT_ALREADY_AVAILABLE');

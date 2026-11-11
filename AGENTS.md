@@ -17,3 +17,9 @@
 - Engine promotions claim expiring service-locked credit through the existing payment helper, while manual checkout discounts the authoritative effective price atomically; shared client countdowns follow server time and invalidate expired checkout quotes. Retain a pending claim and its idempotency key after response loss until retry or code edit. Why: engine outputs stay unchanged, timers never authorize payment, and exhausted campaigns cannot block recovery of a committed claim.
 
 - Admin status pipelines retain each acknowledged step across all order caches and reconcile on HTTP or connection failure; delivery upload restores retry controls without discarding files or assuming ambiguous requests failed. Why: partial progress and lost responses must not trigger stale transitions or trap operators.
+
+- File-and-deliver retries reuse acknowledged uploads scoped to the exact order and file, serialize clicks and read current order status before advancing; unreadable upload responses never authorize completion. Why: retrying a status failure must not duplicate customer files or infer success.
+
+- Authenticated claim replays are resolved under the existing user lock before current service eligibility checks; new claims still validate service and access. Why: closing a service cannot hide a claim already committed for the same account, service and code.
+
+- Refunded scoped credit never inherits an expiring campaign row; restore only non-expiring rows and put remainder in permanent service-scoped refund rows. Why: later campaign expiry cannot erase refunded value or widen it to wallet balance.

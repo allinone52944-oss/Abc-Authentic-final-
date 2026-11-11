@@ -209,17 +209,15 @@ async function reconstructChargeSplit(client, userId, order) {
   return null;
 }
 
-// Top the consumed credit back up, earliest rows first, never above
-// each row's original amount; any remainder (original rows expired
-// or deleted) goes into a fresh 'refund' row so the credit is not
-// silently lost. The ref makes a repeated restore a no-op.
+// Restore only into non-expiring credit rows; remainder becomes a
+// service-scoped permanent refund so another offer cannot expire it.
 async function restoreServiceCredit(client, userId, serviceId, amount, refKey) {
   let left = Math.round((Number(amount) || 0) * 100) / 100;
   if (!(left > 0)) return;
   const rows = await client.query(
     `SELECT id, amount, remaining FROM service_credits
       WHERE user_id = $1 AND service_id = $2 AND remaining < amount
-        AND (expires_at IS NULL OR expires_at > NOW())
+        AND expires_at IS NULL
       ORDER BY created_at ASC
       FOR UPDATE`,
     [userId, serviceId]

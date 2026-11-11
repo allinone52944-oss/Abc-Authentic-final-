@@ -2619,51 +2619,41 @@ window.AdmOrders = {
   },
 
   async modalDeliverWithFile(id) {
-    const f = window._modalDeliFile;
+    const f = window._modalDeliFile, btn = document.getElementById('admModalUploadDeliverBtn');
+    if (this._modalDeliveryBusy) return;
     if (!f) { alert('ফাইল বেছে নিন'); return; }
-    // Admin-order fix (2026-11-03): the file+deliver path used to
-    // run with no confirm, unlike markDelivered.
     if (!confirm('ডেলিভারি ফাইল আপলোড করে অর্ডারটি ডেলিভার্ড মার্ক করতে চান?')) return;
-    const btn = document.getElementById('admModalUploadDeliverBtn');
-    if (btn) { btn.disabled = true; btn.innerText = 'আপলোড ও ডেলিভারি হচ্ছে…'; }
-
-    let fileUploaded = false;
+    this._modalDeliveryBusy = true;
+    if (btn) { btn.disabled=true; btn.innerText='আপলোড ও ডেলিভারি হচ্ছে…'; }
+    let fileUploaded = this._modalUploadAck && this._modalUploadAck.id === String(id) && this._modalUploadAck.file === f;
     try {
-      // 1. Upload delivery doc
-      const fd = new FormData();
-      fd.append('file', f);
-      fd.append('doc_type', 'delivery');
-      const r = await fetch('/api/admin/orders/' + id + '/delivery-docs', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + getAuthToken() },
-        body: fd
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'ডেলিভারি ফাইল আপলোড ব্যর্থ');
-      fileUploaded = true;
-
-      // 2. Advance status smoothly to delivered
-      const o = (TABS._orders || []).find(x => x.id === id);
-      await this.smartTransition(id, o ? o.status : 'processing', 'delivered');
-
-      alert('✅ ডেলিভারি ফাইল সফলভাবে গ্রাহকের কাছে পৌঁছে গেছে এবং অর্ডারটি ডেলিভার্ড সম্পন্ন হয়েছে!');
-      closeModal();
-      show('orders');
-    } catch (e) {
-      // Admin-order fix (2026-11-03): never call this "delivery
-      // failed" when step 1 already succeeded — the file IS in the
-      // order and downloadable from History; only the status step
-      // failed. Say exactly that.
-      if (fileUploaded) {
-        // P2: honest wording — on a not-yet-delivered order the
-        // file is NOT downloadable until delivery (visibility
-        // rule), so the old "can download now" claim was false.
-        // P1: raw error mapped to Bengali via admErrBn.
-        alert('⚠️ ফাইল আপলোড হয়েছে, কিন্তু স্ট্যাটাস ডেলিভার্ড হয়নি — ডেলিভার্ড হলে গ্রাহক ইতিহাস থেকে ডাউনলোড করতে পারবেন। আবার চেষ্টা করুন বা স্ট্যাটাস হাতে বদলান। (' + admErrBn(e.message) + ')');
-      } else {
-        alert('❌ ডেলিভারি ব্যর্থ: ' + admErrBn(e.message));
+      const current = await ABC.api('/admin/orders/' + id);
+      if (!current.ok) throw new Error('অর্ডারের বর্তমান অবস্থা পড়া যায়নি');
+      const data = await current.json(), o = data.order;
+      if (!o || !o.status) throw new Error('অর্ডারের বর্তমান অবস্থা পড়া যায়নি');
+      if (isEngineOrder(o)) throw new Error('ইঞ্জিনের সেবায় আলাদা ডেলিভারি প্রযোজ্য নয়');
+      if (['failed','cancelled','refunded'].includes(o.status)) throw new Error('এই অবস্থায় ডেলিভারি করা যাবে না');
+      if (!fileUploaded) {
+        const fd = new FormData(); fd.append('file', f); fd.append('doc_type', 'delivery');
+        const r = await fetch('/api/admin/orders/' + id + '/delivery-docs', {
+          method: 'POST', headers: { 'Authorization': 'Bearer ' + getAuthToken() }, body: fd
+        });
+        const d = await r.json();
+        if (!r.ok || d.ok !== true || !d.filename) throw new Error(d.error || 'আপলোডের স্বীকৃতি পাওয়া যায়নি');
+        fileUploaded = true;
+        this._modalUploadAck = {id:String(id),file:f};
       }
-      if (btn) { btn.disabled = false; btn.innerText = '🚀 ডেলিভারি ফাইল আপলোড ও সমাপ্ত করুন'; }
+      await this.smartTransition(id, o.status, 'delivered');
+      this._modalUploadAck = null;
+      alert('✅ ডেলিভারি ফাইল সফলভাবে গ্রাহকের কাছে পৌঁছে গেছে এবং অর্ডারটি ডেলিভার্ড সম্পন্ন হয়েছে!');
+      closeModal(); show('orders');
+    } catch (e) {
+      alert(fileUploaded
+        ? '⚠️ ফাইল আপলোড হয়েছে, কিন্তু শেষ স্ট্যাটাস নিশ্চিত নয়—আবার চেষ্টা করলে একই ফাইল পুনরায় আপলোড হবে না। (' + admErrBn(e.message) + ')'
+        : '❌ ডেলিভারি নিশ্চিত নয়—অর্ডারে ফাইল যুক্ত হয়েছে কি না যাচাই করুন। (' + admErrBn(e.message) + ')');
+    } finally {
+      this._modalDeliveryBusy = false;
+      if (btn) { btn.disabled = window._modalDeliFile !== f; btn.innerText = '🚀 ডেলিভারি ফাইল আপলোড ও সমাপ্ত করুন'; }
     }
   },
 
@@ -2735,11 +2725,9 @@ window.AdmOrders = {
       headers: { 'Authorization': 'Bearer ' + getAuthToken() },
       body: fd
     });
-    const d = await r.json().catch(() => ({error:'সার্ভারের উত্তর পড়া যায়নি—অর্ডারে ফাইল যুক্ত হয়েছে কি না যাচাই করুন।'}));
-    if (r.ok) {
+    const d = await r.json();
+    if (r.ok && d.ok === true && d.filename) {
       const o = this.findOrder(id);
-      // P2: on an already-delivered order the server notifies the
-      // customer about the new file — say so honestly.
       if (o && o.status === 'delivered') {
         alert('✅ ডকুমেন্ট আপলোড হয়েছে এবং গ্রাহককে জানানো হয়েছে');
         closeModal(); show('orders');
