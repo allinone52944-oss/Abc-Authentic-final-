@@ -620,3 +620,106 @@ describe('POST /api/admin/sms/:id/match — SMS_ALREADY_MATCHED preserved (Bug 4
     expect(r.body.error).toBe('MATCH_FAILED');
   });
 });
+
+// ============================================================
+// SMS delete system: per-card hard delete + bulk delete of all
+// ignored SMS. A MATCHED SMS is payment evidence and must never
+// be deletable; the guard lives in the DELETE SQL itself.
+// ============================================================
+describe('SMS delete system', () => {
+  const delCalls = () => db.query.mock.calls.filter((c) => /DELETE FROM incoming_sms/.test(c[0]));
+  const activityCalls = () => db.query.mock.calls.filter((c) => /INSERT INTO activity_log/.test(c[0]));
+
+  test('DELETE /:id — unmatched SMS is deleted (200) and logged', async () => {
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      ['DELETE FROM incoming_sms', { rows: [{ id: 's1' }] }],
+    ]);
+    const r = await withAdmin(request(adminApp()).delete('/api/admin/sms/s1')).expect(200);
+    expect(r.body.ok).toBe(true);
+    // The guard is in the SQL: only unmatched rows can be deleted.
+    expect(delCalls()).toHaveLength(1);
+    expect(delCalls()[0][0]).toContain('matched_recharge_id IS NULL');
+    expect(delCalls()[0][1]).toEqual(['s1']);
+    // Activity logged with the sms id only (no body/phone/TrxID).
+    const acts = activityCalls();
+    expect(acts).toHaveLength(1);
+    expect(acts[0][1][1]).toBe('sms.delete');
+    expect(JSON.parse(acts[0][1][2])).toEqual({ sms_id: 's1' });
+  });
+
+  test('DELETE /:id — matched SMS is rejected (400) and the record stays', async () => {
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      // The guarded DELETE deletes nothing (matched row excluded).
+      ['DELETE FROM incoming_sms', { rows: [] }],
+      ['SELECT matched_recharge_id FROM incoming_sms', { rows: [{ matched_recharge_id: 't1' }] }],
+    ]);
+    const r = await withAdmin(request(adminApp()).delete('/api/admin/sms/s1')).expect(400);
+    expect(r.body.error).toBe('MATCHED_SMS');
+    expect(r.body.message).toContain('মিলেছে');
+    // The DELETE was attempted but the guard excluded the matched row.
+    expect(delCalls()).toHaveLength(1);
+    expect(delCalls()[0][0]).toContain('matched_recharge_id IS NULL');
+    // No delete activity was logged for a rejected delete.
+    expect(activityCalls()).toHaveLength(0);
+  });
+
+  test('DELETE /:id — missing SMS returns 404, not success', async () => {
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      ['DELETE FROM incoming_sms', { rows: [] }],
+      ['SELECT matched_recharge_id FROM incoming_sms', { rows: [] }],
+    ]);
+    const r = await withAdmin(request(adminApp()).delete('/api/admin/sms/nope')).expect(404);
+    expect(r.body.error).toBe('SMS_NOT_FOUND');
+    expect(activityCalls()).toHaveLength(0);
+  });
+
+  test('POST /delete-ignored — deletes ONLY ignored SMS, returns the count', async () => {
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      ["parse_status = 'ignored'", { rows: [{ id: 's-ign1' }, { id: 's-ign2' }] }],
+    ]);
+    const r = await withAdmin(request(adminApp()).post('/api/admin/sms/delete-ignored')).expect(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.deleted).toBe(2);
+    // The SQL deletes only ignored AND unmatched rows — matched and
+    // unmatched-but-not-ignored SMS are never touched.
+    expect(delCalls()).toHaveLength(1);
+    expect(delCalls()[0][0]).toContain("parse_status = 'ignored'");
+    expect(delCalls()[0][0]).toContain('matched_recharge_id IS NULL');
+    const acts = activityCalls();
+    expect(acts).toHaveLength(1);
+    expect(acts[0][1][1]).toBe('sms.delete-ignored');
+    expect(JSON.parse(acts[0][1][2])).toEqual({ count: 2 });
+  });
+
+  test('POST /delete-ignored — zero ignored SMS deletes nothing (count 0)', async () => {
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      ["parse_status = 'ignored'", { rows: [] }],
+    ]);
+    const r = await withAdmin(request(adminApp()).post('/api/admin/sms/delete-ignored')).expect(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.deleted).toBe(0);
+    expect(delCalls()).toHaveLength(1);
+    const acts = activityCalls();
+    expect(acts).toHaveLength(1);
+    expect(JSON.parse(acts[0][1][2])).toEqual({ count: 0 });
+  });
+
+  test('GET /api/admin/sms — list carries ignored_total for the bulk button', async () => {
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      // The ignored-count query must be matched before the generic
+      // total-count handler (routeQuery takes the first match).
+      ["parse_status = 'ignored'", { rows: [{ count: '5' }] }],
+      ['SELECT COUNT(*) FROM incoming_sms', { rows: [{ count: '2' }] }],
+      ['FROM incoming_sms s', { rows: [] }],
+    ]);
+    const r = await withAdmin(request(adminApp()).get('/api/admin/sms?matched=no')).expect(200);
+    expect(r.body.total).toBe(2);
+    expect(r.body.ignored_total).toBe(5);
+  });
+});

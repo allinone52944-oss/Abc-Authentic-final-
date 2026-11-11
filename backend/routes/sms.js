@@ -444,6 +444,12 @@ adminSms.get('/', async (req, res) => {
     }
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
     const total = await db.query(`SELECT COUNT(*) FROM incoming_sms s ${where}`, params);
+    // SMS delete system: the hub shows a bulk-delete button only when
+    // there is at least one ignored SMS, so the list carries that count.
+    const ignored = await db.query(
+      `SELECT COUNT(*) FROM incoming_sms s
+        WHERE s.parse_status = 'ignored' AND s.matched_recharge_id IS NULL`
+    );
     const rows = await db.query(
       `SELECT s.*, t.user_id, t.amount AS tx_amount, t.status AS tx_status,
               u.name AS user_name, u.phone AS user_phone
@@ -453,7 +459,7 @@ adminSms.get('/', async (req, res) => {
        ${where} ORDER BY s.created_at DESC LIMIT $${i} OFFSET $${i + 1}`,
       [...params, limit, offset]
     );
-    res.json({ sms: rows.rows, total: parseInt(total.rows[0].count, 10), page, limit });
+    res.json({ sms: rows.rows, total: parseInt(total.rows[0].count, 10), ignored_total: parseInt(ignored.rows[0].count, 10), page, limit });
   } catch (e) {
     safeLog('[sms] list error:', e.message);
     res.status(500).json({ error: 'FAILED' });
@@ -532,6 +538,56 @@ adminSms.post('/:id/ignore', async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     safeLog('[sms] ignore error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// DELETE /api/admin/sms/:id — permanently delete one SMS (hard delete).
+// Safety: a MATCHED SMS (matched_recharge_id IS NOT NULL) is payment
+// evidence for a recharge and must NEVER be deleted. The guard lives in
+// the DELETE itself (atomic); a second SELECT only tells a matched SMS
+// apart from a missing one so the admin gets the real reason.
+adminSms.delete('/:id', async (req, res) => {
+  try {
+    const r = await db.query(
+      `DELETE FROM incoming_sms
+        WHERE id = $1 AND matched_recharge_id IS NULL RETURNING id`,
+      [req.params.id]
+    );
+    if (r.rows.length) {
+      await logActivity(req.user.id, 'sms.delete', { sms_id: req.params.id });
+      return res.json({ ok: true });
+    }
+    const s = await db.query(
+      'SELECT matched_recharge_id FROM incoming_sms WHERE id = $1',
+      [req.params.id]
+    );
+    if (!s.rows[0]) return res.status(404).json({ error: 'SMS_NOT_FOUND' });
+    return res.status(400).json({
+      error: 'MATCHED_SMS',
+      message: 'এই SMS একটি রিচার্জের সাথে মিলেছে, তাই মুছে ফেলা যাবে না।',
+    });
+  } catch (e) {
+    safeLog('[sms] delete error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// POST /api/admin/sms/delete-ignored — permanently delete ALL ignored SMS.
+// Only parse_status = 'ignored' AND unmatched rows; matched and
+// unmatched-but-not-ignored SMS are never touched.
+adminSms.post('/delete-ignored', async (req, res) => {
+  try {
+    const r = await db.query(
+      `DELETE FROM incoming_sms
+        WHERE parse_status = 'ignored' AND matched_recharge_id IS NULL
+        RETURNING id`
+    );
+    const deleted = r.rows.length;
+    await logActivity(req.user.id, 'sms.delete-ignored', { count: deleted });
+    res.json({ ok: true, deleted });
+  } catch (e) {
+    safeLog('[sms] delete-ignored error:', e.message);
     res.status(500).json({ error: 'FAILED' });
   }
 });
