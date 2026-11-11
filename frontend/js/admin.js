@@ -128,7 +128,7 @@ async function init() {
       };
     }
     show('stats');
-    try { VoiceAlert.init(); } catch (e) { console.warn('[abc-admin] VoiceAlert.init ব্যর্থ:', e); }
+    try { VoiceAlert.init({ getUser: () => me, show, openOrder: id => { TABS._orderType = ''; AdmOrders.openById(id); }, openNewOrders: () => { TABS._f = 'new'; TABS._orderType = ''; show('orders'); } }); } catch (e) { console.warn('[abc-admin] VoiceAlert.init ব্যর্থ:', e); }
     try { PushNotify.ensure(); } catch (e) { console.warn('[abc-admin] PushNotify.ensure ব্যর্থ:', e); }
     try { PushNotify.autoPrompt(); } catch (e) { console.warn('[abc-admin] PushNotify.autoPrompt ব্যর্থ:', e); }
   } catch (e) {

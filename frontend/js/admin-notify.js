@@ -6,9 +6,8 @@
 // The chunk only *calls* admin.js helpers (esc/bn/ABC/show) at run
 // time, never at load time, so loading it first is safe: every call
 // happens after both scripts are loaded.
-// The admin new-order/recharge/SMS check runs every 30s now (was
-// 12s) — the first check still baselines at 3s, so the first run
-// never toasts.
+// Poll every 12 seconds and refresh on return to the tab.
+// Null baselines distinguish first load from a legitimate zero count.
 /* ============ Phase 3: Premium Voice & Realtime Sound Notifications ============ */
 window.admToast = (title, message, type = 'info', badge = 'সফল') => {
   if (window.VoiceAlert && VoiceAlert.showToast) {
@@ -27,7 +26,18 @@ window.admToast = (title, message, type = 'info', badge = 'সফল') => {
 
 const VoiceAlert = {
   enabled: typeof localStorage !== 'undefined' && localStorage.getItem('abc_voice') !== 'off',
-  _last: { recharge: 0, order: 0, sms: 0, autoMatch: 0 },
+  _last: { recharge: null, order: null, sms: null, autoMatch: null },
+  _checking: false,
+  _soundQueue: [],
+  _player: null,
+  _playing: false,
+  _blocked: false,
+  _initialized: false,
+  _deps: null,
+
+  escape(value) {
+    return String(value == null ? "" : value).replace(/[&<>"']/g, c => ({"&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"}[c]));
+  },
   _voices: [],
   _audioCtx: null,
   _unlocked: false,
@@ -131,36 +141,59 @@ const VoiceAlert = {
 
   playSound(file) {
     if (!this.enabled) return;
+    // Bound the queue during busy periods; never overlap spoken alerts.
+    if (this._soundQueue.length < 8) this._soundQueue.push(file);
+    this._drainSound();
+  },
+
+  _drainSound() {
+    if (!this.enabled || this._playing || !this._soundQueue.length) return;
     try {
-      this.unlock();
-      const a = new Audio('/audio/' + file);
+      if (!this._player) this._player = new Audio();
+      const a = this._player;
+      const file = this._soundQueue.shift();
+      this._playing = true;
+      a.src = '/audio/' + file;
       a.volume = 1.0;
-      const p = a.play();
-      if (p && typeof p.catch === 'function') {
-        p.catch(() => {
-          // If browser blocked autoplay, schedule retry on very next user touch/click
-          const retryOnGesture = () => {
-            try {
-              const a2 = new Audio('/audio/' + file);
-              a2.volume = 1.0;
-              a2.play().catch(() => {});
-            } catch (_) {}
-            if (typeof document !== 'undefined') {
-              document.removeEventListener('pointerdown', retryOnGesture);
-              document.removeEventListener('keydown', retryOnGesture);
-              document.removeEventListener('click', retryOnGesture);
-              document.removeEventListener('touchstart', retryOnGesture);
-            }
-          };
-          if (typeof document !== 'undefined') {
-            document.addEventListener('pointerdown', retryOnGesture, { once: true });
-            document.addEventListener('keydown', retryOnGesture, { once: true });
-            document.addEventListener('click', retryOnGesture, { once: true });
-            document.addEventListener('touchstart', retryOnGesture, { once: true });
-          }
-        });
-      }
-    } catch (e) {}
+      const finish = () => {
+        this._playing = false;
+        this._drainSound();
+      };
+      a.onended = finish;
+      a.onerror = () => {
+        this.speak(file === 'new-order.mp3' ? 'নতুন অর্ডার এসেছে' : file === 'new-recharge.mp3' ? 'নতুন রিচার্জ এসেছে' : 'নতুন পেমেন্ট এসএমএস এসেছে');
+        this.showToast({ title: 'ভয়েস ফাইল চালানো যায়নি', message: 'শব্দ পরীক্ষা করুন', icon: '⚠️', duration: 6000 });
+        finish();
+      };
+      const started = a.play();
+      if (started && typeof started.then === 'function') started.then(() => {
+        this._blocked = false;
+        this._unlocked = true;
+        this.updateTopbarBtn();
+      }).catch(error => {
+        this._playing = false;
+        if (error && error.name === 'NotAllowedError') {
+          this._soundQueue.unshift(file);
+          this._blocked = true;
+          this.updateTopbarBtn();
+        } else a.onerror();
+      });
+    } catch (error) {
+      this._playing = false;
+      this._blocked = true;
+      this.updateTopbarBtn();
+    }
+  },
+
+  stopSound() {
+    this._soundQueue = [];
+    this._playing = false;
+    if (this._player) {
+      this._player.onended = null;
+      this._player.onerror = null;
+      this._player.pause();
+    }
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
   },
 
   playAudio(file) {
@@ -190,6 +223,7 @@ const VoiceAlert = {
   showToast(opts) {
     if (typeof document === 'undefined') return;
     try {
+      const esc = value => this.escape(value);
       const type = opts.type || 'order';
       const title = opts.title || 'নোটিফিকেশন';
       const message = opts.message || '';
@@ -255,7 +289,10 @@ const VoiceAlert = {
     } catch (e) {}
   },
 
-  init() {
+  init(deps) {
+    if (deps) this._deps = deps;
+    if (this._initialized) return;
+    this._initialized = true;
     try {
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         const load = () => { this._voices = speechSynthesis.getVoices(); };
@@ -264,25 +301,23 @@ const VoiceAlert = {
       }
       const unlockHandler = () => {
         this.unlock();
-        if (typeof document !== 'undefined') {
-          document.removeEventListener('pointerdown', unlockHandler);
-          document.removeEventListener('keydown', unlockHandler);
-          document.removeEventListener('click', unlockHandler);
-          document.removeEventListener('touchstart', unlockHandler);
-        }
+        this._blocked = false;
+        this._drainSound();
+        this.updateTopbarBtn();
       };
       if (typeof document !== 'undefined') {
-        document.addEventListener('pointerdown', unlockHandler, { once: true });
-        document.addEventListener('keydown', unlockHandler, { once: true });
-        document.addEventListener('click', unlockHandler, { once: true });
-        document.addEventListener('touchstart', unlockHandler, { once: true });
+        document.addEventListener('pointerdown', unlockHandler);
+        document.addEventListener('keydown', unlockHandler);
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') this.check();
+        });
       }
     } catch (e) {}
 
     this.updateTopbarBtn();
 
     if (typeof setInterval !== 'undefined') {
-      setInterval(() => this.check(), 30000);
+      setInterval(() => this.check(), 12000);
       setTimeout(() => this.check(), 3000);
     }
   },
@@ -292,7 +327,8 @@ const VoiceAlert = {
     const btn = document.getElementById('admSoundToggleBtn');
     if (btn) {
       if (this.enabled) {
-        btn.innerHTML = '🔊 সাউন্ড: চালু';
+        btn.innerHTML = this._blocked || !this._unlocked ? '🔊 শব্দ সক্রিয় করুন' : '🔊 সাউন্ড: চালু';
+        btn.title = this._blocked || !this._unlocked ? 'পাশের টেস্ট বোতামে চাপুন' : 'শব্দ বন্ধ করুন';
         btn.style.color = '#16a34a';
         btn.style.borderColor = '#bbf7d0';
       } else {
@@ -311,7 +347,6 @@ const VoiceAlert = {
     this.updateTopbarBtn();
     if (this.enabled) {
       this.playChime('order');
-      this.speak('ভয়েস ও সাউন্ড নোটিফিকেশন চালু হয়েছে');
       this.showToast({
         type: 'order',
         icon: '🔊',
@@ -321,6 +356,7 @@ const VoiceAlert = {
         duration: 4000
       });
     } else {
+      this.stopSound();
       this.showToast({
         type: 'chat',
         icon: '🔇',
@@ -338,23 +374,23 @@ const VoiceAlert = {
   },
 
   testAlert() {
+    this.enabled = true;
+    localStorage.setItem('abc_voice', 'on');
     this.unlock();
+    this.updateTopbarBtn();
     this.playChime('order');
-    setTimeout(() => this.speak('সাউন্ড নোটিফিকেশন সিস্টেম কার্যকর আছে'), 450);
     this.showToast({
-      type: 'order',
-      icon: '🛍️',
-      title: 'টেস্ট নোটিফিকেশন',
-      message: 'গ্রাহক: <b>মোঃ আরিফুল ইসলাম</b> • সার্ভিস: <b>NID কার্ড ডাউনলোড</b> (৳৫০)',
-      badge: 'টেস্ট সফল',
-      actionText: 'অর্ডার হাব দেখুন ➤',
-      onAction: () => { show('orders'); },
-      duration: 10000
+      type: 'order', icon: '🔊', title: 'শব্দ পরীক্ষা',
+      message: 'ভয়েস শোনা যাচ্ছে কি?', badge: 'পরীক্ষা', duration: 10000
     });
   },
 
   async check() {
-    if (typeof me === 'undefined' || !me || me.role !== 'admin') return;
+    const user = this._deps && this._deps.getUser ? this._deps.getUser() : null;
+    if (!user || user.role !== 'admin' || this._checking) return;
+    const esc = value => this.escape(value);
+    const bn = value => Number(value || 0).toLocaleString('bn-BD');
+    this._checking = true;
     try {
       const r = await ABC.api('/admin/stats');
       if (!r.ok) return;
@@ -362,9 +398,8 @@ const VoiceAlert = {
       const pr = Number(s.pending_recharge || 0);
       const no = Number(s.orders_new || 0);
 
-      if (this._last.order && no > this._last.order) {
+      if (this._last.order !== null && no > this._last.order) {
         this.playChime('order');
-        this.speak('নতুন অর্ডার এসেছে');
         try {
           const or = await ABC.api('/admin/orders?status=new&limit=1');
           if (or.ok) {
@@ -382,7 +417,7 @@ const VoiceAlert = {
                 // (orders now default to manual, so a new AUTO order
                 // must not be hidden), then await the list load and
                 // open by id (single-order fetch fallback).
-                onAction: () => { TABS._orderType = ''; AdmOrders.openById(latest.id); }
+                onAction: () => this._deps.openOrder(latest.id)
               });
             }
           }
@@ -394,14 +429,13 @@ const VoiceAlert = {
             message: no + 'টি নতুন অর্ডার অপেক্ষমাণ আছে।',
             actionText: 'অর্ডার দেখুন ➤',
             // P3: open the unfiltered new list, not the manual default.
-            onAction: () => { TABS._f = 'new'; TABS._orderType = ''; show('orders'); }
+            onAction: () => this._deps.openNewOrders()
           });
         }
       }
 
-      if (this._last.recharge && pr > this._last.recharge) {
+      if (this._last.recharge !== null && pr > this._last.recharge) {
         this.playChime('recharge');
-        this.speak('নতুন রিচার্জ রিকোয়েস্ট এসেছে');
         try {
           const rr = await ABC.api('/admin/recharge/pending');
           if (rr.ok) {
@@ -415,7 +449,7 @@ const VoiceAlert = {
                 message: 'গ্রাহক: <b>' + esc(latest.user_name || 'গ্রাহক') + '</b><br>পরিমাণ: <b>৳' + bn(latest.amount || 0) + '</b> (' + esc(latest.method || 'পেমেন্ট') + ')',
                 badge: 'অপেক্ষমাণ',
                 actionText: 'অনুমোদন করুন ➤',
-                onAction: () => show('recharge')
+                onAction: () => this._deps.show('recharge')
               });
             }
           }
@@ -426,7 +460,7 @@ const VoiceAlert = {
             title: 'নতুন রিচার্জ রিকোয়েস্ট!',
             message: pr + 'টি রিচার্জ রিকোয়েস্ট অপেক্ষমাণ আছে।',
             actionText: 'রিচার্জ খুলুন ➤',
-            onAction: () => show('recharge')
+            onAction: () => this._deps.show('recharge')
           });
         }
       }
@@ -442,10 +476,9 @@ const VoiceAlert = {
       // starts produce no signal here by design — no noise.
       try {
         const am = Number(s.auto_matched_recharge || 0);
-        if (this._last.autoMatch && am > this._last.autoMatch) {
+        if (this._last.autoMatch !== null && am > this._last.autoMatch) {
           this.playChime('recharge');
-          this.speak('Auto-match রিচার্জ সফল হয়েছে');
-          const lm = s.latest_auto_match || {};
+            const lm = s.latest_auto_match || {};
           this.showToast({
             type: 'recharge',
             icon: '✅',
@@ -455,7 +488,7 @@ const VoiceAlert = {
               : am + 'টি রিচার্জ auto-match এ অনুমোদিত হয়েছে।',
             badge: 'Auto-match',
             actionText: 'SMS গেটওয়ে ➤',
-            onAction: () => show('sms')
+            onAction: () => this._deps.show('sms')
           });
         }
         this._last.autoMatch = am;
@@ -466,23 +499,22 @@ const VoiceAlert = {
         if (sr.ok) {
           const sd = await sr.json();
           const us = Number(sd.unmatched_sms || 0);
-          if (this._last.sms && us > this._last.sms) {
+          if (this._last.sms !== null && us > this._last.sms) {
             this.playChime('message');
-            this.speak('নতুন পেমেন্ট SMS এসেছে, ম্যাচ হয়নি');
-            this.showToast({
+                this.showToast({
               type: 'chat',
               icon: '📩',
               title: 'আনম্যাচড পেমেন্ট SMS!',
               message: 'নতুন এসএমএস এসেছে কিন্তু কোনো রিচার্জের সাথে মেলেনি।',
               badge: 'SMS',
               actionText: 'SMS গেটওয়ে ➤',
-              onAction: () => show('sms')
+              onAction: () => this._deps.show('sms')
             });
           }
           this._last.sms = us;
         }
       } catch (e) {}
-    } catch (e) {}
+    } catch (e) {} finally { this._checking = false; }
   }
 };
 window.VoiceAlert = VoiceAlert;

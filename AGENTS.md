@@ -7,3 +7,5 @@
 - Customer order lists and counts filter manual services without engine IDs before pagination; engine-backed ledger rows become engine history while stored document URLs and admin/charging routes stay unchanged. Why: instant services must not appear as waiting customer orders or lose existing downloads.
 - Account emails share an inline-styled table shell and escape dynamic values while preserving existing SMTP and token flows. Why: email compatibility must not replace production authentication.
 - Recharge approval entry points take the same global transaction advisory lock before row locks and check globally credited references; submissions serialize user/reference checks and reuse matching pending Auto rows. Why: one real payment must credit once without orphan retry requests.
+
+- Admin voice alerts use null counter baselines, serialized reusable audio and explicit gesture recovery; retain mute choice and original APIs. Why: first events after zero must notify without overlapping voice or bypassing browser autoplay rules.
