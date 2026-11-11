@@ -28,6 +28,12 @@ const ADMIN_NOTIFY_SRC = fs.readFileSync(
   path.join(__dirname, '../../../frontend/js/admin-notify.js'),
   'utf8',
 );
+// SMS hub split — the SMS hub (renderSmsTab + AdmSms) lives in
+// frontend/js/admin-sms.js now, not admin.js.
+const ADMIN_SMS_SRC = fs.readFileSync(
+  path.join(__dirname, '../../../frontend/js/admin-sms.js'),
+  'utf8',
+);
 
 /** Extract the full `function name(...) { ... }` definition by brace matching. */
 function extractFn(src, name) {
@@ -529,32 +535,32 @@ describe('jqAttr() — JSON values inside double-quoted onclick attributes', () 
 
 describe('SMS hub match labels (audit #33)', () => {
   test('manual matches say so; only auto matches say "অটো প্রসেসড"', () => {
-    expect(ADMIN_SRC).toContain("s.matched_via === 'manual'");
-    expect(ADMIN_SRC).toContain('🔗 ম্যানুয়াল ম্যাচ');
-    expect(ADMIN_SRC).toContain("s.matched_via === 'auto'");
-    expect(ADMIN_SRC).toContain('✓ অটো প্রসেসড');
+    expect(ADMIN_SMS_SRC).toContain("s.matched_via === 'manual'");
+    expect(ADMIN_SMS_SRC).toContain('🔗 ম্যানুয়াল ম্যাচ');
+    expect(ADMIN_SMS_SRC).toContain("s.matched_via === 'auto'");
+    expect(ADMIN_SMS_SRC).toContain('✓ অটো প্রসেসড');
     // legacy rows (no matched_via) get a neutral label, never a false claim
-    expect(ADMIN_SRC).toContain('✓ মিলেছে');
+    expect(ADMIN_SMS_SRC).toContain('✓ মিলেছে');
   });
 });
 
 describe('SMS hub pagination + manual-match dropdown (audit #36)', () => {
   test('the hub fetches a page and shows a pager', () => {
-    expect(ADMIN_SRC).toContain("'/admin/sms?matched=' + f + '&limit=30&page=' + page");
-    expect(ADMIN_SRC).toContain('window._smsPage');
-    expect(ADMIN_SRC).toContain('আগের');
-    expect(ADMIN_SRC).toContain('পরের →');
-    expect(ADMIN_SRC).toContain('মোট ');
-    expect(ADMIN_SRC).toContain('টি SMS');
+    expect(ADMIN_SMS_SRC).toContain("'/admin/sms?matched=' + f + '&limit=30&page=' + page");
+    expect(ADMIN_SMS_SRC).toContain('window._smsPage');
+    expect(ADMIN_SMS_SRC).toContain('আগের');
+    expect(ADMIN_SMS_SRC).toContain('পরের →');
+    expect(ADMIN_SMS_SRC).toContain('মোট ');
+    expect(ADMIN_SMS_SRC).toContain('টি SMS');
     // changing the filter restarts from page 1
-    expect(ADMIN_SRC).toContain("window._smsFilter=\\'no\\';window._smsPage=1;show(\\'sms\\')");
+    expect(ADMIN_SMS_SRC).toContain("window._smsFilter=\\'no\\';window._smsPage=1;show(\\'sms\\')");
   });
 
   test('the manual-match dropdown shows method + sender', () => {
-    expect(ADMIN_SRC).toContain('smsMethodBn(p.method)');
-    expect(ADMIN_SRC).toContain('p.sender_no');
-    expect(ADMIN_SRC).toContain("function smsMethodBn(m)");
-    expect(ADMIN_SRC).toContain("bkash_payment: 'bKash'");
+    expect(ADMIN_SMS_SRC).toContain('smsMethodBn(p.method)');
+    expect(ADMIN_SMS_SRC).toContain('p.sender_no');
+    expect(ADMIN_SMS_SRC).toContain("function smsMethodBn(m)");
+    expect(ADMIN_SMS_SRC).toContain("bkash_payment: 'bKash'");
   });
 });
 
