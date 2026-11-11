@@ -554,3 +554,69 @@ describe('holdRateLimitedSms — over-cap SMS are held, not lost (audit #37)', (
     expect(src).not.toContain("message: { error: 'RATE_LIMITED' }");
   });
 });
+
+// ============================================================
+// Recharge Bug 4 (2026-11-11): SMS-hub manual match race — the
+// match endpoint's catch collapsed SMS_ALREADY_MATCHED to generic
+// MATCH_FAILED, so the admin saw a raw code with no explanation.
+// The race: a racing actor (auto-match/webhook/another admin) links
+// the SMS after the early ALREADY_MATCHED check but before
+// approveRechargeTx's conditional link. The fix preserves the real
+// code in the endpoint's error regex (sms.js match catch).
+describe('POST /api/admin/sms/:id/match — SMS_ALREADY_MATCHED preserved (Bug 4)', () => {
+  const TX = { id: 't1', type: 'recharge', amount: 500, status: 'pending', user_id: 'u1', trxid: 'FAKE-TRX-1' };
+  const postMatch = () => withAdmin(request(adminApp()).post('/api/admin/sms/s1/match')).send({ transaction_id: 't1' });
+
+  test('race: SMS linked between early check and approveRechargeTx → 400 SMS_ALREADY_MATCHED (not MATCH_FAILED), no credit', async () => {
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      // Early check reads the SMS as still unmatched …
+      ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', amount: 500, matched_recharge_id: null }] }],
+      ['SELECT * FROM transactions', { rows: [TX] }],
+      // … but by the time approveRechargeTx locks it, another actor linked it.
+      ['SELECT id, trxid, matched_recharge_id FROM incoming_sms', { rows: [{ id: 's1', trxid: 'FAKE-TRX-1', matched_recharge_id: 't-other' }] }],
+    ]);
+    const r = await postMatch().expect(400);
+    expect(r.body.error).toBe('SMS_ALREADY_MATCHED');
+    expect(db.__client.query.mock.calls.filter((c) => /wallet_apply/.test(c[0]))).toHaveLength(0);
+  });
+
+  test('DUPLICATE_TRANSACTION is still preserved (not MATCH_FAILED)', async () => {
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [{ id: 't-approved' }] }],
+      ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', amount: 500, matched_recharge_id: null }] }],
+      ['SELECT * FROM transactions', { rows: [TX] }],
+      ['SELECT id, trxid, matched_recharge_id FROM incoming_sms', { rows: [{ id: 's1', trxid: 'FAKE-TRX-1', matched_recharge_id: null }] }],
+      ['WHERE id <> $1', { rows: [] }],
+    ]);
+    const r = await postMatch().expect(400);
+    expect(r.body.error).toBe('DUPLICATE_TRANSACTION');
+    expect(db.__client.query.mock.calls.filter((c) => /wallet_apply/.test(c[0]))).toHaveLength(0);
+  });
+
+  test('INSUFFICIENT_BALANCE is still preserved (not MATCH_FAILED)', async () => {
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', amount: 500, matched_recharge_id: null }] }],
+      ['SELECT * FROM transactions', { rows: [TX] }],
+      ['SELECT id, trxid, matched_recharge_id FROM incoming_sms', { rows: [{ id: 's1', trxid: 'FAKE-TRX-1', matched_recharge_id: null }] }],
+      ['WHERE id <> $1', { rows: [] }],
+      ['SELECT * FROM wallet_apply', async () => { throw new Error('INSUFFICIENT_BALANCE'); }],
+    ]);
+    const r = await postMatch().expect(400);
+    expect(r.body.error).toBe('INSUFFICIENT_BALANCE');
+  });
+
+  test('a genuinely unknown error still returns MATCH_FAILED', async () => {
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', amount: 500, matched_recharge_id: null }] }],
+      ['SELECT * FROM transactions', { rows: [TX] }],
+      ['SELECT id, trxid, matched_recharge_id FROM incoming_sms', { rows: [{ id: 's1', trxid: 'FAKE-TRX-1', matched_recharge_id: null }] }],
+      ['WHERE id <> $1', { rows: [] }],
+      ['SELECT * FROM wallet_apply', async () => { throw new Error('SOME_WEIRD_DB_ERROR'); }],
+    ]);
+    const r = await postMatch().expect(400);
+    expect(r.body.error).toBe('MATCH_FAILED');
+  });
+});
