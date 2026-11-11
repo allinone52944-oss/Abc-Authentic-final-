@@ -1652,16 +1652,17 @@ window.AdmOrders = {
     // land, refresh the list cache, and say exactly how far it got.
     const doneSteps = [];
     for (const st of path) {
-      const r = await ABC.api('/admin/orders/' + id + '/status', {
+      let r, networkError;
+      try { r = await ABC.api('/admin/orders/' + id + '/status', {
         method: 'PUT',
         body: { status: st, admin_note: adminNote || undefined }
-      });
-      if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
+      }); } catch (e) { networkError = e; }
+      if (networkError || !r || !r.ok) {
+        const d = r ? await r.json().catch(() => ({})) : {};
         // F5: claim a refresh only when it really happened.
         let _refreshed = false;
         try { _refreshed = await this._refreshOrdersCache(); } catch (_) {}
-        const base = admErrBn(d.error) || ('স্ট্যাটাস পরিবর্তন ব্যর্থ (' + st + ')');
+        const base = networkError ? 'সংযোগ বিচ্ছিন্ন হয়েছে—শেষ ধাপের ফল নিশ্চিত নয়; বর্তমান অবস্থা যাচাই করুন।' : (admErrBn(d.error) || ('স্ট্যাটাস পরিবর্তন ব্যর্থ (' + st + ')'));
         const err = new Error(doneSteps.length
           ? (base + ' — ' + doneSteps.map(s => STBN[s] || s).join(' → ') + ' পর্যন্ত এগিয়েছে, ' + (STBN[st] || st) + ' ধাপে আটকে গেছে।' + (_refreshed ? ' তালিকা রিফ্রেশ করা হয়েছে।' : ' তালিকা রিফ্রেশ করা যায়নি — পেজ রিলোড করে আবার দেখুন।'))
           : base);
@@ -1670,6 +1671,9 @@ window.AdmOrders = {
         throw err;
       }
       doneSteps.push(st);
+      for (const rows of [TABS._orders, TABS._unifiedRows, [TABS._detailOrder]]) {
+        for (const row of rows || []) if (row && String(row.id) === String(id)) row.status = st;
+      }
     }
     return true;
   },
@@ -2720,7 +2724,9 @@ window.AdmOrders = {
     const f = window._deliFile;
     if (!f) { alert('ফাইল বেছে নিন'); return; }
     const btn = document.getElementById('deliUploadBtn');
+    if (btn && btn.disabled) return;
     if (btn) { btn.disabled = true; btn.innerText = 'আপলোড হচ্ছে…'; }
+    try {
     const fd = new FormData();
     fd.append('file', f);
     fd.append('doc_type', 'delivery');
@@ -2729,9 +2735,9 @@ window.AdmOrders = {
       headers: { 'Authorization': 'Bearer ' + getAuthToken() },
       body: fd
     });
-    const d = await r.json();
+    const d = await r.json().catch(() => ({error:'সার্ভারের উত্তর পড়া যায়নি—অর্ডারে ফাইল যুক্ত হয়েছে কি না যাচাই করুন।'}));
     if (r.ok) {
-      const o = (TABS._orders || []).find(x => x.id === id);
+      const o = this.findOrder(id);
       // P2: on an already-delivered order the server notifies the
       // customer about the new file — say so honestly.
       if (o && o.status === 'delivered') {
@@ -2752,6 +2758,11 @@ window.AdmOrders = {
       closeModal(); show('orders');
     } else {
       alert('❌ ব্যর্থ: ' + admErrBn(d.error || String(r.status)));
+      if (btn) { btn.disabled = false; btn.innerText = '⬆️ আপলোড'; }
+    }
+    } catch (e) {
+      alert('❌ আপলোডের ফল নিশ্চিত নয়—অর্ডারে ফাইল যুক্ত হয়েছে কি না যাচাই করে আবার চেষ্টা করুন। (' + admErrBn(e.message) + ')');
+    } finally {
       if (btn) { btn.disabled = false; btn.innerText = '⬆️ আপলোড'; }
     }
   },
