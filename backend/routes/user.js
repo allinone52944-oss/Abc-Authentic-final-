@@ -1290,18 +1290,18 @@ router.post('/promos/claim', async (req,res) => {
     const result = await db.withTransaction(async client => {
       await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE',[req.user.id]);
       const ref='promo-claim-'+req.user.id+'-'+idempotency_key;
-      const old=await client.query('SELECT r.amount, r.service_id, c.code, c.expires_at FROM coupon_redemptions r LEFT JOIN coupons c ON c.id = r.coupon_id WHERE r.ref = $1 AND r.user_id = $2',[ref,req.user.id]);
+      const old=await client.query('SELECT r.amount, r.service_id, r.claimed_code, r.claimed_expires_at, c.code, c.expires_at FROM coupon_redemptions r LEFT JOIN coupons c ON c.id = r.coupon_id WHERE r.ref = $1 AND r.user_id = $2',[ref,req.user.id]);
       if(old.rows.length) {
         const prior=old.rows[0];
-        if(prior.service_id !== service_id || prior.code !== String(code || '').trim().toUpperCase()) promotions.fail('IDEMPOTENCY_CONFLICT',409);
-        return {ok:true,already:true,credited:Number(prior.amount),expires_at:prior.expires_at};
+        if(prior.service_id !== service_id || (prior.claimed_code ?? prior.code) !== String(code || '').trim().toUpperCase()) promotions.fail('IDEMPOTENCY_CONFLICT',409);
+        return {ok:true,already:true,credited:Number(prior.amount),expires_at:prior.claimed_code != null ? prior.claimed_expires_at : prior.expires_at};
       }
-    const sr = await client.query("SELECT * FROM services WHERE id = $1 AND status = 'active'",[service_id]);
-    if (!sr.rows.length) return res.status(404).json({error:'SERVICE_NOT_FOUND'});
-    const service=sr.rows[0], eff = await effectivePrice(req.user.id,service);
-    if (!eff.allowed) return res.status(403).json({error:'NO_ACCESS'});
-    if (!service.engine_id) promotions.fail('USE_AT_CHECKOUT');
-    if (!serviceOpen(service.schedule)) promotions.fail('SERVICE_CLOSED');
+      const sr = await client.query("SELECT * FROM services WHERE id = $1 AND status = 'active'",[service_id]);
+      if (!sr.rows.length) promotions.fail('SERVICE_NOT_FOUND',404);
+      const service=sr.rows[0], eff = await effectivePrice(req.user.id,service);
+      if (!eff.allowed) promotions.fail('NO_ACCESS',403);
+      if (!service.engine_id) promotions.fail('USE_AT_CHECKOUT');
+      if (!serviceOpen(service.schedule)) promotions.fail('SERVICE_CLOSED');
       const q=await promotions.quote(client,code,req.user.id,service_id,eff.price,true);
       const outstanding=await serviceCredits.availableFor(client,req.user.id,service_id);
       if(outstanding > 0) promotions.fail('CREDIT_ALREADY_AVAILABLE');

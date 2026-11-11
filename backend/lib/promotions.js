@@ -41,7 +41,7 @@ async function quote(client, code, userId, serviceId, price, lock = false) {
   return { coupon:c, code:c.code, original:price, discount:saved, payable:Math.round((price-saved)*100)/100, expires_at:c.expires_at, starts_at:c.starts_at, server_now:new Date().toISOString(), remaining_uses:Number(c.per_user_limit)-Number(u.rows[0]?.n || 0) };
 }
 async function record(client, q, userId, serviceId, ref) {
-  await client.query('INSERT INTO coupon_redemptions (coupon_id,user_id,service_id,ref,amount) VALUES ($1,$2,$3,$4,$5)',[q.coupon.id,userId,serviceId,ref,q.discount]);
+  await client.query('INSERT INTO coupon_redemptions (coupon_id,user_id,service_id,ref,amount,claimed_code,claimed_expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7)',[q.coupon.id,userId,serviceId,ref,q.discount,String(q.code).trim().toUpperCase(),q.expires_at ?? null]);
   await client.query('UPDATE coupons SET used_count = used_count + 1 WHERE id = $1',[q.coupon.id]);
 }
 function publicQuote(q) { const {coupon,...data} = q; return data; }

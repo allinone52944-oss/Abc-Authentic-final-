@@ -23,3 +23,5 @@
 - Authenticated claim replays are resolved under the existing user lock before current service eligibility checks; new claims still validate service and access. Why: closing a service cannot hide a claim already committed for the same account, service and code.
 
 - Refunded scoped credit never inherits an expiring campaign row; restore only non-expiring rows and put remainder in permanent service-scoped refund rows. Why: later campaign expiry cannot erase refunded value or widen it to wallet balance.
+
+- Redemption rows snapshot normalized code and expiry at claim creation; migration backfills only from surviving coupons, and replay falls back to live fields solely for unsnapshotted legacy rows. Why: deleting or editing a campaign must not erase committed claim identity or weaken service/code conflict checks.
