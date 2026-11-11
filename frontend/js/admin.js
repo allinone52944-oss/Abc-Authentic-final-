@@ -4101,75 +4101,88 @@ function fallbackCopy(t, done) {
 
 /* ---------------- BANNERS ---------------- */
 TABS.banners = async () => {
-  const r = await ABC.api('/admin/banners');
-  const d = await r.json();
-  const banners = d.banners || [];
-  const animBn = { slide: '➡️ স্লাইড', fade: '🔄 ফেইড', ticker: '📰 টিকার', bounce: '⬆️ বাউন্স', none: '⏸️ স্থির' };
-  const typeLabels = {
-    banner: '<span class="pill" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;">🖼️ ব্যানার</span>',
-    ad: '<span class="pill" style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;">📢 বিজ্ঞাপন</span>',
-    popup: '<span class="pill" style="background:#fef3c7;color:#b45309;border:1px solid #fde68a;">💬 পপআপ</span>'
-  };
-
-  let rows = '';
-  if (!banners.length) {
-    rows = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted);">এখনো কোনো ব্যানার তৈরি করা হয়নি। উপরের বাটন দিয়ে নতুন ব্যানার তৈরি করুন।</td></tr>';
-  } else {
-    for (const b of banners) {
-      const c = b.content || {};
-      const typeBadge = typeLabels[b.type] || ('<span class="pill">' + esc(b.type) + '</span>');
-      rows += '<tr>' +
-        '<td>' + typeBadge + '</td>' +
-        '<td><div style="font-weight:700;color:var(--text-main);">' + esc(b.title) + '</div>' +
-        '<div class="s" style="margin-top:2px;">' + esc(c.text_bn || '') + (c.link ? ' • 🔗 ' + esc(c.link) : '') + '</div></td>' +
-        '<td><span class="pill" style="background:#f8fafc;border:1px solid #e2e8f0;">#' + b.design_id + '</span></td>' +
-        '<td><small style="font-weight:600;">' + (animBn[b.animation_type] || b.animation_type || '-') + '</small><div class="s">গতি: ' + (b.animation_speed || 30) + '</div></td>' +
-        '<td>' +
-          '<button class="mini-btn ' + (b.active ? 'ok' : '') + '" onclick="AdmBn.toggle(\'' + b.id + '\',' + (!b.active) + ')">' +
-          (b.active ? '✅ চালু' : '❌ বন্ধ') + '</button>' +
-        '</td>' +
-        '<td>' +
-          '<div style="display:flex;gap:6px;">' +
-            '<button class="mini-btn" onclick="AdmBn.editForm(\'' + b.id + '\')">✏️ এডিট</button>' +
-            '<button class="mini-btn danger" onclick="AdmBn.del(\'' + b.id + '\')">🗑️</button>' +
-          '</div>' +
-        '</td>' +
-      '</tr>';
-    }
+  try {
+    const r = await ABC.api('/admin/banners');
+    if (!r.ok) throw new Error('FAILED');
+    const d = await r.json();
+    if (!Array.isArray(d.banners)) throw new Error('FAILED');
+    const banners = d.banners;
+    const types = { banner: 'ব্যানার', ad: 'বিজ্ঞাপন', popup: 'পপআপ' };
+    content.innerHTML = '<section class="bn-manager"><header class="bn-manager-head"><div><h1>ব্যানার ব্যবস্থাপনা</h1><div class="bn-summary">মোট ' + bn(banners.length) + ' · চালু ' + bn(banners.filter(x => x.active).length) + '</div></div><button class="btn" onclick="AdmBn.createForm()">＋ নতুন ব্যানার</button></header>' +
+      '<div class="bn-inventory">' + (banners.length ? banners.map(b =>
+        '<article class="bn-item"><div class="bn-item-preview" data-banner-id="' + esc(b.id) + '"></div><div class="bn-item-body"><div class="bn-item-meta"><span>' + esc(types[b.type] || b.type) + '</span><span>ডিজাইন #' + esc(b.design_id) + '</span></div><h2>' + esc(b.title) + '</h2><p>' + esc((b.content || {}).text_bn || '') + '</p><div class="bn-item-actions"><button class="mini-btn ' + (b.active ? 'ok' : '') + '" aria-pressed="' + !!b.active + '" onclick="AdmBn.toggle(' + jqAttr(b.id) + ',' + !b.active + ')">' + (b.active ? '● চালু' : '○ বন্ধ') + '</button><button class="mini-btn" onclick="AdmBn.editForm(' + jqAttr(b.id) + ')">✎ সম্পাদনা</button><button class="mini-btn danger" aria-label="ব্যানার মুছুন" title="মুছুন" onclick="AdmBn.del(' + jqAttr(b.id) + ')">🗑</button></div></div></article>'
+      ).join('') : '<div class="bn-empty">এখনো কোনো ব্যানার তৈরি করা হয়নি।</div>') + '</div></section>';
+    document.querySelectorAll('[data-banner-id]').forEach(async el => {
+      const row = banners.find(x => String(x.id) === el.dataset.bannerId);
+      if (!row) return;
+      try { const html = await BannerRender.render(row); if (el.isConnected) AdmBn.frame(el, html, row.title); }
+      catch (_) { if (el.isConnected) el.textContent = 'প্রিভিউ পাওয়া যায়নি'; }
+    });
+  } catch (_) {
+    content.innerHTML = '<div class="err" role="alert">ব্যানার লোড হয়নি। <button class="mini-btn" onclick="show(\'banners\')">আবার চেষ্টা</button></div>';
   }
-
-  content.innerHTML =
-    '<div class="adm-settings" style="max-width:1100px;">' +
-      '<div class="adm-settings-hero">' +
-        '<div>' +
-          '<div class="adm-settings-eyebrow">PROMOTIONS & NOTICES</div>' +
-          '<h1>🖼️ ব্যানার ও অফার ম্যানেজমেন্ট</h1>' +
-          '<p>ইউজার ড্যাশবোর্ডের টপ স্লাইডার ব্যানার, বিজ্ঞাপন এবং বিশেষ ঘোষণা পপআপ নিয়ন্ত্রণ করুন।</p>' +
-        '</div>' +
-        '<button class="adm-settings-hero-btn" onclick="AdmBn.createForm()">+ নতুন ব্যানার তৈরি</button>' +
-      '</div>' +
-
-      '<div class="form-card adm-settings-card" style="padding:0;overflow:hidden;">' +
-        '<div style="overflow-x:auto;">' +
-          '<table class="adm" style="margin:0;">' +
-            '<thead>' +
-              '<tr><th>ধরন</th><th>শিরোনাম ও টেক্সট</th><th>ডিজাইন</th><th>অ্যানিমেশন</th><th>স্ট্যাটাস</th><th>অ্যাকশন</th></tr>' +
-            '</thead>' +
-            '<tbody>' + rows + '</tbody>' +
-          '</table>' +
-        '</div>' +
-      '</div>' +
-      '<div class="s" style="margin-top:6px;color:var(--text-muted);">✨ ড্যাশবোর্ডে ব্যানার ও বিজ্ঞাপন স্লাইডার আকারে স্বয়ংক্রিয়ভাবে চলবে। পপআপ সেট করলে ইউজাররা পেজে ঢোকার পর স্পেশাল নোটিশ কার্ড দেখতে পাবেন।</div>' +
-    '</div>';
 };
 
 window.AdmBn = {
   _catalog: null,
   _selDesign: 1,
+  _previewSeq: 0,
+  _busy: false,
+  _pending: new Set(),
+  frame(el, html, title) {
+    const frame = document.createElement('iframe');
+    frame.title = title || 'ব্যানার প্রিভিউ';
+    frame.setAttribute('sandbox', '');
+    frame.srcdoc = '<!doctype html><html lang="bn"><head><meta charset="utf-8"></head><body>' + html + '<style>html,body{margin:0;overflow-x:hidden}body{background:transparent}h2,p{overflow-wrap:anywhere}h2{font-size:22px!important}*{box-sizing:border-box}.bn{min-height:150px!important;display:flex!important;flex-direction:column;justify-content:center}@media(prefers-reduced-motion:reduce){*{animation:none!important}}</style></body></html>';
+    el.replaceChildren(frame);
+  },
+  setupEditor() {
+    const modalEl = document.querySelector('#admModal .modal');
+    if (!modalEl) return;
+    modalEl.classList.add('bn-editor');
+    const layout = document.createElement('div'); layout.className = 'bn-editor-layout';
+    const fields = document.createElement('div'); fields.className = 'bn-editor-fields';
+    const visuals = document.createElement('div'); visuals.className = 'bn-editor-visuals';
+    const grid = document.getElementById('bnDesignGrid')?.parentElement;
+    const preview = document.getElementById('bnPreview')?.parentElement;
+    const parts = Array.from(modalEl.children).filter(el => !el.matches('h3,.modal-x'));
+    parts.forEach(el => { if (el !== grid && el !== preview) fields.appendChild(el); });
+    if (preview) visuals.appendChild(preview);
+    if (grid) visuals.appendChild(grid);
+    layout.append(fields, visuals); modalEl.appendChild(layout);
+    const status = document.createElement('div'); status.id = 'bn_feedback'; status.setAttribute('role', 'alert'); fields.appendChild(status);
+    this._busy = false;
+    document.querySelectorAll('.bn-design-opt').forEach(async option => {
+      const id = Number(option.dataset.id);
+      try {
+        const html = await BannerRender.render({ design_id: id });
+        const thumb = option.querySelector('iframe');
+        if (thumb && option.isConnected) thumb.srcdoc = '<!doctype html><html lang="bn"><body>' + html + '<style>html,body{margin:0;overflow:hidden}.bn{padding:10px!important;min-height:90px!important}.bn h2{font-size:13px!important;overflow-wrap:anywhere}.bn p{font-size:10px!important}.bn .en{display:none!important}*{animation:none!important}</style></body></html>';
+      } catch (_) {}
+    });
+  },
+  feedback(message) {
+    const box = document.getElementById('bn_feedback');
+    if (box) box.textContent = message;
+    else alert(message);
+  },
+  async mutate(id, options, success) {
+    if (this._pending.has(id)) return;
+    this._pending.add(id);
+    try {
+      const r = await ABC.api('/admin/banners/' + id, options);
+      if (!r.ok) throw new Error('FAILED');
+      success();
+    } catch (_) { this.feedback('পরিবর্তন হয়নি। সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।'); }
+    finally { this._pending.delete(id); }
+  },
   async _cat() {
     if (this._catalog) return this._catalog;
     const r = await fetch('/banners/catalog.json');
-    this._catalog = await r.json();
+    if (!r.ok) throw new Error('ডিজাইন লোড হয়নি');
+    const cat = await r.json();
+    if (!Array.isArray(cat.designs) || !cat.designs.length) throw new Error('ডিজাইন পাওয়া যায়নি');
+    this._catalog = cat;
     return this._catalog;
   },
   toggleColors() {
@@ -4202,14 +4215,14 @@ window.AdmBn = {
       '<div class="bn-design-group">' + esc(this._catLabel[c] || c) + ' (' + groups[c].length + 'টি)</div>' +
       '<div class="bn-design-grid">' +
       groups[c].map((d) =>
-        '<div class="bn-design-opt' + (d.id === selId ? ' sel' : '') + '" data-id="' + d.id + '" onclick="AdmBn.pick(' + d.id + ')">' +
-        '<div class="dname">#' + d.id + ' ' + esc(d.name) + '</div><div class="dcat">' + esc(d.category) + '</div></div>'
+        '<button type="button" class="bn-design-opt' + (d.id === selId ? ' sel' : '') + '" data-id="' + d.id + '" onclick="AdmBn.pick(' + d.id + ')">' +
+        '<iframe loading="lazy" tabindex="-1" sandbox="" title="' + esc(d.name) + '"></iframe><div class="dname">#' + d.id + ' ' + esc(d.name) + '</div><div class="dcat">' + esc(d.category) + '</div></button>'
       ).join('') + '</div>'
     ).join('');
   },
   async createForm() {
     this._selDesign = 1;
-    const cat = await this._cat();
+    let cat; try { cat = await this._cat(); } catch (_) { this.feedback('ডিজাইন লোড হয়নি। আবার চেষ্টা করুন।'); return; }
     modal('🖼️ নতুন ব্যানার / বিজ্ঞাপন / পপআপ',
       '<div class="field"><label>ধরন (Placement Type)</label>' +
         '<select id="bn_type">' +
@@ -4247,6 +4260,7 @@ window.AdmBn = {
       '</div>' +
       '<button class="btn" style="margin-top:16px;" onclick="AdmBn.create()">✅ ব্যানার সংরক্ষণ করুন</button>');
 
+    this.setupEditor();
     this.updatePreview();
     ['bn_text_bn', 'bn_text_en', 'bn_link', 'bn_bg_color', 'bn_text_color'].forEach((id) => {
       const el = document.getElementById(id);
@@ -4261,6 +4275,10 @@ window.AdmBn = {
     this.updatePreview();
   },
   async updatePreview() {
+    const seq = ++this._previewSeq;
+    const target = document.getElementById('bnPreview');
+    if (!target) return;
+    try {
     const cat = await this._cat();
     const d = cat.designs.find((x) => x.id === this._selDesign) || cat.designs[0];
     const bn = document.getElementById('bn_text_bn');
@@ -4280,11 +4298,17 @@ window.AdmBn = {
       },
     });
     const pv = document.getElementById('bnPreview');
-    if (pv) pv.innerHTML = html;
+    if (pv === target && seq === this._previewSeq) this.frame(pv, html, 'লাইভ ব্যানার প্রিভিউ');
+    } catch (_) { if (seq === this._previewSeq && target.isConnected) target.textContent = 'প্রিভিউ লোড হয়নি।'; }
   },
   async create() {
+    if (this._busy) return;
     const title = v('bn_title');
     if (!title) { alert('ব্যানারের একটি শিরোনাম লিখুন'); return; }
+    this._busy = true;
+    const submit = document.querySelector('.bn-editor-fields > .btn');
+    if (submit) submit.disabled = true;
+    try {
     const r = await ABC.api('/admin/banners', { method: 'POST', body: {
       type: document.getElementById('bn_type').value,
       title: title,
@@ -4300,11 +4324,14 @@ window.AdmBn = {
         text_color: document.getElementById('bn_use_colors')?.checked ? v('bn_text_color') : '',
       },
     }});
-    if (!r.ok) { alert('❌ ব্যানার তৈরি ব্যর্থ হয়েছে'); return; }
+    if (!r.ok) throw new Error('FAILED');
     closeModal(); show('banners');
+    } catch (_) { this.feedback('সংরক্ষণ হয়নি। আপনার লেখা আছে—আবার চেষ্টা করুন।'); }
+    finally { this._busy = false; if (submit) submit.disabled = false; }
   },
   async editForm(id) {
     const r = await ABC.api('/admin/banners');
+    if (!r.ok) { this.feedback('ব্যানার লোড হয়নি। আবার চেষ্টা করুন।'); return; }
     const d = await r.json();
     const b = (d.banners || []).find((x) => x.id === id);
     if (!b) { alert('পাওয়া যায়নি'); return; }
@@ -4349,6 +4376,7 @@ window.AdmBn = {
       '<div class="field" style="margin-top:12px;"><label><input type="checkbox" id="bn_active" ' + (b.active ? 'checked' : '') + '> এই ব্যানারটি ইউজারদের সামনে সক্রিয় রাখুন</label></div>' +
       '<button class="btn" style="margin-top:16px;" onclick="AdmBn.save(\'' + id + '\')">💾 পরিবর্তন সংরক্ষণ করুন</button>');
 
+    this.setupEditor();
     this.updatePreview();
     ['bn_text_bn', 'bn_text_en', 'bn_link', 'bn_bg_color', 'bn_text_color'].forEach((x) => {
       const el = document.getElementById(x);
@@ -4356,8 +4384,13 @@ window.AdmBn = {
     });
   },
   async save(id) {
+    if (this._busy) return;
     const title = v('bn_title');
     if (!title) { alert('ব্যানারের একটি শিরোনাম লিখুন'); return; }
+    this._busy = true;
+    const submit = document.querySelector('.bn-editor-fields > .btn');
+    if (submit) submit.disabled = true;
+    try {
     const r = await ABC.api('/admin/banners/' + id, { method: 'PUT', body: {
       type: document.getElementById('bn_type').value,
       title: title,
@@ -4374,17 +4407,17 @@ window.AdmBn = {
         text_color: document.getElementById('bn_use_colors')?.checked ? v('bn_text_color') : '',
       },
     }});
-    if (!r.ok) { alert('❌ সংরক্ষণ ব্যর্থ হয়েছে'); return; }
+    if (!r.ok) throw new Error('FAILED');
     closeModal(); show('banners');
+    } catch (_) { this.feedback('সংরক্ষণ হয়নি। আপনার লেখা আছে—আবার চেষ্টা করুন।'); }
+    finally { this._busy = false; if (submit) submit.disabled = false; }
   },
   async toggle(id, active) {
-    await ABC.api('/admin/banners/' + id, { method: 'PUT', body: { active } });
-    show('banners');
+    await this.mutate(id, { method: 'PUT', body: { active } }, () => show('banners'));
   },
   async del(id) {
     if (!confirm('এই ব্যানারটি কি স্থায়ীভাবে মুছে ফেলতে চান?')) return;
-    await ABC.api('/admin/banners/' + id, { method: 'DELETE' });
-    show('banners');
+    await this.mutate(id, { method: 'DELETE' }, () => show('banners'));
   },
 };
 /* ---------------- NOTICES ---------------- */

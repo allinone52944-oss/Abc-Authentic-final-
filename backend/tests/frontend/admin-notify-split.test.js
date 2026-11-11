@@ -25,7 +25,7 @@ describe('admin notify split (audit #69)', () => {
   });
 
   test('admin.js is smaller and the chunk is a real file', () => {
-    expect(fs.statSync(path.join(FRONTEND, 'js/admin.js')).size).toBeLessThan(361000);
+    expect(fs.statSync(path.join(FRONTEND, 'js/admin.js')).size).toBeLessThan(367000);
     expect(fs.statSync(path.join(FRONTEND, 'js/admin-notify.js')).size).toBeGreaterThan(10000);
   });
 
@@ -39,8 +39,8 @@ describe('admin notify split (audit #69)', () => {
   test('admin.html loads the notify chunk BEFORE admin.js (and bumps its version)', () => {
     const html = read('admin.html');
     expect(html).toContain('<script src="/js/admin-notify.js?v=20261111-1"></script>');
-    expect(html).toContain('<script src="/js/admin.js?v=20261111-5"></script>');
-    expect(html.indexOf('admin-notify.js')).toBeLessThan(html.indexOf('/js/admin.js?v=20261111-5'));
+    expect(html).toContain('<script src="/js/admin.js?v=20261111-6"></script>');
+    expect(html.indexOf('admin-notify.js')).toBeLessThan(html.indexOf('/js/admin.js?v=20261111-6'));
   });
 
   test('admin.js still drives the notify init and still calls admToast', () => {

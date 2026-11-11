@@ -9,3 +9,5 @@
 - Recharge approval entry points take the same global transaction advisory lock before row locks and check globally credited references; submissions serialize user/reference checks and reuse matching pending Auto rows. Why: one real payment must credit once without orphan retry requests.
 
 - Admin voice alerts use null counter baselines, serialized reusable audio and explicit gesture recovery; retain mute choice and original APIs. Why: first events after zero must notify without overlapping voice or bypassing browser autoplay rules.
+
+- Admin banner previews render in sandboxed frames, action errors retain user input and refresh only after acknowledgment, and previews discard stale renders. Why: template CSS must not leak and failed requests must not appear saved.

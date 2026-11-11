@@ -1,0 +1,24 @@
+/* Page-scoped banner workspace; existing admin account shell remains authoritative. */
+.page-admin{--bn-surface:#fff;--bn-soft:#f4f7f6;--bn-ink:#173a32;--bn-muted:#60736d;--bn-line:#dce5e1;--bn-accent:#08795e;--bn-on-accent:#fff;--bn-danger:#b42332;--bn-selected:#e5f4ed}
+.bn-manager{max-width:1200px;margin:auto;color:var(--bn-ink)}
+.bn-manager-head{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:24px;border-bottom:1px solid var(--bn-line);padding:8px 0 24px}
+.bn-manager-head h1{font-size:26px;margin:0 0 8px}.bn-summary{color:var(--bn-muted);font-size:14px}
+.bn-manager-head .btn,.bn-editor .btn{background:var(--bn-accent);color:var(--bn-on-accent);border:0;border-radius:6px;min-height:44px;padding:12px 18px;font:inherit;cursor:pointer}
+.bn-inventory{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.bn-item{min-width:0;border:1px solid var(--bn-line);border-radius:8px;overflow:hidden;background:var(--bn-surface)}
+.bn-item-preview{height:160px;background:var(--bn-soft);overflow:hidden}.bn-item-preview iframe{width:100%;height:100%;border:0;pointer-events:none}
+.bn-item-body{padding:18px}.bn-item-meta{display:flex;justify-content:space-between;gap:8px;color:var(--bn-muted);font-size:12px}.bn-item h2{font-size:18px;margin:12px 0 6px;overflow-wrap:anywhere}.bn-item p{font-size:14px;color:var(--bn-muted);margin:0;min-height:40px;overflow-wrap:anywhere}
+.bn-item-actions{display:flex;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid var(--bn-line)}.bn-item-actions .mini-btn{min-height:40px;font-size:13px}.bn-item-actions .danger{margin-left:auto}.bn-empty{padding:40px 0;color:var(--bn-muted)}
+#admModal .modal.bn-editor{max-width:1080px;width:min(94vw,1080px);background:var(--bn-surface);color:var(--bn-ink);border-radius:8px}
+.bn-editor-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:28px}.bn-editor-fields,.bn-editor-visuals{min-width:0}
+.bn-editor .field label{color:var(--bn-ink)}.bn-editor .field input,.bn-editor .field select{font:inherit;font-size:14px;border-color:var(--bn-line);background:var(--bn-surface);color:var(--bn-ink);min-height:44px}
+.bn-editor .field input[type=checkbox]{width:18px;height:18px;min-height:18px;accent-color:var(--bn-accent)}
+.bn-editor .bn-preview{background:var(--bn-soft);border:1px solid var(--bn-line);border-radius:6px;overflow:hidden;padding:0;height:175px}.bn-preview iframe{width:100%;height:100%;border:0}
+.bn-editor .bn-design-groups{max-height:380px;padding:0 4px 4px;overflow-y:auto}.bn-editor .bn-design-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:0}
+.bn-editor .bn-design-opt{width:100%;min-width:0;border:2px solid var(--bn-line);border-radius:6px;padding:0 0 8px;text-align:left;background:var(--bn-surface);color:var(--bn-ink);font:inherit;overflow:hidden}
+.bn-editor .bn-design-opt.sel{background:var(--bn-selected);border-color:var(--bn-accent);box-shadow:none}.bn-design-opt iframe{width:100%;height:90px;border:0;pointer-events:none;display:block;margin-bottom:8px}.bn-editor .bn-design-opt .dname{padding:0 8px;color:var(--bn-ink);font-size:12px;overflow-wrap:anywhere}.bn-editor .bn-design-opt .dcat{display:none}
+.bn-editor button:focus-visible,.bn-manager button:focus-visible{outline:3px solid var(--bn-accent);outline-offset:3px}.bn-editor .btn:disabled{opacity:.55;cursor:wait}#bn_feedback{color:var(--bn-danger);font-size:14px;margin-top:12px;overflow-wrap:anywhere}
+@media(max-width:760px){.bn-inventory{grid-template-columns:1fr}.bn-manager-head{align-items:flex-start;gap:12px}.bn-manager-head h1{font-size:21px}.bn-manager-head .btn{font-size:13px;white-space:nowrap;padding:10px}.bn-editor-layout{grid-template-columns:1fr;gap:16px}.bn-editor-visuals{grid-row:1}.bn-editor .bn-design-groups{max-height:190px}.bn-editor .bn-preview{height:160px}.bn-editor .bn-design-opt iframe{height:75px}.bn-item-preview{height:145px}}
+@media(prefers-reduced-motion:reduce){.bn-manager *,.bn-editor *{transition:none!important}}
+.page-admin .bn-manager-head .btn{background:var(--bn-accent)!important;color:var(--bn-on-accent)!important;border-radius:6px!important}
+.bn-editor .field input[type=range]{padding:0;background:transparent;accent-color:var(--bn-accent)}
