@@ -7,7 +7,7 @@
 /* 2. Land pages: before any result exists the empty right column left the form squeezed on one side. */
 @media (min-width: 901px) {
   .land-layout:has(> #result:empty),
-  .land-layout:has(> #resultsBox[style*="none"]) { grid-template-columns:minmax(0,760px) !important; }
+  .land-layout:has(> #resultsBox[style*="none"]) { grid-template-columns:minmax(0,1fr) !important; max-width:1040px; margin-inline:auto; }
   .land-layout:has(> #result:empty) .grid2,
   .land-layout:has(> #resultsBox[style*="none"]) .grid2 { grid-template-columns:1fr 1fr !important; }
 }
@@ -25,7 +25,24 @@
 @media (min-width: 901px) {
   .page-nid-server-copy :is(.hero,.steps,.form-card),
   .page-qr-photo-verify .form-card,
-  .page-nid-replica :is(.form-card,.steps,.stepper) { max-width:760px !important; }
+  .page-nid-replica :is(.form-card,.steps,.stepper) { max-width:1040px !important; width:100%; margin-inline:auto; }
+}
+
+/* Result emphasis stays outside document frames and respects original visibility. */
+:is(.service-workspace,.page-birth-final,.page-death-final,.page-bdris-apply) [data-engine-feedback] {
+  padding:20px 24px; border-radius:8px; border-width:1px; border-style:solid;
+  font-size:16px; line-height:1.8; overflow-wrap:anywhere; scroll-margin-block:32px;
+}
+[data-engine-feedback]::before { content:attr(data-feedback-title); display:block; font-size:20px; font-weight:700; margin-bottom:8px; }
+[data-engine-feedback="success"] { background:var(--ep-soft); border-color:var(--ep-line); color:var(--ep-emerald); }
+[data-engine-feedback="error"] { background:var(--result-danger-bg); border-color:var(--result-danger-line); color:var(--result-danger); }
+[data-engine-feedback]:focus { outline:2px solid var(--ep-gold); outline-offset:3px; }
+.engine-pending { padding:20px 24px; margin-bottom:20px; border:1px solid var(--ep-line); border-radius:8px; background:var(--ep-soft); color:var(--ep-emerald); font-size:16px; font-weight:600; }
+.engine-new-check { display:none; }
+.page-qr-photo-verify #okBox.on + .engine-new-check { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:10px 20px; margin-bottom:20px; border:1px solid var(--ep-line); border-radius:8px; background:var(--ep-soft); color:var(--ep-emerald); font-weight:700; text-decoration:none; }
+.page-bdris-apply #topBackBtn { min-height:44px; color:var(--ep-emerald) !important; border-color:var(--ep-line) !important; background:var(--ep-soft) !important; }
+@media (max-width:768px) {
+  :is(.service-workspace,.page-birth-final,.page-death-final,.page-bdris-apply) [data-engine-feedback] { padding:18px 16px; }
 }
 
 /* 5. Comfortable mobile touch targets. */
