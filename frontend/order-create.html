@@ -117,6 +117,7 @@
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
 <link rel="stylesheet" href="/css/manual-order.css?v=20261110-13">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
+<script src="/js/promotions.js?v=20261111-1"></script>
 </head>
 <body class="has-tabbar flagship-app service-workspace page-order-create">
 <div class="desktop">
@@ -210,13 +211,7 @@
         <textarea id="notes" rows="3" placeholder="অর্ডারের বিষয়ে আপনার কোনো বিশেষ অনুরোধ বা নোট থাকলে এখানে লিখুন…"></textarea>
       </div>
 
-      <!-- Audit #45 — coupon / locked-credit note + redeem link at checkout.
-           The coupon input lives only on the wallet page; a customer with a
-           code never saw it while ordering. -->
-      <div id="couponBox" style="margin-top:16px;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;font-size:13px;color:#92400e;line-height:1.6;">
-        <div id="couponCreditNote" style="display:none;font-weight:700;color:#15803d;"></div>
-        <div>🎟️ কুপন কোড আছে? <a href="/wallet.html#couponCard" style="color:#1d4ed8;font-weight:700;">ওয়ালেটে রিডিম করুন →</a> — রিডিমের পর এই পাতায় ফিরে এলে এই সেবার ক্রেডিট এখানে দেখাবে।</div>
-      </div>
+      <div id="couponBox"><div id="couponCreditNote" style="display:none"></div><div id="promoCheckout"></div><p class="promo-muted">ব্যক্তিগত কুপন কোড আছে? <a href="/wallet.html#couponCard">ওয়ালেটে রিডিম করুন →</a></p></div>
 
       <div class="err" id="err" role="alert" style="display:none;margin-top:14px;padding:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;color:#b91c1c;font-size:14px;"></div>
 
@@ -457,6 +452,8 @@ function renderFeeBreakdown(price){
   el.textContent = 'ফি ৳' + bnNum(price) + ' = লকড ক্রেডিট ৳' + bnNum(sp.fromCredit) + ' + ওয়ালেট ৳' + bnNum(sp.fromBalance);
 }
 
+let promoQuote = null;
+function checkoutPrice(){return promoQuote ? promoQuote.payable : Number(svc?.price || 0);}
 async function init(){
   const reviewButton = document.getElementById('submitBtn');
   if(reviewButton) reviewButton.disabled = true;
@@ -526,6 +523,12 @@ async function init(){
       }
     }
 
+    ABCPromo.mount(document.getElementById('promoCheckout'), {service:svc,onQuote:q=>{
+      promoQuote=q; document.getElementById('svcPrice').textContent='৳'+bnNum(checkoutPrice());
+      renderFeeBreakdown(checkoutPrice()); document.getElementById('reviewBox').style.display='none';
+      document.getElementById('submitBtn').style.display='block';
+      const warning=document.getElementById('balWarning'); if(warning)warning.style.display=userBal+lockedCredit<checkoutPrice()?'block':'none';
+    }});
     // Check balance affordability — on the REAL total (locked credit
     // + wallet), not the wallet alone. A low wallet with enough locked
     // credit is NOT a shortage (the old check warned anyway).
@@ -805,7 +808,7 @@ function showReview(){
   notice.style.display = 'none';
   const c = collectOrder();
   if(!c) return;
-  const price = Number((svc && svc.price) || 0);
+  const price = checkoutPrice();
   const sp = feeSplit(price); // audit #44 — credit first, then wallet
   const after = userBal - sp.fromBalance;
   const short = userBal + lockedCredit < price;
@@ -876,6 +879,7 @@ async function submit(){
         data,
         notes: document.getElementById('notes').value.trim(),
         idempotency_key: window._orderIdemKey,
+        promo_code: promoQuote ? promoQuote.code : null,
         documents: orderDocs
       }
     });
@@ -894,6 +898,7 @@ async function submit(){
     err.style.display = 'block';
     err.textContent = d.error === 'INSUFFICIENT_BALANCE' ? '⚠️ ওয়ালেটে পর্যাপ্ত ব্যালেন্স নেই! আগে টাকা রিচার্জ করুন।' :
       d.error === 'MISSING_DOCUMENTS' ? '⚠️ প্রয়োজনীয় ডকুমেন্ট দিন: ' + (d.missing || []).join(', ') :
+      (promoQuote && ['EXPIRED_CODE','USER_LIMIT','OFFER_LIMIT','INVALID_CODE','WRONG_SERVICE','OFFER_NOT_STARTED'].includes(d.error)) ? ABCPromo.message(d.error) :
       d.error === 'SERVICE_CLOSED' ? '⚠️ এই সেবাটি সাময়িকভাবে বন্ধ আছে' : '❌ ' + (d.error || 'অর্ডার করতে সমস্যা হয়েছে');
     return;
   }
@@ -970,5 +975,6 @@ async function submit(){
 
 init();
 </script>
+<link rel="stylesheet" href="/css/promotions.css?v=20261111-2">
 </body>
 </html>

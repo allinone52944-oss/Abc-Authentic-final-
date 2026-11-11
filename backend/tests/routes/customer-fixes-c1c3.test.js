@@ -36,7 +36,7 @@ describe('C1: duplicate-submit path strips admin_note', () => {
       ['users WHERE id = $1 FOR UPDATE', { rows: [{ balance: 10000 }] }],
       ['wallet_apply', { rows: [{ new_balance: 9900, tx_id: 'tx9' }] }],
       ['SELECT * FROM orders WHERE user_id = $1 AND idempotency_key = $2',
-        { rows: [{ id: 'o_orig', idempotency_key: 'test-key', admin_note: 'internal: fraud?', status: 'new' }] }],
+        (text, params) => ({ rows: params[1] === 'test-key' ? [{ id: 'o_orig', idempotency_key: 'test-key', admin_note: 'internal: fraud?', status: 'new' }] : [] })],
     ];
   }
 

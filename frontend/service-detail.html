@@ -94,6 +94,7 @@
 <link rel="stylesheet" href="/css/service-journey.css?v=20261110-9">
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
+<script src="/js/promotions.js?v=20261111-1"></script>
 </head>
 <body class="has-tabbar flagship-app page-service-detail">
 <div class="desktop">
@@ -322,6 +323,10 @@ async function init(){
 
     actionHtml;
 
+  const promoHost=document.createElement('section');
+  document.getElementById('detail').appendChild(promoHost);
+  ABCPromo.mount(promoHost,{service:s,engine:hasEngine,onQuote:q=>{if(q){const link=document.createElement('a');link.className='btn';link.href='/order-create.html?service='+encodeURIComponent(s.id);link.textContent='অর্ডার পাতায় কোড প্রয়োগ করুন →';promoHost.querySelector('.promo-result').appendChild(link);}}});
+
   window._rules = (s.type === 'manual' && s.manual_instructions) ? s.manual_instructions : (s.rules_text || 'কোনো বিশেষ নিয়ম নেই।');
   window._sample = s.manual_sample || '';
 }
@@ -349,5 +354,6 @@ function showRules(){
 
 init();
 </script>
+<link rel="stylesheet" href="/css/promotions.css?v=20261111-2">
 </body>
 </html>

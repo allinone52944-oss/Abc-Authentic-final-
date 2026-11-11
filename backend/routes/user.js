@@ -18,6 +18,7 @@ const { chargeRuleFor } = require('../lib/chargeRule'); // audit #49
 const wa = require('../utils/whatsapp');
 const { tryAutoMatchRecharge, tryAutoMatchBySender } = require('./sms');
 const serviceCredits = require('../lib/serviceCredits');
+const promotions = require('../lib/promotions');
 const { bdrisOriginalDoc } = require('../lib/storedOriginal'); // past-applications list (2026-11-07)
 
 // Fraud alerts (duplicate TrxID / amount mismatch at submit) notify
@@ -214,7 +215,7 @@ router.post('/orders', async (req, res) => {
     ? String(req.body.idempotency_key).slice(0, 64)
     : String(Date.now());
   try {
-    const { service_id, data, notes } = req.body || {};
+    const { service_id, data, notes, promo_code } = req.body || {};
     if (!service_id) return res.status(400).json({ error: 'MISSING_SERVICE' });
 
     const sr = await db.query(
@@ -222,6 +223,7 @@ router.post('/orders', async (req, res) => {
     if (!sr.rows.length) return res.status(404).json({ error: 'SERVICE_NOT_FOUND' });
     const service = sr.rows[0];
 
+    if (promo_code && service.engine_id) return res.status(400).json({error:'USE_ENGINE_PROMO'});
     const eff = await effectivePrice(req.user.id, service);
     if (!eff.allowed) return res.status(403).json({ error: 'NO_ACCESS' });
     if (!serviceOpen(service.schedule)) {
@@ -237,7 +239,13 @@ router.post('/orders', async (req, res) => {
     }
 
     // M-15: idempotency key resolved at handler entry so catch block can access it
+    let duplicate = false;
     const order = await db.withTransaction(async (client) => {
+      await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
+      const existing = await client.query('SELECT * FROM orders WHERE user_id = $1 AND idempotency_key = $2 LIMIT 1', [req.user.id, clientKey]);
+      if (existing.rows.length) { duplicate = true; return existing.rows[0]; }
+      const offer = promo_code ? await promotions.quote(client, promo_code, req.user.id, service_id, eff.price, true) : null;
+      const payable = offer ? offer.payable : eff.price;
       // Pay for the service: service-locked credit for THIS service
       // is consumed first, the rest comes from the wallet balance
       // (lib/serviceCredits). Raises INSUFFICIENT_BALANCE if the two
@@ -245,28 +253,30 @@ router.post('/orders', async (req, res) => {
       // double submits exactly like wallet_apply did.
       await serviceCredits.payForService(client, {
         userId: req.user.id, serviceId: service_id,
-        amount: Math.abs(eff.price), ref: 'order-' + clientKey + '-' + req.user.id,
+        amount: payable, ref: 'order-' + clientKey + '-' + req.user.id,
       });
       const ins = await client.query(
         `INSERT INTO orders (user_id, service_id, status, data, documents, notes, price, idempotency_key)
          VALUES ($1, $2, 'new', $3, $4, $5, $6, $7) RETURNING *`,
         [req.user.id, service_id,
          JSON.stringify(data || {}), JSON.stringify(docs),
-         notes || null, eff.price, clientKey]
+         notes || null, payable, clientKey]
       );
+      if (offer) await promotions.record(client, offer, req.user.id, service_id, 'order-' + ins.rows[0].id);
       return ins.rows[0];
     });
 
     // Web Push: notify admins of new order (async, non-blocking)
-    push.notifyNewOrder(db, order, service.name_bn || service.name, req.user.id).catch(() => {});
+    if (!duplicate) push.notifyNewOrder(db, order, service.name_bn || service.name, req.user.id).catch(() => {});
 
     // C1 (2026-11-03): INSERT ... RETURNING * carries admin_note
     // (null at creation, but the column must never leave the server
     // on a customer endpoint — same strip as the list/detail paths).
     delete order.admin_note;
-    res.status(201).json({ order });
+    res.status(duplicate ? 200 : 201).json({ order, ...(duplicate ? {duplicate:true} : {}) });
   } catch (e) {
     safeLog('[user] order create error:', e.message);
+    if (e.statusCode) return res.status(e.statusCode).json({error:e.message});
     if (/INSUFFICIENT_BALANCE/.test(e.message)) {
       return res.status(402).json({ error: 'INSUFFICIENT_BALANCE' });
     }
@@ -1129,6 +1139,7 @@ router.post('/wallet/coupon', async (req, res) => {
         err.statusCode = 403;
         throw err;
       }
+      if (coupon.is_campaign) promotions.fail('USE_AT_CHECKOUT');
       // Service scoping (owner rule, strict form, 2026-10-21): a
       // service-scoped coupon no longer credits the spend-anywhere
       // balance at all — its value becomes a service-locked credit
@@ -1253,6 +1264,59 @@ router.get('/banners', async (req, res) => {
     safeLog('[user] banners error:', e.message);
     res.status(500).json({ error: 'FAILED' });
   }
+});
+
+
+// Read-only quote; never consumes a use or changes a balance.
+router.post('/promos/quote', async (req,res) => {
+  try {
+    const {service_id,code} = req.body || {};
+    const sr = await db.query("SELECT * FROM services WHERE id = $1 AND status = 'active'",[service_id]);
+    if (!sr.rows.length) return res.status(404).json({error:'SERVICE_NOT_FOUND'});
+    const eff = await effectivePrice(req.user.id,sr.rows[0]);
+    if (!eff.allowed) return res.status(403).json({error:'NO_ACCESS'});
+    if (!serviceOpen(sr.rows[0].schedule)) promotions.fail('SERVICE_CLOSED');
+    const q = await promotions.quote(db,code,req.user.id,service_id,eff.price);
+    res.json(promotions.publicQuote(q));
+  } catch(e) { res.status(e.statusCode || 500).json({error:e.statusCode ? e.message : 'FAILED'}); }
+});
+// Engine entry pages claim expiring, service-locked credit through the existing
+// payment system. Never replaces engine charging, result generation or refunds.
+router.post('/promos/claim', async (req,res) => {
+  try {
+    const {service_id,code,idempotency_key} = req.body || {};
+    if (!idempotency_key || String(idempotency_key).length > 64) promotions.fail('INVALID_INPUT');
+    const sr = await db.query("SELECT * FROM services WHERE id = $1 AND status = 'active'",[service_id]);
+    if (!sr.rows.length) return res.status(404).json({error:'SERVICE_NOT_FOUND'});
+    const service=sr.rows[0], eff = await effectivePrice(req.user.id,service);
+    if (!eff.allowed) return res.status(403).json({error:'NO_ACCESS'});
+    if (!service.engine_id) promotions.fail('USE_AT_CHECKOUT');
+    if (!serviceOpen(service.schedule)) promotions.fail('SERVICE_CLOSED');
+    const result = await db.withTransaction(async client => {
+      await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE',[req.user.id]);
+      const ref='promo-claim-'+req.user.id+'-'+idempotency_key;
+      const old=await client.query('SELECT amount FROM coupon_redemptions WHERE ref = $1 AND user_id = $2',[ref,req.user.id]);
+      if(old.rows.length) return {ok:true,already:true,credited:Number(old.rows[0].amount)};
+      const q=await promotions.quote(client,code,req.user.id,service_id,eff.price,true);
+      const outstanding=await serviceCredits.availableFor(client,req.user.id,service_id);
+      if(outstanding > 0) promotions.fail('CREDIT_ALREADY_AVAILABLE');
+      const added=await serviceCredits.addServiceCredit(client,{userId:req.user.id,serviceId:service_id,amount:q.discount,source:'promo',ref,expiresAt:q.expires_at});
+      if(!added) promotions.fail('ALREADY_REDEEMED',409);
+      await promotions.record(client,q,req.user.id,service_id,ref);
+      return {ok:true,credited:q.discount,expires_at:q.expires_at};
+    });
+    res.json(result);
+  } catch(e) { res.status(e.statusCode || 500).json({error:e.statusCode ? e.message : 'FAILED'}); }
+});
+router.get('/promos', async(req,res) => {
+ try {
+  const r=await db.query(`SELECT c.code,c.amount,c.percent,c.service_id,c.starts_at,c.expires_at,c.per_user_limit,c.max_uses,c.used_count,
+   (SELECT COUNT(*) FROM coupon_redemptions r WHERE r.coupon_id=c.id AND r.user_id=$1) AS my_uses
+   FROM coupons c WHERE c.is_campaign=TRUE AND c.status='active' AND (c.user_id IS NULL OR c.user_id=$1)
+   AND (c.expires_at IS NULL OR c.expires_at > NOW()) AND (c.max_uses IS NULL OR c.used_count<c.max_uses)
+   ORDER BY c.created_at DESC LIMIT 100`,[req.user.id]);
+  res.set('Cache-Control','private, no-store').json({offers:r.rows.filter(c=>Number(c.my_uses)<Number(c.per_user_limit)),server_now:new Date().toISOString()});
+ }catch(e){res.status(500).json({error:'FAILED'});}
 });
 
 module.exports = router;

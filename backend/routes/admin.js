@@ -1,3 +1,4 @@
+const promotions = require('../lib/promotions');
 // ============================================================
 // All In One (Abc Authentic) - Admin routes (Phase 2)
 // Mounted at /api/admin with requireAuth + requireAdmin.
@@ -2211,31 +2212,23 @@ router.put('/transactions/:id/reject', async (req, res) => {
 // COUPONS / BANNERS / NOTICES
 // ============================================================
 
-router.get('/coupons', async (req, res) => {
-  try {
-    const rows = await db.query('SELECT * FROM coupons ORDER BY created_at DESC LIMIT 100');
-    res.json({ coupons: rows.rows });
-  } catch (e) { safeLog('[admin] coupons error:', e.message); res.status(500).json({ error: 'FAILED' }); }
+router.get('/coupons', async (req,res) => {
+ try {
+  const page=Math.max(1,parseInt(req.query.page,10)||1),search=String(req.query.q||'').slice(0,40);
+  const rows=await db.query('SELECT * FROM coupons WHERE code ILIKE $1 ORDER BY created_at DESC LIMIT 50 OFFSET $2',['%'+search+'%',(page-1)*50]);
+  const count=await db.query('SELECT COUNT(*) AS n FROM coupons WHERE code ILIKE $1',['%'+search+'%']);
+  res.json({coupons:rows.rows,total:Number(count.rows[0]?.n||0),page,server_now:new Date().toISOString()});
+ }catch(e){res.status(500).json({error:'FAILED'});}
 });
-
-router.post('/coupons', async (req, res) => {
-  try {
-    const { code, type, percent, amount, service_id, expires_at } = req.body || {};
-    if (!code || !['cashback', 'promo'].includes(type)) {
-      return res.status(400).json({ error: 'INVALID_INPUT' });
-    }
-    const r = await db.query(
-      `INSERT INTO coupons (code, type, percent, amount, service_id, expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [String(code).trim().toUpperCase(), type, Number(percent) || 0, Number(amount) || 0,
-       service_id || null, expires_at || null]
-    );
-    await logActivity(req.user.id, 'coupon.create', { code });
-    res.status(201).json({ coupon: r.rows[0] });
-  } catch (e) {
-    safeLog('[admin] coupon create error:', e.message);
-    res.status(500).json({ error: e.code === '23505' ? 'CODE_TAKEN' : 'CREATE_FAILED' });
-  }
+router.post('/coupons', async(req,res) => {
+ try {
+  const b=req.body||{},v=promotions.validateCampaign(b);
+  const r=await db.query(`INSERT INTO coupons (code,type,percent,amount,service_id,expires_at,starts_at,is_campaign,per_user_limit,max_uses)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE,$8,$9) RETURNING *`,
+    [String(b.code).trim().toUpperCase(),b.type,v.percent,v.amount,b.service_id||null,v.ends,v.starts,v.per,v.total]);
+  await logActivity(req.user.id,'coupon.create',{code:b.code});
+  res.status(201).json({coupon:r.rows[0]});
+ }catch(e){res.status(e.statusCode || (e.code==='23505'?409:500)).json({error:e.statusCode?e.message:e.code==='23505'?'CODE_TAKEN':'CREATE_FAILED'});}
 });
 
 router.put('/coupons/:id', async (req, res) => {
@@ -2244,7 +2237,8 @@ router.put('/coupons/:id', async (req, res) => {
     if (!['active', 'disabled', 'expired'].includes(status)) {
       return res.status(400).json({ error: 'INVALID_STATUS' });
     }
-    await db.query('UPDATE coupons SET status = $1 WHERE id = $2', [status, req.params.id]);
+    const changed = await db.query("UPDATE coupons SET status = $1 WHERE id = $2 AND (is_campaign = TRUE OR status <> 'redeemed') RETURNING id", [status, req.params.id]);
+    if (!changed.rows.length) return res.status(409).json({error:'NOT_EDITABLE'});
     await logActivity(req.user.id, 'coupon.update', { coupon_id: req.params.id, status });
     res.json({ ok: true });
   } catch (e) { safeLog('[admin] coupon update error:', e.message); res.status(500).json({ error: 'FAILED' }); }

@@ -10,7 +10,7 @@ function setup({ jsonFields = false, fail = false } = {}) {
   const input = element(); input.dataset.field = 'applicant_name'; input.closest = () => ({ textContent: 'আবেদনকারীর নাম *' });
   const get = id => { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); };
   const store = { getItem: () => null, setItem() {}, removeItem() {} };
-  const context = vm.createContext({ console: { error() {}, warn() {} }, URLSearchParams, location: { search: '?service=test' }, sessionStorage: store, localStorage: store, crypto: { randomUUID: () => 'test-id' },
+  const context = vm.createContext({ console: { error() {}, warn() {} }, URLSearchParams, ABCPromo: {mount() {}}, location: { search: '?service=test' }, sessionStorage: store, localStorage: store, crypto: { randomUUID: () => 'test-id' },
     document: { getElementById: get, querySelector: selector => selector === '.card' ? element() : null, querySelectorAll: selector => selector === '[data-field]' ? [input] : [] },
     ABC: { api: async url => { if (fail && url.startsWith('/services/')) throw new Error('offline'); return { ok: true, json: async () => url === '/auth/me' ? { user: { id: 'test-user', name: 'Test Applicant', balance: 500 } } : url.startsWith('/services/') ? { service: { price: 100, fields_required: jsonFields ? JSON.stringify(fields) : fields, documents_required: [] } } : { service_credits: [] } }; } }
   });

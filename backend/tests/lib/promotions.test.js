@@ -1,0 +1,18 @@
+const p=require('../../lib/promotions');
+const now=Date.parse('2026-11-11T10:00:00Z');
+const c={id:'c1',code:'SAVE',is_campaign:true,status:'active',amount:0,percent:10,service_id:'s1',per_user_limit:1,used_count:0,max_uses:10};
+test('5-minute offer expires after exactly 300 seconds',()=>{const v=p.validateCampaign({code:'SAVE',type:'promo',percent:10,duration_minutes:5},now);expect(Date.parse(v.ends)-now).toBe(300000);});
+test('30-minute offer expires after exactly 1800 seconds',()=>{const v=p.validateCampaign({code:'SAVE',type:'promo',amount:25,duration_minutes:30},now);expect(Date.parse(v.ends)-now).toBe(1800000);});
+test('multiple customers may each redeem once',()=>{expect(()=>p.assertEligible(c,{userId:'u1',serviceId:'s1',used:0,now})).not.toThrow();expect(()=>p.assertEligible({...c,used_count:1},{userId:'u2',serviceId:'s1',used:0,now})).not.toThrow();});
+test('per-user limit rejects second use',()=>expect(()=>p.assertEligible(c,{userId:'u1',serviceId:'s1',used:1,now})).toThrow('USER_LIMIT'));
+test('configurable per-user limit permits second but rejects third use',()=>{expect(()=>p.assertEligible({...c,per_user_limit:2},{userId:'u1',serviceId:'s1',used:1,now})).not.toThrow();expect(()=>p.assertEligible({...c,per_user_limit:2},{userId:'u1',serviceId:'s1',used:2,now})).toThrow('USER_LIMIT');});
+test('service-specific promo rejects another service',()=>expect(()=>p.assertEligible(c,{userId:'u1',serviceId:'s2',now})).toThrow('WRONG_SERVICE'));
+test('percentage applies to current service price not lifetime spend',()=>expect(p.discount(c,200)).toBe(20));
+test('fixed taka offer never exceeds current price',()=>expect(p.discount({...c,amount:250,percent:0},200)).toBe(200));
+test('expired offer fails at exact end time',()=>expect(()=>p.assertEligible({...c,expires_at:new Date(now).toISOString()},{userId:'u1',serviceId:'s1',now})).toThrow('EXPIRED_CODE'));
+test('scheduled offer fails before start',()=>expect(()=>p.assertEligible({...c,starts_at:new Date(now+1).toISOString()},{userId:'u1',serviceId:'s1',now})).toThrow('OFFER_NOT_STARTED'));
+test('total use limit is enforced',()=>expect(()=>p.assertEligible({...c,used_count:10},{userId:'u1',serviceId:'s1',now})).toThrow('OFFER_LIMIT'));
+test.each([{amount:-1},{percent:101},{amount:10,percent:10},{amount:0,percent:0}])('rejects invalid reward %p',b=>expect(()=>p.validateCampaign({code:'SAVE',type:'promo',...b},now)).toThrow('INVALID_VALUE'));
+test('invalid service price fails closed',()=>expect(()=>p.discount(c,NaN)).toThrow('PRICE_UNAVAILABLE'));
+test('personal cashback does not enter campaign path',()=>expect(()=>p.assertEligible({...c,is_campaign:false},{userId:'u1',serviceId:'s1',now})).toThrow('INVALID_CODE'));
+test('quote is read-only; locked checkout enforces FOR UPDATE',async()=>{const query=jest.fn(async sql=>({rows:sql.includes('FROM coupons')?[c]:[{n:0}]}));const q=await p.quote({query},'save','u1','s1',200,true);expect(q.payable).toBe(180);expect(query.mock.calls[0][0]).toContain('FOR UPDATE');expect(query.mock.calls.every(([sql])=>!sql.includes('UPDATE coupons')&&!sql.includes('INSERT'))).toBe(true);});

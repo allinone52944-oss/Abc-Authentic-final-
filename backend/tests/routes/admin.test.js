@@ -842,7 +842,7 @@ describe('transactions (security fix: filter allowlist)', () => {
 });
 
 describe('coupons / banners / notices', () => {
-  test('POST /coupons: invalid → 400; duplicate code → 500 CODE_TAKEN; happy → 201', async () => {
+  test('POST /coupons: invalid → 400; duplicate code → 409 CODE_TAKEN; happy → 201', async () => {
     const r1 = await withAdmin(request(app()).post('/api/admin/coupons'))
       .send({ code: 'X', type: 'weird' }).expect(400);
     expect(r1.body.error).toBe('INVALID_INPUT');
@@ -851,12 +851,12 @@ describe('coupons / banners / notices', () => {
       return { rows: [], rowCount: 0 };
     });
     const r2 = await withAdmin(request(app()).post('/api/admin/coupons'))
-      .send({ code: 'X', type: 'promo' }).expect(500);
+      .send({ code: 'XX', type: 'promo', amount:10 }).expect(409);
     expect(r2.body.error).toBe('CODE_TAKEN');
     db.__reset();
     db.__routeQuery([['INSERT INTO coupons', { rows: [{ id: 'c1', code: 'X' }] }]]);
     const r3 = await withAdmin(request(app()).post('/api/admin/coupons'))
-      .send({ code: 'x', type: 'promo' }).expect(201);
+      .send({ code: 'xx', type: 'promo', amount:10 }).expect(201);
     expect(r3.body.coupon.code).toBe('X'); // uppercased
   });
 

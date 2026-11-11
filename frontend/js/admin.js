@@ -3808,43 +3808,25 @@ window.AdmTx = {
   },
   async _doApprove(id) {
     closeModal();
-    let r;
     try {
-      r = await ABC.api('/admin/transactions/' + id + '/approve', { method: 'PUT' });
-    } catch (e) {
-      admToast('নেটওয়ার্ক ত্রুটি', 'সার্ভারে সংযোগ করা যায়নি', 'error');
-      return;
-    }
-    let d;
-    try {
-      d = await r.json();
-    } catch (e) {
-      // Recharge Bug 3 (2026-11-11): non-JSON body (e.g. 500 HTML from the
-      // server/proxy) is a server error, not a network failure — the server
-      // did answer. Approve state is unknown, so say that, not that it failed.
-      admToast('সার্ভার ত্রুটি', 'সার্ভার থেকে ভুল উত্তর এসেছে — অনুমোদন হয়েছে কি না নিশ্চিত নয়, তালিকা নতুন করে দেখুন।', 'error');
-      return;
-    }
-    if (!r.ok) {
-      // ABC.api answers a real network failure with a synthetic 503 JSON
-      // body {error:'NETWORK_ERROR'} — show it as a network error, not a
-      // rejected approval.
-      if (d.error === 'NETWORK_ERROR') {
-        admToast('নেটওয়ার্ক ত্রুটি', 'সার্ভারে সংযোগ করা যায়নি', 'error');
+      const r = await ABC.api('/admin/transactions/' + id + '/approve', { method: 'PUT' });
+      const d = await r.json();
+      if (!r.ok) {
+        const messages = {
+          DUPLICATE_TRANSACTION: 'এই পেমেন্টের টাকা আগে জমা হয়েছে — আবার জমা হয়নি।',
+          SMS_ALREADY_MATCHED: 'এই SMS অন্য রিচার্জে ব্যবহার হয়েছে — আবার জমা হয়নি।',
+          AUTO_REQUIRES_SMS_MATCH: 'অটো অনুরোধে TrxID নেই। SMS তালিকা থেকে সঠিক পেমেন্ট মিলিয়ে অনুমোদন করুন, অথবা গ্রাহককে ম্যানুয়ালে আসল TrxID দিতে বলুন।',
+          AMOUNT_MISMATCH: 'SMS ও অনুরোধের পরিমাণ মিলছে না — টাকা জমা হয়নি।',
+          ALREADY_PROCESSED: 'এই অনুরোধের সিদ্ধান্ত আগেই হয়েছে। তালিকা নতুন করে দেখুন।',
+        };
+        admToast('অনুমোদন হয়নি', messages[d.error] || 'ব্যর্থ: ' + (d.error || 'UNKNOWN'), 'error');
         return;
       }
-      const messages = {
-        DUPLICATE_TRANSACTION: 'এই পেমেন্টের টাকা আগে জমা হয়েছে — আবার জমা হয়নি।',
-        SMS_ALREADY_MATCHED: 'এই SMS অন্য রিচার্জে ব্যবহার হয়েছে — আবার জমা হয়নি।',
-        AUTO_REQUIRES_SMS_MATCH: 'অটো অনুরোধে TrxID নেই। SMS তালিকা থেকে সঠিক পেমেন্ট মিলিয়ে অনুমোদন করুন, অথবা গ্রাহককে ম্যানুয়ালে আসল TrxID দিতে বলুন।',
-        AMOUNT_MISMATCH: 'SMS ও অনুরোধের পরিমাণ মিলছে না — টাকা জমা হয়নি।',
-        ALREADY_PROCESSED: 'এই অনুরোধের সিদ্ধান্ত আগেই হয়েছে। তালিকা নতুন করে দেখুন।',
-      };
-      admToast('অনুমোদন হয়নি', messages[d.error] || 'ব্যর্থ: ' + (d.error || 'UNKNOWN'), 'error');
-      return;
+      admToast('রিচার্জ সফল 🎉', 'গ্রাহকের ওয়ালেটে সফলভাবে ব্যালেন্স যোগ হয়েছে।', 'recharge');
+      show('recharge');
+    } catch (e) {
+      admToast('নেটওয়ার্ক ত্রুটি', 'সার্ভারে সংযোগ করা যায়নি', 'error');
     }
-    admToast('রিচার্জ সফল 🎉', 'গ্রাহকের ওয়ালেটে সফলভাবে ব্যালেন্স যোগ হয়েছে।', 'recharge');
-    show('recharge');
   },
   reject(id, amount, name) {
     modal('❌ রিচার্জ বাতিল করুন',
@@ -3880,114 +3862,41 @@ window.AdmTx = {
 
 /* ---------------- COUPONS ---------------- */
 TABS.coupons = async () => {
-  const r = await ABC.api('/admin/coupons');
-  const d = await r.json();
-  const coupons = d.coupons || [];
-  const activeCount = coupons.filter(c => c.status === 'active').length;
-
-  let html = '<div class="adm-page-head">' +
-    '<div>' +
-      '<h2 class="adm-page-title">🎟️ কুপন ও ডিসকাউন্ট ভাউচার</h2>' +
-      '<p class="adm-page-sub">গ্রাহকদের প্রমোশনাল ডিসকাউন্ট ও ক্যাশব্যাক কুপন কোড ব্যবস্থাপনা</p>' +
-    '</div>' +
-    '<div class="adm-head-actions">' +
-      '<span class="st-badge info">মোট কুপন: ' + bn(coupons.length) + '</span>' +
-      '<span class="st-badge active">সক্রিয়: ' + bn(activeCount) + '</span>' +
-      '<button class="btn ok" onclick="AdmCp.createForm()">+ নতুন কুপন তৈরি করুন</button>' +
-    '</div>' +
-  '</div>';
-
-  if (!coupons.length) {
-    html += '<div class="adm-empty-state">' +
-      '<div class="adm-empty-icon">🎟️</div>' +
-      '<div class="adm-empty-title">কোনো কুপন তৈরি করা হয়নি</div>' +
-      '<div class="adm-empty-desc">গ্রাহকদের জন্য প্রোমো বা ক্যাশব্যাক কুপন কোড তৈরি করতে উপরের বাটনে চাপ দিন।</div>' +
-      '<div style="margin-top:14px;"><button class="btn ok" onclick="AdmCp.createForm()">+ নতুন কুপন তৈরি করুন</button></div>' +
-    '</div>';
-  } else {
-    html += '<div class="adm-table-card">' +
-      '<div style="overflow-x:auto;">' +
-        '<table class="adm-table">' +
-          '<thead><tr>' +
-            '<th>কুপন কোড</th>' +
-            '<th>ধরন</th>' +
-            '<th>ডিসকাউন্ট রেট</th>' +
-            '<th>ফিক্সড ছাড়</th>' +
-            '<th>স্ট্যাটাস</th>' +
-            '<th style="text-align:right;">অ্যাকশন</th>' +
-          '</tr></thead><tbody>';
-
-    for (const c of coupons) {
-      const isActive = c.status === 'active';
-      const stClass = isActive ? 'active' : 'disabled';
-      const stText = isActive ? 'সক্রিয়' : 'নিষ্ক্রিয়';
-      const typeBadge = c.type === 'cashback'
-        ? '<span class="st-badge info">💰 ক্যাশব্যাক</span>'
-        : '<span class="st-badge active">🎁 প্রোমো</span>';
-
-      html += '<tr>' +
-        '<td>' +
-          '<div style="display:flex;align-items:center;gap:6px;">' +
-            '<span class="adm-code-chip" onclick="AdmInv.copyText(\'' + esc(c.code) + '\')" title="ক্লিক করে কোড কপি করুন">' + esc(c.code) + ' 📋</span>' +
-          '</div>' +
-        '</td>' +
-        '<td>' + typeBadge + '</td>' +
-        '<td>' + (c.percent ? '<b style="color:#0f172a;">' + bn(c.percent) + '%</b>' : '<span style="color:#94a3b8;">—</span>') + '</td>' +
-        '<td>' + (c.amount ? '<b style="color:#15803d;">৳' + bn(c.amount) + '</b>' : '<span style="color:#94a3b8;">—</span>') + '</td>' +
-        '<td><span class="st-badge ' + stClass + '">' + stText + '</span></td>' +
-        '<td style="text-align:right;">' +
-          (isActive
-            ? '<button class="mini-btn danger" onclick="AdmCp.set(\'' + c.id + '\',\'disabled\')">বন্ধ করুন</button>'
-            : '<button class="mini-btn ok" onclick="AdmCp.set(\'' + c.id + '\',\'active\')">চালু করুন</button>') +
-          ' <button class="mini-btn danger" onclick="AdmCp.del(\'' + c.id + '\',\'' + esc(c.code) + '\')">🗑️ মুছুন</button>' +
-        '</td>' +
-      '</tr>';
-    }
-    html += '</tbody></table></div></div>';
+ const page=AdmCp.page||1,q=AdmCp.search||'';
+ try{
+  const r=await ABC.api('/admin/coupons?page='+page+'&q='+encodeURIComponent(q));const d=await r.json();
+  if(!r.ok)throw Error('কুপন লোড হয়নি। আবার চেষ্টা করুন।');ABCPromo.sync(d.server_now);
+  content.innerHTML='<section class="promo-scope"><header class="promo-head"><div><h2>কুপন ও প্রোমো অফার</h2><span class="promo-muted">মোট '+bn(d.total)+'টি অফার</span></div><button class="btn ok" onclick="AdmCp.createForm()">＋ নতুন অফার</button></header><div class="promo-controls"><input id="promoSearch" aria-label="কুপন খুঁজুন" placeholder="কোড দিয়ে খুঁজুন"><button class="btn" onclick="AdmCp.find()">খুঁজুন</button></div><div class="promo-grid" id="promoInventory"></div><div class="promo-pager"><button class="btn" id="promoPrev">←</button><span>পাতা '+bn(page)+'</span><button class="btn" id="promoNext">→</button></div></section>';
+  document.getElementById('promoSearch').value=q;
+  const grid=document.getElementById('promoInventory');
+  for(const c of d.coupons||[]){
+   const card=document.createElement('article');card.className='promo-offer';
+   card.innerHTML='<div class="promo-top"><span class="promo-muted">'+(c.type==='cashback'?'ক্যাশব্যাক':'প্রোমো')+'</span><span class="st-badge '+(c.status==='active'?'active':'disabled')+'">'+esc(c.status==='active'?'চালু':c.status==='redeemed'?'ব্যবহৃত':'বন্ধ')+'</span></div><h3></h3><div class="promo-value">'+(Number(c.amount)>0?'৳'+bn(c.amount):bn(c.percent)+'%')+'</div><p class="promo-muted">'+(c.is_campaign?'ব্যবহার '+bn(c.used_count)+' / '+(c.max_uses?bn(c.max_uses):'সীমাহীন')+' · জনপ্রতি '+bn(c.per_user_limit):'ব্যক্তিগত কুপন · একবার')+'</p><div class="promo-clock"></div><div class="promo-actions"></div>';
+   card.querySelector('h3').textContent=c.code;ABCPromo.clock(card.querySelector('.promo-clock'),c.starts_at,c.expires_at);
+   const actions=card.querySelector('.promo-actions');
+   if(c.status!=='redeemed'){const b=document.createElement('button');b.type='button';b.className='btn';b.textContent=c.status==='active'?'বন্ধ করুন':'চালু করুন';b.onclick=()=>AdmCp.set(c.id,c.status==='active'?'disabled':'active',b);actions.appendChild(b);}
+   const del=document.createElement('button');del.type='button';del.className='btn';del.textContent='🗑 মুছুন';del.onclick=()=>AdmCp.del(c.id,c.code,del);actions.appendChild(del);grid.appendChild(card);
   }
-  content.innerHTML = html;
+  if(!grid.children.length)grid.innerHTML='<p class="promo-empty">কোনো অফার পাওয়া যায়নি।</p>';
+  const prev=document.getElementById('promoPrev'),next=document.getElementById('promoNext');prev.disabled=page===1;next.disabled=page*50>=d.total;prev.onclick=()=>{AdmCp.page=page-1;show('coupons');};next.onclick=()=>{AdmCp.page=page+1;show('coupons');};
+ }catch(e){content.innerHTML='<div role="alert">কুপন লোড হয়নি। <button class="btn" onclick="show(\'coupons\')">আবার চেষ্টা করুন</button></div>';}
 };
 window.AdmCp = {
-  createForm() {
-    modal('🎟️ নতুন কুপন',
-      fld('কোড', 'text', 'cp_code') +
-      '<div class="field"><label>ধরন</label><select id="cp_type"><option value="promo">প্রোমো</option><option value="cashback">ক্যাশব্যাক</option></select></div>' +
-      fld('শতাংশ %', 'number', 'cp_pct') + fld('টাকা (ফিক্সড)', 'number', 'cp_amt') +
-      '<div class="field"><label>📅 মেয়াদ (তারিখ)</label><input type="date" id="cp_exp"></div>' +
-      '<div class="field"><label>🛎️ কোন সেবায় (খালি = সব সেবা)</label><select id="cp_svc"><option value="">সব সেবা</option></select></div>' +
-      '<button class="btn" onclick="AdmCp.create()">তৈরি করুন</button>');
-    // Load services for dropdown
-    ABC.api('/admin/services').then(r => r.json()).then(d => {
-      const sel = document.getElementById('cp_svc');
-      (d.services || []).forEach(s => {
-        const o = document.createElement('option');
-        o.value = s.id; o.textContent = (s.name_bn || s.name);
-        sel.appendChild(o);
-      });
-    });
-  },
-  async create() {
-    const exp = document.getElementById('cp_exp').value;
-    const svc = document.getElementById('cp_svc').value;
-    const r = await ABC.api('/admin/coupons', { method: 'POST', body: {
-      code: v('cp_code'), type: document.getElementById('cp_type').value,
-      percent: Number(v('cp_pct')) || 0, amount: Number(v('cp_amt')) || 0,
-      expires_at: exp || null, service_id: svc || null,
-    }});
-    const d = await r.json();
-    if (!r.ok) { alert('ব্যর্থ: ' + d.error); return; }
-    closeModal(); show('coupons');
-  },
-  async set(id, status) {
-    await ABC.api('/admin/coupons/' + id, { method: 'PUT', body: { status } });
-    show('coupons');
-  },
-  async del(id, code) {
-    if (!confirm('🗑️ কুপনটি স্থায়ীভাবে মুছে ফেলবেন?\n\n' + code + '\n\nমুছে ফেললে এই কোড আর কেউ ব্যবহার করতে পারবে না।')) return;
-    const r = await ABC.api('/admin/coupons/' + id, { method: 'DELETE' });
-    if (!r.ok) { const d = await r.json().catch(() => ({})); alert('ব্যর্থ: ' + (d.error || r.status)); return; }
-    show('coupons');
-  },
+ page:1,search:'',busy:false,
+ find(){this.search=v('promoSearch');this.page=1;show('coupons');},
+ createForm(){
+  modal('🎟️ নতুন প্রোমো অফার','<div class="promo-scope"><div class="promo-form-grid">'+fld('কোড','text','cp_code')+'<div class="field"><label>ধরন</label><select id="cp_type"><option value="promo">প্রোমো</option><option value="cashback">ক্যাশব্যাক</option></select></div>'+fld('শতাংশ %','number','cp_pct')+fld('টাকা (শতাংশ দিলে খালি রাখুন)','number','cp_amt')+'<div class="field"><label>অফারের মেয়াদ</label><select id="cp_duration"><option value="5">৫ মিনিট</option><option value="30" selected>৩০ মিনিট</option><option value="60">১ ঘণ্টা</option><option value="custom">নিজস্ব শেষ সময়</option><option value="">সময়সীমা নেই</option></select></div><div class="field"><label>নিজস্ব শেষ সময়</label><input type="datetime-local" id="cp_exp"></div><div class="field"><label>শুরু (খালি = এখন)</label><input type="datetime-local" id="cp_start"></div><div class="field"><label>জনপ্রতি ব্যবহার</label><input type="number" min="1" value="1" id="cp_per"></div><div class="field"><label>মোট ব্যবহার (খালি = সীমাহীন)</label><input type="number" min="1" id="cp_total"></div><div class="field"><label>কোন সেবায়</label><select id="cp_svc" disabled><option value="">লোড হচ্ছে…</option></select></div></div><p class="promo-status" id="cp_error" role="alert"></p><button class="btn ok" id="cp_save" disabled onclick="AdmCp.create()">অফার তৈরি করুন</button></div>');
+  ABC.api('/admin/services').then(async r=>{if(!r.ok)throw Error();const d=await r.json();const sel=document.getElementById('cp_svc');if(!sel)return;sel.replaceChildren(new Option('সব সেবা',''));(d.services||[]).forEach(s=>sel.appendChild(new Option(s.name_bn||s.name,s.id)));sel.disabled=false;document.getElementById('cp_save').disabled=false;}).catch(()=>{const e=document.getElementById('cp_error');if(e)e.textContent='সেবা লোড হয়নি। আবার ফরম খুলুন।';});
+ },
+ async create(){
+  if(this.busy)return;const btn=document.getElementById('cp_save'),err=document.getElementById('cp_error');this.busy=true;btn.disabled=true;
+  try{const duration=v('cp_duration'),start=v('cp_start'),end=v('cp_exp');
+   if(duration==='custom'&&!end)throw Error('অফারের শেষ সময় দিন।');
+   const r=await ABC.api('/admin/coupons',{method:'POST',body:{code:v('cp_code'),type:v('cp_type'),percent:Number(v('cp_pct')),amount:Number(v('cp_amt')),per_user_limit:Number(v('cp_per')),max_uses:v('cp_total')?Number(v('cp_total')):null,duration_minutes:duration&&duration!=='custom'?Number(duration):null,starts_at:start?new Date(start).toISOString():null,expires_at:duration==='custom'&&end?new Date(end).toISOString():null,service_id:v('cp_svc')||null}});const d=await r.json();if(!r.ok)throw Error(ABCPromo.message(d.error));closeModal();this.page=1;show('coupons');
+  }catch(e){err.dataset.error='true';err.textContent=e.message;}finally{this.busy=false;if(btn.isConnected)btn.disabled=false;}
+ },
+ async set(id,status,btn){if(btn.disabled)return;btn.disabled=true;try{const r=await ABC.api('/admin/coupons/'+id,{method:'PUT',body:{status}});const d=await r.json();if(!r.ok)throw Error(ABCPromo.message(d.error));show('coupons');}catch(e){ABC.showPageMsg(e.message,'err');btn.disabled=false;}},
+ async del(id,code,btn){if(!confirm('কুপনটি মুছবেন? '+code))return;btn.disabled=true;try{const r=await ABC.api('/admin/coupons/'+id,{method:'DELETE'});if(!r.ok)throw Error('মুছে ফেলা যায়নি—আবার চেষ্টা করুন।');show('coupons');}catch(e){ABC.showPageMsg(e.message,'err');btn.disabled=false;}}
 };
 
 /* ---------------- INVITE LINKS ---------------- */
