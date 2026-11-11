@@ -215,7 +215,7 @@ router.post('/orders', async (req, res) => {
     ? String(req.body.idempotency_key).slice(0, 64)
     : String(Date.now());
   try {
-    const { service_id, data, notes, promo_code } = req.body || {};
+    const { service_id, data, notes, promo_code, expected_payable } = req.body || {};
     if (!service_id) return res.status(400).json({ error: 'MISSING_SERVICE' });
 
     const sr = await db.query(
@@ -246,6 +246,7 @@ router.post('/orders', async (req, res) => {
       if (existing.rows.length) { duplicate = true; return existing.rows[0]; }
       const offer = promo_code ? await promotions.quote(client, promo_code, req.user.id, service_id, eff.price, true) : null;
       const payable = offer ? offer.payable : eff.price;
+      if (expected_payable !== undefined && (typeof expected_payable !== 'number' || !Number.isFinite(expected_payable) || Math.round(expected_payable * 100) !== Math.round(payable * 100))) promotions.fail('PRICE_CHANGED',409);
       // Pay for the service: service-locked credit for THIS service
       // is consumed first, the rest comes from the wallet balance
       // (lib/serviceCredits). Raises INSUFFICIENT_BALANCE if the two
@@ -1295,8 +1296,12 @@ router.post('/promos/claim', async (req,res) => {
     const result = await db.withTransaction(async client => {
       await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE',[req.user.id]);
       const ref='promo-claim-'+req.user.id+'-'+idempotency_key;
-      const old=await client.query('SELECT amount FROM coupon_redemptions WHERE ref = $1 AND user_id = $2',[ref,req.user.id]);
-      if(old.rows.length) return {ok:true,already:true,credited:Number(old.rows[0].amount)};
+      const old=await client.query('SELECT r.amount, r.service_id, c.code, c.expires_at FROM coupon_redemptions r LEFT JOIN coupons c ON c.id = r.coupon_id WHERE r.ref = $1 AND r.user_id = $2',[ref,req.user.id]);
+      if(old.rows.length) {
+        const prior=old.rows[0];
+        if(prior.service_id !== service_id || prior.code !== String(code || '').trim().toUpperCase()) promotions.fail('IDEMPOTENCY_CONFLICT',409);
+        return {ok:true,already:true,credited:Number(prior.amount),expires_at:prior.expires_at};
+      }
       const q=await promotions.quote(client,code,req.user.id,service_id,eff.price,true);
       const outstanding=await serviceCredits.availableFor(client,req.user.id,service_id);
       if(outstanding > 0) promotions.fail('CREDIT_ALREADY_AVAILABLE');

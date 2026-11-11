@@ -3,7 +3,7 @@ const path = require('path');
 const vm = require('vm');
 const html = fs.readFileSync(path.join(__dirname, '../../../frontend/order-create.html'), 'utf8');
 const script = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>')).replace(/\ninit\(\);/, '\n');
-function setup({ jsonFields = false, fail = false } = {}) {
+function setup({ jsonFields = false, fail = false, engine = null } = {}) {
   const fields = [{ name: 'applicant_name', label: 'আবেদনকারীর নাম', required: true }];
   const elements = new Map();
   const element = () => ({ style: {}, value: '', textContent: '', innerHTML: '', disabled: false, dataset: {}, addEventListener() {}, scrollIntoView() {}, focus() {}, classList: { add() {}, remove() {} } });
@@ -12,7 +12,7 @@ function setup({ jsonFields = false, fail = false } = {}) {
   const store = { getItem: () => null, setItem() {}, removeItem() {} };
   const context = vm.createContext({ console: { error() {}, warn() {} }, URLSearchParams, ABCPromo: {mount() {}}, location: { search: '?service=test' }, sessionStorage: store, localStorage: store, crypto: { randomUUID: () => 'test-id' },
     document: { getElementById: get, querySelector: selector => selector === '.card' ? element() : null, querySelectorAll: selector => selector === '[data-field]' ? [input] : [] },
-    ABC: { api: async url => { if (fail && url.startsWith('/services/')) throw new Error('offline'); return { ok: true, json: async () => url === '/auth/me' ? { user: { id: 'test-user', name: 'Test Applicant', balance: 500 } } : url.startsWith('/services/') ? { service: { price: 100, fields_required: jsonFields ? JSON.stringify(fields) : fields, documents_required: [] } } : { service_credits: [] } }; } }
+    ABC: { api: async url => { if (fail && url.startsWith('/services/')) throw new Error('offline'); return { ok: true, json: async () => url === '/auth/me' ? { user: { id: 'test-user', name: 'Test Applicant', balance: 500 } } : url.startsWith('/services/') ? { service: { engine_id: engine, price: 100, fields_required: jsonFields ? JSON.stringify(fields) : fields, documents_required: [] } } : { service_credits: [] } }; } }
   });
   context.window = context;
   vm.runInContext(script, context);
@@ -41,3 +41,5 @@ test('different signed-in accounts never restore the same service draft', async 
   }
   expect(seen).toEqual(['order_user-a_test', 'order_user-b_test']);
 });
+
+test('engine checkout redirects to service entry instead of a manual order', async () => { const {context,get}=setup({engine:'qr-photo-verify'}); await vm.runInContext('init()',context); expect(context.location.href).toBe('/service-detail.html?id=test'); expect(get('submitBtn').disabled).toBe(true); });

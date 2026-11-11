@@ -117,7 +117,7 @@
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
 <link rel="stylesheet" href="/css/manual-order.css?v=20261110-13">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
-<script src="/js/promotions.js?v=20261111-1"></script>
+<script src="/js/promotions.js?v=20261111-2"></script>
 </head>
 <body class="has-tabbar flagship-app service-workspace page-order-create">
 <div class="desktop">
@@ -494,6 +494,7 @@ async function init(){
     }
     const d=await r.json();
     svc=d.service;
+    if(svc.engine_id){location.href='/service-detail.html?id='+encodeURIComponent(sid);return;}
     svc.fields_required = safeArray(svc.fields_required);
     const svcPrice = Number(svc.price || 0);
 
@@ -880,6 +881,7 @@ async function submit(){
         notes: document.getElementById('notes').value.trim(),
         idempotency_key: window._orderIdemKey,
         promo_code: promoQuote ? promoQuote.code : null,
+        expected_payable: checkoutPrice(),
         documents: orderDocs
       }
     });
@@ -893,6 +895,11 @@ async function submit(){
   }
 
   if(!r.ok){
+    if(d.error === 'PRICE_CHANGED'){
+      notice.style.display='none';err.style.display='block';
+      err.textContent='সেবার দাম বা ছাড় বদলেছে; কোনো টাকা কাটা হয়নি। পাতা রিফ্রেশ করে নতুন দাম যাচাই করুন।';
+      return;
+    }
     editAgain();
     notice.style.display = 'none';
     err.style.display = 'block';

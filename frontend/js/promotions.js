@@ -5,24 +5,24 @@ const money=n=>'৳'+Number(n).toLocaleString('bn-BD',{maximumFractionDigits:2})
 let offset=0;
 function sync(value){const t=new Date(value).getTime();if(Number.isFinite(t))offset=t-Date.now();}
 function clock(el,start,end){el.dataset.start=start||'';el.dataset.end=end||'';tickOne(el);}
-function tickOne(el){const now=Date.now()+offset,starts=new Date(el.dataset.start).getTime(),end=new Date(el.dataset.end).getTime();const future=Number.isFinite(starts)&&starts>now;const target=future?starts:end;if(!Number.isFinite(target)){el.textContent='নির্দিষ্ট মেয়াদ নেই';return;}const seconds=Math.max(0,Math.ceil((target-now)/1000));const h=Math.floor(seconds/3600),m=Math.floor(seconds%3600/60),s=seconds%60;el.textContent=seconds===0?'অফার শেষ':(future?'শুরু হতে ':'বাকি ')+(h?h+':':'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');el.dataset.expired=String(!future&&seconds===0);}
+function tickOne(el){const now=Date.now()+offset,starts=new Date(el.dataset.start).getTime(),end=new Date(el.dataset.end).getTime();const future=Number.isFinite(starts)&&starts>now;const target=future?starts:end;if(!Number.isFinite(target)){el.textContent='নির্দিষ্ট মেয়াদ নেই';return;}const seconds=Math.max(0,Math.ceil((target-now)/1000));const h=Math.floor(seconds/3600),m=Math.floor(seconds%3600/60),s=seconds%60;el.textContent=seconds===0?'অফার শেষ':(future?'শুরু হতে ':'')+(future?'':'বাকি ')+(h?h+':':'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');if(seconds===0)el.textContent='অফার শেষ';el.dataset.expired=String(!future&&seconds===0);if(!future&&seconds===0&&el.onPromoExpired){const expire=el.onPromoExpired;el.onPromoExpired=null;expire();}}
 setInterval(()=>document.querySelectorAll('.promo-clock').forEach(tickOne),1000);
 async function api(path,body){const r=await ABC.api(path,body?{method:'POST',body}:undefined);const d=await r.json();if(!r.ok)throw Error(errors[d.error]||'কাজটি হয়নি—আবার চেষ্টা করুন।');sync(d.server_now);return d;}
 function uiButton(text,fn){const b=document.createElement('button');b.type='button';b.className='btn';b.textContent=text;b.addEventListener('click',fn);return b;}
 function mount(host,{service,engine=false,onQuote}){
  host.classList.add('promo-scope','promo-checkout');host.innerHTML='<h3>🎟️ প্রোমো কোড</h3><div class="promo-available"></div><div class="promo-fields"><input aria-label="প্রোমো কোড" maxlength="40" placeholder="কোড লিখুন"><button type="button" class="btn promo-apply">প্রয়োগ করুন</button><button type="button" class="btn promo-remove" hidden>✕ সরান</button></div><div class="promo-status" role="status"></div><div class="promo-result"></div>';
  const input=host.querySelector('input'),apply=host.querySelector('.promo-apply'),remove=host.querySelector('.promo-remove'),status=host.querySelector('.promo-status'),result=host.querySelector('.promo-result');
- let seq=0,busy=false,claimKey=null;
- const clear=()=>{seq++;result.replaceChildren();remove.hidden=true;claimKey=null;if(onQuote)onQuote(null);};
+ let seq=0,busy=false,claimKey=null,pendingQuote=null;
+ const clear=()=>{seq++;const timer=result.querySelector('.promo-clock');if(timer)timer.onPromoExpired=null;result.replaceChildren();remove.hidden=true;claimKey=null;pendingQuote=null;if(onQuote)onQuote(null);};
  input.addEventListener('input',()=>{if(!busy){clear();status.textContent='';}});
  remove.addEventListener('click',()=>{clear();input.value='';status.textContent='';});
  apply.addEventListener('click',async()=>{
   if(busy)return;const id=++seq;busy=true;input.disabled=true;apply.disabled=true;apply.textContent='যাচাই হচ্ছে…';status.dataset.error='false';
-  try{const q=await api('/promos/quote',{service_id:service.id,code:input.value});if(id!==seq)return;
+  try{const q=engine&&pendingQuote?pendingQuote:await api('/promos/quote',{service_id:service.id,code:input.value});if(id!==seq)return;
    result.innerHTML='<div class="promo-summary"><span>সেবার মূল্য</span><span></span><span>প্রোমো ছাড়</span><strong></strong><b>প্রদেয়</b><strong></strong></div><div class="promo-clock"></div>';
    const cells=result.querySelector('.promo-summary').children;cells[1].textContent=money(q.original);cells[3].textContent='− '+money(q.discount);cells[5].textContent=money(q.payable);clock(result.querySelector('.promo-clock'),q.starts_at,q.expires_at);
-   if(engine){if(!claimKey)claimKey=crypto.randomUUID();await api('/promos/claim',{service_id:service.id,code:q.code,idempotency_key:claimKey});status.textContent=money(q.discount)+' এই সেবার ক্রেডিটে যোগ হয়েছে; মেয়াদের মধ্যে সেবা নিন।';apply.disabled=true;remove.hidden=true;input.disabled=true;return;}
-   status.textContent='কোড প্রয়োগ হয়েছে; নিশ্চিত করার সময় আবার যাচাই হবে।';remove.hidden=false;if(onQuote)onQuote(q);
+   if(engine){pendingQuote=q;if(!claimKey)claimKey=crypto.randomUUID();const claimed=await api('/promos/claim',{service_id:service.id,code:q.code,idempotency_key:claimKey});status.textContent=money(claimed.credited)+' এই সেবার ক্রেডিটে যোগ হয়েছে; মেয়াদের মধ্যে সেবা নিন।';pendingQuote=null;apply.disabled=true;remove.hidden=true;input.disabled=true;return;}
+   status.textContent='কোড প্রয়োগ হয়েছে; নিশ্চিত করার সময় আবার যাচাই হবে।';remove.hidden=false;if(onQuote)onQuote(q);const timer=result.querySelector('.promo-clock');timer.onPromoExpired=()=>{clear();status.dataset.error='true';status.textContent=errors.EXPIRED_CODE;};tickOne(timer);
   }catch(e){result.replaceChildren();if(onQuote)onQuote(null);status.dataset.error='true';status.textContent=e.message;}
   finally{busy=false;if(!engine||status.dataset.error==='true'){input.disabled=false;apply.disabled=false;}apply.textContent='প্রয়োগ করুন';}
  });
