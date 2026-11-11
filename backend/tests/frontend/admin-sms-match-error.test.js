@@ -10,7 +10,7 @@
  * message for it instead of the raw code.
  *
  * Approach (same pattern as admin-recharge-approve.test.js): read the
- * CURRENT admin.js source, extract the exact `match` method by
+ * CURRENT admin-sms.js source, extract the exact `match` method by
  * brace-matching, and evaluate it with stubbed globals. Fake fixture
  * data only.
  */
@@ -18,12 +18,13 @@
 const fs = require('fs');
 const path = require('path');
 
-const ADMIN_JS = path.join(__dirname, '../../../frontend/js/admin.js');
+// SMS hub split: AdmSms lives in admin-sms.js now, not admin.js.
+const ADMIN_SMS_JS = path.join(__dirname, '../../../frontend/js/admin-sms.js');
 
 function loadSmsMatch() {
-  const src = fs.readFileSync(ADMIN_JS, 'utf8');
+  const src = fs.readFileSync(ADMIN_SMS_JS, 'utf8');
   const start = src.indexOf('async match(smsId) {');
-  if (start < 0) throw new Error('AdmSms.match not found in admin.js');
+  if (start < 0) throw new Error('AdmSms.match not found in admin-sms.js');
   const open = src.indexOf('{', start);
   let depth = 0;
   let i = open;
