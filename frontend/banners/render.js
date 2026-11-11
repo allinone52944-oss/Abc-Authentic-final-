@@ -115,8 +115,12 @@
   }
 
   async function carousel(el, banners, ms) {
-    if (!el || !banners || !banners.length) return;
+    if (!el) return;
     if (el._bnTimer) { clearInterval(el._bnTimer); el._bnTimer = null; }
+    if (el._bnCleanup) el._bnCleanup();
+    const generation = (el._bnGeneration || 0) + 1;
+    el._bnGeneration = generation;
+    if (!banners || !banners.length) { el.innerHTML = ''; return; }
 
     const rendered = await Promise.all(
       banners.map(async (b) => ({
@@ -127,6 +131,7 @@
         speed: b.animation_speed != null ? b.animation_speed : (b.speed != null ? b.speed : 30),
       }))
     );
+    if (el._bnGeneration !== generation) return;
 
     el.innerHTML =
       '<div class="bn-carousel-track" style="position:relative;overflow:hidden;width:100%;">' +
@@ -144,6 +149,31 @@
     const dots = el.querySelectorAll('.bn-dot');
     let curIdx = 0;
     let isPaused = false;
+    let transitioning = false;
+    let queuedIdx = null;
+    let activeAnimation = null;
+    const current = () => el._bnGeneration === generation;
+    function cancelAnimation() {
+      if (!activeAnimation) return;
+      activeAnimation.onfinish = null;
+      activeAnimation.cancel();
+      activeAnimation = null;
+    }
+    function finishTransition() {
+      cancelAnimation();
+      transitioning = false;
+      if (!current()) return;
+      const next = queuedIdx;
+      queuedIdx = null;
+      if (next !== null && next !== curIdx) goToSlide(next);
+    }
+    const pause = () => { isPaused = true; };
+    const resume = () => { isPaused = false; };
+    el._bnCleanup = () => {
+      cancelAnimation();
+      el.removeEventListener('mouseenter', pause);
+      el.removeEventListener('mouseleave', resume);
+    };
 
     function updateDots(idx) {
       dots.forEach((d, i) => {
@@ -160,19 +190,13 @@
 
     setSlideHtml(0);
 
-    if (rendered.length > 1) {
-      dots.forEach((d) => {
-        d.addEventListener('click', () => {
-          const idx = Number(d.dataset.idx);
-          if (!isNaN(idx) && idx !== curIdx) goToSlide(idx);
-        });
-      });
-
-      function goToSlide(nextIdx) {
+    function goToSlide(nextIdx) {
+        if (!current()) return;
+        if (transitioning) { queuedIdx = nextIdx; return; }
         if (nextIdx === curIdx) return;
         const to = rendered[nextIdx];
         if (!to) return;
-        if (to.anim === 'none' || !slide.animate) {
+        if (to.anim === 'none' || !slide.animate || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
           curIdx = nextIdx;
           setSlideHtml(curIdx);
           return;
@@ -180,27 +204,41 @@
         const speedVal = Math.min(120, Math.max(5, Number(to.speed) || 30));
         const dur = Math.round(750 - ((speedVal - 5) / 115) * 570);
         const kf = animKeyframes(to.anim);
+        transitioning = true;
         try {
-          const a = slide.animate(kf.out, { duration: dur, easing: 'ease-in', fill: 'forwards' });
-          a.onfinish = () => {
+          activeAnimation = slide.animate(kf.out, { duration: dur, easing: 'ease-in', fill: 'forwards' });
+          activeAnimation.onfinish = () => {
+            // Outgoing fill must be released before the incoming effect starts.
+            // Otherwise opacity:0 / offscreen transform persists after it ends.
+            cancelAnimation();
+            if (!current()) return;
             curIdx = nextIdx;
-            slide.innerHTML = to.html;
-            updateDots(curIdx);
+            setSlideHtml(curIdx);
             try {
-              slide.animate(kf.in, { duration: dur, easing: 'ease-out' });
-            } catch (_) {}
+              activeAnimation = slide.animate(kf.in, { duration: dur, easing: 'ease-out' });
+              activeAnimation.onfinish = finishTransition;
+            } catch (_) { finishTransition(); }
           };
         } catch (_) {
           curIdx = nextIdx;
           setSlideHtml(curIdx);
+          finishTransition();
         }
-      }
+    }
 
-      el.addEventListener('mouseenter', () => { isPaused = true; });
-      el.addEventListener('mouseleave', () => { isPaused = false; });
+    if (rendered.length > 1) {
+      dots.forEach((d) => {
+        d.addEventListener('click', () => {
+          const idx = Number(d.dataset.idx);
+          if (!isNaN(idx)) goToSlide(idx);
+        });
+      });
+
+      el.addEventListener('mouseenter', pause);
+      el.addEventListener('mouseleave', resume);
 
       el._bnTimer = setInterval(() => {
-        if (isPaused || el.offsetParent === null) return;
+        if (!current() || transitioning || isPaused || el.offsetParent === null) return;
         const nextIdx = (curIdx + 1) % rendered.length;
         goToSlide(nextIdx);
       }, ms || 6000);
