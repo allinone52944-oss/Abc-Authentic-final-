@@ -52,11 +52,19 @@ test('Auto to Manual converts the owned pending request rather than creating ano
  expect(r.body.transaction.id).toBe('t1');
  expect(db.__client.query.mock.calls.filter(c=>c[0].includes('INSERT INTO transactions'))).toHaveLength(0);
 });
-test('admin cannot credit number-only Auto without linking payment evidence',async()=>{
+// Recharge Bug 1 (2026-11-11): the old rule ("admin cannot credit a
+// number-only Auto without linking payment evidence") made a TrxID-less
+// Auto recharge un-approvable forever when the SMS never arrived. The
+// deliberate manual approve now allows it: the admin confirms in the
+// modal after verifying the payment in their own statement, and the
+// credit uses the traceable 'tx-<id>' reference. Fraud guards (amount
+// mismatch, duplicate, already-processed) still apply.
+test('admin CAN credit a number-only Auto recharge manually (deliberate approve)',async()=>{
  db.__routeQuery([['SELECT * FROM transactions',{rows:[{...TX,trxid:null}]}]]);
- const r=await signed(request(app()).put('/api/admin/transactions/t1/approve'),'a1','admin').expect(400);
- expect(r.body.error).toBe('AUTO_REQUIRES_SMS_MATCH');
- expect(db.__client.query.mock.calls.filter(c=>c[0].includes('wallet_apply'))).toHaveLength(0);
+ const r=await signed(request(app()).put('/api/admin/transactions/t1/approve'),'a1','admin').expect(200);
+ expect(r.body.ok).toBe(true);
+ const w=db.__client.query.mock.calls.find(c=>c[0].includes('wallet_apply'));
+ expect(w[1]).toEqual(['u1',500,'recharge','tx-t1','t1']);
 });
 test('Auto to Manual conversion still works when three requests are pending',async()=>{
  db.__routeQuery([
