@@ -3797,6 +3797,11 @@ window.AdmTx = {
     }, 250);
   },
   approve(id, amount, name) {
+    // Bug 5: already approving this id — no 2nd modal.
+    if (this._appr && this._appr.has(id)) {
+      admToast('অনুমোদন চলছে', 'অনুমোদন প্রক্রিয়া চলছে।', 'info');
+      return;
+    }
     modal('💰 রিচার্জ অনুমোদন নিশ্চিত করুন',
       '<div style="text-align:center; padding:10px 0;">' +
         '<div style="font-size:32px; font-weight:800; color:#15803d; margin-bottom:8px;">৳' + bn(amount || 0) + '</div>' +
@@ -3809,45 +3814,52 @@ window.AdmTx = {
     );
   },
   async _doApprove(id) {
-    closeModal();
-    let r;
+    // Bug 5: ignore a 2nd approve while one is in flight for this id
+    // (per-id; finally clears it on success AND failure).
+    this._appr = this._appr || new Set();
+    if (this._appr.has(id)) return;
+    this._appr.add(id);
     try {
-      r = await ABC.api('/admin/transactions/' + id + '/approve', { method: 'PUT' });
-    } catch (e) {
-      admToast('নেটওয়ার্ক ত্রুটি', 'সার্ভারে সংযোগ করা যায়নি', 'error');
-      return;
-    }
-    let d;
-    try {
-      d = await r.json();
-    } catch (e) {
-      // Recharge Bug 3 (2026-11-11, re-applied): non-JSON body (e.g. 500 HTML from the
-      // server/proxy) is a server error, not a network failure — the server
-      // did answer. Approve state is unknown, so say that, not that it failed.
-      // First applied in 4a80c6d; reverted by 83f441c's admin.js rewrite.
-      admToast('সার্ভার ত্রুটি', 'সার্ভার থেকে ভুল উত্তর এসেছে — অনুমোদন হয়েছে কি না নিশ্চিত নয়, তালিকা নতুন করে দেখুন।', 'error');
-      return;
-    }
-    if (!r.ok) {
-      // ABC.api answers a real network failure with a synthetic 503 JSON
-      // body {error:'NETWORK_ERROR'} — show it as a network error, not a
-      // rejected approval.
-      if (d.error === 'NETWORK_ERROR') {
+      closeModal();
+      let r;
+      try {
+        r = await ABC.api('/admin/transactions/' + id + '/approve', { method: 'PUT' });
+      } catch (e) {
         admToast('নেটওয়ার্ক ত্রুটি', 'সার্ভারে সংযোগ করা যায়নি', 'error');
         return;
       }
-      const messages = {
-        DUPLICATE_TRANSACTION: 'এই পেমেন্টের টাকা আগে জমা হয়েছে — আবার জমা হয়নি।',
-        SMS_ALREADY_MATCHED: 'এই SMS অন্য রিচার্জে ব্যবহার হয়েছে — আবার জমা হয়নি।',
-        AUTO_REQUIRES_SMS_MATCH: 'অটো অনুরোধে TrxID নেই। SMS তালিকা থেকে সঠিক পেমেন্ট মিলিয়ে অনুমোদন করুন, অথবা গ্রাহককে ম্যানুয়ালে আসল TrxID দিতে বলুন।',
-        AMOUNT_MISMATCH: 'SMS ও অনুরোধের পরিমাণ মিলছে না — টাকা জমা হয়নি।',
-        ALREADY_PROCESSED: 'এই অনুরোধের সিদ্ধান্ত আগেই হয়েছে। তালিকা নতুন করে দেখুন।',
-      };
-      admToast('অনুমোদন হয়নি', messages[d.error] || 'ব্যর্থ: ' + (d.error || 'UNKNOWN'), 'error');
-      return;
-    }
-    admToast('রিচার্জ সফল 🎉', 'গ্রাহকের ওয়ালেটে সফলভাবে ব্যালেন্স যোগ হয়েছে।', 'recharge');
-    show('recharge');
+      let d;
+      try {
+        d = await r.json();
+      } catch (e) {
+        // Recharge Bug 3 (2026-11-11, re-applied): non-JSON body (e.g. 500 HTML from the
+        // server/proxy) is a server error, not a network failure — the server
+        // did answer. Approve state is unknown, so say that, not that it failed.
+        // First applied in 4a80c6d; reverted by 83f441c's admin.js rewrite.
+        admToast('সার্ভার ত্রুটি', 'সার্ভার থেকে ভুল উত্তর এসেছে — অনুমোদন হয়েছে কি না নিশ্চিত নয়, তালিকা নতুন করে দেখুন।', 'error');
+        return;
+      }
+      if (!r.ok) {
+        // ABC.api answers a real network failure with a synthetic 503 JSON
+        // body {error:'NETWORK_ERROR'} — show it as a network error, not a
+        // rejected approval.
+        if (d.error === 'NETWORK_ERROR') {
+          admToast('নেটওয়ার্ক ত্রুটি', 'সার্ভারে সংযোগ করা যায়নি', 'error');
+          return;
+        }
+        const messages = {
+          DUPLICATE_TRANSACTION: 'এই পেমেন্টের টাকা আগে জমা হয়েছে — আবার জমা হয়নি।',
+          SMS_ALREADY_MATCHED: 'এই SMS অন্য রিচার্জে ব্যবহার হয়েছে — আবার জমা হয়নি।',
+          AUTO_REQUIRES_SMS_MATCH: 'অটো অনুরোধে TrxID নেই। SMS তালিকা থেকে সঠিক পেমেন্ট মিলিয়ে অনুমোদন করুন, অথবা গ্রাহককে ম্যানুয়ালে আসল TrxID দিতে বলুন।',
+          AMOUNT_MISMATCH: 'SMS ও অনুরোধের পরিমাণ মিলছে না — টাকা জমা হয়নি।',
+          ALREADY_PROCESSED: 'এই অনুরোধের সিদ্ধান্ত আগেই হয়েছে। তালিকা নতুন করে দেখুন।',
+        };
+        admToast('অনুমোদন হয়নি', messages[d.error] || 'ব্যর্থ: ' + (d.error || 'UNKNOWN'), 'error');
+        return;
+      }
+      admToast('রিচার্জ সফল 🎉', 'গ্রাহকের ওয়ালেটে সফলভাবে ব্যালেন্স যোগ হয়েছে।', 'recharge');
+      show('recharge');
+    } finally { this._appr.delete(id); }
   },
   reject(id, amount, name) {
     modal('❌ রিচার্জ বাতিল করুন',
