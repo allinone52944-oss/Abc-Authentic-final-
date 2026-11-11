@@ -3810,7 +3810,7 @@ window.AdmTx = {
   approve(id, amount, name) {
     // Bug 5: already approving this id — no 2nd modal.
     if (this._appr && this._appr.has(id)) {
-      admToast('অনুমোদন চলছে', 'অনুমোদন প্রক্রিয়া চলছে।', 'info');
+      admToast('অনুমোদন চলছে', 'অপেক্ষা করুন।', 'info');
       return;
     }
     modal('💰 রিচার্জ অনুমোদন নিশ্চিত করুন',
