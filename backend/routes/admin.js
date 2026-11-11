@@ -2164,14 +2164,30 @@ router.put('/transactions/:id/approve', async (req, res) => {
     });
     await logActivity(req.user.id, 'transaction.approve', { tx_id: tx.id, amount: tx.amount });
 
-    // Customer notifications: recharge approved (WhatsApp + push)
+    // Customer notifications: recharge approved (WhatsApp + push).
+    // Recharge Bug 6 (2026-11-11): these were fire-and-forget with
+    // .catch(() => {}) — a failed notification was invisible to the
+    // admin (approve showed success, customer got nothing). Await
+    // them in parallel, log a WhatsApp failure prominently, and return
+    // the outcome in the response so the UI can warn. A notification
+    // failure NEVER fails the approve — the money is correctly credited.
+    let notify = null;
     if (tx.type === 'recharge') {
-      wa.notifyRechargeApproved(db, tx).catch(() => {});
-      push.notifyUser(db, tx.user_id, '✅ রিচার্জ সফল!',
-        '৳' + tx.amount + ' আপনার ওয়ালেটে যোগ হয়েছে।', '/wallet.html').catch(() => {});
+      const [waRes, pushRes] = await Promise.all([
+        wa.notifyRechargeApproved(db, tx).catch(() => ({ ok: false, error: 'FAILED' })),
+        push.notifyUser(db, tx.user_id, '✅ রিচার্জ সফল!',
+          '৳' + tx.amount + ' আপনার ওয়ালেটে যোগ হয়েছে।', '/wallet.html').catch(() => ({ ok: false })),
+      ]);
+      const waOk = !!(waRes && waRes.ok);
+      notify = { whatsapp: waOk, push: !!(pushRes && pushRes.ok) };
+      if (!waOk) {
+        notify.whatsapp_error = (waRes && waRes.error) || 'FAILED';
+        // tx id only — never log the phone number or TrxID here.
+        safeLog('[admin] approve tx ' + tx.id + ': recharge approved but WhatsApp notification FAILED (' + notify.whatsapp_error + '). Customer was not notified.');
+      }
     }
 
-    res.json({ ok: true });
+    res.json({ ok: true, notify });
   } catch (e) {
     safeLog('[admin] approve error:', e.message);
     const msg = /DUPLICATE_TRANSACTION|INSUFFICIENT_BALANCE|AUTO_REQUIRES_SMS_MATCH|AMOUNT_MISMATCH|SMS_ALREADY_MATCHED|ALREADY_PROCESSED/.test(e.message) ? e.message : 'APPROVE_FAILED';
