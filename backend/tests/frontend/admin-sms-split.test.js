@@ -46,7 +46,7 @@ function loadSmsHub() {
 
 const UNMATCHED = {
   id: 'sms-fake-1', matched_recharge_id: null, method: 'bkash_payment',
-  amount: 500, sender: 'bKash', trxid: 'FAKE-TRX-001',
+  amount: 500, sender: 'bKash', trxid: 'FAKE-TRX-001', parse_status: 'parsed',
   raw_message: 'Fake bKash message', created_at: '2026-11-11T10:00:00.000Z',
   user_name: null, user_phone: null, tx_amount: null, matched_via: null,
 };
@@ -93,7 +93,7 @@ describe('SMS hub split (admin-sms.js)', () => {
 
   test('admin.html loads the SMS chunk BEFORE admin.js (and bumps its version)', () => {
     const html = read('admin.html');
-    expect(html).toContain('<script src="/js/admin-sms.js?v=20261111-2"></script>');
+    expect(html).toContain('<script src="/js/admin-sms.js?v=20261111-3"></script>');
     expect(html).toContain('<script src="/js/admin.js?v=20261111-11"></script>');
     expect(html.indexOf('admin-sms.js')).toBeLessThan(html.indexOf('/js/admin.js?v=20261111-11'));
   });
@@ -171,6 +171,21 @@ describe('SMS hub — render + delete UI', () => {
 
     await render([UNMATCHED], 0);
     expect(content.innerHTML).not.toContain('deleteIgnored');
+  });
+
+  test('OTP/unparsed SMS shows no match option (Bug #3), but ignore/delete stay', async () => {
+    const OTP = { ...UNMATCHED, id: 'sms-otp-1', parse_status: 'unparsed', amount: null, trxid: null, raw_message: 'Your OTP is 123456' };
+    await render([OTP], 0);
+    const html = content.innerHTML;
+    expect(html).not.toContain("AdmSms.match('sms-otp-1')");
+    expect(html).not.toContain('sms-tx-sms-otp-1');
+    expect(html).toContain('পেমেন্ট SMS নয়');
+    expect(html).toContain("AdmSms.ignore('sms-otp-1')");
+    expect(html).toContain("AdmSms.del('sms-otp-1')");
+    // A parsed SMS beside it still has the match option.
+    await render([OTP, UNMATCHED], 0);
+    expect(content.innerHTML).toContain("AdmSms.match('sms-fake-1')");
+    expect(content.innerHTML).toContain('sms-tx-sms-fake-1');
   });
 
   test('match still works (no regression from the split)', async () => {

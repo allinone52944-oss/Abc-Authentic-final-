@@ -202,7 +202,7 @@ describe('POST /api/sms/incoming — webhook auto-approve notifies admin', () =>
     db.__routeQuery([
       ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ...atomicSmsHandlers(),
-      ['FROM incoming_sms WHERE id', { rows: [{ id: 's1', amount: 500, matched_recharge_id: null }] }],
+      ['FROM incoming_sms WHERE id', { rows: [{ id: 's1', amount: 500, matched_recharge_id: null, parse_status: 'parsed', trxid: 'TRX12345' }] }],
       ['FROM transactions WHERE id', { rows: [TX] }],
       ['WHERE id = $1 AND status = \'pending\' AND type = \'recharge\'', { rows: [TX] }],
       ['SELECT * FROM wallet_apply', { rows: [{ new_balance: '600', tx_id: 't1' }] }],

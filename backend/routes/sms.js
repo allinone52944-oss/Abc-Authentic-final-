@@ -509,6 +509,17 @@ adminSms.post('/:id/match', async (req, res) => {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: 'ALREADY_MATCHED' });
       }
+      // Bug #3 — an OTP/unparsed SMS is not a payment SMS: it must never
+      // match a recharge. The amount guard below only runs when the amount
+      // is non-null, so an amount-null SMS would skip every guard and
+      // approve. Require a parsed payment SMS: parsed status + amount + TrxID.
+      if (sms.parse_status !== 'parsed' || sms.amount == null || sms.trxid == null) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: 'NOT_A_PAYMENT_SMS',
+          message: 'এই SMS পেমেন্ট SMS নয় — এটি দিয়ে রিচার্জ ম্যাচ করা যাবে না।',
+        });
+      }
       // Fraud guard: manual match must also agree on the amount.
       if (sms.amount != null) {
         const t = await client.query('SELECT * FROM transactions WHERE id = $1 FOR UPDATE', [txId]);

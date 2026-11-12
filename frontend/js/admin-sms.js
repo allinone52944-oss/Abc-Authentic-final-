@@ -62,6 +62,9 @@ window.renderSmsTab = async () => {
     html += '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">';
     for (const s of list) {
       const matched = !!s.matched_recharge_id;
+      // Bug #3 — OTP/unparsed SMS is not a payment SMS: no match option.
+      // Matchable = parsed AND carries both an amount and a TrxID.
+      const matchable = !matched && s.parse_status === 'parsed' && s.amount != null && s.trxid != null;
       const method = (s.method || 'unknown').toLowerCase();
       let methodColor = '#2563eb';
       if (method.includes('bkash')) methodColor = '#e11d48';
@@ -90,7 +93,7 @@ window.renderSmsTab = async () => {
               : '') +
           '</div>' +
           '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">' +
-            (!matched
+            (matchable
               ? '<select id="sms-tx-' + s.id + '" class="mini-btn" style="max-width:300px;font-size:12px;">' +
                   '<option value="">পেন্ডিং রিচার্জ বাছুন…</option>' +
                   pend.map(p => '<option value="' + p.id + '">৳' + bn(p.amount) + ' • ' + esc(smsMethodBn(p.method)) + ' • ' + esc(p.sender_no || '—') + ' • ' + esc(p.user_name) + ' • ' + esc(p.trxid || '') + '</option>').join('') +
@@ -100,6 +103,12 @@ window.renderSmsTab = async () => {
                   '<button class="mini-btn danger" onclick="AdmSms.ignore(\'' + s.id + '\')">🙈 বাদ দিন</button>' +
                   '<button class="mini-btn danger" onclick="AdmSms.del(\'' + s.id + '\')">🗑️ মুছুন</button>' +
                 '</div>'
+              : !matched
+                ? '<span style="color:#b45309;font-size:12px;font-weight:700;">⚠️ পেমেন্ট SMS নয় — ম্যাচ করা যাবে না</span>' +
+                  '<div style="display:flex;gap:6px;">' +
+                    '<button class="mini-btn danger" onclick="AdmSms.ignore(\'' + s.id + '\')">🙈 বাদ দিন</button>' +
+                    '<button class="mini-btn danger" onclick="AdmSms.del(\'' + s.id + '\')">🗑️ মুছুন</button>' +
+                  '</div>'
               // Audit #33 — the label tells HOW the SMS matched: only an
               // auto-match is "অটো প্রসেসড"; a manual match says so, and
               // a legacy row (matched before matched_via existed) says
@@ -153,7 +162,7 @@ window.AdmSms = {
     const d = await r.json();
     // Recharge Bug 4: SMS_ALREADY_MATCHED means a racing actor linked this
     // SMS to another recharge — say so plainly instead of the raw code.
-    if (!r.ok) { alert(d.error === 'SMS_ALREADY_MATCHED' ? 'এই SMS ইতিমধ্যে অন্য একটি রিচার্জে ব্যবহৃত হয়েছে। তালিকা নতুন করে দেখুন।' : 'ব্যর্থ: ' + d.error); return; }
+    if (!r.ok) { alert(d.error === 'SMS_ALREADY_MATCHED' ? 'এই SMS ইতিমধ্যে অন্য একটি রিচার্জে ব্যবহৃত হয়েছে। তালিকা নতুন করে দেখুন।' : d.error === 'NOT_A_PAYMENT_SMS' ? 'এই SMS পেমেন্ট SMS নয় — এটি দিয়ে রিচার্জ ম্যাচ করা যাবে না।' : 'ব্যর্থ: ' + d.error); return; }
     alert('✅ ম্যাচ সফল! টাকা যোগ হয়েছে।');
     show('sms');
   },
