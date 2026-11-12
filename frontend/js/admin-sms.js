@@ -38,10 +38,17 @@ window.renderSmsTab = async () => {
     '</div>' +
   '</div>';
 
-  // SMS delete: bulk-delete button, only when ignored SMS exist.
-  if ((d.ignored_total || 0) > 0) {
-    html += '<div style="margin-bottom:12px;">' +
-      '<button class="mini-btn danger" onclick="AdmSms.deleteIgnored(' + (d.ignored_total || 0) + ')">🗑️ সব ignored SMS মুছুন (' + bn(d.ignored_total || 0) + 'টি)</button>' +
+  // SMS delete: bulk-delete buttons. Ignored-only, when ignored SMS exist;
+  // Delete All (matched + unmatched), whenever any SMS exists.
+  const _smsTotalAll = d.total_all || 0;
+  if ((d.ignored_total || 0) > 0 || _smsTotalAll > 0) {
+    html += '<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">' +
+      ((d.ignored_total || 0) > 0
+        ? '<button class="mini-btn danger" onclick="AdmSms.deleteIgnored(' + (d.ignored_total || 0) + ')">🗑️ সব ignored SMS মুছুন (' + bn(d.ignored_total || 0) + 'টি)</button>'
+        : '') +
+      (_smsTotalAll > 0
+        ? '<button class="mini-btn danger" style="background:#dc2626;color:#fff;border-color:#b91c1c;font-weight:800;" onclick="AdmSms.deleteAll(' + _smsTotalAll + ')">🗑️ সব SMS মুছুন (' + bn(_smsTotalAll) + 'টি)</button>'
+        : '') +
     '</div>';
   }
 
@@ -172,6 +179,16 @@ window.AdmSms = {
     const d = await r.json();
     if (!r.ok) { alert('ব্যর্থ: ' + (d.error || 'FAILED')); return; }
     admToast('Ignored SMS মোছা হয়েছে', (d.deleted || 0) + 'টি ignored SMS মুছে ফেলা হয়েছে।', 'info');
+    show('sms');
+  },
+  // SMS delete: hard-delete EVERY SMS (matched + unmatched) in one go.
+  // Destructive: matched SMS are payment proof — the confirm says so.
+  async deleteAll(n) {
+    if (!confirm('সতর্কতা: সব ' + n + 'টি SMS স্থায়ীভাবে মুছে ফেলবেন? ম্যাচড SMS-ও মুছে যাবে — সেগুলো রিচার্জের প্রমাণ। এই কাজটি ফেরানো যাবে না।')) return;
+    const r = await ABC.api('/admin/sms/delete-all', { method: 'POST', body: { confirm: true } });
+    const d = await r.json();
+    if (!r.ok) { alert(d.message || 'ব্যর্থ: ' + (d.error || 'FAILED')); return; }
+    admToast('সব SMS মোছা হয়েছে', (d.deleted || 0) + 'টি SMS মুছে ফেলা হয়েছে।', 'info');
     show('sms');
   },
   async showSecret() {

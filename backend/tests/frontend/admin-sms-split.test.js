@@ -112,10 +112,10 @@ describe('SMS hub — render + delete UI', () => {
   let elements;
   let hub;
 
-  function render(list, ignoredTotal) {
+  function render(list, ignoredTotal, totalAll) {
     apiImpl = async (url) => {
       if (url.includes('pending-recharges')) return fakeResponse({ ok: true, body: { pending: PENDING } });
-      return fakeResponse({ ok: true, body: { sms: list, total: list.length, ignored_total: ignoredTotal, page: 1, limit: 30 } });
+      return fakeResponse({ ok: true, body: { sms: list, total: list.length, ignored_total: ignoredTotal, total_all: (totalAll == null ? list.length : totalAll), page: 1, limit: 30 } });
     };
     return hub.renderSmsTab();
   }
@@ -250,6 +250,56 @@ describe('SMS hub — render + delete UI', () => {
     confirmImpl = () => false;
     await hub.AdmSms.deleteIgnored(3);
     expect(apiCalls).toHaveLength(0);
+    expect(toasts).toHaveLength(0);
+    expect(shown).toEqual([]);
+  });
+
+  test('Delete All button renders with the grand total and is solid red (destructive)', async () => {
+    await render([UNMATCHED], 0, 5);
+    expect(content.innerHTML).toContain("AdmSms.deleteAll(5)");
+    expect(content.innerHTML).toContain('সব SMS মুছুন');
+    expect(content.innerHTML).toContain('৫টি');
+    expect(content.innerHTML).toContain('background:#dc2626');
+  });
+
+  test('Delete All button does not render when there are no SMS', async () => {
+    await render([], 0, 0);
+    expect(content.innerHTML).not.toContain('deleteAll');
+    expect(content.innerHTML).not.toContain('সব SMS মুছুন');
+  });
+
+  test('deleteAll confirms with the matched-proof warning, posts confirm:true, toasts and refreshes', async () => {
+    apiImpl = async (url, opts) => {
+      expect(url).toBe('/admin/sms/delete-all');
+      expect(opts.method).toBe('POST');
+      expect(opts.body).toEqual({ confirm: true });
+      return fakeResponse({ ok: true, body: { ok: true, deleted: 5 } });
+    };
+    await hub.AdmSms.deleteAll(5);
+    expect(confirms).toHaveLength(1);
+    expect(confirms[0]).toContain('ম্যাচড SMS-ও মুছে যাবে');
+    expect(confirms[0]).toContain('প্রমাণ');
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0].title).toBe('সব SMS মোছা হয়েছে');
+    expect(toasts[0].message).toContain('5টি');
+    expect(shown).toEqual(['sms']);
+  });
+
+  test('deleteAll does nothing when confirm is cancelled', async () => {
+    confirmImpl = () => false;
+    await hub.AdmSms.deleteAll(5);
+    expect(apiCalls).toHaveLength(0);
+    expect(toasts).toHaveLength(0);
+    expect(shown).toEqual([]);
+  });
+
+  test('deleteAll shows the server message on failure and does not refresh', async () => {
+    apiImpl = async () => fakeResponse({
+      ok: false,
+      body: { error: 'CONFIRM_REQUIRED', message: 'সব SMS মুছতে নিশ্চিত করুন — এই কাজটি ফেরানো যাবে না।' },
+    });
+    await hub.AdmSms.deleteAll(5);
+    expect(alerts).toEqual(['সব SMS মুছতে নিশ্চিত করুন — এই কাজটি ফেরানো যাবে না।']);
     expect(toasts).toHaveLength(0);
     expect(shown).toEqual([]);
   });

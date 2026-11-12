@@ -450,6 +450,10 @@ adminSms.get('/', async (req, res) => {
       `SELECT COUNT(*) FROM incoming_sms s
         WHERE s.parse_status = 'ignored' AND s.matched_recharge_id IS NULL`
     );
+    // SMS Delete All: the button needs the grand total (matched +
+    // unmatched, all filters ignored) — `total` above respects the
+    // current filter, so it cannot serve this.
+    const totalAll = await db.query(`SELECT COUNT(*) FROM incoming_sms`);
     const rows = await db.query(
       `SELECT s.*, t.user_id, t.amount AS tx_amount, t.status AS tx_status,
               u.name AS user_name, u.phone AS user_phone
@@ -459,7 +463,7 @@ adminSms.get('/', async (req, res) => {
        ${where} ORDER BY s.created_at DESC LIMIT $${i} OFFSET $${i + 1}`,
       [...params, limit, offset]
     );
-    res.json({ sms: rows.rows, total: parseInt(total.rows[0].count, 10), ignored_total: parseInt(ignored.rows[0].count, 10), page, limit });
+    res.json({ sms: rows.rows, total: parseInt(total.rows[0].count, 10), ignored_total: parseInt(ignored.rows[0].count, 10), total_all: parseInt(totalAll.rows[0].count, 10), page, limit });
   } catch (e) {
     safeLog('[sms] list error:', e.message);
     res.status(500).json({ error: 'FAILED' });
@@ -588,6 +592,32 @@ adminSms.post('/delete-ignored', async (req, res) => {
     res.json({ ok: true, deleted });
   } catch (e) {
     safeLog('[sms] delete-ignored error:', e.message);
+    res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// POST /api/admin/sms/delete-all — permanently delete EVERY SMS in the hub
+// (matched + unmatched). Destructive by design: a matched SMS is payment
+// evidence for a recharge, and deleting it removes that proof forever.
+// The recharge itself is untouched — no table references incoming_sms
+// (the link lives only on the SMS row's matched_recharge_id, and
+// transactions store no sms id), so nothing dangles and nothing breaks.
+// Requires an explicit {confirm:true} body flag; without it, refuse with
+// 400 CONFIRM_REQUIRED. Logs the count only, never SMS content/TrxIDs.
+adminSms.post('/delete-all', async (req, res) => {
+  try {
+    if (req.body?.confirm !== true) {
+      return res.status(400).json({
+        error: 'CONFIRM_REQUIRED',
+        message: 'সব SMS মুছতে নিশ্চিত করুন — এই কাজটি ফেরানো যাবে না।',
+      });
+    }
+    const r = await db.query(`DELETE FROM incoming_sms RETURNING id`);
+    const deleted = r.rows.length;
+    await logActivity(req.user.id, 'sms.delete-all', { count: deleted });
+    res.json({ ok: true, deleted });
+  } catch (e) {
+    safeLog('[sms] delete-all error:', e.message);
     res.status(500).json({ error: 'FAILED' });
   }
 });

@@ -246,6 +246,8 @@ describe('adminSms routes', () => {
     db.__routeQuery([
       ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ['SELECT COUNT(*) FROM incoming_sms s', { rows: [{ count: '2' }] }],
+      // Delete All added a grand-total COUNT (exact query, no WHERE).
+      [(t) => t.trim() === 'SELECT COUNT(*) FROM incoming_sms', { rows: [{ count: '2' }] }],
       ['FROM incoming_sms s', { rows: [{ id: 's1' }] }],
     ]);
     const r = await withAdmin(request(adminApp()).get('/api/admin/sms?matched=no&page=1')).expect(200);
@@ -484,6 +486,8 @@ describe('GET /api/admin/sms — pagination (audit #36)', () => {
     db.__routeQuery([
       ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ['SELECT COUNT(*) FROM incoming_sms s', { rows: [{ count: '61' }] }],
+      // Delete All added a grand-total COUNT (exact query, no WHERE).
+      [(t) => t.trim() === 'SELECT COUNT(*) FROM incoming_sms', { rows: [{ count: '61' }] }],
       ['FROM incoming_sms s', { rows: [{ id: 's1' }] }],
     ]);
     const r = await withAdmin(request(adminApp()).get('/api/admin/sms?matched=no&page=2&limit=30')).expect(200);
@@ -709,17 +713,67 @@ describe('SMS delete system', () => {
     expect(JSON.parse(acts[0][1][2])).toEqual({ count: 0 });
   });
 
+  test('POST /delete-all — without confirm flag → 400 CONFIRM_REQUIRED, nothing deleted', async () => {
+    const r = await withAdmin(request(adminApp()).post('/api/admin/sms/delete-all')).send({}).expect(400);
+    expect(r.body.error).toBe('CONFIRM_REQUIRED');
+    // No DELETE ran at all without the confirm flag.
+    expect(delCalls()).toHaveLength(0);
+    expect(activityCalls()).toHaveLength(0);
+  });
+
+  test('POST /delete-all — with confirm:true deletes EVERYTHING (matched + unmatched), returns count', async () => {
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      // 3 rows: the mock cannot tell matched from unmatched, so the
+      // SQL itself is the proof — it must have NO guard at all.
+      ['DELETE FROM incoming_sms', { rows: [{ id: 's1' }, { id: 's2' }, { id: 's3' }] }],
+    ]);
+    const r = await withAdmin(request(adminApp()).post('/api/admin/sms/delete-all'))
+      .send({ confirm: true }).expect(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.deleted).toBe(3);
+    // The DELETE has no WHERE clause: no matched guard, no ignored filter.
+    expect(delCalls()).toHaveLength(1);
+    expect(delCalls()[0][0]).not.toContain('matched_recharge_id IS NULL');
+    expect(delCalls()[0][0]).not.toContain("parse_status = 'ignored'");
+    expect(delCalls()[0][0]).not.toContain('WHERE');
+    const acts = activityCalls();
+    expect(acts).toHaveLength(1);
+    expect(acts[0][1][1]).toBe('sms.delete-all');
+    expect(JSON.parse(acts[0][1][2])).toEqual({ count: 3 });
+  });
+
+  test('POST /delete-all — zero SMS deletes nothing (count 0)', async () => {
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      ['DELETE FROM incoming_sms', { rows: [] }],
+    ]);
+    const r = await withAdmin(request(adminApp()).post('/api/admin/sms/delete-all'))
+      .send({ confirm: true }).expect(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.deleted).toBe(0);
+    expect(delCalls()).toHaveLength(1);
+    const acts = activityCalls();
+    expect(acts).toHaveLength(1);
+    expect(JSON.parse(acts[0][1][2])).toEqual({ count: 0 });
+  });
+
   test('GET /api/admin/sms — list carries ignored_total for the bulk button', async () => {
     db.__routeQuery([
       ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       // The ignored-count query must be matched before the generic
       // total-count handler (routeQuery takes the first match).
       ["parse_status = 'ignored'", { rows: [{ count: '5' }] }],
+      // The grand-total query is exactly this string (no WHERE); the
+      // filtered total carries ' s' + a WHERE, so the exact matcher
+      // only fires for total_all.
+      [(t) => t.trim() === 'SELECT COUNT(*) FROM incoming_sms', { rows: [{ count: '7' }] }],
       ['SELECT COUNT(*) FROM incoming_sms', { rows: [{ count: '2' }] }],
       ['FROM incoming_sms s', { rows: [] }],
     ]);
     const r = await withAdmin(request(adminApp()).get('/api/admin/sms?matched=no')).expect(200);
     expect(r.body.total).toBe(2);
     expect(r.body.ignored_total).toBe(5);
+    expect(r.body.total_all).toBe(7);
   });
 });
