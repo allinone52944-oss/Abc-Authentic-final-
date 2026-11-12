@@ -93,7 +93,7 @@ describe('SMS hub split (admin-sms.js)', () => {
 
   test('admin.html loads the SMS chunk BEFORE admin.js (and bumps its version)', () => {
     const html = read('admin.html');
-    expect(html).toContain('<script src="/js/admin-sms.js?v=20261111-1"></script>');
+    expect(html).toContain('<script src="/js/admin-sms.js?v=20261111-2"></script>');
     expect(html).toContain('<script src="/js/admin.js?v=20261111-11"></script>');
     expect(html.indexOf('admin-sms.js')).toBeLessThan(html.indexOf('/js/admin.js?v=20261111-11'));
   });
