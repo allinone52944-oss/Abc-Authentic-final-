@@ -281,6 +281,12 @@ describe('sidebar-unified-orders: one orders section, bulk delete, userTotal', (
     expect(ADMIN_SRC.split('value="land-mouza-map"').length - 1).toBeGreaterThanOrEqual(2);
     expect(ADMIN_SRC).toContain("s.engine_id === 'land-mouza-map' ? ' selected' : ''");
   });
+  test('admin engine dropdowns (create + edit) include passport + sanad (2026-11-13)', () => {
+    expect(ADMIN_SRC.split('value="passport"').length - 1).toBeGreaterThanOrEqual(2);
+    expect(ADMIN_SRC.split('value="sanad"').length - 1).toBeGreaterThanOrEqual(2);
+    expect(ADMIN_SRC).toContain("s.engine_id === 'passport' ? ' selected' : ''");
+    expect(ADMIN_SRC).toContain("s.engine_id === 'sanad' ? ' selected' : ''");
+  });
   test('orders list fetches only the unified endpoint with kind labels', () => {
     expect(ADMIN_SRC).toContain("'/admin/unified-services?limit=50&page='");
     expect(ADMIN_SRC).toContain("KIND_LABEL = { order: 'অর্ডার', delivery: 'ডেলিভারি', application: 'আবেদন' }");

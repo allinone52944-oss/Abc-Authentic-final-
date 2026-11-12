@@ -98,6 +98,16 @@ describe('service-detail routing (the logout bug)', () => {
     expect(sd).toContain("s.engine_id === 'land-scan') { engineUrl = '/land.html?mode=scan'");
     expect(sd).toContain("s.engine_id === 'land-verify') { engineUrl = '/land.html?mode=verify'");
   });
+  test('passport + sanad engines map to their pages (592f4e2 move)', () => {
+    // The two pages moved into frontend/ in 592f4e2; the detail
+    // page maps them explicitly (not just the generic
+    // '/'+engine_id+'.html' rule), so a routing regression can
+    // never send their customers to a nonexistent page.
+    expect(sd).toContain("s.engine_id === 'passport') { engineUrl = '/passport.html'");
+    expect(sd).toContain("s.engine_id === 'sanad') { engineUrl = '/sanad.html'");
+    expect(fs.existsSync(path.join(ROOT, 'frontend', 'passport.html'))).toBe(true);
+    expect(fs.existsSync(path.join(ROOT, 'frontend', 'sanad.html'))).toBe(true);
+  });
   test('land.html honours the ?mode= preselect', () => {
     const html = read('frontend/land.html');
     expect(html).toContain("new URLSearchParams(location.search).get('mode')");
