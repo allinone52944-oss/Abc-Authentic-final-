@@ -3697,6 +3697,8 @@ window.AdmTx = {
         return;
       }
       admToast('রিচার্জ সফল 🎉', 'গ্রাহকের ওয়ালেটে সফলভাবে ব্যালেন্স যোগ হয়েছে।', 'recharge');
+      // Bug 6 (follow-up): approve ok but WhatsApp failed — warn, don't hide it.
+      if (d.notify && !d.notify.whatsapp) admToast('সতর্কতা', 'গ্রাহককে জানানো যায়নি', 'error');
       show('recharge');
     } finally { this._appr.delete(id); }
   },
