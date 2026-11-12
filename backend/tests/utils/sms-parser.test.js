@@ -74,6 +74,33 @@ describe('parseSms — amount formats', () => {
   });
 });
 
+describe('parseSms — TrxID beats Reference (Bug #5)', () => {
+  test('Reference before TrxID → real TrxID wins', () => {
+    const p = parseSms('Reference: 20261112001. TrxID: DKC4E2R81M. Tk 500.00 received from 01712345678.', 'bKash');
+    expect(p.trxid).toBe('DKC4E2R81M');
+  });
+  test('TrxID before Reference → real TrxID still wins', () => {
+    const p = parseSms('TrxID: DKC4E2R81M. Reference: 20261112001. Tk 500.00 received from 01712345678.', 'bKash');
+    expect(p.trxid).toBe('DKC4E2R81M');
+  });
+  test('TxnID beats Ref too', () => {
+    const p = parseSms('Ref: 87654321. TxnID: XYZ123ABC credited Tk 10.', 'bKash');
+    expect(p.trxid).toBe('XYZ123ABC');
+  });
+  test('Reference-only SMS still falls back to the Reference', () => {
+    const p = parseSms('Reference: 20261112001. Tk 500.00 received from 01712345678.', 'bKash');
+    expect(p.trxid).toBe('20261112001');
+  });
+  test('Ref-only SMS still falls back to the Ref', () => {
+    const p = parseSms('Ref: QWE789RTY Tk 10 received.', 'bKash');
+    expect(p.trxid).toBe('QWE789RTY');
+  });
+  test('TrxID-only SMS unchanged', () => {
+    const p = parseSms('You have received Tk 500.00 from 01712345678. TrxID 9HXK2LQM4N.', 'bKash');
+    expect(p.trxid).toBe('9HXK2LQM4N');
+  });
+});
+
 describe('parseSms — direction', () => {
   test('cash-out is "out"', () => {
     const p = parseSms('Cash Out Tk 200.00 sent to 01900000000. TrxID OUT123ABC.', 'bKash');

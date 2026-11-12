@@ -20,7 +20,13 @@ const RECEIVED_AMOUNT_RE = /(?:received|credited|cash\s*in)[\s\S]{0,40}?(?:Tk|TK
 
 // Complete bounded token: never silently truncate a long provider ID.
 // The manual form accepts up to 40 characters, so the parser does too.
-const TRXID_RE = /(?:TrxID|TxnID|Txn\s*ID|Reference|Ref)\s*:?\s*([A-Z0-9]{6,40})(?![A-Z0-9])/i;
+// TrxID priority (Bug #5): an explicit TrxID/TxnID always wins over a
+// "Reference"/"Ref" number. The old single regex took the LEFTMOST match,
+// so "Reference: 20261112001. TrxID: DKC4E2R81M" returned the Reference.
+// The Reference/Ref pattern stays as a fallback for SMS that carry no
+// explicit TrxID — those still get a trxid.
+const TRXID_RE = /(?:TrxID|TxnID|Txn\s*ID)\s*:?\s*([A-Z0-9]{6,40})(?![A-Z0-9])/i;
+const REF_RE = /(?:Reference|Ref)\s*:?\s*([A-Z0-9]{6,40})(?![A-Z0-9])/i;
 
 // Sender mobile: "from 017XXXXXXXX"
 const FROM_RE = /from\s+(01[3-9]\d{8})/i;
@@ -69,7 +75,8 @@ function parseAmount(rawMessage) {
 function parseSms(rawMessage, rawSender) {
   if (!rawMessage || !String(rawMessage).trim()) return null;
 
-  const trxidM = String(rawMessage).match(TRXID_RE);
+  // Real TrxID first; Reference/Ref only when no explicit TrxID exists.
+  const trxidM = String(rawMessage).match(TRXID_RE) || String(rawMessage).match(REF_RE);
   const amount = parseAmount(rawMessage);
   if (!trxidM && amount == null) return null; // nothing usable
 
