@@ -189,6 +189,55 @@ describe('POST /api/sms/incoming — auto-match', () => {
     expect(db.__client.query.mock.calls.filter(c => /wallet_apply/.test(c[0]))).toHaveLength(0);
   });
 
+  test('late SMS auto-matches by amount+sender (Rule 2): no time window', async () => {
+    // The bug: a late SMS (>30 min after the recharge) never matched —
+    // both match paths had a hard 30-minute window and no retry. The
+    // window is gone; the guards that stay are exact amount + sender +
+    // method, a real SMS TrxID, an unmatched SMS, and exactly one
+    // candidate. The mock has no clock, so the regression is asserted
+    // on the SQL the code actually issues: it must carry no window.
+    const auto = { id: 'auto1', user_id: 'u1', amount: 500, method: 'bkash_personal', sender_no: '01712345678', trxid: null, status: 'pending' };
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      ...atomicSmsHandlers('9HXK2LQM4N'),
+      ['FROM incoming_sms', { rows: [] }],
+      ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
+      ['UPPER(trxid) = UPPER($1)', { rows: [] }],
+      ['AND amount = $1 AND sender_no = $2', { rows: [auto] }],
+      ['SELECT * FROM transactions', { rows: [auto] }],
+    ]);
+    const r = await postIncoming({ secret: SECRET, message: BKASH_MSG, sender: 'bKash' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, matched: true, how: 'amount+sender', tx_id: 'auto1' });
+    const wallet = db.__client.query.mock.calls.find((c) => /wallet_apply/.test(c[0]));
+    expect(wallet).toBeDefined();
+    expect(wallet[1]).toEqual(['u1', 500, 'recharge', 'tx-auto1', 'auto1']);
+    const rule2 = db.__client.query.mock.calls.find((c) => /AND amount = \$1 AND sender_no = \$2/.test(c[0]));
+    expect(rule2).toBeDefined();
+    expect(rule2[0]).not.toContain("INTERVAL '30 minutes'");
+    // Exact values only — a wrong amount or sender can never match.
+    expect(rule2[1]).toEqual([500, '01712345678', ['bkash_payment', 'bkash_personal']]);
+    // Audit #33 — the auto-match is recorded as auto
+    const smsUpd = db.__client.query.mock.calls.find((c) => /UPDATE incoming_sms SET matched_recharge_id/.test(c[0]));
+    expect(smsUpd).toBeDefined();
+    expect(smsUpd[1]).toEqual(['auto1', 's1', 'auto']);
+  });
+
+  test('Rule 2 with no exact amount+sender recharge → no match, no credit', async () => {
+    // Wrong amount OR wrong sender: the lookup finds nothing, so the
+    // SMS stays unmatched and no wallet is touched.
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      ...atomicSmsHandlers('9HXK2LQM4N'),
+      ['FROM incoming_sms', { rows: [] }],
+      ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
+      ['UPPER(trxid) = UPPER($1)', { rows: [] }],
+      ['AND amount = $1 AND sender_no = $2', { rows: [] }],
+    ]);
+    const r = await postIncoming({ secret: SECRET, message: BKASH_MSG, sender: 'bKash' }).expect(200);
+    expect(r.body.matched).toBe(false);
+    expect(db.__client.query.mock.calls.filter(c => /wallet_apply/.test(c[0]))).toHaveLength(0);
+  });
+
   test('an already consumed provider TrxID cannot credit another request', async () => {
     db.__routeQuery([
       ["status = 'approved' AND type = 'recharge'", { rows: [] }],
@@ -415,10 +464,10 @@ describe('findMatch amount+sender safety', () => {
   const fuzzyStart = src.indexOf('// 2) Number-only Auto');
   const fuzzy = src.slice(fuzzyStart, src.indexOf('\n}\n', fuzzyStart) + 2);
 
-  test('sender fallback is Auto-only, recent, real-TrxID and ambiguity-safe', () => {
+  test('sender fallback is Auto-only, real-TrxID and ambiguity-safe (no time window — late SMS must match)', () => {
     expect(fuzzy).toContain('parsed.trxid');
     expect(fuzzy).toContain("(trxid IS NULL OR trxid ~ '^AUTO-[0-9A-F]{12}$')");
-    expect(fuzzy).toContain("created_at >= NOW() - INTERVAL '30 minutes'");
+    expect(fuzzy).not.toContain("INTERVAL '30 minutes'");
     expect(fuzzy).toContain('LIMIT 2');
     expect(fuzzy).toContain('r.rows.length === 1');
     expect(fuzzy).not.toContain('LIMIT 1');

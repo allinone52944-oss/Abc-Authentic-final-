@@ -433,6 +433,61 @@ describe('wallet', () => {
   });
 });
 
+describe('POST /api/wallet/recharge/auto — number-only Auto (late SMS)', () => {
+  const BKASH_SMS = 'You have received Tk 500.00 from 01712345678. TrxID 9HXK2LQM4N. New balance Tk 1200.00.';
+  const TX = { id: 'auto1', user_id: 'u1', type: 'recharge', amount: 500, method: 'bkash_personal', sender_no: '01712345678', trxid: null, status: 'pending' };
+  const SMS = { id: 's1', amount: 500, sender: '01712345678', method: 'bkash', trxid: '9HXK2LQM4N', matched_recharge_id: null, parse_status: 'parsed', raw_message: BKASH_SMS, raw_sender: '16247' };
+
+  test('late SMS (>30 min) still auto-matches by amount+sender: no time window', async () => {
+    // The bug: tryAutoMatchBySender only looked at SMS from the last
+    // 30 minutes, so a late SMS never matched a waiting Auto recharge
+    // and no retry ever ran. The window is gone; the guards that stay
+    // are exact amount + sender + method, an unmatched parsed SMS with
+    // a real TrxID, direction 'in', and exactly one candidate.
+    db.__routeQuery([
+      ['SELECT * FROM transactions WHERE user_id', { rows: [] }],
+      ['SELECT COUNT(*) FROM transactions WHERE user_id', { rows: [{ count: '0' }] }],
+      ['INSERT INTO transactions', { rows: [TX] }],
+      ['SELECT * FROM incoming_sms', { rows: [SMS] }],
+      ['SELECT id, trxid, matched_recharge_id FROM incoming_sms', { rows: [{ id: 's1', trxid: '9HXK2LQM4N', matched_recharge_id: null }] }],
+      ['WHERE id <> $1', { rows: [] }],
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      ['WHERE id = $1 AND status = \'pending\' AND type = \'recharge\'', { rows: [TX] }],
+      ['SELECT * FROM wallet_apply', { rows: [{ new_balance: '600', tx_id: 'auto1' }] }],
+      ['UPDATE transactions SET admin_id = NULL', { rows: [] }],
+      ['UPDATE incoming_sms SET matched_recharge_id', { rows: [{ id: 's1' }] }],
+      ['INSERT INTO activity_log', { rows: [] }],
+    ]);
+    const r = await withUser(request(app()).post('/api/wallet/recharge/auto'))
+      .send({ method: 'bkash_personal', sender_no: '01712345678', amount: 500 }).expect(201);
+    expect(r.body.transaction.id).toBe('auto1');
+    expect(r.body.transaction.status).toBe('approved');
+    const wallet = db.__client.query.mock.calls.find((c) => /SELECT \* FROM wallet_apply/.test(c[0]));
+    expect(wallet).toBeDefined();
+    // The SMS lookup must carry NO time window — the regression
+    // assertion: with the window present, this query contains it.
+    const lookup = db.__client.query.mock.calls.find((c) => /SELECT \* FROM incoming_sms/.test(c[0]));
+    expect(lookup).toBeDefined();
+    expect(lookup[0]).not.toContain("INTERVAL '30 minutes'");
+    // Exact values only — a wrong amount or sender can never match.
+    expect(lookup[1]).toEqual([500, '01712345678', 'bkash']);
+  });
+
+  test('no matching SMS (wrong amount/sender) → stays pending, no credit', async () => {
+    db.__routeQuery([
+      ['SELECT * FROM transactions WHERE user_id', { rows: [] }],
+      ['SELECT COUNT(*) FROM transactions WHERE user_id', { rows: [{ count: '0' }] }],
+      ['INSERT INTO transactions', { rows: [TX] }],
+      ['SELECT * FROM incoming_sms', { rows: [] }],
+    ]);
+    const r = await withUser(request(app()).post('/api/wallet/recharge/auto'))
+      .send({ method: 'bkash_personal', sender_no: '01712345678', amount: 500 }).expect(201);
+    expect(r.body.transaction.id).toBe('auto1');
+    expect(r.body.transaction.status).toBe('pending');
+    expect(db.__client.query.mock.calls.filter((c) => /SELECT \* FROM wallet_apply/.test(c[0]))).toHaveLength(0);
+  });
+});
+
 describe('POST /api/wallet/coupon (security fix: transaction + CODE_TOO_LONG)', () => {
   function couponHandlers(coupon) {
     return [

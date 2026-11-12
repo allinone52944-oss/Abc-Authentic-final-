@@ -201,7 +201,11 @@ async function findMatch(client, parsed) {
   }
   // 2) Number-only Auto: amount + sender + provider + real SMS TrxID.
   // A manual request with a wrong TrxID must NEVER fall back to this path.
-  // Only a unique, recent Auto request is eligible; ambiguity stays pending.
+  // Only a unique Auto request is eligible; ambiguity stays pending.
+  // No time window: a late SMS must still match. The guards are exact
+  // amount + sender + method, a real SMS TrxID, an unmatched SMS, and
+  // exactly one candidate — and one payment credits once (approve
+  // consumes the SMS atomically), so age alone cannot mis-credit.
   if (parsed.amount != null && parsed.sender && parsed.trxid) {
     const methods = SMS_METHODS[parsed.method] || [];
     if (!methods.length) return null;
@@ -210,7 +214,6 @@ async function findMatch(client, parsed) {
        WHERE type = 'recharge' AND status = 'pending'
          AND (trxid IS NULL OR trxid ~ '^AUTO-[0-9A-F]{12}$')
          AND amount = $1 AND sender_no = $2 AND method = ANY($3)
-         AND created_at >= NOW() - INTERVAL '30 minutes'
        ORDER BY created_at DESC
        LIMIT 2`,
       [parsed.amount, parsed.sender, methods]
@@ -709,7 +712,8 @@ async function tryAutoMatchRecharge(tx) {
 
 // Auto (number-only) late submit: the SMS arrived BEFORE the user's
 // auto request. Match an unmatched money-in SMS with the same amount,
-// sender number and method family from the last 30 minutes.
+// sender number and method family. No time window: a late SMS must
+// still match (same guards as findMatch Rule 2).
 async function tryAutoMatchBySender(tx) {
   if (!tx || !tx.id || tx.status !== 'pending' || !tx.sender_no) return null;
   const fam = String(tx.method || '').startsWith('bkash') ? 'bkash' : tx.method;
@@ -718,11 +722,13 @@ async function tryAutoMatchBySender(tx) {
     await client.query('BEGIN');
     await client.query("SELECT pg_advisory_xact_lock(hashtext('recharge-credit'))");
     const r = await client.query(
+      // No time window: a late SMS must still match (same guards as
+      // findMatch Rule 2 — exact amount + sender + method, unmatched
+      // parsed SMS with a real TrxID, exactly one candidate).
       `SELECT * FROM incoming_sms
        WHERE matched_recharge_id IS NULL AND parse_status = 'parsed'
          AND trxid IS NOT NULL
          AND amount = $1 AND sender = $2 AND method = $3
-         AND created_at >= NOW() - INTERVAL '30 minutes'
        ORDER BY created_at DESC LIMIT 5
        FOR UPDATE`,
       [Number(tx.amount), String(tx.sender_no).trim(), fam]
