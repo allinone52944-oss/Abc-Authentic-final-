@@ -80,6 +80,13 @@ window.renderSmsTab = async () => {
               (matched
                 ? '<span class="st-badge active">✅ ম্যাচড</span>'
                 : '<span class="st-badge pending">⏳ আনম্যাচড</span>') +
+              // Bug #4 — direction badge: money-in vs money-out. Old rows
+              // (direction NULL) and 'unknown' show no badge.
+              (s.direction === 'in'
+                ? '<span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:#dcfce7;border:1px solid #86efac;color:#15803d;">⬇️ গ্রহণ</span>'
+                : s.direction === 'out'
+                  ? '<span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:#fee2e2;border:1px solid #fca5a5;color:#b91c1c;">⬆️ পাঠানো</span>'
+                  : '') +
             '</div>' +
             '<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">' +
               'প্রেরক: <b>' + esc(s.sender || '—') + '</b> • TrxID: <span class="adm-code-chip" onclick="AdmInv.copyText(\'' + esc(s.trxid || '') + '\')">' + esc(s.trxid || '—') + ' 📋</span>' +
@@ -162,7 +169,7 @@ window.AdmSms = {
     const d = await r.json();
     // Recharge Bug 4: SMS_ALREADY_MATCHED means a racing actor linked this
     // SMS to another recharge — say so plainly instead of the raw code.
-    if (!r.ok) { alert(d.error === 'SMS_ALREADY_MATCHED' ? 'এই SMS ইতিমধ্যে অন্য একটি রিচার্জে ব্যবহৃত হয়েছে। তালিকা নতুন করে দেখুন।' : d.error === 'NOT_A_PAYMENT_SMS' ? 'এই SMS পেমেন্ট SMS নয় — এটি দিয়ে রিচার্জ ম্যাচ করা যাবে না।' : 'ব্যর্থ: ' + d.error); return; }
+    if (!r.ok) { alert(d.error === 'SMS_ALREADY_MATCHED' ? 'এই SMS ইতিমধ্যে অন্য একটি রিচার্জে ব্যবহৃত হয়েছে। তালিকা নতুন করে দেখুন।' : d.error === 'NOT_A_PAYMENT_SMS' ? 'এই SMS পেমেন্ট SMS নয় — এটি দিয়ে রিচার্জ ম্যাচ করা যাবে না।' : d.error === 'MONEY_OUT_SMS' ? 'এই SMS টাকা পাঠানোর SMS — এটি দিয়ে রিচার্জ ম্যাচ করা যাবে না।' : 'ব্যর্থ: ' + d.error); return; }
     alert('✅ ম্যাচ সফল! টাকা যোগ হয়েছে।');
     show('sms');
   },

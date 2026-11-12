@@ -146,6 +146,36 @@ describe('POST /api/sms/incoming — parsing', () => {
     expect(r2.body).toMatchObject({ ok: true, duplicate: true, matched: false, sms_id: 's1' });
     expect(countInserts()).toBe(1); // still 1 — no second row
   });
+
+  test('webhook stores direction: money-in → "in", money-out → "out", unparsed → null (Bug #4)', async () => {
+    const SENT_MSG = 'You have sent Tk 100.00 to 01712345678. TrxID 9HXK2LQM4N.';
+    const insertHandlers = () => [
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      ['FROM incoming_sms', { rows: [] }], // dup check
+      ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
+      ['UPPER(trxid) = UPPER($1)', { rows: [] }], // exact trxid (findMatch)
+      ['AND amount = $1 AND sender_no = $2', { rows: [] }], // fuzzy (findMatch)
+    ];
+    const insertParams = () => db.__client.query.mock.calls
+      .find((c) => /INSERT INTO incoming_sms/.test(c[0]))[1];
+    // Money-in: direction 'in' (param index 7, after parse_status).
+    db.__routeQuery(insertHandlers());
+    const r1 = await postIncoming({ secret: SECRET, message: BKASH_MSG, sender: 'bKash' }).expect(200);
+    expect(r1.body.parsed).toBe(true);
+    expect(insertParams()[7]).toBe('in');
+    // Money-out: direction 'out', no auto-match.
+    db.__reset();
+    db.__routeQuery(insertHandlers());
+    const r2 = await postIncoming({ secret: SECRET, message: SENT_MSG, sender: 'bKash' }).expect(200);
+    expect(r2.body).toMatchObject({ ok: true, matched: false, parsed: true });
+    expect(insertParams()[7]).toBe('out');
+    // Unparsed: direction NULL (same as legacy rows).
+    db.__reset();
+    db.__routeQuery(insertHandlers());
+    const r3 = await postIncoming({ secret: SECRET, message: 'hello world', sender: 'bKash' }).expect(200);
+    expect(r3.body.parsed).toBe(false);
+    expect(insertParams()[7]).toBeNull();
+  });
 });
 
 describe('POST /api/sms/incoming — auto-match', () => {
@@ -401,6 +431,35 @@ describe('adminSms routes', () => {
     expect(db.__client.query.mock.calls.filter((c) => /wallet_apply/.test(c[0]))).toHaveLength(0);
   });
 
+  test('POST /:id/match: money-out SMS → 400 MONEY_OUT_SMS, recharge stays pending (Bug #4)', async () => {
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', matched_recharge_id: null, parse_status: 'parsed', amount: '100', trxid: 'ABC123', direction: 'out' }] }],
+    ]);
+    const r = await withAdmin(request(adminApp()).post('/api/admin/sms/s1/match'))
+      .send({ transaction_id: 't1' }).expect(400);
+    expect(r.body.error).toBe('MONEY_OUT_SMS');
+    // No approve runs: no wallet credit, no matched_recharge_id update.
+    expect(db.__client.query.mock.calls.filter((c) => /wallet_apply/.test(c[0]))).toHaveLength(0);
+    expect(db.__client.query.mock.calls.find((c) => /UPDATE incoming_sms SET matched_recharge_id/.test(c[0]))).toBeUndefined();
+  });
+
+  test('POST /:id/match: direction NULL (legacy row) is NOT blocked — match proceeds (Bug #4)', async () => {
+    // Old rows stored before the direction column have direction NULL;
+    // blocking them would break existing unmatched SMS. The happy-path
+    // flow must still work when direction is absent.
+    const TX = { id: 't1', user_id: 'u1', amount: '500', trxid: 'X', status: 'pending' };
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      ...atomicSmsHandlers(),
+      ['SELECT * FROM incoming_sms WHERE id', { rows: [{ id: 's1', matched_recharge_id: null, parse_status: 'parsed', amount: '500', trxid: 'ABC123', direction: null }] }],
+      ['SELECT * FROM transactions', { rows: [TX] }],
+    ]);
+    const r = await withAdmin(request(adminApp()).post('/api/admin/sms/s1/match'))
+      .send({ transaction_id: 't1' }).expect(200);
+    expect(r.body).toMatchObject({ ok: true, tx_id: 't1' });
+  });
+
   test('POST /:id/ignore: not found → 404; ok → 200', async () => {
     db.__routeQuery([
       ["status = 'approved' AND type = 'recharge'", { rows: [] }],['UPDATE incoming_sms SET parse_status', { rows: [] }]]);
@@ -561,6 +620,17 @@ describe('migration 051_sms_matched_via.sql (audit #33)', () => {
   test('adds the matched_via column with the auto/manual check', () => {
     expect(mig).toContain('ALTER TABLE incoming_sms ADD COLUMN IF NOT EXISTS matched_via VARCHAR(10)');
     expect(mig).toContain("CHECK (matched_via IN ('auto', 'manual'))");
+  });
+});
+
+describe('migration 057_sms_direction.sql (Bug #4)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const mig = fs.readFileSync(
+    path.join(__dirname, '../../../database/migrations/057_sms_direction.sql'), 'utf8');
+  test('adds the direction column with the in/out/unknown check', () => {
+    expect(mig).toContain('ALTER TABLE incoming_sms ADD COLUMN IF NOT EXISTS direction VARCHAR(10)');
+    expect(mig).toContain("CHECK (direction IN ('in', 'out', 'unknown'))");
   });
 });
 

@@ -93,7 +93,7 @@ describe('SMS hub split (admin-sms.js)', () => {
 
   test('admin.html loads the SMS chunk BEFORE admin.js (and bumps its version)', () => {
     const html = read('admin.html');
-    expect(html).toContain('<script src="/js/admin-sms.js?v=20261111-3"></script>');
+    expect(html).toContain('<script src="/js/admin-sms.js?v=20261111-4"></script>');
     expect(html).toContain('<script src="/js/admin.js?v=20261111-11"></script>');
     expect(html.indexOf('admin-sms.js')).toBeLessThan(html.indexOf('/js/admin.js?v=20261111-11'));
   });
@@ -186,6 +186,19 @@ describe('SMS hub — render + delete UI', () => {
     await render([OTP, UNMATCHED], 0);
     expect(content.innerHTML).toContain("AdmSms.match('sms-fake-1')");
     expect(content.innerHTML).toContain('sms-tx-sms-fake-1');
+  });
+
+  test('direction badge: money-in shows ⬇️ গ্রহণ, money-out shows ⬆️ পাঠানো, NULL shows none (Bug #4)', async () => {
+    const IN = { ...UNMATCHED, id: 'sms-in-1', direction: 'in' };
+    const OUT = { ...UNMATCHED, id: 'sms-out-1', direction: 'out' };
+    const LEGACY = { ...UNMATCHED, id: 'sms-legacy-1', direction: null };
+    await render([IN, OUT, LEGACY], 0);
+    const html = content.innerHTML;
+    // Exactly one badge of each kind across three cards — the legacy
+    // row (NULL direction) gets no direction badge.
+    const count = (s) => html.split(s).length - 1;
+    expect(count('⬇️ গ্রহণ')).toBe(1);
+    expect(count('⬆️ পাঠানো')).toBe(1);
   });
 
   test('match still works (no regression from the split)', async () => {

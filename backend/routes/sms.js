@@ -297,16 +297,20 @@ webhook.post('/incoming', async (req, res) => {
         }
       }
 
+      // Bug #4 — store the parser's direction so the hub can badge money-in
+      // vs money-out and manual match can refuse money-out SMS. Unparsed
+      // SMS (parsed == null) stores NULL — same as legacy rows.
       const ins = await client.query(
         `INSERT INTO incoming_sms
-           (method, amount, sender, trxid, raw_message, raw_sender, parse_status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+           (method, amount, sender, trxid, raw_message, raw_sender, parse_status, direction)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
         [
           parsed ? parsed.method : 'unknown',
           parsed ? parsed.amount : null,
           parsed ? parsed.sender : null,
           parsed ? parsed.trxid : null,
           rawMessage, rawSender || null, parseStatus,
+          parsed ? parsed.direction : null,
         ]
       );
       const smsId = ins.rows[0].id;
@@ -518,6 +522,17 @@ adminSms.post('/:id/match', async (req, res) => {
         return res.status(400).json({
           error: 'NOT_A_PAYMENT_SMS',
           message: 'এই SMS পেমেন্ট SMS নয় — এটি দিয়ে রিচার্জ ম্যাচ করা যাবে না।',
+        });
+      }
+      // Bug #4 — a money-out SMS (payment sent) can never match a recharge:
+      // only money received counts. Direction 'unknown'/NULL (old rows
+      // stored before the direction column) is NOT blocked — blocking it
+      // would break existing unmatched SMS.
+      if (sms.direction === 'out') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: 'MONEY_OUT_SMS',
+          message: 'এই SMS টাকা পাঠানোর SMS — এটি দিয়ে রিচার্জ ম্যাচ করা যাবে না।',
         });
       }
       // Fraud guard: manual match must also agree on the amount.
