@@ -28,11 +28,40 @@ const RECEIVED_AMOUNT_RE = /(?:received|credited|cash\s*in)[\s\S]{0,40}?(?:Tk|TK
 const TRXID_RE = /(?:TrxID|TxnID|Txn\s*ID)\s*:?\s*([A-Z0-9]{6,40})(?![A-Z0-9])/i;
 const REF_RE = /(?:Reference|Ref)\s*:?\s*([A-Z0-9]{6,40})(?![A-Z0-9])/i;
 
-// Sender mobile: "from 017XXXXXXXX"
-const FROM_RE = /from\s+(01[3-9]\d{8})/i;
+// Sender mobile (Bug #6): every accepted spelling normalizes to the exact
+// 11-digit 01XXXXXXXXX form the matcher relies on. Accepted:
+//   "from 017XXXXXXXX" (existing), "from +8801712345678" (+880 prefix),
+//   separators ("from 0171-2345678", "from 0171 234 5678"),
+//   "Sender: 017XXXXXXXX" / "Sender No: 017XXXXXXXX",
+//   Rocket "A/C:017XXXXXXXX-X" (trailing check digit dropped).
+// A candidate that cannot normalize to 01[3-9]XXXXXXXXX returns null —
+// never guessed. "to 017XXXXXXXX" is deliberately NOT a sender: on
+// money-out SMS that number is the recipient, not the payer, and sender
+// feeds the matcher.
+function normalizeBdMobile(raw) {
+  if (!raw) return null;
+  let d = String(raw).replace(/[\s\-()]/g, '');
+  if (d.startsWith('+880')) d = '0' + d.slice(4);
+  else if (d.startsWith('880')) d = '0' + d.slice(3);
+  if (!/^01[3-9]\d{8}$/.test(d)) return null;
+  return d;
+}
 
-// Rocket account: "A/C:017XXXXXXXX-X" / "A/C 017XXXXXXXXX"
-const ACCT_RE = /A\/C:?\s*(01[3-9]\d{7,10}(?:-\d)?)/i;
+function parseSender(rawMessage) {
+  const m = String(rawMessage || '');
+  const candidates = [];
+  const fromM = m.match(/from\s+(\+?[\d][\d\s\-()]{7,13}\d)/i);
+  if (fromM) candidates.push(fromM[1]);
+  const senderM = m.match(/\bsender(?:\s+no\.?)?\s*:?\s*(\+?[\d][\d\s\-()]{7,13}\d)/i);
+  if (senderM) candidates.push(senderM[1]);
+  const acctM = m.match(/A\/C:?\s*(\+?[\d][\d\s\-()]{7,13}\d)/i);
+  if (acctM) candidates.push(acctM[1].replace(/-\d$/, ''));
+  for (const c of candidates) {
+    const n = normalizeBdMobile(c);
+    if (n) return n;
+  }
+  return null;
+}
 
 function detectMethod(rawMessage, rawSender) {
   const s = String(rawSender || '').trim().toLowerCase();
@@ -80,9 +109,7 @@ function parseSms(rawMessage, rawSender) {
   const amount = parseAmount(rawMessage);
   if (!trxidM && amount == null) return null; // nothing usable
 
-  const fromM = String(rawMessage).match(FROM_RE);
-  const acctM = String(rawMessage).match(ACCT_RE);
-  const sender = fromM ? fromM[1] : (acctM ? acctM[1] : null);
+  const sender = parseSender(rawMessage);
 
   return {
     method: detectMethod(rawMessage, rawSender),
@@ -93,4 +120,4 @@ function parseSms(rawMessage, rawSender) {
   };
 }
 
-module.exports = { parseSms, detectMethod, detectDirection, parseAmount };
+module.exports = { parseSms, detectMethod, detectDirection, parseAmount, parseSender };

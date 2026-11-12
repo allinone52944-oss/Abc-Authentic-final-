@@ -1,5 +1,5 @@
 // Unit tests for backend/utils/sms-parser.js (pure functions).
-const { parseSms, detectMethod, detectDirection, parseAmount } = require('../../utils/sms-parser');
+const { parseSms, detectMethod, detectDirection, parseAmount, parseSender } = require('../../utils/sms-parser');
 
 describe('parseSms — bKash money-in (happy path)', () => {
   const msg = 'You have received Tk 500.00 from 01712345678. TrxID 9HXK2LQM4N. New balance Tk 1200.00.';
@@ -98,6 +98,54 @@ describe('parseSms — TrxID beats Reference (Bug #5)', () => {
   test('TrxID-only SMS unchanged', () => {
     const p = parseSms('You have received Tk 500.00 from 01712345678. TrxID 9HXK2LQM4N.', 'bKash');
     expect(p.trxid).toBe('9HXK2LQM4N');
+  });
+});
+
+describe('parseSms — sender extraction (Bug #6)', () => {
+  test('+880 prefix normalizes to 01XXXXXXXXX', () => {
+    const p = parseSms('You have received Tk 500.00 from +8801712345678. TrxID 9HXK2LQM4N.', 'bKash');
+    expect(p.sender).toBe('01712345678');
+  });
+  test('bare 880 prefix normalizes too', () => {
+    expect(parseSms('You have received Tk 500.00 from 8801712345678. TrxID 9HXK2LQM4N.', 'bKash').sender).toBe('01712345678');
+  });
+  test('hyphenated number strips the hyphen', () => {
+    expect(parseSms('You have received Tk 500.00 from 0171-2345678. TrxID 9HXK2LQM4N.', 'bKash').sender).toBe('01712345678');
+  });
+  test('spaced number strips the spaces', () => {
+    expect(parseSms('You have received Tk 500.00 from 0171 234 5678. TrxID 9HXK2LQM4N.', 'bKash').sender).toBe('01712345678');
+  });
+  test('+880 combined with hyphen', () => {
+    expect(parseSms('You have received Tk 500.00 from +8801712-345678. TrxID 9HXK2LQM4N.', 'bKash').sender).toBe('01712345678');
+  });
+  test('"Sender:" wording', () => {
+    const p = parseSms('Sender: 01712345678. Tk 500 received. TrxID ABC123XYZ.', 'bKash');
+    expect(p.sender).toBe('01712345678');
+  });
+  test('"Sender No:" wording', () => {
+    expect(parseSms('Sender No: 01712345678. Tk 500 received. TrxID ABC123XYZ.', 'bKash').sender).toBe('01712345678');
+  });
+  test('Rocket A/C check digit is dropped, never returned with a hyphen', () => {
+    const p = parseSms('Cash In Tk 250. A/C:01711112222-1 TrxID XYZ99999.', '16216');
+    expect(p.sender).toBe('01711112222');
+  });
+  test('existing "from 01XXXXXXXXX" still works', () => {
+    expect(parseSms('You have received Tk 500.00 from 01712345678. TrxID 9HXK2LQM4N.', 'bKash').sender).toBe('01712345678');
+  });
+  test('too-short number is never guessed → null', () => {
+    expect(parseSms('You have received Tk 500.00 from 01712 34567. TrxID 9HXK2LQM4N.', 'bKash').sender).toBeNull();
+  });
+  test('non-mobile prefix is never guessed → null', () => {
+    expect(parseSms('You have received Tk 500.00 from 02712345678. TrxID 9HXK2LQM4N.', 'bKash').sender).toBeNull();
+  });
+  test('"to" wording is NOT a sender (that number is the recipient)', () => {
+    const p = parseSms('You have sent Tk 100.00 to 01712345678. TrxID 9HXK2LQM4N.', 'bKash');
+    expect(p.sender).toBeNull();
+    expect(p.direction).toBe('out');
+  });
+  test('parseSender unit: +880 with hyphen normalizes directly', () => {
+    expect(parseSender('from +8801712-345678')).toBe('01712345678');
+    expect(parseSender('nothing here')).toBeNull();
   });
 });
 
