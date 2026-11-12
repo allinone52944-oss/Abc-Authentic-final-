@@ -259,24 +259,42 @@ webhook.post('/incoming', async (req, res) => {
       await client.query('BEGIN');
       await client.query("SELECT pg_advisory_xact_lock(hashtext('recharge-credit'))");
 
-      // Dedupe: same trxid already matched before → ignore.
-      // Audit #23 — case-folded: a re-delivered SMS whose TrxID
-      // differs only in case is the same SMS, not a fresh one.
+      // Dedupe: a re-delivered SMS with the same TrxID is the same
+      // SMS, not a fresh one — whether or not the first copy was
+      // already matched. Audit #23 — case-folded: a re-delivered
+      // SMS whose TrxID differs only in case is the same SMS.
       // Audit #34 — an SMS the parser could not read is 'unparsed',
       // never 'parsed': the old default lied, and the unmatched
       // counts/list (which filter on the status) then treated it as
       // a normal parsed-but-unmatched SMS. The CHECK constraint in
       // migration 005 already allows 'unparsed' — only the code
       // never used it.
+      // Bug #1 — the old check only looked for MATCHED rows, so an
+      // unmatched SMS delivered twice created a second 'parsed'
+      // row and showed up twice in the hub. An unmatched
+      // re-delivery now creates NO row at all: the original row is
+      // still there for the admin hub and for late-submit matching
+      // (tryAutoMatchRecharge / tryAutoMatchBySender look it up),
+      // so nothing is lost by ignoring the re-delivery. A
+      // re-delivery of an already-MATCHED TrxID keeps the old
+      // behaviour (stored as 'duplicate') — it can never match
+      // again and never shows in the unmatched list.
       let parseStatus = parsed ? 'parsed' : 'unparsed';
       let matchInfo = null;
       if (parsed && parsed.trxid) {
         const dup = await client.query(
-          `SELECT id FROM incoming_sms
-           WHERE UPPER(trxid) = UPPER($1) AND matched_recharge_id IS NOT NULL LIMIT 1`,
+          `SELECT id, matched_recharge_id FROM incoming_sms
+           WHERE UPPER(trxid) = UPPER($1) LIMIT 1`,
           [parsed.trxid]
         );
-        if (dup.rows.length) parseStatus = 'duplicate';
+        if (dup.rows.length) {
+          if (dup.rows[0].matched_recharge_id == null) {
+            // Unmatched re-delivery: ignore, no second row.
+            await client.query('COMMIT');
+            return res.json({ ok: true, duplicate: true, matched: false, sms_id: dup.rows[0].id });
+          }
+          parseStatus = 'duplicate';
+        }
       }
 
       const ins = await client.query(

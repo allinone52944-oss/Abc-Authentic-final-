@@ -40,7 +40,7 @@ function incomingHandlers(tx) {
   const matchedTx = { method: 'bkash_personal', ...tx };
   return [
     ["status = 'approved' AND type = 'recharge'", { rows: [] }],    ['INSERT INTO incoming_sms', { rows: [{ id: 'sms1' }] }],
-    ['SELECT id FROM incoming_sms', { rows: [] }], // not a duplicate/consumed payment
+    [(text) => text.includes('FROM incoming_sms') && text.includes('UPPER(trxid)'), { rows: [] }], // dup check + consumed check: not a duplicate/consumed payment
     ['UPPER(trxid)', { rows: [matchedTx] }], // findMatch: exact TrxID
     ['FOR UPDATE', { rows: [matchedTx] }], // recharge + SMS locks
     ['wallet_apply', { rows: [{}] }],

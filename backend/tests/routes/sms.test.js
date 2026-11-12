@@ -107,13 +107,44 @@ describe('POST /api/sms/incoming — parsing', () => {
     db.__routeQuery([
       ["status = 'approved' AND type = 'recharge'", { rows: [] }],
       ...atomicSmsHandlers('9HXK2LQM4N'),
-      ['FROM incoming_sms', { rows: [{ id: 's0' }] }], // dup found
+      ['FROM incoming_sms', { rows: [{ id: 's0', matched_recharge_id: 't1' }] }], // dup found (already matched)
       ['INSERT INTO incoming_sms', { rows: [{ id: 's9' }] }],
     ]);
     const r = await postIncoming({ secret: SECRET, message: BKASH_MSG, sender: 'bKash' }).expect(200);
     expect(r.body.matched).toBe(false);
     const ins = db.__client.query.mock.calls.find((c) => /INSERT INTO incoming_sms/.test(c[0]));
     expect(ins[1][6]).toBe('duplicate'); // parse_status
+  });
+
+  test('duplicate trxid (unmatched) → second delivery creates NO row, reports duplicate', async () => {
+    // Bug #1 — an unmatched SMS delivered twice used to create a second
+    // 'parsed' row and show up twice in the hub. The re-delivery must
+    // be ignored: no second INSERT, response flags duplicate.
+    let dupCalls = 0;
+    const dupRoute = [
+      (text) => text.includes('FROM incoming_sms') && text.includes('UPPER(trxid)'),
+      async () => {
+        dupCalls += 1;
+        return dupCalls === 1 ? { rows: [] } : { rows: [{ id: 's1', matched_recharge_id: null }] };
+      },
+    ];
+    db.__routeQuery([
+      ["status = 'approved' AND type = 'recharge'", { rows: [] }],
+      ...atomicSmsHandlers('9HXK2LQM4N'),
+      dupRoute,
+      ['INSERT INTO incoming_sms', { rows: [{ id: 's1' }] }],
+      ['UPPER(trxid) = UPPER($1)', { rows: [] }], // exact trxid (findMatch)
+      ['AND amount = $1 AND sender_no = $2', { rows: [] }], // fuzzy (findMatch)
+    ]);
+    const countInserts = () => db.__client.query.mock.calls.filter((c) => /INSERT INTO incoming_sms/.test(c[0])).length;
+    // First delivery: stored as parsed.
+    const r1 = await postIncoming({ secret: SECRET, message: BKASH_MSG, sender: 'bKash' }).expect(200);
+    expect(r1.body).toMatchObject({ ok: true, matched: false, sms_id: 's1' });
+    expect(countInserts()).toBe(1);
+    // Second delivery (same TrxID, still unmatched): no new row, reports duplicate.
+    const r2 = await postIncoming({ secret: SECRET, message: BKASH_MSG, sender: 'bKash' }).expect(200);
+    expect(r2.body).toMatchObject({ ok: true, duplicate: true, matched: false, sms_id: 's1' });
+    expect(countInserts()).toBe(1); // still 1 — no second row
   });
 });
 

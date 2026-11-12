@@ -15,7 +15,11 @@ test('user.js DUP check folds case', () => {
 
 test('sms.js duplicate-SMS guard folds case', () => {
   const src = read('backend/routes/sms.js');
-  expect(src).toContain('WHERE UPPER(trxid) = UPPER($1) AND matched_recharge_id IS NOT NULL');
+  // Bug #1 — the guard now covers ANY existing row with the same
+  // TrxID (matched or not), so the matched-only filter is gone;
+  // the case-folding itself must stay.
+  expect(src).toContain('WHERE UPPER(trxid) = UPPER($1) LIMIT 1');
+  expect(src).toContain('SELECT id, matched_recharge_id FROM incoming_sms');
 });
 
 describe('migration 049_tx_trxid_unique_casefold.sql', () => {
