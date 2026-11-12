@@ -68,6 +68,10 @@ describe('SMS hub split (admin-sms.js)', () => {
     expect(sms).toContain('window.renderSmsTab = async () => {');
     expect(sms).toContain('window.AdmSms = {');
     expect(sms).toContain('function smsMethodBn(m) {');
+    // Regression (2026-11-12, live "bn is not defined"): admin.js is an
+    // IIFE, so its bn/esc are NOT global — the chunk must define its own.
+    expect(sms).toContain('function bn(n){return Number(n||0).toLocaleString');
+    expect(sms).toContain('function esc(s){return String(s==null');
     expect(sms).toContain("AdmSms.del(\\'' + s.id + '\\')");
     expect(sms).toContain('AdmSms.deleteIgnored(');
     expect(sms).toContain('async del(smsId) {');
@@ -163,7 +167,7 @@ describe('SMS hub — render + delete UI', () => {
     await render([UNMATCHED], 3);
     expect(content.innerHTML).toContain('AdmSms.deleteIgnored(3)');
     expect(content.innerHTML).toContain('সব ignored SMS মুছুন');
-    expect(content.innerHTML).toContain('3টি');
+    expect(content.innerHTML).toContain('৩টি'); // real bn() formats in Bengali (not the old English stub)
 
     await render([UNMATCHED], 0);
     expect(content.innerHTML).not.toContain('deleteIgnored');

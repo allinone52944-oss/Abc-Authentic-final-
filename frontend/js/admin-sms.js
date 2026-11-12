@@ -1,11 +1,15 @@
 // SMS hub chunk, split out of admin.js (was ~164 lines inside it).
 // Loads BEFORE admin.js; admin.js keeps a one-line shim (TABS.sms
-// delegates to window.renderSmsTab at run time) and the hub calls
-// admin.js helpers (esc/bn/ABC/show/admToast) at run time only,
-// never at load time, so loading it first is safe: every call
-// happens after both scripts are loaded.
+// delegates to window.renderSmsTab at run time).
+// NOTE: admin.js is wrapped in an IIFE, so its helpers (esc/bn) are NOT
+// global — this chunk defines its own local copies below (mirroring
+// admin.js exactly). ABC/show/admToast ARE global (app.js / window
+// assignments), so the hub calls those at run time only.
 // Includes the SMS delete UI: per-card Delete (unmatched cards
 // only) + bulk delete of ignored SMS.
+// Local helpers (admin.js keeps its own inside its IIFE; these mirror them).
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function bn(n){return Number(n||0).toLocaleString('bn-BD');}
 /* ---------------- SMS AUTO-MATCH ---------------- */
 // Audit #36 — short method label for the manual-match dropdown.
 function smsMethodBn(m) {
