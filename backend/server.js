@@ -365,6 +365,32 @@ try {
   safeLog('[engines] land-khatian not mounted:', e.message);
 }
 
+// ---- Passport engine (integrated service, 2026-11-13) -------------
+// The page was a standalone offline tool (CSP connect-src 'none',
+// no backend, Create → download as a local blob, free for anyone
+// with the URL). It now calls this route before Create → download.
+//   GET  /api/passport/price
+//   POST /api/passport/create  { passport_no, idempotency_key? }
+// Wallet charged ONLY on a successful Create (price from the
+// services table, serial 13; price 0 → free, order still
+// recorded). A failure (402/500) blocks the download, so no
+// passport is produced unpaid.
+const passportLimiter = rateLimit({
+  validate: { xForwardedForHeader: false },
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'RATE_LIMITED' },
+});
+try {
+  const passportRoutes = require('./routes/passport');
+  app.use('/api/passport', requireAuth, passportLimiter, passportRoutes);
+  safeLog('[engines] mounted passport at /api/passport');
+} catch (e) {
+  safeLog('[engines] passport not mounted:', e.message);
+}
+
 // ---- Mouza map (SEPARATE engine from land-khatian, 2026-11-04:
 // own page, own services row, own fee; preview images served
 // only against the completed order that the search created).

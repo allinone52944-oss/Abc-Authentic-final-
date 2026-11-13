@@ -106,6 +106,9 @@ function runFlow(opts) {
   const warning = makeEl('form-sample-warning', 'p');
   warning.hidden = true;
   els['form-sample-warning'] = warning;
+  // Price line (integrated service): the fee / free text, filled by
+  // loadPrice() when the form opens.
+  els['passport-price-line'] = makeEl('passport-price-line', 'p');
   // Template values, as the live page ships them — the form must blank them.
   els['eng-passportNo'].value = 'EJ0762655';
   els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
@@ -138,6 +141,20 @@ function runFlow(opts) {
     URL: { createObjectURL: () => 'blob:test', revokeObjectURL: () => {} },
     setTimeout: () => 0,
   };
+  // Backend charge stub (integrated service): Create calls
+  // ABC.api('/passport/create') before the download; the form also
+  // loads the price on entry. Default: price 0, charge ok.
+  const chargeCalls = [];
+  if (o.withAbc !== false) {
+    sandbox.window.ABC = {
+      api: (path, opts) => {
+        chargeCalls.push({ path, opts });
+        if (o.chargeFails) return Promise.reject(new Error('network down'));
+        const res = o.chargeResponse || { ok: true, status: 200, body: { ok: true, charged: 0, orderId: 'o1', balance: 500 } };
+        return Promise.resolve({ ok: res.ok, status: res.status, json: async () => res.body });
+      },
+    };
+  }
   if (o.withApi !== false) {
     sandbox.window.passportEngine = {
       applyAll: () => { calls.applyAll += 1; },
@@ -164,12 +181,12 @@ function runFlow(opts) {
   }
   vm.createContext(sandbox);
   vm.runInContext(FLOW, sandbox);
-  return { els, body, calls, downloads, state };
+  return { els, body, calls, downloads, state, chargeCalls };
 }
 
 describe('landing (form-first entry)', () => {
-  test('body starts in the landing state', () => {
-    expect(PAGE).toContain('<body class="flow-landing">');
+  test('body starts in the landing state, inside the site shell', () => {
+    expect(PAGE).toContain('<body class="has-tabbar flagship-app service-workspace page-passport flow-landing">');
   });
 
   test('landing section with the Passport তৈরি করুন button, before the document area', () => {
@@ -375,7 +392,7 @@ describe('form declutter — status bar, Fidelity and Print texts removed; group
 
   test('the Text panel typography details block is kept (only the two quoted blocks were removed)', () => {
     expect(PAGE).toContain('id="style-details"');
-    expect(PAGE).toContain('Typography &amp; position');
+    expect(PAGE).toContain('অক্ষর ও অবস্থান');
   });
 
   test('updateStatus and the export reset guard the missing status element instead of crashing', () => {
@@ -809,5 +826,202 @@ describe('sample-face warning behavior (vm, stub DOM)', () => {
     expect(r.calls.exportHTML).toBe(1);
     expect(r.downloads).toHaveLength(1);
     expect(r.downloads[0].name).toBe('Passport-EJ0762655.html');
+  });
+});
+
+describe('passport integration — login gate, charge, layout, Bengali chrome (2026-11-13)', () => {
+  async function flush() {
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  function fillValid(r) {
+    r.els['eng-passportNo'].value = 'EJ0762655';
+    r.els['eng-docType'].value = 'P';
+    r.els['eng-countryCode'].value = 'BGD';
+    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-dob'].value = '1979-12-17';
+    r.els['eng-sex'].value = 'M';
+    r.els['eng-expiryDate'].value = '2035-01-01';
+    r.els['eng-nationality'].value = 'BANGLADESHI';
+  }
+
+  function gateScript() {
+    const m = PAGE.match(/<script id="passport-login-gate">([\s\S]*?)<\/script>/);
+    expect(m).toBeTruthy();
+    return m[1];
+  }
+
+  test('login gate: no token → redirect to /login.html?next=/passport.html', () => {
+    const sandbox = {
+      sessionStorage: { getItem: () => null },
+      localStorage: { getItem: () => null },
+      location: { pathname: '/passport.html', href: '' },
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(gateScript(), sandbox);
+    expect(sandbox.location.href).toBe('/login.html?next=%2Fpassport.html');
+  });
+
+  test('login gate: token present → no redirect', () => {
+    const sandbox = {
+      sessionStorage: { getItem: () => 'tok' },
+      localStorage: { getItem: () => null },
+      location: { pathname: '/passport.html', href: '' },
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(gateScript(), sandbox);
+    expect(sandbox.location.href).toBe('');
+  });
+
+  test('login gate script parses', () => {
+    expect(() => new vm.Script(gateScript())).not.toThrow();
+  });
+
+  test('CSP allows same-origin API calls and no longer forbids them', () => {
+    expect(PAGE).toContain("connect-src 'self'");
+    expect(PAGE).not.toContain("connect-src 'none'");
+    expect(PAGE).toContain("style-src 'self' 'unsafe-inline'");
+    expect(PAGE).toContain("script-src 'self' 'unsafe-inline'");
+    expect(PAGE).toContain("font-src 'self' data:");
+  });
+
+  test('shared site layout: stylesheets, scripts, sidebar and mobile tabbar', () => {
+    for (const href of ['/css/emerald-gold.css', '/css/sidebar-nav.css', '/css/service-workspace.css', '/fonts/hind-siliguri.css']) {
+      expect(PAGE).toContain(href);
+    }
+    expect(PAGE).toContain('/js/sidebar-nav.js');
+    expect(PAGE).toContain('/js/engine-feedback.js');
+    expect(PAGE).toContain('/js/app.js');
+    expect(PAGE).toContain('<div class="sidebar">');
+    expect(PAGE).toContain("location.href='/dashboard.html'");
+    expect(PAGE).toContain("location.href='/services.html'");
+    expect(PAGE).toContain("location.href='/orders.html'");
+    expect(PAGE).toContain("location.href='/history.html'");
+    expect(PAGE).toContain("location.href='/wallet.html'");
+    expect(PAGE).toContain('পাসপোর্ট ইঞ্জিন');
+    expect(PAGE).toContain('<div class="m-tabbar">');
+  });
+
+  test('premium look comes from the shared theme, not a copied token set', () => {
+    expect(PAGE).not.toContain('--pg-bg:#faf9f4');
+    expect(PAGE).not.toContain('--pg-green:#006441');
+    expect(PAGE).not.toContain('--pg-gold:#efb541');
+    expect(PAGE).toContain('--pg-bg:var(--bg-page)');
+    expect(PAGE).toContain('--pg-green:var(--primary-600)');
+    expect(PAGE).toContain('var(--gold-gradient)');
+    expect(PAGE).not.toContain('var(--pg-gold-2)');
+    // The form's premium rules themselves are unchanged.
+    expect(PAGE).toContain('body.flow-form aside{background:var(--pg-surface)');
+  });
+
+  test('Bengali chrome: lang, title, toolbar, tabs, no old English strings', () => {
+    expect(PAGE).toContain('<html lang="bn">');
+    expect(PAGE).toContain('<title>পাসপোর্ট ইঞ্জিন - All In One</title>');
+    for (const s of ['অঞ্চল দেখুন', 'প্রিভিউ', 'প্রিন্ট / PDF', 'HTML সংরক্ষণ করুন']) {
+      expect(PAGE).toContain(s);
+    }
+    for (const s of ['data-tab="engine">ইঞ্জিন', 'data-tab="text">লেখা', 'data-tab="photo">ছবি', 'data-tab="signature">স্বাক্ষর']) {
+      expect(PAGE).toContain(s);
+    }
+    for (const s of ['Show regions', 'Save HTML', 'Document editor', 'Typography &amp; position', 'Upload photo', 'Upload signature', 'Passport Engine — Linked Editable Text']) {
+      expect(PAGE).not.toContain(s);
+    }
+  });
+
+  test('snapshotHTML strips the live-only site shell from the export', () => {
+    expect(MAIN).toContain("root.querySelectorAll('.sidebar,.m-tabbar,link[rel=\"stylesheet\"],script[src],#passport-login-gate,#passport-price-line').forEach(n=>n.remove());");
+  });
+
+  test('price line: form entry with price 0 shows the free text', async () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    await flush();
+    expect(r.chargeCalls[0].path).toBe('/passport/price');
+    expect(r.els['passport-price-line'].textContent).toContain('বিনামূল্যে');
+  });
+
+  test('price line: form entry with a price shows the fee + balance', async () => {
+    const r = runFlow({ chargeResponse: { ok: true, status: 200, body: { ok: true, price: 30, balance: 500, serviceId: 13, allowed: true } } });
+    r.els['start-passport-button'].click();
+    await flush();
+    expect(r.els['passport-price-line'].textContent).toContain('সেবা চার্জ: ৳30');
+    expect(r.els['passport-price-line'].textContent).toContain('ব্যালেন্স: ৳500');
+  });
+
+  test('Create calls the backend first, then downloads, and names the charge', async () => {
+    const r = runFlow({ chargeResponse: { ok: true, status: 200, body: { ok: true, charged: 30, orderId: 'o1', balance: 470 } } });
+    r.els['start-passport-button'].click();
+    fillValid(r);
+    r.els['create-passport-button'].click();
+    await r.state.exportedPromise;
+    await flush();
+    const create = r.chargeCalls.find((c) => c.path === '/passport/create');
+    expect(create).toBeTruthy();
+    expect(create.opts.method).toBe('POST');
+    expect(create.opts.body.passport_no).toBe('EJ0762655');
+    expect(String(create.opts.body.idempotency_key)).toMatch(/^passport-/);
+    expect(r.calls.exportHTML).toBe(1);
+    expect(r.downloads).toHaveLength(1);
+    expect(r.downloads[0].name).toBe('Passport-EJ0762655.html');
+    expect(r.els['create-message'].textContent).toContain('চার্জ কাটা হয়েছে: ৳30');
+  });
+
+  test('Create with price 0 downloads and says no charge was taken', async () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    fillValid(r);
+    r.els['create-passport-button'].click();
+    await r.state.exportedPromise;
+    await flush();
+    expect(r.downloads).toHaveLength(1);
+    expect(r.els['create-message'].textContent).toContain('কোনো চার্জ কাটা হয়নি');
+  });
+
+  test('Create blocked when the backend rejects (402): no download, real reason shown', async () => {
+    const r = runFlow({ chargeResponse: { ok: false, status: 402, body: { error: 'INSUFFICIENT_BALANCE', message: 'পর্যাপ্ত ব্যালেন্স নেই। সেবাটির মূল্য ৳30, বর্তমান ব্যালেন্স ৳10।' } } });
+    r.els['start-passport-button'].click();
+    fillValid(r);
+    r.els['create-passport-button'].click();
+    await flush();
+    expect(r.calls.exportHTML).toBe(0);
+    expect(r.downloads).toHaveLength(0);
+    expect(r.els['create-message'].textContent).toContain('পর্যাপ্ত ব্যালেন্স নেই');
+    expect(r.body.classList.contains('flow-form')).toBe(true);
+  });
+
+  test('Create blocked when the backend is unreachable: no download, Bengali error', async () => {
+    const r = runFlow({ chargeFails: true });
+    r.els['start-passport-button'].click();
+    fillValid(r);
+    r.els['create-passport-button'].click();
+    await flush();
+    expect(r.calls.exportHTML).toBe(0);
+    expect(r.downloads).toHaveLength(0);
+    expect(r.els['create-message'].textContent).toContain('ইন্টারনেট সংযোগ নেই');
+  });
+
+  test('Create blocked when ABC is missing: no download, connection error', async () => {
+    const r = runFlow({ withAbc: false });
+    r.els['start-passport-button'].click();
+    fillValid(r);
+    r.els['create-passport-button'].click();
+    await flush();
+    expect(r.calls.exportHTML).toBe(0);
+    expect(r.downloads).toHaveLength(0);
+    expect(r.els['create-message'].textContent).toContain('সেবার সাথে সংযোগ করা যাচ্ছে না');
+  });
+
+  test('double-clicking Create charges once and downloads once', async () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    fillValid(r);
+    r.els['create-passport-button'].click();
+    r.els['create-passport-button'].click();
+    await r.state.exportedPromise;
+    await flush();
+    expect(r.chargeCalls.filter((c) => c.path === '/passport/create')).toHaveLength(1);
+    expect(r.calls.exportHTML).toBe(1);
+    expect(r.downloads).toHaveLength(1);
   });
 });
