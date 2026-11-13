@@ -316,8 +316,21 @@ class HttpGeoService {
     const district = findByName(distRes.entries, districtName);
     if (!district) throw Object.assign(new Error(`HttpGeo: district not found: ${districtName}`), { code: 'GEO_NOT_FOUND' });
     // City corp first (the reported failure), then upazila, then cantonment.
+    // UNION-WARD (2026-11-13): an EXACT name wins over every loose
+    // match. Before, the city-corp list was checked first with loose
+    // substring matching, so an upazila like "কক্সবাজার সদর" matched a
+    // shorter city/paurasava entry ("কক্সবাজার") and every union under
+    // it was walked as a city corporation — zone list empty, ward fetch
+    // failed (upazilaId=184, order=5, rawEntries=0).
+    const lists = [];
+    const wantExact = normalizeBn(upazilaName);
     for (const geoType of [8, 3, 7]) {
       const res = await client.getGeo(district.id, distRes.targetGeoOrder, geoType, { geoGroup });
+      lists.push([geoType, res]);
+      const exact = res.entries.find((e) => normalizeBn(e.nameBn) === wantExact);
+      if (exact) return { upazilaEntry: exact, upazilaTargetOrder: res.targetGeoOrder, isCityCorp: geoType === 8 };
+    }
+    for (const [geoType, res] of lists) {
       const entry = findByName(res.entries, upazilaName);
       if (entry) {
         return { upazilaEntry: entry, upazilaTargetOrder: res.targetGeoOrder, isCityCorp: geoType === 8 };
