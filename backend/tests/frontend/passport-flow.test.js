@@ -85,6 +85,7 @@ function runFlow(opts) {
   els['eng-sameEmergency'] = makeEl('eng-sameEmergency', 'checkbox');
   els['start-passport-button'] = makeEl('start-passport-button', 'button');
   els['create-passport-button'] = makeEl('create-passport-button', 'button');
+  els['back-to-landing-button'] = makeEl('back-to-landing-button', 'button');
   els['create-message'] = makeEl('create-message', 'p');
   // Form-screen photo/signature upload controls.
   ['photo', 'signature'].forEach((type) => {
@@ -211,6 +212,19 @@ describe('form (separate form screen)', () => {
     const panelAt = PAGE.indexOf('id="panel-engine"');
     expect(headAt).toBeGreaterThan(panelAt);
     expect(PAGE.slice(headAt, headAt + 400)).toContain('Passport তৈরি করুন');
+  });
+
+  test('form screen has a back button to the landing (finding 9)', () => {
+    expect(PAGE).toContain('id="back-to-landing-button"');
+    expect(PAGE).toContain('ফিরে যান');
+    const headAt = PAGE.indexOf('id="passport-form-head"');
+    const backAt = PAGE.indexOf('id="back-to-landing-button"');
+    const h2At = PAGE.indexOf('<h2>Passport তৈরি করুন</h2>', headAt);
+    expect(backAt).toBeGreaterThan(headAt);
+    expect(backAt).toBeLessThan(h2At);
+    expect(PAGE).toContain('.back-button{background:none;border:0;color:var(--muted);cursor:pointer;font-size:13px;padding:0;margin:0 0 8px;text-align:left}');
+    expect(FLOW).toContain('back-to-landing-button');
+    expect(FLOW).toContain('formEntered');
   });
 
   test('form screen hides the editor chrome (panel head, tabs) and the helper', () => {
@@ -434,6 +448,24 @@ describe('flow behavior (vm, stub DOM)', () => {
     expect(r.calls.applyAll).toBeGreaterThan(0);
     expect(r.calls.regenerateMRZ).toBeGreaterThan(0);
     expect(r.els['eng-passportNo'].focused).toBe(true);
+  });
+
+  test('back to landing preserves the filled form, and re-entering restores it (finding 9)', () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    expect(r.els['eng-passportNo'].value).toBe('');
+    r.els['eng-passportNo'].value = 'EJ0762655';
+    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['back-to-landing-button'].click();
+    expect(r.body.classList.contains('flow-landing')).toBe(true);
+    expect(r.body.classList.contains('flow-form')).toBe(false);
+    expect(r.els['eng-passportNo'].value).toBe('EJ0762655');
+    expect(r.els['eng-fullName'].value).toBe('GOLAM KIBRIYA MD');
+    // Re-entering restores the in-progress form instead of blanking it.
+    r.els['start-passport-button'].click();
+    expect(r.body.classList.contains('flow-form')).toBe(true);
+    expect(r.els['eng-passportNo'].value).toBe('EJ0762655');
+    expect(r.els['eng-fullName'].value).toBe('GOLAM KIBRIYA MD');
   });
 
   test('filling + Create downloads the output named after the passport number and shows the editor', async () => {

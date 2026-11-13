@@ -142,6 +142,7 @@ body.flow-form [data-tab]:not([data-tab="engine"]){display:none}
 body.flow-form .form-head{display:block;margin:0 0 6px}
 body.flow-form .form-head h2{font-size:20px;margin:0 0 6px}
 body.flow-form .form-head p{margin:0;color:var(--muted);line-height:1.7}
+.back-button{background:none;border:0;color:var(--muted);cursor:pointer;font-size:13px;padding:0;margin:0 0 8px;text-align:left}
 body.flow-form .panel-head,body.flow-form .tabs{display:none}
 body.flow-form #panel-engine>.helper{display:none}
 body.flow-form #panel-engine .engine-hint:not(#create-message):not(#engine-validation):not(#eng-nationality-hint){display:none}
@@ -220,6 +221,7 @@ body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
   <div class="panel-body">
       <section class="tab-panel" id="panel-engine" role="tabpanel" aria-labelledby="tab-engine">
     <header class="form-head" id="passport-form-head">
+     <button type="button" id="back-to-landing-button" class="back-button">← ফিরে যান</button>
      <h2>Passport তৈরি করুন</h2>
      <p>তথ্য ও ছবি/স্বাক্ষর পূরণ করুন — Create চাপলে পাসপোর্ট তৈরি হয়ে সরাসরি ডাউনলোড হবে।</p>
     </header>
@@ -987,8 +989,15 @@ body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
   if (!body || !body.classList.contains('flow-landing') || !api || !editor) return;
   var startBtn = document.getElementById('start-passport-button');
   var createBtn = document.getElementById('create-passport-button');
+  var backBtn = document.getElementById('back-to-landing-button');
   var message = document.getElementById('create-message');
   if (!startBtn || !createBtn) { body.classList.remove('flow-landing'); return; }
+  /* Back to landing (finding 9): the form had no way back except a
+     reload, which lost everything. Going back keeps the filled form in
+     the DOM; re-entering restores it instead of blanking — the form is
+     only blanked on the FIRST entry, so a fresh page load still starts
+     empty. */
+  var formEntered = false;
   function engInput(key){ return document.getElementById('eng-' + key); }
   function setEng(key, value){
     var el = engInput(key); if (!el) return;
@@ -1098,7 +1107,7 @@ body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
   function showForm(){
     body.classList.remove('flow-landing');
     body.classList.add('flow-form');
-    clearForm();
+    if (!formEntered) { clearForm(); formEntered = true; }
     var first = engInput('passportNo');
     if (first) first.focus();
   }
@@ -1147,6 +1156,10 @@ body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
     });
   }
   startBtn.addEventListener('click', showForm);
+  if (backBtn) backBtn.addEventListener('click', function(){
+    body.classList.remove('flow-form');
+    body.classList.add('flow-landing');
+  });
   createBtn.addEventListener('click', createPassport);
 })();
 </script>
