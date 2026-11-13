@@ -217,6 +217,7 @@
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
 <link rel="stylesheet" href="/css/customer-sections.css?v=20261110-11">
+<link rel="stylesheet" href="/css/orders-clean.css?v=20261113-1">
 </head>
 <body class="has-tabbar flagship-app page-order-detail">
 <div class="desktop">
@@ -284,6 +285,8 @@
 <script src="/js/app.js?v=20"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function fmtBn(v){if(!v)return '-';const d=new Date(v);if(isNaN(d))return '-';const h=d.getHours();const p=h<12?'পূর্বাহ্ণ':'অপরাহ্ণ';const h12=((h+11)%12)+1;const n=x=>Number(x).toLocaleString('bn-BD',{useGrouping:false});const z=x=>n(String(x).padStart(2,'0')).padStart(2,'০');return d.toLocaleDateString('bn-BD',{day:'numeric',month:'long',year:'numeric'})+', '+p+' '+n(h12)+':'+z(d.getMinutes());}
+function ftype(n){const m=/\.([a-z0-9]+)$/i.exec(n||'');return m?m[1].toUpperCase()+' ফাইল':'ফাইল';}
 const STBN={new:'নতুন',pending:'অপেক্ষমান',received:'গৃহীত',processing:'প্রসেসিং',registered:'নিবন্ধিত',completed:'সম্পন্ন',delivered:'ডেলিভার্ড',failed:'ব্যর্থ',cancelled:'বাতিল',refunded:'রিফান্ডেড'};
 const oid=new URLSearchParams(location.search).get('id');
 
@@ -313,7 +316,7 @@ async function init(){
     '</div>'
   ).join('') : (manualFormHtml ? '' : '<div style="color:#64748b;font-size:13px;">কোনো পৃথক ফিল্ড তথ্য নেই</div>');
 
-  let docs=[]; try{docs=JSON.parse(o.documents||'[]');}catch(_){}
+  let docs=[]; try{docs=Array.isArray(o.documents)?o.documents:JSON.parse(o.documents||'[]');}catch(_){}
   // P2 (2026-11-03): ডেলিভারি ফাইল শুধু সম্পন্ন/ডেলিভার্ড অর্ডারে
   // দেখাবে; ডেলিভার্ড-পরবর্তী রিফান্ডে ফাইল থাকে (সদিচ্ছা)।
   // C3 (2026-11-03): রিফান্ডেড অর্ডারে ফাইল শুধু তখনই, যখন
@@ -333,15 +336,15 @@ async function init(){
   if (isTerminal) { activeStep = 1; fillPercent = 0; }
   else if (o.status === 'received') { activeStep = 2; fillPercent = 25; }
   else if (['processing', 'registered'].includes(o.status)) { activeStep = 3; fillPercent = 50; }
-  else if (o.status === 'delivered') { activeStep = 4; fillPercent = 75; }
-  else if (o.status === 'completed') { activeStep = 5; fillPercent = 100; }
+  else if (o.status === 'completed') { activeStep = 4; fillPercent = 75; }
+  else if (o.status === 'delivered') { activeStep = 5; fillPercent = 100; }
 
   const stepsDef = [
     { n: 'আবেদন', e: '📥' },
     { n: 'গৃহীত', e: '📋' },
     { n: 'প্রসেসিং', e: '⚙️' },
-    { n: 'ডেলিভার্ড', e: '🎁' },
-    { n: 'সম্পন্ন', e: '✅' }
+    { n: 'সম্পন্ন', e: '✅' },
+    { n: 'ডেলিভার্ড', e: '🎁' }
   ];
 
   const stepperHtml = '<div class="detail-stepper">' +
@@ -352,7 +355,7 @@ async function init(){
       let cls = 'detail-step';
       if (isTerminal) { if (stepNum === 1) cls += ' terminal'; }
       else {
-        if (stepNum < activeStep) cls += ' done';
+        if (stepNum < activeStep || (stepNum === activeStep && o.status === 'delivered')) cls += ' done';
         else if (stepNum === activeStep) cls += ' now';
       }
       return '<div class="' + cls + '"><div class="detail-step-icon">' + s.e + '</div><div class="detail-step-text">' + s.n + '</div></div>';
@@ -360,10 +363,20 @@ async function init(){
   '</div>';
 
 
+  const _canUpload = !['completed','delivered','failed','cancelled','refunded'].includes(o.status);
+  const _done = o.status==='completed' || o.status==='delivered';
+  window._hasDeliveryFile = adminDocs.length > 0;
+  const heroHtml = isTerminal
+    ? '<div class="oc-hero bad"><div class="oc-ico">⚠️</div><div class="oc-txt"><b>অর্ডারটি '+(STBN[o.status]||o.status)+'</b><span>টাকা ফেরতের তথ্য নিচের অগ্রগতিতে দেখুন। প্রশ্ন থাকলে চ্যাটে লিখুন।</span></div></div>'
+    : _done
+      ? (adminDocs.length
+          ? '<div class="oc-hero ok"><div class="oc-ico">🎉</div><div class="oc-txt"><b>আপনার ফাইল তৈরি — ডাউনলোড করুন</b><span>নিচের বাটনে চাপ দিলেই ফাইল নেমে যাবে।</span></div>' + adminDocs.map((d,i)=>'<div class="oc-file-row"><span style="font-size:22px;">📄</span><span class="nm">'+esc(d.originalname||d.filename)+'<span class="ty">'+ftype(d.originalname||d.filename)+'</span></span><button class="oc-dl" onclick="dlDoc('+i+')">⬇️ ডাউনলোড</button></div>').join('') + '</div>'
+          : '<div class="oc-hero wait"><div class="oc-ico">📭</div><div class="oc-txt"><b>কাজ সম্পন্ন, কিন্তু ফাইল এখনো যোগ হয়নি</b><span>এডমিন শিগগিরই ফাইল দেবেন। দেরি হলে নিচের চ্যাটে জানান।</span></div></div>')
+      : '<div class="oc-hero wait"><div class="oc-ico">⏳</div><div class="oc-txt"><b>আপনার অর্ডারের কাজ চলছে</b><span>কাজ শেষ হলে ফাইল এখানেই দেখাবে — আলাদা কিছু করতে হবে না।</span></div></div>';
   const userDocsHtml = '<div style="margin-top:16px;padding-top:14px;border-top:1px solid #e2e8f0;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
       '<div style="font-weight:700;font-size:14px;color:#0f172a;">📎 আপনার প্রেরিত ডকুমেন্টস (' + userDocs.length + 'টি)</div>' +
-      '<button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="triggerExtraDoc()">+ নতুন ফাইল যোগ করুন</button>' +
+      (_canUpload ? '<button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="triggerExtraDoc()">+ নতুন ফাইল যোগ করুন</button>' : '') +
     '</div>' +
     '<input type="file" id="extraDocInp" style="display:none;" onchange="uploadExtraDoc(this.files)">' +
     '<div id="extraDocNotice" style="font-size:12px;color:#2563eb;margin-bottom:6px;display:none;"></div>' +
@@ -371,7 +384,7 @@ async function init(){
       '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">' +
         '<span style="font-size:16px;">📄</span><span style="flex:1;font-size:13px;font-weight:600;color:#0f172a;">'+esc(d.originalname||d.filename)+'</span>' +
         '<button type="button" class="mini-btn" style="padding:4px 8px;font-size:12px;background:#e2e8f0;" onclick="dlUserDoc('+i+')">⬇️ দেখুন</button>' +
-      '</div>').join('') : '<div style="color:#64748b;font-size:12px;">কোনো ডকুমেন্ট ফাইল সংযুক্ত করা হয়নি। প্রয়োজনে উপরের বাটন থেকে ফাইল যোগ করতে পারেন।</div>') +
+      '</div>').join('') : '<div style="color:#64748b;font-size:12px;">'+(_canUpload?'কোনো ফাইল দেননি। দরকার হলে উপরের বাটন থেকে যোগ করুন।':'এই অর্ডারে আপনি কোনো ফাইল দেননি।')+'</div>') +
     '</div>';
 
   const docsHtml='<div style="margin-top:18px;padding-top:14px;border-top:1px solid #e2e8f0;">' +
@@ -390,17 +403,17 @@ async function init(){
     '<div class="order-header">' +
       '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">' +
         '<button type="button" class="btn btn-secondary" style="padding:5px 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;" onclick="viewLiveStatus()">⚡ লাইভ ট্র্যাকার দেখুন →</button>' +
-      '</div>' + stepperHtml +
+      '</div>' + heroHtml + stepperHtml +
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
         '<div>' +
           '<h2 style="font-size:22px;font-weight:800;color:#0f172a;">'+esc(o.service_name_bn||o.service_name)+'</h2>' +
-          '<div style="font-size:12px;color:#64748b;margin-top:4px;">অর্ডার ট্র্যাকিং আইডি: #'+o.id+'</div>' +
+          '<div style="font-size:12px;color:#64748b;margin-top:4px;">অর্ডার নং: #'+esc(String(o.id).slice(0,8))+'</div>' +
         '</div>' +
         '<span class="st st-'+o.status+'" style="font-size:13px;padding:5px 14px;">'+(STBN[o.status]||o.status)+'</span>' +
       '</div>' +
       '<div style="display:flex;gap:20px;margin-top:14px;align-items:center;">' +
         '<div><span style="font-size:12px;color:#64748b;">চার্জ:</span> <b style="font-size:18px;color:#1e40af;">৳'+Number(o.price).toLocaleString('bn-BD')+'</b></div>' +
-        '<div style="font-size:12px;color:#64748b;">🕘 তারিখ: '+new Date(o.created_at).toLocaleString('bn-BD')+'</div>' +
+        '<div style="font-size:12px;color:#64748b;">🕘 তারিখ: '+fmtBn(o.created_at)+'</div>' +
       '</div>' +
       // Audit #48 — customer cancel, new/pending only, auto-refund.
       (['new','pending'].includes(o.status)
@@ -410,7 +423,7 @@ async function init(){
     manualFormHtml +
     (data ? '<div style="margin-top:12px;"><div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#0f172a;">প্রদত্ত তথ্যাবলি:</div>'+data+'</div>' : '') +
     userDocsHtml +
-    (o.notes?'<div style="font-size:13px;margin-top:12px;background:#fffbeb;padding:10px 14px;border-radius:8px;color:#92400e;"><b>📝 আপনার নোট:</b> '+esc(o.notes)+'</div>':'')+docsHtml;
+    (o.notes?'<div style="font-size:13px;margin-top:12px;background:#fffbeb;padding:10px 14px;border-radius:8px;color:#92400e;"><b>📝 আপনার নোট:</b> '+esc(o.notes)+'</div>':'');
 
   loadChat();
   loadTimelineHistory(o); // audit #43 — timeline was only on the status page
@@ -451,6 +464,13 @@ const NEXT_STEP = {
   refunded: 'ফেরতের অবস্থা উপরের বক্সে দেখুন।'
 };
 
+function nextStepFor(st){
+  if ((st==='delivered'||st==='completed') && !window._hasDeliveryFile) return 'ফাইল এখনো যোগ হয়নি — এডমিন যোগ করলে উপরে ডাউনলোড বাটন আসবে।';
+  if (st==='delivered') return 'উপরের ডাউনলোড বাটন থেকে ফাইলটি নিয়ে যাচাই করে নিন।';
+  if (st==='completed') return 'উপরের ডাউনলোড বাটন থেকে ফাইলটি নিন।';
+  return NEXT_STEP[st] || null;
+}
+
 async function loadTimelineHistory(o) {
   if (o) window._timelineOrder = o;
   try {
@@ -469,7 +489,7 @@ function renderTimeline(history, o) {
   const items = [];
   items.push({
     title: '📥 আবেদন ও পেমেন্ট গৃহীত',
-    time: new Date(o.created_at).toLocaleString('bn-BD'),
+    time: fmtBn(o.created_at),
     note: o.notes ? 'গ্রাহক নোট: ' + o.notes : null,
     statusClass: 'done'
   });
@@ -480,9 +500,9 @@ function renderTimeline(history, o) {
       const emoji = TL_EMOJI[h.to_status] || '📌';
       items.push({
         title: emoji + ' অবস্থা পরিবর্তন: ' + toLabel,
-        time: new Date(h.created_at).toLocaleString('bn-BD'),
+        time: fmtBn(h.created_at),
         note: h.note || null,
-        next: isLast ? (NEXT_STEP[h.to_status] || null) : null, // audit #48
+        next: isLast ? nextStepFor(h.to_status) : null, // audit #48
         statusClass: isLast ? 'on' : 'done'
       });
     });
@@ -491,9 +511,9 @@ function renderTimeline(history, o) {
     const emoji = TL_EMOJI[o.status] || '📌';
     items.push({
       title: emoji + ' বর্তমান অবস্থা: ' + currLabel,
-      time: 'সর্বশেষ আপডেট: ' + new Date(o.updated_at).toLocaleString('bn-BD'),
+      time: 'সর্বশেষ আপডেট: ' + fmtBn(o.updated_at),
       note: null,
-      next: NEXT_STEP[o.status] || null, // audit #48
+      next: nextStepFor(o.status), // audit #48
       statusClass: 'on'
     });
   }
@@ -524,7 +544,7 @@ async function loadSupportMsgs() {
         const emoji = TPL_EMOJI[m.template_key] || '💬';
         return '<div class="sup-msg tpl-' + (m.template_key || 'x') + '"><span class="sup-emoji">' + emoji + '</span>' +
           '<span class="sup-text">' + esc(m.message) + '</span>' +
-          '<div class="sup-time">' + new Date(m.created_at).toLocaleString('bn-BD') + '</div></div>';
+          '<div class="sup-time">' + fmtBn(m.created_at) + '</div></div>';
       }).join('');
   } catch (e) {}
 }
@@ -634,7 +654,7 @@ async function loadChat(){
   box.innerHTML=messages.map(m=>
     '<div class="chat-msg '+m.sender+'">'+
       '<span class="b">'+esc(m.message)+'</span>'+
-      '<div class="tm">'+new Date(m.created_at).toLocaleString('bn-BD')+'</div>'+
+      '<div class="tm">'+fmtBn(m.created_at)+'</div>'+
     '</div>'
   ).join('');
   box.scrollTop=box.scrollHeight;
