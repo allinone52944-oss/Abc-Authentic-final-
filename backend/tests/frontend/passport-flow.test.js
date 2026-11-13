@@ -302,12 +302,14 @@ describe('form photo/signature upload', () => {
     expect(PAGE).toContain('id="form-remove-signature"');
   });
 
-  test('upload group sits inside the Engine panel, after the MRZ group and before Create', () => {
+  test('upload group is first in the form — right after the form head, before the Passport group and Create', () => {
     const groupAt = PAGE.indexOf('id="eng-photo-group"');
-    const mrzAt = PAGE.indexOf('id="eng-mrz-group"');
+    const headAt = PAGE.indexOf('id="passport-form-head"');
+    const passportAt = PAGE.indexOf('id="eng-passportNo"');
     const createAt = PAGE.indexOf('id="create-passport-button"');
     const panelTextAt = PAGE.indexOf('id="panel-text"');
-    expect(groupAt).toBeGreaterThan(mrzAt);
+    expect(groupAt).toBeGreaterThan(headAt);
+    expect(groupAt).toBeLessThan(passportAt);
     expect(groupAt).toBeLessThan(createAt);
     expect(createAt).toBeLessThan(panelTextAt);
   });
@@ -354,6 +356,35 @@ describe('form photo/signature upload', () => {
     expect(PAGE).not.toContain('Create-এর পরও বদলানো যাবে');
     expect(PAGE).not.toContain('তারপরও ছবি ও স্বাক্ষর বদলাতে পারবেন');
     expect(FLOW).not.toContain('Photo / Signature ট্যাব থেকে বদলাতে পারবেন');
+  });
+});
+
+describe('form declutter — status bar, Fidelity and Print texts removed; groups borderless', () => {
+  test('editor status bar and Save HTML hint are gone from the page', () => {
+    expect(PAGE).not.toContain('id="status"');
+    expect(PAGE).not.toContain('class="status"');
+    expect(PAGE).not.toContain('status-block');
+    expect(PAGE).not.toContain('Use <strong>Save HTML</strong>');
+  });
+
+  test('Fidelity and Print & developer access blocks are gone from the page', () => {
+    expect(PAGE).not.toContain('Fidelity');
+    expect(PAGE).not.toContain('Print &amp; developer access');
+    expect(PAGE).not.toContain('preserved artwork');
+  });
+
+  test('the Text panel typography details block is kept (only the two quoted blocks were removed)', () => {
+    expect(PAGE).toContain('id="style-details"');
+    expect(PAGE).toContain('Typography &amp; position');
+  });
+
+  test('updateStatus and the export reset guard the missing status element instead of crashing', () => {
+    expect(MAIN).toContain("const st=$('status');if(st)");
+    expect(MAIN).toContain("const st=root.querySelector('#status');if(st)");
+  });
+
+  test('form-state groups have no divider borders — spacing only, simpler premium look', () => {
+    expect(PAGE).toContain('body.flow-form .engine-group{border-top:0;margin-top:24px;padding-top:0}');
   });
 });
 
