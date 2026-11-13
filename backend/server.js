@@ -449,6 +449,8 @@ try {
   // engines/bdris-apply/v2/server.js) — the client sends its JWT in handshake.auth.
   // MUST come before the authenticated routes (Express matches in order)
   app.use('/api/bdris-apply/socket.io', bdrisApplyAdapter.getApp());
+  // Signed one-tap original-PDF links (signature = auth; see lib/originalLink).
+  app.use('/api/bdris-original-dl', bdrisApplyLimiter, require('./routes/bdris-original-dl'));
   app.use('/api/bdris-apply', requireAuth, bdrisApplyLimiter, bdrisApplyRoutes);
   app.use('/api/bdris-apply', requireAuth, bdrisApplyLimiter, bdrisApplyAdapter.getApp());
   safeLog('[engines] mounted bdris-apply at /api/bdris-apply');

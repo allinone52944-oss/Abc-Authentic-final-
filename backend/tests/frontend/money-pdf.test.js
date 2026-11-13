@@ -221,10 +221,10 @@ describe('DONE direct path + download gate (B10)', () => {
     // PREIUM-PRIVATE (2026-11-13): the copy comes from the owner-only
     // route — the bare /bdris-original-*.pdf URL is no longer a public
     // file, and fetching it was how a stored copy leaked.
-    expect(src).toMatch(/fetch\('\/api\/bdris-apply\/applications\/' \+ encodeURIComponent\(canon\) \+ '\/original', \{ headers/);
+    expect(src).toMatch(/fetch\('\/api\/bdris-apply\/applications\/' \+ encodeURIComponent\(canon\) \+ '\/original-link', \{ method: 'POST', headers/);
     expect(src).toMatch(/'Authorization': 'Bearer ' \+ getToken\(\)/);
     expect(src).toMatch(/'X-Charge-Token'/);
-    expect(src).toMatch(/URL\.createObjectURL/);
+    expect(src).toMatch(/a\.href = j\.url;/);
     expect(src).not.toMatch(/a\.href = url;/);
     expect(src).not.toMatch(/fetch\(\s*url/);
   });

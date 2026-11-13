@@ -1451,6 +1451,12 @@ async function fetchHomeOriginal(b, ackNo) {
     if (!token) return;
     // Keep the paid token where downloadOriginal (B10 gate) finds it.
     S._pdfTok = S._pdfTok || {}; S._pdfTok[key] = { tok: token, at: Date.now() };
+    // Already stored on the server? Download it straight away — no
+    // second fetch from the office site (that is what took minutes).
+    b.textContent = '⏳ নামানো হচ্ছে…';
+    const got = await downloadOriginal('stored', canon);
+    if (got === true) { emitted = false; return; }
+    if (got !== 'missing') return;
     b.textContent = '⏳ PDF আসছে…';
     S._origAutoDl = canon;
     // Audit #78 — the home button was clicked, so the user asked
@@ -4604,41 +4610,27 @@ async function downloadOriginal(url, no) {
       S._pdfTok[key] = { tok: token, at: Date.now() };
     }
     const headers = { 'Authorization': 'Bearer ' + getToken(), 'X-Charge-Token': token };
-    const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(60000) : undefined;
-    // PREIUM-PRIVATE (2026-11-13): always fetch through the owner-only
-    // route. The engine's bare /bdris-original-*.pdf URL is no longer a
-    // public file — the copy lives outside the web root — and a bare
-    // URL is what let anyone who guessed a number download it.
-    const r = await fetch('/api/bdris-apply/applications/' + encodeURIComponent(canon) + '/original', { headers, signal });
-    if (!r.ok) {
+    const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined;
+    // ONE-TAP (2026-11-13): a blob saved after long waits was silently
+    // dropped by many phones/WebViews ("message shown, nothing
+    // downloaded"). The server now checks owner/receipt and returns a
+    // short-lived signed link; opening that plain link is a normal file
+    // download on every device. The stored copy stays on the server, so
+    // later taps (recent list) reuse it without fetching it again.
+    const r = await fetch('/api/bdris-apply/applications/' + encodeURIComponent(canon) + '/original-link', { method: 'POST', headers, signal });
+    let j = null; try { j = await r.json(); } catch (e) { j = null; }
+    if (!r.ok || !j || !j.url) {
+      const code = j && j.error;
+      if (url === 'stored' && (code === 'FILE_MISSING' || code === 'NOT_FOUND' || code === 'PDF_NOT_AVAILABLE')) return 'missing';
+      if (code === 'FILE_MISSING') { note('⚠️ আসল PDF সার্ভারে এখনো সংরক্ষণ হয়নি — একটু পরে আবার চাপুন', 'err'); return false; }
       note('⚠️ আসল PDF নামানো যায়নি — ' + (r.status === 401 ? 'আবার লগইন করুন' : r.status === 403 ? 'এই কপির অনুমতি নেই' : 'সার্ভার জবাব ' + r.status), 'err');
       return false;
     }
-    const blob = await r.blob();
-    const signature = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
-    if (String.fromCharCode(...signature) !== '%PDF-') {
-      note('আসল PDF ফেরেনি — আবার চেষ্টা করুন; অন্য ফাইল নামানো হয়নি', 'err');
-      return false;
-    }
-    const file = new File([blob], 'bdris-abedon-' + canon + '.pdf', { type: 'application/pdf' });
-    const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-    if (touch && navigator.canShare && navigator.canShare({ files: [file] })) {
-      // A fresh tap restores mobile user activation after a network wait.
-      if (button) {
-        button.onclick = async () => {
-          try { await navigator.share({ files: [file], title: 'আসল BDRIS PDF' }); }
-          catch (e) { if (e.name !== 'AbortError') note('ফাইল সংরক্ষণ করা যায়নি — আবার চাপুন', 'err'); }
-        };
-        button.textContent = '⬇️ আসল PDF সংরক্ষণ করুন';
-      }
-      return true;
-    }
     const a = document.createElement('a');
-    const objectUrl = URL.createObjectURL(file);
-    a.href = objectUrl; a.download = file.name;
+    a.href = j.url; a.rel = 'noopener';
+    a.download = 'bdris-abedon-' + canon + '.pdf';
     document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
-    note('⬇️ আসল PDF নামছে…', 'ok');
+    note('⬇️ আসল PDF নামছে… (ডাউনলোড ফোল্ডারে দেখুন)', 'ok');
     return true;
   } catch (e) {
     note('⚠️ আসল PDF নামানো যায়নি — ' + (e.name === 'TimeoutError' ? 'সময় শেষ; আবার চেষ্টা করুন' : 'সংযোগ সমস্যা; আবার চেষ্টা করুন'), 'err');

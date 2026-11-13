@@ -26,6 +26,7 @@ const { storedOriginalAvailable, storedOriginalPath, originalFileKey } = require
 // accepted, so a paid copy is reachable even when the DONE-time record
 // was lost.
 const { verifyPdfChargeToken } = require('../middleware/originalPdfGate');
+const { mintOriginalLink } = require('../lib/originalLink');
 
 const router = express.Router();
 
@@ -379,33 +380,55 @@ router.get('/applications', requireAuth, async (req, res) => {
 // disk as a real PDF. Anything else is a 404 with no entitlement
 // detail leaked. The filename is digits-only (storedOriginal
 // helper), so a crafted ack can never escape the directory.
+// Shared entitlement for the stored original: owner record flagged
+// available, OR a charge receipt minted for exactly this file (the
+// DONE-time record POST can be lost). Returns the file key or an error.
+async function originalEntitlement(req) {
+  const ackNo = canonicalAckNo(req.params.ackNo || '');
+  if (!ackNo) return { status: 400, error: 'MISSING_ACK' };
+  const r = await db.query(
+    `SELECT original_pdf_available FROM bdris_applications
+     WHERE user_id = $1 AND status = 'submitted'
+     AND (ack_no = $2 OR regexp_replace(ack_no, '\\D', '', 'g') = $2) LIMIT 1`,
+    [req.user.id, ackNo]
+  );
+  if (!r.rows.length || !r.rows[0].original_pdf_available) {
+    const ct = req.headers['x-charge-token'] || (req.query && req.query.ct) || null;
+    const paid = verifyPdfChargeToken(ct, req.user.id, originalFileKey(ackNo), process.env.JWT_SECRET || '');
+    if (!paid) return { status: 404, error: r.rows.length ? 'PDF_NOT_AVAILABLE' : 'NOT_FOUND' };
+  }
+  const fp = storedOriginalPath(ackNo);
+  if (!fp || !storedOriginalAvailable(ackNo)) return { status: 404, error: 'FILE_MISSING' };
+  return { ackNo, fp };
+}
+
+// GET /api/bdris-apply/applications/:ackNo/original — owner-only
+// download of the stored original (no new charge; see entitlement).
 router.get('/applications/:ackNo/original', requireAuth, async (req, res) => {
   try {
-    const ackNo = canonicalAckNo(req.params.ackNo || '');
-    if (!ackNo) return res.status(400).json({ error: 'MISSING_ACK' });
-    const r = await db.query(
-      `SELECT original_pdf_available FROM bdris_applications
-       WHERE user_id = $1 AND status = 'submitted'
-       AND (ack_no = $2 OR regexp_replace(ack_no, '\\D', '', 'g') = $2) LIMIT 1`,
-      [req.user.id, ackNo]
-    );
-    if (!r.rows.length || !r.rows[0].original_pdf_available) {
-      // PREIUM-PRIVATE (2026-11-13): the owner record is the normal
-      // proof, but the DONE-time POST that creates it can be lost (a
-      // dropped request) — and then a copy the user already paid for
-      // was unreachable: the button did nothing. A charge receipt
-      // minted for exactly this file is the same proof the static-serve
-      // gate accepted, so accept it here too. No receipt, no file.
-      const ct = req.headers['x-charge-token'] || (req.query && req.query.ct) || null;
-      const paid = verifyPdfChargeToken(ct, req.user.id, originalFileKey(ackNo), process.env.JWT_SECRET || '');
-      if (!paid) return res.status(404).json({ error: r.rows.length ? 'PDF_NOT_AVAILABLE' : 'NOT_FOUND' });
-    }
-    const fp = storedOriginalPath(ackNo);
-    if (!fp || !storedOriginalAvailable(ackNo)) return res.status(404).json({ error: 'FILE_MISSING' });
-    res.download(fp, 'bdris-original-' + originalFileKey(ackNo) + '.pdf');
+    const ent = await originalEntitlement(req);
+    if (ent.error) return res.status(ent.status).json({ error: ent.error });
+    res.download(ent.fp, 'bdris-original-' + originalFileKey(ent.ackNo) + '.pdf');
   } catch (e) {
     safeLog('[bdris-apply] original download error:', e.message);
     res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+// POST /api/bdris-apply/applications/:ackNo/original-link — same
+// entitlement, returns a short-lived signed URL the browser opens as a
+// plain link so the download starts on every device. FILE_MISSING
+// tells the page the server has no stored copy yet (fetch it once).
+router.post('/applications/:ackNo/original-link', requireAuth, async (req, res) => {
+  try {
+    const ent = await originalEntitlement(req);
+    if (ent.error) return res.status(ent.status).json({ error: ent.error });
+    const url = mintOriginalLink(originalFileKey(ent.ackNo), req.user.id);
+    if (!url) return res.status(500).json({ error: 'FAILED' });
+    return res.json({ ok: true, url });
+  } catch (e) {
+    safeLog('[bdris-apply] original link error:', e.message);
+    return res.status(500).json({ error: 'FAILED' });
   }
 });
 
