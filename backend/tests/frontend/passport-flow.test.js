@@ -331,6 +331,16 @@ describe('form photo/signature upload', () => {
     // hides engine hints, so a hint class would hide the warning too.
     expect(PAGE.slice(at, at + 120)).not.toContain('engine-hint');
   });
+
+  test('copy says post-Create changes need a re-download (finding 8: the download is frozen at Create)', () => {
+    expect(PAGE).toContain('পরে বদলালে আবার ডাউনলোড করতে হবে');
+    expect(PAGE).toContain('পরে কিছু বদলালে আবার Create করে ডাউনলোড করতে হবে');
+    expect(FLOW).toContain('কিছু বদলাতে চাইলে আবার Create করে ডাউনলোড করুন');
+    expect(PAGE).not.toContain('Create-এর পর বদলানো যাবে');
+    expect(PAGE).not.toContain('Create-এর পরও বদলানো যাবে');
+    expect(PAGE).not.toContain('তারপরও ছবি ও স্বাক্ষর বদলাতে পারবেন');
+    expect(FLOW).not.toContain('Photo / Signature ট্যাব থেকে বদলাতে পারবেন');
+  });
 });
 
 describe('Create → download', () => {

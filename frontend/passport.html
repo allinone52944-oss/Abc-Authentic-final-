@@ -197,7 +197,7 @@ body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
    <h2>Passport তৈরি করুন</h2>
    <p>ফর্মটি পূরণ করুন — পাসপোর্ট নম্বর, নাম, জন্মতারিখসহ সব তথ্য। Create চাপলে পাসপোর্ট তৈরি হয়ে ডাউনলোড হবে।</p>
    <button type="button" id="start-passport-button" class="primary">Passport তৈরি করুন</button>
-   <p class="small-note">ছবি ও স্বাক্ষর ফর্মেই যোগ করুন — না দিলে Create-এর পর বদলানো যাবে।</p>
+   <p class="small-note">ছবি ও স্বাক্ষর ফর্মেই যোগ করুন — পরে বদলালে আবার ডাউনলোড করতে হবে।</p>
   </div>
  </section>
  <section class="document-area" aria-label="Document page">
@@ -334,13 +334,13 @@ body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
        <p class="form-upload-status" id="form-signature-status" hidden=""><img id="form-signature-thumb" alt=""><span id="form-signature-name"></span><button type="button" id="form-remove-signature">সরান</button></p>
       </div>
      </div>
-     <p class="form-upload-note">ছবি ও স্বাক্ষর দিলে ডাউনলোড করা পাসপোর্টে সেগুলো থাকবে। না দিলে Create-এর পরও বদলানো যাবে।</p>
+     <p class="form-upload-note">ছবি ও স্বাক্ষর দিলে ডাউনলোড করা পাসপোর্টে সেগুলো থাকবে। Create-এর পর বদলালে আবার ডাউনলোড করতে হবে।</p>
      <p class="form-sample-warning" id="form-sample-warning" role="status" hidden="">সতর্কতা: ছবি ও স্বাক্ষর না দিলে ডাউনলোড করা পাসপোর্টে নমুনার ছবি ও স্বাক্ষর দেখাবে।</p>
     </div>
     <div class="create-actions">
      <button type="button" id="create-passport-button" class="primary">Create — ডাউনলোড করুন</button>
      <p class="engine-hint" id="create-message" role="status" aria-live="polite"></p>
-     <p class="engine-hint">Create চাপলে এই তথ্য ও ছবি/স্বাক্ষর দিয়ে পাসপোর্ট তৈরি হয়ে ডাউনলোড হবে। তারপরও ছবি ও স্বাক্ষর বদলাতে পারবেন।</p>
+     <p class="engine-hint">Create চাপলে এই তথ্য ও ছবি/স্বাক্ষর দিয়ে পাসপোর্ট তৈরি হয়ে ডাউনলোড হবে। পরে কিছু বদলালে আবার Create করে ডাউনলোড করতে হবে।</p>
     </div>
    </section>
 <section class="tab-panel" id="panel-text" role="tabpanel" aria-labelledby="tab-text" hidden="">
@@ -1141,7 +1141,7 @@ body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
     editor.exportHTML().then(function(html){
       downloadFile(html, name);
       body.classList.remove('flow-form');
-      say('Passport তৈরি হয়েছে — ডাউনলোড দেখুন। ছবি ও স্বাক্ষর Photo / Signature ট্যাব থেকে বদলাতে পারবেন।');
+      say('Passport তৈরি হয়েছে — ডাউনলোড দেখুন। কিছু বদলাতে চাইলে আবার Create করে ডাউনলোড করুন।');
     }).catch(function(err){
       say('Download failed: ' + (err && err.message ? err.message : err));
     });
