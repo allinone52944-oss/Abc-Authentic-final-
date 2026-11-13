@@ -533,7 +533,7 @@ describe('ALL-BUGS cycle (2026-10-30): OTP view, real errors, PDF path, step-1, 
   });
 
   test('(g) address book has a zone field and normalises saves by name only', () => {
-    expect(html).toMatch(/txt\('ab_zone', 'অঞ্চল \(সিটি কর্পোরেশন হলে/);
+    expect(html).toMatch(/txt\('ab_zone', 'অঞ্চল \(তালিকা না এলে লিখুন/);
     expect(html).toMatch(/function addrBookSaveRecord\(a\)/);
     expect(html).toMatch(/const a = addrBookSaveRecord\(Object\.assign\(/);
   });
