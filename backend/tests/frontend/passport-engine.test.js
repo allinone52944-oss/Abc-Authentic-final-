@@ -17,7 +17,9 @@ const html = fs.readFileSync(path.join(__dirname, '../../../frontend/passport.ht
 const stateMatch = html.match(/<script\b(?=[^>]*\bid="document-state")[^>]*>([\s\S]*?)<\/script>/);
 assert.ok(stateMatch, 'embedded model exists');
 const original = JSON.parse(stateMatch[1]);
-const script = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)].find(m => !m[1].includes('application/json'))[2];
+const script = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)].find(m => m[2].includes(' const engBusy='))[2];
+// The editor IIFE is the script containing the engine core — not the
+// first non-JSON script (the head now holds the login-gate script).
 const engine = script.slice(script.indexOf(' const engBusy='), script.indexOf(' createFields();createImages();'));
 const setTextCode = script.slice(script.indexOf(' function setText('), script.indexOf(' function setStyle('));
 const resetCode = script.slice(script.indexOf(' function resetRegion('), script.indexOf(' function createFields('));
