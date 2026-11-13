@@ -101,6 +101,10 @@ function runFlow(opts) {
     els['form-' + type + '-name'] = makeEl('form-' + type + '-name', 'span');
     els['form-remove-' + type] = makeEl('form-remove-' + type, 'button');
   });
+  // Sample-face warning (finding 7): visible when photo/signature missing.
+  const warning = makeEl('form-sample-warning', 'p');
+  warning.hidden = true;
+  els['form-sample-warning'] = warning;
   // Template values, as the live page ships them — the form must blank them.
   els['eng-passportNo'].value = 'EJ0762655';
   els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
@@ -311,6 +315,21 @@ describe('form photo/signature upload', () => {
 
   test('landing and form notes tell the user to add photo/signature in the form', () => {
     expect(PAGE).toContain('ছবি ও স্বাক্ষর ফর্মেই যোগ করুন');
+  });
+
+  test('form warns visibly when photo/signature is missing (finding 7: sample face otherwise)', () => {
+    expect(PAGE).toContain('id="form-sample-warning"');
+    expect(PAGE).toContain('নমুনার ছবি ও স্বাক্ষর দেখাবে');
+    const at = PAGE.indexOf('id="form-sample-warning"');
+    expect(at).toBeGreaterThan(PAGE.indexOf('id="eng-photo-group"'));
+    expect(at).toBeLessThan(PAGE.indexOf('id="create-passport-button"'));
+    expect(PAGE).toContain('.form-sample-warning{margin:10px 0 0;color:#b3261e;font-weight:600;line-height:1.7}');
+    expect(PAGE).toContain('.form-sample-warning[hidden]{display:none}');
+    expect(FLOW).toContain('updateSampleWarning');
+    expect(FLOW).toContain('নমুনার');
+    // It is a plain warning element, NOT an .engine-hint — the form CSS
+    // hides engine hints, so a hint class would hide the warning too.
+    expect(PAGE.slice(at, at + 120)).not.toContain('engine-hint');
   });
 });
 
@@ -641,5 +660,81 @@ describe('form upload behavior (vm, stub DOM)', () => {
     expect(r.els['form-photo-thumb'].src).toBe('');
     expect(r.els['create-message'].textContent).toContain('যোগ হয়নি');
     expect(r.els['form-upload-photo-button'].disabled).toBe(false);
+  });
+});
+
+describe('sample-face warning behavior (vm, stub DOM)', () => {
+  async function flush() {
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  test('warning is visible on form entry, naming both missing photo and signature', () => {
+    const r = runFlow({});
+    expect(r.els['form-sample-warning'].hidden).toBe(true);
+    r.els['start-passport-button'].click();
+    expect(r.els['form-sample-warning'].hidden).toBe(false);
+    expect(r.els['form-sample-warning'].textContent).toContain('ছবি ও স্বাক্ষর না দিলে');
+    expect(r.els['form-sample-warning'].textContent).toContain('নমুনার ছবি ও স্বাক্ষর দেখাবে');
+  });
+
+  test('attaching only the photo leaves the warning naming the signature', async () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    r.els['form-photo-upload'].files = [{ name: 'photo.png' }];
+    r.els['form-photo-upload'].fire('change');
+    await r.state.imagePromise;
+    await flush();
+    expect(r.els['form-sample-warning'].hidden).toBe(false);
+    expect(r.els['form-sample-warning'].textContent).toContain('স্বাক্ষর না দিলে');
+    expect(r.els['form-sample-warning'].textContent).toContain('নমুনার স্বাক্ষর দেখাবে');
+  });
+
+  test('attaching both photo and signature hides the warning', async () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    r.els['form-photo-upload'].files = [{ name: 'photo.png' }];
+    r.els['form-photo-upload'].fire('change');
+    r.els['form-signature-upload'].files = [{ name: 'sig.png' }];
+    r.els['form-signature-upload'].fire('change');
+    await r.state.imagePromise;
+    await flush();
+    expect(r.els['form-sample-warning'].hidden).toBe(true);
+    expect(r.els['form-sample-warning'].textContent).toBe('');
+  });
+
+  test('removing the photo after both were attached shows the warning again', async () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    r.els['form-photo-upload'].files = [{ name: 'photo.png' }];
+    r.els['form-photo-upload'].fire('change');
+    r.els['form-signature-upload'].files = [{ name: 'sig.png' }];
+    r.els['form-signature-upload'].fire('change');
+    await r.state.imagePromise;
+    await flush();
+    expect(r.els['form-sample-warning'].hidden).toBe(true);
+    r.els['form-remove-photo'].click();
+    expect(r.els['form-sample-warning'].hidden).toBe(false);
+    expect(r.els['form-sample-warning'].textContent).toContain('ছবি না দিলে');
+  });
+
+  test('the warning does NOT block Create — it warns only (finding 7)', async () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    expect(r.els['form-sample-warning'].hidden).toBe(false);
+    r.els['eng-passportNo'].value = 'EJ0762655';
+    r.els['eng-docType'].value = 'P';
+    r.els['eng-countryCode'].value = 'BGD';
+    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-dob'].value = '1979-12-17';
+    r.els['eng-sex'].value = 'M';
+    r.els['eng-expiryDate'].value = '2035-01-01';
+    r.els['eng-nationality'].value = 'BANGLADESHI';
+    r.els['create-passport-button'].click();
+    await r.state.exportedPromise;
+    await flush();
+    expect(r.calls.exportHTML).toBe(1);
+    expect(r.downloads).toHaveLength(1);
+    expect(r.downloads[0].name).toBe('Passport-EJ0762655.html');
   });
 });

@@ -164,6 +164,8 @@ body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
 .form-upload-status img[src=""]{display:none}
 .form-upload-status span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
 .form-upload-note{margin:10px 0 0;color:var(--muted)}
+.form-sample-warning{margin:10px 0 0;color:#b3261e;font-weight:600;line-height:1.7}
+.form-sample-warning[hidden]{display:none}
 #create-message:empty{display:none}
 @media print{
  @page{size:594pt 841pt;margin:0}
@@ -333,6 +335,7 @@ body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
       </div>
      </div>
      <p class="form-upload-note">ছবি ও স্বাক্ষর দিলে ডাউনলোড করা পাসপোর্টে সেগুলো থাকবে। না দিলে Create-এর পরও বদলানো যাবে।</p>
+     <p class="form-sample-warning" id="form-sample-warning" role="status" hidden="">সতর্কতা: ছবি ও স্বাক্ষর না দিলে ডাউনলোড করা পাসপোর্টে নমুনার ছবি ও স্বাক্ষর দেখাবে।</p>
     </div>
     <div class="create-actions">
      <button type="button" id="create-passport-button" class="primary">Create — ডাউনলোড করুন</button>
@@ -1021,6 +1024,22 @@ body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
     }
   };
   var canUpload = !!(editor.setImage && editor.resetImage);
+  /* Sample-face warning (finding 7): without an attached photo/signature
+     the download shows the scan's own (sample person's) photo/signature,
+     because the slots are transparent until replaced. Warn visibly on the
+     form BEFORE Create — do not block, the user may proceed knowingly. */
+  var sampleWarning = document.getElementById('form-sample-warning');
+  var attached = { photo: false, signature: false };
+  function updateSampleWarning(){
+    if (!sampleWarning) return;
+    var missing = [];
+    if (!attached.photo) missing.push('ছবি');
+    if (!attached.signature) missing.push('স্বাক্ষর');
+    if (!missing.length) { sampleWarning.hidden = true; sampleWarning.textContent = ''; return; }
+    var label = missing.join(' ও ');
+    sampleWarning.hidden = false;
+    sampleWarning.textContent = 'সতর্কতা: ' + label + ' না দিলে ডাউনলোড করা পাসপোর্টে নমুনার ' + label + ' দেখাবে।';
+  }
   function showUploadState(type, file){
     var u = uploadEls[type]; if (!u) return;
     if (u.thumb) {
@@ -1031,6 +1050,8 @@ body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
     if (u.nameEl) u.nameEl.textContent = file ? (file.name || '') : '';
     if (u.status) u.status.hidden = !file;
     if (u.button) u.button.textContent = file ? u.changeLabel : u.addLabel;
+    attached[type] = !!file;
+    updateSampleWarning();
   }
   function clearUpload(type){
     var u = uploadEls[type]; if (!u) return;
@@ -1072,6 +1093,7 @@ body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
     try { editor.resetImage('photo'); } catch (e) {}
     try { editor.resetImage('signature'); } catch (e) {}
     if (canUpload) { showUploadState('photo', null); showUploadState('signature', null); }
+    updateSampleWarning();
   }
   function showForm(){
     body.classList.remove('flow-landing');
