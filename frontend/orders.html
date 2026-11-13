@@ -110,6 +110,7 @@
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
 <link rel="stylesheet" href="/css/customer-sections.css?v=20261110-11">
+<link rel="stylesheet" href="/css/orders-clean.css?v=20261113-1">
 </head>
 <body class="has-tabbar flagship-app page-orders">
 <div class="desktop">
@@ -135,7 +136,7 @@
     <div class="topbar">
       <div>
         <h2>📦 আমার অর্ডারসমূহ</h2>
-        <p>আপনার প্রদত্ত সকল অর্ডারের রিয়েল-টাইম অগ্রগতি ও স্ট্যাটাস</p>
+        <p>আপনার সব অর্ডার এক জায়গায় — ফাইল তৈরি হলে এখানেই ডাউনলোড করুন</p>
       </div>
     </div>
 
@@ -145,18 +146,20 @@
          বাতিল/রিফান্ড shared one button though they are different
          statuses. The row scrolls horizontally (premium.css .filters),
          so the extra buttons need no layout change. -->
+    <label class="oc-search"><span aria-hidden="true">🔍</span><input id="ocSearch" type="search" placeholder="সেবার নাম বা অর্ডার আইডি লিখে খুঁজুন…" aria-label="অর্ডার খুঁজুন"></label>
     <div class="filters" id="filters">
       <button class="fbtn on" data-st="">সব অর্ডার</button>
-      <button class="fbtn" data-st="new">নতুন</button>
+      <button class="fbtn oc-extra" data-st="new">নতুন</button>
       <button class="fbtn" data-st="pending">অপেক্ষমান</button>
-      <button class="fbtn" data-st="received">গৃহীত</button>
+      <button class="fbtn oc-extra" data-st="received">গৃহীত</button>
       <button class="fbtn" data-st="processing">প্রসেসিং</button>
-      <button class="fbtn" data-st="registered">নিবন্ধিত</button>
+      <button class="fbtn oc-extra" data-st="registered">নিবন্ধিত</button>
       <button class="fbtn" data-st="completed">সম্পন্ন</button>
       <button class="fbtn" data-st="delivered">ডেলিভার্ড</button>
-      <button class="fbtn" data-st="failed">ব্যর্থ</button>
-      <button class="fbtn" data-st="cancelled">বাতিল</button>
-      <button class="fbtn" data-st="refunded">রিফান্ডেড</button>
+      <button class="fbtn oc-extra" data-st="failed">ব্যর্থ</button>
+      <button class="fbtn oc-extra" data-st="cancelled">বাতিল</button>
+      <button class="fbtn oc-extra" data-st="refunded">রিফান্ডেড</button>
+      <button type="button" class="fbtn oc-toggle" id="ocMore">আরও ▾</button>
     </div>
 
     <!-- Orders Table -->
@@ -209,6 +212,8 @@
 <script src="/js/app.js?v=20"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function fmtBn(v){if(!v)return '-';const d=new Date(v);if(isNaN(d))return '-';const h=d.getHours();const p=h<12?'পূর্বাহ্ণ':'অপরাহ্ণ';const h12=((h+11)%12)+1;const n=x=>Number(x).toLocaleString('bn-BD',{useGrouping:false});const z=x=>n(String(x).padStart(2,'0')).padStart(2,'০');return d.toLocaleDateString('bn-BD',{day:'numeric',month:'long',year:'numeric'})+', '+p+' '+n(h12)+':'+z(d.getMinutes());}
+function ocFilter(){const q=(document.getElementById('ocSearch').value||'').trim().toLowerCase();document.querySelectorAll('#list tr[data-q]').forEach(tr=>{tr.style.display=!q||tr.dataset.q.includes(q)?'':'none';});}
 const STBN={new:'নতুন',pending:'অপেক্ষমান',received:'গৃহীত',processing:'প্রসেসিং',registered:'নিবন্ধিত',completed:'সম্পন্ন',delivered:'ডেলিভার্ড',failed:'ব্যর্থ',cancelled:'বাতিল',refunded:'রিফান্ডেড'};
 let page=1,status='';
 let _ordersLoading = false;
@@ -221,7 +226,9 @@ async function init(){
   document.getElementById('waFab').onclick=()=>{
     window.open('https://wa.me/8801835414122?text='+encodeURIComponent('আসসালামু আলাইকুম! আমি '+ou.name+' (ফোন: '+ou.phone+')। সাহায্য দরকার।'),'_blank');
   };
-  document.querySelectorAll('#filters .fbtn').forEach(b=>{
+  document.getElementById('ocSearch').addEventListener('input',ocFilter);
+  document.getElementById('ocMore').onclick=(e)=>{e.stopPropagation();const f=document.getElementById('filters');f.classList.toggle('oc-all');e.currentTarget.textContent=f.classList.contains('oc-all')?'কম ▴':'আরও ▾';};
+  document.querySelectorAll('#filters .fbtn[data-st]').forEach(b=>{
     b.onclick=()=>{
       if (_ordersLoading) return;
       document.querySelectorAll('#filters .fbtn').forEach(x=>x.classList.remove('on'));
@@ -244,6 +251,7 @@ async function init(){
   if (wantBtn) {
     document.querySelectorAll('#filters .fbtn').forEach(x => x.classList.remove('on'));
     wantBtn.classList.add('on');
+    if (wantBtn.classList.contains('oc-extra')) document.getElementById('filters').classList.add('oc-all');
     status = wantStatus;
   }
   load();
@@ -274,7 +282,7 @@ async function loadLegacyManual(){
       return '<div style="padding:12px 0; border-bottom:1px solid var(--border-light); font-size:13px;">' +
       '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">' +
       '<div><b style="color:var(--text-main);">' + esc(m.service_name_bn || m.service_name || 'ম্যানুয়াল সেবা') + '</b>' +
-      '<div style="color:#64748b; font-size:12px; margin-top:2px;">' + new Date(m.created_at).toLocaleString('bn-BD') + '</div></div>' +
+      '<div style="color:#64748b; font-size:12px; margin-top:2px;">' + fmtBn(m.created_at) + '</div></div>' +
       '<div><span class="st st-' + m.status + '">' + (LEGACY_MANUAL_ST[m.status] || m.status) + '</span></div></div>' +
       (docs ? '<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">' + docs + '</div>' : '') +
       '</div>';
@@ -301,7 +309,7 @@ async function load(){
   _ordersLoading = true;
   const more = document.getElementById('moreBtn');
   more.disabled = true;
-  document.querySelectorAll('#filters .fbtn').forEach(b => { b.disabled = true; });
+  document.querySelectorAll('#filters .fbtn[data-st]').forEach(b => { b.disabled = true; });
   try {
     const r=await ABC.api('/orders?limit=10&page='+page+(status?'&status='+status:''));
     if(!r.ok) throw new Error('orders');
@@ -327,20 +335,20 @@ async function load(){
       return docs.some(d => d && d.uploaded_by === 'admin');
     };
     const html=orders.map(o=>
-      '<tr>'+
+      '<tr data-q="'+esc(((o.service_name_bn||'')+' '+(o.service_name||'')+' '+(o.id||'')).toLowerCase())+'">'+
         '<td><b style="color:#0f172a;font-size:14px;">'+esc(o.service_name_bn||o.service_name)+'</b>' +
         '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-top:4px;">' +
           // Audit #52 — auto/manual badge (service_type from GET /orders)
           (o.service_type ? '<span class="ptype '+(o.service_type==='manual'?'manual':'auto')+'">'+(o.service_type==='manual'?'📝 ম্যানুয়াল':'⚡ স্বয়ংক্রিয়')+'</span>' : '') +
           // Audit #52 — 'ফাইল প্রস্তুত' mark, so the file is known without opening detail
-          (hasDeliveryFile(o) ? '<span style="font-size:11px;font-weight:700;color:#166534;background:#dcfce7;padding:2px 8px;border-radius:6px;">📁 ফাইল প্রস্তুত</span>' : '') +
+          (hasDeliveryFile(o) ? '<span class="oc-file">📁 ফাইল প্রস্তুত</span>' : '') +
         '</div>' +
         '<div style="font-size:11px;color:#94a3b8;margin-top:2px;">ID: #'+esc((o.id||'').slice(0,8))+'</div></td>'+
         '<td><b style="color:#1e40af;font-size:15px;">৳'+Number(o.price||0).toLocaleString('bn-BD')+'</b></td>'+
         '<td><span class="st st-'+esc(o.status)+'">'+esc(STBN[o.status]||o.status)+'</span></td>'+
         // Audit #52 — date + time, like detail/status (was date only)
-        '<td>'+(o.created_at ? new Date(o.created_at).toLocaleString('bn-BD') : '-')+'</td>'+
-        '<td style="text-align:right;"><button class="btn-view" onclick="location.href=\'/order-detail.html?id=' + encodeURIComponent(o.id) + '\'">বিস্তারিত দেখুন →</button></td>'+
+        '<td>'+fmtBn(o.created_at)+'</td>'+
+        '<td style="text-align:right;"><button class="btn-view" onclick="location.href=\'/order-detail.html?id=' + encodeURIComponent(o.id) + '\'">'+(hasDeliveryFile(o)?'ফাইল নিন →':'দেখুন →')+'</button></td>'+
       '</tr>'
     ).join('');
 
@@ -349,6 +357,7 @@ async function load(){
     } else {
       document.getElementById('list').insertAdjacentHTML('beforeend', html);
     }
+    ocFilter();
     document.getElementById('moreBtn').style.display=(page*10>=(d.total||0))?'none':'block';
   } catch(e) {
     if(page===1){
@@ -361,7 +370,7 @@ async function load(){
   } finally {
     _ordersLoading = false;
     more.disabled = false;
-    document.querySelectorAll('#filters .fbtn').forEach(b => { b.disabled = false; });
+    document.querySelectorAll('#filters .fbtn[data-st]').forEach(b => { b.disabled = false; });
   }
 }
 
