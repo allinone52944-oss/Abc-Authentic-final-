@@ -1995,6 +1995,45 @@ function renderAddrBook(pickFn, backFn) {
   };
   loadAddrList();
 }
+/* ADDRBOOK-QUICKPICK (2026-11-13): the form's "ঠিকানা বই" buttons used to
+   open the full book page, so filling needed two screens. This shows the
+   saved list in a small popup on the same page; one tap applies the record
+   through the SAME pickFn the full book uses. No addresses / list failure /
+   "সব ঠিকানা" falls back to the full book (renderAddrBook). */
+function addrQuickPick(pickFn, backFn) {
+  const openFull = () => { closeQ(); renderAddrBook(pickFn, backFn); };
+  const old = document.getElementById('abQuick'); if (old) old.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'abQuick';
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.45)';
+  wrap.innerHTML = '<div class="sec" role="dialog" aria-label="ঠিকানা বেছে নিন" style="background:var(--card,#fff);border-radius:14px;width:100%;max-width:520px;max-height:80vh;overflow:auto;padding:16px;box-shadow:0 10px 40px rgba(0,0,0,.25)">' +
+    '<div class="sub-h" style="display:flex;justify-content:space-between;align-items:center"><span><span class="snum">📍</span> ঠিকানা বেছে নিন</span>' +
+    '<button class="btn small ghost" id="abQClose" aria-label="বন্ধ">✕</button></div>' +
+    '<div id="abQList"><div class="draft-card">তালিকা আসছে…</div></div>' +
+    '<div class="mt8"><button class="btn small ghost" id="abQFull">📖 সব ঠিকানা / নতুন যোগ করুন</button></div></div>';
+  document.body.appendChild(wrap);
+  let done = false;
+  function closeQ() { done = true; const w = document.getElementById('abQuick'); if (w) w.remove(); }
+  wrap.onclick = (e) => { if (e.target === wrap) closeQ(); };
+  $('abQClose').onclick = closeQ;
+  $('abQFull').onclick = openFull;
+  const to = setTimeout(() => { if (!done) openFull(); }, 12000);
+  socket.emit('LIST_ADDRESSES', (r) => {
+    clearTimeout(to); if (done) return;
+    const list = (r && r.addresses) || [];
+    if (!list.length) { openFull(); return; }
+    const l = $('abQList'); if (!l) return;
+    l.innerHTML = list.map(a => '<button type="button" class="draft-card" data-qpick="' + esc(a.id) + '" style="width:100%;text-align:left;cursor:pointer">' +
+      '<div class="di">📍</div><div><div class="dt">' + esc(a.name) + '</div><div class="ds">' +
+      esc([a.division, a.district, a.cityCorpUpazila, a.paurasavaUnion, a.ward].filter((v, i, arr) => v && arr.indexOf(v) === i).join(' • ')) +
+      '</div></div></button>').join('');
+    l.querySelectorAll('[data-qpick]').forEach(b => b.onclick = () => {
+      const rec = list.find(x => x.id === b.dataset.qpick);
+      if (!rec) return;
+      closeQ(); pickFn(rec);
+    });
+  });
+}
 function loadAddrList() {
   // FINAL-PACK: the list used to sit on "coming…" forever when the
   // socket answer never arrived. A 15s watchdog only replaces the
@@ -3074,7 +3113,7 @@ function renderStep2() {
   // ঠিকানা বই থেকে জন্মস্থানে বসানো (2026-10-17)
   const gb = $('gBook'); if (gb) gb.onclick = () => {
     collectStep2();
-    renderAddrBook((rec) => {
+    addrQuickPick((rec) => {
       S.d.s1 = S.d.s1 || {};
       // Address book fields → birthplace s1 fields
       ['division','district','cityCorpUpazila','paurasavaUnion','ward','postBn','postEn','vilBn','vilEn','houseBn','houseEn'].forEach(k => {
@@ -3359,7 +3398,7 @@ function renderStep4() {
   if ($('spFromBirth')) $('spFromBirth').onclick = () => fillPrefixFromBirth('sp');
   if ($('spBook')) $('spBook').onclick = () => {
     collectStep4();
-    renderAddrBook((rec) => { S.d.s2b.perm = Object.assign({}, rec); S.d.s2b.permCopy = false; renderStep4(); if (S.draftId) saveDraft(4, () => {}); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderStep4());
+    addrQuickPick((rec) => { S.d.s2b.perm = Object.assign({}, rec); S.d.s2b.permCopy = false; renderStep4(); if (S.draftId) saveDraft(4, () => {}); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderStep4());
   };
   if ($('rpFromPerm')) $('rpFromPerm').onclick = () => {
     fillPrefixFrom('rp', readAddrFields('sp', (S.d.s2b && S.d.s2b.perm) || {}));
@@ -3367,7 +3406,7 @@ function renderStep4() {
   };
   if ($('rpBook')) $('rpBook').onclick = () => {
     collectStep4();
-    renderAddrBook((rec) => { S.d.s2b.pres = Object.assign({}, rec); S.d.s2b.presCopy = false; renderStep4(); if (S.draftId) saveDraft(4, () => {}); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderStep4());
+    addrQuickPick((rec) => { S.d.s2b.pres = Object.assign({}, rec); S.d.s2b.presCopy = false; renderStep4(); if (S.draftId) saveDraft(4, () => {}); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderStep4());
   };
   setBtns([
     { html: 'পরবর্তী →', fn: () => submitStep4() },
@@ -4988,9 +5027,9 @@ function renderAuto() {
   $('sp_same').onchange = toggle;
   $('rp_same').onchange = toggle;
   $('spFromBirth').onclick = () => fillPrefixFromBirth('sp');
-  $('spBook').onclick = () => { collectAuto(); renderAddrBook((rec) => { S.d.s2b.perm = Object.assign({}, rec); S.d.s2b.permCopy = false; renderAuto(); autoSaveDraft(S.d.uiStep || 0); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
+  $('spBook').onclick = () => { collectAuto(); addrQuickPick((rec) => { S.d.s2b.perm = Object.assign({}, rec); S.d.s2b.permCopy = false; renderAuto(); autoSaveDraft(S.d.uiStep || 0); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
   $('rpFromPerm').onclick = () => { fillPrefixFrom('rp', readAddrFields('sp')); note('✔ স্থায়ী ঠিকানা থেকে বসানো হয়েছে', 'ok'); };
-  $('rpBook').onclick = () => { collectAuto(); renderAddrBook((rec) => { S.d.s2b.pres = Object.assign({}, rec); S.d.s2b.presCopy = false; renderAuto(); autoSaveDraft(S.d.uiStep || 0); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
+  $('rpBook').onclick = () => { collectAuto(); addrQuickPick((rec) => { S.d.s2b.pres = Object.assign({}, rec); S.d.s2b.presCopy = false; renderAuto(); autoSaveDraft(S.d.uiStep || 0); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
   // Auto mode জন্মস্থানে ঠিকানা বই (2026-10-17)
   // ADDRBOOK-PICK (2026-10-31): the old pick wrote the record into
   // DOM geo_* inputs and then renderAuto() replaced #stepBody from
@@ -5002,7 +5041,7 @@ function renderAuto() {
   // entry with a blank field never wipes a typed value.
   const abb = $('aBirthBook'); if (abb) abb.onclick = () => {
     collectAuto();
-    renderAddrBook((rec) => {
+    addrQuickPick((rec) => {
       S.d.s1 = S.d.s1 || {};
       A_KEYS.forEach(([k]) => { const v = rec[k]; if (v !== undefined && String(v).trim() !== '') S.d.s1[k] = v; });
       renderAuto(); autoSaveDraft(S.d.uiStep || 0); note('✔ ঠিকানা বসানো হয়েছে', 'ok');
