@@ -2014,7 +2014,7 @@ function loadAddrList() {
     }
     l.innerHTML = list.map(a => '<div class="draft-card"><div class="di">📍</div>' +
       '<div><div class="dt">' + esc(a.name) + '</div><div class="ds">' +
-        esc([a.division, a.district, a.cityCorpUpazila, a.paurasavaUnion, a.ward].filter(Boolean).join(' • ')) +
+        esc([a.division, a.district, a.cityCorpUpazila, a.paurasavaUnion, a.ward].filter((v, i, arr) => v && arr.indexOf(v) === i).join(' • ')) +
       '</div></div><div class="da">' +
       (S.addrPick ? '<button class="btn small" data-picka="' + esc(a.id) + '">বসিয়ে দিন</button>' : '') +
       '<button class="btn danger small" data-dela="' + esc(a.id) + '">মুছুন</button></div></div>').join('');
