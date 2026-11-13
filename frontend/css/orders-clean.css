@@ -1,0 +1,37 @@
+/* Orders + order detail: simple, calm presentation layer (loaded last). */
+body:is(.page-orders,.page-order-detail) .main { --oc-ink:#0f2a1f; --oc-muted:#5b6b63; --oc-line:#e4ebe7; --oc-soft:#f4f8f6; --oc-green:#0b6b45; --oc-green-soft:#e7f5ee; --oc-gold:#c98a12; --oc-gold-soft:#fff6e3; }
+body.page-orders .topbar h2, body.page-order-detail h2 { letter-spacing: -.01em; }
+/* Search + filters */
+body.page-orders .oc-search { display:flex; align-items:center; gap:10px; background:#fff; border:1px solid var(--oc-line); border-radius:14px; padding:4px 6px 4px 14px; margin:0 0 14px; box-shadow:0 1px 2px rgba(15,42,31,.04); }
+body.page-orders .oc-search input { flex:1; border:0; outline:0; font-size:15px; padding:12px 0; background:transparent; color:var(--oc-ink); min-width:0; }
+body.page-orders .oc-search:focus-within { border-color:var(--oc-green); box-shadow:0 0 0 3px rgba(11,107,69,.12); }
+body.page-orders #filters { display:flex !important; flex-wrap:wrap; gap:8px !important; margin-bottom:16px; }
+body.page-orders #filters .fbtn { flex:0 0 auto; border-radius:999px !important; padding:8px 16px !important; font-weight:600; border:1px solid var(--oc-line); background:#fff; color:var(--oc-muted); }
+body.page-orders #filters .fbtn.on { background:var(--oc-green); border-color:var(--oc-green); color:#fff; }
+body.page-orders #filters .fbtn.oc-extra { display:none; }
+body.page-orders #filters.oc-all .fbtn.oc-extra { display:inline-block; }
+body.page-orders #filters .oc-toggle { border-style:dashed; }
+/* Table */
+body.page-orders .table-container { border-radius:16px; border-color:var(--oc-line); box-shadow:0 1px 3px rgba(15,42,31,.05); }
+body.page-orders .table-container th { background:var(--oc-soft); color:var(--oc-muted); font-size:12px; font-weight:700; padding:12px 16px; text-align:left; }
+body.page-orders .table-container td { padding:16px; border-top:1px solid var(--oc-line); vertical-align:middle; }
+body.page-orders .table-container tbody tr:hover td { background:#fbfdfc; }
+body.page-orders .btn-view { background:var(--oc-green) !important; color:#fff !important; border:0 !important; padding:10px 18px !important; border-radius:10px !important; }
+body.page-orders .oc-file { font-size:11px; font-weight:700; color:var(--oc-green); background:var(--oc-green-soft); padding:2px 8px; border-radius:6px; }
+body.page-orders .btn-more { border-radius:12px; }
+/* Detail */
+body.page-order-detail .oc-hero { border-radius:14px; padding:16px 18px; margin:0 0 18px; display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+body.page-order-detail .oc-hero.ok { background:var(--oc-green-soft); border:1px solid #b7e2cb; }
+body.page-order-detail .oc-hero.wait { background:var(--oc-gold-soft); border:1px solid #f3dca8; }
+body.page-order-detail .oc-hero.bad { background:#fdeeee; border:1px solid #f4c7c7; }
+body.page-order-detail .oc-hero .oc-ico { font-size:26px; line-height:1; }
+body.page-order-detail .oc-hero .oc-txt { flex:1; min-width:180px; }
+body.page-order-detail .oc-hero b { display:block; font-size:16px; color:var(--oc-ink); }
+body.page-order-detail .oc-hero span { font-size:13px; color:var(--oc-muted); }
+body.page-order-detail .oc-dl { background:var(--oc-green); color:#fff; border:0; border-radius:10px; padding:12px 18px; font-weight:700; font-size:14px; cursor:pointer; min-height:44px; }
+body.page-order-detail .oc-file-row { display:flex; align-items:center; gap:12px; padding:12px 14px; background:#fff; border:1px solid var(--oc-line); border-radius:12px; margin-top:10px; width:100%; }
+body.page-order-detail .oc-file-row .nm { flex:1; font-weight:700; color:var(--oc-ink); font-size:14px; }
+body.page-order-detail .oc-file-row .ty { font-size:11px; color:var(--oc-muted); display:block; font-weight:500; }
+body.page-order-detail .detail-step.done .detail-step-icon { background:var(--oc-green); border-color:var(--oc-green); }
+body.page-order-detail .detail-step.now .detail-step-icon { background:var(--oc-gold); border-color:var(--oc-gold); box-shadow:0 0 0 4px rgba(201,138,18,.18); }
+body.page-order-detail .detail-step-fill { background:var(--oc-green); }
