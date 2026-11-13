@@ -22,6 +22,10 @@ const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
 const db = require('../db');
 const { storedOriginalAvailable, storedOriginalPath, originalFileKey } = require('../lib/storedOriginal');
+// PREIUM-PRIVATE (2026-11-13): the same charge-receipt proof the PDF gate
+// accepted, so a paid copy is reachable even when the DONE-time record
+// was lost.
+const { verifyPdfChargeToken } = require('../middleware/originalPdfGate');
 
 const router = express.Router();
 
@@ -385,8 +389,17 @@ router.get('/applications/:ackNo/original', requireAuth, async (req, res) => {
        AND (ack_no = $2 OR regexp_replace(ack_no, '\\D', '', 'g') = $2) LIMIT 1`,
       [req.user.id, ackNo]
     );
-    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
-    if (!r.rows[0].original_pdf_available) return res.status(404).json({ error: 'PDF_NOT_AVAILABLE' });
+    if (!r.rows.length || !r.rows[0].original_pdf_available) {
+      // PREIUM-PRIVATE (2026-11-13): the owner record is the normal
+      // proof, but the DONE-time POST that creates it can be lost (a
+      // dropped request) — and then a copy the user already paid for
+      // was unreachable: the button did nothing. A charge receipt
+      // minted for exactly this file is the same proof the static-serve
+      // gate accepted, so accept it here too. No receipt, no file.
+      const ct = req.headers['x-charge-token'] || (req.query && req.query.ct) || null;
+      const paid = verifyPdfChargeToken(ct, req.user.id, originalFileKey(ackNo), process.env.JWT_SECRET || '');
+      if (!paid) return res.status(404).json({ error: r.rows.length ? 'PDF_NOT_AVAILABLE' : 'NOT_FOUND' });
+    }
     const fp = storedOriginalPath(ackNo);
     if (!fp || !storedOriginalAvailable(ackNo)) return res.status(404).json({ error: 'FILE_MISSING' });
     res.download(fp, 'bdris-original-' + originalFileKey(ackNo) + '.pdf');

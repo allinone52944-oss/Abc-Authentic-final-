@@ -137,7 +137,7 @@ describe('OriginalFetcher (no browser)', () => {
   }
 
   it('cachedOriginal returns null when no file', () => {
-    const f = new OriginalFetcher({ browserManager: fakeBM, frontendDir: tmpDir(), log: () => {} });
+    const f = new OriginalFetcher({ browserManager: fakeBM, originalsDir: tmpDir(), log: () => {} });
     assert.strictEqual(f.cachedOriginal('12345'), null);
   });
 
@@ -146,7 +146,7 @@ describe('OriginalFetcher (no browser)', () => {
     const buf = Buffer.concat([Buffer.from('%PDF-1.4 test'), Buffer.alloc(9000)]);
     fs.writeFileSync(path.join(dir, 'bdris-original-999.pdf'), buf);
     fs.writeFileSync(path.join(dir, 'bdris-original-111.pdf'), Buffer.from('tiny'));
-    const f = new OriginalFetcher({ browserManager: fakeBM, frontendDir: dir, log: () => {} });
+    const f = new OriginalFetcher({ browserManager: fakeBM, originalsDir: dir, log: () => {} });
     const hit = f.cachedOriginal('999');
     assert.strictEqual(hit.ok, true);
     assert.strictEqual(hit.url, '/bdris-original-999.pdf');
@@ -159,21 +159,21 @@ describe('OriginalFetcher (no browser)', () => {
     const dir = tmpDir();
     const buf = Buffer.concat([Buffer.from('%PDF-1.4 test'), Buffer.alloc(9000)]);
     fs.writeFileSync(path.join(dir, 'bdris-original-777.pdf'), buf);
-    const f = new OriginalFetcher({ browserManager: fakeBM, frontendDir: dir, log: () => {} });
+    const f = new OriginalFetcher({ browserManager: fakeBM, originalsDir: dir, log: () => {} });
     const job = await f.ensureOriginal({ appId: '777' });
     assert.strictEqual(job.status, 'done');
     assert.strictEqual(job.result.cached, true);
   });
 
   it('ensureOriginal rejects on missing appId', async () => {
-    const f = new OriginalFetcher({ browserManager: fakeBM, frontendDir: tmpDir(), log: () => {} });
+    const f = new OriginalFetcher({ browserManager: fakeBM, originalsDir: tmpDir(), log: () => {} });
     await assert.rejects(() => f.ensureOriginal({}), /MISSING_APPID/);
   });
 
   it('hanging job settles via timeout (v1 bug fix)', async () => {
     // _runJob never resolves — job must still settle as failed, not hang forever
     const f = new OriginalFetcher({
-      browserManager: fakeBM, frontendDir: tmpDir(),
+      browserManager: fakeBM, originalsDir: tmpDir(),
       jobTimeoutMs: 300, jobTtlMs: 60000, log: () => {},
     });
     f._runJob = () => new Promise(() => {}); // hang forever
@@ -185,7 +185,7 @@ describe('OriginalFetcher (no browser)', () => {
 
   it('concurrent callers join the same running job', async () => {
     const f = new OriginalFetcher({
-      browserManager: fakeBM, frontendDir: tmpDir(), log: () => {},
+      browserManager: fakeBM, originalsDir: tmpDir(), log: () => {},
     });
     let calls = 0;
     f._runJob = async () => { calls++; await new Promise(r => setTimeout(r, 100)); return { ok: true, url: '/x.pdf', bytes: 9000 }; };
@@ -200,7 +200,7 @@ describe('OriginalFetcher (no browser)', () => {
 
   it('finished jobs are cleaned up after TTL (v1 leak fix)', async () => {
     const f = new OriginalFetcher({
-      browserManager: fakeBM, frontendDir: tmpDir(), jobTtlMs: 200, log: () => {},
+      browserManager: fakeBM, originalsDir: tmpDir(), jobTtlMs: 200, log: () => {},
     });
     f._runJob = async () => ({ ok: false, url: null, bytes: 0 });
     await f.ensureOriginal({ appId: '222' });
@@ -212,7 +212,7 @@ describe('OriginalFetcher (no browser)', () => {
   it('saveRec/loadRec round-trip via index file', () => {
     const dir = tmpDir();
     const idx = path.join(dir, 'originals-index.json');
-    const f = new OriginalFetcher({ browserManager: fakeBM, frontendDir: dir, indexFile: idx, log: () => {} });
+    const f = new OriginalFetcher({ browserManager: fakeBM, originalsDir: dir, indexFile: idx, log: () => {} });
     assert.strictEqual(f.loadRec('123'), null);
     const rec = { appId: '123', date: '01/01/2020', nameEn: 'Test', mobileNo: '01700000000' };
     assert.strictEqual(f.saveRec('123', rec), true);

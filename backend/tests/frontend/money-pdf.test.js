@@ -218,11 +218,15 @@ describe('DONE direct path + download gate (B10)', () => {
 
   test('downloadOriginal fetches with JWT + charge token, never a bare anchor', () => {
     const src = extractFn(html, 'downloadOriginal');
-    expect(src).toMatch(/fetch\(url, \{ headers/);
+    // PREIUM-PRIVATE (2026-11-13): the copy comes from the owner-only
+    // route — the bare /bdris-original-*.pdf URL is no longer a public
+    // file, and fetching it was how a stored copy leaked.
+    expect(src).toMatch(/fetch\('\/api\/bdris-apply\/applications\/' \+ encodeURIComponent\(canon\) \+ '\/original', \{ headers/);
     expect(src).toMatch(/'Authorization': 'Bearer ' \+ getToken\(\)/);
     expect(src).toMatch(/'X-Charge-Token'/);
     expect(src).toMatch(/URL\.createObjectURL/);
     expect(src).not.toMatch(/a\.href = url;/);
+    expect(src).not.toMatch(/fetch\(\s*url/);
   });
 });
 

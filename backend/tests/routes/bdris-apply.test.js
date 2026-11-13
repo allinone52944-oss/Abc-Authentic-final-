@@ -17,6 +17,12 @@ const bdrisRouter = require('../../routes/bdris-apply');
 const push = require('../../utils/push');
 const storedOriginal = require('../../lib/storedOriginal');
 
+// PREIUM-PRIVATE (2026-11-13): stored originals live outside the web
+// root; point the private store at a scratch dir for these tests.
+const os = require('os');
+const ORIGINALS = fs.mkdtempSync(path.join(os.tmpdir(), 'orig-route-'));
+process.env.BDRIS_ORIGINALS_DIR = ORIGINALS;
+
 function app() {
   const a = express();
   a.use(express.json());
@@ -372,7 +378,7 @@ describe('POST/GET/DELETE /api/bdris-apply/applications (আবেদনের �
 describe('GET /api/bdris-apply/applications/:ackNo/original — stored original re-download', () => {
   const KEY = '999000111';
   const FN = 'bdris-original-' + KEY + '.pdf';
-  const FP = path.join(__dirname, '..', '..', '..', 'frontend', FN);
+  const FP = path.join(ORIGINALS, FN);
   const PDF = '%PDF-1.4\n' + 'A'.repeat(8100); // over the 8000-byte real-PDF floor
   beforeEach(() => { fs.writeFileSync(FP, PDF); });
   afterEach(() => { try { fs.unlinkSync(FP); } catch {} });

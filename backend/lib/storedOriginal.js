@@ -17,12 +17,17 @@
 const fs = require('fs');
 const path = require('path');
 
+// PREIUM-PRIVATE (2026-11-13): the store lives outside the web root and
+// the rule is shared with the engine (shared/originalsDir) — a copy
+// written into frontend/ was downloadable by URL without any check.
+const { originalsDir: sharedOriginalsDir } = require('../../shared/originalsDir');
+
 // Mirror of the engine OriginalFetcher MIN_PDF_BYTES (8000): a
 // file at/below that is not a real fetched PDF (truncated write).
 const MIN_ORIGINAL_BYTES = 8000;
 
 function originalsDir() {
-  return path.join(__dirname, '..', '..', 'frontend');
+  return sharedOriginalsDir();
 }
 
 // Digits-only file key for an ack number (engine keyOf rule).

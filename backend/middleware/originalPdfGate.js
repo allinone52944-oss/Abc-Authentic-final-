@@ -13,6 +13,9 @@
 
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+// PREIUM-PRIVATE (2026-11-13): the copy is read from the private store
+// (shared/originalsDir) — never from the web root.
+const { storedOriginalPath, storedOriginalAvailable, originalFileName } = require('../lib/storedOriginal');
 
 // Mirror of the engine's charge-token verifier, with the file-key
 // binding added: backend mints ref
@@ -53,18 +56,26 @@ function originalPdfGate(db) {
     let user;
     try { user = jwt.verify(rawJwt, secret); } catch { return res.status(401).json({ error: 'INVALID_TOKEN' }); }
     const ct = req.headers['x-charge-token'] || (req.query && req.query.ct) || null;
-    if (verifyPdfChargeToken(ct, user.id, fileKey, secret)) return next();
-    // Re-download of one's own paid copy: the server record links
-    // this user + ack and flags the original available.
-    try {
-      const r = await db.query(
-        `SELECT 1 FROM bdris_applications WHERE user_id = $1 AND original_pdf_available = true
-         AND (ack_no = $2 OR regexp_replace(ack_no, '\\D', '', 'g') = $2) LIMIT 1`,
-        [user.id, fileKey]
-      );
-      if (r.rows && r.rows.length) return next();
-    } catch { /* fall through to 403 */ }
-    return res.status(403).json({ error: 'PDF_NOT_ENTITLED' });
+    let allowed = verifyPdfChargeToken(ct, user.id, fileKey, secret);
+    if (!allowed) {
+      // Re-download of one's own paid copy: the server record links
+      // this user + ack and flags the original available.
+      try {
+        const r = await db.query(
+          `SELECT 1 FROM bdris_applications WHERE user_id = $1 AND original_pdf_available = true
+           AND (ack_no = $2 OR regexp_replace(ack_no, '\\D', '', 'g') = $2) LIMIT 1`,
+          [user.id, fileKey]
+        );
+        allowed = !!(r.rows && r.rows.length);
+      } catch { /* fall through to 403 */ }
+    }
+    if (!allowed) return res.status(403).json({ error: 'PDF_NOT_ENTITLED' });
+    // PREIUM-PRIVATE: serve the entitled copy straight from the private
+    // store. Handing the request to `next()` would let static serving
+    // answer it from the web root — the exact hole this closes.
+    const fp = storedOriginalPath(fileKey);
+    if (!fp || !storedOriginalAvailable(fileKey)) return res.status(404).json({ error: 'FILE_MISSING' });
+    return res.download(fp, originalFileName(fileKey));
   };
 }
 

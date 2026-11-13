@@ -25,6 +25,10 @@
 const fs = require('fs');
 const path = require('path');
 
+// PREIUM-PRIVATE (2026-11-13): the private store rule is shared with the
+// backend (backend/lib/storedOriginal) so writer and reader agree.
+const { originalsDir: sharedOriginalsDir, ensureOriginalsDir } = require('../../../../shared/originalsDir');
+
 const SITE = 'https://bdris.gov.bd';
 
 // v1-এর default ছিল 150s; v2-তে ৫ মিনিট (task requirement + hanging-bug fix)
@@ -115,9 +119,13 @@ class OriginalFetcher {
       throw new Error('OriginalFetcher requires browserManager');
     }
     this.browserManager = options.browserManager;
-    // PDF কোথায় লিখবে: আসল frontend dir (v1-এর engines/frontend/ পথটি dead ছিল)
-    this.frontendDir = options.frontendDir
-      || path.join(__dirname, '..', '..', '..', 'frontend');
+    // PREIUM-PRIVATE (2026-11-13): the Form-1 copy must never be written
+    // into the web root — nginx serves frontend/ directly, so a file
+    // there downloads for anyone who guesses the name (the backend
+    // charge/owner gate never sees that request). Originals go to the
+    // private dir outside the web root; the authenticated route / gate
+    // are the only way to read one back.
+    this.originalsDir = options.originalsDir || sharedOriginalsDir();
     this.archiveDir = options.archiveDir
       || path.join(__dirname, '..', '..', 'downloads');
     // v1-এর সাথে shared index (read/write — v1 ফাইল modify নয়, শুধু JSON read/write)
@@ -149,7 +157,7 @@ class OriginalFetcher {
   cachedOriginal(appId) {
     const key = this.keyOf(appId);
     if (!key) return null;
-    const f = path.join(this.frontendDir, 'bdris-original-' + key + '.pdf');
+    const f = path.join(this.originalsDir, 'bdris-original-' + key + '.pdf');
     try {
       const st = fs.statSync(f);
       if (st.size > MIN_PDF_BYTES) {
@@ -424,14 +432,14 @@ class OriginalFetcher {
         this._progress(job, 'pdf');
         const buf = Buffer.from(hit.b64, 'base64');
         const file = 'bdris-original-' + this.keyOf(rec.appId) + '.pdf';
-        fs.mkdirSync(this.frontendDir, { recursive: true }); // ডিরেক্টরি না থাকলে লেখা ব্যর্থ হতো (ENOENT)
-        fs.writeFileSync(path.join(this.frontendDir, file), buf);
+        const dir = ensureOriginalsDir(); // ডিরেক্টরি না থাকলে লেখা ব্যর্থ হতো (ENOENT)
+        fs.writeFileSync(path.join(dir, file), buf);
         try {
           fs.mkdirSync(this.archiveDir, { recursive: true });
           fs.writeFileSync(path.join(this.archiveDir, Date.now() + '-' + file), buf);
         } catch { /* সংরক্ষণ ঐচ্ছিক */ }
         this.log('HIT appId=' + rec.appId, buf.length + 'B', 'worker', hit.worker, 'round', hit.round, (Date.now() - t0) + 'ms');
-        return { ok: true, url: '/' + file, path: path.join(this.frontendDir, file), bytes: buf.length, ms: Date.now() - t0, worker: hit.worker, round: hit.round };
+        return { ok: true, url: '/' + file, path: path.join(dir, file), bytes: buf.length, ms: Date.now() - t0, worker: hit.worker, round: hit.round };
       }
       job.done = true;
       this.log('MISS appId=' + rec.appId, (Date.now() - t0) + 'ms');

@@ -24,7 +24,7 @@ function fetcher() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orig-premium-'));
   return new OriginalFetcher({
     browserManager: {},
-    frontendDir: path.join(dir, 'frontend'),
+    originalsDir: path.join(dir, 'originals'),
     archiveDir: path.join(dir, 'archive'),
     indexFile: path.join(dir, 'originals-index.json'),
     log: () => {},
@@ -109,7 +109,7 @@ describe('PREMIUM ensureOriginal progress', () => {
 
   it('a cached hit notifies nobody', async () => {
     const f = fetcher();
-    const dir = f.frontendDir;
+    const dir = f.originalsDir;
     fs.mkdirSync(dir, { recursive: true });
     const buf = Buffer.alloc(9000, 0);
     buf.write('%PDF-1.4 fake', 0);

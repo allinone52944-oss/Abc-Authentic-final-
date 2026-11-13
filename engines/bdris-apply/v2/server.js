@@ -17,6 +17,8 @@
 
 const crypto = require('crypto');
 const path = require('path');
+// PREIUM-PRIVATE (2026-11-13): shared rule for the private original-PDF store.
+const { originalsDir: sharedOriginalsDir } = require('../../../shared/originalsDir');
 const { BrowserManager } = require('./core/BrowserManager');
 
 function verifyJwtHS256(token, secret) {
@@ -278,10 +280,12 @@ class BdrisEngineV2 {
 
     this.originalFetcher = new OriginalFetcher({
       browserManager: this.browserManager,
-      // আসল PDF-এর ফাইল সার্ভ করা frontend ডিরেক্টরিতে লিখতে হবে (backend
-      // এখান থেকেই static serve করে)। ডিফল্ট engines/frontend পথটি dead —
-      // সেখানে লিখলে URL 404 হয়, ডাউনলোড করা ফাইল খোলা যায় না (2026-10-28)।
-      frontendDir: path.join(__dirname, '..', '..', '..', 'frontend'),
+      // PREIUM-PRIVATE (2026-11-13): the copy is written OUTSIDE the web
+      // root — nginx serves frontend/ directly, so a file there
+      // downloaded for anyone who guessed the name (the backend
+      // charge/owner gate never saw that request). The private dir is
+      // the same rule the backend route and gate read from.
+      originalsDir: sharedOriginalsDir(),
       log: (...a) => this.log(...a),
     });
 

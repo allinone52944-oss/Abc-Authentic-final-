@@ -4605,7 +4605,11 @@ async function downloadOriginal(url, no) {
     }
     const headers = { 'Authorization': 'Bearer ' + getToken(), 'X-Charge-Token': token };
     const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(60000) : undefined;
-    const r = await fetch(url, { headers, signal });
+    // PREIUM-PRIVATE (2026-11-13): always fetch through the owner-only
+    // route. The engine's bare /bdris-original-*.pdf URL is no longer a
+    // public file — the copy lives outside the web root — and a bare
+    // URL is what let anyone who guessed a number download it.
+    const r = await fetch('/api/bdris-apply/applications/' + encodeURIComponent(canon) + '/original', { headers, signal });
     if (!r.ok) {
       note('⚠️ আসল PDF নামানো যায়নি — ' + (r.status === 401 ? 'আবার লগইন করুন' : r.status === 403 ? 'এই কপির অনুমতি নেই' : 'সার্ভার জবাব ' + r.status), 'err');
       return false;

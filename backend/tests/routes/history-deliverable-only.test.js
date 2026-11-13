@@ -19,6 +19,12 @@ const db = require('../../db');
 const auth = require('../../auth');
 const userRouter = require('../../routes/user');
 
+// PREIUM-PRIVATE (2026-11-13): stored originals live outside the web
+// root; point the private store at a scratch dir for these tests.
+const os = require('os');
+const ORIGINALS = fs.mkdtempSync(path.join(os.tmpdir(), 'orig-hist-'));
+process.env.BDRIS_ORIGINALS_DIR = ORIGINALS;
+
 function app() {
   const a = express();
   a.use(express.json());
@@ -167,7 +173,7 @@ describe('GET /api/history — deliverable PDF only (R1 follow-up)', () => {
   // in History; without the file on disk it stays text-only.
   test('(e) BDRIS filing with a stored original → documents carries the owner-only download link', async () => {
     const KEY = '265530312';
-    const FP = path.join(__dirname, '..', '..', '..', 'frontend', 'bdris-original-' + KEY + '.pdf');
+    const FP = path.join(ORIGINALS, 'bdris-original-' + KEY + '.pdf');
     fs.writeFileSync(FP, '%PDF-1.4\n' + 'A'.repeat(8100));
     try {
       db.__routeQuery([
