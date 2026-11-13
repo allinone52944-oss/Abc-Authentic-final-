@@ -4500,15 +4500,12 @@ function showDone(d, restore) {
         (no ? '<button class="btn" id="akCopy">📋 নম্বর কপি</button>' : '') +
         (origUrl ? '<button class="btn" id="akOrig">⬇️ আসল PDF (এখনই নামান)</button>' : '') +
         (!origUrl ? '<button class="btn ghost" id="akOrigPend" disabled>⏳ PDF তৈরি হচ্ছে…</button>' : '') +
-        (S.pdf ? '<button class="btn ghost" id="akPdf">⬇️ সংরক্ষিত আবেদন কপি</button>' : '') +
       '</div>' +
     '</div>' +
     (S.photo ? '<details class="sec"><summary class="sub-h" style="cursor:pointer"><span class="snum">📸</span> জমা হওয়া পেজের ছবি</summary>' +
-      '<img src="' + S.photo + '" alt="জমা হওয়া পেজ" style="max-width:100%;border-radius:12px;margin-top:10px"></details>' : '') +
-    (!S.pdf ? '<p class="hint">আবেদন কপি এখানে আসেনি — উপরের ছবিতে নম্বরটি সংরক্ষণ করে রাখুন, চাইলে নিজের অ্যাকাউন্ট থেকেও নামানো যাবে।</p>' : '')
+      '<img src="' + S.photo + '" alt="জমা হওয়া পেজ" style="max-width:100%;border-radius:12px;margin-top:10px"></details>' : '')
   );
   const c = $('akCopy'); if (c) c.onclick = () => copyText(no);
-  const p = $('akPdf'); if (p) p.onclick = () => { dlBase64(S.pdf.name || 'bdris-application.pdf', S.pdf.base64); note('⬇️ PDF কপি নামছে…', 'ok'); };
   const og = $('akOrig'); if (og) og.onclick = async () => {
     // MONEY/PDF (B10): this button used to download the static URL
     // with no charge at all. It now charges first (canonical key —
