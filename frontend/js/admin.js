@@ -2053,6 +2053,19 @@ window.AdmOrders = {
     }
     if (!o) { alert('অর্ডার পাওয়া যায়নি'); return; }
 
+    // Field labels: list rows don't carry the service's form schema,
+    // so the detail fetch fills it once — the admin then sees the
+    // same বাংলা labels the customer filled in, not raw English keys.
+    if (o.service_fields === undefined) {
+      try {
+        const fr = await ABC.api('/admin/orders/' + id);
+        if (fr.ok) {
+          const fd = await fr.json().catch(() => ({}));
+          if (fd.order && fd.order.service_fields !== undefined) o.service_fields = fd.order.service_fields;
+        }
+      } catch (_) {}
+    }
+
     // P3: a detail view opened from the unified list returns to
     // the orders list after a delete from inside the detail modal.
     // Captured + cleared here so a later view never inherits it.
@@ -2073,6 +2086,14 @@ window.AdmOrders = {
       'তারিখ: ' + new Date(o.created_at).toLocaleString('bn-BD') + '\n' +
       'গ্রাহক: ' + (o.user_name || '') + ' (' + (o.user_phone || '') + ')\n\n--- ফর্ম ডেটা ---\n';
 
+    // Service-defined field labels win over the generic dictionary:
+    // the customer saw these exact labels on the order form.
+    let svcFieldLabels = {};
+    try {
+      const sf = typeof o.service_fields === 'string' ? JSON.parse(o.service_fields || '[]') : (o.service_fields || []);
+      if (Array.isArray(sf)) sf.forEach(f => { if (f && f.name) svcFieldLabels[String(f.name)] = String(f.label || f.name); });
+    } catch (_) {}
+
     try {
       const data = typeof o.data === 'string' ? JSON.parse(o.data) : (o.data || {});
       let manualFormHtml = '';
@@ -2092,7 +2113,7 @@ window.AdmOrders = {
       if (entries.length) {
         dataCardsHtml = '<div class="adm-fields-grid">' +
           entries.map(([k, v]) => {
-            const label = ORDER_LABELS_BN[k] || String(k).replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+            const label = svcFieldLabels[k] || ORDER_LABELS_BN[k] || String(k).replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim();
             const val = String(v == null ? '' : v).trim();
             rawText += label + ': ' + val + '\n';
             return '<div class="adm-field-card">' +

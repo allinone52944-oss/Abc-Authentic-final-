@@ -1010,7 +1010,8 @@ router.get('/orders/:id', async (req, res) => {
     const r = await db.query(
       `SELECT o.*, u.name AS user_name, u.phone AS user_phone,
               s.name AS service_name, s.name_bn AS service_name_bn,
-              s.type AS service_type, s.engine_id AS service_engine
+              s.type AS service_type, s.engine_id AS service_engine,
+              s.fields_required AS service_fields
        FROM orders o JOIN users u ON u.id = o.user_id
        JOIN services s ON s.id = o.service_id
        WHERE o.id = $1`,
