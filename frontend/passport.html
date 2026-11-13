@@ -144,7 +144,8 @@ body.flow-form .form-head h2{font-size:20px;margin:0 0 6px}
 body.flow-form .form-head p{margin:0;color:var(--muted);line-height:1.7}
 body.flow-form .panel-head,body.flow-form .tabs{display:none}
 body.flow-form #panel-engine>.helper{display:none}
-body.flow-form #panel-engine .engine-hint:not(#create-message){display:none}
+body.flow-form #panel-engine .engine-hint:not(#create-message):not(#engine-validation):not(#eng-nationality-hint){display:none}
+body.flow-form #engine-validation{color:#b3261e;font-weight:600}
 body.flow-form .auto-tag{display:none}
 body.flow-form #eng-mrz-group{display:none}
 body.flow-form #eng-name-auto-row{display:none}
@@ -226,7 +227,7 @@ body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
     <div class="engine-group">
      <p class="engine-legend">Passport · পাসপোর্ট</p>
      <label for="eng-passportNo">Passport No. <span class="auto-tag">3 text regions + dotted strip</span></label>
-     <input type="text" id="eng-passportNo" data-engine="passportNo" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="EJ0762655">
+     <input type="text" id="eng-passportNo" data-engine="passportNo" maxlength="9" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="EJ0762655">
      <p class="engine-hint">Main box + right-hand printed vertical number + MRZ line 2 + left dotted strip (auto). Preview below reads the actual regions.</p>
      <p class="passport-preview" id="eng-passportPreview" aria-live="polite"></p>
      <p class="engine-hint" id="eng-dotmx-note" lang="bn" role="status" aria-live="polite"></p>
@@ -1080,7 +1081,7 @@ body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
     if (first) first.focus();
   }
   function requiredMissing(){
-    var need = [['passportNo','Passport No.'],['fullName','Full name'],['dob','Date of birth']];
+    var need = [['passportNo','Passport No.'],['docType','Type'],['countryCode','Country code'],['fullName','Full name'],['dob','Date of birth'],['sex','Sex'],['expiryDate','Date of expiry']];
     for (var i = 0; i < need.length; i++) {
       var el = engInput(need[i][0]);
       if (!el || !String(el.value).trim()) return need[i];
@@ -1106,6 +1107,11 @@ body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
       say('Please fill in ' + missing[1] + ' before creating the passport. / ' + missing[1] + ' পূরণ করুন।');
       var el = engInput(missing[0]);
       if (el) el.focus();
+      return;
+    }
+    var issues = (api.validate ? api.validate() : []);
+    if (issues && issues.length) {
+      say('Please fix this before creating the passport: ' + issues[0] + ' / পাসপোর্ট তৈরির আগে ঠিক করুন।');
       return;
     }
     var no = String((engInput('passportNo') || {}).value || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();

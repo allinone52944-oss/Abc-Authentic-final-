@@ -112,7 +112,7 @@ function runFlow(opts) {
     classList: makeClassList(o.bodyClasses || ['flow-landing']),
     appendChild: () => {},
   };
-  const calls = { applyAll: 0, regenerateMRZ: 0, resetImage: [], exportHTML: 0, setImage: [] };
+  const calls = { applyAll: 0, regenerateMRZ: 0, validate: 0, resetImage: [], exportHTML: 0, setImage: [] };
   const state = { exportedPromise: null, imagePromise: null };
   const downloads = [];
   const anchor = {
@@ -137,6 +137,7 @@ function runFlow(opts) {
     sandbox.window.passportEngine = {
       applyAll: () => { calls.applyAll += 1; },
       regenerateMRZ: () => { calls.regenerateMRZ += 1; },
+      validate: () => { calls.validate += 1; return o.validateIssues || []; },
     };
   }
   if (o.withEditor !== false) {
@@ -237,11 +238,22 @@ describe('form (separate form screen)', () => {
     expect(givenAt).toBeLessThan(fatherAt);
   });
 
-  test('form screen hides preview, hints and auto-only controls', () => {
+  test('form screen hides preview, hints and auto-only controls — except validation', () => {
     expect(PAGE).toContain('body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}');
-    expect(PAGE).toContain('body.flow-form #panel-engine .engine-hint:not(#create-message){display:none}');
+    // Validation must stay VISIBLE on the form screen (findings 1–6): the
+    // engine computes format/consistency issues, and Create now blocks on
+    // them — hiding the line would make the block reason undiscoverable.
+    // Only the other hints are hidden.
+    expect(PAGE).toContain('body.flow-form #panel-engine .engine-hint:not(#create-message):not(#engine-validation):not(#eng-nationality-hint){display:none}');
+    expect(PAGE).toContain('body.flow-form #engine-validation{color:#b3261e;font-weight:600}');
     expect(PAGE).toContain('body.flow-form .auto-tag{display:none}');
     expect(PAGE).toContain('body.flow-form #eng-dotstrip-row{display:none}');
+  });
+
+  test('passport-no input is limited to 9 characters (finding 5: MRZ truncates silently otherwise)', () => {
+    const at = PAGE.indexOf('id="eng-passportNo"');
+    expect(at).toBeGreaterThan(-1);
+    expect(PAGE.slice(at, at + 200)).toContain('maxlength="9"');
   });
 
   test('form state collapses the editor grid to a single column', () => {
@@ -328,11 +340,20 @@ describe('Create → download', () => {
     expect(FLOW).toContain("'Passport-'");
   });
 
-  test('Create requires passport no, full name, DOB and nationality before downloading', () => {
+  test('Create requires passport no, type, country code, full name, DOB, sex, expiry and nationality before downloading', () => {
     expect(FLOW).toContain("['passportNo','Passport No.']");
+    expect(FLOW).toContain("['docType','Type']");
+    expect(FLOW).toContain("['countryCode','Country code']");
     expect(FLOW).toContain("['fullName','Full name']");
     expect(FLOW).toContain("['dob','Date of birth']");
+    expect(FLOW).toContain("['sex','Sex']");
+    expect(FLOW).toContain("['expiryDate','Date of expiry']");
     expect(FLOW).toContain("['nationality','Nationality']");
+  });
+
+  test('Create blocks on engine validation issues and names the problem', () => {
+    expect(FLOW).toContain('api.validate()');
+    expect(FLOW).toContain('Please fix this before creating the passport:');
   });
 });
 
@@ -390,8 +411,12 @@ describe('flow behavior (vm, stub DOM)', () => {
     const r = runFlow({});
     r.els['start-passport-button'].click();
     r.els['eng-passportNo'].value = 'EJ0762655';
+    r.els['eng-docType'].value = 'P';
+    r.els['eng-countryCode'].value = 'BGD';
     r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
     r.els['eng-dob'].value = '1979-12-17';
+    r.els['eng-sex'].value = 'M';
+    r.els['eng-expiryDate'].value = '2035-01-01';
     r.els['eng-nationality'].value = 'BANGLADESHI';
     r.els['create-passport-button'].click();
     await r.state.exportedPromise;
@@ -408,14 +433,73 @@ describe('flow behavior (vm, stub DOM)', () => {
     const r = runFlow({});
     r.els['start-passport-button'].click();
     r.els['eng-passportNo'].value = 'EJ0762655';
+    r.els['eng-docType'].value = 'P';
+    r.els['eng-countryCode'].value = 'BGD';
     r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
     // dob left blank
+    r.els['eng-sex'].value = 'M';
+    r.els['eng-expiryDate'].value = '2035-01-01';
     r.els['eng-nationality'].value = 'BANGLADESHI';
     r.els['create-passport-button'].click();
     expect(r.calls.exportHTML).toBe(0);
     expect(r.downloads).toHaveLength(0);
     expect(r.els['create-message'].textContent).toContain('Date of birth');
     expect(r.els['eng-dob'].focused).toBe(true);
+    expect(r.body.classList.contains('flow-form')).toBe(true);
+  });
+
+  test('Create with expiry missing downloads nothing and points at expiry (finding 2)', () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    r.els['eng-passportNo'].value = 'EJ0762655';
+    r.els['eng-docType'].value = 'P';
+    r.els['eng-countryCode'].value = 'BGD';
+    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-dob'].value = '1979-12-17';
+    r.els['eng-sex'].value = 'M';
+    // expiryDate left blank
+    r.els['eng-nationality'].value = 'BANGLADESHI';
+    r.els['create-passport-button'].click();
+    expect(r.calls.exportHTML).toBe(0);
+    expect(r.downloads).toHaveLength(0);
+    expect(r.els['create-message'].textContent).toContain('Date of expiry');
+    expect(r.els['eng-expiryDate'].focused).toBe(true);
+  });
+
+  test('Create with sex untouched downloads nothing and points at sex (finding 4)', () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    r.els['eng-passportNo'].value = 'EJ0762655';
+    r.els['eng-docType'].value = 'P';
+    r.els['eng-countryCode'].value = 'BGD';
+    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-dob'].value = '1979-12-17';
+    // sex left blank (clearForm blanks the select)
+    r.els['eng-expiryDate'].value = '2035-01-01';
+    r.els['eng-nationality'].value = 'BANGLADESHI';
+    r.els['create-passport-button'].click();
+    expect(r.calls.exportHTML).toBe(0);
+    expect(r.downloads).toHaveLength(0);
+    expect(r.els['create-message'].textContent).toContain('Sex');
+    expect(r.els['eng-sex'].focused).toBe(true);
+  });
+
+  test('Create blocked by an engine validation issue downloads nothing and names it (findings 1, 5)', () => {
+    const r = runFlow({ validateIssues: ['Enter the three-letter nationality code; it is not assumed from the issuing country.'] });
+    r.els['start-passport-button'].click();
+    r.els['eng-passportNo'].value = 'EJ0762655';
+    r.els['eng-docType'].value = 'P';
+    r.els['eng-countryCode'].value = 'BGD';
+    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-dob'].value = '1979-12-17';
+    r.els['eng-sex'].value = 'M';
+    r.els['eng-expiryDate'].value = '2035-01-01';
+    r.els['eng-nationality'].value = 'INDIAN';
+    r.els['create-passport-button'].click();
+    expect(r.calls.validate).toBeGreaterThan(0);
+    expect(r.calls.exportHTML).toBe(0);
+    expect(r.downloads).toHaveLength(0);
+    expect(r.els['create-message'].textContent).toContain('three-letter nationality code');
     expect(r.body.classList.contains('flow-form')).toBe(true);
   });
 
@@ -517,8 +601,12 @@ describe('form upload behavior (vm, stub DOM)', () => {
     await r.state.imagePromise;
     await flush();
     r.els['eng-passportNo'].value = 'EJ0762655';
+    r.els['eng-docType'].value = 'P';
+    r.els['eng-countryCode'].value = 'BGD';
     r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
     r.els['eng-dob'].value = '1979-12-17';
+    r.els['eng-sex'].value = 'M';
+    r.els['eng-expiryDate'].value = '2035-01-01';
     r.els['eng-nationality'].value = 'BANGLADESHI';
     r.els['create-passport-button'].click();
     await r.state.exportedPromise;
