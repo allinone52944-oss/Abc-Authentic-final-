@@ -2664,9 +2664,9 @@ async function geoLoad(k, Ls, data, wantOv) {
         zone: data.paurasavaUnion || '',
       };
       const lvl = (k === 'paurasavaUnion') ? 'zone' : 'ward';
-      // Form নির্ণয়: UI id prefix থেকে (g_=birth, sp_=perm, pr_=prsnt)
+      // Form নির্ণয়: UI id prefix থেকে (g_=birth, sp_=perm, rp_=prsnt)
       const uiId = L.ui || '';
-      const form = uiId.startsWith('sp_') ? 'perm' : (uiId.startsWith('pr_') ? 'prsnt' : 'birth');
+      const form = uiId.startsWith('sp_') ? 'perm' : (uiId.startsWith('rp_') ? 'prsnt' : 'birth');
       const addrRes = await fetchAddrOpts(lvl, parents, 40000, form);
       opts = addrRes.options || [];
       // 2026-10-25 zone fix: a failed zone/ward fetch must NOT degrade
