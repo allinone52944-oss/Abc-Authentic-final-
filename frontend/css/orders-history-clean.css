@@ -1,0 +1,45 @@
+/* Scoped final presentation; workflow visibility is owned by the original pages. */
+body:is(.page-orders,.page-history) .main { max-width: 1440px; }
+body:is(.page-orders,.page-history) .topbar { margin-bottom: 24px; }
+body:is(.page-orders,.page-history) .topbar h2 { font-size: 26px; }
+body:is(.page-orders,.page-history) .topbar p { color: var(--text-muted); }
+.oh-search { margin-bottom: 20px; }
+.oh-search label { display: block; margin-bottom: 8px; color: var(--text-main); font-size: 14px; font-weight: 600; }
+.oh-search-line { display: flex; gap: 8px; }
+.oh-search input { flex: 1; width: 100%; min-width: 0; min-height: 48px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-surface); color: var(--text-main); padding: 12px 16px; font-size: 16px; }
+.oh-search input::placeholder { color: var(--text-muted); }
+.oh-search .oh-clear { flex: 0 0 48px; width: 48px; min-height: 48px; padding: 0; font-size: 24px; border-radius: 8px; background: var(--bg-surface); border: 1px solid var(--border-light); color: var(--text-muted); }
+body.page-orders #filters { display: flex; flex-wrap: wrap; gap: 8px; overflow: visible; align-items: start; }
+body.page-orders #filters .fbtn { min-height: 44px; padding: 10px 18px; border-radius: 8px; }
+.oh-status-more { min-width: 140px; }
+.oh-status-more summary { cursor: pointer; min-height: 44px; padding: 11px 14px; border: 1px solid var(--border-light); border-radius: 8px; color: var(--text-muted); background: var(--bg-surface); font-size: 14px; }
+.oh-status-more[open] { flex-basis: 100%; }
+.oh-status-more[open] summary { width: fit-content; margin-bottom: 10px; }
+.oh-extra-statuses { display: flex; flex-wrap: wrap; gap: 8px; }
+body.page-orders .table-container { border-radius: 8px; box-shadow: none; }
+body.page-orders .table-container th { color: var(--text-muted); background: var(--bg-subtle); font-size: 13px; font-weight: 600; }
+body.page-orders .table-container td { padding: 20px 16px; color: var(--text-main); font-size: 14px; vertical-align: middle; }
+body.page-orders #list td:first-child b { color: var(--text-main) !important; font-size: 16px !important; }
+body.page-orders #list td:nth-child(2) b { color: var(--primary-700) !important; }
+body.page-orders #list tr[hidden] { display: none !important; }
+body.page-orders .btn-view { color: var(--primary-700); background: var(--primary-50); border-color: var(--primary-200); }
+.oh-empty { color: var(--text-muted); padding: 22px 0; line-height: 1.7; }
+body:is(.page-orders,.page-history) :is(.btn-more,#histMoreBtn) { border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-surface); color: var(--primary-700); min-height: 48px; box-shadow: none; }
+body.page-history #histList { display: grid; gap: 14px; }
+body.page-history .hist-item { margin: 0; border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-surface); padding: 22px; box-shadow: none; }
+body.page-history .hist-title { font-size: 17px; line-height: 1.6; color: var(--text-main); }
+body.page-history .hist-meta { margin-top: 6px; color: var(--text-muted); font-size: 13px; }
+body.page-history .hist-docs { margin-top: 16px; gap: 10px; }
+body.page-history .hist-doc { padding: 10px 14px; border-radius: 8px; min-height: 46px; font-size: 14px; }
+body.page-history .hist-doc.delivery { background: var(--primary-50); color: var(--primary-700); border-color: var(--primary-200); }
+.oh-file-type { font-size: 11px; font-weight: 700; color: var(--text-muted); border-left: 1px solid var(--border-light); margin-left: 8px; padding-left: 8px; }
+body.page-history :is(#histSearch,#histKind) { background: var(--bg-surface); color: var(--text-main); border-color: var(--border-light) !important; border-radius: 8px !important; }
+body:is(.page-orders,.page-history) :is(input,summary,button):focus-visible { outline: 2px solid var(--primary-600); outline-offset: 3px; }
+@media (max-width: 768px) {
+  body:is(.page-orders,.page-history) .topbar h2 { font-size: 23px; }
+  body.page-orders #filters .fbtn { padding: 10px 14px; }
+  body.page-orders #list tr { border-radius: 8px; background: var(--bg-surface); box-shadow: none; }
+  body.page-orders #list td { padding: 5px 0; }
+  body.page-history .hist-item { padding: 18px 16px; }
+  body.page-history .hist-doc.delivery { width: 100%; justify-content: flex-start; }
+}
