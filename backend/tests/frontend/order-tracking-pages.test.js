@@ -133,7 +133,8 @@ describe('order tracking — "এরপর কী" per step (audit #48)', () => 
   });
 
   test('the detail timeline carries the same next-step note', () => {
-    expect(detailHtml).toContain("next: isLast ? (NEXT_STEP[h.to_status] || null) : null");
+    expect(detailHtml).toContain("next: isLast ? nextStepFor(h.to_status) : null");
+    expect(detailHtml).toContain("return NEXT_STEP[st] || null;");
     expect(detailHtml).toContain('এরপর কী: ');
   });
 });

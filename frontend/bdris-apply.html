@@ -2571,10 +2571,14 @@ function setSelByText(id, text) {
   const norm = typeof geoNorm === 'function' ? geoNorm :
     (typeof bnNormJs === 'function' ? bnNormJs : (s => String(s || '').trim()));
   const wN = norm(want);
+  // 2026-11-13: partial-name matches are accepted only when exactly one
+  // real option matches; an ambiguous name (e.g. "ঢাকা" vs North/South
+  // city corporation) is left unselected for the user instead of guessed.
+  const uniqueOpt = (fn) => { const m = Array.from(node.options).filter(o => o.value && fn(o)); return m.length === 1 ? m[0] : null; };
   const opt = Array.from(node.options).find(o => o.text.trim() === want) ||
     Array.from(node.options).find(o => norm(o.text) === wN) ||
-    Array.from(node.options).find(o => norm(o.text).includes(wN) || wN.includes(norm(o.text.trim()))) ||
-    Array.from(node.options).find(o => o.text.includes(want) || want.includes(o.text.trim()));
+    uniqueOpt(o => o.text.trim() && (norm(o.text).includes(wN) || wN.includes(norm(o.text.trim())))) ||
+    uniqueOpt(o => o.text.trim() && (o.text.includes(want) || want.includes(o.text.trim())));
   if (opt) { node.value = opt.value; return true; }
   // FINAL-SOLUTION (#12): zone/ward digit match. Saved labels
   // ('Zone-8', 'Ward-68') and live options ('অঞ্চল - ৮',
@@ -2774,10 +2778,15 @@ async function geoChanged(k, Ls, data) {
     return;
   }
   data[k] = label;
+  // STALE-ID FIX (2026-11-13): a parent change cleared descendant labels
+  // but kept their old option IDs, and the collectors re-sent them.
+  delete data[k + 'Id'];
+  if (node && node.tagName === 'SELECT' && node.value) data[k + 'Id'] = node.value;
   setGeoState(k, Ls, label ? 'loaded' : 'idle');
   const idx = Ls.indexOf(L);
   Ls.slice(idx + 1).forEach(D => {
     data[D.k] = '';
+    delete data[D.k + 'Id'];
     setGeoState(D.k, Ls, 'idle');
     const lblEl = $(D.ui + '_lbl'); if (lblEl) lblEl.textContent = D.lbl;
   });
@@ -3065,11 +3074,6 @@ function collectStep2() {
 }
 function submitStep2() {
   collectStep2();
-  if ((S.d.uiStep || 0) >= 3) {
-    // ফিরে এসে কিছু বদলালে কেবল এই এক ধাপই আবার সাইটে বসাই (লকস্টেপ)
-    if (stepChanged('SUBMIT_S1', payloadFor('SUBMIT_S1'))) { resendFrom('SUBMIT_S1'); return; }
-    goStep(3); return;
-  }
   const s1 = S.d.s1, bad = [];
   [['s1_f_bn', 'নামের প্রথম অংশ (বাংলা)'], ['s1_f_en', 'First Name (English)']].forEach(([id, lbl]) => {
     if (!s1[id === 's1_f_bn' ? 'firstNameBn' : 'firstNameEn']) { bad.push(lbl); $('' + id).classList.add('bad'); }
@@ -3079,15 +3083,24 @@ function submitStep2() {
   if (!s1.district) bad.push('জেলা');
   // সাইট যেখানে তালিকা দিয়েছে সেখানে বাছাই বাধ্যতামূলক — live-এ সাইট নিজেই দাবি করে
   // ("যেকোনো একটি নির্বাচন করুন! [birthPlaceCityCorpCantOrUpazila]"); খালি রাখলে মেইন সার্ভার আটকায়
-  { const cc = $('g_cc'); if (cc && cc.tagName === 'SELECT' && cc.options.length > 1 && !cc.value) bad.push('সিটি কর্পোরেশন / উপজেলা'); }
-  { const pu = $('g_pu'); if (pu && pu.tagName === 'SELECT' && pu.options.length > 1 && !pu.value) bad.push('পৌরসভা / ইউনিয়ন'); }
-  { const wd = $('g_ward'); if (wd && wd.tagName === 'SELECT' && wd.options.length > 1 && !wd.value) bad.push('ওয়ার্ড'); }
+  // 2026-11-13: a list still loading or failed (one placeholder option)
+  // used to skip these checks entirely; the collected value decides now,
+  // matching the Auto form's unconditional checks.
+  if (!s1.cityCorpUpazila) bad.push('সিটি কর্পোরেশন / উপজেলা');
+  if (!s1.paurasavaUnion) bad.push('পৌরসভা / ইউনিয়ন');
+  if (!s1.ward) bad.push('ওয়ার্ড');
   if (!s1.postBn) bad.push('ডাকঘর (বাংলায়)');
   if (!s1.postEn) bad.push('ডাকঘর (English)');
   if (!s1.vilBn) bad.push('গ্রাম / পাড়া / মহল্লা');
   if (!s1.vilEn) bad.push('গ্রাম / Area (English)');
   if (bad.length) { showFail(bad); note('⚠️ কিছু ঘর পূরণ করুন', 'warn'); return; }
   hideFail();
+  // 2026-11-13: revisiting a finished step now validates first; the old
+  // early return re-sent cleared required fields without any warning.
+  if ((S.d.uiStep || 0) >= 3) {
+    if (stepChanged('SUBMIT_S1', payloadFor('SUBMIT_S1'))) { resendFrom('SUBMIT_S1'); return; }
+    goStep(3); return;
+  }
   advanceAndSend(3, 'SUBMIT_S1', Object.assign({ docsAvailable: true }, s1));
 }
 
@@ -3143,11 +3156,6 @@ function readPerson(p) {
 function collectStep3() { S.d.s2 = { father: readPerson('father'), mother: readPerson('mother') }; }
 function submitStep3() {
   collectStep3();
-  if ((S.d.uiStep || 0) >= 4) {
-    // ফিরে এসে কিছু বদলালে কেবল এই এক ধাপই আবার সাইটে বসাই (লকস্টেপ)
-    if (stepChanged('SUBMIT_S2', payloadFor('SUBMIT_S2'))) { resendFrom('SUBMIT_S2'); return; }
-    goStep(4); return;
-  }
   const brnExempt = isParentBrnExemptClient(S.d.s1.dob);
   const bad = [];
   [['father', 'পিতা'], ['mother', 'মাতা']].forEach(([p, who]) => {
@@ -3161,6 +3169,12 @@ function submitStep3() {
   hideFail();
   const brnWarn = parentBrnWarnings();
   if (brnWarn.length) note('⚠️ ' + brnWarn.join(' — '), 'warn');
+  // 2026-11-13: revisiting a finished step now validates first; the old
+  // early return re-sent cleared required fields without any warning.
+  if ((S.d.uiStep || 0) >= 4) {
+    if (stepChanged('SUBMIT_S2', payloadFor('SUBMIT_S2'))) { resendFrom('SUBMIT_S2'); return; }
+    goStep(4); return;
+  }
   advanceAndSend(4, 'SUBMIT_S2', Object.assign({}, S.d.s2, { applicantDob: S.d.s1.dob }));
 }
 
@@ -3395,7 +3409,7 @@ function renderStep5() {
     '<div id="docTypes" class="hint"></div></div>' +
     '<div id="docRows"></div>' +
     '<div class="mt8"><button class="btn ghost" id="addDoc">➕ ছবি যোগ করুন</button>' +
-    '<input type="file" id="docFile" accept="image/*" multiple style="display:none"></div>'
+    '<input type="file" id="docFile" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple style="display:none"></div>'
   );
   renderDocRows();
   els('.rcard.rsm').forEach(c => c.onclick = () => {
@@ -3411,21 +3425,32 @@ function renderStep5() {
     const files = Array.from($('docFile').files || []);
     $('docFile').value = '';
     if (!files.length) return;
+    // 2026-11-13: one file reading at a time — a second selection while
+    // the first is still being read could pass the six-file limit.
+    if (S._docReading) { note('⏳ আগের ছবি যোগ হচ্ছে — একটু অপেক্ষা করুন', 'warn'); return; }
+    S._docReading = true;
+    const addBtn = $('addDoc'); if (addBtn) addBtn.disabled = true;
+    try {
     busy(true, '⏳ ছবি যোগ হচ্ছে…');
     let uploadWarning = false;
     for (const f of files) {
       if ((S.d.docs || []).length >= 6) { uploadWarning = true; note('সর্বোচ্চ ৬টি কাগজ দেওয়া যাবে', 'warn'); break; }
-      const isImg = /^image\//.test(f.type) || /\.(jpe?g|png)$/i.test(f.name);
+      const isImg = /^image\/(?:jpe?g|pjpeg|png)$/i.test(f.type) || (!f.type && /\.(jpe?g|png)$/i.test(f.name));
       if (!isImg) { uploadWarning = true; note('শুধু JPG/PNG ছবি চলবে — ' + f.name, 'warn'); continue; }
       if (f.size > 2 * 1024 * 1024) { uploadWarning = true; note('“' + f.name + '” ২MB-এর বেশি — ছোট করে আবার দিন', 'warn'); continue; }
       const d = await fileToDoc(f);
       if (!d) { uploadWarning = true; note('“' + f.name + '” পড়া যায়নি — আবার চেষ্টা করুন', 'warn'); continue; }
       const st = docTypeStatus();
       d.docType = !st.has40 ? '40' : (!st.has41 ? '41' : '40');
+      if ((S.d.docs || []).length >= 6) { uploadWarning = true; note('সর্বোচ্চ ৬টি কাগজ দেওয়া যাবে', 'warn'); break; }
       S.d.docs.push(d);
     }
     renderDocRows();
     busy(false); if (!uploadWarning) noteOff();
+    } finally {
+      S._docReading = false;
+      const addBtn2 = $('addDoc'); if (addBtn2) addBtn2.disabled = false;
+    }
   };
   setBtns([
     { html: 'পরবর্তী →', fn: () => submitStep5() },
@@ -3435,11 +3460,6 @@ function renderStep5() {
 }
 function submitStep5() {
   if (!Array.isArray(S.d.docs)) S.d.docs = [];
-  if ((S.d.uiStep || 0) >= 6) {
-    // কাগজ বদলালে কেবল এই এক ধাপই আবার ছবিসহ সাইটে যায় (লকস্টেপ)
-    if (stepChanged('SUBMIT_S3_DOCS', payloadFor('SUBMIT_S3_DOCS'))) { resendFrom('SUBMIT_S3_DOCS'); return; }
-    goStep(6); return;
-  }
   const st = docTypeStatus(), bad = [];
   if (!st.n) bad.push('কমপক্ষে ১টি কাগজের ছবি যোগ করুন');
   if (st.n && !(st.has40 && st.has41)) bad.push('দুই ধরনের কাগজ দরকার — ধরন ৪০ ও ধরন ৪১ দুটোই চিহ্নিত করুন');
@@ -3454,6 +3474,12 @@ function submitStep5() {
   if (!normalizeRelation(S.d.relation) || !relationsForAge().includes(normalizeRelation(S.d.relation))) bad.push('আবেদনকারী কে তা বেছে নিন (সম্পর্ক)');
   if (bad.length) { showFail(bad); note('⚠️ কাগজপত্র ঠিক করুন', 'warn'); return; }
   hideFail();
+  // 2026-11-13: revisiting a finished step now validates first; the old
+  // early return re-sent cleared required fields without any warning.
+  if ((S.d.uiStep || 0) >= 6) {
+    if (stepChanged('SUBMIT_S3_DOCS', payloadFor('SUBMIT_S3_DOCS'))) { resendFrom('SUBMIT_S3_DOCS'); return; }
+    goStep(6); return;
+  }
   advanceAndSend(6, 'SUBMIT_S3_DOCS', { relation: S.d.relation || defaultRelation(), other: S.d.other || {}, docs: S.d.docs });
 }
 
@@ -4387,15 +4413,20 @@ function cleanSiteSms(t) {
 
 function showDone(d, restore) {
   d = d || {};
+  // 2026-11-13: a new application's DONE must never inherit the
+  // previous application's screenshot/PDF copy; only a restore or the
+  // same acknowledgement keeps the already captured attachments.
+  const prevDone = S._done;
+  const sameApp = !!restore || !!(prevDone && prevDone.ackId && d.ackId && prevDone.ackId === d.ackId);
   S._done = d; // প্রিভিউ থেকে ফেরার সময় আবার দেখানোর জন্য
   S.otpStage = 'done'; S.pvMode = false;
   S._otpSessionLive = false; // FINAL-SOLUTION (#2): submitted → no return button
   S._pendingSubmit = null; // FINAL-SOLUTION (#4): submitted → no held submit
-  S.photo = d.screenshot || S.photo || null;
+  S.photo = d.screenshot || (sameApp ? S.photo : null) || null;
   // ALL-BUGS (c): a bytes-only pdf (legacy COMPLETED carries
   // name+bytes, no content) must never replace a real base64 copy
   // or render a broken download button — keep the existing copy.
-  S.pdf = (d.pdf && d.pdf.base64) ? d.pdf : (S.pdf || null);
+  S.pdf = (d.pdf && d.pdf.base64) ? d.pdf : (sameApp ? (S.pdf || null) : null);
   // Debug-2 (2026-10-26): COMPLETED.original is the original-PDF
   // RECORD object ({appId, date, nameEn, mobileNo}), never a URL —
   // v1 sent a URL string here. Only a string may render the direct
@@ -4849,7 +4880,7 @@ function renderAuto() {
     '<div id="docTypes" class="hint"></div>' +
     '<div id="docRows"></div>' +
     '<div class="mt8"><button class="btn ghost" id="addDoc">➕ ছবি যোগ করুন</button>' +
-    '<input type="file" id="docFile" accept="image/*" multiple style="display:none"></div>' +
+    '<input type="file" id="docFile" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple style="display:none"></div>' +
 
     '<div class="sec"><div class="sub-h"><span class="snum">📞</span> যোগাযোগ (OTP এখানেই আসবে)</div></div>' +
     '<div class="row2">' +
@@ -4905,22 +4936,33 @@ function renderAuto() {
     const files = Array.from($('docFile').files || []);
     $('docFile').value = '';
     if (!files.length) return;
+    // 2026-11-13: one file reading at a time — a second selection while
+    // the first is still being read could pass the six-file limit.
+    if (S._docReading) { note('⏳ আগের ছবি যোগ হচ্ছে — একটু অপেক্ষা করুন', 'warn'); return; }
+    S._docReading = true;
+    const addBtn = $('addDoc'); if (addBtn) addBtn.disabled = true;
+    try {
     busy(true, '⏳ ছবি যোগ হচ্ছে…');
     let uploadWarning = false;
     for (const f2 of files) {
       if ((S.d.docs || []).length >= 6) { uploadWarning = true; note('সর্বোচ্চ ৬টি কাগজ দেওয়া যাবে', 'warn'); break; }
-      const isImg = /^image\//.test(f2.type) || /\.(jpe?g|png)$/i.test(f2.name);
+      const isImg = /^image\/(?:jpe?g|pjpeg|png)$/i.test(f2.type) || (!f2.type && /\.(jpe?g|png)$/i.test(f2.name));
       if (!isImg) { uploadWarning = true; note('শুধু JPG/PNG ছবি চলবে — ' + f2.name, 'warn'); continue; }
       if (f2.size > 2 * 1024 * 1024) { uploadWarning = true; note('“' + f2.name + '” ২MB-এর বেশি — ছোট করে আবার দিন', 'warn'); continue; }
       const d = await fileToDoc(f2);
       if (!d) { uploadWarning = true; note('“' + f2.name + '” পড়া যায়নি — আবার চেষ্টা করুন', 'warn'); continue; }
       const st = docTypeStatus();
       d.docType = !st.has40 ? '40' : (!st.has41 ? '41' : '40');
+      if ((S.d.docs || []).length >= 6) { uploadWarning = true; note('সর্বোচ্চ ৬টি কাগজ দেওয়া যাবে', 'warn'); break; }
       S.d.docs.push(d);
     }
     renderDocRows();
     autoSaveDraft(0); // DRAFTS/AUTH (B14): added photos are progress — save them with the form
     busy(false); if (!uploadWarning) noteOff();
+    } finally {
+      S._docReading = false;
+      const addBtn2 = $('addDoc'); if (addBtn2) addBtn2.disabled = false;
+    }
   };
   renderDocRows();
   $('pasteBox').value = S._pasteRaw || '';
@@ -5083,11 +5125,20 @@ function submitAuto() {
   hideFail();
   const brnWarnAuto = parentBrnWarnings();
   if (brnWarnAuto.length) note('⚠️ ' + brnWarnAuto.join(' — '), 'warn');
+  // RAPID-CLICK GUARD (2026-11-13): between this click and the progress
+  // screen there is a session/draft-save window (up to several seconds).
+  // A second click there queued a second chain and a second preparation.
+  // One pending start at a time; released when the chain takes over, or
+  // after the session-start window so a stalled session can be retried.
+  if (S._autoStarting) { note('⏳ আবেদন প্রস্তুত হচ্ছে — একটু অপেক্ষা করুন', 'warn'); return; }
+  S._autoStarting = true;
+  clearTimeout(S._autoStartT);
+  S._autoStartT = setTimeout(() => { S._autoStarting = false; }, 65000);
   ensureReady(() => {
     // Permanent (2026-10-15): submit-এর আগে খসড়া auto-save — manual "খসড়ায় রাখুন"
     // না চাপলেও draft থাকবে। Save না হলে (3s timeout) submit আটকাবে না।
     let saved = false;
-    const proceed = () => { if (!saved) { saved = true; runChain(OPS, () => { autoPrep(); }, 'আবেদন প্রস্তুত হচ্ছে'); } };
+    const proceed = () => { if (!saved) { saved = true; S._autoStarting = false; clearTimeout(S._autoStartT); runChain(OPS, () => { autoPrep(); }, 'আবেদন প্রস্তুত হচ্ছে'); } };
     try { saveDraft(6, proceed); } catch (e) { proceed(); }
     setTimeout(proceed, 3000);
   });
@@ -5217,7 +5268,15 @@ function abortChain() {
   S._directOtp = false; // DIRECT-PATH WIRING: pausing kills the direct OTP phase too
   directAckClear(); // DIRECT ACK TIMEOUT: no fallback after pausing to draft
   S._staleAcks = 0;
-  saveDraft(S.d.uiStep || 0, () => { note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে পরে চালু করুন', 'ok'); setTimeout(renderHome, 500); });
+  saveDraft(S.d.uiStep || 0, (r) => {
+    // 2026-11-13: a failed save no longer claims success and leaves.
+    if (!r || !r.ok) {
+      note('⚠️ খসড়া সেভ হয়নি — তথ্য এখানেই আছে, সংযোগ ফিরলে আবার চেষ্টা করুন', 'err');
+      setBtns([{ html: '💾 আবার খসড়ায় রাখুন', fn: () => abortChain() }, { html: '🏠 মূল পাতায় যান', cls: 'ghost', fn: () => renderHome() }]);
+      return;
+    }
+    note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে পরে চালু করুন', 'ok'); setTimeout(renderHome, 500);
+  });
 }
 /* অটো-চেইন শেষ হওয়ার পরের ধাপ: ওটিপি-প্রস্তুতির ack (progress view-তে chain আর থাকে না) */
 /* OTP-TRAP (A6, 2026-10-31): shared cap classifier — the 5-use
@@ -5907,6 +5966,9 @@ socket.on('BOT_STATUS', (d) => {
     // immediate banner. Merge into the shown DONE page (or stash
     // for restore if the user already navigated away) — never a
     // new DONE, never a second recent-list entry.
+    // 2026-11-13: a late attachment for a different acknowledgement
+    // is ignored, so application B can never show application A's copy.
+    if (d.ackId && S._done && S._done.ackId && d.ackId !== S._done.ackId) return;
     if (d.screenshot) S.photo = d.screenshot;
     if (d.pdf && d.pdf.base64) S.pdf = d.pdf;
     if (S.view === 'done' && S._done) {
@@ -5921,7 +5983,7 @@ socket.on('BOT_STATUS', (d) => {
   if (st === 'ERROR') {
     busy(false);
     const diedOp = S._waitingAck;
-    const msg = String(d.message || noMsgError('ERROR', 'সাময়িক সমস্যা হয়েছে'));
+    const msg = String(d.message || d.error || noMsgError('ERROR', 'সাময়িক সমস্যা হয়েছে'));
     if (/চালু হয়নি|সংযোগ নেই/.test(msg)) { sessionLost(); return; }
     // চূড়ান্ত জমার মুহূর্তের ব্যর্থতা — সার্ভারে রেকর্ড + অ্যাডমিন push।
     // OTP-ভুলের শাখাটি বাদ (ওটা কোড বসানোর পর্দায় ফেরে, আবেদন মরে না)।
