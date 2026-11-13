@@ -824,8 +824,15 @@ describe('address book (2026-10-31)', () => {
   });
 
   test('book cascade passes the saved zone through the async onUp so it survives the endpoint fill', () => {
-    expect(html).toMatch(/\$?\('ab_cityCorpUpazila'\)\.onchange = \(\) => onUp\(\);/);
+    expect(html).toMatch(/\$?\('ab_cityCorpUpazila'\)\.onchange = \(\) => \{ clearWard\(\); onUp\(\); \};/);
     expect(html).toMatch(/onUp\(d\.paurasavaUnion\)/);
+  });
+
+  test('book ward is a list loaded from the union/zone, falling back to text on failure', () => {
+    expect(html).toMatch(/fetchAddrOpts\('ward', \{ division: dv, district: ds, upazila: up, zone: un \}/);
+    expect(html).toMatch(/\$\('ab_paurasavaUnion'\)\.onchange = \(\) => onUnion\(\);/);
+    expect(html).toMatch(/ওয়ার্ডের তালিকা আসেনি — ওয়ার্ড ঘরে লিখে দিন/);
+    expect(html).toMatch(/await onUnion\(d\.ward\)/);
   });
 
   test('auto birthplace book pick lands in S.d.s1 before re-render, so it survives renderAuto', () => {

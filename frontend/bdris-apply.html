@@ -1344,7 +1344,7 @@ function addrBookGeoHtml(d) {
   return sel('ab_division', 'বিভাগ') + sel('ab_district', 'জেলা') +
     sel('ab_cityCorpUpazila', 'সিটি কর্পোরেশন / উপজেলা') + sel('ab_paurasavaUnion', 'পৌরসভা / ইউনিয়ন') +
     txt('ab_zone', 'অঞ্চল (সিটি কর্পোরেশন হলে, যেমন: অঞ্চল - ৭)') +
-    txt('ab_ward', 'ওয়ার্ড') + txt('ab_postBn', 'ডাকঘর (বাংলায়)') +
+    '<div class="fld" id="ab_ward_box"><label>ওয়ার্ড</label><select id="ab_ward"><option value="">--- আগে ইউনিয়ন / অঞ্চল নির্বাচন করুন ---</option></select></div>' + txt('ab_postBn', 'ডাকঘর (বাংলায়)') +
     txt('ab_postEn', 'ডাকঘর (English)') + txt('ab_vilBn', 'গ্রাম / পাড়া / মহল্লা') +
     txt('ab_vilEn', 'Village / Area (English)') + txt('ab_houseBn', 'বাসা ও সড়ক (বাংলা)') +
     txt('ab_houseEn', 'বাসা ও সড়ক (English)');
@@ -1399,12 +1399,47 @@ function addrBookWire(d) {
     }
     addrBookFill('ab_paurasavaUnion', []);
   };
-  $('ab_division').onchange = onDiv; $('ab_district').onchange = onDis; $('ab_cityCorpUpazila').onchange = () => onUp();
+  // ADDRBOOK-WARD (2026-11-13): ward used to be a bare text box, so a
+  // saved address never carried a real ward like the application form.
+  // After a union/paurasava/zone is chosen, the SAME ward endpoint the
+  // application form uses fills a ward list. If it fails, the box turns
+  // back into a text field (never a dead empty list).
+  const wardText = (val, msg) => {
+    const box = $('ab_ward_box'); if (!box) return;
+    box.innerHTML = '<label>ওয়ার্ড</label><input type="text" id="ab_ward" value="' + esc(val || '') + '">';
+    if (msg) note(msg, 'warn');
+  };
+  const wardSelect = () => {
+    const box = $('ab_ward_box'); if (!box) return;
+    if (!$('ab_ward') || $('ab_ward').tagName !== 'SELECT') box.innerHTML = '<label>ওয়ার্ড</label><select id="ab_ward"></select>';
+  };
+  let wardSeq = 0;
+  const onUnion = async (want) => {
+    const dv = $('ab_division').value, ds = $('ab_district').value, up = $('ab_cityCorpUpazila').value, un = $('ab_paurasavaUnion').value;
+    const my = ++wardSeq;
+    wardSelect();
+    if (!(dv && ds && up && un)) { $('ab_ward').innerHTML = '<option value="">--- আগে ইউনিয়ন / অঞ্চল নির্বাচন করুন ---</option>'; return; }
+    $('ab_ward').innerHTML = '<option value="">ওয়ার্ড আসছে…</option>';
+    const res = await fetchAddrOpts('ward', { division: dv, district: ds, upazila: up, zone: un }, 40000, 'birth');
+    if (my !== wardSeq) return; // a newer choice replaced this request
+    const names = (res.options || []).map(o => (typeof o === 'string' ? o : (o.name || o.id || ''))).map(x => String(x).trim()).filter(Boolean);
+    if (names.length) { addrBookFill('ab_ward', names, want); return; }
+    wardText(want, 'ওয়ার্ডের তালিকা আসেনি — ওয়ার্ড ঘরে লিখে দিন');
+  };
+  const clearWard = () => { wardSeq++; wardSelect(); $('ab_ward').innerHTML = '<option value="">--- আগে ইউনিয়ন / অঞ্চল নির্বাচন করুন ---</option>'; };
+  $('ab_division').onchange = () => { onDiv(); clearWard(); };
+  $('ab_district').onchange = () => { onDis(); clearWard(); };
+  $('ab_cityCorpUpazila').onchange = () => { clearWard(); onUp(); };
+  $('ab_paurasavaUnion').onchange = () => onUnion();
   // saved মান থাকলে cascade চালিয়ে বসাও
-  if (d.division && setSelByText('ab_division', d.division)) { onDiv(); }
-  if (d.district && setSelByText('ab_district', d.district)) { onDis(); }
-  if (d.cityCorpUpazila && setSelByText('ab_cityCorpUpazila', d.cityCorpUpazila)) { onUp(d.paurasavaUnion); }
-  if (d.paurasavaUnion) setSelByText('ab_paurasavaUnion', d.paurasavaUnion);
+  (async () => {
+    if (d.division && setSelByText('ab_division', d.division)) { onDiv(); }
+    if (d.district && setSelByText('ab_district', d.district)) { onDis(); }
+    if (d.cityCorpUpazila && setSelByText('ab_cityCorpUpazila', d.cityCorpUpazila)) { await onUp(d.paurasavaUnion); }
+    if (d.paurasavaUnion) setSelByText('ab_paurasavaUnion', d.paurasavaUnion);
+    if ($('ab_paurasavaUnion').value) await onUnion(d.ward);
+    else if (d.ward) wardText(d.ward);
+  })();
 }
 function readAddrFields(prefix, prev) {
   const o = {};
