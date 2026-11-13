@@ -55,3 +55,20 @@
   .page-bdris-apply .draft-card { flex-wrap: wrap; }
   .page-bdris-apply .draft-card .da { flex-wrap: wrap; }
 }
+/* Completion: visible official response, compact hierarchy, distinct primary PDF. */
+.page-bdris-apply .hero.done-result { text-align: center; padding: 32px 24px; border-top: 3px solid var(--layout-emerald); }
+.page-bdris-apply .done-result .done-mark { display: grid; place-items: center; width: 56px; height: 56px; margin: 0 auto 12px; border-radius: 50%; background: var(--layout-soft); color: var(--layout-emerald); font-size: 32px; font-weight: 700; }
+.page-bdris-apply .done-result .hpill { font-size: 14px; font-weight: 600; margin: 0 0 8px; }
+.page-bdris-apply .hero.done-result .sitesms { color: var(--layout-ink); font-size: 22px; line-height: 1.7; max-width: 650px; margin: 0 auto; overflow-wrap: anywhere; }
+.page-bdris-apply .done-result .ackhero { animation: none; padding: 20px 0 8px; }
+.page-bdris-apply .done-result .acknum { color: var(--layout-emerald); font-size: 32px; letter-spacing: 0; overflow-wrap: anywhere; margin: 6px 0; }
+.page-bdris-apply .done-result .hsub { margin: 8px 0; font-size: 15px; }
+.page-bdris-apply .done-result .hint { color: var(--layout-muted); font-size: 13px; margin: 16px 0 0; }
+.page-bdris-apply .done-result .copyrow2 { align-items: stretch; gap: 10px; margin-top: 20px; }
+.page-bdris-apply .done-result .btn { min-height: 48px; font-size: 14px; }
+.page-bdris-apply .done-result :is(#akOrig,#akOrigPend):not(:disabled) { background: var(--layout-emerald); color: var(--layout-paper); opacity: 1 !important; }
+@media (max-width: 600px) {
+  .page-bdris-apply .hero.done-result { padding: 24px 16px; }
+  .page-bdris-apply .hero.done-result .sitesms { font-size: 19px; }
+  .page-bdris-apply .done-result .copyrow2 { display: grid; grid-template-columns: minmax(0,1fr); }
+}

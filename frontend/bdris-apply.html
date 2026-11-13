@@ -454,7 +454,7 @@ input.bad, select.bad{border-color:var(--status-danger); box-shadow:0 0 0 3px rg
 <link rel="stylesheet" href="/css/registration-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/engine-polish.css?v=20261111-4">
 <script src="/js/engine-feedback.js?v=20261111-4" defer></script>
-<link rel="stylesheet" href="/css/bdris-application-clean.css?v=20261113-1">
+<link rel="stylesheet" href="/css/bdris-application-clean.css?v=20261113-2">
 </head>
 <body class="page-bdris-apply">
 <div class="wrap">
@@ -4411,6 +4411,10 @@ function cleanSiteSms(t) {
   return s.slice(0, 300);
 }
 
+function originalRecordPending(d) {
+  return !!(d && d.attachmentsPending && !(d.original && typeof d.original === 'object'));
+}
+
 function showDone(d, restore) {
   d = d || {};
   // 2026-11-13: a new application's DONE must never inherit the
@@ -4446,7 +4450,8 @@ function showDone(d, restore) {
   // full ack.
   const runs = labeled ? null : (String(d.ackId || '').match(/\d{4,}/g) || []);
   const m = runs && runs.length ? runs.reduce((a, b) => (b.length > a.length ? b : a)) : null;
-  if (labeled) no = labeled[1];
+  if (d.ackNum && /^\d{4,20}$/.test(String(d.ackNum))) no = String(d.ackNum);
+  else if (labeled) no = labeled[1];
   else if (m) no = m;
   else { const t = String(d.ackId || '').trim(); if (t && t.length <= 60) no = t; }
   S.ackNo = no || null;
@@ -4475,13 +4480,12 @@ function showDone(d, restore) {
   // PREMIUM-DONE: সাইটের নিজের মেসেজ থাকলে সেটাই মূল ডিসপ্লে (ব্যানার নয়);
   // ফলব্যাক-বাক্য বা খালি হলে আগের ব্যানারই থাকে।
   const rawSms = String(d.ackId || '').trim();
-  const siteSms = (rawSms && rawSms !== 'BDRIS পোর্টালে সফলভাবে জমা হয়েছে.') ? cleanSiteSms(rawSms) : '';
+  const siteSms = (rawSms && !/^\d+$/.test(rawSms) && rawSms !== 'BDRIS পোর্টালে সফলভাবে জমা হয়েছে.') ? cleanSiteSms(rawSms) : '';
   setView('done'); hideFail(); hideBanner(); noteOff();
   $('stepper').className = 'stepper hidden';
   showBody(
-    '<div class="hero"><span class="hbean" style="top:16%;left:8%">☕</span>' +
-      '<span class="hbean" style="top:60%;right:7%;animation-delay:-4s">✨</span>' +
-      '<div class="tickpop">✅</div>' +
+    '<div class="hero done-result" aria-live="polite">' +
+      '<div class="done-mark" aria-hidden="true">✓</div>' +
       '<div class="hpill">আবেদন সম্পন্ন</div>' +
       (siteSms
         ? '<div class="sitesms">' + esc(siteSms) + '</div>'
@@ -4496,7 +4500,7 @@ function showDone(d, restore) {
         (no ? '<button class="btn" id="akCopy">📋 নম্বর কপি</button>' : '') +
         (origUrl ? '<button class="btn" id="akOrig">⬇️ আসল PDF (এখনই নামান)</button>' : '') +
         (!origUrl ? '<button class="btn ghost" id="akOrigPend" disabled>⏳ PDF তৈরি হচ্ছে…</button>' : '') +
-        (S.pdf ? '<button class="btn ghost" id="akPdf">⬇️ আবেদন কপি নামান</button>' : '') +
+        (S.pdf ? '<button class="btn ghost" id="akPdf">⬇️ সংরক্ষিত আবেদন কপি</button>' : '') +
       '</div>' +
     '</div>' +
     (S.photo ? '<details class="sec"><summary class="sub-h" style="cursor:pointer"><span class="snum">📸</span> জমা হওয়া পেজের ছবি</summary>' +
@@ -4522,7 +4526,13 @@ function showDone(d, restore) {
   (function bgPdf() {
     const el = $('akOrigPend'); if (!el || origUrl) return;
     const key = String(no || '').replace(/\D/g, '');
-    if (!key) return;
+    if (!key) { el.textContent = 'আবেদন নম্বর পাওয়া যায়নি'; return; }
+    // Immediate acceptance precedes the engine's saved original record.
+    // Attachments re-render must not fetch until final COMPLETED supplies it.
+    if (originalRecordPending(d)) { el.textContent = 'আবেদনের রেকর্ড প্রস্তুত হচ্ছে…'; return; }
+    if (S._origRequested === key && !(S._origDone && S._origDone[key])) {
+      el.textContent = 'আসল PDF আনা হচ্ছে…'; return;
+    }
     if (ORIG_READY[key]) {
       el.disabled = false; el.className = 'btn'; el.textContent = '⬇️ আসল PDF (এখনই নামান)';
       el.onclick = () => downloadOriginal(ORIG_READY[key], key);
@@ -4531,6 +4541,7 @@ function showDone(d, restore) {
     el.disabled = false; el.style.opacity = '.8';
     el.textContent = '⏳ PDF তৈরি হচ্ছে…';
     S._origAutoDl = key;
+    S._origRequested = key;
     socket.emit('FETCH_ORIGINAL', { ack: key });
     el.onclick = () => { note('⏳ PDF তৈরি হচ্ছে — প্রস্তুত হলে এই বোতামেই নামানো যাবে', 'info'); socket.emit('FETCH_ORIGINAL', { ack: key }); };
     // ALL-BUGS (d): ONE driven path for the original PDF — the
@@ -4569,30 +4580,66 @@ function showDone(d, restore) {
    প্রস্তুত হলেই নেমে যায়) */
 const ORIG_READY = {};
 const ORIG_AUTODLED = {};
-function downloadOriginal(url, no) {
-  // MONEY/PDF (B10): originals are no longer anonymous static files —
-  // the server refuses a bare /bdris-original-*.pdf URL. Fetch with
-  // the user's JWT + the paid charge token, then download the blob,
-  // so no token ever sits in a URL.
+async function downloadOriginal(url, no) {
   const canon = canonicalAck(no);
-  const cached = (canon && S._pdfTok && S._pdfTok['pdf-' + canon]) ? S._pdfTok['pdf-' + canon].tok : null;
-  const headers = { 'Authorization': 'Bearer ' + getToken() };
-  if (cached) headers['X-Charge-Token'] = cached;
-  fetch(url, { headers }).then(async r => {
+  if (!canon || !url) { note('আবেদন নম্বর বা আসল PDF পাওয়া যায়নি', 'err'); return false; }
+  S._pdfDownloading = S._pdfDownloading || {};
+  if (S._pdfDownloading[canon]) return false;
+  S._pdfDownloading[canon] = true;
+  const button = canonicalAck(S.ackNo) === canon ? ($('akOrig') || $('akOrigPend')) : null;
+  const label = button && button.textContent;
+  if (button) { button.disabled = true; button.textContent = 'আসল PDF নামানো হচ্ছে…'; }
+  try {
+    // Preserve the original authenticated, idempotently paid download gate.
+    const key = pdfChargeKey(canon);
+    S._pdfTok = S._pdfTok || {};
+    const receipt = S._pdfTok[key];
+    let token = receipt && Date.now() - receipt.at < 25 * 60 * 1000 ? receipt.tok : null;
+    if (!token) {
+      token = await charge('pdf', key);
+      if (!token) return false;
+      S._pdfTok[key] = { tok: token, at: Date.now() };
+    }
+    const headers = { 'Authorization': 'Bearer ' + getToken(), 'X-Charge-Token': token };
+    const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(60000) : undefined;
+    const r = await fetch(url, { headers, signal });
     if (!r.ok) {
       note('⚠️ আসল PDF নামানো যায়নি — ' + (r.status === 401 ? 'আবার লগইন করুন' : r.status === 403 ? 'এই কপির অনুমতি নেই' : 'সার্ভার জবাব ' + r.status), 'err');
-      return null;
+      return false;
     }
-    return r.blob();
-  }).then(blob => {
-    if (!blob) return;
+    const blob = await r.blob();
+    const signature = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
+    if (String.fromCharCode(...signature) !== '%PDF-') {
+      note('আসল PDF ফেরেনি — আবার চেষ্টা করুন; অন্য ফাইল নামানো হয়নি', 'err');
+      return false;
+    }
+    const file = new File([blob], 'bdris-abedon-' + canon + '.pdf', { type: 'application/pdf' });
+    const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    if (touch && navigator.canShare && navigator.canShare({ files: [file] })) {
+      // A fresh tap restores mobile user activation after a network wait.
+      if (button) {
+        button.onclick = async () => {
+          try { await navigator.share({ files: [file], title: 'আসল BDRIS PDF' }); }
+          catch (e) { if (e.name !== 'AbortError') note('ফাইল সংরক্ষণ করা যায়নি — আবার চাপুন', 'err'); }
+        };
+        button.textContent = '⬇️ আসল PDF সংরক্ষণ করুন';
+      }
+      return true;
+    }
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'bdris-abedon-' + (no || 'copy') + '.pdf';
+    const objectUrl = URL.createObjectURL(file);
+    a.href = objectUrl; a.download = file.name;
     document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
     note('⬇️ আসল PDF নামছে…', 'ok');
-  }).catch(() => { note('⚠️ আসল PDF নামানো যায়নি — সংযোগ সমস্যা', 'err'); });
+    return true;
+  } catch (e) {
+    note('⚠️ আসল PDF নামানো যায়নি — ' + (e.name === 'TimeoutError' ? 'সময় শেষ; আবার চেষ্টা করুন' : 'সংযোগ সমস্যা; আবার চেষ্টা করুন'), 'err');
+    return false;
+  } finally {
+    delete S._pdfDownloading[canon];
+    if (button) { button.disabled = false; if (button.textContent === 'আসল PDF নামানো হচ্ছে…') button.textContent = label; }
+  }
 }
 /* ═══════════ অটো আবেদন — এক ফর্মে সব ═══════════ */
 function startAuto(resume) {
@@ -5864,7 +5911,9 @@ socket.on('BOT_STATUS', (d) => {
     try { const k = String(d.ackId || '').replace(/\D/g, ''); if (k) { (S._origProgressByAck = S._origProgressByAck || {})[k] = Date.now(); } } catch {}
     const pl = san(d.label || '⏳ PDF তৈরি হচ্ছে…');
     const el = $('akOrigPend');
-    if (el) el.textContent = pl; else note(pl, 'info');
+    const progressAck = canonicalAck(d.ackId);
+    if (el && progressAck && progressAck === canonicalAck(S.ackNo)) el.textContent = pl;
+    else if (!el) note(pl, 'info');
     return;
   }
   if (st === 'ORIGINAL_PDF') {
@@ -5885,7 +5934,7 @@ socket.on('BOT_STATUS', (d) => {
       } catch {}
     }
     if (ono && u) ORIG_READY[ono] = u;
-    const el = $('akOrigPend');
+    const el = ono && ono === canonicalAck(S.ackNo) ? $('akOrigPend') : null;
     if (u) {
       // ALL-BUGS (i): link the stored original to the server
       // record, so the submission stays retrievable with its
@@ -5954,6 +6003,9 @@ socket.on('BOT_STATUS', (d) => {
       const merged = Object.assign({}, S._done, {
         screenshot: d.screenshot || S._done.screenshot || null,
         pdf: (d.pdf && d.pdf.base64) ? d.pdf : (S._done.pdf || null),
+        ackNum: d.ackNum || S._done.ackNum,
+        original: d.original || S._done.original,
+        attachmentsPending: !!d.attachmentsPending,
       });
       showDone(merged, true);
       return;
