@@ -135,8 +135,38 @@ body.flow-form .toolbar,body.flow-form .document-area,body.flow-form .footer-not
 body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:760px}
 body.flow-form aside{position:static;max-height:none}
 body.flow-form [data-tab]:not([data-tab="engine"]){display:none}
+/* Separate form screen: only what the user fills up — no MRZ auto
+   fields, no preview, no editor chrome. Automation (name split, MRZ,
+   dates) still runs behind the scenes through the engine inputs. */
+.form-head{display:none}
+body.flow-form .form-head{display:block;margin:0 0 6px}
+body.flow-form .form-head h2{font-size:20px;margin:0 0 6px}
+body.flow-form .form-head p{margin:0;color:var(--muted);line-height:1.7}
+.back-button{background:none;border:0;color:var(--muted);cursor:pointer;font-size:13px;padding:0;margin:0 0 8px;text-align:left}
+body.flow-form .panel-head,body.flow-form .tabs{display:none}
+body.flow-form #panel-engine>.helper{display:none}
+body.flow-form #panel-engine .engine-hint:not(#create-message):not(#engine-validation):not(#eng-nationality-hint){display:none}
+body.flow-form #engine-validation{color:#b3261e;font-weight:600}
+body.flow-form .auto-tag{display:none}
+body.flow-form #eng-mrz-group{display:none}
+body.flow-form #eng-name-auto-row{display:none}
+body.flow-form #eng-dotstrip-row{display:none}
+body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
 .create-actions{display:block;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
 .create-actions .primary{display:block;width:100%;font-size:14px;padding:11px 14px}
+/* Form-screen photo/signature upload: same slots as the editor tabs,
+   attached in the form so the Create download carries them. */
+.form-upload-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form-upload-row label{display:block;font-weight:600;margin:0 0 6px}
+.form-upload-row .primary{width:100%}
+.form-upload-status{display:flex;align-items:center;gap:8px;margin:8px 0 0}
+.form-upload-status[hidden]{display:none}
+.form-upload-status img{width:48px;height:48px;object-fit:cover;border:1px solid var(--line);flex:none}
+.form-upload-status img[src=""]{display:none}
+.form-upload-status span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+.form-upload-note{margin:10px 0 0;color:var(--muted)}
+.form-sample-warning{margin:10px 0 0;color:#b3261e;font-weight:600;line-height:1.7}
+.form-sample-warning[hidden]{display:none}
 #create-message:empty{display:none}
 @media print{
  @page{size:594pt 841pt;margin:0}
@@ -168,7 +198,7 @@ body.flow-form [data-tab]:not([data-tab="engine"]){display:none}
    <h2>Passport তৈরি করুন</h2>
    <p>ফর্মটি পূরণ করুন — পাসপোর্ট নম্বর, নাম, জন্মতারিখসহ সব তথ্য। Create চাপলে পাসপোর্ট তৈরি হয়ে ডাউনলোড হবে।</p>
    <button type="button" id="start-passport-button" class="primary">Passport তৈরি করুন</button>
-   <p class="small-note">ছবি ও স্বাক্ষর Create-এর পর বদলানো যাবে।</p>
+   <p class="small-note">ছবি ও স্বাক্ষর ফর্মেই যোগ করুন — পরে বদলালে আবার ডাউনলোড করতে হবে।</p>
   </div>
  </section>
  <section class="document-area" aria-label="Document page">
@@ -190,17 +220,22 @@ body.flow-form [data-tab]:not([data-tab="engine"]){display:none}
   </div>
   <div class="panel-body">
       <section class="tab-panel" id="panel-engine" role="tabpanel" aria-labelledby="tab-engine">
+    <header class="form-head" id="passport-form-head">
+     <button type="button" id="back-to-landing-button" class="back-button">← ফিরে যান</button>
+     <h2>Passport তৈরি করুন</h2>
+     <p>তথ্য ও ছবি/স্বাক্ষর পূরণ করুন — Create চাপলে পাসপোর্ট তৈরি হয়ে সরাসরি ডাউনলোড হবে।</p>
+    </header>
     <p class="helper">Fill each detail <strong>once</strong> to update its linked editable text regions and MRZ. <span lang="bn">বামের dotted strip এখন auto-editable: Passport No বদলালে dots নতুন নম্বর দেখায়। ডানের printed vertical number আলাদা region।</span></p>
 
     <p class="engine-hint" id="engine-validation" role="status" aria-live="polite" hidden></p>
     <div class="engine-group">
      <p class="engine-legend">Passport · পাসপোর্ট</p>
      <label for="eng-passportNo">Passport No. <span class="auto-tag">3 text regions + dotted strip</span></label>
-     <input type="text" id="eng-passportNo" data-engine="passportNo" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="EJ0762655">
+     <input type="text" id="eng-passportNo" data-engine="passportNo" maxlength="9" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="EJ0762655">
      <p class="engine-hint">Main box + right-hand printed vertical number + MRZ line 2 + left dotted strip (auto). Preview below reads the actual regions.</p>
      <p class="passport-preview" id="eng-passportPreview" aria-live="polite"></p>
      <p class="engine-hint" id="eng-dotmx-note" lang="bn" role="status" aria-live="polite"></p>
-     <label class="checkbox"><input type="checkbox" id="eng-dotStripAuto" data-engine="dotStripAuto" checked> Dotted strip auto-edit · বামের dotted strip auto-update</label>
+     <label class="checkbox" id="eng-dotstrip-row"><input type="checkbox" id="eng-dotStripAuto" data-engine="dotStripAuto" checked> Dotted strip auto-edit · বামের dotted strip auto-update</label>
      <p class="engine-hint">On: the perforation-style dots re-render with the passport number. Off or original number: the untouched scan artwork shows. Restore region also brings the scan strip back.</p>
      <div class="engine-row">
       <div><label for="eng-docType">Type</label><input type="text" id="eng-docType" data-engine="docType" maxlength="1" spellcheck="false" autocomplete="off"></div>
@@ -212,7 +247,7 @@ body.flow-form [data-tab]:not([data-tab="engine"]){display:none}
      <p class="engine-legend">Name · নাম <span class="auto-tag">1 write → all places</span></p>
      <label for="eng-fullName">Full name · পুরো নাম</label>
      <input type="text" id="eng-fullName" data-engine="fullName" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="GOLAM KIBRIYA MD">
-     <div class="engine-row">
+     <div class="engine-row" id="eng-name-auto-row">
       <div><label for="eng-surname">Surname (auto)</label><input type="text" id="eng-surname" data-engine="surname" spellcheck="false" autocapitalize="off" autocomplete="off"></div>
       <div><label for="eng-givenName">Given name (auto)</label><input type="text" id="eng-givenName" data-engine="givenName" spellcheck="false" autocapitalize="off" autocomplete="off"></div>
      </div>
@@ -276,7 +311,7 @@ body.flow-form [data-tab]:not([data-tab="engine"]){display:none}
      <input type="text" id="eng-emergencyName" data-engine="emergencyName" spellcheck="false" autocapitalize="off" autocomplete="off">
     </div>
 
-    <div class="engine-group">
+    <div class="engine-group" id="eng-mrz-group">
      <p class="engine-legend">MRZ · machine-readable <span class="auto-tag">TD3 · 44 columns</span></p>
      <label for="eng-mrz1">Line 1</label>
      <textarea id="eng-mrz1" data-engine="mrz1" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
@@ -284,11 +319,30 @@ body.flow-form [data-tab]:not([data-tab="engine"]){display:none}
      <textarea id="eng-mrz2" data-engine="mrz2" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
      <p class="engine-hint">Both lines rebuild from the fields above (44 chars, check digits computed). Type here to override until the next data edit.</p>
      <div class="engine-actions"><button type="button" id="eng-remrz">Regenerate MRZ</button><button type="button" id="eng-reapply">Re-apply to page</button></div>
-     <div class="create-actions">
-      <button type="button" id="create-passport-button" class="primary">Create — ডাউনলোড করুন</button>
-      <p class="engine-hint" id="create-message" role="status" aria-live="polite"></p>
-      <p class="engine-hint">Create চাপলে এই তথ্য দিয়ে পাসপোর্ট তৈরি হয়ে ডাউনলোড হবে। তারপর ছবি ও স্বাক্ষর বদলাতে পারবেন।</p>
+    </div>
+    <div class="engine-group" id="eng-photo-group">
+     <p class="engine-legend">ছবি ও স্বাক্ষর · Photo &amp; signature</p>
+     <div class="form-upload-row">
+      <div>
+       <label for="form-photo-upload">ছবি · Photo</label>
+       <input type="file" id="form-photo-upload" accept="image/png,image/jpeg,image/webp" hidden="">
+       <button type="button" id="form-upload-photo-button" class="primary">ছবি যোগ করুন</button>
+       <p class="form-upload-status" id="form-photo-status" hidden=""><img id="form-photo-thumb" alt=""><span id="form-photo-name"></span><button type="button" id="form-remove-photo">সরান</button></p>
+      </div>
+      <div>
+       <label for="form-signature-upload">স্বাক্ষর · Signature</label>
+       <input type="file" id="form-signature-upload" accept="image/png,image/jpeg,image/webp" hidden="">
+       <button type="button" id="form-upload-signature-button" class="primary">স্বাক্ষর যোগ করুন</button>
+       <p class="form-upload-status" id="form-signature-status" hidden=""><img id="form-signature-thumb" alt=""><span id="form-signature-name"></span><button type="button" id="form-remove-signature">সরান</button></p>
+      </div>
      </div>
+     <p class="form-upload-note">ছবি ও স্বাক্ষর দিলে ডাউনলোড করা পাসপোর্টে সেগুলো থাকবে। Create-এর পর বদলালে আবার ডাউনলোড করতে হবে।</p>
+     <p class="form-sample-warning" id="form-sample-warning" role="status" hidden="">সতর্কতা: ছবি ও স্বাক্ষর না দিলে ডাউনলোড করা পাসপোর্টে নমুনার ছবি ও স্বাক্ষর দেখাবে।</p>
+    </div>
+    <div class="create-actions">
+     <button type="button" id="create-passport-button" class="primary">Create — ডাউনলোড করুন</button>
+     <p class="engine-hint" id="create-message" role="status" aria-live="polite"></p>
+     <p class="engine-hint">Create চাপলে এই তথ্য ও ছবি/স্বাক্ষর দিয়ে পাসপোর্ট তৈরি হয়ে ডাউনলোড হবে। পরে কিছু বদলালে আবার Create করে ডাউনলোড করতে হবে।</p>
     </div>
    </section>
 <section class="tab-panel" id="panel-text" role="tabpanel" aria-labelledby="tab-text" hidden="">
@@ -935,14 +989,106 @@ body.flow-form [data-tab]:not([data-tab="engine"]){display:none}
   if (!body || !body.classList.contains('flow-landing') || !api || !editor) return;
   var startBtn = document.getElementById('start-passport-button');
   var createBtn = document.getElementById('create-passport-button');
+  var backBtn = document.getElementById('back-to-landing-button');
   var message = document.getElementById('create-message');
   if (!startBtn || !createBtn) { body.classList.remove('flow-landing'); return; }
+  /* Back to landing (finding 9): the form had no way back except a
+     reload, which lost everything. Going back keeps the filled form in
+     the DOM; re-entering restores it instead of blanking — the form is
+     only blanked on the FIRST entry, so a fresh page load still starts
+     empty. */
+  var formEntered = false;
   function engInput(key){ return document.getElementById('eng-' + key); }
   function setEng(key, value){
     var el = engInput(key); if (!el) return;
     if (el.type === 'checkbox') el.checked = !!value;
     else el.value = value == null ? '' : String(value);
   }
+  /* Photo/signature upload on the form screen — the SAME slots the editor
+     tabs use, driven through editor.setImage / editor.resetImage, so the
+     Create download carries the uploaded photo/signature. No second photo
+     system: the file goes straight into the editor's model. */
+  var uploadEls = {
+    photo: {
+      input: document.getElementById('form-photo-upload'),
+      button: document.getElementById('form-upload-photo-button'),
+      status: document.getElementById('form-photo-status'),
+      thumb: document.getElementById('form-photo-thumb'),
+      nameEl: document.getElementById('form-photo-name'),
+      remove: document.getElementById('form-remove-photo'),
+      objectUrl: '',
+      addLabel: 'ছবি যোগ করুন', changeLabel: 'ছবি বদলান',
+      doneMsg: 'ছবি যোগ হয়েছে।', removedMsg: 'ছবি সরানো হয়েছে।'
+    },
+    signature: {
+      input: document.getElementById('form-signature-upload'),
+      button: document.getElementById('form-upload-signature-button'),
+      status: document.getElementById('form-signature-status'),
+      thumb: document.getElementById('form-signature-thumb'),
+      nameEl: document.getElementById('form-signature-name'),
+      remove: document.getElementById('form-remove-signature'),
+      objectUrl: '',
+      addLabel: 'স্বাক্ষর যোগ করুন', changeLabel: 'স্বাক্ষর বদলান',
+      doneMsg: 'স্বাক্ষর যোগ হয়েছে।', removedMsg: 'স্বাক্ষর সরানো হয়েছে।'
+    }
+  };
+  var canUpload = !!(editor.setImage && editor.resetImage);
+  /* Sample-face warning (finding 7): without an attached photo/signature
+     the download shows the scan's own (sample person's) photo/signature,
+     because the slots are transparent until replaced. Warn visibly on the
+     form BEFORE Create — do not block, the user may proceed knowingly. */
+  var sampleWarning = document.getElementById('form-sample-warning');
+  var attached = { photo: false, signature: false };
+  function updateSampleWarning(){
+    if (!sampleWarning) return;
+    var missing = [];
+    if (!attached.photo) missing.push('ছবি');
+    if (!attached.signature) missing.push('স্বাক্ষর');
+    if (!missing.length) { sampleWarning.hidden = true; sampleWarning.textContent = ''; return; }
+    var label = missing.join(' ও ');
+    sampleWarning.hidden = false;
+    sampleWarning.textContent = 'সতর্কতা: ' + label + ' না দিলে ডাউনলোড করা পাসপোর্টে নমুনার ' + label + ' দেখাবে।';
+  }
+  function showUploadState(type, file){
+    var u = uploadEls[type]; if (!u) return;
+    if (u.thumb) {
+      if (u.objectUrl) { URL.revokeObjectURL(u.objectUrl); u.objectUrl = ''; }
+      u.objectUrl = file ? URL.createObjectURL(file) : '';
+      u.thumb.src = u.objectUrl;
+    }
+    if (u.nameEl) u.nameEl.textContent = file ? (file.name || '') : '';
+    if (u.status) u.status.hidden = !file;
+    if (u.button) u.button.textContent = file ? u.changeLabel : u.addLabel;
+    attached[type] = !!file;
+    updateSampleWarning();
+  }
+  function clearUpload(type){
+    var u = uploadEls[type]; if (!u) return;
+    try { editor.resetImage(type); } catch (e) {}
+    showUploadState(type, null);
+  }
+  function wireUpload(type){
+    var u = uploadEls[type];
+    if (!u || !u.input || !u.button) return;
+    u.button.addEventListener('click', function(){ u.input.click(); });
+    u.input.addEventListener('change', function(){
+      var file = u.input.files && u.input.files[0];
+      if (!file) return;
+      u.button.disabled = true;
+      editor.setImage(type, file).then(function(result){
+        u.button.disabled = false;
+        if (result && result.discarded) return;
+        showUploadState(type, file);
+        say(u.doneMsg);
+      }).catch(function(err){
+        u.button.disabled = false;
+        say('যোগ হয়নি: ' + (err && err.message ? err.message : err));
+      });
+      u.input.value = '';
+    });
+    if (u.remove) u.remove.addEventListener('click', function(){ clearUpload(type); say(u.removedMsg); });
+  }
+  if (canUpload) { wireUpload('photo'); wireUpload('signature'); }
   /* All engine fields, in panel order — blanking them through the same
      code path as typing keeps MRZ, dotted strip, preview and validation
      in sync with the form. */
@@ -955,16 +1101,18 @@ body.flow-form [data-tab]:not([data-tab="engine"]){display:none}
     if (api.regenerateMRZ) api.regenerateMRZ();
     try { editor.resetImage('photo'); } catch (e) {}
     try { editor.resetImage('signature'); } catch (e) {}
+    if (canUpload) { showUploadState('photo', null); showUploadState('signature', null); }
+    updateSampleWarning();
   }
   function showForm(){
     body.classList.remove('flow-landing');
     body.classList.add('flow-form');
-    clearForm();
+    if (!formEntered) { clearForm(); formEntered = true; }
     var first = engInput('passportNo');
     if (first) first.focus();
   }
   function requiredMissing(){
-    var need = [['passportNo','Passport No.'],['fullName','Full name'],['dob','Date of birth']];
+    var need = [['passportNo','Passport No.'],['docType','Type'],['countryCode','Country code'],['fullName','Full name'],['dob','Date of birth'],['sex','Sex'],['expiryDate','Date of expiry']];
     for (var i = 0; i < need.length; i++) {
       var el = engInput(need[i][0]);
       if (!el || !String(el.value).trim()) return need[i];
@@ -992,17 +1140,26 @@ body.flow-form [data-tab]:not([data-tab="engine"]){display:none}
       if (el) el.focus();
       return;
     }
+    var issues = (api.validate ? api.validate() : []);
+    if (issues && issues.length) {
+      say('Please fix this before creating the passport: ' + issues[0] + ' / পাসপোর্ট তৈরির আগে ঠিক করুন।');
+      return;
+    }
     var no = String((engInput('passportNo') || {}).value || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
     var name = no ? 'Passport-' + no + '.html' : 'Passport-Engine.html';
     editor.exportHTML().then(function(html){
       downloadFile(html, name);
       body.classList.remove('flow-form');
-      say('Passport তৈরি হয়েছে — ডাউনলোড দেখুন। ছবি ও স্বাক্ষর Photo / Signature ট্যাব থেকে বদলাতে পারবেন।');
+      say('Passport তৈরি হয়েছে — ডাউনলোড দেখুন। কিছু বদলাতে চাইলে আবার Create করে ডাউনলোড করুন।');
     }).catch(function(err){
       say('Download failed: ' + (err && err.message ? err.message : err));
     });
   }
   startBtn.addEventListener('click', showForm);
+  if (backBtn) backBtn.addEventListener('click', function(){
+    body.classList.remove('flow-form');
+    body.classList.add('flow-landing');
+  });
   createBtn.addEventListener('click', createPassport);
 })();
 </script>
