@@ -508,6 +508,12 @@ input.bad, select.bad{border-color:var(--status-danger); box-shadow:0 0 0 3px rg
    (4) proactive refresh every 12 min keeps long sessions alive. */
 const LS_ACCESS_T = 'abc_access_token', LS_REFRESH_T = 'abc_refresh_token';
 function curAccessToken() { try { return sessionStorage.getItem(LS_ACCESS_T) || ''; } catch (e) { return ''; } }
+// Shared HTTP actions execute outside the wallet IIFE: they need the
+// current session token too, not the private getToken in that closure.
+function getToken() {
+  try { return sessionStorage.getItem(LS_ACCESS_T) || localStorage.getItem(LS_ACCESS_T) || ''; }
+  catch (e) { return ''; }
+}
 let _tokRefreshP = null;
 // DRAFTS/AUTH (C5): tri-state result — 'ok' | 'expired' |
 // 'transient'. The old boolean lumped every non-OK together, so a

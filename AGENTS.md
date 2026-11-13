@@ -29,3 +29,4 @@
 - Redemption rows snapshot normalized code and expiry at claim creation; migration backfills only from surviving coupons, and replay falls back to live fields solely for unsnapshotted legacy rows. Why: deleting or editing a campaign must not erase committed claim identity or weaken service/code conflict checks.
 
 - BDRIS original-PDF presentation waits for the final saved-record completion, scopes progress/results to the shown acknowledgement, and downloads only validated PDF bytes through existing auth and charge receipts. Why: immediate acceptance is earlier than file readiness and must not misdirect another application’s file.
+- BDRIS HTTP actions outside the wallet closure use a shared current-token reader. Why: a closure-private helper makes submission reporting silently fail and prevents original downloads.
