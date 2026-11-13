@@ -1343,7 +1343,9 @@ function addrBookGeoHtml(d) {
     '<input type="text" id="' + id + '" value="' + esc(d[id.slice(3)] || '') + '"></div>';
   return sel('ab_division', 'বিভাগ') + sel('ab_district', 'জেলা') +
     sel('ab_cityCorpUpazila', 'সিটি কর্পোরেশন / উপজেলা') + sel('ab_paurasavaUnion', 'পৌরসভা / ইউনিয়ন') +
-    txt('ab_zone', 'অঞ্চল (সিটি কর্পোরেশন হলে, যেমন: অঞ্চল - ৭)') +
+    // ADDRBOOK-ZONE-BOX (2026-11-13): zones now load into the পৌরসভা/ইউনিয়ন list, so the
+    // typed zone box is only a fallback, shown when that list fails to load.
+    '<div id="ab_zone_box" style="display:none">' + txt('ab_zone', 'অঞ্চল (তালিকা না এলে লিখুন, যেমন: অঞ্চল - ৭)') + '</div>' +
     '<div class="fld" id="ab_ward_box"><label>ওয়ার্ড</label><select id="ab_ward"><option value="">--- আগে ইউনিয়ন / অঞ্চল নির্বাচন করুন ---</option></select></div>' + txt('ab_postBn', 'ডাকঘর (বাংলায়)') +
     txt('ab_postEn', 'ডাকঘর (English)') + txt('ab_vilBn', 'গ্রাম / পাড়া / মহল্লা') +
     txt('ab_vilEn', 'Village / Area (English)') + txt('ab_houseBn', 'বাসা ও সড়ক (বাংলা)') +
@@ -1373,6 +1375,7 @@ function addrBookWire(d) {
   };
   const onUp = async (want) => {
     const dv = $('ab_division').value, ds = $('ab_district').value, up = $('ab_cityCorpUpazila').value;
+    const zb = $('ab_zone_box'); if (zb) zb.style.display = 'none';
     let arr = [];
     try {
       const u = GEO_DATA[dv][ds][up];
@@ -1394,6 +1397,7 @@ function addrBookWire(d) {
       const names = (res.options || []).map(o => (typeof o === 'string' ? o : (o.name || o.id || ''))).map(s => String(s).trim()).filter(Boolean);
       if (names.length) { addrBookFill('ab_paurasavaUnion', names, want); return; }
       addrBookFill('ab_paurasavaUnion', []);
+      if (zb) zb.style.display = '';
       note('অঞ্চলের তালিকা আসেনি — অঞ্চল ঘরে লিখে দিন', 'warn');
       return;
     }
