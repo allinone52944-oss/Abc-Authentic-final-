@@ -1,13 +1,17 @@
 // Passport engine form-first flow — frontend only (text-reading + vm).
 //
-// Bug (user-reported 2026-11-13): the page opened straight into the
-// editor (Engine / Text / Photo / Signature tabs, Print / Save HTML).
-// No "Passport তৈরি করুন" entry, no form-first step, no Create → download.
-// Correct flow: landing "Passport তৈরি করুন" → form → Create → download,
-// then the editor for fine-tuning. The output itself (MRZ TD3, dotted
-// strip, name split, dates, photo/signature slots) is untouched — the
-// change is the FLOW only, driven through the exposed editor APIs
-// (window.passportEngine / window.documentEditor).
+// Bug (user-reported 2026-11-13, corrected same day): the page opened
+// straight into the editor, and the first fix showed the form INSIDE the
+// editor's Engine tab (MRZ lines visible, editor chrome around it).
+// Correct flow: landing "Passport তৈরি করুন" → a SEPARATE form screen
+// (1st page = form, only what the user fills up — no MRZ auto fields, no
+// document preview, no editor chrome) → Create → DIRECT download, then
+// the editor for photo/signature fine-tuning. Automation (name auto-split,
+// MRZ auto-generation, dates) still runs behind the scenes through the
+// engine inputs — it is computed, not displayed. The output itself (MRZ
+// TD3, dotted strip, name split, dates, photo/signature slots) is
+// untouched — the change is the FLOW only, driven through the exposed
+// editor APIs (window.passportEngine / window.documentEditor).
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
@@ -33,6 +37,16 @@ const FORM_KEYS = [
   'expiryDate', 'birthPlace', 'nationality', 'nationalityCode', 'personalNo',
   'previousPassport', 'authority', 'address1', 'address2', 'emergency1',
   'emergency2', 'emergencyName', 'phone', 'relationship', 'mrz1', 'mrz2',
+];
+// What the separate form screen actually SHOWS: only the fields the user
+// fills up. surname/givenName (auto-split) and mrz1/mrz2 (auto-generated)
+// stay in the DOM as automation targets but are hidden in form state.
+const FILLABLE_KEYS = [
+  'passportNo', 'docType', 'countryCode', 'fullName',
+  'fatherName', 'motherName', 'spouseName', 'dob', 'sex', 'issueDate',
+  'expiryDate', 'birthPlace', 'nationality', 'nationalityCode', 'personalNo',
+  'previousPassport', 'authority', 'address1', 'address2', 'emergency1',
+  'emergency2', 'emergencyName', 'phone', 'relationship',
 ];
 
 function makeClassList(initial) {
@@ -149,14 +163,62 @@ describe('landing (form-first entry)', () => {
   });
 });
 
-describe('form (all output fields)', () => {
-  test.each(FORM_KEYS)('form exposes engine field eng-%s', (key) => {
+describe('form (separate form screen)', () => {
+  test.each(FORM_KEYS)('engine input eng-%s still exists in the DOM (automation target)', (key) => {
     expect(PAGE).toContain('id="eng-' + key + '"');
   });
 
-  test('form state shows only the Engine tab', () => {
+  test.each(FILLABLE_KEYS)('form shows fillable field eng-%s', (key) => {
+    expect(PAGE).toContain('id="eng-' + key + '"');
+    // Every fillable field sits before the MRZ group — none of them is
+    // inside a container the form screen hides.
+    expect(PAGE.indexOf('id="eng-' + key + '"')).toBeLessThan(PAGE.indexOf('id="eng-mrz-group"'));
+  });
+
+  test('form screen has its own heading, shown only in form state', () => {
+    expect(PAGE).toContain('id="passport-form-head"');
+    expect(PAGE).toContain('.form-head{display:none}');
+    expect(PAGE).toContain("body.flow-form .form-head{display:block;margin:0 0 6px}");
+    const headAt = PAGE.indexOf('id="passport-form-head"');
+    const panelAt = PAGE.indexOf('id="panel-engine"');
+    expect(headAt).toBeGreaterThan(panelAt);
+    expect(PAGE.slice(headAt, headAt + 400)).toContain('Passport তৈরি করুন');
+  });
+
+  test('form screen hides the editor chrome (panel head, tabs) and the helper', () => {
+    expect(PAGE).toContain('body.flow-form .panel-head,body.flow-form .tabs{display:none}');
+    expect(PAGE).toContain('body.flow-form #panel-engine>.helper{display:none}');
     expect(PAGE).toContain('body.flow-form [data-tab]:not([data-tab="engine"]){display:none}');
     expect(PAGE).toContain('body.flow-form .toolbar,body.flow-form .document-area,body.flow-form .footer-note{display:none}');
+  });
+
+  test('form screen hides the MRZ group — the MRZ fields are not shown', () => {
+    expect(PAGE).toContain('body.flow-form #eng-mrz-group{display:none}');
+    const groupAt = PAGE.indexOf('id="eng-mrz-group"');
+    const mrz1At = PAGE.indexOf('id="eng-mrz1"');
+    const mrz2At = PAGE.indexOf('id="eng-mrz2"');
+    const createAt = PAGE.indexOf('id="create-passport-button"');
+    expect(groupAt).toBeLessThan(mrz1At);
+    expect(mrz1At).toBeLessThan(mrz2At);
+    expect(mrz2At).toBeLessThan(createAt);
+  });
+
+  test('form screen hides the auto name-split fields', () => {
+    expect(PAGE).toContain('body.flow-form #eng-name-auto-row{display:none}');
+    const rowAt = PAGE.indexOf('id="eng-name-auto-row"');
+    const surnameAt = PAGE.indexOf('id="eng-surname"');
+    const givenAt = PAGE.indexOf('id="eng-givenName"');
+    const fatherAt = PAGE.indexOf('id="eng-fatherName"');
+    expect(rowAt).toBeLessThan(surnameAt);
+    expect(surnameAt).toBeLessThan(givenAt);
+    expect(givenAt).toBeLessThan(fatherAt);
+  });
+
+  test('form screen hides preview, hints and auto-only controls', () => {
+    expect(PAGE).toContain('body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}');
+    expect(PAGE).toContain('body.flow-form #panel-engine .engine-hint:not(#create-message){display:none}');
+    expect(PAGE).toContain('body.flow-form .auto-tag{display:none}');
+    expect(PAGE).toContain('body.flow-form #eng-dotstrip-row{display:none}');
   });
 
   test('form state collapses the editor grid to a single column', () => {
@@ -165,7 +227,7 @@ describe('form (all output fields)', () => {
 });
 
 describe('Create → download', () => {
-  test('Create button + status message sit at the end of the Engine panel', () => {
+  test('Create button + status message sit at the end of the Engine panel, outside the MRZ group', () => {
     expect(PAGE).toContain('id="create-passport-button"');
     expect(PAGE).toContain('Create — ডাউনলোড করুন');
     expect(PAGE).toContain('id="create-message"');
@@ -174,6 +236,12 @@ describe('Create → download', () => {
     expect(createAt).toBeGreaterThan(remrzAt);
     const panelTextAt = PAGE.indexOf('id="panel-text"');
     expect(createAt).toBeLessThan(panelTextAt);
+    // The MRZ group closes before the Create block opens — Create is a
+    // sibling of the group, so hiding the group never hides Create.
+    expect(PAGE).toContain('</div>\n    <div class="create-actions">');
+    const createBlockAt = PAGE.indexOf('<div class="create-actions">');
+    expect(createBlockAt).toBeLessThan(createAt);
+    expect(createBlockAt).toBeGreaterThan(remrzAt);
   });
 
   test('flow script drives the download through the exposed editor API', () => {
