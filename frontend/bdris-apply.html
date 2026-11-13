@@ -454,6 +454,7 @@ input.bad, select.bad{border-color:var(--status-danger); box-shadow:0 0 0 3px rg
 <link rel="stylesheet" href="/css/registration-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/engine-polish.css?v=20261111-4">
 <script src="/js/engine-feedback.js?v=20261111-4" defer></script>
+<link rel="stylesheet" href="/css/bdris-application-clean.css?v=20261113-1">
 </head>
 <body class="page-bdris-apply">
 <div class="wrap">
@@ -938,7 +939,6 @@ function setBtns(list) {
     btn.className = 'btn ' + (b.cls || '');
     btn.innerHTML = b.html;
     if (b.fn) {
-      btn.addEventListener('click', b.fn);
       btn.onclick = b.fn;
     }
     r.appendChild(btn);
@@ -3412,19 +3412,20 @@ function renderStep5() {
     $('docFile').value = '';
     if (!files.length) return;
     busy(true, '⏳ ছবি যোগ হচ্ছে…');
+    let uploadWarning = false;
     for (const f of files) {
-      if ((S.d.docs || []).length >= 6) { note('সর্বোচ্চ ৬টি কাগজ দেওয়া যাবে', 'warn'); break; }
+      if ((S.d.docs || []).length >= 6) { uploadWarning = true; note('সর্বোচ্চ ৬টি কাগজ দেওয়া যাবে', 'warn'); break; }
       const isImg = /^image\//.test(f.type) || /\.(jpe?g|png)$/i.test(f.name);
-      if (!isImg) { note('শুধু JPG/PNG ছবি চলবে — ' + f.name, 'warn'); continue; }
-      if (f.size > 2 * 1024 * 1024) { note('“' + f.name + '” ২MB-এর বেশি — ছোট করে আবার দিন', 'warn'); continue; }
+      if (!isImg) { uploadWarning = true; note('শুধু JPG/PNG ছবি চলবে — ' + f.name, 'warn'); continue; }
+      if (f.size > 2 * 1024 * 1024) { uploadWarning = true; note('“' + f.name + '” ২MB-এর বেশি — ছোট করে আবার দিন', 'warn'); continue; }
       const d = await fileToDoc(f);
-      if (!d) { note('“' + f.name + '” পড়া যায়নি — আবার চেষ্টা করুন', 'warn'); continue; }
+      if (!d) { uploadWarning = true; note('“' + f.name + '” পড়া যায়নি — আবার চেষ্টা করুন', 'warn'); continue; }
       const st = docTypeStatus();
       d.docType = !st.has40 ? '40' : (!st.has41 ? '41' : '40');
       S.d.docs.push(d);
     }
     renderDocRows();
-    busy(false); noteOff();
+    busy(false); if (!uploadWarning) noteOff();
   };
   setBtns([
     { html: 'পরবর্তী →', fn: () => submitStep5() },
@@ -3975,11 +3976,12 @@ async function directSubmit(otp, alreadyVerified) {
   if (typeof getTok !== 'function') {
     // Shim missing — the bot submit charges via its own wrapper.
     S._directOtp = false;
+    clearInterval(S._submitProgressTimer); S._submitProgressTimer = null;
     emitStep('SUBMIT_S4_OTP', { otp: otp, _submitSource: 'direct-fallback' });
     return;
   }
   const tok = await getTok();
-  if (!tok) { busy(false); S.otpStage = 'code'; return; } // charge() already alerted
+  if (!tok) { clearInterval(S._submitProgressTimer); S._submitProgressTimer = null; busy(false); S.otpStage = 'code'; return; } // charge() already alerted
   const payload = Object.assign({}, directCtx(), { phase: 'submit', uiDirect: true, otp: otp, _chargeToken: tok },
     // RESEED (2026-10-30): a deliberate retry after
     // outcome-unknown sets this — the chain then skips the
@@ -4904,20 +4906,21 @@ function renderAuto() {
     $('docFile').value = '';
     if (!files.length) return;
     busy(true, '⏳ ছবি যোগ হচ্ছে…');
+    let uploadWarning = false;
     for (const f2 of files) {
-      if ((S.d.docs || []).length >= 6) { note('সর্বোচ্চ ৬টি কাগজ দেওয়া যাবে', 'warn'); break; }
+      if ((S.d.docs || []).length >= 6) { uploadWarning = true; note('সর্বোচ্চ ৬টি কাগজ দেওয়া যাবে', 'warn'); break; }
       const isImg = /^image\//.test(f2.type) || /\.(jpe?g|png)$/i.test(f2.name);
-      if (!isImg) { note('শুধু JPG/PNG ছবি চলবে — ' + f2.name, 'warn'); continue; }
-      if (f2.size > 2 * 1024 * 1024) { note('“' + f2.name + '” ২MB-এর বেশি — ছোট করে আবার দিন', 'warn'); continue; }
+      if (!isImg) { uploadWarning = true; note('শুধু JPG/PNG ছবি চলবে — ' + f2.name, 'warn'); continue; }
+      if (f2.size > 2 * 1024 * 1024) { uploadWarning = true; note('“' + f2.name + '” ২MB-এর বেশি — ছোট করে আবার দিন', 'warn'); continue; }
       const d = await fileToDoc(f2);
-      if (!d) { note('“' + f2.name + '” পড়া যায়নি — আবার চেষ্টা করুন', 'warn'); continue; }
+      if (!d) { uploadWarning = true; note('“' + f2.name + '” পড়া যায়নি — আবার চেষ্টা করুন', 'warn'); continue; }
       const st = docTypeStatus();
       d.docType = !st.has40 ? '40' : (!st.has41 ? '41' : '40');
       S.d.docs.push(d);
     }
     renderDocRows();
     autoSaveDraft(0); // DRAFTS/AUTH (B14): added photos are progress — save them with the form
-    busy(false); noteOff();
+    busy(false); if (!uploadWarning) noteOff();
   };
   renderDocRows();
   $('pasteBox').value = S._pasteRaw || '';
@@ -5067,10 +5070,10 @@ function submitAuto() {
   console.log('[bdris] submitAuto called, S.ready=' + S.ready);
   // Preview থেকে আসলে S.d আগেই ভরা আছে — collectAuto() form field খুঁজে throw করবে
   if (!S.pvMode) {
-    try { collectAuto(); } catch (e) { console.log('[bdris] collectAuto failed: ' + e.message); }
+    try { collectAuto(); } catch (e) { console.log('[bdris] collectAuto failed: ' + e.message); showFail(['ফর্মের তথ্য পড়া যায়নি — কোনো আবেদন পাঠানো হয়নি। তথ্য মিলিয়ে আবার চেষ্টা করুন।']); return; }
   }
   let bad = [];
-  try { bad = validateAuto(); } catch (e) { console.log('[bdris] validateAuto threw: ' + e.message); return; }
+  try { bad = validateAuto(); } catch (e) { console.log('[bdris] validateAuto threw: ' + e.message); showFail(['ফর্ম যাচাই করা যায়নি — কোনো আবেদন পাঠানো হয়নি। আবার চেষ্টা করুন।']); return; }
   if (bad.length) {
     console.log('[bdris] validation failed: ' + bad.join(', '));
     showFail(bad); note('⚠️ কিছু ঘর পূরণ করুন', 'warn');
