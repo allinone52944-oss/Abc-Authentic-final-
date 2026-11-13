@@ -1,4 +1,5 @@
 # Legacy presentation rules
+- BDRIS application buttons bind each action once; scoped application CSS must preserve engine state, official document output and existing financial gates. Why: visual cleanup must not duplicate submissions or alter government records.
 - Orders/history simplification uses a scoped, versioned presentation adapter for loaded-row search, status disclosure and file labels; preserve inline scripts, pagination and protected download handlers. Why: a clearer interface must not change existing financial or fulfillment rules.
 - Engine feedback observes existing visible result boxes and adds focus/scroll emphasis outside document frames; original handlers, result visibility and charge state remain authoritative. Why: completion must be noticeable without changing engine execution or financial behavior.
 - Engine upload accessibility uses a keyboard-only adapter for existing and dynamically rendered file labels; preserve original upload/change handlers, disabled controls and document frames. Why: keyboard access must not alter engine execution or generated output.
