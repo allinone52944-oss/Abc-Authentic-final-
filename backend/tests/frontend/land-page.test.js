@@ -465,3 +465,21 @@ describe('land.html — mouza data lazy-loaded, not inlined (audit #63)', () => 
     expect(html).toContain('"অন্য অফিস" বেছে নিয়ে নাম লিখে এগোনো যাবে');
   });
 });
+
+describe('land.html — B2#15 compact hero/mode spacing clears the first field at 1366x720', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'frontend', 'land.html'), 'utf8');
+
+  test('desktop hero, modes and price-line use the compact spacing (mobile rules untouched)', () => {
+    // Reproduction measured the first field (#fDivision) at top 619px
+    // on a 720px viewport — visible but only 47px from the fold.
+    // These values save ~58px so the field clears the fold with margin.
+    expect(html).toContain('.hero { margin:0 -24px 14px; padding:16px 24px 12px;');
+    expect(html).toContain('.modes { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:12px; }');
+    expect(html).toContain('.mode-card { position:relative; border:2px solid #e2e8f0; border-radius:16px; padding:12px 12px 10px;');
+    expect(html).toContain('.mode-card .ic { width:44px; height:44px;');
+    expect(html).toContain('padding:9px 14px; border-radius:12px; font-size:13px; font-weight:700; margin-bottom:12px; }');
+    // The mobile compact rules stay as they were.
+    expect(html).toContain('.hero { margin:0 -16px 16px; padding:18px 16px 14px; }');
+    expect(html).toContain('.mode-card .d { display:none; }');
+  });
+});
