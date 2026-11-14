@@ -22,8 +22,13 @@ const { buildReceiptPdf } = require('../lib/receiptPdf');
 const { requireAuth, requireAdmin } = require('../auth');
 const { safeLog } = require('../security');
 
-const SERVICE_LABELS = { 'birth-final': 'জন্ম সনদ যাচাই', 'death-final': 'মৃত্যু সনদ যাচাই' };
-const SUBJECT_LABELS = { 'birth-final': 'জন্ম নিবন্ধন নম্বর', 'death-final': 'মৃত্যু নিবন্ধন নম্বর' };
+const SERVICE_LABELS = { 'birth-final': 'জন্ম সনদ যাচাই', 'death-final': 'মৃত্যু সনদ যাচাই', 'passport': 'পাসপোর্ট ইঞ্জিন' };
+const SUBJECT_LABELS = { 'birth-final': 'জন্ম নিবন্ধন নম্বর', 'death-final': 'মৃত্যু নিবন্ধন নম্বর', 'passport': 'পাসপোর্ট নম্বর' };
+// Delivery-copy notifications: the service name the customer is told
+// was created (WhatsApp + push). Passport must not be called a
+// birth/death certificate.
+const DELIVERY_LABELS = { 'birth-final': 'জন্ম সনদ (সার্টিফিকেট)', 'death-final': 'মৃত্যু সনদ', 'passport': 'পাসপোর্ট' };
+const DELIVERY_SHORT = { 'birth-final': 'জন্ম সনদ', 'death-final': 'মৃত্যু সনদ', 'passport': 'পাসপোর্ট' };
 
 // Bengali rendering of an engine failure — the engine's own
 // message may be English or system-flavoured; the customer only
@@ -38,7 +43,7 @@ function failureReasonBn(raw) {
 }
 
 const UPLOAD_DIR = '/opt/all-in-one-abc-authentic/uploads/engine-jobs';
-const ENGINES = ['birth-final', 'death-final'];
+const ENGINES = ['birth-final', 'death-final', 'passport'];
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -198,11 +203,12 @@ customerEngineJobs.post('/', (req, res) => {
       }
       // First stored copy of this document → customer confirmation
       // (WhatsApp + own-device push).
-      wa.notifyServiceCompleted(db, req.user.id,
-        engineId === 'death-final' ? 'মৃত্যু সনদ' : 'জন্ম সনদ (সার্টিফিকেট)').catch(() => {});
+      const label = DELIVERY_LABELS[engineId] || 'জন্ম সনদ (সার্টিফিকেট)';
+      const short = DELIVERY_SHORT[engineId] || 'জন্ম সনদ';
+      wa.notifyServiceCompleted(db, req.user.id, label).catch(() => {});
       push.notifyUser(db, req.user.id,
-        '✅ ' + (engineId === 'death-final' ? 'মৃত্যু সনদ' : 'জন্ম সনদ') + ' তৈরি হয়েছে',
-        'আপনার সনদটি তৈরি হয়েছে — ইতিহাস থেকে যেকোনো সময় ডাউনলোড করতে পারবেন।', '/history.html').catch(() => {});
+        '✅ ' + short + ' তৈরি হয়েছে',
+        'আপনার ' + (engineId === 'passport' ? 'পাসপোর্টটি' : 'সনদটি') + ' তৈরি হয়েছে — ইতিহাস থেকে যেকোনো সময় ডাউনলোড করতে পারবেন।', '/history.html').catch(() => {});
       res.status(201).json({ ok: true, id: r.rows[0].id });
     } catch (e) {
       cleanup();
