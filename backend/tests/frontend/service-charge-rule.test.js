@@ -43,3 +43,15 @@ describe('service-detail.html — charge-rule line (audit #49)', () => {
     expect(html).toContain("((price > 0 && s.charge_rule) ?");
   });
 });
+
+describe('service-detail.html — price label (B1#5/B2#11)', () => {
+  const html = read('frontend/service-detail.html');
+
+  test('the single price is labelled সেবা চার্জ, not conflated with সরকারি ফি', () => {
+    // The shown amount is services.price — the site's service charge.
+    // No service carries a separate government fee in the data, so
+    // the label must not imply the amount is (or includes) one.
+    expect(html).toContain('সেবা চার্জ:</div>');
+    expect(html).not.toContain('সেবার মূল্য / সরকারি ফি');
+  });
+});
