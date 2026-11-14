@@ -453,33 +453,32 @@ function showCat(i){
     (g.services.map(card).join('') || '<div style="color:#64748b;padding:20px 0;">এই ক্যাটাগরিতে কোনো সেবা নেই</div>') + '</div>';
 }
 
-function showLoadError(kind){
-  // B2#2 — the real failure, not one generic message. Session
-  // expiry goes to login WITH the return URL (a retry would just
-  // bounce to login anyway); server/network problems get a retry.
-  // Counts stay '–' while the list is unknown — never '০', which
-  // would imply zero inventory.
-  document.getElementById('svcView').style.display = 'none';
-  const view = document.getElementById('catView');
-  view.style.display = '';
-  let msg, action;
-  if (kind === 'session') {
-    msg = 'আপনার সেশন শেষ হয়ে গেছে। আবার লগইন করুন।';
-    action = '<button class="btn btn-secondary" onclick="location.href=\'/login.html?next=\' + encodeURIComponent(\'/services.html\')">লগইন করুন</button>';
-  } else if (kind === 'server') {
-    msg = 'সার্ভার সমস্যা হচ্ছে। কিছুক্ষণ পর আবার চেষ্টা করুন।';
-    action = '<button class="btn btn-secondary" onclick="init()">আবার চেষ্টা করুন</button>';
-  } else if (kind === 'network') {
-    msg = 'ইন্টারনেট সংযোগ পাওয়া যাচ্ছে না। সংযোগ দেখে আবার চেষ্টা করুন।';
-    action = '<button class="btn btn-secondary" onclick="init()">আবার চেষ্টা করুন</button>';
-  } else {
-    msg = 'সেবার তালিকা আনা যায়নি। সংযোগ দেখে আবার চেষ্টা করুন।';
-    action = '<button class="btn btn-secondary" onclick="init()">আবার চেষ্টা করুন</button>';
-  }
-  view.innerHTML = '<div class="service-load-error" role="alert">' + msg + '<br>' + action + '</div>';
-}
-
 async function init(){
+  function showLoadError(kind){
+    // B2#2 — the real failure, not one generic message. Session
+    // expiry goes to login WITH the return URL (a retry would just
+    // bounce to login anyway); server/network problems get a retry.
+    // Counts stay '–' while the list is unknown — never '০', which
+    // would imply zero inventory.
+    document.getElementById('svcView').style.display = 'none';
+    const view = document.getElementById('catView');
+    view.style.display = '';
+    let msg, action;
+    if (kind === 'session') {
+      msg = 'আপনার সেশন শেষ হয়ে গেছে। আবার লগইন করুন।';
+      action = '<button class="btn btn-secondary" onclick="location.href=\'/login.html?next=\' + encodeURIComponent(\'/services.html\')">লগইন করুন</button>';
+    } else if (kind === 'server') {
+      msg = 'সার্ভার সমস্যা হচ্ছে। কিছুক্ষণ পর আবার চেষ্টা করুন।';
+      action = '<button class="btn btn-secondary" onclick="init()">আবার চেষ্টা করুন</button>';
+    } else if (kind === 'network') {
+      msg = 'ইন্টারনেট সংযোগ পাওয়া যাচ্ছে না। সংযোগ দেখে আবার চেষ্টা করুন।';
+      action = '<button class="btn btn-secondary" onclick="init()">আবার চেষ্টা করুন</button>';
+    } else {
+      msg = 'সেবার তালিকা আনা যায়নি। সংযোগ দেখে আবার চেষ্টা করুন।';
+      action = '<button class="btn btn-secondary" onclick="init()">আবার চেষ্টা করুন</button>';
+    }
+    view.innerHTML = '<div class="service-load-error" role="alert">' + msg + '<br>' + action + '</div>';
+  }
   // B2#2 — a failed /auth/me must not bounce the user to login
   // blindly: 401 means the session really ended (login WITH the
   // return URL); anything else is a server/network problem, shown
