@@ -3,7 +3,7 @@ const path = require('path');
 const vm = require('vm');
 const html = fs.readFileSync(path.join(__dirname, '../../../frontend/order-create.html'), 'utf8');
 const script = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>')).replace(/\ninit\(\);/, '\n');
-function setup({ jsonFields = false, fail = false, engine = null } = {}) {
+function setup({ jsonFields = false, fail = false, engine = null, fallback = false, docs = [], sample = null } = {}) {
   const fields = [{ name: 'applicant_name', label: 'আবেদনকারীর নাম', required: true }];
   const elements = new Map();
   const element = () => ({ style: {}, value: '', textContent: '', innerHTML: '', disabled: false, dataset: {}, addEventListener() {}, scrollIntoView() {}, focus() {}, classList: { add() {}, remove() {} } });
@@ -12,7 +12,7 @@ function setup({ jsonFields = false, fail = false, engine = null } = {}) {
   const store = { getItem: () => null, setItem() {}, removeItem() {} };
   const context = vm.createContext({ console: { error() {}, warn() {} }, URLSearchParams, ABCPromo: {mount() {}}, location: { search: '?service=test' }, sessionStorage: store, localStorage: store, crypto: { randomUUID: () => 'test-id' },
     document: { getElementById: get, querySelector: selector => selector === '.card' ? element() : null, querySelectorAll: selector => selector === '[data-field]' ? [input] : [] },
-    ABC: { api: async url => { if (fail && url.startsWith('/services/')) throw new Error('offline'); return { ok: true, json: async () => url === '/auth/me' ? { user: { id: 'test-user', name: 'Test Applicant', balance: 500 } } : url.startsWith('/services/') ? { service: { engine_id: engine, price: 100, fields_required: jsonFields ? JSON.stringify(fields) : fields, documents_required: [] } } : { service_credits: [] } }; } }
+    ABC: { api: async url => { if (fail && url.startsWith('/services/')) throw new Error('offline'); return { ok: true, json: async () => url === '/auth/me' ? { user: { id: 'test-user', name: 'Test Applicant', balance: 500 } } : url.startsWith('/services/') ? { service: { engine_id: engine, price: 100, fields_required: fallback ? [] : (jsonFields ? JSON.stringify(fields) : fields), documents_required: docs, manual_sample: sample } } : { service_credits: [] } }; } }
   });
   context.window = context;
   vm.runInContext(script, context);
@@ -43,3 +43,36 @@ test('different signed-in accounts never restore the same service draft', async 
 });
 
 test('engine checkout redirects to service entry instead of a manual order', async () => { const {context,get}=setup({engine:'qr-photo-verify'}); await vm.runInContext('init()',context); expect(context.location.href).toBe('/service-detail.html?id=test'); expect(get('submitBtn').disabled).toBe(true); });
+
+test('B1#4/B2#9 — fallback placeholder never asks for a mobile number', async () => {
+  const { context, get } = setup({ fallback: true });
+  await vm.runInContext('init()', context);
+  const html = get('fieldsContainer').innerHTML;
+  expect(html).toContain('manualDetailsInput');
+  expect(html).not.toContain('মোবাইল');
+  expect(html).toContain('এখানে আপনার প্রয়োজনীয় তথ্য লিখে পূরণ করুন');
+});
+
+test('B1#4/B2#9 — fallback with a sample still never asks for a mobile number', async () => {
+  const { context, get } = setup({ fallback: true, sample: 'নাম:\nNID নম্বর:\nজন্ম তারিখ:' });
+  await vm.runInContext('init()', context);
+  const html = get('fieldsContainer').innerHTML;
+  expect(html).toContain('নমুনা ফরম্যাট (শুধু দেখার জন্য)');
+  expect(html).not.toContain('মোবাইল');
+});
+
+test('B1#4/B2#9 — optional doc renders (ঐচ্ছিক) without *, required keeps *', async () => {
+  const { context, get } = setup({ fallback: true, docs: ['জাতীয় পরিচয়পত্র', { name: 'পাসপোর্ট কপি', required: false }] });
+  await vm.runInContext('init()', context);
+  const html = get('namedDocs').innerHTML;
+  expect(html).toContain('জাতীয় পরিচয়পত্র');
+  expect(html).toContain('পাসপোর্ট কপি');
+  expect(html).toContain('(ঐচ্ছিক)');
+  expect(html).toContain('data-doctype="পাসপোর্ট কপি"');
+  expect(html).not.toContain('[object Object]');
+  // The required doc carries the red *; the optional one must not get one.
+  const reqIdx = html.indexOf('জাতীয় পরিচয়পত্র');
+  expect(html.slice(reqIdx, reqIdx + 120)).toContain('color:#ef4444;">*</span>');
+  const optIdx = html.indexOf('পাসপোর্ট কপি');
+  expect(html.slice(optIdx, optIdx + 120)).not.toContain('color:#ef4444;">*</span>');
+});

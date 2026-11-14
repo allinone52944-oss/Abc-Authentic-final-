@@ -193,8 +193,9 @@ async function init(){
   const catName = s.category_name_bn || s.category_name;
   const icon = (s.icon && s.icon !== '🛎️') ? s.icon : autoIcon(s.name_bn || s.name);
 
-  // Docs
-  const docs=safeArray(s.documents_required).map(d=>'<li>📄 '+esc(d)+'</li>').join('')||'<li>কোনো বিশেষ ডকুমেন্ট প্রয়োজন নেই</li>';
+  // Docs — B1#4/B2#9: entries are strings (required) or
+  // {name, required:false} (optional); optional docs are marked (ঐচ্ছিক).
+  const docs=safeArray(s.documents_required).map(d=>{const n=typeof d==='string'?d:(d&&d.name)||'';const opt=d&&typeof d==='object'&&d.required===false;return '<li>📄 '+esc(n)+(opt?' <span style="color:#64748b;">(ঐচ্ছিক)</span>':'')+'</li>';}).join('')||'<li>কোনো বিশেষ ডকুমেন্ট প্রয়োজন নেই</li>';
   const sched=(s.schedule&&s.schedule.open)?'<div style="color:#64748b;font-size:13px;margin:8px 0;">🕘 সেবার সময়সূচি: '+esc(s.schedule.open)+' - '+esc(s.schedule.close||'')+'</div>':'';
 
   // Balance Check

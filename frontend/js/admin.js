@@ -3227,7 +3227,7 @@ TABS.services = async () => {
             '</div>' +
 
             (isManual && s.manual_doc_count ? '<div style="font-size:12px;color:#64748b;margin-bottom:6px;">📎 সর্বোচ্চ ডকুমেন্ট: <b>' + bn(s.manual_doc_count) + 'টি</b></div>' : '') +
-            (s.documents_required && s.documents_required.length ? '<div style="font-size:11px;color:#64748b;margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📄 আবশ্যক: ' + esc(s.documents_required.join(', ')) + '</div>' : '') +
+            (s.documents_required && s.documents_required.length ? '<div style="font-size:11px;color:#64748b;margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📄 ডকুমেন্ট: ' + esc(s.documents_required.map(docLabel).join(', ')) + '</div>' : '') +
           '</div>' +
 
           '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;border-top:1px solid #f1f5f9;padding-top:12px;margin-top:10px;">' +
@@ -3352,12 +3352,12 @@ window.AdmSvc = {
         fld('📎 প্রয়োজনীয় ডকুমেন্ট সংখ্যা (১-৬)', 'number', 'sv_doccount', '1') +
       '</div>' +
       fld('সেবা মূল্য (৳) *', 'number', 'sv_price', '0') +
-      fld('প্রয়োজনীয় ডকুমেন্টের নাম (কমা দিয়ে, যেমন: NID, Photo, Signature)', 'text', 'sv_docs') +
+      fld('প্রয়োজনীয় ডকুমেন্টের নাম (কমা দিয়ে, যেমন: NID, Photo, Signature) — ঐচ্ছিক হলে নামের শেষে (ঐচ্ছিক) লিখুন', 'text', 'sv_docs') +
       '<div class="field"><label>📜 সাধারণ নিয়মাবলী ও শর্তাবলী</label><textarea id="sv_rules" rows="3" style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:10px;font-size:13px;"></textarea></div>' +
       '<button class="btn" onclick="AdmSvc.create()" style="width:100%;padding:12px;font-weight:700;margin-top:10px;">✅ সেবা সংরক্ষণ করুন</button>');
   },
   async create() {
-    const docs = v('sv_docs').split(',').map(x => x.trim()).filter(Boolean);
+    const docs = parseDocsInput(v('sv_docs'));
     const type = document.getElementById('sv_type').value;
     const bnName = v('sv_bn');
     const enName = v('sv_name') || bnName;
@@ -3428,12 +3428,12 @@ window.AdmSvc = {
       '<div class="field"><label>স্ট্যাটাস</label><select id="esv_status">' +
       ['active', 'disabled'].map(x => '<option value="' + x + '"' + (s.status === x ? ' selected' : '') + '>' + (x === 'active' ? '🟢 সক্রিয়' : '🔴 নিষ্ক্রিয়') + '</option>').join('') +
       '</select></div>' +
-      fld('প্রয়োজনীয় ডকুমেন্টের নাম (কমা দিয়ে)', 'text', 'esv_docs', (s.documents_required || []).join(', ')) +
+      fld('প্রয়োজনীয় ডকুমেন্টের নাম (কমা দিয়ে) — ঐচ্ছিক হলে নামের শেষে (ঐচ্ছিক) লিখুন', 'text', 'esv_docs', (s.documents_required || []).map(docLabel).join(', ')) +
       '<div class="field"><label>📜 সাধারণ নিয়মাবলী ও শর্তাবলী</label><textarea id="esv_rules" rows="3" style="width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:10px;font-size:13px;">' + esc(s.rules_text || '') + '</textarea></div>' +
       '<button class="btn" onclick="AdmSvc.save(\'' + id + '\')" style="width:100%;padding:12px;font-weight:700;margin-top:10px;">💾 পরিবর্তন সংরক্ষণ করুন</button>');
   },
   async save(id) {
-    const docs = v('esv_docs').split(',').map(x => x.trim()).filter(Boolean);
+    const docs = parseDocsInput(v('esv_docs'));
     const type = document.getElementById('esv_type').value;
     const r = await ABC.api('/admin/services/' + id, { method: 'PUT', body: {
       name: v('esv_name'),
@@ -4939,6 +4939,19 @@ window.AdmWa = {
 };
 
 /* ---------------- helpers ---------------- */
+// B1#4/B2#9 — documents_required entries are strings (required) or
+// {name, required:false} objects (optional). In the admin comma field an
+// optional doc is typed as "Name (ঐচ্ছিক)"; the backend skips optional
+// entries in the MISSING_DOCUMENTS check and order-create shows (ঐচ্ছিক).
+function docName(d) { return typeof d === 'string' ? d : (d && d.name) || ''; }
+function docIsOptional(d) { return !!(d && typeof d === 'object' && d.required === false); }
+function docLabel(d) { return docName(d) + (docIsOptional(d) ? ' (ঐচ্ছিক)' : ''); }
+function parseDocsInput(s) {
+  return (s || '').split(',').map(x => x.trim()).filter(Boolean).map(x => {
+    const m = x.match(/^(.*?)\s*\(ঐচ্ছিক\)\s*$/);
+    return m ? { name: m[1].trim(), required: false } : x;
+  });
+}
 function fld(label, type, id, val) {
   // P2: label programmatically tied to its input (for=).
   return '<div class="field"><label for="' + id + '">' + label + '</label>' +

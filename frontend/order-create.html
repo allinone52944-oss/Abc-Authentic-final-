@@ -587,14 +587,19 @@ async function init(){
           (rawSampleText ?
             '<div style="margin-bottom:10px;"><div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:6px;">📋 নমুনা ফরম্যাট (শুধু দেখার জন্য)</div>' +
             '<pre class="sample-code" style="margin:0;">' + esc(rawSampleText) + '</pre></div>' : '') +
-          '<textarea id="manualDetailsInput" data-field="_manual_form" rows="8" placeholder="এখানে নাম, মোবাইল নম্বর এবং প্রয়োজনীয় আবেদন ফরম্যাটের তথ্য লিখে পূরণ করুন…" style="width:100%;padding:12px 14px;border:1px solid #cbd5e1;border-radius:12px;font-size:16px;line-height:1.6;font-family:inherit;"></textarea>' +
+          '<textarea id="manualDetailsInput" data-field="_manual_form" rows="8" placeholder="এখানে আপনার প্রয়োজনীয় তথ্য লিখে পূরণ করুন…" style="width:100%;padding:12px 14px;border:1px solid #cbd5e1;border-radius:12px;font-size:16px;line-height:1.6;font-family:inherit;"></textarea>' +
           (rawSampleText ?
             '<div style="font-size:12px;color:#64748b;margin-top:4px;">💡 উপরের নমুনা ফরম্যাটটি দেখে নিচের বক্সে আপনার সঠিক তথ্য লিখুন।</div>' :
-            '<div style="font-size:12px;color:#64748b;margin-top:4px;">(প্রয়োজনীয় নাম, মোবাইল ও আবেদনের তথ্যাদি লিখে পূরণ করুন)</div>') +
+            '<div style="font-size:12px;color:#64748b;margin-top:4px;">(প্রয়োজনীয় তথ্যাদি লিখে পূরণ করুন)</div>') +
         '</div>';
     }
 
     // Named required documents with safeArray
+    // B1#4/B2#9 — a named document is a string (required) or
+    // {name, required:false} (optional); optional docs show (ঐচ্ছিক)
+    // and no *, and the backend skips them in the MISSING_DOCUMENTS check.
+    const docName = d => (typeof d === 'string' ? d : (d && d.name) || '');
+    const docRequired = d => !(d && typeof d === 'object' && d.required === false);
     const docs = safeArray(svc.documents_required);
     const universalSec = document.getElementById('universalUploadSection');
 
@@ -603,19 +608,19 @@ async function init(){
       if(universalSec) universalSec.style.display = 'none';
 
       document.getElementById('namedDocs').innerHTML =
-        '<div style="margin-top:20px;margin-bottom:12px;font-weight:700;font-size:15px;color:#1e293b;">📄 আবশ্যক নির্দিষ্ট ডকুমেন্ট (' + docs.length + 'টি):</div>' +
+        '<div style="margin-top:20px;margin-bottom:12px;font-weight:700;font-size:15px;color:#1e293b;">📄 নির্দিষ্ট ডকুমেন্ট (' + docs.length + 'টি):</div>' +
         docs.map((doc,i)=>
           '<div class="field" style="margin-bottom:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;">' +
             '<label style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">' +
-              '<span>📄 ' + esc(doc) + ' <span style="color:#ef4444;">*</span></span>' +
+              '<span>📄 ' + esc(docName(doc)) + (docRequired(doc) ? ' <span style="color:#ef4444;">*</span>' : ' <span style="color:#64748b;font-weight:400;">(ঐচ্ছিক)</span>') + '</span>' +
               '<span style="font-size:11px;font-weight:normal;color:#64748b;">(JPG, PNG বা PDF)</span>' +
             '</label>' +
             '<div class="file-drop" style="background:#ffffff;border:1.5px dashed #cbd5e1;border-radius:10px;padding:12px 14px;cursor:pointer;" role="button" tabindex="0" aria-label="ডকুমেন্ট নির্বাচন করুন" onkeydown="if(event.target===this &amp;&amp; (event.key===\'Enter\' || event.key===\' \')){event.preventDefault();this.querySelector(\'input\').click()}" onclick="if(event.target===this || !event.target.matches(\'input\'))this.querySelector(\'input\').click()">' +
-              '<input type="file" data-doc="' + i + '" data-doctype="' + esc(doc) + '" accept="image/*,.pdf" style="display:none;" onchange="updateDocFeedback(this, \'' + i + '\')">' +
+              '<input type="file" data-doc="' + i + '" data-doctype="' + esc(docName(doc)) + '" accept="image/*,.pdf" style="display:none;" onchange="updateDocFeedback(this, \'' + i + '\')">' +
               '<div id="docFeedback_' + i + '" style="display:flex;align-items:center;gap:10px;color:#475569;font-size:13px;">' +
                 '<span style="font-size:22px;">📤</span>' +
                 '<div>' +
-                  '<div style="font-weight:600;color:#2563eb;">' + esc(doc) + ' ফাইল নির্বাচন করতে এখানে ক্লিক করুন</div>' +
+                  '<div style="font-weight:600;color:#2563eb;">' + esc(docName(doc)) + ' ফাইল নির্বাচন করতে এখানে ক্লিক করুন</div>' +
                   '<div style="font-size:11px;color:#64748b;">JPG, PNG অথবা PDF ফাইল নির্বাচন করতে পারেন</div>' +
                 '</div>' +
               '</div>' +
