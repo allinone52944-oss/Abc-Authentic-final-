@@ -307,12 +307,27 @@ function card(s){
     '<div class="svc-info"><h4>'+esc(s.name_bn||s.name)+'</h4>'+
     '<div style="margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">' + catHtml +
     '<span class="ptype '+(isAuto?'auto':'manual')+'">'+(isAuto?'⚡ স্বয়ংক্রিয়':'📝 ম্যানুয়াল')+'</span>'+closed+'</div></div>'+
-    '<div class="svc-pr">৳'+bnNum(s.price)+(s.open?'':'<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:2px;">বন্ধ আছে</div>')+chargeRuleHtml(s)+'</div></div>';
+    '<div class="svc-pr">৳'+bnNum(s.price)+(s.open?'':'<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:2px;">বন্ধ আছে</div>')+chargeRuleHtml(s)+(s.engine_id === 'bdris-apply' ? '<div class="bdris-pdf-note" style="font-size:11px;color:#64748b;font-weight:600;margin-top:2px;">' + bdrisPdfNoteHtml() + '</div>' : '')+'</div></div>';
 }
 
 let GROUPS = [];
 let ALL_SERVICES = [];
 let CURRENT_FILTER = 'cats';
+
+// B2#4 — BDRIS charges twice (application + original PDF). The
+// catalog card shows only the application price until the PDF
+// price loads from /api/bdris-apply/prices (never hardcoded).
+let BDRIS_PDF_PRICE = null;
+function bdrisPdfNoteHtml(){
+  return BDRIS_PDF_PRICE ? '+ আসল PDF ৳' + bnNum(BDRIS_PDF_PRICE) : '';
+}
+function loadBdrisPdfPrice(){
+  ABC.api('/bdris-apply/prices').then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.ok || !(Number(d.pdfPrice) > 0)) return;
+    BDRIS_PDF_PRICE = Number(d.pdfPrice);
+    document.querySelectorAll('.bdris-pdf-note').forEach(function (el) { el.textContent = bdrisPdfNoteHtml(); });
+  }).catch(function () {});
+}
 
 function updateCounts(){
   const allCnt = ALL_SERVICES.length;
@@ -500,6 +515,9 @@ async function init(){
   }
   ALL_SERVICES = groupLand(services || []);
   updateCounts();
+  // B2#4 — non-blocking: the catalog renders first; the BDRIS
+  // PDF price fills in when the price fetch resolves.
+  loadBdrisPdfPrice();
 
   const map = {}; GROUPS = [];
   const uncat = { id:null, name:'অন্যান্য সেবা', icon:'📦', services:[], ord:999999 };

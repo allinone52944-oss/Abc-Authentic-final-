@@ -492,7 +492,7 @@ input.bad, select.bad{border-color:var(--status-danger); box-shadow:0 0 0 3px rg
 
   <div class="footer">
     নিরাপদ অনলাইন আবেদন <span class="fl">•</span> আপনার তথ্য সুরক্ষিত থাকে<br>
-    বিডিআরআইএস-এ আবেদন <span class="fl">•</span> ফি জমা/আসল পিডিএফ-এর আগে একবারই কাটে — চার্জ ব্যর্থ হলে ৳০, একই কাজে দুবার নয়
+    বিডিআরআইএস-এ আবেদন <span class="fl">•</span> <span id="abcFeeNote">ফি জমা/আসল পিডিএফ-এর আগে একবারই কাটে — চার্জ ব্যর্থ হলে ৳০, একই কাজে দুবার নয়</span>
   </div>
 </div>
 <script src="/js/socket.io.min.js?v=1"></script>
@@ -6430,6 +6430,14 @@ $('logoutBtn').onclick = async () => {
         var parts = [];
         if (d.submitPrice > 0) parts.push('আবেদন: ৳' + d.submitPrice);
         if (d.pdfPrice > 0) parts.push('PDF: ৳' + d.pdfPrice);
+        // B2#4 — the static footer states no amounts; put the real
+        // amounts there too so the fee is named before each charge.
+        // (If the price fetch fails, the footer keeps its old
+        // amount-less text — never a guessed amount.)
+        var feeNote = document.getElementById('abcFeeNote');
+        if (feeNote && parts.length) {
+          feeNote.textContent = parts.join(' + ') + ' — ফি জমা/আসল পিডিএফ-এর আগে একবারই কাটে — চার্জ ব্যর্থ হলে ৳০, একই কাজে দুবার নয়';
+        }
         if (parts.length && !document.getElementById('abcChargeBar')) {
           var bar = document.createElement('div');
           bar.id = 'abcChargeBar';
