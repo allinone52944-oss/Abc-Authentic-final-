@@ -742,25 +742,109 @@ body.flow-form .create-actions .primary:hover{background:var(--gold-gradient);bo
  async function updateSignatureOptions(){const revision=++imageRevision.signature,updated={...model.images.signature,removeWhite:$('signature-remove-white').checked,trim:$('signature-trim').checked};try{if(updated.data)updated.rendered=await processSignature(updated);if(revision!==imageRevision.signature)return;const optionsChanged=updated.removeWhite!==model.images.signature.removeWhite||updated.trim!==model.images.signature.trim;model.images.signature=updated;renderImage('signature');if(optionsChanged)mark();}catch(error){if(revision!==imageRevision.signature)return;renderImage('signature');notify(error.message);}}
  async function updatePhotoOptions(){const revision=++imageRevision.photo,updated={...model.images.photo,cutout:$('photo-cutout').checked};try{updated.cutoutRendered=updated.data&&updated.cutout?await processPhotoCutout(updated):'';if(revision!==imageRevision.photo)return;const optionsChanged=updated.cutout!==model.images.photo.cutout;model.images.photo=updated;renderImage('photo');if(optionsChanged)mark();}catch(error){if(revision!==imageRevision.photo)return;renderImage('photo');notify(error.message);}}
  function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
- async function snapshotHTML(){
-  await drainImages();const revision=editRevision,root=document.documentElement.cloneNode(true);
-  /* Site shell is live-only: the self-contained export stays a plain
-     offline editor (no login gate, no site links, no external
-     stylesheets/scripts — the copy opens from file://). */
-  root.querySelectorAll('.sidebar,.m-tabbar,link[rel="stylesheet"],script[src],#passport-login-gate,#passport-price-line').forEach(n=>n.remove());
-  root.querySelector('#document-state').textContent=JSON.stringify(model).replace(/</g,'\\u003c');
-  for(const id of ['erase-layer','image-layer','text-layer']){const n=root.querySelector('#'+id);n.replaceChildren();n.removeAttribute('style');}
-  root.querySelector('body').className='';root.querySelector('#field-picker').innerHTML='<option value="">লেখার অংশ বেছে নিন…</option>';
-  root.querySelector('#field-value').textContent='';root.querySelector('#field-value').disabled=true;root.querySelector('#style-controls').disabled=true;
-  root.querySelector('#restore-field').disabled=true;root.querySelector('#save-button').disabled=false;
-  for(const id of ['photo-preview','signature-preview'])root.querySelector('#'+id).removeAttribute('src');
-  const st=root.querySelector('#status');if(st)st.textContent='Loading embedded document…';root.querySelector('#field-info').textContent='ইংরেজি ও বাংলা — দুটোই চলে।';
-  root.querySelector('#toast').className='toast';root.querySelector('#toast').textContent='';
-  root.querySelector('#regions-button').setAttribute('aria-pressed','false');root.querySelector('#preview-button').setAttribute('aria-pressed','false');root.querySelector('#preview-button').textContent='প্রিভিউ';
-  root.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab==='engine')));
-  root.querySelectorAll('.tab-panel').forEach(p=>p.hidden=p.id!=='panel-engine');root.querySelectorAll('details').forEach(d=>d.open=false);
-  return {html:'<!doctype html>\n'+root.outerHTML,revision};
+ /* ---- Document-only export (bug fix 2026-11-14) ----
+   User report: the Create download was the FULL ENGINE HTML (toolbar,
+   form, tabs, panels, editor scripts) with the document layers EMPTIED
+   — it only looked like a passport when opened, because the embedded
+   editor re-rendered it from #document-state. The download is now ONLY
+   the passport document: the rendered #page-shell (scan artwork, photo /
+   signature, all text + MRZ) with just the CSS the document needs. No
+   scripts, no editor, no site shell — and the file can no longer be
+   reopened for editing; to edit, use the live site and Create again. */
+ function escapeHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+ function splitCSSRules(text){
+  const rules=[];let depth=0,start=0,i=0;
+  while(i<text.length){
+    const c=text[i];
+    if(c==='/'&&text[i+1]==='*'){const end=text.indexOf('*/',i+2);i=end<0?text.length:end+2;continue;}
+    if(c==='"'||c==="'"){const q=c;i++;while(i<text.length&&text[i]!==q)i++;i++;continue;}
+    if(c==='{')depth++;
+    else if(c==='}'){depth--;if(depth===0){const r=text.slice(start,i+1).trim();if(r)rules.push(r);start=i+1;}}
+    i++;
+  }
+  return rules;
  }
+ function keepDocumentRule(sel){
+  const s=String(sel||'').trim();
+  if(!s)return false;
+  if(s.indexOf('@font-face')===0)return true;
+  if(s.indexOf('@media print')===0)return true;
+  if(s.charAt(0)==='@')return false;
+  return s.split(',').every(function(q){
+    q=q.trim();
+    if(q.indexOf('::selection')>=0||q.indexOf(':focus-visible')>=0)return false;
+    if(q.indexOf('.active')>=0)return false;
+    if(/^(body\.show-regions|body\.preview|body\.flow-|body:not)/.test(q))return false;
+    if(/^(?:\:root|\*|html|body)$/.test(q))return true;
+    if(/^\.(page-shell|scan|page-layer|erase-layer|image-layer|text-layer|erase-patch|dot-strip|field|image-slot)\b/.test(q))return true;
+    return false;
+  });
+ }
+ function documentCSS(){
+  let text='';
+  for(const el of document.querySelectorAll('style')){
+    if(el.textContent&&el.textContent.indexOf('.page-shell{')>=0){text=el.textContent;break;}
+  }
+  if(!text)return '';
+  return splitCSSRules(text).filter(function(rule){
+    return keepDocumentRule(rule.slice(0,rule.indexOf('{')));
+  }).join('\n');
+ }
+ function cleanDocumentShell(shell){
+  // Editor affordances off: the document is static, not editable.
+  shell.querySelectorAll('[contenteditable]').forEach(function(n){n.removeAttribute('contenteditable');});
+  shell.querySelectorAll('[tabindex]').forEach(function(n){n.removeAttribute('tabindex');});
+  shell.querySelectorAll('[spellcheck]').forEach(function(n){n.removeAttribute('spellcheck');});
+  shell.querySelectorAll('[role]').forEach(function(n){n.removeAttribute('role');});
+  shell.querySelectorAll('[aria-label]').forEach(function(n){n.removeAttribute('aria-label');});
+  shell.querySelectorAll('[aria-multiline]').forEach(function(n){n.removeAttribute('aria-multiline');});
+  shell.querySelectorAll('[autocapitalize]').forEach(function(n){n.removeAttribute('autocapitalize');});
+  shell.querySelectorAll('[autocorrect]').forEach(function(n){n.removeAttribute('autocorrect');});
+  shell.querySelectorAll('.active').forEach(function(n){n.classList.remove('active');});
+  // Editor hooks are not document content. (The `changed` class stays:
+  // it is what makes edited text and uploaded photo/signature visible.)
+  shell.querySelectorAll('[data-field]').forEach(function(n){n.removeAttribute('data-field');});
+  shell.querySelectorAll('[data-slot]').forEach(function(n){n.removeAttribute('data-slot');});
+  shell.querySelectorAll('[data-patch-for]').forEach(function(n){n.removeAttribute('data-patch-for');});
+  // The layer scale is set inline for the live editor width; the
+  // document uses the fixed A4 scale from its stylesheet instead.
+  shell.querySelectorAll('.page-layer').forEach(function(n){n.style.removeProperty('--sx');n.style.removeProperty('--sy');});
+  // A cloned canvas is blank — the dotted strip is drawn on a canvas,
+  // so bake the live canvas into an image for the static document.
+  // When the strip is inactive (original scan artwork shows instead),
+  // the canvas holds nothing, so drop it.
+  try{
+    const liveWrap=document.querySelector('.dot-strip');
+    const live=liveWrap?liveWrap.querySelector('canvas'):null;
+    const clone=shell.querySelector('.dot-strip canvas');
+    if(live&&clone&&liveWrap.style.display!=='none'&&live.width>0&&typeof live.toDataURL==='function'){
+      const img=document.createElement('img');
+      img.alt='';img.src=live.toDataURL();
+      clone.replaceWith(img);
+    }else if(clone){
+      clone.remove();
+    }
+  }catch(e){/* keep the canvas; the strip is hidden when inactive */}
+ }
+ function documentTitle(){
+  let no='';
+  try{
+    const f=(model.fields||[]).find(function(x){return x.id==='passport-no';});
+    no=f&&f.text?String(f.text).replace(/[^A-Z0-9]/gi,'').toUpperCase():'';
+  }catch(e){}
+  return no?'Passport-'+no:'Passport-Engine';
+ }
+ async function snapshotHTML(){
+  await drainImages();
+  const revision=editRevision;
+  const shell=$('page-shell').cloneNode(true);
+  cleanDocumentShell(shell);
+  const css=documentCSS();
+  const title=documentTitle();
+  const html='<!doctype html>\n<html lang="bn"><head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<title>'+escapeHtml(title)+'</title>\n<style>\n'+css+'\n/* Document-only: neutral page, fixed A4 width (792px) with the exact A4 layer scale, no editor interactivity. (A container-unit scale cannot work here: calc(100cqw/2479) is a length, and scale() needs a unitless number — the transform would be invalid. The fixed A4 scale is exact on desktop and in print; on a narrower screen the page scrolls horizontally.) */\nbody{margin:0;background:#fff}\n.page-shell{width:792px;margin:0 auto}\n.page-layer{transform:scale(0.31948366277,0.31965032307)}\n.field,.image-slot{pointer-events:none!important;cursor:default!important;outline:none!important}\n.dot-strip img{display:block;width:100%;height:100%}\n</style>\n</head>\n<body>\n'+shell.outerHTML+'\n</body></html>';
+  return {html,revision};
+ }
+ /* ---- /Document-only export ---- */
  async function printDocument(){
   try{
    await drainImages();if(document.fonts)await document.fonts.ready;

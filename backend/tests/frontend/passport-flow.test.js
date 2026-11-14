@@ -395,9 +395,12 @@ describe('form declutter — status bar, Fidelity and Print texts removed; group
     expect(PAGE).toContain('অক্ষর ও অবস্থান');
   });
 
-  test('updateStatus and the export reset guard the missing status element instead of crashing', () => {
+  test('updateStatus guards the missing status element; the document-only export never touches it', () => {
     expect(MAIN).toContain("const st=$('status');if(st)");
-    expect(MAIN).toContain("const st=root.querySelector('#status');if(st)");
+    // The document-only export (bug fix 2026-11-14) builds a fresh
+    // document from #page-shell — it never references #status, so the
+    // old export-reset guard is gone because it cannot crash on it.
+    expect(MAIN).not.toContain("root.querySelector('#status')");
   });
 
   test('form-state groups have no divider borders — spacing only, simpler premium look', () => {
@@ -463,8 +466,15 @@ describe('flow layer does not touch the editor', () => {
     expect(FLOW).toContain("if (!startBtn || !createBtn) { body.classList.remove('flow-landing'); return; }");
   });
 
-  test('a downloaded copy opens in the editor, not the landing (snapshotHTML resets the body class)', () => {
-    expect(MAIN).toContain("root.querySelector('body').className=''");
+  test('a downloaded copy is the document only, not the editor (bug fix 2026-11-14)', () => {
+    // The old export cloned the whole document and reset the body class so
+    // the copy reopened as the editor. The download is now only the
+    // passport document — no whole-document clone, no model JSON, no
+    // body-class reset.
+    expect(MAIN).not.toContain('document.documentElement.cloneNode(true)');
+    expect(MAIN).not.toContain("root.querySelector('#document-state')");
+    expect(MAIN).not.toContain("root.querySelector('body').className=''");
+    expect(MAIN).toContain("const shell=$('page-shell').cloneNode(true);");
   });
 
   test('every inline script parses', () => {
@@ -929,8 +939,15 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
     }
   });
 
-  test('snapshotHTML strips the live-only site shell from the export', () => {
-    expect(MAIN).toContain("root.querySelectorAll('.sidebar,.m-tabbar,link[rel=\"stylesheet\"],script[src],#passport-login-gate,#passport-price-line').forEach(n=>n.remove());");
+  test('snapshotHTML builds a document-only export (bug fix 2026-11-14)', () => {
+    // No whole-document clone, no site-shell strip list, no model JSON —
+    // the export clones only #page-shell, cleans the editor affordances
+    // off it, and wraps it in document-only CSS.
+    expect(MAIN).not.toContain("root.querySelectorAll('.sidebar,.m-tabbar");
+    expect(MAIN).toContain("const shell=$('page-shell').cloneNode(true);");
+    expect(MAIN).toContain('cleanDocumentShell(shell);');
+    expect(MAIN).toContain('const css=documentCSS();');
+    expect(MAIN).toContain("shell.outerHTML");
   });
 
   test('price line: form entry with price 0 shows the free text', async () => {
@@ -1023,5 +1040,272 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
     expect(r.chargeCalls.filter((c) => c.path === '/passport/create')).toHaveLength(1);
     expect(r.calls.exportHTML).toBe(1);
     expect(r.downloads).toHaveLength(1);
+  });
+});
+
+describe('document-only export (bug fix 2026-11-14)', () => {
+  // User report: Create downloaded the FULL ENGINE HTML (toolbar, form,
+  // tabs, panels, editor scripts) with the document layers EMPTIED — it
+  // only looked like a passport when opened, because the embedded editor
+  // re-rendered it from #document-state. The export now builds only the
+  // passport document. These tests run the REAL snapshotHTML() from the
+  // page (sliced out of the editor IIFE) in vm against a stub DOM that
+  // mirrors the live #page-shell, and assert on the produced HTML.
+  const EXPORT_START = '/* ---- Document-only export (bug fix 2026-11-14) ----';
+  const EXPORT_END = '/* ---- /Document-only export ---- */';
+  const EXPORT_CODE = MAIN.slice(MAIN.indexOf(EXPORT_START), MAIN.indexOf(EXPORT_END));
+  const STYLE_TEXT = PAGE.match(/<style>([\s\S]*?)<\/style>/)[1];
+
+  // Minimal DOM stub: enough for cloneNode + querySelector(All) +
+  // outerHTML, the only DOM surface snapshotHTML/cleanDocumentShell use.
+  class StubStyle {
+    constructor() { this.props = new Map(); }
+    setProperty(k, v) { this.props.set(k, String(v)); }
+    removeProperty(k) { this.props.delete(k); }
+    getPropertyValue(k) { return this.props.get(k) || ''; }
+    clone() { const s = new StubStyle(); s.props = new Map(this.props); return s; }
+    get cssText() { return [...this.props.entries()].map(([k, v]) => k + ':' + v + ';').join(' '); }
+  }
+  function matchesSimple(el, part) {
+    // tag, .class, [attr], tag.class, .a.b, tag[attr]
+    const m = part.match(/^([a-zA-Z][a-zA-Z0-9]*)?((?:\.[a-zA-Z0-9_-]+)*)?(?:\[([a-zA-Z0-9_-]+)\])?$/);
+    if (!m) return false;
+    const [, tag, classes, attr] = m;
+    if (tag && el.tagName.toLowerCase() !== tag.toLowerCase()) return false;
+    if (classes) {
+      for (const c of classes.split('.').filter(Boolean)) {
+        if (!el.classList.contains(c)) return false;
+      }
+    }
+    if (attr && !el.hasAttribute(attr)) return false;
+    return true;
+  }
+  function collectAll(el, out) {
+    for (const c of el.children) { out.push(c); collectAll(c, out); }
+    return out;
+  }
+  class StubEl {
+    constructor(tag, attrs) {
+      this.tagName = tag.toUpperCase();
+      this.attributes = new Map(Object.entries(attrs || {}));
+      this.children = [];
+      this.parentNode = null;
+      this.style = new StubStyle();
+      this.text = '';
+      this.classes = new Set(String((attrs || {}).class || '').split(/\s+/).filter(Boolean));
+    }
+    get id() { return this.attributes.get('id') || ''; }
+    // Reflected attributes the export writes as properties (real DOM
+    // reflects img.src / img.alt into attributes; the stub must too).
+    get src() { return this.attributes.get('src') || ''; }
+    set src(v) { this.attributes.set('src', String(v)); }
+    get alt() { return this.attributes.get('alt') || ''; }
+    set alt(v) { this.attributes.set('alt', String(v)); }
+    get className() { return [...this.classes].join(' '); }
+    set className(v) { this.classes = new Set(String(v).split(/\s+/).filter(Boolean)); }
+    get classList() {
+      const self = this;
+      return {
+        add: (c) => self.classes.add(c),
+        remove: (c) => self.classes.delete(c),
+        contains: (c) => self.classes.has(c),
+        toggle: (c, f) => { if (f === undefined) f = !self.classes.has(c); if (f) self.classes.add(c); else self.classes.delete(c); },
+      };
+    }
+    get textContent() { return this.children.length ? this.children.map((c) => c.textContent).join('') : this.text; }
+    set textContent(v) { this.children = []; this.text = String(v); }
+    getAttribute(n) { return this.attributes.has(n) ? this.attributes.get(n) : null; }
+    setAttribute(n, v) { this.attributes.set(n, String(v)); }
+    removeAttribute(n) { this.attributes.delete(n); }
+    hasAttribute(n) { return this.attributes.has(n); }
+    appendChild(c) { c.parentNode = this; this.children.push(c); return c; }
+    cloneNode(deep) {
+      const c = new StubEl(this.tagName);
+      c.attributes = new Map(this.attributes);
+      c.classes = new Set(this.classes);
+      c.style = this.style.clone();
+      c.text = this.text;
+      if (deep) for (const k of this.children) c.appendChild(k.cloneNode(true));
+      return c;
+    }
+    replaceWith(n) {
+      if (!this.parentNode) return;
+      const i = this.parentNode.children.indexOf(this);
+      this.parentNode.children.splice(i, 1, n);
+      n.parentNode = this.parentNode;
+    }
+    remove() {
+      if (!this.parentNode) return;
+      const i = this.parentNode.children.indexOf(this);
+      this.parentNode.children.splice(i, 1);
+      this.parentNode = null;
+    }
+    querySelectorAll(sel) {
+      const out = [];
+      for (const part of sel.split(',')) {
+        const bits = part.trim().split(/\s+/);
+        let pool = collectAll(this, []);
+        if (bits.length === 2) {
+          pool = pool.filter((el) => matchesSimple(el, bits[1]) && collectAll(this, []).some((a) => a !== el && matchesSimple(a, bits[0]) && collectAll(a, []).includes(el)));
+        } else {
+          pool = pool.filter((el) => matchesSimple(el, bits[0]));
+        }
+        for (const el of pool) if (!out.includes(el)) out.push(el);
+      }
+      return out;
+    }
+    querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
+    get outerHTML() {
+      const voidTags = new Set(['IMG', 'BR', 'HR', 'INPUT', 'LINK', 'META']);
+      let attrs = '';
+      for (const [k, v] of this.attributes) {
+        if (k === 'class') continue;
+        attrs += ' ' + k + '="' + String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"';
+      }
+      if (this.classes.size) attrs += ' class="' + [...this.classes].join(' ') + '"';
+      const css = this.style.cssText;
+      if (css) attrs += ' style="' + css.replace(/"/g, '&quot;') + '"';
+      const tag = this.tagName.toLowerCase();
+      if (voidTags.has(this.tagName)) return '<' + tag + attrs + '>';
+      const inner = this.children.length
+        ? this.children.map((c) => c.outerHTML).join('')
+        : String(this.text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return '<' + tag + attrs + '>' + inner + '</' + tag + '>';
+    }
+  }
+
+  // A #page-shell mirroring the live one: scan artwork, rendered layers
+  // (fields with text, photo/signature slots with data URIs), a drawn
+  // dot-strip canvas, and the editor affordances the export must strip.
+  function buildShell() {
+    const shell = new StubEl('div', { id: 'page-shell', class: 'page-shell' });
+    shell.appendChild(new StubEl('img', { id: 'scan', class: 'scan', src: 'data:image/webp;base64,SCANARTWORK' }));
+    const erase = new StubEl('div', { id: 'erase-layer', class: 'page-layer erase-layer' });
+    erase.style.setProperty('--sx', '0.44');
+    erase.style.setProperty('--sy', '0.44');
+    erase.appendChild(new StubEl('img', { class: 'erase-patch visible', src: 'data:image/png;base64,ERASEPATCH', 'data-patch-for': 'passport-no' }));
+    shell.appendChild(erase);
+    const imageLayer = new StubEl('div', { id: 'image-layer', class: 'page-layer image-layer' });
+    const photo = new StubEl('div', { class: 'image-slot photo changed', 'data-slot': 'photo', tabindex: '0', role: 'button', 'aria-label': 'Replace photo' });
+    photo.appendChild(new StubEl('img', { class: 'slot-image', src: 'data:image/jpeg;base64,USERPHOTO', alt: '' }));
+    photo.appendChild(new StubEl('img', { class: 'slot-patch', src: 'data:image/png;base64,PHOTOPATCH', alt: '' }));
+    imageLayer.appendChild(photo);
+    const sig = new StubEl('div', { class: 'image-slot signature changed', 'data-slot': 'signature', tabindex: '0', role: 'button', 'aria-label': 'Replace signature' });
+    sig.appendChild(new StubEl('img', { class: 'slot-image', src: 'data:image/png;base64,USERSIGNATURE', alt: '' }));
+    imageLayer.appendChild(sig);
+    shell.appendChild(imageLayer);
+    const textLayer = new StubEl('div', { id: 'text-layer', class: 'page-layer text-layer' });
+    const f1 = new StubEl('div', { class: 'field changed active', 'data-field': 'passport-no' });
+    f1.style.setProperty('--text-color', '#000000');
+    f1.style.setProperty('left', '100px');
+    const t1 = new StubEl('span', { class: 'text', contenteditable: 'plaintext-only', tabindex: '0', role: 'textbox', 'aria-label': 'Passport No.' });
+    t1.textContent = 'EJ0762655';
+    f1.appendChild(t1);
+    textLayer.appendChild(f1);
+    const f2 = new StubEl('div', { class: 'field changed', 'data-field': 'mrz-2' });
+    const t2 = new StubEl('span', { class: 'text', contenteditable: 'plaintext-only', tabindex: '0', role: 'textbox', 'aria-label': 'MRZ line 2' });
+    t2.textContent = 'EJ0762655BGD7912171M3501011<<<<<<<<<<<<<<';
+    f2.appendChild(t2);
+    textLayer.appendChild(f2);
+    const dotStrip = new StubEl('div', { class: 'dot-strip', 'aria-hidden': 'true' });
+    dotStrip.style.setProperty('display', 'block');
+    const canvas = new StubEl('canvas');
+    canvas.width = 1523;
+    canvas.height = 116;
+    canvas.toDataURL = () => 'data:image/png;base64,DOTSTRIPDATA';
+    dotStrip.appendChild(canvas);
+    textLayer.appendChild(dotStrip);
+    shell.appendChild(textLayer);
+    return { shell, canvas, dotStrip };
+  }
+
+  function runExport(opts) {
+    const { shell, canvas, dotStrip } = buildShell();
+    const styleEl = new StubEl('style');
+    styleEl.textContent = STYLE_TEXT;
+    const model = { fields: [{ id: 'passport-no', text: (opts && opts.passportNo !== undefined) ? opts.passportNo : 'EJ0762655' }] };
+    const documentStub = {
+      querySelectorAll: (sel) => (sel === 'style' ? [styleEl] : []),
+      querySelector: (sel) => {
+        if (sel === '.dot-strip canvas') return canvas;
+        if (sel === '.dot-strip') return dotStrip;
+        if (sel === 'style') return styleEl;
+        return null;
+      },
+      createElement: (tag) => new StubEl(tag),
+      getElementById: (id) => (id === 'page-shell' ? shell : null),
+    };
+    const context = vm.createContext({
+      document: documentStub,
+      model,
+      editRevision: 3,
+      drainImages: async () => {},
+      $: (id) => documentStub.getElementById(id),
+    });
+    vm.runInContext(EXPORT_CODE, context);
+    return { context, shell, canvas };
+  }
+
+  const EDITOR_MARKERS = [
+    'class="toolbar"', 'id="passport-landing"', 'id="panel-engine"', 'id="panel-text"',
+    'id="panel-photo"', 'id="panel-signature"', 'id="document-state"', 'id="toast"',
+    'id="save-button"', 'id="print-button"', 'id="regions-button"', 'id="preview-button"',
+    'window.passportEngine', 'window.documentEditor', 'function snapshotHTML',
+    'id="eng-passportNo"', 'id="field-picker"', 'id="field-value"',
+    'class="tabs"', 'Passport তৈরি করুন', 'id="passport-login-gate"',
+    'id="create-passport-button"', 'id="eng-mrz-group"', 'id="eng-photo-group"',
+    '<script', 'contenteditable', 'tabindex', 'data-field', 'data-slot',
+  ];
+
+  test('export contains the document and none of the editor', async () => {
+    const { context } = runExport({});
+    const { html, revision } = await context.snapshotHTML();
+    expect(revision).toBe(3);
+    for (const m of EDITOR_MARKERS) expect(html).not.toContain(m);
+    // The document: shell, scan, rendered layers, filled data, MRZ.
+    for (const m of ['id="page-shell"', 'id="scan"', 'id="text-layer"', 'id="image-layer"', 'id="erase-layer"', 'EJ0762655', 'EJ0762655BGD7912171M3501011', 'data:image/webp;base64,SCANARTWORK', 'data:image/jpeg;base64,USERPHOTO', 'data:image/png;base64,USERSIGNATURE', '@font-face', '.page-shell{', '.field .text', '<title>Passport-EJ0762655</title>']) {
+      expect(html).toContain(m);
+    }
+    // Rendered fields and slots survive (the old export emptied them).
+    expect(html).toContain('class="field changed"');
+    expect(html).toContain('class="image-slot photo changed"');
+    expect(html).toContain('class="image-slot signature changed"');
+    // The `changed` class stays (it is what makes text/photo visible);
+    // the editor `active` selection class is gone.
+    expect(html).not.toContain('active');
+    // Layers no longer carry the live editor's inline scale.
+    expect(html).not.toContain('--sx:0.44');
+    expect(html).not.toContain('--sy:0.44');
+    // The document carries the fixed A4 scale instead.
+    expect(html).toContain('.page-layer{transform:scale(0.31948366277,0.31965032307)}');
+    expect(html).toContain('.page-shell{width:792px;');
+  });
+
+  test('export bakes the dotted strip canvas into an image, no canvas left', async () => {
+    const { context } = runExport({});
+    const { html } = await context.snapshotHTML();
+    expect(html).toContain('data:image/png;base64,DOTSTRIPDATA');
+    expect(html).not.toContain('<canvas');
+    expect(html).toContain('.dot-strip img{display:block;width:100%;height:100%}');
+  });
+
+  test('export title falls back to Passport-Engine without a number', async () => {
+    const { context } = runExport({ passportNo: '' });
+    const { html } = await context.snapshotHTML();
+    expect(html).toContain('<title>Passport-Engine</title>');
+  });
+
+  test('documentCSS keeps document rules and drops editor rules', () => {
+    const { context } = runExport({});
+    const css = context.documentCSS();
+    for (const r of ['@font-face{font-family:ScanSans', ':root{color-scheme:light', '.page-shell{position:relative', '.scan{position:absolute', '.page-layer{position:absolute', '.field{position:absolute', '.field .text{display:block', '.field.changed .text{color:var(--text-color)}', '.image-slot{position:absolute', '.image-slot.changed .slot-image{display:block}', '@media print{', '@page{size:594pt 841pt']) {
+      expect(css).toContain(r);
+    }
+    for (const r of ['.toolbar{', 'aside{', '.tabs{', '.tab-panel', 'button{', 'input[type=text]', '.passport-landing', 'body.flow-form', 'body.flow-landing', '.engine-group{', '@media(max-width:1060px)', '@media(max-width:740px)', '.toast{', '.footer-note{']) {
+      expect(css).not.toContain(r);
+    }
+    // No editor rule leaks in via a selector list.
+    expect(css).not.toContain('panel-engine');
+    expect(css).not.toContain('passport-landing');
   });
 });
