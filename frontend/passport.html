@@ -1350,13 +1350,80 @@ body.flow-form .create-actions .primary:hover{background:var(--gold-gradient);bo
       });
     }).catch(function(){ line.textContent = 'সেবা চার্জ জানা যায়নি — Create চাপলে যাচাই করা হবে।'; });
   }
-  function downloadFile(html, name){
-    var blob = new Blob([html], {type: 'text/html;charset=utf-8'});
+  function downloadBlob(blob, name){
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url; a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+  }
+  /* A paid Create whose PDF export failed — retrying it must NOT
+     charge again. createPassport reuses this idempotency key and
+     skips the charge entirely; it is cleared once a PDF is
+     downloaded, so a later Create (after a successful download)
+     is a fresh paid creation, as before. */
+  var pdfRetry = null;
+  /* Direct real-PDF download from Create (2026-11-14): the
+     document-only HTML (snapshotHTML) is POSTed to
+     /api/passport/pdf and the server renders a real PDF (headless
+     Chromium, A4) and returns the bytes. No HTML fallback — a PDF
+     failure shows a clear error and downloads NOTHING. The charge
+     already happened in /create (same idempotency key); this call
+     never charges, so a retry is free. */
+  function exportPdf(idem, passportNo){
+    var ABCref = window.ABC;
+    if (!ABCref || !ABCref.api) return Promise.resolve({ ok: false, message: 'সেবার সাথে সংযোগ করা যাচ্ছে না — পেজটি রিফ্রেশ করে আবার চেষ্টা করুন।' });
+    // Bengali fonts + images must be fully loaded before the export,
+    // or the layout breaks. snapshotHTML already drains images; wait
+    // for the fonts and decode the document images too (same as print).
+    var ready = Promise.resolve();
+    try {
+      var fontReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+      var imgs = (document.querySelectorAll) ? document.querySelectorAll('#page-shell img[src]') : [];
+      var decoded = [];
+      for (var i = 0; i < imgs.length; i++) {
+        (function(img){ decoded.push((typeof img.decode === 'function' ? img.decode() : Promise.resolve()).catch(function(){})); })(imgs[i]);
+      }
+      ready = Promise.all([fontReady].concat(decoded));
+    } catch (e) { ready = Promise.resolve(); }
+    return ready.then(function(){
+      return editor.exportHTML();
+    }).then(function(html){
+      var qs = 'passport_no=' + encodeURIComponent(passportNo) + '&idempotency_key=' + encodeURIComponent(idem);
+      return ABCref.api('/passport/pdf?' + qs, { method: 'POST', body: html, headers: { 'Content-Type': 'text/html;charset=utf-8' }, timeout: 60000 }).then(function(r){
+        if (!r.ok) {
+          return r.json().catch(function(){ return {}; }).then(function(d){
+            if (r.status === 413) return { ok: false, message: (d && d.message) ? String(d.message) : 'ছবি অনেক বড় — ছোট ছবি দিয়ে আবার চেষ্টা করুন।' };
+            return { ok: false, message: (d && d.message) ? String(d.message) : 'PDF তৈরি করা যায়নি — আবার চেষ্টা করুন।' };
+          });
+        }
+        var ct = (r.headers && r.headers.get) ? String(r.headers.get('content-type') || '') : '';
+        if (ct.indexOf('application/pdf') < 0) return { ok: false, message: 'PDF তৈরি করা যায়নি — আবার চেষ্টা করুন।' };
+        return r.blob().then(function(blob){ return { ok: true, blob: blob }; });
+      });
+    }).catch(function(){
+      return { ok: false, message: 'ইন্টারনেট সংযোগ নেই — সংযোগ ফিরলে আবার চেষ্টা করুন।' };
+    });
+  }
+  /* Charge (once) → PDF export → download. On a PDF failure the paid
+     creation is remembered (pdfRetry) so a retry reuses it and never
+     charges twice; nothing is downloaded on failure. */
+  function finishCreateWithPdf(idem, no, name, charged){
+    say('PDF তৈরি করা হচ্ছে…');
+    return exportPdf(idem, no).then(function(pdf){
+      creating = false;
+      createBtn.disabled = false;
+      if (!pdf || !pdf.ok) {
+        pdfRetry = { idem: idem, no: no, charged: charged };
+        say((pdf && pdf.message) ? pdf.message : 'PDF তৈরি করা যায়নি — আবার চেষ্টা করুন।');
+        return false;
+      }
+      pdfRetry = null;
+      downloadBlob(pdf.blob, name);
+      body.classList.remove('flow-form');
+      say('Passport PDF তৈরি হয়েছে — ডাউনলোড দেখুন।' + (charged ? ' চার্জ কাটা হয়েছে: ৳' + charged + '।' : ' কোনো চার্জ কাটা হয়নি।') + ' কিছু বদলাতে চাইলে আবার Create করে ডাউনলোড করুন।');
+      return true;
+    });
   }
   function createPassport(){
     if (api.applyAll) api.applyAll();
@@ -1374,26 +1441,29 @@ body.flow-form .create-actions .primary:hover{background:var(--gold-gradient);bo
       return;
     }
     if (creating) return;
+    var no = String((engInput('passportNo') || {}).value || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+    var name = no ? 'Passport-' + no + '.pdf' : 'Passport-Engine.pdf';
+    // Retry of a failed PDF export: the Create for this passport
+    // number already succeeded and was charged — reuse its
+    // idempotency key and skip the charge entirely.
+    if (pdfRetry && pdfRetry.no === no) {
+      creating = true;
+      createBtn.disabled = true;
+      finishCreateWithPdf(pdfRetry.idem, no, name, pdfRetry.charged);
+      return;
+    }
     creating = true;
     createBtn.disabled = true;
     say('চার্জ যাচাই করা হচ্ছে…');
-    var no = String((engInput('passportNo') || {}).value || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
-    var name = no ? 'Passport-' + no + '.html' : 'Passport-Engine.html';
     var idem = 'passport-' + ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)));
     chargeCreate(idem, no).then(function(result){
-      creating = false;
-      createBtn.disabled = false;
       if (!result || !result.ok) {
+        creating = false;
+        createBtn.disabled = false;
         say((result && result.message) ? result.message : 'চার্জ যাচাই করা যায়নি — আবার চেষ্টা করুন।');
         return;
       }
-      editor.exportHTML().then(function(html){
-        downloadFile(html, name);
-        body.classList.remove('flow-form');
-        say('Passport তৈরি হয়েছে — ডাউনলোড দেখুন।' + (result.charged ? ' চার্জ কাটা হয়েছে: ৳' + result.charged + '।' : ' কোনো চার্জ কাটা হয়নি।') + ' কিছু বদলাতে চাইলে আবার Create করে ডাউনলোড করুন।');
-      }).catch(function(err){
-        say('ডাউনলোড ব্যর্থ হয়েছে: ' + (err && err.message ? err.message : err));
-      });
+      finishCreateWithPdf(idem, no, name, result.charged);
     });
   }
   startBtn.addEventListener('click', showForm);
