@@ -18,6 +18,7 @@ const vm = require('vm');
 
 const FRONTEND = path.join(__dirname, '../../../frontend');
 const PAGE = fs.readFileSync(path.join(FRONTEND, 'passport.html'), 'utf8');
+const CSS = fs.readFileSync(path.join(FRONTEND, 'css/passport-flow.css'), 'utf8');
 
 function inlineScripts(html) {
   const out = [];
@@ -109,6 +110,12 @@ function runFlow(opts) {
   // Price line (integrated service): the fee / free text, filled by
   // loadPrice() when the form opens.
   els['passport-price-line'] = makeEl('passport-price-line', 'p');
+  // Balance pills (site-feel Fix 1): topbar (landing/form) + toolbar
+  // (editor) — both show the wallet balance, bn-formatted.
+  els['balVal'] = makeEl('balVal', 'span');
+  els['balVal'].textContent = '০';
+  els['balValEditor'] = makeEl('balValEditor', 'span');
+  els['balValEditor'].textContent = '০';
   // Template values, as the live page ships them — the form must blank them.
   els['eng-passportNo'].value = 'EJ0762655';
   els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
@@ -243,12 +250,12 @@ describe('landing (form-first entry)', () => {
   });
 
   test('landing is hidden by default and shown only in the landing state', () => {
-    expect(PAGE).toContain('#passport-landing{display:none}');
-    expect(PAGE).toContain('body.flow-landing #passport-landing{display:block}');
+    expect(CSS).toContain('#passport-landing{display:none}');
+    expect(CSS).toContain('body.flow-landing #passport-landing{display:block}');
   });
 
   test('landing state hides the toolbar, document, editor and footer', () => {
-    expect(PAGE).toContain('body.flow-landing .toolbar,body.flow-landing .document-area,body.flow-landing aside,body.flow-landing .footer-note{display:none}');
+    expect(CSS).toContain('body.flow-landing .toolbar,body.flow-landing .document-area,body.flow-landing aside,body.flow-landing .footer-note{display:none}');
   });
 });
 
@@ -266,8 +273,8 @@ describe('form (separate form screen)', () => {
 
   test('form screen has its own heading, shown only in form state', () => {
     expect(PAGE).toContain('id="passport-form-head"');
-    expect(PAGE).toContain('.form-head{display:none}');
-    expect(PAGE).toContain("body.flow-form .form-head{display:block;margin:0 0 6px}");
+    expect(CSS).toContain('.form-head{display:none}');
+    expect(CSS).toContain("body.flow-form .form-head{display:block;margin:0 0 6px}");
     const headAt = PAGE.indexOf('id="passport-form-head"');
     const panelAt = PAGE.indexOf('id="panel-engine"');
     expect(headAt).toBeGreaterThan(panelAt);
@@ -282,20 +289,20 @@ describe('form (separate form screen)', () => {
     const h2At = PAGE.indexOf('<h2>Passport তৈরি করুন</h2>', headAt);
     expect(backAt).toBeGreaterThan(headAt);
     expect(backAt).toBeLessThan(h2At);
-    expect(PAGE).toContain('.back-button{background:none;border:0;color:var(--muted);cursor:pointer;font-size:13px;padding:0;margin:0 0 8px;text-align:left}');
+    expect(CSS).toContain('.back-button{background:none;border:0;color:var(--muted);cursor:pointer;font-size:13px;padding:0;margin:0 0 8px;text-align:left}');
     expect(FLOW).toContain('back-to-landing-button');
     expect(FLOW).toContain('formEntered');
   });
 
   test('form screen hides the editor chrome (panel head, tabs) and the helper', () => {
-    expect(PAGE).toContain('body.flow-form .panel-head,body.flow-form .tabs{display:none}');
-    expect(PAGE).toContain('body.flow-form #panel-engine>.helper{display:none}');
-    expect(PAGE).toContain('body.flow-form [data-tab]:not([data-tab="engine"]){display:none}');
-    expect(PAGE).toContain('body.flow-form .toolbar,body.flow-form .document-area,body.flow-form .footer-note{display:none}');
+    expect(CSS).toContain('body.flow-form .panel-head,body.flow-form .tabs{display:none}');
+    expect(CSS).toContain('body.flow-form #panel-engine>.helper{display:none}');
+    expect(CSS).toContain('body.flow-form [data-tab]:not([data-tab="engine"]){display:none}');
+    expect(CSS).toContain('body.flow-form .toolbar,body.flow-form .document-area,body.flow-form .footer-note{display:none}');
   });
 
   test('form screen hides the MRZ group — the MRZ fields are not shown', () => {
-    expect(PAGE).toContain('body.flow-form #eng-mrz-group{display:none}');
+    expect(CSS).toContain('body.flow-form #eng-mrz-group{display:none}');
     const groupAt = PAGE.indexOf('id="eng-mrz-group"');
     const mrz1At = PAGE.indexOf('id="eng-mrz1"');
     const mrz2At = PAGE.indexOf('id="eng-mrz2"');
@@ -306,7 +313,7 @@ describe('form (separate form screen)', () => {
   });
 
   test('form screen hides the auto name-split fields', () => {
-    expect(PAGE).toContain('body.flow-form #eng-name-auto-row{display:none}');
+    expect(CSS).toContain('body.flow-form #eng-name-auto-row{display:none}');
     const rowAt = PAGE.indexOf('id="eng-name-auto-row"');
     const surnameAt = PAGE.indexOf('id="eng-surname"');
     const givenAt = PAGE.indexOf('id="eng-givenName"');
@@ -317,15 +324,15 @@ describe('form (separate form screen)', () => {
   });
 
   test('form screen hides preview, hints and auto-only controls — except validation', () => {
-    expect(PAGE).toContain('body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}');
+    expect(CSS).toContain('body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}');
     // Validation must stay VISIBLE on the form screen (findings 1–6): the
     // engine computes format/consistency issues, and Create now blocks on
     // them — hiding the line would make the block reason undiscoverable.
     // Only the other hints are hidden.
-    expect(PAGE).toContain('body.flow-form #panel-engine .engine-hint:not(#create-message):not(#engine-validation):not(#eng-nationality-hint){display:none}');
-    expect(PAGE).toContain('body.flow-form #engine-validation{color:#b3261e;font-weight:600}');
-    expect(PAGE).toContain('body.flow-form .auto-tag{display:none}');
-    expect(PAGE).toContain('body.flow-form #eng-dotstrip-row{display:none}');
+    expect(CSS).toContain('body.flow-form #panel-engine .engine-hint:not(#create-message):not(#engine-validation):not(#eng-nationality-hint){display:none}');
+    expect(CSS).toContain('body.flow-form #engine-validation{color:#b3261e;font-weight:600}');
+    expect(CSS).toContain('body.flow-form .auto-tag{display:none}');
+    expect(CSS).toContain('body.flow-form #eng-dotstrip-row{display:none}');
   });
 
   test('passport-no input is limited to 9 characters (finding 5: MRZ truncates silently otherwise)', () => {
@@ -335,7 +342,7 @@ describe('form (separate form screen)', () => {
   });
 
   test('form state collapses the editor grid to a single column', () => {
-    expect(PAGE).toContain('body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:760px}');
+    expect(CSS).toContain('body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:760px}');
   });
 });
 
@@ -376,7 +383,7 @@ describe('form photo/signature upload', () => {
 
   test('form state does not hide the upload group — the confirmation stays hidden until a file is chosen', () => {
     expect(PAGE).not.toContain('eng-photo-group{display:none}');
-    expect(PAGE).toContain('.form-upload-status[hidden]{display:none}');
+    expect(CSS).toContain('.form-upload-status[hidden]{display:none}');
     expect(PAGE).toContain('id="form-photo-status" hidden=""');
     expect(PAGE).toContain('id="form-signature-status" hidden=""');
   });
@@ -399,8 +406,8 @@ describe('form photo/signature upload', () => {
     const at = PAGE.indexOf('id="form-sample-warning"');
     expect(at).toBeGreaterThan(PAGE.indexOf('id="eng-photo-group"'));
     expect(at).toBeLessThan(PAGE.indexOf('id="create-passport-button"'));
-    expect(PAGE).toContain('.form-sample-warning{margin:10px 0 0;color:#b3261e;font-weight:600;line-height:1.7}');
-    expect(PAGE).toContain('.form-sample-warning[hidden]{display:none}');
+    expect(CSS).toContain('.form-sample-warning{margin:10px 0 0;color:#b3261e;font-weight:600;line-height:1.7}');
+    expect(CSS).toContain('.form-sample-warning[hidden]{display:none}');
     expect(FLOW).toContain('updateSampleWarning');
     expect(FLOW).toContain('নমুনার');
     // It is a plain warning element, NOT an .engine-hint — the form CSS
@@ -447,7 +454,7 @@ describe('form declutter — status bar, Fidelity and Print texts removed; group
   });
 
   test('form-state groups have no divider borders — spacing only, simpler premium look', () => {
-    expect(PAGE).toContain('body.flow-form .engine-group{border-top:0;margin-top:24px;padding-top:0}');
+    expect(CSS).toContain('body.flow-form .engine-group{border-top:0;margin-top:24px;padding-top:0}');
   });
 });
 
@@ -958,15 +965,15 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
   });
 
   test('premium look comes from the shared theme, not a copied token set', () => {
-    expect(PAGE).not.toContain('--pg-bg:#faf9f4');
-    expect(PAGE).not.toContain('--pg-green:#006441');
-    expect(PAGE).not.toContain('--pg-gold:#efb541');
-    expect(PAGE).toContain('--pg-bg:var(--bg-page)');
-    expect(PAGE).toContain('--pg-green:var(--primary-600)');
-    expect(PAGE).toContain('var(--gold-gradient)');
-    expect(PAGE).not.toContain('var(--pg-gold-2)');
+    expect(CSS).not.toContain('--pg-bg:#faf9f4');
+    expect(CSS).not.toContain('--pg-green:#006441');
+    expect(CSS).not.toContain('--pg-gold:#efb541');
+    expect(CSS).toContain('--pg-bg:var(--bg-page)');
+    expect(CSS).toContain('--pg-green:var(--primary-600)');
+    expect(CSS).toContain('var(--gold-gradient)');
+    expect(CSS).not.toContain('var(--pg-gold-2)');
     // The form's premium rules themselves are unchanged.
-    expect(PAGE).toContain('body.flow-form aside{background:var(--pg-surface)');
+    expect(CSS).toContain('body.flow-form aside{background:var(--pg-surface)');
   });
 
   test('Bengali chrome: lang, title, toolbar, tabs, no old English strings', () => {
@@ -1006,6 +1013,29 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
     await flush();
     expect(r.chargeCalls[0].path).toBe('/passport/price');
     expect(r.els['passport-price-line'].textContent).toContain('বিনামূল্যে');
+  });
+
+  // Site-feel Fix 1: the balance pill (same as the other engines) in all
+  // three views — topbar pill on landing/form, toolbar pill in the editor.
+  test('balance pill: landing shows the real balance in Bengali digits', async () => {
+    const r = runFlow({});
+    await flush();
+    expect(r.els['balVal'].textContent).toBe('৫০০');
+    expect(r.els['balValEditor'].textContent).toBe('৫০০');
+  });
+
+  test('balance pill markup: topbar + toolbar pills link to the wallet', () => {
+    expect(PAGE).toContain('id="walletBadge"');
+    expect(PAGE).toContain('id="balVal"');
+    expect(PAGE).toContain('id="walletBadgeEditor"');
+    expect(PAGE).toContain('id="balValEditor"');
+    expect(PAGE).toContain("location.href='/wallet.html'");
+    expect(PAGE).toContain('💳 ব্যালেন্স: ৳');
+  });
+
+  test('balance pill CSS: topbar hidden in the editor, shown on landing/form', () => {
+    expect(CSS).toContain('#passport-topbar{display:none}');
+    expect(CSS).toContain('body.flow-landing #passport-topbar,body.flow-form #passport-topbar');
   });
 
   test('price line: form entry with a price shows the fee + balance', async () => {

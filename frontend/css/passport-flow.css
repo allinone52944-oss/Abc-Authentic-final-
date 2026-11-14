@@ -29,6 +29,11 @@ body.flow-form .toolbar,body.flow-form .document-area,body.flow-form .footer-not
 body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:760px}
 body.flow-form aside{position:static;max-height:none}
 body.flow-form [data-tab]:not([data-tab="engine"]){display:none}
+/* Standard content header (site-feel Fixes 1–2): balance pill + page
+   header, same pattern as the other engines. Hidden in the editor
+   view, where the restyled toolbar carries the balance pill. */
+#passport-topbar{display:none}
+body.flow-landing #passport-topbar,body.flow-form #passport-topbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
 /* Separate form screen: only what the user fills up — no MRZ auto
    fields, no preview, no editor chrome. Automation (name split, MRZ,
    dates) still runs behind the scenes through the engine inputs. */

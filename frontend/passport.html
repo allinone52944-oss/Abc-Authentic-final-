@@ -159,12 +159,16 @@ details p{line-height:1.7;margin:8px 0}
   </div>
 
   <div class="main">
+  <div class="topbar" id="passport-topbar">
+   <div id="walletBadge" style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">💳 ব্যালেন্স: ৳<span id="balVal">০</span></div>
+  </div>
 <header class="toolbar"><div class="toolbar-inner">
  <div><h1>পাসপোর্ট ইঞ্জিন</h1><p class="subtitle">লিংকড তথ্য · মূল স্ক্যান সংরক্ষিত</p></div>
  <div class="actions" aria-label="Document actions">
   <button type="button" id="regions-button" aria-pressed="false">অঞ্চল দেখুন</button>
   <button type="button" id="preview-button" aria-pressed="false">প্রিভিউ</button>
   <button type="button" id="print-button">প্রিন্ট</button>
+  <div id="walletBadgeEditor" style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">💳 ব্যালেন্স: ৳<span id="balValEditor">০</span></div>
  </div>
 </div></header>
 <main>
@@ -1072,6 +1076,7 @@ details p{line-height:1.7;margin:8px 0}
      empty. */
   var formEntered = false;
   var creating = false; // Create in flight (charge + download) — double-click guard.
+  loadPrice(); // Balance pill on the landing screen (Fix 1) + price line.
   function engInput(key){ return document.getElementById('eng-' + key); }
   function setEng(key, value){
     var el = engInput(key); if (!el) return;
@@ -1218,18 +1223,29 @@ details p{line-height:1.7;margin:8px 0}
   /* Price line on the form: the fee (or free) + balance, so the
      charge is visible BEFORE Create. A failed fetch never blocks
      the form — Create re-checks the price on the server. */
+  /* Bengali digits, same as the other engines (land-khatian.html). */
+  var bn = function (n) { return String(n == null ? '' : n).replace(/[0-9]/g, function (d) { return '০১২৩৪৫৬৭৮৯'[Number(d)]; }); };
+  /* Balance pill (site-feel Fix 1): the topbar pill (landing/form) and
+     the toolbar pill (editor) show the same wallet balance. */
+  function updateBalancePills(balance) {
+    var text = bn(balance == null ? 0 : balance);
+    var top = document.getElementById('balVal');
+    if (top) top.textContent = text;
+    var editor = document.getElementById('balValEditor');
+    if (editor) editor.textContent = text;
+  }
   function loadPrice(){
     var line = document.getElementById('passport-price-line');
-    if (!line) return;
     var ABCref = window.ABC;
-    if (!ABCref || !ABCref.api) { line.textContent = 'সেবা চার্জ জানা যায়নি।'; return; }
+    if (!ABCref || !ABCref.api) { if (line) line.textContent = 'সেবা চার্জ জানা যায়নি।'; return; }
     ABCref.api('/passport/price').then(function(r){
       return r.json().catch(function(){ return null; }).then(function(d){
-        if (!r.ok || !d || d.ok !== true) { line.textContent = 'সেবা চার্জ জানা যায়নি — Create চাপলে যাচাই করা হবে।'; return; }
-        if (d.allowed === false) { line.textContent = 'এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।'; return; }
-        line.textContent = (d.price > 0) ? ('সেবা চার্জ: ৳' + d.price + ' · ব্যালেন্স: ৳' + (d.balance || 0)) : 'এই সেবাটি এখন বিনামূল্যে — কোনো চার্জ কাটা হবে না।';
+        if (!r.ok || !d || d.ok !== true) { if (line) line.textContent = 'সেবা চার্জ জানা যায়নি — Create চাপলে যাচাই করা হবে।'; return; }
+        if (d.balance != null) updateBalancePills(d.balance);
+        if (d.allowed === false) { if (line) line.textContent = 'এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।'; return; }
+        if (line) line.textContent = (d.price > 0) ? ('সেবা চার্জ: ৳' + d.price + ' · ব্যালেন্স: ৳' + (d.balance || 0)) : 'এই সেবাটি এখন বিনামূল্যে — কোনো চার্জ কাটা হবে না।';
       });
-    }).catch(function(){ line.textContent = 'সেবা চার্জ জানা যায়নি — Create চাপলে যাচাই করা হবে।'; });
+    }).catch(function(){ if (line) line.textContent = 'সেবা চার্জ জানা যায়নি — Create চাপলে যাচাই করা হবে।'; });
   }
   /* Stored delivery copy (engine-jobs, like birth-final): after the
      PDF is downloaded, report the same bytes so History can
