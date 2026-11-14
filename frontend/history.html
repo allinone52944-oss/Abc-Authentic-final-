@@ -32,6 +32,8 @@
   }
   .hist-doc:hover { border-color:#2563eb; background:#eff6ff; }
   .hist-doc.delivery { border-color:#fde68a; background:#fffbeb; }
+  /* B2#8 — kind label: every row states which group it belongs to */
+  .hist-kind { display:inline-block; font-size:11px; font-weight:600; color:#475569; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:999px; padding:1px 8px; margin-left:6px; vertical-align:middle; }
 </style>
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
@@ -105,6 +107,10 @@
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 const ICON = { manual:'📝', order:'📦', engine:'🎓', bdris:'📋' }; // audit #39 — BDRIS filings appear in History
+// B2#8 — kind labels: rows are labelled by group (the #histKind filter
+// filters by the same kinds); the label + status line below say whether
+// a row is a downloadable delivery or a record-only (billing) entry.
+const KIND_LABEL = { manual:'ম্যানুয়াল সেবা', order:'অর্ডার', engine:'ইঞ্জিন সেবা', bdris:'বিডিআরআইএস আবেদন' };
 
 let _items = [];
 let _histShown = 20;
@@ -156,6 +162,22 @@ function render(){
     // the same copy in a new tab. When the copy is not retrievable
     // the row keeps the filing-page note (the page can re-fetch it).
     const hasPdf = it.kind === 'bdris' && (it.documents || []).length > 0;
+    const hasDocs = (it.documents || []).length > 0;
+    const isFailed = (it.title || '').includes('— ব্যর্থ');
+    // B2#8 — every row states its status and the next action. History
+    // only ever holds completed/delivered records (the /history SQL
+    // gates), so a file-less row is a completed record with no
+    // downloadable file — never a missing record. BDRIS rows with a
+    // retrievable PDF already state their PDF state in `extra` below,
+    // so they get no second status line.
+    const statusText = isFailed
+      ? '❌ ব্যর্থ হয়েছে — কোনো ফাইল তৈরি হয়নি। আবার চেষ্টা করুন।'
+      : hasDocs
+        ? '✅ ডেলিভারি ফাইল প্রস্তুত — নিচে ডাউনলোড করুন।'
+        : (it.kind === 'bdris'
+          ? (it.original_pdf_available ? '' : 'আসল PDF এখানে সংরক্ষিত নেই — আবেদন পাতা থেকে নিতে পারবেন।')
+          : '✅ সম্পন্ন হয়েছে — ডাউনলোডযোগ্য ফাইল নেই (শুধু রেকর্ড)।');
+    const status = statusText ? '<div class="hist-meta" style="color:#475569;">' + statusText + '</div>' : '';
     const extra = (it.kind === 'bdris'
       ? (it.original_pdf_available ? '<div class="hist-meta" style="color:#059669;">✅ আসল PDF তৈরি — ' + (hasPdf ? 'এখানেই দেখুন / নামান' : 'আবেদন পাতা থেকে নামান') + '</div>' : '') +
         ((hasPdf || it.link) ? '<div class="hist-docs">' +
@@ -165,8 +187,9 @@ function render(){
       : '');
     return '<div class="hist-item">' +
       '<div class="hist-head"><div>' +
-        '<div class="hist-title">' + (ICON[it.kind] || '📄') + ' ' + esc(it.title) + '</div>' +
+        '<div class="hist-title">' + (ICON[it.kind] || '📄') + ' ' + esc(it.title) + (KIND_LABEL[it.kind] ? ' <span class="hist-kind">' + KIND_LABEL[it.kind] + '</span>' : '') + '</div>' +
         '<div class="hist-meta">' + new Date(it.created_at).toLocaleString('bn-BD') + '</div>' +
+        status +
       '</div></div>' +
       (docs ? '<div class="hist-docs">' + docs + '</div>' : '') + extra +
     '</div>';
