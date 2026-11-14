@@ -488,7 +488,7 @@
       <h3>লেনদেনের ইতিহাস</h3>
       <!-- Audit #35 — filter + load-more: the list used to stop at 10 rows -->
       <div style="display:flex;gap:8px;margin-bottom:12px;">
-        <select id="txFilterType" onchange="txApplyFilter()" style="flex:1;min-width:0;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;">
+        <select id="txFilterType" aria-label="লেনদেনের ধরন অনুযায়ী ফিল্টার" onchange="txApplyFilter()" style="flex:1;min-width:0;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;">
           <option value="">সব ধরন</option>
           <option value="recharge">রিচার্জ</option>
           <option value="order_payment">অর্ডার ফি</option>
@@ -500,7 +500,7 @@
           <option value="bonus">বোনাস</option>
           <option value="admin_adjustment">এডমিন সমন্বয়</option>
         </select>
-        <select id="txFilterStatus" onchange="txApplyFilter()" style="flex:1;min-width:0;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;">
+        <select id="txFilterStatus" aria-label="লেনদেনের অবস্থা অনুযায়ী ফিল্টার" onchange="txApplyFilter()" style="flex:1;min-width:0;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;">
           <option value="">সব অবস্থা</option>
           <option value="pending">পেন্ডিং</option>
           <option value="approved">অনুমোদিত</option>
