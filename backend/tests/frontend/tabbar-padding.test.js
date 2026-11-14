@@ -12,9 +12,12 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const TABBAR_PAGES = ['dashboard', 'history', 'land-khatian', 'land-mouza-map',
   'land', 'nid-server-copy',
   'nid-replica', 'order-create', 'order-detail', 'order-status', 'orders',
-  'profile', 'qr-photo-verify', 'service-detail', 'services', 'wallet'];
+  'profile', 'qr-photo-verify', 'service-detail', 'services', 'wallet',
+  'birth-final', 'death-final'];
 const NO_TABBAR_PAGES = ['bdris-apply', 'login', 'admin',
-  'birth-final', 'death-final', 'index', 'manual-submit'];
+  'index', 'manual-submit'];
+// UI audit Fix 7 (B1#7/B2#6) gave birth-final/death-final the shared
+// shell including the tabbar, so they moved to the tabbar list.
 // Audit #51: manual-submit is a redirect page now — no tabbar, no
 // has-tabbar class, so it belongs in the no-tabbar list.
 
