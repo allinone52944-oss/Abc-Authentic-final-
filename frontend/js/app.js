@@ -188,6 +188,70 @@
     return _refreshPromise;
   }
 
+  // Fix 14 — retry safety + progress.
+  // (a) A retry re-sends the request, so it is only safe for reads or
+  // for writes the server dedupes by idempotency key. An unkeyed
+  // mutating request is NEVER auto-retried: the first attempt may
+  // already have executed server-side (response lost on the wire),
+  // and a silent second execution could double-charge or
+  // double-create. Those callers surface the failure and the user
+  // retries manually — the money endpoints dedupe a manual retry
+  // server-side (orders/passport/engine idempotency keys; wallet
+  // recharge TrxID lock → DUP_TRXID; auto pending-row reuse).
+  // (b) opts.timeout used to be deleted before the recursive call,
+  // so a custom timeout (60–180s for extracts/builds/renders) reset
+  // to the 15s default on retry and a slow-but-working request was
+  // aborted mid-flight. It is now preserved across retries (fetch
+  // ignores the unknown property).
+  function apiCanRetry(path, opts) {
+    const method = String((opts && opts.method) || 'GET').toUpperCase();
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true;
+    if (String(path || '').indexOf('idempotency_key=') !== -1) return true;
+    const body = opts && opts.body;
+    if (!body) return false;
+    if (typeof body === 'string') {
+      try {
+        const j = JSON.parse(body);
+        return !!(j && typeof j === 'object' && j.idempotency_key);
+      } catch (_) { return false; }
+    }
+    if (typeof body === 'object' && typeof body.get === 'function') {
+      try { return !!body.get('idempotency_key'); } catch (_) { return false; }
+    }
+    if (typeof body === 'object') return !!body.idempotency_key;
+    return false;
+  }
+
+  // Retry progress: a small fixed note while a retry is in flight,
+  // so a failing request reads as "retrying", never as a hang. One
+  // counter per page; each show() pairs with a hide() in the same
+  // api() invocation (try/finally around the recursive call), so
+  // nested retries and concurrent calls balance.
+  let _retryNoteCount = 0;
+  let _retryNoteEl = null;
+  function retryNoteShow(attempt) {
+    if (typeof document === 'undefined') return;
+    _retryNoteCount++;
+    try {
+      if (!_retryNoteEl) {
+        _retryNoteEl = document.createElement('div');
+        _retryNoteEl.id = 'abcRetryNote';
+        _retryNoteEl.style.cssText = 'position:fixed;left:50%;bottom:84px;transform:translateX(-50%);z-index:9999;background:#0f172a;color:#fff;font-size:13px;font-weight:600;padding:10px 16px;border-radius:999px;box-shadow:0 8px 24px rgba(15,23,42,.35);pointer-events:none;max-width:calc(100vw - 24px);text-align:center;';
+        _retryNoteEl.textContent = '⏳ সংযোগে সমস্যা — আবার চেষ্টা করা হচ্ছে… (চেষ্টা ' + attempt + '/৩)';
+        document.body.appendChild(_retryNoteEl);
+        try { _retryNoteEl.setAttribute('role', 'status'); } catch (_) {}
+      } else {
+        _retryNoteEl.textContent = '⏳ সংযোগে সমস্যা — আবার চেষ্টা করা হচ্ছে… (চেষ্টা ' + attempt + '/৩)';
+        _retryNoteEl.style.display = '';
+      }
+    } catch (e) {}
+  }
+  function retryNoteHide() {
+    if (typeof document === 'undefined') return;
+    _retryNoteCount = Math.max(0, _retryNoteCount - 1);
+    try { if (_retryNoteEl && _retryNoteCount === 0) _retryNoteEl.style.display = 'none'; } catch (e) {}
+  }
+
   async function api(path, opts, _retry) {
     if (typeof path !== 'string' || !path) {
       throw new TypeError('api(path): path must be a non-empty string');
@@ -218,11 +282,12 @@
       opts.body = JSON.stringify(_body);
     }
     // Timeout: don't hang forever on flaky network (tunnel)
-    // Default 15s, but allow override via opts.timeout (e.g., PDF generation needs 60s)
+    // Default 15s, but allow override via opts.timeout (e.g., PDF generation needs 60s).
+    // Fix 14: do NOT delete opts.timeout — the recursive retry reads
+    // it again, and deleting it reset custom timeouts to 15s.
     const timeoutMs = opts.timeout || 15000;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-    delete opts.timeout;
     opts.signal = ctrl.signal;
     let r;
     try {
@@ -230,10 +295,15 @@
     } catch (e) {
       clearTimeout(timer);
       // Network failure/timeout → retry with backoff (tunnel flakiness),
-      // then synthetic 503 so callers handle uniformly
-      if (_retry < 2) {
+      // then synthetic 503 so callers handle uniformly.
+      // Fix 14: only safe requests retry (GETs + idempotency-keyed
+      // writes); an unkeyed mutating request may already have
+      // executed server-side, so it fails fast instead of re-sending.
+      if (_retry < 2 && apiCanRetry(path, opts)) {
+        retryNoteShow(_retry + 2);
         await new Promise(function (res) { setTimeout(res, 1000 * (_retry + 1)); });
-        return api(path, opts, _retry + 1);
+        try { return await api(path, opts, _retry + 1); }
+        finally { retryNoteHide(); }
       }
       return new Response(JSON.stringify({ error: 'NETWORK_ERROR' }), {
         status: 503,
@@ -245,9 +315,11 @@
     // Callers may pass skip503Retry when a 503 is deterministic for
     // them (e.g. QR verify's GATEWAY_NOT_CONFIGURED) so the user
     // is not made to wait through two pointless retries.
-    if ((r.status === 503 || r.status === 504) && _retry < 2 && !opts.skip503Retry) {
+    if ((r.status === 503 || r.status === 504) && _retry < 2 && !opts.skip503Retry && apiCanRetry(path, opts)) {
+      retryNoteShow(_retry + 2);
       await new Promise(function (res) { setTimeout(res, 1000 * (_retry + 1)); });
-      return api(path, opts, _retry + 1);
+      try { return await api(path, opts, _retry + 1); }
+      finally { retryNoteHide(); }
     }
     // 401 recovery: try one silent refresh (deduplicated), then
     // retry. This must ALSO run when this tab has no access token
@@ -263,7 +335,9 @@
       if (refreshed) {
         opts.headers['Authorization'] = 'Bearer ' + accessToken;
         const ctrl2 = new AbortController();
-        const timer2 = setTimeout(() => ctrl2.abort(), 20000);
+        // Fix 14: the refresh re-fetch keeps the caller's timeout
+        // (was a hardcoded 20s, cutting custom timeouts short).
+        const timer2 = setTimeout(() => ctrl2.abort(), opts.timeout || 20000);
         opts.signal = ctrl2.signal;
         try {
           r = await fetch('/api' + path, opts);

@@ -63,14 +63,14 @@ describe('audit #73 — shared component in app.js', () => {
     expect(app).toContain("id = 'abc-page-msg'");
   });
 
-  test('every page that loads app.js loads the new version (v=20)', () => {
+  test('every page that loads app.js loads the new version (v=21)', () => {
     // Pages that never loaded app.js (login, bdris-apply, 404/offline,
     // auth pages) are out of this pin — they use their own inline code.
     for (const f of fs.readdirSync(FRONTEND).filter((x) => x.endsWith('.html'))) {
       const html = read(f);
       if (!html.includes('/js/app.js?v=')) continue;
-      expect(html).toContain('/js/app.js?v=20');
-      expect(html).not.toContain('/js/app.js?v=19');
+      expect(html).toContain('/js/app.js?v=21');
+      expect(html).not.toContain('/js/app.js?v=20');
     }
   });
 });

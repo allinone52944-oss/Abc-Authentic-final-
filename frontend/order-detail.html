@@ -282,7 +282,7 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
 </div>
 
-<script src="/js/app.js?v=20"></script>
+<script src="/js/app.js?v=21"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function fmtBn(v){if(!v)return '-';const d=new Date(v);if(isNaN(d))return '-';const h=d.getHours();const p=h<12?'পূর্বাহ্ণ':'অপরাহ্ণ';const h12=((h+11)%12)+1;const n=x=>Number(x).toLocaleString('bn-BD',{useGrouping:false});const z=x=>n(String(x).padStart(2,'0')).padStart(2,'০');return d.toLocaleDateString('bn-BD',{day:'numeric',month:'long',year:'numeric'})+', '+p+' '+n(h12)+':'+z(d.getMinutes());}
