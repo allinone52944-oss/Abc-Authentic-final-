@@ -1038,6 +1038,14 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
     expect(CSS).toContain('body.flow-landing #passport-topbar,body.flow-form #passport-topbar');
   });
 
+  // Site-feel Fix 2: the standard page header (emoji + Bengali h2 +
+  // subtitle, same pattern as land-khatian/nid-replica) on landing/form.
+  test('standard page header: emoji + Bengali h2 + subtitle in the topbar', () => {
+    expect(PAGE).toContain('id="passport-topbar"');
+    expect(PAGE).toContain('<h2>🛂 পাসপোর্ট ইঞ্জিন</h2>');
+    expect(PAGE).toContain('ফর্ম পূরণ করুন — Create চাপলে পাসপোর্ট PDF তৈরি হয়ে ডাউনলোড হবে।');
+  });
+
   test('price line: form entry with a price shows the fee + balance', async () => {
     const r = runFlow({ chargeResponse: { ok: true, status: 200, body: { ok: true, price: 30, balance: 500, serviceId: 13, allowed: true } } });
     r.els['start-passport-button'].click();
