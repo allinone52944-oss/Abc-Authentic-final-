@@ -1254,6 +1254,17 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
       'Photo replaced in its original frame',
     ]) expect(MAIN).not.toContain(s);
   });
+
+  // Site-feel Fix 9: neutral placeholders — the sample number/name no
+  // longer read as pre-filled demo data. (EJ0762655 / GOLAM KIBRIYA MD
+  // remain only as clearly-fake TEST input values, and inside the
+  // document model's own sample record.)
+  test('neutral placeholders: no sample number or name as placeholder', () => {
+    expect(PAGE).toContain('placeholder="৯ অক্ষরের পাসপোর্ট নম্বর"');
+    expect(PAGE).toContain('placeholder="পুরো নাম লিখুন"');
+    expect(PAGE).not.toContain('placeholder="EJ0762655"');
+    expect(PAGE).not.toContain('placeholder="GOLAM KIBRIYA MD"');
+  });
   test('editor toolbar follows the site page-header pattern', () => {
     expect(PAGE).toContain('<h2>🛂 পাসপোর্ট ইঞ্জিন</h2>');
     expect(PAGE).not.toContain('<h1>পাসপোর্ট ইঞ্জিন</h1>');
