@@ -43,10 +43,10 @@ button.primary{color:white;background:var(--green);border-color:var(--green)}
 button:disabled{opacity:.45;cursor:default}
 button[aria-pressed=true]{background:#e1efe5;border-color:#81a58c;color:#184a31}
 button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #8db9e7;outline-offset:2px}
-.toolbar{position:sticky;top:0;z-index:30;background:#fffffff5;border-bottom:1px solid var(--line);backdrop-filter:blur(10px)}
+.toolbar{position:sticky;top:0;z-index:30;background:var(--bg-page,#eef2ef);border-bottom:1px solid var(--line)}
 .toolbar-inner{display:flex;justify-content:space-between;gap:18px;align-items:center;max-width:1432px;margin:auto;padding:13px 22px}
-h1{margin:0;font-size:16px;letter-spacing:-.25px;line-height:1.4}
-.subtitle{margin:3px 0 0;font-size:10px;letter-spacing:.07em;color:var(--muted)}
+.toolbar h2{margin:0;font-size:22px;letter-spacing:-.25px;line-height:1.4}
+.subtitle{margin:3px 0 0;font-size:12px;letter-spacing:0;color:var(--muted)}
 .actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
 main{max-width:1432px;display:grid;grid-template-columns:minmax(0,1fr) 326px;gap:22px;align-items:start;margin:22px auto;padding:0 22px}
 .document-area{min-width:0}
@@ -167,7 +167,7 @@ details p{line-height:1.7;margin:8px 0}
    <div id="walletBadge" style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">💳 ব্যালেন্স: ৳<span id="balVal">০</span></div>
   </div>
 <header class="toolbar"><div class="toolbar-inner">
- <div><h1>পাসপোর্ট ইঞ্জিন</h1><p class="subtitle">সংযুক্ত তথ্য · মূল স্ক্যান সংরক্ষিত</p></div>
+ <div><h2>🛂 পাসপোর্ট ইঞ্জিন</h2><p class="subtitle">সংযুক্ত তথ্য · মূল স্ক্যান সংরক্ষিত</p></div>
  <div class="actions" aria-label="Document actions">
   <button type="button" id="regions-button" aria-pressed="false">অঞ্চল দেখুন</button>
   <button type="button" id="preview-button" aria-pressed="false">প্রিভিউ</button>

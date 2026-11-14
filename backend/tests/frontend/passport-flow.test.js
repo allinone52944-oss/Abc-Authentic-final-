@@ -1072,6 +1072,20 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
     expect(PAGE).not.toContain('machine-readable');
   });
 
+  // Site-feel Fix 5: the editor toolbar follows the site page-header
+  // pattern — page background, no white blur bar; the editor actions
+  // (regions/preview/print + balance pill) stay reachable in it.
+  test('editor toolbar follows the site page-header pattern', () => {
+    expect(PAGE).toContain('<h2>🛂 পাসপোর্ট ইঞ্জিন</h2>');
+    expect(PAGE).not.toContain('<h1>পাসপোর্ট ইঞ্জিন</h1>');
+    expect(PAGE).toContain('.toolbar{position:sticky;top:0;z-index:30;background:var(--bg-page,#eef2ef);border-bottom:1px solid var(--line)}');
+    expect(PAGE).not.toContain('backdrop-filter:blur(10px)');
+    expect(PAGE).not.toContain('background:#fffffff5');
+    for (const s of ['id="regions-button"', 'id="preview-button"', 'id="print-button"', 'id="walletBadgeEditor"']) {
+      expect(PAGE).toContain(s);
+    }
+  });
+
   test('price line: form entry with a price shows the fee + balance', async () => {
     const r = runFlow({ chargeResponse: { ok: true, status: 200, body: { ok: true, price: 30, balance: 500, serviceId: 13, allowed: true } } });
     r.els['start-passport-button'].click();
