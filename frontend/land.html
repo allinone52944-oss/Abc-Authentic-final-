@@ -26,7 +26,7 @@
        they stack full-width here. */
     .land-layout .grid2 { grid-template-columns:1fr; }
   }
-  .hero { margin:0 -24px 20px; padding:22px 24px 18px; background:linear-gradient(135deg,#052e16 0%,#14532d 55%,#166534 100%); color:#ecfdf5; position:relative; }
+  .hero { margin:0 -24px 14px; padding:16px 24px 12px; background:linear-gradient(135deg,#052e16 0%,#14532d 55%,#166534 100%); color:#ecfdf5; position:relative; }
   .hero:after { content:''; position:absolute; inset:0; background:radial-gradient(circle at 85% 20%, rgba(250,204,21,.22) 0%, transparent 55%); pointer-events:none; }
   .hero h3 { margin:0 0 4px; font-size:19px; color:#fff; }
   .hero p { margin:0; font-size:13px; color:#bbf7d0; }
@@ -40,7 +40,7 @@
   .err.on { display:block; }
   .ok { display:none; background:#f0fdf4; border:1px solid #86efac; color:#15803d; padding:14px; border-radius:12px; margin-bottom:14px; font-size:14px; }
   .ok.on { display:block; }
-  .modes { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:18px; }
+  .modes { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:12px; }
   /* Phones (audit #58): the 3 mode cards go 2-column — 3-across was
      too cramped to read, and full stacking pushes the form far down
      the page. Form padding tightens and fields go 16px (stops iOS zoom). */
@@ -55,12 +55,12 @@
     .mode-card .d { display:none; }
     .mode-card.on:after { width:17px; height:17px; font-size:10px; top:5px; right:6px; }
   }
-  .mode-card { position:relative; border:2px solid #e2e8f0; border-radius:16px; padding:18px 12px 14px; cursor:pointer; text-align:center; background:#fff; transition:all .18s ease; box-shadow:0 2px 8px rgba(15,23,42,.04); }
+  .mode-card { position:relative; border:2px solid #e2e8f0; border-radius:16px; padding:12px 12px 10px; cursor:pointer; text-align:center; background:#fff; transition:all .18s ease; box-shadow:0 2px 8px rgba(15,23,42,.04); }
   .mode-card:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(15,23,42,.09); }
-  .mode-card .ic { width:52px; height:52px; margin:0 auto; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:25px; background:linear-gradient(135deg,#f0fdf4,#dcfce7); box-shadow:inset 0 0 0 1px #bbf7d0; }
-  .mode-card .t { font-weight:700; font-size:15.5px; color:#0f172a; margin-top:8px; }
-  .mode-card .p { display:inline-block; margin-top:6px; background:linear-gradient(135deg,#fef3c7,#fde68a); color:#92400e; font-size:13.5px; font-weight:800; padding:2px 12px; border-radius:20px; border:1px solid #f59e0b55; }
-  .mode-card .d { font-size:11.5px; color:#64748b; margin-top:7px; line-height:1.55; }
+  .mode-card .ic { width:44px; height:44px; margin:0 auto; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:22px; background:linear-gradient(135deg,#f0fdf4,#dcfce7); box-shadow:inset 0 0 0 1px #bbf7d0; }
+  .mode-card .t { font-weight:700; font-size:15.5px; color:#0f172a; margin-top:6px; }
+  .mode-card .p { display:inline-block; margin-top:4px; background:linear-gradient(135deg,#fef3c7,#fde68a); color:#92400e; font-size:13.5px; font-weight:800; padding:2px 12px; border-radius:20px; border:1px solid #f59e0b55; }
+  .mode-card .d { font-size:11.5px; color:#64748b; margin-top:5px; line-height:1.55; }
   .mode-card.on { border-color:#14532d; background:linear-gradient(180deg,#f0fdf4,#ffffff); box-shadow:0 10px 24px rgba(20,83,45,.16); }
   .mode-card.on:after { content:'✓'; position:absolute; top:8px; right:10px; width:20px; height:20px; border-radius:50%; background:#16a34a; color:#fff; font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center; }
   .field { margin-bottom:14px; }
@@ -74,7 +74,7 @@
      specificity, later in the file) would win. */
   @media (max-width:560px){ #wzCardGrid { grid-template-columns:1fr; } }
   @media (max-width:560px){ .grid2 { grid-template-columns:1fr; } }
-  .price-line { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; background:linear-gradient(135deg,#fffbeb,#fef3c7); border:1px solid #f59e0b66; color:#92400e; padding:11px 14px; border-radius:12px; font-size:13px; font-weight:700; margin-bottom:18px; }
+  .price-line { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; background:linear-gradient(135deg,#fffbeb,#fef3c7); border:1px solid #f59e0b66; color:#92400e; padding:9px 14px; border-radius:12px; font-size:13px; font-weight:700; margin-bottom:12px; }
   #goBtn { background:linear-gradient(135deg,#14532d,#16a34a) !important; border:none; border-radius:14px; box-shadow:0 8px 20px rgba(20,83,45,.35); letter-spacing:.2px; }
   #goBtn:disabled { opacity:.75; }
   .note { font-size:12px; color:#64748b; margin-top:10px; line-height:1.7; }
@@ -145,18 +145,18 @@
           <span class="badge">📄 PDF রিপোর্ট + ইতিহাসে সংরক্ষণ</span>
         </div>
       </div>
-      <div class="modes" id="modes">
-        <div class="mode-card on" data-mode="scan">
+      <div class="modes" id="modes" role="radiogroup" aria-label="সেবার ধরন">
+        <div class="mode-card on" data-mode="scan" role="radio" tabindex="0" aria-checked="true">
           <div class="ic">👤</div><div class="t">নামে সন্ধান</div>
           <div class="p">৳<span data-price="scan">–</span></div>
           <div class="d">এক নামে পুরো মৌজার সব খতিয়ান</div>
         </div>
-        <div class="mode-card" data-mode="verify">
+        <div class="mode-card" data-mode="verify" role="radio" tabindex="0" aria-checked="false">
           <div class="ic">✅</div><div class="t">জমি যাচাই</div>
           <div class="p">৳<span data-price="verify">–</span></div>
           <div class="d">কেনার আগে দাবি বনাম রেকর্ড</div>
         </div>
-        <div class="mode-card" data-mode="mouza">
+        <div class="mode-card" data-mode="mouza" role="radio" tabindex="0" aria-checked="false">
           <div class="ic">📋</div><div class="t">মৌজা মূল্য</div>
           <div class="p">৳<span data-price="mouza">–</span></div>
           <div class="d">হার × জমি = সর্বনিম্ন মূল্য রিপোর্ট</div>
@@ -173,24 +173,24 @@
 
       <form id="lform">
         <div class="grid2" id="areaCascade">
-          <div class="field"><label>বিভাগ *</label><select id="fDivision"><option value="">— বেছে নিন —</option></select></div>
-          <div class="field"><label>জেলা *</label><select id="fDistrict"><option value="">— আগে বিভাগ —</option></select></div>
-          <div class="field"><label>উপজেলা / থানা *</label><select id="fUpazila"><option value="">— আগে জেলা —</option></select></div>
-          <div class="field"><label>মৌজা *</label><select id="fMouza"><option value="">— আগে উপজেলা —</option></select></div>
+          <div class="field"><label for="fDivision">বিভাগ *</label><select id="fDivision"><option value="">— বেছে নিন —</option></select></div>
+          <div class="field"><label for="fDistrict">জেলা *</label><select id="fDistrict"><option value="">— আগে বিভাগ —</option></select></div>
+          <div class="field"><label for="fUpazila">উপজেলা / থানা *</label><select id="fUpazila"><option value="">— আগে জেলা —</option></select></div>
+          <div class="field"><label for="fMouza">মৌজা *</label><select id="fMouza"><option value="">— আগে উপজেলা —</option></select></div>
         </div>
 
         <div id="pane-scan" style="display:none">
-          <div class="field"><label>মালিকের নাম *</label><input type="text" id="fOwnerName" placeholder="যেমন: আকবর আলী"></div>
+          <div class="field"><label for="fOwnerName">মালিকের নাম *</label><input type="text" id="fOwnerName" placeholder="যেমন: আকবর আলী"></div>
         </div>
         <div id="pane-verify" style="display:none">
-          <div class="field"><label>খতিয়ান নম্বর *</label><input type="text" id="fVKhatianNo" inputmode="numeric" placeholder="যেমন: ৮"></div>
+          <div class="field"><label for="fVKhatianNo">খতিয়ান নম্বর *</label><input type="text" id="fVKhatianNo" inputmode="numeric" placeholder="যেমন: ৮"></div>
           <div class="note" style="margin:-4px 0 10px;">শুধু ঠিকানা আর খতিয়ান নম্বর দিলেই সরকারি রেকর্ডের পূর্ণ রিপোর্ট পাবেন।</div>
           <div class="claim-toggle" id="claimToggle">➕ বিক্রেতার দাবিও মিলিয়ে দেখুন (ঐচ্ছিক)</div>
           <div id="claimBox" style="display:none">
-            <div class="field"><label>বিক্রেতার দাবি — মালিকের নাম</label><input type="text" id="fClaimOwner" placeholder="বিক্রেতা যা বলেছে"></div>
+            <div class="field"><label for="fClaimOwner">বিক্রেতার দাবি — মালিকের নাম</label><input type="text" id="fClaimOwner" placeholder="বিক্রেতা যা বলেছে"></div>
             <div class="grid2">
-              <div class="field"><label>দাবি — দাগ নম্বর</label><input type="text" id="fClaimDag" inputmode="numeric" placeholder="যেমন: ১২৩৭"></div>
-              <div class="field"><label>দাবি — জমি (একর)</label><input type="text" id="fClaimLand" inputmode="decimal" placeholder="যেমন: 0.0544"></div>
+              <div class="field"><label for="fClaimDag">দাবি — দাগ নম্বর</label><input type="text" id="fClaimDag" inputmode="numeric" placeholder="যেমন: ১২৩৭"></div>
+              <div class="field"><label for="fClaimLand">দাবি — জমি (একর)</label><input type="text" id="fClaimLand" inputmode="decimal" placeholder="যেমন: 0.0544"></div>
             </div>
           </div>
         </div>
@@ -213,20 +213,20 @@
 
           <!-- Step 1: where -->
           <div id="wzStep1">
-            <div class="field"><label>অফিস খুঁজুন</label><input type="text" id="wzOfficeSearch" placeholder="অফিসের নাম লিখে খুঁজুন…"></div>
-            <div class="field"><label>জমি কোথায়? — সাব-রেজিস্ট্রার অফিস *</label><select id="mOffice"></select></div>
+            <div class="field"><label for="wzOfficeSearch">অফিস খুঁজুন</label><input type="text" id="wzOfficeSearch" placeholder="অফিসের নাম লিখে খুঁজুন…"></div>
+            <div class="field"><label for="mOffice">জমি কোথায়? — সাব-রেজিস্ট্রার অফিস *</label><select id="mOffice"></select></div>
             <div id="wzOfficeCount" style="font-size:13.5px;color:#14532d;min-height:19px;margin:-6px 0 10px;"></div>
             <div id="wzOfficeNote" style="font-size:13.5px;color:#14532d;min-height:19px;margin:-6px 0 10px;"></div>
-            <div class="field" id="wzOfficeManualWrap" style="display:none"><label>অফিসের নাম *</label><input type="text" id="wzOfficeManual" placeholder="যেমন: সদর সাব-রেজিস্ট্রি অফিস"></div>
-            <div class="field" id="wzMouzaSearchWrap"><label>মৌজা খুঁজুন</label><input type="text" id="wzMouzaSearch" placeholder="মৌজার নাম লিখে খুঁজুন…"></div>
-            <div class="field"><label>মৌজা *</label><select id="wzMouza"><option value="">— বেছে নিন —</option></select></div>
-            <div class="field" id="wzMouzaManualWrap" style="display:none"><label>মৌজার নাম *</label><input type="text" id="wzMouzaManual" placeholder="যেমন: শাকপুরা"></div>
+            <div class="field" id="wzOfficeManualWrap" style="display:none"><label for="wzOfficeManual">অফিসের নাম *</label><input type="text" id="wzOfficeManual" placeholder="যেমন: সদর সাব-রেজিস্ট্রি অফিস"></div>
+            <div class="field" id="wzMouzaSearchWrap"><label for="wzMouzaSearch">মৌজা খুঁজুন</label><input type="text" id="wzMouzaSearch" placeholder="মৌজার নাম লিখে খুঁজুন…"></div>
+            <div class="field"><label for="wzMouza">মৌজা *</label><select id="wzMouza"><option value="">— বেছে নিন —</option></select></div>
+            <div class="field" id="wzMouzaManualWrap" style="display:none"><label for="wzMouzaManual">মৌজার নাম *</label><input type="text" id="wzMouzaManual" placeholder="যেমন: শাকপুরা"></div>
             <button type="button" class="btn btn-primary" id="wzNext1" style="padding:10px 18px;">পরের ধাপ →</button>
           </div>
 
           <!-- Step 1b: which thana (only when one mouza name lives in several thanas) -->
           <div id="wzStepThana" style="display:none">
-            <div class="field"><label>কোন থানা?</label><select id="wzThana"></select></div>
+            <div class="field"><label for="wzThana">কোন থানা?</label><select id="wzThana"></select></div>
             <div style="font-size:13.5px;color:#374151;margin:-6px 0 10px;">এই মৌজা একাধিক থানায় আছে — থানা বাছলে ঠিক হার দেখাবে।</div>
             <button type="button" class="btn" id="wzBackThana" style="padding:10px 18px;">← ফিরে যান</button>
             <button type="button" class="btn btn-primary" id="wzNextThana" style="padding:10px 18px;">পরের ধাপ →</button>
@@ -250,8 +250,8 @@
           <!-- Step 3: how much -->
           <div id="wzStep3" style="display:none">
             <div class="grid2">
-              <div class="field"><label>কতটুকু জমি? — পরিমাণ *</label><input type="text" id="wzAmount" inputmode="decimal" placeholder="যেমন: 10"></div>
-              <div class="field"><label>একক</label><select id="wzUnit">
+              <div class="field"><label for="wzAmount">কতটুকু জমি? — পরিমাণ *</label><input type="text" id="wzAmount" inputmode="decimal" placeholder="যেমন: 10"></div>
+              <div class="field"><label for="wzUnit">একক</label><select id="wzUnit">
                 <option value="shatangsho">শতাংশ</option><option value="katha">কাঠা (১ = ১.৬৫ শতাংশ)</option><option value="bigha">বিঘা (১ = ৩৩ শতাংশ)</option><option value="gonda">গন্ডা (১ = ২ শতাংশ)</option>
               </select></div>
             </div>
@@ -264,7 +264,7 @@
           <div id="wzStep4" style="display:none">
             <div id="wzRateBox" style="margin-bottom:10px;"></div>
             <div class="field" id="wzRateManualWrap" style="display:none"><label id="wzRateLabel">হার (টাকা) *</label><input type="text" id="wzRateInput" inputmode="decimal" placeholder="যেমন: 100000"></div>
-            <div class="field"><label>পুরনো হার (ঐচ্ছিক — তুলনার জন্য)</label><input type="text" id="wzOldRate" inputmode="decimal" placeholder="খালি থাকলে তুলনা দেখানো হবে না"></div>
+            <div class="field"><label for="wzOldRate">পুরনো হার (ঐচ্ছিক — তুলনার জন্য)</label><input type="text" id="wzOldRate" inputmode="decimal" placeholder="খালি থাকলে তুলনা দেখানো হবে না"></div>
             <button type="button" class="btn" id="wzBack4" style="padding:10px 18px;">← ফিরে যান</button>
             <button type="button" class="btn btn-primary" id="wzNext4" style="padding:10px 18px;">পরের ধাপ →</button>
           </div>
@@ -272,7 +272,7 @@
           <!-- Step 5: preview sentence -->
           <div id="wzStep5" style="display:none">
             <div id="wzPreviewBox" style="margin-bottom:10px;"></div>
-            <div class="field"><label>ঘোষিত দাম (টাকা, ঐচ্ছিক)</label><input type="text" id="mDeclaredPrice" inputmode="decimal" placeholder="খালি থাকলে শুধু সর্বনিম্ন মূল্যই ভিত্তি"></div>
+            <div class="field"><label for="mDeclaredPrice">ঘোষিত দাম (টাকা, ঐচ্ছিক)</label><input type="text" id="mDeclaredPrice" inputmode="decimal" placeholder="খালি থাকলে শুধু সর্বনিম্ন মূল্যই ভিত্তি"></div>
             <button type="button" class="btn" id="wzBack5" style="padding:10px 18px;">← ফিরে যান</button>
             <button type="button" class="btn btn-primary" id="wzAddLine" style="padding:10px 18px;">➕ লাইন যোগ করুন</button>
           </div>
@@ -312,7 +312,7 @@
   </div>
 </div>
 
-<script src="/js/app.js?v=20"></script>
+<script src="/js/app.js?v=21"></script>
 <script>
   const API = '/land'; // ABC.api() prepends '/api' itself
   const BN = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
@@ -368,7 +368,7 @@
   function setMode(mode) {
     MODE = mode;
     if (prices[mode] == null) loadPrice(mode);
-    document.querySelectorAll('.mode-card').forEach((c) => c.classList.toggle('on', c.dataset.mode === mode));
+    document.querySelectorAll('.mode-card').forEach((c) => { c.classList.toggle('on', c.dataset.mode === mode); c.setAttribute('aria-checked', String(c.dataset.mode === mode)); });
     ['scan', 'verify', 'mouza'].forEach((m) => { $('pane-' + m).style.display = m === mode ? '' : 'none'; });
     // Mouza mode has its own single flow (office → mouza → class
     // → amount → rate): the shared DLRMS cascade is hidden HERE
@@ -383,7 +383,11 @@
     clearBoxes();
     $('result').innerHTML = '';
   }
-  document.querySelectorAll('.mode-card').forEach((c) => c.addEventListener('click', () => setMode(c.dataset.mode)));
+  document.querySelectorAll('.mode-card').forEach((c) => {
+    c.addEventListener('click', () => setMode(c.dataset.mode));
+    // B2#5 — cards are radios: keyboard-selectable (Enter/Space).
+    c.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setMode(c.dataset.mode); } });
+  });
   $('claimToggle').addEventListener('click', () => {
     const box = $('claimBox');
     const open = box.style.display !== 'none';

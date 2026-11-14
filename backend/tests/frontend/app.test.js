@@ -380,3 +380,191 @@ describe("Drafts.get and Idempotency helpers", () => {
     expect(global.sessionStorage.getItem("abc_idem_form1")).toBeNull();
   });
 });
+
+describe('api() — Fix 14 retry safety: timeout preserved, unkeyed writes never retried, retry progress shown', () => {
+  // Record every setTimeout delay the code schedules (abort timers +
+  // backoff sleeps), calling through to the real (or fake) timer.
+  function recordDelays() {
+    const delays = [];
+    const base = global.setTimeout;
+    const spy = jest.spyOn(global, 'setTimeout').mockImplementation((fn, ms, ...rest) => {
+      delays.push(ms);
+      return base(fn, ms, ...rest);
+    });
+    return { delays, restore: () => spy.mockRestore() };
+  }
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  test('a custom timeout survives all retries (was reset to 15s by `delete opts.timeout`)', async () => {
+    jest.useFakeTimers();
+    const { delays, restore } = recordDelays();
+    try {
+      const ABC = loadApp();
+      global.fetch
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce(okJson({ ok: true }));
+      const p = ABC.api('/ping', { timeout: 60000 });
+      await jest.advanceTimersByTimeAsync(10000);
+      const r = await p;
+      expect(r.ok).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+      // Three attempts, each with its own 60s abort timer; the 1s/2s
+      // backoffs in between. No 15s timer may appear.
+      expect(delays.filter((d) => d === 60000)).toHaveLength(3);
+      expect(delays).toContain(1000);
+      expect(delays).toContain(2000);
+      expect(delays).not.toContain(15000);
+    } finally { restore(); }
+  });
+
+  test('default timeout stays 15s per attempt (retry math: 15+1+15+2+15 = 48s worst case)', async () => {
+    jest.useFakeTimers();
+    const { delays, restore } = recordDelays();
+    try {
+      const ABC = loadApp();
+      global.fetch
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockRejectedValueOnce(new Error('offline'));
+      const p = ABC.api('/ping');
+      await jest.advanceTimersByTimeAsync(10000);
+      const r = await p;
+      expect(r.status).toBe(503);
+      expect(await r.json()).toEqual({ error: 'NETWORK_ERROR' });
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+      expect(delays.filter((d) => d === 15000)).toHaveLength(3);
+    } finally { restore(); }
+  });
+
+  test('unkeyed mutating POST is NOT retried on network failure (fails fast as synthetic 503)', async () => {
+    const ABC = loadApp();
+    global.fetch.mockRejectedValueOnce(new Error('offline'));
+    const r = await ABC.api('/orders', { method: 'POST', body: { service_id: 's1' } });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(r.status).toBe(503);
+    expect(await r.json()).toEqual({ error: 'NETWORK_ERROR' });
+  });
+
+  test('unkeyed mutating POST is NOT retried on 503/504 (the 503 is returned as-is)', async () => {
+    const ABC = loadApp();
+    global.fetch.mockResolvedValue(errStatus(503));
+    const r = await ABC.api('/wallet/recharge', { method: 'POST', body: { method: 'bkash_payment', trxid: 'ABC123' } });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(r.status).toBe(503);
+  });
+
+  test('GET still retries on network failure and on 503', async () => {
+    jest.useFakeTimers();
+    try {
+      const ABC = loadApp();
+      global.fetch
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce(errStatus(503))
+        .mockResolvedValueOnce(okJson({ ok: true }));
+      const p = ABC.api('/services');
+      await jest.advanceTimersByTimeAsync(10000);
+      const r = await p;
+      expect(r.ok).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+    } finally { jest.useRealTimers(); }
+  });
+
+  test('keyed mutating POST retries with the SAME idempotency key on every attempt', async () => {
+    jest.useFakeTimers();
+    try {
+      const ABC = loadApp();
+      global.fetch
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce(okJson({ ok: true }));
+      const p = ABC.api('/orders', { method: 'POST', body: { service_id: 's1', idempotency_key: 'k1' } });
+      await jest.advanceTimersByTimeAsync(10000);
+      const r = await p;
+      expect(r.ok).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+      for (const [, opts] of global.fetch.mock.calls) {
+        expect(JSON.parse(opts.body).idempotency_key).toBe('k1');
+      }
+    } finally { jest.useRealTimers(); }
+  });
+
+  test('keyed FormData POST retries; key in the query string counts too', async () => {
+    jest.useFakeTimers();
+    try {
+      const ABC = loadApp();
+      const fd = new FormData();
+      fd.append('idempotency_key', 'fd-key');
+      fd.append('photo', 'x');
+      global.fetch
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce(okJson({ ok: true }));
+      const p = ABC.api('/qr-photo-verify/verify', { method: 'POST', body: fd });
+      await jest.advanceTimersByTimeAsync(5000);
+      expect((await p).ok).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+
+      global.fetch
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce(okJson({ ok: true }));
+      const p2 = ABC.api('/passport/pdf?passport_no=X&idempotency_key=k9', { method: 'POST', body: '<html></html>' });
+      await jest.advanceTimersByTimeAsync(5000);
+      expect((await p2).ok).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(4);
+    } finally { jest.useRealTimers(); }
+  });
+
+  test('the 401 refresh re-fetch keeps the caller timeout (was a hardcoded 20s)', async () => {
+    const { delays, restore } = recordDelays();
+    try {
+      const ABC = loadApp();
+      ABC.setTokens('old-acc', 'good-refresh');
+      global.fetch.mockImplementation(async (url, opts) => {
+        if (url === '/api/auth/refresh') {
+          return okJson({ access_token: 'new-acc', refresh_token: 'new-ref' });
+        }
+        if (opts.headers['Authorization'] === 'Bearer old-acc') return errStatus(401);
+        return okJson({ retried: true });
+      });
+      const r = await ABC.api('/orders', { timeout: 60000 });
+      expect(r.ok).toBe(true);
+      // Initial attempt + the post-refresh re-fetch, both at 60s.
+      expect(delays.filter((d) => d === 60000)).toHaveLength(2);
+      expect(delays).not.toContain(20000);
+    } finally { restore(); }
+  });
+
+  test('retry progress: a note appears during the retry and hides when it settles', async () => {
+    jest.useFakeTimers();
+    const created = [];
+    const appended = [];
+    global.document.createElement = (tag) => {
+      const el = { tag, style: {}, setAttribute: jest.fn(), appendChild: jest.fn(), addEventListener: jest.fn(), textContent: '' };
+      created.push(el);
+      return el;
+    };
+    global.document.body.appendChild = (el) => { appended.push(el); };
+    try {
+      const ABC = loadApp();
+      global.fetch
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce(okJson({ ok: true }));
+      const p = ABC.api('/services');
+      // Halfway through the 1s backoff the note must already be up.
+      await jest.advanceTimersByTimeAsync(500);
+      expect(appended).toHaveLength(1);
+      const note = appended[0];
+      expect(note.id).toBe('abcRetryNote');
+      expect(note.textContent).toContain('আবার চেষ্টা করা হচ্ছে');
+      expect(note.style.display).not.toBe('none');
+      await jest.advanceTimersByTimeAsync(5000);
+      const r = await p;
+      expect(r.ok).toBe(true);
+      expect(note.style.display).toBe('none');
+    } finally { jest.useRealTimers(); }
+  });
+});

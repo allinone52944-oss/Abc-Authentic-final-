@@ -39,3 +39,68 @@ describe('history.html — BDRIS filings (past-applications list)', () => {
     expect(html).not.toContain('bdris-original');
   });
 });
+
+describe('history.html — B2#8 kind label + status/next action per row', () => {
+  const vm = require('vm');
+  const script = read('frontend/history.html')
+    .slice(read('frontend/history.html').lastIndexOf('<script>') + 8, read('frontend/history.html').lastIndexOf('</script>'))
+    .replace(/\ninit\(\);/, '\n');
+
+  function renderItems(items) {
+    const els = {};
+    const el = () => ({ style: {}, innerHTML: '' });
+    const get = (id) => (els[id] = els[id] || el());
+    const ctx = vm.createContext({ document: { getElementById: get }, console });
+    vm.runInContext(script, ctx);
+    vm.runInContext('_items = ' + JSON.stringify(items) + '; render();', ctx);
+    return get('histList').innerHTML;
+  }
+  const at = '2026-11-14T10:00:00.000Z';
+
+  test('every row shows its kind label', () => {
+    const out = renderItems([
+      { kind: 'order', id: 'o1', title: 'অর্ডার সেবা', created_at: at, documents: [] },
+      { kind: 'manual', id: 'm1', title: 'ম্যানুয়াল সেবা', created_at: at, documents: [] },
+      { kind: 'engine', id: 'j1', title: 'জন্ম সনদ', created_at: at, documents: [] },
+      { kind: 'bdris', id: 'a1', title: 'জন্ম নিবন্ধন আবেদন', created_at: at, documents: [], link: '/bdris-apply.html', original_pdf_available: false },
+    ]);
+    expect(out).toContain('>অর্ডার</span>');
+    expect(out).toContain('>ম্যানুয়াল সেবা</span>');
+    expect(out).toContain('>ইঞ্জিন সেবা</span>');
+    expect(out).toContain('>বিডিআরআইএস আবেদন</span>');
+  });
+
+  test('file-less completed row says so (record only); downloadable row says the file is ready', () => {
+    const out = renderItems([
+      { kind: 'order', id: 'o1', title: 'অর্ডার সেবা', created_at: at, documents: [] },
+      { kind: 'engine', id: 'j1', title: 'জন্ম সনদ (সার্টিফিকেট)', created_at: at, documents: [{ filename: 'c.pdf', originalname: 'জন্ম সনদ.pdf', url: '/engine-jobs/j1/file' }] },
+    ]);
+    expect(out).toContain('সম্পন্ন হয়েছে — ডাউনলোডযোগ্য ফাইল নেই (শুধু রেকর্ড)');
+    expect(out).toContain('ডেলিভারি ফাইল প্রস্তুত — নিচে ডাউনলোড করুন');
+  });
+
+  test('failed engine job says failed with a retry next action; BDRIS row without a stored PDF points to the filing page', () => {
+    const out = renderItems([
+      { kind: 'engine', id: 'j2', title: 'জন্ম সনদ (সার্টিফিকেট) — ব্যর্থ', created_at: at, documents: [] },
+      { kind: 'bdris', id: 'a1', title: 'জন্ম নিবন্ধন আবেদন (আবেদন নম্বর: 123)', created_at: at, documents: [], link: '/bdris-apply.html', original_pdf_available: false },
+    ]);
+    expect(out).toContain('ব্যর্থ হয়েছে — কোনো ফাইল তৈরি হয়নি। আবার চেষ্টা করুন।');
+    expect(out).toContain('আসল PDF এখানে সংরক্ষিত নেই — আবেদন পাতা থেকে নিতে পারবেন।');
+    expect(out).toContain('আবেদন দেখুন');
+  });
+
+  test('B2#3 — order rows link to their order detail; manual/engine/bdris rows get no (wrong) order link', () => {
+    const out = renderItems([
+      { kind: 'order', id: 'o1', title: 'অর্ডার সেবা', created_at: at, documents: [] },
+      { kind: 'manual', id: 'm1', title: 'ম্যানুয়াল সেবা', created_at: at, documents: [] },
+      { kind: 'engine', id: 'j1', title: 'জন্ম সনদ (সার্টিফিকেট)', created_at: at, documents: [] },
+      { kind: 'bdris', id: 'a1', title: 'জন্ম নিবন্ধন আবেদন', created_at: at, documents: [], link: '/bdris-apply.html', original_pdf_available: false },
+    ]);
+    expect(out).toContain('/order-detail.html?id=o1');
+    expect(out).toContain('বিস্তারিত দেখুন');
+    // No order-detail link may carry a non-order id (it would 404).
+    expect(out).not.toContain('/order-detail.html?id=m1');
+    expect(out).not.toContain('/order-detail.html?id=j1');
+    expect(out).not.toContain('/order-detail.html?id=a1');
+  });
+});

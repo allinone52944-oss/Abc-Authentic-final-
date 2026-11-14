@@ -137,7 +137,7 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
 </div>
 
-<script src="/js/app.js?v=20"></script>
+<script src="/js/app.js?v=21"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -193,8 +193,9 @@ async function init(){
   const catName = s.category_name_bn || s.category_name;
   const icon = (s.icon && s.icon !== '🛎️') ? s.icon : autoIcon(s.name_bn || s.name);
 
-  // Docs
-  const docs=safeArray(s.documents_required).map(d=>'<li>📄 '+esc(d)+'</li>').join('')||'<li>কোনো বিশেষ ডকুমেন্ট প্রয়োজন নেই</li>';
+  // Docs — B1#4/B2#9: entries are strings (required) or
+  // {name, required:false} (optional); optional docs are marked (ঐচ্ছিক).
+  const docs=safeArray(s.documents_required).map(d=>{const n=typeof d==='string'?d:(d&&d.name)||'';const opt=d&&typeof d==='object'&&d.required===false;return '<li>📄 '+esc(n)+(opt?' <span style="color:#64748b;">(ঐচ্ছিক)</span>':'')+'</li>';}).join('')||'<li>কোনো বিশেষ ডকুমেন্ট প্রয়োজন নেই</li>';
   const sched=(s.schedule&&s.schedule.open)?'<div style="color:#64748b;font-size:13px;margin:8px 0;">🕘 সেবার সময়সূচি: '+esc(s.schedule.open)+' - '+esc(s.schedule.close||'')+'</div>':'';
 
   // Balance Check
@@ -301,13 +302,19 @@ async function init(){
       '</div>' +
       sched +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;background:#f8fafc;padding:12px 18px;border-radius:12px;border:1px solid #e2e8f0;">' +
-        '<div style="font-size:14px;color:#475569;font-weight:600;">সেবার মূল্য / সরকারি ফি:</div>' +
+        '<div style="font-size:14px;color:#475569;font-weight:600;">সেবা চার্জ:</div>' +
         '<div style="font-size:24px;font-weight:800;color:#1e40af;">৳' + bnNum(price) + '</div>' +
       '</div>' +
       // Audit #49 — when the fee is cut (never guessed; only when the
       // API carries a rule and the service is priced).
       ((price > 0 && s.charge_rule) ?
         '<div style="margin-top:8px;padding:10px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;font-size:13px;color:#1e40af;">💳 <b>' + esc(s.charge_rule.label) + '</b> — ' + esc(s.charge_rule.detail) + (s.charge_rule.rule === 'success' ? '। না পেলে ৳০ — কোনো টাকা কাটা হবে না।' : '।') + '</div>' : '') +
+      // B2#4 — BDRIS charges twice, at two separate moments
+      // (application ৳90 before submit, original PDF ৳10 before
+      // download). Filled from /api/bdris-apply/prices below; the
+      // box stays empty if the price fetch fails — the ৳90 above
+      // is never wrong, and no amount is ever guessed.
+      '<div id="bdrisFeeNote"></div>' +
     '</div>' +
 
     balBoxHtml +
@@ -328,6 +335,22 @@ async function init(){
   const promoHost=document.createElement('section');
   document.getElementById('detail').appendChild(promoHost);
   ABCPromo.mount(promoHost,{service:s,engine:hasEngine,onQuote:q=>{if(q){const link=document.createElement('a');link.className='btn';link.href='/order-create.html?service='+encodeURIComponent(s.id);link.textContent='অর্ডার পাতায় কোড প্রয়োগ করুন →';promoHost.querySelector('.promo-result').appendChild(link);}}});
+
+  // B2#4 — BDRIS fee breakdown (disclosure only; amounts come from
+  // the server, never hardcoded). Non-blocking: the detail is
+  // already rendered; a failed fetch leaves the note empty.
+  if (s.engine_id === 'bdris-apply') {
+    ABC.api('/bdris-apply/prices').then(function (r) { return r.json(); }).then(function (d) {
+      if (!d || !d.ok) return;
+      const note = document.getElementById('bdrisFeeNote');
+      if (!note) return;
+      const parts = [];
+      if (Number(d.submitPrice) > 0) parts.push('আবেদন ৳' + bnNum(d.submitPrice));
+      if (Number(d.pdfPrice) > 0) parts.push('আসল PDF ৳' + bnNum(d.pdfPrice));
+      if (!parts.length) return;
+      note.innerHTML = '<div style="margin-top:8px;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;font-size:13px;color:#92400e;">💰 মোট ফি দুই ধাপে: <b>' + esc(parts.join(' + ')) + '</b> — আবেদন জমার আগে আবেদন ফি, আসল PDF নেওয়ার আগে PDF ফি।</div>';
+    }).catch(function () {});
+  }
 
   window._rules = (s.type === 'manual' && s.manual_instructions) ? s.manual_instructions : (s.rules_text || 'কোনো বিশেষ নিয়ম নেই।');
   window._sample = s.manual_sample || '';
@@ -356,6 +379,6 @@ function showRules(){
 
 init();
 </script>
-<link rel="stylesheet" href="/css/promotions.css?v=20261111-2">
+<link rel="stylesheet" href="/css/promotions.css?v=20261114-1">
 </body>
 </html>

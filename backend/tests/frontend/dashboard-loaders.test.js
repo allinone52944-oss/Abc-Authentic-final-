@@ -34,6 +34,47 @@ describe('dashboard loaders fail visibly (audit #76)', () => {
   });
 });
 
+describe('B1#1/B2#12 — dashboard notices render **bold** / *italic*, never raw asterisks or HTML', () => {
+  const vm = require('vm');
+  function loadRenderNoticeText() {
+    const start = DASH.indexOf('function escapeHtml(s)');
+    const end = DASH.indexOf('function bnNum(n)');
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const ctx = {};
+    vm.runInNewContext(DASH.slice(start, end), ctx);
+    expect(typeof ctx.renderNoticeText).toBe('function');
+    return ctx.renderNoticeText;
+  }
+
+  test('the reproduction case renders bold, with no literal asterisks', () => {
+    const render = loadRenderNoticeText();
+    const out = render('**গুরুত্বপূর্ণ:** আগামীকাল সকাল ৯টা থেকে সেবা বন্ধ থাকবে।');
+    expect(out).toBe('<strong>গুরুত্বপূর্ণ:</strong> আগামীকাল সকাল ৯টা থেকে সেবা বন্ধ থাকবে।');
+    expect(out).not.toContain('**');
+  });
+
+  test('single * renders italic; unmatched * stays literal', () => {
+    const render = loadRenderNoticeText();
+    expect(render('এটি *গুরুত্বপূর্ণ* তথ্য')).toBe('এটি <em>গুরুত্বপূর্ণ</em> তথ্য');
+    expect(render('৫ * ৩ = ১৫')).toBe('৫ * ৩ = ১৫');
+  });
+
+  test('stored HTML is escaped first — no markup can execute', () => {
+    const render = loadRenderNoticeText();
+    const out = render('**সতর্ক:** <script>alert(1)</script>');
+    expect(out).toBe('<strong>সতর্ক:</strong> &lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(out).not.toContain('<script>');
+  });
+
+  test('both notice renderers use renderNoticeText (list, marquee, modal)', () => {
+    expect(fnBody('loadNotices')).toContain('renderNoticeText(n.title)');
+    expect(fnBody('loadNotices')).toContain('renderNoticeText(trunc(n.message, 60))');
+    expect(fnBody('loadNotices')).toContain('renderNoticeText(valid[0].title)');
+    expect(fnBody('showNotices')).toContain("renderNoticeText(n.title || 'বিজ্ঞপ্তি')");
+    expect(fnBody('showNotices')).toContain("renderNoticeText(n.message || '')");
+  });
+});
 describe('audit #82 — engine cards render once from ENGINE_CARDS', () => {
   const DASH = fs.readFileSync(
     path.join(__dirname, '..', '..', '..', 'frontend', 'dashboard.html'),

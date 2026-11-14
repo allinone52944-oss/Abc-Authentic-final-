@@ -18,6 +18,13 @@
     box-shadow: var(--shadow-sm);
     margin-bottom: 20px;
   }
+  /* B1#7/B2#6 — first-step fee summary (same as nid-server-copy). */
+  .price-line {
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+    background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+    padding: 10px 14px; border-radius: var(--r-md); font-size: 13px; font-weight: 600;
+    margin-bottom: 18px;
+  }
   .steps {
     display: flex;
     gap: 8px;
@@ -306,6 +313,10 @@
     <!-- STEP 1: UPLOAD -->
     <div class="wiz on" id="w1">
       <div class="form-card">
+        <div class="price-line">
+          <span>সেবা চার্জ: ৳<span id="priceVal">–</span> (কার্ড তৈরি সফল হলে কাটবে)</span>
+          <span>ব্যর্থ হলে চার্জ: ৳০</span>
+        </div>
         <label class="drop" id="dropZone">
           <input type="file" id="pdfFile" accept="application/pdf,.pdf">
           <div style="font-size:42px; margin-bottom:8px;">📄</div>
@@ -368,9 +379,13 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
 </div>
 
-<script src="/js/app.js?v=20"></script>
+<script src="/js/app.js?v=21"></script>
 <script>
 const API='/nid-engine';
+// B1#7/B2#6 — Bengali-digit formatter (local, like nid-server-copy;
+// there is no global bn() — admin.js is IIFE-wrapped).
+const BN = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
+const bn = (v) => String(v == null ? '' : v).replace(/[0-9]/g, (d) => BN[Number(d)]);
 let S={jobId:null,fields:{},photo:null,sign:null,pdfBlob:null};
 // Core-data gate (backend adapter-এর নিয়মের mirror): কার্ডের জন্য নাম,
 // আইডি নম্বর ও জন্মতারিখ — তিনটাই লাগে। build-এর আগেই খালি ফর্ম
@@ -560,11 +575,12 @@ async function updateBalance(){
     const p = await ABC.api(API+'/price');
     if(p.ok){
       const d = await p.json();
-      if(document.getElementById('balVal')) document.getElementById('balVal').textContent = d.balance;
+      if(document.getElementById('balVal')) document.getElementById('balVal').textContent = bn(d.balance);
       currentPrice = d.price || 0;
+      if(document.getElementById('priceVal')) document.getElementById('priceVal').textContent = bn(currentPrice);
       const b3 = document.getElementById('b3');
       if(b3 && currentPrice > 0){
-        b3.textContent = 'কার্ড তৈরি করুন (৳' + currentPrice + ') →';
+        b3.textContent = 'কার্ড তৈরি করুন (৳' + bn(currentPrice) + ') →';
       }
       if(d.allowed === false){
         showErr('এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।');

@@ -141,6 +141,22 @@ describe('POST /api/orders', () => {
     expect(r.body.missing).toEqual(['nid_back']);
   });
 
+  test('B1#4/B2#9 — optional {name, required:false} doc missing does NOT block; required one still does', async () => {
+    const withDocs = { ...SERVICE, documents_required: ['nid_front', { name: 'passport_copy', required: false }] };
+    db.__routeQuery(serviceHandlers(withDocs));
+    // Only the required doc uploaded; the optional one absent → order succeeds.
+    const ok = await withUser(request(app()).post('/api/orders'))
+      .send({ service_id: 's1', documents: [{ type: 'nid_front' }] }).expect(201);
+    expect(ok.body.order.id).toBe('o1');
+
+    // Required doc absent → still 400, and `missing` lists only the required name.
+    db.__routeQuery(serviceHandlers(withDocs));
+    const bad = await withUser(request(app()).post('/api/orders'))
+      .send({ service_id: 's1', documents: [{ type: 'passport_copy' }] }).expect(400);
+    expect(bad.body.error).toBe('MISSING_DOCUMENTS');
+    expect(bad.body.missing).toEqual(['nid_front']);
+  });
+
   test('insufficient balance → 402 INSUFFICIENT_BALANCE', async () => {
     db.__routeQuery([
       ['users WHERE id = $1 FOR UPDATE', { rows: [{ balance: 10 }] }],

@@ -492,7 +492,7 @@ input.bad, select.bad{border-color:var(--status-danger); box-shadow:0 0 0 3px rg
 
   <div class="footer">
     নিরাপদ অনলাইন আবেদন <span class="fl">•</span> আপনার তথ্য সুরক্ষিত থাকে<br>
-    বিডিআরআইএস-এ আবেদন <span class="fl">•</span> ফি জমা/আসল পিডিএফ-এর আগে একবারই কাটে — চার্জ ব্যর্থ হলে ৳০, একই কাজে দুবার নয়
+    বিডিআরআইএস-এ আবেদন <span class="fl">•</span> <span id="abcFeeNote">ফি জমা/আসল পিডিএফ-এর আগে একবারই কাটে — চার্জ ব্যর্থ হলে ৳০, একই কাজে দুবার নয়</span>
   </div>
 </div>
 <script src="/js/socket.io.min.js?v=1"></script>
@@ -717,9 +717,9 @@ function otherPersonSection() {
   return '<div id="otherSec" class="sec"' + (show ? '' : ' style="display:none"') + '><div class="sub-h"><span class="snum">👤</span> আবেদনকারীর তথ্য (অন্যান্য / অভিভাবক)</div>' +
     '<p class="hint">সম্পর্ক অন্যান্য বা অভিভাবক হলে মূল সাইট এই ব্যক্তির জন্ম নিবন্ধন নম্বর, জন্ম তারিখ ও English নাম চায় — তিনটিই বাধ্যতামূলক।</p>' +
     '<div class="row2">' +
-    '<div class="fld"><label>জন্ম নিবন্ধন নম্বর (BRN) <b>*</b></label><input type="text" id="other_brn" value="' + esc(o.brn || '') + '" placeholder="১৭ ডিজিটের নম্বর"></div>' +
+    '<div class="fld"><label for="other_brn">জন্ম নিবন্ধন নম্বর (BRN) <b>*</b></label><input type="text" id="other_brn" value="' + esc(o.brn || '') + '" placeholder="১৭ ডিজিটের নম্বর"></div>' +
     dobFieldHtml('other_dob', 'জন্ম তারিখ (খ্রিঃ)', o.dob || '', true) +
-    '<div class="fld"><label>নাম (English) <b>*</b></label><input type="text" id="other_en" value="' + esc(o.en || '') + '"></div>' +
+    '<div class="fld"><label for="other_en">নাম (English) <b>*</b></label><input type="text" id="other_en" value="' + esc(o.en || '') + '"></div>' +
     '</div></div>';
 }
 function syncOtherFromDom() {
@@ -1279,7 +1279,7 @@ function dobFieldHtml(id, lbl, isoVal, req) {
   /* Text input (not native date) — user pastes all data via copy-paste.
      dobExtract handles DD/MM/YYYY, YYYY-MM-DD, Bengali digits, extra text. */
   const disp = isoVal ? dobDisplay(isoVal) : '';
-  return '<div class="fld"><label>' + esc(lbl) + (req ? ' <b>*</b>' : '') + '</label>' +
+  return '<div class="fld"><label for="' + id + '">' + esc(lbl) + (req ? ' <b>*</b>' : '') + '</label>' +
     '<input type="text" id="' + id + '" value="' + esc(disp) + '" placeholder="দিন/মাস/বছর (যেমন 10/10/2008)" autocomplete="off"></div>';
 }
 
@@ -1316,8 +1316,8 @@ function addrGeoInputs(prefix, d) {
   d = d || {};
   const Ls = addrGeoLevels(prefix);
   const selBox = (L) => '<div class="fld"><label id="' + L.ui + '_lbl">' + esc(L.lbl) + '</label>' +
-    '<select id="' + L.ui + '"><option value="">লোড হচ্ছে…</option></select></div>';
-  const txt = (k, lbl) => '<div class="fld"><label>' + esc(lbl) + '</label>' +
+    '<select id="' + L.ui + '" aria-labelledby="' + L.ui + '_lbl"><option value="">লোড হচ্ছে…</option></select></div>';
+  const txt = (k, lbl) => '<div class="fld"><label for="' + prefix + '_' + k + '">' + esc(lbl) + '</label>' +
     '<input type="text" id="' + prefix + '_' + k + '" value="' + esc(d[k] || '') + '"></div>';
   return Ls.map(selBox).join('') +
     txt('postBn', 'ডাকঘর (বাংলায়)') + txt('postEn', 'ডাকঘর (English)') +
@@ -1328,7 +1328,7 @@ function addrGeoInputs(prefix, d) {
    ব্যাকএন্ড নিজেই লেবেল-মিলিয়ে সাইটের সিলেক্টে বসায়, live-proven) */
 function addrTextInputs(prefix, d) {
   d = d || {};
-  return A_KEYS.map(([k, lbl]) => '<div class="fld"><label>' + esc(lbl) + '</label>' +
+  return A_KEYS.map(([k, lbl]) => '<div class="fld"><label for="' + prefix + '_' + k + '">' + esc(lbl) + '</label>' +
     '<input type="text" id="' + prefix + '_' + k + '" value="' + esc(d[k] || '') + '"></div>').join('');
 }
 /* ═══════════ ঠিকানা বইয়ের dropdown (permanent fix 2026-10-15) ═══════════
@@ -1337,16 +1337,16 @@ function addrTextInputs(prefix, d) {
    ওয়ার্ড static-এ নেই বলে text input থাকে। */
 function addrBookGeoHtml(d) {
   d = d || {};
-  const sel = (id, lbl) => '<div class="fld"><label>' + esc(lbl) + '</label>' +
+  const sel = (id, lbl) => '<div class="fld"><label for="' + id + '">' + esc(lbl) + '</label>' +
     '<select id="' + id + '"><option value="">--- নির্বাচন করুন ---</option></select></div>';
-  const txt = (id, lbl) => '<div class="fld"><label>' + esc(lbl) + '</label>' +
+  const txt = (id, lbl) => '<div class="fld"><label for="' + id + '">' + esc(lbl) + '</label>' +
     '<input type="text" id="' + id + '" value="' + esc(d[id.slice(3)] || '') + '"></div>';
   return sel('ab_division', 'বিভাগ') + sel('ab_district', 'জেলা') +
     sel('ab_cityCorpUpazila', 'সিটি কর্পোরেশন / উপজেলা') + sel('ab_paurasavaUnion', 'পৌরসভা / ইউনিয়ন') +
     // ADDRBOOK-ZONE-BOX (2026-11-13): zones now load into the পৌরসভা/ইউনিয়ন list, so the
     // typed zone box is only a fallback, shown when that list fails to load.
     '<div id="ab_zone_box" style="display:none">' + txt('ab_zone', 'অঞ্চল (তালিকা না এলে লিখুন, যেমন: অঞ্চল - ৭)') + '</div>' +
-    '<div class="fld" id="ab_ward_box"><label>ওয়ার্ড</label><select id="ab_ward"><option value="">--- আগে ইউনিয়ন / অঞ্চল নির্বাচন করুন ---</option></select></div>' + txt('ab_postBn', 'ডাকঘর (বাংলায়)') +
+    '<div class="fld" id="ab_ward_box"><label for="ab_ward">ওয়ার্ড</label><select id="ab_ward"><option value="">--- আগে ইউনিয়ন / অঞ্চল নির্বাচন করুন ---</option></select></div>' + txt('ab_postBn', 'ডাকঘর (বাংলায়)') +
     txt('ab_postEn', 'ডাকঘর (English)') + txt('ab_vilBn', 'গ্রাম / পাড়া / মহল্লা') +
     txt('ab_vilEn', 'Village / Area (English)') + txt('ab_houseBn', 'বাসা ও সড়ক (বাংলা)') +
     txt('ab_houseEn', 'বাসা ও সড়ক (English)');
@@ -1410,12 +1410,12 @@ function addrBookWire(d) {
   // back into a text field (never a dead empty list).
   const wardText = (val, msg) => {
     const box = $('ab_ward_box'); if (!box) return;
-    box.innerHTML = '<label>ওয়ার্ড</label><input type="text" id="ab_ward" value="' + esc(val || '') + '">';
+    box.innerHTML = '<label for="ab_ward">ওয়ার্ড</label><input type="text" id="ab_ward" value="' + esc(val || '') + '">';
     if (msg) note(msg, 'warn');
   };
   const wardSelect = () => {
     const box = $('ab_ward_box'); if (!box) return;
-    if (!$('ab_ward') || $('ab_ward').tagName !== 'SELECT') box.innerHTML = '<label>ওয়ার্ড</label><select id="ab_ward"></select>';
+    if (!$('ab_ward') || $('ab_ward').tagName !== 'SELECT') box.innerHTML = '<label for="ab_ward">ওয়ার্ড</label><select id="ab_ward"></select>';
   };
   let wardSeq = 0;
   const onUnion = async (want) => {
@@ -1688,12 +1688,12 @@ function renderStatusLogin() {
   showBody(
     '<div class="sec"><div class="sub-h"><span class="snum">📋</span> আবেদনের অবস্থা দেখুন</div>' +
     '<p class="hint">আপনার BDRIS অ্যাকাউন্টের তথ্য দিন — জমা দেওয়া আবেদনগুলোর সর্বশেষ অবস্থা আনা হবে। লগইনের জন্য কোড আসবে, সেটি পরের ধাপে বসাবেন।</p>' +
-    '<div class="fld"><label>অ্যাকাউন্টের ধরন</label><select id="st_type">' +
+    '<div class="fld"><label for="st_type">অ্যাকাউন্টের ধরন</label><select id="st_type">' +
       '<option value="BANGLADESH"' + (isBd ? ' selected' : '') + '>বাংলাদেশ</option>' +
       '<option value="MISSION"' + (!isBd ? ' selected' : '') + '>বিদেশে (দূতাবাস / মিশন)</option>' +
     '</select></div>' +
-    '<div class="fld"><label>ব্যবহারকারীর নাম</label><input type="text" id="st_user" value="' + esc(st.username) + '" autocomplete="username"></div>' +
-    '<div class="fld"><label>পাসওয়ার্ড</label><input type="password" id="st_pass" value="' + esc(st.password) + '" autocomplete="current-password"></div>' +
+    '<div class="fld"><label for="st_user">ব্যবহারকারীর নাম</label><input type="text" id="st_user" value="' + esc(st.username) + '" autocomplete="username"></div>' +
+    '<div class="fld"><label for="st_pass">পাসওয়ার্ড</label><input type="password" id="st_pass" value="' + esc(st.password) + '" autocomplete="current-password"></div>' +
     '<div class="fld"><label id="st_mlbl"></label><input type="text" id="st_mobile" value="' + esc(st.mobileEmail) + '"></div>' +
     '<p class="hint">🔒 তথ্য শুধু সরকারি সাইটে লগইনের জন্য ব্যবহৃত হয় — কোথাও জমা হয় না।</p></div>'
   );
@@ -1737,7 +1737,7 @@ function renderStatusOtp() {
       ? esc(tail) + '-এ শেষ হওয়া <b>মোবাইলে</b>'
       : 'আপনার <b>ইমেইলে</b> (' + esc(tail) + ')') +
     ' BDRIS-এর পাঠানো কোডটি এবার নিচে বসান। <b>কোড কারও সাথে শেয়ার করবেন না।</b></p></div>' +
-    '<div class="otpboxes">' + [0,1,2,3,4,5].map(i => '<input class="otpbox" id="sob' + i + '" inputmode="numeric" maxlength="1" autocomplete="one-time-code">').join('') + '</div>'
+    '<div class="otpboxes" role="group" aria-label="যাচাই কোড">' + [0,1,2,3,4,5].map(i => '<input class="otpbox" id="sob' + i + '" inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="যাচাই কোডের ' + (i+1) + ' নম্বর অঙ্ক">').join('') + '</div>'
   );
   const boxes = els('.otpbox');
   const val = () => boxes.map(b => b.value.replace(/\D/g, '')).join('');
@@ -1960,7 +1960,7 @@ function renderAddrBook(pickFn, backFn) {
     '<p class="hint">নাম দিয়ে ঠিকানা সেভ করুন — যেকোনো আবেদনে এক ক্লিকে ব্যবহার করুন।</p></div>' +
     '<div id="addrList"><div class="draft-card">তালিকা আসছে…</div></div>' +
     '<div class="sec"><div class="sub-h"><span class="snum">➕</span> নতুন ঠিকানা</div></div>' +
-    '<div class="fld"><label>নাম (বাধ্যতামূলক)</label><input id="ab_name" placeholder="যেমন: বাসা, অফিস"></div>' +
+    '<div class="fld"><label for="ab_name">নাম (বাধ্যতামূলক)</label><input id="ab_name" placeholder="যেমন: বাসা, অফিস"></div>' +
     '<div class="row2">' + addrBookGeoHtml() + '</div>' +
     '<div class="mt8"><button class="btn" id="abSave">💾 সেভ করুন</button></div>'
   );
@@ -2547,12 +2547,13 @@ function renderStep1() {
   showBody(
     '<div class="sec"><div class="sub-h"><span class="snum">১</span> আবেদনের ভিত্তি</div>' +
     '<p class="hint">আবেদনটি কোন ঠিকানার ভিত্তিতে করা হবে তা বেছে নিন।</p></div>' +
-    '<div class="rcard' + (s0.addressType !== 'PERMANENT' ? ' sel' : '') + '" id="rcBirth">' +
+    '<div role="radiogroup" aria-label="আবেদনের ভিত্তি">' +
+    '<div class="rcard' + (s0.addressType !== 'PERMANENT' ? ' sel' : '') + '" id="rcBirth" role="radio" tabindex="0" aria-checked="' + (s0.addressType !== 'PERMANENT' ? 'true' : 'false') + '">' +
       '<span class="rdot"></span><div><div class="rt">জন্মস্থান</div>' +
       '<div class="rs">শিশু যেখানে জন্মেছে সেই এলাকার ভিত্তিতে আবেদন</div></div></div>' +
-    '<div class="rcard' + (s0.addressType === 'PERMANENT' ? ' sel' : '') + '" id="rcPerm">' +
+    '<div class="rcard' + (s0.addressType === 'PERMANENT' ? ' sel' : '') + '" id="rcPerm" role="radio" tabindex="0" aria-checked="' + (s0.addressType === 'PERMANENT' ? 'true' : 'false') + '">' +
       '<span class="rdot"></span><div><div class="rt">স্থায়ী ঠিকানা</div>' +
-      '<div class="rs">স্থায়ী ঠিকানার ভিত্তিতে আবেদন</div></div></div>' +
+      '<div class="rs">স্থায়ী ঠিকানার ভিত্তিতে আবেদন</div></div></div></div>' +
     '<label class="chk"><input type="checkbox" id="s1emb"' + (s0.embassy ? ' checked' : '') + '>' +
       '<span>বাংলাদেশ দূতাবাসে জন্ম নিবন্ধনের আবেদন (প্রযোজ্য হলে টিক দিন)</span></label>'
   );
@@ -2560,15 +2561,15 @@ function renderStep1() {
     S.d.s0.addressType = t;
     // ALL-BUGS (e): the cards may be gone when a stale handler
     // fires after a body re-render — never throw on them.
-    const _b = $('rcBirth'); if (_b) _b.classList.toggle('sel', t !== 'PERMANENT');
-    const _p = $('rcPerm'); if (_p) _p.classList.toggle('sel', t === 'PERMANENT');
+    const _b = $('rcBirth'); if (_b) { _b.classList.toggle('sel', t !== 'PERMANENT'); _b.setAttribute('aria-checked', String(t !== 'PERMANENT')); }
+    const _p = $('rcPerm'); if (_p) { _p.classList.toggle('sel', t === 'PERMANENT'); _p.setAttribute('aria-checked', String(t === 'PERMANENT')); }
     syncS0Live();
   };
   // ALL-BUGS (e): bind only when present — btnRow outlives
   // stepBody, so a stale Next press after the step-1 body is gone
   // used to throw on these null elements and block the flow.
-  const _rcB = $('rcBirth'); if (_rcB) _rcB.onclick = () => pick('BIRTHPLACE');
-  const _rcP = $('rcPerm'); if (_rcP) _rcP.onclick = () => pick('PERMANENT');
+  const _rcB = $('rcBirth'); if (_rcB) { _rcB.onclick = () => pick('BIRTHPLACE'); _rcB.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick('BIRTHPLACE'); } }; }
+  const _rcP = $('rcPerm'); if (_rcP) { _rcP.onclick = () => pick('PERMANENT'); _rcP.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick('PERMANENT'); } }; }
   const _emb = $('s1emb'); if (_emb) _emb.onchange = () => { S.d.s0.embassy = !!_emb.checked; syncS0Live(); };
   setBtns([
     { html: 'পরবর্তী →', fn: () => submitStep1() },
@@ -3084,14 +3085,14 @@ function renderStep2() {
     '<div class="sec"><div class="sub-h"><span class="snum">২</span> নিবন্ধনাধীন ব্যক্তির পরিচিতি</div>' +
     '<p class="hint">নাম এক অংশের হলে শেষ অংশ খালি রাখুন — বাকিটা স্বয়ংক্রিয়ভাবে সামলে নেওয়া হবে।</p></div>' +
     '<div class="row2">' +
-      '<div class="fld"><label>নামের প্রথম অংশ (বাংলা) <b>*</b></label><input type="text" id="s1_f_bn" value="' + esc(s1.firstNameBn || '') + '"></div>' +
-      '<div class="fld"><label>নামের শেষ অংশ (বাংলা)</label><input type="text" id="s1_l_bn" value="' + esc(s1.lastNameBn || '') + '"></div>' +
-      '<div class="fld"><label>First Name (English) <b>*</b></label><input type="text" id="s1_f_en" value="' + esc(s1.firstNameEn || '') + '"></div>' +
-      '<div class="fld"><label>Last Name (English)</label><input type="text" id="s1_l_en" value="' + esc(s1.lastNameEn || '') + '"></div>' +
+      '<div class="fld"><label for="s1_f_bn">নামের প্রথম অংশ (বাংলা) <b>*</b></label><input type="text" id="s1_f_bn" value="' + esc(s1.firstNameBn || '') + '"></div>' +
+      '<div class="fld"><label for="s1_l_bn">নামের শেষ অংশ (বাংলা)</label><input type="text" id="s1_l_bn" value="' + esc(s1.lastNameBn || '') + '"></div>' +
+      '<div class="fld"><label for="s1_f_en">First Name (English) <b>*</b></label><input type="text" id="s1_f_en" value="' + esc(s1.firstNameEn || '') + '"></div>' +
+      '<div class="fld"><label for="s1_l_en">Last Name (English)</label><input type="text" id="s1_l_en" value="' + esc(s1.lastNameEn || '') + '"></div>' +
       dobFieldHtml('s1_dob', 'জন্ম তারিখ (খ্রিঃ)', s1.dob, true) +
-      '<div class="fld"><label>পিতা ও মাতার কততম সন্তান <b>*</b></label><select id="s1_child">' +
+      '<div class="fld"><label for="s1_child">পিতা ও মাতার কততম সন্তান <b>*</b></label><select id="s1_child">' +
         FB.thChild.map(t => '<option' + (s1.thChild === t ? ' selected' : '') + '>' + esc(t) + '</option>').join('') + '</select></div>' +
-      '<div class="fld"><label>লিঙ্গ <b>*</b></label><select id="s1_gender">' +
+      '<div class="fld"><label for="s1_gender">লিঙ্গ <b>*</b></label><select id="s1_gender">' +
         FB.gender.map(t => '<option' + (s1.gender === t ? ' selected' : '') + '>' + esc(t) + '</option>').join('') + '</select></div>' +
     '</div>' +
     '<h4 class="sub-h"><span class="snum">📍</span> জন্মস্থানের ঠিকানা <button class="btn small ghost" id="gBook" style="margin-left:8px">📍 ঠিকানা বই</button></h4>' +
@@ -3099,12 +3100,12 @@ function renderStep2() {
       selBox('g_country', 'দেশ') +
       selBox('g_div', 'বিভাগ') + selBox('g_dist', 'জেলা') + selBox('g_cc', 'সিটি কর্পোরেশন / উপজেলা') +
       selBox('g_pu', 'পৌরসভা / ইউনিয়ন') + selBox('g_ward', 'ওয়ার্ড') +
-      '<div class="fld"><label>ডাকঘর (বাংলায়) <b>*</b></label><input type="text" id="g_postBn" value="' + esc(s1.postBn || '') + '"></div>' +
-      '<div class="fld"><label>ডাকঘর (English) <b>*</b></label><input type="text" id="g_postEn" value="' + esc(s1.postEn || '') + '"></div>' +
-      '<div class="fld"><label>গ্রাম / পাড়া / মহল্লা <b>*</b></label><input type="text" id="g_vilBn" value="' + esc(s1.vilBn || '') + '"></div>' +
-      '<div class="fld"><label>গ্রাম / Area (English) <b>*</b></label><input type="text" id="g_vilEn" value="' + esc(s1.vilEn || '') + '"></div>' +
-      '<div class="fld"><label>বাসা ও সড়ক (বাংলা)</label><input type="text" id="g_houseBn" value="' + esc(s1.houseBn || '') + '"></div>' +
-      '<div class="fld"><label>বাসা ও সড়ক (English)</label><input type="text" id="g_houseEn" value="' + esc(s1.houseEn || '') + '"></div>' +
+      '<div class="fld"><label for="g_postBn">ডাকঘর (বাংলায়) <b>*</b></label><input type="text" id="g_postBn" value="' + esc(s1.postBn || '') + '"></div>' +
+      '<div class="fld"><label for="g_postEn">ডাকঘর (English) <b>*</b></label><input type="text" id="g_postEn" value="' + esc(s1.postEn || '') + '"></div>' +
+      '<div class="fld"><label for="g_vilBn">গ্রাম / পাড়া / মহল্লা <b>*</b></label><input type="text" id="g_vilBn" value="' + esc(s1.vilBn || '') + '"></div>' +
+      '<div class="fld"><label for="g_vilEn">গ্রাম / Area (English) <b>*</b></label><input type="text" id="g_vilEn" value="' + esc(s1.vilEn || '') + '"></div>' +
+      '<div class="fld"><label for="g_houseBn">বাসা ও সড়ক (বাংলা)</label><input type="text" id="g_houseBn" value="' + esc(s1.houseBn || '') + '"></div>' +
+      '<div class="fld"><label for="g_houseEn">বাসা ও সড়ক (English)</label><input type="text" id="g_houseEn" value="' + esc(s1.houseEn || '') + '"></div>' +
     '</div>'
   );
   S.d.s1 = S.d.s1 || {};
@@ -3211,11 +3212,11 @@ function renderStep3() {
   const person = (p, o, v, r) => (
     '<div class="addrwrap"><div class="ah"><span class="t">' + (p === 'father' ? 'পিতার তথ্য' : 'মাতার তথ্য') + '</span>' + badge(v, r) + '</div>' +
     '<div class="row2">' +
-      '<div class="fld"><label>জন্ম নিবন্ধন নম্বর (BRN) ' + (brnExempt ? '' : '<b>*</b>') + '</label><input type="text" id="' + p + '_brn" value="' + esc(o.brn || '') + '" placeholder="১৭ ডিজিটের নম্বর"></div>' +
+      '<div class="fld"><label for="' + p + '_brn">জন্ম নিবন্ধন নম্বর (BRN) ' + (brnExempt ? '' : '<b>*</b>') + '</label><input type="text" id="' + p + '_brn" value="' + esc(o.brn || '') + '" placeholder="১৭ ডিজিটের নম্বর"></div>' +
       dobFieldHtml(p + '_dob', 'জন্ম তারিখ (খ্রিঃ)', o.dob, !brnExempt) +
-      '<div class="fld"><label>নাম (বাংলায়) <b>*</b></label><input type="text" id="' + p + '_bn" value="' + esc(o.nameBn || '') + '"></div>' +
-      '<div class="fld"><label>নাম (English) <b>*</b></label><input type="text" id="' + p + '_en" value="' + esc(o.nameEn || '') + '"></div>' +
-      '<div class="fld"><label>জাতীয়তা</label><select id="' + p + '_nat">' +
+      '<div class="fld"><label for="' + p + '_bn">নাম (বাংলায়) <b>*</b></label><input type="text" id="' + p + '_bn" value="' + esc(o.nameBn || '') + '"></div>' +
+      '<div class="fld"><label for="' + p + '_en">নাম (English) <b>*</b></label><input type="text" id="' + p + '_en" value="' + esc(o.nameEn || '') + '"></div>' +
+      '<div class="fld"><label for="' + p + '_nat">জাতীয়তা</label><select id="' + p + '_nat">' +
         FB.nationality.map(t => '<option' + ((o.nationality || 'বাংলাদেশী') === t ? ' selected' : '') + '>' + esc(t) + '</option>').join('') + '</select></div>' +
     '</div></div>');
   showBody(
@@ -3459,7 +3460,7 @@ function renderDocRows() {
     box.innerHTML = docs.map((d, i) => '<div class="docrow">' +
       (d.base64 ? '<img class="dthumb" data-full="' + i + '" src="data:' + esc(d.mimeType || 'image/jpeg') + ';base64,' + d.base64 + '" alt="">' : '<span class="dthumb" style="display:flex;align-items:center;justify-content:center;font-size:20px">🖼️</span>') +
       '<span class="dname">' + esc(d.name) + '</span>' +
-      '<select class="dtype" data-i="' + i + '">' + DOC_TYPES.map(t =>
+      '<select class="dtype" data-i="' + i + '" aria-label="কাগজের ধরন">' + DOC_TYPES.map(t =>
         '<option value="' + t.v + '"' + (d.docType === t.v ? ' selected' : '') + '>ধরন ' + t.v + ' — ' + esc(t.t) + '</option>').join('') +
       '</select><button class="btn danger small" data-rm="' + i + '">✕</button></div>').join('');
     box.querySelectorAll('.dthumb[data-full]').forEach(im => im.onclick = () => {
@@ -3583,8 +3584,8 @@ function renderStep6() {
     '<div class="sec"><div class="sub-h"><span class="snum">📞</span> যোগাযোগ — এই নম্বরেই কোড আসবে</div>' +
     '<p class="hint">নম্বরটি হাতে রাখুন — কোড এসে গেলে নিচের ঘরে বসাতে পারবেন। চাইলে এখান থেকেই খসড়ায় রেখে পরে ফিরে আসতে পারবেন।</p></div>' +
     '<div class="row2">' +
-      '<div class="fld"><label>মোবাইল নম্বর <b>*</b></label><input type="text" id="c_phone" value="' + esc(S.d.phone || '') + '" placeholder="01XXXXXXXXX"></div>' +
-      '<div class="fld"><label>ইমেইল</label><input type="text" id="c_email" value="' + esc(S.d.email || '') + '" placeholder="you@example.com"></div>' +
+      '<div class="fld"><label for="c_phone">মোবাইল নম্বর <b>*</b></label><input type="text" id="c_phone" value="' + esc(S.d.phone || '') + '" placeholder="01XXXXXXXXX"></div>' +
+      '<div class="fld"><label for="c_email">ইমেইল</label><input type="text" id="c_email" value="' + esc(S.d.email || '') + '" placeholder="you@example.com"></div>' +
     '</div>'
   );
   bindPvEdits();
@@ -4438,10 +4439,10 @@ function showPvOtp() {
     '<div class="pvotp"><div class="sub-h"><span class="snum">🔐</span> কোড বসান — এই পেজেই</div>' +
     '<p class="hint"><b>' + esc(ph) + '</b> নম্বরে কোড পাঠানো হয়েছে। ' +
     '<button class="btn ghost small" id="pvPhEdit">✏️ নম্বর বদলান</button><br>এক নম্বরে OTP না এলে/লিমিট শেষ হলে নম্বর বদলে আবার পাঠাতে পারবেন। <b>কোড কারও সাথে শেয়ার করবেন না।</b></p>' +
-    '<div id="pvPhRow" style="display:none"><div class="fld"><label>মোবাইল নম্বর (OTP যাবে)</label>' +
+    '<div id="pvPhRow" style="display:none"><div class="fld"><label for="pvPhInp">মোবাইল নম্বর (OTP যাবে)</label>' +
     '<input type="text" id="pvPhInp" inputmode="numeric" placeholder="01XXXXXXXXX" value="' + esc(ph) + '"></div>' +
     '<div class="mt8"><button class="btn small" id="pvPhGo">📲 এই নম্বরে কোড পাঠান</button></div></div>' +
-    '<div class="otpboxes">' + [0, 1, 2, 3, 4, 5].map(i => '<input class="otpbox" id="pvob' + i + '" inputmode="numeric" maxlength="1" autocomplete="one-time-code">').join('') + '</div>' +
+    '<div class="otpboxes" role="group" aria-label="যাচাই কোড">' + [0, 1, 2, 3, 4, 5].map(i => '<input class="otpbox" id="pvob' + i + '" inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="যাচাই কোডের ' + (i+1) + ' নম্বর অঙ্ক">').join('') + '</div>' +
     '<div class="mt8"><button class="btn" id="pvOtpGo">✅ নিশ্চিত করুন — জমা দিন</button> ' +
     '<button class="btn ghost" id="pvOtpRe">📲 আবার কোড পাঠান</button></div></div>';
   $('pvPhEdit').onclick = () => { const r = $('pvPhRow'); r.style.display = r.style.display === 'none' ? '' : 'none'; };
@@ -4935,7 +4936,7 @@ function renderAuto() {
   const f = s2.father || {}, m = s2.mother || {};
   const permCopy = z.permCopy != null ? !!z.permCopy : false;
   const presCopy = z.presCopy != null ? !!z.presCopy : false;
-  const fldI = (id, lbl, val, ph, req) => '<div class="fld"><label>' + esc(lbl) + (req ? ' <b>*</b>' : '') + '</label>' +
+  const fldI = (id, lbl, val, ph, req) => '<div class="fld"><label for="' + id + '">' + esc(lbl) + (req ? ' <b>*</b>' : '') + '</label>' +
     '<input type="text" id="' + id + '" value="' + esc(val || '') + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + '></div>';
   showBody(
     '<div class="sec"><div class="sub-h"><span class="snum">⚡</span> অটো আবেদন — এক ফর্মে সব তথ্য</div>' +
@@ -4960,8 +4961,8 @@ function renderAuto() {
       fldI('a_f_en', 'First Name (English)', s1.firstNameEn, '', true) +
       fldI('a_l_en', 'Last Name (English)', s1.lastNameEn) +
       dobFieldHtml('a_dob', 'জন্ম তারিখ (খ্রিঃ)', s1.dob, true) +
-      '<div class="fld"><label>পিতা ও মাতার কততম সন্তান <b>*</b></label>' + autoSel('a_child', FB.thChild, s1.thChild) + '</div>' +
-      '<div class="fld"><label>লিঙ্গ <b>*</b></label>' + autoSel('a_gender', FB.gender, s1.gender) + '</div>' +
+      '<div class="fld"><label for="a_child">পিতা ও মাতার কততম সন্তান <b>*</b></label>' + autoSel('a_child', FB.thChild, s1.thChild) + '</div>' +
+      '<div class="fld"><label for="a_gender">লিঙ্গ <b>*</b></label>' + autoSel('a_gender', FB.gender, s1.gender) + '</div>' +
       fldI('a_country', 'দেশ', s1.country || 'বাংলাদেশ', 'যেমন: বাংলাদেশ', true) +
     '</div>' +
     '<h4 class="sub-h"><span class="snum">📍</span> জন্মস্থানের ঠিকানা <button class="btn small ghost" id="aBirthBook" style="margin-left:8px">📍 ঠিকানা বই</button></h4>' +
@@ -5124,7 +5125,7 @@ function renderAuto() {
 function personAuto(p, lbl, o) {
   const pre = isPre2013Client((S.d.s1 || {}).dob);
   const brnExempt = isParentBrnExemptClient((S.d.s1 || {}).dob);
-  const fldI = (id, l, val, ph, req) => '<div class="fld"><label>' + esc(l) + (req ? ' <b>*</b>' : '') + '</label>' +
+  const fldI = (id, l, val, ph, req) => '<div class="fld"><label for="' + id + '">' + esc(l) + (req ? ' <b>*</b>' : '') + '</label>' +
     '<input type="text" id="' + id + '" value="' + esc(val || '') + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + '></div>';
   return '<div class="addrwrap"><div class="ah"><span class="t">' + esc(lbl) + 'র তথ্য</span>' +
     (pre ? '<span class="vbadge warn">২০১৩-পূর্ব — BRN ছাড়াও হবে</span>' : (brnExempt ? '<span class="vbadge warn">২০১৩ সাল — BRN ছাড়াই, আইডি কার্ডই যথেষ্ট</span>' : '')) + '</div><div class="row2">' +
@@ -5132,7 +5133,7 @@ function personAuto(p, lbl, o) {
     dobFieldHtml(p + '_dob', 'জন্ম তারিখ (খ্রিঃ)', o.dob, !brnExempt) +
     fldI(p + '_bn', 'নাম (বাংলায়)', o.nameBn, '', true) +
     fldI(p + '_en', 'নাম (English)', o.nameEn, '', true) +
-    '<div class="fld"><label>জাতীয়তা</label>' + autoSel(p + '_nat', FB.nationality, o.nationality || 'বাংলাদেশী') + '</div>' +
+    '<div class="fld"><label for="' + p + '_nat">জাতীয়তা</label>' + autoSel(p + '_nat', FB.nationality, o.nationality || 'বাংলাদেশী') + '</div>' +
     '</div></div>';
 }
 function readPersonAuto(p) {
@@ -6430,6 +6431,14 @@ $('logoutBtn').onclick = async () => {
         var parts = [];
         if (d.submitPrice > 0) parts.push('আবেদন: ৳' + d.submitPrice);
         if (d.pdfPrice > 0) parts.push('PDF: ৳' + d.pdfPrice);
+        // B2#4 — the static footer states no amounts; put the real
+        // amounts there too so the fee is named before each charge.
+        // (If the price fetch fails, the footer keeps its old
+        // amount-less text — never a guessed amount.)
+        var feeNote = document.getElementById('abcFeeNote');
+        if (feeNote && parts.length) {
+          feeNote.textContent = parts.join(' + ') + ' — ফি জমা/আসল পিডিএফ-এর আগে একবারই কাটে — চার্জ ব্যর্থ হলে ৳০, একই কাজে দুবার নয়';
+        }
         if (parts.length && !document.getElementById('abcChargeBar')) {
           var bar = document.createElement('div');
           bar.id = 'abcChargeBar';

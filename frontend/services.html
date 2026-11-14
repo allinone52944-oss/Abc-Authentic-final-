@@ -204,9 +204,9 @@
     <!-- Filter Segment Tabs -->
     <div class="filter-tabs" id="filterTabs">
       <button class="ftab on" id="tabCats" onclick="switchFilter('cats')">📁 ক্যাটাগরি ভিউ</button>
-      <button class="ftab" id="tabAll" onclick="switchFilter('all')">📋 সকল সেবা (<span id="cntAll">০</span>)</button>
-      <button class="ftab" id="tabAuto" onclick="switchFilter('auto')">⚡ স্বয়ংক্রিয় সেবা (<span id="cntAuto">০</span>)</button>
-      <button class="ftab" id="tabManual" onclick="switchFilter('manual')">📝 ম্যানুয়াল সেবা (<span id="cntManual">০</span>)</button>
+      <button class="ftab" id="tabAll" onclick="switchFilter('all')">📋 সকল সেবা (<span id="cntAll">–</span>)</button>
+      <button class="ftab" id="tabAuto" onclick="switchFilter('auto')">⚡ স্বয়ংক্রিয় সেবা (<span id="cntAuto">–</span>)</button>
+      <button class="ftab" id="tabManual" onclick="switchFilter('manual')">📝 ম্যানুয়াল সেবা (<span id="cntManual">–</span>)</button>
     </div>
 
     <!-- Category Grid View -->
@@ -232,7 +232,7 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
 </div>
 
-<script src="/js/app.js?v=20"></script>
+<script src="/js/app.js?v=21"></script>
 <script src="/js/service-navigation.js?v=20261110-9"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -307,12 +307,27 @@ function card(s){
     '<div class="svc-info"><h4>'+esc(s.name_bn||s.name)+'</h4>'+
     '<div style="margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">' + catHtml +
     '<span class="ptype '+(isAuto?'auto':'manual')+'">'+(isAuto?'⚡ স্বয়ংক্রিয়':'📝 ম্যানুয়াল')+'</span>'+closed+'</div></div>'+
-    '<div class="svc-pr">৳'+bnNum(s.price)+(s.open?'':'<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:2px;">বন্ধ আছে</div>')+chargeRuleHtml(s)+'</div></div>';
+    '<div class="svc-pr">৳'+bnNum(s.price)+(s.open?'':'<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:2px;">বন্ধ আছে</div>')+chargeRuleHtml(s)+(s.engine_id === 'bdris-apply' ? '<div class="bdris-pdf-note" style="font-size:11px;color:#64748b;font-weight:600;margin-top:2px;">' + bdrisPdfNoteHtml() + '</div>' : '')+'</div></div>';
 }
 
 let GROUPS = [];
 let ALL_SERVICES = [];
 let CURRENT_FILTER = 'cats';
+
+// B2#4 — BDRIS charges twice (application + original PDF). The
+// catalog card shows only the application price until the PDF
+// price loads from /api/bdris-apply/prices (never hardcoded).
+let BDRIS_PDF_PRICE = null;
+function bdrisPdfNoteHtml(){
+  return BDRIS_PDF_PRICE ? '+ আসল PDF ৳' + bnNum(BDRIS_PDF_PRICE) : '';
+}
+function loadBdrisPdfPrice(){
+  ABC.api('/bdris-apply/prices').then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.ok || !(Number(d.pdfPrice) > 0)) return;
+    BDRIS_PDF_PRICE = Number(d.pdfPrice);
+    document.querySelectorAll('.bdris-pdf-note').forEach(function (el) { el.textContent = bdrisPdfNoteHtml(); });
+  }).catch(function () {});
+}
 
 function updateCounts(){
   const allCnt = ALL_SERVICES.length;
@@ -340,6 +355,7 @@ function switchFilter(f){
   } else {
     showFilteredServices(f);
   }
+  saveViewState();
 }
 
 function showFilteredServices(f){
@@ -384,6 +400,7 @@ function clearSearch(){
   document.getElementById('searchClear').style.display = 'none';
   if (CURRENT_FILTER === 'cats') showCats();
   else showFilteredServices(CURRENT_FILTER);
+  saveViewState();
 }
 
 function applySearch(q){
@@ -410,6 +427,7 @@ function applySearch(q){
     '<div class="svc-grid">' +
     (filtered.map(card).join('') || '<div style="color:#64748b;padding:40px 0;grid-column:1/-1;text-align:center;background:#fff;border-radius:12px;border:1px dashed #cbd5e1;"><div style="font-size:32px;margin-bottom:8px;">🔍</div>কোনো সেবা খুঁজে পাওয়া যায়নি। সেবার নাম অন্যভাবে লিখে দেখুন।</div>') +
     '</div>';
+  saveViewState();
 }
 
 function showCats(){
@@ -436,27 +454,69 @@ function showCat(i){
 }
 
 async function init(){
-  const me = await ABC.api('/auth/me');
-  if(!me.ok){location.href='/login.html';return;}
+  function showLoadError(kind){
+    // B2#2 — the real failure, not one generic message. Session
+    // expiry goes to login WITH the return URL (a retry would just
+    // bounce to login anyway); server/network problems get a retry.
+    // Counts stay '–' while the list is unknown — never '০', which
+    // would imply zero inventory.
+    document.getElementById('svcView').style.display = 'none';
+    const view = document.getElementById('catView');
+    view.style.display = '';
+    let msg, action;
+    if (kind === 'session') {
+      msg = 'আপনার সেশন শেষ হয়ে গেছে। আবার লগইন করুন।';
+      action = '<button class="btn btn-secondary" onclick="location.href=\'/login.html?next=\' + encodeURIComponent(\'/services.html\')">লগইন করুন</button>';
+    } else if (kind === 'server') {
+      msg = 'সার্ভার সমস্যা হচ্ছে। কিছুক্ষণ পর আবার চেষ্টা করুন।';
+      action = '<button class="btn btn-secondary" onclick="init()">আবার চেষ্টা করুন</button>';
+    } else if (kind === 'network') {
+      msg = 'ইন্টারনেট সংযোগ পাওয়া যাচ্ছে না। সংযোগ দেখে আবার চেষ্টা করুন।';
+      action = '<button class="btn btn-secondary" onclick="init()">আবার চেষ্টা করুন</button>';
+    } else {
+      msg = 'সেবার তালিকা আনা যায়নি। সংযোগ দেখে আবার চেষ্টা করুন।';
+      action = '<button class="btn btn-secondary" onclick="init()">আবার চেষ্টা করুন</button>';
+    }
+    view.innerHTML = '<div class="service-load-error" role="alert">' + msg + '<br>' + action + '</div>';
+  }
+  // B2#2 — a failed /auth/me must not bounce the user to login
+  // blindly: 401 means the session really ended (login WITH the
+  // return URL); anything else is a server/network problem, shown
+  // as such with a retry instead of a login bounce.
+  let me = null;
+  try { me = await ABC.api('/auth/me'); } catch (_) { me = null; }
+  if(!me || !me.ok){
+    if (me && me.status === 401) { location.href='/login.html?next=' + encodeURIComponent('/services.html'); return; }
+    showLoadError(me && me.status >= 500 ? 'server' : 'network');
+    return;
+  }
   const u=(await me.json()).user;
   document.getElementById('topUserBal').textContent = '৳' + bnNum(u.balance || 0);
   document.getElementById('waFab').onclick=()=>{
     window.open('https://wa.me/8801835414122?text='+encodeURIComponent('আমি '+u.name+'। সেবা সম্পর্কে জানতে চাই।'),'_blank');
   };
   let services;
+  let loadKind = 'unknown';
   try {
     const r=await ABC.api('/services');
-    if(!r.ok) throw new Error('service-load');
+    if(!r.ok) {
+      // B2#2 — keep the failure kind: 401 = session expired,
+      // NETWORK_ERROR (ABC.api's synthetic 503) = offline,
+      // 5xx = server problem. One generic message hid all three.
+      loadKind = r.status === 401 ? 'session' : (r.status >= 500 ? 'server' : 'unknown');
+      try { const b = await r.json(); if (b && b.error === 'NETWORK_ERROR') loadKind = 'network'; } catch (e) {}
+      throw new Error('service-load');
+    }
     ({services}=await r.json());
   } catch (_) {
-    document.getElementById('svcView').style.display = 'none';
-    const view = document.getElementById('catView');
-    view.style.display = '';
-    view.innerHTML = '<div class="service-load-error" role="alert">সেবার তালিকা আনা যায়নি। সংযোগ দেখে আবার চেষ্টা করুন।<br><button class="btn btn-secondary" onclick="init()">আবার চেষ্টা করুন</button></div>';
+    showLoadError(loadKind);
     return;
   }
   ALL_SERVICES = groupLand(services || []);
   updateCounts();
+  // B2#4 — non-blocking: the catalog renders first; the BDRIS
+  // PDF price fills in when the price fetch resolves.
+  loadBdrisPdfPrice();
 
   const map = {}; GROUPS = [];
   const uncat = { id:null, name:'অন্যান্য সেবা', icon:'📦', services:[], ord:999999 };
@@ -481,9 +541,44 @@ async function init(){
   if (!GROUPS.length) {
     switchFilter('all');
   } else {
-    showCats();
+    // B2#14 — Browser Back can restore the search input value
+    // while init() re-runs: re-apply the restored query instead
+    // of always showing the category view. History state
+    // (filter + query) wins when present; otherwise fall back to
+    // the input value the browser restored.
+    const saved = (window.history && history.state) || null;
+    const restoredQ = ((saved && saved.q) || (document.getElementById('svcSearch').value || '')).trim();
+    if (restoredQ) {
+      if (saved && saved.f && ['cats','all','auto','manual'].indexOf(saved.f) >= 0) CURRENT_FILTER = saved.f;
+      document.getElementById('svcSearch').value = restoredQ;
+      document.getElementById('searchClear').style.display = 'inline-flex';
+      applySearch(restoredQ.toLowerCase());
+    } else {
+      showCats();
+    }
   }
 }
+
+// B2#14 — remember the current query + filter in history state
+// (replaceState: no extra history entries) so Back/Forward
+// restores the same view instead of the category view.
+function saveViewState(){
+  try {
+    const q = (document.getElementById('svcSearch').value || '').trim();
+    history.replaceState({ q: q, f: CURRENT_FILTER }, '');
+  } catch (e) {}
+}
+window.addEventListener('popstate', function (ev) {
+  const st = (ev && ev.state) || null;
+  if (!st || !ALL_SERVICES.length) return;
+  const q = (st.q || '').trim();
+  if (st.f && ['cats','all','auto','manual'].indexOf(st.f) >= 0) CURRENT_FILTER = st.f;
+  document.getElementById('svcSearch').value = q;
+  document.getElementById('searchClear').style.display = q ? 'inline-flex' : 'none';
+  if (q) applySearch(q.toLowerCase());
+  else if (CURRENT_FILTER === 'cats') showCats();
+  else showFilteredServices(CURRENT_FILTER);
+});
 init();
 </script>
 </body>

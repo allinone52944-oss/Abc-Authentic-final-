@@ -230,10 +230,16 @@ router.post('/orders', async (req, res) => {
       return res.status(403).json({ error: 'SERVICE_CLOSED', schedule: service.schedule });
     }
 
-    // Validate required documents for manual services
+    // Validate required documents for manual services.
+    // B1#4/B2#9 — documents_required entries are strings (required) or
+    // {name, required:false} objects (optional); only required ones
+    // block the order. `missing` carries plain names either way.
     const docs = (req.body.documents || []);
     const required = safeJsonArray(service.documents_required);
-    const missing = required.filter((d) => !docs.some((x) => x && x.type === d));
+    const missing = required
+      .filter((d) => !(d && typeof d === 'object' && d.required === false))
+      .map((d) => (typeof d === 'string' ? d : (d && d.name) || ''))
+      .filter((name) => name && !docs.some((x) => x && x.type === name));
     if (missing.length) {
       return res.status(400).json({ error: 'MISSING_DOCUMENTS', missing });
     }
