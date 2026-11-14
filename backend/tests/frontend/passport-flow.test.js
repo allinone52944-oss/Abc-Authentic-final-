@@ -1054,6 +1054,24 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
     expect(CSS).toContain('body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:760px}');
   });
 
+  // Site-feel Fix 4: Bengali kicker + Bengali-only section headers —
+  // no English halves, no transliterated "লিংকড" in chrome.
+  test('kicker and section headers are Bengali-only', () => {
+    expect(PAGE).toContain('<p class="kicker">পাসপোর্ট ইঞ্জিন</p>');
+    expect(PAGE).not.toContain('<p class="kicker">Passport Engine</p>');
+    expect(PAGE).toContain('<p class="engine-legend">ছবি ও স্বাক্ষর</p>');
+    expect(PAGE).toContain('<p class="engine-legend">পাসপোর্ট</p>');
+    expect(PAGE).toContain('<p class="engine-legend">নাম ');
+    expect(PAGE).toContain('<p class="engine-legend">পরিবার</p>');
+    expect(PAGE).toContain('<p class="engine-legend">তারিখ ও ব্যক্তিগত তথ্য</p>');
+    expect(PAGE).toContain('<p class="engine-legend">ঠিকানা ও যোগাযোগ</p>');
+    expect(PAGE).toContain('MRZ · মেশিন-পাঠযোগ্য');
+    expect(PAGE).toContain('সংযুক্ত তথ্য · মূল স্ক্যান সংরক্ষিত');
+    expect(PAGE).not.toContain('লিংকড তথ্য');
+    expect(PAGE).not.toContain('Photo &amp; signature');
+    expect(PAGE).not.toContain('machine-readable');
+  });
+
   test('price line: form entry with a price shows the fee + balance', async () => {
     const r = runFlow({ chargeResponse: { ok: true, status: 200, body: { ok: true, price: 30, balance: 500, serviceId: 13, allowed: true } } });
     r.els['start-passport-button'].click();

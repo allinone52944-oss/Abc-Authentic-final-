@@ -167,7 +167,7 @@ details p{line-height:1.7;margin:8px 0}
    <div id="walletBadge" style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">💳 ব্যালেন্স: ৳<span id="balVal">০</span></div>
   </div>
 <header class="toolbar"><div class="toolbar-inner">
- <div><h1>পাসপোর্ট ইঞ্জিন</h1><p class="subtitle">লিংকড তথ্য · মূল স্ক্যান সংরক্ষিত</p></div>
+ <div><h1>পাসপোর্ট ইঞ্জিন</h1><p class="subtitle">সংযুক্ত তথ্য · মূল স্ক্যান সংরক্ষিত</p></div>
  <div class="actions" aria-label="Document actions">
   <button type="button" id="regions-button" aria-pressed="false">অঞ্চল দেখুন</button>
   <button type="button" id="preview-button" aria-pressed="false">প্রিভিউ</button>
@@ -178,7 +178,7 @@ details p{line-height:1.7;margin:8px 0}
 <main>
  <section class="passport-landing" id="passport-landing" aria-label="Create a passport">
   <div class="passport-landing-inner">
-   <p class="kicker">Passport Engine</p>
+   <p class="kicker">পাসপোর্ট ইঞ্জিন</p>
    <h2>Passport তৈরি করুন</h2>
    <p>ফর্মটি পূরণ করুন — পাসপোর্ট নম্বর, নাম, জন্মতারিখসহ সব তথ্য। Create চাপলে পাসপোর্ট PDF তৈরি হয়ে ডাউনলোড হবে।</p>
    <button type="button" id="start-passport-button" class="primary">Passport তৈরি করুন</button>
@@ -210,7 +210,7 @@ details p{line-height:1.7;margin:8px 0}
      <p>তথ্য ও ছবি/স্বাক্ষর পূরণ করুন — Create চাপলে পাসপোর্ট PDF তৈরি হয়ে সরাসরি ডাউনলোড হবে।</p>
     </header>
     <div class="engine-group" id="eng-photo-group">
-     <p class="engine-legend">ছবি ও স্বাক্ষর · Photo &amp; signature</p>
+     <p class="engine-legend">ছবি ও স্বাক্ষর</p>
      <div class="form-upload-row">
       <div>
        <label for="form-photo-upload">ছবি · Photo</label>
@@ -232,7 +232,7 @@ details p{line-height:1.7;margin:8px 0}
 
     <p class="engine-hint" id="engine-validation" role="status" aria-live="polite" hidden></p>
     <div class="engine-group">
-     <p class="engine-legend">Passport · পাসপোর্ট</p>
+     <p class="engine-legend">পাসপোর্ট</p>
      <label for="eng-passportNo">Passport No. <span class="auto-tag">3 text regions + dotted strip</span></label>
      <input type="text" id="eng-passportNo" data-engine="passportNo" maxlength="9" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="EJ0762655">
      <p class="engine-hint">Main box + right-hand printed vertical number + MRZ line 2 + left dotted strip (auto). Preview below reads the actual regions.</p>
@@ -247,7 +247,7 @@ details p{line-height:1.7;margin:8px 0}
     </div>
 
     <div class="engine-group">
-     <p class="engine-legend">Name · নাম <span class="auto-tag">1 write → all places</span></p>
+     <p class="engine-legend">নাম <span class="auto-tag">1 write → all places</span></p>
      <label for="eng-fullName">Full name · পুরো নাম</label>
      <input type="text" id="eng-fullName" data-engine="fullName" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="GOLAM KIBRIYA MD">
      <div class="engine-row" id="eng-name-auto-row">
@@ -258,7 +258,7 @@ details p{line-height:1.7;margin:8px 0}
     </div>
 
     <div class="engine-group">
-     <p class="engine-legend">Family · পরিবার</p>
+     <p class="engine-legend">পরিবার</p>
      <label for="eng-fatherName">Father's name · পিতার নাম</label>
      <input type="text" id="eng-fatherName" data-engine="fatherName" spellcheck="false" autocapitalize="off" autocomplete="off">
      <label for="eng-motherName">Mother's name · মাতার নাম</label>
@@ -268,7 +268,7 @@ details p{line-height:1.7;margin:8px 0}
     </div>
 
     <div class="engine-group">
-     <p class="engine-legend">Dates &amp; person · তারিখ ও ব্যক্তিগত তথ্য</p>
+     <p class="engine-legend">তারিখ ও ব্যক্তিগত তথ্য</p>
      <div class="engine-row">
       <div><label for="eng-dob">Date of birth · জন্ম</label><input type="date" id="eng-dob" data-engine="dob"></div>
       <div><label for="eng-sex">Sex · লিঙ্গ</label><select id="eng-sex" data-engine="sex"><option value="M">M — Male</option><option value="F">F — Female</option><option value="&lt;">Unspecified</option></select></div>
@@ -294,7 +294,7 @@ details p{line-height:1.7;margin:8px 0}
     </div>
 
     <div class="engine-group">
-     <p class="engine-legend">Address &amp; contact · ঠিকানা ও যোগাযোগ</p>
+     <p class="engine-legend">ঠিকানা ও যোগাযোগ</p>
      <label for="eng-address1">Address line 1 · ঠিকানা (প্রথম লাইন)</label>
      <input type="text" id="eng-address1" data-engine="address1" spellcheck="false" autocomplete="off">
      <label for="eng-address2">Address line 2 / District · ঠিকানা (দ্বিতীয় লাইন)</label>
@@ -315,7 +315,7 @@ details p{line-height:1.7;margin:8px 0}
     </div>
 
     <div class="engine-group" id="eng-mrz-group">
-     <p class="engine-legend">MRZ · machine-readable <span class="auto-tag">TD3 · 44 columns</span></p>
+     <p class="engine-legend">MRZ · মেশিন-পাঠযোগ্য <span class="auto-tag">TD3 · 44 columns</span></p>
      <label for="eng-mrz1">Line 1</label>
      <textarea id="eng-mrz1" data-engine="mrz1" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
      <label for="eng-mrz2">Line 2</label>
@@ -385,7 +385,7 @@ details p{line-height:1.7;margin:8px 0}
   </div>
  </aside>
 </main>
-<p class="footer-note">লিংকড লেখা · মূল ফন্ট ও স্ক্যান সংরক্ষিত · Passport No বদলালে dotted strip auto-update · অফলাইনে চলে</p>
+<p class="footer-note">সংযুক্ত লেখা · মূল ফন্ট ও স্ক্যান সংরক্ষিত · পাসপোর্ট নম্বর বদলালে ডটেড স্ট্রিপ নিজে থেকে আপডেট হয় · অফলাইনে চলে</p>
 <noscript><p style="padding:20px;text-align:center">লেখা সম্পাদনা, ছবি বদল ও কপি সংরক্ষণের জন্য JavaScript চালু করুন। মূল স্ক্যান দেখা যাবে।</p></noscript>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </div>
