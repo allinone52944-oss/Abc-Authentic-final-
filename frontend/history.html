@@ -185,6 +185,15 @@ function render(){
           (it.link ? '<button class="hist-doc" onclick="location.href=\'' + esc(it.link) + '\'">📄 আবেদন দেখুন</button>' : '') +
           '</div>' : '')
       : '');
+    // B2#3 (adjacent gap) — History rows had no way to open the
+    // order's detail/status/files. Only 'order' rows carry an orders
+    // id that /order-detail.html serves; manual rows have no
+    // customer detail page and engine/bdris ids are not order ids,
+    // so they get no link here (a wrong link would 404).
+    const detailUrl = it.kind === 'order' ? '/order-detail.html?id=' + encodeURIComponent(it.id) : '';
+    const detailBtn = detailUrl
+      ? '<button class="hist-doc" onclick="location.href=\'' + esc(detailUrl) + '\'">🔍 বিস্তারিত দেখুন</button>'
+      : '';
     return '<div class="hist-item">' +
       '<div class="hist-head"><div>' +
         '<div class="hist-title">' + (ICON[it.kind] || '📄') + ' ' + esc(it.title) + (KIND_LABEL[it.kind] ? ' <span class="hist-kind">' + KIND_LABEL[it.kind] + '</span>' : '') + '</div>' +
@@ -192,6 +201,7 @@ function render(){
         status +
       '</div></div>' +
       (docs ? '<div class="hist-docs">' + docs + '</div>' : '') + extra +
+      (detailBtn ? '<div class="hist-docs">' + detailBtn + '</div>' : '') +
     '</div>';
   }).join('');
 }

@@ -88,4 +88,19 @@ describe('history.html — B2#8 kind label + status/next action per row', () => 
     expect(out).toContain('আসল PDF এখানে সংরক্ষিত নেই — আবেদন পাতা থেকে নিতে পারবেন।');
     expect(out).toContain('আবেদন দেখুন');
   });
+
+  test('B2#3 — order rows link to their order detail; manual/engine/bdris rows get no (wrong) order link', () => {
+    const out = renderItems([
+      { kind: 'order', id: 'o1', title: 'অর্ডার সেবা', created_at: at, documents: [] },
+      { kind: 'manual', id: 'm1', title: 'ম্যানুয়াল সেবা', created_at: at, documents: [] },
+      { kind: 'engine', id: 'j1', title: 'জন্ম সনদ (সার্টিফিকেট)', created_at: at, documents: [] },
+      { kind: 'bdris', id: 'a1', title: 'জন্ম নিবন্ধন আবেদন', created_at: at, documents: [], link: '/bdris-apply.html', original_pdf_available: false },
+    ]);
+    expect(out).toContain('/order-detail.html?id=o1');
+    expect(out).toContain('বিস্তারিত দেখুন');
+    // No order-detail link may carry a non-order id (it would 404).
+    expect(out).not.toContain('/order-detail.html?id=m1');
+    expect(out).not.toContain('/order-detail.html?id=j1');
+    expect(out).not.toContain('/order-detail.html?id=a1');
+  });
 });
