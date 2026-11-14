@@ -1,8 +1,8 @@
 'use strict';
 // Passport engine core regression tests — ported from the user's own zip
 // (Passport-Engine/photo-bg-fixed, regression-tests.cjs), run against the
-// LIVE frontend/passport.html. UI, image, save/reopen and print checks are
-// additionally run in a real browser. Jest suite (test/expect globals);
+// LIVE frontend/passport.html. UI and image checks are additionally run in
+// a real browser. Jest suite (test/expect globals);
 // node:assert is kept for the ported assertions.
 // PRIVACY: two zip tests tied to the sample's real passport number are NOT
 // ported here — the dot-geometry test uses a fake number ('ZZ 0000001')
@@ -21,7 +21,7 @@ const script = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)].find(m
 // The editor IIFE is the script containing the engine core — not the
 // first non-JSON script (the head now holds the login-gate script).
 const engine = script.slice(script.indexOf(' const engBusy='), script.indexOf(' createFields();createImages();'));
-const setTextCode = script.slice(script.indexOf(' function setText('), script.indexOf(' function setStyle('));
+const setTextCode = script.slice(script.indexOf(' function setText('), script.indexOf(' function resetRegion('));
 const resetCode = script.slice(script.indexOf(' function resetRegion('), script.indexOf(' function createFields('));
 
 function createHarness() {
@@ -64,91 +64,53 @@ function checkLine(line) {
   assert.equal(line[43], checkDigit(line.slice(0,10) + line.slice(13,20) + line.slice(21,43)));
 }
 
-function createSelectionHarness() {
-  const elements = new Map(['field-picker','field-value','style-controls','restore-field','field-info'].map(id => [id,{value:'father',disabled:false,textContent:'Old selection'}]));
-  const classList = () => { const classes=new Set(['active']); return {add:k=>classes.add(k),remove:k=>classes.delete(k),contains:k=>classes.has(k)}; };
-  const nodes = new Map([['father',{el:{classList:classList()}}]]), imageNodes = new Map([['photo',{el:{classList:classList()}}]]);
-  const context=vm.createContext({elements,nodes,imageNodes,selected:'father',fields:new Map([['father',{text:'TEST FIELD',group:'Test'}]]),document:{querySelectorAll:()=>[]},$:id=>elements.get(id),changed:()=>true,tab() {}});
-  vm.runInContext(script.slice(script.indexOf(' function clearSelection('),script.indexOf(' function selectImage(')),context);
-  return {context,elements,nodes,imageNodes};
-}
-function createTextInputHarness(value,start=value.length,end=start,direction='none') {
-  const h=createHarness(),input=h.elements.get('field-value');
-  Object.assign(input,{value,selectionStart:start,selectionEnd:end,selectionDirection:direction,setSelectionRange(s,e,d){this.selectionStart=s;this.selectionEnd=e;this.selectionDirection=d;}});
-  h.context.selected='father';h.context.document.activeElement=input;
-  return {...h,input};
-}
-
-test('empty picker clears selection and disables text editing and restore', () => {
-  const h=createSelectionHarness();h.context.selectField('');
-  assert.equal(h.context.selected,null);assert.equal(h.elements.get('field-picker').value,'');
-  assert.equal(h.elements.get('field-value').value,'');
-  for(const id of ['field-value','style-controls','restore-field'])assert.equal(h.elements.get(id).disabled,true,id);
-  assert.equal(h.nodes.get('father').el.classList.contains('active'),false);
-  assert.equal(h.imageNodes.get('photo').el.classList.contains('active'),false);
-});
-test('choosing a valid region after deselection re-enables its editor', () => {
-  const h=createSelectionHarness();h.context.selectField('');h.context.selectField('father');
-  assert.equal(h.context.selected,'father');assert.equal(h.elements.get('field-value').value,'TEST FIELD');
-  assert.equal(h.elements.get('field-value').disabled,false);assert.equal(h.elements.get('style-controls').disabled,false);
-  assert.equal(h.nodes.get('father').el.classList.contains('active'),true);
-});
-test('textarea input normalizes pasted lines in both control and model', () => {
-  const h=createTextInputHarness('AUDIT বাংলা\n\tSECOND\u00a0LINE');h.context.editFieldValue();
-  assert.equal(h.input.value,'AUDIT বাংলা SECOND LINE');assert.equal(h.field('father'),h.input.value);
-  assert.equal(h.api.state().fatherName,h.input.value);
-  assert.ok(script.includes("$('field-value').addEventListener('input',editFieldValue)"));
-});
-test('textarea normalization preserves caret selection and direction', () => {
-  const h=createTextInputHarness('AB\n\tCD',4,5,'backward');h.context.editFieldValue();
-  assert.equal(h.input.value,'AB CD');assert.equal(h.input.selectionStart,3);assert.equal(h.input.selectionEnd,4);assert.equal(h.input.selectionDirection,'backward');
-  h.input.value='AB CD';h.input.setSelectionRange(2,2,'none');h.context.editFieldValue();
-  assert.equal(h.input.selectionStart,2);assert.equal(h.input.selectionEnd,2);
-});
-test('textarea input with no selected region cannot alter the old field', () => {
-  const h=createTextInputHarness('SHOULD NOT APPLY'),before=h.field('father');h.context.selected=null;
-  h.context.editFieldValue();assert.equal(h.field('father'),before);assert.equal(h.context.marks,0);
-});
-test('keyboard focus styling covers image slots outside preview', () => {
-  assert.ok(/body:not\(\.preview\) \.image-slot:focus-visible\s*\{[^}]*outline:4px solid var\(--focus\)/.test(html),'image slots need a visible keyboard focus outline');
+// NOTE (2026-11-14): the editor is gone — the selection harness,
+// the text-input harness and their five tests were removed with it.
+// The form writes through the model (setText / window.passportEngine);
+// there is no in-page selection, no panel text input, no caret work.
+test('image slots carry no keyboard-focus styling (no editor interaction)', () => {
+  assert.ok(!html.includes('.image-slot:focus-visible'), 'no focus outline rule for image slots');
+  assert.ok(!html.includes('body:not(.preview)'), 'no preview-state CSS remains');
 });
 test('entire executable script parses', () => { new vm.Script(script); });
-test('cross-region paste cannot delete adjacent document regions', () => {
-  const body=script.match(/text\.addEventListener\('paste',e=>\{([\s\S]*?)\}\);/)[1];
-  let deleted=false, updated='';
-  const text={textContent:'ORIGINAL',contains:node=>node==='inside'};
-  const context=vm.createContext({text,f:{id:'personal-name'},normalize:String,e:{preventDefault(){},clipboardData:{getData:()=> 'PASTE TEST'}},getSelection:()=>({rangeCount:1,anchorNode:'inside',focusNode:'outside',getRangeAt:()=>({deleteContents(){deleted=true;throw new Error('Cross-region deletion');}})}),setText:(id,value)=>{updated=value;}});
-  vm.runInContext(body,context);
-  assert.equal(deleted,false);assert.equal(updated,'PASTE TEST');
+test('no paste handler exists on document text (slots are render-only)', () => {
+  assert.ok(!script.includes("addEventListener('paste'"), 'no paste listener in the engine script');
+  assert.ok(!script.includes('.contentEditable'), 'slots are never made editable');
+  // The export still strips any stray contenteditable from the shell.
+  assert.ok(script.includes("shell.querySelectorAll('[contenteditable]')"));
 });
-test('settings-only edits display an Unsaved indicator', () => {
-  const status={textContent:''}; const code=script.slice(script.indexOf(' function updateStatus('),script.indexOf(' function mark('));
-  const ctx=vm.createContext({counts:()=>({text:0,images:0}),$:()=>status,model:{fields:new Array(59)},unsaved:true});
-  vm.runInContext(code+'\nupdateStatus();',ctx);assert.ok(status.textContent.endsWith('Unsaved'));
+test('no unsaved indicator exists (editor status UI removed)', () => {
+  assert.ok(!script.includes('function updateStatus('), 'updateStatus is gone');
+  assert.ok(!script.includes('unsaved'), 'no unsaved state in the engine script');
+  const h = createHarness();
+  h.edit('personal-name', 'TEST SAMPLE PERSON');
+  assert.equal(h.field('surname'), 'PERSON');
 });
-test('signature options are dirty before an image is uploaded', async () => {
-  const code=script.slice(script.indexOf(' async function updateSignatureOptions('),script.indexOf(' function download('));
-  let marks=0;const model={images:{signature:{data:'',rendered:'',removeWhite:true,trim:true}}};
-  const ctx=vm.createContext({model,imageRevision:{signature:0},$:id=>({checked:id==='signature-trim'}),renderImage(){},mark(){marks++;},notify(){}});
-  vm.runInContext(code,ctx);await ctx.updateSignatureOptions();assert.equal(marks,1);assert.equal(model.images.signature.removeWhite,false);await ctx.updateSignatureOptions();assert.equal(marks,1);
+test('signature render defaults are remove-white + trim with no panel controls', () => {
+  assert.ok(!script.includes('function updateSignatureOptions('), 'updateSignatureOptions is gone');
+  assert.ok(!html.includes('id="signature-remove-white"'), 'no signature panel control');
+  assert.ok(!html.includes('id="signature-trim"'), 'no signature trim control');
+  assert.equal(original.images.signature.removeWhite, true);
+  assert.equal(original.images.signature.trim, true);
+  assert.equal(original.images.signature.fit, 'contain');
 });
-test('print waits for pending work, fonts and image decoding', async () => {
-  const code=script.slice(script.indexOf(' async function printDocument('),script.indexOf(' async function exportHTML('));
-  const order=[];const ctx=vm.createContext({drainImages:async()=>order.push('jobs'),document:{fonts:{get ready(){order.push('fonts');return Promise.resolve();}},querySelectorAll:()=>[{decode:async()=>order.push('image')}],activeElement:{blur(){order.push('blur');}}},model:{fields:[{}]},renderField:()=>order.push('render'),window:{print:()=>order.push('print')},notify:message=>{throw new Error(message);}});
-  vm.runInContext(code,ctx);await ctx.printDocument();assert.deepEqual(order,['jobs','fonts','image','blur','render','print']);
+test('no print path exists in the flow (the PDF is the output)', () => {
+  assert.ok(!script.includes('function printDocument('), 'printDocument is gone');
+  assert.ok(!html.includes('id="print-button"'), 'no print button');
+  assert.ok(!script.includes('window.print'), 'no window.print call');
 });
 test('startup preserves all source text without dirtying', () => { const h=createHarness(); for(const f of original.fields) assert.equal(h.field(f.id),f.text); assert.equal(h.context.marks,0); });
 test('ordinary vertical print is not mapped as dotted scan artwork', () => { const h=createHarness(); const mapping=h.api.map().passportNo; assert.ok(mapping.some(([id,transform])=>id==='vertical-passport'&&transform==='printedVertical')); assert.ok(!mapping.some(([,transform])=>/dot/i.test(transform))); });
-test('passport preview reads actual printed-region text rather than synthesizing it', () => { const h=createHarness(); h.edit('vertical-passport','ZZ  0000007'); const preview=h.elements.get('eng-passportPreview').textContent; assert.ok(preview.includes('PRINTED  ZZ  0000007')); assert.ok(preview.includes('DOT-MX   ZZ 0000007')); });
-test('passport changes disclose the dotted strip auto-edit state', () => { const h=createHarness(); const note=h.elements.get('eng-dotmx-note'); assert.ok(note.textContent.includes('scan artwork')); h.input('passportNo','ZZ0000008'); assert.ok(note.textContent.includes('auto-edit সক্রিয়')); h.reset('passport-no'); assert.ok(!note.textContent.includes('auto-edit সক্রিয়')); });
-test('dotted strip stays original scan artwork at startup without dirtying', () => { const h=createHarness(); assertDotStrip(h,false,''); assert.ok(h.elements.get('eng-passportPreview').textContent.includes('DOT-MX   (original scan)')); assert.equal(h.context.marks,0); });
-test('passport change auto-renders the dotted strip', () => { const h=createHarness(); h.input('passportNo','ZZ0000001'); assertDotStrip(h,true,'ZZ 0000001'); assert.ok(h.elements.get('eng-passportPreview').textContent.includes('DOT-MX   ZZ 0000001')); });
+test('passport preview reads actual printed-region text rather than synthesizing it', () => { const h=createHarness(); h.edit('vertical-passport','ZZ  0000007'); const preview=h.elements.get('eng-passportPreview').textContent; assert.ok(preview.includes('ছাপা     ZZ  0000007')); assert.ok(preview.includes('ডট       ZZ 0000007')); });
+test('passport changes disclose the dotted strip auto-edit state', () => { const h=createHarness(); const note=h.elements.get('eng-dotmx-note'); assert.ok(note.textContent.includes('আসল স্ক্যান')); h.input('passportNo','ZZ0000008'); assert.ok(note.textContent.includes('নিজে থেকে বদলানো সক্রিয়')); h.reset('passport-no'); assert.ok(!note.textContent.includes('নিজে থেকে বদলানো সক্রিয়')); });
+test('dotted strip stays original scan artwork at startup without dirtying', () => { const h=createHarness(); assertDotStrip(h,false,''); assert.ok(h.elements.get('eng-passportPreview').textContent.includes('ডট       (মূল স্ক্যান)')); assert.equal(h.context.marks,0); });
+test('passport change auto-renders the dotted strip', () => { const h=createHarness(); h.input('passportNo','ZZ0000001'); assertDotStrip(h,true,'ZZ 0000001'); assert.ok(h.elements.get('eng-passportPreview').textContent.includes('ডট       ZZ 0000001')); });
 test('dotted strip follows direct page edits and restore', () => { const h=createHarness(); h.edit('vertical-passport','ZZ 0000003'); assert.equal(h.api.dotStrip().text,'ZZ 0000003'); h.edit('passport-no','ZZ0000009'); assert.equal(h.api.dotStrip().text,'ZZ 0000009'); h.reset('passport-no'); assert.equal(h.api.dotStrip().active,false); });
 test('dotted strip auto-edit toggle preserves original artwork', () => { const h=createHarness(); h.input('passportNo','ZZ0000001'); h.input('dotStripAuto',false); assert.equal(h.api.dotStrip().active,false); assert.equal(h.api.state().dotStripAuto,false); h.input('dotStripAuto',true); assert.equal(h.api.dotStrip().active,true); });
-test('cleared passport blanks the dotted strip while auto-edit is on', () => { const h=createHarness(); h.input('passportNo',''); assertDotStrip(h,true,''); assert.ok(h.elements.get('eng-passportPreview').textContent.includes('DOT-MX   (blank)')); });
+test('cleared passport blanks the dotted strip while auto-edit is on', () => { const h=createHarness(); h.input('passportNo',''); assertDotStrip(h,true,''); assert.ok(h.elements.get('eng-passportPreview').textContent.includes('ডট       (খালি)')); });
 test('reapply keeps the dotted strip synchronized', () => { const h=createHarness(); h.input('passportNo','ZZ0000002'); h.api.applyAll(); assertDotStrip(h,true,'ZZ 0000002'); });
 test('dot layout reproduces the glyph geometry for a sample number', () => { const h=createHarness(); const L=h.api.dotLayout('ZZ 0000001'); assert.equal(L.dots.length,126); assert.equal(L.dots[0][0],4.5); assert.equal(L.dots[0][1],4.5); assert.ok(Math.abs(L.w-761.2)<1.5); assert.ok(L.dots.some(([u,v])=>Math.abs(u-82.7)<0.01&&v===4.5)); assert.equal(h.api.dotLayout('').dots.length,0); });
-test('empty passport fields remain explicit in actual-region preview', () => { const h=createHarness(); h.input('passportNo',''); const preview=h.elements.get('eng-passportPreview').textContent; assert.ok(preview.includes('BOX      (empty)')); assert.ok(preview.includes('PRINTED  (empty)')); });
+test('empty passport fields remain explicit in actual-region preview', () => { const h=createHarness(); h.input('passportNo',''); const preview=h.elements.get('eng-passportPreview').textContent; assert.ok(preview.includes('বাক্স     (খালি)')); assert.ok(preview.includes('ছাপা     (খালি)')); });
 test('passport input updates all linked fields', () => { const h=createHarness(); h.input('passportNo','ZZ0000001'); assert.equal(h.field('passport-no'),'ZZ0000001'); assert.equal(h.field('vertical-passport'),'ZZ 0000001'); assert.ok(h.field('mrz-2').startsWith('ZZ0000001')); checkLine(h.field('mrz-2')); });
 test('direct passport edit updates form, printed vertical number and MRZ', () => { const h=createHarness(); h.edit('passport-no','ZZ0000002'); assert.equal(h.api.state().passportNo,'ZZ0000002'); assert.equal(h.field('vertical-passport'),'ZZ 0000002'); assert.ok(h.field('mrz-2').startsWith('ZZ0000002')); });
 test('direct printed-vertical edit updates the passport source', () => { const h=createHarness(); h.edit('vertical-passport','ZZ 0000003'); assert.equal(h.field('passport-no'),'ZZ0000003'); checkLine(h.field('mrz-2')); });
@@ -166,18 +128,18 @@ test('direct emergency override explicitly unlinks addresses', () => { const h=c
 test('independent emergency address survives parent edits', () => { const h=createHarness(); h.input('sameEmergency',false); h.input('emergency1','INDEPENDENT'); h.input('address1','PERMANENT'); assert.equal(h.field('emergency-address'),'INDEPENDENT'); });
 test('checkbox-only state changes are dirty', () => { const h=createHarness(); h.input('sameEmergency',true); const marks=h.context.marks; h.input('sameEmergency',false); assert.ok(h.context.marks>marks); });
 test('valid leap day reverse-syncs', () => { const h=createHarness(); h.edit('birth-date','29 FEB 2024'); assert.equal(h.api.state().dob,'2024-02-29'); assert.equal(h.field('mrz-2').slice(13,19),'240229'); });
-test('invalid dates clear stale derived dates and warn', () => { const h=createHarness(); h.edit('birth-date','31 FEB 2024'); assert.equal(h.api.state().dob,''); assert.equal(h.field('mrz-2').slice(13,19),'<<<<<<'); assert.ok(h.api.validate().some(x=>x.includes('Birth date'))); });
+test('invalid dates clear stale derived dates and warn', () => { const h=createHarness(); h.edit('birth-date','31 FEB 2024'); assert.equal(h.api.state().dob,''); assert.equal(h.field('mrz-2').slice(13,19),'<<<<<<'); assert.ok(h.api.validate().some(x=>x.includes('জন্মতারিখ'))); });
 test('clearing a page date clears form and MRZ date', () => { const h=createHarness(); h.edit('birth-date',''); assert.equal(h.api.state().dob,''); assert.equal(h.field('mrz-2').slice(13,19),'<<<<<<'); });
 test('century leap-year rules are respected', () => { const h=createHarness(); h.edit('birth-date','29 FEB 1900'); assert.equal(h.api.state().dob,''); h.edit('birth-date','29 FEB 2000'); assert.equal(h.api.state().dob,'2000-02-29'); h.edit('birth-date','29 FEB 2100'); assert.equal(h.api.state().dob,''); });
 test('ISO dates in text region parse without loss', () => { const h=createHarness(); h.edit('birth-date','2001-12-03'); assert.equal(h.api.state().dob,'2001-12-03'); });
-test('date chronology problems are visible', () => { const h=createHarness(); h.input('issueDate','2030-01-01'); h.input('expiryDate','2029-01-01'); assert.ok(h.api.validate().some(x=>x.includes('Expiry date must not'))); });
-test('partial country code does not shift MRZ positions', () => { const h=createHarness(); h.input('countryCode','B'); assert.equal(h.api.buildMrz1().length,44); assert.equal(h.api.buildMrz1().slice(2,5),'B<<'); checkLine(h.api.buildMrz2()); assert.ok(h.api.validate().some(x=>x.includes('Issuing country'))); });
+test('date chronology problems are visible', () => { const h=createHarness(); h.input('issueDate','2030-01-01'); h.input('expiryDate','2029-01-01'); assert.ok(h.api.validate().some(x=>x.includes('মেয়াদের তারিখ'))); });
+test('partial country code does not shift MRZ positions', () => { const h=createHarness(); h.input('countryCode','B'); assert.equal(h.api.buildMrz1().length,44); assert.equal(h.api.buildMrz1().slice(2,5),'B<<'); checkLine(h.api.buildMrz2()); assert.ok(h.api.validate().some(x=>x.includes('ইস্যুকারী দেশ'))); });
 test('issuing country and nationality are independent', () => { const h=createHarness(); h.input('nationality','GBR'); h.input('countryCode','BGD'); assert.equal(h.field('mrz-1').slice(2,5),'BGD'); assert.equal(h.field('mrz-2').slice(10,13),'GBR'); });
 test('Bangladeshi nationality maps to BGD', () => { const h=createHarness(); h.input('nationality','Bangladeshi'); assert.equal(h.api.state().nationalityCode,'BGD'); assert.equal(h.field('mrz-2').slice(10,13),'BGD'); });
 test('unknown nationality clears stale code until explicit correction', () => { const h=createHarness(); h.input('nationalityCode','USA'); h.input('nationality','Example nationality'); assert.equal(h.api.state().nationalityCode,''); assert.equal(h.field('mrz-2').slice(10,13),'<<<'); h.input('nationalityCode','GBR'); h.api.applyAll(); assert.equal(h.api.state().nationalityCode,'GBR'); });
-test('MRZ name characters are constrained and unsupported text warned', () => { const h=createHarness(); h.input('surname',"D’ÁR-CY"); h.input('givenName','TEST'); assert.match(h.api.buildMrz1(), /^[A-Z0-9<]{44}$/); assert.ok(h.api.buildMrz1().includes('DAR<CY')); h.input('surname','পরীক্ষা'); assert.ok(h.api.validate().some(x=>x.includes('Latin-letter surname'))); });
-test('overlength passport number produces a visible warning', () => { const h=createHarness(); h.input('passportNo','ZZ1234567890'); assert.ok(h.api.validate().some(x=>x.includes('at most 9'))); checkLine(h.field('mrz-2')); });
-test('manual MRZ override validates length and normalizes line breaks', () => { const h=createHarness(); h.input('mrz1','TEST\nLINE'); assert.equal(h.api.state().mrz1,'TESTLINE'); assert.equal(h.field('mrz-1'),'TESTLINE'); assert.ok(h.api.validate().some(x=>x.includes('MRZ line 1'))); });
+test('MRZ name characters are constrained and unsupported text warned', () => { const h=createHarness(); h.input('surname',"D’ÁR-CY"); h.input('givenName','TEST'); assert.match(h.api.buildMrz1(), /^[A-Z0-9<]{44}$/); assert.ok(h.api.buildMrz1().includes('DAR<CY')); h.input('surname','পরীক্ষা'); assert.ok(h.api.validate().some(x=>x.includes('লাতিন অক্ষরের পদবি'))); });
+test('overlength passport number produces a visible warning', () => { const h=createHarness(); h.input('passportNo','ZZ1234567890'); assert.ok(h.api.validate().some(x=>x.includes('সর্বোচ্চ ৯টি'))); checkLine(h.field('mrz-2')); });
+test('manual MRZ override validates length and normalizes line breaks', () => { const h=createHarness(); h.input('mrz1','TEST\nLINE'); assert.equal(h.api.state().mrz1,'TESTLINE'); assert.equal(h.field('mrz-1'),'TESTLINE'); assert.ok(h.api.validate().some(x=>x.includes('MRZ লাইন ১'))); });
 test('published checksum example matches known digits', () => { const h=createHarness(); h.input('passportNo','L898902C3'); h.input('dob','1974-08-12'); h.input('expiryDate','2012-04-15'); const line=h.api.buildMrz2(); assert.equal(line[9],'6'); assert.equal(line[19],'2'); assert.equal(line[27],'9'); checkLine(line); });
 test('MRZ regeneration restores valid checksums', () => { const h=createHarness(); h.input('mrz2','<'.repeat(44)); h.api.regenerateMRZ(); checkLine(h.field('mrz-2')); });
 test('unspecified sex uses the MRZ filler', () => { const h=createHarness(); h.input('sex','<'); assert.equal(h.field('sex'),'<'); assert.equal(h.field('mrz-2')[20],'<'); checkLine(h.field('mrz-2')); });
@@ -188,9 +150,8 @@ test('scan glyphs J and 7 keep their measured extra dots', () => { const h=creat
 // --- Photo background preservation (scan backdrop plate + offline person cutout) ---
 const cutoutCode = script.slice(script.indexOf(' function cutoutMask('), script.indexOf(' async function processPhotoCutout('));
 const renderImageCode = script.slice(script.indexOf(' function renderImage('), script.indexOf(' function loadImage('));
-const resetImageCode = script.slice(script.indexOf(' function resetImage('), script.indexOf(' async function updateSignatureOptions('));
+const resetImageCode = script.slice(script.indexOf(' function resetImage('), script.indexOf(' function escapeHtml('));
 const setImageCode = script.slice(script.indexOf(' async function setImage('), script.indexOf(' function resetImage('));
-const photoOptionsCode = script.slice(script.indexOf(' async function updatePhotoOptions('), script.indexOf(' function download('));
 function syntheticPixels(w, h, paint) { const p = new Uint8ClampedArray(w * h * 4); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const [r, g, b] = paint(x, y); const j = (y * w + x) * 4; p[j] = r; p[j+1] = g; p[j+2] = b; p[j+3] = 255; } return p; }
 function runCutoutMask(p, w, h) { const ctx = vm.createContext({}); vm.runInContext(cutoutCode, ctx); return ctx.cutoutMask(p, w, h); }
 
@@ -200,9 +161,9 @@ test('embedded model ships the scan photo-window backdrop and cutout default on'
   assert.equal(original.images.photo.cutout, true);
   assert.equal(original.images.photo.cutoutRendered, '');
 });
-test('photo slot backing shows the scan plate in edit, preview and print css', () => {
+test('photo slot backing shows the scan plate in edit and print css (no preview state)', () => {
   assert.ok(html.includes('.image-slot.photo.changed .slot-patch{display:block}'));
-  assert.ok(html.includes('body.preview .image-slot.photo.changed .slot-patch{display:block!important}'));
+  assert.ok(!html.includes('body.preview'), 'no preview state remains');
   const printBlock = html.slice(html.indexOf('@media print{'), html.indexOf('</style>'));
   assert.ok(printBlock.includes('.image-slot.photo.changed .slot-patch{display:block!important}'));
   assert.ok(!/\.image-slot\.photo\.changed\{background:#eef0ea/.test(html), 'flat backing colour must not replace the scan plate');
@@ -228,15 +189,14 @@ test('cutoutMask falls back when the person does not reach the bottom edge', () 
   const p = syntheticPixels(w, h, (x, y) => (x >= 16 && x < 48 && y >= 20 && y < 60) ? [60 + (x * 7 + y * 13) % 40, 70 + (x * 5 + y * 11) % 35, 80 + (x * 3 + y * 17) % 30] : [240, 240, 240]);
   assert.equal(runCutoutMask(p, w, h).ok, false);
 });
-test('renderImage prefers the cutout render and falls back to the uploaded photo', () => {
-  const els = new Map(); const el = () => ({ src:'', value:'', checked:false, disabled:false, removeAttribute(){ this.src = ''; } });
+test('renderImage prefers the cutout render and falls back to the uploaded photo (no panel sync)', () => {
   const slotImg = { style:{}, src:'', removeAttribute(){ this.src = ''; } };
-  const ctx = vm.createContext({ model:{ images:{ photo:{ data:'DATA', cutout:true, cutoutRendered:'CUT', preserveStamp:true, fit:'cover', x:50, y:50, zoom:1 } }, assets:{ photoOriginal:'ORIG' } }, imageNodes:new Map([['photo', { el:{ classList:{ toggle(){} } }, img:slotImg }]]), $:id => { if (!els.has(id)) els.set(id, el()); return els.get(id); }, syncBusy(){}, updateStatus(){} });
+  const ctx = vm.createContext({ model:{ images:{ photo:{ data:'DATA', cutout:true, cutoutRendered:'CUT', preserveStamp:true, fit:'cover', x:50, y:50, zoom:1 } }, assets:{ photoOriginal:'ORIG' } }, imageNodes:new Map([['photo', { el:{ classList:{ toggle(){} } }, img:slotImg }]]), syncBusy(){} });
   vm.runInContext(renderImageCode, ctx);
-  ctx.renderImage('photo'); assert.equal(slotImg.src, 'CUT'); assert.equal(els.get('photo-cutout').checked, true); assert.equal(els.get('photo-cutout').disabled, false);
+  ctx.renderImage('photo'); assert.equal(slotImg.src, 'CUT'); assert.equal(slotImg.style.objectFit, 'cover'); assert.equal(slotImg.style.objectPosition, '50% 50%');
   ctx.model.images.photo.cutout = false; ctx.renderImage('photo'); assert.equal(slotImg.src, 'DATA');
   ctx.model.images.photo.cutout = true; ctx.model.images.photo.cutoutRendered = ''; ctx.renderImage('photo'); assert.equal(slotImg.src, 'DATA');
-  ctx.model.images.photo.data = ''; ctx.renderImage('photo'); assert.equal(slotImg.src, ''); assert.equal(els.get('photo-cutout').disabled, true); assert.equal(els.get('photo-preview').src, 'ORIG');
+  ctx.model.images.photo.data = ''; ctx.renderImage('photo'); assert.equal(slotImg.src, '');
 });
 test('resetImage restores the photo cutout default and clears the render', () => {
   const ctx = vm.createContext({ model:{ images:{ photo:{ data:'X', cutoutRendered:'Y', cutout:false, fit:'contain', x:1, y:2, zoom:3, preserveStamp:false } } }, imageRevision:{ photo:0 }, renderImage(){}, mark(){} });
@@ -253,16 +213,14 @@ test('setImage computes the cutout for photos only while the option is on', asyn
   await ctx.setImage('photo', 'data:image/png;base64,QUJD');
   assert.equal(calls, 1);
 });
-test('photo cutout toggle recomputes the render and dirties only on option change', async () => {
-  let marks = 0; const checkbox = { checked:false };
-  const ctx = vm.createContext({ model:{ images:{ photo:{ data:'D', cutout:true, cutoutRendered:'OLD' } } }, imageRevision:{ photo:0 }, $:id => id === 'photo-cutout' ? checkbox : {}, processPhotoCutout:async () => 'CUT', renderImage(){}, mark(){ marks++; }, notify:message => { throw new Error(message); } });
-  vm.runInContext(photoOptionsCode, ctx);
-  await ctx.updatePhotoOptions(); assert.equal(ctx.model.images.photo.cutout, false); assert.equal(ctx.model.images.photo.cutoutRendered, ''); assert.equal(marks, 1);
-  await ctx.updatePhotoOptions(); assert.equal(marks, 1);
-  checkbox.checked = true; await ctx.updatePhotoOptions(); assert.equal(ctx.model.images.photo.cutoutRendered, 'CUT'); assert.equal(marks, 2);
+test('photo cutout default stays on in the model (no panel toggle)', () => {
+  assert.ok(!script.includes('function updatePhotoOptions('), 'updatePhotoOptions is gone');
+  assert.ok(!html.includes('id="photo-cutout"'), 'no photo cutout control');
+  assert.equal(original.images.photo.cutout, true);
+  assert.equal(original.images.photo.fit, 'cover');
 });
-test('photo panel exposes the cutout control and keeps it busy-safe', () => {
-  assert.ok(html.includes('id="photo-cutout"'));
-  assert.ok(/for\(const id of \['photo-fit','photo-x','photo-y','photo-zoom','preserve-stamp','photo-cutout'\]\)/.test(script));
-  assert.ok(/\$\('photo-cutout'\)\.addEventListener\('change',\(\)=>track\(updatePhotoOptions\(\)\)\)/.test(script));
+test('the photo panel is gone (no cutout control, no panel wiring)', () => {
+  assert.ok(!html.includes('id="photo-cutout"'), 'no cutout checkbox in the page');
+  assert.ok(!html.includes('id="panel-photo"'), 'no photo panel');
+  assert.ok(!script.includes("'photo-cutout'"), 'no cutout wiring in the engine script');
 });
