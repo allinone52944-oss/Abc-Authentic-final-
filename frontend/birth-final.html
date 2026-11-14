@@ -95,11 +95,11 @@
     <div class="wiz on" id="w1">
       <div class="form-card">
         <div class="field">
-          <label>BRN (১৭ সংখ্যা) *</label>
+          <label for="brn">BRN (১৭ সংখ্যা) *</label>
           <input id="brn" inputmode="numeric" maxlength="17" placeholder="যেমন: 20001234567890123">
         </div>
         <div class="field">
-          <label>জন্ম তারিখ *</label>
+          <label for="dob">জন্ম তারিখ *</label>
           <input id="dob" type="text" placeholder="dd-mm-yyyy বা yyyy-mm-dd" inputmode="numeric">
         </div>
         <button class="btn" id="b1" onclick="step1()">ক্যাপচা আনুন →</button>
@@ -112,7 +112,7 @@
         <p style="color:#334155;font-size:14px;font-weight:600;margin-bottom:12px;">ছবিতে প্রদর্শিত অক্ষরগুলো লিখুন</p>
         <img class="captcha-img" id="capImg" alt="captcha">
         <div class="field">
-          <label>ক্যাপচা উত্তর *</label>
+          <label for="capAns">ক্যাপচা উত্তর *</label>
           <input id="capAns" placeholder="সঠিক উত্তর লিখুন" autocomplete="off">
         </div>
         <div class="row2">
@@ -237,7 +237,7 @@ async function step2(){
       ['permBn','স্থায়ী ঠিকানা (বাংলা)',d.permBn||d.permanentAddressBn||''],['permEn','স্থায়ী ঠিকানা (EN)',d.permEn||d.permanentAddressEn||'']
     ];
     const fullW=['office1','office2','brn','permBn','permEn'];
-    document.getElementById('recView').innerHTML=fields.map(f=>'<div class="field'+(fullW.includes(f[0])?' full':'')+'"><label>'+esc(f[1])+'</label><input type="text" id="rec_'+f[0]+'" value="'+esc(f[2]||'')+'"></div>').join('')+'<div class="s full" style="color:var(--muted);font-size:12px;">✏️ সব তথ্য এডিট করা যাবে</div>';
+    document.getElementById('recView').innerHTML=fields.map(f=>'<div class="field'+(fullW.includes(f[0])?' full':'')+'"><label for="rec_'+f[0]+'">'+esc(f[1])+'</label><input type="text" id="rec_'+f[0]+'" value="'+esc(f[2]||'')+'"></div>').join('')+'<div class="s full" style="color:var(--muted);font-size:12px;">✏️ সব তথ্য এডিট করা যাবে</div>';
     // Save edited values back to S.record on change
     fields.forEach(f=>{const el=document.getElementById('rec_'+f[0]); if(el) el.oninput=()=>{S.record[f[0]]=el.value;};});
     go(3);showOk('তথ্য যাচাই সফল ✓');hideFailReceipt();

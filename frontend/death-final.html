@@ -95,11 +95,11 @@
     <div class="wiz on" id="w1">
       <div class="form-card">
         <div class="field">
-          <label>Death Registration No (১৭ সংখ্যা) *</label>
+          <label for="drn">Death Registration No (১৭ সংখ্যা) *</label>
           <input id="drn" inputmode="numeric" maxlength="17" placeholder="যেমন: 19681517411127048">
         </div>
         <div class="field">
-          <label>মৃত্যু তারিখ *</label>
+          <label for="dod">মৃত্যু তারিখ *</label>
           <input id="dod" type="text" placeholder="dd-mm-yyyy বা yyyy-mm-dd" inputmode="numeric">
         </div>
         <button class="btn" id="b1" onclick="step1()">ক্যাপচা আনুন →</button>
@@ -112,7 +112,7 @@
         <p style="color:#334155;font-size:14px;font-weight:600;margin-bottom:12px;">ছবিতে প্রদর্শিত অক্ষরগুলো লিখুন</p>
         <img class="captcha-img" id="capImg" alt="captcha">
         <div class="field">
-          <label>ক্যাপচা উত্তর *</label>
+          <label for="capAns">ক্যাপচা উত্তর *</label>
           <input id="capAns" placeholder="সঠিক উত্তর লিখুন" autocomplete="off">
         </div>
         <div class="row2">
@@ -243,7 +243,7 @@ async function step2(){
     const sexOpts=['','Male','Female'];
     document.getElementById('recView').innerHTML=fields.map(f=>{
       const cls='field'+(fullW.includes(f[0])?' full':'');
-      const lbl='<label>'+esc(f[1])+'</label>';
+      const lbl='<label for="rec_'+f[0]+'">'+esc(f[1])+'</label>';
       if(f[3]==='dropdown'){
         const opts=f[0]==='sex'?sexOpts:(f[0].includes('Bn')?codOptsBn:codOpts);
         const otherVal=f[0].includes('Bn')?'অন্যান্য':'Other';
