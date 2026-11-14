@@ -494,19 +494,19 @@ describe('Create → download', () => {
   });
 
   test('Create requires passport no, type, country code, full name, DOB, sex, expiry and nationality before downloading', () => {
-    expect(FLOW).toContain("['passportNo','Passport No.']");
-    expect(FLOW).toContain("['docType','Type']");
-    expect(FLOW).toContain("['countryCode','Country code']");
-    expect(FLOW).toContain("['fullName','Full name']");
-    expect(FLOW).toContain("['dob','Date of birth']");
-    expect(FLOW).toContain("['sex','Sex']");
-    expect(FLOW).toContain("['expiryDate','Date of expiry']");
-    expect(FLOW).toContain("['nationality','Nationality']");
+    expect(FLOW).toContain("['passportNo','পাসপোর্ট নম্বর']");
+    expect(FLOW).toContain("['docType','ধরন']");
+    expect(FLOW).toContain("['countryCode','দেশের কোড']");
+    expect(FLOW).toContain("['fullName','পুরো নাম']");
+    expect(FLOW).toContain("['dob','জন্মতারিখ']");
+    expect(FLOW).toContain("['sex','লিঙ্গ']");
+    expect(FLOW).toContain("['expiryDate','মেয়াদের তারিখ']");
+    expect(FLOW).toContain("['nationality','জাতীয়তা']");
   });
 
   test('Create blocks on engine validation issues and names the problem', () => {
     expect(FLOW).toContain('api.validate()');
-    expect(FLOW).toContain('Please fix this before creating the passport:');
+    expect(FLOW).toContain('পাসপোর্ট তৈরির আগে ঠিক করুন:');
   });
 });
 
@@ -696,7 +696,7 @@ describe('flow behavior (vm, stub DOM)', () => {
     r.els['create-passport-button'].click();
     expect(r.calls.exportHTML).toBe(0);
     expect(r.downloads).toHaveLength(0);
-    expect(r.els['create-message'].textContent).toContain('Date of birth');
+    expect(r.els['create-message'].textContent).toContain('জন্মতারিখ');
     expect(r.els['eng-dob'].focused).toBe(true);
     expect(r.body.classList.contains('flow-form')).toBe(true);
   });
@@ -715,7 +715,7 @@ describe('flow behavior (vm, stub DOM)', () => {
     r.els['create-passport-button'].click();
     expect(r.calls.exportHTML).toBe(0);
     expect(r.downloads).toHaveLength(0);
-    expect(r.els['create-message'].textContent).toContain('Date of expiry');
+    expect(r.els['create-message'].textContent).toContain('মেয়াদের তারিখ');
     expect(r.els['eng-expiryDate'].focused).toBe(true);
   });
 
@@ -733,12 +733,12 @@ describe('flow behavior (vm, stub DOM)', () => {
     r.els['create-passport-button'].click();
     expect(r.calls.exportHTML).toBe(0);
     expect(r.downloads).toHaveLength(0);
-    expect(r.els['create-message'].textContent).toContain('Sex');
+    expect(r.els['create-message'].textContent).toContain('লিঙ্গ');
     expect(r.els['eng-sex'].focused).toBe(true);
   });
 
   test('Create blocked by an engine validation issue downloads nothing and names it (findings 1, 5)', () => {
-    const r = runFlow({ validateIssues: ['Enter the three-letter nationality code; it is not assumed from the issuing country.'] });
+    const r = runFlow({ validateIssues: ['তিন অক্ষরের জাতীয়তার কোড লিখুন; ইস্যুকারী দেশ থেকে এটি ধরে নেওয়া হয় না।'] });
     r.els['start-passport-button'].click();
     r.els['eng-passportNo'].value = 'EJ0762655';
     r.els['eng-docType'].value = 'P';
@@ -752,7 +752,7 @@ describe('flow behavior (vm, stub DOM)', () => {
     expect(r.calls.validate).toBeGreaterThan(0);
     expect(r.calls.exportHTML).toBe(0);
     expect(r.downloads).toHaveLength(0);
-    expect(r.els['create-message'].textContent).toContain('three-letter nationality code');
+    expect(r.els['create-message'].textContent).toContain('জাতীয়তার কোড');
     expect(r.body.classList.contains('flow-form')).toBe(true);
   });
 
@@ -1155,9 +1155,105 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
     expect(PAGE).not.toContain('machine-readable');
   });
 
-  // Site-feel Fix 5: the editor toolbar follows the site page-header
-  // pattern — page background, no white blur bar; the editor actions
-  // (regions/preview/print + balance pill) stay reachable in it.
+  // Site-feel Fix 8: Bengali labels + hints throughout the form and
+  // editor. MRZ/TD3 stay as technical terms; the printed document's
+  // own English (scan artwork, field values) is untouched.
+  test('form labels are Bengali (no English halves)', () => {
+    for (const s of [
+      '<label for="eng-passportNo">পাসপোর্ট নম্বর',
+      '<label for="eng-docType">ধরন</label>',
+      '<label for="eng-countryCode">দেশের কোড</label>',
+      '<label for="eng-fullName">পুরো নাম</label>',
+      '<label for="eng-surname">পদবি (স্বয়ংক্রিয়)</label>',
+      '<label for="eng-givenName">প্রদত্ত নাম (স্বয়ংক্রিয়)</label>',
+      '<label for="eng-fatherName">পিতার নাম</label>',
+      '<label for="eng-motherName">মাতার নাম</label>',
+      '<label for="eng-spouseName">স্বামী/স্ত্রীর নাম</label>',
+      '<label for="eng-dob">জন্মতারিখ</label>',
+      '<label for="eng-sex">লিঙ্গ</label>',
+      '<label for="eng-issueDate">ইস্যুর তারিখ</label>',
+      '<label for="eng-expiryDate">মেয়াদের তারিখ</label>',
+      '<label for="eng-birthPlace">জন্মস্থান</label>',
+      '<label for="eng-nationality">জাতীয়তা</label>',
+      '<label for="eng-nationalityCode">জাতীয়তার কোড (MRZ)</label>',
+      '<label for="eng-personalNo">ব্যক্তিগত / এনআইডি নম্বর</label>',
+      '<label for="eng-previousPassport">পূর্ববর্তী পাসপোর্ট নম্বর</label>',
+      '<label for="eng-authority">ইস্যুকারী কর্তৃপক্ষ</label>',
+      '<label for="eng-address1">ঠিকানা (প্রথম লাইন)</label>',
+      '<label for="eng-phone">ফোন</label>',
+      '<label for="eng-relationship">সম্পর্ক</label>',
+      '<label for="eng-emergencyName">জরুরি কন্টাক্টের নাম</label>',
+      '<label for="eng-mrz1">১ম লাইন</label>',
+      '<label for="eng-mrz2">২য় লাইন</label>',
+      '<option value="M">M — পুরুষ</option>',
+      '<option value="F">F — নারী</option>',
+      'MRZ আবার তৈরি করুন',
+      'পাতায় আবার বসান',
+    ]) expect(PAGE).toContain(s);
+    for (const [id, en] of [
+      ['eng-passportNo', 'Passport No.'],
+      ['eng-docType', 'Type'],
+      ['eng-countryCode', 'Country code'],
+      ['eng-fullName', 'Full name'],
+      ['eng-surname', 'Surname (auto)'],
+      ['eng-givenName', 'Given name (auto)'],
+      ['eng-fatherName', "Father's name"],
+      ['eng-motherName', "Mother's name"],
+      ['eng-spouseName', "Spouse's name"],
+      ['eng-dob', 'Date of birth'],
+      ['eng-sex', 'Sex'],
+      ['eng-issueDate', 'Date of issue'],
+      ['eng-expiryDate', 'Date of expiry'],
+      ['eng-birthPlace', 'Place of birth'],
+      ['eng-nationality', 'Nationality'],
+      ['eng-nationalityCode', 'Nationality code'],
+      ['eng-personalNo', 'Personal / NID No'],
+      ['eng-previousPassport', 'Previous passport no'],
+      ['eng-authority', 'Issuing authority'],
+      ['eng-address1', 'Address line 1'],
+      ['eng-address2', 'Address line 2'],
+      ['eng-phone', 'Telephone'],
+      ['eng-relationship', 'Relationship'],
+      ['eng-emergencyName', 'Emergency contact name'],
+      ['eng-mrz1', 'Line 1'],
+      ['eng-mrz2', 'Line 2'],
+    ]) expect(PAGE).not.toContain('<label for="' + id + '">' + en);
+    // (Label-scoped: the document model's own printed English — e.g. the
+    // passport's "Passport No." heading — is document content, not chrome,
+    // and stays. These chrome strings appear nowhere in the model.)
+    for (const s of [
+      'Regenerate MRZ', 'Re-apply to page',
+      'M — Male', 'F — Female', 'Unspecified',
+    ]) expect(PAGE).not.toContain(s);
+  });
+
+  test('editor hints and validation messages are Bengali', () => {
+    // Hints are page markup; validation/notify strings live in the editor script.
+    for (const s of [
+      'সংযুক্ত লেখা ও MRZ আপডেট হবে',
+      'ডটেড স্ট্রিপ নিজে থেকে আপডেট হয়',
+      'মূল বাক্স + ডানের ছাপা উল্লম্ব নম্বর',
+      'পুরো নাম নিজে থেকে পদবি + প্রদত্ত নামে ভাগ হয়',
+      'তারিখ পাতায় “17 DEC 1979” আকারে ছাপা হয়',
+      'ইস্যুকারী দেশ থেকে আলাদা',
+      'দুটো লাইনই উপরের তথ্য থেকে আবার তৈরি হয়',
+    ]) expect(PAGE).toContain(s);
+    for (const s of [
+      'MRZ-এর চেক ডিজিট মিলছে না',
+      'তিন অক্ষরের জাতীয়তার কোড লিখুন',
+      // The surname/given-name message is built with a ternary, so the
+      // literal is split: 'MRZ-এর জন্য লাতিন অক্ষরের ' + 'পদবি'.
+      'MRZ-এর জন্য লাতিন অক্ষরের ',
+      'ছবি মূল ফ্রেমে বদলে গেছে',
+      'স্বাক্ষর মূল জায়গায় বদলে গেছে',
+    ]) expect(MAIN).toContain(s);
+    for (const s of [
+      'MRZ check digits do not match',
+      'Enter the three-letter nationality code',
+      'Use a Latin-letter surname',
+      'Photo replaced in its original frame',
+    ]) expect(MAIN).not.toContain(s);
+  });
   test('editor toolbar follows the site page-header pattern', () => {
     expect(PAGE).toContain('<h2>🛂 পাসপোর্ট ইঞ্জিন</h2>');
     expect(PAGE).not.toContain('<h1>পাসপোর্ট ইঞ্জিন</h1>');
