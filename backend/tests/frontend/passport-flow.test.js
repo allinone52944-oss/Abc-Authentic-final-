@@ -123,6 +123,7 @@ function runFlow(opts) {
   const calls = { applyAll: 0, regenerateMRZ: 0, validate: 0, resetImage: [], exportHTML: 0, setImage: [] };
   const state = { exportedPromise: null, imagePromise: null };
   const downloads = [];
+  const blobs = []; // every blob handed to URL.createObjectURL (PDF or HTML)
   const anchor = {
     href: '',
     download: '',
@@ -137,18 +138,47 @@ function runFlow(opts) {
   const sandbox = {
     document: documentStub,
     window: {},
-    Blob: function (parts) { this.parts = parts; },
-    URL: { createObjectURL: () => 'blob:test', revokeObjectURL: () => {} },
+    Blob: function (parts, opts) { this.parts = parts; this.type = (opts && opts.type) || ''; },
+    URL: { createObjectURL: (blob) => { blobs.push(blob); return 'blob:test'; }, revokeObjectURL: () => {} },
     setTimeout: () => 0,
   };
   // Backend charge stub (integrated service): Create calls
   // ABC.api('/passport/create') before the download; the form also
   // loads the price on entry. Default: price 0, charge ok.
+  // PDF stub (direct real-PDF download, 2026-11-14): Create then
+  // calls ABC.api('/passport/pdf?...') with the document HTML and
+  // gets PDF bytes back. Default: a fake %PDF- blob. Options:
+  // o.pdfFailTimes (first N /pdf calls fail), o.pdfNonPdf (the
+  // server answers 200 but with a non-PDF content-type).
   const chargeCalls = [];
+  const pdfCalls = [];
+  let pdfAttempt = 0;
   if (o.withAbc !== false) {
     sandbox.window.ABC = {
       api: (path, opts) => {
         chargeCalls.push({ path, opts });
+        if (String(path).indexOf('/passport/pdf') === 0) {
+          pdfCalls.push({ path, opts });
+          pdfAttempt += 1;
+          if (o.pdfFailTimes && pdfAttempt <= o.pdfFailTimes) {
+            return Promise.resolve({ ok: false, status: 500, json: async () => ({ error: 'PDF_FAILED', message: 'PDF তৈরি করা যায়নি — আবার চেষ্টা করুন।' }) });
+          }
+          if (o.pdfNonPdf) {
+            return Promise.resolve({
+              ok: true, status: 200,
+              headers: { get: () => 'text/html' },
+              blob: async () => new sandbox.Blob(['<html>not a pdf</html>'], { type: 'text/html' }),
+              json: async () => ({}),
+            });
+          }
+          const pdfBytes = '%PDF-1.4\n%fake passport pdf\n';
+          return Promise.resolve({
+            ok: true, status: 200,
+            headers: { get: (name) => (String(name).toLowerCase() === 'content-type' ? 'application/pdf' : null) },
+            blob: async () => new sandbox.Blob([pdfBytes], { type: 'application/pdf' }),
+            json: async () => ({}),
+          });
+        }
         if (o.chargeFails) return Promise.reject(new Error('network down'));
         const res = o.chargeResponse || { ok: true, status: 200, body: { ok: true, charged: 0, orderId: 'o1', balance: 500 } };
         return Promise.resolve({ ok: res.ok, status: res.status, json: async () => res.body });
@@ -181,7 +211,7 @@ function runFlow(opts) {
   }
   vm.createContext(sandbox);
   vm.runInContext(FLOW, sandbox);
-  return { els, body, calls, downloads, state, chargeCalls };
+  return { els, body, calls, downloads, blobs, state, chargeCalls, pdfCalls };
 }
 
 describe('landing (form-first entry)', () => {
@@ -426,12 +456,13 @@ describe('Create → download', () => {
     expect(createBlockAt).toBeGreaterThan(remrzAt);
   });
 
-  test('flow script drives the download through the exposed editor API', () => {
+  test('flow script drives the PDF download through the exposed editor API', () => {
     expect(FLOW).toContain('form-first flow');
-    expect(FLOW).toContain('editor.exportHTML().then(function(html){');
+    expect(FLOW).toContain('editor.exportHTML()');
+    expect(FLOW).toContain('/passport/pdf');
+    expect(FLOW).toContain("'.pdf'");
     expect(FLOW).toContain('URL.createObjectURL');
     expect(FLOW).toContain('a.download = name');
-    expect(FLOW).toContain("'Passport-'");
   });
 
   test('Create requires passport no, type, country code, full name, DOB, sex, expiry and nationality before downloading', () => {
@@ -542,10 +573,10 @@ describe('flow behavior (vm, stub DOM)', () => {
     await new Promise((resolve) => setImmediate(resolve));
     expect(r.calls.exportHTML).toBe(1);
     expect(r.downloads).toHaveLength(1);
-    expect(r.downloads[0].name).toBe('Passport-EJ0762655.html');
+    expect(r.downloads[0].name).toBe('Passport-EJ0762655.pdf');
     expect(r.body.classList.contains('flow-form')).toBe(false);
     expect(r.body.classList.contains('flow-landing')).toBe(false);
-    expect(r.els['create-message'].textContent).toContain('Passport তৈরি হয়েছে');
+    expect(r.els['create-message'].textContent).toContain('Passport PDF তৈরি হয়েছে');
   });
 
   test('Create with a missing required field downloads nothing and points at the field', () => {
@@ -737,7 +768,7 @@ describe('form upload behavior (vm, stub DOM)', () => {
     expect(r.calls.setImage.map((c) => c.type)).toEqual(['photo', 'signature']);
     expect(r.calls.exportHTML).toBe(1);
     expect(r.downloads).toHaveLength(1);
-    expect(r.downloads[0].name).toBe('Passport-EJ0762655.html');
+    expect(r.downloads[0].name).toBe('Passport-EJ0762655.pdf');
   });
 
   test('entering the form clears any previous photo/signature and hides the confirmations', () => {
@@ -835,7 +866,7 @@ describe('sample-face warning behavior (vm, stub DOM)', () => {
     await flush();
     expect(r.calls.exportHTML).toBe(1);
     expect(r.downloads).toHaveLength(1);
-    expect(r.downloads[0].name).toBe('Passport-EJ0762655.html');
+    expect(r.downloads[0].name).toBe('Passport-EJ0762655.pdf');
   });
 });
 
@@ -980,7 +1011,7 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
     expect(String(create.opts.body.idempotency_key)).toMatch(/^passport-/);
     expect(r.calls.exportHTML).toBe(1);
     expect(r.downloads).toHaveLength(1);
-    expect(r.downloads[0].name).toBe('Passport-EJ0762655.html');
+    expect(r.downloads[0].name).toBe('Passport-EJ0762655.pdf');
     expect(r.els['create-message'].textContent).toContain('চার্জ কাটা হয়েছে: ৳30');
   });
 
@@ -1040,6 +1071,113 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
     expect(r.chargeCalls.filter((c) => c.path === '/passport/create')).toHaveLength(1);
     expect(r.calls.exportHTML).toBe(1);
     expect(r.downloads).toHaveLength(1);
+  });
+});
+
+describe('Create → direct real-PDF download (2026-11-14)', () => {
+  async function flush() {
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  function fillValid(r) {
+    r.els['eng-passportNo'].value = 'EJ0762655';
+    r.els['eng-docType'].value = 'P';
+    r.els['eng-countryCode'].value = 'BGD';
+    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-dob'].value = '1979-12-17';
+    r.els['eng-sex'].value = 'M';
+    r.els['eng-expiryDate'].value = '2035-01-01';
+    r.els['eng-nationality'].value = 'BANGLADESHI';
+  }
+
+  test('Create success downloads a real PDF (not HTML), named after the passport number', async () => {
+    const r = runFlow({ chargeResponse: { ok: true, status: 200, body: { ok: true, charged: 30, orderId: 'o1', balance: 470 } } });
+    r.els['start-passport-button'].click();
+    fillValid(r);
+    r.els['create-passport-button'].click();
+    await r.state.exportedPromise;
+    await flush();
+    expect(r.chargeCalls.filter((c) => c.path === '/passport/create')).toHaveLength(1);
+    expect(r.pdfCalls).toHaveLength(1);
+    expect(r.pdfCalls[0].path).toContain('/passport/pdf?');
+    expect(r.pdfCalls[0].path).toContain('passport_no=EJ0762655');
+    expect(r.pdfCalls[0].path).toContain('idempotency_key=passport-');
+    // The /pdf call reuses the SAME idempotency key as the charge.
+    const chargeIdem = r.chargeCalls.find((c) => c.path === '/passport/create').opts.body.idempotency_key;
+    expect(r.pdfCalls[0].path).toContain('idempotency_key=' + encodeURIComponent(chargeIdem));
+    // The document HTML is POSTed as the raw body (text/html).
+    expect(r.pdfCalls[0].opts.body).toBe('<html>passport</html>');
+    expect(r.pdfCalls[0].opts.headers['Content-Type']).toContain('text/html');
+    expect(r.downloads).toHaveLength(1);
+    expect(r.downloads[0].name).toBe('Passport-EJ0762655.pdf');
+    expect(r.blobs).toHaveLength(1);
+    expect(r.blobs[0].type).toBe('application/pdf');
+    expect(String(r.blobs[0].parts[0]).slice(0, 5)).toBe('%PDF-');
+    expect(r.els['create-message'].textContent).toContain('Passport PDF তৈরি হয়েছে');
+    expect(r.els['create-message'].textContent).toContain('চার্জ কাটা হয়েছে: ৳30');
+  });
+
+  test('PDF failure shows a clear error and downloads NOTHING — no HTML fallback', async () => {
+    const r = runFlow({ pdfFailTimes: 99 });
+    r.els['start-passport-button'].click();
+    fillValid(r);
+    r.els['create-passport-button'].click();
+    await r.state.exportedPromise;
+    await flush();
+    expect(r.chargeCalls.filter((c) => c.path === '/passport/create')).toHaveLength(1);
+    expect(r.pdfCalls).toHaveLength(1);
+    expect(r.downloads).toHaveLength(0);
+    expect(r.blobs).toHaveLength(0);
+    expect(r.els['create-message'].textContent).toContain('PDF তৈরি করা যায়নি');
+    expect(r.body.classList.contains('flow-form')).toBe(true);
+  });
+
+  test('a non-PDF answer from the server is an error, not a download', async () => {
+    const r = runFlow({ pdfNonPdf: true });
+    r.els['start-passport-button'].click();
+    fillValid(r);
+    r.els['create-passport-button'].click();
+    await r.state.exportedPromise;
+    await flush();
+    expect(r.downloads).toHaveLength(0);
+    expect(r.blobs).toHaveLength(0);
+    expect(r.els['create-message'].textContent).toContain('PDF তৈরি করা যায়নি');
+  });
+
+  test('retry after a PDF failure reuses the paid creation — one charge, no second charge', async () => {
+    const r = runFlow({ pdfFailTimes: 1, chargeResponse: { ok: true, status: 200, body: { ok: true, charged: 30, orderId: 'o1', balance: 470 } } });
+    r.els['start-passport-button'].click();
+    fillValid(r);
+    // First Create: charge ok, PDF fails → no download.
+    r.els['create-passport-button'].click();
+    await r.state.exportedPromise;
+    await flush();
+    expect(r.downloads).toHaveLength(0);
+    expect(r.els['create-message'].textContent).toContain('PDF তৈরি করা যায়নি');
+    // Retry (same passport number): NO second charge, same idem, PDF now succeeds.
+    r.els['create-passport-button'].click();
+    await flush();
+    expect(r.chargeCalls.filter((c) => c.path === '/passport/create')).toHaveLength(1);
+    expect(r.pdfCalls).toHaveLength(2);
+    const idemOf = (p) => decodeURIComponent(String(p).split('idempotency_key=')[1] || '');
+    expect(idemOf(r.pdfCalls[1].path)).toBe(idemOf(r.pdfCalls[0].path));
+    expect(r.downloads).toHaveLength(1);
+    expect(r.downloads[0].name).toBe('Passport-EJ0762655.pdf');
+    expect(r.blobs[0].type).toBe('application/pdf');
+    expect(r.els['create-message'].textContent).toContain('Passport PDF তৈরি হয়েছে');
+  });
+
+  test('charge failure never reaches the PDF step', async () => {
+    const r = runFlow({ chargeResponse: { ok: false, status: 402, body: { error: 'INSUFFICIENT_BALANCE', message: 'পর্যাপ্ত ব্যালেন্স নেই।' } } });
+    r.els['start-passport-button'].click();
+    fillValid(r);
+    r.els['create-passport-button'].click();
+    await flush();
+    expect(r.pdfCalls).toHaveLength(0);
+    expect(r.calls.exportHTML).toBe(0);
+    expect(r.downloads).toHaveLength(0);
+    expect(r.els['create-message'].textContent).toContain('পর্যাপ্ত ব্যালেন্স নেই');
   });
 });
 
