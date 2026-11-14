@@ -1046,6 +1046,14 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
     expect(PAGE).toContain('ফর্ম পূরণ করুন — Create চাপলে পাসপোর্ট PDF তৈরি হয়ে ডাউনলোড হবে।');
   });
 
+  // Site-feel Fix 3: the landing fills the standard content width —
+  // no floating 760px card in empty space. The form keeps its 760px.
+  test('landing fills the standard content width, form keeps 760px', () => {
+    expect(CSS).toContain('body.flow-landing main{display:block}');
+    expect(CSS).not.toContain('body.flow-landing main{display:block;max-width:760px}');
+    expect(CSS).toContain('body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:760px}');
+  });
+
   test('price line: form entry with a price shows the fee + balance', async () => {
     const r = runFlow({ chargeResponse: { ok: true, status: 200, body: { ok: true, price: 30, balance: 500, serviceId: 13, allowed: true } } });
     r.els['start-passport-button'].click();

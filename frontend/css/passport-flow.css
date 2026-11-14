@@ -24,7 +24,7 @@ body.show-regions .field.linked{outline-color:#b5811f}
 .passport-landing-inner .primary{font-size:15px;padding:12px 26px;margin-top:10px}
 body.flow-landing #passport-landing{display:block}
 body.flow-landing .toolbar,body.flow-landing .document-area,body.flow-landing aside,body.flow-landing .footer-note{display:none}
-body.flow-landing main{display:block;max-width:760px}
+body.flow-landing main{display:block}
 body.flow-form .toolbar,body.flow-form .document-area,body.flow-form .footer-note{display:none}
 body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:760px}
 body.flow-form aside{position:static;max-height:none}
@@ -75,7 +75,7 @@ body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
 body.flow-landing,body.flow-form{--pg-bg:var(--bg-page);--pg-surface:var(--bg-surface);--pg-subtle:var(--bg-subtle);--pg-ink:var(--text-main);--pg-muted:var(--text-muted);--pg-dim:var(--text-dim);--pg-line:var(--border-light);--pg-focus:var(--primary-500);--pg-ring:var(--primary-100);--pg-hover:var(--primary-200);--pg-green:var(--primary-600);--pg-green-700:var(--primary-700);--pg-gold:var(--brand-gold);--pg-gold-text:var(--brand-gold-text);--pg-shadow-md:var(--shadow-md);--pg-glow:var(--shadow-glow);--pg-danger-bg:#fef2f2;--pg-danger-line:#fecaca;--pg-danger:#991b1b;--pg-warn-bg:#fffbeb;--pg-warn-line:#fde68a;--pg-warn:#92400e;--ui:'Hind Siliguri','Noto Sans Bengali',Arial,ScanBengali,sans-serif}
 body.flow-landing,body.flow-form{background:var(--pg-bg);color:var(--pg-ink)}
 /* Landing: white card, gold accent bar, gold pill CTA (homepage hero pattern). */
-body.flow-landing .passport-landing-inner{background:var(--pg-surface);border:1px solid var(--pg-line);border-radius:24px;box-shadow:var(--pg-shadow-md);padding:48px 36px 40px;margin:64px auto}
+body.flow-landing .passport-landing-inner{background:var(--pg-surface);border:1px solid var(--pg-line);border-radius:24px;box-shadow:var(--pg-shadow-md);padding:48px 36px 40px;margin:32px auto}
 body.flow-landing .passport-landing-inner .kicker{color:var(--pg-green);font-size:12px;letter-spacing:.14em}
 body.flow-landing .passport-landing-inner .kicker::after{content:"";display:block;width:48px;height:3px;margin:12px auto 0;border-radius:2px;background:var(--gold-gradient)}
 body.flow-landing .passport-landing-inner h2{font-size:30px;font-weight:800;color:var(--pg-ink);letter-spacing:-.02em;line-height:1.3}
