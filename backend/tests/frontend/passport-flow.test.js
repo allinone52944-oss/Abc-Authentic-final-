@@ -116,6 +116,14 @@ function runFlow(opts) {
   els['balVal'].textContent = '০';
   els['balValEditor'] = makeEl('balValEditor', 'span');
   els['balValEditor'].textContent = '০';
+  // Post-Create result screen (site-feel Fix 6): success first, editor
+  // opt-in via a button.
+  els['passport-result'] = makeEl('passport-result', 'section');
+  els['result-message'] = makeEl('result-message', 'p');
+  els['download-again-button'] = makeEl('download-again-button', 'button');
+  els['edit-more-button'] = makeEl('edit-more-button', 'button');
+  els['back-to-form-button'] = makeEl('back-to-form-button', 'button');
+  els['new-passport-button'] = makeEl('new-passport-button', 'button');
   // Template values, as the live page ships them — the form must blank them.
   els['eng-passportNo'].value = 'EJ0762655';
   els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
@@ -577,7 +585,7 @@ describe('flow behavior (vm, stub DOM)', () => {
     expect(r.els['eng-fullName'].value).toBe('GOLAM KIBRIYA MD');
   });
 
-  test('filling + Create downloads the output named after the passport number and shows the editor', async () => {
+  test('filling + Create downloads the PDF and shows the result screen first (editor opt-in)', async () => {
     const r = runFlow({});
     r.els['start-passport-button'].click();
     r.els['eng-passportNo'].value = 'EJ0762655';
@@ -596,7 +604,82 @@ describe('flow behavior (vm, stub DOM)', () => {
     expect(r.downloads[0].name).toBe('Passport-EJ0762655.pdf');
     expect(r.body.classList.contains('flow-form')).toBe(false);
     expect(r.body.classList.contains('flow-landing')).toBe(false);
+    expect(r.body.classList.contains('flow-result')).toBe(true);
     expect(r.els['create-message'].textContent).toContain('Passport PDF তৈরি হয়েছে');
+    expect(r.els['result-message'].textContent).toContain('Passport-EJ0762655.pdf');
+  });
+
+  // Site-feel Fix 6: post-Create result screen — success first, editor
+  // behind an opt-in button; re-download is free (same stored blob).
+  async function createOk() {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    r.els['eng-passportNo'].value = 'EJ0762655';
+    r.els['eng-docType'].value = 'P';
+    r.els['eng-countryCode'].value = 'BGD';
+    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-dob'].value = '1979-12-17';
+    r.els['eng-sex'].value = 'M';
+    r.els['eng-expiryDate'].value = '2035-01-01';
+    r.els['eng-nationality'].value = 'BANGLADESHI';
+    r.els['create-passport-button'].click();
+    await r.state.exportedPromise;
+    await new Promise((resolve) => setImmediate(resolve));
+    return r;
+  }
+
+  test('result screen: download-again re-downloads the same PDF, no new charge', async () => {
+    const r = await createOk();
+    expect(r.body.classList.contains('flow-result')).toBe(true);
+    r.els['download-again-button'].click();
+    expect(r.downloads).toHaveLength(2);
+    expect(r.downloads[1].name).toBe('Passport-EJ0762655.pdf');
+    expect(r.chargeCalls.filter((c) => c.path === '/passport/create')).toHaveLength(1);
+  });
+
+  test('result screen: edit-more opens the editor', async () => {
+    const r = await createOk();
+    r.els['edit-more-button'].click();
+    expect(r.body.classList.contains('flow-result')).toBe(false);
+    expect(r.body.classList.contains('flow-form')).toBe(false);
+    expect(r.body.classList.contains('flow-landing')).toBe(false);
+  });
+
+  test('result screen: back-to-form returns to the form with the data kept', async () => {
+    const r = await createOk();
+    r.els['back-to-form-button'].click();
+    expect(r.body.classList.contains('flow-form')).toBe(true);
+    expect(r.body.classList.contains('flow-result')).toBe(false);
+    expect(r.els['eng-passportNo'].value).toBe('EJ0762655');
+  });
+
+  test('result screen: new-passport blanks the form for a fresh start', async () => {
+    const r = await createOk();
+    r.els['new-passport-button'].click();
+    expect(r.body.classList.contains('flow-form')).toBe(true);
+    expect(r.body.classList.contains('flow-result')).toBe(false);
+    expect(r.els['eng-passportNo'].value).toBe('');
+    expect(r.els['eng-fullName'].value).toBe('');
+  });
+
+  test('result screen markup: success message, re-download, edit opt-in, history link', () => {
+    expect(PAGE).toContain('id="passport-result"');
+    expect(PAGE).toContain('id="result-message"');
+    expect(PAGE).toContain('id="download-again-button"');
+    expect(PAGE).toContain('আবার ডাউনলোড করুন');
+    expect(PAGE).toContain('id="edit-more-button"');
+    expect(PAGE).toContain('আরও সম্পাদনা করুন');
+    expect(PAGE).toContain('href="/history.html"');
+    expect(PAGE).toContain('ইতিহাসে দেখুন');
+    expect(PAGE).toContain('id="back-to-form-button"');
+    expect(PAGE).toContain('id="new-passport-button"');
+  });
+
+  test('result screen CSS: shown only in flow-result; editor hidden there', () => {
+    expect(CSS).toContain('#passport-result{display:none}');
+    expect(CSS).toContain('body.flow-result #passport-result{display:block}');
+    expect(CSS).toContain('body.flow-result .toolbar,body.flow-result .document-area,body.flow-result aside,body.flow-result .footer-note{display:none}');
+    expect(CSS).toContain('body.flow-result #passport-topbar');
   });
 
   test('Create with a missing required field downloads nothing and points at the field', () => {
