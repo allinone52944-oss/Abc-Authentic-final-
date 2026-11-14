@@ -9,7 +9,7 @@
    No access token → login, with ?next= back to this page. */
 (function(){try{var t=null;try{t=sessionStorage.getItem('abc_access_token')||localStorage.getItem('abc_access_token');}catch(e){}if(!t){location.href='/login.html?next='+encodeURIComponent(location.pathname);}}catch(e){}})();
 </script>
-<meta name="description" content="পাসপোর্ট ইঞ্জিন — ফর্ম পূরণ করুন, Create চাপলে পাসপোর্ট তৈরি হয়ে ডাউনলোড হবে।">
+<meta name="description" content="পাসপোর্ট ইঞ্জিন — ফর্ম পূরণ করুন, Create চাপলে পাসপোর্ট PDF তৈরি হয়ে ডাউনলোড হবে।">
 <title>পাসপোর্ট ইঞ্জিন - All In One</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
@@ -280,8 +280,7 @@ body.flow-form .create-actions .primary:hover{background:var(--gold-gradient);bo
  <div class="actions" aria-label="Document actions">
   <button type="button" id="regions-button" aria-pressed="false">অঞ্চল দেখুন</button>
   <button type="button" id="preview-button" aria-pressed="false">প্রিভিউ</button>
-  <button type="button" id="print-button">প্রিন্ট / PDF</button>
-  <button type="button" id="save-button" class="primary">HTML সংরক্ষণ করুন</button>
+  <button type="button" id="print-button">প্রিন্ট</button>
  </div>
 </div></header>
 <main>
@@ -289,7 +288,7 @@ body.flow-form .create-actions .primary:hover{background:var(--gold-gradient);bo
   <div class="passport-landing-inner">
    <p class="kicker">Passport Engine</p>
    <h2>Passport তৈরি করুন</h2>
-   <p>ফর্মটি পূরণ করুন — পাসপোর্ট নম্বর, নাম, জন্মতারিখসহ সব তথ্য। Create চাপলে পাসপোর্ট তৈরি হয়ে ডাউনলোড হবে।</p>
+   <p>ফর্মটি পূরণ করুন — পাসপোর্ট নম্বর, নাম, জন্মতারিখসহ সব তথ্য। Create চাপলে পাসপোর্ট PDF তৈরি হয়ে ডাউনলোড হবে।</p>
    <button type="button" id="start-passport-button" class="primary">Passport তৈরি করুন</button>
    <p class="small-note">ছবি ও স্বাক্ষর ফর্মেই যোগ করুন — পরে বদলালে আবার ডাউনলোড করতে হবে।</p>
   </div>
@@ -316,7 +315,7 @@ body.flow-form .create-actions .primary:hover{background:var(--gold-gradient);bo
     <header class="form-head" id="passport-form-head">
      <button type="button" id="back-to-landing-button" class="back-button">← ফিরে যান</button>
      <h2>Passport তৈরি করুন</h2>
-     <p>তথ্য ও ছবি/স্বাক্ষর পূরণ করুন — Create চাপলে পাসপোর্ট তৈরি হয়ে সরাসরি ডাউনলোড হবে।</p>
+     <p>তথ্য ও ছবি/স্বাক্ষর পূরণ করুন — Create চাপলে পাসপোর্ট PDF তৈরি হয়ে সরাসরি ডাউনলোড হবে।</p>
     </header>
     <div class="engine-group" id="eng-photo-group">
      <p class="engine-legend">ছবি ও স্বাক্ষর · Photo &amp; signature</p>
@@ -434,9 +433,9 @@ body.flow-form .create-actions .primary:hover{background:var(--gold-gradient);bo
     </div>
     <div class="create-actions">
      <p class="passport-price-line" id="passport-price-line" role="status" aria-live="polite">সেবা চার্জ লোড হচ্ছে…</p>
-     <button type="button" id="create-passport-button" class="primary">Create — ডাউনলোড করুন</button>
+     <button type="button" id="create-passport-button" class="primary">Create — PDF ডাউনলোড করুন</button>
      <p class="engine-hint" id="create-message" role="status" aria-live="polite"></p>
-     <p class="engine-hint">Create চাপলে এই তথ্য ও ছবি/স্বাক্ষর দিয়ে পাসপোর্ট তৈরি হয়ে ডাউনলোড হবে। পরে কিছু বদলালে আবার Create করে ডাউনলোড করতে হবে।</p>
+     <p class="engine-hint">Create চাপলে এই তথ্য ও ছবি/স্বাক্ষর দিয়ে পাসপোর্ট PDF তৈরি হয়ে ডাউনলোড হবে। পরে কিছু বদলালে আবার Create করে ডাউনলোড করতে হবে।</p>
     </div>
    </section>
 <section class="tab-panel" id="panel-text" role="tabpanel" aria-labelledby="tab-text" hidden="">
@@ -528,7 +527,7 @@ body.flow-form .create-actions .primary:hover{background:var(--gold-gradient);bo
  function updateStatus(){const c=counts();const summary=c.text||c.images?`${c.text} edited text regions · ${c.images} replaced images`:`Original scan · ${model.fields.length} text regions · 2 image slots`;const st=$('status');if(st)st.textContent=summary+(unsaved?' · Unsaved':'');}
  function mark(){unsaved=true;editRevision++;updateStatus();}
  function notify(text){clearTimeout(toastTimer);$('toast').textContent=text;$('toast').classList.add('visible');toastTimer=setTimeout(()=>$('toast').classList.remove('visible'),3200);}
- function syncBusy(){const busy=jobs.size>0;$('save-button').disabled=busy;$('print-button').disabled=busy;for(const id of ['photo-fit','photo-x','photo-y','photo-zoom','preserve-stamp','photo-cutout'])$(id).disabled=busy||!model.images.photo.data;for(const id of ['signature-remove-white','signature-trim','upload-photo-button','upload-signature-button'])$(id).disabled=busy;}
+ function syncBusy(){const busy=jobs.size>0;$('print-button').disabled=busy;for(const id of ['photo-fit','photo-x','photo-y','photo-zoom','preserve-stamp','photo-cutout'])$(id).disabled=busy||!model.images.photo.data;for(const id of ['signature-remove-white','signature-trim','upload-photo-button','upload-signature-button'])$(id).disabled=busy;}
  function track(promise){jobs.add(promise);syncBusy();promise.finally(()=>{jobs.delete(promise);syncBusy();}).catch(()=>{});return promise;}
  async function drainImages(){while(jobs.size)await Promise.all([...jobs]);}
  function fontString(s){return `${s.italic?'italic':'normal'} ${s.weight} ${s.size}px ${s.family}, ScanBengali, sans-serif`;}
@@ -853,7 +852,6 @@ body.flow-form .create-actions .primary:hover{background:var(--gold-gradient);bo
   }catch(error){notify('প্রিন্ট ব্যর্থ হয়েছে: '+error.message);}
  }
  async function exportHTML(){return (await snapshotHTML()).html;}
- async function saveHTML(){try{const snapshot=await snapshotHTML();download(new Blob([snapshot.html],{type:'text/html;charset=utf-8'}),'Passport-Engine.html');if(editRevision===snapshot.revision)unsaved=false;updateStatus();notify('স্বয়ংসম্পূর্ণ HTML তৈরি হয়েছে — ডাউনলোড দেখুন।');}catch(e){notify('সংরক্ষণ ব্যর্থ হয়েছে: '+e.message);}}
 
  
  // ===================== ENGINE: sync linked editable text; preserve scanned artwork =====================
@@ -1152,10 +1150,9 @@ body.flow-form .create-actions .primary:hover{background:var(--gold-gradient);bo
  $('photo-cutout').addEventListener('change',()=>track(updatePhotoOptions()));
  $('regions-button').addEventListener('click',e=>{const on=document.body.classList.toggle('show-regions');e.currentTarget.setAttribute('aria-pressed',String(on));});
  $('preview-button').addEventListener('click',e=>{const on=document.body.classList.toggle('preview');e.currentTarget.setAttribute('aria-pressed',String(on));e.currentTarget.textContent=on?'Edit document':'Preview';document.querySelectorAll('.field .text,.image-slot').forEach(n=>n.tabIndex=on?-1:0);document.querySelectorAll('.field .text').forEach(n=>n.contentEditable=on?'false':'plaintext-only');fitPage();});
- $('save-button').addEventListener('click',saveHTML);
  $('print-button').addEventListener('click',printDocument);
  $('download-text').addEventListener('click',()=>download(new Blob(['\ufeff'+model.fields.map(f=>`${f.label}: ${f.text}`).join('\r\n')],{type:'text/plain;charset=utf-8'}),'Passport-Engine-text.txt'));
- document.addEventListener('keydown',e=>{if(e.ctrlKey||e.metaKey){const key=e.key.toLowerCase();if(key==='s'){e.preventDefault();saveHTML();}else if(key==='p'){e.preventDefault();printDocument();}}});
+ document.addEventListener('keydown',e=>{if(e.ctrlKey||e.metaKey){const key=e.key.toLowerCase();if(key==='p'){e.preventDefault();printDocument();}}});
  window.addEventListener('beforeunload',e=>{if(unsaved){e.preventDefault();e.returnValue='';}});
  window.documentEditor=Object.freeze({
   getState:()=>clone(model),setText,setStyle,resetRegion,resetImage,
@@ -1350,6 +1347,23 @@ body.flow-form .create-actions .primary:hover{background:var(--gold-gradient);bo
       });
     }).catch(function(){ line.textContent = 'সেবা চার্জ জানা যায়নি — Create চাপলে যাচাই করা হবে।'; });
   }
+  /* Stored delivery copy (engine-jobs, like birth-final): after the
+     PDF is downloaded, report the same bytes so History can
+     re-download them. Same idempotency key as the charge — a retry
+     reports the same key, so no duplicate History row. Fire-and-
+     forget: a report failure never blocks or fails the download. */
+  function reportEngineJob(engineId, refNo, name, blob, fname, idem){
+    try{
+      var fd = new FormData();
+      fd.append('file', blob, fname);
+      fd.append('engine_id', engineId);
+      fd.append('ref_no', refNo || '');
+      fd.append('name', name || '');
+      fd.append('idempotency_key', idem || (engineId + '-' + (refNo || Date.now())));
+      var token = sessionStorage.getItem('abc_access_token') || '';
+      fetch('/api/engine-jobs', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd }).catch(function(){});
+    }catch(e){}
+  }
   function downloadBlob(blob, name){
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
@@ -1420,8 +1434,9 @@ body.flow-form .create-actions .primary:hover{background:var(--gold-gradient);bo
       }
       pdfRetry = null;
       downloadBlob(pdf.blob, name);
+      reportEngineJob('passport', no, String((engInput('fullName') || {}).value || ''), pdf.blob, name, idem);
       body.classList.remove('flow-form');
-      say('Passport PDF তৈরি হয়েছে — ডাউনলোড দেখুন।' + (charged ? ' চার্জ কাটা হয়েছে: ৳' + charged + '।' : ' কোনো চার্জ কাটা হয়নি।') + ' কিছু বদলাতে চাইলে আবার Create করে ডাউনলোড করুন।');
+      say('Passport PDF তৈরি হয়েছে — ' + name + ' ডাউনলোড দেখুন।' + (charged ? ' চার্জ কাটা হয়েছে: ৳' + charged + '।' : ' কোনো চার্জ কাটা হয়নি।') + ' কিছু বদলাতে চাইলে আবার Create করে ডাউনলোড করুন।');
       return true;
     });
   }

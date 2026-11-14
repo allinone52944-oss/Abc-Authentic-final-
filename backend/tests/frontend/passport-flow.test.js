@@ -142,6 +142,19 @@ function runFlow(opts) {
     URL: { createObjectURL: (blob) => { blobs.push(blob); return 'blob:test'; }, revokeObjectURL: () => {} },
     setTimeout: () => 0,
   };
+  // Stored delivery copy (engine-jobs, fix 2026-11-14): the flow
+  // reports the PDF blob after a successful Create, via fetch +
+  // FormData (birth-final pattern). These stubs record the report.
+  const engineJobCalls = [];
+  sandbox.FormData = function () {
+    this.fields = {};
+    this.append = (k, v, fn) => { this.fields[k] = fn ? { value: v, filename: fn } : v; };
+  };
+  sandbox.fetch = (url, opts) => {
+    engineJobCalls.push({ url, opts });
+    return Promise.resolve({ ok: true, json: async () => ({ ok: true }) });
+  };
+  sandbox.sessionStorage = { getItem: () => 'test-token' };
   // Backend charge stub (integrated service): Create calls
   // ABC.api('/passport/create') before the download; the form also
   // loads the price on entry. Default: price 0, charge ok.
@@ -211,7 +224,7 @@ function runFlow(opts) {
   }
   vm.createContext(sandbox);
   vm.runInContext(FLOW, sandbox);
-  return { els, body, calls, downloads, blobs, state, chargeCalls, pdfCalls };
+  return { els, body, calls, downloads, blobs, state, chargeCalls, pdfCalls, engineJobCalls };
 }
 
 describe('landing (form-first entry)', () => {
@@ -441,7 +454,7 @@ describe('form declutter — status bar, Fidelity and Print texts removed; group
 describe('Create → download', () => {
   test('Create button + status message sit at the end of the Engine panel, outside the MRZ group', () => {
     expect(PAGE).toContain('id="create-passport-button"');
-    expect(PAGE).toContain('Create — ডাউনলোড করুন');
+    expect(PAGE).toContain('Create — PDF ডাউনলোড করুন');
     expect(PAGE).toContain('id="create-message"');
     const createAt = PAGE.indexOf('id="create-passport-button"');
     const remrzAt = PAGE.indexOf('id="eng-remrz"');
@@ -959,8 +972,14 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
   test('Bengali chrome: lang, title, toolbar, tabs, no old English strings', () => {
     expect(PAGE).toContain('<html lang="bn">');
     expect(PAGE).toContain('<title>পাসপোর্ট ইঞ্জিন - All In One</title>');
-    for (const s of ['অঞ্চল দেখুন', 'প্রিভিউ', 'প্রিন্ট / PDF', 'HTML সংরক্ষণ করুন']) {
+    for (const s of ['অঞ্চল দেখুন', 'প্রিভিউ', 'প্রিন্ট']) {
       expect(PAGE).toContain(s);
+    }
+    // No HTML download path anymore (fix 2026-11-14): the toolbar's
+    // HTML-save button, its wiring and Ctrl+S are all gone, and the
+    // print button is labelled print only — it never was a download.
+    for (const s of ['প্রিন্ট / PDF', 'HTML সংরক্ষণ করুন', 'id="save-button"', 'saveHTML', "key==='s'"]) {
+      expect(PAGE).not.toContain(s);
     }
     for (const s of ['data-tab="engine">ইঞ্জিন', 'data-tab="text">লেখা', 'data-tab="photo">ছবি', 'data-tab="signature">স্বাক্ষর']) {
       expect(PAGE).toContain(s);
@@ -1115,7 +1134,67 @@ describe('Create → direct real-PDF download (2026-11-14)', () => {
     expect(r.blobs[0].type).toBe('application/pdf');
     expect(String(r.blobs[0].parts[0]).slice(0, 5)).toBe('%PDF-');
     expect(r.els['create-message'].textContent).toContain('Passport PDF তৈরি হয়েছে');
+    expect(r.els['create-message'].textContent).toContain('Passport-EJ0762655.pdf');
     expect(r.els['create-message'].textContent).toContain('চার্জ কাটা হয়েছে: ৳30');
+  });
+
+  test('Create success stores a delivery copy in engine-jobs (re-downloadable from History)', async () => {
+    const r = runFlow({ chargeResponse: { ok: true, status: 200, body: { ok: true, charged: 30, orderId: 'o1', balance: 470 } } });
+    r.els['start-passport-button'].click();
+    fillValid(r);
+    r.els['create-passport-button'].click();
+    await r.state.exportedPromise;
+    await flush();
+    expect(r.downloads).toHaveLength(1);
+    expect(r.engineJobCalls).toHaveLength(1);
+    const call = r.engineJobCalls[0];
+    expect(call.url).toBe('/api/engine-jobs');
+    expect(call.opts.method).toBe('POST');
+    expect(call.opts.headers.Authorization).toBe('Bearer test-token');
+    expect(call.opts.body.fields.engine_id).toBe('passport');
+    expect(call.opts.body.fields.ref_no).toBe('EJ0762655');
+    expect(call.opts.body.fields.name).toBe('GOLAM KIBRIYA MD');
+    expect(call.opts.body.fields.file.filename).toBe('Passport-EJ0762655.pdf');
+    expect(call.opts.body.fields.file.value.type).toBe('application/pdf');
+    // Same idempotency key as the charge — a retry reports the same
+    // key, so History never gets a duplicate row.
+    const chargeIdem = r.chargeCalls.find((c) => c.path === '/passport/create').opts.body.idempotency_key;
+    expect(call.opts.body.fields.idempotency_key).toBe(chargeIdem);
+  });
+
+  test('PDF failure stores no delivery copy', async () => {
+    const r = runFlow({ pdfFailTimes: 99 });
+    r.els['start-passport-button'].click();
+    fillValid(r);
+    r.els['create-passport-button'].click();
+    await r.state.exportedPromise;
+    await flush();
+    expect(r.downloads).toHaveLength(0);
+    expect(r.engineJobCalls).toHaveLength(0);
+  });
+
+  test('retry after a PDF failure reports the delivery copy once, same idempotency key', async () => {
+    const r = runFlow({ pdfFailTimes: 1, chargeResponse: { ok: true, status: 200, body: { ok: true, charged: 30, orderId: 'o1', balance: 470 } } });
+    r.els['start-passport-button'].click();
+    fillValid(r);
+    // First Create: charge ok, PDF fails → no download, no report.
+    r.els['create-passport-button'].click();
+    await r.state.exportedPromise;
+    await flush();
+    expect(r.downloads).toHaveLength(0);
+    expect(r.engineJobCalls).toHaveLength(0);
+    // Retry: PDF succeeds → one download, exactly one report.
+    r.els['create-passport-button'].click();
+    await flush();
+    expect(r.downloads).toHaveLength(1);
+    expect(r.engineJobCalls).toHaveLength(1);
+    const chargeIdem = r.chargeCalls.find((c) => c.path === '/passport/create').opts.body.idempotency_key;
+    expect(r.engineJobCalls[0].opts.body.fields.idempotency_key).toBe(chargeIdem);
+  });
+
+  test('landing and Create state PDF before acting (fix 2026-11-14)', () => {
+    expect(PAGE).toContain('Create চাপলে পাসপোর্ট PDF তৈরি হয়ে ডাউনলোড হবে।');
+    expect(PAGE).toContain('Create — PDF ডাউনলোড করুন');
   });
 
   test('PDF failure shows a clear error and downloads NOTHING — no HTML fallback', async () => {
@@ -1387,7 +1466,7 @@ describe('document-only export (bug fix 2026-11-14)', () => {
   const EDITOR_MARKERS = [
     'class="toolbar"', 'id="passport-landing"', 'id="panel-engine"', 'id="panel-text"',
     'id="panel-photo"', 'id="panel-signature"', 'id="document-state"', 'id="toast"',
-    'id="save-button"', 'id="print-button"', 'id="regions-button"', 'id="preview-button"',
+    'id="print-button"', 'id="regions-button"', 'id="preview-button"',
     'window.passportEngine', 'window.documentEditor', 'function snapshotHTML',
     'id="eng-passportNo"', 'id="field-picker"', 'id="field-value"',
     'class="tabs"', 'Passport তৈরি করুন', 'id="passport-login-gate"',

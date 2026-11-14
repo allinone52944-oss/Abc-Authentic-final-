@@ -785,7 +785,7 @@ router.get('/history', async (req, res) => {
     for (const j of engineJobs.rows) {
       items.push({
         kind: 'engine', id: j.id,
-        title: (j.engine_id === 'death-final' ? 'মৃত্যু সনদ' : 'জন্ম সনদ (সার্টিফিকেট)') +
+        title: ({ 'birth-final': 'জন্ম সনদ (সার্টিফিকেট)', 'death-final': 'মৃত্যু সনদ', 'passport': 'পাসপোর্ট' }[j.engine_id] || 'জন্ম সনদ (সার্টিফিকেট)') +
           (j.subject_name ? ' — ' + j.subject_name : '') +
           (j.outcome === 'failed' ? ' — ব্যর্থ' : ''),
         created_at: j.created_at,

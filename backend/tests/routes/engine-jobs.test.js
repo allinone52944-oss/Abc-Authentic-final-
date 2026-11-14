@@ -90,6 +90,31 @@ describe('POST /api/engine-jobs — report a delivery copy', () => {
     expect(dirCount()).toBe(before);
   });
 
+  test('passport delivery copy stores, and notifies as পাসপোর্ট (not a birth certificate)', async () => {
+    let insertParams = null;
+    db.__routeQuery([
+      ['INSERT INTO engine_jobs', (text, params) => { insertParams = params; return { rows: [{ id: 'jP' }] }; }],
+    ]);
+    const r = await asUser(request(app()).post('/api/engine-jobs'))
+      .field('engine_id', 'passport')
+      .field('ref_no', 'EJ0762655')
+      .field('name', 'GOLAM KIBRIYA MD')
+      .field('idempotency_key', 'passport-abc-123')
+      .attach('file', Buffer.from('%PDF-1.4 passport'), 'Passport-EJ0762655.pdf')
+      .expect(201);
+    expect(r.body).toMatchObject({ ok: true, id: 'jP' });
+    expect(insertParams[1]).toBe('passport');
+    expect(insertParams[2]).toBe('EJ0762655');
+    expect(fs.existsSync(path.join(UPLOAD_DIR, insertParams[4]))).toBe(true);
+    dropFile(insertParams[4]);
+    expect(wa.notifyServiceCompleted).toHaveBeenCalledTimes(1);
+    expect(wa.notifyServiceCompleted.mock.calls[0][2]).toBe('পাসপোর্ট');
+    expect(push.notifyUser).toHaveBeenCalledTimes(1);
+    expect(push.notifyUser.mock.calls[0][2]).toContain('পাসপোর্ট');
+    expect(push.notifyUser.mock.calls[0][2]).not.toContain('জন্ম সনদ');
+    expect(push.notifyUser.mock.calls[0][3]).toContain('পাসপোর্টটি');
+  });
+
   test('unknown engine → 400 BAD_ENGINE and no file kept', async () => {
     const before = dirCount();
     const r = await asUser(request(app()).post('/api/engine-jobs'))
@@ -280,6 +305,24 @@ describe('GET /api/history — engine deliveries are included', () => {
     const bdrisQueries = db.query.mock.calls.filter(c => /bdris_applications/.test(c[0]));
     expect(bdrisQueries).toHaveLength(1);
     expect(bdrisQueries[0][0]).toContain("status = 'submitted'");
+  });
+
+  test('a passport delivery appears titled পাসপোর্ট with a re-download link', async () => {
+    db.__routeQuery([
+      ['FROM orders o LEFT JOIN services', { rows: [] }],
+      ['FROM manual_submissions m LEFT JOIN services', { rows: [] }],
+      ['FROM engine_jobs', { rows: [
+        { id: 'jP', engine_id: 'passport', subject_name: 'GOLAM KIBRIYA MD', filename: 'engine-p.pdf', originalname: 'Passport-EJ0762655.pdf', created_at: '2026-10-21T08:00:00Z' },
+      ] }],
+      ['FROM bdris_applications', { rows: [] }],
+    ]);
+    const r = await asUser(request(app()).get('/api/history')).expect(200);
+    expect(r.body.items).toHaveLength(1);
+    expect(r.body.items[0].kind).toBe('engine');
+    expect(r.body.items[0].title).toContain('পাসপোর্ট');
+    expect(r.body.items[0].title).not.toContain('জন্ম সনদ');
+    expect(r.body.items[0].documents).toHaveLength(1);
+    expect(r.body.items[0].documents[0].url).toBe('/engine-jobs/jP/file');
   });
 
   test('a failed engine job appears in history marked ব্যর্থ with NO download link (R1 follow-up: the receipt is not a deliverable)', async () => {
