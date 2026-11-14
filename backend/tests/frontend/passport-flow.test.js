@@ -1,17 +1,17 @@
 // Passport engine form-first flow — frontend only (text-reading + vm).
 //
-// Bug (user-reported 2026-11-13, corrected same day): the page opened
-// straight into the editor, and the first fix showed the form INSIDE the
-// editor's Engine tab (MRZ lines visible, editor chrome around it).
-// Correct flow: landing "Passport তৈরি করুন" → a SEPARATE form screen
-// (1st page = form, only what the user fills up — no MRZ auto fields, no
-// document preview, no editor chrome) → Create → DIRECT download, then
-// the editor for photo/signature fine-tuning. Automation (name auto-split,
-// MRZ auto-generation, dates) still runs behind the scenes through the
-// engine inputs — it is computed, not displayed. The output itself (MRZ
-// TD3, dotted strip, name split, dates, photo/signature slots) is
-// untouched — the change is the FLOW only, driven through the exposed
-// editor APIs (window.passportEngine / window.documentEditor).
+// Flow (user direction 2026-11-14): landing "Passport তৈরি করুন" → a
+// SEPARATE form screen (1st page = form, only what the user fills up —
+// no MRZ auto fields, no document preview, no editor chrome) → Create
+// → DIRECT real-PDF download → result screen. NO EDITOR: the output is
+// just the PDF (like the NID engines); a change after Create means
+// refilling the form and pressing Create again. Automation (name
+// auto-split, MRZ auto-generation, dates) still runs behind the scenes
+// through the engine inputs — it is computed, not displayed. The output
+// itself (MRZ TD3, dotted strip, name split, dates, photo/signature
+// slots) is untouched — the change is the FLOW only, driven through the
+// exposed document-engine APIs (window.passportEngine /
+// window.documentEditor).
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
@@ -110,18 +110,15 @@ function runFlow(opts) {
   // Price line (integrated service): the fee / free text, filled by
   // loadPrice() when the form opens.
   els['passport-price-line'] = makeEl('passport-price-line', 'p');
-  // Balance pills (site-feel Fix 1): topbar (landing/form) + toolbar
-  // (editor) — both show the wallet balance, bn-formatted.
+  // Balance pill (site-feel Fix 1): topbar (landing/form/result)
+  // shows the wallet balance, bn-formatted. No editor pill anymore.
   els['balVal'] = makeEl('balVal', 'span');
   els['balVal'].textContent = '০';
-  els['balValEditor'] = makeEl('balValEditor', 'span');
-  els['balValEditor'].textContent = '০';
-  // Post-Create result screen (site-feel Fix 6): success first, editor
-  // opt-in via a button.
+  // Post-Create result screen (site-feel Fix 6): success first, no
+  // editor — re-download, back to form, or start fresh.
   els['passport-result'] = makeEl('passport-result', 'section');
   els['result-message'] = makeEl('result-message', 'p');
   els['download-again-button'] = makeEl('download-again-button', 'button');
-  els['edit-more-button'] = makeEl('edit-more-button', 'button');
   els['back-to-form-button'] = makeEl('back-to-form-button', 'button');
   els['new-passport-button'] = makeEl('new-passport-button', 'button');
   // Template values, as the live page ships them — the form must blank them.
@@ -262,8 +259,10 @@ describe('landing (form-first entry)', () => {
     expect(CSS).toContain('body.flow-landing #passport-landing{display:block}');
   });
 
-  test('landing state hides the toolbar, document, editor and footer', () => {
-    expect(CSS).toContain('body.flow-landing .toolbar,body.flow-landing .document-area,body.flow-landing aside,body.flow-landing .footer-note{display:none}');
+  test('landing state hides the document and the form (no editor anywhere)', () => {
+    expect(CSS).toContain('body.flow-landing .document-area,body.flow-landing #panel-engine{display:none}');
+    expect(PAGE).not.toContain('class="toolbar"');
+    expect(PAGE).not.toContain('<aside');
   });
 });
 
@@ -302,11 +301,15 @@ describe('form (separate form screen)', () => {
     expect(FLOW).toContain('formEntered');
   });
 
-  test('form screen hides the editor chrome (panel head, tabs) and the helper', () => {
-    expect(CSS).toContain('body.flow-form .panel-head,body.flow-form .tabs{display:none}');
+  test('form screen has no editor chrome at all (no panel head, tabs, toolbar)', () => {
+    expect(PAGE).not.toContain('class="toolbar"');
+    expect(PAGE).not.toContain('<aside');
+    expect(PAGE).not.toContain('class="tabs"');
+    expect(PAGE).not.toContain('id="panel-text"');
+    expect(PAGE).not.toContain('id="panel-photo"');
+    expect(PAGE).not.toContain('id="panel-signature"');
     expect(CSS).toContain('body.flow-form #panel-engine>.helper{display:none}');
-    expect(CSS).toContain('body.flow-form [data-tab]:not([data-tab="engine"]){display:none}');
-    expect(CSS).toContain('body.flow-form .toolbar,body.flow-form .document-area,body.flow-form .footer-note{display:none}');
+    expect(CSS).toContain('body.flow-form .document-area{display:none}');
   });
 
   test('form screen hides the MRZ group — the MRZ fields are not shown', () => {
@@ -349,7 +352,7 @@ describe('form (separate form screen)', () => {
     expect(PAGE.slice(at, at + 200)).toContain('maxlength="9"');
   });
 
-  test('form state collapses the editor grid to a single column', () => {
+  test('form state is a single column', () => {
     expect(CSS).toContain('body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:760px}');
   });
 });
@@ -382,11 +385,11 @@ describe('form photo/signature upload', () => {
     const headAt = PAGE.indexOf('id="passport-form-head"');
     const passportAt = PAGE.indexOf('id="eng-passportNo"');
     const createAt = PAGE.indexOf('id="create-passport-button"');
-    const panelTextAt = PAGE.indexOf('id="panel-text"');
+    const docAt = PAGE.indexOf('class="document-area"');
     expect(groupAt).toBeGreaterThan(headAt);
     expect(groupAt).toBeLessThan(passportAt);
     expect(groupAt).toBeLessThan(createAt);
-    expect(createAt).toBeLessThan(panelTextAt);
+    expect(createAt).toBeLessThan(docAt);
   });
 
   test('form state does not hide the upload group — the confirmation stays hidden until a file is chosen', () => {
@@ -448,16 +451,21 @@ describe('form declutter — status bar, Fidelity and Print texts removed; group
     expect(PAGE).not.toContain('preserved artwork');
   });
 
-  test('the Text panel typography details block is kept (only the two quoted blocks were removed)', () => {
-    expect(PAGE).toContain('id="style-details"');
-    expect(PAGE).toContain('অক্ষর ও অবস্থান');
+  test('the editor panels are gone entirely (text/photo/signature tabs + style controls)', () => {
+    for (const id of ['panel-text', 'panel-photo', 'panel-signature', 'style-details', 'field-picker', 'field-value', 'style-controls', 'photo-fit', 'photo-cutout', 'preserve-stamp', 'signature-remove-white', 'signature-trim']) {
+      expect(PAGE).not.toContain('id="' + id + '"');
+    }
+    expect(PAGE).not.toContain('অক্ষর ও অবস্থান');
+    expect(PAGE).not.toContain('class="tabs"');
   });
 
-  test('updateStatus guards the missing status element; the document-only export never touches it', () => {
-    expect(MAIN).toContain("const st=$('status');if(st)");
+  test('no editor status/unsaved machinery remains; the document-only export never touches it', () => {
+    expect(MAIN).not.toContain('updateStatus');
+    expect(MAIN).not.toContain('unsaved');
+    expect(MAIN).not.toContain('beforeunload');
+    expect(MAIN).not.toContain("const st=$('status')");
     // The document-only export (bug fix 2026-11-14) builds a fresh
-    // document from #page-shell — it never references #status, so the
-    // old export-reset guard is gone because it cannot crash on it.
+    // document from #page-shell — it never references #status.
     expect(MAIN).not.toContain("root.querySelector('#status')");
   });
 
@@ -467,15 +475,15 @@ describe('form declutter — status bar, Fidelity and Print texts removed; group
 });
 
 describe('Create → download', () => {
-  test('Create button + status message sit at the end of the Engine panel, outside the MRZ group', () => {
+  test('Create button + status message sit at the end of the form, outside the MRZ group', () => {
     expect(PAGE).toContain('id="create-passport-button"');
     expect(PAGE).toContain('Create — PDF ডাউনলোড করুন');
     expect(PAGE).toContain('id="create-message"');
     const createAt = PAGE.indexOf('id="create-passport-button"');
     const remrzAt = PAGE.indexOf('id="eng-remrz"');
     expect(createAt).toBeGreaterThan(remrzAt);
-    const panelTextAt = PAGE.indexOf('id="panel-text"');
-    expect(createAt).toBeLessThan(panelTextAt);
+    const docAt = PAGE.indexOf('class="document-area"');
+    expect(createAt).toBeLessThan(docAt);
     // The MRZ group closes before the Create block opens — Create is a
     // sibling of the group, so hiding the group never hides Create.
     expect(PAGE).toContain('</div>\n    <div class="create-actions">');
@@ -510,14 +518,19 @@ describe('Create → download', () => {
   });
 });
 
-describe('flow layer does not touch the editor', () => {
-  test('the editor IIFE still exposes the same frozen APIs', () => {
+describe('flow layer drives the document engine through frozen APIs', () => {
+  test('the engine IIFE still exposes the same frozen APIs (no editor-only surface)', () => {
     expect(MAIN).toContain('window.passportEngine=Object.freeze');
     expect(MAIN).toContain('window.documentEditor=Object.freeze');
     expect(MAIN).toContain('applyAll:applyAllEngine');
     expect(MAIN).toContain('regenerateMRZ,');
     expect(MAIN).toContain('validate:validateEngine,');
     expect(MAIN).toContain('buildMrz1,buildMrz2,');
+    expect(MAIN).toContain('getState:()=>clone(model),setText,');
+    expect(MAIN).toContain('setImage:(type,input)=>track(setImage(type,input)),resetImage,exportHTML');
+    expect(MAIN).not.toContain('setStyle,');
+    expect(MAIN).not.toContain('resetRegion,');
+    expect(MAIN).not.toContain('inspect:');
   });
 
   test('flow script guards on missing APIs / no landing state instead of crashing', () => {
@@ -585,7 +598,7 @@ describe('flow behavior (vm, stub DOM)', () => {
     expect(r.els['eng-fullName'].value).toBe('GOLAM KIBRIYA MD');
   });
 
-  test('filling + Create downloads the PDF and shows the result screen first (editor opt-in)', async () => {
+  test('filling + Create downloads the PDF and shows the result screen first (no editor — just the PDF)', async () => {
     const r = runFlow({});
     r.els['start-passport-button'].click();
     r.els['eng-passportNo'].value = 'EJ0762655';
@@ -609,8 +622,8 @@ describe('flow behavior (vm, stub DOM)', () => {
     expect(r.els['result-message'].textContent).toContain('Passport-EJ0762655.pdf');
   });
 
-  // Site-feel Fix 6: post-Create result screen — success first, editor
-  // behind an opt-in button; re-download is free (same stored blob).
+  // Site-feel Fix 6: post-Create result screen — success first, no
+  // editor; re-download is free (same stored blob).
   async function createOk() {
     const r = runFlow({});
     r.els['start-passport-button'].click();
@@ -637,12 +650,16 @@ describe('flow behavior (vm, stub DOM)', () => {
     expect(r.chargeCalls.filter((c) => c.path === '/passport/create')).toHaveLength(1);
   });
 
-  test('result screen: edit-more opens the editor', async () => {
+  test('result screen: no editor entry point anywhere in the flow', async () => {
     const r = await createOk();
-    r.els['edit-more-button'].click();
-    expect(r.body.classList.contains('flow-result')).toBe(false);
-    expect(r.body.classList.contains('flow-form')).toBe(false);
-    expect(r.body.classList.contains('flow-landing')).toBe(false);
+    expect(r.body.classList.contains('flow-result')).toBe(true);
+    expect(PAGE).not.toContain('id="edit-more-button"');
+    expect(PAGE).not.toContain('আরও সম্পাদনা করুন');
+    expect(FLOW).not.toContain('edit-more-button');
+    // The only exits are re-download, back to form, or a fresh start.
+    expect(PAGE).toContain('id="download-again-button"');
+    expect(PAGE).toContain('id="back-to-form-button"');
+    expect(PAGE).toContain('id="new-passport-button"');
   });
 
   test('result screen: back-to-form returns to the form with the data kept', async () => {
@@ -662,23 +679,23 @@ describe('flow behavior (vm, stub DOM)', () => {
     expect(r.els['eng-fullName'].value).toBe('');
   });
 
-  test('result screen markup: success message, re-download, edit opt-in, history link', () => {
+  test('result screen markup: success message, re-download, history link (no editor)', () => {
     expect(PAGE).toContain('id="passport-result"');
     expect(PAGE).toContain('id="result-message"');
     expect(PAGE).toContain('id="download-again-button"');
     expect(PAGE).toContain('আবার ডাউনলোড করুন');
-    expect(PAGE).toContain('id="edit-more-button"');
-    expect(PAGE).toContain('আরও সম্পাদনা করুন');
+    expect(PAGE).not.toContain('id="edit-more-button"');
+    expect(PAGE).not.toContain('আরও সম্পাদনা করুন');
     expect(PAGE).toContain('href="/history.html"');
     expect(PAGE).toContain('ইতিহাসে দেখুন');
     expect(PAGE).toContain('id="back-to-form-button"');
     expect(PAGE).toContain('id="new-passport-button"');
   });
 
-  test('result screen CSS: shown only in flow-result; editor hidden there', () => {
+  test('result screen CSS: shown only in flow-result; form + document hidden there', () => {
     expect(CSS).toContain('#passport-result{display:none}');
     expect(CSS).toContain('body.flow-result #passport-result{display:block}');
-    expect(CSS).toContain('body.flow-result .toolbar,body.flow-result .document-area,body.flow-result aside,body.flow-result .footer-note{display:none}');
+    expect(CSS).toContain('body.flow-result .document-area,body.flow-result #panel-engine{display:none}');
     expect(CSS).toContain('body.flow-result #passport-topbar');
   });
 
@@ -1056,23 +1073,22 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
     expect(CSS).toContain('var(--gold-gradient)');
     expect(CSS).not.toContain('var(--pg-gold-2)');
     // The form's premium rules themselves are unchanged.
-    expect(CSS).toContain('body.flow-form aside{background:var(--pg-surface)');
+    expect(CSS).toContain('body.flow-form #panel-engine{background:var(--pg-surface)');
   });
 
-  test('Bengali chrome: lang, title, toolbar, tabs, no old English strings', () => {
+  test('Bengali chrome: lang, title, no editor chrome, no old English strings', () => {
     expect(PAGE).toContain('<html lang="bn">');
     expect(PAGE).toContain('<title>পাসপোর্ট ইঞ্জিন - All In One</title>');
-    for (const s of ['অঞ্চল দেখুন', 'প্রিভিউ', 'প্রিন্ট']) {
-      expect(PAGE).toContain(s);
-    }
-    // No HTML download path anymore (fix 2026-11-14): the toolbar's
-    // HTML-save button, its wiring and Ctrl+S are all gone, and the
-    // print button is labelled print only — it never was a download.
-    for (const s of ['প্রিন্ট / PDF', 'HTML সংরক্ষণ করুন', 'id="save-button"', 'saveHTML', "key==='s'"]) {
+    // The editor is gone: no toolbar actions, no tabs, no print button.
+    // (প্রিভিউ stays as a word inside a form hint — only the button id
+    // is asserted absent.)
+    for (const s of ['অঞ্চল দেখুন', 'প্রিন্ট', 'id="regions-button"', 'id="preview-button"', 'id="print-button"', 'data-tab="engine">ইঞ্জিন', 'data-tab="text">লেখা', 'data-tab="photo">ছবি', 'data-tab="signature">স্বাক্ষর', 'id="panel-text"', 'id="panel-photo"', 'id="panel-signature"']) {
       expect(PAGE).not.toContain(s);
     }
-    for (const s of ['data-tab="engine">ইঞ্জিন', 'data-tab="text">লেখা', 'data-tab="photo">ছবি', 'data-tab="signature">স্বাক্ষর']) {
-      expect(PAGE).toContain(s);
+    // No HTML download path anymore (fix 2026-11-14): the toolbar's
+    // HTML-save button, its wiring and Ctrl+S are all gone.
+    for (const s of ['প্রিন্ট / PDF', 'HTML সংরক্ষণ করুন', 'id="save-button"', 'saveHTML', "key==='s'"]) {
+      expect(PAGE).not.toContain(s);
     }
     for (const s of ['Show regions', 'Save HTML', 'Document editor', 'Typography &amp; position', 'Upload photo', 'Upload signature', 'Passport Engine — Linked Editable Text']) {
       expect(PAGE).not.toContain(s);
@@ -1104,21 +1120,20 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
     const r = runFlow({});
     await flush();
     expect(r.els['balVal'].textContent).toBe('৫০০');
-    expect(r.els['balValEditor'].textContent).toBe('৫০০');
   });
 
-  test('balance pill markup: topbar + toolbar pills link to the wallet', () => {
+  test('balance pill markup: the topbar pill links to the wallet', () => {
     expect(PAGE).toContain('id="walletBadge"');
     expect(PAGE).toContain('id="balVal"');
-    expect(PAGE).toContain('id="walletBadgeEditor"');
-    expect(PAGE).toContain('id="balValEditor"');
+    expect(PAGE).not.toContain('id="walletBadgeEditor"');
+    expect(PAGE).not.toContain('id="balValEditor"');
     expect(PAGE).toContain("location.href='/wallet.html'");
     expect(PAGE).toContain('💳 ব্যালেন্স: ৳');
   });
 
-  test('balance pill CSS: topbar hidden in the editor, shown on landing/form', () => {
+  test('balance pill CSS: topbar shown on landing/form/result (no editor view)', () => {
     expect(CSS).toContain('#passport-topbar{display:none}');
-    expect(CSS).toContain('body.flow-landing #passport-topbar,body.flow-form #passport-topbar');
+    expect(CSS).toContain('body.flow-landing #passport-topbar,body.flow-form #passport-topbar,body.flow-result #passport-topbar');
   });
 
   // Site-feel Fix 2: the standard page header (emoji + Bengali h2 +
@@ -1149,7 +1164,7 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
     expect(PAGE).toContain('<p class="engine-legend">তারিখ ও ব্যক্তিগত তথ্য</p>');
     expect(PAGE).toContain('<p class="engine-legend">ঠিকানা ও যোগাযোগ</p>');
     expect(PAGE).toContain('MRZ · মেশিন-পাঠযোগ্য');
-    expect(PAGE).toContain('সংযুক্ত তথ্য · মূল স্ক্যান সংরক্ষিত');
+    expect(PAGE).not.toContain('সংযুক্ত তথ্য · মূল স্ক্যান সংরক্ষিত');
     expect(PAGE).not.toContain('লিংকড তথ্য');
     expect(PAGE).not.toContain('Photo &amp; signature');
     expect(PAGE).not.toContain('machine-readable');
@@ -1244,14 +1259,16 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
       // The surname/given-name message is built with a ternary, so the
       // literal is split: 'MRZ-এর জন্য লাতিন অক্ষরের ' + 'পদবি'.
       'MRZ-এর জন্য লাতিন অক্ষরের ',
-      'ছবি মূল ফ্রেমে বদলে গেছে',
-      'স্বাক্ষর মূল জায়গায় বদলে গেছে',
     ]) expect(MAIN).toContain(s);
     for (const s of [
       'MRZ check digits do not match',
       'Enter the three-letter nationality code',
       'Use a Latin-letter surname',
       'Photo replaced in its original frame',
+      // The editor panel upload confirmations are gone with the panels;
+      // the form upload says ছবি/স্বাক্ষর যোগ হয়েছে (flow script).
+      'ছবি মূল ফ্রেমে বদলে গেছে',
+      'স্বাক্ষর মূল জায়গায় বদলে গেছে',
     ]) expect(MAIN).not.toContain(s);
   });
 
@@ -1265,15 +1282,18 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
     expect(PAGE).not.toContain('placeholder="EJ0762655"');
     expect(PAGE).not.toContain('placeholder="GOLAM KIBRIYA MD"');
   });
-  test('editor toolbar follows the site page-header pattern', () => {
+  test('no editor toolbar remains — the topbar is the only page header', () => {
     expect(PAGE).toContain('<h2>🛂 পাসপোর্ট ইঞ্জিন</h2>');
     expect(PAGE).not.toContain('<h1>পাসপোর্ট ইঞ্জিন</h1>');
-    expect(PAGE).toContain('.toolbar{position:sticky;top:0;z-index:30;background:var(--bg-page,#eef2ef);border-bottom:1px solid var(--line)}');
+    expect(PAGE).not.toContain('class="toolbar"');
+    expect(PAGE).not.toContain('.toolbar{');
     expect(PAGE).not.toContain('backdrop-filter:blur(10px)');
     expect(PAGE).not.toContain('background:#fffffff5');
-    for (const s of ['id="regions-button"', 'id="preview-button"', 'id="print-button"', 'id="walletBadgeEditor"']) {
-      expect(PAGE).toContain(s);
+    for (const s of ['id="regions-button"', 'id="preview-button"', 'id="print-button"', 'id="walletBadgeEditor"', 'id="balValEditor"']) {
+      expect(PAGE).not.toContain(s);
     }
+    expect(PAGE).toContain('id="passport-topbar"');
+    expect(PAGE).toContain('id="walletBadge"');
   });
 
   test('price line: form entry with a price shows the fee + balance', async () => {
