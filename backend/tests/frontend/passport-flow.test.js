@@ -352,8 +352,8 @@ describe('form (separate form screen)', () => {
     expect(PAGE.slice(at, at + 200)).toContain('maxlength="9"');
   });
 
-  test('form state is a single column', () => {
-    expect(CSS).toContain('body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:760px}');
+  test('form state is a two-column grid at the standard content width', () => {
+    expect(CSS).toContain('body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:1046px}');
   });
 });
 
@@ -1144,13 +1144,68 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
     expect(PAGE).toContain('ফর্ম পূরণ করুন — Create চাপলে পাসপোর্ট PDF তৈরি হয়ে ডাউনলোড হবে।');
   });
 
-  // Site-feel Fix 3: the landing fills the standard content width —
-  // no floating 760px card in empty space. The form keeps its 760px.
-  test('landing fills the standard content width, form keeps 760px', () => {
+  // Two-column form (2026-11-15): the form is side-by-side premium at
+  // the standard content width — no more 760px single column.
+  test('landing and form both fill the standard content width (1046px)', () => {
     expect(CSS).toContain('body.flow-landing main{display:block}');
     expect(CSS).not.toContain('body.flow-landing main{display:block;max-width:760px}');
-    expect(CSS).toContain('body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:760px}');
+    expect(CSS).toContain('body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:1046px}');
   });
+
+describe('two-column premium form (2026-11-15)', () => {
+  // User complaint: the form was one very long column with no premium
+  // sizing. Groups now lay their fields out in a 2-column grid on
+  // desktop and collapse to one column on mobile. Group + field order
+  // is unchanged; only the layout moved.
+  test('form groups use the two-column grid', () => {
+    for (const rule of [
+      'body.flow-form .form-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 16px}',
+      'body.flow-form .form-grid>.engine-legend{grid-column:1/-1}',
+      'body.flow-form .form-grid>.engine-row{grid-column:1/-1;gap:0 16px}',
+      'body.flow-form .form-grid>.checkbox{grid-column:1/-1}',
+      'body.flow-form .form-grid .span-2{grid-column:1/-1}',
+      'body.flow-form #eng-emergency-box:not([hidden]){display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 16px}',
+    ]) expect(CSS).toContain(rule);
+    // The five visible groups carry the grid class; the MRZ group stays
+    // hidden on the form screen and keeps its single-column rules.
+    expect(PAGE.match(/class="engine-group form-grid"/g)).toHaveLength(5);
+    expect(PAGE).toContain('<div class="engine-group" id="eng-mrz-group">');
+  });
+
+  test('passport number and full name span both columns; pairs share a row', () => {
+    expect(PAGE).toContain('<div class="form-field span-2"><label for="eng-passportNo">');
+    expect(PAGE).toContain('<div class="form-field span-2"><label for="eng-fullName">');
+    for (const id of ['eng-fatherName', 'eng-motherName', 'eng-birthPlace', 'eng-nationality', 'eng-nationalityCode', 'eng-personalNo', 'eng-previousPassport', 'eng-authority', 'eng-address1', 'eng-address2', 'eng-emergencyName']) {
+      expect(PAGE).toContain('<div class="form-field"><label for="' + id + '">');
+    }
+    // The nationality hint travels with its field (it is the one hint
+    // the form screen keeps visible).
+    const fieldAt = PAGE.indexOf('<div class="form-field"><label for="eng-nationalityCode">');
+    const hintAt = PAGE.indexOf('id="eng-nationality-hint"');
+    const closeAt = PAGE.indexOf('</div>', fieldAt);
+    expect(hintAt).toBeGreaterThan(fieldAt);
+    expect(hintAt).toBeLessThan(closeAt);
+  });
+
+  test('field order is unchanged (visual order = DOM order)', () => {
+    const ids = ['eng-passportNo', 'eng-docType', 'eng-countryCode', 'eng-fullName', 'eng-fatherName', 'eng-motherName', 'eng-spouseName', 'eng-dob', 'eng-sex', 'eng-issueDate', 'eng-expiryDate', 'eng-birthPlace', 'eng-nationality', 'eng-nationalityCode', 'eng-personalNo', 'eng-previousPassport', 'eng-authority', 'eng-address1', 'eng-address2', 'eng-sameEmergency', 'eng-emergency1', 'eng-emergency2', 'eng-phone', 'eng-relationship', 'eng-emergencyName'];
+    let prev = -1;
+    for (const id of ids) {
+      const at = PAGE.indexOf('id="' + id + '"');
+      expect(at).toBeGreaterThan(prev);
+      prev = at;
+    }
+  });
+
+  test('mobile collapses to a single column at the 740px breakpoint', () => {
+    expect(CSS).toContain('body.flow-form .form-grid{grid-template-columns:minmax(0,1fr)}');
+    expect(CSS).toContain('body.flow-form #eng-emergency-box:not([hidden]){grid-template-columns:minmax(0,1fr)}');
+  });
+
+  test('flow stylesheet is cache-busted for the new layout', () => {
+    expect(PAGE).toContain('/css/passport-flow.css?v=2');
+  });
+});
 
   // Site-feel Fix 4: Bengali kicker + Bengali-only section headers —
   // no English halves, no transliterated "লিংকড" in chrome.

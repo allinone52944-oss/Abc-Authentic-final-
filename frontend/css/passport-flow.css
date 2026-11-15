@@ -8,6 +8,19 @@
 #panel-engine label{margin:9px 0 4px}
 .engine-row{display:grid;grid-template-columns:1fr 1fr;gap:0 9px}
 .engine-row label{margin-top:9px}
+/* ---- Two-column premium form (2026-11-15): fields sit side by side
+   on desktop so the form is much shorter; group + field order is
+   unchanged. Single column again on mobile (see the 740px query). ---- */
+body.flow-form .form-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 16px}
+body.flow-form .form-grid>.engine-legend{grid-column:1/-1}
+body.flow-form .form-grid>.engine-row{grid-column:1/-1;gap:0 16px}
+body.flow-form .form-grid>.engine-hint{grid-column:1/-1}
+body.flow-form .form-grid>.checkbox{grid-column:1/-1}
+body.flow-form .form-grid>#eng-emergency-box{grid-column:1/-1}
+body.flow-form .form-grid .span-2{grid-column:1/-1}
+body.flow-form #panel-engine .form-grid .form-field label{margin-top:12px}
+body.flow-form #panel-engine .form-grid .form-field .engine-hint{margin-top:6px}
+body.flow-form #eng-emergency-box:not([hidden]){display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 16px}
 .auto-tag{display:inline-block;margin-left:4px;padding:1px 5px;border-radius:8px;background:#e1efe5;color:#184a31;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:none;vertical-align:middle}
 #panel-engine textarea{min-height:46px;max-height:96px;font-family:ScanMono,Consolas,monospace;font-size:10px;line-height:1.5;letter-spacing:.04em;white-space:pre;resize:vertical}
 .engine-actions{display:flex;gap:7px;margin-top:10px}
@@ -24,7 +37,7 @@ body.flow-landing #passport-landing{display:block}
 body.flow-landing .document-area,body.flow-landing #panel-engine{display:none}
 body.flow-landing main{display:block}
 body.flow-form .document-area{display:none}
-body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:760px}
+body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:1046px}
 /* Standard content header (site-feel Fixes 1–2): balance pill + page
    header, same pattern as the other engines. */
 #passport-topbar{display:none}
@@ -136,6 +149,8 @@ body.flow-form .create-actions .primary:hover{background:var(--gold-gradient);bo
  body.flow-form main{margin:16px auto 32px}
  body.flow-form #panel-engine{padding:20px 18px 24px}
  body.flow-form .form-upload-row{grid-template-columns:1fr}
+ body.flow-form .form-grid{grid-template-columns:minmax(0,1fr)}
+ body.flow-form #eng-emergency-box:not([hidden]){grid-template-columns:minmax(0,1fr)}
 }
 @media(prefers-reduced-motion:reduce){
  body.flow-landing .passport-landing-inner .primary,body.flow-form .create-actions .primary,body.flow-form #eng-photo-group .primary{transition:none}
