@@ -573,6 +573,10 @@ describe('flow behavior (vm, stub DOM)', () => {
     expect(r.els['eng-fullName'].value).toBe('');
     expect(r.els['eng-dob'].value).toBe('');
     expect(r.els['eng-nationality'].value).toBe('');
+    // Defaults (user direction 2026-11-15): Type "P" and Country code
+    // "BGD" are pre-filled; everything else is blank.
+    expect(r.els['eng-docType'].value).toBe('P');
+    expect(r.els['eng-countryCode'].value).toBe('BGD');
     expect(r.els['eng-dotStripAuto'].checked).toBe(true);
     expect(r.els['eng-sameEmergency'].checked).toBe(false);
     expect(r.calls.applyAll).toBeGreaterThan(0);
@@ -677,6 +681,9 @@ describe('flow behavior (vm, stub DOM)', () => {
     expect(r.body.classList.contains('flow-result')).toBe(false);
     expect(r.els['eng-passportNo'].value).toBe('');
     expect(r.els['eng-fullName'].value).toBe('');
+    // A fresh start restores the defaults (user direction 2026-11-15).
+    expect(r.els['eng-docType'].value).toBe('P');
+    expect(r.els['eng-countryCode'].value).toBe('BGD');
   });
 
   test('result screen markup: success message, re-download, history link (no editor)', () => {
@@ -786,6 +793,83 @@ describe('flow behavior (vm, stub DOM)', () => {
     expect(() => r.els['start-passport-button'].click()).not.toThrow();
     expect(r.body.classList.contains('flow-form')).toBe(false);
     expect(r.calls.applyAll).toBe(0);
+  });
+});
+
+describe('field defaults — Type P / Country code BGD (2026-11-15)', () => {
+  // User direction: Type (ধরন) and Country code (দেশের কোড) are
+  // pre-filled with defaults and stay editable — change or clear them.
+  function fillRequired(r) {
+    r.els['eng-passportNo'].value = 'EJ0762655';
+    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-dob'].value = '1979-12-17';
+    r.els['eng-sex'].value = 'M';
+    r.els['eng-expiryDate'].value = '2035-01-01';
+    r.els['eng-nationality'].value = 'BANGLADESHI';
+  }
+
+  test('defaults are a single source in the flow (FORM_DEFAULTS)', () => {
+    expect(FLOW).toContain("var FORM_DEFAULTS = { docType: 'P', countryCode: 'BGD' };");
+    expect(FLOW).toContain('FORM_KEYS.forEach(function(k){ setEng(k, FORM_DEFAULTS[k] || \'\'); });');
+  });
+
+  test('fresh form pre-fills Type P and Country code BGD', () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    expect(r.els['eng-docType'].value).toBe('P');
+    expect(r.els['eng-countryCode'].value).toBe('BGD');
+  });
+
+  test('defaults are plain editable inputs, not disabled or readonly', () => {
+    expect(PAGE).toContain('<input type="text" id="eng-docType" data-engine="docType" maxlength="1" spellcheck="false" autocomplete="off">');
+    expect(PAGE).toContain('<input type="text" id="eng-countryCode" data-engine="countryCode" maxlength="3" spellcheck="false" autocapitalize="off" autocomplete="off">');
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    r.els['eng-docType'].value = 'D';
+    r.els['eng-countryCode'].value = 'USA';
+    expect(r.els['eng-docType'].value).toBe('D');
+    expect(r.els['eng-countryCode'].value).toBe('USA');
+  });
+
+  test('clearing Type blocks Create naming ধরন', () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    fillRequired(r);
+    r.els['eng-docType'].value = '';
+    r.els['create-passport-button'].click();
+    expect(r.calls.exportHTML).toBe(0);
+    expect(r.downloads).toHaveLength(0);
+    expect(r.els['create-message'].textContent).toContain('ধরন পূরণ করুন।');
+    expect(r.els['eng-docType'].focused).toBe(true);
+    expect(r.body.classList.contains('flow-form')).toBe(true);
+  });
+
+  test('clearing Country code blocks Create naming দেশের কোড', () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    fillRequired(r);
+    r.els['eng-countryCode'].value = '';
+    r.els['create-passport-button'].click();
+    expect(r.calls.exportHTML).toBe(0);
+    expect(r.downloads).toHaveLength(0);
+    expect(r.els['create-message'].textContent).toContain('দেশের কোড পূরণ করুন।');
+    expect(r.els['eng-countryCode'].focused).toBe(true);
+    expect(r.body.classList.contains('flow-form')).toBe(true);
+  });
+
+  test('Create with the untouched defaults proceeds (required gate passes)', async () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    fillRequired(r);
+    // docType 'P' and countryCode 'BGD' are the pre-filled defaults.
+    expect(r.els['eng-docType'].value).toBe('P');
+    expect(r.els['eng-countryCode'].value).toBe('BGD');
+    r.els['create-passport-button'].click();
+    await r.state.exportedPromise;
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(r.calls.exportHTML).toBe(1);
+    expect(r.downloads).toHaveLength(1);
+    expect(r.downloads[0].name).toBe('Passport-EJ0762655.pdf');
   });
 });
 

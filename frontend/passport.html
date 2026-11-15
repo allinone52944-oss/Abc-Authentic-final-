@@ -985,8 +985,13 @@ input[type=checkbox]{accent-color:var(--green)}
      code path as typing keeps MRZ, dotted strip, preview and validation
      in sync with the form. */
   var FORM_KEYS = ['passportNo','docType','countryCode','fullName','surname','givenName','fatherName','motherName','spouseName','dob','sex','issueDate','expiryDate','birthPlace','nationality','nationalityCode','personalNo','previousPassport','authority','address1','address2','emergency1','emergency2','emergencyName','phone','relationship','mrz1','mrz2'];
+  /* Field defaults (user direction 2026-11-15): Type "P" (ordinary
+     passport) and Country code "BGD" (Bangladesh) are pre-filled and
+     stay editable — the user can change or clear them. clearForm is
+     the single source: it runs on first entry and on a fresh start. */
+  var FORM_DEFAULTS = { docType: 'P', countryCode: 'BGD' };
   function clearForm(){
-    FORM_KEYS.forEach(function(k){ setEng(k, ''); });
+    FORM_KEYS.forEach(function(k){ setEng(k, FORM_DEFAULTS[k] || ''); });
     setEng('dotStripAuto', true);
     setEng('sameEmergency', false);
     if (api.applyAll) api.applyAll();
