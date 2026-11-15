@@ -10,7 +10,8 @@
 .engine-row label{margin-top:9px}
 /* ---- Two-column premium form (2026-11-15): fields sit side by side
    on desktop so the form is much shorter; group + field order is
-   unchanged. Single column again on mobile (see the 740px query). ---- */
+   unchanged. Two columns on mobile too (user direction 2026-11-15:
+   side-by-side on mobile as well — no single-column collapse). ---- */
 body.flow-form .form-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 16px}
 body.flow-form .form-grid>.engine-legend{grid-column:1/-1}
 body.flow-form .form-grid>.engine-row{grid-column:1/-1;gap:0 16px}
@@ -63,7 +64,7 @@ body.flow-result main{display:block}
 /* ---- Compact density (2026-11-15): the form was still 2166px tall at
    1366px. Tighter gaps, shorter inputs, tighter sections — dense, not
    cramped; labels/inputs stay aligned, 16px input text kept (no iOS
-   zoom on focus). Mobile keeps the single column. ---- */
+   zoom on focus). Two columns hold on mobile too. ---- */
 body.flow-form .form-head{display:block;margin:0 0 4px}
 body.flow-form .form-head h2{font-size:20px;margin:0 0 6px}
 body.flow-form .form-head p{margin:0;color:var(--muted);line-height:1.7}
@@ -153,9 +154,9 @@ body.flow-form .create-actions .primary:hover{background:var(--gold-gradient);bo
  body.flow-result .passport-result-inner h2{font-size:26px}
  body.flow-form main{margin:12px auto 24px}
  body.flow-form #panel-engine{padding:16px 18px 20px}
- body.flow-form .form-upload-row{grid-template-columns:1fr}
- body.flow-form .form-grid{grid-template-columns:minmax(0,1fr)}
- body.flow-form #eng-emergency-box:not([hidden]){grid-template-columns:minmax(0,1fr)}
+ /* No single-column collapse here: the form grid, the emergency box
+    and the photo/signature upload row stay two-column on mobile too
+    (user direction 2026-11-15). */
 }
 @media(prefers-reduced-motion:reduce){
  body.flow-landing .passport-landing-inner .primary,body.flow-form .create-actions .primary,body.flow-form #eng-photo-group .primary{transition:none}

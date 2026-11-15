@@ -1230,6 +1230,9 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
 
   // Two-column form (2026-11-15): the form is side-by-side premium at
   // the standard content width — no more 760px single column.
+  // Two columns hold on mobile too (user direction 2026-11-15) — the
+  // 740px query keeps only spacing tweaks, never a single-column
+  // collapse.
   test('landing and form both fill the standard content width (1046px)', () => {
     expect(CSS).toContain('body.flow-landing main{display:block}');
     expect(CSS).not.toContain('body.flow-landing main{display:block;max-width:760px}');
@@ -1239,8 +1242,8 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
 describe('two-column premium form (2026-11-15)', () => {
   // User complaint: the form was one very long column with no premium
   // sizing. Groups now lay their fields out in a 2-column grid on
-  // desktop and collapse to one column on mobile. Group + field order
-  // is unchanged; only the layout moved.
+  // desktop and on mobile too. Group + field order is unchanged; only
+  // the layout moved.
   test('form groups use the two-column grid', () => {
     for (const rule of [
       'body.flow-form .form-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 16px}',
@@ -1284,13 +1287,19 @@ describe('two-column premium form (2026-11-15)', () => {
     }
   });
 
-  test('mobile collapses to a single column at the 740px breakpoint', () => {
-    expect(CSS).toContain('body.flow-form .form-grid{grid-template-columns:minmax(0,1fr)}');
-    expect(CSS).toContain('body.flow-form #eng-emergency-box:not([hidden]){grid-template-columns:minmax(0,1fr)}');
+  test('mobile stays two-column at the 740px breakpoint — no single-column collapse', () => {
+    // User direction 2026-11-15: on mobile the form did not become
+    // side-by-side. The 740px query keeps only spacing tweaks; the
+    // grid, the emergency box and the photo/signature row stay 2-column.
+    expect(CSS).not.toContain('body.flow-form .form-grid{grid-template-columns:minmax(0,1fr)}');
+    expect(CSS).not.toContain('body.flow-form #eng-emergency-box:not([hidden]){grid-template-columns:minmax(0,1fr)}');
+    expect(CSS).not.toContain('body.flow-form .form-upload-row{grid-template-columns:1fr}');
+    expect(CSS).toContain('body.flow-form .form-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 16px}');
+    expect(CSS).toContain('.form-upload-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}');
   });
 
   test('flow stylesheet is cache-busted for the new layout', () => {
-    expect(PAGE).toContain('/css/passport-flow.css?v=3');
+    expect(PAGE).toContain('/css/passport-flow.css?v=4');
   });
 });
 
@@ -1329,8 +1338,8 @@ describe('compact dense form (2026-11-15)', () => {
     expect(PAGE).toContain('<div class="form-field span-2"><label for="eng-fullName">');
   });
 
-  test('mobile keeps the single column and the tight card', () => {
-    expect(CSS).toContain('body.flow-form .form-grid{grid-template-columns:minmax(0,1fr)}');
+  test('mobile keeps the two-column grid and the tight card', () => {
+    expect(CSS).not.toContain('body.flow-form .form-grid{grid-template-columns:minmax(0,1fr)}');
     expect(CSS).toContain('body.flow-form #panel-engine{padding:16px 18px 20px}');
   });
 });
