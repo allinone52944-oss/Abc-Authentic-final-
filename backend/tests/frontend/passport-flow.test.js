@@ -296,7 +296,7 @@ describe('form (separate form screen)', () => {
     const h2At = PAGE.indexOf('<h2>Passport তৈরি করুন</h2>', headAt);
     expect(backAt).toBeGreaterThan(headAt);
     expect(backAt).toBeLessThan(h2At);
-    expect(CSS).toContain('.back-button{background:none;border:0;color:var(--muted);cursor:pointer;font-size:13px;padding:0;margin:0 0 4px;text-align:left}');
+    expect(CSS).toContain('.back-button{background:none;border:0;color:var(--muted);cursor:pointer;font-size:13px;padding:0;margin:0 0 2px;text-align:left}');
     expect(FLOW).toContain('back-to-landing-button');
     expect(FLOW).toContain('formEntered');
   });
@@ -417,7 +417,7 @@ describe('form photo/signature upload', () => {
     const at = PAGE.indexOf('id="form-sample-warning"');
     expect(at).toBeGreaterThan(PAGE.indexOf('id="eng-photo-group"'));
     expect(at).toBeLessThan(PAGE.indexOf('id="create-passport-button"'));
-    expect(CSS).toContain('.form-sample-warning{margin:6px 0 0;color:#b3261e;font-weight:600;line-height:1.7}');
+    expect(CSS).toContain('.form-sample-warning{margin:4px 0 0;color:#b3261e;font-weight:600;line-height:1.7}');
     expect(CSS).toContain('.form-sample-warning[hidden]{display:none}');
     expect(FLOW).toContain('updateSampleWarning');
     expect(FLOW).toContain('নমুনার');
@@ -470,7 +470,7 @@ describe('form declutter — status bar, Fidelity and Print texts removed; group
   });
 
   test('form-state groups have no divider borders — spacing only, simpler premium look', () => {
-    expect(CSS).toContain('body.flow-form .engine-group{border-top:0;margin-top:8px;padding-top:0}');
+    expect(CSS).toContain('body.flow-form .engine-group{border-top:0;margin-top:2px;padding-top:0}');
   });
 });
 
@@ -1299,35 +1299,36 @@ describe('two-column premium form (2026-11-15)', () => {
   });
 
   test('flow stylesheet is cache-busted for the new layout', () => {
-    expect(PAGE).toContain('/css/passport-flow.css?v=4');
+    expect(PAGE).toContain('/css/passport-flow.css?v=5');
   });
 });
 
 describe('compact dense form (2026-11-15)', () => {
   // User frustration: even the two-column form was still 2166px tall at
   // 1366px. Tighter gaps, shorter inputs, tighter sections — dense, not
-  // cramped. The 2166 → 1500px height is verified in a real browser
-  // (measure-form.js); these tests lock the density values in CSS.
+  // cramped. The 2166 → 1500 → 1295px height is verified in a real
+  // browser (measure-defects.js / verify-defect-fixes-a.js); these tests
+  // lock the density values in CSS.
   test('inputs are compact but keep 16px text (no iOS zoom on focus)', () => {
-    expect(CSS).toContain('padding:6px 12px;font-size:16px;min-height:36px');
+    expect(CSS).toContain('padding:5px 12px;font-size:16px;line-height:1.3;min-height:32px');
   });
 
   test('field labels sit tight to their inputs', () => {
-    expect(CSS).toContain('body.flow-form #panel-engine .form-grid .form-field label{margin-top:4px}');
-    expect(CSS).toContain('body.flow-form #panel-engine label:not(.checkbox){font-size:13px;font-weight:600;color:var(--pg-ink);margin:6px 0 2px}');
+    expect(CSS).toContain('body.flow-form #panel-engine .form-grid .form-field label{margin-top:2px}');
+    expect(CSS).toContain('body.flow-form #panel-engine label:not(.checkbox){font-size:13px;font-weight:600;color:var(--pg-ink);margin:2px 0 2px}');
   });
 
   test('groups and legends are tight', () => {
-    expect(CSS).toContain('body.flow-form .engine-group{border-top:0;margin-top:8px;padding-top:0}');
-    expect(CSS).toContain('body.flow-form .engine-legend{font-size:11px;letter-spacing:.12em;color:var(--pg-green);margin:0 0 2px}');
+    expect(CSS).toContain('body.flow-form .engine-group{border-top:0;margin-top:2px;padding-top:0}');
+    expect(CSS).toContain('body.flow-form .engine-legend{font-size:11px;letter-spacing:.12em;color:var(--pg-green);margin:0}');
   });
 
   test('card, head, photo boxes and Create area are tight', () => {
-    expect(CSS).toContain('body.flow-form #panel-engine{background:var(--pg-surface);border:1px solid var(--pg-line);border-radius:24px;box-shadow:var(--pg-shadow-md);padding:16px 24px 12px}');
+    expect(CSS).toContain('body.flow-form #panel-engine{background:var(--pg-surface);border:1px solid var(--pg-line);border-radius:24px;box-shadow:var(--pg-shadow-md);padding:10px 20px 10px}');
     expect(CSS).toContain('body.flow-form .form-head h2{font-size:20px;');
-    expect(CSS).toContain('body.flow-form #eng-photo-group .primary{background:var(--pg-surface);color:var(--pg-green);border:1px solid var(--pg-hover);border-radius:14px;padding:9px;font-size:13px;');
-    expect(CSS).toContain('body.flow-form .create-actions{margin-top:10px;padding-top:8px;');
-    expect(CSS).toContain('body.flow-form .create-actions .primary{background:var(--gold-gradient);color:var(--pg-gold-text);border-color:transparent;border-radius:14px;font-size:15px;font-weight:700;padding:12px;');
+    expect(CSS).toContain('body.flow-form #eng-photo-group .primary{background:var(--pg-surface);color:var(--pg-green);border:1px solid var(--pg-hover);border-radius:14px;padding:7px;font-size:13px;');
+    expect(CSS).toContain('body.flow-form .create-actions{margin-top:8px;padding-top:6px;');
+    expect(CSS).toContain('body.flow-form .create-actions .primary{background:var(--gold-gradient);color:var(--pg-gold-text);border-color:transparent;border-radius:14px;font-size:15px;font-weight:700;padding:10px;');
   });
 
   test('passport number is one grid column, full name keeps its full span', () => {
@@ -1340,7 +1341,19 @@ describe('compact dense form (2026-11-15)', () => {
 
   test('mobile keeps the two-column grid and the tight card', () => {
     expect(CSS).not.toContain('body.flow-form .form-grid{grid-template-columns:minmax(0,1fr)}');
-    expect(CSS).toContain('body.flow-form #panel-engine{padding:16px 18px 20px}');
+    expect(CSS).toContain('body.flow-form #panel-engine{padding:12px 14px 16px}');
+  });
+
+  test('date rows hold their tracks — date inputs shrink into their cells (2026-11-15)', () => {
+    // Defect: the expiry input poked 73px past the card at 360px — the
+    // native date input's intrinsic min-width blew the 1fr tracks out.
+    expect(CSS).toContain('.engine-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 9px}');
+    expect(CSS).toContain('body.flow-form .engine-row>div{min-width:0}');
+    expect(CSS).toContain('body.flow-form input[type=date]{width:100%;min-width:0}');
+    // Mobile: 14px date text so mm/dd/yyyy is fully visible in the
+    // ~121px column (at 16px the year clipped to "mm/dd/").
+    expect(CSS).toContain('body.flow-form input[type=date]{font-size:14px;padding:7px 8px}');
+    expect(CSS).toContain('body.flow-form main{margin:12px auto 24px;padding:0 16px}');
   });
 });
 

@@ -31,7 +31,7 @@ function createHarness() {
   for (const match of html.slice(0, stateMatch.index).matchAll(/<(input|textarea|select|button|div|p)\b([^>]*\bid="([^"]+)"[^>]*)>/g)) {
     const [, tag, attrs, id] = match;
     const listeners = {};
-    elements.set(id, { id, type:attrs.match(/\btype="([^"]+)"/)?.[1] || (tag === 'select' ? 'select-one' : 'text'), tagName:tag.toUpperCase(), value:'', checked:false, hidden:false, textContent:'', dataset:{ engine:attrs.match(/\bdata-engine="([^"]+)"/)?.[1] }, validityMessage:'', addEventListener(event, callback) { listeners[event] = callback; }, setCustomValidity(message) { this.validityMessage = message; }, fire(event) { listeners[event]?.(); } });
+    elements.set(id, { id, type:attrs.match(/\btype="([^"]+)"/)?.[1] || (tag === 'select' ? 'select-one' : 'text'), tagName:tag.toUpperCase(), value:'', checked:false, hidden:false, textContent:'', dataset:{ engine:attrs.match(/\bdata-engine="([^"]+)"/)?.[1] }, validityMessage:'', addEventListener(event, callback) { listeners[event] = callback; }, setCustomValidity(message) { this.validityMessage = message; }, fire(event, arg) { listeners[event]?.(arg); } });
   }
   const document = { getElementById:id => elements.get(id), querySelectorAll:selector => selector === '[data-engine]' ? [...elements.values()].filter(e => e.dataset.engine) : [], activeElement:null };
   const context = vm.createContext({ model, fields, document, window:{}, nodes:new Map(), selected:null, normalize:value => String(value).replace(/[\r\n\t]+/g, ' ').replace(/\u00a0/g, ' '), renderField() {}, baseStyle:() => ({}), selectField() {}, clone:structuredClone, marks:0, notify() {}, $:id => elements.get(id) });
@@ -73,11 +73,51 @@ test('image slots carry no keyboard-focus styling (no editor interaction)', () =
   assert.ok(!html.includes('body:not(.preview)'), 'no preview-state CSS remains');
 });
 test('entire executable script parses', () => { new vm.Script(script); });
-test('no paste handler exists on document text (slots are render-only)', () => {
-  assert.ok(!script.includes("addEventListener('paste'"), 'no paste listener in the engine script');
+test('paste handler exists ONLY on the form date inputs (copy-paste dates), never on document text', () => {
+  assert.ok(script.includes("addEventListener('paste'"), 'date inputs have a paste listener');
+  // The paste wiring is a loop over exactly the three date keys.
+  const pasteAt = script.indexOf("addEventListener('paste'");
+  const around = script.slice(Math.max(0, pasteAt - 400), pasteAt + 400);
+  assert.ok(around.includes("['dob','issueDate','expiryDate']"), 'paste loop covers only the three date inputs');
+  assert.ok(!around.includes('personal-name'), 'no paste wiring on document fields');
   assert.ok(!script.includes('.contentEditable'), 'slots are never made editable');
   // The export still strips any stray contenteditable from the shell.
   assert.ok(script.includes("shell.querySelectorAll('[contenteditable]')"));
+});
+test('pasted date strings normalize to ISO (copy-paste dates, 2026-11-15)', () => {
+  const h = createHarness();
+  const p = h.api.parsePastedDate;
+  assert.equal(p('17/12/1979'), '1979-12-17');
+  assert.equal(p('17-12-1979'), '1979-12-17');
+  assert.equal(p('17.12.1979'), '1979-12-17');
+  assert.equal(p('1979-12-17'), '1979-12-17');
+  assert.equal(p('17 DEC 1979'), '1979-12-17');
+  assert.equal(p('17 dec 1979'), '1979-12-17');
+  assert.equal(p('17 December 1979'), '1979-12-17');
+  assert.equal(p(' 17/12/1979 '), '1979-12-17');
+  assert.equal(p('29/02/2020'), '2020-02-29'); // leap day is real
+  assert.equal(p('31/02/1979'), ''); // impossible date
+  assert.equal(p('29/02/2019'), ''); // not a leap year
+  assert.equal(p('32/13/1979'), '');
+  assert.equal(p('hello'), '');
+  assert.equal(p(''), '');
+});
+test('pasting a date into a date input sets it and rebuilds the MRZ', () => {
+  const h = createHarness();
+  const dob = h.elements.get('eng-dob');
+  assert.ok(dob, 'eng-dob exists');
+  let prevented = false;
+  dob.fire('paste', { clipboardData: { getData: () => '17/12/1979' }, preventDefault: () => { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(dob.value, '1979-12-17');
+  assert.equal(h.api.state().dob, '1979-12-17');
+  assert.equal(h.field('mrz-2').slice(13, 19), '791217');
+  checkLine(h.field('mrz-2'));
+  // Unparseable paste is left alone — validation still catches it.
+  const issue = h.elements.get('eng-issueDate');
+  const before = issue.value;
+  issue.fire('paste', { clipboardData: { getData: () => 'not a date' }, preventDefault: () => { prevented = true; } });
+  assert.equal(issue.value, before);
 });
 test('no unsaved indicator exists (editor status UI removed)', () => {
   assert.ok(!script.includes('function updateStatus('), 'updateStatus is gone');
