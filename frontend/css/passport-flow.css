@@ -80,7 +80,6 @@ body.flow-form #panel-engine .engine-hint:not(#create-message):not(#engine-valid
 body.flow-form #engine-validation{color:#b3261e;font-weight:600}
 body.flow-form .auto-tag{display:none}
 body.flow-form #eng-mrz-group{display:none}
-body.flow-form #eng-name-auto-row{display:none}
 body.flow-form #eng-dotstrip-row{display:none}
 body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
 .create-actions{display:block;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}

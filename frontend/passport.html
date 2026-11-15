@@ -178,6 +178,15 @@ input[type=checkbox]{accent-color:var(--green)}
 
     <p class="engine-hint" id="engine-validation" role="status" aria-live="polite" hidden></p>
     <div class="engine-group form-grid">
+     <p class="engine-legend">নাম <span class="auto-tag">একবার লিখলেই সব জায়গায়</span></p>
+     <div class="engine-row">
+      <div><label for="eng-givenName">প্রথম নাম</label><input type="text" id="eng-givenName" data-engine="givenName" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="প্রথম নাম লিখুন"></div>
+      <div><label for="eng-surname">শেষ নাম (ঐচ্ছিক)</label><input type="text" id="eng-surname" data-engine="surname" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="শেষ নাম লিখুন"></div>
+     </div>
+     <p class="engine-hint">প্রথম নাম আবশ্যক। শেষ নাম না থাকলে খালি রাখুন — এক নামের আবেদনকারীর ক্ষেত্রে এভাবেই ঠিক থাকে (তথ্যের টেবিল + MRZ লাইন ১)।</p>
+    </div>
+
+    <div class="engine-group form-grid">
      <p class="engine-legend">পাসপোর্ট</p>
      <div class="form-field"><label for="eng-passportNo">পাসপোর্ট নম্বর <span class="auto-tag">৩টি লেখার অংশ + ডটেড স্ট্রিপ</span></label>
      <input type="text" id="eng-passportNo" data-engine="passportNo" maxlength="9" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="৯ অক্ষরের পাসপোর্ট নম্বর"></div>
@@ -190,17 +199,6 @@ input[type=checkbox]{accent-color:var(--green)}
       <div><label for="eng-docType">ধরন</label><input type="text" id="eng-docType" data-engine="docType" maxlength="1" spellcheck="false" autocomplete="off"></div>
       <div><label for="eng-countryCode">দেশের কোড</label><input type="text" id="eng-countryCode" data-engine="countryCode" maxlength="3" spellcheck="false" autocapitalize="off" autocomplete="off"></div>
      </div>
-    </div>
-
-    <div class="engine-group form-grid">
-     <p class="engine-legend">নাম <span class="auto-tag">একবার লিখলেই সব জায়গায়</span></p>
-     <div class="form-field span-2"><label for="eng-fullName">পুরো নাম</label>
-     <input type="text" id="eng-fullName" data-engine="fullName" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="পুরো নাম লিখুন"></div>
-     <div class="engine-row" id="eng-name-auto-row">
-      <div><label for="eng-surname">পদবি (স্বয়ংক্রিয়)</label><input type="text" id="eng-surname" data-engine="surname" spellcheck="false" autocapitalize="off" autocomplete="off"></div>
-      <div><label for="eng-givenName">প্রদত্ত নাম (স্বয়ংক্রিয়)</label><input type="text" id="eng-givenName" data-engine="givenName" spellcheck="false" autocapitalize="off" autocomplete="off"></div>
-     </div>
-     <p class="engine-hint">পুরো নাম নিজে থেকে পদবি + প্রদত্ত নামে ভাগ হয় (তথ্যের টেবিল + MRZ লাইন ১)। দুটো ঘরই ঠিক করার জন্য সম্পাদনা করা যায়।</p>
     </div>
 
     <div class="engine-group form-grid">
@@ -638,7 +636,6 @@ input[type=checkbox]{accent-color:var(--green)}
   passportNo:[['passport-no','upper'],['vertical-passport','printedVertical']],
   docType:[['type','upper1']],
   countryCode:[['country-code','upper3']],
-  fullName:[['personal-name','upper']],
   surname:[['surname','upper']],
   givenName:[['given-name','upper']],
   fatherName:[['father','raw']],
@@ -660,7 +657,7 @@ input[type=checkbox]{accent-color:var(--green)}
   mrz1:[['mrz-1','raw']],
   mrz2:[['mrz-2','raw']]
  };
- const ENG_M1=new Set(['fullName','surname','givenName','countryCode','docType']);
+ const ENG_M1=new Set(['surname','givenName','countryCode','docType']);
  const ENG_M2=new Set(['passportNo','nationality','nationalityCode','dob','expiryDate','sex']);
  const ENG_BACK={};
  for(const k in ENG_MAP)for(const t of ENG_MAP[k])if(!ENG_BACK[t[0]])ENG_BACK[t[0]]=k;
@@ -756,7 +753,7 @@ input[type=checkbox]{accent-color:var(--green)}
    const value=raw(parent);storeEngine(key,value);engSet(id,value);
   }
  }
- function applyEngine(key,derive,sourceId=null,reapply=false){
+ function applyEngine(key,sourceId=null,reapply=false){
   if(engBusy.v)return;
   const el=engEl(key);if(!el)return;
   let val=el.type==='checkbox'?el.checked:el.value;
@@ -766,12 +763,13 @@ input[type=checkbox]{accent-color:var(--green)}
    if(!model.engine)model.engine={};
    storeEngine(key,val);
    for(const t of ENG_MAP[key]||[])if(t[0]!==sourceId)engSet(t[0],ENG_XFORM[t[1]](val));
-   if(key==='fullName'&&derive===true){
-    const parts=up(val).split(' ').filter(Boolean);
-    const sur=parts.length>1?parts[parts.length-1]:(parts[0]||'');
-    const giv=parts.length>1?parts.slice(0,-1).join(' '):'';
-    storeEngine('surname',sur);storeEngine('givenName',giv);
-    engSet('surname',sur);engSet('given-name',giv);
+   /* The document's full-name line is derived from the two name fields
+      — given + surname, joined once. No splitting: the form feeds
+      givenName/surname directly, and an empty surname stays empty
+      (single-name applicant), never doubled. */
+   if(key==='givenName'||key==='surname'){
+    const parts=[raw('givenName'),raw('surname')].map(v=>up(v)).filter(Boolean);
+    engSet('personal-name',parts.join(' '));
    }
    if(key==='nationality'&&!reapply)storeEngine('nationalityCode',nationalityCode(val));
    if(key==='sameEmergency')toggleEmergency();
@@ -783,6 +781,23 @@ input[type=checkbox]{accent-color:var(--green)}
  }
  function engReverseSync(id,f){
   if(engBusy.v)return;
+  /* Direct edit of the document's full-name line (old editor path /
+     tests — the form never does this): split it back into surname +
+     given name so the model stays consistent. The FORM never splits —
+     it feeds givenName/surname directly and personal-name is derived
+     from them. The split-then-rejoin is idempotent, and engSet()
+     no-ops on identical text, so this cannot loop. */
+  if(id==='personal-name'){
+   const parts=up(f.text).split(' ').filter(Boolean);
+   const sur=parts.length>1?parts[parts.length-1]:(parts[0]||'');
+   const giv=parts.length>1?parts.slice(0,-1).join(' '):'';
+   storeEngine('surname',sur);storeEngine('givenName',giv);
+   const sEl=engEl('surname'),gEl=engEl('givenName');
+   if(sEl)sEl.value=sur;if(gEl)gEl.value=giv;
+   engSet('surname',sur);engSet('given-name',giv);
+   applyEngine('surname');applyEngine('givenName');
+   return;
+  }
   const k=ENG_BACK[id];if(!k)return;
   const el=engEl(k);if(!el||el.type==='checkbox')return;
   let v=f.text;
@@ -793,10 +808,10 @@ input[type=checkbox]{accent-color:var(--green)}
    if(v!==raw(parent)){storeEngine('sameEmergency',false);toggleEmergency();}
   }
   el.value=v;
-  applyEngine(k,k==='fullName',id);
+  applyEngine(k,id);
  }
  function applyAllEngine(){
-  for(const key in ENG_MAP)applyEngine(key,false,null,true);
+  for(const key in ENG_MAP)applyEngine(key,null,true);
   validateEngine();
  }
  function regenerateMRZ(){
@@ -832,7 +847,7 @@ input[type=checkbox]{accent-color:var(--green)}
   const F=id=>fields.has(id)?fields.get(id).text:'';
   const derived={
    passportNo:F('passport-no').replace(/\s+/g,''),docType:F('type'),countryCode:F('country-code'),
-   fullName:F('personal-name'),surname:F('surname'),givenName:F('given-name'),
+   surname:F('surname'),givenName:F('given-name'),
    fatherName:F('father'),motherName:F('mother'),spouseName:F('spouse'),
    address1:F('permanent-address'),address2:F('permanent-city'),
    emergency1:F('emergency-address'),emergency2:F('emergency-city'),
@@ -849,7 +864,7 @@ input[type=checkbox]{accent-color:var(--green)}
   for(const n of document.querySelectorAll('[data-engine]')){
    const key=n.dataset.engine;
    const evt=(n.type==='checkbox'||n.tagName==='SELECT')?'change':'input';
-   n.addEventListener(evt,()=>applyEngine(key,key==='fullName'));
+   n.addEventListener(evt,()=>applyEngine(key));
   }
   /* Date paste: the three date inputs accept a pasted date string
      (DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, "17 DEC 1979") — a native
@@ -874,7 +889,7 @@ input[type=checkbox]{accent-color:var(--green)}
   updatePassportPreview();validateEngine();
  }
  window.passportEngine=Object.freeze({
-  apply:k=>applyEngine(k,k==='fullName'),
+  apply:k=>applyEngine(k),
   applyAll:applyAllEngine,
   regenerateMRZ,
   validate:validateEngine,
@@ -1022,7 +1037,7 @@ input[type=checkbox]{accent-color:var(--green)}
   /* All engine fields, in panel order — blanking them through the same
      code path as typing keeps MRZ, dotted strip, preview and validation
      in sync with the form. */
-  var FORM_KEYS = ['passportNo','docType','countryCode','fullName','surname','givenName','fatherName','motherName','spouseName','dob','sex','issueDate','expiryDate','birthPlace','nationality','nationalityCode','personalNo','previousPassport','authority','address1','address2','emergency1','emergency2','emergencyName','phone','relationship','mrz1','mrz2'];
+  var FORM_KEYS = ['passportNo','docType','countryCode','givenName','surname','fatherName','motherName','spouseName','dob','sex','issueDate','expiryDate','birthPlace','nationality','nationalityCode','personalNo','previousPassport','authority','address1','address2','emergency1','emergency2','emergencyName','phone','relationship','mrz1','mrz2'];
   /* Field defaults (user direction 2026-11-15): Type "P" (ordinary
      passport) and Country code "BGD" (Bangladesh) are pre-filled and
      stay editable — the user can change or clear them. clearForm is
@@ -1048,7 +1063,7 @@ input[type=checkbox]{accent-color:var(--green)}
     if (first) first.focus();
   }
   function requiredMissing(){
-    var need = [['passportNo','পাসপোর্ট নম্বর'],['docType','ধরন'],['countryCode','দেশের কোড'],['fullName','পুরো নাম'],['dob','জন্মতারিখ'],['sex','লিঙ্গ'],['expiryDate','মেয়াদের তারিখ']];
+    var need = [['passportNo','পাসপোর্ট নম্বর'],['docType','ধরন'],['countryCode','দেশের কোড'],['givenName','প্রথম নাম'],['dob','জন্মতারিখ'],['sex','লিঙ্গ'],['expiryDate','মেয়াদের তারিখ']];
     for (var i = 0; i < need.length; i++) {
       var el = engInput(need[i][0]);
       if (!el || !String(el.value).trim()) return need[i];
@@ -1188,7 +1203,8 @@ input[type=checkbox]{accent-color:var(--green)}
       }
       pdfRetry = null;
       downloadBlob(pdf.blob, name);
-      reportEngineJob('passport', no, String((engInput('fullName') || {}).value || ''), pdf.blob, name, idem);
+      var nameParts = [engInput('givenName'), engInput('surname')].map(function (el) { return el ? String(el.value || '').trim() : ''; }).filter(Boolean);
+      reportEngineJob('passport', no, nameParts.join(' '), pdf.blob, name, idem);
       lastPdf = { blob: pdf.blob, name: name };
       body.classList.remove('flow-form');
       body.classList.add('flow-result');
