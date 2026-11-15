@@ -281,7 +281,7 @@ describe('form (separate form screen)', () => {
   test('form screen has its own heading, shown only in form state', () => {
     expect(PAGE).toContain('id="passport-form-head"');
     expect(CSS).toContain('.form-head{display:none}');
-    expect(CSS).toContain("body.flow-form .form-head{display:block;margin:0 0 6px}");
+    expect(CSS).toContain("body.flow-form .form-head{display:block;margin:0 0 4px}");
     const headAt = PAGE.indexOf('id="passport-form-head"');
     const panelAt = PAGE.indexOf('id="panel-engine"');
     expect(headAt).toBeGreaterThan(panelAt);
@@ -296,7 +296,7 @@ describe('form (separate form screen)', () => {
     const h2At = PAGE.indexOf('<h2>Passport তৈরি করুন</h2>', headAt);
     expect(backAt).toBeGreaterThan(headAt);
     expect(backAt).toBeLessThan(h2At);
-    expect(CSS).toContain('.back-button{background:none;border:0;color:var(--muted);cursor:pointer;font-size:13px;padding:0;margin:0 0 8px;text-align:left}');
+    expect(CSS).toContain('.back-button{background:none;border:0;color:var(--muted);cursor:pointer;font-size:13px;padding:0;margin:0 0 4px;text-align:left}');
     expect(FLOW).toContain('back-to-landing-button');
     expect(FLOW).toContain('formEntered');
   });
@@ -417,7 +417,7 @@ describe('form photo/signature upload', () => {
     const at = PAGE.indexOf('id="form-sample-warning"');
     expect(at).toBeGreaterThan(PAGE.indexOf('id="eng-photo-group"'));
     expect(at).toBeLessThan(PAGE.indexOf('id="create-passport-button"'));
-    expect(CSS).toContain('.form-sample-warning{margin:10px 0 0;color:#b3261e;font-weight:600;line-height:1.7}');
+    expect(CSS).toContain('.form-sample-warning{margin:6px 0 0;color:#b3261e;font-weight:600;line-height:1.7}');
     expect(CSS).toContain('.form-sample-warning[hidden]{display:none}');
     expect(FLOW).toContain('updateSampleWarning');
     expect(FLOW).toContain('নমুনার');
@@ -470,7 +470,7 @@ describe('form declutter — status bar, Fidelity and Print texts removed; group
   });
 
   test('form-state groups have no divider borders — spacing only, simpler premium look', () => {
-    expect(CSS).toContain('body.flow-form .engine-group{border-top:0;margin-top:24px;padding-top:0}');
+    expect(CSS).toContain('body.flow-form .engine-group{border-top:0;margin-top:8px;padding-top:0}');
   });
 });
 
@@ -1256,8 +1256,11 @@ describe('two-column premium form (2026-11-15)', () => {
     expect(PAGE).toContain('<div class="engine-group" id="eng-mrz-group">');
   });
 
-  test('passport number and full name span both columns; pairs share a row', () => {
-    expect(PAGE).toContain('<div class="form-field span-2"><label for="eng-passportNo">');
+  test('passport number is one column, full name keeps its full span; pairs share a row', () => {
+    // User direction 2026-11-15: the passport number box was too wide —
+    // a 9-character number needs no full-width box. Full name stays wide.
+    expect(PAGE).toContain('<div class="form-field"><label for="eng-passportNo">');
+    expect(PAGE).not.toContain('<div class="form-field span-2"><label for="eng-passportNo">');
     expect(PAGE).toContain('<div class="form-field span-2"><label for="eng-fullName">');
     for (const id of ['eng-fatherName', 'eng-motherName', 'eng-birthPlace', 'eng-nationality', 'eng-nationalityCode', 'eng-personalNo', 'eng-previousPassport', 'eng-authority', 'eng-address1', 'eng-address2', 'eng-emergencyName']) {
       expect(PAGE).toContain('<div class="form-field"><label for="' + id + '">');
@@ -1287,7 +1290,48 @@ describe('two-column premium form (2026-11-15)', () => {
   });
 
   test('flow stylesheet is cache-busted for the new layout', () => {
-    expect(PAGE).toContain('/css/passport-flow.css?v=2');
+    expect(PAGE).toContain('/css/passport-flow.css?v=3');
+  });
+});
+
+describe('compact dense form (2026-11-15)', () => {
+  // User frustration: even the two-column form was still 2166px tall at
+  // 1366px. Tighter gaps, shorter inputs, tighter sections — dense, not
+  // cramped. The 2166 → 1500px height is verified in a real browser
+  // (measure-form.js); these tests lock the density values in CSS.
+  test('inputs are compact but keep 16px text (no iOS zoom on focus)', () => {
+    expect(CSS).toContain('padding:6px 12px;font-size:16px;min-height:36px');
+  });
+
+  test('field labels sit tight to their inputs', () => {
+    expect(CSS).toContain('body.flow-form #panel-engine .form-grid .form-field label{margin-top:4px}');
+    expect(CSS).toContain('body.flow-form #panel-engine label:not(.checkbox){font-size:13px;font-weight:600;color:var(--pg-ink);margin:6px 0 2px}');
+  });
+
+  test('groups and legends are tight', () => {
+    expect(CSS).toContain('body.flow-form .engine-group{border-top:0;margin-top:8px;padding-top:0}');
+    expect(CSS).toContain('body.flow-form .engine-legend{font-size:11px;letter-spacing:.12em;color:var(--pg-green);margin:0 0 2px}');
+  });
+
+  test('card, head, photo boxes and Create area are tight', () => {
+    expect(CSS).toContain('body.flow-form #panel-engine{background:var(--pg-surface);border:1px solid var(--pg-line);border-radius:24px;box-shadow:var(--pg-shadow-md);padding:16px 24px 12px}');
+    expect(CSS).toContain('body.flow-form .form-head h2{font-size:20px;');
+    expect(CSS).toContain('body.flow-form #eng-photo-group .primary{background:var(--pg-surface);color:var(--pg-green);border:1px solid var(--pg-hover);border-radius:14px;padding:9px;font-size:13px;');
+    expect(CSS).toContain('body.flow-form .create-actions{margin-top:10px;padding-top:8px;');
+    expect(CSS).toContain('body.flow-form .create-actions .primary{background:var(--gold-gradient);color:var(--pg-gold-text);border-color:transparent;border-radius:14px;font-size:15px;font-weight:700;padding:12px;');
+  });
+
+  test('passport number is one grid column, full name keeps its full span', () => {
+    // User direction 2026-11-15: a 9-character number needs no
+    // full-width box. Before: 946px wide (span-2); after: ~465px.
+    expect(PAGE).toContain('<div class="form-field"><label for="eng-passportNo">');
+    expect(PAGE).not.toContain('<div class="form-field span-2"><label for="eng-passportNo">');
+    expect(PAGE).toContain('<div class="form-field span-2"><label for="eng-fullName">');
+  });
+
+  test('mobile keeps the single column and the tight card', () => {
+    expect(CSS).toContain('body.flow-form .form-grid{grid-template-columns:minmax(0,1fr)}');
+    expect(CSS).toContain('body.flow-form #panel-engine{padding:16px 18px 20px}');
   });
 });
 
