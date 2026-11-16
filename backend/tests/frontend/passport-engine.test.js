@@ -222,6 +222,35 @@ test('single lowercase name stays single and uppercase, never doubled (2026-11-1
   assert.equal(h.field('surname'),'');
   assert.ok(h.field('mrz-1').includes('P<BGD<<<RAHIM'));
 });
+test('empty spouse prints NA in the document after apply-all, form stays empty (2026-11-16)', () => {
+  const h=createHarness();
+  // At startup the scan is preserved as-is (spouse blank, not dirtied).
+  assert.equal(h.field('spouse'),'');
+  // Create runs applyAll first, so an untouched empty spouse becomes NA.
+  h.api.applyAll();
+  assert.equal(h.field('spouse'),'NA');
+  assert.equal(h.elements.get('eng-spouseName').value,'');
+  assert.equal(h.api.state().spouseName,'');
+});
+test('filled spouse prints the actual name uppercased; clearing it brings NA back (2026-11-16)', () => {
+  const h=createHarness();
+  h.input('spouseName','lutfa begum');
+  assert.equal(h.field('spouse'),'LUTFA BEGUM');
+  h.input('spouseName','');
+  assert.equal(h.field('spouse'),'NA');
+  h.input('spouseName','  ');
+  assert.equal(h.field('spouse'),'NA');
+});
+test('spouse never reaches the MRZ or the delivery name (2026-11-16)', () => {
+  const mk=(spouse)=>{ const h=createHarness(); h.input('surname','MD'); h.input('givenName','GOLAM KIBRIYA'); h.input('passportNo','EJ0762655'); h.input('dob','1979-12-17'); h.input('expiryDate','2035-01-01'); h.input('nationality','BANGLADESHI'); h.input('sex','M'); h.input('spouseName',spouse); h.api.applyAll(); return h; };
+  const empty=mk(''), filled=mk('lutfa begum');
+  assert.equal(empty.field('spouse'),'NA');
+  assert.equal(filled.field('spouse'),'LUTFA BEGUM');
+  assert.equal(empty.field('mrz-1'),filled.field('mrz-1'));
+  assert.equal(empty.field('mrz-2'),filled.field('mrz-2'));
+  assert.match(empty.field('mrz-1'),/^[A-Z0-9<]{44}$/);
+  checkLine(empty.field('mrz-2'));
+});
 test('checkbox-only state changes are dirty', () => { const h=createHarness(); h.input('sameEmergency',true); const marks=h.context.marks; h.input('sameEmergency',false); assert.ok(h.context.marks>marks); });
 test('valid leap day reverse-syncs', () => { const h=createHarness(); h.edit('birth-date','29 FEB 2024'); assert.equal(h.api.state().dob,'2024-02-29'); assert.equal(h.field('mrz-2').slice(13,19),'240229'); });
 test('invalid dates clear stale derived dates and warn', () => { const h=createHarness(); h.edit('birth-date','31 FEB 2024'); assert.equal(h.api.state().dob,''); assert.equal(h.field('mrz-2').slice(13,19),'<<<<<<'); assert.ok(h.api.validate().some(x=>x.includes('জন্মতারিখ'))); });

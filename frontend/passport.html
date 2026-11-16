@@ -628,7 +628,7 @@ input[type=checkbox]{accent-color:var(--green)}
  function nationalityCode(v){const n=up(v);return /^(BANGLADESH|BANGLADESHI)$/.test(n)?'BGD':/^[A-Z]{3}$/.test(n)?n:'';}
  // The existing right-hand printed number is ordinary text, not the left dotted scan artwork.
  function formatPrintedVerticalPassport(v){const s=String(v||'').replace(/\s+/g,'').toUpperCase();return s.length>2?s.slice(0,2)+' '+s.slice(2):s;}
- const ENG_XFORM={raw:v=>String(v==null?'':v),upper:v=>up(v),upper1:v=>up(v).slice(0,1),upper3:v=>up(v).replace(/[^A-Z]/g,'').slice(0,3),printedVertical:v=>formatPrintedVerticalPassport(v),date:v=>fmtDisplay(v)};
+ const ENG_XFORM={raw:v=>String(v==null?'':v),upper:v=>up(v),upperOrNA:v=>{const s=up(v);return s?s:'NA';},upper1:v=>up(v).slice(0,1),upper3:v=>up(v).replace(/[^A-Z]/g,'').slice(0,3),printedVertical:v=>formatPrintedVerticalPassport(v),date:v=>fmtDisplay(v)};
  const ENG_MAP={
   sameEmergency:[],
   dotStripAuto:[],
@@ -643,7 +643,7 @@ input[type=checkbox]{accent-color:var(--green)}
   givenName:[['given-name','upper']],
   fatherName:[['father','upper']],
   motherName:[['mother','upper']],
-  spouseName:[['spouse','upper']],
+  spouseName:[['spouse','upperOrNA']],
   phone:[['phone','raw']],
   emergencyName:[['emergency-name','upper']],
   relationship:[['relationship','upper']],
