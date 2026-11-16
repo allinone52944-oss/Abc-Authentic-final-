@@ -120,6 +120,108 @@ test('pasting a date into a date input sets it and rebuilds the MRZ', () => {
   issue.fire('paste', { clipboardData: { getData: () => 'not a date' }, preventDefault: () => { prevented = true; } });
   assert.equal(issue.value, before);
 });
+test('typing or pasting a date string into a text date input normalizes it to ISO (mobile paste, 2026-11-16)', () => {
+  // User report: on a phone the native date input offered no paste at
+  // all. The fields are text inputs now; any accepted form typed or
+  // pasted normalizes to ISO on the input event, so the engine,
+  // validation and MRZ always see YYYY-MM-DD.
+  const h = createHarness();
+  const dob = h.elements.get('eng-dob');
+  assert.equal(dob.type, 'text');
+  for (const [typed, iso] of [
+    ['17/12/1979', '1979-12-17'],
+    ['17-12-1979', '1979-12-17'],
+    ['17.12.1979', '1979-12-17'],
+    ['1979-12-17', '1979-12-17'],
+    ['17 DEC 1979', '1979-12-17'],
+    ['17 December 1979', '1979-12-17'],
+  ]) {
+    h.input('dob', typed);
+    assert.equal(dob.value, iso, typed);
+    assert.equal(h.api.state().dob, iso, typed);
+  }
+  assert.equal(h.field('birth-date'), '17 DEC 1979');
+  assert.equal(h.field('mrz-2').slice(13, 19), '791217');
+  checkLine(h.field('mrz-2'));
+  // Issue + expiry normalize the same way; MRZ expiry follows.
+  h.input('issueDate', '01 JAN 2020');
+  h.input('expiryDate', '01/01/2030');
+  assert.equal(h.elements.get('eng-issueDate').value, '2020-01-01');
+  assert.equal(h.elements.get('eng-expiryDate').value, '2030-01-01');
+  assert.equal(h.field('mrz-2').slice(21, 27), '300101');
+  checkLine(h.field('mrz-2'));
+});
+test('universal paste: Bengali digits, trailing newline/space, MM/DD fallback (2026-11-16)', () => {
+  // User direction: "je rokomi paste koruk, logic kore nibe" — however
+  // the user pastes, the logic must take it. Trim, Bengali-digit
+  // conversion and the MM/DD fallback all live in parsePastedDate,
+  // so every paste path (paste event, input event, keyboard insert)
+  // gets them; validDate() still gates every result.
+  const h = createHarness();
+  const p = h.api.parsePastedDate;
+  // Bengali digits (copied from Bengali text) convert to ASCII first.
+  assert.equal(p('১৭/১২/১৯৭৯'), '1979-12-17');
+  assert.equal(p('১৭-১২-১৯৭৯'), '1979-12-17');
+  assert.equal(p('১৯৭৯-১২-১৭'), '1979-12-17');
+  assert.equal(p('১৭ DEC ১৯৭৯'), '1979-12-17');
+  assert.equal(p('১৭ December ১৯৭৯'), '1979-12-17');
+  // Trailing newline / spaces (copied from a PDF or a message).
+  assert.equal(p('17/12/1979\n'), '1979-12-17');
+  assert.equal(p('17/12/1979\r\n'), '1979-12-17');
+  assert.equal(p('\n 17/12/1979 \n'), '1979-12-17');
+  assert.equal(p('১৭/১২/১৯৭৯\n'), '1979-12-17');
+  // MM/DD/YYYY fallback (US-format display): second number > 12.
+  assert.equal(p('12/17/1979'), '1979-12-17');
+  assert.equal(p('12-17-1979'), '1979-12-17');
+  // First number > 12 stays DD/MM.
+  assert.equal(p('17/12/1979'), '1979-12-17');
+  // Both <= 12 stay DD/MM (the user's locale).
+  assert.equal(p('05/06/1979'), '1979-06-05');
+  assert.equal(p('06/05/1979'), '1979-05-06');
+  // Impossible dates still blocked even through the fallback.
+  assert.equal(p('13/13/1979'), '');
+  assert.equal(p('02/31/1979'), '');
+  assert.equal(p('31/02/1979'), '');
+});
+test('universal paste through the text input: Bengali digits, trailing newline and MM/DD normalize to ISO (2026-11-16)', () => {
+  const h = createHarness();
+  const dob = h.elements.get('eng-dob');
+  h.input('dob', '১৭/১২/১৯৭৯');
+  assert.equal(dob.value, '1979-12-17');
+  assert.equal(h.api.state().dob, '1979-12-17');
+  h.input('dob', '12/17/1979');
+  assert.equal(dob.value, '1979-12-17');
+  h.input('dob', '17/12/1979\n');
+  assert.equal(dob.value, '1979-12-17');
+  assert.equal(h.field('birth-date'), '17 DEC 1979');
+  assert.equal(h.field('mrz-2').slice(13, 19), '791217');
+  checkLine(h.field('mrz-2'));
+  // The other two fields normalize the same way.
+  h.input('issueDate', '০১-০১-২০২০');
+  h.input('expiryDate', '01/01/2030\n');
+  assert.equal(h.elements.get('eng-issueDate').value, '2020-01-01');
+  assert.equal(h.elements.get('eng-expiryDate').value, '2030-01-01');
+  assert.equal(h.field('mrz-2').slice(21, 27), '300101');
+  checkLine(h.field('mrz-2'));
+});
+test('partial or impossible date text is left alone and still fails validation (mobile paste, 2026-11-16)', () => {
+  const h = createHarness();
+  const dob = h.elements.get('eng-dob');
+  // Mid-typing: the text stays so the user can finish typing it.
+  h.input('dob', '17/12/197');
+  assert.equal(dob.value, '17/12/197');
+  assert.ok(h.api.validate().some((m) => m.includes('জন্মতারিখ')));
+  // Impossible date: never normalized, validation still catches it.
+  h.input('dob', '31/02/1979');
+  assert.equal(dob.value, '31/02/1979');
+  assert.ok(h.api.validate().some((m) => m.includes('জন্মতারিখ')));
+  // Date ordering still enforced on normalized values — assert the
+  // exact ordering message, not just the field name (the "not a valid
+  // date" message for issueDate also contains it).
+  h.input('dob', '01/01/2020');
+  h.input('issueDate', '01/01/2019');
+  assert.ok(h.api.validate().some((m) => m.includes('ইস্যুর তারিখ জন্মতারিখের আগে হতে পারে না')));
+});
 test('no unsaved indicator exists (editor status UI removed)', () => {
   assert.ok(!script.includes('function updateStatus('), 'updateStatus is gone');
   assert.ok(!script.includes('unsaved'), 'no unsaved state in the engine script');
