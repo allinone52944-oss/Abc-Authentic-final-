@@ -420,9 +420,11 @@ describe('form photo/signature upload', () => {
     expect(PAGE).toContain('ছবি ও স্বাক্ষর ফর্মেই যোগ করুন');
   });
 
-  test('form warns visibly when photo/signature is missing (finding 7: sample face otherwise)', () => {
+  test('form warns visibly when photo is missing (finding 7: sample face otherwise); a missing signature shows no sample-signature warning (2026-11-16: signature area stays blank)', () => {
     expect(PAGE).toContain('id="form-sample-warning"');
-    expect(PAGE).toContain('নমুনার ছবি ও স্বাক্ষর দেখাবে');
+    expect(PAGE).toContain('নমুনার ছবি দেখাবে');
+    expect(PAGE).not.toContain('নমুনার ছবি ও স্বাক্ষর দেখাবে');
+    expect(PAGE).not.toContain('নমুনার স্বাক্ষর দেখাবে');
     const at = PAGE.indexOf('id="form-sample-warning"');
     expect(at).toBeGreaterThan(PAGE.indexOf('id="eng-photo-group"'));
     expect(at).toBeLessThan(PAGE.indexOf('id="create-passport-button"'));
@@ -430,9 +432,33 @@ describe('form photo/signature upload', () => {
     expect(CSS).toContain('.form-sample-warning[hidden]{display:none}');
     expect(FLOW).toContain('updateSampleWarning');
     expect(FLOW).toContain('নমুনার');
+    expect(FLOW).not.toContain("missing.push('স্বাক্ষর')");
     // It is a plain warning element, NOT an .engine-hint — the form CSS
     // hides engine hints, so a hint class would hide the warning too.
     expect(PAGE.slice(at, at + 120)).not.toContain('engine-hint');
+  });
+
+  test('signature slot always shows the clean erase patch, so no signature means a blank signature area (2026-11-16)', () => {
+    // The patch used to display only once a signature was uploaded
+    // (.changed); the sample signature from the scan showed through
+    // otherwise. It now displays unconditionally, erasing the sample.
+    expect(PAGE).toContain('.image-slot.signature .slot-patch{display:block}');
+    expect(PAGE).not.toContain('.image-slot.signature.changed .slot-patch{display:block}');
+    expect(PAGE).toContain('.image-slot.signature .slot-patch{display:block!important}');
+  });
+
+  test('hologram overlay shows on top of an uploaded photo, on the photo\'s right side (2026-11-16)', () => {
+    // The lotus emblem was missing from the template, so it is layered
+    // over the uploaded photo (z-index 2, above the photo) whenever a
+    // photo is attached; with no photo the scan's own faint hologram
+    // shows through instead. The round seal keeps its own existing
+    // overlay (stampOverlay) — it was NOT taken from the provided file.
+    expect(PAGE).toContain('.image-slot.photo.changed .hologram-overlay{display:block;z-index:2}');
+    expect(PAGE).toContain('.image-slot .hologram-overlay');
+    expect(PAGE).toContain("holo.className='hologram-overlay'");
+    expect(PAGE).toContain('holo.src=model.assets.hologramOverlay');
+    expect(PAGE).toContain("stamp.className='stamp-overlay'");
+    expect(PAGE).toContain('stamp.src=model.assets.stampOverlay');
   });
 
   test('copy says post-Create changes need a re-download (finding 8: the download is frozen at Create)', () => {
@@ -1026,25 +1052,25 @@ describe('sample-face warning behavior (vm, stub DOM)', () => {
     await new Promise((resolve) => setImmediate(resolve));
   }
 
-  test('warning is visible on form entry, naming both missing photo and signature', () => {
+  test('warning is visible on form entry, naming only the missing photo (2026-11-16: no sample-signature warning — the signature area stays blank)', () => {
     const r = runFlow({});
     expect(r.els['form-sample-warning'].hidden).toBe(true);
     r.els['start-passport-button'].click();
     expect(r.els['form-sample-warning'].hidden).toBe(false);
-    expect(r.els['form-sample-warning'].textContent).toContain('ছবি ও স্বাক্ষর না দিলে');
-    expect(r.els['form-sample-warning'].textContent).toContain('নমুনার ছবি ও স্বাক্ষর দেখাবে');
+    expect(r.els['form-sample-warning'].textContent).toContain('ছবি না দিলে');
+    expect(r.els['form-sample-warning'].textContent).toContain('নমুনার ছবি দেখাবে');
+    expect(r.els['form-sample-warning'].textContent).not.toContain('স্বাক্ষর');
   });
 
-  test('attaching only the photo leaves the warning naming the signature', async () => {
+  test('attaching only the photo hides the warning — a missing signature needs none (2026-11-16)', async () => {
     const r = runFlow({});
     r.els['start-passport-button'].click();
     r.els['form-photo-upload'].files = [{ name: 'photo.png' }];
     r.els['form-photo-upload'].fire('change');
     await r.state.imagePromise;
     await flush();
-    expect(r.els['form-sample-warning'].hidden).toBe(false);
-    expect(r.els['form-sample-warning'].textContent).toContain('স্বাক্ষর না দিলে');
-    expect(r.els['form-sample-warning'].textContent).toContain('নমুনার স্বাক্ষর দেখাবে');
+    expect(r.els['form-sample-warning'].hidden).toBe(true);
+    expect(r.els['form-sample-warning'].textContent).toBe('');
   });
 
   test('attaching both photo and signature hides the warning', async () => {

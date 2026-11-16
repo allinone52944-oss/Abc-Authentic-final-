@@ -12,6 +12,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const zlib = require('node:zlib');
 const assert = require('node:assert/strict');
 const html = fs.readFileSync(path.join(__dirname, '../../../frontend/passport.html'), 'utf8');
 const stateMatch = html.match(/<script\b(?=[^>]*\bid="document-state")[^>]*>([\s\S]*?)<\/script>/);
@@ -172,6 +173,84 @@ test('reapply never restores a stale emergency address', () => { const h=createH
 test('unchecking same-address retains latest mirrored values', () => { const h=createHarness(); h.input('sameEmergency',true); h.input('address1','LATEST'); h.input('sameEmergency',false); assert.equal(h.elements.get('eng-emergency1').value,'LATEST'); });
 test('direct emergency override explicitly unlinks addresses', () => { const h=createHarness(); h.input('sameEmergency',true); h.edit('emergency-address','DIFFERENT'); assert.equal(h.api.state().sameEmergency,false); assert.equal(h.api.state().emergency1,'DIFFERENT'); assert.equal(h.elements.get('eng-emergency-box').hidden,false); });
 test('independent emergency address survives parent edits', () => { const h=createHarness(); h.input('sameEmergency',false); h.input('emergency1','INDEPENDENT'); h.input('address1','PERMANENT'); assert.equal(h.field('emergency-address'),'INDEPENDENT'); });
+test('lowercase form input prints UPPERCASE document lines, form keeps typed text (2026-11-16)', () => {
+  const h=createHarness();
+  h.input('fatherName','abdul karim'); h.input('motherName','minara begum'); h.input('spouseName','lutfa begum');
+  h.input('birthPlace','noakhali'); h.input('authority','dhaka');
+  h.input('address1','narottom pur, pandit bazar, begumganj'); h.input('address2','noakhali');
+  h.input('emergencyName','abdul karim'); h.input('relationship','father');
+  assert.equal(h.field('father'),'ABDUL KARIM');
+  assert.equal(h.field('mother'),'MINARA BEGUM');
+  assert.equal(h.field('spouse'),'LUTFA BEGUM');
+  assert.equal(h.field('birthplace'),'NOAKHALI');
+  assert.equal(h.field('authority'),'DHAKA');
+  assert.equal(h.field('permanent-address'),'NAROTTOM PUR, PANDIT BAZAR, BEGUMGANJ');
+  assert.equal(h.field('permanent-city'),'NOAKHALI');
+  assert.equal(h.field('emergency-name'),'ABDUL KARIM');
+  assert.equal(h.field('relationship'),'FATHER');
+  // The form keeps exactly what was typed — only the output normalizes.
+  assert.equal(h.elements.get('eng-fatherName').value,'abdul karim');
+  assert.equal(h.elements.get('eng-address1').value,'narottom pur, pandit bazar, begumganj');
+});
+test('same-address mirror prints the permanent address UPPERCASE (2026-11-16)', () => {
+  const h=createHarness();
+  h.input('sameEmergency',true);
+  h.input('address1','test address'); h.input('address2','test district');
+  assert.equal(h.field('emergency-address'),'TEST ADDRESS');
+  assert.equal(h.field('emergency-city'),'TEST DISTRICT');
+  assert.equal(h.elements.get('eng-emergency1').value,'test address');
+});
+test('lowercase input leaves the MRZ identical to uppercase input (2026-11-16)', () => {
+  const mk=(sur,giv,num,nat)=>{ const h=createHarness(); h.input('surname',sur); h.input('givenName',giv); h.input('passportNo',num); h.input('dob','1979-12-17'); h.input('expiryDate','2035-01-01'); h.input('nationality',nat); h.input('sex','M'); return h; };
+  const lower=mk('md','golam kibriya','ej0762655','bangladeshi');
+  const upper=mk('MD','GOLAM KIBRIYA','EJ0762655','BANGLADESHI');
+  assert.equal(lower.field('mrz-1'),upper.field('mrz-1'));
+  assert.equal(lower.field('mrz-2'),upper.field('mrz-2'));
+  assert.match(lower.field('mrz-1'),/^[A-Z0-9<]{44}$/);
+  checkLine(lower.field('mrz-2'));
+});
+test('digits and punctuation pass through the uppercase output untouched (2026-11-16)', () => {
+  const h=createHarness();
+  h.input('address1','house 12, road-5, block-c');
+  assert.equal(h.field('permanent-address'),'HOUSE 12, ROAD-5, BLOCK-C');
+});
+test('single lowercase name stays single and uppercase, never doubled (2026-11-16)', () => {
+  const h=createHarness();
+  h.input('givenName','rahim'); h.input('surname','');
+  assert.equal(h.field('personal-name'),'RAHIM');
+  assert.equal(h.field('given-name'),'RAHIM');
+  assert.equal(h.field('surname'),'');
+  assert.ok(h.field('mrz-1').includes('P<BGD<<<RAHIM'));
+});
+test('empty spouse prints NA in the document after apply-all, form stays empty (2026-11-16)', () => {
+  const h=createHarness();
+  // At startup the scan is preserved as-is (spouse blank, not dirtied).
+  assert.equal(h.field('spouse'),'');
+  // Create runs applyAll first, so an untouched empty spouse becomes NA.
+  h.api.applyAll();
+  assert.equal(h.field('spouse'),'NA');
+  assert.equal(h.elements.get('eng-spouseName').value,'');
+  assert.equal(h.api.state().spouseName,'');
+});
+test('filled spouse prints the actual name uppercased; clearing it brings NA back (2026-11-16)', () => {
+  const h=createHarness();
+  h.input('spouseName','lutfa begum');
+  assert.equal(h.field('spouse'),'LUTFA BEGUM');
+  h.input('spouseName','');
+  assert.equal(h.field('spouse'),'NA');
+  h.input('spouseName','  ');
+  assert.equal(h.field('spouse'),'NA');
+});
+test('spouse never reaches the MRZ or the delivery name (2026-11-16)', () => {
+  const mk=(spouse)=>{ const h=createHarness(); h.input('surname','MD'); h.input('givenName','GOLAM KIBRIYA'); h.input('passportNo','EJ0762655'); h.input('dob','1979-12-17'); h.input('expiryDate','2035-01-01'); h.input('nationality','BANGLADESHI'); h.input('sex','M'); h.input('spouseName',spouse); h.api.applyAll(); return h; };
+  const empty=mk(''), filled=mk('lutfa begum');
+  assert.equal(empty.field('spouse'),'NA');
+  assert.equal(filled.field('spouse'),'LUTFA BEGUM');
+  assert.equal(empty.field('mrz-1'),filled.field('mrz-1'));
+  assert.equal(empty.field('mrz-2'),filled.field('mrz-2'));
+  assert.match(empty.field('mrz-1'),/^[A-Z0-9<]{44}$/);
+  checkLine(empty.field('mrz-2'));
+});
 test('checkbox-only state changes are dirty', () => { const h=createHarness(); h.input('sameEmergency',true); const marks=h.context.marks; h.input('sameEmergency',false); assert.ok(h.context.marks>marks); });
 test('valid leap day reverse-syncs', () => { const h=createHarness(); h.edit('birth-date','29 FEB 2024'); assert.equal(h.api.state().dob,'2024-02-29'); assert.equal(h.field('mrz-2').slice(13,19),'240229'); });
 test('invalid dates clear stale derived dates and warn', () => { const h=createHarness(); h.edit('birth-date','31 FEB 2024'); assert.equal(h.api.state().dob,''); assert.equal(h.field('mrz-2').slice(13,19),'<<<<<<'); assert.ok(h.api.validate().some(x=>x.includes('জন্মতারিখ'))); });
@@ -201,11 +280,74 @@ const setImageCode = script.slice(script.indexOf(' async function setImage('), s
 function syntheticPixels(w, h, paint) { const p = new Uint8ClampedArray(w * h * 4); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const [r, g, b] = paint(x, y); const j = (y * w + x) * 4; p[j] = r; p[j+1] = g; p[j+2] = b; p[j+3] = 255; } return p; }
 function runCutoutMask(p, w, h) { const ctx = vm.createContext({}); vm.runInContext(cutoutCode, ctx); return ctx.cutoutMask(p, w, h); }
 
+// Minimal 8-bit RGB PNG reader (node:zlib only) — the photo backdrop plate
+// is stored as PNG so its tone can be regression-checked without an image
+// library in the test environment.
+function decodePngRgb(buf) {
+  assert.deepEqual([...buf.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  let pos = 8, width = 0, height = 0, bitDepth = 0, colorType = 0;
+  const idat = [];
+  while (pos < buf.length) {
+    const len = buf.readUInt32BE(pos);
+    const type = buf.toString('ascii', pos + 4, pos + 8);
+    const data = buf.subarray(pos + 8, pos + 8 + len);
+    if (type === 'IHDR') { width = data.readUInt32BE(0); height = data.readUInt32BE(4); bitDepth = data[8]; colorType = data[9]; }
+    else if (type === 'IDAT') { idat.push(data); }
+    else if (type === 'IEND') { break; }
+    pos += 12 + len;
+  }
+  assert.equal(bitDepth, 8, 'plate is 8-bit');
+  assert.equal(colorType, 2, 'plate is RGB');
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  const bpp = 3, stride = width * bpp;
+  const out = Buffer.alloc(width * height * bpp);
+  let src = 0;
+  for (let y = 0; y < height; y++) {
+    const f = raw[src++];
+    const row = raw.subarray(src, src + stride); src += stride;
+    const prev = y > 0 ? out.subarray((y - 1) * stride, y * stride) : null;
+    const dst = out.subarray(y * stride, (y + 1) * stride);
+    for (let x = 0; x < stride; x++) {
+      const a = x >= bpp ? dst[x - bpp] : 0, b = prev ? prev[x] : 0, c = (x >= bpp && prev) ? prev[x - bpp] : 0;
+      let v = row[x];
+      if (f === 1) v = (v + a) & 255;
+      else if (f === 2) v = (v + b) & 255;
+      else if (f === 3) v = (v + ((a + b) >> 1)) & 255;
+      else if (f === 4) { const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c); v = (v + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 255; }
+      dst[x] = v;
+    }
+  }
+  return { width, height, data: out };
+}
+
 test('embedded model ships the scan photo-window backdrop and cutout default on', () => {
-  assert.ok(original.assets.photoBackground.startsWith('data:image/webp;base64,'));
+  assert.ok(original.assets.photoBackground.startsWith('data:image/png;base64,'));
   assert.ok(original.assets.photoBackground.length > 5000);
   assert.equal(original.images.photo.cutout, true);
   assert.equal(original.images.photo.cutoutRendered, '');
+});
+test('photo backdrop plate is tonally even — no dark band behind the cut-out person (2026-11-16)', () => {
+  const png = decodePngRgb(Buffer.from(original.assets.photoBackground.split(',')[1], 'base64'));
+  assert.equal(png.width, 385);
+  assert.equal(png.height, 532);
+  const rowMean = (y) => { let s = 0, n = 0; for (let x = 0; x < png.width; x += 4) { const i = (y * png.width + x) * 3; s += (png.data[i] + png.data[i + 1] + png.data[i + 2]) / 3; n++; } return s / n; };
+  const mid = (rowMean(200) + rowMean(300) + rowMean(350)) / 3;
+  const bottom = (rowMean(450) + rowMean(480) + rowMean(510)) / 3;
+  // Before the fix the bottom rows averaged ~147 against ~184 mid-frame —
+  // a grey smudge at the bottom-right of the photo frame behind the new
+  // person. The plate's bottom gradient is now levelled to the mid tone.
+  assert.ok(Math.abs(bottom - mid) < 12, `photo plate bottom ${bottom.toFixed(1)} vs mid ${mid.toFixed(1)}`);
+});
+test('hologram overlay is a separate asset from the template seal (2026-11-16)', () => {
+  // The lotus emblem was genuinely missing from the template, so it was
+  // extracted from the user-provided artwork file; the round government
+  // seal was ALREADY in the template as stampOverlay and is untouched.
+  assert.ok(original.assets.hologramOverlay.startsWith('data:image/webp;base64,'));
+  assert.ok(original.assets.hologramOverlay.length > 5000);
+  assert.notEqual(original.assets.hologramOverlay, original.assets.stampOverlay);
+  assert.ok(original.assets.stampOverlay.startsWith('data:image/webp;base64,'));
+  assert.ok(script.includes("holo.className='hologram-overlay'"));
+  assert.ok(script.includes('holo.src=model.assets.hologramOverlay'));
 });
 test('photo slot backing shows the scan plate in edit and print css (no preview state)', () => {
   assert.ok(html.includes('.image-slot.photo.changed .slot-patch{display:block}'));
