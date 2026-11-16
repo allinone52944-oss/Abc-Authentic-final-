@@ -60,7 +60,7 @@ main{max-width:1432px;display:grid;grid-template-columns:minmax(0,1fr);gap:22px;
 .image-slot .slot-image,.image-slot .slot-patch,.image-slot .stamp-overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:none}
 .image-slot.changed .slot-image{display:block}
 .image-slot.photo.changed .slot-patch{display:block}
-.image-slot.signature.changed .slot-patch{display:block}
+.image-slot.signature .slot-patch{display:block}
 .image-slot.photo.changed.preserve-stamp .stamp-overlay{display:block;z-index:2}
 .image-slot .slot-image{z-index:1}
 .image-slot .slot-patch{z-index:0}
@@ -91,6 +91,7 @@ input[type=checkbox]{accent-color:var(--green)}
  .page-layer{transform:scale(0.31948366277,0.31965032307)!important}
  .field,.image-slot{outline:none!important;background:transparent!important}
  .image-slot.photo.changed .slot-patch{display:block!important}
+ .image-slot.signature .slot-patch{display:block!important}
  .page-shell,.page-shell *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
 }
 </style>
@@ -172,7 +173,7 @@ input[type=checkbox]{accent-color:var(--green)}
       </div>
      </div>
      <p class="form-upload-note">ছবি ও স্বাক্ষর দিলে ডাউনলোড করা পাসপোর্টে সেগুলো থাকবে। Create-এর পর বদলালে আবার ডাউনলোড করতে হবে।</p>
-     <p class="form-sample-warning" id="form-sample-warning" role="status" hidden="">সতর্কতা: ছবি ও স্বাক্ষর না দিলে ডাউনলোড করা পাসপোর্টে নমুনার ছবি ও স্বাক্ষর দেখাবে।</p>
+     <p class="form-sample-warning" id="form-sample-warning" role="status" hidden="">সতর্কতা: ছবি না দিলে ডাউনলোড করা পাসপোর্টে নমুনার ছবি দেখাবে।</p>
     </div>
     <p class="helper">প্রতিটি তথ্য <strong>একবার</strong> পূরণ করলেই সংযুক্ত লেখা ও MRZ আপডেট হবে। <span lang="bn">বামের ডটেড স্ট্রিপ এখন নিজে থেকে বদলায়: পাসপোর্ট নম্বর বদলালে ডট নতুন নম্বর দেখায়। ডানের ছাপা উল্লম্ব নম্বর আলাদা অংশ।</span></p>
 
@@ -978,21 +979,24 @@ input[type=checkbox]{accent-color:var(--green)}
     }
   };
   var canUpload = !!(editor.setImage && editor.resetImage);
-  /* Sample-face warning (finding 7): without an attached photo/signature
-     the download shows the scan's own (sample person's) photo/signature,
-     because the slots are transparent until replaced. Warn visibly on the
-     form BEFORE Create — do not block, the user may proceed knowingly. */
+  /* Sample-face warning (finding 7): without an attached photo the
+     download shows the scan's own (sample person's) photo, because the
+     photo slot is transparent until replaced. Warn visibly on the form
+     BEFORE Create — do not block, the user may proceed knowingly.
+     The signature is different: its slot always shows the clean erase
+     patch, so without an uploaded signature the signature area stays
+     blank — no sample signature ever appears, and no warning is shown
+     for a missing signature. */
   var sampleWarning = document.getElementById('form-sample-warning');
   var attached = { photo: false, signature: false };
   function updateSampleWarning(){
     if (!sampleWarning) return;
-    var missing = [];
-    if (!attached.photo) missing.push('ছবি');
-    if (!attached.signature) missing.push('স্বাক্ষর');
-    if (!missing.length) { sampleWarning.hidden = true; sampleWarning.textContent = ''; return; }
-    var label = missing.join(' ও ');
-    sampleWarning.hidden = false;
-    sampleWarning.textContent = 'সতর্কতা: ' + label + ' না দিলে ডাউনলোড করা পাসপোর্টে নমুনার ' + label + ' দেখাবে।';
+    if (!attached.photo) {
+      sampleWarning.hidden = false;
+      sampleWarning.textContent = 'সতর্কতা: ছবি না দিলে ডাউনলোড করা পাসপোর্টে নমুনার ছবি দেখাবে।';
+      return;
+    }
+    sampleWarning.hidden = true; sampleWarning.textContent = '';
   }
   function showUploadState(type, file){
     var u = uploadEls[type]; if (!u) return;
