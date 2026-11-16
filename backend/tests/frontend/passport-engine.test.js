@@ -260,6 +260,17 @@ test('photo backdrop plate is tonally even — no dark band behind the cut-out p
   // person. The plate's bottom gradient is now levelled to the mid tone.
   assert.ok(Math.abs(bottom - mid) < 12, `photo plate bottom ${bottom.toFixed(1)} vs mid ${mid.toFixed(1)}`);
 });
+test('hologram overlay is a separate asset from the template seal (2026-11-16)', () => {
+  // The lotus emblem was genuinely missing from the template, so it was
+  // extracted from the user-provided artwork file; the round government
+  // seal was ALREADY in the template as stampOverlay and is untouched.
+  assert.ok(original.assets.hologramOverlay.startsWith('data:image/webp;base64,'));
+  assert.ok(original.assets.hologramOverlay.length > 5000);
+  assert.notEqual(original.assets.hologramOverlay, original.assets.stampOverlay);
+  assert.ok(original.assets.stampOverlay.startsWith('data:image/webp;base64,'));
+  assert.ok(script.includes("holo.className='hologram-overlay'"));
+  assert.ok(script.includes('holo.src=model.assets.hologramOverlay'));
+});
 test('photo slot backing shows the scan plate in edit and print css (no preview state)', () => {
   assert.ok(html.includes('.image-slot.photo.changed .slot-patch{display:block}'));
   assert.ok(!html.includes('body.preview'), 'no preview state remains');
