@@ -31,7 +31,7 @@ function createHarness() {
   for (const match of html.slice(0, stateMatch.index).matchAll(/<(input|textarea|select|button|div|p)\b([^>]*\bid="([^"]+)"[^>]*)>/g)) {
     const [, tag, attrs, id] = match;
     const listeners = {};
-    elements.set(id, { id, type:attrs.match(/\btype="([^"]+)"/)?.[1] || (tag === 'select' ? 'select-one' : 'text'), tagName:tag.toUpperCase(), value:'', checked:false, hidden:false, textContent:'', dataset:{ engine:attrs.match(/\bdata-engine="([^"]+)"/)?.[1] }, validityMessage:'', addEventListener(event, callback) { listeners[event] = callback; }, setCustomValidity(message) { this.validityMessage = message; }, fire(event) { listeners[event]?.(); } });
+    elements.set(id, { id, type:attrs.match(/\btype="([^"]+)"/)?.[1] || (tag === 'select' ? 'select-one' : 'text'), tagName:tag.toUpperCase(), value:'', checked:false, hidden:false, textContent:'', dataset:{ engine:attrs.match(/\bdata-engine="([^"]+)"/)?.[1] }, validityMessage:'', addEventListener(event, callback) { listeners[event] = callback; }, setCustomValidity(message) { this.validityMessage = message; }, fire(event, arg) { listeners[event]?.(arg); } });
   }
   const document = { getElementById:id => elements.get(id), querySelectorAll:selector => selector === '[data-engine]' ? [...elements.values()].filter(e => e.dataset.engine) : [], activeElement:null };
   const context = vm.createContext({ model, fields, document, window:{}, nodes:new Map(), selected:null, normalize:value => String(value).replace(/[\r\n\t]+/g, ' ').replace(/\u00a0/g, ' '), renderField() {}, baseStyle:() => ({}), selectField() {}, clone:structuredClone, marks:0, notify() {}, $:id => elements.get(id) });
@@ -73,11 +73,51 @@ test('image slots carry no keyboard-focus styling (no editor interaction)', () =
   assert.ok(!html.includes('body:not(.preview)'), 'no preview-state CSS remains');
 });
 test('entire executable script parses', () => { new vm.Script(script); });
-test('no paste handler exists on document text (slots are render-only)', () => {
-  assert.ok(!script.includes("addEventListener('paste'"), 'no paste listener in the engine script');
+test('paste handler exists ONLY on the form date inputs (copy-paste dates), never on document text', () => {
+  assert.ok(script.includes("addEventListener('paste'"), 'date inputs have a paste listener');
+  // The paste wiring is a loop over exactly the three date keys.
+  const pasteAt = script.indexOf("addEventListener('paste'");
+  const around = script.slice(Math.max(0, pasteAt - 400), pasteAt + 400);
+  assert.ok(around.includes("['dob','issueDate','expiryDate']"), 'paste loop covers only the three date inputs');
+  assert.ok(!around.includes('personal-name'), 'no paste wiring on document fields');
   assert.ok(!script.includes('.contentEditable'), 'slots are never made editable');
   // The export still strips any stray contenteditable from the shell.
   assert.ok(script.includes("shell.querySelectorAll('[contenteditable]')"));
+});
+test('pasted date strings normalize to ISO (copy-paste dates, 2026-11-15)', () => {
+  const h = createHarness();
+  const p = h.api.parsePastedDate;
+  assert.equal(p('17/12/1979'), '1979-12-17');
+  assert.equal(p('17-12-1979'), '1979-12-17');
+  assert.equal(p('17.12.1979'), '1979-12-17');
+  assert.equal(p('1979-12-17'), '1979-12-17');
+  assert.equal(p('17 DEC 1979'), '1979-12-17');
+  assert.equal(p('17 dec 1979'), '1979-12-17');
+  assert.equal(p('17 December 1979'), '1979-12-17');
+  assert.equal(p(' 17/12/1979 '), '1979-12-17');
+  assert.equal(p('29/02/2020'), '2020-02-29'); // leap day is real
+  assert.equal(p('31/02/1979'), ''); // impossible date
+  assert.equal(p('29/02/2019'), ''); // not a leap year
+  assert.equal(p('32/13/1979'), '');
+  assert.equal(p('hello'), '');
+  assert.equal(p(''), '');
+});
+test('pasting a date into a date input sets it and rebuilds the MRZ', () => {
+  const h = createHarness();
+  const dob = h.elements.get('eng-dob');
+  assert.ok(dob, 'eng-dob exists');
+  let prevented = false;
+  dob.fire('paste', { clipboardData: { getData: () => '17/12/1979' }, preventDefault: () => { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(dob.value, '1979-12-17');
+  assert.equal(h.api.state().dob, '1979-12-17');
+  assert.equal(h.field('mrz-2').slice(13, 19), '791217');
+  checkLine(h.field('mrz-2'));
+  // Unparseable paste is left alone — validation still catches it.
+  const issue = h.elements.get('eng-issueDate');
+  const before = issue.value;
+  issue.fire('paste', { clipboardData: { getData: () => 'not a date' }, preventDefault: () => { prevented = true; } });
+  assert.equal(issue.value, before);
 });
 test('no unsaved indicator exists (editor status UI removed)', () => {
   assert.ok(!script.includes('function updateStatus('), 'updateStatus is gone');
@@ -116,9 +156,15 @@ test('direct passport edit updates form, printed vertical number and MRZ', () =>
 test('direct printed-vertical edit updates the passport source', () => { const h=createHarness(); h.edit('vertical-passport','ZZ 0000003'); assert.equal(h.field('passport-no'),'ZZ0000003'); checkLine(h.field('mrz-2')); });
 test('restore region reverse-syncs all dependents', () => { const h=createHarness(); h.input('passportNo','ZZ0000004'); h.reset('passport-no'); assert.equal(h.api.state().passportNo,h.field('passport-no')); assert.equal(h.field('mrz-2').slice(0,9),h.field('passport-no')); });
 test('document type is mapped in both directions', () => { const h=createHarness(); h.input('docType','X'); assert.equal(h.field('type'),'X'); assert.equal(h.field('mrz-1')[0],'X'); h.edit('type','P'); assert.equal(h.api.state().docType,'P'); assert.equal(h.field('mrz-1')[0],'P'); });
-test('full name change clears manual surname and given name', () => { const h=createHarness(); h.input('surname','OVERRIDE'); h.input('givenName','OVERRIDE'); h.input('fullName','NEW EXAMPLE NAME'); assert.equal(h.api.state().surname,'NAME'); assert.equal(h.api.state().givenName,'NEW EXAMPLE'); });
+test('defaults P/BGD flow into the MRZ like typed values (2026-11-15)', () => { const h=createHarness(); h.input('docType','D'); h.input('countryCode','USA'); assert.equal(h.api.buildMrz1().slice(0,5),'D<USA'); h.input('docType','P'); h.input('countryCode','BGD'); assert.equal(h.field('type'),'P'); assert.equal(h.field('country-code'),'BGD'); assert.equal(h.api.buildMrz1().slice(0,5),'P<BGD'); assert.match(h.api.buildMrz1(),/^[A-Z0-9<]{44}$/); });
+test('invalid document type is caught by validation', () => { const h=createHarness(); h.input('docType','PP'); assert.ok(h.api.validate().some(x=>x.includes('ধরন একটি লাতিন অক্ষর হতে হবে।'))); h.input('docType','P'); assert.ok(!h.api.validate().some(x=>x.includes('ধরন'))); });
+test('first and last name feed surname/given name directly — no splitting (2026-11-15)', () => { const h=createHarness(); h.input('surname','KEEP'); h.input('givenName','NEW EXAMPLE'); assert.equal(h.api.state().surname,'KEEP'); assert.equal(h.api.state().givenName,'NEW EXAMPLE'); assert.equal(h.field('personal-name'),'NEW EXAMPLE KEEP'); assert.equal(h.field('surname'),'KEEP'); assert.equal(h.field('given-name'),'NEW EXAMPLE'); assert.ok(h.field('mrz-1').includes('KEEP<<NEW<EXAMPLE')); assert.match(h.field('mrz-1'),/^[A-Z0-9<]{44}$/); });
+test('two-word name feeds document and MRZ directly', () => { const h=createHarness(); h.input('givenName','KARIM UDDIN'); h.input('surname','AHMED'); assert.equal(h.field('personal-name'),'KARIM UDDIN AHMED'); assert.equal(h.field('surname'),'AHMED'); assert.equal(h.field('given-name'),'KARIM UDDIN'); assert.ok(h.field('mrz-1').startsWith('P<BGDAHMED<<KARIM<UDDIN')); assert.match(h.field('mrz-1'),/^[A-Z0-9<]{44}$/); });
+test('multi-word given name stays whole — its last word is NOT moved to surname', () => { const h=createHarness(); h.input('givenName','A B C'); h.input('surname','D'); assert.equal(h.api.state().givenName,'A B C'); assert.equal(h.api.state().surname,'D'); assert.equal(h.field('personal-name'),'A B C D'); assert.ok(h.field('mrz-1').includes('D<<A<B<C')); assert.match(h.field('mrz-1'),/^[A-Z0-9<]{44}$/); });
+test('single-name applicant: empty surname stays empty, no doubling, MRZ correct', () => { const h=createHarness(); h.input('givenName','RAHIM'); h.input('surname',''); assert.equal(h.api.state().givenName,'RAHIM'); assert.equal(h.api.state().surname,''); assert.equal(h.field('personal-name'),'RAHIM'); assert.equal(h.field('surname'),''); assert.equal(h.field('given-name'),'RAHIM'); assert.ok(h.field('mrz-1').startsWith('P<BGD<<<RAHIM')); assert.match(h.field('mrz-1'),/^[A-Z0-9<]{44}$/); assert.ok(!h.api.validate().some(x=>x.includes('পদবি'))); assert.ok(!h.api.validate().some(x=>x.includes('প্রদত্ত নাম'))); });
+test('name section sits after photo-signature and before passport, first name before last name (2026-11-15)', () => { const photoAt=html.indexOf('id="eng-photo-group"'); const nameAt=html.indexOf('নাম <span class="auto-tag">'); const givenAt=html.indexOf('id="eng-givenName"'); const surnameAt=html.indexOf('id="eng-surname"'); const passportAt=html.indexOf('<p class="engine-legend">পাসপোর্ট</p>'); const passportNoAt=html.indexOf('id="eng-passportNo"'); assert.ok(photoAt>-1&&nameAt>photoAt,'name section after photo-signature'); assert.ok(givenAt>nameAt&&surnameAt>givenAt,'first name before last name'); assert.ok(passportAt>surnameAt&&passportNoAt>passportAt,'passport section after name'); assert.ok(!html.includes('id="eng-fullName"'),'no single full-name field'); assert.ok(!html.includes('id="eng-name-auto-row"'),'no hidden auto-split row'); });
 test('direct full-name edit derives every name region', () => { const h=createHarness(); h.edit('personal-name','TEST SAMPLE PERSON'); assert.equal(h.field('surname'),'PERSON'); assert.equal(h.field('given-name'),'TEST SAMPLE'); assert.ok(h.field('mrz-1').includes('PERSON<<TEST<SAMPLE')); });
-test('public apply uses the full-name derivation path', () => { const h=createHarness(); h.elements.get('eng-fullName').value='API TEST NAME'; h.api.apply('fullName'); assert.equal(h.field('surname'),'NAME'); assert.equal(h.field('given-name'),'API TEST'); });
+test('public apply feeds a single name field directly', () => { const h=createHarness(); h.elements.get('eng-givenName').value='API TEST'; h.api.apply('givenName'); assert.equal(h.field('given-name'),'API TEST'); assert.equal(h.field('personal-name'),'API TEST MD'); assert.equal(h.field('surname'),'MD'); });
 test('reapply preserves manual name and MRZ overrides', () => { const h=createHarness(); h.input('surname','CUSTOM'); h.input('mrz1','P<BGDCUSTOM<<TEST'.padEnd(44,'<')); const line=h.field('mrz-1'); h.api.applyAll(); assert.equal(h.field('surname'),'CUSTOM'); assert.equal(h.field('mrz-1'),line); });
 test('new source data clears stale MRZ overrides', () => { const h=createHarness(); h.input('mrz2','<'.repeat(44)); h.input('passportNo','ZZ0000005'); assert.notEqual(h.field('mrz-2'),'<'.repeat(44)); checkLine(h.field('mrz-2')); });
 test('same-address edits synchronize document, form and model', () => { const h=createHarness(); h.input('sameEmergency',true); h.input('address1','TEST ADDRESS'); h.input('address2','TEST DISTRICT'); assert.equal(h.field('emergency-address'),'TEST ADDRESS'); assert.equal(h.api.state().emergency1,'TEST ADDRESS'); assert.equal(h.api.state().emergency2,'TEST DISTRICT'); });

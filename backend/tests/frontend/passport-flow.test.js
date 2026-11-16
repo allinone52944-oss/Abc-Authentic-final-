@@ -33,17 +33,18 @@ const MAIN = SCRIPTS[SCRIPTS.length - 2]; // the editor IIFE
 
 // All engine fields the form must expose (FORM_KEYS in the flow script).
 const FORM_KEYS = [
-  'passportNo', 'docType', 'countryCode', 'fullName', 'surname', 'givenName',
+  'passportNo', 'docType', 'countryCode', 'givenName', 'surname',
   'fatherName', 'motherName', 'spouseName', 'dob', 'sex', 'issueDate',
   'expiryDate', 'birthPlace', 'nationality', 'nationalityCode', 'personalNo',
   'previousPassport', 'authority', 'address1', 'address2', 'emergency1',
   'emergency2', 'emergencyName', 'phone', 'relationship', 'mrz1', 'mrz2',
 ];
 // What the separate form screen actually SHOWS: only the fields the user
-// fills up. surname/givenName (auto-split) and mrz1/mrz2 (auto-generated)
-// stay in the DOM as automation targets but are hidden in form state.
+// fills up. mrz1/mrz2 (auto-generated) stay in the DOM as automation
+// targets but are hidden in form state; givenName/surname are visible
+// first/last-name fields since 2026-11-15.
 const FILLABLE_KEYS = [
-  'passportNo', 'docType', 'countryCode', 'fullName',
+  'passportNo', 'docType', 'countryCode', 'givenName', 'surname',
   'fatherName', 'motherName', 'spouseName', 'dob', 'sex', 'issueDate',
   'expiryDate', 'birthPlace', 'nationality', 'nationalityCode', 'personalNo',
   'previousPassport', 'authority', 'address1', 'address2', 'emergency1',
@@ -123,7 +124,8 @@ function runFlow(opts) {
   els['new-passport-button'] = makeEl('new-passport-button', 'button');
   // Template values, as the live page ships them — the form must blank them.
   els['eng-passportNo'].value = 'EJ0762655';
-  els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+  els['eng-givenName'].value = 'GOLAM KIBRIYA';
+  els['eng-surname'].value = 'MD';
   els['eng-dob'].value = '1979-12-17';
   els['eng-nationality'].value = 'BANGLADESHI';
   els['eng-dotStripAuto'].checked = true;
@@ -281,7 +283,7 @@ describe('form (separate form screen)', () => {
   test('form screen has its own heading, shown only in form state', () => {
     expect(PAGE).toContain('id="passport-form-head"');
     expect(CSS).toContain('.form-head{display:none}');
-    expect(CSS).toContain("body.flow-form .form-head{display:block;margin:0 0 6px}");
+    expect(CSS).toContain("body.flow-form .form-head{display:block;margin:0 0 4px}");
     const headAt = PAGE.indexOf('id="passport-form-head"');
     const panelAt = PAGE.indexOf('id="panel-engine"');
     expect(headAt).toBeGreaterThan(panelAt);
@@ -296,7 +298,7 @@ describe('form (separate form screen)', () => {
     const h2At = PAGE.indexOf('<h2>Passport তৈরি করুন</h2>', headAt);
     expect(backAt).toBeGreaterThan(headAt);
     expect(backAt).toBeLessThan(h2At);
-    expect(CSS).toContain('.back-button{background:none;border:0;color:var(--muted);cursor:pointer;font-size:13px;padding:0;margin:0 0 8px;text-align:left}');
+    expect(CSS).toContain('.back-button{background:none;border:0;color:var(--muted);cursor:pointer;font-size:13px;padding:0;margin:0 0 2px;text-align:left}');
     expect(FLOW).toContain('back-to-landing-button');
     expect(FLOW).toContain('formEntered');
   });
@@ -323,15 +325,22 @@ describe('form (separate form screen)', () => {
     expect(mrz2At).toBeLessThan(createAt);
   });
 
-  test('form screen hides the auto name-split fields', () => {
-    expect(CSS).toContain('body.flow-form #eng-name-auto-row{display:none}');
-    const rowAt = PAGE.indexOf('id="eng-name-auto-row"');
-    const surnameAt = PAGE.indexOf('id="eng-surname"');
+  test('name section shows first name then last name, before the passport section (2026-11-15)', () => {
+    expect(PAGE).not.toContain('id="eng-fullName"');
+    expect(PAGE).not.toContain('id="eng-name-auto-row"');
+    expect(CSS).not.toContain('#eng-name-auto-row');
+    const photoAt = PAGE.indexOf('id="eng-photo-group"');
     const givenAt = PAGE.indexOf('id="eng-givenName"');
+    const surnameAt = PAGE.indexOf('id="eng-surname"');
+    const passportAt = PAGE.indexOf('id="eng-passportNo"');
     const fatherAt = PAGE.indexOf('id="eng-fatherName"');
-    expect(rowAt).toBeLessThan(surnameAt);
-    expect(surnameAt).toBeLessThan(givenAt);
-    expect(givenAt).toBeLessThan(fatherAt);
+    expect(photoAt).toBeGreaterThan(-1);
+    expect(givenAt).toBeGreaterThan(photoAt);
+    expect(surnameAt).toBeGreaterThan(givenAt);
+    expect(passportAt).toBeGreaterThan(surnameAt);
+    expect(fatherAt).toBeGreaterThan(passportAt);
+    expect(PAGE).toContain('<label for="eng-givenName">প্রথম নাম</label>');
+    expect(PAGE).toContain('<label for="eng-surname">শেষ নাম (ঐচ্ছিক)</label>');
   });
 
   test('form screen hides preview, hints and auto-only controls — except validation', () => {
@@ -352,8 +361,8 @@ describe('form (separate form screen)', () => {
     expect(PAGE.slice(at, at + 200)).toContain('maxlength="9"');
   });
 
-  test('form state is a single column', () => {
-    expect(CSS).toContain('body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:760px}');
+  test('form state is a two-column grid at the standard content width', () => {
+    expect(CSS).toContain('body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:1046px}');
   });
 });
 
@@ -417,7 +426,7 @@ describe('form photo/signature upload', () => {
     const at = PAGE.indexOf('id="form-sample-warning"');
     expect(at).toBeGreaterThan(PAGE.indexOf('id="eng-photo-group"'));
     expect(at).toBeLessThan(PAGE.indexOf('id="create-passport-button"'));
-    expect(CSS).toContain('.form-sample-warning{margin:10px 0 0;color:#b3261e;font-weight:600;line-height:1.7}');
+    expect(CSS).toContain('.form-sample-warning{margin:4px 0 0;color:#b3261e;font-weight:600;line-height:1.7}');
     expect(CSS).toContain('.form-sample-warning[hidden]{display:none}');
     expect(FLOW).toContain('updateSampleWarning');
     expect(FLOW).toContain('নমুনার');
@@ -470,7 +479,7 @@ describe('form declutter — status bar, Fidelity and Print texts removed; group
   });
 
   test('form-state groups have no divider borders — spacing only, simpler premium look', () => {
-    expect(CSS).toContain('body.flow-form .engine-group{border-top:0;margin-top:24px;padding-top:0}');
+    expect(CSS).toContain('body.flow-form .engine-group{border-top:0;margin-top:2px;padding-top:0}');
   });
 });
 
@@ -501,11 +510,11 @@ describe('Create → download', () => {
     expect(FLOW).toContain('a.download = name');
   });
 
-  test('Create requires passport no, type, country code, full name, DOB, sex, expiry and nationality before downloading', () => {
+  test('Create requires passport no, type, country code, first name, DOB, sex, expiry and nationality before downloading', () => {
     expect(FLOW).toContain("['passportNo','পাসপোর্ট নম্বর']");
     expect(FLOW).toContain("['docType','ধরন']");
     expect(FLOW).toContain("['countryCode','দেশের কোড']");
-    expect(FLOW).toContain("['fullName','পুরো নাম']");
+    expect(FLOW).toContain("['givenName','প্রথম নাম']");
     expect(FLOW).toContain("['dob','জন্মতারিখ']");
     expect(FLOW).toContain("['sex','লিঙ্গ']");
     expect(FLOW).toContain("['expiryDate','মেয়াদের তারিখ']");
@@ -570,9 +579,14 @@ describe('flow behavior (vm, stub DOM)', () => {
     expect(r.body.classList.contains('flow-landing')).toBe(false);
     expect(r.body.classList.contains('flow-form')).toBe(true);
     expect(r.els['eng-passportNo'].value).toBe('');
-    expect(r.els['eng-fullName'].value).toBe('');
+    expect(r.els['eng-givenName'].value).toBe('');
+    expect(r.els['eng-surname'].value).toBe('');
     expect(r.els['eng-dob'].value).toBe('');
     expect(r.els['eng-nationality'].value).toBe('');
+    // Defaults (user direction 2026-11-15): Type "P" and Country code
+    // "BGD" are pre-filled; everything else is blank.
+    expect(r.els['eng-docType'].value).toBe('P');
+    expect(r.els['eng-countryCode'].value).toBe('BGD');
     expect(r.els['eng-dotStripAuto'].checked).toBe(true);
     expect(r.els['eng-sameEmergency'].checked).toBe(false);
     expect(r.calls.applyAll).toBeGreaterThan(0);
@@ -585,17 +599,20 @@ describe('flow behavior (vm, stub DOM)', () => {
     r.els['start-passport-button'].click();
     expect(r.els['eng-passportNo'].value).toBe('');
     r.els['eng-passportNo'].value = 'EJ0762655';
-    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-givenName'].value = 'GOLAM KIBRIYA';
+    r.els['eng-surname'].value = 'MD';
     r.els['back-to-landing-button'].click();
     expect(r.body.classList.contains('flow-landing')).toBe(true);
     expect(r.body.classList.contains('flow-form')).toBe(false);
     expect(r.els['eng-passportNo'].value).toBe('EJ0762655');
-    expect(r.els['eng-fullName'].value).toBe('GOLAM KIBRIYA MD');
+    expect(r.els['eng-givenName'].value).toBe('GOLAM KIBRIYA');
+    expect(r.els['eng-surname'].value).toBe('MD');
     // Re-entering restores the in-progress form instead of blanking it.
     r.els['start-passport-button'].click();
     expect(r.body.classList.contains('flow-form')).toBe(true);
     expect(r.els['eng-passportNo'].value).toBe('EJ0762655');
-    expect(r.els['eng-fullName'].value).toBe('GOLAM KIBRIYA MD');
+    expect(r.els['eng-givenName'].value).toBe('GOLAM KIBRIYA');
+    expect(r.els['eng-surname'].value).toBe('MD');
   });
 
   test('filling + Create downloads the PDF and shows the result screen first (no editor — just the PDF)', async () => {
@@ -604,7 +621,8 @@ describe('flow behavior (vm, stub DOM)', () => {
     r.els['eng-passportNo'].value = 'EJ0762655';
     r.els['eng-docType'].value = 'P';
     r.els['eng-countryCode'].value = 'BGD';
-    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-givenName'].value = 'GOLAM KIBRIYA';
+    r.els['eng-surname'].value = 'MD';
     r.els['eng-dob'].value = '1979-12-17';
     r.els['eng-sex'].value = 'M';
     r.els['eng-expiryDate'].value = '2035-01-01';
@@ -630,7 +648,8 @@ describe('flow behavior (vm, stub DOM)', () => {
     r.els['eng-passportNo'].value = 'EJ0762655';
     r.els['eng-docType'].value = 'P';
     r.els['eng-countryCode'].value = 'BGD';
-    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-givenName'].value = 'GOLAM KIBRIYA';
+    r.els['eng-surname'].value = 'MD';
     r.els['eng-dob'].value = '1979-12-17';
     r.els['eng-sex'].value = 'M';
     r.els['eng-expiryDate'].value = '2035-01-01';
@@ -676,7 +695,11 @@ describe('flow behavior (vm, stub DOM)', () => {
     expect(r.body.classList.contains('flow-form')).toBe(true);
     expect(r.body.classList.contains('flow-result')).toBe(false);
     expect(r.els['eng-passportNo'].value).toBe('');
-    expect(r.els['eng-fullName'].value).toBe('');
+    expect(r.els['eng-givenName'].value).toBe('');
+    expect(r.els['eng-surname'].value).toBe('');
+    // A fresh start restores the defaults (user direction 2026-11-15).
+    expect(r.els['eng-docType'].value).toBe('P');
+    expect(r.els['eng-countryCode'].value).toBe('BGD');
   });
 
   test('result screen markup: success message, re-download, history link (no editor)', () => {
@@ -705,7 +728,8 @@ describe('flow behavior (vm, stub DOM)', () => {
     r.els['eng-passportNo'].value = 'EJ0762655';
     r.els['eng-docType'].value = 'P';
     r.els['eng-countryCode'].value = 'BGD';
-    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-givenName'].value = 'GOLAM KIBRIYA';
+    r.els['eng-surname'].value = 'MD';
     // dob left blank
     r.els['eng-sex'].value = 'M';
     r.els['eng-expiryDate'].value = '2035-01-01';
@@ -724,7 +748,8 @@ describe('flow behavior (vm, stub DOM)', () => {
     r.els['eng-passportNo'].value = 'EJ0762655';
     r.els['eng-docType'].value = 'P';
     r.els['eng-countryCode'].value = 'BGD';
-    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-givenName'].value = 'GOLAM KIBRIYA';
+    r.els['eng-surname'].value = 'MD';
     r.els['eng-dob'].value = '1979-12-17';
     r.els['eng-sex'].value = 'M';
     // expiryDate left blank
@@ -742,7 +767,8 @@ describe('flow behavior (vm, stub DOM)', () => {
     r.els['eng-passportNo'].value = 'EJ0762655';
     r.els['eng-docType'].value = 'P';
     r.els['eng-countryCode'].value = 'BGD';
-    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-givenName'].value = 'GOLAM KIBRIYA';
+    r.els['eng-surname'].value = 'MD';
     r.els['eng-dob'].value = '1979-12-17';
     // sex left blank (clearForm blanks the select)
     r.els['eng-expiryDate'].value = '2035-01-01';
@@ -760,7 +786,8 @@ describe('flow behavior (vm, stub DOM)', () => {
     r.els['eng-passportNo'].value = 'EJ0762655';
     r.els['eng-docType'].value = 'P';
     r.els['eng-countryCode'].value = 'BGD';
-    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-givenName'].value = 'GOLAM KIBRIYA';
+    r.els['eng-surname'].value = 'MD';
     r.els['eng-dob'].value = '1979-12-17';
     r.els['eng-sex'].value = 'M';
     r.els['eng-expiryDate'].value = '2035-01-01';
@@ -786,6 +813,84 @@ describe('flow behavior (vm, stub DOM)', () => {
     expect(() => r.els['start-passport-button'].click()).not.toThrow();
     expect(r.body.classList.contains('flow-form')).toBe(false);
     expect(r.calls.applyAll).toBe(0);
+  });
+});
+
+describe('field defaults — Type P / Country code BGD (2026-11-15)', () => {
+  // User direction: Type (ধরন) and Country code (দেশের কোড) are
+  // pre-filled with defaults and stay editable — change or clear them.
+  function fillRequired(r) {
+    r.els['eng-passportNo'].value = 'EJ0762655';
+    r.els['eng-givenName'].value = 'GOLAM KIBRIYA';
+    r.els['eng-surname'].value = 'MD';
+    r.els['eng-dob'].value = '1979-12-17';
+    r.els['eng-sex'].value = 'M';
+    r.els['eng-expiryDate'].value = '2035-01-01';
+    r.els['eng-nationality'].value = 'BANGLADESHI';
+  }
+
+  test('defaults are a single source in the flow (FORM_DEFAULTS)', () => {
+    expect(FLOW).toContain("var FORM_DEFAULTS = { docType: 'P', countryCode: 'BGD' };");
+    expect(FLOW).toContain('FORM_KEYS.forEach(function(k){ setEng(k, FORM_DEFAULTS[k] || \'\'); });');
+  });
+
+  test('fresh form pre-fills Type P and Country code BGD', () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    expect(r.els['eng-docType'].value).toBe('P');
+    expect(r.els['eng-countryCode'].value).toBe('BGD');
+  });
+
+  test('defaults are plain editable inputs, not disabled or readonly', () => {
+    expect(PAGE).toContain('<input type="text" id="eng-docType" data-engine="docType" maxlength="1" spellcheck="false" autocomplete="off">');
+    expect(PAGE).toContain('<input type="text" id="eng-countryCode" data-engine="countryCode" maxlength="3" spellcheck="false" autocapitalize="off" autocomplete="off">');
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    r.els['eng-docType'].value = 'D';
+    r.els['eng-countryCode'].value = 'USA';
+    expect(r.els['eng-docType'].value).toBe('D');
+    expect(r.els['eng-countryCode'].value).toBe('USA');
+  });
+
+  test('clearing Type blocks Create naming ধরন', () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    fillRequired(r);
+    r.els['eng-docType'].value = '';
+    r.els['create-passport-button'].click();
+    expect(r.calls.exportHTML).toBe(0);
+    expect(r.downloads).toHaveLength(0);
+    expect(r.els['create-message'].textContent).toContain('ধরন পূরণ করুন।');
+    expect(r.els['eng-docType'].focused).toBe(true);
+    expect(r.body.classList.contains('flow-form')).toBe(true);
+  });
+
+  test('clearing Country code blocks Create naming দেশের কোড', () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    fillRequired(r);
+    r.els['eng-countryCode'].value = '';
+    r.els['create-passport-button'].click();
+    expect(r.calls.exportHTML).toBe(0);
+    expect(r.downloads).toHaveLength(0);
+    expect(r.els['create-message'].textContent).toContain('দেশের কোড পূরণ করুন।');
+    expect(r.els['eng-countryCode'].focused).toBe(true);
+    expect(r.body.classList.contains('flow-form')).toBe(true);
+  });
+
+  test('Create with the untouched defaults proceeds (required gate passes)', async () => {
+    const r = runFlow({});
+    r.els['start-passport-button'].click();
+    fillRequired(r);
+    // docType 'P' and countryCode 'BGD' are the pre-filled defaults.
+    expect(r.els['eng-docType'].value).toBe('P');
+    expect(r.els['eng-countryCode'].value).toBe('BGD');
+    r.els['create-passport-button'].click();
+    await r.state.exportedPromise;
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(r.calls.exportHTML).toBe(1);
+    expect(r.downloads).toHaveLength(1);
+    expect(r.downloads[0].name).toBe('Passport-EJ0762655.pdf');
   });
 });
 
@@ -873,7 +978,8 @@ describe('form upload behavior (vm, stub DOM)', () => {
     r.els['eng-passportNo'].value = 'EJ0762655';
     r.els['eng-docType'].value = 'P';
     r.els['eng-countryCode'].value = 'BGD';
-    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-givenName'].value = 'GOLAM KIBRIYA';
+    r.els['eng-surname'].value = 'MD';
     r.els['eng-dob'].value = '1979-12-17';
     r.els['eng-sex'].value = 'M';
     r.els['eng-expiryDate'].value = '2035-01-01';
@@ -976,7 +1082,8 @@ describe('sample-face warning behavior (vm, stub DOM)', () => {
     r.els['eng-passportNo'].value = 'EJ0762655';
     r.els['eng-docType'].value = 'P';
     r.els['eng-countryCode'].value = 'BGD';
-    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-givenName'].value = 'GOLAM KIBRIYA';
+    r.els['eng-surname'].value = 'MD';
     r.els['eng-dob'].value = '1979-12-17';
     r.els['eng-sex'].value = 'M';
     r.els['eng-expiryDate'].value = '2035-01-01';
@@ -1000,7 +1107,8 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
     r.els['eng-passportNo'].value = 'EJ0762655';
     r.els['eng-docType'].value = 'P';
     r.els['eng-countryCode'].value = 'BGD';
-    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-givenName'].value = 'GOLAM KIBRIYA';
+    r.els['eng-surname'].value = 'MD';
     r.els['eng-dob'].value = '1979-12-17';
     r.els['eng-sex'].value = 'M';
     r.els['eng-expiryDate'].value = '2035-01-01';
@@ -1144,13 +1252,141 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
     expect(PAGE).toContain('ফর্ম পূরণ করুন — Create চাপলে পাসপোর্ট PDF তৈরি হয়ে ডাউনলোড হবে।');
   });
 
-  // Site-feel Fix 3: the landing fills the standard content width —
-  // no floating 760px card in empty space. The form keeps its 760px.
-  test('landing fills the standard content width, form keeps 760px', () => {
+  // Two-column form (2026-11-15): the form is side-by-side premium at
+  // the standard content width — no more 760px single column.
+  // Two columns hold on mobile too (user direction 2026-11-15) — the
+  // 740px query keeps only spacing tweaks, never a single-column
+  // collapse.
+  test('landing and form both fill the standard content width (1046px)', () => {
     expect(CSS).toContain('body.flow-landing main{display:block}');
     expect(CSS).not.toContain('body.flow-landing main{display:block;max-width:760px}');
-    expect(CSS).toContain('body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:760px}');
+    expect(CSS).toContain('body.flow-form main{grid-template-columns:minmax(0,1fr);max-width:1046px}');
   });
+
+describe('two-column premium form (2026-11-15)', () => {
+  // User complaint: the form was one very long column with no premium
+  // sizing. Groups now lay their fields out in a 2-column grid on
+  // desktop and on mobile too. Group + field order is unchanged; only
+  // the layout moved.
+  test('form groups use the two-column grid', () => {
+    for (const rule of [
+      'body.flow-form .form-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 16px}',
+      'body.flow-form .form-grid>.engine-legend{grid-column:1/-1}',
+      'body.flow-form .form-grid>.engine-row{grid-column:1/-1;gap:0 16px}',
+      'body.flow-form .form-grid>.checkbox{grid-column:1/-1}',
+      'body.flow-form .form-grid .span-2{grid-column:1/-1}',
+      'body.flow-form #eng-emergency-box:not([hidden]){display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 16px}',
+    ]) expect(CSS).toContain(rule);
+    // The five visible groups carry the grid class; the MRZ group stays
+    // hidden on the form screen and keeps its single-column rules.
+    expect(PAGE.match(/class="engine-group form-grid"/g)).toHaveLength(5);
+    expect(PAGE).toContain('<div class="engine-group" id="eng-mrz-group">');
+  });
+
+  test('passport number is one column; first/last name share a row, other pairs share a row', () => {
+    // User direction 2026-11-15: the passport number box was too wide —
+    // a 9-character number needs no full-width box. First + last name
+    // share one engine-row instead of a full-width full-name field.
+    expect(PAGE).toContain('<div class="form-field"><label for="eng-passportNo">');
+    expect(PAGE).not.toContain('<div class="form-field span-2"><label for="eng-passportNo">');
+    expect(PAGE).not.toContain('id="eng-fullName"');
+    expect(PAGE).not.toContain('<div class="form-field span-2"><label for="eng-givenName">');
+    expect(PAGE).not.toContain('<div class="form-field span-2"><label for="eng-surname">');
+    for (const id of ['eng-fatherName', 'eng-motherName', 'eng-birthPlace', 'eng-nationality', 'eng-nationalityCode', 'eng-personalNo', 'eng-previousPassport', 'eng-authority', 'eng-address1', 'eng-address2', 'eng-emergencyName']) {
+      expect(PAGE).toContain('<div class="form-field"><label for="' + id + '">');
+    }
+    // The nationality hint travels with its field (it is the one hint
+    // the form screen keeps visible).
+    const fieldAt = PAGE.indexOf('<div class="form-field"><label for="eng-nationalityCode">');
+    const hintAt = PAGE.indexOf('id="eng-nationality-hint"');
+    const closeAt = PAGE.indexOf('</div>', fieldAt);
+    expect(hintAt).toBeGreaterThan(fieldAt);
+    expect(hintAt).toBeLessThan(closeAt);
+  });
+
+  test('field order is unchanged (visual order = DOM order)', () => {
+    const ids = ['eng-givenName', 'eng-surname', 'eng-passportNo', 'eng-docType', 'eng-countryCode', 'eng-fatherName', 'eng-motherName', 'eng-spouseName', 'eng-dob', 'eng-sex', 'eng-issueDate', 'eng-expiryDate', 'eng-birthPlace', 'eng-nationality', 'eng-nationalityCode', 'eng-personalNo', 'eng-previousPassport', 'eng-authority', 'eng-address1', 'eng-address2', 'eng-sameEmergency', 'eng-emergency1', 'eng-emergency2', 'eng-phone', 'eng-relationship', 'eng-emergencyName'];
+    let prev = -1;
+    for (const id of ids) {
+      const at = PAGE.indexOf('id="' + id + '"');
+      expect(at).toBeGreaterThan(prev);
+      prev = at;
+    }
+  });
+
+  test('mobile stays two-column at the 740px breakpoint — no single-column collapse', () => {
+    // User direction 2026-11-15: on mobile the form did not become
+    // side-by-side. The 740px query keeps only spacing tweaks; the
+    // grid, the emergency box and the photo/signature row stay 2-column.
+    expect(CSS).not.toContain('body.flow-form .form-grid{grid-template-columns:minmax(0,1fr)}');
+    expect(CSS).not.toContain('body.flow-form #eng-emergency-box:not([hidden]){grid-template-columns:minmax(0,1fr)}');
+    expect(CSS).not.toContain('body.flow-form .form-upload-row{grid-template-columns:1fr}');
+    expect(CSS).toContain('body.flow-form .form-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 16px}');
+    expect(CSS).toContain('.form-upload-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}');
+  });
+
+  test('flow stylesheet is cache-busted for the new layout', () => {
+    expect(PAGE).toContain('/css/passport-flow.css?v=5');
+  });
+});
+
+describe('compact dense form (2026-11-15)', () => {
+  // User frustration: even the two-column form was still 2166px tall at
+  // 1366px. Tighter gaps, shorter inputs, tighter sections — dense, not
+  // cramped. The 2166 → 1500 → 1295px height is verified in a real
+  // browser (measure-defects.js / verify-defect-fixes-a.js); these tests
+  // lock the density values in CSS.
+  test('inputs are compact but keep 16px text (no iOS zoom on focus)', () => {
+    expect(CSS).toContain('padding:5px 12px;font-size:16px;line-height:1.3;min-height:32px');
+  });
+
+  test('field labels sit tight to their inputs', () => {
+    expect(CSS).toContain('body.flow-form #panel-engine .form-grid .form-field label{margin-top:2px}');
+    expect(CSS).toContain('body.flow-form #panel-engine label:not(.checkbox){font-size:13px;font-weight:600;color:var(--pg-ink);margin:2px 0 2px}');
+  });
+
+  test('groups and legends are tight', () => {
+    expect(CSS).toContain('body.flow-form .engine-group{border-top:0;margin-top:2px;padding-top:0}');
+    expect(CSS).toContain('body.flow-form .engine-legend{font-size:11px;letter-spacing:.12em;color:var(--pg-green);margin:0}');
+  });
+
+  test('card, head, photo boxes and Create area are tight', () => {
+    expect(CSS).toContain('body.flow-form #panel-engine{background:var(--pg-surface);border:1px solid var(--pg-line);border-radius:24px;box-shadow:var(--pg-shadow-md);padding:10px 20px 10px}');
+    expect(CSS).toContain('body.flow-form .form-head h2{font-size:20px;');
+    expect(CSS).toContain('body.flow-form #eng-photo-group .primary{background:var(--pg-surface);color:var(--pg-green);border:1px solid var(--pg-hover);border-radius:14px;padding:7px;font-size:13px;');
+    expect(CSS).toContain('body.flow-form .create-actions{margin-top:8px;padding-top:6px;');
+    expect(CSS).toContain('body.flow-form .create-actions .primary{background:var(--gold-gradient);color:var(--pg-gold-text);border-color:transparent;border-radius:14px;font-size:15px;font-weight:700;padding:10px;');
+  });
+
+  test('passport number is one grid column; first/last name share one row (2026-11-15)', () => {
+    // User direction 2026-11-15: a 9-character number needs no
+    // full-width box. Before: 946px wide (span-2); after: ~465px.
+    // The single full-name field is gone — first + last name sit in
+    // one engine-row, one column each, after the photo group.
+    expect(PAGE).toContain('<div class="form-field"><label for="eng-passportNo">');
+    expect(PAGE).not.toContain('<div class="form-field span-2"><label for="eng-passportNo">');
+    expect(PAGE).not.toContain('id="eng-fullName"');
+    expect(PAGE).not.toContain('<div class="form-field span-2"><label for="eng-givenName">');
+    expect(PAGE).not.toContain('<div class="form-field span-2"><label for="eng-surname">');
+  });
+
+  test('mobile keeps the two-column grid and the tight card', () => {
+    expect(CSS).not.toContain('body.flow-form .form-grid{grid-template-columns:minmax(0,1fr)}');
+    expect(CSS).toContain('body.flow-form #panel-engine{padding:12px 14px 16px}');
+  });
+
+  test('date rows hold their tracks — date inputs shrink into their cells (2026-11-15)', () => {
+    // Defect: the expiry input poked 73px past the card at 360px — the
+    // native date input's intrinsic min-width blew the 1fr tracks out.
+    expect(CSS).toContain('.engine-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 9px}');
+    expect(CSS).toContain('body.flow-form .engine-row>div{min-width:0}');
+    expect(CSS).toContain('body.flow-form input[type=date]{width:100%;min-width:0}');
+    // Mobile: 14px date text so mm/dd/yyyy is fully visible in the
+    // ~121px column (at 16px the year clipped to "mm/dd/").
+    expect(CSS).toContain('body.flow-form input[type=date]{font-size:14px;padding:7px 8px}');
+    expect(CSS).toContain('body.flow-form main{margin:12px auto 24px;padding:0 16px}');
+  });
+});
 
   // Site-feel Fix 4: Bengali kicker + Bengali-only section headers —
   // no English halves, no transliterated "লিংকড" in chrome.
@@ -1178,9 +1414,8 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
       '<label for="eng-passportNo">পাসপোর্ট নম্বর',
       '<label for="eng-docType">ধরন</label>',
       '<label for="eng-countryCode">দেশের কোড</label>',
-      '<label for="eng-fullName">পুরো নাম</label>',
-      '<label for="eng-surname">পদবি (স্বয়ংক্রিয়)</label>',
-      '<label for="eng-givenName">প্রদত্ত নাম (স্বয়ংক্রিয়)</label>',
+      '<label for="eng-givenName">প্রথম নাম</label>',
+      '<label for="eng-surname">শেষ নাম (ঐচ্ছিক)</label>',
       '<label for="eng-fatherName">পিতার নাম</label>',
       '<label for="eng-motherName">মাতার নাম</label>',
       '<label for="eng-spouseName">স্বামী/স্ত্রীর নাম</label>',
@@ -1209,9 +1444,8 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
       ['eng-passportNo', 'Passport No.'],
       ['eng-docType', 'Type'],
       ['eng-countryCode', 'Country code'],
-      ['eng-fullName', 'Full name'],
-      ['eng-surname', 'Surname (auto)'],
-      ['eng-givenName', 'Given name (auto)'],
+      ['eng-givenName', 'Given name'],
+      ['eng-surname', 'Surname'],
       ['eng-fatherName', "Father's name"],
       ['eng-motherName', "Mother's name"],
       ['eng-spouseName', "Spouse's name"],
@@ -1248,7 +1482,7 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
       'সংযুক্ত লেখা ও MRZ আপডেট হবে',
       'ডটেড স্ট্রিপ নিজে থেকে আপডেট হয়',
       'মূল বাক্স + ডানের ছাপা উল্লম্ব নম্বর',
-      'পুরো নাম নিজে থেকে পদবি + প্রদত্ত নামে ভাগ হয়',
+      'প্রথম নাম আবশ্যক',
       'তারিখ পাতায় “17 DEC 1979” আকারে ছাপা হয়',
       'ইস্যুকারী দেশ থেকে আলাদা',
       'দুটো লাইনই উপরের তথ্য থেকে আবার তৈরি হয়',
@@ -1278,7 +1512,8 @@ describe('passport integration — login gate, charge, layout, Bengali chrome (2
   // document model's own sample record.)
   test('neutral placeholders: no sample number or name as placeholder', () => {
     expect(PAGE).toContain('placeholder="৯ অক্ষরের পাসপোর্ট নম্বর"');
-    expect(PAGE).toContain('placeholder="পুরো নাম লিখুন"');
+    expect(PAGE).toContain('placeholder="প্রথম নাম লিখুন"');
+    expect(PAGE).toContain('placeholder="শেষ নাম লিখুন"');
     expect(PAGE).not.toContain('placeholder="EJ0762655"');
     expect(PAGE).not.toContain('placeholder="GOLAM KIBRIYA MD"');
   });
@@ -1391,7 +1626,8 @@ describe('Create → direct real-PDF download (2026-11-14)', () => {
     r.els['eng-passportNo'].value = 'EJ0762655';
     r.els['eng-docType'].value = 'P';
     r.els['eng-countryCode'].value = 'BGD';
-    r.els['eng-fullName'].value = 'GOLAM KIBRIYA MD';
+    r.els['eng-givenName'].value = 'GOLAM KIBRIYA';
+    r.els['eng-surname'].value = 'MD';
     r.els['eng-dob'].value = '1979-12-17';
     r.els['eng-sex'].value = 'M';
     r.els['eng-expiryDate'].value = '2035-01-01';
