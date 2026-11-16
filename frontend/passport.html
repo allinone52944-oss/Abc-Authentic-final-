@@ -632,21 +632,21 @@ input[type=checkbox]{accent-color:var(--green)}
  const ENG_MAP={
   sameEmergency:[],
   dotStripAuto:[],
-  address1:[['permanent-address','raw']],
-  address2:[['permanent-city','raw']],
-  emergency1:[['emergency-address','raw']],
-  emergency2:[['emergency-city','raw']],
+  address1:[['permanent-address','upper']],
+  address2:[['permanent-city','upper']],
+  emergency1:[['emergency-address','upper']],
+  emergency2:[['emergency-city','upper']],
   passportNo:[['passport-no','upper'],['vertical-passport','printedVertical']],
   docType:[['type','upper1']],
   countryCode:[['country-code','upper3']],
   surname:[['surname','upper']],
   givenName:[['given-name','upper']],
-  fatherName:[['father','raw']],
-  motherName:[['mother','raw']],
-  spouseName:[['spouse','raw']],
+  fatherName:[['father','upper']],
+  motherName:[['mother','upper']],
+  spouseName:[['spouse','upper']],
   phone:[['phone','raw']],
-  emergencyName:[['emergency-name','raw']],
-  relationship:[['relationship','raw']],
+  emergencyName:[['emergency-name','upper']],
+  relationship:[['relationship','upper']],
   nationality:[['nationality','upper']],
   nationalityCode:[],
   personalNo:[['personal-no','raw']],
@@ -753,7 +753,7 @@ input[type=checkbox]{accent-color:var(--green)}
  }
  function mirrorEmergency(){
   for(const [key,parent,id] of [['emergency1','address1','emergency-address'],['emergency2','address2','emergency-city']]){
-   const value=raw(parent);storeEngine(key,value);engSet(id,value);
+   const value=raw(parent);storeEngine(key,value);engSet(id,ENG_XFORM.upper(value));
   }
  }
  function applyEngine(key,sourceId=null,reapply=false){

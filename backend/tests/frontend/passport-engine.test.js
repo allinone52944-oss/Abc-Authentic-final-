@@ -173,6 +173,55 @@ test('reapply never restores a stale emergency address', () => { const h=createH
 test('unchecking same-address retains latest mirrored values', () => { const h=createHarness(); h.input('sameEmergency',true); h.input('address1','LATEST'); h.input('sameEmergency',false); assert.equal(h.elements.get('eng-emergency1').value,'LATEST'); });
 test('direct emergency override explicitly unlinks addresses', () => { const h=createHarness(); h.input('sameEmergency',true); h.edit('emergency-address','DIFFERENT'); assert.equal(h.api.state().sameEmergency,false); assert.equal(h.api.state().emergency1,'DIFFERENT'); assert.equal(h.elements.get('eng-emergency-box').hidden,false); });
 test('independent emergency address survives parent edits', () => { const h=createHarness(); h.input('sameEmergency',false); h.input('emergency1','INDEPENDENT'); h.input('address1','PERMANENT'); assert.equal(h.field('emergency-address'),'INDEPENDENT'); });
+test('lowercase form input prints UPPERCASE document lines, form keeps typed text (2026-11-16)', () => {
+  const h=createHarness();
+  h.input('fatherName','abdul karim'); h.input('motherName','minara begum'); h.input('spouseName','lutfa begum');
+  h.input('birthPlace','noakhali'); h.input('authority','dhaka');
+  h.input('address1','narottom pur, pandit bazar, begumganj'); h.input('address2','noakhali');
+  h.input('emergencyName','abdul karim'); h.input('relationship','father');
+  assert.equal(h.field('father'),'ABDUL KARIM');
+  assert.equal(h.field('mother'),'MINARA BEGUM');
+  assert.equal(h.field('spouse'),'LUTFA BEGUM');
+  assert.equal(h.field('birthplace'),'NOAKHALI');
+  assert.equal(h.field('authority'),'DHAKA');
+  assert.equal(h.field('permanent-address'),'NAROTTOM PUR, PANDIT BAZAR, BEGUMGANJ');
+  assert.equal(h.field('permanent-city'),'NOAKHALI');
+  assert.equal(h.field('emergency-name'),'ABDUL KARIM');
+  assert.equal(h.field('relationship'),'FATHER');
+  // The form keeps exactly what was typed — only the output normalizes.
+  assert.equal(h.elements.get('eng-fatherName').value,'abdul karim');
+  assert.equal(h.elements.get('eng-address1').value,'narottom pur, pandit bazar, begumganj');
+});
+test('same-address mirror prints the permanent address UPPERCASE (2026-11-16)', () => {
+  const h=createHarness();
+  h.input('sameEmergency',true);
+  h.input('address1','test address'); h.input('address2','test district');
+  assert.equal(h.field('emergency-address'),'TEST ADDRESS');
+  assert.equal(h.field('emergency-city'),'TEST DISTRICT');
+  assert.equal(h.elements.get('eng-emergency1').value,'test address');
+});
+test('lowercase input leaves the MRZ identical to uppercase input (2026-11-16)', () => {
+  const mk=(sur,giv,num,nat)=>{ const h=createHarness(); h.input('surname',sur); h.input('givenName',giv); h.input('passportNo',num); h.input('dob','1979-12-17'); h.input('expiryDate','2035-01-01'); h.input('nationality',nat); h.input('sex','M'); return h; };
+  const lower=mk('md','golam kibriya','ej0762655','bangladeshi');
+  const upper=mk('MD','GOLAM KIBRIYA','EJ0762655','BANGLADESHI');
+  assert.equal(lower.field('mrz-1'),upper.field('mrz-1'));
+  assert.equal(lower.field('mrz-2'),upper.field('mrz-2'));
+  assert.match(lower.field('mrz-1'),/^[A-Z0-9<]{44}$/);
+  checkLine(lower.field('mrz-2'));
+});
+test('digits and punctuation pass through the uppercase output untouched (2026-11-16)', () => {
+  const h=createHarness();
+  h.input('address1','house 12, road-5, block-c');
+  assert.equal(h.field('permanent-address'),'HOUSE 12, ROAD-5, BLOCK-C');
+});
+test('single lowercase name stays single and uppercase, never doubled (2026-11-16)', () => {
+  const h=createHarness();
+  h.input('givenName','rahim'); h.input('surname','');
+  assert.equal(h.field('personal-name'),'RAHIM');
+  assert.equal(h.field('given-name'),'RAHIM');
+  assert.equal(h.field('surname'),'');
+  assert.ok(h.field('mrz-1').includes('P<BGD<<<RAHIM'));
+});
 test('checkbox-only state changes are dirty', () => { const h=createHarness(); h.input('sameEmergency',true); const marks=h.context.marks; h.input('sameEmergency',false); assert.ok(h.context.marks>marks); });
 test('valid leap day reverse-syncs', () => { const h=createHarness(); h.edit('birth-date','29 FEB 2024'); assert.equal(h.api.state().dob,'2024-02-29'); assert.equal(h.field('mrz-2').slice(13,19),'240229'); });
 test('invalid dates clear stale derived dates and warn', () => { const h=createHarness(); h.edit('birth-date','31 FEB 2024'); assert.equal(h.api.state().dob,''); assert.equal(h.field('mrz-2').slice(13,19),'<<<<<<'); assert.ok(h.api.validate().some(x=>x.includes('জন্মতারিখ'))); });
