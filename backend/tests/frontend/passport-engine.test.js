@@ -12,6 +12,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const zlib = require('node:zlib');
 const assert = require('node:assert/strict');
 const html = fs.readFileSync(path.join(__dirname, '../../../frontend/passport.html'), 'utf8');
 const stateMatch = html.match(/<script\b(?=[^>]*\bid="document-state")[^>]*>([\s\S]*?)<\/script>/);
@@ -201,11 +202,63 @@ const setImageCode = script.slice(script.indexOf(' async function setImage('), s
 function syntheticPixels(w, h, paint) { const p = new Uint8ClampedArray(w * h * 4); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const [r, g, b] = paint(x, y); const j = (y * w + x) * 4; p[j] = r; p[j+1] = g; p[j+2] = b; p[j+3] = 255; } return p; }
 function runCutoutMask(p, w, h) { const ctx = vm.createContext({}); vm.runInContext(cutoutCode, ctx); return ctx.cutoutMask(p, w, h); }
 
+// Minimal 8-bit RGB PNG reader (node:zlib only) — the photo backdrop plate
+// is stored as PNG so its tone can be regression-checked without an image
+// library in the test environment.
+function decodePngRgb(buf) {
+  assert.deepEqual([...buf.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  let pos = 8, width = 0, height = 0, bitDepth = 0, colorType = 0;
+  const idat = [];
+  while (pos < buf.length) {
+    const len = buf.readUInt32BE(pos);
+    const type = buf.toString('ascii', pos + 4, pos + 8);
+    const data = buf.subarray(pos + 8, pos + 8 + len);
+    if (type === 'IHDR') { width = data.readUInt32BE(0); height = data.readUInt32BE(4); bitDepth = data[8]; colorType = data[9]; }
+    else if (type === 'IDAT') { idat.push(data); }
+    else if (type === 'IEND') { break; }
+    pos += 12 + len;
+  }
+  assert.equal(bitDepth, 8, 'plate is 8-bit');
+  assert.equal(colorType, 2, 'plate is RGB');
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  const bpp = 3, stride = width * bpp;
+  const out = Buffer.alloc(width * height * bpp);
+  let src = 0;
+  for (let y = 0; y < height; y++) {
+    const f = raw[src++];
+    const row = raw.subarray(src, src + stride); src += stride;
+    const prev = y > 0 ? out.subarray((y - 1) * stride, y * stride) : null;
+    const dst = out.subarray(y * stride, (y + 1) * stride);
+    for (let x = 0; x < stride; x++) {
+      const a = x >= bpp ? dst[x - bpp] : 0, b = prev ? prev[x] : 0, c = (x >= bpp && prev) ? prev[x - bpp] : 0;
+      let v = row[x];
+      if (f === 1) v = (v + a) & 255;
+      else if (f === 2) v = (v + b) & 255;
+      else if (f === 3) v = (v + ((a + b) >> 1)) & 255;
+      else if (f === 4) { const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c); v = (v + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 255; }
+      dst[x] = v;
+    }
+  }
+  return { width, height, data: out };
+}
+
 test('embedded model ships the scan photo-window backdrop and cutout default on', () => {
-  assert.ok(original.assets.photoBackground.startsWith('data:image/webp;base64,'));
+  assert.ok(original.assets.photoBackground.startsWith('data:image/png;base64,'));
   assert.ok(original.assets.photoBackground.length > 5000);
   assert.equal(original.images.photo.cutout, true);
   assert.equal(original.images.photo.cutoutRendered, '');
+});
+test('photo backdrop plate is tonally even — no dark band behind the cut-out person (2026-11-16)', () => {
+  const png = decodePngRgb(Buffer.from(original.assets.photoBackground.split(',')[1], 'base64'));
+  assert.equal(png.width, 385);
+  assert.equal(png.height, 532);
+  const rowMean = (y) => { let s = 0, n = 0; for (let x = 0; x < png.width; x += 4) { const i = (y * png.width + x) * 3; s += (png.data[i] + png.data[i + 1] + png.data[i + 2]) / 3; n++; } return s / n; };
+  const mid = (rowMean(200) + rowMean(300) + rowMean(350)) / 3;
+  const bottom = (rowMean(450) + rowMean(480) + rowMean(510)) / 3;
+  // Before the fix the bottom rows averaged ~147 against ~184 mid-frame —
+  // a grey smudge at the bottom-right of the photo frame behind the new
+  // person. The plate's bottom gradient is now levelled to the mid tone.
+  assert.ok(Math.abs(bottom - mid) < 12, `photo plate bottom ${bottom.toFixed(1)} vs mid ${mid.toFixed(1)}`);
 });
 test('photo slot backing shows the scan plate in edit and print css (no preview state)', () => {
   assert.ok(html.includes('.image-slot.photo.changed .slot-patch{display:block}'));
