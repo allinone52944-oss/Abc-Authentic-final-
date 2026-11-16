@@ -1352,7 +1352,7 @@ describe('two-column premium form (2026-11-15)', () => {
   });
 
   test('flow stylesheet is cache-busted for the new layout', () => {
-    expect(PAGE).toContain('/css/passport-flow.css?v=5');
+    expect(PAGE).toContain('/css/passport-flow.css?v=6');
   });
 });
 
@@ -1404,13 +1404,27 @@ describe('compact dense form (2026-11-15)', () => {
   test('date rows hold their tracks — date inputs shrink into their cells (2026-11-15)', () => {
     // Defect: the expiry input poked 73px past the card at 360px — the
     // native date input's intrinsic min-width blew the 1fr tracks out.
+    // The fields are plain text inputs now (2026-11-16: native date
+    // inputs offer no paste affordance on a phone), but the width rule
+    // stays so a long date never blows the track out again.
     expect(CSS).toContain('.engine-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 9px}');
     expect(CSS).toContain('body.flow-form .engine-row>div{min-width:0}');
-    expect(CSS).toContain('body.flow-form input[type=date]{width:100%;min-width:0}');
-    // Mobile: 14px date text so mm/dd/yyyy is fully visible in the
-    // ~121px column (at 16px the year clipped to "mm/dd/").
-    expect(CSS).toContain('body.flow-form input[type=date]{font-size:14px;padding:7px 8px}');
+    expect(CSS).toContain('body.flow-form input.date-input{width:100%;min-width:0}');
+    // Mobile: 14px date text so a full DD/MM/YYYY value is visible in
+    // the ~121px column (at 16px the year clipped).
+    expect(CSS).toContain('body.flow-form input.date-input{font-size:14px;padding:7px 8px}');
     expect(CSS).toContain('body.flow-form main{margin:12px auto 24px;padding:0 16px}');
+  });
+
+  test('date fields are pasteable text inputs, not native date pickers (2026-11-16)', () => {
+    // User report: "জন্ম তারিখ এখনো paste system নাই — সকল তারিখে
+    // same". A native date input offers NO paste affordance on a
+    // phone (long-press opens the picker), so the three date fields
+    // are plain text inputs with a format placeholder instead.
+    for (const [id, key] of [['eng-dob', 'dob'], ['eng-issueDate', 'issueDate'], ['eng-expiryDate', 'expiryDate']]) {
+      expect(PAGE).toContain(`<input type="text" id="${id}" data-engine="${key}" class="date-input" placeholder="DD/MM/YYYY" spellcheck="false" autocomplete="off" autocapitalize="off">`);
+    }
+    expect(PAGE).not.toContain('type="date"');
   });
 });
 
