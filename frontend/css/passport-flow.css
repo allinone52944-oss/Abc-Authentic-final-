@@ -85,8 +85,15 @@ body.flow-form #eng-passportPreview,body.flow-form #eng-dotmx-note{display:none}
 .create-actions{display:block;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
 .create-actions .primary{display:block;width:100%;font-size:14px;padding:11px 14px}
 /* Form-screen photo/signature upload: attached in the form so the
-   Create download carries them. */
-.form-upload-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+   Create download carries them. Tracks are minmax(0,1fr) with
+   min-width:0 grid items: with plain 1fr tracks, an attached file's
+   nowrap filename sets the track's min-content (~190/208px), so the
+   row ran ~140px past the card's right edge at 360/390 — the
+   signature upload button and its remove button unreachable, with
+   no page scroll (card clips overflow). Now both columns shrink to
+   the card and the filename ellipsizes instead. */
+.form-upload-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+.form-upload-row>div{min-width:0}
 .form-upload-row label{display:block;font-weight:600;margin:0 0 4px}
 .form-upload-row .primary{width:100%}
 .form-upload-status{display:flex;align-items:center;gap:8px;margin:6px 0 0}
