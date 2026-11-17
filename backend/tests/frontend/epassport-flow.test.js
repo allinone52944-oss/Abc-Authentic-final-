@@ -108,9 +108,9 @@ function makeEl(tag, id) {
   el.click = () => el.fire('click');
   el.focus = () => { el.focused = true; };
   el.appendChild = (child) => { child.parent = el; el.children.push(child); return child; };
-  el.setAttribute = (k, v) => { el.attributes[k] = String(v); if (k === 'id') el.id = String(v); if (k.startsWith('data-')) el.dataset[k.slice(5)] = String(v); };
+  el.setAttribute = (k, v) => { el.attributes[k] = String(v); if (k === 'id') el.id = String(v); if (k.startsWith('data-')) el.dataset[k.slice(5)] = String(v); if (k === 'src') el.src = String(v); };
   el.getAttribute = (k) => el.attributes[k];
-  el.removeAttribute = (k) => { delete el.attributes[k]; if (k.startsWith('data-')) delete el.dataset[k.slice(5)]; };
+  el.removeAttribute = (k) => { delete el.attributes[k]; if (k.startsWith('data-')) delete el.dataset[k.slice(5)]; if (k === 'src') el.src = ''; };
   el.setCustomValidity = (v) => { el._customValidity = v; };
   el.decode = () => Promise.resolve();
   el.cloneNode = (deep) => {
@@ -177,10 +177,12 @@ function runPage() {
   const repairs = reg(makeEl('div', 'ep-repairs'));
   const regions = reg(makeEl('div', 'ep-text-regions'));
   const slots = reg(makeEl('div', 'ep-asset-slots'));
+  const topRegions = reg(makeEl('div', 'ep-top-regions'));
   stage.appendChild(scan);
   stage.appendChild(repairs);
   stage.appendChild(regions);
   stage.appendChild(slots);
+  stage.appendChild(topRegions);
   shell.appendChild(stage);
   // Form inputs (found via [data-engine="..."]).
   FORM_KEYS.forEach((k) => {
@@ -194,7 +196,7 @@ function runPage() {
    'form-signature-status', 'form-signature-thumb', 'form-signature-name',
    'passport-price-line', 'create-passport-button', 'result-message',
    'start-passport-button', 'back-to-landing-button', 'download-again-button',
-   'back-to-form-button', 'new-passport-button', 'eng-remrz', 'eng-emergency-box',
+   'back-to-form-button', 'new-passport-button', 'eng-remrz', 'eng-reapply', 'eng-emergency-box',
    'form-photo-upload', 'form-signature-upload',
    'form-upload-photo-button', 'form-upload-signature-button',
    'form-remove-photo', 'form-remove-signature'].forEach((id) => {
@@ -202,6 +204,12 @@ function runPage() {
     if (id === 'form-photo-upload' || id === 'form-signature-upload') el.type = 'file';
     if (id === 'form-photo-thumb' || id === 'form-signature-thumb') el.tagName = 'IMG';
   });
+  // The warning carries hidden="" in the real HTML (it is set by
+  // clearForm / showUploadState on first form entry, MRP-style).
+  els['form-sample-warning'].hidden = true;
+  // The upload buttons carry their add-labels in the real HTML.
+  els['form-upload-photo-button'].textContent = 'ছবি যোগ করুন';
+  els['form-upload-signature-button'].textContent = 'স্বাক্ষর যোগ করুন';
   const body = makeEl('body');
   body.classList.add('flow-landing');
   const documentStub = {
@@ -221,7 +229,37 @@ function runPage() {
     createElement: (tag) => {
       const el = makeEl(tag);
       if (tag === 'canvas') {
-        el.getContext = () => ({ measureText: (t) => ({ width: String(t).length * 8 }) });
+        // Minimal 2D context: the barcode / perforation / cutout code
+        // draws with it. getImageData synthesizes a photo — a white
+        // backdrop with a dark person (central column, from 20% down
+        // to the bottom edge) — so the cutout mask has a component
+        // to find. toDataURL returns a fixed stub URL.
+        el.getContext = () => ({
+          fillStyle: '', strokeStyle: '', globalAlpha: 1, font: '',
+          fillRect() {}, clearRect() {}, save() {}, restore() {},
+          translate() {}, rotate() {}, scale() {}, drawImage() {},
+          fillText() {}, beginPath() {}, arc() {}, fill() {}, stroke() {},
+          moveTo() {}, lineTo() {}, closePath() {},
+          measureText: (t) => ({ width: String(t).length * 8 }),
+          createLinearGradient: () => ({ addColorStop() {} }),
+          createRadialGradient: () => ({ addColorStop() {} }),
+          getImageData: (x, y, w, h) => {
+            const W = el.width || w, H = el.height || h;
+            const data = new Uint8ClampedArray(w * h * 4);
+            for (let j = 0; j < h; j++) {
+              for (let i = 0; i < w; i++) {
+                const gx = x + i, gy = y + j;
+                const idx = (j * w + i) * 4;
+                const inPerson = gx >= W * 0.3 && gx < W * 0.7 && gy >= H * 0.2;
+                const v = inPerson ? [80, 60, 50] : [255, 255, 255];
+                data[idx] = v[0]; data[idx + 1] = v[1]; data[idx + 2] = v[2]; data[idx + 3] = 255;
+              }
+            }
+            return { width: w, height: h, data };
+          },
+          putImageData() {},
+        });
+        el.toDataURL = () => 'data:image/png;base64,FAKE';
       }
       return el;
     },
@@ -240,6 +278,17 @@ function runPage() {
     fetch: async () => ({ ok: true }),
     sessionStorage: { getItem: () => '' },
     localStorage: { getItem: () => '' },
+    // Stub Image: loads synchronously (100x100) so loadImage /
+    // processPhotoCutout can run. The synthetic photo comes from
+    // the canvas stub's getImageData, not from this image.
+    Image: function () {
+      const img = { width: 100, height: 100, naturalWidth: 100, naturalHeight: 100, _src: '' };
+      Object.defineProperty(img, 'src', {
+        set(v) { img._src = v; if (img.onload) img.onload(); },
+        get() { return img._src; },
+      });
+      return img;
+    },
   };
   sandbox.window = sandbox;
   sandbox.ABC = {
@@ -286,7 +335,7 @@ const FULL_FORM = {
   additionalNo: '999', fatherName: 'KARIM UDDIN', motherName: 'FATEMA BEGUM',
   spouseName: '', dob: '1979-12-17', sex: 'M',
   issueDate: '2020-01-01', expiryDate: '2030-01-01',
-  birthPlace: 'DHAKA', nationality: 'BANGLADESHI', nationalityCode: '',
+  birthPlace: 'DHAKA', nationality: 'BANGLADESHI', nationalityCode: 'BGD',
   personalNo: '1234567890', authority: 'DIP',
   address1: 'HOUSE 1 ROAD 2', postalCode: '1205', district: 'DHAKA',
   emergencyName: 'KARIM UDDIN', relationship: 'FATHER',
@@ -360,13 +409,18 @@ describe('e-passport page structure', () => {
     expect(FLOW_CSS).toContain('.form-upload-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}');
     expect(FLOW_CSS).toContain('.form-upload-row>div{min-width:0}');
   });
-  test('no editor/workbench surface: no contenteditable attribute, MRZ is read-only', () => {
+  test('no editor/workbench surface: no contenteditable attribute; MRZ is editable like MRP', () => {
     // No element carries a contenteditable attribute (the script
     // only strips the attribute in cleanDocumentShell).
     expect(EPASS_HTML).not.toMatch(/contenteditable\s*=/);
     expect(EPASS_HTML).not.toContain('documentEditor');
-    expect(EPASS_HTML).toMatch(/id="eng-mrz1"[^>]*readonly/);
-    expect(EPASS_HTML).toMatch(/id="eng-mrz2"[^>]*readonly/);
+    // MRP-style: the MRZ boxes are editable textareas with a
+    // re-generate button AND a re-apply button (a hand edit is kept
+    // until the next regenerate).
+    expect(EPASS_HTML).not.toMatch(/id="eng-mrz1"[^>]*readonly/);
+    expect(EPASS_HTML).not.toMatch(/id="eng-mrz2"[^>]*readonly/);
+    expect(EPASS_HTML).toContain('id="eng-reapply"');
+    expect(EPASS_HTML).toContain('পাতায় আবার বসান');
   });
   test('form mirrors the MRP serial: photo/signature first, then first/last name', () => {
     const photoAt = EPASS_HTML.indexOf('id="eng-photo-group"');
@@ -540,14 +594,16 @@ describe('photo propagation (one upload → both photo slots)', () => {
     const signature = els['ep-asset-slots'].children.find((s) => s.dataset.slot === 'signature');
     expect(signature._class.has('active')).toBe(true); // clearPatch visible
     expect(signature.children[1].src).toBe(''); // no signature image
-    expect(signature.children[0].src.startsWith('data:image/png;base64,')).toBe(true);
+    expect(signature.children[0].src.startsWith('data:image/')).toBe(true); // clearPatch (JPEG after the inpainted regeneration)
   });
-  test('sample warning shows while no photo is uploaded', () => {
-    const { els } = runPage();
-    // initEngine calls updateSampleWarning with no photo yet.
+  test('sample warning shows on first form entry (clearForm), not at load', () => {
+    const { api, els } = runPage();
+    // At load the warning stays hidden (MRP: it is set by clearForm /
+    // showUploadState on first form entry, not by initEngine).
+    expect(els['form-sample-warning'].hidden).toBe(true);
+    api.clearForm();
     expect(els['form-sample-warning'].hidden).toBe(false);
-    // Hiding the warning on upload goes through setAsset (FileReader
-    // + Image) — verified in the real-browser check, not here.
+    expect(els['form-sample-warning'].textContent).toContain('নমুনার ছবি');
   });
 });
 
@@ -607,5 +663,206 @@ describe('snapshot (document-only HTML for the PDF render)', () => {
     expect(snap.html).not.toContain('data-field=');
     expect(snap.html).not.toContain('data-slot=');
     expect(typeof snap.revision).toBe('number');
+  });
+});
+
+describe('Point 1: DOB once → 2 derived places; passport number once → 4 places', () => {
+  test('secondary birth date paints in the top layer (above the ghost photo)', () => {
+    const { api, els } = runPage();
+    fillForm(els, FULL_FORM);
+    api.applyAll();
+    api.render();
+    const region = els['ep-top-regions'].children.find((c) => c.dataset.field === 'secondary-birth-date');
+    expect(region).toBeTruthy();
+    expect(region.textContent).toBe('17.12.79');
+    // It must NOT be in the text layer (which the ghost photo covers).
+    expect(els['ep-text-regions'].children.find((c) => c.dataset.field === 'secondary-birth-date')).toBeUndefined();
+  });
+  test('DOB derives to the data page, the secondary date, and MRZ-2', () => {
+    const { api, els } = runPage();
+    fillForm(els, FULL_FORM);
+    api.applyAll();
+    const d = api.derive(api.state());
+    expect(d['birth-date']).toBe('17 DEC 1979');
+    expect(d['secondary-birth-date']).toBe('17.12.79');
+    expect(d['mrz-2']).toContain('791217');
+  });
+  test('Code 128 encoder matches bwip-js exactly (8 reference numbers)', () => {
+    const { api } = runPage();
+    // Reference runs extracted from bwip-js 4.11.4 toSVG output
+    // (the independent oracle — the page's table is not reused).
+    const cases = {
+      EP0000001: [2, 1, 1, 2, 1, 4, 1, 3, 2, 1, 1, 3, 3, 1, 3, 1, 2, 1, 1, 2, 3, 1, 2, 2, 1, 1, 3, 1, 4, 1, 2, 1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 1, 1, 2, 4, 1, 2, 2, 3, 3, 1, 1, 1, 2],
+      A12345678: [2, 1, 1, 2, 1, 4, 1, 1, 1, 3, 2, 3, 1, 1, 3, 1, 4, 1, 1, 1, 2, 2, 3, 2, 1, 3, 1, 1, 2, 3, 3, 3, 1, 1, 2, 1, 2, 4, 1, 1, 1, 2, 2, 2, 1, 1, 3, 2, 2, 3, 3, 1, 1, 1, 2],
+      AB1234567: [2, 1, 1, 2, 1, 4, 1, 1, 1, 3, 2, 3, 1, 3, 1, 1, 2, 3, 1, 2, 3, 2, 2, 1, 1, 1, 3, 1, 4, 1, 3, 1, 2, 1, 3, 1, 1, 1, 3, 1, 2, 3, 1, 4, 1, 1, 2, 2, 1, 1, 1, 4, 2, 2, 2, 3, 3, 1, 1, 1, 2],
+      ZZ9999999: [2, 1, 1, 2, 1, 4, 3, 1, 2, 3, 1, 1, 3, 1, 2, 3, 1, 1, 3, 2, 1, 1, 2, 2, 1, 1, 3, 1, 4, 1, 1, 1, 3, 1, 4, 1, 1, 1, 3, 1, 4, 1, 1, 1, 3, 1, 4, 1, 3, 3, 2, 1, 1, 1, 2, 3, 3, 1, 1, 1, 2],
+      B00000002: [2, 1, 1, 2, 1, 4, 1, 3, 1, 1, 2, 3, 1, 1, 3, 1, 4, 1, 2, 1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 1, 3, 1, 3, 2, 3, 3, 1, 1, 1, 2],
+      C11111111: [2, 1, 1, 2, 1, 4, 1, 3, 1, 3, 2, 1, 1, 1, 3, 1, 4, 1, 2, 3, 1, 2, 1, 2, 2, 3, 1, 2, 1, 2, 2, 3, 1, 2, 1, 2, 2, 3, 1, 2, 1, 2, 2, 2, 1, 2, 3, 1, 2, 3, 3, 1, 1, 1, 2],
+      A00000001: [2, 1, 1, 2, 1, 4, 1, 1, 1, 3, 2, 3, 1, 1, 3, 1, 4, 1, 2, 1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 3, 2, 1, 2, 1, 2, 3, 3, 1, 1, 1, 2],
+      '123456789': [2, 1, 1, 2, 3, 2, 1, 1, 2, 2, 3, 2, 1, 3, 1, 1, 2, 3, 3, 3, 1, 1, 2, 1, 2, 4, 1, 1, 1, 2, 1, 1, 4, 1, 3, 1, 3, 2, 1, 1, 2, 2, 1, 3, 4, 1, 1, 1, 2, 3, 3, 1, 1, 1, 2],
+    };
+    for (const [n, exp] of Object.entries(cases)) {
+      expect(api.code128Runs(n)).toEqual(exp);
+    }
+    expect(api.code128Runs('')).toBeNull();
+    expect(api.code128Runs('---')).toBeNull();
+  });
+  test('barcode + perforation regenerate for an entered number, stay as scan art for the sample number', () => {
+    const { api, els } = runPage();
+    const sample = api.model().samplePassportNo;
+    expect(sample).toBeTruthy();
+    expect(sample).not.toBe('EP0000001');
+    // Entered number differs from the sample: cover + regenerated
+    // art show (barcode + both perforation strips).
+    fillForm(els, { ...FULL_FORM, passportNo: 'EP0000001' });
+    api.applyAll();
+    api.render();
+    const repairs = els['ep-repairs'].children;
+    const barcode = repairs.find((c) => c.className === 'repair cover barcode');
+    expect(barcode).toBeTruthy();
+    expect(barcode.style.display).toBe('block');
+    expect(barcode.src).toBe('data:image/png;base64,FAKE');
+    const generated = repairs.filter((c) => c.src === 'data:image/png;base64,FAKE');
+    expect(generated.length).toBe(3); // barcode + top holes + bottom holes
+    const covers = repairs.filter((c) => c.className === 'repair cover');
+    expect(covers.length).toBe(5); // barcode + top + bottom covers/holes share the class
+    expect(covers[0].style.display).toBe('block'); // barcode cover hides the old barcode
+    // Same number as the sample: the scan's own barcode/holes are
+    // correct, so no cover and no regenerated art.
+    fillForm(els, { ...FULL_FORM, passportNo: sample });
+    api.applyAll();
+    api.render();
+    expect(barcode.style.display).toBe('none');
+    expect(repairs.filter((c) => c.src === 'data:image/png;base64,FAKE').length).toBe(0);
+    expect(covers[0].style.display).toBe('none');
+  });
+  test('perforation slots sit on the scan left edge, bottom-to-top', () => {
+    const { api } = runPage();
+    expect(api.perfSlots).toEqual([1626, 1444, 1276, 1124, 956, 787, 635, 452, 285]);
+    expect(api.perfCols).toEqual([133, 164, 192]);
+  });
+  test('barcode + perforation renderers return data URLs', () => {
+    const { api } = runPage();
+    expect(api.renderBarcodeDataURL('EP0000001').startsWith('data:image/png;base64,')).toBe(true);
+    expect(api.renderPerfDataURL('EP0000001', 0, 200, 1500).startsWith('data:image/png;base64,')).toBe(true);
+  });
+});
+
+describe('Point 3: photo background (MRP cutout + plate)', () => {
+  test('portrait slot background is the levelled plate, not white', () => {
+    const { api, els } = runPage();
+    api.render();
+    const portrait = els['ep-asset-slots'].children.find((s) => s.dataset.slot === 'portrait');
+    expect(portrait.children[0].src).toBe(api.model().assets.photoPlate);
+  });
+  test('epCutoutMask finds the person in a synthetic photo', () => {
+    const { api } = runPage();
+    // Raw pixel data (what getImageData returns): white backdrop
+    // with a dark person (central column, from 20% to the bottom).
+    const w = 100, h = 100;
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        const inPerson = x >= 30 && x < 70 && y >= 20;
+        const v = inPerson ? [80, 60, 50] : [255, 255, 255];
+        data[i] = v[0]; data[i + 1] = v[1]; data[i + 2] = v[2]; data[i + 3] = 255;
+      }
+    }
+    const mask = api.epCutoutMask(data, w, h);
+    expect(mask.ok).toBe(true);
+    expect(mask.alpha.length).toBe(w * h);
+  });
+  test('processPhotoCutout returns a cut-out data URL for a person photo', async () => {
+    const { api } = runPage();
+    const out = await api.processPhotoCutout('data:image/png;base64,AAA');
+    expect(out.startsWith('data:image/png;base64,')).toBe(true);
+  });
+  test('render uses the cut-out person for the portrait slot when present', () => {
+    const { api, els } = runPage();
+    api.state().assets.photo = {
+      dataUrl: 'data:image/png;base64,AAA', width: 100, height: 100,
+      cutoutRendered: 'data:image/png;base64,CUTOUT',
+    };
+    api.render();
+    const portrait = els['ep-asset-slots'].children.find((s) => s.dataset.slot === 'portrait');
+    expect(portrait.children[1].src).toBe('data:image/png;base64,CUTOUT');
+    // The ghost slot keeps the full photo (monochrome), not the cutout.
+    const secondary = els['ep-asset-slots'].children.find((s) => s.dataset.slot === 'secondary-portrait');
+    expect(secondary.children[1].src).toBe('data:image/png;base64,AAA');
+  });
+});
+
+describe('Point 4: form flow like MRP', () => {
+  test('a pasted/typed date normalizes to ISO on input (MRP rule)', () => {
+    const { els } = runPage();
+    const dob = els['eng-dob'];
+    dob.value = '17/12/1979';
+    dob.fire('input');
+    expect(dob.value).toBe('1979-12-17');
+    // A paste is intercepted and set to ISO at once.
+    dob.value = '';
+    dob.fire('paste', { clipboardData: { getData: () => '17 DEC 1979' }, preventDefault: () => {} });
+    expect(dob.value).toBe('1979-12-17');
+  });
+  test('nationality without a code is flagged with the MRP message', () => {
+    const { api, els } = runPage();
+    fillForm(els, { ...FULL_FORM, nationalityCode: '' });
+    api.applyAll();
+    const issues = api.validateEngine();
+    expect(issues).toContain('তিন অক্ষরের জাতীয়তার কোড লিখুন; ইস্যুকারী দেশ থেকে এটি ধরে নেওয়া হয় না।');
+  });
+  test("sex '<' (third option) reaches MRZ-2 as '<'", () => {
+    const { api, els } = runPage();
+    fillForm(els, { ...FULL_FORM, sex: '<' });
+    api.applyAll();
+    const m2 = api.buildMrz2();
+    expect(m2.length).toBe(44);
+    expect(m2[20]).toBe('<');
+  });
+  test('upload button toggles to the change label once a file is attached', () => {
+    const { api, els } = runPage();
+    const btn = els['form-upload-photo-button'];
+    expect(btn.textContent).toBe('ছবি যোগ করুন');
+    api.showUploadState('photo', { name: 'photo.png' });
+    expect(btn.textContent).toBe('ছবি বদলান');
+    api.showUploadState('photo', null);
+    expect(btn.textContent).toBe('ছবি যোগ করুন');
+    const signBtn = els['form-upload-signature-button'];
+    api.showUploadState('signature', { name: 'sign.png' });
+    expect(signBtn.textContent).toBe('স্বাক্ষর বদলান');
+  });
+  test('MRZ is editable: a hand edit is kept by re-apply, cleared by re-generate', () => {
+    const { api, els } = runPage();
+    fillForm(els, FULL_FORM);
+    api.applyAll();
+    els['eng-mrz1'].value = 'P<BGD' + '<'.repeat(39);
+    els['eng-mrz2'].value = 'X'.repeat(44);
+    api.reapplyMRZ();
+    expect(api.derive(api.state())['mrz-1']).toBe('P<BGD' + '<'.repeat(39));
+    expect(api.derive(api.state())['mrz-2']).toBe('X'.repeat(44));
+    api.regenerateMRZ();
+    expect(api.derive(api.state())['mrz-1']).toBe(expectedMrz1());
+    expect(api.derive(api.state())['mrz-2']).toBe(expectedMrz2());
+  });
+  test('idempotency key is a random UUID, not the passport number + timestamp', () => {
+    expect(EPASS_HTML).toContain('crypto.randomUUID()');
+    expect(EPASS_HTML).not.toContain("'epassport-'+pp+'-'+Date.now()");
+  });
+  test('create applies the form + regenerates MRZ before the required/validation gates', () => {
+    const body = EPASS_HTML.match(/function createEpassport\(\)\{([\s\S]*?)\n\}/)[1];
+    const applyAt = body.indexOf('applyAll();');
+    const regenAt = body.indexOf('regenerateMRZ();');
+    const reqAt = body.indexOf('requiredMissing()');
+    const valAt = body.indexOf('validateEngine()');
+    expect(applyAt).toBeGreaterThan(-1);
+    expect(regenAt).toBeGreaterThan(applyAt);
+    expect(reqAt).toBeGreaterThan(regenAt);
+    expect(valAt).toBeGreaterThan(reqAt);
+  });
+  test('PDF retry reuses the key only for the same passport number and keeps it until a PDF succeeds', () => {
+    const body = EPASS_HTML.match(/function createEpassport\(\)\{([\s\S]*?)\n\}/)[1];
+    expect(body).toContain('pdfRetry.no===pp');
+    expect(body).not.toContain('pdfRetry=null');
   });
 });
