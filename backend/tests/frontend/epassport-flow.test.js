@@ -695,6 +695,32 @@ describe('upper page: name + address match the scan (position + font)', () => {
     }
   });
 
+  test('MRZ lines fit inside their region: no CSS letter-spacing on top of the ink calibration', () => {
+    // Audit 2026-11-17: both MRZ lines overflowed the right page edge
+    // (last character clipped; MRZ-1 reached 603.8pt on a 595pt page).
+    // Root cause: the .region.mrz rule added letter-spacing:0.04em,
+    // but fitText's width math never accounts for it — and the
+    // reference calibration (ink / measured original) ALREADY includes
+    // the scan's own letter spacing, so the CSS spacing double-counted
+    // it and the lines came out ~4% too wide. The source workbench
+    // has no MRZ letter-spacing at all.
+    const mrzRule = EPASS_HTML.match(/#ep-text-regions \.region\.mrz\{[^}]*\}/);
+    expect(mrzRule).toBeTruthy();
+    expect(mrzRule[0]).not.toContain('letter-spacing');
+    for (const id of ['mrz-1', 'mrz-2']) {
+      const f = MODEL.fields.find((x) => x.id === id);
+      expect(f).toBeTruthy();
+      const value = id === 'mrz-1' ? expectedMrz1() : expectedMrz2();
+      expect(value.length).toBe(44);
+      const exp = expectedCalibration(f, value);
+      // Real invariant (stub-canvas-free): the scan's own ink width,
+      // shrunk by the same uniform factor fitText applies, fits the
+      // region — the MRZ value is 44 chars like the original, so its
+      // ink is the model's ink to within a glyph.
+      expect(f.ink * exp.uniform).toBeLessThanOrEqual(f.w - 8);
+    }
+  });
+
   test('repair patches are valid images sized to their field boxes', () => {
     // Guards the patch regeneration (ghost removal): a corrupt or
     // mis-sized patch would blank the wrong area or break the render.
