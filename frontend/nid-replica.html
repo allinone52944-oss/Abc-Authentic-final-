@@ -355,12 +355,9 @@
         <h3 style="color:var(--success); font-size:17px; font-weight:700; margin-bottom:12px;">🎉 আপনার এনআইডি কার্ড প্রস্তুত!</h3>
         <iframe id="cardFrame" title="NID card preview"></iframe>
         <div style="height:16px;"></div>
-        <div style="text-align:center; margin-bottom:12px;">
-          <a id="mobileDlLink" class="btn btn-secondary" target="_blank" style="display:none; width:100%; text-decoration:none; justify-content:center;" download="NID_Card.pdf">📱 মোবাইলে সরাসরি দেখুন / ডাউনলোড করুন</a>
-        </div>
         <div class="row2">
           <button class="btn btn-secondary" onclick="go(3)">← তথ্য পরিবর্তন</button>
-          <button class="btn btn-primary" id="b4" onclick="dlPdf()">📥 PDF ডাউনলোড করুন</button>
+          <a class="btn btn-primary" id="b4" download>📥 PDF ডাউনলোড করুন</a>
         </div>
       </div>
     </div>
@@ -626,22 +623,14 @@ async function doBuild(){
     S.downloadName = name ? name[1] : 'nid-card.pdf';
     if(S.pdfUrl){ try{ URL.revokeObjectURL(S.pdfUrl); }catch(_){} }
     S.pdfUrl=URL.createObjectURL(S.pdfBlob);
-    document.getElementById('cardFrame').src=S.pdfUrl;
-    const mLink=document.getElementById('mobileDlLink');
-    if(mLink){ mLink.href=S.pdfUrl; mLink.download=S.downloadName; mLink.style.display='inline-flex'; }
+    document.getElementById('cardFrame').src = S.pdfUrl + '#toolbar=0&navpanes=0';
+    const downloadLink = document.getElementById('b4');
+    downloadLink.href = S.pdfUrl;
+    downloadLink.download = S.downloadName;
     go(4);showOk('কার্ড প্রস্তুত হয়েছে ✓');
     updateBalance();
   }catch(e){showErr(e.message||'কার্ড তৈরি ব্যর্থ।');}
   busy('b3',false);
-}
-function dlPdf(){
-  if(!S.pdfBlob){showErr('আগে কার্ড তৈরি করুন।');return;}
-  const url = S.pdfUrl || URL.createObjectURL(S.pdfBlob);
-  const a=document.createElement('a');
-  a.href=url;
-  a.download=S.downloadName;
-  document.body.appendChild(a);a.click();a.remove();
-  showOk('PDF ডাউনলোড শুরু হয়েছে ✓');
 }
 function setupDropZone(){
   const dz = document.getElementById('dropZone');
