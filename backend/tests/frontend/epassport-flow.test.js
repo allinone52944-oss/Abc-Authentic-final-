@@ -33,6 +33,7 @@ const FRONTEND = path.join(__dirname, '../../../frontend');
 const EPASS_HTML = fs.readFileSync(path.join(FRONTEND, 'epassport.html'), 'utf8');
 const MRP_HTML = fs.readFileSync(path.join(FRONTEND, 'passport.html'), 'utf8');
 const SERVICE_DETAIL = fs.readFileSync(path.join(FRONTEND, 'service-detail.html'), 'utf8');
+const FLOW_CSS = fs.readFileSync(path.join(FRONTEND, 'css/passport-flow.css'), 'utf8');
 
 function extractModel(html) {
   const m = html.match(/<script type="application\/json" id="epassport-model">([\s\S]*?)<\/script>/);
@@ -335,7 +336,7 @@ describe('e-passport page structure', () => {
     expect(EPASS_HTML).toContain('id="ep-stage"');
     expect(EPASS_HTML).toContain('id="ep-scan"');
     expect(EPASS_HTML).toContain('/login.html?next=');
-    expect(EPASS_HTML).toContain('passport-flow.css?v=6');
+    expect(EPASS_HTML).toContain('passport-flow.css?v=7');
   });
   test('form inputs fill their grid tracks (no mobile overflow)', () => {
     // Regression: the MRP page carries an inline rule making text
@@ -344,6 +345,20 @@ describe('e-passport page structure', () => {
     // tracks on mobile (right column clipped, no page scroll).
     expect(EPASS_HTML).toMatch(/#panel-engine input\[type=text\][^{]*\{[^}]*width:100%/);
     expect(EPASS_HTML).toMatch(/#panel-engine input\[type=text\][^{]*\{[^}]*min-width:0/);
+  });
+  test('photo/signature upload row fits its card on mobile (no right-column clip)', () => {
+    // Regression (found by viewing the filled-form screenshot at
+    // 360px): with files attached, the attached-file rows' nowrap
+    // filenames set the plain 1fr tracks' min-content (~190/208px),
+    // so the row ran ~140px past the card's right edge — the
+    // signature upload button and its remove button unreachable,
+    // with no page scroll. minmax(0,1fr) tracks + min-width:0 grid
+    // items let both columns shrink to the card; the filename
+    // ellipsizes instead. The shared stylesheet owns the row, so
+    // this also repairs the MRP form, which clipped identically
+    // once files were attached.
+    expect(FLOW_CSS).toContain('.form-upload-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}');
+    expect(FLOW_CSS).toContain('.form-upload-row>div{min-width:0}');
   });
   test('no editor/workbench surface: no contenteditable attribute, MRZ is read-only', () => {
     // No element carries a contenteditable attribute (the script

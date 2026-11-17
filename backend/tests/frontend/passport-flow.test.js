@@ -1348,11 +1348,12 @@ describe('two-column premium form (2026-11-15)', () => {
     expect(CSS).not.toContain('body.flow-form #eng-emergency-box:not([hidden]){grid-template-columns:minmax(0,1fr)}');
     expect(CSS).not.toContain('body.flow-form .form-upload-row{grid-template-columns:1fr}');
     expect(CSS).toContain('body.flow-form .form-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 16px}');
-    expect(CSS).toContain('.form-upload-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}');
+    expect(CSS).toContain('.form-upload-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}');
+    expect(CSS).toContain('.form-upload-row>div{min-width:0}');
   });
 
   test('flow stylesheet is cache-busted for the new layout', () => {
-    expect(PAGE).toContain('/css/passport-flow.css?v=6');
+    expect(PAGE).toContain('/css/passport-flow.css?v=7');
   });
 });
 
