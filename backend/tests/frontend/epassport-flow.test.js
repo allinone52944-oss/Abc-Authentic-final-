@@ -164,6 +164,7 @@ const FORM_KEYS = [
 function runPage() {
   const els = {};
   const all = [];
+  const canvases = [];
   const reg = (el) => { if (el.id) els[el.id] = el; all.push(el); return el; };
   // Model script element (the JSON the page parses).
   const modelEl = reg(makeEl('script', 'epassport-model'));
@@ -233,12 +234,17 @@ function runPage() {
         // draws with it. getImageData synthesizes a photo — a white
         // backdrop with a dark person (central column, from 20% down
         // to the bottom edge) — so the cutout mask has a component
-        // to find. toDataURL returns a fixed stub URL.
-        el.getContext = () => ({
+        // to find. toDataURL returns a fixed stub URL. arc() records
+        // its calls (with the fillStyle in force) so the perforation
+        // geometry test can read the drawn holes back.
+        const ctx = {
           fillStyle: '', strokeStyle: '', globalAlpha: 1, font: '',
+          arcs: [],
           fillRect() {}, clearRect() {}, save() {}, restore() {},
           translate() {}, rotate() {}, scale() {}, drawImage() {},
-          fillText() {}, beginPath() {}, arc() {}, fill() {}, stroke() {},
+          fillText() {}, beginPath() {},
+          arc(x, y, r) { ctx.arcs.push({ x, y, r, fill: ctx.fillStyle }); },
+          fill() {}, stroke() {},
           moveTo() {}, lineTo() {}, closePath() {},
           measureText: (t) => ({ width: String(t).length * 8 }),
           createLinearGradient: () => ({ addColorStop() {} }),
@@ -258,8 +264,11 @@ function runPage() {
             return { width: w, height: h, data };
           },
           putImageData() {},
-        });
+        };
+        el.getContext = () => ctx;
+        el._ctx = ctx;
         el.toDataURL = () => 'data:image/png;base64,FAKE';
+        canvases.push(el);
       }
       return el;
     },
@@ -301,7 +310,7 @@ function runPage() {
   vm.runInContext(MAIN_SCRIPT, sandbox);
   const api = sandbox.window.epassportEngine;
   expect(api).toBeTruthy();
-  return { api, els, all, documentStub };
+  return { api, els, all, documentStub, canvases };
 }
 
 // Independent ICAO TD3 check-digit computation (the test's own
@@ -934,8 +943,47 @@ describe('Point 1: DOB once → 2 derived places; passport number once → 4 pla
   });
   test('perforation slots sit on the scan left edge, bottom-to-top', () => {
     const { api } = runPage();
-    expect(api.perfSlots).toEqual([1626, 1444, 1276, 1124, 956, 787, 635, 452, 285]);
-    expect(api.perfCols).toEqual([133, 164, 192]);
+    // Measured glyph centres from the scan (blob detection +
+    // morphological opening, 2026-11-17); spacing ~167.5px.
+    expect(api.perfSlots).toEqual([1627, 1461, 1294, 1126, 957, 790, 622, 454, 287]);
+    // Measured hole columns (medians): 5 columns, pitch ~30px.
+    expect(api.perfCols).toEqual([138, 171, 200, 230, 260]);
+  });
+  test('perforation holes match the scan grid + glyphs (no clipped column)', () => {
+    const { api, canvases } = runPage();
+    const before = canvases.length;
+    const url = api.renderPerfDataURL('A11933503', 0, 200, 1500);
+    expect(url.startsWith('data:image/png;base64,')).toBe(true);
+    const cv = canvases[before];
+    expect(cv).toBeTruthy();
+    // Canvas covers x 100-280 (180 wide) so all 5 columns fit;
+    // the old 85px canvas clipped the 3rd column entirely.
+    expect(cv.width).toBe(180);
+    expect(cv.height).toBe(1500);
+    const arcs = cv._ctx.arcs;
+    // Each hole is a dark crater (r 6.5) + a pale lower rim (r 3.5, +3px).
+    const dark = arcs.filter((a) => a.r === 6.5);
+    const pale = arcs.filter((a) => a.r === 3.5);
+    expect(dark.length).toBe(pale.length);
+    // The sample number's glyphs (scan-decoded): A=12, 1=9, 1=9, 9=10,
+    // 3=10, 3=10, 5=11, 0=10, 3=10 holes = 91, the scan's own count.
+    expect(dark.length).toBe(91);
+    // All five columns are drawn (canvas x = scan x - 100).
+    const xs = [...new Set(dark.map((a) => a.x))].sort((a, b) => a - b);
+    expect(xs).toEqual([38, 71, 100, 130, 160]);
+    // '0' (8th char, slot centre 454 -> canvas cy 254) matches the
+    // scan's pattern .XXX./X...X/X...X/.XXX. at rows 209/239/269/299.
+    const zero = dark.filter((a) => a.y >= 200 && a.y <= 310);
+    expect(zero.length).toBe(10);
+    const at = (x, y) => zero.some((a) => a.x === x && a.y === y);
+    expect(at(71, 209)).toBe(true); expect(at(100, 209)).toBe(true); expect(at(130, 209)).toBe(true);
+    expect(at(38, 239)).toBe(true); expect(at(160, 239)).toBe(true);
+    expect(at(38, 269)).toBe(true); expect(at(160, 269)).toBe(true);
+    expect(at(71, 299)).toBe(true); expect(at(100, 299)).toBe(true); expect(at(130, 299)).toBe(true);
+    // Every dark crater has its pale rim 3px below it.
+    for (const d of dark) {
+      expect(pale.some((p) => p.x === d.x && p.y === d.y + 3)).toBe(true);
+    }
   });
   test('barcode + perforation renderers return data URLs', () => {
     const { api } = runPage();
