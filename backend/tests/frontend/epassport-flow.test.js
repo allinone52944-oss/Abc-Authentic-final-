@@ -659,6 +659,83 @@ describe('upper page: name + address match the scan (position + font)', () => {
     expect(prev.style.width).toBe(MODEL.fields.find((x) => x.id === 'previous-passport').w + 'px');
     expect(prev.style.fontSize).toBeFalsy();
   });
+
+  test('upper-page value fields render BOLD (700) — the scan is bold, not the workbench 400', () => {
+    // User rebuke 2026-11-17: the side-by-side showed the scan's
+    // upper-page values plainly heavier than the render. The workbench
+    // model records weight 400 for these fields, but the scan's print
+    // is bold (stroke ~7px vs regular ~5px at the model size; bold +
+    // calibration scale matches the scan's stroke and width). The
+    // side-by-side is the standard — no metric overrules it.
+    const upperValueIds = ['name', 'father', 'mother', 'spouse',
+      'permanent-address', 'contact-name', 'relationship',
+      'contact-address', 'telephone'];
+    for (const id of upperValueIds) {
+      const f = MODEL.fields.find((x) => x.id === id);
+      expect(f).toBeTruthy();
+      expect(f.weight).toBe(700);
+    }
+    const { api, els } = runPage();
+    fillForm(els, FULL_FORM);
+    api.applyAll();
+    api.render();
+    for (const id of upperValueIds) {
+      const region = regionFor(els, id);
+      expect(region).toBeTruthy();
+      expect(String(region.style.font || '')).toMatch(/^700 /);
+    }
+  });
+
+  test('data-page values stay bold and small data-page labels stay regular (scope guard)', () => {
+    for (const id of ['passport-number', 'surname', 'given-name', 'birth-date']) {
+      expect(MODEL.fields.find((x) => x.id === id).weight).toBe(700);
+    }
+    for (const id of ['type-label', 'country-code-label', 'passport-number-label']) {
+      expect(MODEL.fields.find((x) => x.id === id).weight).toBe(400);
+    }
+  });
+
+  test('repair patches are valid images sized to their field boxes', () => {
+    // Guards the patch regeneration (ghost removal): a corrupt or
+    // mis-sized patch would blank the wrong area or break the render.
+    // Patches are PNG or JPEG data URLs (the originals are JPEG,
+    // regenerated ones PNG) — both are decoded for dimensions.
+    function imageSize(dataUrl) {
+      const b64 = String(dataUrl || '').split(',')[1] || '';
+      const buf = Buffer.from(b64, 'base64');
+      expect(buf.length).toBeGreaterThan(16);
+      if (buf[0] === 0x89) { // PNG: IHDR width/height
+        return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+      }
+      expect(buf[0]).toBe(0xff); // JPEG: scan markers for SOF0/SOF2
+      expect(buf[1]).toBe(0xd8);
+      let off = 2;
+      while (off + 9 < buf.length) {
+        if (buf[off] !== 0xff) { off += 1; continue; }
+        const marker = buf[off + 1];
+        if (marker === 0xc0 || marker === 0xc2) {
+          return { h: buf.readUInt16BE(off + 5), w: buf.readUInt16BE(off + 7) };
+        }
+        if (marker === 0xd8 || marker === 0x01 ||
+            (marker >= 0xd0 && marker <= 0xd7)) { off += 2; continue; }
+        off += 2 + buf.readUInt16BE(off + 2);
+      }
+      throw new Error('no SOF marker in patch image');
+    }
+    for (const f of MODEL.fields) {
+      expect(f.patch).toBeTruthy();
+      const size = imageSize(f.patch);
+      // The patch is the scan crop round(x+w)-round(x); allow ±1px —
+      // the workbench's older patches are 1px short in height after
+      // the bff2273 calibration shift, which is invisible (the <img>
+      // is stretched to the field box). This guards against a corrupt
+      // or wrong-field patch, not rounding.
+      const expW = Math.round(f.x + f.w) - Math.round(f.x);
+      const expH = Math.round(f.y + f.h) - Math.round(f.y);
+      expect(Math.abs(size.w - expW)).toBeLessThanOrEqual(1);
+      expect(Math.abs(size.h - expH)).toBeLessThanOrEqual(1);
+    }
+  });
 });
 
 describe('photo propagation (one upload → both photo slots)', () => {
