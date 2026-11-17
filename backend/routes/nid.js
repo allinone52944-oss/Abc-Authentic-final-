@@ -153,6 +153,11 @@ router.post('/build', requireAuth, async (req, res) => {
       return res.status(status).json(body);
     }
 
+    const nid = String(fields?.['ID NO:'] ?? '').trim()
+      .replace(/[০-৯]/g, digit => String(digit.charCodeAt(0) - 0x09E6))
+      .replace(/[\s-]/g, '');
+    const downloadName = /^\d{10}$|^\d{13}$|^\d{17}$/.test(nid) ? nid + '.pdf' : 'nid-card.pdf';
+
     if (price > 0) {
       const ref = 'nid-card-' + jobId;
       const alreadyPaid = await db.query(
@@ -225,7 +230,7 @@ router.post('/build', requireAuth, async (req, res) => {
             fsx.mkdirSync(dir, { recursive: true });
             fsx.writeFileSync(pathx.join(dir, fn), r.pdfBuffer);
             docs.push({
-              type: 'delivery', filename: fn, originalname: 'nid-card.pdf',
+              type: 'delivery', filename: fn, originalname: downloadName,
               uploaded_at: new Date().toISOString(), uploaded_by: 'admin',
             });
             await db.query('UPDATE orders SET documents = $1 WHERE id = $2', [JSON.stringify(docs), ord.rows[0].id]);
@@ -239,7 +244,7 @@ router.post('/build', requireAuth, async (req, res) => {
     }
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="nid-card.pdf"');
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
     res.setHeader('Content-Length', r.pdfBuffer.length);
     res.send(r.pdfBuffer);
   } catch (e) {

@@ -621,11 +621,14 @@ async function doBuild(){
       throw new Error(j.message || (j.error==='JOB_NOT_FOUND'?'সেশন শেষ — আবার আপলোড করুন।':'কার্ড তৈরি ব্যর্থ।'));
     }
     S.pdfBlob=await r.blob();
+    const disposition = r.headers.get('Content-Disposition') || '';
+    const name = /filename="([0-9]+\.pdf)"/i.exec(disposition);
+    S.downloadName = name ? name[1] : 'nid-card.pdf';
     if(S.pdfUrl){ try{ URL.revokeObjectURL(S.pdfUrl); }catch(_){} }
     S.pdfUrl=URL.createObjectURL(S.pdfBlob);
     document.getElementById('cardFrame').src=S.pdfUrl;
     const mLink=document.getElementById('mobileDlLink');
-    if(mLink){ mLink.href=S.pdfUrl; mLink.style.display='inline-flex'; }
+    if(mLink){ mLink.href=S.pdfUrl; mLink.download=S.downloadName; mLink.style.display='inline-flex'; }
     go(4);showOk('কার্ড প্রস্তুত হয়েছে ✓');
     updateBalance();
   }catch(e){showErr(e.message||'কার্ড তৈরি ব্যর্থ।');}
@@ -636,7 +639,7 @@ function dlPdf(){
   const url = S.pdfUrl || URL.createObjectURL(S.pdfBlob);
   const a=document.createElement('a');
   a.href=url;
-  a.download='NID_Card.pdf';
+  a.download=S.downloadName;
   document.body.appendChild(a);a.click();a.remove();
   showOk('PDF ডাউনলোড শুরু হয়েছে ✓');
 }

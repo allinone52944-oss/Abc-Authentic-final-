@@ -256,10 +256,10 @@ describe('POST /api/nid-engine/build', () => {
     ]);
 
     const r = await withUser(request(app()).post('/api/nid-engine/build'))
-      .send({ jobId: 'j1', fields: { name: 'R' } }).expect(200);
+      .send({ jobId: 'j1', fields: { name: 'R', 'ID NO:': '০১২৩৪৫৬৭৮৯' } }).expect(200);
 
     expect(r.headers['content-type']).toContain('application/pdf');
-    expect(r.headers['content-disposition']).toContain('nid-card.pdf');
+    expect(r.headers['content-disposition']).toContain('0123456789.pdf');
     expect(walletDebitCalled).toBe(true);
     expect(orderInsertCalled).toBe(true);
   });
