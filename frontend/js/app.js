@@ -430,18 +430,34 @@
       '#abc-install-banner button{border:none;border-radius:10px;padding:10px 16px;font-weight:bold;cursor:pointer;}' +
       '#abc-install-go{background:linear-gradient(135deg,#d4af37,#b8941f);color:#2b1d14;white-space:nowrap;}' +
       '#abc-install-x{background:transparent;color:#c9a961;font-size:16px;padding:8px 10px;}' +
-      '@keyframes abcSlideUp{from{transform:translateY(120%);opacity:0;}to{transform:none;opacity:1;}}';
+      '@keyframes abcSlideUp{from{opacity:0;}to{opacity:1;}}';
     document.head.appendChild(css);
     document.body.appendChild(bar);
-    document.getElementById('abc-install-go').addEventListener('click', async () => {
+    const navigation = document.querySelector('.m-tabbar');
+    function positionBanner() {
+      const rect = navigation && navigation.getBoundingClientRect();
+      const clearance = rect && rect.height ? window.innerHeight - rect.top : 0;
+      bar.style.bottom = Math.max(12, clearance + 12) + 'px';
+    }
+    positionBanner();
+    const observer = navigation && typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(positionBanner) : null;
+    if (observer) observer.observe(navigation);
+    window.addEventListener('resize', positionBanner);
+    function removeBanner() {
+      window.removeEventListener('resize', positionBanner);
+      if (observer) observer.disconnect();
       bar.remove();
+    }
+    document.getElementById('abc-install-go').addEventListener('click', async () => {
+      removeBanner();
       if (!deferredPrompt) return;
       deferredPrompt.prompt();
       await deferredPrompt.userChoice.catch(() => {});
       deferredPrompt = null;
     });
     document.getElementById('abc-install-x').addEventListener('click', () => {
-      bar.remove();
+      removeBanner();
       try { localStorage.setItem('abc_install_dismissed', '1'); } catch (e) {}
     });
   }
