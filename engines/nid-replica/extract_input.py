@@ -596,7 +596,12 @@ def get_spans(page, pno):
                     for c in chars:
                         if prev_c is not None:
                             gap = c["bbox"][0] - prev_c["bbox"][2]
-                            if gap > max(1.2, size * 0.15):
+                            # Nirmala positions the second half of Bengali o-kar
+                            # beyond its text box. This gap is shaping, not a space.
+                            shaped_o = (prev_c["c"] == "ো" and
+                                        s.get("font", "").split("+")[-1].startswith("Nirmala") and
+                                        gap < size * 0.30)
+                            if gap > max(1.2, size * 0.15) and not shaped_o:
                                 parts.append(" ")
                         parts.append(c["c"])
                         prev_c = c
@@ -879,13 +884,11 @@ def parse_address_table(all_spans, page_heights, anchor, end_anchor=None):
     band = [s for s in all_spans
             if s["page"] == pno and pa["y0"] - 2 <= s["y0"] < y_end]
 
-    def has_additional_above(cand):
-        for s in band:
-            if (s["text"].strip() == "Additional"
-                    and abs(s["x0"] - cand["x0"]) < 12
-                    and cand["y0"] - 30 < s["y0"] < cand["y0"] - 2):
-                return True
-        return False
+    def additional_prefix(cand):
+        above = [s for s in band if abs(s["x0"] - cand["x0"]) < 12
+                 and cand["y0"] - 30 < s["y0"] < cand["y0"] - 2]
+        nearest = max(above, key=lambda s: s["y0"], default=None)
+        return nearest if nearest and nearest["text"].strip() == "Additional" else None
 
     band.sort(key=lambda s: (s["y0"], s["x0"]))
     # canonical label per span (OCR typo tolerate: 'Jpozila'->'Upozila')
@@ -931,22 +934,18 @@ def parse_address_table(all_spans, page_heights, anchor, end_anchor=None):
         cands = [s for s in band if (canon.get(id(s)) or s["text"].strip()) == label_text]
         cands.sort(key=lambda s: (s["y0"], s["x0"]))
         for c in cands:
-            is_add = (key in ("village", "mouza")) and has_additional_above(c)
-            target_key = ("additional_" + key) if is_add else key
+            prefix = additional_prefix(c) if key in ("village", "mouza") else None
+            target_key = ("additional_" + key) if prefix else key
             if target_key in addr:
                 continue
                 
-            if is_add:
-                search_c = c.copy()
-                search_c["_orig"] = c
-                # Expand the bounding box upwards to catch values on the "Additional" line
-                search_c["y0"] -= 16
-                search_c["size"] = 28
-            else:
-                search_c = c
-                
-            val = right_value(search_c, band, ADDR_LABELS | ADDR_STOP_EXTRA,
+            # A wrapped label may align its value with either label line.
+            # Probe the actual baselines separately, never the adjacent row.
+            val = right_value(c, band, ADDR_LABELS | ADDR_STOP_EXTRA,
                               multi_line=True, multi_line_labels=ADDR_LABELS)
+            if prefix and not val:
+                val = right_value(prefix, band, ADDR_LABELS | ADDR_STOP_EXTRA,
+                                  multi_line=True, multi_line_labels=ADDR_LABELS)
             if val:
                 addr[target_key] = val
     return addr
