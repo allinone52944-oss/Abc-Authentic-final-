@@ -31,7 +31,7 @@ describe('audit #73 — no alert() on customer pages', () => {
     const counts = {
       'order-status.html': 8, 'order-detail.html': 10, 'history.html': 4,
       'wallet.html': 3, 'order-create.html': 5,
-      'dashboard.html': 2, 'service-detail.html': 2,
+      'dashboard.html': 2,
     };
     for (const [file, n] of Object.entries(counts)) {
       const hits = (read(file).match(/ABC\.showPageMsg\(/g) || []).length;

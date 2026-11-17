@@ -17,12 +17,11 @@ describe('tap targets are at least 36px on touch screens (audit #60)', () => {
 
   test('the cited filing-flow buttons all carry a floored class', () => {
     // order-create copy button, order-detail file + tracker buttons,
-    // service-detail copy button — each is .btn-secondary or .mini-btn,
+    // each is .btn-secondary or .mini-btn,
     // so the shared floor reaches it despite its tiny inline padding.
     expect(read('frontend/order-create.html')).toContain('class="btn btn-secondary" onclick="copySampleText()"');
     expect(read('frontend/order-detail.html')).toContain('class="mini-btn"');
     expect(read('frontend/order-detail.html')).toContain('class="btn btn-secondary" style="padding:5px 12px;');
-    expect(read('frontend/service-detail.html')).toContain('class="btn btn-secondary" onclick="event.stopPropagation();copySample()"');
   });
 
   test('bdris-apply .pvedit has a 36px floor at ≤760px', () => {

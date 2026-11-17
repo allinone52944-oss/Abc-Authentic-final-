@@ -74,19 +74,6 @@
     color: #92400e;
   }
 
-  .sample-box {
-    background: #0f172a;
-    color: #f8fafc;
-    border-radius: var(--r-md);
-    padding: 14px 18px;
-    font-family: monospace;
-    font-size: 13px;
-    white-space: pre-wrap;
-    line-height: 1.6;
-    max-height: 220px;
-    overflow-y: auto;
-    margin-top: 8px;
-  }
   @media (min-width: 901px) {
     body.flagship-app.page-service-detail .main {
       max-width: 1164px;
@@ -223,30 +210,12 @@ async function init(){
       '<button class="btn btn-primary" onclick="location.href=\'/wallet.html\'" style="padding:8px 16px;font-size:13px;font-weight:700;">+ এখনই রিচার্জ করুন</button>' +
     '</div>';
 
-  // Instructions & Sample Box
+  // Service instructions
   let instHtml = '';
   if (s.manual_instructions) {
     instHtml += '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px;margin-bottom:16px;color:#1e40af;font-size:13px;line-height:1.6;">' +
       '<b>📋 সেবার বিশেষ নির্দেশনা:</b><div style="margin-top:6px;white-space:pre-wrap;">' + esc(s.manual_instructions) + '</div></div>';
   }
-  if (s.manual_sample) {
-    instHtml += '<div style="margin-bottom:16px;">' +
-      '<details style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;cursor:pointer;">' +
-        '<summary style="font-size:13px;font-weight:700;color:#334155;user-select:none;display:flex;justify-content:space-between;align-items:center;">' +
-          '<span>📋 আবেদনের নমুনা ফরম্যাট (প্রিভিউ দেখতে ক্লিক করুন)</span>' +
-          '<span style="font-size:12px;color:#2563eb;font-weight:600;">প্রিভিউ ▾</span>' +
-        '</summary>' +
-        '<div style="margin-top:10px;padding-top:10px;border-top:1px dashed #cbd5e1;">' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
-            '<span style="font-size:11px;color:#64748b;">অর্ডার পেজে সরাসরি ফরম্যাটটি পূরণ করতে পারবেন</span>' +
-            '<button type="button" class="btn btn-secondary" onclick="event.stopPropagation();copySample()" style="padding:4px 10px;font-size:11px;">📋 কপি করুন</button>' +
-          '</div>' +
-          '<pre class="sample-box" id="samplePre" style="margin:0;font-size:12px;line-height:1.6;max-height:180px;overflow-y:auto;background:#ffffff;padding:12px;border-radius:8px;border:1px solid #cbd5e1;white-space:pre-wrap;color:#334155;">' + esc(s.manual_sample) + '</pre>' +
-        '</div>' +
-      '</details>' +
-    '</div>';
-  }
-
   // Action CTA Logic
   let actionHtml = '';
   if (!s.open) {
@@ -360,16 +329,6 @@ async function init(){
   }
 
   window._rules = (s.type === 'manual' && s.manual_instructions) ? s.manual_instructions : (s.rules_text || 'কোনো বিশেষ নিয়ম নেই।');
-  window._sample = s.manual_sample || '';
-}
-
-function copySample(){
-  if (!window._sample) return;
-  navigator.clipboard.writeText(window._sample).then(()=>{
-    ABC.showPageMsg('📋 নমুনা ফরম্যাট কপি করা হয়েছে!', 'ok');
-  }).catch(()=>{
-    ABC.showPageMsg('কপি করা সম্ভব হয়নি — আবার চেষ্টা করুন।', 'err');
-  });
 }
 
 function showRules(){
