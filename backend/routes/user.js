@@ -136,17 +136,18 @@ router.get('/services', async (req, res) => {
   try {
     const rows = await db.query(
       `SELECT s.*, sc.id AS cat_id, sc.name AS cat_name, sc.name_bn AS cat_name_bn,
-              sc.icon AS cat_icon, sc.serial AS cat_serial
+              sc.icon AS cat_icon, sc.serial AS cat_serial,
+              us.custom_price, us.access_enabled
        FROM services s
        LEFT JOIN service_categories sc ON sc.id = s.category_id AND sc.status = 'active'
-       WHERE s.status = 'active' ORDER BY s.serial ASC, s.created_at ASC`);
+       LEFT JOIN user_services us ON us.service_id = s.id AND us.user_id = $1
+       WHERE s.status = 'active' ORDER BY s.serial ASC, s.created_at ASC`, [req.user.id]);
     const out = [];
     for (const s of rows.rows) {
-      const eff = await effectivePrice(req.user.id, s);
-      if (!eff.allowed) continue;
+      if (s.access_enabled === false) continue;
       out.push({
         id: s.id, name: s.name, name_bn: s.name_bn, type: s.type,
-        price: eff.price, serial: s.serial,
+        price: Number(s.custom_price ?? s.price), serial: s.serial,
         featured: s.featured === true, show_on_dashboard: s.show_on_dashboard !== false,
         // category (null when uncategorized or category disabled -> grouped under অন্যান্য)
         category_id: s.cat_id || null,
@@ -174,10 +175,13 @@ router.get('/services', async (req, res) => {
 router.get('/services/:id', async (req, res) => {
   try {
     const r = await db.query(
-      `SELECT s.*, sc.id AS cat_id, sc.name AS cat_name, sc.name_bn AS cat_name_bn, sc.icon AS cat_icon
+      `SELECT s.*, sc.id AS cat_id, sc.name AS cat_name, sc.name_bn AS cat_name_bn, sc.icon AS cat_icon,
+              (SELECT COALESCE(SUM(c.remaining), 0) FROM service_credits c
+                WHERE c.service_id = s.id AND c.user_id = $2 AND c.remaining > 0
+                  AND (c.expires_at IS NULL OR c.expires_at > NOW())) AS service_credit
        FROM services s
        LEFT JOIN service_categories sc ON sc.id = s.category_id AND sc.status = 'active'
-       WHERE s.id = $1 AND s.status = 'active'`, [req.params.id]);
+       WHERE s.id = $1 AND s.status = 'active'`, [req.params.id, req.user.id]);
     if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
     const s = r.rows[0];
     const eff = await effectivePrice(req.user.id, s);
@@ -185,7 +189,7 @@ router.get('/services/:id', async (req, res) => {
     res.json({
       service: {
         id: s.id, name: s.name, name_bn: s.name_bn, type: s.type,
-        price: eff.price, documents_required: safeJsonArray(s.documents_required),
+        price: eff.price, service_credit: Number(s.service_credit || 0), documents_required: safeJsonArray(s.documents_required),
         fields_required: safeJsonArray(s.fields_required), schedule: s.schedule,
         rules_text: s.rules_text, engine_id: s.engine_id,
         open: serviceOpen(s.schedule),

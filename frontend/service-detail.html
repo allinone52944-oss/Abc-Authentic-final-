@@ -160,7 +160,11 @@ function autoIcon(name){
 
 async function init(){
   const me=await ABC.api('/auth/me');
-  if(!me.ok){location.href='/login.html';return;}
+  if (me.status === 401) {
+    location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search);
+    return;
+  }
+  if (!me.ok) throw new Error('ACCOUNT_UNAVAILABLE');
   const u=(await me.json()).user;
   const userBalance = Number(u.balance || 0);
 
@@ -192,20 +196,23 @@ async function init(){
   const sched=(s.schedule&&s.schedule.open)?'<div style="color:#64748b;font-size:13px;margin:8px 0;">🕘 সেবার সময়সূচি: '+esc(s.schedule.open)+' - '+esc(s.schedule.close||'')+'</div>':'';
 
   // Balance Check
-  const hasEnoughBal = userBalance >= price;
-  const shortage = Math.max(0, price - userBalance);
+  const credit = hasEngine ? 0 : Number(s.service_credit || 0);
+  const available = userBalance + credit;
+  const creditText = credit ? ' + সেবার ক্রেডিট ৳' + bnNum(credit) : '';
+  const hasEnoughBal = available >= price;
+  const shortage = Math.max(0, price - available);
   const balBoxHtml = hasEnoughBal ?
     '<div class="bal-box ok">' +
       '<div>' +
-        '<div style="font-weight:700;font-size:14px;">✅ আপনার ওয়ালেটে পর্যাপ্ত ব্যালেন্স রয়েছে</div>' +
-        '<div style="font-size:12px;margin-top:2px;">বর্তমান ওয়ালেট ব্যালেন্স: <b>৳' + bnNum(userBalance) + '</b> (প্রয়োজন: ৳' + bnNum(price) + ')</div>' +
+        '<div style="font-weight:700;font-size:14px;">✅ এই সেবার জন্য পর্যাপ্ত ব্যালেন্স রয়েছে</div>' +
+        '<div style="font-size:12px;margin-top:2px;">বর্তমান ওয়ালেট ব্যালেন্স: <b>৳' + bnNum(userBalance) + creditText + '</b> (প্রয়োজন: ৳' + bnNum(price) + ')</div>' +
       '</div>' +
       '<button class="btn btn-secondary" onclick="location.href=\'/wallet.html\'" style="padding:6px 14px;font-size:13px;">+ ব্যালেন্স দেখুন</button>' +
     '</div>' :
     '<div class="bal-box warn">' +
       '<div>' +
-        '<div style="font-weight:700;font-size:14px;color:#b45309;">⚠️ ওয়ালেটে ৳' + bnNum(shortage) + ' ঘাটতি রয়েছে</div>' +
-        '<div style="font-size:12px;margin-top:2px;">বর্তমান ব্যালেন্স: ৳' + bnNum(userBalance) + ' • সেবার ফি: ৳' + bnNum(price) + '</div>' +
+        '<div style="font-weight:700;font-size:14px;color:#b45309;">⚠️ এই সেবার জন্য ৳' + bnNum(shortage) + ' ঘাটতি রয়েছে</div>' +
+        '<div style="font-size:12px;margin-top:2px;">বর্তমান ব্যালেন্স: ৳' + bnNum(userBalance) + creditText + ' • সেবার ফি: ৳' + bnNum(price) + '</div>' +
       '</div>' +
       '<button class="btn btn-primary" onclick="location.href=\'/wallet.html\'" style="padding:8px 16px;font-size:13px;font-weight:700;">+ এখনই রিচার্জ করুন</button>' +
     '</div>';
@@ -343,7 +350,9 @@ function showRules(){
   document.body.appendChild(bg);
 }
 
-init();
+init().catch(() => {
+  document.getElementById('detail').innerHTML = '<div role="alert">তথ্য লোড হয়নি। <button class="btn btn-secondary" onclick="location.reload()">আবার চেষ্টা করুন</button></div>';
+});
 </script>
 <link rel="stylesheet" href="/css/promotions.css?v=20261114-1">
 </body>

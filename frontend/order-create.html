@@ -459,7 +459,11 @@ async function init(){
   if(reviewButton) reviewButton.disabled = true;
   try {
     const me=await ABC.api('/auth/me');
-    if(!me.ok){location.href='/login.html';return;}
+    if (me.status === 401) {
+    location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search);
+    return;
+  }
+  if (!me.ok) throw new Error('ACCOUNT_UNAVAILABLE');
     const u=(await me.json()).user;
     applicant=u;
     draftKey = u.id ? 'order_' + u.id + '_' + sid : null;
@@ -498,17 +502,7 @@ async function init(){
     svc.fields_required = safeArray(svc.fields_required);
     const svcPrice = Number(svc.price || 0);
 
-    // Audit #44 — locked credit for THIS service (GET /wallet returns
-    // it per service). A failed fetch leaves it 0 (old behaviour);
-    // it never blocks the page.
-    try {
-      const wr = await ABC.api('/wallet?limit=1');
-      if (wr.ok) {
-        const wj = await wr.json();
-        const row = (wj.service_credits || []).find(x => x.service_id === sid);
-        lockedCredit = Number((row && row.amount) || 0);
-      }
-    } catch (_) { lockedCredit = 0; }
+    lockedCredit = Number(svc.service_credit || 0);
 
     document.getElementById('svcName').textContent=svc.name_bn||svc.name;
     document.getElementById('svcPrice').textContent='৳'+bnNum(svcPrice);

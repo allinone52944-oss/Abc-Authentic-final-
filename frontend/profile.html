@@ -127,7 +127,17 @@ try{if(window.CSS&&CSS.supports('-webkit-text-security','disc')){var swapPw=func
 
 async function init(){
   const r=await ABC.api('/auth/me');
-  if(!r.ok){location.href='/login.html';return;}
+  if (r.status === 401) {
+    location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search);
+    return;
+  }
+  if (!r.ok) {
+    const notice = document.createElement('div');
+    notice.setAttribute('role', 'alert');
+    notice.innerHTML = 'অ্যাকাউন্টের তথ্য লোড হয়নি। <button class="btn btn-secondary" onclick="location.reload()">আবার চেষ্টা করুন</button>';
+    (document.querySelector('.main') || document.body).prepend(notice);
+    return;
+  }
   const {user}=await r.json();
   document.getElementById('waFab').onclick=()=>{
     window.open('https://wa.me/8801835414122?text='+encodeURIComponent('আসসালামু আলাইকুম! আমি '+user.name+' (ফোন: '+user.phone+')। সাহায্য দরকার।'),'_blank');

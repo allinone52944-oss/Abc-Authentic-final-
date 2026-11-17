@@ -44,11 +44,10 @@ describe('GET /api/services', () => {
     const s1 = { ...SERVICE, id: 's1' };
     const s2 = { ...SERVICE, id: 's2', price: 200 };
     db.__routeQuery([
-      ['FROM services s', { rows: [s1, s2] }],
-      ['FROM user_services WHERE user_id', (text, params) => {
-        if (params[1] === 's1') return { rows: [{ custom_price: 80, access_enabled: true }] };
-        if (params[1] === 's2') return { rows: [{ custom_price: null, access_enabled: false }] };
-        return { rows: [] };
+      ['FROM services s', (sql, params) => {
+        expect(params).toEqual(['u1']);
+        expect(sql).toContain('us.service_id = s.id AND us.user_id = $1');
+        return { rows: [{ ...s1, custom_price: 80 }, { ...s2, access_enabled: false }] };
       }],
     ]);
     const r = await withUser(request(app()).get('/api/services')).expect(200);

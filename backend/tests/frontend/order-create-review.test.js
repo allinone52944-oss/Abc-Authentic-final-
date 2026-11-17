@@ -65,11 +65,9 @@ describe('order-create.html — fee breakdown with locked credit (audit #44)', (
   const initFn = script.slice(script.indexOf('async function init(){'), script.indexOf('function triggerDraftSave(){'));
   const showReviewFn = script.slice(script.indexOf('function showReview(){'), script.indexOf('function editAgain(){'));
 
-  test('the page reads the per-service locked credit from GET /wallet', () => {
-    expect(script).toContain("ABC.api('/wallet?limit=1')");
-    expect(script).toContain('service_credits');
-    expect(script).toContain('x.service_id === sid');
-    expect(script).toContain('lockedCredit = Number');
+  test('checkout uses the same scoped credit returned on the service detail page', () => {
+    expect(script).toContain('lockedCredit = Number(svc.service_credit || 0)');
+    expect(read('frontend/service-detail.html')).toContain('Number(s.service_credit || 0)');
   });
 
   test('the fee breakdown is shown (locked credit + wallet = total)', () => {

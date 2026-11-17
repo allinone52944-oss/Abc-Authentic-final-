@@ -665,7 +665,17 @@ function setupDropZone(){
 (async function init(){
   setupDropZone();
   const me=await ABC.api('/auth/me');
-  if(!me.ok){location.href='/login.html';return;}
+  if (me.status === 401) {
+    location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search);
+    return;
+  }
+  if (!me.ok) {
+    const notice = document.createElement('div');
+    notice.setAttribute('role', 'alert');
+    notice.innerHTML = 'অ্যাকাউন্টের তথ্য লোড হয়নি। <button class="btn btn-secondary" onclick="location.reload()">আবার চেষ্টা করুন</button>';
+    (document.querySelector('.main') || document.body).prepend(notice);
+    return;
+  }
   const u=(await me.json()).user;
   updateBalance();
   document.getElementById('waFab').onclick=()=>{window.open('https://wa.me/8801835414122?text='+encodeURIComponent('আমি '+u.name+' (ফোন: '+u.phone+')। এনআইডি কার্ড সম্পর্কে জানতে চাই।'),'_blank');};
