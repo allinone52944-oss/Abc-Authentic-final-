@@ -477,26 +477,29 @@ function derive(s){
 }
 
 /* ===== render: derived values -> stage DOM ===== */
-/* Shrink-to-fit by reducing the region's font-size (not a transform:
-   a scaled span inside the transformed stage breaks Chromium print). */
+/* Match the source workbench's fitText: the scan's print is ~13-15%
+   narrower than Arial at the model size, so the workbench calibrates
+   each field with reference=f.ink/longest(original) and a uniform
+   shrink-to-fit, applied as a scale on the text. We apply the same
+   scale to the REGION div itself (transform-origin top left) — the
+   text stays directly in the region (no inner span: a scaled span
+   inside the transformed stage breaks Chromium print). The region's
+   line-height is the model's f.line (separate property, NOT in the
+   font shorthand), so multi-line fields (permanent address) keep the
+   scan's line pitch. */
 function fitText(f,region,text){
   region.style.font=regionFont(f);
-  region.style.lineHeight='normal';
+  region.style.lineHeight=(f.line||f.size)+'px';
+  region.style.transform='';
+  region.style.transformOrigin='left top';
+  region.style.width=f.w+'px';
   if(!text||!canvasMeasure)return;
-  var w=f.w;
-  canvasMeasure.font=region.style.font||regionFont(f);
-  var tw=canvasMeasure.measureText(text).width;
-  if(tw<=w)return;
-  var lines=text.split('\n').length;
-  var allowed=Math.max(1,Math.min(3,Math.floor(f.h/Math.max(1,f.line||f.size))));
-  var scale=1;
-  if(lines<allowed){
-    scale=Math.min(1,w/tw);
-  } else {
-    var perLine=tw/lines;
-    if(perLine>w)scale=Math.min(1,w/perLine);
-  }
-  if(scale<1)region.style.fontSize=(f.size*scale)+'px';
+  var longest=function(v){return Math.max(1,...v.split('\n').map(function(line){canvasMeasure.font=regionFont(f);return canvasMeasure.measureText(line).width;}));};
+  var reference=(f.ink&&f.original)?f.ink/longest(f.original):1;
+  var lines=Math.max(1,text.split('\n').length);
+  var uniform=Math.min(1,(f.w-8)/(longest(text)*reference),(f.h-2)/((f.line||f.size)*lines));
+  region.style.transform='scale('+(reference*uniform)+','+uniform+')';
+  region.style.width=((f.w-8)/(reference*uniform))+'px';
 }
 function slotGeometry(slotDef,asset){
   var settings=(state.slotSettings&&state.slotSettings[slotDef.id])||{fit:'cover',positionX:50,positionY:50,zoom:1};

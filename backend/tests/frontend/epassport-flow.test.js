@@ -568,6 +568,99 @@ describe('editability: every output field follows the form', () => {
   });
 });
 
+describe('upper page: name + address match the scan (position + font)', () => {
+  // The render must use the source workbench's text calibration
+  // (reference + uniform scale + model line-height), not the old
+  // font-size shrink with line-height 'normal'. The old render
+  // came out ~13-15% too wide with the address second line ~5px
+  // too high; the calibrated render matches the scan (measured
+  // on the real PDF at 400dpi: name width 367.7 -> 310.8 source
+  // px, address pitch 64.8 -> 72.6 vs the scan's ~70).
+  //
+  // NOTE: the stub canvas measures 8px per character, so the
+  // absolute scale factors below are stub artefacts; what these
+  // tests pin is the MECHANISM (scale transform + model
+  // line-height + formula width, no font-size shrink). The
+  // absolute match to the scan was verified by measuring the
+  // real PDF, not by these tests.
+  function expectedCalibration(f, value) {
+    const measure = (t) => String(t).length * 8; // stub canvas
+    const longest = (t) => Math.max(...String(t || '').split('\n').map(measure), 1);
+    const reference = f.ink && f.original ? f.ink / longest(f.original) : 1;
+    const lines = Math.max(1, String(value).split('\n').length);
+    const uniform = Math.min(1, (f.w - 8) / (longest(value) * reference), (f.h - 2) / ((f.line || f.size) * lines));
+    return { reference, uniform, scaleX: reference * uniform, scaleY: uniform, width: (f.w - 8) / (reference * uniform) };
+  }
+  function regionFor(els, id) { return els['ep-text-regions'].children.find((c) => c.dataset.field === id); }
+  function parseScale(transform) {
+    const m = /^scale\(([\d.]+),([\d.]+)\)$/.exec(String(transform || ''));
+    expect(m).toBeTruthy();
+    return { x: parseFloat(m[1]), y: parseFloat(m[2]) };
+  }
+
+  test('name region is calibrated: scale transform, model line-height, formula width, no font-size shrink', () => {
+    const { api, els } = runPage();
+    fillForm(els, FULL_FORM);
+    api.applyAll();
+    api.render();
+    const f = MODEL.fields.find((x) => x.id === 'name');
+    const region = regionFor(els, 'name');
+    expect(region).toBeTruthy();
+    const exp = expectedCalibration(f, 'RAHIM UDDIN');
+    const s = parseScale(region.style.transform);
+    expect(s.x).toBeCloseTo(exp.scaleX, 2);
+    expect(s.y).toBeCloseTo(exp.scaleY, 2);
+    expect(region.style.lineHeight).toBe(f.line + 'px');
+    expect(parseFloat(region.style.width)).toBeCloseTo(exp.width, 0);
+    expect(region.style.fontSize).toBeFalsy();
+    expect(region.style.transformOrigin).toBe('left top');
+  });
+
+  test('permanent address region uses the model line-height (the line pitch that was too tight)', () => {
+    const { api, els } = runPage();
+    fillForm(els, FULL_FORM);
+    api.applyAll();
+    api.render();
+    const f = MODEL.fields.find((x) => x.id === 'permanent-address');
+    const region = regionFor(els, 'permanent-address');
+    expect(region).toBeTruthy();
+    expect(region.style.lineHeight).toBe(f.line + 'px');
+    const exp = expectedCalibration(f, 'HOUSE 1 ROAD 2\n1205, DHAKA');
+    const s = parseScale(region.style.transform);
+    expect(s.x).toBeCloseTo(exp.scaleX, 2);
+    expect(s.y).toBeCloseTo(exp.scaleY, 2);
+    expect(region.style.fontSize).toBeFalsy();
+  });
+
+  test('a field with no ink in the model renders at reference 1 (spouse NA)', () => {
+    const { api, els } = runPage();
+    fillForm(els, FULL_FORM);
+    api.applyAll();
+    api.render();
+    const f = MODEL.fields.find((x) => x.id === 'spouse');
+    const region = regionFor(els, 'spouse');
+    expect(region).toBeTruthy();
+    const exp = expectedCalibration(f, 'NA');
+    const s = parseScale(region.style.transform);
+    expect(s.x).toBeCloseTo(exp.scaleX, 2);
+    expect(s.y).toBeCloseTo(exp.scaleY, 2);
+    expect(region.style.lineHeight).toBe(f.line + 'px');
+  });
+
+  test('an empty value resets the calibration (no stale transform)', () => {
+    const { api, els } = runPage();
+    fillForm(els, { ...FULL_FORM, previousPassport: '' });
+    api.applyAll();
+    api.render();
+    const prev = regionFor(els, 'previous-passport');
+    expect(prev).toBeTruthy();
+    expect(prev.textContent).toBe('');
+    expect(prev.style.transform).toBeFalsy();
+    expect(prev.style.width).toBe(MODEL.fields.find((x) => x.id === 'previous-passport').w + 'px');
+    expect(prev.style.fontSize).toBeFalsy();
+  });
+});
+
 describe('photo propagation (one upload → both photo slots)', () => {
   test('photoSlotCount is 2 — the source has two photo placements, not three', () => {
     const { api } = runPage();
