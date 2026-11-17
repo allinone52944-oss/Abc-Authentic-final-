@@ -391,6 +391,31 @@ try {
   safeLog('[engines] passport not mounted:', e.message);
 }
 
+// ---- E-Passport engine (branch of the passport engine,
+// 2026-11-17): entering the passport engine offers an MRP /
+// e-passport choice; the e-passport branch uses the
+// document-data engine logic (user-provided file), integrated
+// the same way as MRP: site shell, login gate, charge/order
+// via backend, form -> Create -> real PDF.
+//   GET  /api/epassport/price
+//   POST /api/epassport/create  { passport_no, idempotency_key? }
+//   POST /api/epassport/pdf     ?passport_no=&idempotency_key=  (text/html body)
+const epassportLimiter = rateLimit({
+  validate: { xForwardedForHeader: false },
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'RATE_LIMITED' },
+});
+try {
+  const epassportRoutes = require('./routes/epassport');
+  app.use('/api/epassport', requireAuth, epassportLimiter, epassportRoutes);
+  safeLog('[engines] mounted epassport at /api/epassport');
+} catch (e) {
+  safeLog('[engines] epassport not mounted:', e.message);
+}
+
 // ---- Mouza map (SEPARATE engine from land-khatian, 2026-11-04:
 // own page, own services row, own fee; preview images served
 // only against the completed order that the search created).

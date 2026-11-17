@@ -96,6 +96,15 @@ input[type=checkbox]{accent-color:var(--green)}
  .page-shell,.page-shell *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
 }
 </style>
+<style>
+/* MRP / e-passport selector: two clean choices, each to its own view. */
+.passport-choice{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin:22px 0 6px;text-align:left}
+.passport-choice-card{border:1px solid var(--pg-line);border-radius:16px;padding:18px 16px;background:#fff}
+.passport-choice-card h3{font-size:17px;margin:0 0 6px;color:var(--pg-ink)}
+.passport-choice-card p{font-size:13px;line-height:1.7;margin:0 0 12px}
+.passport-choice-card .primary{width:100%}
+@media(max-width:740px){.passport-choice{grid-template-columns:minmax(0,1fr)}}
+</style>
 </head>
 <body class="has-tabbar flagship-app service-workspace page-passport flow-landing">
 <div class="desktop">
@@ -130,9 +139,20 @@ input[type=checkbox]{accent-color:var(--green)}
  <section class="passport-landing" id="passport-landing" aria-label="পাসপোর্ট তৈরি করুন">
   <div class="passport-landing-inner">
    <p class="kicker">পাসপোর্ট ইঞ্জিন</p>
-   <h2>Passport তৈরি করুন</h2>
-   <p>ফর্মটি পূরণ করুন — পাসপোর্ট নম্বর, নাম, জন্মতারিখসহ সব তথ্য। Create চাপলে পাসপোর্ট PDF তৈরি হয়ে ডাউনলোড হবে।</p>
-   <button type="button" id="start-passport-button" class="primary">Passport তৈরি করুন</button>
+   <h2>কোন পাসপোর্ট তৈরি করবেন?</h2>
+   <p>একটি বেছে নিন — প্রতিটি নিজের আলাদা ফর্মে খুলবে।</p>
+   <div class="passport-choice">
+    <div class="passport-choice-card">
+     <h3>MRP পাসপোর্ট</h3>
+     <p>মেশিন-রিডেবল পাসপোর্ট — ফর্ম পূরণ করে Create চাপলে PDF ডাউনলোড হবে।</p>
+     <button type="button" id="start-passport-button" class="primary">MRP তৈরি করুন</button>
+    </div>
+    <div class="passport-choice-card">
+     <h3>ই-পাসপোর্ট</h3>
+     <p>ই-পাসপোর্ট ডেটা পেজ — ফর্ম পূরণ করে Create চাপলে PDF ডাউনলোড হবে।</p>
+     <button type="button" id="start-epassport-button" class="primary">ই-পাসপোর্ট তৈরি করুন</button>
+    </div>
+   </div>
    <p class="small-note">ছবি ও স্বাক্ষর ফর্মেই যোগ করুন — পরে বদলালে আবার ডাউনলোড করতে হবে।</p>
   </div>
  </section>
@@ -974,6 +994,9 @@ input[type=checkbox]{accent-color:var(--green)}
   var newPassportBtn = document.getElementById('new-passport-button');
   var lastPdf = null; // last downloaded PDF blob + name (Fix 6 re-download).
   if (!startBtn || !createBtn) { body.classList.remove('flow-landing'); return; }
+  /* E-passport choice: separate clean view (premium = separation). */
+  var epassBtn = document.getElementById('start-epassport-button');
+  if (epassBtn) epassBtn.addEventListener('click', function(){ location.href='/epassport.html'; });
   /* Back to landing (finding 9): the form had no way back except a
      reload, which lost everything. Going back keeps the filled form in
      the DOM; re-entering restores it instead of blanking — the form is
