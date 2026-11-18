@@ -28,6 +28,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { Blob } = require('node:buffer');
 
 const FRONTEND = path.join(__dirname, '../../../frontend');
 const EPASS_HTML = fs.readFileSync(path.join(FRONTEND, 'epassport.html'), 'utf8');
@@ -161,7 +162,7 @@ const FORM_KEYS = [
   'mrz1', 'mrz2',
 ];
 
-function runPage() {
+function runPage(options = {}) {
   const els = {};
   const all = [];
   const canvases = [];
@@ -280,13 +281,14 @@ function runPage() {
   const sandbox = {
     document: documentStub,
     console,
-    setTimeout,
+    setTimeout: options.setTimeout || setTimeout,
     clearTimeout,
     Promise,
     URL: { createObjectURL: () => 'blob:fake', revokeObjectURL: () => {} },
     fetch: async () => ({ ok: true }),
     sessionStorage: { getItem: () => '' },
     localStorage: { getItem: () => '' },
+    FileReader: options.FileReader,
     // Stub Image: loads synchronously (100x100) so loadImage /
     // processPhotoCutout can run. The synthetic photo comes from
     // the canvas stub's getImageData, not from this image.
@@ -306,6 +308,10 @@ function runPage() {
       json: () => Promise.resolve({ ok: true, engineId: 'epassport', price: 0, balance: 500, serviceId: 15, allowed: true }),
     }),
   };
+  if (options.api) sandbox.ABC.api = options.api;
+  if (options.onDownload) {
+    sandbox.URL.createObjectURL = (blob) => { options.onDownload(blob); return 'blob:fake'; };
+  }
   vm.createContext(sandbox);
   vm.runInContext(MAIN_SCRIPT, sandbox);
   const api = sandbox.window.epassportEngine;
@@ -1108,5 +1114,73 @@ describe('Point 4: form flow like MRP', () => {
     const body = EPASS_HTML.match(/function createEpassport\(\)\{([\s\S]*?)\n\}/)[1];
     expect(body).toContain('pdfRetry.no===pp');
     expect(body).not.toContain('pdfRetry=null');
+  });
+});
+
+describe('e-passport output and retry', () => {
+  function pageWithResponses({ invalidPdf = false, loseChargeResponse = false } = {}) {
+    const chargeKeys = [], pdfUrls = [], downloads = [];
+    const page = runPage({
+      setTimeout: () => 0,
+      onDownload: blob => downloads.push(blob),
+      api: async (url, options) => {
+        if (url === '/epassport/create') {
+          chargeKeys.push(options.body.idempotency_key);
+          if (loseChargeResponse && chargeKeys.length === 1) throw new Error('response lost');
+        }
+        if (url.startsWith('/epassport/pdf?')) {
+          pdfUrls.push(url);
+          const bytes = invalidPdf && pdfUrls.length === 1 ? '%PDF-1.7\npartial' : '%PDF-1.7\n%%EOF\n';
+          return {ok: true, headers: {get: () => 'application/pdf'}, blob: async () => new Blob([bytes])};
+        }
+        return {ok: true, json: async () => ({ok: true, charged: 20, balance: 480})};
+      },
+    });
+    page.els['start-passport-button'].click();
+    fillForm(page.els, FULL_FORM);
+    return { ...page, chargeKeys, pdfUrls, downloads };
+  }
+  async function clickCreate(page) {
+    page.els['create-passport-button'].click();
+    await new Promise(resolve => setImmediate(resolve));
+  }
+
+  test('an incomplete PDF is rejected and retry keeps the paid reference', async () => {
+    const page = pageWithResponses({invalidPdf: true});
+    await clickCreate(page);
+    expect(page.downloads).toHaveLength(0);
+    expect(page.documentStub.body.classList.contains('flow-result')).toBe(false);
+    await clickCreate(page);
+    expect(page.chargeKeys).toHaveLength(1);
+    expect(page.pdfUrls[1]).toBe(page.pdfUrls[0]);
+    expect(page.downloads).toHaveLength(1);
+  });
+
+  test('the charge request uses the same key after a lost response', async () => {
+    const page = pageWithResponses({loseChargeResponse: true});
+    await clickCreate(page);
+    expect(page.downloads).toHaveLength(0);
+    await clickCreate(page);
+    expect(page.chargeKeys).toEqual([page.chargeKeys[0], page.chargeKeys[0]]);
+    expect(page.downloads).toHaveLength(1);
+  });
+
+  test('Create waits for both uploads and a removed upload cannot reappear', async () => {
+    const readers = [];
+    class DeferredReader {
+      readAsDataURL() { readers.push(this); }
+      finish() { this.result = 'data:image/png;base64,TEST'; this.onload(); }
+    }
+    const { api, els } = runPage({FileReader: DeferredReader});
+    const photo = api.setAsset('photo', {name: 'photo.png'});
+    const signature = api.setAsset('signature', {name: 'sig.png'});
+    readers[1].finish();
+    await signature;
+    expect(els['create-passport-button'].disabled).toBe(true);
+    await api.setAsset('photo', null);
+    readers[0].finish();
+    await photo;
+    expect(api.state().assets.photo).toBeNull();
+    expect(els['create-passport-button'].disabled).toBe(false);
   });
 });

@@ -943,42 +943,50 @@ function loadImage(uri){
     image.src=uri;
   });
 }
-function setAsset(kind,file){
-  var labels=UPLOAD_LABELS[kind]||UPLOAD_LABELS.photo;
-  var btn=$('form-upload-'+kind+'-button');
+const pendingUploads = new Map();
+function updateCreateButton(){
+  if(createBtn) createBtn.disabled = creating || pendingUploads.size > 0;
+}
+function setCreating(busy){
+  creating = busy;
+  updateCreateButton();
+}
+async function setAsset(kind,file){
+  const labels = UPLOAD_LABELS[kind];
+  const button = $('form-upload-'+kind+'-button');
   if(!file){
-    if(state.assets)state.assets[kind]=null;
+    pendingUploads.delete(kind);
+    if(button) button.disabled = false;
+    updateCreateButton();
+    state.assets[kind]=null;
     render();updateSampleWarning();showUploadState(kind,null);
     say(labels.removed);
-    return Promise.resolve();
+    return;
   }
-  /* MRP-style busy: the upload button and Create stay disabled while
-     the file is read (and the photo is cut out), so a second click
-     cannot queue a duplicate job. */
-  if(btn)btn.disabled=true;
-  if(createBtn&&!creating)createBtn.disabled=true;
-  return readFileAsDataURL(file).then(function(url){
-    return loadImageDims(url).then(function(d){
-      var asset={dataUrl:url,width:d.width,height:d.height,cutoutRendered:''};
-      if(kind==='photo'){
-        return processPhotoCutout(url).then(function(cut){
-          asset.cutoutRendered=cut||'';
-          state.assets[kind]=asset;
-          render();updateSampleWarning();showUploadState(kind,file);
-          say(labels.done);
-        });
-      }
-      state.assets[kind]=asset;
-      render();updateSampleWarning();showUploadState(kind,file);
-      say(labels.done);
-    });
-  }).catch(function(){
-    say('যোগ হয়নি: ছবি পড়া যায়নি — অন্য ছবি দিয়ে চেষ্টা করুন।');
-    toast('ছবি পড়া যায়নি — অন্য ছবি দিয়ে চেষ্টা করুন।');
-  }).then(function(){
-    if(btn)btn.disabled=false;
-    if(createBtn&&!creating)createBtn.disabled=false;
-  });
+  const job = Symbol(kind);
+  pendingUploads.set(kind,job);
+  if(button) button.disabled = true;
+  updateCreateButton();
+  try {
+    const dataUrl = await readFileAsDataURL(file);
+    const {width,height} = await loadImageDims(dataUrl);
+    const cutoutRendered = kind === 'photo' ? await processPhotoCutout(dataUrl) : '';
+    if(pendingUploads.get(kind) !== job) return;
+    state.assets[kind] = {dataUrl,width,height,cutoutRendered:cutoutRendered || ''};
+    render();
+    showUploadState(kind,file);
+    say(labels.done);
+  } catch {
+    if(pendingUploads.get(kind) === job) {
+      say('ফাইলটি খোলা যায়নি। অন্য ছবি দিয়ে আবার চেষ্টা করুন।');
+    }
+  } finally {
+    if(pendingUploads.get(kind) === job) {
+      pendingUploads.delete(kind);
+      if(button) button.disabled = false;
+      updateCreateButton();
+    }
+  }
 }
 
 /* ===== validation (mirrors MRP) ===== */
@@ -1093,6 +1101,7 @@ function snapshotHTML(){
 
 /* ===== charge + create (mirrors MRP) ===== */
 var creating=false, pdfRetry=null, lastPdf=null, formEntered=false;
+const createAttempts = new Map();
 var createBtn=$('create-passport-button'), resultMessage=$('result-message');
 function loadPrice(){
   var line=$('passport-price-line');
@@ -1145,8 +1154,17 @@ function exportPdf(idem,passportNo){
         });
       }
       var ct=(r.headers&&r.headers.get)?String(r.headers.get('content-type')||''):'';
-      if(ct.indexOf('application/pdf')<0)return {ok:false,message:'PDF তৈরি করা যায়নি — আবার চেষ্টা করুন।'};
-      return r.blob().then(function(blob){return {ok:true,blob:blob};});
+      if(ct.split(';')[0].trim().toLowerCase() !== 'application/pdf'){
+        return {ok:false,message:'PDF তৈরি করা যায়নি — আবার চেষ্টা করুন।'};
+      }
+      return r.blob().then(async function(blob){
+        const header = await blob.slice(0,5).text();
+        const tail = await blob.slice(-1024).text();
+        if(header !== '%PDF-' || !tail.trimEnd().endsWith('%%EOF')){
+          return {ok:false,message:'সম্পূর্ণ PDF পাওয়া যায়নি। এই পেজেই আবার চেষ্টা করুন।'};
+        }
+        return {ok:true,blob:blob};
+      });
     });
   }).catch(function(){
     return {ok:false,message:'ইন্টারনেট সংযোগ নেই — সংযোগ ফিরলে আবার চেষ্টা করুন।'};
@@ -1167,14 +1185,14 @@ function reportEngineJob(engineId,refNo,name,blob,fname,idem){
 function finishCreateWithPdf(idem,no,name,charged){
   say('PDF তৈরি করা হচ্ছে…');
   return exportPdf(idem,no).then(function(pdf){
-    creating=false;
-    if(createBtn)createBtn.disabled=false;
+    setCreating(false);
     if(!pdf||!pdf.ok){
       pdfRetry={idem:idem,no:no,charged:charged};
       say((pdf&&pdf.message)?pdf.message:'PDF তৈরি করা যায়নি — আবার চেষ্টা করুন।');
       return false;
     }
     pdfRetry=null;
+    createAttempts.delete(no);
     downloadBlob(pdf.blob,name);
     var nameParts=[engInput('givenName'),engInput('surname')].map(function(el){return el?String(el.value||'').trim():'';}).filter(Boolean);
     reportEngineJob('epassport',no,nameParts.join(' '),pdf.blob,name,idem);
@@ -1188,6 +1206,7 @@ function finishCreateWithPdf(idem,no,name,charged){
   });
 }
 function createEpassport(){
+  if(creating || pendingUploads.size) return;
   applyAll();
   regenerateMRZ();
   var missing=requiredMissing();
@@ -1202,22 +1221,25 @@ function createEpassport(){
     say('পাসপোর্ট তৈরির আগে ঠিক করুন: '+issues[0]);
     return;
   }
-  if(creating)return;
   var pp=up(raw('passportNo')).replace(/\s/g,'');
   var name='E-Passport-'+pp+'.pdf';
   /* Retry of a failed PDF export: the Create for this passport number
      already succeeded and was charged — reuse its idempotency key and
      skip the charge entirely. The key is kept until a PDF succeeds. */
   if(pdfRetry&&pdfRetry.no===pp){
-    creating=true;if(createBtn)createBtn.disabled=true;
+    setCreating(true);
     finishCreateWithPdf(pdfRetry.idem,pp,name,pdfRetry.charged);
     return;
   }
-  var idem='epassport-'+((typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():(Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10)));
-  creating=true;if(createBtn)createBtn.disabled=true;
+  let idem = createAttempts.get(pp);
+  if(!idem){
+    idem='epassport-'+((typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():(Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10)));
+    createAttempts.set(pp,idem);
+  }
+  setCreating(true);
   say('চার্জ যাচাই করা হচ্ছে…');
   chargeCreate(idem,pp).then(function(ch){
-    if(!ch||!ch.ok){creating=false;if(createBtn)createBtn.disabled=false;say(ch&&ch.message?ch.message:'চার্জ যাচাই করা যায়নি — আবার চেষ্টা করুন।');return;}
+    if(!ch||!ch.ok){setCreating(false);say(ch&&ch.message?ch.message:'চার্জ যাচাই করা যায়নি — আবার চেষ্টা করুন।');return;}
     finishCreateWithPdf(idem,pp,name,ch.charged);
   });
 }
@@ -1237,6 +1259,12 @@ function showLanding(){
   body.classList.add('flow-landing');
 }
 function clearForm(){
+  pendingUploads.clear();
+  for(const kind of ['photo','signature']){
+    const button = $('form-upload-'+kind+'-button');
+    if(button) button.disabled = false;
+  }
+  updateCreateButton();
   FORM_KEYS.forEach(function(k){setEng(k,FORM_DEFAULTS[k]||'');});
   setEng('sameEmergency',false);
   state.assets.photo=null;state.assets.signature=null;
