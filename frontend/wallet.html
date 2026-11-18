@@ -159,107 +159,6 @@
   }
 
   /* Gateway-style payment session (premium, 2026-11-04) */
-  .gw-card {
-    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-    border: 1.5px solid #bfdbfe;
-    box-shadow: 0 6px 20px rgba(30, 64, 175, 0.08);
-  }
-  .gw-chips {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-bottom: 14px;
-  }
-  .gw-chip {
-    border: 2px solid var(--border-light);
-    background: #ffffff;
-    border-radius: 999px;
-    padding: 8px 16px;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--text-main);
-    cursor: pointer;
-  }
-  .gw-chip.sel {
-    border-color: var(--primary-600);
-    background: var(--primary-50);
-    color: var(--primary-600);
-  }
-  .gw-timer-row {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
-    border-radius: 12px;
-    padding: 12px 14px;
-    margin-bottom: 14px;
-  }
-  .gw-timer-ring { transform: rotate(-90deg); flex-shrink: 0; }
-  .gw-timer-ring circle { fill: none; stroke-width: 5; }
-  .gw-timer-ring .bg { stroke: #dbeafe; }
-  .gw-timer-ring .fg { stroke: #2563eb; stroke-linecap: round; transition: stroke-dashoffset 1s linear, stroke 0.3s; }
-  .gw-timer-row.warn .gw-timer-ring .fg { stroke: #dc2626; }
-  .gw-timer-row.warn { background: #fef2f2; border-color: #fecaca; }
-  .gw-timer-text { font-size: 26px; font-weight: 800; color: #1e40af; line-height: 1; }
-  .gw-timer-row.warn .gw-timer-text { color: #dc2626; }
-  .gw-timeline {
-    display: flex;
-    gap: 0;
-    margin-bottom: 14px;
-  }
-  .gw-step {
-    flex: 1;
-    text-align: center;
-    font-size: 12px;
-    font-weight: 700;
-    color: #94a3b8;
-    padding-top: 26px;
-    position: relative;
-  }
-  .gw-step::before {
-    content: '';
-    position: absolute;
-    top: 6px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: #e2e8f0;
-    border: 2px solid #cbd5e1;
-  }
-  .gw-step::after {
-    content: '';
-    position: absolute;
-    top: 16px;
-    left: calc(-50% + 14px);
-    width: calc(100% - 28px);
-    height: 2px;
-    background: #e2e8f0;
-  }
-  .gw-step:first-child::after { display: none; }
-  .gw-step.done { color: #059669; }
-  .gw-step.done::before { content: '✓'; color: #fff; background: #059669; border-color: #059669; font-size: 12px; line-height: 18px; }
-  .gw-step.done::after { background: #059669; }
-  .gw-step.active { color: #1e40af; }
-  .gw-step.active::before { background: #2563eb; border-color: #2563eb; animation: gwPulse 1.6s ease-in-out infinite; }
-  @keyframes gwPulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.35); }
-    50% { box-shadow: 0 0 0 6px rgba(37, 99, 235, 0); }
-  }
-  .gw-state {
-    border-radius: 12px;
-    padding: 14px 16px;
-    font-size: 14px;
-    line-height: 1.7;
-    margin-bottom: 12px;
-  }
-  .gw-state.success { background: #ecfdf5; border: 1.5px solid #6ee7b7; color: #065f46; }
-  .gw-state.failed { background: #fef2f2; border: 1.5px solid #fca5a5; color: #991b1b; }
-  .gw-state.duplicate { background: #eff6ff; border: 1.5px solid #93c5fd; color: #1e3a8a; }
-  .gw-state.pending { background: #fffbeb; border: 1.5px solid #fde68a; color: #92400e; }
-  .gw-state.expired { background: #f1f5f9; border: 1.5px solid #cbd5e1; color: #334155; }
   .gw-badge {
     display: inline-flex;
     align-items: center;
@@ -271,12 +170,11 @@
     font-weight: 700;
   }
   .gw-badge.pass { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
-  .gw-badge.fail { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
 </style>
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
-<link rel="stylesheet" href="/css/wallet-preview.css?v=20261110-1">
+<link rel="stylesheet" href="/css/wallet-preview.css?v=20261118-2">
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
 <script src="/js/promotions.js?v=20261111-2"></script>
@@ -316,171 +214,64 @@
 
 
 
-    <!-- Gateway-style quick payment session (premium, 2026-11-04) -->
-    <!-- Client-side session only: starting it calls NO API and creates
-         nothing on the server. The server request happens once, at
-         Auto Match, through the classic /wallet/recharge flow. -->
-    <div class="card gw-card" id="gwCard">
-      <h3>টাকা যোগ করুন</h3>
-      <div class="wp-mode-selector"><button type="button" class="wp-mode selected" onclick="gwBackToAuto()"><strong>অটো পেমেন্ট</strong><small>শুধু নম্বর দিন</small></button><button type="button" class="wp-mode" onclick="gwGoManual()"><strong>TrxID দিয়ে</strong><small>নম্বর + ট্রানজেকশন আইডি</small></button></div>
-
-      <!-- Step 1: session setup -->
-      <div id="gwStep1">
-        <div class="gw-chips" id="gwMethods">
-          <button type="button" class="gw-chip sel" data-m="bkash_payment" onclick="gwSelectMethod(this)">bKash Payment</button>
-          <button type="button" class="gw-chip" data-m="bkash_personal" onclick="gwSelectMethod(this)">bKash Personal</button>
-          <button type="button" class="gw-chip" data-m="nagad" onclick="gwSelectMethod(this)">Nagad</button>
-          <button type="button" class="gw-chip" data-m="rocket" onclick="gwSelectMethod(this)">Rocket</button>
+    <form class="card wp-recharge" id="classicRechargeCard" aria-labelledby="paymentTitle" novalidate>
+      <h2 id="paymentTitle">অটো পেমেন্ট</h2>
+      <p class="wp-payment-intro">টাকা পাঠিয়ে পরিমাণ, প্রেরকের নম্বর ও TrxID দিন।</p>
+      <fieldset class="wp-methods">
+        <legend>পেমেন্ট মাধ্যম</legend>
+        <div class="method-card-grid" id="methods">
+          <label class="pay-method">
+            <input type="radio" name="paymentMethod" value="bkash_payment" checked>
+            <img src="/icons/bkash-logo.webp" alt="">
+            <span>বিকাশ পেমেন্ট</span>
+          </label>
+          <label class="pay-method">
+            <input type="radio" name="paymentMethod" value="bkash_personal">
+            <img src="/icons/bkash-logo.webp" alt="">
+            <span>বিকাশ পার্সোনাল</span>
+          </label>
+          <label class="pay-method">
+            <input type="radio" name="paymentMethod" value="nagad">
+            <img src="/icons/nagad-logo.png" alt="">
+            <span>নগদ</span>
+          </label>
+          <label class="pay-method">
+            <input type="radio" name="paymentMethod" value="rocket">
+            <img src="/icons/rocket-logo.svg" alt="">
+            <span>রকেট</span>
+          </label>
         </div>
-        <div class="wp-receiving"><small id="wpReceiveLabel">বিকাশ পেমেন্ট নম্বর</small><strong id="wpReceiveNumber">নম্বর লোড হচ্ছে…</strong></div>
-        <ol class="wp-instructions"><li>পেমেন্টের নম্বরে টাকা পাঠান।</li><li>যে নম্বর থেকে পাঠিয়েছেন সেটি ও পরিমাণ দিন।</li><li>SMS মিললেই ব্যালেন্স অটো যোগ হবে।</li></ol>
-        <div class="wp-inputs">
-        <div class="field wp-sender">
-          <label for="gwSender">যে নম্বর থেকে টাকা পাঠাবেন</label>
-          <input type="text" inputmode="tel" id="gwSender" placeholder="যে নম্বর থেকে পাঠিয়েছেন" maxlength="15">
+      </fieldset>
+
+      <div class="wp-recipient">
+        <div>
+          <div id="recvLabel">পেমেন্টের নম্বর</div>
+          <strong id="recvNum" dir="ltr">লোড হচ্ছে…</strong>
+        </div>
+        <button type="button" class="btn-secondary" id="copyBtn" hidden>নম্বর কপি</button>
+        <span class="wp-copy-feedback" id="copyFeedback" role="status"></span>
+      </div>
+
+      <div class="wp-recharge-fields">
+        <div class="field">
+          <label for="amount">পাঠানো টাকার পরিমাণ</label>
+          <input type="number" inputmode="decimal" id="amount" placeholder="৳" min="10" max="100000" step="0.01" required>
         </div>
         <div class="field">
-          <label for="gwAmount">টাকার পরিমাণ (৳১০ - ৳১,০০,০০০)</label>
-          <input type="number" id="gwAmount" placeholder="পরিমাণ (৳)" min="10" max="100000">
+          <label for="sender">যে নম্বর থেকে পাঠিয়েছেন</label>
+          <input type="tel" id="sender" placeholder="01XXXXXXXXX" maxlength="11" required>
         </div>
-        </div>
-        <div class="err" id="gwErr"></div>
-        <button class="btn wp-submit" style="width:100%;padding:14px;" onclick="gwStartSession()">পেমেন্ট শুরু করুন →</button>
-        <button class="btn-secondary" style="width:100%;margin-top:10px;padding:12px;" onclick="gwGoManual()">📝 Manual-এ দিন</button>
-      </div>
-
-      <!-- Step 2+: active session -->
-      <div id="gwStep2" style="display:none;">
-        <div class="gw-timer-row" id="gwTimerRow">
-          <svg class="gw-timer-ring" width="56" height="56" viewBox="0 0 56 56">
-            <circle class="bg" cx="28" cy="28" r="24"></circle>
-            <circle class="fg" id="gwRingFg" cx="28" cy="28" r="24" stroke-dasharray="150.8" stroke-dashoffset="0"></circle>
-          </svg>
-          <div style="flex:1;">
-            <div class="gw-timer-text" id="gwTimerText">১০:০০</div>
-            <div style="font-size:12px;color:#64748b;margin-top:2px;">সেশন সময় বাকি</div>
-          </div>
-          <div style="text-align:right;font-size:13px;line-height:1.6;">
-            <div><b id="gwSumMethod">bKash Payment</b></div>
-            <div style="font-size:16px;font-weight:800;color:#0f172a;" id="gwSumAmount">৳০</div>
-            <div style="color:#64748b;" id="gwSumSender"></div>
-          </div>
-        </div>
-
-        <div class="gw-timeline" id="gwTimeline"></div>
-
-        <div class="recv-box" id="gwRecvWrap" style="display:none;">
-          <div style="font-size:12px;font-weight:700;color:#1e40af;text-transform:uppercase;margin-bottom:4px;">সাজেশন — এই নম্বরে পাঠাতে পারেন:</div>
-          <div style="display:flex;gap:12px;align-items:center;">
-            <div id="gwRecvNum" style="font-size:22px;font-weight:800;color:#1e40af;flex:1;letter-spacing:1px;"></div>
-            <button class="btn-secondary" id="gwCopyBtn" onclick="gwCopySuggest()">📋 কপি করুন</button>
-          </div>
-          <div style="font-size:12px;color:#475569;margin-top:6px;">যে কোনো নম্বরে পাঠাতে পারেন — উপরের নম্বর শুধু সাজেশন, বাধ্যতামূলক নয়।</div>
-        </div>
-        <div style="font-size:12.5px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.7;">
-          ১️⃣ উপরের সাজেশন বা আপনার পছন্দের যে কোনো নম্বরে টাকা পাঠান। &nbsp;২️⃣ টাকা পাঠানোর পর শুধু <b>Auto Match</b> চাপ দিন — যে নম্বর থেকে পাঠিয়েছেন সেটি ও টাকার পরিমাণ SMS-এর সঙ্গে মিলে যাবে।
-        </div>
-
-        <div class="gw-auto-note">🔒 Auto-তে TrxID লাগবে না। নম্বর ও পরিমাণ মিললে SMS-এর আসল TrxID নিজে থেকেই সংরক্ষিত হবে।</div>
-        <div class="err" id="gwErr2"></div>
-        <div id="gwState"></div>
-        <button class="btn" id="gwMatchBtn" style="width:100%;padding:14px;" onclick="gwAutoMatch()">🔍 Auto Match</button>
-        <button class="btn-secondary" style="width:100%;margin-top:10px;padding:12px;" onclick="gwNewSession()">↩ নতুন সেশন</button>
-        <button class="btn-secondary" style="width:100%;margin-top:10px;padding:12px;" onclick="gwGoManual()">📝 Manual-এ দিন</button>
-      </div>
-
-      <!-- Expired state -->
-      <div id="gwExpired" style="display:none;">
-        <div class="gw-state expired">
-          <b>⏰ সেশন সময় শেষ হয়েছে।</b>
-          <div id="gwExpiredNote" style="margin-top:4px;">নতুন সেশন শুরু করুন, অথবা ম্যানুয়াল ফর্মে TrxID দিয়ে রিকোয়েস্ট পাঠান।</div>
-        </div>
-        <button class="btn" style="width:100%;padding:14px;" onclick="gwNewSession()">↩ নতুন সেশন শুরু করুন</button>
-        <button class="btn-secondary" style="width:100%;margin-top:10px;padding:12px;" onclick="gwScrollManual()">📝 ম্যানুয়াল ফর্মে যান</button>
-      </div>
-    </div>
-
-    <!-- Manual section: its own clean view (2026-11-04 redesign).
-         The auto session card is hidden while this is shown; the
-         'Auto-তে ফিরুন' button returns to it. No inline expand. -->
-    <div id="manualSection" style="display:none;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-        <button class="btn-secondary" style="padding:10px 16px;" onclick="gwBackToAuto()">← Auto-তে ফিরুন</button>
-        <h3 style="margin:0;">📝 Manual-এ টাকা যোগ করুন</h3>
-      </div>
-
-    <!-- Recharge Form Card -->
-    <div class="card" id="classicRechargeCard">
-      <h3>টাকা যোগ করুন</h3><div class="wp-mode-selector"><button type="button" class="wp-mode" onclick="gwBackToAuto()"><strong>অটো পেমেন্ট</strong><small>শুধু নম্বর দিন</small></button><button type="button" class="wp-mode selected" onclick="gwGoManual()"><strong>TrxID দিয়ে</strong><small>নম্বর + ট্রানজেকশন আইডি</small></button></div>
-      <p style="font-size:13px;color:#64748b;margin-bottom:16px;">নিচের যেকোনো মাধ্যমে টাকা পাঠিয়ে TrxID সাবমিট করুন। SMS মিললে স্বয়ংক্রিয়ভাবে ব্যালেন্স যোগ হবে, না হলে এডমিন যাচাই করে যোগ করবেন।</p>
-
-      <div id="manualGuide" style="font-size:12.5px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.7;">
-        <b style="color:#0f172a;">Manual-এ দেওয়ার নির্দেশনা:</b><br>
-        ১️⃣ যেকোনো মাধ্যমে (bKash/Nagad/Rocket) যেকোনো নম্বরে টাকা পাঠান।<br>
-        ২️⃣ নিচের ফর্মে method, টাকার পরিমাণ, যে নম্বর থেকে পাঠিয়েছেন ও TrxID লিখুন।<br>
-        ৩️⃣ “টাকা যোগ করার রিকোয়েস্ট পাঠান” চাপ দিন।<br>
-        ৪️⃣ SMS মিললে স্বয়ংক্রিয়ভাবে অনুমোদিত হবে, না হলে এডমিন যাচাই করে ব্যালেন্স যোগ করবেন।
-      </div>
-
-      <div class="method-card-grid" id="methods">
-        <div class="method pay-method sel" data-m="bkash_payment">
-          <img src="/icons/bkash-logo.webp" alt="bKash">
-          <div>bKash Payment</div>
-        </div>
-        <div class="method pay-method" data-m="bkash_personal">
-          <img src="/icons/bkash-logo.webp" alt="bKash">
-          <div>bKash Personal</div>
-        </div>
-        <div class="method pay-method" data-m="nagad">
-          <img src="/icons/nagad-logo.png" alt="Nagad">
-          <div>Nagad</div>
-        </div>
-        <div class="method pay-method" data-m="rocket">
-          <img src="/icons/rocket-logo.svg" alt="Rocket">
-          <div>Rocket</div>
+        <div class="field wp-reference">
+          <label for="trxid">ট্রানজ্যাকশন আইডি (TrxID)</label>
+          <input type="text" id="trxid" maxlength="40" autocapitalize="characters" spellcheck="false" aria-describedby="trxidHint" required>
+          <small id="trxidHint">পেমেন্টের এসএমএস বা অ্যাপ থেকে TrxID কপি করুন।</small>
         </div>
       </div>
 
-      <div class="recv-box" id="recvNumWrap" style="display:none;">
-        <div style="font-size:12px;font-weight:700;color:#1e40af;text-transform:uppercase;margin-bottom:4px;">এই নম্বরে টাকা পাঠান:</div>
-        <div style="display:flex;gap:12px;align-items:center;">
-          <div id="recvNum" style="font-size:22px;font-weight:800;color:#1e40af;flex:1;letter-spacing:1px;"></div>
-          <button class="btn-secondary" id="copyBtn" onclick="copyRecvNum()">📋 কপি করুন</button>
-        </div>
-      </div>
-
-      <ol class="wp-instructions"><li>উপরের নম্বরে টাকা পাঠান।</li><li>আপনার নম্বর, টাকার পরিমাণ ও TrxID দিন।</li><li>SMS মিললে ব্যালেন্স যোগ হবে, না মিললে এডমিন যাচাই করবেন।</li></ol>
-      <div class="wp-manual-inputs">
-      <div class="field">
-        <label for="amount">টাকার পরিমাণ (৳১০ - ৳১,০০,০০০)</label>
-        <input type="number" id="amount" placeholder="পরিমাণ (৳)" min="10" max="100000">
-        <div class="quick-amounts">
-          <div class="amount-chip" onclick="setAmount(100)">+ ৳১০০</div>
-          <div class="amount-chip" onclick="setAmount(500)">+ ৳৫০০</div>
-          <div class="amount-chip" onclick="setAmount(1000)">+ ৳১,০০০</div>
-          <div class="amount-chip" onclick="setAmount(2000)">+ ৳২,০০০</div>
-          <div class="amount-chip" onclick="setAmount(5000)">+ ৳৫,০০০</div>
-        </div>
-      </div>
-
-      <div class="field">
-        <label for="sender">যে নম্বর থেকে টাকা পাঠিয়েছেন (সেন্ডার নম্বর)</label>
-        <input type="text" inputmode="tel" id="sender" placeholder="যে নম্বর থেকে পাঠিয়েছেন" maxlength="15">
-      </div>
-
-      <div class="field">
-        <label for="trxid">ট্রানজ্যাকশন আইডি (TrxID)</label>
-        <input type="text" id="trxid" placeholder="যেমন: BL10293847" maxlength="40">
-        <div style="margin-top:8px;padding:10px 12px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:12.5px;line-height:1.6;">⚠️ <b>সতর্কতা:</b> ডুপ্লিকেট (আগে ব্যবহৃত) বা ভুল/ভুয়া ট্রানজ্যাকশন আইডি (TrxID) দিয়ে বারবার চেষ্টা করলে আপনার অ্যাকাউন্ট <b>স্থায়ীভাবে ব্লক</b> করা হতে পারে। শুধুমাত্র সঠিক TrxID ও সঠিক টাকার পরিমাণ লিখুন।</div>
-      </div>
-
-      </div>
-      <div class="err" id="err"></div>
-      <div class="okmsg" id="ok"></div>
-
-      <button class="btn wp-submit" style="width:100%;margin-top:10px;padding:14px;" onclick="submitRecharge()">টাকা যোগ করার রিকোয়েস্ট পাঠান →</button>
-    </div>
-    </div>
+      <div class="err" id="err" role="alert"></div>
+      <button type="submit" class="btn wp-submit" id="rechargeSubmit">রিচার্জ অনুরোধ পাঠান</button>
+      <div class="wp-recharge-status" id="ok" role="status" tabindex="-1"></div>
+    </form>
 
     </div>
     <!-- Transaction History -->
@@ -553,7 +344,7 @@
       <h3>🛡️ রিফান্ড ও ব্যালেন্স পলিসি</h3>
       <div style="font-size:13px;line-height:1.8;color:#475569;">
         <p>• সেবা শুরু হওয়ার আগে যেকোনো সময় অর্ডার বাতিল করলে সম্পূর্ণ টাকা ইনস্ট্যান্ট ওয়ালেটে ফেরত আসবে।</p>
-        <p>• SMS মিললে রিচার্জ স্বয়ংক্রিয়ভাবে অনুমোদিত হয়, না হলে এডমিন যাচাই করে জমা করেন।</p>
+        <p>• এসএমএসের সঙ্গে TrxID ও পরিমাণ মিললে রিচার্জ অনুমোদিত হয়। প্রয়োজনে অ্যাডমিন যাচাই করেন।</p>
         <p>• নির্দিষ্ট সেবার ক্রেডিট দিয়ে নেওয়া অর্ডার বাতিল হলে সেই অংশ আবার ওই সেবার ক্রেডিটে ফেরত যায়; সাধারণ ব্যালেন্সে যায় না।</p>
         <p>• ক্যাশব্যাক দিনে একবার সংগ্রহ করা যায়; সংগ্রহের পরে সেদিনের নতুন রিচার্জে আর ক্যাশব্যাক যোগ হয় না।</p>
         <p>• যেকোনো রিচার্জ বা লেনদেন সম্পর্কিত জটিলতায় নিচের WhatsApp বাটনে যোগাযোগ করতে পারেন।</p>
@@ -596,53 +387,60 @@
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
 const TYPBN={recharge:'রিচার্জ',order_payment:'অর্ডার ফি',refund:'রিফান্ড',coupon:'কুপন',admin_adjustment:'এডমিন সমন্বয়',cashback:'ক্যাশব্যাক',promo:'প্রোমো',debit:'ডেবিট',bonus:'বোনাস'}; // audit #35 — cashback/promo/debit/bonus showed raw English
-let method='bkash_payment', rechargeNums={};
-
-function setAmount(n){
-  const el = document.getElementById('amount');
-  if(el){ el.value = n; el.focus(); }
-}
+const PAYMENT_METHOD_NAMES = { bkash_payment: 'বিকাশ পেমেন্ট', bkash_personal: 'বিকাশ পার্সোনাল', nagad: 'নগদ', rocket: 'রকেট' };
+const RECHARGE_FORM = document.getElementById('classicRechargeCard');
+let rechargeNums = {};
+let rechargeStorageKey = '';
 
 function updateRecvNum(){
-  const w=document.getElementById('recvNumWrap');
-  if(!w) return;
-  const num=rechargeNums[method]||'';
-  w.style.display=num?'block':'none';
-  if(num) document.getElementById('recvNum').textContent=num;
+  const method = RECHARGE_FORM.elements.paymentMethod.value;
+  const number = rechargeNums[method];
+  document.getElementById('recvLabel').textContent = PAYMENT_METHOD_NAMES[method] + ' নম্বর';
+  document.getElementById('recvNum').textContent = number || 'এই মাধ্যমের গ্রহণ নম্বর পাওয়া যাচ্ছে না';
+  document.getElementById('copyBtn').hidden = !number;
+  document.getElementById('copyFeedback').textContent = '';
 }
 
-function copyRecvNum(){
-  const n=document.getElementById('recvNum').textContent;
-  const btn = document.getElementById('copyBtn');
-  if(n&&navigator.clipboard){
-    navigator.clipboard.writeText(n);
-    if(btn){
-      const orig = btn.textContent;
-      btn.textContent = '✅ কপি হয়েছে!';
-      setTimeout(() => btn.textContent = orig, 2000);
-    }
+async function copyRecvNum(){
+  const number = rechargeNums[RECHARGE_FORM.elements.paymentMethod.value];
+  if (!number) return;
+  const feedback = document.getElementById('copyFeedback');
+  try {
+    await navigator.clipboard.writeText(number);
+    feedback.textContent = 'নম্বর কপি হয়েছে।';
+  } catch (_) {
+    window.getSelection()?.selectAllChildren(document.getElementById('recvNum'));
+    feedback.textContent = 'নম্বর নির্বাচন করা হয়েছে। এখান থেকে কপি করুন।';
   }
 }
+
+RECHARGE_FORM.addEventListener('change', event => {
+  if (event.target.name === 'paymentMethod') updateRecvNum();
+});
+RECHARGE_FORM.addEventListener('submit', submitRecharge);
+document.getElementById('copyBtn').addEventListener('click', copyRecvNum);
 
 async function init(){
   const me=await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
   const wu=(await me.json()).user||{};
+  document.getElementById('wpAccountName').textContent = wu.name || 'আপনার অ্যাকাউন্ট';
+  rechargeStorageKey = wu.id ? 'abc_wallet_recharge:' + wu.id : '';
   document.getElementById('waFab').onclick=()=>{
     window.open('https://wa.me/8801835414122?text='+encodeURIComponent('আসসালামু আলাইকুম! আমি '+wu.name+' (ফোন: '+wu.phone+')। সাহায্য দরকার।'),'_blank');
   };
   try{const nr=await ABC.api('/recharge-numbers');if(nr.ok)rechargeNums=(await nr.json()).numbers||{};}catch(e){}
-  document.querySelectorAll('#methods .method').forEach(m=>{
-    m.onclick=()=>{
-      document.querySelectorAll('#methods .method').forEach(x=>x.classList.remove('sel'));
-      m.classList.add('sel');
-      method=m.dataset.m;
-      updateRecvNum();
-    };
-  });
+  const methods = RECHARGE_FORM.elements.paymentMethod;
+  if (!rechargeNums[methods.value]) {
+    const available = Array.from(methods).find(option => rechargeNums[option.value]);
+    if (available) available.checked = true;
+  }
   updateRecvNum();
   loadWallet();
-  gwRestoreSession(); // audit #20 — resume a live gateway session after a reload
+  try {
+    const ref = rechargeStorageKey && sessionStorage.getItem(rechargeStorageKey);
+    if (ref) startRechargePolling(ref, true);
+  } catch (_) {}
 }
 
 const bn = n => Number(n || 0).toLocaleString('bn-BD');
@@ -656,7 +454,7 @@ const shortRef = x => {
   const m = x.match(/^order-([0-9a-f]{8})/i);
   return m ? '#' + m[1] : x;
 };
-const isAutoRechargeRef = t => t.type === 'recharge' &&
+const isLegacyRechargeRef = t => t.type === 'recharge' &&
   (!t.trxid || /^AUTO-[0-9A-F]{12}$/i.test(String(t.trxid)));
 
 // Audit #35 — "কতক্ষণ ধরে পেন্ডিং" in plain words.
@@ -785,7 +583,9 @@ async function loadWallet(reset = true){
       return false;
     }
     const d=await r.json();
-    document.getElementById('bal').textContent='৳'+bn(d.balance);
+    const balance = '৳' + bn(d.balance);
+    document.getElementById('bal').textContent = balance;
+    document.getElementById('wpHeaderBalance').textContent = balance;
   // shortRef is global
   const fmtAmt=a=>{a=Number(a);return (a<0?'-':'+')+'৳'+Math.abs(a).toLocaleString('bn-BD');};
   const fmtDt=s=>{try{return new Date(s).toLocaleString('bn-BD').replace(' PM',' পিএম').replace(' AM',' এএম');}catch(e){return '';}};
@@ -800,14 +600,13 @@ async function loadWallet(reset = true){
       if (t.status === 'pending') {
         // Audit #35 — how long it has waited + whether its SMS arrived.
         cbHtml = '<div class="cb-badge pending">⏳ পেন্ডিং — ' + esc(fmtElapsed(t.created_at)) + ' ধরে অপেক্ষায়' +
-          (t.sms_arrived ? ' • 📩 SMS এসেছে' : ' • 📩 SMS এখনো আসেনি') +
-          '<br>SMS মিললে স্বয়ংক্রিয়ভাবে অনুমোদিত হবে, না হলে এডমিন যাচাই করবেন' +
+          '<br>যাচাই চলছে' +
           (cbCfg.enabled && cbCfg.percent > 0 ? ' (অনুমোদন হলে ' + bn(cbCfg.percent) + '% ক্যাশব্যাক পাবেন)' : '') +
           '</div>';
       } else if (t.status === 'approved') {
         // Premium pass badge (2026-11-04): every approved recharge shows
         // its status, not only ones with a coupon. Coupon badge follows.
-        cbHtml = '<span class="gw-badge pass">✅ পাস — ৳' + bn(t.amount) + ' যোগ হয়েছে</span>';
+        cbHtml = '<span class="gw-badge pass">✅ অনুমোদিত · ৳' + bn(t.amount) + ' যোগ হয়েছে</span>';
         const coupon = t.coupon;
         if (coupon && coupon.code) {
           if (coupon.status === 'redeemed') {
@@ -822,16 +621,16 @@ async function loadWallet(reset = true){
         // day on the combined total from the hub card above (2026-10-21).
       } else if (t.status === 'rejected') {
         // Audit #28 — the stored cancel reason, when the admin gave one.
-        cbHtml = '<div class="cb-badge pending" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;">❌ ব্যর্থ — এডমিন যাচাইয়ে বাতিল হয়েছে।' + (t.cancel_reason ? '<br>কারণ: ' + esc(t.cancel_reason) + '<br>' : ' ') + 'নতুন সেশন বা ম্যানুয়াল ফর্মে আবার চেষ্টা করুন।</div>';
+        cbHtml = '<div class="cb-badge pending" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;">❌ ব্যর্থ — এডমিন যাচাইয়ে বাতিল হয়েছে।' + (t.cancel_reason ? '<br>কারণ: ' + esc(t.cancel_reason) + '<br>' : ' ') + 'বিস্তারিত দেখতে রিচার্জের তথ্য মিলিয়ে নিন।</div>';
       }
     }
 
     // Audit #35 — method + paying number on the row (the API already
     // returned them; the row just never showed them).
     const methodLine = t.type === 'recharge'
-      ? '<br><small style="color:#64748b;">' + esc(GW_METHOD_NAMES[t.method] || t.method || '') + (t.sender_no ? ' • ' + esc(t.sender_no) : '') + '</small>'
+      ? '<br><small style="color:#64748b;">' + esc(PAYMENT_METHOD_NAMES[t.method] || t.method || '') + (t.sender_no ? ' • ' + esc(t.sender_no) : '') + '</small>'
       : '';
-    const refLabel = isAutoRechargeRef(t) ? 'Auto • নম্বর + পরিমাণের SMS match' : shortRef(t.trxid);
+    const refLabel = isLegacyRechargeRef(t) ? 'আগের রিচার্জ' : shortRef(t.trxid);
     return '<div class="tx"><div style="flex:1;min-width:0;"><b style="font-size:14px;color:#0f172a;">' +
       esc(TYPBN[t.type] || t.type) + '</b> <small style="color:#94a3b8;margin-left:6px;word-break:break-all;">' +
       esc(refLabel) + '</small>' + methodLine + '<br><small style="color:#64748b;">' +
@@ -940,382 +739,7 @@ function copyCode(code) {
   }
 }
 
-// ============================================================
-// Gateway-style payment session (premium, 2026-11-04)
-// Client-side only until Auto Match: starting a session performs NO
-// network request and creates nothing server-side, so no admin notice
-// can fire at session start. Timer expiry likewise calls NO API and
-// cancels nothing — a submitted pending request stays pending for
-// admin verification and stays visible in the wallet history below.
-// Auto Match calls POST /wallet/recharge/auto with only method, sender
-// number and amount. Manual has its own exact-TrxID form below.
-// No receipt view: the wallet history below is the record.
-// ============================================================
-const GW_SESSION_SECONDS = 600;
-const GW_WARN_SECONDS = 60;
-const GW_METHOD_NAMES = { bkash_payment: 'bKash Payment', bkash_personal: 'bKash Personal', nagad: 'Nagad', rocket: 'Rocket' };
-let gwMethod = 'bkash_payment';
-let gw = null;
-
-function gwFmtDt(s){ try{ return new Date(s).toLocaleString('bn-BD').replace(' PM',' পিএম').replace(' AM',' এএম'); }catch(e){ return ''; } }
-function gwFmtTimer(sec){ const m = Math.floor(sec / 60), s = sec % 60; return bn(m) + ':' + String(bn(s)).padStart(2, '০'); }
-
-function gwSelectMethod(btn){
-  document.querySelectorAll('#gwMethods .gw-chip').forEach(function(x){ x.classList.remove('sel'); });
-  btn.classList.add('sel');
-  gwMethod = btn.dataset.m;
-}
-
-function gwStopAll(){
-  if (!gw) return;
-  if (gw.timerId) clearInterval(gw.timerId);
-  if (gw.pollId) clearInterval(gw.pollId);
-  gw.timerId = null;
-  gw.pollId = null;
-}
-function gwStopPolling(){ if (gw && gw.pollId) { clearInterval(gw.pollId); gw.pollId = null; } }
-// Audit #18 — the session timer must stop when the session is
-// done: the success/reject paths used to stop only polling, so
-// the 10-minute timer kept running and gwTick expired the session
-// on top of the success card.
-// Audit #20 — the gateway session survives a reload: the live
-// session (method, own paying number, amount, absolute deadline,
-// submitted transaction ID) is persisted in localStorage on start and on
-// submit, and restored on page load with the timer and the match
-// polling resumed. Only the user's own session values are stored
-// (same-origin localStorage; no token or password ever). A done
-// or expired session is cleared, never restored.
-var GW_STORE_KEY = 'abc_gw_session_v1';
-function gwSaveSession(){
-  try {
-    if (!gw || gw.done) { localStorage.removeItem(GW_STORE_KEY); return; }
-    localStorage.setItem(GW_STORE_KEY, JSON.stringify({
-      method: gw.method, sender: gw.sender, amount: gw.amount,
-      endsAt: gw.endsAt, submitted: !!gw.submitted,
-      submittedId: gw.submittedId || null, legacyRef: gw.legacyRef || null,
-      pausedAt: gw.pausedAt || null
-    }));
-  } catch (e) { /* storage unavailable — the session just won't survive a reload */ }
-}
-function gwClearSession(){
-  try { localStorage.removeItem(GW_STORE_KEY); } catch (e) {}
-}
-function gwRestoreSession(){
-  var raw = null;
-  try { raw = localStorage.getItem(GW_STORE_KEY); } catch (e) { return false; }
-  if (!raw) return false;
-  var s;
-  try { s = JSON.parse(raw); } catch (e) { gwClearSession(); return false; }
-  if (!s || !s.endsAt || !s.sender || !s.amount) { gwClearSession(); return false; }
-  // Bug-hunt F4 — a paused session's deadline was frozen at pause
-  // time: shift it by the paused duration BEFORE the expiry check,
-  // or a session paused near its deadline would be cleared as
-  // expired on reload even though the pause should have frozen it.
-  // The reload itself resumes the session (the page loads on the
-  // auto card), so pausedAt is cleared — and the resumed session
-  // is saved below, so a second reload does not shift it again.
-  var endsAt = s.endsAt;
-  if (s.pausedAt && s.pausedAt > 0 && s.pausedAt <= Date.now()) {
-    endsAt = s.endsAt + (Date.now() - s.pausedAt);
-  }
-  if (endsAt <= Date.now()) { gwClearSession(); return false; } // expired while away
-  gw = { method: s.method || 'bkash_payment', sender: s.sender, amount: s.amount,
-         endsAt: endsAt, timerId: null, pollId: null,
-         submitted: !!s.submitted, submittedId: s.submittedId || null,
-         // Sessions created before the no-TrxID fix only stored AUTO-*.
-         // Keep polling those through the legacy lookup; never show the
-         // placeholder as a payment-provider TrxID.
-         legacyRef: s.legacyRef || s.submittedTrxid || null, done: false, pausedAt: null };
-  document.getElementById('gwSumMethod').textContent = GW_METHOD_NAMES[gw.method] || gw.method;
-  document.getElementById('gwSumAmount').textContent = '৳' + bn(gw.amount);
-  document.getElementById('gwSumSender').textContent = gw.sender;
-  var num = rechargeNums[gw.method] || '';
-  document.getElementById('gwRecvWrap').style.display = num ? 'block' : 'none';
-  if (num) document.getElementById('gwRecvNum').textContent = num;
-  document.getElementById('gwErr2').textContent = '';
-  document.getElementById('gwState').innerHTML = gw.submitted
-    ? '<div class="gw-state pending"><b>⏳ SMS এখনো আসেনি।</b><br>রিকোয়েস্ট জমা হয়েছে — SMS এলে স্বয়ংক্রিয়ভাবে মিলে যাবে, না হলে এডমিন যাচাই করবেন। টাকা হারাবে না।</div>'
-    : '';
-  gwRenderTimeline(gw.submitted ? 'sms' : 'pay');
-  document.getElementById('gwStep1').style.display = 'none';
-  document.getElementById('gwExpired').style.display = 'none';
-  document.getElementById('gwStep2').style.display = 'block';
-  gwTick();
-  gw.timerId = setInterval(gwTick, 1000);
-  if (gw.submitted && (gw.submittedId || gw.legacyRef)) {
-    gwStartPolling(); // audit #38 — starts with an immediate flip-check
-  }
-  gwSaveSession(); // bug-hunt F4 — persist the resumed deadline so a
-  // second reload does not shift it again
-  return true;
-}
-function gwStopTimer(){ if (gw && gw.timerId) { clearInterval(gw.timerId); gw.timerId = null; } }
-
-function gwRenderTimeline(active){
-  const steps = [['pay', '💳 পেমেন্ট'], ['sms', '📩 SMS'], ['match', '🔍 ম্যাচ'], ['balance', '💰 ব্যালেন্স']];
-  const order = ['pay', 'sms', 'match', 'balance'];
-  const ai = order.indexOf(active);
-  document.getElementById('gwTimeline').innerHTML = order.map(function(k, i){
-    const cls = i < ai ? 'done' : (i === ai ? 'active' : '');
-    return '<div class="gw-step ' + cls + '">' + steps[i][1] + '</div>';
-  }).join('');
-}
-function gwRenderTimelineDone(){
-  const steps = ['💳 পেমেন্ট', '📩 SMS', '🔍 ম্যাচ', '💰 ব্যালেন্স'];
-  document.getElementById('gwTimeline').innerHTML = steps.map(function(s){
-    return '<div class="gw-step done">' + s + '</div>';
-  }).join('');
-}
-
-function gwStartSession(){
-  const err = document.getElementById('gwErr');
-  err.textContent = '';
-  const sender = document.getElementById('gwSender').value.trim();
-  const amt = Number(document.getElementById('gwAmount').value);
-  if (!/^01[3-9]\d{8}$/.test(sender)) {
-    err.textContent = '❌ যে নম্বর থেকে টাকা পাঠাবেন তা সঠিকভাবে লিখুন (01XXXXXXXXX)';
-    return;
-  }
-  if (!amt || amt < 10 || amt > 100000) {
-    err.textContent = '❌ অনুগ্রহ করে ৳১০ - ৳১,০০,০০০ এর মধ্যে পরিমাণ লিখুন';
-    return;
-  }
-  gwStopAll();
-  gw = { method: gwMethod, sender: sender, amount: amt,
-         endsAt: Date.now() + GW_SESSION_SECONDS * 1000,
-         timerId: null, pollId: null, submitted: false,
-         submittedId: null, legacyRef: null, done: false, pausedAt: null };
-  gwSaveSession(); // audit #20 — persist so a reload resumes the session
-  document.getElementById('gwSumMethod').textContent = GW_METHOD_NAMES[gwMethod] || gwMethod;
-  document.getElementById('gwSumAmount').textContent = '৳' + bn(amt);
-  document.getElementById('gwSumSender').textContent = sender;
-  const num = rechargeNums[gwMethod] || '';
-  document.getElementById('gwRecvWrap').style.display = num ? 'block' : 'none';
-  if (num) document.getElementById('gwRecvNum').textContent = num;
-  document.getElementById('gwErr2').textContent = '';
-  document.getElementById('gwState').innerHTML = '';
-  gwRenderTimeline('pay');
-  document.getElementById('gwStep1').style.display = 'none';
-  document.getElementById('gwExpired').style.display = 'none';
-  document.getElementById('gwStep2').style.display = 'block';
-  gwTick();
-  gw.timerId = setInterval(gwTick, 1000);
-}
-
-function gwTick(){
-  // Audit #18 — a done session never expires: even if some path
-  // sets gw.done without stopping the timer, the tick must not
-  // turn a success/reject card into the expired view.
-  if (!gw || gw.done) return;
-  const rem = Math.max(0, Math.round((gw.endsAt - Date.now()) / 1000));
-  document.getElementById('gwTimerText').textContent = gwFmtTimer(rem);
-  const ring = document.getElementById('gwRingFg');
-  if (ring) ring.style.strokeDashoffset = String(150.8 * (1 - rem / GW_SESSION_SECONDS));
-  document.getElementById('gwTimerRow').classList.toggle('warn', rem <= GW_WARN_SECONDS);
-  if (rem <= 0) gwExpireSession();
-}
-
-function gwExpireSession(){
-  // Timer expiry cancels NOTHING and calls NO API by design. A pending
-  // request submitted before expiry stays pending for admin verification
-  // and stays visible in the wallet history below — money never lost.
-  gwStopAll();
-  gwClearSession(); // audit #20 — an expired session is never restored
-  const wasPending = !!(gw && gw.submitted && !gw.done);
-  document.getElementById('gwStep2').style.display = 'none';
-  document.getElementById('gwExpiredNote').textContent = wasPending
-    ? 'আপনার রিকোয়েস্ট পেন্ডিং আছে — SMS মিললে স্বয়ংক্রিয়ভাবে মিলে যাবে, না হলে এডমিন যাচাই করবেন, টাকা হারাবে না। নতুন সেশন শুরু করুন, অথবা ম্যানুয়াল ফর্মে TrxID দিয়ে রিকোয়েস্ট পাঠান।'
-    : 'নতুন সেশন শুরু করুন, অথবা ম্যানুয়াল ফর্মে TrxID দিয়ে রিকোয়েস্ট পাঠান।';
-  document.getElementById('gwExpired').style.display = 'block';
-  loadWallet();
-}
-
-function gwNewSession(){
-  gwStopAll();
-  gw = null;
-  document.getElementById('gwStep2').style.display = 'none';
-  document.getElementById('gwExpired').style.display = 'none';
-  document.getElementById('gwStep1').style.display = 'block';
-  document.getElementById('gwErr').textContent = '';
-}
-
-function gwCopySuggest(){
-  const n = document.getElementById('gwRecvNum').textContent;
-  const btn = document.getElementById('gwCopyBtn');
-  if (n && navigator.clipboard) {
-    navigator.clipboard.writeText(n);
-    if (btn) {
-      const orig = btn.textContent;
-      btn.textContent = '✅ কপি হয়েছে!';
-      setTimeout(function(){ btn.textContent = orig; }, 2000);
-    }
-  }
-}
-
-function gwGoManual(){
-  // Audit #19 — leaving for Manual PAUSES the auto session: the
-  // timer and the match polling stop, and the deadline is frozen
-  // (pausedAt) so the session does not die while the user reads
-  // the manual instructions. gwBackToAuto resumes it.
-  if (gw && !gw.done && !gw.pausedAt) {
-    gw.pausedAt = Date.now();
-    gwStopAll();
-    gwSaveSession(); // bug-hunt F4 — persist the pause, or a reload
-    // would restore an un-paused session ticking on the old deadline
-  }
-  const gwCard = document.getElementById('gwCard');
-  if (gwCard) gwCard.style.display = 'none';
-  const ms = document.getElementById('manualSection');
-  if (ms) { ms.style.display = 'block'; ms.scrollIntoView({ behavior: 'smooth' }); }
-}
-
-function gwScrollManual(){
-  gwGoManual();
-}
-
-function gwBackToAuto(){
-  const ms = document.getElementById('manualSection');
-  if (ms) ms.style.display = 'none';
-  const gwCard = document.getElementById('gwCard');
-  if (gwCard) { gwCard.style.display = 'block'; gwCard.scrollIntoView({ behavior: 'smooth' }); }
-  // Audit #19 — resume the paused auto session: shift the
-  // deadline by the time spent in Manual, restart the timer
-  // (and the match polling, if a request was submitted).
-  if (gw && !gw.done && gw.pausedAt) {
-    gw.endsAt += Date.now() - gw.pausedAt;
-    gw.pausedAt = null;
-    gwSaveSession(); // bug-hunt F4 — persist the extended deadline,
-    // or a reload would restore the stale pre-pause deadline
-    if (!gw.timerId) { gwTick(); gw.timerId = setInterval(gwTick, 1000); }
-    if (gw.submitted && !gw.pollId) gwStartPolling();
-  }
-}
-
-async function gwAutoMatch(){
-  if (!gw || gw.done) return;
-  const errEl = document.getElementById('gwErr2');
-  const stateEl = document.getElementById('gwState');
-  const btn = document.getElementById('gwMatchBtn');
-  // One session, one pending request. Tracking uses the immutable
-  // transaction ID, never a provider TrxID or an invented AUTO-* value.
-  if (gw.submitted) {
-    errEl.textContent = '';
-    stateEl.innerHTML = '<div class="gw-state pending"><b>⏳ SMS এখনো আসেনি।</b><br>' +
-      'আপনার রিকোয়েস্টটি জমা আছে — SMS এলে স্বয়ংক্রিয়ভাবে মিলে যাবে, না হলে এডমিন যাচাই করবেন। টাকা হারাবে না।</div>';
-    gwRenderTimeline('sms');
-    return;
-  }
-  errEl.textContent = '';
-  stateEl.innerHTML = '';
-  btn.disabled = true;
-  btn.textContent = '⏳ মিলিয়ে দেখা হচ্ছে…';
-  try {
-    const r = await ABC.api('/wallet/recharge/auto', {
-      method: 'POST',
-      body: { method: gw.method, sender_no: gw.sender, amount: gw.amount }
-    });
-    const d = await r.json();
-    if (!r.ok) {
-      if (d.error === 'DUP_TRXID' && d.existing_tx) {
-        const ex = d.existing_tx;
-        const stTxt = ex.status === 'approved' ? 'পাস (অনুমোদিত)' : (ex.status === 'rejected' ? 'প্রত্যাখ্যাত' : 'পেন্ডিং');
-        stateEl.innerHTML = '<div class="gw-state duplicate"><b>ℹ️ এই TrxID-র রিচার্জ আগেই আছে।</b><br>' +
-          'পরিমাণ: <b>৳' + bn(ex.amount) + '</b> • তারিখ: <b>' + esc(gwFmtDt(ex.created_at)) + '</b> • অবস্থা: <b>' + stTxt + '</b>' +
-          (ex.status === 'approved' ? '<br>✅ এই টাকা ইতিমধ্যে ব্যালেন্সে যোগ হয়েছে।' : '') +
-          // Audit #28 — a rejected original shows WHY it was rejected.
-          (ex.status === 'rejected' && ex.cancel_reason ? '<br>কারণ: ' + esc(ex.cancel_reason) : '') +
-          '</div>';
-        if (ex.status === 'approved') gwRenderTimelineDone(); else gwRenderTimeline('match');
-      } else if (d.error === 'DUP_TRXID') {
-        errEl.textContent = '❌ এই ট্রানজ্যাকশন আইডি (TrxID) ইতিপূর্বে ব্যবহার করা হয়েছে।';
-      } else if (d.error === 'TRXID_AMOUNT_MISMATCH') {
-        stateEl.innerHTML = '<div class="gw-state failed"><b>❌ পরিমাণ মেলেনি।</b><br>' +
-          'আপনার পাঠানো টাকার SMS এ ৳' + bn(d.sms_amount || 0) + ' এসেছে — আপনি ৳' + bn(gw.amount) + ' লিখেছেন।<br>' +
-          'সঠিক পরিমাণ দিয়ে <b>নতুন সেশন</b> শুরু করুন, অথবা ম্যানুয়াল ফর্মে চেষ্টা করুন।</div>';
-        gwRenderTimeline('match');
-      } else if (d.error === 'TOO_MANY_PENDING') {
-        stateEl.innerHTML = '<div class="gw-state failed"><b>❌ ৩টি পেন্ডিং রিকোয়েস্ট ইতিমধ্যে আছে।</b><br>আগেরগুলো নিষ্পত্তি হলে আবার চেষ্টা করুন।</div>';
-      } else {
-        errEl.textContent = rechargeErrText(d.error); // audit #30 — never a raw code
-      }
-      return;
-    }
-    const tx = d.transaction || {};
-    gw.submitted = true;
-    gw.submittedId = tx.id || d.request_id || null;
-    gw.legacyRef = null;
-    gwSaveSession(); // persist the transaction ID for reload-resume
-    if (tx.status === 'approved') {
-      gw.done = true;
-      gwStopPolling();
-      gwStopTimer();
-      gwClearSession(); // audit #20 — a done session is never restored
-      const okLoad = await loadWallet();
-      const balText = okLoad && document.getElementById('bal') ? document.getElementById('bal').textContent : '';
-      stateEl.innerHTML = '<div class="gw-state success"><b>✅ সফল!</b> ৳' + bn(tx.amount) + ' আপনার ওয়ালেটে যোগ হয়েছে।' +
-        (balText ? '<br>বর্তমান ব্যালেন্স: <b>' + esc(balText) + '</b>' : '') +
-        '<br><span style="font-size:12px;">' + esc(gwFmtDt(new Date().toISOString())) + ' • ওয়ালেট হিস্ট্রিতে দেখুন।</span></div>';
-      gwRenderTimelineDone();
-    } else {
-      gwRenderTimeline('sms');
-      stateEl.innerHTML = '<div class="gw-state pending"><b>⏳ SMS এখনো আসেনি।</b><br>' +
-        'রিকোয়েস্ট জমা হয়েছে — SMS এলে স্বয়ংক্রিয়ভাবে মিলে যাবে, না হলে এডমিন যাচাই করবেন। টাকা হারাবে না।</div>';
-      loadWallet();
-      gwStartPolling();
-    }
-  } catch (e) {
-    errEl.textContent = '❌ নেটওয়ার্ক সমস্যা হয়েছে। পুনরায় চেষ্টা করুন।';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '🔍 Auto Match';
-  }
-}
-
-function gwStartPolling(){
-  gwStopPolling();
-  if (!gw) return;
-  gw.pollId = setInterval(gwPollOnce, 15000);
-  gwPollOnce(); // audit #38 — immediate flip-check, don't wait 15s
-}
-
-async function gwPollOnce(){
-  if (!gw || gw.done || (!gw.submittedId && !gw.legacyRef)) return;
-  try {
-    // New Auto requests poll by immutable transaction ID. legacyRef is
-    // only for sessions created before the no-TrxID fix.
-    const lookup = gw.submittedId
-      ? '/wallet/recharge/request/' + encodeURIComponent(gw.submittedId)
-      : '/wallet/recharge/' + encodeURIComponent(gw.legacyRef);
-    const r = await ABC.api(lookup);
-    if (!r.ok) return;
-    const tx = (await r.json()).transaction;
-    if (!tx) return;
-    if (tx.status === 'approved') {
-      gw.done = true;
-      gwStopPolling();
-      gwStopTimer();
-      gwClearSession(); // audit #20 — a done session is never restored
-      const okLoad = await loadWallet();
-      const balText = okLoad && document.getElementById('bal') ? document.getElementById('bal').textContent : '';
-      document.getElementById('gwState').innerHTML = '<div class="gw-state success"><b>✅ সফল!</b> ৳' + bn(tx.amount) + ' আপনার ওয়ালেটে যোগ হয়েছে।' +
-        (balText ? '<br>বর্তমান ব্যালেন্স: <b>' + esc(balText) + '</b>' : '') + '</div>';
-      gwRenderTimelineDone();
-    } else if (tx.status === 'rejected') {
-      gw.done = true;
-      gwStopPolling();
-      gwStopTimer();
-      gwClearSession(); // audit #20 — a done session is never restored
-      document.getElementById('gwState').innerHTML = '<div class="gw-state failed"><b>❌ রিচার্জ সম্পন্ন হয়নি।</b><br>' +
-        'এডমিন যাচাইয়ে অনুরোধটি বাতিল হয়েছে।' + (tx.cancel_reason ? '<br>কারণ: ' + esc(tx.cancel_reason) + '<br>' : ' ') + 'নতুন সেশন বা ম্যানুয়াল ফর্মে আবার চেষ্টা করুন।</div>';
-      gwRenderTimeline('match');
-      loadWallet();
-    }
-  } catch (e) { /* next tick retries silently — no spinner, no error noise */ }
-}
-// ==== End gateway session ====
-
-// Audit #30 — every recharge error code gets a Bengali message, so no
-// raw English code ever reaches the customer (classic + gateway paths).
+// Keep errors from the recharge endpoint in the language of the form.
 function rechargeErrText(code) {
   switch (code) {
     case 'TOO_MANY_PENDING': return '❌ আপনার ৩টি রিচার্জ ইতিমধ্যে পেন্ডিং আছে। আগের একটির ফলাফল আসার পর আবার চেষ্টা করুন।';
@@ -1327,121 +751,129 @@ function rechargeErrText(code) {
   }
 }
 
-async function submitRecharge(){
-  const err=document.getElementById('err'),ok=document.getElementById('ok');
-  const btn = document.querySelector('button[onclick*="submitRecharge"]');
-  err.textContent='';ok.textContent='';
-  const amt = document.getElementById('amount').value;
-  const sender = document.getElementById('sender').value.trim();
-  const trxid = document.getElementById('trxid').value.trim();
+async function submitRecharge(event){
+  event.preventDefault();
+  const btn = document.getElementById('rechargeSubmit');
+  if (btn.disabled) return;
+  const err = document.getElementById('err');
+  const amountInput = document.getElementById('amount');
+  const senderInput = document.getElementById('sender');
+  const trxidInput = document.getElementById('trxid');
+  const method = RECHARGE_FORM.elements.paymentMethod.value;
+  const amt = amountInput.value;
+  const sender = senderInput.value.trim();
+  const trxid = trxidInput.value.trim();
 
-  // Audit #30 — the same validation the gateway session enforces
-  // (gwStartSession / gwAutoMatch): amount ৳10–৳100,000, sender
-  // 01XXXXXXXXX, TrxID at least 4 characters.
-  if(!amt || Number(amt) < 10 || Number(amt) > 100000){
-    err.textContent = '❌ অনুগ্রহ করে ৳১০ - ৳১,০০,০০০ এর মধ্যে পরিমাণ লিখুন';
-    return;
+  err.textContent = '';
+  let invalid;
+  if (!amt || Number(amt) < 10 || Number(amt) > 100000) {
+    invalid = [amountInput, 'INVALID_AMOUNT'];
+  } else if (!/^01[3-9]\d{8}$/.test(sender)) {
+    invalid = [senderInput, 'INVALID_SENDER'];
+  } else if (trxid.length < 4 || trxid.length > 40) {
+    invalid = [trxidInput, 'INVALID_TRXID'];
   }
-  if(!sender){
-    err.textContent = '❌ যে নম্বর থেকে টাকা পাঠিয়েছেন তা লিখুন';
-    return;
-  }
-  if(!/^01[3-9]\d{8}$/.test(sender)){
-    err.textContent = '❌ যে নম্বর থেকে টাকা পাঠিয়েছেন তা সঠিকভাবে লিখুন (01XXXXXXXXX)';
-    return;
-  }
-  if(!trxid || trxid.length < 4){
-    err.textContent = '❌ ট্রানজ্যাকশন আইডি (TrxID) লিখুন';
+  if (invalid) {
+    err.textContent = rechargeErrText(invalid[1]);
+    invalid[0].focus();
     return;
   }
 
-  if(btn){ btn.disabled = true; btn.textContent = '⏳ সাবমিট হচ্ছে…'; }
+  btn.disabled = true;
+  btn.textContent = 'অনুরোধ পাঠানো হচ্ছে…';
   try {
-    const r=await ABC.api('/wallet/recharge',{
-      method:'POST',
-      body:{method, sender_no:sender, trxid:trxid, amount:amt}
+    const r = await ABC.api('/wallet/recharge', {
+      method: 'POST',
+      body: { method, sender_no: sender, trxid, amount: amt }
     });
-    const d=await r.json();
-    if(!r.ok){
-      if(d.error==='DUP_TRXID' && d.existing_tx){
-        // Premium duplicate display (2026-11-04): the SAME user's own
-        // earlier transaction, shown instead of a block warning.
-        const ex=d.existing_tx;
-        const stTxt=ex.status==='approved'?'পাস (অনুমোদিত)':(ex.status==='rejected'?'প্রত্যাখ্যাত':'পেন্ডিং');
-        err.innerHTML='<div class="gw-state duplicate" style="margin-bottom:0;"><b>ℹ️ এই TrxID-র রিচার্জ আগেই আছে।</b><br>' +
-          'পরিমাণ: <b>৳'+bn(ex.amount)+'</b> • তারিখ: <b>'+esc(gwFmtDt(ex.created_at))+'</b> • অবস্থা: <b>'+stTxt+'</b>' +
-          (ex.status==='approved'?'<br>✅ এই টাকা ইতিমধ্যে ব্যালেন্সে যোগ হয়েছে।':'') +
-          // Audit #28 — a rejected original shows WHY it was rejected.
-          (ex.status==='rejected' && ex.cancel_reason ? '<br>কারণ: ' + esc(ex.cancel_reason) : '') +
-          '</div>';
+    const d = await r.json();
+    if (!r.ok) {
+      if (d.error === 'DUP_TRXID' && d.existing_tx) {
+        showRechargeStatus(d.existing_tx, true);
+        if (d.existing_tx.status === 'pending') startRechargePolling(trxid);
+        else stopRechargePolling();
+        document.getElementById('ok').focus();
+      } else if (d.error === 'DUP_TRXID') {
+        err.textContent = 'এই TrxID ইতিমধ্যে ব্যবহার করা হয়েছে।';
+      } else if (d.error === 'TRXID_AMOUNT_MISMATCH') {
+        err.textContent = 'এসএমএসে পাঠানো পরিমাণ ৳' + bn(d.sms_amount) + '। ফর্মে ওই পরিমাণটি লিখুন।';
+        amountInput.focus();
       } else {
-        if (d.error === 'DUP_TRXID') {
-          err.textContent = '❌ এই ট্রানজ্যাকশন আইডি (TrxID) ইতিপূর্বে ব্যবহার করা হয়েছে। ⚠️ বারবার ডুপ্লিকেট বা ভুল TrxID দিলে অ্যাকাউন্ট ব্লক হতে পারে।';
-        } else if (d.error === 'TRXID_AMOUNT_MISMATCH') {
-          err.textContent = 'আপনার পাঠানো টাকার SMS এ ৳' + (d.sms_amount||'') + ' এসেছে — আপনি যে পরিমাণ লিখেছেন তার সাথে মেলে না। সঠিক পরিমাণ লিখে আবার চেষ্টা করুন। ⚠️ বারবার ভুল তথ্য দিলে অ্যাকাউন্ট ব্লক হতে পারে।';
-        } else {
-          // Audit #30 — every other code gets its Bengali message, never the raw code.
-          err.textContent = rechargeErrText(d.error);
-        }
+        err.textContent = rechargeErrText(d.error);
       }
       return;
     }
-    // Status truth (2026-11-04): the response carries the real tx status —
-    // an instant auto-approve must NOT say "admin will verify".
-    const tx=d.transaction||{};
-    if(tx.status==='approved'){
-      const okLoad=await loadWallet();
-      const balText=okLoad&&document.getElementById('bal')?document.getElementById('bal').textContent:'';
-      ok.textContent='✅ সফল! ৳'+bn(tx.amount)+' আপনার ওয়ালেটে যোগ হয়েছে।'+(balText?' বর্তমান ব্যালেন্স: '+balText+'।':'');
-    } else {
-      ok.textContent='⏳ রিচার্জ রিকোয়েস্ট জমা হয়েছে! SMS মিললে স্বয়ংক্রিয়ভাবে ব্যালেন্স যোগ হবে, না হলে এডমিন যাচাই করে যোগ করবেন।';
-      loadWallet();
-      manualStartPolling(trxid, ok); // audit #22 — poll until the pending flips
-    }
-    document.getElementById('amount').value = '';
-    document.getElementById('sender').value = '';
-    document.getElementById('trxid').value = '';
-  } catch(e) {
-    err.textContent = '❌ নেটওয়ার্ক সমস্যা হয়েছে। পুনরায় চেষ্টা করুন।';
+
+    const tx = d.transaction;
+    if (!tx || !tx.status) throw new Error('Missing recharge status');
+    showRechargeStatus(tx);
+    if (tx.status === 'pending') startRechargePolling(trxid);
+    else stopRechargePolling();
+    loadWallet();
+    [amountInput, senderInput, trxidInput].forEach(input => { input.value = ''; });
+    document.getElementById('ok').focus();
+  } catch (_) {
+    err.textContent = 'সংযোগে সমস্যা হয়েছে। একই TrxID দিয়ে আবার চেষ্টা করুন।';
   } finally {
-    if(btn){ btn.disabled = false; btn.textContent = 'রিচার্জ রিকোয়েস্ট পাঠান →'; }
+    btn.disabled = false;
+    btn.textContent = 'রিচার্জ অনুরোধ পাঠান';
   }
 }
 
-// Audit #22 — the manual form's pending gets the same treatment
-// as the gateway session: poll /wallet every 15s for the
-// submitted TrxID and flip the message on approve/reject, so the
-// user sees the outcome without refreshing. A new manual submit
-// replaces the poll (same as gwStartPolling); the poll never
-// cancels anything and never writes.
-let manualPollId = null;
-function manualStopPolling(){ if (manualPollId) { clearInterval(manualPollId); manualPollId = null; } }
-async function manualPollOnce(trxid, okEl){
+function showRechargeStatus(tx, existing = false){
+  const ok = document.getElementById('ok');
+  const title = {
+    approved: 'রিচার্জ সফল',
+    pending: 'যাচাই চলছে',
+    rejected: 'রিচার্জ অনুমোদিত হয়নি',
+  }[tx.status];
+  if (!title) return;
+  const description = {
+    approved: '৳' + bn(tx.amount) + ' আপনার ব্যালেন্সে যোগ হয়েছে।',
+    pending: 'অনুরোধ জমা হয়েছে। এসএমএসের তথ্য মিললে ব্যালেন্স যোগ হবে।',
+    rejected: tx.cancel_reason || 'অ্যাডমিন যাচাইয়ের পর অনুরোধটি বাতিল হয়েছে।',
+  }[tx.status];
+  const details = tx.trxid ? 'TrxID ' + tx.trxid + ' · ৳' + bn(tx.amount) : '৳' + bn(tx.amount);
+  ok.dataset.status = tx.status;
+  ok.innerHTML = '<strong>' + esc(existing ? 'আগের অনুরোধ · ' + title : title) + '</strong><p>' +
+    esc(description) + '</p><small>' + esc(details) + '</small><a href="#walletHistory">লেনদেনের ইতিহাস</a>';
+}
+
+let rechargeTracking = null;
+function stopRechargePolling(){
+  if (rechargeTracking) clearInterval(rechargeTracking.interval);
+  rechargeTracking = null;
+  try { if (rechargeStorageKey) sessionStorage.removeItem(rechargeStorageKey); } catch (_) {}
+}
+
+async function pollRecharge(tracking){
+  if (tracking.busy) return;
+  tracking.busy = true;
   try {
-    // Audit #38 — look the submitted transaction up by TrxID directly;
-    // scanning the latest 10 rows could miss it entirely.
-    const r = await ABC.api('/wallet/recharge/' + encodeURIComponent(trxid));
+    const r = await ABC.api('/wallet/recharge/' + encodeURIComponent(tracking.trxid));
+    if (tracking !== rechargeTracking) return;
+    if (r.status === 404) { stopRechargePolling(); return; }
     if (!r.ok) return;
-    const tx = (await r.json()).transaction;
-    if (!tx) return;
-    if (tx.status === 'approved') {
-      manualStopPolling();
-      const okLoad = await loadWallet();
-      const balText = okLoad && document.getElementById('bal') ? document.getElementById('bal').textContent : '';
-      okEl.textContent = '✅ সফল! ৳' + bn(tx.amount) + ' আপনার ওয়ালেটে যোগ হয়েছে।' + (balText ? ' বর্তমান ব্যালেন্স: ' + balText + '।' : '');
-    } else if (tx.status === 'rejected') {
-      manualStopPolling();
-      okEl.textContent = '';
-      const err = document.getElementById('err');
-      if (err) err.textContent = '❌ রিচার্জ সম্পন্ন হয়নি — এডমিন যাচাইয়ে অনুরোধটি বাতিল হয়েছে।' + (tx.cancel_reason ? ' কারণ: ' + tx.cancel_reason : '') + ' নতুন করে রিকোয়েস্ট পাঠান।';
+    const { transaction: tx } = await r.json();
+    if (!tx || tracking !== rechargeTracking) return;
+    if (tx.status === 'pending' && !tracking.showPending) return;
+    tracking.showPending = false;
+    showRechargeStatus(tx);
+    if (tx.status !== 'pending') {
+      stopRechargePolling();
       loadWallet();
     }
-  } catch (e) { /* next tick retries silently — no spinner, no error noise */ }
+  } catch (_) { /* Read-only checks resume on the next interval. */ }
+  finally { tracking.busy = false; }
 }
-function manualStartPolling(trxid, okEl){
-  manualStopPolling();
-  manualPollId = setInterval(function(){ manualPollOnce(trxid, okEl); }, 15000);
-  manualPollOnce(trxid, okEl); // immediate flip-check — don't wait 15s
+
+function startRechargePolling(trxid, showPending = false){
+  stopRechargePolling();
+  const tracking = { trxid, showPending, busy: false };
+  rechargeTracking = tracking;
+  try { if (rechargeStorageKey) sessionStorage.setItem(rechargeStorageKey, trxid); } catch (_) {}
+  tracking.interval = setInterval(() => pollRecharge(tracking), 15000);
+  pollRecharge(tracking);
 }
 
 async function redeem(){
@@ -1513,8 +945,7 @@ function celebrate(amount,code,opts){
 
 init();
 </script>
-<script src="/js/wallet-presentation.js?v=20261109-5"></script>
-<script src="/js/wallet-preview-adapter.js?v=20261109-4"></script>
+<script src="/js/wallet-presentation.js?v=20261118-2"></script>
 <script>document.addEventListener("DOMContentLoaded",function(){const h=document.createElement("section");const main=document.querySelector(".main");if(main){main.appendChild(h);ABCPromo.offers(h);}});</script>
 <link rel="stylesheet" href="/css/promotions.css?v=20261114-1">
 </body>

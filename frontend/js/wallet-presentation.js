@@ -1,20 +1,6 @@
 /* Presentation-only observers: no API calls, financial writes, or legacy function replacement. */
 (function () {
   'use strict';
-  function syncReceiving() {
-    var active = document.querySelector('#gwMethods .sel');
-    var number = document.getElementById('wpReceiveNumber');
-    var label = document.getElementById('wpReceiveLabel');
-    if (!active || !number || !label) return;
-    var names = { bkash_payment: 'বিকাশ পেমেন্ট', bkash_personal: 'বিকাশ পার্সোনাল', nagad: 'নগদ', rocket: 'রকেট' };
-    label.textContent = (names[active.dataset.m] || active.textContent) + ' নম্বর';
-    number.textContent = typeof rechargeNums !== 'undefined' && rechargeNums[active.dataset.m] ? rechargeNums[active.dataset.m] : 'শীঘ্রই যোগ হবে';
-  }
-  var methods = document.getElementById('gwMethods');
-  if (methods) new MutationObserver(syncReceiving).observe(methods, { attributes: true, subtree: true, attributeFilter: ['class'] });
-  var receive = document.getElementById('recvNum');
-  if (receive) new MutationObserver(syncReceiving).observe(receive, { childList: true, characterData: true, subtree: true });
-  syncReceiving();
   var dialog = document.createElement('dialog');
   dialog.className = 'wp-result';
   dialog.setAttribute('aria-labelledby', 'wpResultTitle');
@@ -61,28 +47,13 @@
   }
   var history=document.getElementById('txList');
   if(history){new MutationObserver(compactHistory).observe(history,{childList:true});compactHistory();}
-  // These nodes are the existing engine's feedback contract. Never infer new credits from history.
-  ['gwState', 'ok', 'err', 'gwErr', 'gwErr2', 'cerr'].forEach(function (id) {
-    var node = document.getElementById(id);
-    if (!node) return;
-    var last = node.textContent.trim(); // Existing content on load is not a new event.
+  var couponError = document.getElementById('cerr');
+  if (couponError) {
     new MutationObserver(function () {
-      var text = node.textContent.trim();
-      if (text === last) return;
-      last = text;
-      if (!text) return;
-      var outcome = null;
-      if (id === 'gwState') {
-        if (node.querySelector('.gw-state.success')) outcome = 'success';
-        else if (node.querySelector('.gw-state.failed')) outcome = 'failed';
-        else if (node.querySelector('.gw-state.pending')) outcome = 'pending';
-      } else if (id === 'ok') {
-        if (text.indexOf('✅ সফল!') === 0) outcome = 'success';
-        else if (text.indexOf('⏳') === 0) outcome = 'pending';
-      } else outcome = 'failed';
-      if (outcome) open(outcome, text);
-    }).observe(node, { childList: true, subtree: true, characterData: true });
-  });
+      var text = couponError.textContent.trim();
+      if (text) open('failed', text);
+    }).observe(couponError, { childList: true, subtree: true, characterData: true });
+  }
   var cashback = document.getElementById('cbOverlay');
   if (cashback) {
     var panel = cashback.querySelector('.wp-cashback-panel');
