@@ -77,8 +77,8 @@
 </style>
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/registration-layout.css?v=20261110-1">
-<link rel="stylesheet" href="/css/engine-polish.css?v=20261111-4">
-<script src="/js/engine-feedback.js?v=20261111-4" defer></script>
+<link rel="stylesheet" href="/css/engine-polish.css?v=20261118-2">
+<script src="/js/engine-feedback.js?v=20261118-2" defer></script>
 </head>
 <body class="has-tabbar flagship-app service-workspace page-birth-final">
 <div class="desktop">
@@ -221,9 +221,20 @@ async function loadPrice(){
 }
 let S={sessionId:null,brn:'',dob:'',record:null,pdfBlob:null,attemptKey:null};
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function showErr(m){const e=document.getElementById('err');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),6000);}
-function showOk(m){const e=document.getElementById('ok');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),4000);}
+function clearResultMessage(){
+  document.getElementById('err').classList.remove('on');
+  document.getElementById('ok').classList.remove('on');
+}
+function showErr(m){ showResultMessage('err', m); }
+function showOk(m){ showResultMessage('ok', m); }
+function showResultMessage(id, message){
+  clearResultMessage();
+  const box = document.getElementById(id);
+  box.textContent = message;
+  box.classList.add('on');
+}
 function go(n){
+  clearResultMessage();
   document.querySelectorAll('.wiz').forEach(w=>w.classList.remove('on'));
   document.getElementById('w'+n).classList.add('on');
   document.querySelectorAll('.step').forEach(s=>{
@@ -233,6 +244,8 @@ function go(n){
   window.scrollTo({top:0,behavior:'smooth'});
 }
 function busy(id,on,txt){
+  if(on) clearResultMessage();
+
   const b=document.getElementById(id);if(!b)return;
   if(on){b.dataset.t=b.innerHTML;b.innerHTML='<span class="spin"></span>'+(txt||'অপেক্ষা করুন…');b.disabled=true;}
   else{b.innerHTML=b.dataset.t||b.innerHTML;b.disabled=false;}
@@ -322,6 +335,7 @@ async function step3(){
     if(!j.success)throw new Error(j.message||j.error||'প্রিভিউ ব্যর্থ');
     document.getElementById('certFrame').srcdoc=j.html;
     go(4);
+    showOk('প্রিভিউ প্রস্তুত। নিচের বোতাম থেকে PDF ডাউনলোড করুন।');
   }catch(e){showErr(e.message||'সনদ তৈরি ব্যর্থ।');}
   busy('b3',false);
 }

@@ -115,7 +115,7 @@
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/service-workspace.css?v=20261110-1">
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
-<link rel="stylesheet" href="/css/manual-order.css?v=20261110-13">
+<link rel="stylesheet" href="/css/manual-order.css?v=20261118-1">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
 <script src="/js/promotions.js?v=20261111-2"></script>
 </head>
@@ -161,7 +161,7 @@
       </div>
     </div>
 
-    <div class="card manual-workspace" style="max-width:780px;">
+    <div class="card manual-workspace" id="orderWorkspace" style="max-width:780px;">
       <div class="order-meta">
         <div>
           <h2 id="svcName" style="font-size:20px;font-weight:800;color:#0f172a;margin-bottom:4px;">লোড হচ্ছে…</h2>
@@ -228,8 +228,15 @@
 
       <button class="btn" id="submitBtn" disabled style="width:100%;padding:14px;font-size:16px;font-weight:700;margin-top:14px;">পর্যালোচনা করুন →</button>
       
-      <div id="submitNotice" style="display:none;margin-top:12px;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;color:#1e40af;font-size:13px;text-align:center;"></div>
+      <div id="submitNotice" role="status" style="display:none;margin-top:12px;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;color:#1e40af;font-size:13px;text-align:center;"></div>
     </div>
+
+    <section class="order-result" id="orderResult" aria-labelledby="orderResultTitle" hidden>
+      <h2 id="orderResultTitle" tabindex="-1">অর্ডার গৃহীত হয়েছে</h2>
+      <p id="orderResultId"></p>
+      <p id="orderResultMessage"></p>
+      <a class="btn btn-primary" id="orderResultLink">অর্ডারের অবস্থা দেখুন →</a>
+    </section>
   </div>
 </div>
 
@@ -269,6 +276,7 @@ let draftKey=null;
 let lockedCredit=0; // audit #44 — service-locked credit for this service (spent first by payForService)
 let rawSampleText='';
 let selectedFiles=[];
+let orderSubmitting = false;
 
 // Drag & drop handlers
 const dropArea=document.getElementById('dropArea');
@@ -804,6 +812,7 @@ function collectOrder(){
 // Audit #40 — step 1: show the "তথ্য + ফাইল + ফি" review. Nothing is
 // charged here; the wallet is cut only on the confirm click.
 function showReview(){
+  if (orderSubmitting) return;
   const notice = document.getElementById('submitNotice');
   notice.style.display = 'none';
   const c = collectOrder();
@@ -844,6 +853,7 @@ function showReview(){
 }
 
 function editAgain(){
+  if (orderSubmitting) return;
   document.getElementById('reviewBox').style.display = 'none';
   document.getElementById('submitBtn').style.display = 'block';
 }
@@ -852,6 +862,7 @@ function editAgain(){
 // review. Re-collects at confirm time — the review is a snapshot, the
 // post uses the current form values.
 async function submit(){
+  if (orderSubmitting) return;
   const err = document.getElementById('err');
   const notice = document.getElementById('submitNotice');
   err.style.display = 'none';
@@ -864,7 +875,24 @@ async function submit(){
   const orderDocs = c.orderDocs;
 
   const btn = document.getElementById('reviewConfirmBtn');
+  const back = document.getElementById('reviewBackBtn');
+  if (btn.disabled) return;
+  orderSubmitting = true;
   btn.disabled = true;
+  back.disabled = true;
+  function releaseSubmission() {
+    orderSubmitting = false;
+    back.disabled = false;
+  }
+  function showRetry() {
+    releaseSubmission();
+    btn.disabled = false;
+    btn.textContent = 'আবার চেষ্টা করুন';
+    notice.style.display = 'none';
+    err.style.display = 'block';
+    err.textContent = 'অর্ডার গৃহীত হয়েছে কি না জানা যায়নি। ফল জানতে আবার চেষ্টা করুন।';
+    err.scrollIntoView({ block: 'nearest' });
+  }
   btn.textContent = 'অর্ডার প্রসেস হচ্ছে…';
 
   notice.style.display = 'block';
@@ -884,16 +912,18 @@ async function submit(){
         documents: orderDocs
       }
     });
-    d = await r.json();
+    d = (await r.json()) || {};
   } catch (netErr) {
-    editAgain();
-    notice.style.display = 'none';
-    err.style.display = 'block';
-    err.textContent = '❌ নেটওয়ার্ক সমস্যা বা সার্ভার সংযোগ বিঘ্নিত হয়েছে। পুনরায় চেষ্টা করুন।';
+    showRetry();
     return;
   }
 
   if(!r.ok){
+    if (r.status >= 500 || r.status === 429) {
+      showRetry();
+      return;
+    }
+    releaseSubmission();
     if(d.error === 'PRICE_CHANGED'){
       notice.style.display='none';err.style.display='block';
       err.textContent='সেবার দাম বা ছাড় বদলেছে; কোনো টাকা কাটা হয়নি। পাতা রিফ্রেশ করে নতুন দাম যাচাই করুন।';
@@ -909,7 +939,11 @@ async function submit(){
     return;
   }
 
-  const orderId = d.order.id;
+  const orderId = d?.order?.id;
+  if (!orderId) {
+    showRetry();
+    return;
+  }
   const token = sessionStorage.getItem('abc_access_token') || '';
 
   // Gather all files to upload
@@ -955,28 +989,19 @@ async function submit(){
   LocalIdem.clear('order_submit_' + sid);
   if(draftKey) LocalDraft.clear(draftKey);
 
-  // Audit #74 — the headline must not claim "সম্পন্ন" when documents
-  // are still pending: the order is created, the documents are not.
-  if (uploadErrors > 0) {
-    notice.style.background = '#fffbeb';
-    notice.style.borderColor = '#fcd34d';
-    notice.style.color = '#92400e';
-    notice.textContent = '⚠️ অর্ডার তৈরি হয়েছে, ডকুমেন্ট বাকি — অর্ডার ট্র্যাকিং পেজে নিয়ে যাওয়া হচ্ছে…';
-  } else {
-    notice.style.background = '#f0fdf4';
-    notice.style.borderColor = '#86efac';
-    notice.style.color = '#15803d';
-    notice.textContent = '✅ অর্ডার সফলভাবে সম্পন্ন হয়েছে! অর্ডার ট্র্যাকিং পেজে নিয়ে যাওয়া হচ্ছে…';
-  }
-
-  setTimeout(()=>{
-    if(uploadErrors > 0){
-      ABC.showPageMsg('⚠️ আপনার অর্ডারটি তৈরি হয়েছে (ID: #' + orderId.slice(0,8) + ')! তবে ফাইল সাইজ বা নেটওয়ার্ক সমস্যার কারণে কিছু ডকুমেন্ট আপলোড বাকি থাকতে পারে। আপনি অর্ডার পেজে গিয়ে চ্যাটে ফাইলগুলো দিতে পারবেন।', 'info');
-      location.href = '/order-status.html?id=' + orderId + '&doc_warning=1';
-    } else {
-      location.href = '/order-status.html?id=' + orderId;
-    }
-  }, 1200);
+  const result = document.getElementById('orderResult');
+  const incomplete = uploadErrors > 0;
+  result.classList.toggle('needs-docs', incomplete);
+  document.getElementById('orderResultId').textContent = 'অর্ডার নম্বর #' + String(orderId).slice(0, 8);
+  document.getElementById('orderResultMessage').textContent = incomplete
+    ? 'কিছু ফাইল আপলোড হয়নি। অর্ডারের অবস্থা পেজ থেকে বাকি ফাইল যোগ করুন।'
+    : 'অর্ডারের অগ্রগতি ও প্রস্তুত ফাইল পরের পেজে দেখতে পারবেন।';
+  document.getElementById('orderResultLink').href = '/order-status.html?id=' + encodeURIComponent(orderId)
+    + (incomplete ? '&doc_warning=1' : '');
+  document.getElementById('orderWorkspace').hidden = true;
+  document.getElementById('balWarning').style.display = 'none';
+  result.hidden = false;
+  document.getElementById('orderResultTitle').focus();
 }
 
 init();

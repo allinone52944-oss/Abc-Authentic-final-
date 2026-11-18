@@ -6,7 +6,7 @@ const script = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</
 function setup({ jsonFields = false, fail = false, engine = null, fallback = false, docs = [], sample = null } = {}) {
   const fields = [{ name: 'applicant_name', label: 'আবেদনকারীর নাম', required: true }];
   const elements = new Map();
-  const element = () => ({ style: {}, value: '', textContent: '', innerHTML: '', disabled: false, dataset: {}, addEventListener() {}, scrollIntoView() {}, focus() {}, classList: { add() {}, remove() {} } });
+  const element = () => ({ style: {}, value: '', textContent: '', innerHTML: '', disabled: false, dataset: {}, addEventListener() {}, scrollIntoView() {}, focus() {}, classList: { add() {}, remove() {}, toggle() {} } });
   const input = element(); input.dataset.field = 'applicant_name'; input.closest = () => ({ textContent: 'আবেদনকারীর নাম *' });
   const get = id => { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); };
   const store = { getItem: () => null, setItem() {}, removeItem() {} };
@@ -20,6 +20,49 @@ function setup({ jsonFields = false, fail = false, engine = null, fallback = fal
 }
 test('applicant profile fills an empty own-name field', async () => {
   const { context, input } = setup(); await vm.runInContext('init()', context); expect(input.value).toBe('Test Applicant');
+});
+
+test.each([false, true])('submitted order stays on its receipt (upload failure: %s)', async (uploadFails) => {
+  const {context, get} = setup();
+  const api = context.ABC.api;
+  context.ABC.api = async (url, options) => {
+    if (url !== '/orders') return api(url);
+    expect(options.body.idempotency_key).toBeTruthy();
+    return {ok: true, json: async () => ({order: {id: 'test-order'}})};
+  };
+  await vm.runInContext('init()', context);
+  if (uploadFails) {
+    context.FormData = class { append() {} };
+    context.fetch = async () => ({ok: false});
+    vm.runInContext("selectedFiles = [{name:'example.pdf', size:100}]", context);
+  }
+  vm.runInContext('showReview()', context);
+  await vm.runInContext('submit()', context);
+  expect(get('orderWorkspace').hidden).toBe(true);
+  expect(get('orderResult').hidden).toBe(false);
+  expect(get('orderResultLink').href).toBe('/order-status.html?id=test-order' + (uploadFails ? '&doc_warning=1' : ''));
+  expect(get('orderResultMessage').textContent.includes('কিছু ফাইল আপলোড হয়নি')).toBe(uploadFails);
+  expect(context.location.href).toBeUndefined();
+});
+
+test('network retry preserves the review and uses the same order key', async () => {
+  const {context, get} = setup();
+  const api = context.ABC.api;
+  const keys = [];
+  context.ABC.api = async (url, options) => {
+    if (url !== '/orders') return api(url);
+    keys.push(options.body.idempotency_key);
+    if (keys.length === 1) throw new Error('offline');
+    return {ok: true, json: async () => ({order: {id: 'test-order'}})};
+  };
+  await vm.runInContext('init()', context);
+  vm.runInContext('showReview()', context);
+  await vm.runInContext('submit()', context);
+  expect(get('reviewBox').style.display).toBe('block');
+  expect(get('reviewConfirmBtn').disabled).toBe(false);
+  await vm.runInContext('submit()', context);
+  expect(keys).toEqual([keys[0], keys[0]]);
+  expect(get('orderResult').hidden).toBe(false);
 });
 test('JSON-encoded admin fields can be reviewed with fee 100 and remaining wallet 400', async () => {
   const { context, input, get } = setup({ jsonFields: true }); await vm.runInContext('init()', context); input.value = 'Applicant';

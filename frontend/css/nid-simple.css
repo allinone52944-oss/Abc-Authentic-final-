@@ -27,8 +27,7 @@ body.page-nid-replica .wiz .form-card {
 .page-nid-replica .nid-brand a { color:#fff; text-decoration:none; font-size:14px; }
 .page-nid-replica .nid-brand a:first-child { color:#f5cf72; font-size:24px; font-weight:700; }
 .page-nid-replica .main:has(#w3.on,#w4.on) .topbar { display:none !important; }
-.page-nid-replica #w1 .form-card,
-.page-nid-replica #w2 .form-card { max-width: 600px !important; }
+.page-nid-replica #w1 .form-card { max-width: 600px !important; }
 .page-nid-replica .nid-step { text-align: center; color: #66726c; margin: 0 0 24px; font-size: 16px; }
 .page-nid-replica #dropZone {
   min-height: 220px;

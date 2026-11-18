@@ -37,8 +37,8 @@
         seen.set(box, signature);
         var success = box.classList.contains('ok');
         var failure = box.classList.contains('err') || box.classList.contains('failbox');
-        box.dataset.engineFeedback = success ? 'success' : failure ? 'error' : 'notice';
-        box.dataset.feedbackTitle = success ? 'সফল হয়েছে' : failure ? 'সমস্যা হয়েছে' : 'সেবার আপডেট';
+        var warning = box.classList.contains('warn');
+        box.dataset.engineFeedback = failure ? 'error' : success ? 'success' : warning ? 'warning' : 'notice';
         box.setAttribute('role', failure ? 'alert' : 'status');
         box.setAttribute('aria-live', failure ? 'assertive' : 'polite');
         box.setAttribute('aria-atomic', 'true');
@@ -46,7 +46,7 @@
         box.focus({ preventScroll: true });
         var rect = box.getBoundingClientRect();
         if (rect.top < 24 || rect.bottom > window.innerHeight - 88) {
-          box.scrollIntoView({ block: 'center', behavior: 'auto' });
+          box.scrollIntoView({ block: 'nearest', behavior: 'auto' });
         }
       });
       if (pending) {

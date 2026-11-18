@@ -263,11 +263,11 @@
 <link rel="stylesheet" href="/css/service-workspace.css?v=20261110-1">
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
-<link rel="stylesheet" href="/css/engine-polish.css?v=20261111-4">
+<link rel="stylesheet" href="/css/engine-polish.css?v=20261118-2">
 <link rel="stylesheet" href="/css/engine-inputs.css?v=20261110-13">
 <script src="/js/engine-inputs.js?v=20261110-13" defer></script>
-<script src="/js/engine-feedback.js?v=20261111-4" defer></script>
-<link rel="stylesheet" href="/css/nid-simple.css?v=20261118-1">
+<script src="/js/engine-feedback.js?v=20261118-2" defer></script>
+<link rel="stylesheet" href="/css/nid-simple.css?v=20261118-2">
 </head>
 <body class="has-tabbar flagship-app service-workspace page-nid-replica">
 <div class="desktop">
@@ -324,15 +324,7 @@
       </div>
     </div>
 
-    <!-- STEP 2: EXTRACTING -->
-    <div class="wiz" id="w2">
-      <div class="form-card" style="text-align:center; padding:50px 20px;">
-        <div style="font-size:20px; font-weight:700; color:var(--primary-700); margin-bottom:12px;"><span class="spin"></span>তথ্য বের করা হচ্ছে…</div>
-        <div style="font-size:14px; color:var(--text-muted);">PDF বিশ্লেষণ করা হচ্ছে, ছবি ও স্বাক্ষর প্রসেস হচ্ছে। অনুগ্রহ করে একটু অপেক্ষা করুন।</div>
-      </div>
-    </div>
-
-    <!-- STEP 3: REVIEW -->
+    <!-- STEP 2: REVIEW -->
     <div class="wiz" id="w3">
       <div class="form-card">
         <h3 style="color:var(--primary-700); font-size:17px; font-weight:700; margin-bottom:6px;">তথ্য মিলিয়ে নিন</h3>
@@ -345,7 +337,7 @@
       </div>
     </div>
 
-    <!-- STEP 4: CARD -->
+    <!-- STEP 3: CARD -->
     <div class="wiz" id="w4">
       <div class="form-card">
         <h3 style="color:var(--success); font-size:17px; font-weight:700; margin-bottom:12px;">আপনার কার্ড প্রস্তুত</h3>
@@ -390,10 +382,23 @@ const CORE_NAME_KEYS=['নাম:','Name:'],CORE_ID_KEYS=['ID NO:','Pin'],CORE_D
 const NO_CORE_DATA_MSG='তথ্য অসম্পূর্ণ — নাম, জাতীয় পরিচয়পত্র নম্বর ও জন্মতারিখ ছাড়া কার্ড তৈরি করা যাবে না। সঠিক NID ফর্ম PDF আপলোড করুন। কোনো টাকা কাটা হয়নি।';
 function hasCoreData(f){const t=v=>v!=null&&String(v).trim().length>0;return f&&typeof f==='object'&&CORE_NAME_KEYS.some(k=>t(f[k]))&&CORE_ID_KEYS.some(k=>t(f[k]))&&CORE_DOB_KEYS.some(k=>t(f[k]));}
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function showErr(m){const e=document.getElementById('err');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),6000);}
-function showOk(m){const e=document.getElementById('ok');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),4000);}
-function busy(id,on,txt){const b=document.getElementById(id);if(!b)return;b.disabled=on;if(on&&txt){b.dataset.t=b.textContent;b.textContent=txt;}else if(b.dataset.t){b.textContent=b.dataset.t;delete b.dataset.t;}}
+function clearResultMessage(){
+  document.getElementById('err').classList.remove('on');
+  document.getElementById('ok').classList.remove('on');
+}
+function showErr(m){ showResultMessage('err', m); }
+function showOk(m){ showResultMessage('ok', m); }
+function showResultMessage(id, message){
+  clearResultMessage();
+  const box = document.getElementById(id);
+  box.textContent = message;
+  box.classList.add('on');
+}
+function busy(id,on,txt){
+  if(on) clearResultMessage();
+const b=document.getElementById(id);if(!b)return;b.disabled=on;if(on&&txt){b.dataset.t=b.textContent;b.textContent=txt;}else if(b.dataset.t){b.textContent=b.dataset.t;delete b.dataset.t;}}
 function go(n){
+  clearResultMessage();
   document.querySelectorAll('.wiz').forEach(w=>w.classList.remove('on'));
   document.getElementById('w'+n).classList.add('on');
   document.querySelectorAll('.step').forEach(s=>{
@@ -532,10 +537,12 @@ function renderFieldsUI(){
 }
 
 async function doExtract(){
-  const f=document.getElementById('pdfFile').files[0];
+  const input = document.getElementById('pdfFile');
+  const f = input.files[0];
   if(!f){showErr('PDF ফাইল বেছে নিন।');return;}
   if(f.size>10*1024*1024){showErr('ফাইল ১০ MB-এর বেশি।');return;}
-  busy('b1',true,'আপলোড হচ্ছে…');go(2);
+  input.disabled = true;
+  busy('b1',true,'তথ্য বের করা হচ্ছে…');
   try{
     const fd=new FormData();fd.append('pdf',f,f.name);
     const r=await ABC.api(API+'/extract',{method:'POST',body:fd,timeout:60000});
@@ -554,7 +561,8 @@ async function doExtract(){
     renderFieldsUI();
     go(3);
     showOk('তথ্য পাওয়া গেছে ✓ ভুল থাকলে ঠিক করে দিন বা ছবি/স্বাক্ষর যুক্ত করুন');
-  }catch(e){go(1);showErr(e.message||'তথ্য বের করা যায়নি।');}
+  }catch(e){showErr(e.message||'তথ্য বের করা যায়নি। আবার চেষ্টা করুন।');}
+  input.disabled = false;
   busy('b1',false);
 }
 
@@ -644,7 +652,7 @@ function setupDropZone(){
     e.preventDefault();
     dz.style.borderColor = '#93c5fd';
     dz.style.background = '#eff6ff';
-    if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]){
+    if(!fi.disabled && e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]){
       fi.files = e.dataTransfer.files;
       updateTxt(fi.files[0]);
     }

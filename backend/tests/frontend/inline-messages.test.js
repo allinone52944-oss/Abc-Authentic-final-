@@ -30,7 +30,7 @@ describe('audit #73 — no alert() on customer pages', () => {
   test('each page routes its former alerts through the inline component', () => {
     const counts = {
       'order-status.html': 8, 'order-detail.html': 10, 'history.html': 4,
-      'wallet.html': 3, 'order-create.html': 5,
+      'wallet.html': 3, 'order-create.html': 4,
       'dashboard.html': 2,
     };
     for (const [file, n] of Object.entries(counts)) {
