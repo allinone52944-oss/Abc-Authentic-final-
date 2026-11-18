@@ -3,7 +3,7 @@
 //
 // The MRP template scan was a faded wash and the printed values were
 // thin grey sans, while a vivid real MRP photo shows deep saturated
-// background art and bold black printed values. The fix:
+// background art and bold black printed values. The 69ba4ec fix:
 //  - data-page values: sans 400 grey (#4c4c4c) -> sans-bold 700 black
 //  - top-page values: serif-bold grey (#696a69) -> black
 //  - top-page labels: sans-bold-italic grey -> serif-bold-italic black
@@ -11,6 +11,24 @@
 //  - vertical passport number: mono grey (#747677) -> black
 //  - all background-derived raster assets deepened in place
 //    (saturate 1.8 / contrast 1.1 / brightness .95); MRZ untouched.
+// The glyph fix (same branch, after the user rejected 69ba4ec's
+// "text matches" claim — "ekhono hoinai likha gula milenai"):
+//  - top-page values are NOT Times: the scan prints them in the same
+//    bold grotesque as the data-page values -> serif-bold becomes
+//    sans-bold (ScanSans 700). Country heading English stays serif-bold.
+//  - MRZ is NOT Consolas: the scan prints OCR-B -> mono becomes ocr
+//    (ScanOcr 400, CTAN ocr-b-outline, free licence).
+//  - vertical passport number is NOT mono: the scan prints it in the
+//    bold grotesque -> mono becomes sans-bold (ScanSans 700).
+//  - data-page labels print Bengali + English, but the English part is
+//    a serif italic, not the Bengali sans -> renderField splits them
+//    (labelParts / writeFieldText / measureFieldText).
+//  - top-page labels need a REAL Times bold italic face (the model had
+//    no italic face, so the browser synthesised the slant) -> a
+//    ScanSerif 700 italic @font-face is embedded.
+// Data-page values stay sans-bold 700: the scan's BANGLADESHI measures
+// W/capH 10.47 against Arial Bold 10.43 (Arial Regular is 10.07), so
+// the bold grotesque was already right there.
 // These tests pin the model side (fonts/weights/colors). The asset
 // deepening is verified by the rendered-PDF colour measurement in the
 // branch report, not by pixels here.
@@ -35,6 +53,11 @@ const TOP_VALUES = ['personal-name', 'father', 'mother', 'spouse', 'permanent-ad
 const TOP_LABELS = ['name-label', 'father-label', 'mother-label', 'spouse-label',
   'permanent-label', 'emergency-label', 'contact-name-label', 'relationship-label',
   'address-label', 'telephone-label'];
+const DATA_LABELS = ['surname-label', 'given-label', 'nationality-label',
+  'personal-no-label', 'dob-label', 'previous-label', 'sex-label',
+  'birthplace-label', 'issue-label', 'authority-label', 'signature-label',
+  'expiry-label', 'type-label', 'country-code-label', 'passport-no-label',
+  'vertical-label'];
 
 describe('MRP deep output — printed text matches a vivid real passport', () => {
   test('data-page values are sans-bold 700 black', () => {
@@ -51,18 +74,21 @@ describe('MRP deep output — printed text matches a vivid real passport', () =>
     }
   });
 
-  test('top-page values are serif-bold black', () => {
+  test('top-page values are sans-bold 700 black (same grotesque as data values)', () => {
     const byId = {};
     for (const f of documentState().fields) byId[f.id] = f;
     for (const id of TOP_VALUES) {
       const f = byId[id];
       expect(f).toBeDefined();
-      expect(f.font).toBe('serif-bold');
+      expect(f.font).toBe('sans-bold');
       expect(f.color).toBe('#000000');
-      expect(f.style.family).toBe('ScanSerif');
+      expect(f.style.family).toBe('ScanSans');
       expect(f.style.weight).toBe(700);
       expect(f.style.color).toBe('#000000');
     }
+    // Country heading English is the one serif-bold that stays Times.
+    expect(byId['country-en'].font).toBe('serif-bold');
+    expect(byId['country-en'].style.family).toBe('ScanSerif');
   });
 
   test('top-page labels are serif-bold-italic black', () => {
@@ -81,14 +107,46 @@ describe('MRP deep output — printed text matches a vivid real passport', () =>
     expect(PAGE).toContain("'serif-bold-italic':['ScanSerif',700,true]");
   });
 
-  test('vertical passport number is black; MRZ untouched', () => {
+  test('MRZ is OCR-B and vertical passport number is sans-bold; colours untouched', () => {
     const byId = {};
     for (const f of documentState().fields) byId[f.id] = f;
+    expect(byId['vertical-passport'].font).toBe('sans-bold');
+    expect(byId['vertical-passport'].style.family).toBe('ScanSans');
+    expect(byId['vertical-passport'].style.weight).toBe(700);
     expect(byId['vertical-passport'].color).toBe('#000000');
     expect(byId['vertical-passport'].style.color).toBe('#000000');
-    expect(byId['mrz-1'].color).toBe('#262626');
-    expect(byId['mrz-2'].color).toBe('#262626');
-    expect(byId['mrz-1'].style.weight).toBe(400);
+    for (const id of ['mrz-1', 'mrz-2']) {
+      expect(byId[id].font).toBe('ocr');
+      expect(byId[id].style.family).toBe('ScanOcr');
+      expect(byId[id].style.weight).toBe(400);
+      expect(byId[id].color).toBe('#262626');
+    }
+  });
+
+  test('OCR-B and real serif bold-italic faces are embedded; ocr is in the families map', () => {
+    expect(PAGE).toContain("ocr:['ScanOcr',400,false]");
+    expect(PAGE).toMatch(/@font-face\{font-family:ScanOcr;font-style:normal;font-weight:400;src:url\(data:font\/woff2;base64,[A-Za-z0-9+/=]+\) format\("woff2"\);\}/);
+    expect(PAGE).toMatch(/@font-face\{font-family:ScanSerif;font-style:italic;font-weight:700;src:url\(data:font\/woff2;base64,[A-Za-z0-9+/=]+\) format\("woff2"\);\}/);
+  });
+
+  test('data labels carry Bengali + English and the renderer splits them', () => {
+    const byId = {};
+    for (const f of documentState().fields) byId[f.id] = f;
+    for (const id of DATA_LABELS) {
+      const f = byId[id];
+      expect(f).toBeDefined();
+      expect(f.font).toBe('bengali');
+      expect(f.text).toContain(' / ');
+    }
+    expect(PAGE).toContain('function labelParts(f,text)');
+    expect(PAGE).toContain('function writeFieldText(n,f,s)');
+    expect(PAGE).toContain('function measureFieldText(f,style,text)');
+    expect(PAGE).toContain('if(write)writeFieldText(n,f,s);');
+    expect(PAGE).toContain('const originalWidth=measureFieldText(f,b,f.original);');
+    expect(PAGE).toContain('const width=Math.max(2,measureFieldText(f,s,f.text));');
+    // The English half is rendered in a serif italic (ScanSerif 400 italic).
+    expect(PAGE).toContain("en.style.fontFamily='ScanSerif, ScanBengali, sans-serif'");
+    expect(PAGE).toContain('en.style.fontStyle=\'italic\'');
   });
 
   test('no faded grey value ink remains in the model', () => {
