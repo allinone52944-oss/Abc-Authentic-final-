@@ -38,6 +38,7 @@
 // that never render. Plain Node 24 (production) supports require()
 // of ESM, so the lazy require works there and in the browser check.
 const { safeLog } = require('../security');
+const { compactScanImages } = require('./pdfScanCompression');
 
 const LAUNCH_ARGS = [
   '--no-sandbox',
@@ -126,30 +127,6 @@ async function renderOnce(html) {
         )));
       })();
       await Promise.race([ready, timeout]);
-
-      // Chromium writes the large WebP scan to the PDF as a losslessly
-      // compressed bitmap. A high-quality JPEG keeps its full resolution
-      // and reduces the download while the overlaid text remains vector.
-      const scan = document.querySelector('#page-shell > img#scan');
-      if (!scan) return;
-      const original = scan.getAttribute('src') || '';
-      const pixels = scan.naturalWidth * scan.naturalHeight;
-      if (!/^data:image\/webp;base64,/i.test(original) || pixels < 1_000_000 || pixels > 16_000_000) return;
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = scan.naturalWidth;
-        canvas.height = scan.naturalHeight;
-        canvas.getContext('2d').drawImage(scan, 0, 0);
-        const jpeg = canvas.toDataURL('image/jpeg', 0.94);
-        if (jpeg.length >= original.length || !jpeg.startsWith('data:image/jpeg;')) return;
-        scan.src = jpeg;
-        await scan.decode();
-      } catch {
-        if (scan.getAttribute('src') !== original) {
-          scan.src = original;
-          await scan.decode().catch(() => {});
-        }
-      }
     });
     const pdf = await page.pdf({
       format: 'A4',
@@ -169,7 +146,15 @@ function renderPassportPdf(html) {
   if (!html || typeof html !== 'string' || html.length < 100 || html.indexOf('<') < 0) {
     return Promise.reject(new Error('পাসপোর্ট ডকুমেন্ট পাওয়া যায়নি।'));
   }
-  const run = queue.then(() => renderOnce(html));
+  const run = queue.then(async () => {
+    const original = await renderOnce(html);
+    try {
+      return await compactScanImages(original);
+    } catch (error) {
+      safeLog('[passport-pdf] lossless compression skipped:', error.message);
+      return original;
+    }
+  });
   // Keep the queue alive past a failure so later renders still run.
   queue = run.catch(() => {});
   return run;
