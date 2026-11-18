@@ -423,9 +423,9 @@ describe('form photo/signature upload', () => {
     expect(PAGE).toContain('ছবি ও স্বাক্ষর ফর্মেই যোগ করুন');
   });
 
-  test('form warns visibly when photo is missing (finding 7: sample face otherwise); a missing signature shows no sample-signature warning (2026-11-16: signature area stays blank)', () => {
+  test('form explains that the photo area stays blank when no photo is attached', () => {
     expect(PAGE).toContain('id="form-sample-warning"');
-    expect(PAGE).toContain('নমুনার ছবি দেখাবে');
+    expect(PAGE).toContain('ছবির জায়গা খালি থাকবে');
     expect(PAGE).not.toContain('নমুনার ছবি ও স্বাক্ষর দেখাবে');
     expect(PAGE).not.toContain('নমুনার স্বাক্ষর দেখাবে');
     const at = PAGE.indexOf('id="form-sample-warning"');
@@ -434,7 +434,7 @@ describe('form photo/signature upload', () => {
     expect(CSS).toContain('.form-sample-warning{margin:4px 0 0;color:#b3261e;font-weight:600;line-height:1.7}');
     expect(CSS).toContain('.form-sample-warning[hidden]{display:none}');
     expect(FLOW).toContain('updateSampleWarning');
-    expect(FLOW).toContain('নমুনার');
+    expect(FLOW).not.toContain('নমুনার ছবি দেখাবে');
     expect(FLOW).not.toContain("missing.push('স্বাক্ষর')");
     // It is a plain warning element, NOT an .engine-hint — the form CSS
     // hides engine hints, so a hint class would hide the warning too.
@@ -1047,7 +1047,7 @@ describe('form upload behavior (vm, stub DOM)', () => {
   });
 });
 
-describe('sample-face warning behavior (vm, stub DOM)', () => {
+describe('blank photo guidance (vm, stub DOM)', () => {
   async function flush() {
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
@@ -1059,7 +1059,7 @@ describe('sample-face warning behavior (vm, stub DOM)', () => {
     r.els['start-passport-button'].click();
     expect(r.els['form-sample-warning'].hidden).toBe(false);
     expect(r.els['form-sample-warning'].textContent).toContain('ছবি না দিলে');
-    expect(r.els['form-sample-warning'].textContent).toContain('নমুনার ছবি দেখাবে');
+    expect(r.els['form-sample-warning'].textContent).toContain('ছবির জায়গা খালি থাকবে');
     expect(r.els['form-sample-warning'].textContent).not.toContain('স্বাক্ষর');
   });
 

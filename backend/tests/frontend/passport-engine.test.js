@@ -26,7 +26,7 @@ const setTextCode = script.slice(script.indexOf(' function setText('), script.in
 const resetCode = script.slice(script.indexOf(' function resetRegion('), script.indexOf(' function createFields('));
 
 function createHarness() {
-  const model = { fields: original.fields.map(f => ({ id:f.id, text:f.text, original:f.original, group:f.group, style:{} })), engine:structuredClone(original.engine || {}) };
+  const model = { fields: original.fields.map(f => ({ id:f.id, text:f.text, original:f.original, group:f.group, style:{w:f.w,size:f.size} })), engine:structuredClone(original.engine || {}) };
   const fields = new Map(model.fields.map(f => [f.id, f]));
   const elements = new Map();
   for (const match of html.slice(0, stateMatch.index).matchAll(/<(input|textarea|select|button|div|p)\b([^>]*\bid="([^"]+)"[^>]*)>/g)) {
@@ -35,7 +35,7 @@ function createHarness() {
     elements.set(id, { id, type:attrs.match(/\btype="([^"]+)"/)?.[1] || (tag === 'select' ? 'select-one' : 'text'), tagName:tag.toUpperCase(), value:'', checked:false, hidden:false, textContent:'', dataset:{ engine:attrs.match(/\bdata-engine="([^"]+)"/)?.[1] }, validityMessage:'', addEventListener(event, callback) { listeners[event] = callback; }, setCustomValidity(message) { this.validityMessage = message; }, fire(event, arg) { listeners[event]?.(arg); } });
   }
   const document = { getElementById:id => elements.get(id), querySelectorAll:selector => selector === '[data-engine]' ? [...elements.values()].filter(e => e.dataset.engine) : [], activeElement:null };
-  const context = vm.createContext({ model, fields, document, window:{}, nodes:new Map(), selected:null, normalize:value => String(value).replace(/[\r\n\t]+/g, ' ').replace(/\u00a0/g, ' '), renderField() {}, baseStyle:() => ({}), selectField() {}, clone:structuredClone, marks:0, notify() {}, $:id => elements.get(id) });
+  const context = vm.createContext({ model, fields, document, window:{}, nodes:new Map(), selected:null, normalize:value => String(value).replace(/[\r\n\t]+/g, ' ').replace(/\u00a0/g, ' '), renderField() {}, measureFieldText:(_field, style, text) => text.length * style.size * 0.55, baseStyle:() => ({}), selectField() {}, clone:structuredClone, marks:0, notify() {}, $:id => elements.get(id) });
   vm.runInContext('function mark(){marks++;}\n' + setTextCode + resetCode + engine + '\ninitEngine();', context);
   const api = context.window.passportEngine;
   return { api, context, fields, elements,
@@ -272,6 +272,34 @@ test('reapply preserves manual name and MRZ overrides', () => { const h=createHa
 test('new source data clears stale MRZ overrides', () => { const h=createHarness(); h.input('mrz2','<'.repeat(44)); h.input('passportNo','ZZ0000005'); assert.notEqual(h.field('mrz-2'),'<'.repeat(44)); checkLine(h.field('mrz-2')); });
 test('same-address edits synchronize document, form and model', () => { const h=createHarness(); h.input('sameEmergency',true); h.input('address1','TEST ADDRESS'); h.input('address2','TEST DISTRICT'); assert.equal(h.field('emergency-address'),'TEST ADDRESS'); assert.equal(h.api.state().emergency1,'TEST ADDRESS'); assert.equal(h.api.state().emergency2,'TEST DISTRICT'); });
 test('reapply never restores a stale emergency address', () => { const h=createHarness(); h.input('sameEmergency',true); h.input('address1','NEW ADDRESS'); h.input('address2','NEW DISTRICT'); h.api.applyAll(); assert.equal(h.field('emergency-address'),'NEW ADDRESS'); assert.equal(h.field('emergency-city'),'NEW DISTRICT'); });
+
+test('a long pasted-style address splits and mirrors without losing words', () => {
+  const h = createHarness();
+  const address = 'SAMPLE APARTMENT EXTENSION, TEST COMMERCIAL ROAD SAMPLE LOCALITY, EXAMPLE DISTRICT';
+  h.input('address2','');
+  h.input('address1',address);
+  h.input('sameEmergency',true);
+  h.api.applyAll();
+  const first = h.elements.get('eng-address1').value;
+  const second = h.elements.get('eng-address2').value;
+  assert.ok(second, 'address split into the second line');
+  assert.equal(first + ' ' + second,address);
+  assert.equal(h.field('emergency-address'),first);
+  assert.equal(h.field('emergency-city'),second);
+});
+
+test('an existing second address line is kept and excessive text is flagged', () => {
+  const h = createHarness();
+  const address = 'LONG WORD SAMPLE COMPLEX '.repeat(20).trim();
+  h.input('sameEmergency',false);
+  h.input('address1',address);
+  h.input('address2','EXAMPLE DISTRICT');
+  h.api.applyAll();
+  assert.equal(h.elements.get('eng-address1').value,address);
+  assert.equal(h.elements.get('eng-address2').value,'EXAMPLE DISTRICT');
+  assert.match(h.elements.get('eng-address1').validityMessage,/দুই লাইনে ভাগ/);
+});
+
 test('unchecking same-address retains latest mirrored values', () => { const h=createHarness(); h.input('sameEmergency',true); h.input('address1','LATEST'); h.input('sameEmergency',false); assert.equal(h.elements.get('eng-emergency1').value,'LATEST'); });
 test('direct emergency override explicitly unlinks addresses', () => { const h=createHarness(); h.input('sameEmergency',true); h.edit('emergency-address','DIFFERENT'); assert.equal(h.api.state().sameEmergency,false); assert.equal(h.api.state().emergency1,'DIFFERENT'); assert.equal(h.elements.get('eng-emergency-box').hidden,false); });
 test('independent emergency address survives parent edits', () => { const h=createHarness(); h.input('sameEmergency',false); h.input('emergency1','INDEPENDENT'); h.input('address1','PERMANENT'); assert.equal(h.field('emergency-address'),'INDEPENDENT'); });
