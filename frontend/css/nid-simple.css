@@ -1,0 +1,72 @@
+/* NID interaction surfaces only; the PDF renders in its own document. */
+body.page-nid-replica { --nid-green: #00543b; --nid-cream: #fcfaf5; }
+body.page-nid-replica .main {
+  max-width: 1120px;
+  margin-inline: auto;
+  padding: 28px 32px 100px;
+  background: var(--nid-cream);
+}
+.page-nid-replica .topbar {
+  position: static !important;
+  margin: 0 0 24px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+.page-nid-replica .topbar h2 { color: var(--nid-green); font-size: 28px; line-height: 1.4; }
+.page-nid-replica .topbar p { margin-top: 8px; color: #637369; }
+.page-nid-replica #walletBadge { background: #eef6ef !important; color: var(--nid-green) !important; border-color: #d8e6db !important; }
+body.page-nid-replica .wiz .form-card {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  box-shadow: none;
+  margin: 0 auto;
+}
+.page-nid-replica .nid-brand { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:18px 22px; margin-bottom:24px; border-radius:16px; background:var(--nid-green); }
+.page-nid-replica .nid-brand a { color:#fff; text-decoration:none; font-size:14px; }
+.page-nid-replica .nid-brand a:first-child { color:#f5cf72; font-size:24px; font-weight:700; }
+.page-nid-replica .main:has(#w3.on,#w4.on) .topbar { display:none !important; }
+.page-nid-replica #w1 .form-card,
+.page-nid-replica #w2 .form-card { max-width: 600px !important; }
+.page-nid-replica .nid-step { text-align: center; color: #66726c; margin: 0 0 24px; font-size: 16px; }
+.page-nid-replica #dropZone {
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border: 2px dashed var(--nid-green);
+  border-radius: 20px;
+  background: #f1f6ee;
+}
+.page-nid-replica #dropZone > div:nth-child(3) { color: var(--nid-green) !important; font-size: 23px !important; overflow-wrap: anywhere; }
+.page-nid-replica .nid-help { margin: 22px 0; color: var(--nid-green); }
+.page-nid-replica .nid-help summary { cursor: pointer; min-height: 40px; text-align: center; text-decoration: underline; text-underline-offset: 4px; }
+.page-nid-replica .nid-help p { margin-top: 8px; line-height: 1.7; color: #53665b; }
+.page-nid-replica .price-line { background: #f7eedb; color: #413721; border: 0; padding: 16px; border-radius: 14px; font-size: 16px; justify-content: center; }
+.page-nid-replica :is(#b1,#b3,#b4) { background: var(--nid-green); color: white; border-radius: 14px; min-height: 54px; font-size: 18px; padding: 14px 18px; text-align: center; text-decoration: none; }
+.page-nid-replica :is(#b1,#b3,#b4):focus-visible { outline: 3px solid #d4a52d; outline-offset: 3px; }
+.page-nid-replica #w3 h3,
+.page-nid-replica #w4 h3 { font-size: 28px !important; text-align: center; color: var(--nid-green) !important; margin-bottom: 12px !important; }
+.page-nid-replica #w3 .form-card > p { text-align: center; font-size: 16px !important; }
+.page-nid-replica .nid-back { padding: 10px 0; border: 0; background: transparent; color: var(--nid-green); cursor: pointer; font: inherit; }
+.page-nid-replica #fieldForm { gap: 18px 24px; }
+.page-nid-replica #fieldForm label { font-size: 16px; color: var(--nid-green); }
+.page-nid-replica #fieldForm :is(input,textarea) { min-height: 48px; font-size: 16px; border-radius: 10px; border-color: #b9c8bf; }
+.page-nid-replica #fieldForm .field { min-width: 0; }
+.page-nid-replica .imgprev { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+.page-nid-replica .img-slot-card { min-width: 0; background: #f8f5ee; box-shadow: none; border-color: #ded8ca; border-radius: 14px; }
+.page-nid-replica .img-preview-box { max-width: 100%; }
+.page-nid-replica .btn-img { min-height: 40px; }
+.page-nid-replica .img-btn-group { flex-wrap: wrap; }
+.page-nid-replica #w4 .row2 { flex-direction: column-reverse; }
+.page-nid-replica #w4 .row2 .btn-secondary { background: transparent; border: 0; color: var(--nid-green); }
+.page-nid-replica .nid-another { display: block; text-align: center; padding: 12px; color: var(--nid-green); text-underline-offset: 4px; }
+.page-nid-replica #cardFrame { height: 440px; max-height: 55vh; box-shadow: none; }
+@media (max-width: 900px) {
+  body.page-nid-replica .main { padding: 24px 20px 100px; }
+  .page-nid-replica .topbar h2 { font-size: 26px; }
+  .page-nid-replica #walletBadge { font-size: 12px !important; padding: 5px 10px !important; }
+  .page-nid-replica #fieldForm { grid-template-columns: minmax(0,1fr); }
+  .page-nid-replica .img-slot-card { padding: 10px; }
+}

@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
 <link rel="stylesheet" href="/css/premium.css?v=20261110-1">
 <link rel="stylesheet" href="/css/motion.css?v=20261110-1">
-<meta name="theme-color" content="#1e40af">
+<meta name="theme-color" content="#00543b">
 <title>এনআইডি কার্ড রেপ্লিকা - All In One</title>
 <style>
   .form-card {
@@ -267,6 +267,7 @@
 <link rel="stylesheet" href="/css/engine-inputs.css?v=20261110-13">
 <script src="/js/engine-inputs.js?v=20261110-13" defer></script>
 <script src="/js/engine-feedback.js?v=20261111-4" defer></script>
+<link rel="stylesheet" href="/css/nid-simple.css?v=20261118-1">
 </head>
 <body class="has-tabbar flagship-app service-workspace page-nid-replica">
 <div class="desktop">
@@ -290,42 +291,36 @@
   </div>
 
   <div class="main">
+    <header class="nid-brand"><a href="/dashboard.html">All In One</a><a href="/services.html">সকল সেবা →</a></header>
     <div class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
       <div>
-        <h2>🪪 এনআইডি কার্ড রেপ্লিকা জেনারেটর</h2>
-        <p>ভোটার নিবন্ধন ফরমের PDF আপলোড করে স্বয়ংক্রিয়ভাবে কার্ড প্রস্তুত করুন</p>
+        <h2>এনআইডি কার্ড তৈরি</h2>
+        <p>PDF দিন, তথ্য মিলিয়ে কার্ড ডাউনলোড করুন</p>
       </div>
       <div id="walletBadge" style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">
         💳 ব্যালেন্স: ৳<span id="balVal">০</span>
       </div>
     </div>
 
-    <div class="steps" id="steps">
-      <div class="step on" data-s="1"><span class="dot">১</span>আপলোড</div>
-      <div class="step" data-s="2"><span class="dot">২</span>তথ্য এক্সট্রাক্ট</div>
-      <div class="step" data-s="3"><span class="dot">৩</span>যাচাই ও এডিট</div>
-      <div class="step" data-s="4"><span class="dot">৪</span>কার্ড তৈরি</div>
-    </div>
-
-    <div class="err" id="err"></div>
-    <div class="ok" id="ok"></div>
+    <div class="err" id="err" role="alert"></div>
+    <div class="ok" id="ok" role="status"></div>
 
     <!-- STEP 1: UPLOAD -->
     <div class="wiz on" id="w1">
       <div class="form-card">
-        <div class="price-line">
-          <span>সেবা চার্জ: ৳<span id="priceVal">–</span> (কার্ড তৈরি সফল হলে কাটবে)</span>
-          <span>ব্যর্থ হলে চার্জ: ৳০</span>
-        </div>
+        <p class="nid-step">ধাপ ১ / ৩ · PDF দিন</p>
         <label class="drop" id="dropZone">
           <input type="file" id="pdfFile" accept="application/pdf,.pdf">
           <div style="font-size:42px; margin-bottom:8px;">📄</div>
-          <div style="font-size:16px; font-weight:700; color:var(--primary-700);">NID ফর্মের PDF ফাইল নির্বাচন করুন</div>
-          <div style="font-size:13px; color:var(--text-muted); margin-top:4px;">ক্লিক করুন বা ড্র্যাগ করে ফেলুন (সর্বোচ্চ ১০ MB)</div>
+          <div style="font-size:16px; font-weight:700; color:var(--primary-700);">PDF বেছে নিন</div>
+          <div style="font-size:13px; color:var(--text-muted); margin-top:4px;">সর্বোচ্চ ১০ MB · এখানে ফাইল ছেড়েও দিতে পারেন</div>
         </label>
-        <div style="height:16px;"></div>
+        <details class="nid-help"><summary>কোন PDF দিতে হবে?</summary><p>ভোটার নিবন্ধন তথ্যের PDF দিন। ফাইল থেকে পাওয়া তথ্য পরের ধাপে দেখে সংশোধন করতে পারবেন।</p></details>
+        <div class="price-line">
+          <span>ফি ৳<span id="priceVal">–</span> · সফল হলে টাকা কাটবে</span>
+        </div>
         <button class="btn btn-primary" id="b1" onclick="doExtract()" style="width:100%;">তথ্য বের করুন →</button>
-        <p style="text-align:center; font-size:12px; color:var(--text-muted); margin-top:8px;">আপনার ভোটার নিবন্ধন ফর্ম থেকে নাম, ছবি ও স্বাক্ষর স্বয়ংক্রিয়ভাবে সংগ্রহ করা হবে।</p>
+
       </div>
     </div>
 
@@ -340,25 +335,28 @@
     <!-- STEP 3: REVIEW -->
     <div class="wiz" id="w3">
       <div class="form-card">
-        <h3 style="color:var(--primary-700); font-size:17px; font-weight:700; margin-bottom:6px;">✅ তথ্য মিলিয়ে নিন ও প্রয়োজন হলে সংশোধন করুন</h3>
-        <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">কাগজপত্রে ছবি, স্বাক্ষর বা কোনো তথ্য না থাকলে নিচের খালি ঘরে লিখে দিন অথবা ছবি/স্বাক্ষর আপলোড করে যুক্ত করুন।</p>
-        <div class="imgprev" id="imgPrev"></div>
+        <h3 style="color:var(--primary-700); font-size:17px; font-weight:700; margin-bottom:6px;">তথ্য মিলিয়ে নিন</h3>
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">ধাপ ২ / ৩ · ভুল থাকলে সংশোধন করুন</p>
+        <button type="button" class="nid-back" onclick="go(1)">← PDF পরিবর্তন করুন</button>
         <div id="fieldForm"></div>
+        <div class="imgprev" id="imgPrev"></div>
         <div style="height:18px;"></div>
-        <button class="btn btn-primary" id="b3" onclick="doBuild()" style="width:100%;">কার্ড তৈরি করুন →</button>
+        <button class="btn btn-primary" id="b3" onclick="doBuild()" style="width:100%;">নিশ্চিত করে তৈরি করুন →</button>
       </div>
     </div>
 
     <!-- STEP 4: CARD -->
     <div class="wiz" id="w4">
       <div class="form-card">
-        <h3 style="color:var(--success); font-size:17px; font-weight:700; margin-bottom:12px;">🎉 আপনার এনআইডি কার্ড প্রস্তুত!</h3>
+        <h3 style="color:var(--success); font-size:17px; font-weight:700; margin-bottom:12px;">আপনার কার্ড প্রস্তুত</h3>
+        <p class="nid-step">ধাপ ৩ / ৩ · PDF ডাউনলোড করুন</p>
         <iframe id="cardFrame" title="NID card preview"></iframe>
         <div style="height:16px;"></div>
         <div class="row2">
           <button class="btn btn-secondary" onclick="go(3)">← তথ্য পরিবর্তন</button>
           <a class="btn btn-primary" id="b4" download>📥 PDF ডাউনলোড করুন</a>
         </div>
+        <a class="nid-another" href="/nid-replica.html">আরেকটি কার্ড তৈরি করুন</a>
       </div>
     </div>
   </div>
@@ -508,10 +506,10 @@ function renderFieldsUI(){
     d.className = 'field' + (sf.full ? ' full' : '');
     const id = 'std_fld_' + i;
     if(sf.full){
-      d.innerHTML = '<label>' + esc(sf.label) + '</label>' +
+      d.innerHTML = '<label for="' + id + '">' + esc(sf.label) + '</label>' +
         '<textarea id="' + id + '" rows="3" data-k="' + esc(sf.key) + '" placeholder="' + esc(sf.placeholder) + '">' + esc(val) + '</textarea>';
     } else {
-      d.innerHTML = '<label>' + esc(sf.label) + '</label>' +
+      d.innerHTML = '<label for="' + id + '">' + esc(sf.label) + '</label>' +
         '<input id="' + id + '" value="' + esc(val) + '" data-k="' + esc(sf.key) + '" placeholder="' + esc(sf.placeholder) + '">';
     }
     ff.appendChild(d);
@@ -525,9 +523,9 @@ function renderFieldsUI(){
     if(isAddr) d.classList.add('full');
     const id = 'extra_fld_' + idx;
     if(isAddr){
-      d.innerHTML = '<label>' + esc(k) + '</label><textarea id="' + id + '" rows="3" data-k="' + esc(k) + '">' + esc(fields[k]) + '</textarea>';
+      d.innerHTML = '<label for="' + id + '">' + esc(k) + '</label><textarea id="' + id + '" rows="3" data-k="' + esc(k) + '">' + esc(fields[k]) + '</textarea>';
     } else {
-      d.innerHTML = '<label>' + esc(k) + '</label><input id="' + id + '" value="' + esc(fields[k]) + '" data-k="' + esc(k) + '">';
+      d.innerHTML = '<label for="' + id + '">' + esc(k) + '</label><input id="' + id + '" value="' + esc(fields[k]) + '" data-k="' + esc(k) + '">';
     }
     ff.appendChild(d);
   });
@@ -577,7 +575,7 @@ async function updateBalance(){
       if(document.getElementById('priceVal')) document.getElementById('priceVal').textContent = bn(currentPrice);
       const b3 = document.getElementById('b3');
       if(b3 && currentPrice > 0){
-        b3.textContent = 'কার্ড তৈরি করুন (৳' + bn(currentPrice) + ') →';
+        b3.textContent = 'নিশ্চিত করে তৈরি করুন (৳' + bn(currentPrice) + ') →';
       }
       if(d.allowed === false){
         showErr('এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।');
