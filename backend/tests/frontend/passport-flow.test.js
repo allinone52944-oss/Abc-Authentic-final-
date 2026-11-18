@@ -447,16 +447,14 @@ describe('form photo/signature upload', () => {
     expect(PAGE).toContain('.image-slot.signature .slot-patch{display:block!important}');
   });
 
-  test('hologram overlay shows on top of an uploaded photo, on the photo\'s right side (2026-11-16)', () => {
-    // The lotus emblem was missing from the template, so it is layered
-    // over the uploaded photo (z-index 2, above the photo) whenever a
-    // photo is attached; with no photo the scan's own faint hologram
-    // shows through instead. The round seal keeps its own existing
-    // overlay (stampOverlay) — it was NOT taken from the provided file.
-    expect(PAGE).toContain('.image-slot.photo.changed .hologram-overlay{display:block;z-index:2}');
-    expect(PAGE).toContain('.image-slot .hologram-overlay');
-    expect(PAGE).toContain("holo.className='hologram-overlay'");
-    expect(PAGE).toContain('holo.src=model.assets.hologramOverlay');
+  test('no hologram overlay over the uploaded photo (2026-11-18)', () => {
+    // The scan has no circle at the photo's top-right: the pale
+    // hologram-overlay blob was removed (2026-11-18 user report). The
+    // photo area now shows only the uploaded photo over the levelled
+    // plate, and the round seal keeps its own existing overlay
+    // (stampOverlay) — it was NOT taken from the provided file.
+    expect(PAGE).not.toContain('hologram-overlay');
+    expect(PAGE).not.toContain('hologramOverlay');
     expect(PAGE).toContain("stamp.className='stamp-overlay'");
     expect(PAGE).toContain('stamp.src=model.assets.stampOverlay');
   });

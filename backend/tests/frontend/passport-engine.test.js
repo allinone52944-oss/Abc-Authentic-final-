@@ -440,16 +440,19 @@ test('photo backdrop plate is tonally even — no dark band behind the cut-out p
   // person. The plate's bottom gradient is now levelled to the mid tone.
   assert.ok(Math.abs(bottom - mid) < 12, `photo plate bottom ${bottom.toFixed(1)} vs mid ${mid.toFixed(1)}`);
 });
-test('hologram overlay is a separate asset from the template seal (2026-11-16)', () => {
-  // The lotus emblem was genuinely missing from the template, so it was
-  // extracted from the user-provided artwork file; the round government
-  // seal was ALREADY in the template as stampOverlay and is untouched.
-  assert.ok(original.assets.hologramOverlay.startsWith('data:image/webp;base64,'));
-  assert.ok(original.assets.hologramOverlay.length > 5000);
-  assert.notEqual(original.assets.hologramOverlay, original.assets.stampOverlay);
+test('no hologram overlay over the uploaded photo (2026-11-18)', () => {
+  // The pale circle the overlay painted over the photo's top-right does
+  // not exist in the scan: the scan's photo edge is clean guilloche and
+  // its hologram (dark-blue lotus, top-right of the page) is already in
+  // the template. So no overlay element, no asset, nothing over the photo.
+  assert.ok(!('hologramOverlay' in original.assets), 'hologramOverlay asset removed');
+  assert.ok(!script.includes('hologram-overlay'), 'no hologram overlay element');
+  assert.ok(!script.includes('hologramOverlay'), 'no hologramOverlay reference');
+  assert.ok(!html.includes('hologram-overlay'), 'no hologram overlay CSS');
+  // The round government seal at the photo's bottom-left is untouched.
   assert.ok(original.assets.stampOverlay.startsWith('data:image/webp;base64,'));
-  assert.ok(script.includes("holo.className='hologram-overlay'"));
-  assert.ok(script.includes('holo.src=model.assets.hologramOverlay'));
+  assert.ok(script.includes("stamp.className='stamp-overlay'"));
+  assert.ok(script.includes('stamp.src=model.assets.stampOverlay'));
 });
 test('photo slot backing shows the scan plate in edit and print css (no preview state)', () => {
   assert.ok(html.includes('.image-slot.photo.changed .slot-patch{display:block}'));
