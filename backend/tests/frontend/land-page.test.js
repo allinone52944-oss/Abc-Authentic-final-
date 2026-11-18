@@ -8,6 +8,7 @@
 //  - server.js mounts /api/land
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
@@ -145,8 +146,24 @@ describe('catalog shows land ONCE (the duplicate complaint)', () => {
     // the khatian search is its own card now, so it leaves the subtitle.
     expect(svcs).toContain('নামে সন্ধান · জমি যাচাই · মৌজা মূল্য');
     expect(svcs).not.toContain('খতিয়ান খোঁজ · নামে সন্ধান');
-    expect(svcs).toContain("_landSearch: 'নামে সন্ধান জমি যাচাই মৌজা মূল্য মৌজা মূল্য রিপোর্ট'");
-    expect(svcs).toContain("extra.includes(q)");
+    const groupSource = svcs.slice(svcs.indexOf('const LAND_ENGINES'), svcs.indexOf('function chargeRuleHtml'));
+    const searchSource = svcs.slice(svcs.indexOf('function searchKey'), svcs.indexOf('function showCats'));
+    const results = { style: {} };
+    const inputs = [
+      { engine_id: 'land-scan', name_bn: 'নামে সম্পত্তি সন্ধান', type: 'automated', open: true },
+      { engine_id: 'land-mouza-value', name_bn: 'মৌজা মূল্য রিপোর্ট', type: 'automated', open: true },
+      { engine_id: 'birth-final', name_bn: 'জন্ম নিবন্ধন সনদ', type: 'automated', open: true },
+    ];
+    vm.runInNewContext(groupSource + searchSource + '\nconst ALL_SERVICES = groupLand(inputs); applySearch("মৌজা-মূল্য");', {
+      inputs,
+      CURRENT_FILTER: 'cats',
+      document: { getElementById: id => id === 'svcView' ? results : { style: {} } },
+      card: service => service.name_bn,
+      bnNum: String,
+      saveViewState() {},
+    });
+    expect(results.innerHTML).toContain('ভূমি সেবা (খতিয়ান)');
+    expect(results.innerHTML).not.toContain('জন্ম নিবন্ধন সনদ');
   });
   test('the group card opens the single land page', () => {
     expect(svcs).toContain("if (s._landGroup)");

@@ -53,11 +53,11 @@
   }
   .search-input {
     width: 100%;
-    padding: 14px 44px 14px 44px;
+    padding: 14px 48px 14px 44px;
     background: #ffffff;
     border: 1px solid var(--border-light);
     border-radius: var(--r-lg);
-    font-size: 15px;
+    font-size: 16px;
     font-family: inherit;
     box-shadow: var(--shadow-xs);
     transition: all 0.2s ease;
@@ -78,20 +78,28 @@
   }
   .search-clear {
     position: absolute;
-    right: 14px;
+    right: 4px;
     top: 50%;
     transform: translateY(-50%);
-    background: #e2e8f0;
+    background: transparent;
     border: none;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
     font-size: 12px;
     color: #475569;
     cursor: pointer;
     display: none;
     align-items: center;
     justify-content: center;
+  }
+  .search-clear:hover { background: #e2e8f0; }
+  .svc-summary {
+    margin: 3px 0 6px;
+    color: #475569;
+    font-size: 13px;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
   }
   .filter-tabs {
     display: flex;
@@ -195,10 +203,10 @@
     </div>
 
     <!-- Live Search Bar -->
-    <div class="search-bar-wrap">
-      <span class="search-icon">🔍</span>
-      <input type="text" id="svcSearch" class="search-input" placeholder="সেবার নাম লিখে খুঁজুন (যেমন: জন্ম নিবন্ধন, NID, পাসপোর্ট...)" oninput="onSearchInput(this.value)">
-      <button class="search-clear" id="searchClear" onclick="clearSearch()" aria-label="অনুসন্ধান মুছুন">✕</button>
+    <div class="search-bar-wrap" role="search" aria-label="সেবা খুঁজুন">
+      <span class="search-icon" aria-hidden="true">🔍</span>
+      <input type="text" id="svcSearch" class="search-input" aria-label="সেবার নাম" placeholder="সেবার নাম লিখুন" oninput="onSearchInput(this.value)">
+      <button type="button" class="search-clear" id="searchClear" onclick="clearSearch()" aria-label="অনুসন্ধান মুছুন">✕</button>
     </div>
 
     <!-- Filter Segment Tabs -->
@@ -288,12 +296,29 @@ function chargeRuleHtml(s){
   return '<div style="font-size:11px;color:#64748b;font-weight:600;margin-top:2px;">💳 ' + esc(r.label) + ' · ' + esc(r.detail) + '</div>';
 }
 
+const SERVICE_SUMMARIES = new Map([
+  ['nid-replica', 'তথ্য ও ছবি দিয়ে ফর্ম পূরণ করুন'],
+  ['nid-server-copy', 'পোর্টাল লগইন প্রয়োজন'],
+  ['qr-photo-verify', 'QR কোড ও ছবি দিয়ে যাচাই করুন'],
+  ['bdris-apply', 'জন্ম নিবন্ধনের আবেদন ফর্ম পূরণ করুন'],
+  ['birth-final', 'জন্ম নিবন্ধন নম্বর ও জন্মতারিখ দিন'],
+  ['death-final', 'মৃত্যু নিবন্ধন নম্বর ও মৃত্যুর তারিখ দিন'],
+  ['land-search', 'খতিয়ান নম্বর দিয়ে খুঁজুন'],
+  ['land-scan', 'মালিকের নামে সম্পত্তি খুঁজুন'],
+  ['land-verify', 'জমির তথ্য দিয়ে রেকর্ড যাচাই করুন'],
+  ['land-mouza-value', 'মৌজা ও জমির শ্রেণি অনুযায়ী মূল্য দেখুন'],
+  ['land-khatian', 'খতিয়ান নম্বর, নাম বা দাগ দিয়ে খুঁজুন'],
+  ['land-mouza-map', 'মৌজা বেছে ম্যাপ দেখুন'],
+  ['passport', 'এমআরপি পাসপোর্টের তথ্য পূরণের ফর্ম'],
+  ['epassport', 'ই-পাসপোর্টের তথ্য পূরণের ফর্ম'],
+]);
+
 function card(s){
   if (s._landGroup) {
     return '<div class="svc-card" onclick="location.href=\'/land.html\'">' +
       '<div class="svc-ico">🌾</div>' +
       '<div class="svc-info"><h4>ভূমি সেবা (খতিয়ান)</h4>' +
-      '<div style="font-size:12px;color:#64748b;margin-top:2px;">নামে সন্ধান · জমি যাচাই · মৌজা মূল্য</div>' +
+      '<p class="svc-summary">নামে সন্ধান · জমি যাচাই · মৌজা মূল্য</p>' +
       '<div style="margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">' +
       '<span class="ptype auto">⚡ স্বয়ংক্রিয়</span>' + (s.open ? '' : '<span class="ptype closed">সাময়িক বন্ধ</span>') + '</div></div>' +
       '<div class="svc-pr">৳' + bnNum(s.price) + ' থেকে' + chargeRuleHtml(s) + '</div></div>';
@@ -302,9 +327,11 @@ function card(s){
   const catName = s.category_name_bn || s.category_name;
   const catHtml = catName ? '<span class="cat-pill">📁 ' + esc(catName) + '</span>' : '';
   const isAuto = s.type !== 'manual';
+  const summary = isAuto ? SERVICE_SUMMARIES.get(s.engine_id) : 'তথ্য দিয়ে অর্ডার করুন। অপারেটর কাজটি করবেন।';
   return '<div class="svc-card" onclick="location.href=\'/service-detail.html?id='+s.id+'\'">'+
     '<div class="svc-ico">'+esc((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn||s.name))+'</div>'+
     '<div class="svc-info"><h4>'+esc(s.name_bn||s.name)+'</h4>'+
+    (summary ? '<p class="svc-summary">' + esc(summary) + '</p>' : '') +
     '<div style="margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">' + catHtml +
     '<span class="ptype '+(isAuto?'auto':'manual')+'">'+(isAuto?'⚡ স্বয়ংক্রিয়':'📝 ম্যানুয়াল')+'</span>'+closed+'</div></div>'+
     '<div class="svc-pr">৳'+bnNum(s.price)+(s.open?'':'<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:2px;">বন্ধ আছে</div>')+chargeRuleHtml(s)+(s.engine_id === 'bdris-apply' ? '<div class="bdris-pdf-note" style="font-size:11px;color:#64748b;font-weight:600;margin-top:2px;">' + bdrisPdfNoteHtml() + '</div>' : '')+'</div></div>';
@@ -344,7 +371,7 @@ function switchFilter(f){
   const targetBtn = { cats:'tabCats', all:'tabAll', auto:'tabAuto', manual:'tabManual' }[f];
   if(targetBtn) document.getElementById(targetBtn).classList.add('on');
 
-  const q = (document.getElementById('svcSearch').value || '').trim().toLowerCase();
+  const q = document.getElementById('svcSearch').value.trim();
   if (q) {
     applySearch(q);
     return;
@@ -386,21 +413,29 @@ function onSearchInput(val){
   const clearBtn = document.getElementById('searchClear');
   if (val && val.trim()) {
     clearBtn.style.display = 'inline-flex';
-    applySearch(val.trim().toLowerCase());
+    applySearch(val.trim());
   } else {
     clearBtn.style.display = 'none';
     if (CURRENT_FILTER === 'cats') showCats();
     else showFilteredServices(CURRENT_FILTER);
+    saveViewState();
   }
 }
 
 function clearSearch(){
   const inp = document.getElementById('svcSearch');
   inp.value = '';
-  document.getElementById('searchClear').style.display = 'none';
-  if (CURRENT_FILTER === 'cats') showCats();
-  else showFilteredServices(CURRENT_FILTER);
-  saveViewState();
+  onSearchInput('');
+  inp.focus();
+}
+
+function searchKey(value){
+  return String(value || '').normalize('NFKC').toLowerCase()
+    .replace(/[^\p{L}\p{N}\p{M}]+/gu, '')
+    .replace(/এনআইডি|nআইডি/g, 'nid')
+    .replace(/জন্মনিবন্ধন/g, 'birthregistration')
+    .replace(/ইপাসপোর্ট/g, 'epassport')
+    .replace(/পাসপোর্ট/g, 'passport');
 }
 
 function applySearch(q){
@@ -412,13 +447,11 @@ function applySearch(q){
   if (CURRENT_FILTER === 'auto') baseList = ALL_SERVICES.filter(s => s.type !== 'manual');
   else if (CURRENT_FILTER === 'manual') baseList = ALL_SERVICES.filter(s => s.type === 'manual');
 
-  const filtered = baseList.filter(s => {
-    const bn = (s.name_bn || '').toLowerCase();
-    const en = (s.name || '').toLowerCase();
-    const cat = (s.category_name_bn || s.category_name || '').toLowerCase();
-    const extra = (s._landSearch || '').toLowerCase();
-    return bn.includes(q) || en.includes(q) || cat.includes(q) || extra.includes(q);
-  });
+  const key = searchKey(q);
+  const filtered = key ? baseList.filter(s =>
+    [s.name_bn, s.name, s.category_name_bn, s.category_name, s._landSearch]
+      .some(value => searchKey(value).includes(key))
+  ) : [];
 
   v.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
     '<h3 style="font-size:17px;font-weight:800;color:#0f172a;">🔍 অনুসন্ধানের ফলাফল (' + bnNum(filtered.length) + 'টি পাওয়া গেছে)</h3>' +
@@ -454,6 +487,9 @@ function showCat(i){
 }
 
 async function init(){
+  function loginUrl(){
+    return '/login.html?next=' + encodeURIComponent(location.pathname + location.search);
+  }
   function showLoadError(kind){
     // B2#2 — the real failure, not one generic message. Session
     // expiry goes to login WITH the return URL (a retry would just
@@ -466,7 +502,7 @@ async function init(){
     let msg, action;
     if (kind === 'session') {
       msg = 'আপনার সেশন শেষ হয়ে গেছে। আবার লগইন করুন।';
-      action = '<button class="btn btn-secondary" onclick="location.href=\'/login.html?next=\' + encodeURIComponent(\'/services.html\')">লগইন করুন</button>';
+      action = '<a class="btn btn-secondary" href="' + esc(loginUrl()) + '">লগইন করুন</a>';
     } else if (kind === 'server') {
       msg = 'সার্ভার সমস্যা হচ্ছে। কিছুক্ষণ পর আবার চেষ্টা করুন।';
       action = '<button class="btn btn-secondary" onclick="init()">আবার চেষ্টা করুন</button>';
@@ -486,7 +522,7 @@ async function init(){
   let me = null;
   try { me = await ABC.api('/auth/me'); } catch (_) { me = null; }
   if(!me || !me.ok){
-    if (me && me.status === 401) { location.href='/login.html?next=' + encodeURIComponent('/services.html'); return; }
+    if (me && me.status === 401) { location.href = loginUrl(); return; }
     showLoadError(me && me.status >= 500 ? 'server' : 'network');
     return;
   }
@@ -538,25 +574,13 @@ async function init(){
   if (uncat.services.length) GROUPS.push(uncat);
   GROUPS.sort((a,b)=>a.ord-b.ord);
 
-  if (!GROUPS.length) {
-    switchFilter('all');
-  } else {
-    // B2#14 — Browser Back can restore the search input value
-    // while init() re-runs: re-apply the restored query instead
-    // of always showing the category view. History state
-    // (filter + query) wins when present; otherwise fall back to
-    // the input value the browser restored.
-    const saved = (window.history && history.state) || null;
-    const restoredQ = ((saved && saved.q) || (document.getElementById('svcSearch').value || '')).trim();
-    if (restoredQ) {
-      if (saved && saved.f && ['cats','all','auto','manual'].indexOf(saved.f) >= 0) CURRENT_FILTER = saved.f;
-      document.getElementById('svcSearch').value = restoredQ;
-      document.getElementById('searchClear').style.display = 'inline-flex';
-      applySearch(restoredQ.toLowerCase());
-    } else {
-      showCats();
-    }
-  }
+  const input = document.getElementById('svcSearch');
+  const saved = history.state;
+  const query = saved?.q ?? (input.value || new URLSearchParams(location.search).get('q') || '');
+  input.value = query.trim();
+  document.getElementById('searchClear').style.display = input.value ? 'inline-flex' : 'none';
+  const filter = ['cats', 'all', 'auto', 'manual'].includes(saved?.f) ? saved.f : (GROUPS.length ? 'cats' : 'all');
+  switchFilter(filter);
 }
 
 // B2#14 — remember the current query + filter in history state
@@ -565,19 +589,19 @@ async function init(){
 function saveViewState(){
   try {
     const q = (document.getElementById('svcSearch').value || '').trim();
-    history.replaceState({ q: q, f: CURRENT_FILTER }, '');
+    const url = new URL(location.href);
+    if (q) url.searchParams.set('q', q);
+    else url.searchParams.delete('q');
+    history.replaceState({ q, f: CURRENT_FILTER }, '', url);
   } catch (e) {}
 }
 window.addEventListener('popstate', function (ev) {
   const st = (ev && ev.state) || null;
   if (!st || !ALL_SERVICES.length) return;
   const q = (st.q || '').trim();
-  if (st.f && ['cats','all','auto','manual'].indexOf(st.f) >= 0) CURRENT_FILTER = st.f;
   document.getElementById('svcSearch').value = q;
   document.getElementById('searchClear').style.display = q ? 'inline-flex' : 'none';
-  if (q) applySearch(q.toLowerCase());
-  else if (CURRENT_FILTER === 'cats') showCats();
-  else showFilteredServices(CURRENT_FILTER);
+  switchFilter(['cats', 'all', 'auto', 'manual'].includes(st.f) ? st.f : 'cats');
 });
 init();
 </script>

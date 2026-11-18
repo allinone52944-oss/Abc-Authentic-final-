@@ -182,3 +182,57 @@ body.dash-v2 .dv2-row-main b { white-space: normal; overflow: visible; overflow-
 body.dash-v2 .dv2-tag { white-space: normal; }
 body.dash-v2 :is(.hero-bal-toggle,#greetVoiceBtn,#greetVoiceBtnM) { min-height: 44px; min-width: 44px; }
 body.dash-v2 :is(.svc2,.dv2-q):focus-visible { outline: 2px solid var(--pv-primary); outline-offset: 3px; }
+
+body.dash-v2 .dv2-service-search {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #dce5df;
+  border-radius: 14px;
+}
+body.dash-v2 .dv2-service-search input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #0f172a;
+  font: inherit;
+  font-size: 16px;
+}
+body.dash-v2 .dv2-service-search button,
+.dashboard-load-status button {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--pv-primary, #065f46);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+body.dash-v2 .dv2-service-search :focus-visible,
+.dashboard-load-status button:focus-visible {
+  outline: 2px solid var(--pv-primary, #065f46);
+  outline-offset: 2px;
+}
+.dashboard-load-status:not([hidden]) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid #e6cc98;
+  border-radius: 12px;
+  background: #fff8e7;
+  color: #563b12;
+}
+.dashboard-load-status p { margin: 0; }
+.dashboard-load-status button:disabled { opacity: .65; cursor: wait; }
+.mobile-only .dashboard-load-status { margin-inline: 16px; }

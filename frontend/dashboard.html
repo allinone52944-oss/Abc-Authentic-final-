@@ -943,7 +943,7 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/dashboard-polish.css?v=20261110-1">
-<link rel="stylesheet" href="/css/dashboard-v2.css?v=20261110-9">
+<link rel="stylesheet" href="/css/dashboard-v2.css?v=20261118-1">
 <script defer src="/js/service-navigation.js?v=20261110-9"></script>
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
@@ -997,6 +997,8 @@
         <button class="btn-logout" id="logoutBtn" title="নিরাপদে লগআউট করুন">⏻</button>
       </div>
     </div>
+
+    <div class="dashboard-load-status" hidden></div>
 
     <!-- Banner Strip (Desktop) -->
     <div class="bn-strip" id="bnStrip" style="display:none;"></div>
@@ -1153,6 +1155,8 @@
       </div>
     </div>
   </div>
+
+  <div class="dashboard-load-status" hidden></div>
 
   <!-- Mobile Balance & 4-Action Grid -->
   <div class="m-bal">
@@ -1517,10 +1521,45 @@ const GreetVoice = (() => {
   return { maybePlay, isConfigured, fileForUser, play, stop, initUI, isPlaying, handleManualClick };
 })();
 
+let dashboardLoading = false;
 async function init() {
-  const r = await ABC.api('/auth/me');
-  if (!r.ok) { location.href = '/login.html'; return; }
-  const { user } = await r.json();
+  if (dashboardLoading) return;
+  dashboardLoading = true;
+  const statusBoxes = document.querySelectorAll('.dashboard-load-status');
+  for (const box of statusBoxes) {
+    const retry = box.querySelector('button');
+    if (retry) {
+      retry.disabled = true;
+      retry.textContent = 'চেষ্টা চলছে…';
+    }
+  }
+
+  let user;
+  try {
+    const r = await ABC.api('/auth/me');
+    if (r.status === 401) {
+      location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search);
+      return;
+    }
+    if (!r.ok) throw new Error('Dashboard account unavailable');
+    ({ user } = await r.json());
+    if (!user) throw new Error('Dashboard account missing');
+  } catch (_) {
+    for (const box of statusBoxes) {
+      const retry = box.querySelector('button');
+      if (retry) {
+        retry.disabled = false;
+        retry.textContent = 'আবার চেষ্টা করুন';
+      } else {
+        box.innerHTML = '<p role="alert">ড্যাশবোর্ড লোড করা যায়নি।</p><button type="button" onclick="init()">আবার চেষ্টা করুন</button>';
+      }
+      box.hidden = false;
+    }
+    return;
+  } finally {
+    dashboardLoading = false;
+  }
+  for (const box of statusBoxes) box.hidden = true;
   window._user = user;
   _userBal = user.balance || 0;
 
@@ -1924,6 +1963,6 @@ async function showNotices() {
 
 init();
 </script>
-<script src="/js/dashboard-v2.js?v=20261110-7"></script>
+<script src="/js/dashboard-v2.js?v=20261118-1"></script>
 </body>
 </html>
