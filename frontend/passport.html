@@ -1249,8 +1249,19 @@ function renderField(f,write=true){
           });
         }
         var ct = (r.headers && r.headers.get) ? String(r.headers.get('content-type') || '') : '';
-        if (ct.indexOf('application/pdf') < 0) return { ok: false, message: 'PDF তৈরি করা যায়নি — আবার চেষ্টা করুন।' };
-        return r.blob().then(function(blob){ return { ok: true, blob: blob }; });
+        if (ct.split(';')[0].trim().toLowerCase() !== 'application/pdf') {
+          return { ok: false, message: 'PDF তৈরি করা যায়নি — আবার চেষ্টা করুন।' };
+        }
+        return r.blob().then(async function(blob){
+          // The response header alone cannot distinguish a PDF from a
+          // mislabeled error page or a truncated browser response.
+          var header = await blob.slice(0, 5).text();
+          var tail = await blob.slice(-1024).text();
+          if (header !== '%PDF-' || !tail.trimEnd().endsWith('%%EOF')) {
+            return { ok: false, message: 'সম্পূর্ণ PDF পাওয়া যায়নি — এই পেজেই আবার চেষ্টা করুন।' };
+          }
+          return { ok: true, blob: blob };
+        });
       });
     }).catch(function(){
       return { ok: false, message: 'ইন্টারনেট সংযোগ নেই — সংযোগ ফিরলে আবার চেষ্টা করুন।' };

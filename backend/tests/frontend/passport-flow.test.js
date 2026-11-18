@@ -15,6 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { Blob } = require('node:buffer');
 
 const FRONTEND = path.join(__dirname, '../../../frontend');
 const PAGE = fs.readFileSync(path.join(FRONTEND, 'passport.html'), 'utf8');
@@ -152,7 +153,7 @@ function runFlow(opts) {
   const sandbox = {
     document: documentStub,
     window: {},
-    Blob: function (parts, opts) { this.parts = parts; this.type = (opts && opts.type) || ''; },
+    Blob,
     URL: { createObjectURL: (blob) => { blobs.push(blob); return 'blob:test'; }, revokeObjectURL: () => {} },
     setTimeout: () => 0,
   };
@@ -198,7 +199,9 @@ function runFlow(opts) {
               json: async () => ({}),
             });
           }
-          const pdfBytes = '%PDF-1.4\n%fake passport pdf\n';
+          const pdfBytes = o.invalidPdfFirst !== undefined && pdfAttempt === 1
+            ? o.invalidPdfFirst
+            : '%PDF-1.4\n%test fixture\n%%EOF\n';
           return Promise.resolve({
             ok: true, status: 200,
             headers: { get: (name) => (String(name).toLowerCase() === 'content-type' ? 'application/pdf' : null) },
@@ -1695,7 +1698,7 @@ describe('Create → direct real-PDF download (2026-11-14)', () => {
     expect(r.downloads[0].name).toBe('Passport-EJ0762655.pdf');
     expect(r.blobs).toHaveLength(1);
     expect(r.blobs[0].type).toBe('application/pdf');
-    expect(String(r.blobs[0].parts[0]).slice(0, 5)).toBe('%PDF-');
+    expect(await r.blobs[0].slice(0, 5).text()).toBe('%PDF-');
     expect(r.els['create-message'].textContent).toContain('Passport PDF তৈরি হয়েছে');
     expect(r.els['create-message'].textContent).toContain('Passport-EJ0762655.pdf');
     expect(r.els['create-message'].textContent).toContain('চার্জ কাটা হয়েছে: ৳30');
@@ -1785,6 +1788,23 @@ describe('Create → direct real-PDF download (2026-11-14)', () => {
     expect(r.downloads).toHaveLength(0);
     expect(r.blobs).toHaveLength(0);
     expect(r.els['create-message'].textContent).toContain('PDF তৈরি করা যায়নি');
+  });
+
+  test.each(['', '<html>error</html>', '%PDF-1.7\nincomplete'])('rejects invalid bytes labeled as PDF and retries the same paid export (%j)', async (invalidPdfFirst) => {
+    const r = runFlow({ invalidPdfFirst });
+    r.els['start-passport-button'].click();
+    fillValid(r);
+    r.els['create-passport-button'].click();
+    await r.state.exportedPromise;
+    await flush();
+    expect(r.downloads).toHaveLength(0);
+    expect(r.engineJobCalls).toHaveLength(0);
+    expect(r.body.classList.contains('flow-form')).toBe(true);
+    r.els['create-passport-button'].click();
+    await flush();
+    expect(r.chargeCalls.filter(c => c.path === '/passport/create')).toHaveLength(1);
+    expect(r.pdfCalls[1].path).toBe(r.pdfCalls[0].path);
+    expect(r.downloads).toHaveLength(1);
   });
 
   test('retry after a PDF failure reuses the paid creation — one charge, no second charge', async () => {
