@@ -115,7 +115,7 @@
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/service-workspace.css?v=20261110-1">
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
-<link rel="stylesheet" href="/css/manual-order.css?v=20261118-1">
+<link rel="stylesheet" href="/css/manual-order.css?v=20261110-13">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
 <script src="/js/promotions.js?v=20261111-2"></script>
 </head>
@@ -161,7 +161,7 @@
       </div>
     </div>
 
-    <div class="card manual-workspace" id="orderWorkspace" style="max-width:780px;">
+    <div class="card manual-workspace" style="max-width:780px;">
       <div class="order-meta">
         <div>
           <h2 id="svcName" style="font-size:20px;font-weight:800;color:#0f172a;margin-bottom:4px;">লোড হচ্ছে…</h2>
@@ -231,12 +231,6 @@
       <div id="submitNotice" role="status" style="display:none;margin-top:12px;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;color:#1e40af;font-size:13px;text-align:center;"></div>
     </div>
 
-    <section class="order-result" id="orderResult" aria-labelledby="orderResultTitle" hidden>
-      <h2 id="orderResultTitle" tabindex="-1">অর্ডার গৃহীত হয়েছে</h2>
-      <p id="orderResultId"></p>
-      <p id="orderResultMessage"></p>
-      <a class="btn btn-primary" id="orderResultLink">অর্ডারের অবস্থা দেখুন →</a>
-    </section>
   </div>
 </div>
 
@@ -896,7 +890,7 @@ async function submit(){
   btn.textContent = 'অর্ডার প্রসেস হচ্ছে…';
 
   notice.style.display = 'block';
-  notice.textContent = '⏳ ১. ওয়ালেট থেকে ফি কর্তন ও অর্ডার রেজিস্টার করা হচ্ছে…';
+  notice.textContent = 'অর্ডার জমা হচ্ছে…';
 
   let r, d;
   try {
@@ -965,7 +959,7 @@ async function submit(){
   if(uploadQueue.length > 0){
     for(let i = 0; i < uploadQueue.length; i++){
       const item = uploadQueue[i];
-      notice.textContent = '📤 ২. ডকুমেন্টস আপলোড হচ্ছে (' + (i + 1) + '/' + uploadQueue.length + '): ' + item.file.name + '…';
+      notice.textContent = 'ফাইল আপলোড হচ্ছে (' + (i + 1) + '/' + uploadQueue.length + ')…';
       btn.textContent = 'ডকুমেন্ট আপলোড হচ্ছে (' + (i + 1) + '/' + uploadQueue.length + ')…';
 
       const fd = new FormData();
@@ -989,19 +983,8 @@ async function submit(){
   LocalIdem.clear('order_submit_' + sid);
   if(draftKey) LocalDraft.clear(draftKey);
 
-  const result = document.getElementById('orderResult');
-  const incomplete = uploadErrors > 0;
-  result.classList.toggle('needs-docs', incomplete);
-  document.getElementById('orderResultId').textContent = 'অর্ডার নম্বর #' + String(orderId).slice(0, 8);
-  document.getElementById('orderResultMessage').textContent = incomplete
-    ? 'কিছু ফাইল আপলোড হয়নি। অর্ডারের অবস্থা পেজ থেকে বাকি ফাইল যোগ করুন।'
-    : 'অর্ডারের অগ্রগতি ও প্রস্তুত ফাইল পরের পেজে দেখতে পারবেন।';
-  document.getElementById('orderResultLink').href = '/order-status.html?id=' + encodeURIComponent(orderId)
-    + (incomplete ? '&doc_warning=1' : '');
-  document.getElementById('orderWorkspace').hidden = true;
-  document.getElementById('balWarning').style.display = 'none';
-  result.hidden = false;
-  document.getElementById('orderResultTitle').focus();
+  location.href = '/order-status.html?id=' + encodeURIComponent(orderId)
+    + (uploadErrors > 0 ? '&doc_warning=1' : '');
 }
 
 init();

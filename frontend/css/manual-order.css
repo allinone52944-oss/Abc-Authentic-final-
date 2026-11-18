@@ -45,23 +45,6 @@
 .page-order-create .manual-load-error { padding: 24px 0; color: var(--manual-error); }
 .page-order-create .manual-load-error .btn { margin-top: 12px; }
 .page-order-create #submitBtn { position: static; box-shadow: none; }
-.page-order-create #orderWorkspace[hidden],
-.page-order-create .order-result[hidden] { display: none; }
-.page-order-create .main:has(.order-result:not([hidden])) > .topbar { display: none; }
-.page-order-create .order-result {
-  max-width: 620px;
-  margin: 24px auto;
-  padding: clamp(20px, 4vw, 36px);
-  border: 1px solid #bedecf;
-  border-radius: 16px;
-  background: #f0faf4;
-  color: #123e2e;
-  overflow-wrap: anywhere;
-}
-.page-order-create .order-result.needs-docs { background: #fffbeb; border-color: #f0d694; color: #654410; }
-.page-order-create .order-result h2 { font-size: 24px; margin-bottom: 8px; }
-.page-order-create .order-result p { margin: 0 0 8px; }
-.page-order-create .order-result .btn { margin-top: 14px; min-height: 46px; white-space: normal; }
 @media (max-width: 768px) {
   .page-order-create .manual-workspace .order-meta { padding: 20px; }
   .page-order-create #reviewBox > div:nth-child(3) { flex-direction: column; }

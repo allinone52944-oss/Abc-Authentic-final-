@@ -22,8 +22,8 @@ test('applicant profile fills an empty own-name field', async () => {
   const { context, input } = setup(); await vm.runInContext('init()', context); expect(input.value).toBe('Test Applicant');
 });
 
-test.each([false, true])('submitted order stays on its receipt (upload failure: %s)', async (uploadFails) => {
-  const {context, get} = setup();
+test.each([false, true])('submitted order opens tracking directly (upload failure: %s)', async (uploadFails) => {
+  const {context} = setup();
   const api = context.ABC.api;
   context.ABC.api = async (url, options) => {
     if (url !== '/orders') return api(url);
@@ -38,11 +38,7 @@ test.each([false, true])('submitted order stays on its receipt (upload failure: 
   }
   vm.runInContext('showReview()', context);
   await vm.runInContext('submit()', context);
-  expect(get('orderWorkspace').hidden).toBe(true);
-  expect(get('orderResult').hidden).toBe(false);
-  expect(get('orderResultLink').href).toBe('/order-status.html?id=test-order' + (uploadFails ? '&doc_warning=1' : ''));
-  expect(get('orderResultMessage').textContent.includes('কিছু ফাইল আপলোড হয়নি')).toBe(uploadFails);
-  expect(context.location.href).toBeUndefined();
+  expect(context.location.href).toBe('/order-status.html?id=test-order' + (uploadFails ? '&doc_warning=1' : ''));
 });
 
 test('network retry preserves the review and uses the same order key', async () => {
@@ -62,7 +58,7 @@ test('network retry preserves the review and uses the same order key', async () 
   expect(get('reviewConfirmBtn').disabled).toBe(false);
   await vm.runInContext('submit()', context);
   expect(keys).toEqual([keys[0], keys[0]]);
-  expect(get('orderResult').hidden).toBe(false);
+  expect(context.location.href).toBe('/order-status.html?id=test-order');
 });
 test('JSON-encoded admin fields can be reviewed with fee 100 and remaining wallet 400', async () => {
   const { context, input, get } = setup({ jsonFields: true }); await vm.runInContext('init()', context); input.value = 'Applicant';

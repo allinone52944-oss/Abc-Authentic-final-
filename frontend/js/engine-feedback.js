@@ -39,6 +39,7 @@
         var failure = box.classList.contains('err') || box.classList.contains('failbox');
         var warning = box.classList.contains('warn');
         box.dataset.engineFeedback = failure ? 'error' : success ? 'success' : warning ? 'warning' : 'notice';
+        box.dataset.feedbackTitle = failure ? 'সমস্যা হয়েছে' : success ? 'সফল হয়েছে' : warning ? 'সতর্কতা' : 'সেবার আপডেট';
         box.setAttribute('role', failure ? 'alert' : 'status');
         box.setAttribute('aria-live', failure ? 'assertive' : 'polite');
         box.setAttribute('aria-atomic', 'true');
