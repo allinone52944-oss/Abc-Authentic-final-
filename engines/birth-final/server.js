@@ -576,6 +576,50 @@ function mapResultData(tds) {
     return data;
 }
 
+// English Title Case shared by the BDRIS path (normalizeBdrisData) and the
+// form/render path (toTemplateFields): "MANSURA AKHTER" -> "Mansura Akhter".
+const titleCaseEn = (s) => String(s || '').toLowerCase()
+    .split(/(\s+)/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+
+// --- Place of Birth: foreign-country detection (2026-11-19) ---
+// BDRIS returns only the place/country name in the birthplace cells —
+// there is no separate country field. A birthplace that IS a country
+// other than Bangladesh must print as just that country (no
+// ", Bangladesh" suffix); Bangladeshi places keep the existing suffix.
+// Match the whole value or its last comma-part ("London, United Kingdom").
+// A bare foreign CITY with no country (e.g. "London") cannot be detected —
+// no live BDRIS sample exists for a foreign birth, so only country names
+// are matched. Lists are curated (common countries + Bengali names).
+const FOREIGN_COUNTRIES_EN = new Set([
+    'afghanistan','albania','algeria','andorra','angola','argentina','armenia','australia','austria','azerbaijan','bahamas','bahrain','barbados','belarus','belgium','belize','benin','bhutan','bolivia','bosnia and herzegovina','botswana','brazil','brunei','bulgaria','burkina faso','burma','burundi','cambodia','cameroon','canada','chad','chile','china','colombia','congo','costa rica','croatia','cuba','cyprus','czech republic','czechia','denmark','djibouti','dominican republic','ecuador','egypt','el salvador','england','eritrea','estonia','ethiopia','fiji','finland','france','gabon','georgia','germany','ghana','great britain','greece','guatemala','guinea','guyana','haiti','holland','honduras','hong kong','hungary','iceland','india','indonesia','iran','iraq','ireland','israel','italy','ivory coast',"cote d'ivoire",'jamaica','japan','jordan','kazakhstan','kenya','kiribati','korea','kuwait','kyrgyzstan','laos','latvia','lebanon','liberia','libya','liechtenstein','lithuania','luxembourg','macau','madagascar','malawi','malaysia','maldives','mali','malta','marshall islands','mauritania','mauritius','mexico','micronesia','moldova','monaco','mongolia','morocco','mozambique','myanmar','namibia','nauru','nepal','netherlands','new zealand','nicaragua','niger','nigeria','north korea','northern ireland','norway','oman','pakistan','palau','palestine','panama','papua new guinea','paraguay','peru','philippines','poland','portugal','puerto rico','qatar','romania','russia','rwanda','samoa','san marino','saudi arabia','scotland','senegal','serbia','seychelles','sierra leone','singapore','slovakia','slovenia','solomon islands','somalia','south africa','south korea','south sudan','spain','sri lanka','sudan','suriname','sweden','switzerland','syria','taiwan','tajikistan','tanzania','thailand','timor-leste','east timor','togo','tonga','trinidad and tobago','tunisia','turkey','turkiye','turkmenistan','tuvalu','uae','uganda','uk','ukraine','united arab emirates','united kingdom','united kingdom of great britain and northern ireland','united states','united states of america','america','uruguay','usa','u.s.a.','uzbekistan','vanuatu','vatican city','venezuela','vietnam','viet nam','wales','yemen','zambia','zimbabwe',
+]);
+const FOREIGN_COUNTRIES_BN = new Set([
+    'আফগানিস্তান','আলবেনিয়া','আলজেরিয়া','অ্যাঙ্গোলা','আর্জেন্টিনা','আর্মেনিয়া','অস্ট্রেলিয়া','অস্ট্রিয়া','আজারবাইজান','বাহামা','বাহরাইন','বার্বাডোস','বেলারুশ','বেলজিয়াম','বেলিজ','বেনিন','ভুটান','বলিভিয়া','বসনিয়া ও হার্জেগোভিনা','বতসোয়ানা','ব্রাজিল','ব্রুনাই','বুলগেরিয়া','বুর্কিনা ফাসো','মিয়ানমার','বার্মা','বুরুন্ডি','কম্বোডিয়া','ক্যামেরুন','কানাডা','চাদ','চিলি','চীন','কলম্বিয়া','কঙ্গো','কোস্টা রিকা','ক্রোয়েশিয়া','কিউবা','সাইপ্রাস','চেক প্রজাতন্ত্র','ডেনমার্ক','জিবুতি','ডোমিনিকান প্রজাতন্ত্র','ইকুয়েডর','মিশর','এল সালভাদর','ইংল্যান্ড','ইরিত্রিয়া','এস্তোনিয়া','ইথিওপিয়া','ফিজি','ফিনল্যান্ড','ফ্রান্স','গ্যাবন','জর্জিয়া','জার্মানি','ঘানা','গ্রেট ব্রিটেন','গ্রিস','গুয়াতেমালা','গিনি','গায়ানা','হাইতি','হল্যান্ড','হন্ডুরাস','হংকং','হাঙ্গেরি','আইসল্যান্ড','ভারত','ইন্দোনেশিয়া','ইরান','ইরাক','আয়ারল্যান্ড','ইসরায়েল','ইতালি','আইভরি কোস্ট','জ্যামাইকা','জাপান','জর্ডান','কাজাখস্তান','কেনিয়া','কিরিবাতি','কোরিয়া','কুয়েত','কিরগিজস্তান','লাওস','লাটভিয়া','লেবানন','লাইবেরিয়া','লিবিয়া','লিথুয়ানিয়া','লুক্সেমবার্গ','ম্যাকাও','মাদাগাস্কার','মালাউই','মালয়েশিয়া','মালদ্বীপ','মালি','মাল্টা','মরিশাস','মেক্সিকো','মলদোভা','মোনাকো','মঙ্গোলিয়া','মরক্কো','মোজাম্বিক','নামিবিয়া','নাউরু','নেপাল','নেদারল্যান্ডস','নিউজিল্যান্ড','নিকারাগুয়া','নাইজার','নাইজেরিয়া','উত্তর কোরিয়া','নরওয়ে','ওমান','পাকিস্তান','পালাউ','ফিলিস্তিন','পানামা','পাপুয়া নিউ গিনি','প্যারাগুয়ে','পেরু','ফিলিপাইন','পোল্যান্ড','পর্তুগাল','পুয়ের্তো রিকো','কাতার','রোমানিয়া','রাশিয়া','রুয়ান্ডা','সামোয়া','সান মারিনো','সৌদি আরব','স্কটল্যান্ড','সেনেগাল','সার্বিয়া','সেশেলস','সিয়েরা লিওন','সিঙ্গাপুর','স্লোভাকিয়া','স্লোভেনিয়া','সোমালিয়া','দক্ষিণ আফ্রিকা','দক্ষিণ কোরিয়া','দক্ষিণ সুদান','স্পেন','শ্রীলঙ্কা','সুদান','সুরিনাম','সুইডেন','সুইজারল্যান্ড','সিরিয়া','তাইওয়ান','তাজিকিস্তান','তানজানিয়া','থাইল্যান্ড','পূর্ব তিমুর','তিমুর-লেস্তে','টোগো','টোঙ্গা','ত্রিনিদাদ ও টোবাগো','তিউনিসিয়া','তুরস্ক','তুর্কমেনিস্তান','টুভালু','সংযুক্ত আরব আমিরাত','আমিরাত','উগান্ডা','ইউক্রেন','যুক্তরাজ্য','যুক্তরাষ্ট্র','আমেরিকা','উরুগুয়ে','উজবেকিস্তান','ভানুয়াতু','ভ্যাটিকান সিটি','ভেনেজুয়েলা','ভিয়েতনাম','ওয়েলস','ইয়েমেন','জাম্বিয়া','জিম্বাবুয়ে',
+]);
+const lastCommaPart = (s) => {
+    const parts = String(s || '').split(',').map(x => x.trim()).filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : '';
+};
+// Shared place-of-birth normaliser (BDRIS path + form/render path):
+// Title Case (En) + the country rule. Bangladeshi places keep the
+// existing ", Bangladesh" / ", বাংলাদেশ" suffix; a foreign country
+// prints as just that country's name.
+function normalizePlaceOfBirthEn(s) {
+    const v = titleCaseEn(s).trim();
+    if (!v) return v;
+    if (/bangladesh/i.test(v)) return v;
+    const low = v.toLowerCase();
+    if (FOREIGN_COUNTRIES_EN.has(low) || FOREIGN_COUNTRIES_EN.has(lastCommaPart(v).toLowerCase())) return v;
+    return v + ', Bangladesh';
+}
+function normalizePlaceOfBirthBn(s) {
+    const v = String(s || '').replace(/\s+/g, ' ').trim();
+    if (!v) return v;
+    if (/বাংলাদেশ/.test(v)) return v;
+    if (FOREIGN_COUNTRIES_BN.has(v) || FOREIGN_COUNTRIES_BN.has(lastCommaPart(v))) return v;
+    return v + ', বাংলাদেশ';
+}
+
 // BDRIS API-র raw data-কে genuine certificate format-এ normalize করো
 function normalizeBdrisData(data) {
     const out = { ...data };
@@ -587,9 +631,8 @@ function normalizeBdrisData(data) {
     for (const k of Object.keys(out)) {
         if (typeof out[k] === 'string') out[k] = clean(out[k]);
     }
-    // --- Title Case: "MANSURA AKHTER" -> "Mansura Akhter" ---
-    const titleCase = (s) => String(s || '').toLowerCase()
-        .split(/(\s+)/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+    // Title Case lives at module level (titleCaseEn) so the BDRIS path
+    // and the form/render path use the identical function.
 
     // PERMANENT: decode ekhon shudhu top-level decodeHtmlEntities-e;
     // normalize-e alada copy rakha hoy na.
@@ -617,11 +660,11 @@ function normalizeBdrisData(data) {
 
     // --- English names/places: Title Case ---
     for (const k of ['nameEn', 'motherNameEn', 'fatherNameEn', 'placeOfBirthEn', 'permanentAddressEn', 'registrationOffice']) {
-        if (out[k]) out[k] = titleCase(out[k]);
+        if (out[k]) out[k] = titleCaseEn(out[k]);
     }
     // Nationality: "BANGLADESHI" -> "Bangladeshi"
     for (const k of ['motherNationalityEn', 'fatherNationalityEn']) {
-        if (out[k]) out[k] = titleCase(out[k]);
+        if (out[k]) out[k] = titleCaseEn(out[k]);
     }
 
     // Registration office: drop any "NB: ... Database. Location of the
@@ -690,16 +733,16 @@ function normalizeBdrisData(data) {
                         looseKey(firstPart) === looseKey(firstTok) ||
                         (lp.length > 2 && (firstPart.startsWith(firstTok + ' ') || looseKey(firstPart).startsWith(looseKey(firstTok))));
                     const locParts = dropFirst ? lp.slice(1) : lp;
-                    const cand = titleCase(locParts.join(', '));
+                    const cand = titleCaseEn(locParts.join(', '));
                     if (!out.office2 || cand.toLowerCase() === String(out.office2).toLowerCase() || cand.toLowerCase().startsWith(String(out.office2).toLowerCase() + ', ')) {
                         out.office2 = cand;
                     }
                 } else if (!out.office2) {
-                    out.office2 = titleCase(lp.slice(1).join(', '));
-                    out.office1 = titleCase(lp[0]);
+                    out.office2 = titleCaseEn(lp.slice(1).join(', '));
+                    out.office1 = titleCaseEn(lp[0]);
                 }
             } else if (lp.length === 1 && !out.office1) {
-                out.office1 = titleCase(lp[0]);
+                out.office1 = titleCaseEn(lp[0]);
             }
         }
         delete out.officeLocationRaw;
@@ -715,15 +758,13 @@ function normalizeBdrisData(data) {
 
     // --- Place of Birth: ", Bangladesh" / ", বাংলাদেশ" যোগ করো ---
     // (BDRIS দেয় bare "SIRAJGANJ"/"সিরাজগঞ্জ", replica-তে country suffix থাকে)
-    if (out.placeOfBirthEn && !/bangladesh/i.test(out.placeOfBirthEn)) {
-        out.placeOfBirthEn += ', Bangladesh';
-    }
-    if (out.placeOfBirthBn && !/বাংলাদেশ/.test(out.placeOfBirthBn)) {
-        out.placeOfBirthBn += ', বাংলাদেশ';
-    }
+    // Foreign country (Bangladesh chara onno desh) hole suffix jog hobe na —
+    // just oi desher nametai thakbe (2026-11-19, normalizePlaceOfBirthEn/Bn).
+    if (out.placeOfBirthEn) out.placeOfBirthEn = normalizePlaceOfBirthEn(out.placeOfBirthEn);
+    if (out.placeOfBirthBn) out.placeOfBirthBn = normalizePlaceOfBirthBn(out.placeOfBirthBn);
 
     // --- Sex: "MALE" -> "Male" ---
-    if (out.sex) out.sex = titleCase(out.sex);
+    if (out.sex) out.sex = titleCaseEn(out.sex);
 
     return out;
 }
@@ -1195,10 +1236,27 @@ function toTemplateFields(d) {
     pick('motherNatBn', 'motherNationalityBn');
     pick('fatherNatEn', 'fatherNationalityEn');
     pick('fatherNatBn', 'fatherNationalityBn');
+    // Production form-er purono ek-field 'pob' (English janmosthan): age
+    // server eta ignore korto, tai form-e bodlano janmosthan output-e
+    // ashto na. pobEn na thakle pob-i English janmosthan (2026-11-19).
+    if (t.pob && !t.pobEn) t.pobEn = t.pob;
     pick('pobEn', 'placeOfBirthEn');
     pick('pobBn', 'placeOfBirthBn');
     pick('permEn', 'permanentAddressEn');
     pick('permBn', 'permanentAddressBn');
+    // --- Form/render path normalize (2026-11-19) ---
+    // Form-e bodlano man age ekhane raw jeto — BDRIS path-er
+    // normalizeBdrisData (titleCase + country rule) shudhu /api/verify-te
+    // cholto. Tai form-e chhoto akkhore lekha nam chhotoi chhapto, ar
+    // bodlano janmosthan-er country suffix thik hoto na. Ekhon duita
+    // path-i eki helper use kore. (permEn age thekei
+    // buildCertificateHtml-e titleCaseAddr pay — okhanei thak.)
+    for (const k of ['nameEn', 'motherEn', 'fatherEn', 'motherNatEn', 'fatherNatEn']) {
+        if (t[k]) t[k] = titleCaseEn(t[k]);
+    }
+    if (t.sex) t.sex = titleCaseEn(t.sex);
+    if (t.pobEn) t.pobEn = normalizePlaceOfBirthEn(t.pobEn);
+    if (t.pobBn) t.pobBn = normalizePlaceOfBirthBn(t.pobBn);
     // auto compute dobWords from dob if missing (In Word row)
     if (!t.dobWords && t.dob) {
         const months = { '01':'January','02':'February','03':'March','04':'April','05':'May','06':'June','07':'July','08':'August','09':'September','10':'October','11':'November','12':'December' };
@@ -1292,4 +1350,4 @@ function logLine(s) {
 process.on('uncaughtException', (e) => { logLine('UNCAUGHT: ' + (e && e.stack || e)); });
 process.on('unhandledRejection', (e) => { logLine('UNHANDLED: ' + (e && e.stack || e)); });
 
-module.exports = { app, buildCertificateHtml, buildAssets, normalizeBdrisData, verifyRenderToken, RENDER_TOKEN_HEADER };
+module.exports = { app, buildCertificateHtml, buildAssets, normalizeBdrisData, normalizePlaceOfBirthEn, normalizePlaceOfBirthBn, toTemplateFields, verifyRenderToken, RENDER_TOKEN_HEADER };
