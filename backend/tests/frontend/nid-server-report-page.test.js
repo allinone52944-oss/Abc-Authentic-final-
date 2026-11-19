@@ -1,4 +1,4 @@
-// Wiring guards for the NID Server Copy Report engine:
+// Wiring guards for the Sign to Server Copy engine (nid-server-report):
 //  - the customer page exists at EXACTLY <engine_id>.html (the
 //    service-detail rule builds '/' + engine_id + '.html' — the
 //    land "logout" bug of 2026-10-23 came from missing pages)

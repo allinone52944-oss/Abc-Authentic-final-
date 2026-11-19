@@ -1,5 +1,5 @@
 // ============================================================
-// All In One (Abc Authentic) - NID Server Copy Report engine routes
+// All In One (Abc Authentic) - Sign to Server Copy engine routes
 // Mounted at /api/nid-server-report (JWT auth + rate limit at mount).
 //
 // A completely separate engine from nid-replica (NID card) and
@@ -58,7 +58,7 @@ const adapter = require('../../engines/nid-server-report/adapter');
 
 const router = express.Router();
 const ENGINE_ID = 'nid-server-report';
-const LABEL = 'এনআইডি সার্ভার কপি রিপোর্ট';
+const LABEL = 'সাইন টু সার্ভার কপি';
 const PAGE = '/nid-server-report.html';
 
 const upload = uploadMiddleware(() => ({ allowed: ['pdf'], max_mb: 20 }));
