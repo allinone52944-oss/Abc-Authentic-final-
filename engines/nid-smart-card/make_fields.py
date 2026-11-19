@@ -1,0 +1,360 @@
+# -*- coding: utf-8 -*-
+"""
+ব্যবহার: python make_fields.py
+
+work/input_data.json (ফর্মের ডেটা) + work/template.json (কার্ডের স্লট)
+থেকে work/fields.json বানায় — এটাই এডিট করা যায়।
+সাথে work/preview.html প্রিভিউ।
+
+Smart-card engine (nid-smart-card): nid-replica-র make_fields.py-র
+উপর ভিত্তি করে, v2 (nid_card_v2) টেমপ্লেটের জন্য —
+clean_bn-এ নাম বদলানো/স্পেস দেওয়ার নিয়ম নেই (fix #6),
+Voter No কখনো ID NO-র বিকল্প নয় (fix #2), v2 fixed slot set +
+Gender helper।
+"""
+import sys
+import json
+import os
+import re
+import html
+import datetime
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+# কার্ডের লেবেল -> ফর্মের ফিল্ড
+FIELD_MAP = {
+    "নাম:": "Name(Bangla)",
+    "Name:": "Name(English)",
+    "পিতা:": "Father Name",
+    "মাতা:": "Mother Name",
+    "Date of Birth:": "Date of Birth",
+    "ID NO:": "National ID",
+    "জন্মস্থান:": "Birth Place",
+}
+
+
+MONTHS = {"01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr",
+          "05": "May", "06": "Jun", "07": "Jul", "08": "Aug",
+          "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dec"}
+
+
+def clean_bn(text):
+    """ডাবল মাত্রা এবং ওয়েব-প্রিন্ট ফন্ট-আর্টিফ্যাক্ট সাফ করো।
+
+    Names pass through UNALTERED apart from glyph/double-matra
+    repairs (smart-card fix #6): the old ~40-entry replacement table
+    and the hardcoded name spacings are gone — no name is ever
+    rewritten, respaced or "corrected" here.
+    """
+    if not text:
+        return ""
+    s = text
+    # control/NUL bytes (ligature-cmap artifact) — kono field-e leak NA
+    s = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', s)
+    s = s.replace("No Documents Available", "").strip()
+    s = s.replace("Holding No", "").strip()
+    # শুধুমাত্র যদি ওয়েব-প্রিন্টের বিশেষ গ্লিফ থাকে, তখন কনভার্ট করো
+    if any(ch in s for ch in ('ĺ', 'Ƶ', 'Ȱ', 'ǻ', 'ɨ')):
+        s = re.sub(r'ĺ([\u0995-\u09B9])', r'\1ে', s)
+        s = re.sub(r'([\u0995-\u09B9])ৌ', r'\1ৌ', s)
+        rep = {'Ƶ': 'প্রি', 'Ȱ': 'ন্দ্র', 'ǻ': 'ঞ্জ', 'ɨ': 'ল্ল', 'ĺ': 'ে'}
+        for k, v in rep.items():
+            s = s.replace(k, v)
+
+    for bad, good in [("ুু", "ু"), ("ূূ", "ূ"), ("াা", "া"), ("িি", "ি"),
+                      ("ীী", "ী"), ("েে", "ে"), ("োো", "ো"), ("ঃঃ", "ঃ"),
+                      ("্্", "্"), ("ঁঁ", "ঁ")]:
+        while bad in s:
+            s = s.replace(bad, good)
+    return re.sub(r'\s+', ' ', s).strip()
+def fmt_dob(s):
+    """1977-02-02 -> 02 Feb 1977; handles Bengali numerals & slash formats"""
+    if not s:
+        return ""
+    t = str(s).translate(str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")).strip()
+    t = re.sub(r"^DATE\s*OF\s*BIRTH\s*[:：]?\s*", "", t, flags=re.I).strip()
+    m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", t)
+    if m:
+        return "%02d %s %s" % (int(m.group(3)), MONTHS.get(m.group(2).zfill(2), m.group(2)), m.group(1))
+    m = re.match(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$", t)
+    if m:
+        return "%02d %s %s" % (int(m.group(1)), MONTHS.get(m.group(2).zfill(2), m.group(2)), m.group(3))
+    m = re.match(r"^(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})$", t)
+    if m:
+        return "%02d %s %s" % (int(m.group(1)), m.group(2)[:3].capitalize(), m.group(3))
+    return t
+
+
+def bn_digits(s):
+    """English digits -> Bengali digits: 30/08/2026 -> ৩০/০৮/২০২৬"""
+    return (s or "").translate(str.maketrans("0123456789", "০১২৩৪৫৬৭৮৯"))
+
+
+# Common OCR misspellings -> correct (NID PDF font issues)
+_OCR_FIXES = {
+    "ফিরদপুর": "ফরিদপুর",
+    "চরকমলাপুর": "চর কমলাপুর",
+    "ফিরদপুরসদর": "ফরিদপুর সদর",
+}
+
+# Upazila/district normalized lookup (space-dropping fix for unknowns)
+_GEO_NOSPACE = {}
+
+def _load_geo_nospace():
+    """bd-geo.json থেকে নাম -> সঠিক বানান ম্যাপ (space ছাড়া key)।"""
+    global _GEO_NOSPACE
+    if _GEO_NOSPACE:
+        return
+    import json as _json
+    import os as _os
+    base = _os.path.dirname(_os.path.abspath(__file__))
+    for cand in (
+        _os.path.join(base, "..", "..", "frontend", "bd-geo.json"),
+        _os.path.join(base, "bd-geo.json"),
+    ):
+        cand = _os.path.normpath(cand)
+        if _os.path.exists(cand):
+            try:
+                with open(cand, "r", encoding="utf-8") as f:
+                    data = _json.load(f)
+                for div, dists in data.items():
+                    for dist, ups in (dists or {}).items():
+                        _GEO_NOSPACE[dist.replace(" ", "")] = dist
+                        for up in (ups or {}).keys():
+                            if up not in ("u", "p", "m"):
+                                _GEO_NOSPACE[up.replace(" ", "")] = up
+                break
+            except Exception:
+                pass
+
+
+def fix_ocr_spelling(text):
+    """Known OCR ভুল বানান ঠিক করো (লম্বা match আগে) + space-missing unknown।"""
+    if not text:
+        return text
+    for wrong in sorted(_OCR_FIXES, key=len, reverse=True):
+        text = text.replace(wrong, _OCR_FIXES[wrong])
+    # Unknown space-dropping: "ফরিদপুরসদর" -> "ফরিদপুর সদর"
+    _load_geo_nospace()
+    if _GEO_NOSPACE:
+        # পুরো text-এ প্রতিটি word check করো
+        import re as _re
+        def _repl(m):
+            w = m.group(0)
+            key = w.replace(" ", "")
+            return _GEO_NOSPACE.get(key, w)
+        # Bengali word boundaries
+        text = _re.sub(r'[\u0980-\u09FF]+(?: [\u0980-\u09FF]+)*', _repl, text)
+    return text
+
+
+def compose_address(pa, data=None):
+    """Present Address টেবিলের অংশ থেকে কার্ডের ঠিকানা বানাও; খালি অংশ বাদ।"""
+    if isinstance(pa, str):
+        return fix_ocr_spelling(bn_digits(clean_bn(pa).strip()))
+    pa = pa or {}
+    data = data or {}
+    parts = []
+
+    # 1. বাসা/হোল্ডিং: শুধু সংখ্যা বা টেক্সট থাকলে আসবে, ফাঁকা বা '-' থাকলে পুরোপুরি বাদ
+    raw_h = clean_bn(pa.get("holding", "")).strip()
+    if raw_h and re.sub(r'[-–—\s]', '', raw_h):
+        parts.append("বাসা/হোল্ডিং: " + bn_digits(raw_h))
+
+    # 2. গ্রাম ও মৌজা: একই হলে একবার, ভিন্ন হলে কমা দিয়ে মৌজা
+    vill_parts = []
+    for k in ("village", "additional_village"):
+        v = clean_bn(pa.get(k, "")).strip()
+        if v and v not in vill_parts and re.sub(r'[-–—\s]', '', v):
+            vill_parts.append(v)
+    for k in ("mouza", "additional_mouza"):
+        v = clean_bn(pa.get(k, "")).strip()
+        if v and v not in vill_parts and re.sub(r'[-–—\s]', '', v):
+            vill_parts.append(v)
+    if vill_parts:
+        parts.append("গ্রাম/রাস্তা: " + ", ".join(vill_parts))
+
+    # 3. ডাকঘর ও পোস্ট কোড
+    po = clean_bn(pa.get("post_office", "")).strip()
+    raw_pc = clean_bn(pa.get("postal_code", "")).strip()
+    pc = "" if not re.sub(r'[-–—\s]', '', raw_pc) else bn_digits(raw_pc)
+    if po and pc:
+        parts.append("ডাকঘর: %s - %s" % (po, pc))
+    elif po:
+        parts.append("ডাকঘর: " + po)
+    elif pc:
+        parts.append("ডাকঘর: " + pc)
+
+    # 4. উপজেলা, RMO (পল্লী / সিটি কর্পোরেশন / পৌরসভা / শহর) ও জেলা
+    upozila = clean_bn(pa.get("upozila", "")).strip() or clean_bn(data.get("Upozila", "")).strip()
+    city_full = ""
+    rmo_val = clean_bn(pa.get("rmo", "")).strip() or clean_bn(data.get("RMO", "")).strip()
+    if "সিটি" in rmo_val or "পৌরসভা" in rmo_val or "শহর" in rmo_val:
+        c_parts = [clean_bn(pa.get(k, "")).strip()
+                   for k in ("city_corp", "city_corp2", "city_corp3")]
+        c_parts = [c for c in c_parts if c and re.sub(r'[-–—\s]', '', c)]
+        city_full = " ".join(c_parts)
+    district = clean_bn(pa.get("district", "")).strip() or clean_bn(data.get("District", "")).strip()
+
+    if upozila:
+        parts.append(upozila)
+    if city_full:
+        parts.append(city_full)
+    if district:
+        parts.append(district)
+
+    return fix_ocr_spelling(bn_digits(", ".join(parts)))
+
+def main():
+    for need in ("work/input_data.json", "work/template.json"):
+        if not os.path.exists(need):
+            print("পাওয়া যায়নি:", need, "-> আগে extract চালাও")
+            return
+    with open("work/input_data.json", encoding="utf-8") as f:
+        data = json.load(f)
+    with open("work/template.json", encoding="utf-8") as f:
+        tpl = json.load(f)
+    fields = build_fields(data, tpl)
+
+    with open("work/fields.json", "w", encoding="utf-8") as f:
+        json.dump(fields, f, ensure_ascii=False, indent=1)
+
+
+    try:
+        with open("work/input_images.json", encoding="utf-8") as f:
+            in_images = json.load(f)
+    except Exception:
+        in_images = {}
+    rows = "".join(
+        "<tr><td><b>%s</b></td><td>%s</td></tr>" % (html.escape(k), html.escape(v))
+        for k, v in fields.items())
+    thumbs = "".join(
+        "<div style='display:inline-block;text-align:center;margin:6px'>"
+        "<img src='%s' style='max-height:140px;border:1px solid #ccc'><br><small>%s</small></div>"
+        % (html.escape(v.replace("work/", "", 1)), html.escape(k))
+        for k, v in in_images.items())
+    addr_dbg = ""
+    pa = data.get("Present Address")
+    if isinstance(pa, dict) and pa:
+        addr_dbg = ("<h2>ঠিকানার অংশ (input-এর Present Address টেবিল থেকে)</h2>"
+                    "<table border='1' cellpadding='8' cellspacing='0'>" +
+                    "".join("<tr><td><b>%s</b></td><td>%s</td></tr>"
+                            % (html.escape(k), html.escape(v))
+                            for k, v in pa.items()) + "</table>")
+    preview = """<html><head><meta charset="utf-8">
+<title>Fields Preview</title></head>
+<body style="font-family:sans-serif;max-width:900px;margin:auto;padding:16px">
+<h2>কার্ডে বসবে (edit: work/fields.json)</h2>
+<table border="1" cellpadding="8" cellspacing="0">%s</table>
+%s
+<h2>ছবি</h2>%s
+<p style="color:#666">মান ভুল থাকলে work/fields.json নোটপ্যাডে খুলে ঠিক করে সেভ করো।</p>
+</body></html>""" % (rows, addr_dbg, thumbs)
+    with open("work/preview.html", "w", encoding="utf-8") as f:
+        f.write(preview)
+
+    print("Done -> work/fields.json")
+    for k, v in fields.items():
+        print("  [%s] = %s" % (k, v))
+
+
+def build_fields(data, tpl):
+    """Build editable card fields from extracted input data + template.
+    Returns {slot_label: value} (same as work/fields.json)."""
+    tpl_slots = set()
+    has_address_slot = False
+    for pg in tpl["pages"]:
+        for t in pg["texts"]:
+            if t.get("slot"):
+                tpl_slots.add(t["slot"])
+        if pg.get("address_slot"):
+            has_address_slot = True
+
+    # Smart card (v2 template) — fixed slot set: the v2 template's
+    # values live in XObjects/images, so text-extracting the template
+    # finds only 2 slots. extract_template.py writes layout
+    # "nid_card_v2" into template.json; when it does, use the fixed
+    # v2 slots (same as the desktop kit's make_fields.py).
+    if tpl.get("layout") == "nid_card_v2":
+        tpl_slots = set(FIELD_MAP) | {"/Blood Group:", "ঠিকানা:",
+                                      "প্রদানের তারিখ:"}
+        has_address_slot = True
+
+    # Data-dump input (voter printout) — template-e 0 slot. Default card
+    # labels diye fields banao; build_output default template-e place korbe.
+    if not tpl_slots:
+        tpl_slots = set(FIELD_MAP) | {"/Blood Group:", "ঠিকানা:",
+                                      "প্রদানের তারিখ:"}
+        has_address_slot = True
+
+    fields = {}
+    for tpl_label, in_field in FIELD_MAP.items():
+        if tpl_label not in tpl_slots:
+            print("  সতর্কতা: টেমপ্লেটে স্লট পাওয়া যায়নি:", tpl_label)
+            continue
+        val = data.get(in_field, "")
+        if in_field == "National ID" and not val:
+            # v2.0 fix: Voter No must NEVER stand in for the National ID —
+            # a Voter No printed as ID NO is a wrong card. Missing
+            # National ID stays empty (the core-data gate blocks Create).
+            val = data.get("Pin", "")
+        if in_field == "Date of Birth":
+            val = fmt_dob(val)
+        elif in_field == "Name(English)":
+            val = re.sub(r"^NAME\s*[:：]?\s*", "", str(val or "").strip(), flags=re.I).upper()
+        else:
+            val = clean_bn(val)
+            if tpl_label == "নাম:":
+                val = re.sub(r"^নাম\s*[:：]?\s*", "", val).strip()
+            elif tpl_label == "পিতা:":
+                val = re.sub(r"^পিতা\s*[:：]?\s*", "", val).strip()
+            elif tpl_label == "মাতা:":
+                val = re.sub(r"^মাতা\s*[:：]?\s*", "", val).strip()
+            elif tpl_label == "জন্মস্থান:":
+                val = re.sub(r"^জন্মস্থান\s*[:：]?\s*", "", val).strip()
+        if tpl_label == "ID NO:":
+            val = str(val or "").translate(str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")).strip()
+        fields[tpl_label] = val
+
+    # ঠিকানা: Present Address টেবিল থেকে অটো-কম্পোজ (টেমপ্লেটে address_slot থাকলে);
+    # Present na thakle Permanent table fallback
+    if has_address_slot:
+        pa_tbl = data.get("Present Address") or data.get("Permanent Address")
+        raw_addr = compose_address(pa_tbl, data)
+        fields["ঠিকানা:"] = re.sub(r"^ঠিকানা\s*[:：]?\s*", "", raw_addr).strip()
+
+    # প্রদানের তারিখ: ডিফল্ট আজকের তারিখ বসাও
+    if "প্রদানের তারিখ:" in tpl_slots and not fields.get("প্রদানের তারিখ:"):
+        t = datetime.date.today()
+        fields["প্রদানের তারিখ:"] = ("%02d/%02d/%04d" % (t.day, t.month, t.year)).translate(str.maketrans("0123456789", "০১২৩৪৫৬৭৮৯"))
+
+    # রক্তের গ্রুপ: টেমপ্লেটের স্লট-নাম অনুযায়ী (নতুন টেমপ্লেটে "/Blood Group:")
+    bg = ""
+    for k in ("Blood Group", "Blood", "BG"):
+        if data.get(k):
+            bg = data[k]
+            break
+    bg_slot = next((s for s in ("/Blood Group:", "Blood Group:")
+                    if s in tpl_slots), None)
+    if bg_slot:
+        fields[bg_slot] = clean_bn(bg)
+    elif bg:
+        print("  সতর্কতা: টেমপ্লেটে রক্তের গ্রুপের স্লট পাওয়া যায়নি")
+
+    # Pin: ১৭ সংখ্যার পিন থাকলে বারকোডের জন্য রাখো
+    if data.get("Pin"):
+        fields["Pin"] = data["Pin"]
+
+    # v2 কার্ডের MRZ-এর জন্য Gender দরকার (fields.json-এ invisible helper)
+    if tpl.get("layout") == "nid_card_v2":
+        fields["Gender"] = (data.get("Gender") or "").strip()
+
+    return fields
+
+
+if __name__ == "__main__":
+    main()

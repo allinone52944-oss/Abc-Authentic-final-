@@ -258,6 +258,7 @@ async function init(){
     else if (s.engine_id === 'qr-photo-verify') engineLabel = '⚡ এখনই QR + ছবি যাচাই করুন →';
     else if (s.engine_id === 'nid-server-copy') engineLabel = '⚡ এখনই NID সার্ভার কপি নিন →';
     else if (s.engine_id === 'nid-server-report') { engineUrl = '/nid-server-report.html'; engineLabel = '⚡ এখনই সার্ভার কপি রিপোর্ট নিন →'; }
+    else if (s.engine_id === 'nid-smart-card') { engineUrl = '/nid-smart-card.html'; engineLabel = '⚡ এখনই স্মার্ট কার্ড নিন →'; }
 
     actionHtml = '<div style="margin-top:10px;">' +
       '<button class="btn btn-primary" style="width:100%;padding:15px;font-size:16px;font-weight:700;box-shadow:0 4px 14px rgba(37,99,235,0.3);" onclick="location.href=\'' + engineUrl + '\'">' + engineLabel + '</button>' +

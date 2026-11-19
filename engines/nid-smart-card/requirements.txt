@@ -1,0 +1,12 @@
+# NID smart-card engine deps (Linux server).
+# pymupdf / Pillow / pdf417gen already on the server (nid-replica).
+# opencv-python-headless is NEW: photo background sanitize-er jonno.
+# Na thakle engine original photo-i use kore (visible WARNING log soho),
+# kintu deploy-er age install kora uchit:
+#   pip3 install opencv-python-headless
+pymupdf>=1.24
+Pillow>=10
+pdf417gen
+opencv-python-headless
+dddocr  # scanned-PDF OCR fallback (Latin/digits; Bangla-te simito)
+# easyocr  # optional: scanned Bangla-er jonno uttom (bn+en); torch lage (~500MB)
