@@ -63,8 +63,10 @@ test('order-status page: failed gets a hero box, refund shows the real split', (
 test('wallet page: rejected rows and polls show the stored reason', () => {
   const src = read('frontend/wallet.html');
   expect(src).toContain("(t.cancel_reason ? '<br>কারণ: ' + esc(t.cancel_reason)");
-  expect(src).toContain("(tx.cancel_reason ? '<br>কারণ: ' + esc(tx.cancel_reason)");
-  expect(src).toContain("(ex.status === 'rejected' && ex.cancel_reason ? '<br>কারণ: ' + esc(ex.cancel_reason)");
+  // showRechargeStatus (poll + submit result) shows the reason as the
+  // rejected description (Codex wallet refactor: the ex. render is gone;
+  // the old tx. rows render is now the t. site pinned above).
+  expect(src).toContain("rejected: tx.cancel_reason || 'অ্যাডমিন যাচাইয়ের পর অনুরোধটি বাতিল হয়েছে।'");
 });
 
 test('admin recharge-reject modal collects the reason', () => {
