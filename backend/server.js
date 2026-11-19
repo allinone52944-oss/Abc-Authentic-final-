@@ -468,6 +468,34 @@ try {
   safeLog('[engines] nid-server-copy not mounted:', e.message);
 }
 
+// ---- NID Server Copy Report (upload PDF -> v1+v2 reports, auth + limit) ---
+// A separate engine from nid-replica (card) and nid-server-copy
+// (portal login -> card): the customer uploads an NID form PDF (or
+// an old v1/v2 report); the engine extracts the fields, the customer
+// reviews/edits them, and Create builds v1 + v2 server-copy report
+// PDFs for ONE charge.
+//   GET  /api/nid-server-report/price
+//   POST /api/nid-server-report/extract (multipart pdf) → jobId
+//   POST /api/nid-server-report/create  { jobId, fields } → charge + order
+//   POST /api/nid-server-report/pdf     ?kind=v1|v2&idempotency_key= → PDF
+const nidServerReportLimiter = rateLimit({
+  validate: { xForwardedForHeader: false },
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'RATE_LIMITED' },
+});
+try {
+  const nidServerReportAdapter = require('../engines/nid-server-report/adapter.js');
+  nidServerReportAdapter.init({});
+  const nidServerReportRoutes = require('./routes/nid-server-report');
+  app.use('/api/nid-server-report', requireAuth, nidServerReportLimiter, nidServerReportRoutes);
+  safeLog('[engines] mounted nid-server-report at /api/nid-server-report');
+} catch (e) {
+  safeLog('[engines] nid-server-report not mounted:', e.message);
+}
+
 // ---- BDRIS Apply engine (as-is bot, auth + strict limit) -------------
 // The engine folder is an as-is copy of Bdris-apply-v2-CLEAN-v23.zip
 // (BDRIS Auto-fill Bot v6: Express + Socket.IO + Playwright).

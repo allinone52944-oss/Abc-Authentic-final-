@@ -1,0 +1,7 @@
+# NID Server Copy Report engine deps (Linux server).
+# ddddocr/easyocr are OPTIONAL — the extractor's scanned-PDF OCR
+# fallback degrades gracefully without them (text-layer PDFs work).
+pymupdf>=1.24
+Pillow>=10
+qrcode
+fonttools

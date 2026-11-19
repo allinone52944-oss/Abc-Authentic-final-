@@ -3339,6 +3339,7 @@ window.AdmSvc = {
           '<option value="passport">পাসপোর্ট ইঞ্জিন</option>' +
           '<option value="sanad">সনদ ও সার্টিফিকেট ইঞ্জিন</option>' +
           '<option value="nid-server-copy">এনআইডি সার্ভার কপি ইঞ্জিন (Portal Login)</option>' +
+          '<option value="nid-server-report">এনআইডি সার্ভার কপি রিপোর্ট ইঞ্জিন (PDF Upload)</option>' +
         '</select></div>' +
         '<small style="color:#64748b;font-size:11px;">গ্রাহক অর্ডার প্লেস করলে ইঞ্জিন ব্যাকগ্রাউন্ডে স্বয়ংক্রিয়ভাবে প্রসেস করে রেজাল্ট প্রদান করবে।</small>' +
       '</div>' +
@@ -3413,6 +3414,7 @@ window.AdmSvc = {
           '<option value="passport"' + (s.engine_id === 'passport' ? ' selected' : '') + '>পাসপোর্ট ইঞ্জিন</option>' +
           '<option value="sanad"' + (s.engine_id === 'sanad' ? ' selected' : '') + '>সনদ ও সার্টিফিকেট ইঞ্জিন</option>' +
           '<option value="nid-server-copy"' + (s.engine_id === 'nid-server-copy' ? ' selected' : '') + '>এনআইডি সার্ভার কপি ইঞ্জিন (Portal Login)</option>' +
+          '<option value="nid-server-report"' + (s.engine_id === 'nid-server-report' ? ' selected' : '') + '>এনআইডি সার্ভার কপি রিপোর্ট ইঞ্জিন (PDF Upload)</option>' +
         '</select></div>' +
       '</div>' +
       '<div id="esv_manualBox" style="display:' + (isManual ? 'block' : 'none') + ';background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin-bottom:14px;">' +
