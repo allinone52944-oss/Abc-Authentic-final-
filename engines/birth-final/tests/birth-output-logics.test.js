@@ -3,7 +3,8 @@
  * ager all logic bojay thakbe — previous behaviour unchanged):
  *
  * 1. FOREIGN COUNTRY: a birthplace that IS a country other than Bangladesh
- *    prints as just that country — no ", Bangladesh" / ", বাংলাদেশ" suffix.
+ *    prints SINGLE — just that country's name alone, the city/place part
+ *    is dropped ("London, United Kingdom" -> "United Kingdom").
  *    Bangladeshi places keep the existing suffix.
  * 2. FORM OVERRIDE + BILINGUAL: a birthplace changed in the form reaches
  *    the output through the SAME normalize path as BDRIS values (titleCase
@@ -37,18 +38,18 @@ describe('logic 1 — foreign country gets no Bangladesh suffix (BDRIS path)', (
         assert.equal(out.placeOfBirthBn, 'যুক্তরাজ্য');
     });
 
-    it('city + foreign country (En): last part decides, no suffix', () => {
+    it('city + foreign country (En): SINGLE — only the country name remains', () => {
         const out = normalizeBdrisData({ placeOfBirthEn: 'LONDON, UNITED KINGDOM', placeOfBirthBn: 'লন্ডন, যুক্তরাজ্য' });
-        assert.equal(out.placeOfBirthEn, 'London, United Kingdom');
-        assert.equal(out.placeOfBirthBn, 'লন্ডন, যুক্তরাজ্য');
+        assert.equal(out.placeOfBirthEn, 'United Kingdom');
+        assert.equal(out.placeOfBirthBn, 'যুক্তরাজ্য');
     });
 
-    it('other foreign countries (En + Bn): no suffix', () => {
+    it('other foreign countries (En + Bn): SINGLE country name only', () => {
         assert.equal(normalizePlaceOfBirthEn('INDIA'), 'India');
-        assert.equal(normalizePlaceOfBirthEn('DUBAI, UNITED ARAB EMIRATES'), 'Dubai, United Arab Emirates');
-        assert.equal(normalizePlaceOfBirthEn('NEW YORK, UNITED STATES'), 'New York, United States');
+        assert.equal(normalizePlaceOfBirthEn('DUBAI, UNITED ARAB EMIRATES'), 'United Arab Emirates');
+        assert.equal(normalizePlaceOfBirthEn('NEW YORK, UNITED STATES'), 'United States');
         assert.equal(normalizePlaceOfBirthBn('ভারত'), 'ভারত');
-        assert.equal(normalizePlaceOfBirthBn('দুবাই, সংযুক্ত আরব আমিরাত'), 'দুবাই, সংযুক্ত আরব আমিরাত');
+        assert.equal(normalizePlaceOfBirthBn('দুবাই, সংযুক্ত আরব আমিরাত'), 'সংযুক্ত আরব আমিরাত');
     });
 
     it('a bare foreign country acronym still gets no suffix', () => {
@@ -81,9 +82,9 @@ describe('logic 2 — form birthplace override + both languages (render path)', 
         assert.equal(t.pobBn, 'চট্টগ্রাম, বাংলাদেশ');
     });
 
-    it('legacy single-field pob (old production form) reaches the output', () => {
+    it('legacy single-field pob (old production form) reaches the output as SINGLE country', () => {
         const t = toTemplateFields({ placeOfBirthEn: 'SIRAJGANJ', pob: 'London, United Kingdom' });
-        assert.equal(t.pobEn, 'London, United Kingdom');
+        assert.equal(t.pobEn, 'United Kingdom');
     });
 
     it('legacy pob does not override an explicit pobEn', () => {
@@ -91,10 +92,16 @@ describe('logic 2 — form birthplace override + both languages (render path)', 
         assert.equal(t.pobEn, 'Chattogram, Bangladesh');
     });
 
-    it('form foreign birthplace: both languages, no suffix on either side', () => {
+    it('form foreign birthplace: SINGLE country name in both languages', () => {
         const t = toTemplateFields({ pobEn: 'london, united kingdom', pobBn: 'লন্ডন, যুক্তরাজ্য' });
-        assert.equal(t.pobEn, 'London, United Kingdom');
-        assert.equal(t.pobBn, 'লন্ডন, যুক্তরাজ্য');
+        assert.equal(t.pobEn, 'United Kingdom');
+        assert.equal(t.pobBn, 'যুক্তরাজ্য');
+    });
+
+    it('form birthplace already a single country stays as-is', () => {
+        const t = toTemplateFields({ pobEn: 'united kingdom', pobBn: 'যুক্তরাজ্য' });
+        assert.equal(t.pobEn, 'United Kingdom');
+        assert.equal(t.pobBn, 'যুক্তরাজ্য');
     });
 
     it('untouched BDRIS values still flow through the same rule', () => {
@@ -166,14 +173,16 @@ describe('integration — /api/preview renders the normalized form values', () =
         });
     }
 
-    it('foreign birthplace + lowercase names: HTML shows both languages, no Bangladesh suffix', async () => {
+    it('foreign birthplace + lowercase names: HTML shows SINGLE country in both languages', async () => {
         const r = await postPreview(formPayload());
         assert.strictEqual(r.status, 200);
         const b = await r.json();
         assert.strictEqual(b.success, true);
-        assert.ok(b.html.includes('London, United Kingdom'), 'English birthplace present');
-        assert.ok(!b.html.includes('London, United Kingdom, Bangladesh'), 'no Bangladesh suffix on foreign birthplace');
-        assert.ok(b.html.includes('লন্ডন, যুক্তরাজ্য'), 'Bengali birthplace present');
+        assert.ok(b.html.includes('United Kingdom'), 'English birthplace present');
+        assert.ok(!b.html.includes('London'), 'city part dropped — SINGLE country only');
+        assert.ok(!b.html.includes('United Kingdom, Bangladesh'), 'no Bangladesh suffix on foreign birthplace');
+        assert.ok(b.html.includes('যুক্তরাজ্য'), 'Bengali birthplace present');
+        assert.ok(!b.html.includes('লন্ডন'), 'Bengali city part dropped');
         assert.ok(!b.html.includes('যুক্তরাজ্য, বাংলাদেশ'), 'no বাংলাদেশ suffix on foreign birthplace');
         assert.ok(b.html.includes('Rahim Uddin'), 'name Title Cased');
         assert.ok(b.html.includes('Fatema Begum'), 'mother name Title Cased');

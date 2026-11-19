@@ -584,9 +584,10 @@ const titleCaseEn = (s) => String(s || '').toLowerCase()
 // --- Place of Birth: foreign-country detection (2026-11-19) ---
 // BDRIS returns only the place/country name in the birthplace cells —
 // there is no separate country field. A birthplace that IS a country
-// other than Bangladesh must print as just that country (no
-// ", Bangladesh" suffix); Bangladeshi places keep the existing suffix.
-// Match the whole value or its last comma-part ("London, United Kingdom").
+// other than Bangladesh must print SINGLE — just that country's name
+// alone, the city/place part is dropped ("London, United Kingdom" ->
+// "United Kingdom"); Bangladeshi places keep the existing suffix.
+// Match the whole value or its last comma-part.
 // A bare foreign CITY with no country (e.g. "London") cannot be detected —
 // no live BDRIS sample exists for a foreign birth, so only country names
 // are matched. Lists are curated (common countries + Bengali names).
@@ -603,20 +604,25 @@ const lastCommaPart = (s) => {
 // Shared place-of-birth normaliser (BDRIS path + form/render path):
 // Title Case (En) + the country rule. Bangladeshi places keep the
 // existing ", Bangladesh" / ", বাংলাদেশ" suffix; a foreign country
-// prints as just that country's name.
+// prints SINGLE — just that country's name alone, the city/place part
+// is dropped ("London, United Kingdom" -> "United Kingdom").
 function normalizePlaceOfBirthEn(s) {
     const v = titleCaseEn(s).trim();
     if (!v) return v;
     if (/bangladesh/i.test(v)) return v;
     const low = v.toLowerCase();
-    if (FOREIGN_COUNTRIES_EN.has(low) || FOREIGN_COUNTRIES_EN.has(lastCommaPart(v).toLowerCase())) return v;
+    if (FOREIGN_COUNTRIES_EN.has(low)) return v;
+    const last = lastCommaPart(v);
+    if (FOREIGN_COUNTRIES_EN.has(last.toLowerCase())) return last;
     return v + ', Bangladesh';
 }
 function normalizePlaceOfBirthBn(s) {
     const v = String(s || '').replace(/\s+/g, ' ').trim();
     if (!v) return v;
     if (/বাংলাদেশ/.test(v)) return v;
-    if (FOREIGN_COUNTRIES_BN.has(v) || FOREIGN_COUNTRIES_BN.has(lastCommaPart(v))) return v;
+    if (FOREIGN_COUNTRIES_BN.has(v)) return v;
+    const last = lastCommaPart(v);
+    if (FOREIGN_COUNTRIES_BN.has(last)) return last;
     return v + ', বাংলাদেশ';
 }
 
