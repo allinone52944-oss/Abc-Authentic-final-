@@ -74,10 +74,11 @@ describe('audit #14 — gate IDs are the directory names', () => {
     // engine-jobs pattern as birth/death-final) — the closed set is
     // now three engines; nothing else may be added without a test
     // update here.
-    // nid-server-report joined 2026-11-19 (Server Copy Report
-    // engine: v1 + v2 delivery copies under one charge) — the
-    // closed set is now four engines; its ID is its directory
-    // name, per the same audit #14 rule.
+    // nid-server-report joined 2026-11-19 (Sign to Server Copy
+    // engine — renamed 2026-11-19 from NID Server Copy Report;
+    // v1 + v2 delivery copies under one charge) — the closed
+    // set is now four engines; its ID is its directory name,
+    // per the same audit #14 rule.
     // nid-smart-card joined 2026-11-19 (Smart Card engine: new
     // NID card, front+back one page, MRZ + PDF417 barcode) — the
     // closed set is now five engines; its ID is its directory
@@ -86,7 +87,7 @@ describe('audit #14 — gate IDs are the directory names', () => {
     expect(jobs).toContain("'birth-final': 'জন্ম সনদ যাচাই'");
     expect(jobs).toContain("'death-final': 'মৃত্যু সনদ যাচাই'");
     expect(jobs).toContain("'passport': 'পাসপোর্ট ইঞ্জিন'");
-    expect(jobs).toContain("'nid-server-report': 'এনআইডি সার্ভার কপি রিপোর্ট'");
+    expect(jobs).toContain("'nid-server-report': 'সাইন টু সার্ভার কপি'");
     expect(jobs).toContain("'nid-smart-card': 'স্মার্ট কার্ড পিডিএফ'");
     expect(jobs).not.toContain('bdris-certificate');
     expect(jobs).not.toContain('death-verify');

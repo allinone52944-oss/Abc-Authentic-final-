@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Regression tests for the NID Server Copy Report engine.
+"""Regression tests for the Sign to Server Copy engine (nid-server-report).
 
 Covers: Bengali spelling repair, address composition, gender/
 religion normalisation, extract on the template reports (fixtures),

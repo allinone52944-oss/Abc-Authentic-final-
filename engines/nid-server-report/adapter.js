@@ -1,7 +1,7 @@
 'use strict';
 /**
  * engines/nid-server-report/adapter.js — Abc Authentic adapter for the
- * NID Server Copy Report engine (NID form PDF / old v1/v2 report ->
+ * Sign to Server Copy engine (NID form PDF / old v1/v2 report ->
  * v1 + v2 server-copy report PDFs).
  *
  * WRAPPING ONLY — the engine folder is an as-is copy of the
@@ -362,8 +362,8 @@ function init(config) {
 function getInfo() {
   return {
     id: 'nid-server-report',
-    name: 'NID Server Copy Report',
-    name_bn: 'এনআইডি সার্ভার কপি রিপোর্ট',
+    name: 'Sign to Server Copy',
+    name_bn: 'সাইন টু সার্ভার কপি',
     version: '1.0.0',
     capabilities: ['extract-fields', 'report-pdf'],
     mode: 'as-is-wrap',

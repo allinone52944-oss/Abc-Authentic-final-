@@ -22,12 +22,12 @@ const { buildReceiptPdf } = require('../lib/receiptPdf');
 const { requireAuth, requireAdmin } = require('../auth');
 const { safeLog } = require('../security');
 
-const SERVICE_LABELS = { 'birth-final': 'জন্ম সনদ যাচাই', 'death-final': 'মৃত্যু সনদ যাচাই', 'passport': 'পাসপোর্ট ইঞ্জিন', 'nid-server-report': 'এনআইডি সার্ভার কপি রিপোর্ট', 'nid-smart-card': 'স্মার্ট কার্ড পিডিএফ' };
+const SERVICE_LABELS = { 'birth-final': 'জন্ম সনদ যাচাই', 'death-final': 'মৃত্যু সনদ যাচাই', 'passport': 'পাসপোর্ট ইঞ্জিন', 'nid-server-report': 'সাইন টু সার্ভার কপি', 'nid-smart-card': 'স্মার্ট কার্ড পিডিএফ' };
 const SUBJECT_LABELS = { 'birth-final': 'জন্ম নিবন্ধন নম্বর', 'death-final': 'মৃত্যু নিবন্ধন নম্বর', 'passport': 'পাসপোর্ট নম্বর', 'nid-server-report': 'জাতীয় পরিচয়পত্র নম্বর', 'nid-smart-card': 'জাতীয় পরিচয়পত্র নম্বর' };
 // Delivery-copy notifications: the service name the customer is told
 // was created (WhatsApp + push). Passport must not be called a
 // birth/death certificate.
-const DELIVERY_LABELS = { 'birth-final': 'জন্ম সনদ (সার্টিফিকেট)', 'death-final': 'মৃত্যু সনদ', 'passport': 'পাসপোর্ট', 'nid-server-report': 'এনআইডি সার্ভার কপি রিপোর্ট', 'nid-smart-card': 'স্মার্ট কার্ড পিডিএফ' };
+const DELIVERY_LABELS = { 'birth-final': 'জন্ম সনদ (সার্টিফিকেট)', 'death-final': 'মৃত্যু সনদ', 'passport': 'পাসপোর্ট', 'nid-server-report': 'সাইন টু সার্ভার কপি', 'nid-smart-card': 'স্মার্ট কার্ড পিডিএফ' };
 const DELIVERY_SHORT = { 'birth-final': 'জন্ম সনদ', 'death-final': 'মৃত্যু সনদ', 'passport': 'পাসপোর্ট', 'nid-server-report': 'সার্ভার কপি রিপোর্ট', 'nid-smart-card': 'স্মার্ট কার্ড' };
 
 // Bengali rendering of an engine failure — the engine's own
