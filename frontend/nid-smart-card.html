@@ -169,6 +169,10 @@
     margin-bottom: 10px;
     position: relative;
   }
+  .img-preview-box.sign-box {
+    width: 190px;
+    height: 80px;
+  }
   .img-preview-box.empty {
     border: 2px dashed #94a3b8;
     background: #f1f5f9;
@@ -180,6 +184,11 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+  .img-preview-box.sign-box img {
+    object-fit: contain;
+    background: #ffffff;
+    padding: 4px;
   }
   .img-btn-group {
     display: flex;
@@ -240,7 +249,7 @@
     color: #64748b;
     margin-top: -6px;
   }
-  #reportFrame {
+  #cardFrame {
     width: 100%;
     height: 62vh;
     border: 1px solid #cbd5e1;
@@ -248,19 +257,6 @@
     background: #ffffff;
     box-shadow: 0 4px 12px rgba(0,0,0,0.05);
   }
-
-  .opt-card {
-    border: 1px solid #e2e8f0;
-    border-radius: 14px;
-    padding: 16px;
-    background: #f8fafc;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .opt-card .ico { font-size: 28px; }
-  .opt-card .t { font-size: 16px; font-weight: 700; color: #0f172a; }
-  .opt-card .d { font-size: 13px; color: #475569; line-height: 1.6; flex: 1; }
 
   @media (max-width: 768px) {
     #fieldForm { grid-template-columns: 1fr; }
@@ -314,12 +310,6 @@
     <div class="err" id="err" role="alert"></div>
     <div class="ok" id="ok" role="status"></div>
 
-    <div class="steps">
-      <div class="step on" data-s="1"><span class="dot">১</span>PDF দিন</div>
-      <div class="step" data-s="2"><span class="dot">২</span>তথ্য মিলান</div>
-      <div class="step" data-s="3"><span class="dot">৩</span>ডাউনলোড</div>
-    </div>
-
     <!-- STEP 1: UPLOAD -->
     <div class="wiz on" id="w1">
       <div class="form-card">
@@ -330,10 +320,9 @@
           <div style="font-size:16px; font-weight:700; color:var(--primary-700);">PDF বেছে নিন</div>
           <div style="font-size:13px; color:var(--text-muted); margin-top:4px;">সর্বোচ্চ ১০ MB · এখানে ফাইল ছেড়েও দিতে পারেন</div>
         </label>
-        <details class="nid-help"><summary>কোন PDF দিতে হবে?</summary><p>NID ফর্মের PDF দিন। ফাইল থেকে পাওয়া তথ্য পরের ধাপে দেখে সংশোধন করতে পারবেন।</p></details>
+        <details class="nid-help"><summary>কোন PDF দিতে হবে?</summary><p>ভোটার নিবন্ধন তথ্যের PDF দিন। ফাইল থেকে পাওয়া তথ্য পরের ধাপে দেখে সংশোধন করতে পারবেন।</p></details>
         <div class="price-line">
-          <span>ফি ৳<span id="priceVal">–</span> · এক চার্জে একটি কার্ড PDF</span>
-          <span>ব্যর্থ হলে চার্জ: ৳০</span>
+          <span>ফি ৳<span id="priceVal">–</span> · সফল হলে টাকা কাটবে</span>
         </div>
         <button class="btn btn-primary" id="b1" onclick="doExtract()" style="width:100%;">তথ্য বের করুন →</button>
 
@@ -341,42 +330,28 @@
     </div>
 
     <!-- STEP 2: REVIEW -->
-    <div class="wiz" id="w2">
+    <div class="wiz" id="w3">
       <div class="form-card">
         <h3 style="color:var(--primary-700); font-size:17px; font-weight:700; margin-bottom:6px;">তথ্য মিলিয়ে নিন</h3>
-        <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">ধাপ ২ / ৩ · ভুল থাকলে সংশোধন করুন — বদলানো মানই কার্ডে বসবে</p>
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">ধাপ ২ / ৩ · ভুল থাকলে সংশোধন করুন</p>
         <button type="button" class="nid-back" onclick="go(1)">← PDF পরিবর্তন করুন</button>
-        <p class="note" style="text-align:left;">✏️ সব তথ্য এডিট করা যাবে — নিচে সাজানো আছে, ভুল থাকলে ঠিক করে তারপর তৈরি করুন।</p>
         <div class="imgprev" id="imgPrev"></div>
-        <div id="editFields"></div>
         <div id="fieldForm"></div>
         <div style="height:18px;"></div>
-        <button class="btn btn-primary" id="b3" onclick="doCreate()" style="width:100%;">নিশ্চিত করে তৈরি করুন →</button>
+        <button class="btn btn-primary" id="b3" onclick="doBuild()" style="width:100%;">নিশ্চিত করে তৈরি করুন →</button>
       </div>
     </div>
 
-    <!-- STEP 3: DOWNLOAD — single card PDF -->
-    <div class="wiz" id="w3">
+    <!-- STEP 3: CARD -->
+    <div class="wiz" id="w4">
       <div class="form-card">
         <h3 style="color:var(--success); font-size:17px; font-weight:700; margin-bottom:12px;">আপনার স্মার্ট কার্ড প্রস্তুত</h3>
-        <p class="nid-step">ধাপ ৩ / ৩ · সামনে+পেছনে এক পাতার কার্ড — MRZ + বারকোডসহ</p>
-        <div class="captcha-box" id="optionBox" style="background:#ffffff; border-color:#bfdbfe; text-align:left;">
-          <div class="opt-card">
-            <div class="ico">💳</div>
-            <div class="t">স্মার্ট কার্ড PDF</div>
-            <div class="d">নতুন NID স্মার্ট কার্ড — সামনে ছবি, নাম, পিতা-মাতা, জন্মতারিখ ও NID নম্বর; পেছনে ঠিকানা, রক্তের গ্রুপ, জন্মস্থান, প্রদানের তারিখ, MRZ ও বারকোড।</div>
-            <button type="button" class="btn btn-primary" id="dlBtn" onclick="download()" style="width:100%; padding:14px; font-size:16px; font-weight:700;">
-              কার্ড ডাউনলোড করুন
-            </button>
-          </div>
-          <p class="note" style="text-align:left;">ফাইলটি ইতিহাস (History) থেকেও আবার ডাউনলোড করতে পারবেন।</p>
-        </div>
-        <div style="height:16px;"></div>
-        <iframe id="reportFrame" title="Smart card preview"></iframe>
+        <p class="nid-step">ধাপ ৩ / ৩ · PDF ডাউনলোড করুন</p>
+        <iframe id="cardFrame" title="Smart card preview"></iframe>
         <div style="height:16px;"></div>
         <div class="row2">
-          <button class="btn btn-secondary" onclick="go(2)">← তথ্য পরিবর্তন</button>
-          <a class="btn btn-primary" id="b4" download style="display:none;">📥 PDF ডাউনলোড করুন</a>
+          <button class="btn btn-secondary" onclick="go(3)">← তথ্য পরিবর্তন</button>
+          <a class="btn btn-primary" id="b4" download>📥 PDF ডাউনলোড করুন</a>
         </div>
         <a class="nid-another" href="/nid-smart-card.html">আরেকটি কার্ড তৈরি করুন</a>
       </div>
@@ -403,23 +378,15 @@ const API = '/nid-smart-card';
 // there is no global bn() — admin.js is IIFE-wrapped).
 const BN = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
 const bn = (v) => String(v == null ? '' : v).replace(/[0-9]/g, (d) => BN[Number(d)]);
-// PHOTO_STATE: null = untouched (keep the extracted photo),
-// {dataUrl} = user-uploaded replacement, 'removed' = no photo.
-// WARNING: a removed photo makes the build FAIL (fix #3) — the
-// template's sample photo is never kept in a customer's card.
-let S={jobId:null,fields:{},photo:null,photoTouched:false,idem:null,pdfUrl:null};
-// Core-data gate (backend adapter-এর নিয়মের mirror): কার্ডের জন্য
-// নাম, আইডি নম্বর ও জন্মতারিখ — তিনটাই লাগে। Create-এর আগেই খালি
-// ফর্ম আটকায়, যাতে চার্জের ধাপ পর্যন্ত না যায়। "প্রদানের তারিখ:"
-// আজকের তারিখে default হয় বলে ওটা core data নয়।
+let S={jobId:null,fields:{},photo:null,sign:null,pdfBlob:null};
+// Core-data gate (backend adapter-এর নিয়মের mirror): কার্ডের জন্য নাম,
+// আইডি নম্বর ও জন্মতারিখ — তিনটাই লাগে। build-এর আগেই খালি ফর্ম
+// আটকায়, যাতে চার্জের ধাপ পর্যন্ত না যায়। "প্রদানের তারিখ:" আজকের
+// তারিখে default হয় বলে ওটা core data নয়।
 const CORE_NAME_KEYS=['নাম:','Name:'],CORE_ID_KEYS=['ID NO:','Pin'],CORE_DOB_KEYS=['Date of Birth:'];
 const NO_CORE_DATA_MSG='তথ্য অসম্পূর্ণ — নাম, জাতীয় পরিচয়পত্র নম্বর ও জন্মতারিখ ছাড়া কার্ড তৈরি করা যাবে না। সঠিক NID ফর্ম PDF আপলোড করুন। কোনো টাকা কাটা হয়নি।';
 function hasCoreData(f){const t=v=>v!=null&&String(v).trim().length>0;return f&&typeof f==='object'&&CORE_NAME_KEYS.some(k=>t(f[k]))&&CORE_ID_KEYS.some(k=>t(f[k]))&&CORE_DOB_KEYS.some(k=>t(f[k]));}
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function scrollBoxIntoView(){
-  const box = document.getElementById('err').classList.contains('on') ? document.getElementById('err') : document.getElementById('ok');
-  if (box && box.classList.contains('on')) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
-}
 function clearResultMessage(){
   document.getElementById('err').classList.remove('on');
   document.getElementById('ok').classList.remove('on');
@@ -431,7 +398,6 @@ function showResultMessage(id, message){
   const box = document.getElementById(id);
   box.textContent = message;
   box.classList.add('on');
-  scrollBoxIntoView();
 }
 function busy(id,on,txt){
   if(on) clearResultMessage();
@@ -443,7 +409,7 @@ function go(n){
   document.querySelectorAll('.step').forEach(s=>{
     const k=+s.dataset.s;s.classList.toggle('on',k===n);s.classList.toggle('done',k<n);
     if(k<n)s.querySelector('.dot').textContent='✓';
-    else s.querySelector('.dot').textContent=k===1?'১':k===2?'২':'৩';
+    else s.querySelector('.dot').textContent=k===1?'১':k===2?'২':k===3?'৩':'৪';
   });
   window.scrollTo(0,0);
 }
@@ -468,7 +434,7 @@ const STANDARD_FIELDS = [
   { key: 'ঠিকানা:', label: 'ঠিকানা (সম্পূর্ণ ঠিকানা)', placeholder: 'বাসা/হোল্ডিং, গ্রাম/মহল্লা, ডাকঘর, উপজেলা, জেলা...', full: true },
 ];
 
-function renderPhotoUI(){
+function renderImagesUI(){
   const ip=document.getElementById('imgPrev');
   if(!ip) return;
   ip.innerHTML = `
@@ -483,45 +449,69 @@ function renderPhotoUI(){
       <div class="img-btn-group">
         <label class="btn-img">
           ${S.photo ? '📷 ছবি বদলান' : '➕ ছবি যুক্ত করুন'}
-          <input type="file" accept="image/*" style="display:none;" onchange="handlePhotoUpload(this)">
+          <input type="file" accept="image/*" style="display:none;" onchange="handleImageUpload('photo', this)">
         </label>
-        ${S.photo ? `<button type="button" class="btn-img btn-img-danger" onclick="removePhoto()">🗑️ মুছুন</button>` : ''}
+        ${S.photo ? `<button type="button" class="btn-img btn-img-danger" onclick="removeImage('photo')">🗑️ মুছুন</button>` : ''}
       </div>
-      ${!S.photo ? '<div style="font-size:12px;color:#b91c1c;margin-top:8px;max-width:220px;text-align:center;">⚠️ ছবি ছাড়া কার্ড তৈরি হবে না — ছবি যুক্ত করুন।</div>' : ''}
+    </div>
+
+    <div class="img-slot-card">
+      <div class="img-slot-header">✍️ স্বাক্ষর / টিপসই</div>
+      <div class="img-preview-box sign-box ${S.sign ? '' : 'empty'}">
+        ${S.sign ? `<img src="${esc(S.sign.dataUrl)}" alt="স্বাক্ষর">` : `
+          <div style="font-size:24px;margin-bottom:4px;">✍️</div>
+          <div style="font-size:12px;font-weight:600;">স্বাক্ষর/টিপসই নেই</div>
+        `}
+      </div>
+      <div class="img-btn-group">
+        <label class="btn-img">
+          ${S.sign ? '✍️ স্বাক্ষর বদলান' : '➕ স্বাক্ষর যুক্ত করুন'}
+          <input type="file" accept="image/*" style="display:none;" onchange="handleImageUpload('sign', this)">
+        </label>
+        ${S.sign ? `<button type="button" class="btn-img btn-img-danger" onclick="removeImage('sign')">🗑️ মুছুন</button>` : ''}
+      </div>
     </div>
   `;
 }
 
-function handlePhotoUpload(input){
+function handleImageUpload(kind, input){
   const f = input.files && input.files[0];
   if(!f) return;
   const r = new FileReader();
   r.onload = () => {
-    S.photo = { name: 'photo.png', dataUrl: r.result };
-    S.photoTouched = true;
-    showOk('ছবি যুক্ত করা হয়েছে ✓');
-    renderPhotoUI();
+    if(kind === 'photo'){
+      S.photo = { name: 'photo.png', dataUrl: r.result };
+      showOk('ছবি যুক্ত করা হয়েছে ✓');
+    } else {
+      S.sign = { name: 'sign.png', dataUrl: r.result };
+      showOk('স্বাক্ষর/টিপসই যুক্ত করা হয়েছে ✓');
+    }
+    renderImagesUI();
   };
   r.readAsDataURL(f);
 }
 
-function removePhoto(){
-  S.photo = null;
-  S.photoTouched = true;
-  showOk('ছবি বাদ দেওয়া হয়েছে — কার্ড তৈরি করতে ছবি লাগবে।');
-  renderPhotoUI();
-}
-
-function fieldInput(id, label, value, attrs){
-  return '<label for="' + id + '">' + esc(label) + '</label>' +
-    '<input id="' + id + '" value="' + esc(value) + '" ' + attrs + '>';
+function removeImage(kind){
+  if(kind === 'photo'){
+    S.photo = null;
+    showOk('ছবি বাদ দেওয়া হয়েছে');
+  } else {
+    S.sign = null;
+    showOk('স্বাক্ষর বাদ দেওয়া হয়েছে');
+  }
+  renderImagesUI();
 }
 
 function renderFieldsUI(){
   const ff = document.getElementById('fieldForm');
   if(!ff) return;
   ff.innerHTML = '';
+
   const fields = Object.assign({}, S.fields || {});
+  if(!fields['/Blood Group:'] && fields['Blood Group:']){
+    fields['/Blood Group:'] = fields['Blood Group:'];
+  }
+
   const renderedKeys = new Set();
 
   STANDARD_FIELDS.forEach((sf, i) => {
@@ -530,11 +520,12 @@ function renderFieldsUI(){
     const d = document.createElement('div');
     d.className = 'field' + (sf.full ? ' full' : '');
     const id = 'std_fld_' + i;
-    if (sf.full) {
+    if(sf.full){
       d.innerHTML = '<label for="' + id + '">' + esc(sf.label) + '</label>' +
-        '<textarea id="' + id + '" data-k="' + esc(sf.key) + '" placeholder="' + esc(sf.placeholder) + '">' + esc(val) + '</textarea>';
+        '<textarea id="' + id + '" rows="3" data-k="' + esc(sf.key) + '" placeholder="' + esc(sf.placeholder) + '">' + esc(val) + '</textarea>';
     } else {
-      d.innerHTML = fieldInput(id, sf.label, val, 'data-k="' + esc(sf.key) + '" placeholder="' + esc(sf.placeholder) + '"');
+      d.innerHTML = '<label for="' + id + '">' + esc(sf.label) + '</label>' +
+        '<input id="' + id + '" value="' + esc(val) + '" data-k="' + esc(sf.key) + '" placeholder="' + esc(sf.placeholder) + '">';
     }
     ff.appendChild(d);
     if (sf.hint) {
@@ -546,19 +537,24 @@ function renderFieldsUI(){
   });
 
   Object.keys(fields).forEach((k, idx) => {
-    if(renderedKeys.has(k) || k.startsWith('_')) return;
-    if(typeof fields[k] === 'object') return;
+    if(renderedKeys.has(k) || k === 'Blood Group:' || k.startsWith('_')) return;
     const d = document.createElement('div');
     d.className = 'field';
+    const isAddr = /address|ঠিকানা/i.test(k);
+    if(isAddr) d.classList.add('full');
     const id = 'extra_fld_' + idx;
-    d.innerHTML = fieldInput(id, k, fields[k], 'data-k="' + esc(k) + '"');
+    if(isAddr){
+      d.innerHTML = '<label for="' + id + '">' + esc(k) + '</label><textarea id="' + id + '" rows="3" data-k="' + esc(k) + '">' + esc(fields[k]) + '</textarea>';
+    } else {
+      d.innerHTML = '<label for="' + id + '">' + esc(k) + '</label><input id="' + id + '" value="' + esc(fields[k]) + '" data-k="' + esc(k) + '">';
+    }
     ff.appendChild(d);
   });
 }
 
 function collectFields(){
-  const out = {};
-  document.querySelectorAll('#fieldForm input[data-k], #fieldForm textarea[data-k]').forEach(inp => { out[inp.dataset.k] = inp.value; });
+  const out={};
+  document.querySelectorAll('#fieldForm input,#fieldForm textarea').forEach(inp=>{out[inp.dataset.k]=inp.value;});
   return out;
 }
 
@@ -577,16 +573,16 @@ async function doExtract(){
     S.jobId=j.jobId;
     S.fields=j.fields||{};
     S.photo = null;
-    S.photoTouched = false;
-    S.idem = null;
+    S.sign = null;
     (j.images || []).forEach(im => {
       if (/photo/i.test(im.name)) S.photo = { name: 'photo.png', dataUrl: im.dataUrl };
+      else if (/sign/i.test(im.name)) S.sign = { name: 'sign.png', dataUrl: im.dataUrl };
     });
 
-    renderPhotoUI();
+    renderImagesUI();
     renderFieldsUI();
-    go(2);
-    showOk('তথ্য পাওয়া গেছে ✓ ভুল থাকলে ঠিক করে দিন বা ছবি যুক্ত করুন');
+    go(3);
+    showOk('তথ্য পাওয়া গেছে ✓ ভুল থাকলে ঠিক করে দিন বা ছবি/স্বাক্ষর যুক্ত করুন');
   }catch(e){showErr(e.message||'তথ্য বের করা যায়নি। আবার চেষ্টা করুন।');}
   input.disabled = false;
   busy('b1',false);
@@ -614,120 +610,49 @@ async function updateBalance(){
   }catch(e){}
 }
 
-function newIdem(){
-  try { return 'nidsc-' + crypto.randomUUID(); }
-  catch(e) { return 'nidsc-' + Date.now() + '-' + Math.floor(Math.random() * 1e9); }
-}
-
-async function doCreate(){
-  // Core-data gate (frontend): খালি/অসম্পূর্ণ ফর্ম Create-এ পাঠিও না —
+async function doBuild(){
+  // Core-data gate (frontend): খালি/অসম্পূর্ণ ফর্ম build-এ পাঠিও না —
   // backend-ও একই নিয়মে আটকাবে, এটা শুধু আগেভাগে জানায়।
   if(!hasCoreData(collectFields())){showErr(NO_CORE_DATA_MSG);return;}
-  if(!S.idem) S.idem = newIdem();
-  busy('b3',true,'তৈরি করা হচ্ছে…');
+  busy('b3',true,'কার্ড তৈরি হচ্ছে…');
   try{
-    const r=await ABC.api(API + '/create',{
+    const imgs = [];
+    if(S.photo && S.photo.dataUrl) imgs.push(S.photo);
+    if(S.sign && S.sign.dataUrl) imgs.push(S.sign);
+
+    const r=await ABC.api(API + '/build',{
       method:'POST',
       timeout:90000,
       body:{
         jobId:S.jobId,
         fields:collectFields(),
-        idempotency_key:S.idem
+        images:imgs
       }
     });
-    const j=await r.json().catch(()=>({}));
-    if(!r.ok||!j.ok){
+    if(!r.ok){
+      const j=await r.json().catch(()=>({}));
       if (r.status === 402 || j.error === 'INSUFFICIENT_BALANCE') {
         throw new Error(j.message || 'পর্যাপ্ত ব্যালেন্স নেই। অনুগ্রহ করে ওয়ালেট রিচার্জ করুন।');
       }
       if (r.status === 403 || j.error === 'SERVICE_ACCESS_DISABLED') {
         throw new Error(j.message || 'এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।');
       }
-      throw new Error(j.message || (j.error==='JOB_NOT_FOUND'?'সেশন শেষ — আবার আপলোড করুন।':'তৈরি করা যায়নি।'));
+      throw new Error(j.message || (j.error==='JOB_NOT_FOUND'?'সেশন শেষ — আবার আপলোড করুন।':'কার্ড তৈরি ব্যর্থ।'));
     }
-    S.filename = j.filename || '';
-    go(3);
-    showOk('চার্জ সম্পন্ন ✓ এবার কার্ডটি ডাউনলোড করুন।');
-    updateBalance();
-  }catch(e){showErr(e.message||'তৈরি করা যায়নি।');}
-  busy('b3',false);
-}
-
-/* Stored delivery copy (engine-jobs, like passport): after the PDF
-   is downloaded, report the same bytes so History can re-download
-   it. Fire-and-forget: a report failure never blocks or fails the
-   download. */
-function reportEngineJob(engineId, refNo, name, blob, fname, idem){
-  try{
-    var fd = new FormData();
-    fd.append('file', blob, fname);
-    fd.append('engine_id', engineId);
-    fd.append('ref_no', refNo || '');
-    fd.append('name', name || '');
-    fd.append('idempotency_key', idem || (engineId + '-' + (refNo || Date.now())));
-    var token = sessionStorage.getItem('abc_access_token') || '';
-    fetch('/api/engine-jobs', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd }).catch(function(){});
-  }catch(e){}
-}
-
-async function download(){
-  if(!S.idem){showErr('আগে তৈরি করুন — তারপর ডাউনলোড হবে।');return;}
-  busy('dlBtn',true,'তৈরি হচ্ছে…');
-  try{
-    const fields = collectFields();
-    if(!hasCoreData(fields)){showErr(NO_CORE_DATA_MSG);return;}
-    // Photo override: untouched = keep extracted photo (absent);
-    // changed = new data URL; removed = null (no photo) — the build
-    // then FAILS loudly (fix #3) instead of keeping the template photo.
-    let photo;
-    if (S.photoTouched) photo = S.photo ? S.photo.dataUrl : null;
-    const qs = 'idempotency_key=' + encodeURIComponent(S.idem);
-    const r=await ABC.api(API + '/pdf?'+qs,{
-      method:'POST',
-      timeout:120000,
-      body:{ jobId:S.jobId, fields:fields, photo:photo }
-    });
-    if(!r.ok){
-      const j=await r.json().catch(()=>({}));
-      if (r.status === 402 || j.error === 'NOT_PAID' || j.error === 'INSUFFICIENT_BALANCE') {
-        throw new Error(j.message || 'আগে Create করে চার্জ সম্পন্ন করুন, তারপর PDF ডাউনলোড হবে।');
-      }
-      if (r.status === 403 || j.error === 'SERVICE_ACCESS_DISABLED') {
-        throw new Error(j.message || 'এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।');
-      }
-      if (j.error === 'INVALID_PHOTO') {
-        throw new Error(j.message || 'ছবিটি পড়া যায়নি — অন্য ছবি দিয়ে আবার চেষ্টা করুন।');
-      }
-      throw new Error(j.message || (j.error==='JOB_NOT_FOUND'?'সেশন শেষ — আবার আপলোড করুন।':'PDF তৈরি ব্যর্থ।'));
-    }
-    const ct = r.headers.get('Content-Type') || '';
-    if(!ct.includes('application/pdf')) throw new Error('PDF পাওয়া যায়নি — আবার চেষ্টা করুন।');
-    const blob = await r.blob();
+    S.pdfBlob=await r.blob();
     const disposition = r.headers.get('Content-Disposition') || '';
-    const m = /filename="([^"]+)"/i.exec(disposition);
-    const fname = m ? m[1] : 'smart-card.pdf';
-    // Open the finished PDF in a new tab (inside the tap gesture,
-    // so it is not popup-blocked) and fall back to forced download
-    // only if the viewer was blocked.
-    const url = URL.createObjectURL(blob);
-    const viewer = window.open('', '_blank');
-    if (viewer) {
-      viewer.location = url;
-      showOk('✅ স্মার্ট কার্ড তৈরি হয়েছে — নতুন ট্যাবে ফর্মটি খুলেছে। ফাইলটি ইতিহাস (History) থেকেও আবার ডাউনলোড করা যাবে।');
-    } else {
-      const a = document.createElement('a');
-      a.href = url; a.download = fname;
-      document.body.appendChild(a); a.click(); a.remove();
-      showOk('✅ স্মার্ট কার্ড তৈরি হয়েছে এবং ডাউনলোড শুরু হয়েছে। এটি ইতিহাস (History) থেকেও আবার ডাউনলোড করা যাবে।');
-    }
-    setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
-    document.getElementById('reportFrame').src = url + '#toolbar=0&navpanes=0';
-    const nid = String((fields['ID NO:'] || fields['Pin'] || '')).trim();
-    const name = String((fields['নাম:'] || fields['Name:'] || '')).trim();
-    reportEngineJob('nid-smart-card', nid, name, blob, fname, S.idem);
-    S.idem = null; // downloaded -> the next Create is a fresh paid one.
-  }catch(e){showErr(e.message||'PDF তৈরি ব্যর্থ।');}
-  busy('dlBtn',false);
+    const name = /filename="([^"]+)"/i.exec(disposition);
+    S.downloadName = name ? name[1] : 'smart-card.pdf';
+    if(S.pdfUrl){ try{ URL.revokeObjectURL(S.pdfUrl); }catch(_){} }
+    S.pdfUrl=URL.createObjectURL(S.pdfBlob);
+    document.getElementById('cardFrame').src = S.pdfUrl + '#toolbar=0&navpanes=0';
+    const downloadLink = document.getElementById('b4');
+    downloadLink.href = S.pdfUrl;
+    downloadLink.download = S.downloadName;
+    go(4);showOk('কার্ড প্রস্তুত হয়েছে ✓');
+    updateBalance();
+  }catch(e){showErr(e.message||'কার্ড তৈরি ব্যর্থ।');}
+  busy('b3',false);
 }
 
 function setupDropZone(){

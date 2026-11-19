@@ -143,6 +143,9 @@ async function payForService(client, { userId, serviceId, amount, ref }) {
 //     + uuid, land.js idemOf), where the real ref carries the mode
 //     twice ('land-<mode>-land-<mode>-<uuid>').
 //   - nid.js: order key 'nid-' + jobId, ref 'nid-card-' + jobId.
+//     nid-smart-card.js uses the same format (single-step /build
+//     flow, like nid-replica) — the reconstruction below applies
+//     to both engines.
 //   - nid-server-copy.js: the order key IS the ref
 //     ('nidsc-' + jobId + '-' + kind) — it is inserted as the
 //     order's idempotency_key, so the key itself is the candidate.

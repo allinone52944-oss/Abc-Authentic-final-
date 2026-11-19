@@ -504,8 +504,9 @@ try {
 // PDF417 barcode) for ONE charge. v2 template only.
 //   GET  /api/nid-smart-card/price
 //   POST /api/nid-smart-card/extract (multipart pdf) → jobId
-//   POST /api/nid-smart-card/create  { jobId, fields } → charge + order
-//   POST /api/nid-smart-card/pdf     ?idempotency_key= → PDF
+//   POST /api/nid-smart-card/build   { jobId, fields, images } → PDF
+//        (single step like nid-replica: build first, charge after
+//        a successful build, order + server delivery copy)
 const nidSmartCardLimiter = rateLimit({
   validate: { xForwardedForHeader: false },
   windowMs: 60 * 1000,
