@@ -4,7 +4,9 @@
 //    land "logout" bug of 2026-10-23 came from missing pages)
 //  - the page calls the right API paths (ABC.api() adds '/api'
 //    itself — a hard-coded '/api/...' would double-prefix)
-//  - ONE download option after Create (single card PDF), one charge
+//  - single-step build like nid-replica: ONE Create click returns
+//    the card PDF in the same response (build first, charge after
+//    success); no /create + /pdf split, no client idempotency key
 //  - dashboard cards (desktop + mobile) link to the page and the
 //    charge labels refresh from the services list
 //  - admin engine dropdowns offer the engine; migration 061 seeds
@@ -22,49 +24,59 @@ describe('nid-smart-card.html', () => {
     expect(html).not.toContain("'/api/nid-smart-card'");
     expect(html).not.toContain('"/api/nid-smart-card"');
   });
-  test('has extract + create + pdf flow endpoints', () => {
+  test('has extract + build flow endpoints (no /create + /pdf split)', () => {
     expect(html).toContain("API + '/price'");
     expect(html).toContain("API + '/extract'");
-    expect(html).toContain("API + '/create'");
-    expect(html).toContain("API + '/pdf?'");
+    expect(html).toContain("API + '/build'");
+    expect(html).not.toContain("API + '/create'");
+    expect(html).not.toContain("API + '/pdf?'");
+    expect(html).not.toContain('idempotency_key');
     expect(html).toContain('id="pdfFile"');
   });
-  test('ONE download option after Create (single card PDF), one charge', () => {
-    expect(html).toContain('id="optionBox"');
-    expect(html).toContain('id="dlBtn"');
-    expect(html).toContain('এক চার্জে একটি কার্ড PDF');
+  test('ONE Create click returns the PDF (iframe + download link, like nid-replica)', () => {
+    expect(html).toContain('id="cardFrame"');
+    expect(html).toContain('id="b4"');
+    expect(html).toContain('সফল হলে টাকা কাটবে');
+    expect(html).not.toContain('id="optionBox"');
+    expect(html).not.toContain('id="dlBtn"');
+    expect(html).not.toContain('এক চার্জে একটি কার্ড PDF');
+    expect(html).not.toContain('ব্যর্থ হলে চার্জ: ৳০');
     expect(html).not.toContain('dlV1Btn');
     expect(html).not.toContain('dlV2Btn');
   });
-  test('trust lines: no charge on failure', () => {
-    expect(html).toContain('ব্যর্থ হলে চার্জ: ৳০');
+  test('trust lines: charge only on success, no charge on failure', () => {
+    expect(html).toContain('সফল হলে টাকা কাটবে');
     expect(html).toContain('কোনো টাকা কাটা হয়নি');
+    expect(html).not.toContain('ব্যর্থ হলে চার্জ: ৳০');
   });
-  test('PDF arrives via authenticated fetch -> blob (never a plain link)', () => {
-    expect(html).toContain("ct.includes('application/pdf')");
+  test('PDF arrives via authenticated fetch -> blob into the iframe (never a plain link)', () => {
     expect(html).toContain('r.blob()');
+    expect(html).toContain("getElementById('cardFrame')");
+    expect(html).toContain("getElementById('b4')");
+    expect(html).not.toContain("window.open('', '_blank')");
   });
-  test('finished PDF OPENS in a new tab, not only saved (2026-10-24 video bug)', () => {
-    expect(html).toContain("window.open('', '_blank')");
-    expect(html).toContain('viewer.location = url');
-    expect(html).toContain('নতুন ট্যাবে ফর্মটি খুলেছে');
+  test('wizard structure like nid-replica: w1/w3/w4, no step bar, no dead editFields', () => {
+    expect(html).toContain('id="w1"');
+    expect(html).toContain('id="w3"');
+    expect(html).toContain('id="w4"');
+    expect(html).not.toContain('id="w2"');
+    expect(html).not.toContain('<div class="steps">');
+    expect(html).not.toContain('id="editFields"');
   });
-  test('success/error message scrolls into view (boxes sit above the panels)', () => {
-    expect(html).toContain('function scrollBoxIntoView()');
-    expect(html).toContain('scrollIntoView');
-    expect(html).toContain('নতুন ট্যাবে ফর্মটি খুলেছে');
-  });
-  test('edit form: review step + fields + photo slot', () => {
-    expect(html).toContain('id="editFields"');
+  test('review step: fields + photo AND signature slots (like nid-replica)', () => {
     expect(html).toContain('id="fieldForm"');
     expect(html).toContain('id="imgPrev"');
-    expect(html).toContain('সব তথ্য এডিট করা যাবে');
-    expect(html).toContain('PHOTO_STATE');
+    expect(html).toContain('renderImagesUI');
+    expect(html).toContain('sign.png');
+    expect(html).toContain('স্বাক্ষর বদলান');
+    expect(html).toContain('ছবি বদলান');
   });
-  test('download sends photo override + reports the card to engine-jobs', () => {
-    expect(html).toContain('INVALID_PHOTO');
-    expect(html).toContain("reportEngineJob('nid-smart-card'");
-    expect(html).toContain('S.idem');
+  test('build sends photo+sign images in one call, no engine-jobs report', () => {
+    expect(html).toContain('images:imgs');
+    expect(html).toContain('S.sign');
+    expect(html).not.toContain('reportEngineJob');
+    expect(html).not.toContain('S.idem');
+    expect(html).not.toContain('newIdem');
   });
   test('issue date is visible + editable in review (fix #5: today default shown)', () => {
     expect(html).toContain('প্রদানের তারিখ:');
@@ -73,10 +85,9 @@ describe('nid-smart-card.html', () => {
   test('no Voter No field (fix #2: it never stands in for the National ID)', () => {
     expect(html).not.toContain("key: 'Voter No'");
     expect(html).not.toContain('ভোটার নম্বর');
-  });
-  test('no applicant-signature slot (the authority signature comes from shakkhor/)', () => {
-    expect(html).not.toContain('sign.png');
-    expect(html).not.toContain('স্বাক্ষর বদলান');
+    // the replica's label must NOT come back with the alignment
+    expect(html).not.toContain('এনআইডি / ভোটার আইডি নম্বর');
+    expect(html).toContain("label: 'এনআইডি নম্বর'");
   });
 });
 

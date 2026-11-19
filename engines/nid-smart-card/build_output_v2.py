@@ -7,10 +7,19 @@ Ei module ki kore:
   * template-er variable text (nam/pita/mata/DOB/NID/address/blood/birth place/
     issue date/MRZ) stream theke soriye fele — label/background/guilloche osomosto
   * notun man gulo template-er exact position, size, color-e bosay
-  * photo (front + duita back photo), authority signature, barcode, DOB band replace kore
+  * photo (front + duita back photo), holder signature, barcode, DOB band replace kore
 
 Smart-card engine (nid-smart-card) — v2 TEMPLATE ONLY. Purono template
 (2-page card, "নাম:" / "ID NO:" style) ei engine-e nei.
+
+Holder-signature slot (sample-proven): sample card
+(output_template.pdf — user-er deya sample-er sathe byte-identical)
+dekha jay card-er ekmatro swakkhor-ta front-e, photo-r niche
+(xref 24) — seta HOLDER-er swakkhor; back panel-e kono swakkhor
+nei, authority signature-o card-e kothao nei. Age eta authority
+bole bhul kora hoto (shakkhor/ diye replace kora hoto) — ekhon
+holder-er sign.png-i oi slot-e boshe; authority signature ei
+engine-e ar render hoy na.
 
 Fail-loudly rule (fix #3): photo / signature / barcode / DOB band
 replace korte na parle build FAIL kore (Bengali error, kono PDF na) —
@@ -25,7 +34,7 @@ import html
 import datetime
 
 import pymupdf
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 import build_output as bo
 
@@ -57,7 +66,10 @@ MRZ = {"x": 316.50, "y1": 171.75, "y2": 184.50, "y3": 197.25,
        "pitch": 7.2778, "size": 10.20, "vscale": 1.0}
 
 PHOTO_XREFS = (18, 20, 26)     # front photo, back mini photo, back ghost photo
-SIGN_XREF = 24                 # authority signature (photo-r niche)
+HOLDER_SIGN_XREF = 24          # holder (cardholder) signature — front, photo-r niche.
+                               # Sample card (output_template.pdf) proman kore: card-e
+                               # ekmatro swakkhor eitai, holder-er; back panel-e kono
+                               # swakkhor nei, authority signature-o card-e nei.
 BARCODE_XREF = 15
 DOB_BAND_XREF = 66
 
@@ -620,13 +632,126 @@ def _fit_contain_rgba(path, w, h):
     return canvas
 
 
-def _replace_photos(page, photo_path, sign_path):
-    """Photo (3 jaiga) + authority signature replace.
+def _fit_holder_signature(path):
+    """Cleaned holder signature -> 146x73 slot image, sample card-er moto.
 
-    FAIL LOUDLY (fix #3): photo ba signature na thakle / replace korte
-    na parle RuntimeError (Bengali) — build theme jay, kono PDF hoy na.
-    Template-er sample-er chhobi/signature kokhono customer-er card-e
-    thakte pare na.
+    Sample card-er holder-er kalir bbox 116x51 px (146x73 slot-er
+    bhitore, charpashe margin: baame ~13px, daney ~17px, upore ~9px,
+    niche ~13px). _fit_contain_rgba slot bhore dito — signature-ta
+    slot-er purno prostho jure bichhiye jeto ar sample-er cheye
+    lomba/chhoto dekhate. Tai ghono kali-ta-ke (alpha>128) 116x51
+    box-er bhitore fit kori (kokhono boro kori na — scale <= 1.0),
+    ar ghono kali-r kendro-ta slot-er kendro-e bosai — cleaned
+    chhobi-r halka lejer jonno kali upore/niche sore jay na.
+    Akrity (aspect) bodlay na.
+    """
+    im = Image.open(path).convert("RGBA")
+    alpha = im.split()[3]
+    solid = alpha.point(lambda a: 255 if a > 128 else 0)
+    bbox = solid.getbbox()
+    if bbox:
+        ink_w = bbox[2] - bbox[0]
+        ink_h = bbox[3] - bbox[1]
+    else:
+        bbox = (0, 0, im.width, im.height)
+        ink_w, ink_h = im.width, im.height
+    scale = min(1.0, 116.0 / max(1, ink_w), 51.0 / max(1, ink_h))
+    nw = max(1, int(round(im.width * scale)))
+    nh = max(1, int(round(im.height * scale)))
+    im = im.resize((nw, nh), Image.LANCZOS)
+    # Ghono kali-r bbox (resize-er pore) slot-er kendro-e anar jonno
+    # paste offset hisab kori.
+    sx0 = int(round(bbox[0] * scale))
+    sy0 = int(round(bbox[1] * scale))
+    sx1 = int(round(bbox[2] * scale))
+    sy1 = int(round(bbox[3] * scale))
+    ink_cx = (sx0 + sx1) / 2.0
+    ink_cy = (sy0 + sy1) / 2.0
+    px = int(round(146 / 2.0 - ink_cx))
+    py = int(round(73 / 2.0 - ink_cy))
+    canvas = Image.new("RGBA", (146, 73), (0, 0, 0, 0))
+    canvas.paste(im, (px, py), im)
+    return canvas
+
+
+def _clean_signature(path):
+    """Scanned holder signature (dark ink on white paper) -> transparent-bg
+    RGBA PNG, cropped to the ink bounding box.
+
+    Form theke extract kora sign.png-er kagoj saada na — scan-er
+    gradient (upore majhari gray, niche pray saada). Fixed white
+    threshold dile kagoj-tai gray box hoye card-er guilloche dheke
+    dito. Tai kagoj-ta per-pixel estimate kori (wide Gaussian blur)
+    ar kali = kagoj - gray: kali onek dark, kagoj pray shoman —
+    tai gradient thakleo kali alada hoy. Source-e alpha thakle
+    setao manjo. Ink-er bbox-e crop kori jate slot-e signature
+    chhoto na hoye jay.
+    Returns the path of the cleaned temp PNG.
+    Raises RuntimeError (Bengali) if the file cannot be read or has no ink.
+    """
+    try:
+        im = Image.open(path)
+    except Exception as e:
+        raise RuntimeError("ধারকের স্বাক্ষর পড়া যায়নি: %s" % e)
+    try:
+        rgb = im.convert("RGB")
+        gray = rgb.convert("L")
+        # Background estimate: strokes wash out, paper gradient stays.
+        radius = max(8, min(im.width, im.height) // 10)
+        bg = gray.filter(ImageFilter.GaussianBlur(radius=radius))
+        dark = ImageChops.subtract(bg, gray)
+        # darkness <20 -> paper (transparent), >60 -> solid ink.
+        alpha = dark.point(
+            lambda d: 0 if d < 20 else (255 if d > 60 else
+                                       int((d - 20) * 255 / 40)))
+        if im.mode == "RGBA":
+            try:
+                alpha = ImageChops.darker(alpha, im.split()[3])
+            except Exception:
+                pass
+        out = rgb.convert("RGBA")
+        out.putalpha(alpha)
+        bbox = alpha.getbbox()
+        if not bbox:
+            raise RuntimeError(
+                "ধারকের স্বাক্ষরে কালি পাওয়া যায়নি — ফাঁকা ছবি। "
+                "সঠিক স্বাক্ষরের ছবি দিন।")
+        m = 2
+        out = out.crop((max(0, bbox[0] - m), max(0, bbox[1] - m),
+                        min(out.width, bbox[2] + m),
+                        min(out.height, bbox[3] + m)))
+        tmp = bo._w("temp_renders", "v2_holder_sign_clean.png")
+        out.save(tmp)
+        return tmp
+    except RuntimeError:
+        raise
+    except Exception as e:
+        raise RuntimeError("ধারকের স্বাক্ষর বসানো যায়নি: %s" % e)
+
+
+def _blank_signature_image():
+    """Fully transparent 146x73 PNG — holder signature na thakle slot-ta
+    faka rakhar jonno. Template-er sample holder-er signature kokhono
+    customer-er card-e thakte pare na (fix #3), tai blank diye replace
+    korte hoy; khali rekhe dile sample-er swakkhor theke jeto."""
+    im = Image.new("RGBA", (146, 73), (0, 0, 0, 0))
+    out = bo._w("temp_renders", "v2_holder_sign_blank.png")
+    im.save(out)
+    return out
+
+
+def _replace_photos(page, photo_path, holder_sign_path):
+    """Photo (3 jaiga) + holder signature replace.
+
+    FAIL LOUDLY (fix #3): photo replace korte na parle RuntimeError
+    (Bengali) — build theme jay, kono PDF hoy na. Template-er sample-er
+    chhobi kokhono customer-er card-e thakte pare na.
+
+    Holder signature: deya thakle setai HOLDER_SIGN_XREF slot-e boshe
+    (sample card-er hubohu jaiga — front, photo-r niche). Deya na
+    thakle slot-ta blank (transparent) kore deya hoy — template-er
+    sample holder-er signature kokhono thake na — ar build choltei
+    thake. Deya signature porte / bosate na parle RuntimeError.
     """
     os.makedirs(bo._w("temp_renders"), exist_ok=True)
     if not photo_path or not os.path.exists(photo_path):
@@ -663,17 +788,23 @@ def _replace_photos(page, photo_path, sign_path):
     except Exception as e:
         raise RuntimeError("পেছনের ছবি বসানো যায়নি: %s" % e)
 
-    sig = sign_path or bo.find_issue_authority_sign()
-    if not sig or not os.path.exists(sig):
-        raise RuntimeError(
-            "কর্তৃপক্ষের স্বাক্ষর পাওয়া যায়নি — কার্ড তৈরি করা যাবে না।")
-    im = _fit_contain_rgba(sig, 146, 73)
-    out = bo._w("temp_renders", "v2_sign.png")
-    im.save(out)
-    try:
-        page.replace_image(SIGN_XREF, filename=out)
-    except Exception as e:
-        raise RuntimeError("স্বাক্ষর বসানো যায়নি: %s" % e)
+    if holder_sign_path and os.path.exists(holder_sign_path):
+        clean = _clean_signature(holder_sign_path)
+        im = _fit_holder_signature(clean)
+        out = bo._w("temp_renders", "v2_holder_sign.png")
+        im.save(out)
+        try:
+            page.replace_image(HOLDER_SIGN_XREF, filename=out)
+        except Exception as e:
+            raise RuntimeError("ধারকের স্বাক্ষর বসানো যায়নি: %s" % e)
+    else:
+        # Kono holder signature nei — slot blank rakho (sample-er
+        # signature muchhe fela hoy), build theme jay na.
+        blank = _blank_signature_image()
+        try:
+            page.replace_image(HOLDER_SIGN_XREF, filename=blank)
+        except Exception as e:
+            raise RuntimeError("স্বাক্ষরের জায়গা খালি করা যায়নি: %s" % e)
 
 
 def _make_barcode(fields):
@@ -702,13 +833,20 @@ def _make_barcode(fields):
     ds = (fields.get("ds") or "").strip()
     ds_xml = "<ds>%s</ds>" % ds if ds else ""
     # Sample card-er format: name-e space-er bodole '+', DOB ISO, TYPE faka.
+    # F-er man "Right INDEX" (sample card-er hubohu — "Right Index" noy).
     xml = ("<pin>%s</pin><name>%s</name><DOB>%s</DOB><FP></FP>"
-           "<F>Right Index</F><TYPE></TYPE><V>2.0</V>%s"
+           "<F>Right INDEX</F><TYPE></TYPE><V>2.0</V>%s"
            % (pin, nm.replace(" ", "+"), dob, ds_xml))
     try:
-        # Sample barcode-er hubohu geometry: 13 data column, 18 row,
-        # module 2px x 2px, row height 6px -> 580x108 exact bitmap.
-        codes = _pdf417_codes(xml, columns=13, security_level=4, rows=18)
+        # Sample barcode-er hubohu geometry + format: 13 data column,
+        # 18 row, security level 5 (sample-er row indicator diye promanito
+        # — level 4 noy), module 2px x 2px, row height 6px -> 580x108
+        # exact bitmap. NOTE: pattern-ta bekti-r data encode kore, tai
+        # onno bekti-r pattern sample-er sathe milbe na (setai thik);
+        # kintu eki bekti-r jonno pdf417gen-er text compaction-er switch
+        # sample-er original encoder-er cheye alada — pixel-hubohu
+        # milate hole compactor-ta bodlate hobe (bhinno kaj).
+        codes = _pdf417_codes(xml, columns=13, security_level=5, rows=18)
     except Exception as e:
         raise RuntimeError("বারকোড তৈরি করা যায়নি: %s" % e)
     if not codes:
@@ -799,7 +937,7 @@ def _make_dob_band(dob_iso):
 # main build
 # ---------------------------------------------------------------------------
 def build_v2_card(fields, template_pdf, out_pdf=None, photo_path=None,
-                  sign_path=None, authority_sign_path=None):
+                  holder_sign_path=None):
     # Caller (main / adapter) bo.configure(assets, work) kore — ekhane
     # work dir reset kora hoy na, karon adapter per-job absolute work
     # dir set kore (reset korle job-er file onno jaigay jeto).
@@ -912,8 +1050,9 @@ def build_v2_card(fields, template_pdf, out_pdf=None, photo_path=None,
     # ---- images ----
     # photo_path None hole _replace_photos FAIL kore (fix #3) — kono
     # default work-dir photo use hoy na, template-er photo-o thake na.
-    sig = authority_sign_path or sign_path
-    _replace_photos(page, photo_path, sig)
+    # holder_sign_path None hole signature slot blank thake, build
+    # choltei thake.
+    _replace_photos(page, photo_path, holder_sign_path)
 
     bc = _make_barcode(fields)  # fail hole RuntimeError (Bengali)
     try:
@@ -954,7 +1093,7 @@ def _build_mrz(fields, dob, issue):
 # ---------------------------------------------------------------------------
 # CLI — adapter theke call hoy:
 #   python build_output_v2.py <fields.json> <template.pdf> <out.pdf>
-#       [--photo <path>] [--sign <path>] [--work <jobdir>] [--assets <enginedir>]
+#       [--photo <path>] [--holder-sign <path>] [--work <jobdir>] [--assets <enginedir>]
 # stdout-e sheshe ek line JSON: {"ok": true, "output": ...} ba
 # {"ok": false, "error": "<Bengali message>"}. Log line gulo tar age ashe.
 # ---------------------------------------------------------------------------
@@ -965,7 +1104,7 @@ def main(argv=None):
     ap.add_argument("template_pdf")
     ap.add_argument("out_pdf")
     ap.add_argument("--photo", default=None)
-    ap.add_argument("--sign", default=None)
+    ap.add_argument("--holder-sign", default=None)
     ap.add_argument("--work", default=None)
     ap.add_argument("--assets", default=None)
     args = ap.parse_args(argv)
@@ -977,7 +1116,8 @@ def main(argv=None):
         with open(args.fields_json, encoding="utf-8") as fh:
             fields = json.load(fh)
         out = build_v2_card(fields, args.template_pdf, args.out_pdf,
-                            photo_path=args.photo, sign_path=args.sign)
+                            photo_path=args.photo,
+                            holder_sign_path=args.holder_sign)
         print(json.dumps({"ok": True, "output": out}, ensure_ascii=False))
         return 0
     except Exception as e:

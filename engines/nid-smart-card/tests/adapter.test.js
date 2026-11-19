@@ -1,9 +1,27 @@
 // Node tests for engines/nid-smart-card/adapter.js — pure
-// helpers only (no Python spawned here; the Python pipeline is
-// covered by tests/test_smart_card.py).
+// helpers, plus buildCard image handling (photo.png + sign.png)
+// against a hand-built job dir. The image tests assert on the
+// job-dir file state only — the Python build itself is covered by
+// tests/test_smart_card.py, and its outcome here is NOT asserted
+// (it fails on a VM without pymupdf, which is fine: the images
+// are written before the Python call runs).
 // Run: node --test engines/nid-smart-card/tests/adapter.test.js
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const childProcess = require('node:child_process');
+
+// Capture every spawnSync call (delegating to the real one) so the
+// buildCard wiring tests can assert the exact Python argv
+// (--holder-sign) without depending on the Python outcome.
+const spawnCalls = [];
+const realSpawnSync = childProcess.spawnSync;
+childProcess.spawnSync = (...args) => {
+  spawnCalls.push(args);
+  return realSpawnSync(...args);
+};
 
 const adapter = require('../adapter');
 
@@ -28,11 +46,15 @@ test('missingCoreGroups names the missing groups in Bengali', () => {
   );
 });
 
-test('outputBase: Bengali digits map to ASCII, junk stripped, empty -> smart-card', () => {
+test('outputBase: replica filename rule — 10/13/17 digits, else smart-card', () => {
   assert.equal(adapter.outputBase({ 'ID NO:': '১০১০১০১০১০' }), '1010101010');
   assert.equal(adapter.outputBase({ 'ID NO:': '1010-101010' }), '1010101010');
+  assert.equal(adapter.outputBase({ 'ID NO:': '1010101010101' }), '1010101010101');
   assert.equal(adapter.outputBase({ Pin: '10101010101010101' }), '10101010101010101');
   assert.equal(adapter.outputBase({ 'ID NO:': ' 1010101010 ' }), '1010101010');
+  // Not 10/13/17 digits → fallback (replica rule).
+  assert.equal(adapter.outputBase({ 'ID NO:': '12345' }), 'smart-card');
+  assert.equal(adapter.outputBase({ 'ID NO:': '123456789012' }), 'smart-card');
   assert.equal(adapter.outputBase({ 'ID NO:': '' }), 'smart-card');
   assert.equal(adapter.outputBase({}), 'smart-card');
   assert.equal(adapter.outputBase(null), 'smart-card');
@@ -57,4 +79,102 @@ test('parseBuildJson: last JSON with an ok key wins, log lines ignored', () => {
   assert.equal(adapter.parseBuildJson(''), null);
   // A JSON object without an ok key is not a build result.
   assert.equal(adapter.parseBuildJson('{"output": "x"}\n'), null);
+});
+
+// --- buildCard image handling (photo.png + sign.png, like nid-replica) ---
+// Tiny 1x1 PNGs (distinct bytes so replacement is observable).
+const PNG_OLD = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+const PNG_PHOTO = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+const PNG_SIGN = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADgAGYAKw2h4AAAAASUVORK5CYII=', 'base64');
+const FIELDS = { 'নাম:': 'পরীক্ষা নাম', 'ID NO:': '1010101010', 'Date of Birth:': '01/01/1990' };
+
+function makeJobDir() {
+  const id = crypto.randomUUID();
+  const dir = path.join(__dirname, '..', 'work', 'jobs', id);
+  fs.mkdirSync(path.join(dir, 'work', 'images'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'work', 'input_data.json'), '{}');
+  fs.writeFileSync(path.join(dir, '.owner'), 'u1');
+  fs.writeFileSync(path.join(dir, 'work', 'images', 'photo.png'), PNG_OLD);
+  fs.writeFileSync(path.join(dir, 'work', 'images', 'sign.png'), PNG_OLD);
+  return { id, dir };
+}
+
+function cleanup(dir) {
+  try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+}
+
+test('buildCard stores uploaded photo.png + sign.png in the job dir', async () => {
+  const { id, dir } = makeJobDir();
+  try {
+    await adapter.buildCard(id, FIELDS, [
+      { name: 'photo.png', dataUrl: 'data:image/png;base64,' + PNG_PHOTO.toString('base64') },
+      { name: 'sign.png', dataUrl: 'data:image/png;base64,' + PNG_SIGN.toString('base64') },
+    ], 'u1');
+    assert.deepEqual(fs.readFileSync(path.join(dir, 'work', 'images', 'photo.png')), PNG_PHOTO);
+    assert.deepEqual(fs.readFileSync(path.join(dir, 'work', 'images', 'sign.png')), PNG_SIGN);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('buildCard deletes extracted photo/sign not re-passed', async () => {
+  const { id, dir } = makeJobDir();
+  try {
+    await adapter.buildCard(id, FIELDS, [], 'u1');
+    assert.equal(fs.existsSync(path.join(dir, 'work', 'images', 'photo.png')), false);
+    assert.equal(fs.existsSync(path.join(dir, 'work', 'images', 'sign.png')), false);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('buildCard ignores non-photo/sign image names', async () => {
+  const { id, dir } = makeJobDir();
+  try {
+    await adapter.buildCard(id, FIELDS, [
+      { name: 'other.png', dataUrl: 'data:image/png;base64,' + PNG_PHOTO.toString('base64') },
+    ], 'u1');
+    assert.equal(fs.existsSync(path.join(dir, 'work', 'images', 'other.png')), false);
+    assert.equal(fs.existsSync(path.join(dir, 'work', 'images', 'photo.png')), false);
+    assert.equal(fs.existsSync(path.join(dir, 'work', 'images', 'sign.png')), false);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+function buildCallArgs() {
+  const call = spawnCalls.find((c) => String((c[1] || [])[0] || '').endsWith('build_output_v2.py'));
+  assert.ok(call, 'build_output_v2.py was not invoked');
+  return call[1].slice(1);
+}
+
+test('buildCard passes --holder-sign when sign.png exists', async () => {
+  const { id, dir } = makeJobDir();
+  try {
+    spawnCalls.length = 0;
+    await adapter.buildCard(id, FIELDS, [
+      { name: 'photo.png', dataUrl: 'data:image/png;base64,' + PNG_PHOTO.toString('base64') },
+      { name: 'sign.png', dataUrl: 'data:image/png;base64,' + PNG_SIGN.toString('base64') },
+    ], 'u1');
+    const argv = buildCallArgs();
+    const i = argv.indexOf('--holder-sign');
+    assert.notEqual(i, -1, '--holder-sign missing from build argv');
+    assert.equal(argv[i + 1], path.join(dir, 'work', 'images', 'sign.png'));
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('buildCard omits --holder-sign when sign.png is absent', async () => {
+  const { id, dir } = makeJobDir();
+  try {
+    spawnCalls.length = 0;
+    await adapter.buildCard(id, FIELDS, [
+      { name: 'photo.png', dataUrl: 'data:image/png;base64,' + PNG_PHOTO.toString('base64') },
+    ], 'u1');
+    const argv = buildCallArgs();
+    assert.equal(argv.indexOf('--holder-sign'), -1, '--holder-sign must be absent without sign.png');
+  } finally {
+    cleanup(dir);
+  }
 });
