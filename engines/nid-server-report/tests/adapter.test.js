@@ -41,3 +41,20 @@ test('NO_CORE_DATA_MESSAGE is a Bengali no-charge message', () => {
   assert.match(adapter.NO_CORE_DATA_MESSAGE, /তথ্য অসম্পূর্ণ/);
   assert.match(adapter.NO_CORE_DATA_MESSAGE, /কোনো টাকা কাটা হয়নি/);
 });
+
+test('sanitizeFields: single-line address strings pass through; legacy dicts still sanitize key-by-key', () => {
+  const clean = adapter.sanitizeFields({
+    'Name(Bangla)': 'পরীক্ষা নাম',
+    'Present Address': '১২, পরীক্ষা গ্রাম, ঢাকা',
+    'Permanent Address': '',
+    Legacy: { holding: '১২', evil: 'x'.repeat(600) },
+    arr: [1, 2],
+    flag: true,
+  });
+  assert.equal(clean['Present Address'], '১২, পরীক্ষা গ্রাম, ঢাকা');
+  assert.equal(clean['Permanent Address'], '');
+  assert.equal(clean['Legacy'].holding, '১২');
+  assert.equal(clean['Legacy'].evil.length, 500);
+  assert.equal('arr' in clean, false);
+  assert.equal('flag' in clean, false);
+});

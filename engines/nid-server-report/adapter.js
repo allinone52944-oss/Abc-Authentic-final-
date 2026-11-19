@@ -216,7 +216,8 @@ async function extractFields(pdfBuffer, ownerId) {
 }
 
 // Sanitize the (possibly edited) fields before they are written
-// back to work/input_data.json for the build: scalar strings capped,
+// back to work/input_data.json for the build: scalar strings capped
+// (a single-line address passes through as a string), legacy
 // address dicts sanitized key-by-key, unknown shapes dropped.
 function sanitizeFields(fieldsJson) {
   const clean = {};
@@ -237,7 +238,8 @@ function sanitizeFields(fieldsJson) {
       clean[ks] = String(v).slice(0, 2000);
     }
     // other types (arrays, booleans) are dropped — the builder
-    // only reads strings and address dicts.
+    // reads strings (including single-line addresses) and legacy
+    // address dicts.
   }
   return clean;
 }
@@ -245,7 +247,7 @@ function sanitizeFields(fieldsJson) {
 /**
  * Build BOTH report PDFs (v1 + v2) from (possibly edited) fields.
  * @param {string} jobId
- * @param {object} fieldsJson  input_data.json shape (scalars + address dicts)
+ * @param {object} fieldsJson  input_data.json shape (scalars + address strings, or legacy address dicts)
  * @param {Array} images  [{name, dataUrl}] — photo override; empty
  *   photo means the extracted photo is removed for the build.
  * @param {string|number} ownerId
@@ -371,4 +373,4 @@ function getInfo() {
   };
 }
 
-module.exports = { init, getInfo, extractFields, buildReports, validateJob, hasCoreData, missingCoreGroups, outputBase, NO_CORE_DATA_MESSAGE };
+module.exports = { init, getInfo, extractFields, buildReports, validateJob, hasCoreData, missingCoreGroups, outputBase, sanitizeFields, NO_CORE_DATA_MESSAGE };

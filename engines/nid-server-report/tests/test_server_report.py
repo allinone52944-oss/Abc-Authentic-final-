@@ -126,6 +126,15 @@ class TestAddressCompose(unittest.TestCase):
         self.assertEqual(br.addr_parts({}), "")
         self.assertEqual(br.addr_parts({"holding": "-"}), "")
 
+    def test_addr_parts_string_passes_through_verbatim(self):
+        # The review form now sends each address as ONE string; the
+        # builders print it verbatim as the one-liner.
+        self.assertEqual(br.addr_parts("12, Mirpur, Dhaka 1200"),
+                         "12, Mirpur, Dhaka 1200")
+        self.assertEqual(br.addr_parts("  spaced  "), "spaced")
+        self.assertEqual(br.addr_parts(""), "")
+        self.assertEqual(br.addr_parts(None), "")
+
     def test_parse_bn_address_text(self):
         # Same segment order the composer emits (addr_parts): no
         # "ডাকঘর:" segment — the composer never writes one.
@@ -249,6 +258,25 @@ class TestBuildReports(unittest.TestCase):
             imgs = doc[0].get_images(full=True)
         # photo + QR = at least 2 embedded images
         self.assertGreaterEqual(len(imgs), 2)
+
+    def test_build_string_address_prints_verbatim(self):
+        # String addresses (from the single-line review inputs) reach
+        # BOTH built PDFs as the one-liner, verbatim.
+        import copy
+        data = copy.deepcopy(FAKE)
+        data["Present Address"] = "12, Mirpur, Dhaka 1200"
+        data["Permanent Address"] = "34, Uttara, Dhaka 1230"
+        with open(os.path.join(self.work, "input_data.json"), "w",
+                  encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=1)
+        self.assertEqual(br.main(os.path.join(self.work, "input_data.json"),
+                                 self.out), 0)
+        import pymupdf
+        for suffix in ("-v1.pdf", "-v2.pdf"):
+            with pymupdf.open(os.path.join(self.out, "1010101010" + suffix)) as doc:
+                text = doc[0].get_text()
+            self.assertIn("12, Mirpur, Dhaka 1200", text)
+            self.assertIn("34, Uttara, Dhaka 1230", text)
 
 
 if __name__ == "__main__":
