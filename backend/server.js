@@ -496,6 +496,34 @@ try {
   safeLog('[engines] nid-server-report not mounted:', e.message);
 }
 
+// ---- NID Smart Card (upload PDF -> smart card, auth + limit) --------
+// A separate engine from nid-replica (old card) and nid-server-report
+// (v1/v2 reports): the customer uploads an NID form PDF; the engine
+// extracts the fields, the customer reviews/edits them, and Create
+// builds the new smart card (front+back, one Letter page, MRZ +
+// PDF417 barcode) for ONE charge. v2 template only.
+//   GET  /api/nid-smart-card/price
+//   POST /api/nid-smart-card/extract (multipart pdf) → jobId
+//   POST /api/nid-smart-card/create  { jobId, fields } → charge + order
+//   POST /api/nid-smart-card/pdf     ?idempotency_key= → PDF
+const nidSmartCardLimiter = rateLimit({
+  validate: { xForwardedForHeader: false },
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'RATE_LIMITED' },
+});
+try {
+  const nidSmartCardAdapter = require('../engines/nid-smart-card/adapter.js');
+  nidSmartCardAdapter.init({});
+  const nidSmartCardRoutes = require('./routes/nid-smart-card');
+  app.use('/api/nid-smart-card', requireAuth, nidSmartCardLimiter, nidSmartCardRoutes);
+  safeLog('[engines] mounted nid-smart-card at /api/nid-smart-card');
+} catch (e) {
+  safeLog('[engines] nid-smart-card not mounted:', e.message);
+}
+
 // ---- BDRIS Apply engine (as-is bot, auth + strict limit) -------------
 // The engine folder is an as-is copy of Bdris-apply-v2-CLEAN-v23.zip
 // (BDRIS Auto-fill Bot v6: Express + Socket.IO + Playwright).

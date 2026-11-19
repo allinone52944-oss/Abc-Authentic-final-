@@ -1,0 +1,1316 @@
+# -*- coding: utf-8 -*-
+"""
+ব্যবহার: python extract_input.py input.pdf
+
+NID ফর্ম (input.pdf) থেকে নাম-ধরা ফিল্ডগুলো পড়ে work/input_data.json-এ রাখে,
+ছবি (ফটো/সই) আলাদা করে work/images/ ফোল্ডারে সেভ করে।
+Present Address টেবিল থেকে ঠিকানার অংশগুলো আলাদা করে পড়ে
+(data["Present Address"] ডিকশনারি হিসেবে)।
+"""
+import sys
+import os
+import json
+import difflib
+import re
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+try:
+    import pymupdf
+except ImportError:
+    import fitz as pymupdf
+
+
+# --- Phantom-sign detector (permanent) --------------------------------------
+# NID site-er PDF-e generator /Span <<ActualText>> diye Unicode dey, kintu
+# glyph paint-e kichu combining-sign (া/ে/ু...) ANPLOT hoy (font-GSUB er
+# phantom). Extraction-e oi char ASHE, card-e dile NAME GARBAGE dekhabe.
+# Fix: value-er ink-width (paint-sotto) compare koro — kono ek ekta sign
+# char bad dile width melbe, oitai real string.
+_BN_COMB = set("ািীুূৃৄেৈোৌঁংঃਁ")
+_DOC = None          # extract()-er dokan e active doc
+_FONT_CACHE = {}
+_MEAS_DOC = None
+_FONT_INDEX = None   # {lower_stem: path} — scan once, reuse
+
+# Known Bangla-capable font stems (input ja dao — match + fallback)
+_KNOWN_BN = ("nirmala", "solaiman", "kalpurush", "nikosh", "hind",
+             "baloo", "mina", "tiro", "bangla", "bengali", "likhan",
+             "siyam", "rupali", "adwaita", "galada", "mitra", "lklug")
+
+
+def _font_dirs():
+    here = os.path.dirname(os.path.abspath(__file__))
+    dirs = [os.path.join(here, "assets", "fonts"),   # kit layout
+            os.path.join(here, "fonts"),              # live flat layout
+            r"C:\Windows\Fonts"]
+    return [d for d in dirs if os.path.isdir(d)]
+
+
+def _scan_fonts():
+    """Ekbar scan: {lower_stem: path} — subset/exotic font name-o match hobe."""
+    global _FONT_INDEX
+    if _FONT_INDEX is not None:
+        return _FONT_INDEX
+    idx = {}
+    for d in _font_dirs():
+        try:
+            for fn in os.listdir(d):
+                low = fn.lower()
+                if not low.endswith((".ttf", ".ttc", ".otf")):
+                    continue
+                stem = os.path.splitext(fn)[0].lower()
+                # earlier dirs priority (kit assets > live fonts > Windows)
+                idx.setdefault(stem, os.path.join(d, fn))
+        except OSError:
+            pass
+    _FONT_INDEX = idx
+    return idx
+
+
+def _font_file_for(span_font):
+    """ANY span font name -> best font file (permanent logic + fallback).
+    Nirmala/Solaiman/Kalpurush/Nikosh/Hind... jai asuk, stem-match kore
+    file ber koro; na pelle None (caller fallback nibe). Subset names
+    ('NirmalaUI-Bold-...', 'ABCDEF+Nirmala') o chole."""
+    if not span_font:
+        return None
+    key = span_font.lower()
+    if key in _FONT_CACHE:
+        return _FONT_CACHE[key]
+    idx = _scan_fonts()
+    # normalize: subset prefix (ABCDEF+), style suffix (-Bold), commas
+    raw = span_font.split(",")[0].strip()
+    if "+" in raw:
+        raw = raw.split("+", 1)[1]
+    stem = raw.split("-")[0].split(" ")[0].strip().lower()
+    hit = None
+    # 1) exact stem
+    if stem in idx:
+        hit = idx[stem]
+    # 2) known-BN alias (nirmala -> nirmalaui/nirmala...)
+    if not hit:
+        for kpath_stem, p in idx.items():
+            if stem and len(stem) >= 3 and (
+                    kpath_stem.startswith(stem) or stem.startswith(kpath_stem)):
+                hit = p
+                break
+    # 3) known BN family substring match
+    if not hit:
+        for bn in _KNOWN_BN:
+            if bn in key:
+                for kpath_stem, p in idx.items():
+                    if bn in kpath_stem:
+                        hit = p
+                        break
+            if hit:
+                break
+    _FONT_CACHE[key] = hit
+    return hit
+
+
+def _ink_matrix(page, bbox, zoom=4.0):
+    """Crop render kore ink-matrix (paint-sotto). Text-extract NA — tar
+    phantom-char ashe. Returns (rows, w, h) — rows[r][c]=True hole ink."""
+    try:
+        r = pymupdf.Rect(bbox.x0 - 0.5, bbox.y0 - 0.5,
+                         bbox.x1 + 0.5, bbox.y1 + 0.5)
+        pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), clip=r)
+        w, h, n = pix.width, pix.height, pix.n
+        buf = pix.samples
+        grid = [[False] * w for _ in range(h)]
+        for y in range(h):
+            row = grid[y]
+            base = y * w * n
+            for x in range(w):
+                o = base + x * n
+                if min(buf[o], buf[o + 1], buf[o + 2]) < 170:
+                    row[x] = True
+        # ink-er actual extent diye crop (padding 1px)
+        cols = [x for x in range(w) if any(grid[y][x] for y in range(h))]
+        rows_ = [y for y in range(h) if any(grid[y])]
+        if not cols or not rows_:
+            return None
+        c0, c1 = max(0, cols[0] - 1), min(w - 1, cols[-1] + 1)
+        r0, r1 = max(0, rows_[0] - 1), min(h - 1, rows_[-1] + 1)
+        m = [row[c0:c1 + 1] for row in grid[r0:r1 + 1]]
+        return m, len(m[0]), len(m)
+    except Exception:
+        return None
+
+
+def _rendered_ink_matrix(text, font_path, size_pt):
+    """Candidate string-er ink-matrix (same font diye nijer PDF-e render)."""
+    global _MEAS_DOC
+    try:
+        import html as _html
+        if _MEAS_DOC is None:
+            _MEAS_DOC = pymupdf.open()
+        page = _MEAS_DOC.new_page(width=600, height=200)
+        fdir = os.path.dirname(font_path)
+        fname = os.path.basename(font_path)
+        arch = pymupdf.Archive(fdir)
+        css = ("@font-face {font-family: bn; src: url(%s);}\n"
+               "div {font-family: bn; font-size: %.4fpx; white-space: nowrap;}\n"
+               % (fname, size_pt))
+        page.insert_htmlbox(pymupdf.Rect(30, 50, 570, 150),
+                            "<div>%s</div>" % _html.escape(text),
+                            css=css, archive=arch, scale_low=1)
+        d = page.get_text("rawdict")
+        xs, ys = [], []
+        for blk in d["blocks"]:
+            for ln in blk.get("lines", []):
+                for sp in ln["spans"]:
+                    for ch in sp["chars"]:
+                        xs += [ch["bbox"][0], ch["bbox"][2]]
+                        ys += [ch["bbox"][1], ch["bbox"][3]]
+        if not xs:
+            return None
+        return _ink_matrix(page, pymupdf.Rect(min(xs) - 0.5, min(ys) - 0.5,
+                                              max(xs) + 0.5, max(ys) + 0.5))
+    except Exception:
+        return None
+    finally:
+        try:
+            _MEAS_DOC.delete_page(-1)
+        except Exception:
+            pass
+
+
+def _match_score(crop, cand):
+    """crop/cand ink-matrix pixel-compare. Left-top align + ±2px dy search.
+    Score = min XOR-ink / union-ink (0 = perfect paint-match)."""
+    if not crop or not cand:
+        return 1.0
+    (cm, cw, chh), (dm, dw, dh) = crop, cand
+    best = 1.0
+    for dy in (-2, -1, 0, 1, 2):
+        W = max(cw, dw)
+        H = max(chh, dh) + 4
+        union = xor = 0
+        for y in range(H):
+            for x in range(W):
+                a = False
+                if 0 <= y < chh and 0 <= x < cw:
+                    a = cm[y][x]
+                y2 = y - 2 - dy  # cand placed with center align (2px slack)
+                b = False
+                if 0 <= y2 < dh and 0 <= x < dw:
+                    b = dm[y2][x]
+                if a or b:
+                    union += 1
+                if a != b:
+                    xor += 1
+        if union:
+            s = xor / union
+            if s < best:
+                best = s
+    return best
+
+
+def _phantom_fix(text, cands, page):
+    """BN value theke unpainted ActualText-phantom sign sorao.
+    (1) Deterministic: consecutive DUPLICATE matra (ুু/াা/িি...) kokhono
+        valid Bengali na — strip koro (input generator-er ActualText bug).
+    (2) Pixel-refine baki single sign-er jonno: crop (input paint, Nirmala)
+        sathe Nirmala-render compare — sign-ti paint hocche kina check.
+        Input er sathe match korle (legit) touch NA; mismatch + big
+        improvement hole remove. Output font na — INPUT paint sathe
+        compare (same font = apples-to-apples)."""
+    if not text or not page:
+        return text
+    if not any(0x0980 <= ord(ch) <= 0x09FF for ch in text):
+        return text
+
+    # (1) duplicate consecutive combining strip (deterministic)
+    out, prev_comb = [], None
+    for ch in text:
+        if ch in _BN_COMB and ch == prev_comb:
+            continue  # phantom dup
+        out.append(ch)
+        prev_comb = ch if ch in _BN_COMB else None
+    cur = "".join(out)
+
+    # (2) pixel-refine for remaining single phantom signs
+    if not cands:
+        return cur
+    idxs = [i for i, ch in enumerate(cur) if ch in _BN_COMB]
+    if not idxs:
+        return cur
+    fpath = _font_file_for(cands[0].get("font"))
+    if not fpath:
+        return cur
+    size_pt = max(c.get("size") or 10 for c in cands)
+    try:
+        bb = pymupdf.Rect(min(c["x0"] for c in cands),
+                          min(c["y0"] for c in cands),
+                          max(c["x1"] for c in cands),
+                          max(c["y1"] for c in cands))
+    except Exception:
+        return cur
+    crop = _ink_matrix(page, bb)
+    if not crop:
+        return cur
+    for _round in range(3):  # multiple phantom hole ekbar-e jabe na
+        s_orig = _match_score(crop, _rendered_ink_matrix(cur, fpath, size_pt))
+        if s_orig < 0.06:
+            break  # original paint sathe-mili — kono phantom NA
+        best, best_s = cur, s_orig
+        for i, ch in enumerate(cur):
+            if ch not in _BN_COMB:
+                continue
+            cand = cur[:i] + cur[i + 1:]
+            if not cand.strip():
+                continue
+            s = _match_score(crop, _rendered_ink_matrix(cand, fpath, size_pt))
+            if s < best_s:
+                best, best_s = cand, s
+        if best != cur and best_s < 0.08 and (s_orig - best_s) > 0.03:
+            cur = best
+        else:
+            break
+    return cur
+
+
+# ফর্মে যে লেবেলগুলো খোঁজা হবে
+KNOWN_LABELS = [
+    "National ID", "Pin", "Status", "Afis Status", "Lock Flag", "Voter No",
+    "Form No", "Sl No", "Tag",
+    "Name(Bangla)", "Name(English)", "Date of Birth", "Birth Place",
+    "Birth Registration No", "Father Name", "Mother Name", "Spouse Name",
+    "Gender", "Marital", "Occupation", "Mobile", "Voter Area", "Voter At",
+    "Division", "District", "City", "RMO", "Upozila", "Union/Ward",
+    "Present Address", "Permanent Address", "Birth Other", "Disability", "Disability Other",
+    "Phone", "Email", "Religion", "Religion Other",
+    "Education", "Education Other", "Education Sub", "Identification",
+    "TIN", "Driving", "Passport", "Laptop ID",
+    "NID Father", "NID Mother", "Nid Spouse",
+    "Death Date Of Father", "Death Date Of Mother", "Death Date Of Spouse",
+    "No Finger", "No Finger Print",
+    "Voter No Father", "Voter No Mother", "Voter No Spouse",
+    "Blood Group", "Blood", "BG",
+    # Voter printout (vertical label->value) sub-labels
+    "Ward For Union Porishod", "Village/Road", "Additional Village/Road",
+    "Home/Holding No", "Post Office", "Postal Code", "Region",
+    "Mouza/Moholla", "Additional Mouza/Moholla",
+    "City Corporation Or Municipality",
+    # Card format labels
+    "নাম:", "Name:", "পিতা:", "মাতা:", "Date of Birth:", "ID NO:",
+    "জন্মস্থান:", "/Blood Group:", "Blood Group:", "ঠিকানা:",
+]
+LABEL_SET = set(KNOWN_LABELS)
+
+CARD_LABEL_MAP = {
+    "name:": "Name(English)",
+    "name": "Name(English)",
+    "name(english)": "Name(English)",
+    "name(bangla)": "Name(Bangla)",
+    "নাম:": "Name(Bangla)",
+    "নাম": "Name(Bangla)",
+    "father name": "Father Name",
+    "পিতা:": "Father Name",
+    "পিতা": "Father Name",
+    "mother name": "Mother Name",
+    "মাতা:": "Mother Name",
+    "মাতা": "Mother Name",
+    "date of birth:": "Date of Birth",
+    "date of birth": "Date of Birth",
+    "id no:": "National ID",
+    "id no": "National ID",
+    "national id": "National ID",
+    "birth place:": "Birth Place",
+    "birth place": "Birth Place",
+    "জন্মস্থান:": "Birth Place",
+    "জন্মস্থান": "Birth Place",
+    "রক্তের গ্রুপ:": "Blood Group",
+    "রক্তের গ্রুপ": "Blood Group",
+    "/blood group:": "Blood Group",
+    "blood group:": "Blood Group",
+    "blood group": "Blood Group",
+}
+
+
+# এই লেবেলগুলো টেবিল-সেকশন — ডানপাশের সাধারণ ক্যাপচারে নেওয়া হবে না
+SKIP_GENERIC = {"Present Address", "Permanent Address", "Foreign Address"}
+
+# --- OCR fallback (scanned/image PDF — text layer nei) -----------------------
+# Page-e 5-tar kom text span thakle OCR chalao. Words span-dict akare ashe,
+# tai baki pipeline (coalesce/label/address) same thake.
+# Backend: 1) easyocr (bn+en, jodi installed) -> 2) ddddocr det+ocr.
+# Kono backend na thakle [] (skip, crash NA).
+_ocr_reader = None
+_dd_det = None
+_dd_ocr = None
+
+
+def _easyocr_words(png_bytes):
+    """easyocr word boxes -> [(x0,y0,x1,y1,text)] (image px). None = unavailable."""
+    try:
+        global _ocr_reader
+        import easyocr
+        if _ocr_reader is None:
+            _ocr_reader = easyocr.Reader(['bn', 'en'], gpu=False)
+        import numpy as np
+        from PIL import Image as _I
+        import io as _io
+        arr = np.array(_I.open(_io.BytesIO(png_bytes)).convert('RGB'))
+        out = []
+        for box, text, conf in _ocr_reader.readtext(arr):
+            try:
+                xs = [p[0] for p in box]
+                ys = [p[1] for p in box]
+                if (conf or 0) < 0.25:
+                    continue
+                t = str(text or '').strip()
+                if t:
+                    out.append((min(xs), min(ys), max(xs), max(ys), t))
+            except Exception:
+                continue
+        return out
+    except Exception:
+        return None
+
+
+def _is_cid_mojibake_span(s):
+    """Anonymous CID font (broken ToUnicode) + Bengali codepoints = text
+    layer untrusted (paint thik, extract garbage — 'ছুȵুিময়া' class)."""
+    fn = (s.get("font") or "").lower()
+    if "cidfont" not in fn and not fn.startswith("cid"):
+        return False
+    t = s.get("text") or ""
+    return any(0x0980 <= ord(c) <= 0x09FF for c in t)
+
+
+def _ocr_crop(page, bbox, zoom=6.0):
+    """Span bbox crop render + easyocr/ddddocr (dui engine, jater Bengali
+    letter beshi setai nio — small BN word-e easyocr partial dey)."""
+    try:
+        r = pymupdf.Rect(bbox[0] - 1, bbox[1] - 1, bbox[2] + 1, bbox[3] + 1)
+        pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), clip=r)
+        png = pix.tobytes("png")
+    except Exception:
+        return None
+
+    def _join(words):
+        if not words:
+            return ""
+        words = sorted(words, key=lambda w: (round(w[1] / 10), w[0]))
+        return " ".join(w[4] for w in words).strip()
+
+    def _bn_count(t):
+        return sum(1 for c in t if 0x0980 <= ord(c) <= 0x09FF)
+
+    def _clean(t):
+        # CJK/misc garbage (easyocr kabhikhe Chinese dey) sorao; BN+Latin+rakho
+        return "".join(c for c in t
+                       if 0x0980 <= ord(c) <= 0x09FF
+                       or 0x0020 <= ord(c) <= 0x007E
+                       or c in "ঃঁৗ-").strip()
+
+    c1 = _clean(_join(_easyocr_words(png)))
+    c2 = _clean(_join(_ddddocr_words(png)))
+    cands = [c for c in (c1, c2) if c]
+    if not cands:
+        return None
+    return max(cands, key=lambda t: (_bn_count(t), len(t)))
+
+
+def _repair_cid_spans(page, spans):
+    """CID-mojibake span -> crop+OCR replace (paint sathe OCR, text-layer na).
+    Replace rule (permanent): OCR result-er Bengali letter original-er
+    theke kom na hole, ba original-e class-A junk (non-Bengali char) thakle
+    (>=2 BN letter hole). All-Bengali original + weak OCR hole ORIGINAL
+    thake (jemon 'সুিপ্রিয়া' > '3T')."""
+    for s in spans:
+        if not _is_cid_mojibake_span(s):
+            continue
+        t = _ocr_crop(page, (s["x0"], s["y0"], s["x1"], s["y1"]))
+        if not t:
+            continue
+        old = s["text"]
+        old_bn = sum(1 for c in old if 0x0980 <= ord(c) <= 0x09FF)
+        new_bn = sum(1 for c in t if 0x0980 <= ord(c) <= 0x09FF)
+        old_junk = any(
+            not (0x0980 <= ord(c) <= 0x09FF or 0x0020 <= ord(c) <= 0x007E
+                 or c in " .,:/-()&'\"") for c in old)
+        if new_bn >= old_bn or (old_junk and new_bn >= 2):
+            s["text"] = t
+            s["ocr"] = True
+    return spans
+
+
+def _ddddocr_words(png_bytes):
+    """ddddocr det (char boxes) + ocr -> [(x0,y0,x1,y1,text)]. None = unavailable.
+    Dense page-e detector blind hoy — tai overlapping horizontal strip-e
+    vag kore detect (full-page-e 0-2 box, strip-e shoto box)."""
+    try:
+        global _dd_det, _dd_ocr
+        from ddddocr import DdddOcr
+        from PIL import Image as _I
+        import io as _io
+        if _dd_det is None:
+            _dd_det = DdddOcr(det=True, show_ad=False)
+        if _dd_ocr is None:
+            _dd_ocr = DdddOcr(det=False, ocr=True, show_ad=False)
+        img = _I.open(_io.BytesIO(png_bytes)).convert('RGB')
+        W, H = img.size
+        strips = []
+        n = max(1, H // 400)
+        ov = 40
+        for i in range(n):
+            y0 = max(0, (H // n) * i - ov)
+            y1 = min(H, (H // n) * (i + 1) + ov)
+            if y1 - y0 < 60:
+                continue
+            strips.append((y0, img.crop((0, y0, W, y1))))
+        if not strips:
+            strips = [(0, img)]
+        out = []
+        seen = set()
+        for (sy, part) in strips:
+            cb = _io.BytesIO()
+            part.save(cb, format='PNG')
+            try:
+                boxes = _dd_det.detection(cb.getvalue()) or []
+            except Exception:
+                continue
+            for b in boxes:
+                try:
+                    x1, y1, x2, y2 = [int(v) for v in b]
+                    if x2 <= x1 or y2 <= y1:
+                        continue
+                    key = (x1 // 4, (y1 + sy) // 4, x2 // 4, (y2 + sy) // 4)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    crop = part.crop((x1, y1, x2, y2))
+                    cbb = _io.BytesIO()
+                    crop.save(cbb, format='PNG')
+                    t = _dd_ocr.classification(cbb.getvalue())
+                    if t and str(t).strip():
+                        out.append((x1, y1 + sy, x2, y2 + sy, str(t).strip()))
+                except Exception:
+                    continue
+        return out
+    except Exception:
+        return None
+
+
+def ocr_page_spans(page, pno, dpi=200):
+    """Scanned page -> OCR span-dicts (get_spans-compat shape + 'ocr': True)."""
+    try:
+        pix = page.get_pixmap(dpi=dpi)
+    except Exception:
+        return []
+    try:
+        png = pix.tobytes("png")
+    except Exception:
+        return []
+    sx = (page.rect.width / pix.width) if pix.width else 1.0
+    words = _easyocr_words(png)
+    if words is None:
+        words = _ddddocr_words(png)
+    if not words:
+        return []
+    out = []
+    for (x0, y0, x1, y1, t) in words:
+        t = (t or '').strip()
+        if not t:
+            continue
+        out.append({"page": pno, "text": t,
+                    "x0": round(x0 * sx, 2), "y0": round(y0 * sx, 2),
+                    "x1": round(x1 * sx, 2), "y1": round(y1 * sx, 2),
+                    "size": round(max(6.0, (y1 - y0) * sx), 2),
+                    "ocr": True})
+    return out
+
+# ফর্মের ডান-সাইডবারের লেখা — মান পড়ার সময় এগুলো এলে থামো
+SIDEBAR_STOP = {"License Documents", "BIRTH_CERTIFICATE", "DATA ENTRY PROOF COPY",
+                "VOTER FORM PAGE ONE", "VOTER FORM PAGE TWO", "Smart Card Info",
+                "No Documents", "Documents", "No", "Available", "No Documents Available"}
+
+
+def std_label(text, candidates, is_ocr):
+    """Label canonicalize: exact match first; OCR span hole fuzzy (typo
+    tolerate: 'Date of Birtn'->'Date of Birth'). Clean path exact-i thake."""
+    t = (text or "").strip()
+    if t in candidates:
+        return t
+    if is_ocr:
+        try:
+            m = difflib.get_close_matches(t, list(candidates), n=1, cutoff=0.78)
+        except Exception:
+            m = None
+        if m:
+            return m[0]
+    return None
+
+# Present Address টেবিলের উপ-লেবেল পড়ার সময় থামার শর্ত (সব টুকরো লেবেলসহ)
+ADDR_STOP_EXTRA = {"Additional", "Union/Ward",
+                   "Or", "Ward", "For", "Union", "Porishod",
+                   "No", "Region", "Home/", "Holding No", "Home/Holding No", "Mouza/", "Moholla"}
+
+# Present Address টেবিলের যে উপ-লেবেলগুলো দরকার (কার্ডের ঠিকানা বানাতে)
+# ফর্মে "Home/Holding No" দুই লাইনে ভাঙা থাকে, তাই "Home/Holding" দিয়ে মেলানো হয়
+ADDR_WANT = [
+    ("RMO", "rmo"),
+    ("City", "city_corp"),
+    ("Corporation", "city_corp2"),
+    ("Municipality", "city_corp3"),
+    ("Division", "division"),
+    ("District", "district"),
+    ("Upozila", "upozila"),
+    ("Mouza/Moholla", "mouza"),
+    ("Village/Road", "village"),
+    ("Home/Holding", "holding"),
+    ("Home/Holding No", "holding"),
+    ("Holding", "holding"),
+    ("Post Office", "post_office"),
+    ("Postal Code", "postal_code"),
+]
+ADDR_LABELS = set(l for l, _ in ADDR_WANT)
+
+
+def get_spans(page, pno):
+    spans = []
+    try:
+        raw = json.loads(page.get_text("rawjson"))
+        blocks = raw.get("blocks", [])
+    except Exception:
+        blocks = page.get_text("dict").get("blocks", [])
+
+    for b in blocks:
+        if b.get("type", 0) != 0:
+            continue
+        for line in b.get("lines", []):
+            for s in line.get("spans", []):
+                chars = s.get("chars", [])
+                size = s.get("size", 8)
+                if chars:
+                    parts = []
+                    prev_c = None
+                    for c in chars:
+                        if prev_c is not None:
+                            gap = c["bbox"][0] - prev_c["bbox"][2]
+                            # Nirmala positions the second half of Bengali o-kar
+                            # beyond its text box. This gap is shaping, not a space.
+                            shaped_o = (prev_c["c"] == "ো" and
+                                        s.get("font", "").split("+")[-1].startswith("Nirmala") and
+                                        gap < size * 0.30)
+                            if gap > max(1.2, size * 0.15) and not shaped_o:
+                                parts.append(" ")
+                        parts.append(c["c"])
+                        prev_c = c
+                    txt = "".join(parts)
+                else:
+                    txt = s.get("text", "")
+                if not txt.strip():
+                    continue
+                x0, y0, x1, y1 = [round(v, 2) for v in s["bbox"]]
+                spans.append({"page": pno, "text": txt,
+                              "x0": x0, "y0": y0, "x1": x1, "y1": y1,
+                              "size": round(size, 2),
+                              "font": s.get("font", "")})
+    return _coalesce_fragments(spans)
+
+
+def _coalesce_fragments(spans):
+    """কাছাকাছি single-character টুকরোগুলোকে শব্দে জোড়া দাও।
+
+    কিছু PDF generator (যেমন এই NID ফর্মের) প্রতিটি অক্ষরকে আলাদা span
+    হিসেবে রাখে — তখন "Name(Bangla)" ১১টা টুকরো হয়ে label-match ব্যর্থ হয়।
+    একই baseline-এ খুব কাছাকাছি (character spacing) টুকরো জোড়া হয়;
+    স্বাভাবিক word-gap আলাদা span-ই থাকে, তাই পুরনো PDF-এ আচরণ বদলায় না।
+    """
+    if not spans:
+        return spans
+    ordered = sorted(spans, key=lambda s: (s["page"], (s["y0"] + s["y1"]) / 2, s["x0"]))
+    out = []
+    i = 0
+    n = len(ordered)
+    while i < n:
+        yc = (ordered[i]["y0"] + ordered[i]["y1"]) / 2
+        size = ordered[i]["size"] or 10
+        pg = ordered[i]["page"]
+        line = [ordered[i]]
+        j = i + 1
+        while j < n:
+            o = ordered[j]
+            if o["page"] != pg:
+                break
+            if abs((o["y0"] + o["y1"]) / 2 - yc) > size * 0.6:
+                break
+            line.append(o)
+            j += 1
+        line.sort(key=lambda s: s["x0"])
+        merged = []
+        for s in line:
+            if merged:
+                prev = merged[-1]
+                gap = s["x0"] - prev["x1"]
+                # শুধু অক্ষরের টুকরো (gap ~0) জোড়া হবে; word-gap (join_fragments-এর
+                # 0.12 নিয়মের মতো) আলাদা থাকবে যাতে "আবদুল লতিফ" space না হারায়
+                if gap < prev["size"] * 0.12 and gap < s["size"] * 0.12:
+                    prev["text"] += s["text"]
+                    prev["x1"] = max(prev["x1"], s["x1"])
+                    prev["y0"] = min(prev["y0"], s["y0"])
+                    prev["y1"] = max(prev["y1"], s["y1"])
+                    continue
+            merged.append(dict(s))
+        out.extend(merged)
+        i = j
+    return out
+
+
+def join_fragments(cands):
+    parts = []
+    prev = None
+    for c in cands:
+        if prev is not None:
+            gap = c["x0"] - prev["x1"]
+            # শব্দের মাঝের ফাঁকা (~0.25em) থাকলে স্পেস, যুক্তাক্ষরের টুকরো (ফাঁকা ~0) হলে নয়
+            parts.append(" " if gap > c["size"] * 0.12 else "")
+        parts.append(c["text"])
+        prev = c
+    
+    text = "".join(parts).strip()
+    
+    # 1. Dictionary Mapping for common font garbling issues
+    replacements = {
+        "চǾƣাম": "চট্টগ্রাম",
+        "িসǅ": "সিটি",
+        "কেপŪােরশন": "কর্পোরেশন",
+        "মাঃ": "মোঃ ",
+        "উিțন": "উদ্দিন ",
+        "ওয়ািসম": "ওয়াসিম",
+        "লছুমা": "কুলছুমা",
+        "রাǩামাǅয়া": "রাঙ্গামাটিয়া",
+        "হািমদচর": "হামিদচর",
+        "ওয়াডŪ": "ওয়ার্ড",
+        "চালাদক্ষি ন": "চালাদক্ষিন",
+        "দক্ষি ন": "দক্ষিন",
+        "মোঃঃ": "মোঃ",
+        "ংং": "ং",
+        "ংাং": "ং",
+        "˙": "রু",
+        "ǻ": "ঞ্জ",
+        "ǘ": "ক্ষ",
+        "Ƶ": "প্রি",
+        "Ȱ": "ন্দ্র",
+        "ɨ": "ল্ল",
+        "িসেলট": "সিলেট",
+        "গৃিহনী": "গৃহিনী",
+        "িনরǘর": "নিরক্ষর",
+        "আিম": "আমি",
+        "িবিব": "বিবি",
+        "ছাতকĺপৗরসভা": "ছাতক পৌরসভা",
+        "ĺপৗরসভা": "পৌরসভা",
+        "ĺনছা": "নেছা",
+        "ʛ": "",
+        "  ": " ",
+    }
+    for bad, good in replacements.items():
+        text = text.replace(bad, good)
+
+    text = re.sub(r'ĺ([ক-হ])', r'\g<1>ে', text)
+    text = re.sub(r'([ক-হ])ৌ', r'\g<1>ৌ', text)
+    text = text.replace("ĺ", "ে")
+
+    text = text.strip()
+
+    # Phantom-sign fix: ActualText-e ache kintu paint-e nei — ink-width
+    # proof diye sorao (permanently; Nirmala-web-print PDF-er jonno).
+    if _DOC is not None:
+        try:
+            page = _DOC[cands[0]["page"]] if cands else None
+        except Exception:
+            page = None
+        if page is not None and cands:
+            text = _phantom_fix(text, cands, page)
+
+    return text.strip()
+
+
+def right_value(label_span, spans, stop_set, max_x0=600, multi_line=False,
+                multi_line_labels=None):
+    """লেবেলের ডান পাশে একই লাইনের মান পড়ো; পরের লেবেল/সাইডবার এলে থামো।
+    multi_line=True হলে নিচের লাইনের continuation-ও জোড়া হয় (শুধু address-table পথে)।
+    continuation লাইনে পরের row-এর লেবেল থাকলে থামো; তবে বর্তমান লেবেলের
+    টুকরো (যেমন 'Home/Holding' + 'No') থাকলে থামা যাবে না।"""
+    b = label_span
+    yc = (b["y0"] + b["y1"]) / 2
+    cands = []
+    for c in sorted(spans, key=lambda s: s["x0"]):
+        if c["page"] != b["page"] or c is b or c is b.get("_orig"):
+            continue
+        if abs((c["y0"] + c["y1"]) / 2 - yc) > b["size"] * 0.7:
+            continue
+        if c["x0"] < b["x1"] - 15:
+            continue
+        if c["x0"] > max_x0:
+            break  # সাইডবার-কলামে ঢুকে গেছে, থামো
+        if c["text"].strip() in stop_set:
+            break  # পরের লেবেল এসে গেছে, থামো
+        cands.append(c)
+    if not cands:
+        return ""
+    if not multi_line:
+        return join_fragments(cands)
+    # --- multi-line continuation (address-table only) ---
+    # প্রথম লাইনের মানের centre-ই anchor; continuation তার ঠিক নিচের লাইন(গুলো)।
+    val_yc = sum((c["y0"] + c["y1"]) / 2 for c in cands) / len(cands)
+    val_x0 = cands[0]["x0"]
+    # value-কলামের ডান সীমা: পরের label-কলামের x0 (না থাকলে max_x0)।
+    # দুই-কলাম টেবিলে অন্য কলামের মান যেন continuation-এ না ঢোকে।
+    lbl_set = multi_line_labels if multi_line_labels is not None else stop_set
+    next_lbl_x0 = None
+    for s in spans:
+        if s["page"] != b["page"] or s is b or s is b.get("_orig"):
+            continue
+        if s["text"].strip() in lbl_set and s["x0"] > val_x0:
+            if next_lbl_x0 is None or s["x0"] < next_lbl_x0:
+                next_lbl_x0 = s["x0"]
+    val_x1_max = (next_lbl_x0 - 15) if next_lbl_x0 is not None else max_x0
+    lines = [join_fragments(cands)]
+    # নিচের স্প্যানগুলো লাইনে ভাগ করো (y-centre দিয়ে)
+    below = []
+    for c in spans:
+        if c["page"] != b["page"] or c is b or c is b.get("_orig"):
+            continue
+        if (c["y0"] + c["y1"]) / 2 <= yc + b["size"] * 0.7:
+            continue  # একই লাইন বা উপরের লাইন
+        below.append(c)
+    below.sort(key=lambda s: ((s["y0"] + s["y1"]) / 2, s["x0"]))
+    grouped, cur = [], []
+    for s in below:
+        sc = (s["y0"] + s["y1"]) / 2
+        if cur and abs(sc - (cur[-1]["y0"] + cur[-1]["y1"]) / 2) > 6:
+            grouped.append(cur)
+            cur = []
+        cur.append(s)
+    if cur:
+        grouped.append(cur)
+    last_yc = val_yc
+    # continuation লাইনে থামার শর্ত: সম্পূর্ণ লেবেল, বা stop word — তবে
+    # বর্তমান লেবেলের টুকরো (যেমন 'Home/Holding' + 'No' = 'Home/Holding No')
+    # হলে থামা যাবে না; আর 'Region'-এর মতো আসল পরের ফিল্ডে থামতে হবে।
+    lbl_text = b["text"].strip()
+
+    def _is_new_row(span_text):
+        t = span_text.strip()
+        if t in lbl_set:
+            return True  # সম্পূর্ণ লেবেল — পরের row
+        if t not in stop_set:
+            return False
+        # stop word: বর্তমান লেবেলের টুকরো হলে নতুন row নয়
+        if ((lbl_text + " " + t) in lbl_set or (lbl_text + t) in lbl_set
+                or (t + " " + lbl_text) in lbl_set):
+            return False
+        return True
+
+    for line in grouped:
+        if len(lines) - 1 >= 2:
+            break  # সর্বোচ্চ ২টি continuation লাইন
+        line_yc = sum((s["y0"] + s["y1"]) / 2 for s in line) / len(line)
+        if line_yc > last_yc + 30:
+            break  # পরের লাইন অনেক নিচে — continuation নয়
+        # থামার শর্ত শুধু এই value-এর নিজের label-কলামে (value-র ঠিক বামে) দেখো —
+        # দুই-কলাম টেবিলে অন্য কলামের লেবেল একই y-তে থাকলেও তা নতুন row নয়।
+        lbl_x_lo = b["x0"] - 20
+        lbl_x_hi = val_x0 - 15
+        if any(_is_new_row(s["text"]) for s in line
+               if lbl_x_lo <= s["x0"] <= lbl_x_hi):
+            break  # এই লাইনে পরের row-এর লেবেল আছে — থামো
+        # continuation মান অবশ্যই এই লাইনের সব লেবেলের ডানে হতে হবে —
+        # লেবেলের বামে থাকা span অন্য ফিল্ডের (বা orphan) মান, continuation
+        # নয় (যেমন RMO-র নিচের লাইনে Corporation লেবেলের বামে থাকা
+        # city-মানের অংশ)।
+        line_label_x1 = [s["x1"] for s in line if s["text"].strip() in stop_set]
+        label_x1_max = max(line_label_x1) if line_label_x1 else -1
+        vals = [s for s in sorted(line, key=lambda s: s["x0"])
+                if val_x0 - 15 <= s["x0"] <= val_x1_max
+                and s["x0"] > label_x1_max]
+        if not vals:
+            break  # value-কলামে কিছু নেই — continuation নয়
+        lines.append(join_fragments(vals))
+        last_yc = line_yc
+    return " ".join(t for t in lines if t)
+
+
+def parse_present_address(all_spans, page_heights):
+    """Present Address টেবিল (Present Address লেবেল থেকে Permanent Address
+    লেবেল পর্যন্ত) থেকে ঠিকানার অংশগুলো পড়ো।"""
+    return parse_address_table(all_spans, page_heights,
+                               anchor="Present Address",
+                               end_anchor="Permanent Address")
+
+
+def parse_address_table(all_spans, page_heights, anchor, end_anchor=None):
+    """Address table reader (Present ba Permanent): anchor লেবেল থেকে
+    end_anchor (ba page-shesh) porjonto ঠিকানার অংশগুলো পড়ো।"""
+    aw = anchor.split()
+    pa = []
+    for i, s in enumerate(all_spans):
+        text = s["text"].strip()
+        if std_label(text, {anchor}, bool(s.get("ocr"))) == anchor:
+            pa.append(s)
+        elif len(aw) > 1 and text == aw[0]:
+            if i + 1 < len(all_spans) and aw[1] in all_spans[i+1]["text"]:
+                pa.append(s)
+
+    if not pa:
+        return {}
+    pa = sorted(pa, key=lambda s: (s["page"], s["y0"]))[0]
+    pno = pa["page"]
+
+    # সেকশনের শেষ: একই পেজে end_anchor (thakle)
+    ends = []
+    ew = end_anchor.split() if end_anchor else []
+    for i, s in enumerate(all_spans):
+        text = s["text"].strip()
+        if s["page"] == pno and s["y0"] > pa["y0"]:
+            if end_anchor and std_label(text, {end_anchor}, bool(s.get("ocr"))) == end_anchor:
+                ends.append(s)
+            elif len(ew) > 1 and text == ew[0]:
+                if i + 1 < len(all_spans) and ew[1] in all_spans[i+1]["text"]:
+                    ends.append(s)
+                    
+    y_end = (sorted(ends, key=lambda s: s["y0"])[0]["y0"]
+             if ends else page_heights.get(pno, 1e9))
+    band = [s for s in all_spans
+            if s["page"] == pno and pa["y0"] - 2 <= s["y0"] < y_end]
+
+    def additional_prefix(cand):
+        above = [s for s in band if abs(s["x0"] - cand["x0"]) < 12
+                 and cand["y0"] - 30 < s["y0"] < cand["y0"] - 2]
+        nearest = max(above, key=lambda s: s["y0"], default=None)
+        return nearest if nearest and nearest["text"].strip() == "Additional" else None
+
+    band.sort(key=lambda s: (s["y0"], s["x0"]))
+    # canonical label per span (OCR typo tolerate: 'Jpozila'->'Upozila')
+    canon = {}
+    for s in band:
+        canon[id(s)] = std_label(s["text"], ADDR_LABELS, bool(s.get("ocr")))
+    merged_band = []
+    i = 0
+    while i < len(band):
+        s = band[i]
+        text = canon[id(s)] or s["text"].strip()
+
+        # Merge "Mouza/" + "Moholla" (value 2nd line-e thake, tai geometry-o
+        # 2nd line-er ta neowa hoy — nahole right_value line mismatch-e reject kore)
+        if text == "Mouza/" and i+1 < len(band) and (canon.get(id(band[i+1])) or band[i+1]["text"].strip()) == "Moholla":
+            s_new = s.copy()
+            s_new["text"] = "Mouza/Moholla"
+            s_new["y0"] = band[i+1]["y0"]
+            s_new["y1"] = band[i+1]["y1"]
+            s_new["size"] = band[i+1]["size"]
+            merged_band.append(s_new)
+            i += 2
+            continue
+
+        # Merge "Home/" + "Holding No" (same: 2nd line geometry)
+        if text == "Home/" and i+1 < len(band) and (canon.get(id(band[i+1])) or band[i+1]["text"].strip()) == "Holding No":
+            s_new = s.copy()
+            s_new["text"] = "Home/Holding No"
+            s_new["y0"] = band[i+1]["y0"]
+            s_new["y1"] = band[i+1]["y1"]
+            s_new["size"] = band[i+1]["size"]
+            merged_band.append(s_new)
+            i += 2
+            continue
+            
+        merged_band.append(s)
+        i += 1
+        
+    band = merged_band
+
+    addr = {}
+    for label_text, key in ADDR_WANT:
+        cands = [s for s in band if (canon.get(id(s)) or s["text"].strip()) == label_text]
+        cands.sort(key=lambda s: (s["y0"], s["x0"]))
+        for c in cands:
+            prefix = additional_prefix(c) if key in ("village", "mouza") else None
+            target_key = ("additional_" + key) if prefix else key
+            if target_key in addr:
+                continue
+                
+            # A wrapped label may align its value with either label line.
+            # Probe the actual baselines separately, never the adjacent row.
+            val = right_value(c, band, ADDR_LABELS | ADDR_STOP_EXTRA,
+                              multi_line=True, multi_line_labels=ADDR_LABELS)
+            if prefix and not val:
+                val = right_value(prefix, band, ADDR_LABELS | ADDR_STOP_EXTRA,
+                                  multi_line=True, multi_line_labels=ADDR_LABELS)
+            if val:
+                addr[target_key] = val
+    return addr
+
+
+# Voter printout: vertical label-line -> value-line. Sub-label -> compose_address key.
+_VERT_ADDR_MAP = {
+    "Home/Holding No": "holding",
+    "Village/Road": "village",
+    "Additional Village/Road": "additional_village",
+    "Mouza/Moholla": "mouza",
+    "Additional Mouza/Moholla": "additional_mouza",
+    "Post Office": "post_office",
+    "Postal Code": "postal_code",
+    "Upozila": "upozila",
+    "District": "district",
+    "RMO": "rmo",
+    "Division": "division",
+    "City Corporation Or Municipality": "city_corp",
+    "Ward For Union Porishod": "ward_porishod",
+    "Region": "region",
+}
+
+
+def parse_vertical_kv_pages(pages_spans):
+    """Voter printout style (label line, value line below, not side-by-side).
+    Returns (flat, present_addr, perm_addr). Cross-page value support:
+    page-shesher label-er value hote pare next page-r 1st line."""
+    flat, present, perm = {}, {}, {}
+    section = None  # None | "present" | "perm"
+    pending = None  # (label, section) awaiting value across page boundary
+    for spans in pages_spans:
+        # group into lines by y
+        spans = sorted(spans, key=lambda s: (s["y0"], s["x0"]))
+        lines, cur = [], []
+        for s in spans:
+            if cur and abs(s["y0"] - cur[-1]["y0"]) > 6:
+                lines.append(cur)
+                cur = []
+            cur.append(s)
+        if cur:
+            lines.append(cur)
+        texts = [" ".join(s["text"].strip() for s in ln
+                          if s["text"].strip()).strip() for ln in lines]
+        i = 0
+        while i < len(texts):
+            lt = texts[i]
+            if not lt:
+                i += 1
+                continue
+            lab = std_label(lt, LABEL_SET, False)
+            if pending and lab is None:
+                # cross-page value for last-page label
+                _vert_store(pending[0], lt, flat, present, perm, pending[1])
+                pending = None
+                i += 1
+                continue
+            pending = None
+            if lab is None:
+                i += 1
+                continue
+            if lab in SKIP_GENERIC:
+                section = ("present" if lab == "Present Address"
+                           else "perm" if lab == "Permanent Address" else None)
+                i += 1
+                continue
+            # value = next non-empty line if not itself a label
+            val = ""
+            j = i + 1
+            while j < len(texts) and not texts[j]:
+                j += 1
+            if j < len(texts) and std_label(texts[j], LABEL_SET, False) is None:
+                val = texts[j]
+            if val:
+                _vert_store(lab, val, flat, present, perm, section)
+                i = j + 1
+            else:
+                if j >= len(texts):
+                    pending = (lab, section)  # last line of page
+                i = j if j < len(texts) else i + 1
+    return flat, present, perm
+
+
+def _vert_store(lab, val, flat, present, perm, section=None):
+    if section == "present" and lab in _VERT_ADDR_MAP:
+        present.setdefault(_VERT_ADDR_MAP[lab], val)
+    elif section == "perm" and lab in _VERT_ADDR_MAP:
+        perm.setdefault(_VERT_ADDR_MAP[lab], val)
+    else:
+        flat.setdefault(lab, val)
+
+
+def classify_input_image(w, h):
+    if w <= 0 or h <= 0:
+        return "other"
+    r = w / h
+    if 0.5 <= r < 1.3:
+        return "photo"
+    if 1.3 <= r <= 4.5:
+        return "sign"
+    return "other"
+
+
+def assign_photo_sign(candidates):
+    """Decide which image candidate is the photo and which is the
+    signature. Returns a dict with 'photo' and/or 'sign' keys.
+
+    Priority (permanent — input j rokom e thakbe logic a kaj korte hobe):
+      1. POSITION — the NID form puts the photo in the top-right box
+         and the signature directly below it, in the same column
+         (both test forms: x0=611..730, photo y0 ~40-70, sign
+         y0 ~230-270). So among candidates stacked in the same
+         column (x-ranges overlap), the TOPMOST is the photo and the
+         one below it is the signature. This holds for ANY aspect
+         ratio or size — a large signature scan (800x750) no longer
+         outranks the smaller portrait photo (480x630), and a wide
+         photo no longer gets called a signature.
+      2. ASPECT RATIO — wide (r >= 1.25) is a signature, portrait
+         (0.45 <= r < 1.25) is a photo. Used only when position
+         does not resolve it (images side by side / different
+         pages / no rect available).
+      3. AREA — only as a last tie-breaker, never to overrule
+         position. Two portraits are therefore NEVER ranked by
+         area (that is exactly what swapped photo/sign on the
+         40065719.pdf form).
+    """
+    if not candidates:
+        return {}
+
+    def _y0(c):
+        r = c.get("rect")
+        return r[1] if r else None
+
+    # 1. Position: same page, same column (x-overlap), top-to-bottom.
+    with_rect = [c for c in candidates if c.get("rect")]
+    by_page = {}
+    for c in with_rect:
+        by_page.setdefault(c["pno"], []).append(c)
+    for pno in sorted(by_page):
+        col = sorted(by_page[pno], key=lambda c: c["rect"][1])
+        for i in range(len(col) - 1):
+            a, b = col[i], col[i + 1]
+            if a["rect"][0] < b["rect"][2] and b["rect"][0] < a["rect"][2]:
+                return {"photo": a, "sign": b}
+
+    # 2. Aspect ratio.
+    wide = [c for c in candidates if c["r"] >= 1.25]
+    port = [c for c in candidates if 0.45 <= c["r"] < 1.25]
+    if wide and port:
+        # Photo = the portrait; if several, the topmost (by y0) else
+        # the first. A wide image is the signature here.
+        port.sort(key=lambda c: (_y0(c) if _y0(c) is not None else 1e9))
+        return {"photo": port[0], "sign": wide[0]}
+    if len(port) >= 2:
+        # Two portraits: topmost (by y0) is the photo — NOT the
+        # largest. If no rect is available, fall through to area.
+        if all(_y0(c) is not None for c in port):
+            port.sort(key=lambda c: _y0(c))
+            return {"photo": port[0], "sign": port[1]}
+    if wide and not port:
+        out = {"sign": wide[0]}
+        others = [c for c in candidates if c is not wide[0]]
+        if others:
+            out["photo"] = others[0]
+        return out
+
+    # 3. Area — last resort only.
+    if len(candidates) >= 2:
+        s = sorted(candidates, key=lambda c: c["area"], reverse=True)
+        return {"photo": s[0], "sign": s[1]}
+    if len(port) == 1:
+        return {"photo": port[0]}
+    if len(wide) == 1:
+        return {"sign": wide[0]}
+    if candidates:
+        return {"photo": candidates[0]}
+    return {}
+
+
+def extract(pdf_path="input.pdf", work_dir="work"):
+    """Extract form fields + photo/signature. Returns (data_dict, images_dict)."""
+    if not os.path.exists(pdf_path):
+        raise FileNotFoundError("NOT FOUND: " + pdf_path)
+    img_dir = os.path.join(work_dir, "images")
+    os.makedirs(img_dir, exist_ok=True)
+    # Stale image leak fix: ager PDF-er photo/sign ekhane thake gele notun
+    # card-e oi chobi chole ashe — protyek extract-e age clear koro.
+    for fn in os.listdir(img_dir):
+        if fn.lower().endswith(".png"):
+            try:
+                os.remove(os.path.join(img_dir, fn))
+            except OSError:
+                pass
+    doc = pymupdf.open(pdf_path)
+    global _DOC
+    _DOC = doc
+
+    data = {}
+    n_text = 0
+    all_spans = []
+    pages_spans = []
+    page_heights = {}
+    for pno, page in enumerate(doc):
+        spans = get_spans(page, pno)
+        if len(spans) < 5:
+            # scanned page (text layer nei) -> OCR fallback
+            ocr_spans = ocr_page_spans(page, pno)
+            if ocr_spans:
+                spans = _coalesce_fragments(spans + ocr_spans)
+        # CID-font mojibake repair: broken ToUnicode-e Bengali paint thik
+        # kintu text garbage — crop+OCR diye real text boshao (permanent)
+        spans = _repair_cid_spans(page, spans)
+        all_spans.extend(spans)
+        pages_spans.append(spans)
+        page_heights[pno] = page.rect.height
+        n_text += len(spans)
+        for i, b in enumerate(spans):
+            label = b["text"].strip()
+            is_ocr = bool(b.get("ocr"))
+
+            # Label-alone check FIRST (complete 'Father Name' etc). Comb
+            # agekhe thakle short VALUE ('ময়া') false-comb label-e match
+            # kore field skip kore — oi bug fix.
+            anchor = b
+            label_std = std_label(label, LABEL_SET, is_ocr)
+            if not label_std and i + 1 < len(spans):
+                # 2-span split label (e.g. "Mother" + "Name")
+                comb = label + " " + spans[i+1]["text"].strip()
+                comb_std = std_label(comb, LABEL_SET,
+                                     is_ocr or bool(spans[i+1].get("ocr")))
+                if comb_std:
+                    label_std = comb_std
+                    anchor = spans[i+1]
+            if not label_std and i + 2 < len(spans):
+                # 3-span split label
+                comb2 = (label + " " + spans[i+1]["text"].strip()
+                         + " " + spans[i+2]["text"].strip())
+                comb2_std = std_label(comb2, LABEL_SET, is_ocr)
+                if comb2_std:
+                    label_std = comb2_std
+                    anchor = spans[i+2]
+            if not label_std or label_std in data:
+                continue
+            if label_std in SKIP_GENERIC:
+                continue  # টেবিল-সেকশন: আলাদা পার্স হবে
+            val = right_value(anchor, spans, LABEL_SET | SIDEBAR_STOP)
+            if val:
+                data[label_std] = val
+
+    # Present Address টেবিল -> ঠিকানার অংশ (+ Permanent fallback)
+    addr = parse_present_address(all_spans, page_heights)
+    if addr:
+        data["Present Address"] = addr
+    perm = parse_address_table(all_spans, page_heights,
+                               anchor="Permanent Address")
+    if perm:
+        data["Permanent Address"] = perm
+
+    # Voter printout fallback (vertical label->value, side-by-side na):
+    # shudhu MISSING key fill koro — main extraction thakle oi data-i thakbe.
+    try:
+        vflat, vpresent, vperm = parse_vertical_kv_pages(pages_spans)
+        for k, v in vflat.items():
+            if k not in data or not data[k]:
+                data[k] = v
+        for key, vdict in (("Present Address", vpresent),
+                           ("Permanent Address", vperm)):
+            if not vdict:
+                continue
+            cur = data.get(key)
+            if not cur:
+                data[key] = vdict
+            else:
+                for k, v in vdict.items():
+                    if not cur.get(k):
+                        cur[k] = v
+    except Exception:
+        pass
+
+    # Card format & inline Label: Value fallback
+    # কোনো ফিল্ড খালি থাকলে কার্ড স্প্যান বা ইনলাইন টেক্সট থেকে পূরণ করো
+    inline_pat = re.compile(
+        r'^(Date of Birth|ID NO|Name|National ID|Name\(English\)|Name\(Bangla\)|Father Name|Mother Name|Birth Place|নাম|পিতা|মাতা|জন্মস্থান)\s*[:：]\s*(.+)$',
+        re.I
+    )
+    for s in all_spans:
+        txt = s.get("text", "").strip()
+        m = inline_pat.match(txt)
+        if m:
+            c_lbl = CARD_LABEL_MAP.get(m.group(1).lower().strip())
+            if c_lbl and (c_lbl not in data or not data[c_lbl]):
+                data[c_lbl] = m.group(2).strip()
+                continue
+        # কার্ড লেবেল আলাদা স্প্যান হলে
+        c_lbl = CARD_LABEL_MAP.get(txt.lower())
+        if c_lbl and (c_lbl not in data or not data[c_lbl]):
+            # কার্ডের ক্ষেত্রে ফ্রন্ট সাইড লিমিট ৩০৫
+            card_max_x = 305 if s.get("x0", 0) < 250 else 600
+            v = right_value(s, all_spans, set(CARD_LABEL_MAP.keys()) | SIDEBAR_STOP, max_x0=card_max_x)
+            if v:
+                data[c_lbl] = v
+
+    candidates = []
+    for pno, page in enumerate(doc):
+        for i, img in enumerate(page.get_images(full=True)):
+            xref, smask = img[0], img[1]
+            w_px = img[2] if len(img) > 2 else 0
+            h_px = img[3] if len(img) > 3 else 0
+            if w_px < 25 or h_px < 25:
+                continue
+            r = w_px / max(1, h_px)
+            if r > 6.0 or r < 0.2:
+                continue
+            # Page rect: position is the primary photo/sign signal
+            # (photo box sits above the signature box, same column).
+            rect = None
+            try:
+                rects = page.get_image_rects(xref)
+                if rects:
+                    rc = rects[0]
+                    rect = (rc.x0, rc.y0, rc.x1, rc.y1)
+            except Exception:
+                rect = None
+            candidates.append({
+                "page": page, "xref": xref, "smask": smask,
+                "w": w_px, "h": h_px, "r": r,
+                "area": w_px * h_px, "pno": pno, "rect": rect,
+            })
+
+    assigned = assign_photo_sign(candidates)
+
+    images = {}
+    for kind, c in assigned.items():
+        try:
+            pix = pymupdf.Pixmap(doc, c["xref"])
+            smask = c["smask"]
+            if smask:
+                m = pymupdf.Pixmap(doc, smask)
+                if m.n > 1:
+                    m = pymupdf.Pixmap(pymupdf.csGRAY, m)
+                if pix.n > 4:
+                    pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
+                pix = pymupdf.Pixmap(pix, m)
+            elif pix.n > 4:
+                pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
+            fname = os.path.join(work_dir, "images", "%s.png" % kind)
+            pix.save(fname)
+            images[kind] = fname
+        except Exception as e:
+            print("Failed to save %s image:" % kind, e)
+
+    with open(os.path.join(work_dir, "input_data.json"), "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+    with open(os.path.join(work_dir, "input_images.json"), "w", encoding="utf-8") as f:
+        json.dump(images, f, ensure_ascii=False, indent=1)
+
+    return data, images
+
+
+def main():
+    pdf_path = sys.argv[1] if len(sys.argv) > 1 else "input.pdf"
+    work_dir = sys.argv[2] if len(sys.argv) > 2 else "work"
+    data, images = extract(pdf_path, work_dir)
+    print("Done: images=%s -> %s/input_data.json" % (list(images), work_dir))
+
+
+if __name__ == "__main__":
+    main()
