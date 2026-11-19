@@ -58,6 +58,17 @@ describe('logic 1 — foreign country gets no Bangladesh suffix (BDRIS path)', (
         assert.equal(normalizePlaceOfBirthEn('USA'), 'Usa');
     });
 
+    it('BDRIS Bengali spelling of Italy (ইটালি, ট): no suffix', () => {
+        // BDRIS spells Italy 'ইটালি' (ট); the set also carries the standard
+        // 'ইতালি' (ত). Both must be recognised as foreign.
+        assert.equal(normalizePlaceOfBirthBn('ইটালি'), 'ইটালি');
+        assert.equal(normalizePlaceOfBirthBn('ইতালি'), 'ইতালি');
+    });
+
+    it('city + BDRIS-spelled Italy (রোম, ইটালি): SINGLE — only the country name', () => {
+        assert.equal(normalizePlaceOfBirthBn('রোম, ইটালি'), 'ইটালি');
+    });
+
     it('Bangladeshi places keep the existing suffix (unchanged)', () => {
         const out = normalizeBdrisData({ placeOfBirthEn: 'SIRAJGANJ', placeOfBirthBn: 'সিরাজগঞ্জ' });
         assert.equal(out.placeOfBirthEn, 'Sirajganj, Bangladesh');
@@ -96,6 +107,12 @@ describe('logic 2 — form birthplace override + both languages (render path)', 
         const t = toTemplateFields({ pobEn: 'london, united kingdom', pobBn: 'লন্ডন, যুক্তরাজ্য' });
         assert.equal(t.pobEn, 'United Kingdom');
         assert.equal(t.pobBn, 'যুক্তরাজ্য');
+    });
+
+    it('form Bengali birthplace ইটালি (BDRIS spelling): no বাংলাদেশ suffix', () => {
+        const t = toTemplateFields({ pobEn: 'Italy', pobBn: 'ইটালি' });
+        assert.equal(t.pobEn, 'Italy');
+        assert.equal(t.pobBn, 'ইটালি');
     });
 
     it('form birthplace already a single country stays as-is', () => {
