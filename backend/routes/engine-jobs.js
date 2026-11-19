@@ -22,13 +22,13 @@ const { buildReceiptPdf } = require('../lib/receiptPdf');
 const { requireAuth, requireAdmin } = require('../auth');
 const { safeLog } = require('../security');
 
-const SERVICE_LABELS = { 'birth-final': 'জন্ম সনদ যাচাই', 'death-final': 'মৃত্যু সনদ যাচাই', 'passport': 'পাসপোর্ট ইঞ্জিন' };
-const SUBJECT_LABELS = { 'birth-final': 'জন্ম নিবন্ধন নম্বর', 'death-final': 'মৃত্যু নিবন্ধন নম্বর', 'passport': 'পাসপোর্ট নম্বর' };
+const SERVICE_LABELS = { 'birth-final': 'জন্ম সনদ যাচাই', 'death-final': 'মৃত্যু সনদ যাচাই', 'passport': 'পাসপোর্ট ইঞ্জিন', 'nid-server-report': 'এনআইডি সার্ভার কপি রিপোর্ট' };
+const SUBJECT_LABELS = { 'birth-final': 'জন্ম নিবন্ধন নম্বর', 'death-final': 'মৃত্যু নিবন্ধন নম্বর', 'passport': 'পাসপোর্ট নম্বর', 'nid-server-report': 'জাতীয় পরিচয়পত্র নম্বর' };
 // Delivery-copy notifications: the service name the customer is told
 // was created (WhatsApp + push). Passport must not be called a
 // birth/death certificate.
-const DELIVERY_LABELS = { 'birth-final': 'জন্ম সনদ (সার্টিফিকেট)', 'death-final': 'মৃত্যু সনদ', 'passport': 'পাসপোর্ট' };
-const DELIVERY_SHORT = { 'birth-final': 'জন্ম সনদ', 'death-final': 'মৃত্যু সনদ', 'passport': 'পাসপোর্ট' };
+const DELIVERY_LABELS = { 'birth-final': 'জন্ম সনদ (সার্টিফিকেট)', 'death-final': 'মৃত্যু সনদ', 'passport': 'পাসপোর্ট', 'nid-server-report': 'এনআইডি সার্ভার কপি রিপোর্ট' };
+const DELIVERY_SHORT = { 'birth-final': 'জন্ম সনদ', 'death-final': 'মৃত্যু সনদ', 'passport': 'পাসপোর্ট', 'nid-server-report': 'সার্ভার কপি রিপোর্ট' };
 
 // Bengali rendering of an engine failure — the engine's own
 // message may be English or system-flavoured; the customer only
@@ -43,7 +43,7 @@ function failureReasonBn(raw) {
 }
 
 const UPLOAD_DIR = '/opt/all-in-one-abc-authentic/uploads/engine-jobs';
-const ENGINES = ['birth-final', 'death-final', 'passport'];
+const ENGINES = ['birth-final', 'death-final', 'passport', 'nid-server-report'];
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {

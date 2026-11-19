@@ -1723,6 +1723,7 @@ const ENGINE_CARDS = [
   { href: '/birth-final.html', icon: '📜', iconStyle: 'background:linear-gradient(135deg, #f0fdf4, #dcfce7);color:#15803d;', tag: 'তাৎক্ষণিক সনদ', tagM: 'সনদ', tagStyle: 'background:#dcfce7;color:#166534;', title: 'জন্ম নিবন্ধন সনদ', titleM: 'জন্ম সনদ', desc: 'ভেরিফাইড QR কোড ও নিখুঁত অফিসিয়াল ফরম্যাটে সনদ ডাউনলোড', btn: 'তৈরি করুন →', btnM: 'তৈরি →', chargeId: 'engChargeCert', charge: 'চার্জ: ৳৫০' },
   { href: '/nid-replica.html', icon: '🪪', iconStyle: 'background:linear-gradient(135deg, #faf5ff, #f3e8ff);color:#7e22ce;', tag: 'এইচডি প্রিন্ট', tagM: 'কার্ড', tagStyle: 'background:#f3e8ff;color:#6b21a8;', title: 'এনআইডি কার্ড রিপ্রিন্ট', titleM: 'এনআইডি রিপ্রিন্ট', desc: 'PDF এক্সট্রাক্ট, ছবি-স্বাক্ষর সম্পাদনা ও প্রিন্ট রেডি স্মার্ট কার্ড', btn: 'প্রিন্ট নিন →', btnM: 'প্রিন্ট →', chargeId: 'engChargeNid', charge: 'চার্জ: ৳৫০' },
   { href: '/nid-server-copy.html', icon: '🪪', iconStyle: 'background:linear-gradient(135deg, #f0fdf4, #dcfce7);color:#15803d;', tag: 'পোর্টাল লগইন', tagM: 'লগইন', tagStyle: 'background:#dcfce7;color:#166534;', title: 'এনআইডি সার্ভার কপি', desc: 'NID পোর্টালের আইডি-পাসওয়ার্ডে লগইন করে সরাসরি কার্ড — সব সালের NID', btn: 'কার্ড নিন →', btnM: 'কার্ড →', chargeId: 'engChargeNidSc', charge: 'চার্জ: ৳১৫০' },
+  { href: '/nid-server-report.html', icon: '🧾', iconStyle: 'background:linear-gradient(135deg, #fef3c7, #fde68a);color:#92400e;', tag: 'PDF থেকে', tagM: 'রিপোর্ট', tagStyle: 'background:#fef3c7;color:#92400e;', title: 'এনআইডি সার্ভার কপি রিপোর্ট', titleM: 'সার্ভার কপি', desc: 'NID ফর্ম PDF থেকে v1 + v2 সার্ভার কপি রিপোর্ট — এক চার্জে দুটো ফাইল', btn: 'রিপোর্ট নিন →', btnM: 'রিপোর্ট →', chargeId: 'engChargeNidSr', charge: 'চার্জ: ৳০' },
   { href: '/death-final.html', icon: '🕊️', iconStyle: 'background:linear-gradient(135deg, #fff7ed, #ffedd5);color:#c2410c;', tag: 'যাচাই ও কপি', tagM: 'যাচাই', tagStyle: 'background:#ffedd5;color:#9a3412;', title: 'মৃত্যু সনদ যাচাই', titleM: 'মৃত্যু সনদ', desc: 'অনলাইন মৃত্যু নিবন্ধন নম্বর দিয়ে যাচাই ও অফিসিয়াল সনদ ডাউনলোড', btn: 'যাচাই করুন →', btnM: 'কপি →', chargeId: 'engChargeDeath', charge: 'চার্জ: ৳৫০' },
   { href: '/qr-photo-verify.html', icon: '🔍', iconStyle: 'background:linear-gradient(135deg, #ecfdf5, #d1fae5);color:#047857;', tag: 'মুখ যাচাই', tagM: 'যাচাই', tagStyle: 'background:#d1fae5;color:#065f46;', title: 'QR + ছবি যাচাই', desc: 'NID-এর QR কোড ও ব্যক্তির ছবি মিলিয়ে তাৎক্ষণিক পরিচয় যাচাই', btn: 'যাচাই করুন →', btnM: 'যাচাই →', chargeId: 'engChargeQr', charge: 'চার্জ: ৳৫০' },
   { href: '/land-khatian.html', icon: '🌾', iconStyle: 'background:linear-gradient(135deg, #f0fdf4, #dcfce7);color:#14532d;', tag: 'ভূমি রেকর্ড', tagM: 'ভূমি', tagStyle: 'background:#dcfce7;color:#14532d;', title: 'ভূমি সেবা (খতিয়ান)', desc: 'খতিয়ান খোঁজ, নামে সম্পত্তি সন্ধান ও জমি যাচাই রিপোর্ট — সরকারি রেকর্ড থেকে সরাসরি', btn: 'সেবা নিন →', chargeId: 'engChargeLand', charge: 'চার্জ: ৳২০ থেকে' },
@@ -1822,6 +1823,11 @@ async function loadServices() {
     if (nidScSvc && nidScSvc.price) {
       setText('engChargeNidSc', 'চার্জ: ৳' + bnNum(nidScSvc.price));
       setText('mEngChargeNidSc', '৳' + bnNum(nidScSvc.price));
+    }
+    const nidSrSvc = _allServices.find(s => s.engine_id === 'nid-server-report');
+    if (nidSrSvc && nidSrSvc.price) {
+      setText('engChargeNidSr', 'চার্জ: ৳' + bnNum(nidSrSvc.price));
+      setText('mEngChargeNidSr', '৳' + bnNum(nidSrSvc.price));
     }
     const deathSvc = _allServices.find(s => s.engine_id === 'death-final');
     if (deathSvc && deathSvc.price) {

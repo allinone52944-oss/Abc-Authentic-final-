@@ -81,10 +81,13 @@ describe('audit #82 — engine cards render once from ENGINE_CARDS', () => {
     'utf8',
   );
 
-  test('one array holds all seven cards; no hardcoded card blocks remain', () => {
+  test('one array holds all eight cards; no hardcoded card blocks remain', () => {
     const m = DASH.match(/const ENGINE_CARDS = \[([\s\S]*?)\];/);
     expect(m).toBeTruthy();
-    expect(m[1].split('href:').length - 1).toBe(7);
+    // Eight since 2026-11-19: the NID Server Copy Report card
+    // (v1 + v2 reports, one charge) joined the seven.
+    expect(m[1].split('href:').length - 1).toBe(8);
+    expect(m[1]).toContain("href: '/nid-server-report.html'");
     // The only '<div class="engine-card"' left is the renderer's
     // own template string — the 14 hardcoded blocks are gone.
     expect(DASH.split('<div class="engine-card"').length - 1).toBe(1);

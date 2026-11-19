@@ -74,10 +74,15 @@ describe('audit #14 — gate IDs are the directory names', () => {
     // engine-jobs pattern as birth/death-final) — the closed set is
     // now three engines; nothing else may be added without a test
     // update here.
-    expect(jobs).toContain("const ENGINES = ['birth-final', 'death-final', 'passport'];");
+    // nid-server-report joined 2026-11-19 (Server Copy Report
+    // engine: v1 + v2 delivery copies under one charge) — the
+    // closed set is now four engines; its ID is its directory
+    // name, per the same audit #14 rule.
+    expect(jobs).toContain("const ENGINES = ['birth-final', 'death-final', 'passport', 'nid-server-report'];");
     expect(jobs).toContain("'birth-final': 'জন্ম সনদ যাচাই'");
     expect(jobs).toContain("'death-final': 'মৃত্যু সনদ যাচাই'");
     expect(jobs).toContain("'passport': 'পাসপোর্ট ইঞ্জিন'");
+    expect(jobs).toContain("'nid-server-report': 'এনআইডি সার্ভার কপি রিপোর্ট'");
     expect(jobs).not.toContain('bdris-certificate');
     expect(jobs).not.toContain('death-verify');
   });
