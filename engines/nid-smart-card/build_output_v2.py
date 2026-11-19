@@ -632,6 +632,48 @@ def _fit_contain_rgba(path, w, h):
     return canvas
 
 
+def _fit_holder_signature(path):
+    """Cleaned holder signature -> 146x73 slot image, sample card-er moto.
+
+    Sample card-er holder-er kalir bbox 116x51 px (146x73 slot-er
+    bhitore, charpashe margin: baame ~13px, daney ~17px, upore ~9px,
+    niche ~13px). _fit_contain_rgba slot bhore dito — signature-ta
+    slot-er purno prostho jure bichhiye jeto ar sample-er cheye
+    lomba/chhoto dekhate. Tai ghono kali-ta-ke (alpha>128) 116x51
+    box-er bhitore fit kori (kokhono boro kori na — scale <= 1.0),
+    ar ghono kali-r kendro-ta slot-er kendro-e bosai — cleaned
+    chhobi-r halka lejer jonno kali upore/niche sore jay na.
+    Akrity (aspect) bodlay na.
+    """
+    im = Image.open(path).convert("RGBA")
+    alpha = im.split()[3]
+    solid = alpha.point(lambda a: 255 if a > 128 else 0)
+    bbox = solid.getbbox()
+    if bbox:
+        ink_w = bbox[2] - bbox[0]
+        ink_h = bbox[3] - bbox[1]
+    else:
+        bbox = (0, 0, im.width, im.height)
+        ink_w, ink_h = im.width, im.height
+    scale = min(1.0, 116.0 / max(1, ink_w), 51.0 / max(1, ink_h))
+    nw = max(1, int(round(im.width * scale)))
+    nh = max(1, int(round(im.height * scale)))
+    im = im.resize((nw, nh), Image.LANCZOS)
+    # Ghono kali-r bbox (resize-er pore) slot-er kendro-e anar jonno
+    # paste offset hisab kori.
+    sx0 = int(round(bbox[0] * scale))
+    sy0 = int(round(bbox[1] * scale))
+    sx1 = int(round(bbox[2] * scale))
+    sy1 = int(round(bbox[3] * scale))
+    ink_cx = (sx0 + sx1) / 2.0
+    ink_cy = (sy0 + sy1) / 2.0
+    px = int(round(146 / 2.0 - ink_cx))
+    py = int(round(73 / 2.0 - ink_cy))
+    canvas = Image.new("RGBA", (146, 73), (0, 0, 0, 0))
+    canvas.paste(im, (px, py), im)
+    return canvas
+
+
 def _clean_signature(path):
     """Scanned holder signature (dark ink on white paper) -> transparent-bg
     RGBA PNG, cropped to the ink bounding box.
@@ -748,7 +790,7 @@ def _replace_photos(page, photo_path, holder_sign_path):
 
     if holder_sign_path and os.path.exists(holder_sign_path):
         clean = _clean_signature(holder_sign_path)
-        im = _fit_contain_rgba(clean, 146, 73)
+        im = _fit_holder_signature(clean)
         out = bo._w("temp_renders", "v2_holder_sign.png")
         im.save(out)
         try:
@@ -791,13 +833,20 @@ def _make_barcode(fields):
     ds = (fields.get("ds") or "").strip()
     ds_xml = "<ds>%s</ds>" % ds if ds else ""
     # Sample card-er format: name-e space-er bodole '+', DOB ISO, TYPE faka.
+    # F-er man "Right INDEX" (sample card-er hubohu — "Right Index" noy).
     xml = ("<pin>%s</pin><name>%s</name><DOB>%s</DOB><FP></FP>"
-           "<F>Right Index</F><TYPE></TYPE><V>2.0</V>%s"
+           "<F>Right INDEX</F><TYPE></TYPE><V>2.0</V>%s"
            % (pin, nm.replace(" ", "+"), dob, ds_xml))
     try:
-        # Sample barcode-er hubohu geometry: 13 data column, 18 row,
-        # module 2px x 2px, row height 6px -> 580x108 exact bitmap.
-        codes = _pdf417_codes(xml, columns=13, security_level=4, rows=18)
+        # Sample barcode-er hubohu geometry + format: 13 data column,
+        # 18 row, security level 5 (sample-er row indicator diye promanito
+        # — level 4 noy), module 2px x 2px, row height 6px -> 580x108
+        # exact bitmap. NOTE: pattern-ta bekti-r data encode kore, tai
+        # onno bekti-r pattern sample-er sathe milbe na (setai thik);
+        # kintu eki bekti-r jonno pdf417gen-er text compaction-er switch
+        # sample-er original encoder-er cheye alada — pixel-hubohu
+        # milate hole compactor-ta bodlate hobe (bhinno kaj).
+        codes = _pdf417_codes(xml, columns=13, security_level=5, rows=18)
     except Exception as e:
         raise RuntimeError("বারকোড তৈরি করা যায়নি: %s" % e)
     if not codes:

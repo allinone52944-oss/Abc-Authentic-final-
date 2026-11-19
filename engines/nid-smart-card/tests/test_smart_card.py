@@ -339,6 +339,34 @@ class TestBarcodeDs(unittest.TestCase):
         xml = self._capture_xml(fields)
         self.assertIn("<ds>TESTDS123</ds>", xml)
 
+    def test_barcode_uses_level_5_and_right_index(self):
+        # Sample card-er row indicator diye promanito: security level 5
+        # (level 4 noy); F-er man "Right INDEX" ("Right Index" noy).
+        seen = {}
+        orig = v2._pdf417_codes
+
+        def fake_codes(text, columns=13, security_level=5, rows=18):
+            seen["xml"] = text
+            seen["level"] = security_level
+            seen["columns"] = columns
+            seen["rows"] = rows
+            return orig(text, columns, security_level, rows)
+
+        v2._pdf417_codes = fake_codes
+        try:
+            work = tempfile.mkdtemp(prefix="nsc-lvl5-")
+            os.makedirs(os.path.join(work, "temp_renders"), exist_ok=True)
+            bo.configure(ENGINE_DIR, work)
+            v2._make_barcode(FAKE_FIELDS)
+        finally:
+            v2._pdf417_codes = orig
+        self.assertEqual(seen.get("level"), 5,
+                         "barcode must use security level 5 (sample)")
+        self.assertEqual(seen.get("columns"), 13)
+        self.assertEqual(seen.get("rows"), 18)
+        self.assertIn("<F>Right INDEX</F>", seen.get("xml", ""))
+        self.assertNotIn("<F>Right Index</F>", seen.get("xml", ""))
+
 
 class TestPhotoSanitize(unittest.TestCase):
     """Fix #2 (photo): cv2 present -> sanitize runs; absent -> the
@@ -456,8 +484,8 @@ class TestHolderSignature(unittest.TestCase):
                 pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
             built = Image.frombytes("RGB", (pix.width, pix.height),
                                     pix.samples)
-        expect = v2._fit_contain_rgba(
-            v2._clean_signature(self.sign_path), 146, 73).convert("RGB")
+        expect = v2._fit_holder_signature(
+            v2._clean_signature(self.sign_path)).convert("RGB")
         # PyMuPDF re-encodes the PNG on replace_image — pixel values
         # round by a few levels, so compare with a tolerance instead
         # of exact equality (the barcode test can be exact because
@@ -470,12 +498,36 @@ class TestHolderSignature(unittest.TestCase):
                              "slot image is not the holder signature")
         self.assertEqual(sum(1 for v in diffs if v > 10), 0,
                          "slot image is not the holder signature")
-        auth = v2._fit_contain_rgba(
-            os.path.join(ENGINE_DIR, "shakkhor", "prodankari-shakkhor.png"),
-            146, 73).convert("RGB")
+        auth = v2._fit_holder_signature(
+            os.path.join(ENGINE_DIR, "shakkhor", "prodankari-shakkhor.png")
+        ).convert("RGB")
         auth_diffs = _diffs(list(built.getdata()), list(auth.getdata()))
         self.assertGreater(sum(1 for v in auth_diffs if v > 10), 100,
                            "slot image is the authority signature")
+
+    def test_holder_sign_fit_matches_sample_ink_box(self):
+        # Sample card-er holder-er kalir bbox 116x51 px (146x73 slot-er
+        # bhitore, margin soho). Fit-ta kali-ke oi box-er bhitore rakhe
+        # — slot bhore na, kinara chhoy na.
+        bo.configure(ENGINE_DIR, self.work)
+        os.makedirs(bo._w("temp_renders"), exist_ok=True)
+        clean = v2._clean_signature(self.sign_path)
+        fitted = v2._fit_holder_signature(clean)
+        self.assertEqual(fitted.size, (146, 73))
+        alpha = list(fitted.split()[3].getdata())
+        gray = list(fitted.convert("L").getdata())
+        w, h = fitted.size
+        ink = [(x, y) for y in range(h) for x in range(w)
+               if gray[y * w + x] < 160 and alpha[y * w + x] > 128]
+        self.assertTrue(ink, "no ink in fitted signature")
+        xs = [p[0] for p in ink]
+        ys = [p[1] for p in ink]
+        self.assertLessEqual(max(xs) - min(xs) + 1, 118,
+                             "ink wider than the sample's ink box")
+        self.assertLessEqual(max(ys) - min(ys) + 1, 53,
+                             "ink taller than the sample's ink box")
+        self.assertGreaterEqual(min(xs), 5, "ink touches the left edge")
+        self.assertGreaterEqual(min(ys), 3, "ink touches the top edge")
 
     def test_cli_holder_sign_flag(self):
         # The --holder-sign CLI flag builds OK and the JSON ok line
