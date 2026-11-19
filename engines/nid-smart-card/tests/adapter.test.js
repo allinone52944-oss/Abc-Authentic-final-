@@ -11,6 +11,17 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const childProcess = require('node:child_process');
+
+// Capture every spawnSync call (delegating to the real one) so the
+// buildCard wiring tests can assert the exact Python argv
+// (--holder-sign) without depending on the Python outcome.
+const spawnCalls = [];
+const realSpawnSync = childProcess.spawnSync;
+childProcess.spawnSync = (...args) => {
+  spawnCalls.push(args);
+  return realSpawnSync(...args);
+};
 
 const adapter = require('../adapter');
 
@@ -126,6 +137,43 @@ test('buildCard ignores non-photo/sign image names', async () => {
     assert.equal(fs.existsSync(path.join(dir, 'work', 'images', 'other.png')), false);
     assert.equal(fs.existsSync(path.join(dir, 'work', 'images', 'photo.png')), false);
     assert.equal(fs.existsSync(path.join(dir, 'work', 'images', 'sign.png')), false);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+function buildCallArgs() {
+  const call = spawnCalls.find((c) => String((c[1] || [])[0] || '').endsWith('build_output_v2.py'));
+  assert.ok(call, 'build_output_v2.py was not invoked');
+  return call[1].slice(1);
+}
+
+test('buildCard passes --holder-sign when sign.png exists', async () => {
+  const { id, dir } = makeJobDir();
+  try {
+    spawnCalls.length = 0;
+    await adapter.buildCard(id, FIELDS, [
+      { name: 'photo.png', dataUrl: 'data:image/png;base64,' + PNG_PHOTO.toString('base64') },
+      { name: 'sign.png', dataUrl: 'data:image/png;base64,' + PNG_SIGN.toString('base64') },
+    ], 'u1');
+    const argv = buildCallArgs();
+    const i = argv.indexOf('--holder-sign');
+    assert.notEqual(i, -1, '--holder-sign missing from build argv');
+    assert.equal(argv[i + 1], path.join(dir, 'work', 'images', 'sign.png'));
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('buildCard omits --holder-sign when sign.png is absent', async () => {
+  const { id, dir } = makeJobDir();
+  try {
+    spawnCalls.length = 0;
+    await adapter.buildCard(id, FIELDS, [
+      { name: 'photo.png', dataUrl: 'data:image/png;base64,' + PNG_PHOTO.toString('base64') },
+    ], 'u1');
+    const argv = buildCallArgs();
+    assert.equal(argv.indexOf('--holder-sign'), -1, '--holder-sign must be absent without sign.png');
   } finally {
     cleanup(dir);
   }

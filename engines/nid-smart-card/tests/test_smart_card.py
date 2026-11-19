@@ -355,5 +355,146 @@ class TestPhotoSanitize(unittest.TestCase):
         self.assertNotEqual(os.path.abspath(out), os.path.abspath(p))
 
 
+class TestHolderSignature(unittest.TestCase):
+    """Holder-signature slot (sample-proven): the card's only signature
+    is the HOLDER's, front below the photo (xref 24, bbox
+    65.2/174.0/124.5/204.0). The old code rendered the AUTHORITY
+    signature there — the sample card (output_template.pdf, byte-
+    identical to the user's sample) proves that slot is the holder's,
+    and the back panel has no signature at all."""
+
+    SLOT = (65.2, 174.0, 124.5, 204.0)  # xref 24 bbox, top-origin pt
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="nsc-sign-")
+        self.work = os.path.join(self.tmp, "work")
+        os.makedirs(os.path.join(self.work, "images"), exist_ok=True)
+        _fake_photo(os.path.join(self.work, "images", "photo.png"))
+        self.fields_path = os.path.join(self.work, "fields.json")
+        with open(self.fields_path, "w", encoding="utf-8") as fh:
+            json.dump(FAKE_FIELDS, fh, ensure_ascii=False, indent=1)
+        self.out = os.path.join(self.tmp, "output.pdf")
+        self.sign_path = os.path.join(self.work, "images", "sign.png")
+        self._fake_sign(self.sign_path)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    @staticmethod
+    def _fake_sign(path, size=(260, 130)):
+        # Black scribble on white paper, like a scanned signature.
+        from PIL import Image, ImageDraw
+        img = Image.new("RGB", size, (255, 255, 255))
+        d = ImageDraw.Draw(img)
+        d.line([(20, 90), (60, 40), (90, 100), (130, 50), (170, 95),
+                (210, 45), (240, 80)], fill=(10, 10, 10), width=6)
+        d.line([(30, 110), (120, 115), (230, 105)], fill=(20, 20, 20),
+               width=4)
+        img.save(path)
+
+    def _build(self, holder_sign=True):
+        bo.configure(ENGINE_DIR, self.work)
+        return v2.build_v2_card(
+            FAKE_FIELDS, TEMPLATE_PDF, self.out,
+            photo_path=os.path.join(self.work, "images", "photo.png"),
+            holder_sign_path=(self.sign_path if holder_sign else None))
+
+    def _slot_gray(self, pdf_path):
+        import pymupdf
+        with pymupdf.open(pdf_path) as doc:
+            pix = doc[0].get_pixmap(dpi=150,
+                                     clip=pymupdf.Rect(*self.SLOT))
+        from PIL import Image
+        im = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+        return im.convert("L")
+
+    @staticmethod
+    def _ink_pixels(gray, threshold=80):
+        return sum(1 for v in gray.getdata() if v < threshold)
+
+    def test_holder_sign_rendered_at_slot(self):
+        out = self._build(holder_sign=True)
+        self.assertTrue(os.path.exists(out))
+        ink = self._ink_pixels(self._slot_gray(out))
+        self.assertGreater(ink, 100, "holder signature ink missing at slot")
+        # The template's sample signature must be gone — the slot
+        # render differs from the template's slot render.
+        self.assertNotEqual(list(self._slot_gray(out).getdata()),
+                            list(self._slot_gray(TEMPLATE_PDF).getdata()))
+
+    def test_no_holder_sign_leaves_slot_blank(self):
+        out = self._build(holder_sign=False)
+        self.assertTrue(os.path.exists(out))
+        ink = self._ink_pixels(self._slot_gray(out))
+        self.assertEqual(ink, 0, "slot not blank without holder signature")
+
+    def test_corrupt_holder_sign_fails_loudly(self):
+        bad = os.path.join(self.work, "bad-sign.png")
+        with open(bad, "wb") as fh:
+            fh.write(b"this is not an image at all")
+        bo.configure(ENGINE_DIR, self.work)
+        with self.assertRaises(RuntimeError) as cm:
+            v2.build_v2_card(
+                FAKE_FIELDS, TEMPLATE_PDF, self.out,
+                photo_path=os.path.join(self.work, "images", "photo.png"),
+                holder_sign_path=bad)
+        self.assertIn("স্বাক্ষর", str(cm.exception))
+        self.assertFalse(os.path.exists(self.out))
+
+    def test_slot_holds_holder_sign_not_authority(self):
+        out = self._build(holder_sign=True)
+        import pymupdf
+        from PIL import Image
+        with pymupdf.open(out) as doc:
+            infos = doc[0].get_image_info(xrefs=True)
+            slot = [i for i in infos
+                    if [round(v, 1) for v in i["bbox"]] ==
+                    [round(v, 1) for v in self.SLOT]]
+            self.assertEqual(len(slot), 1, "slot image not found")
+            pix = pymupdf.Pixmap(doc, slot[0]["xref"])
+            if pix.n > 3:
+                pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
+            built = Image.frombytes("RGB", (pix.width, pix.height),
+                                    pix.samples)
+        expect = v2._fit_contain_rgba(
+            v2._clean_signature(self.sign_path), 146, 73).convert("RGB")
+        # PyMuPDF re-encodes the PNG on replace_image — pixel values
+        # round by a few levels, so compare with a tolerance instead
+        # of exact equality (the barcode test can be exact because
+        # its image is opaque; this one has an alpha mask).
+        def _diffs(a, b):
+            return [max(abs(x[0] - y[0]), abs(x[1] - y[1]),
+                        abs(x[2] - y[2])) for x, y in zip(a, b)]
+        diffs = _diffs(list(built.getdata()), list(expect.getdata()))
+        self.assertLessEqual(max(diffs), 10,
+                             "slot image is not the holder signature")
+        self.assertEqual(sum(1 for v in diffs if v > 10), 0,
+                         "slot image is not the holder signature")
+        auth = v2._fit_contain_rgba(
+            os.path.join(ENGINE_DIR, "shakkhor", "prodankari-shakkhor.png"),
+            146, 73).convert("RGB")
+        auth_diffs = _diffs(list(built.getdata()), list(auth.getdata()))
+        self.assertGreater(sum(1 for v in auth_diffs if v > 10), 100,
+                           "slot image is the authority signature")
+
+    def test_cli_holder_sign_flag(self):
+        # The --holder-sign CLI flag builds OK and the JSON ok line
+        # is the last JSON object on stdout.
+        import subprocess
+        r = subprocess.run(
+            [sys.executable,
+             os.path.join(ENGINE_DIR, "build_output_v2.py"),
+             self.fields_path, TEMPLATE_PDF, self.out,
+             "--photo", os.path.join(self.work, "images", "photo.png"),
+             "--holder-sign", self.sign_path,
+             "--work", self.work, "--assets", ENGINE_DIR],
+            capture_output=True, text=True, timeout=120)
+        self.assertEqual(r.returncode, 0, r.stderr[-500:])
+        last = [ln for ln in r.stdout.splitlines()
+                if ln.strip().startswith("{")][-1]
+        self.assertEqual(json.loads(last).get("ok"), True)
+        self.assertTrue(os.path.exists(self.out))
+
+
 if __name__ == "__main__":
     unittest.main()

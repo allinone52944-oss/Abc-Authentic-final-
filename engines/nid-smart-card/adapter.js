@@ -245,12 +245,14 @@ async function extractFields(pdfBuffer, ownerId) {
  *   photo/sign not re-passed are deleted, so a removed photo makes
  *   the build FAIL loudly (fix #3) instead of keeping the
  *   template's sample photo.
- *   NOTE: the applicant's sign.png is accepted and stored with the
- *   job (form parity with nid-replica) but is NOT passed to the
- *   v2 builder — the v2 template has no applicant-signature slot;
- *   its only signature slot (SIGN_XREF) is the AUTHORITY signature,
- *   and the builder's --sign would override it. The authority
- *   signature comes from shakkhor/ only.
+ *   NOTE: the applicant's sign.png is accepted, stored with the job
+ *   and passed to the v2 builder as --holder-sign. The sample card
+ *   (output_template.pdf) proves the card's only signature slot
+ *   (xref 24, front below the photo) is the HOLDER's — there is no
+ *   authority signature on the smart card, so shakkhor/ is NOT used
+ *   by this engine. No sign.png -> the builder blanks the slot
+ *   (the sample holder's signature never leaks) and the build
+ *   still succeeds.
  * @returns {Promise<{ok:boolean, pdfBuffer?, error?, detail?}>}
  */
 async function buildCard(jobId, fieldsJson, images, ownerId) {
@@ -291,11 +293,10 @@ async function buildCard(jobId, fieldsJson, images, ownerId) {
             try { fs.writeFileSync(path.join(imgDir, safeName), Buffer.from(m[2], 'base64')); } catch (e) {}
         }
         // User removed the photo/sign: delete the extracted ones so
-        // the build FAILS loudly (fix #3) — never keep the template
-        // photo. (sign.png is stored with the job; the v2 template
-        // has no applicant-signature slot, so it is not rendered —
-        // and it is never passed to the builder as --sign, which
-        // would override the authority signature from shakkhor/.)
+        // the build FAILS loudly for a missing photo (fix #3) —
+        // never keep the template photo. (A removed sign.png means
+        // the builder blanks the holder-signature slot; the sample
+        // holder's signature never leaks.)
         if (!passedNames.has('photo.png') && fs.existsSync(path.join(imgDir, 'photo.png'))) {
             try { fs.unlinkSync(path.join(imgDir, 'photo.png')); } catch (_) {}
         }
@@ -326,6 +327,12 @@ async function buildCard(jobId, fieldsJson, images, ownerId) {
         // Pass the photo only when the file exists; when it does not,
         // the builder raises its own Bengali "ছবি পাওয়া যায়নি" error.
         if (fs.existsSync(photoPath)) args.push('--photo', photoPath);
+        // Holder signature: the sample card proves the only signature
+        // slot (xref 24, front below the photo) is the HOLDER's.
+        // No file -> the builder blanks the slot (the sample
+        // holder's signature never leaks) and the build succeeds.
+        const signPath = path.join(imgDir, 'sign.png');
+        if (fs.existsSync(signPath)) args.push('--holder-sign', signPath);
         const r = runPython('build_output_v2.py', args, dir);
         const buildJson = parseBuildJson(r.stdout);
         if (!r.ok) {
