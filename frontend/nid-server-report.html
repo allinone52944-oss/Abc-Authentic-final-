@@ -305,8 +305,8 @@
       <div class="side-link on"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M7 15h4M15 15h2M7 11h2"/></svg></span> সার্ভার কপি রিপোর্ট</div>
       <div class="side-link" onclick="location.href='/orders.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span> অর্ডার</div>
       <div class="side-link" onclick="location.href='/history.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></span> ইতিহাস</div>
-      <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg></div>ওয়ালেট</div>
-      <div class="side-link" onclick="location.href='/profile.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
+      <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg></span> ওয়ালেট</div>
+      <div class="side-link" onclick="location.href='/profile.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span> প্রোফাইল</div>
     </nav>
   </div>
 
@@ -502,11 +502,23 @@ const ADDR_PARTS = [
   ['district', 'জেলা'],
   ['division', 'বিভাগ'],
 ];
-const ADDR_CORE = ['holding', 'village', 'post_office', 'postal_code', 'upozila', 'district'];
 const ADDR_SECTIONS = [
   { key: 'Present Address', label: 'বর্তমান ঠিকানা' },
   { key: 'Permanent Address', label: 'স্থায়ী ঠিকানা' },
 ];
+
+// Placeholder values the report builders drop from a composed
+// address one-liner (build_reports.py ADDR_EMPTY) — the pre-filled
+// single line skips them too, so the form shows what the report
+// will show.
+const ADDR_EMPTY = new Set(['', '-', '--', '—', '–', 'n/a', 'na', 'none', 'null', 'না', '০']);
+function joinAddressParts(addr){
+  if (typeof addr === 'string') return addr || '';
+  if (!addr || typeof addr !== 'object') return '';
+  return ADDR_PARTS.map((part) => String(addr[part[0]] || '').trim())
+    .filter((v) => v && !ADDR_EMPTY.has(v.toLowerCase()))
+    .join(', ');
+}
 
 function renderPhotoUI(){
   const ip=document.getElementById('imgPrev');
@@ -573,24 +585,18 @@ function renderFieldsUI(){
     ff.appendChild(d);
   });
 
-  // Address sections: parts present in the extract, plus the core
-  // parts so the customer can fill a missing piece.
+  // Addresses are ONE single-line input each — the parts the extract
+  // found, joined in ADDR_PARTS order (the order the report builders
+  // use for their one-liners), comma-separated. The customer edits
+  // the line as a whole; collectFields sends it back as a string and
+  // the builders print it verbatim.
   ADDR_SECTIONS.forEach((sec) => {
-    const addr = (fields[sec.key] && typeof fields[sec.key] === 'object') ? fields[sec.key] : {};
     renderedKeys.add(sec.key);
-    const head = document.createElement('div');
-    head.className = 'addr-head';
-    head.textContent = sec.label;
-    ff.appendChild(head);
-    const want = new Set(Object.keys(addr).concat(ADDR_CORE));
-    ADDR_PARTS.forEach((part) => {
-      if (!want.has(part[0])) return;
-      const d = document.createElement('div');
-      d.className = 'field';
-      const id = 'addr_' + sec.key.replace(/\s/g, '_') + '_' + part[0];
-      d.innerHTML = fieldInput(id, part[1], addr[part[0]] || '', 'data-addr="' + esc(sec.key) + '" data-k="' + esc(part[0]) + '" placeholder="' + esc(part[1]) + '"');
-      ff.appendChild(d);
-    });
+    const d = document.createElement('div');
+    d.className = 'field';
+    const id = 'addr_' + sec.key.replace(/\s/g, '_');
+    d.innerHTML = fieldInput(id, sec.label, joinAddressParts(fields[sec.key]), 'data-k="' + esc(sec.key) + '" placeholder="' + esc(sec.label) + '"');
+    ff.appendChild(d);
   });
 
   Object.keys(fields).forEach((k, idx) => {
@@ -605,15 +611,11 @@ function renderFieldsUI(){
 }
 
 function collectFields(){
+  // Every review input — including the two single-line addresses —
+  // is collected by its data-k key. A cleared field is sent empty,
+  // same as any other field.
   const out = {};
-  document.querySelectorAll('#fieldForm input[data-k]:not([data-addr])').forEach(inp => { out[inp.dataset.k] = inp.value; });
-  ADDR_SECTIONS.forEach((sec) => {
-    const addr = {};
-    document.querySelectorAll('#fieldForm input[data-addr="' + sec.key + '"]').forEach(inp => {
-      if (String(inp.value || '').trim()) addr[inp.dataset.k] = inp.value;
-    });
-    if (Object.keys(addr).length) out[sec.key] = addr;
-  });
+  document.querySelectorAll('#fieldForm input[data-k]').forEach(inp => { out[inp.dataset.k] = inp.value; });
   return out;
 }
 

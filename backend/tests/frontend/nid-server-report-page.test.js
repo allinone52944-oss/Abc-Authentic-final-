@@ -68,11 +68,33 @@ describe('nid-server-report.html', () => {
     expect(html).toContain("reportEngineJob('nid-server-report'");
     expect(html).toContain("S.idem + '-' + kind");
   });
-  test('review renders address sections (present + permanent)', () => {
+  test('review renders each address as ONE single-line input (present + permanent)', () => {
     expect(html).toContain('Present Address');
     expect(html).toContain('Permanent Address');
     expect(html).toContain('বর্তমান ঠিকানা');
     expect(html).toContain('স্থায়ী ঠিকানা');
+    // No part-inputs: the old per-part data-addr inputs are gone.
+    expect(html).not.toContain('data-addr=');
+    expect(html).not.toContain('ADDR_CORE');
+    expect(html).toContain('function joinAddressParts');
+    expect(html).toContain('joinAddressParts(fields[sec.key])');
+  });
+  test('joinAddressParts: ADDR_PARTS order, empties + placeholders skipped, strings pass through', () => {
+    // Execute the page's own join against its own ADDR_PARTS (the
+    // page has no DOM harness — pull the definitions out and run
+    // them in a sandbox).
+    const partsSrc = html.slice(html.indexOf('const ADDR_PARTS = ['), html.indexOf('];', html.indexOf('const ADDR_PARTS = [')) + 2);
+    const emptySrc = html.slice(html.indexOf('const ADDR_EMPTY = new Set('), html.indexOf(');', html.indexOf('const ADDR_EMPTY = new Set(')) + 2);
+    const fnStart = html.indexOf('function joinAddressParts(addr){');
+    const fnSrc = html.slice(fnStart, html.indexOf('\n}\n', fnStart) + 3);
+    const join = new Function(partsSrc + ';\n' + emptySrc + ';\n' + fnSrc + ';\nreturn joinAddressParts;')();
+    const full = { holding: '১২', village: 'পরীক্ষা গ্রাম', additional_village: '', mouza: 'X', additional_mouza: '', ward_porishod: '৩', post_office: 'পরীক্ষা ডাকঘর', postal_code: '১২০০', thana: '', upozila: 'পরীক্ষা উপজেলা', district: 'ঢাকা', division: 'ঢাকা' };
+    expect(join(full)).toBe('১২, পরীক্ষা গ্রাম, X, ৩, পরীক্ষা ডাকঘর, ১২০০, পরীক্ষা উপজেলা, ঢাকা, ঢাকা');
+    expect(join({ holding: '-', village: 'V', district: 'N/A' })).toBe('V');
+    expect(join('already, one line')).toBe('already, one line');
+    expect(join({})).toBe('');
+    expect(join(null)).toBe('');
+    expect(join(undefined)).toBe('');
   });
 });
 

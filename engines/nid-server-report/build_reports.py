@@ -73,6 +73,10 @@ def addr_clean(v):
 
 
 def addr_parts(ad):
+    # A single-line address (typed/edited in the review form) is
+    # used verbatim as the one-liner — no labels, no re-joining.
+    if isinstance(ad, str):
+        return ad.strip()
     ad = ad or {}
     parts = []
 
