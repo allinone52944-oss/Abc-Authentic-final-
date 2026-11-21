@@ -341,7 +341,9 @@ class TestBarcodeDs(unittest.TestCase):
 
     def test_barcode_uses_level_5_and_right_index(self):
         # Sample card-er row indicator diye promanito: security level 5
-        # (level 4 noy); F-er man "Right INDEX" ("Right Index" noy).
+        # (level 4 noy); F-er man "Right Index" — user-provided barcode
+        # XML + replica build_output.py, duitotei ei spelling; df16223-er
+        # "Right INDEX" chilo bhul decode, ekhane thik kora hoyeche.
         seen = {}
         orig = v2._pdf417_codes
 
@@ -364,8 +366,8 @@ class TestBarcodeDs(unittest.TestCase):
                          "barcode must use security level 5 (sample)")
         self.assertEqual(seen.get("columns"), 13)
         self.assertEqual(seen.get("rows"), 18)
-        self.assertIn("<F>Right INDEX</F>", seen.get("xml", ""))
-        self.assertNotIn("<F>Right Index</F>", seen.get("xml", ""))
+        self.assertIn("<F>Right Index</F>", seen.get("xml", ""))
+        self.assertNotIn("<F>Right INDEX</F>", seen.get("xml", ""))
 
 
 class TestPhotoSanitize(unittest.TestCase):

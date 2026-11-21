@@ -833,9 +833,12 @@ def _make_barcode(fields):
     ds = (fields.get("ds") or "").strip()
     ds_xml = "<ds>%s</ds>" % ds if ds else ""
     # Sample card-er format: name-e space-er bodole '+', DOB ISO, TYPE faka.
-    # F-er man "Right INDEX" (sample card-er hubohu — "Right Index" noy).
+    # F-er man "Right Index" — user-provided barcode XML + replica
+    # build_output.py, duitotei ei spelling; df16223-er "Right INDEX"
+    # chilo bhul decode (LOWER submode-e 27-ke latch dhora hoyechilo,
+    # asole seta ek-okhorer shift) — ekhane thik kora holo.
     xml = ("<pin>%s</pin><name>%s</name><DOB>%s</DOB><FP></FP>"
-           "<F>Right INDEX</F><TYPE></TYPE><V>2.0</V>%s"
+           "<F>Right Index</F><TYPE></TYPE><V>2.0</V>%s"
            % (pin, nm.replace(" ", "+"), dob, ds_xml))
     try:
         # Sample barcode-er hubohu geometry + format: 13 data column,
