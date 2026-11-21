@@ -6,8 +6,9 @@ standing in for the National ID (fix #2), v2 fixed slots + Gender
 helper, extract on the sample input fixture, build producing the
 card (MRZ recompute == rendered MRZ, barcode pixels == regenerated
 barcode), fail-loudly behaviour (fix #3: missing photo / barcode
-data raises, never keeps the template sample), barcode `ds` only
-from form data (fix #4), issue-date today default visible in the
+data raises, never keeps the template sample), barcode `ds` from form
+data or the replica's fixed default when absent (NID engine logic),
+issue-date today default visible in the
 fields (fix #5), address bound (max 3 lines).
 
 The sample input.pdf is the engine's own sample-form asset; tests
@@ -307,7 +308,9 @@ class TestBuildCard(unittest.TestCase):
 
 
 class TestBarcodeDs(unittest.TestCase):
-    """Fix #4: `ds` comes only from form data; absent -> omitted."""
+    """`ds`: NID replica engine-er moto — form data theke ashle setai,
+    na thakle replica-r fixed default (DS_DEFAULT); sample-er per-person
+    ds kokhono fallback hisebe use hoy na."""
 
     def _capture_xml(self, fields):
         seen = {}
@@ -327,10 +330,13 @@ class TestBarcodeDs(unittest.TestCase):
             v2._pdf417_codes = orig
         return seen.get("xml", "")
 
-    def test_ds_absent_means_no_ds_element(self):
+    def test_ds_absent_means_replica_default(self):
+        # NID replica engine-er moto: form-e ds na thakle replica-r fixed
+        # default boshe (sobar jonno eki) — <ds> omit hoy na.
         xml = self._capture_xml(FAKE_FIELDS)
-        self.assertNotIn("<ds>", xml)
-        self.assertNotIn("</ds>", xml)
+        self.assertIn("<ds>%s</ds>" % v2.DS_DEFAULT, xml)
+        self.assertEqual(len(v2.DS_DEFAULT), 94)
+        self.assertRegex(v2.DS_DEFAULT, r"^[0-9a-f]{94}$")
         self.assertIn("<pin>10101010101010101</pin>", xml)
 
     def test_ds_present_is_used_verbatim(self):
