@@ -151,6 +151,40 @@ class TestV2Slots(unittest.TestCase):
         lay = v2._layout_address(long_addr, "ঠিকানা:", bn_font, v2.ADDRESS)
         self.assertLessEqual(len(lay["lines"]), 3)
 
+    def test_address_sample_split_six_seven_one(self):
+        # Sample card-er moto split: official renderer-er chowra
+        # metric-e wrap korle address 3 line-e 6+7+1 hoy (7.50pt).
+        # Dummy address — sample-er gathon (14 token, eki length /
+        # joti-chinho), sample-er asol man noy.
+        sample_like = ("বাসা/হোল্ডিং:, , কৃষ্ণকৃষ্ণকৃষ্ণ মুন্সিগঞ্জ শ্রী "
+                       "মুন্সিগঞ্জ গৌরী উপজেলা পৌরসভা বাড়ি - ১২৩৪, "
+                       "মহল্লা সিরাজগঞ্জ")
+        bn_font = os.path.join(ENGINE_DIR, "fonts", "SolaimanLipi.ttf")
+        lay = v2._layout_address(sample_like, "ঠিকানা:", bn_font, v2.ADDRESS)
+        self.assertEqual([len(ln.split()) for ln in lay["lines"]], [6, 7, 1])
+        self.assertEqual(lay["size"], 7.50)
+        self.assertFalse(lay["truncated"])
+
+    def test_address_other_sizes_stay_within_three_lines(self):
+        # Choto/boro address-eo ≤3 line, overflow/truncate hobe na;
+        # boro address choto font-e (shrink loop) dhore.
+        bn_font = os.path.join(ENGINE_DIR, "fonts", "SolaimanLipi.ttf")
+        short_addr = ("বাসা/হোল্ডিং: ১২, গ্রাম/রাস্তা: ঢাকা, "
+                      "ডাকঘর: ঢাকা - ১০০০, জেলা: ঢাকা")
+        lay = v2._layout_address(short_addr, "ঠিকানা:", bn_font, v2.ADDRESS)
+        self.assertLessEqual(len(lay["lines"]), 2)
+        self.assertEqual(lay["size"], 7.50)
+        self.assertFalse(lay["truncated"])
+        long_addr = ("বাসা/হোল্ডিং: ১২৩, গ্রাম/রাস্তা: অনেক লম্বা গ্রামের নাম "
+                     "যেটা অনেক শব্দ দিয়ে লেখা, ডাকঘর: অনেক লম্বা ডাকঘর, "
+                     "উপজেলা: অনেক লম্বা উপজেলা, জেলা: অনেক লম্বা জেলা, "
+                     "বিভাগ: অনেক লম্বা বিভাগ")
+        lay = v2._layout_address(long_addr, "ঠিকানা:", bn_font, v2.ADDRESS)
+        self.assertLessEqual(len(lay["lines"]), 3)
+        self.assertFalse(lay["truncated"])
+        self.assertGreaterEqual(lay["size"], v2.ADDRESS["min_size"])
+        self.assertTrue(lay["ok"])
+
 
 class TestExtractSample(unittest.TestCase):
     """Extract the sample input fixture — structure only, never the
