@@ -24,8 +24,9 @@ engine-e ar render hoy na.
 Fail-loudly rule (fix #3): photo / signature / barcode / DOB band
 replace korte na parle build FAIL kore (Bengali error, kono PDF na) —
 template-er sample-er chhobi/barcode kokhono customer-er card-e thake na.
-Barcode-er `ds` (digital signature) form data theke ashe; na thakle omit
-kora hoy — sample card-er ds kokhono fallback hisebe use hoy na (fix #4).
+Barcode-er `ds` (digital signature) NID replica engine-er moto: form data theke
+ashle setai, na thakle replica-r fixed default (build_output.py:569) — sobar
+jonno eki man; sample card-er per-person ds kokhono fallback hisebe use hoy na.
 """
 import os
 import re
@@ -807,6 +808,16 @@ def _replace_photos(page, photo_path, holder_sign_path):
             raise RuntimeError("স্বাক্ষরের জায়গা খালি করা যায়নি: %s" % e)
 
 
+# `ds` (digital signature) — NID replica engine-er moto fixed default.
+# Replica build_output.py:569: `ds = fields.get("ds") or "<94-char hex>"`
+# (comment: "from template / standard") — kono signing/key nei, kono
+# pipeline source fields["ds"] set kore na; replica template-er nijer
+# barcode-eo exactly ei man-ta ache — sobar jonno eki. Form-e ds na
+# thakle etai boshe; sample card-er per-person ds kokhono fallback noy.
+DS_DEFAULT = ("302d02145a5dbb1a4597a438fe6ac697453a57fa4b444be402150081b9f4"
+              "3f1813602bc2369fc8798930714e0f3196")
+
+
 def _make_barcode(fields):
     """PDF417 barcode bitmap banay, temp_renders/v2_barcode.png-e save kore.
 
@@ -814,8 +825,9 @@ def _make_barcode(fields):
     encode fail korle RuntimeError (Bengali) — template-er sample
     barcode kokhono customer-er card-e thake na.
 
-    `ds` (digital signature) form data theke ashle tobei XML-e jay;
-    na thakle <ds> element-ta omit kora hoy (fix #4) — sample card-er
+    `ds` (digital signature) NID replica engine-er moto: form data theke
+    ashle setai, na thakle DS_DEFAULT (replica-r fixed default,
+    build_output.py:569) — sobar jonno eki; sample card-er per-person
     ds hex kokhono fallback hisebe use hoy na.
     """
     try:
@@ -830,8 +842,8 @@ def _make_barcode(fields):
     if not (pin and nm and dob):
         raise RuntimeError(
             "বারকোডের জন্য পিন, নাম ও জন্মতারিখ লাগে — তথ্য অসম্পূর্ণ।")
-    ds = (fields.get("ds") or "").strip()
-    ds_xml = "<ds>%s</ds>" % ds if ds else ""
+    ds = (fields.get("ds") or "").strip() or DS_DEFAULT
+    ds_xml = "<ds>%s</ds>" % ds
     # Sample card-er format: name-e space-er bodole '+', DOB ISO, TYPE faka.
     # F-er man "Right Index" — user-provided barcode XML + replica
     # build_output.py, duitotei ei spelling; df16223-er "Right INDEX"
