@@ -234,6 +234,8 @@
     font-family: inherit;
   }
   #fieldForm textarea { min-height: 70px; }
+  #fieldForm [aria-invalid="true"] { border-color: #b91c1c; }
+  #reportFieldErrors { color: #b91c1c; margin-top: 12px; }
   #fieldForm .addr-head {
     grid-column: 1 / -1;
     font-size: 15px;
@@ -251,6 +253,8 @@
     background: #ffffff;
     box-shadow: 0 4px 12px rgba(0,0,0,0.05);
   }
+  #reportFrame[hidden] { display: none; }
+  #w3 { scroll-margin-top: 12px; }
 
   /* Two download options, side by side (NID-engine style). */
   .opt-grid {
@@ -346,7 +350,7 @@
         <details class="nid-help"><summary>কোন PDF দিতে হবে?</summary><p>NID ফর্মের PDF দিন — অথবা পুরোনো v1/v2 সার্ভার কপি রিপোর্ট। ফাইল থেকে পাওয়া তথ্য পরের ধাপে দেখে সংশোধন করতে পারবেন।</p></details>
         <div class="price-line">
           <span>ফি ৳<span id="priceVal">–</span> · এক চার্জে দুটো PDF (v1 + v2)</span>
-          <span>ব্যর্থ হলে চার্জ: ৳০</span>
+          <span>PDF থেকে তথ্য বের করতে চার্জ নেই</span>
         </div>
         <button class="btn btn-primary" id="b1" onclick="doExtract()" style="width:100%;">তথ্য বের করুন →</button>
 
@@ -362,6 +366,7 @@
         <p class="note" style="text-align:left;">✏️ সব তথ্য এডিট করা যাবে — নিচে সাজানো আছে, ভুল থাকলে ঠিক করে তারপর তৈরি করুন।</p>
         <div class="imgprev" id="imgPrev"></div>
         <div id="editFields"></div>
+        <p id="reportFieldErrors" role="alert" hidden></p>
         <div id="fieldForm"></div>
         <div style="height:18px;"></div>
         <button class="btn btn-primary" id="b3" onclick="doCreate()" style="width:100%;">নিশ্চিত করে তৈরি করুন →</button>
@@ -396,7 +401,7 @@
           <p class="note" style="text-align:left;">একই Create-এ দুটো ফাইলই পাবেন — একটি ডাউনলোড করলে অন্যটির জন্য আর চার্জ কাটবে না। ফাইল দুটো ইতিহাস (History) থেকেও আবার ডাউনলোড করতে পারবেন।</p>
         </div>
         <div style="height:16px;"></div>
-        <iframe id="reportFrame" title="Server copy report preview"></iframe>
+        <iframe id="reportFrame" title="Server copy report preview" hidden></iframe>
         <div style="height:16px;"></div>
         <div class="row2">
           <button class="btn btn-secondary" onclick="go(2)">← তথ্য পরিবর্তন</button>
@@ -429,14 +434,21 @@ const BN = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
 const bn = (v) => String(v == null ? '' : v).replace(/[0-9]/g, (d) => BN[Number(d)]);
 // PHOTO_STATE: null = untouched (keep the extracted photo),
 // {dataUrl} = user-uploaded replacement, 'removed' = no photo.
-let S={jobId:null,fields:{},photo:null,photoTouched:false,idem:null,downloaded:{},pdfUrl:null};
+let S={jobId:null,fields:{},photo:null,photoTouched:false,idem:null,confirmed:null,downloaded:{}};
 // Core-data gate (backend adapter-এর নিয়মের mirror): রিপোর্টের জন্য
 // নাম, আইডি নম্বর ও জন্মতারিখ — তিনটাই লাগে। Create-এর আগেই খালি
 // ফর্ম আটকায়, যাতে চার্জের ধাপ পর্যন্ত না যায়।
 const CORE_NAME_KEYS=['Name(Bangla)','Name(English)'],CORE_ID_KEYS=['National ID','Pin'],CORE_DOB_KEYS=['Date of Birth'];
 const NO_CORE_DATA_MSG='তথ্য অসম্পূর্ণ — নাম, জাতীয় পরিচয়পত্র নম্বর ও জন্মতারিখ ছাড়া সার্ভার কপি রিপোর্ট তৈরি করা যাবে না। সঠিক NID ফর্ম PDF আপলোড করুন। কোনো টাকা কাটা হয়নি।';
-function hasCoreData(f){const t=v=>v!=null&&String(v).trim().length>0;return f&&typeof f==='object'&&CORE_NAME_KEYS.some(k=>t(f[k]))&&CORE_ID_KEYS.some(k=>t(f[k]))&&CORE_DOB_KEYS.some(k=>t(f[k]));}
-function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function missingFieldGroups(fields){
+  const groups = [
+    [CORE_NAME_KEYS, 'বাংলা বা ইংরেজি নাম দিন'],
+    [CORE_ID_KEYS, 'জাতীয় পরিচয়পত্র বা পিন নম্বর দিন'],
+    [CORE_DOB_KEYS, 'জন্ম তারিখ দিন'],
+  ];
+  return groups.filter(([keys]) => !keys.some(key => String(fields?.[key] ?? '').trim()));
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function scrollBoxIntoView(){
   const box = document.getElementById('err').classList.contains('on') ? document.getElementById('err') : document.getElementById('ok');
   if (box && box.classList.contains('on')) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -446,13 +458,14 @@ function clearResultMessage(){
   document.getElementById('ok').classList.remove('on');
 }
 function showErr(m){ showResultMessage('err', m); }
-function showOk(m){ showResultMessage('ok', m); }
-function showResultMessage(id, message){
+function showOk(m, target){ showResultMessage('ok', m, target); }
+function showResultMessage(id, message, target){
   clearResultMessage();
   const box = document.getElementById(id);
   box.textContent = message;
   box.classList.add('on');
-  scrollBoxIntoView();
+  if (target) target.scrollIntoView({ block: 'start' });
+  else scrollBoxIntoView();
 }
 function busy(id,on,txt){
   if(on) clearResultMessage();
@@ -497,10 +510,14 @@ const ADDR_PARTS = [
   ['mouza', 'মৌজা/মহল্লা'],
   ['additional_mouza', 'অতিরিক্ত মৌজা/মহল্লা'],
   ['ward_porishod', 'ওয়ার্ড নং'],
+  ['union_ward', 'ইউনিয়ন/ওয়ার্ড'],
   ['post_office', 'ডাকঘর'],
   ['postal_code', 'পোস্ট কোড'],
   ['thana', 'থানা'],
   ['upozila', 'উপজেলা'],
+  ['city_corp', 'শহর'],
+  ['city_corp2', 'সিটি কর্পোরেশন'],
+  ['city_corp3', 'পৌরসভা'],
   ['district', 'জেলা'],
   ['division', 'বিভাগ'],
 ];
@@ -517,7 +534,7 @@ const ADDR_EMPTY = new Set(['', '-', '--', '—', '–', 'n/a', 'na', 'none', 'n
 function joinAddressParts(addr){
   if (typeof addr === 'string') return addr || '';
   if (!addr || typeof addr !== 'object') return '';
-  return ADDR_PARTS.map((part) => String(addr[part[0]] || '').trim())
+  return ADDR_PARTS.map((part) => String(addr[part[0]] ?? '').trim())
     .filter((v) => v && !ADDR_EMPTY.has(v.toLowerCase()))
     .join(', ');
 }
@@ -579,7 +596,7 @@ function renderFieldsUI(){
 
   STANDARD_FIELDS.forEach((sf, i) => {
     renderedKeys.add(sf.key);
-    const val = fields[sf.key] || '';
+    const val = fields[sf.key] ?? '';
     const d = document.createElement('div');
     d.className = 'field';
     const id = 'std_fld_' + i;
@@ -587,17 +604,16 @@ function renderFieldsUI(){
     ff.appendChild(d);
   });
 
-  // Addresses are ONE single-line input each — the parts the extract
-  // found, joined in ADDR_PARTS order (the order the report builders
-  // use for their one-liners), comma-separated. The customer edits
-  // the line as a whole; collectFields sends it back as a string and
-  // the builders print it verbatim.
+  // Keep one editable field per address. Wrapping keeps the full
+  // extracted value readable on narrow screens.
   ADDR_SECTIONS.forEach((sec) => {
     renderedKeys.add(sec.key);
     const d = document.createElement('div');
-    d.className = 'field';
+    d.className = 'field full';
     const id = 'addr_' + sec.key.replace(/\s/g, '_');
-    d.innerHTML = fieldInput(id, sec.label, joinAddressParts(fields[sec.key]), 'data-k="' + esc(sec.key) + '" placeholder="' + esc(sec.label) + '"');
+    d.innerHTML = '<label for="' + id + '">' + esc(sec.label) + '</label>' +
+      '<textarea rows="2" id="' + id + '" data-k="' + esc(sec.key) + '">' +
+      esc(joinAddressParts(fields[sec.key])) + '</textarea>';
     ff.appendChild(d);
   });
 
@@ -613,12 +629,37 @@ function renderFieldsUI(){
 }
 
 function collectFields(){
-  // Every review input — including the two single-line addresses —
-  // is collected by its data-k key. A cleared field is sent empty,
-  // same as any other field.
   const out = {};
-  document.querySelectorAll('#fieldForm input[data-k]').forEach(inp => { out[inp.dataset.k] = inp.value; });
+  document.querySelectorAll('#fieldForm [data-k]').forEach(inp => { out[inp.dataset.k] = inp.value; });
   return out;
+}
+
+function showFieldErrors(groups, focus){
+  const error = document.getElementById('reportFieldErrors');
+  error.hidden = groups.length === 0;
+  error.textContent = groups.map(([, message]) => message).join('। ');
+  const missing = new Set(groups.flatMap(([keys]) => keys));
+  let first;
+  document.querySelectorAll('#fieldForm [data-k]').forEach(input => {
+    if (missing.has(input.dataset.k)) {
+      input.setAttribute('aria-invalid', 'true');
+      input.setAttribute('aria-describedby', 'reportFieldErrors');
+      first ||= input;
+    } else {
+      input.removeAttribute('aria-invalid');
+      input.removeAttribute('aria-describedby');
+    }
+  });
+  if (focus) first?.focus();
+}
+document.getElementById('fieldForm').addEventListener('input', () => {
+  if (!document.getElementById('reportFieldErrors').hidden) showFieldErrors(missingFieldGroups(collectFields()));
+});
+
+function clearReportPreview(){
+  const frame = document.getElementById('reportFrame');
+  frame.hidden = true;
+  frame.removeAttribute('src');
 }
 
 async function doExtract(){
@@ -638,13 +679,16 @@ async function doExtract(){
     S.photo = null;
     S.photoTouched = false;
     S.idem = null;
+    S.confirmed = null;
     S.downloaded = {};
+    clearReportPreview();
     (j.images || []).forEach(im => {
       if (/photo/i.test(im.name)) S.photo = { name: 'photo.png', dataUrl: im.dataUrl };
     });
 
     renderPhotoUI();
     renderFieldsUI();
+    showFieldErrors([]);
     go(2);
     showOk('তথ্য পাওয়া গেছে ✓ ভুল থাকলে ঠিক করে দিন বা ছবি যুক্ত করুন');
   }catch(e){showErr(e.message||'তথ্য বের করা যায়নি। আবার চেষ্টা করুন।');}
@@ -680,19 +724,30 @@ function newIdem(){
 }
 
 async function doCreate(){
-  // Core-data gate (frontend): খালি/অসম্পূর্ণ ফর্ম Create-এ পাঠিও না —
-  // backend-ও একই নিয়মে আটকাবে, এটা শুধু আগেভাগে জানায়।
-  if(!hasCoreData(collectFields())){showErr(NO_CORE_DATA_MSG);return;}
+  const step = document.getElementById('w2');
+  if (step.inert || !S.jobId) return;
+  const fields = collectFields();
+  const missing = missingFieldGroups(fields);
+  if (missing.length) {
+    clearResultMessage();
+    showFieldErrors(missing, true);
+    return;
+  }
   if(!S.idem) S.idem = newIdem();
+  const confirmed = {
+    jobId: S.jobId, fields, idem: S.idem,
+    photo: S.photoTouched ? (S.photo?.dataUrl ?? null) : undefined,
+  };
+  step.inert = true;
   busy('b3',true,'তৈরি করা হচ্ছে…');
   try{
     const r=await ABC.api(API + '/create',{
       method:'POST',
       timeout:90000,
       body:{
-        jobId:S.jobId,
-        fields:collectFields(),
-        idempotency_key:S.idem
+        jobId:confirmed.jobId,
+        fields:confirmed.fields,
+        idempotency_key:confirmed.idem
       }
     });
     const j=await r.json().catch(()=>({}));
@@ -705,12 +760,17 @@ async function doCreate(){
       }
       throw new Error(j.message || (j.error==='JOB_NOT_FOUND'?'সেশন শেষ — আবার আপলোড করুন।':'তৈরি করা যায়নি।'));
     }
-    S.filenames = j.filenames || [];
+    if (S.confirmed?.idem !== confirmed.idem) S.downloaded = {};
+    S.confirmed = confirmed;
+    clearReportPreview();
     go(3);
-    showOk('চার্জ সম্পন্ন ✓ এবার v1 বা v2 — যেটি লাগবে সেটি ডাউনলোড করুন।');
+    showOk('চার্জ সম্পন্ন ✓ এবার v1 বা v2 — যেটি লাগবে সেটি ডাউনলোড করুন।', document.getElementById('w3'));
     updateBalance();
   }catch(e){showErr(e.message||'তৈরি করা যায়নি।');}
-  busy('b3',false);
+  finally {
+    step.inert = false;
+    busy('b3',false);
+  }
 }
 
 /* Stored delivery copy (engine-jobs, like passport): after each PDF
@@ -733,21 +793,18 @@ function reportEngineJob(engineId, refNo, name, blob, fname, idem){
 
 async function download(kind){
   if(kind !== 'v1' && kind !== 'v2') return;
-  if(!S.idem){showErr('আগে তৈরি করুন — তারপর ডাউনলোড হবে।');return;}
+  const confirmed = S.confirmed;
+  if(!confirmed){showErr('আগে তৈরি করুন — তারপর ডাউনলোড হবে।');return;}
   const btnId = kind === 'v1' ? 'dlV1Btn' : 'dlV2Btn';
+  if (document.getElementById(btnId).disabled) return;
   busy(btnId,true,'তৈরি হচ্ছে…');
   try{
-    const fields = collectFields();
-    if(!hasCoreData(fields)){showErr(NO_CORE_DATA_MSG);return;}
-    // Photo override: untouched = keep extracted photo (absent);
-    // changed = new data URL; removed = null (no photo).
-    let photo;
-    if (S.photoTouched) photo = S.photo ? S.photo.dataUrl : null;
-    const qs = 'kind=' + kind + '&idempotency_key=' + encodeURIComponent(S.idem);
+    const { jobId, fields, photo, idem } = confirmed;
+    const qs = 'kind=' + kind + '&idempotency_key=' + encodeURIComponent(idem);
     const r=await ABC.api(API + '/pdf?'+qs,{
       method:'POST',
       timeout:120000,
-      body:{ jobId:S.jobId, fields:fields, photo:photo }
+      body:{ jobId, fields, photo }
     });
     if(!r.ok){
       const j=await r.json().catch(()=>({}));
@@ -765,6 +822,7 @@ async function download(kind){
     const ct = r.headers.get('Content-Type') || '';
     if(!ct.includes('application/pdf')) throw new Error('PDF পাওয়া যায়নি — আবার চেষ্টা করুন।');
     const blob = await r.blob();
+    if (S.confirmed !== confirmed) return;
     const disposition = r.headers.get('Content-Disposition') || '';
     const m = /filename="([^"]+)"/i.exec(disposition);
     const fname = m ? m[1] : ('report-' + kind + '.pdf');
@@ -783,15 +841,17 @@ async function download(kind){
       showOk('✅ সার্ভার কপি ' + kind + ' তৈরি হয়েছে এবং ডাউনলোড শুরু হয়েছে। এটি ইতিহাস (History) থেকেও আবার ডাউনলোড করা যাবে।');
     }
     setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
-    document.getElementById('reportFrame').src = url + '#toolbar=0&navpanes=0';
+    const frame = document.getElementById('reportFrame');
+    frame.src = url + '#toolbar=0&navpanes=0';
+    frame.hidden = false;
     const nid = String((fields['National ID'] || '')).trim();
     const name = String((fields['Name(Bangla)'] || fields['Name(English)'] || '')).trim();
-    reportEngineJob('nid-server-report', nid, name, blob, fname, S.idem + '-' + kind);
+    reportEngineJob('nid-server-report', nid, name, blob, fname, idem + '-' + kind);
     S.downloaded[kind] = true;
     // Both files downloaded -> the next Create is a fresh paid one.
     if (S.downloaded.v1 && S.downloaded.v2) S.idem = null;
-  }catch(e){showErr(e.message||'PDF তৈরি ব্যর্থ।');}
-  busy(btnId,false);
+  }catch(e){if (S.confirmed === confirmed) showErr(e.message||'PDF তৈরি ব্যর্থ।');}
+  finally { busy(btnId,false); }
 }
 
 function setupDropZone(){
@@ -801,6 +861,11 @@ function setupDropZone(){
   const updateTxt = (file) => {
     const info = dz.querySelector('div:nth-child(3)');
     if(info && file) info.innerHTML = '✅ নির্বাচিত: <b>' + esc(file.name) + '</b> (' + (file.size/(1024*1024)).toFixed(2) + ' MB)';
+    const action = document.getElementById('b1');
+    const nav = document.querySelector('.m-tabbar')?.getBoundingClientRect();
+    if (action && action.getBoundingClientRect().bottom > (nav?.height ? nav.top : innerHeight)) {
+      action.scrollIntoView({ block: 'center' });
+    }
   };
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = 'var(--primary-600)'; dz.style.background = '#dbeafe'; });
   dz.addEventListener('dragleave', e => { e.preventDefault(); dz.style.borderColor = '#93c5fd'; dz.style.background = '#eff6ff'; });

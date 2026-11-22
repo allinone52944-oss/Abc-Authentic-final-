@@ -38,8 +38,8 @@ describe('nid-server-report.html', () => {
     expect(html).toContain('এক চার্জে দুটো ফাইল');
     expect(html).toContain('এক চার্জে দুটো PDF');
   });
-  test('trust lines: no charge on failure', () => {
-    expect(html).toContain('ব্যর্থ হলে চার্জ: ৳০');
+  test('the fee disclosure distinguishes extraction from confirmation', () => {
+    expect(html).toContain('PDF থেকে তথ্য বের করতে চার্জ নেই');
     expect(html).toContain('কোনো টাকা কাটা হয়নি');
   });
   test('PDF arrives via authenticated fetch -> blob (never a plain link)', () => {
@@ -66,9 +66,9 @@ describe('nid-server-report.html', () => {
   test('download sends photo override + reports both files to engine-jobs', () => {
     expect(html).toContain('INVALID_PHOTO');
     expect(html).toContain("reportEngineJob('nid-server-report'");
-    expect(html).toContain("S.idem + '-' + kind");
+    expect(html).toContain("idem + '-' + kind");
   });
-  test('review renders each address as ONE single-line input (present + permanent)', () => {
+  test('review renders each address as one wrapping field (present + permanent)', () => {
     expect(html).toContain('Present Address');
     expect(html).toContain('Permanent Address');
     expect(html).toContain('বর্তমান ঠিকানা');
@@ -78,6 +78,7 @@ describe('nid-server-report.html', () => {
     expect(html).not.toContain('ADDR_CORE');
     expect(html).toContain('function joinAddressParts');
     expect(html).toContain('joinAddressParts(fields[sec.key])');
+    expect(html).toContain('<textarea rows="2" id="');
   });
   test('joinAddressParts: ADDR_PARTS order, empties + placeholders skipped, strings pass through', () => {
     // Execute the page's own join against its own ADDR_PARTS (the
@@ -91,10 +92,21 @@ describe('nid-server-report.html', () => {
     const full = { holding: '১২', village: 'পরীক্ষা গ্রাম', additional_village: '', mouza: 'X', additional_mouza: '', ward_porishod: '৩', post_office: 'পরীক্ষা ডাকঘর', postal_code: '১২০০', thana: '', upozila: 'পরীক্ষা উপজেলা', district: 'ঢাকা', division: 'ঢাকা' };
     expect(join(full)).toBe('১২, পরীক্ষা গ্রাম, X, ৩, পরীক্ষা ডাকঘর, ১২০০, পরীক্ষা উপজেলা, ঢাকা, ঢাকা');
     expect(join({ holding: '-', village: 'V', district: 'N/A' })).toBe('V');
+    expect(join({ union_ward: 'Ward 4', city_corp: 'City', city_corp2: 'Corporation', city_corp3: 'Municipality', district: 'District' }))
+      .toBe('Ward 4, City, Corporation, Municipality, District');
     expect(join('already, one line')).toBe('already, one line');
     expect(join({})).toBe('');
     expect(join(null)).toBe('');
     expect(join(undefined)).toBe('');
+  });
+
+  test('review requires one name, one ID and a birth date', () => {
+    const start = html.indexOf('const CORE_NAME_KEYS=');
+    const end = html.indexOf('function esc(', start);
+    const missing = new Function(html.slice(start, end) + ';return missingFieldGroups;')();
+    expect(missing({ 'Name(English)': 'Sample', Pin: '001234', 'Date of Birth': '01 Jan 2000' })).toEqual([]);
+    expect(missing({ 'Name(Bangla)': '   ', 'Date of Birth': '01 Jan 2000' }).map(([keys]) => keys))
+      .toEqual([['Name(Bangla)', 'Name(English)'], ['National ID', 'Pin']]);
   });
 });
 
