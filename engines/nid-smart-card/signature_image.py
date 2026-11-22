@@ -11,12 +11,15 @@ def signature_ink(image):
     # Estimate contrast on the image as it appears on paper.
     if opacity.getextrema()[0] < 255:
         paper = Image.new("RGBA", rgba.size, "white")
-        gray = Image.alpha_composite(paper, rgba).convert("L")
+        visible = Image.alpha_composite(paper, rgba).convert("RGB")
     else:
-        gray = rgba.convert("L")
-    radius = max(8, min(gray.size) // 10)
-    background = gray.filter(ImageFilter.GaussianBlur(radius))
-    contrast = ImageChops.subtract(background, gray)
+        visible = rgba.convert("RGB")
+    radius = max(8, min(visible.size) // 10)
+    background = visible.filter(ImageFilter.GaussianBlur(radius))
+    # Colored thumb impressions can have almost the same luminance as
+    # the paper. Measure the strongest drop across the color channels.
+    red, green, blue = ImageChops.subtract(background, visible).split()
+    contrast = ImageChops.lighter(ImageChops.lighter(red, green), blue)
     alpha = ImageChops.darker(
         contrast.point(lambda d: max(0, min(255, (d - 20) * 255 // 40))),
         opacity,
@@ -26,7 +29,7 @@ def signature_ink(image):
         # threshold. A few specks in a scan are not a signature.
         evidence = contrast.point(lambda d: 255 if d >= 7 else 0)
         evidence = evidence.filter(ImageFilter.MedianFilter(3))
-        if evidence.histogram()[255] < max(8, gray.width * gray.height // 4000):
+        if evidence.histogram()[255] < max(8, visible.width * visible.height // 4000):
             return None
         support = evidence.filter(ImageFilter.MaxFilter(5))
         faint = contrast.point(lambda d: max(0, min(255, (d - 5) * 255 // 12)))

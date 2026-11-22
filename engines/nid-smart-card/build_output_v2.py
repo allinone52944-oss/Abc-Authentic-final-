@@ -685,7 +685,7 @@ def _clean_signature(path):
         raise RuntimeError("ধারকের স্বাক্ষর পড়া যায়নি: %s" % e)
     if out is None:
         raise RuntimeError(
-            "ধারকের স্বাক্ষরে স্পষ্ট দাগ পাওয়া যায়নি। "
+            "ধারকের স্বাক্ষর বা টিপসইয়ে স্পষ্ট দাগ পাওয়া যায়নি। "
             "অন্য ছবি দিন অথবা ফর্ম থেকে স্বাক্ষরটি সরিয়ে আবার চেষ্টা করুন।")
     try:
         tmp = bo._w("temp_renders", "v2_holder_sign_clean.png")

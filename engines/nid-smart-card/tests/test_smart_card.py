@@ -191,12 +191,30 @@ class TestExtractSample(unittest.TestCase):
         self.assertTrue(str(data.get("Date of Birth", "") or "").strip())
         self.assertIn("photo", images)
 
-    def test_extract_keeps_only_a_signature_with_visible_ink(self):
+    def _extract_form_images(self, key, placed_images):
         import pymupdf
-        from PIL import Image, ImageDraw
         photo = os.path.join(self.tmp, "photo.png")
         _fake_photo(photo)
+        form = os.path.join(self.tmp, key + ".pdf")
+        with pymupdf.open() as doc:
+            page = doc.new_page()
+            for index, text in enumerate(("Sample form", "Field 1", "Field 2", "Field 3", "Field 4")):
+                page.insert_text((30, 40 + index * 18), text)
+            page.insert_image(pymupdf.Rect(420, 40, 500, 140), filename=photo)
+            for rect, file in placed_images:
+                page.insert_image(pymupdf.Rect(*rect), filename=file)
+            doc.save(form)
+        work = os.path.join(self.tmp, "work-" + key)
+        try:
+            _data, images = ei.extract(form, work)
+        finally:
+            if ei._DOC is not None:
+                ei._DOC.close()
+                ei._DOC = None
+        return images
 
+    def test_extract_keeps_only_a_signature_with_visible_ink(self):
+        from PIL import Image, ImageDraw
         for has_ink in (False, True):
             with self.subTest(has_ink=has_ink):
                 signature = os.path.join(self.tmp, "signature.png")
@@ -205,21 +223,33 @@ class TestExtractSample(unittest.TestCase):
                     ImageDraw.Draw(scan).line([(10, 35), (50, 12), (85, 47), (145, 21)],
                                               fill=(0, 0, 0, 210), width=4)
                 scan.save(signature)
-                form = os.path.join(self.tmp, "fixture-" + str(has_ink) + ".pdf")
-                with pymupdf.open() as doc:
-                    page = doc.new_page()
-                    for index, text in enumerate(("Sample form", "Field 1", "Field 2", "Field 3", "Field 4")):
-                        page.insert_text((30, 40 + index * 18), text)
-                    page.insert_image(pymupdf.Rect(420, 40, 500, 140), filename=photo)
-                    page.insert_image(pymupdf.Rect(420, 165, 500, 195), filename=signature)
-                    doc.save(form)
-                work = os.path.join(self.tmp, "work-" + str(has_ink))
-                _data, images = ei.extract(form, work)
-                ei._DOC.close()
-                ei._DOC = None
+                key = "signature-" + str(has_ink)
+                images = self._extract_form_images(key, [((420, 165, 500, 195), signature)])
                 self.assertIn("photo", images)
                 self.assertEqual("sign" in images, has_ink)
-                self.assertEqual(os.path.exists(os.path.join(work, "images", "sign.png")), has_ink)
+                self.assertEqual(os.path.exists(os.path.join(self.tmp, "work-" + key, "images", "sign.png")), has_ink)
+
+    def test_extract_compact_mark_from_holder_area(self):
+        from PIL import Image, ImageDraw
+        compact = os.path.join(self.tmp, "compact.png")
+        image = Image.new("RGB", (22, 24), "white")
+        ImageDraw.Draw(image).rectangle((6, 4, 16, 20), fill=(90, 50, 120))
+        image.save(compact)
+        blank = os.path.join(self.tmp, "blank.png")
+        Image.new("RGB", (160, 60), "white").save(blank)
+        for key, images in (
+            ("compact", [((447, 168, 471, 192), compact)]),
+            ("overlay", [((420, 165, 500, 195), blank), ((447, 168, 471, 192), compact)]),
+        ):
+            with self.subTest(key=key):
+                extracted = self._extract_form_images(key, images)
+                self.assertIn("photo", extracted)
+                with Image.open(extracted["sign"]) as sign:
+                    self.assertEqual(sign.size, (22, 24))
+
+        outside = self._extract_form_images("outside", [((40, 168, 64, 192), compact)])
+        self.assertIn("photo", outside)
+        self.assertNotIn("sign", outside)
 
     def test_template_layout_is_v2(self):
         # extract_template.py writes template.json in the job work dir.
@@ -533,6 +563,7 @@ class TestHolderSignature(unittest.TestCase):
         samples = (
             ((0, 0, 0, 0), (0, 0, 0, 215)),
             ((230, 230, 230, 255), (216, 216, 216, 255)),
+            ((234, 234, 234, 255), (245, 224, 245, 255)),
         )
         for background, ink in samples:
             with self.subTest(background=background):
@@ -543,7 +574,7 @@ class TestHolderSignature(unittest.TestCase):
                 cleaned = v2._clean_signature(self.sign_path)
                 fitted = v2._fit_holder_signature(cleaned)
                 self.assertIsNotNone(fitted.getchannel("A").getbbox())
-                self.assertGreater(fitted.getchannel("A").getextrema()[1], 100)
+                self.assertGreater(fitted.getchannel("A").getextrema()[1], 80)
 
     def test_blank_images_still_require_a_valid_signature_or_removal(self):
         from PIL import Image, ImageDraw

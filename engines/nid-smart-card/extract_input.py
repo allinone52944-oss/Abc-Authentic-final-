@@ -1129,6 +1129,30 @@ def assign_photo_sign(candidates):
     return {}
 
 
+def _compact_holder_mark(assigned, small_images):
+    """Find a single small print in the holder's signature area."""
+    photo = assigned.get("photo")
+    if not photo or not photo["rect"]:
+        return None
+    photo_box = pymupdf.Rect(photo["rect"])
+    signature = assigned.get("sign")
+    if signature:
+        if signature["pno"] != photo["pno"] or not signature["rect"]:
+            return None
+        area = pymupdf.Rect(signature["rect"])
+        if area.y0 < photo_box.y1:
+            return None
+    else:
+        area = pymupdf.Rect(photo_box.x0, photo_box.y1,
+                            photo_box.x1, photo_box.y1 + photo_box.height)
+    marks = [
+        image for image in small_images
+        if image["pno"] == photo["pno"] and image["rect"]
+        and 0.55 <= image["r"] <= 1.7 and area.contains(pymupdf.Rect(image["rect"]))
+    ]
+    return marks[0] if len(marks) == 1 else None
+
+
 def extract(pdf_path="input.pdf", work_dir="work"):
     """Extract form fields + photo/signature. Returns (data_dict, images_dict)."""
     if not os.path.exists(pdf_path):
@@ -1253,12 +1277,13 @@ def extract(pdf_path="input.pdf", work_dir="work"):
                 data[c_lbl] = v
 
     candidates = []
+    small_images = []
     for pno, page in enumerate(doc):
         for i, img in enumerate(page.get_images(full=True)):
             xref, smask = img[0], img[1]
             w_px = img[2] if len(img) > 2 else 0
             h_px = img[3] if len(img) > 3 else 0
-            if w_px < 25 or h_px < 25:
+            if w_px < 12 or h_px < 12:
                 continue
             r = w_px / max(1, h_px)
             if r > 6.0 or r < 0.2:
@@ -1273,16 +1298,28 @@ def extract(pdf_path="input.pdf", work_dir="work"):
                     rect = (rc.x0, rc.y0, rc.x1, rc.y1)
             except Exception:
                 rect = None
-            candidates.append({
+            candidate = {
                 "page": page, "xref": xref, "smask": smask,
                 "w": w_px, "h": h_px, "r": r,
                 "area": w_px * h_px, "pno": pno, "rect": rect,
-            })
+            }
+            # Keep small images out of the standard photo/signature
+            # selection. Only consider them inside the holder mark area.
+            if w_px < 25 or h_px < 25:
+                small_images.append(candidate)
+            else:
+                candidates.append(candidate)
 
     assigned = assign_photo_sign(candidates)
+    image_roles = list(assigned.items())
+    compact_mark = _compact_holder_mark(assigned, small_images)
+    if compact_mark:
+        image_roles.append(("sign", compact_mark))
 
     images = {}
-    for kind, c in assigned.items():
+    for kind, c in image_roles:
+        if kind in images or (c is compact_mark and "photo" not in images):
+            continue
         try:
             pix = pymupdf.Pixmap(doc, c["xref"])
             smask = c["smask"]
