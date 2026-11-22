@@ -39,7 +39,7 @@
     return page + (page.includes('?') ? '&' : '?') + 'service=' + encodeURIComponent(service.id) + '&flow=directory';
   }
 
-  window.ServiceNavigation = { destination };
+  window.ServiceNavigation = { destination, isManual };
 
   function enhance() {
     document.querySelectorAll('.svc-card[onclick],.cat-card[onclick],.svc2[onclick],.back-nav[onclick]').forEach(function (node) {

@@ -102,39 +102,6 @@
     line-height: 1.55;
     overflow-wrap: anywhere;
   }
-  .filter-tabs {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    padding-bottom: 8px;
-    margin-bottom: 20px;
-    scrollbar-width: none;
-  }
-  .filter-tabs::-webkit-scrollbar { display: none; }
-  .ftab {
-    padding: 8px 16px;
-    border-radius: 999px;
-    font-size: 13px;
-    font-weight: 600;
-    white-space: nowrap;
-    background: #ffffff;
-    border: 1px solid var(--border-light);
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all 0.18s ease;
-    user-select: none;
-  }
-  .ftab:hover {
-    background: #f8fafc;
-    border-color: #cbd5e1;
-    color: var(--text-main);
-  }
-  .ftab.on {
-    background: #1e40af;
-    color: #ffffff;
-    border-color: #1e40af;
-    box-shadow: 0 4px 12px rgba(30, 64, 175, 0.25);
-  }
   .back-nav {
     display: inline-flex;
     align-items: center;
@@ -163,7 +130,7 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
-<link rel="stylesheet" href="/css/service-journey.css?v=20261122-4">
+<link rel="stylesheet" href="/css/service-journey.css?v=20261122-5">
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261122-3">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
 </head>
@@ -179,11 +146,21 @@
     </div>
     <nav>
       <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span> ড্যাশবোর্ড</div>
-      <details class="service-disclosure">
-        <summary class="side-link"><span class="ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></span> সকল সেবা</summary>
-        <a class="side-link side-sub" href="/services.html?type=auto" data-directory-type="auto">স্বয়ংক্রিয় সেবা</a>
-        <a class="side-link side-sub" href="/services.html?type=manual" data-directory-type="manual">অর্ডার সার্ভিস</a>
-      </details>
+      <div id="desktopServiceMenu">
+        <details id="serviceMenu" class="service-disclosure service-menu" open>
+          <summary class="side-link on"><span class="ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></span> সকল সেবা</summary>
+          <div class="service-menu-types" role="group" aria-label="সেবার ধরন">
+            <button type="button" class="service-menu-type" data-directory-type="auto" aria-expanded="false" aria-controls="autoServiceCategories" disabled>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="m13 2-9 12h7l-1 8 10-12h-7z"/></svg>স্বয়ংক্রিয় সেবা
+            </button>
+            <ul id="autoServiceCategories" class="service-menu-categories" data-directory-categories="auto" hidden></ul>
+            <button type="button" class="service-menu-type" data-directory-type="manual" aria-expanded="false" aria-controls="manualServiceCategories" disabled>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="16" height="18" x="4" y="4" rx="2"/><path d="M9 4V2h6v2m-7 6h8m-8 4h8"/></svg>অর্ডার সার্ভিস
+            </button>
+            <ul id="manualServiceCategories" class="service-menu-categories" data-directory-categories="manual" hidden></ul>
+          </div>
+        </details>
+      </div>
       <div class="side-link" onclick="location.href='/orders.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span> অর্ডার</div>
       <div class="side-link" onclick="location.href='/history.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></span> ইতিহাস</div>
       <div class="side-link" onclick="location.href='/wallet.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg></span> ওয়ালেট</div>
@@ -194,8 +171,7 @@
   <div class="main">
     <div class="topbar-wrap">
       <div>
-        <h2 style="font-size:22px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:8px;">🛎️ সকল ডিজিটাল সেবা</h2>
-        <p style="color:#64748b;font-size:14px;margin-top:2px;">আপনার প্রয়োজনীয় সেবা বেছে নিন অথবা ক্যাটাগরি ব্রাউজ করুন</p>
+        <h2>সকল ডিজিটাল সেবা</h2>
       </div>
       <div class="user-bal-pill" onclick="location.href='/wallet.html'" title="ওয়ালেটে টাকা যোগ করতে ক্লিক করুন">
         <span style="font-size:18px;">💳</span>
@@ -207,24 +183,13 @@
       </div>
     </div>
 
-    <!-- Live Search Bar -->
+    <nav id="mobileServiceMenu" aria-label="সেবা মেনু"></nav>
+
+    <!-- Preserve results from existing search links. -->
     <div class="search-bar-wrap" id="serviceSearchBar" role="search" aria-label="সেবা খুঁজুন" hidden>
       <span class="search-icon" aria-hidden="true">🔍</span>
       <input type="text" id="svcSearch" class="search-input" aria-label="সেবার নাম" placeholder="সেবার নাম লিখুন" oninput="onSearchInput(this.value)">
       <button type="button" class="search-clear" id="searchClear" onclick="clearSearch()" aria-label="অনুসন্ধান মুছুন">✕</button>
-    </div>
-
-    <!-- Filter Segment Tabs -->
-    <div class="filter-tabs" id="filterTabs">
-      <details class="service-disclosure directory-filter-menu">
-        <summary class="ftab">সকল সেবা</summary>
-        <div class="directory-type-filters">
-          <button type="button" class="ftab" id="tabAuto" onclick="switchFilter('auto')">স্বয়ংক্রিয় সেবা (<span id="cntAuto">–</span>)</button>
-          <button type="button" class="ftab" id="tabManual" onclick="switchFilter('manual')">অর্ডার সার্ভিস (<span id="cntManual">–</span>)</button>
-        </div>
-      </details>
-      <button type="button" class="ftab on" id="tabAll" onclick="switchFilter('all')">সবগুলো (<span id="cntAll">–</span>)</button>
-      <button type="button" class="ftab" id="tabCats" onclick="switchFilter('cats')">ক্যাটাগরি ভিউ</button>
     </div>
 
     <!-- Category Grid View -->
@@ -251,7 +216,7 @@
 </div>
 
 <script src="/js/app.js?v=22"></script>
-<script src="/js/service-navigation.js?v=20261122-4"></script>
+<script src="/js/service-navigation.js?v=20261122-5"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -262,6 +227,8 @@ function autoIcon(name){
   if(/মৃত্যু|death/i.test(n))return '🕊️';
   if(/এনআইডি|NID|ভোটার/i.test(n))return '🪪';
   if(/পাসপোর্ট|passport/i.test(n))return '🛂';
+  if(/ভূমি|জমি|খতিয়ান|খতিয়ান|মৌজা|land/i.test(n))return '🌾';
+  if(/কর সেবা|টিন|ট্যাক্স|ট্রেড লাইসেন্স|tax/i.test(n))return '🧾';
   if(/টিকিট|ticket/i.test(n))return '🎫';
   if(/আবেদন|apply|application/i.test(n))return '📝';
   if(/সনদ|certificate/i.test(n))return '📜';
@@ -336,7 +303,7 @@ function card(s){
   const closed = s.open ? '' : '<span class="ptype closed">সাময়িক বন্ধ</span>';
   const catName = s.category_name_bn || s.category_name;
   const catHtml = catName ? '<span class="cat-pill">📁 ' + esc(catName) + '</span>' : '';
-  const isAuto = s.type !== 'manual';
+  const isAuto = !isOrderService(s);
   const summary = isAuto ? SERVICE_SUMMARIES.get(s.engine_id) : '';
   const target = window.ServiceNavigation?.destination(s) || '/service-detail.html?id=' + encodeURIComponent(s.id);
   return '<a class="svc-card" href="'+esc(target)+'">'+
@@ -351,6 +318,17 @@ function card(s){
 let GROUPS = [];
 let ALL_SERVICES = [];
 let CURRENT_FILTER = 'all';
+let CURRENT_CATEGORY = null;
+let directoryLoaded = false;
+
+const DIRECTORY_TYPES = { auto: 'স্বয়ংক্রিয় সেবা', manual: 'অর্ডার সার্ভিস' };
+const serviceMenu = document.getElementById('serviceMenu');
+const mobileDirectory = window.matchMedia('(max-width: 1023px)');
+
+function placeServiceMenu(){
+  const mount = document.getElementById(mobileDirectory.matches ? 'mobileServiceMenu' : 'desktopServiceMenu');
+  if (serviceMenu.parentElement !== mount) mount.append(serviceMenu);
+}
 
 function directoryFilter(params){
   const type = params.get('type');
@@ -372,63 +350,81 @@ function loadBdrisPdfPrice(){
   }).catch(function () {});
 }
 
-function updateCounts(){
-  const allCnt = ALL_SERVICES.length;
-  const autoCnt = ALL_SERVICES.filter(s => s.type !== 'manual').length;
-  const manualCnt = ALL_SERVICES.filter(s => s.type === 'manual').length;
-  document.getElementById('cntAll').textContent = bnNum(allCnt);
-  document.getElementById('cntAuto').textContent = bnNum(autoCnt);
-  document.getElementById('cntManual').textContent = bnNum(manualCnt);
+function categoryKey(group){
+  return group.id === null ? 'uncategorized' : String(group.id);
 }
 
-function switchFilter(f){
-  CURRENT_FILTER = f;
-  document.querySelectorAll('button.ftab').forEach(b => b.classList.remove('on'));
-  document.querySelectorAll('[data-directory-type]').forEach(link => {
-    const active = link.dataset.directoryType === f;
-    link.classList.toggle('on', active);
-    if (active) link.setAttribute('aria-current', 'page');
-    else link.removeAttribute('aria-current');
+function isOrderService(service){
+  return window.ServiceNavigation?.isManual?.(service) ?? (service.type === 'manual' && !service.engine_id);
+}
+
+function categoryServices(group, type){
+  return group.services.filter(service => isOrderService(service) === (type === 'manual'));
+}
+
+function mountServiceCategories(){
+  for (const [type, label] of Object.entries(DIRECTORY_TYPES)) {
+    const categories = GROUPS.filter(group => categoryServices(group, type).length > 0);
+    const list = serviceMenu.querySelector('[data-directory-categories="' + type + '"]');
+    list.innerHTML = categories.map(group => {
+      const href = '/services.html?' + new URLSearchParams({ type, category: categoryKey(group) });
+      return '<li><a href="' + esc(href) + '" data-directory-category="' + esc(categoryKey(group)) +
+        '"><span class="service-category-icon" aria-hidden="true">' + esc(group.icon) + '</span>' + esc(group.name) + '</a></li>';
+    }).join('') || '<li class="service-menu-empty">কোনো ক্যাটাগরি নেই</li>';
+    list.setAttribute('aria-label', label);
+    serviceMenu.querySelector('[data-directory-type="' + type + '"]').disabled = false;
+  }
+}
+
+function restoreDirectory(){
+  const params = new URLSearchParams(location.search);
+  CURRENT_FILTER = directoryFilter(params);
+  CURRENT_CATEGORY = DIRECTORY_TYPES[CURRENT_FILTER] ? GROUPS.find(group =>
+    categoryKey(group) === params.get('category') && categoryServices(group, CURRENT_FILTER).length > 0
+  ) || null : null;
+
+  serviceMenu.querySelectorAll('[data-directory-type]').forEach(button => {
+    const open = button.dataset.directoryType === CURRENT_FILTER;
+    button.setAttribute('aria-expanded', String(open));
+    document.getElementById(button.getAttribute('aria-controls')).hidden = !open;
   });
-  const targetBtn = { cats:'tabCats', all:'tabAll', auto:'tabAuto', manual:'tabManual' }[f];
-  if(targetBtn) document.getElementById(targetBtn).classList.add('on');
+  serviceMenu.querySelectorAll('[data-directory-category]').forEach(link => {
+    if (!link.closest('[hidden]') && CURRENT_CATEGORY && link.dataset.directoryCategory === categoryKey(CURRENT_CATEGORY)) {
+      link.setAttribute('aria-current', 'page');
+    } else {
+      link.removeAttribute('aria-current');
+    }
+  });
 
-  const q = document.getElementById('svcSearch').value.trim();
-  if (q) {
-    applySearch(q);
-    return;
-  }
-
-  if (f === 'cats') {
-    showCats();
-  } else {
-    showFilteredServices(f);
-  }
-  saveViewState();
+  const q = (params.get('q') || '').trim();
+  document.getElementById('svcSearch').value = q;
+  onSearchInput(q);
 }
 
-function serviceTypeSection(kind){
-  const manual = kind === 'manual';
-  const title = manual ? 'অর্ডার সার্ভিস' : 'স্বয়ংক্রিয় সেবা';
-  let count = 0;
-  const sections = GROUPS.map(group => {
-    const items = group.services.filter(service => (service.type === 'manual') === manual);
-    count += items.length;
-    return items.length ? '<section class="svc-directory-group"><h4 class="svc-directory-category">' + esc(group.name) + '</h4><div class="svc-grid">' +
-      items.map(card).join('') + '</div></section>' : '';
-  }).join('');
-  return '<section class="svc-directory-type" data-service-kind="' + kind + '" aria-labelledby="directory-' + kind + '">' +
-    '<header class="svc-directory-type-head"><h3 id="directory-' + kind + '">' + title + '</h3>' +
-    '<span>' + bnNum(count) + 'টি সেবা</span></header>' +
-    (sections || '<p class="svc-directory-empty">এই তালিকায় এখন কোনো সেবা নেই।</p>') + '</section>';
+function openDirectory(url){
+  history.pushState(null, '', url);
+  restoreDirectory();
 }
 
-function showFilteredServices(f){
+function showDirectory(){
   document.getElementById('catView').style.display = 'none';
   const view = document.getElementById('svcView');
   view.style.display = '';
-  view.innerHTML = f === 'all' ? '<div class="svc-directory-types">' +
-    serviceTypeSection('auto') + serviceTypeSection('manual') + '</div>' : serviceTypeSection(f);
+  const group = CURRENT_CATEGORY;
+  const type = DIRECTORY_TYPES[CURRENT_FILTER];
+  if (!group) {
+    const hasServices = type ? ALL_SERVICES.some(service => isOrderService(service) === (CURRENT_FILTER === 'manual')) : ALL_SERVICES.length > 0;
+    const guide = type ? 'মেনু থেকে একটি ক্যাটাগরি বেছে নিন।' : 'মেনু থেকে সেবার ধরন বেছে নিন।';
+    view.innerHTML = '<div class="service-directory-guide" role="status">' + (type ? '<h3>' + type + '</h3>' : '') + '<p>' +
+      (hasServices ? guide : 'এখন কোনো সেবা পাওয়া যাচ্ছে না।') + '</p></div>';
+    return;
+  }
+
+  const items = categoryServices(group, CURRENT_FILTER);
+  view.innerHTML = '<section class="directory-category-results" data-service-kind="' + CURRENT_FILTER + '" aria-labelledby="directoryCategoryTitle">' +
+    '<header class="directory-category-heading"><p>' + type + '</p><h3 id="directoryCategoryTitle" tabindex="-1">' + esc(group.name) +
+    '</h3><span role="status">' + bnNum(items.length) + 'টি সেবা</span></header>' +
+    '<div class="svc-grid">' + items.map(card).join('') + '</div></section>';
 }
 
 function onSearchInput(val){
@@ -440,7 +436,7 @@ function onSearchInput(val){
   } else {
     clearBtn.style.display = 'none';
     if (CURRENT_FILTER === 'cats') showCats();
-    else showFilteredServices(CURRENT_FILTER);
+    else showDirectory();
     saveViewState();
   }
 }
@@ -467,8 +463,9 @@ function applySearch(q){
   v.style.display = '';
   
   let baseList = ALL_SERVICES;
-  if (CURRENT_FILTER === 'auto') baseList = ALL_SERVICES.filter(s => s.type !== 'manual');
-  else if (CURRENT_FILTER === 'manual') baseList = ALL_SERVICES.filter(s => s.type === 'manual');
+  if (CURRENT_FILTER === 'auto' || CURRENT_FILTER === 'manual') {
+    baseList = categoryServices(CURRENT_CATEGORY || { services: ALL_SERVICES }, CURRENT_FILTER);
+  }
 
   const key = searchKey(q);
   const filtered = key ? baseList.filter(s =>
@@ -572,12 +569,11 @@ async function init(){
     return;
   }
   ALL_SERVICES = groupLand(services || []);
-  updateCounts();
   // B2#4 — non-blocking: the catalog renders first; the BDRIS
   // PDF price fills in when the price fetch resolves.
   loadBdrisPdfPrice();
 
-  const map = {}; GROUPS = [];
+  const map = Object.create(null); GROUPS = [];
   const uncat = { id:null, name:'অন্যান্য সেবা', icon:'📦', services:[], ord:999999 };
   ALL_SERVICES.forEach(s => {
     if (s.category_id) {
@@ -597,37 +593,37 @@ async function init(){
   if (uncat.services.length) GROUPS.push(uncat);
   GROUPS.sort((a,b)=>a.ord-b.ord);
 
-  const input = document.getElementById('svcSearch');
-  const saved = history.state;
-  const params = new URLSearchParams(location.search);
-  const query = saved?.q ?? (input.value || params.get('q') || '');
-  input.value = query.trim();
-  document.getElementById('serviceSearchBar').hidden = !input.value;
-  document.getElementById('searchClear').style.display = input.value ? 'inline-flex' : 'none';
-  switchFilter(directoryFilter(params));
+  mountServiceCategories();
+  directoryLoaded = true;
+  restoreDirectory();
 }
 
-// Back and Forward restore the directory URL and its search input.
+// Search links retain their query when reloading or returning from a service.
 function saveViewState(){
   try {
     const q = (document.getElementById('svcSearch').value || '').trim();
     const url = new URL(location.href);
     if (q) url.searchParams.set('q', q);
     else url.searchParams.delete('q');
-    if (CURRENT_FILTER === 'all') url.searchParams.delete('type');
-    else url.searchParams.set('type', CURRENT_FILTER);
-    history.replaceState({ q }, '', url);
+    history.replaceState(null, '', url);
   } catch (e) {}
 }
-window.addEventListener('popstate', function (ev) {
-  const st = (ev && ev.state) || null;
-  if (!st || !ALL_SERVICES.length) return;
-  const q = (st.q || '').trim();
-  document.getElementById('svcSearch').value = q;
-  document.getElementById('serviceSearchBar').hidden = !q;
-  document.getElementById('searchClear').style.display = q ? 'inline-flex' : 'none';
-  switchFilter(directoryFilter(new URLSearchParams(location.search)));
+serviceMenu.addEventListener('click', event => {
+  const typeButton = event.target.closest('[data-directory-type]');
+  if (typeButton && !typeButton.disabled) {
+    const type = typeButton.dataset.directoryType;
+    openDirectory(type === CURRENT_FILTER ? '/services.html' : '/services.html?type=' + type);
+    return;
+  }
+  const link = event.target.closest('[data-directory-category]');
+  if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  if (link.href !== location.href) openDirectory(link.href);
+  if (mobileDirectory.matches) document.getElementById('directoryCategoryTitle')?.focus();
 });
+window.addEventListener('popstate', () => { if (directoryLoaded) restoreDirectory(); });
+mobileDirectory.addEventListener('change', placeServiceMenu);
+placeServiceMenu();
 init();
 </script>
 </body>
