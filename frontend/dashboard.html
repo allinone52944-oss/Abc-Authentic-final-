@@ -433,6 +433,8 @@
   .svc2.svc2-featured { border: 2px solid #d4a017 !important; box-shadow: 0 6px 18px rgba(212,160,23,.18) !important; position: relative; }
   .svc2-badge { position: absolute; top: 8px; right: 8px; background: #fef3c7; color: #92400e; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
   .svc2 {
+    text-decoration: none;
+    color: inherit;
     background: #ffffff;
     border: 1px solid var(--border-light);
     border-radius: var(--r-lg);
@@ -944,7 +946,7 @@
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/dashboard-polish.css?v=20261110-1">
 <link rel="stylesheet" href="/css/dashboard-v2.css?v=20261122-3">
-<script defer src="/js/service-navigation.js?v=20261110-9"></script>
+<script defer src="/js/service-navigation.js?v=20261122-4"></script>
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261122-3">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
 </head>
@@ -1774,12 +1776,13 @@ function renderServiceGrid(containerId, list) {
   el.innerHTML = list.map(s => {
     const name = escapeHtml(s.name_bn || s.name);
     const ico = escapeHtml((s.icon && s.icon !== '🛎️') ? s.icon : autoIcon(name));
-    return '<div class="svc2' + (s.featured ? ' svc2-featured' : '') + '" onclick="location.href=\'/service-detail.html?id=' + encodeURIComponent(s.id) + '\'">' +
+    const destination = window.ServiceNavigation?.destination(s) || '/service-detail.html?id=' + encodeURIComponent(s.id);
+    return '<a class="svc2' + (s.featured ? ' svc2-featured' : '') + '" href="' + escapeHtml(destination) + '">' +
       '<div class="ico">' + ico + '</div>' +
       (s.featured ? '<span class="svc2-badge">⭐ বিশেষ</span>' : '') +
       '<h4>' + name + '</h4>' +
       '<div class="pr">৳' + bnNum(s.price) + '</div>' +
-    '</div>';
+    '</a>';
   }).join('');
 }
 

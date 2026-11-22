@@ -51,7 +51,7 @@ describe('order-create.html — review step before payment (audit #40)', () => {
   test('a failed confirm returns to the form (review hidden, main button back)', () => {
     expect(submitFn).toContain('editAgain()');
     expect(script).toContain("document.getElementById('reviewBox').style.display = 'none'");
-    expect(script).toContain("document.getElementById('submitBtn').style.display = 'block'");
+    expect(script).toContain("document.getElementById('submitBtn').style.display = reviewing ? 'none' : 'block'");
   });
 
   test('the review warns when the balance cannot cover the fee', () => {
@@ -149,7 +149,7 @@ describe('order-create.html — one sample, one guided form (audit #46)', () => 
     expect(fallback).not.toContain('mdi.value = rawSampleText');
     expect(fallback).not.toContain('Auto-fill sample');
     expect(fallback).toContain('ফরম্যাট কপি');
-    expect(fallback).toContain('উপরের নমুনা ফরম্যাটটি দেখে নিচের বক্সে আপনার সঠিক তথ্য লিখুন');
+    expect(fallback).toContain('<details class="manual-sample">');
   });
 
   test('copySampleText still works (the one remaining sample action)', () => {

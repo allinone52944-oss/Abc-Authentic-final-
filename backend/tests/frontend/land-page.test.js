@@ -167,7 +167,7 @@ describe('catalog shows land ONCE (the duplicate complaint)', () => {
   });
   test('the group card opens the single land page', () => {
     expect(svcs).toContain("if (s._landGroup)");
-    expect(svcs).toContain("location.href=\\'/land.html\\'");
+    expect(svcs).toContain('<a class="svc-card" href="/land.html">');
   });
 });
 

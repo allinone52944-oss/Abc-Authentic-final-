@@ -1,0 +1,22 @@
+/* Directory context around the existing engine workspace. */
+.directory-service-paused > :not(.directory-service-entry) { display: none !important; }
+.directory-service-entry {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto 16px;
+  color: var(--layout-ink, #16392e);
+  overflow-wrap: anywhere;
+}
+.directory-service-entry nav { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
+.directory-service-entry :is(a,summary) {
+  min-height: 44px;
+  align-content: center;
+  color: var(--layout-emerald, #07543f);
+  font-weight: 700;
+}
+.directory-service-entry nav a { text-decoration: underline; text-underline-offset: 3px; }
+.directory-service-entry details { border-bottom: 1px solid var(--layout-line, #dce5df); }
+.directory-service-entry details p { white-space: pre-wrap; }
+.directory-service-entry details :is(p,ul) { margin: 0 0 12px; }
+.directory-service-entry details ul { padding-inline-start: 20px; }
+.directory-service-entry > button[hidden] { display: none !important; }

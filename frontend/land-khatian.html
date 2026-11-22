@@ -143,6 +143,7 @@
         <summary>সেবার নিয়ম</summary>
         <p id="directoryServiceRulesText"></p>
       </details>
+      <p id="directoryServiceDetails" hidden><a>সেবার বিস্তারিত ও ছাড়</a></p>
 
       <div class="err" id="errBox"></div>
       <div class="ok" id="okBox"></div>
@@ -661,6 +662,9 @@
         $('directoryServiceRulesText').textContent = service.rules_text;
         $('directoryServiceRules').hidden = false;
       }
+      const details = $('directoryServiceDetails');
+      details.querySelector('a').href = '/service-detail.html?id=' + encodeURIComponent(service.id);
+      details.hidden = false;
       if (!await loadPrice()) {
         if (!$('errBox').classList.contains('on')) showErr('সেবার ফি লোড হয়নি। পেজটি রিফ্রেশ করুন।');
         return;

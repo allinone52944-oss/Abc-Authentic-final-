@@ -163,7 +163,7 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
-<link rel="stylesheet" href="/css/service-journey.css?v=20261122-3">
+<link rel="stylesheet" href="/css/service-journey.css?v=20261122-4">
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261122-3">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
 </head>
@@ -251,8 +251,7 @@
 </div>
 
 <script src="/js/app.js?v=22"></script>
-<script src="/js/service-navigation.js?v=20261110-9"></script>
-<script src="/js/service-order-panel.js?v=20261122-1"></script>
+<script src="/js/service-navigation.js?v=20261122-4"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -324,36 +323,29 @@ const SERVICE_SUMMARIES = new Map([
   ['epassport', 'ই-পাসপোর্টের তথ্য পূরণের ফর্ম'],
 ]);
 
-function serviceDestination(s){
-  const id = encodeURIComponent(s.id);
-  if (s.open && s.engine_id === 'land-khatian') return '/land-khatian.html?service=' + id;
-  // Start with the two services whose direct form and outcome are verified.
-  if (s.open && window.ServiceOrderPanel?.supports(s)) return '/order-create.html?service=' + id + '&flow=directory';
-  return '/service-detail.html?id=' + id;
-}
-
 function card(s){
   if (s._landGroup) {
-    return '<div class="svc-card" onclick="location.href=\'/land.html\'">' +
+    return '<a class="svc-card" href="/land.html">' +
       '<div class="svc-ico">🌾</div>' +
       '<div class="svc-info"><h4>ভূমি সেবা (খতিয়ান)</h4>' +
       '<p class="svc-summary">নামে সন্ধান · জমি যাচাই · মৌজা মূল্য</p>' +
       '<div style="margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">' +
       '<span class="ptype auto">⚡ স্বয়ংক্রিয়</span>' + (s.open ? '' : '<span class="ptype closed">সাময়িক বন্ধ</span>') + '</div></div>' +
-      '<div class="svc-pr">৳' + bnNum(s.price) + ' থেকে' + chargeRuleHtml(s) + '</div></div>';
+      '<div class="svc-pr">৳' + bnNum(s.price) + ' থেকে' + chargeRuleHtml(s) + '</div></a>';
   }
   const closed = s.open ? '' : '<span class="ptype closed">সাময়িক বন্ধ</span>';
   const catName = s.category_name_bn || s.category_name;
   const catHtml = catName ? '<span class="cat-pill">📁 ' + esc(catName) + '</span>' : '';
   const isAuto = s.type !== 'manual';
-  const summary = isAuto ? SERVICE_SUMMARIES.get(s.engine_id) : 'তথ্য দিয়ে অর্ডার করুন। অপারেটর কাজটি করবেন।';
-  return '<div class="svc-card" onclick="location.href=\''+serviceDestination(s)+'\'">'+
+  const summary = isAuto ? SERVICE_SUMMARIES.get(s.engine_id) : '';
+  const target = window.ServiceNavigation?.destination(s) || '/service-detail.html?id=' + encodeURIComponent(s.id);
+  return '<a class="svc-card" href="'+esc(target)+'">'+
     '<div class="svc-ico">'+esc((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn||s.name))+'</div>'+
     '<div class="svc-info"><h4>'+esc(s.name_bn||s.name)+'</h4>'+
     (summary ? '<p class="svc-summary">' + esc(summary) + '</p>' : '') +
-    '<div style="margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">' + catHtml +
-    '<span class="ptype '+(isAuto?'auto':'manual')+'">'+(isAuto?'⚡ স্বয়ংক্রিয়':'📝 ম্যানুয়াল')+'</span>'+closed+'</div></div>'+
-    '<div class="svc-pr">৳'+bnNum(s.price)+(s.open?'':'<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:2px;">বন্ধ আছে</div>')+chargeRuleHtml(s)+(s.engine_id === 'bdris-apply' ? '<div class="bdris-pdf-note" style="font-size:11px;color:#64748b;font-weight:600;margin-top:2px;">' + bdrisPdfNoteHtml() + '</div>' : '')+'</div></div>';
+    '<div class="svc-card-tags">' + catHtml +
+    '<span class="ptype '+(isAuto?'auto':'manual')+'">'+(isAuto?'⚡ স্বয়ংক্রিয়':'📝 অর্ডার')+'</span>'+closed+'</div></div>'+
+    '<div class="svc-pr">৳'+bnNum(s.price)+chargeRuleHtml(s)+(s.engine_id === 'bdris-apply' ? '<div class="bdris-pdf-note" style="font-size:11px;color:#64748b;font-weight:600;margin-top:2px;">' + bdrisPdfNoteHtml() + '</div>' : '')+'</div></a>';
 }
 
 let GROUPS = [];

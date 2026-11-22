@@ -19,7 +19,6 @@ describe('services.html — charge-rule label on cards (audit #49)', () => {
   });
 
   test('the label is shown on both card shapes (land group + regular)', () => {
-    expect(html).toContain("chargeRuleHtml(s) + '</div></div>'");
     const cardFn = html.slice(html.indexOf('function card(s){'), html.indexOf('let GROUPS'));
     expect(cardFn.match(/chargeRuleHtml\(s\)/g)).toHaveLength(2);
   });

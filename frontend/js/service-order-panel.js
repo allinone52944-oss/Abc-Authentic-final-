@@ -1,7 +1,6 @@
 (function () {
   'use strict';
 
-  const PILOT_SERVICE = 'da426b90-e01b-42a6-9393-90805221d0a1';
   const ACTIVE_STATUSES = new Set(['new', 'pending', 'received', 'processing', 'registered']);
   const STATUS_LABELS = {
     new: 'অর্ডার জমা হয়েছে',
@@ -19,7 +18,7 @@
   let mountedService;
 
   function supports(service) {
-    return service?.id === PILOT_SERVICE && service.type === 'manual' && !service.engine_id;
+    return service?.type === 'manual' && !service.engine_id;
   }
 
   function checkoutReturn(orderId, failedUploads) {
@@ -151,7 +150,21 @@
         }
         if (needsFocus && orders.some(order => order.id === focus)) {
           needsFocus = false;
-          requestAnimationFrame(() => panel.scrollIntoView({ block: 'start' }));
+          const form = document.getElementById('manualOrderForm');
+          const nextOrder = document.getElementById('newServiceOrder');
+          const newOrderUrl = new URLSearchParams({ service: service.id, flow: 'directory' });
+          if (form) form.hidden = true;
+          if (nextOrder && service.open === true) {
+            nextOrder.href = '/order-create.html?' + newOrderUrl;
+            nextOrder.hidden = false;
+          }
+          const title = document.getElementById('orderWorkspaceTitle');
+          if (title) title.textContent = 'অর্ডারের অবস্থা';
+          document.getElementById('serviceOrdersTitle').textContent = service.name_bn || service.name || 'অর্ডারের অবস্থা';
+          requestAnimationFrame(() => {
+            panel.scrollIntoView({ block: 'start' });
+            panel.focus({ preventScroll: true });
+          });
         }
         hasPending = orders.some(order => ACTIVE_STATUSES.has(order.status));
         message.textContent = orders.length ? '' : 'এই সেবায় এখনো কোনো অর্ডার নেই।';

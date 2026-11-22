@@ -9,8 +9,9 @@
 .page-order-create .order-meta > div:first-child > div { color: rgba(255,255,255,.72) !important; }
 .page-order-create .order-meta #userBalSub, .page-order-create .order-meta #feeBreakdown { color: rgba(255,255,255,.8) !important; }
 .page-order-create #svcPrice { background: #f5c451 !important; color: #3b2a00 !important; border: 0 !important; }
-.page-order-create #instWrap { background: #fffbeb !important; border: 1px solid #fde68a !important; border-left: 4px solid #d4a017 !important; color: #713f12 !important; }
-.page-order-create #instWrap b { color: #713f12; }
+.page-order-create #instWrap { border-bottom: 1px solid var(--layout-line); }
+.page-order-create #instWrap[hidden], .page-order-create #newServiceOrder[hidden] { display: none !important; }
+.page-order-create #instWrap p { white-space: pre-wrap; overflow-wrap: anywhere; padding-bottom: 12px; }
 .page-order-create #dropArea div[style*="1d4ed8"] { color: #065f46 !important; }
 .page-order-create #couponBox { background: #f8faf9 !important; border: 1px dashed #cfe3da !important; color: #475569 !important; }
 .page-order-create #couponBox a { color: #065f46 !important; }
@@ -33,6 +34,14 @@
 .page-order-create { --manual-error: #b91c1c; }
 .page-order-create .main > .manual-workspace { background: transparent; border: 0; padding: 0; box-shadow: none; }
 .page-order-create .manual-workspace .order-meta { border-radius: 8px; padding: 24px; gap: 20px; }
+.page-order-create .manual-progress { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 0 0 12px; margin: 0; list-style: none; color: var(--layout-muted); }
+.page-order-create .manual-progress li + li::before { content: '›'; margin-inline-end: 12px; }
+.page-order-create .manual-progress [aria-current] { color: var(--layout-emerald); font-weight: 700; }
+.page-order-create :is(.manual-sample,#instWrap) summary { min-height: 44px; align-content: center; color: var(--layout-emerald); cursor: pointer; }
+.page-order-create .manual-sample .btn { margin-bottom: 12px; }
+.page-order-create .reviewing-order > :is(.manual-section,.order-extra,#instWrap,#couponBox) { display: none !important; }
+.page-order-create .back-nav, .page-order-create #newServiceOrder { text-decoration: none; }
+.page-order-create #newServiceOrder { margin-top: 12px; }
 .page-order-create .manual-section { padding-block: 24px; border-bottom: 1px solid var(--layout-line); }
 .page-order-create .manual-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; font-size: 18px; color: var(--layout-ink); }
 .page-order-create .manual-heading > span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--layout-emerald); color: var(--layout-light); font-size: 14px; }
