@@ -130,7 +130,7 @@
       <div class="form-card">
         <div class="price-line">
           <span id="priceText">সেবা চার্জ লোড হচ্ছে…</span>
-          <span>যাচাই ব্যর্থ হলে চার্জ ৳০</span>
+          <span>ফর্মে যাচাই করা তথ্য এলে একবারই চার্জ কাটবে</span>
         </div>
         <div class="field">
           <label for="brn">BRN (১৭ সংখ্যা) *</label>
@@ -203,7 +203,7 @@ const BN = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
 const bn = (v) => String(v == null ? '' : v).replace(/[0-9]/g, (d) => BN[Number(d)]);
 // B1#7/B2#6 — first-step fee summary. Price comes ONLY from the
 // services table (same source as the charge gate — never hardcoded);
-// the gate charges only on a successful verification.
+// the gate charges before the returned record is shown in the form.
 async function loadPrice(){
   try {
     const r = await ABC.api('/services');
@@ -212,14 +212,17 @@ async function loadPrice(){
     const s = (d.services || []).find((x) => x.engine_id === 'birth-final');
     const el = document.getElementById('priceText');
     if (!el) return;
-    if (!s) { el.textContent = 'সেবা চার্জ: ৳– (যাচাই সফল হলে কাটবে)'; return; }
-    el.textContent = 'সেবা চার্জ: ৳' + bn(s.price) + ' (যাচাই সফল হলে কাটবে)';
+    if (!s || !(Number(s.price) > 0)) { el.textContent = 'সেবা চার্জ নির্ধারণ করা নেই'; return; }
+    el.textContent = 'সেবা চার্জ: ৳' + bn(s.price);
   } catch (e) {
     const el = document.getElementById('priceText');
-    if (el) el.textContent = 'সেবা চার্জ: ৳– (যাচাই সফল হলে কাটবে)';
+    if (el) el.textContent = 'সেবা চার্জ লোড করা যায়নি';
   }
 }
 let S={sessionId:null,brn:'',dob:'',record:null,pdfBlob:null,attemptKey:null};
+function showWalletBalance(user){
+  if(user?.balance != null) document.getElementById('balVal').textContent = bn(user.balance);
+}
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function clearResultMessage(){
   document.getElementById('err').classList.remove('on');
@@ -324,7 +327,8 @@ async function step2(){
     document.getElementById('recView').innerHTML=fields.map(f=>'<div class="field'+(fullW.includes(f[0])?' full':'')+'"><label for="rec_'+f[0]+'">'+esc(f[1])+'</label><input type="text" id="rec_'+f[0]+'" value="'+esc(f[2]||'')+'"></div>').join('')+'<div class="s full" style="color:var(--muted);font-size:12px;">✏️ সব তথ্য এডিট করা যাবে</div>';
     // Save edited values back to S.record on change
     fields.forEach(f=>{const el=document.getElementById('rec_'+f[0]); if(el) el.oninput=()=>{S.record[f[0]]=el.value;};});
-    go(3);showOk('তথ্য যাচাই সফল ✓');hideFailReceipt();
+    go(3);showOk('যাচাই করা তথ্য পাওয়া গেছে। সেবা চার্জ কাটা হয়েছে।');hideFailReceipt();
+    ABC.api('/auth/me').then(r=>r.ok?r.json():null).then(d=>showWalletBalance(d?.user)).catch(()=>{});
   }catch(e){showErr(e.message||'যাচাই ব্যর্থ।');reportEngineFailure('birth-final', S.brn, e.message);}
   busy('b2',false);
 }
@@ -393,7 +397,7 @@ async function dlPdf(){
   const me=await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}
   const u=(await me.json()).user;
-  const balEl=document.getElementById('balVal'); if(balEl) balEl.textContent = bn(u.balance || 0);
+  showWalletBalance(u);
   loadPrice();
   document.getElementById('waFab').onclick=()=>{window.open('https://wa.me/8801835414122?text='+encodeURIComponent('আমি '+u.name+' (ফোন: '+u.phone+')। জন্ম সনদ সম্পর্কে জানতে চাই।'),'_blank');};
 })();

@@ -19,9 +19,8 @@
 // - Price comes ONLY from the `services` table (engine_id +
 //   status='active'), with the same per-user user_services override
 //   (access_enabled=false -> 403, custom_price). NEVER hardcoded.
-//   No active row or price 0 -> the service stays free for now, but
-//   the gate stays in place, so charging starts automatically once
-//   Pankaj sets rates in Admin -> Services.
+//   Birth results require a configured positive fee. Death results
+//   retain the existing free flow when no fee is set.
 // - Captcha endpoints stay free: they return no record.
 // - POST /api/verify: the engine response is intercepted. ONLY a
 //   successful verification (record found) is charged, and the record
@@ -38,7 +37,7 @@
 //   CHARGE_REQUIRED before it ever reaches the engine, so the
 //   engine cannot be used to render a certificate from
 //   self-supplied fields without paying for a verification first.
-//   When the price is 0 these paths pass through freely.
+//   For death renders, a price of 0 still allows the free flow.
 // - Any other engine path is NOT part of the shop flow (e.g. the
 //   builder record store /api/records, /api/engine, /api/store/health,
 //   dev debug pages) and is rejected with 404 at this mount, so the
@@ -107,10 +106,8 @@ async function getEngineServicePrice(db, engineId, userId) {
     [engineId]
   );
   if (!r.rows.length) {
-    // Audit #17 — no active price row: the service runs free.
-    // Price 0 is the design decision, so the gate stays open;
-    // the admin is alerted (throttled, once per engine per hour)
-    // instead, so a wrong engine_id cannot stay free silently.
+    // The lookup reports a missing rate and alerts the admin. The gate
+    // applies the engine's policy for missing rates.
     alertMissingPrice(db, engineId);
     return { allowed: true, price: 0, serviceId: null };
   }
@@ -291,6 +288,10 @@ function gateError(res, status, error, message) {
   return res.status(status).json({ success: false, error, message });
 }
 
+function birthPriceUnavailable(res) {
+  return gateError(res, 503, 'SERVICE_PRICE_UNAVAILABLE', 'জন্ম নিবন্ধন সনদের সেবা চার্জ নির্ধারণ করা নেই। পরে আবার চেষ্টা করুন।');
+}
+
 // engineId: 'birth-final' | 'death-final' (services table).
 // engineKind: 'birth' | 'death' (path shapes differ per engine).
 // mount: '/api/bdris-engine' | '/api/death-engine'.
@@ -317,28 +318,19 @@ function chargeGate(engineId, engineKind, mount, deps) {
       if (!allowed) {
         return gateError(res, 403, 'SERVICE_ACCESS_DISABLED', 'এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।');
       }
+      const hasFee = Boolean(serviceId && Number.isFinite(price) && price > 0);
+      const isBirth = engineKind === 'birth';
 
       if (policy === 'render') {
-        // Already free while no rate is set; otherwise a charged
-        // attempt (same user, same engine, same attempt key) is the
-        // only proof that lets preview/PDF through without a second
-        // charge. The check happens BEFORE the engine runs, so the
-        // engine cannot render from self-supplied fields unpaid.
-        // AUDIT #5 (2026-11-05): every allowed render also mints a
-        // short-lived render token (header x-engine-render-token)
-        // that the ENGINE verifies before rendering — defense in
-        // depth, so a direct localhost hit on the engine port cannot
-        // render a certificate free. The engine proxies forward
-        // req.headers as-is, so no proxy change is needed. Minted
-        // even when the price is 0: the token attests "the gate
-        // allowed this", it does not charge.
+        // A paid attempt may render again without a second charge, even
+        // if pricing changes after verification.
         const key = attemptKeyOf(req.body);
-        let allowed = false;
-        if (price <= 0 || !serviceId) allowed = true;
-        else if (key && (await hasChargedOrder(db, userId, orderKeyOf(engineId, key)))) allowed = true;
-        if (!allowed) {
+        const freeDeathRender = !isBirth && (price <= 0 || !serviceId);
+        if (!freeDeathRender && !(key && await hasChargedOrder(db, userId, orderKeyOf(engineId, key)))) {
+          if (isBirth && !hasFee) return birthPriceUnavailable(res);
           return gateError(res, 402, 'CHARGE_REQUIRED', 'এই সনদের জন্য প্রথমে যাচাই ও পেমেন্ট সম্পন্ন করুন, তারপর প্রিভিউ/PDF খুলবে।');
         }
+        // The engine verifies this token before rendering.
         const token = mintRenderToken(engineKind, userId, key || 'no-key');
         if (!token) {
           // No shared secret: the engine would reject the render
@@ -352,6 +344,7 @@ function chargeGate(engineId, engineKind, mount, deps) {
       }
 
       // policy === 'verify'
+      if (isBirth && !hasFee) return birthPriceUnavailable(res);
       if (price > 0 && serviceId) {
         const { balance, lockedCredit } = await balanceAndCredit(db, serviceCredits, userId, serviceId);
         if (balance + lockedCredit < price) {
@@ -372,6 +365,12 @@ function chargeGate(engineId, engineKind, mount, deps) {
         let parsed = null;
         try { parsed = JSON.parse(body.toString('utf8')); } catch (_) { parsed = null; }
         if (!isVerifySuccess(status, parsed)) {
+          if (isBirth && parsed?.success === true) {
+            return send.replace(502, {
+              success: false, error: 'NO_VERIFIED_RECORD',
+              message: 'যাচাই করা নিবন্ধন তথ্য পাওয়া যায়নি। নতুন ক্যাপচা নিয়ে আবার চেষ্টা করুন।',
+            });
+          }
           // Failure, session error, engine error: forward untouched,
           // never charged.
           return send.forward(status, body);

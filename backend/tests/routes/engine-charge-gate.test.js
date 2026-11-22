@@ -43,6 +43,12 @@ function downstream(mode, calls, tokens) {
       if (mode === 'success') {
         return res.json({ success: true, data: { brn: '19900101123456789', nameEn: 'Test Person' } });
       }
+      if (mode === 'partial') {
+        return res.json({ success: true, data: { brn: '19900101123456789', nameEn: '', office2: '' } });
+      }
+      if (mode === 'empty') {
+        return res.json({ success: true, data: {} });
+      }
       if (mode === 'session-error') {
         return res.status(400).json({ success: false, error: 'Session expired.' });
       }
@@ -50,6 +56,9 @@ function downstream(mode, calls, tokens) {
     }
     if (req.url === '/api/captcha') {
       return res.json({ success: true, image: 'data:image/png;base64,xx', sessionId: 'sess-1' });
+    }
+    if (req.url === '/generate-pdf') {
+      return res.type('application/pdf').send(Buffer.from('%PDF-1.4 fixture'));
     }
     return res.json({ success: true, html: '<h1>cert</h1>' });
   };
@@ -113,13 +122,63 @@ describe('charge gate', () => {
     expect(calls).toHaveLength(0);
   });
 
-  test('price 0 (no service row) -> verify forwarded free, no charge', async () => {
+  test('death verification without a fee still works free of charge', async () => {
     routeDb({ serviceRow: null });
-    const { app } = appWith({ mode: 'success' });
-    const r = await request(app).post('/api/bdris-engine/api/verify')
+    const mount = '/api/death-engine';
+    const { app } = appWith({ engine: 'death-final', mount, kind: 'death' });
+    const r = await request(app).post(mount + '/api/verify')
       .send({ sessionId: 's', brn: '1', dob: '2000-01-01', captcha: 'x', idempotency_key: 'k-free' });
     expect(r.status).toBe(200);
     expect(r.body.data.brn).toBe('19900101123456789');
+    expect(serviceCredits.payForService).not.toHaveBeenCalled();
+  });
+
+  test.each([null, { id: 7, price: 0 }])('birth verification and unpaid PDF require a configured fee (%j)', async serviceRow => {
+    routeDb({ serviceRow });
+    const { app, calls } = appWith();
+    for (const path of ['/api/verify', '/api/preview', '/generate-pdf']) {
+      const r = await request(app).post(MOUNT + path).send({ idempotency_key: 'k-unpaid' });
+      expect(r.status).toBe(503);
+      expect(r.body.error).toBe('SERVICE_PRICE_UNAVAILABLE');
+    }
+    expect(calls).toHaveLength(0);
+    expect(serviceCredits.payForService).not.toHaveBeenCalled();
+  });
+
+  test('partial birth record is charged before form data arrives; PDF uses the same payment', async () => {
+    routeDb();
+    const { app } = appWith({ mode: 'partial' });
+    const r = await request(app).post(MOUNT + '/api/verify')
+      .send({ sessionId: 's', brn: '1', dob: '2000-01-01', captcha: 'x', idempotency_key: 'k-partial' });
+    expect(r.status).toBe(200);
+    expect(r.body.data).toMatchObject({ brn: '19900101123456789', nameEn: '', office2: '' });
+    expect(serviceCredits.payForService).toHaveBeenCalledTimes(1);
+    expect(serviceCredits.payForService.mock.calls[0][1]).toMatchObject({ amount: 100, ref: 'birth-final-k-partial' });
+
+    routeDb({ alreadyPaid: true, chargedOrder: true });
+    const pdf = await request(app).post(MOUNT + '/generate-pdf')
+      .send({ ...r.body.data, idempotency_key: 'k-partial' });
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers['content-type']).toBe('application/pdf');
+    expect(serviceCredits.payForService).toHaveBeenCalledTimes(1);
+  });
+
+  test('empty birth verification success cannot open the form or charge the account', async () => {
+    routeDb();
+    const { app } = appWith({ mode: 'empty' });
+    const r = await request(app).post(MOUNT + '/api/verify').send({ idempotency_key: 'k-empty' });
+    expect(r.status).toBe(502);
+    expect(r.body).toMatchObject({ success: false, error: 'NO_VERIFIED_RECORD' });
+    expect(r.body.data).toBeUndefined();
+    expect(serviceCredits.payForService).not.toHaveBeenCalled();
+  });
+
+  test('a previously paid birth attempt can render after its fee is removed', async () => {
+    routeDb({ serviceRow: null, chargedOrder: true });
+    const { app } = appWith({ mode: 'success' });
+    const r = await request(app).post(MOUNT + '/generate-pdf').send({ idempotency_key: 'k-paid' });
+    expect(r.status).toBe(200);
+    expect(r.headers['content-type']).toBe('application/pdf');
     expect(serviceCredits.payForService).not.toHaveBeenCalled();
   });
 
@@ -232,10 +291,11 @@ describe('charge gate', () => {
     expect(serviceCredits.payForService).not.toHaveBeenCalled();
   });
 
-  test('preview free when price 0, even without a charged attempt', async () => {
+  test('death preview stays free when price 0, even without a charged attempt', async () => {
     routeDb({ serviceRow: null });
-    const { app, calls } = appWith({});
-    const r = await request(app).post('/api/bdris-engine/api/preview').send({ brn: '1' });
+    const mount = '/api/death-engine';
+    const { app, calls } = appWith({ engine: 'death-final', mount, kind: 'death' });
+    const r = await request(app).post(mount + '/api/preview').send({ brn: '1' });
     expect(r.status).toBe(200);
     expect(calls).toHaveLength(1);
   });
@@ -322,13 +382,14 @@ describe('render token (audit #5)', () => {
     expect(tokens).toHaveLength(0);
   });
 
-  test('preview free when price 0 -> token still minted (gate attestation)', async () => {
+  test('free death preview still requires a render token', async () => {
     routeDb({ serviceRow: null });
-    const { app, tokens } = appWith({});
-    const r = await request(app).post('/api/bdris-engine/api/preview').send({ brn: '1' });
+    const mount = '/api/death-engine';
+    const { app, tokens } = appWith({ engine: 'death-final', mount, kind: 'death' });
+    const r = await request(app).post(mount + '/api/preview').send({ brn: '1' });
     expect(r.status).toBe(200);
     expect(tokens).toHaveLength(1);
-    expect(verifyRenderToken(tokens[0], 'birth', { secret: SECRET })).toBe(true);
+    expect(verifyRenderToken(tokens[0], 'death', { secret: SECRET })).toBe(true);
   });
 
   test('death engine pdf with charged key -> token verifies for death', async () => {
