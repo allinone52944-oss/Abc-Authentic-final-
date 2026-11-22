@@ -41,15 +41,14 @@ MONTHS = {"01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr",
           "05": "May", "06": "Jun", "07": "Jul", "08": "Aug",
           "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dec"}
 
+# Legacy web-print glyphs also handled in the NID engine.
+_WEB_PRINT_GLYPHS = str.maketrans({
+    "˙": "রু", "ǻ": "ঞ্জ", "ǘ": "ক্ষ", "Ƶ": "প্রি",
+    "Ȱ": "ন্দ্র", "ɨ": "ল্ল", "ĺ": "ে",
+})
 
 def clean_bn(text):
-    """ডাবল মাত্রা এবং ওয়েব-প্রিন্ট ফন্ট-আর্টিফ্যাক্ট সাফ করো।
-
-    Names pass through UNALTERED apart from glyph/double-matra
-    repairs (smart-card fix #6): the old ~40-entry replacement table
-    and the hardcoded name spacings are gone — no name is ever
-    rewritten, respaced or "corrected" here.
-    """
+    """Repair PDF font artifacts without applying person-name substitutions."""
     if not text:
         return ""
     s = text
@@ -57,20 +56,41 @@ def clean_bn(text):
     s = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', s)
     s = s.replace("No Documents Available", "").strip()
     s = s.replace("Holding No", "").strip()
-    # শুধুমাত্র যদি ওয়েব-প্রিন্টের বিশেষ গ্লিফ থাকে, তখন কনভার্ট করো
-    if any(ch in s for ch in ('ĺ', 'Ƶ', 'Ȱ', 'ǻ', 'ɨ')):
-        s = re.sub(r'ĺ([\u0995-\u09B9])', r'\1ে', s)
-        s = re.sub(r'([\u0995-\u09B9])ৌ', r'\1ৌ', s)
-        rep = {'Ƶ': 'প্রি', 'Ȱ': 'ন্দ্র', 'ǻ': 'ঞ্জ', 'ɨ': 'ল্ল', 'ĺ': 'ে'}
-        for k, v in rep.items():
-            s = s.replace(k, v)
+    s = re.sub(r'ĺ([\u0995-\u09B9])', r'\1ে', s)
+    s = s.replace("িƵ", "Ƶ").translate(_WEB_PRINT_GLYPHS)
+    s = re.sub(r'([\u0995-\u09B9])ৌ', r'\1ৌ', s)
+    s = re.sub(r'(^|\s)ি([\u0995-\u09B9])', r'\1\2ি', s)
 
     for bad, good in [("ুু", "ু"), ("ূূ", "ূ"), ("াা", "া"), ("িি", "ি"),
                       ("ীী", "ী"), ("েে", "ে"), ("োো", "ো"), ("ঃঃ", "ঃ"),
-                      ("্্", "্"), ("ঁঁ", "ঁ")]:
+                      ("্্", "্"), ("ঁঁ", "ঁ"), ("ংং", "ং")]:
         while bad in s:
             s = s.replace(bad, good)
     return re.sub(r'\s+', ' ', s).strip()
+
+
+_LOCATION_GLYPH_FIXES = {
+    "ছাতকĺপৗরসভা": "ছাতক পৌরসভা",
+    "ĺপৗরসভা": "পৌরসভা",
+    "চǾƣাম": "চট্টগ্রাম",
+    "কেপŪােরশন": "কর্পোরেশন",
+    "রাǩামাǅয়া": "রাঙ্গামাটিয়া",
+    "িসǅ": "সিটি",
+    "িসেলট": "সিলেট",
+    "হিবগঞ্জ": "হবিগঞ্জ",
+    "হিবগǻ": "হবিগঞ্জ",
+    "ওয়াডŪ": "ওয়ার্ড",
+}
+
+
+def clean_location(text):
+    """Apply the NID address-specific spellings only to geographic fields."""
+    text = text or ""
+    for source, fixed in _LOCATION_GLYPH_FIXES.items():
+        text = text.replace(source, fixed)
+    return clean_bn(text)
+
+
 def fmt_dob(s):
     """1977-02-02 -> 02 Feb 1977; handles Bengali numerals & slash formats"""
     if not s:
@@ -155,31 +175,31 @@ def fix_ocr_spelling(text):
 def compose_address(pa, data=None):
     """Present Address টেবিলের অংশ থেকে কার্ডের ঠিকানা বানাও; খালি অংশ বাদ।"""
     if isinstance(pa, str):
-        return fix_ocr_spelling(bn_digits(clean_bn(pa).strip()))
+        return fix_ocr_spelling(bn_digits(clean_location(pa)))
     pa = pa or {}
     data = data or {}
     parts = []
 
     # 1. বাসা/হোল্ডিং: শুধু সংখ্যা বা টেক্সট থাকলে আসবে, ফাঁকা বা '-' থাকলে পুরোপুরি বাদ
-    raw_h = clean_bn(pa.get("holding", "")).strip()
+    raw_h = clean_location(pa.get("holding"))
     if raw_h and re.sub(r'[-–—\s]', '', raw_h):
         parts.append("বাসা/হোল্ডিং: " + bn_digits(raw_h))
 
     # 2. গ্রাম ও মৌজা: একই হলে একবার, ভিন্ন হলে কমা দিয়ে মৌজা
     vill_parts = []
     for k in ("village", "additional_village"):
-        v = clean_bn(pa.get(k, "")).strip()
+        v = clean_location(pa.get(k))
         if v and v not in vill_parts and re.sub(r'[-–—\s]', '', v):
             vill_parts.append(v)
     for k in ("mouza", "additional_mouza"):
-        v = clean_bn(pa.get(k, "")).strip()
+        v = clean_location(pa.get(k))
         if v and v not in vill_parts and re.sub(r'[-–—\s]', '', v):
             vill_parts.append(v)
     if vill_parts:
         parts.append("গ্রাম/রাস্তা: " + ", ".join(vill_parts))
 
     # 3. ডাকঘর ও পোস্ট কোড
-    po = clean_bn(pa.get("post_office", "")).strip()
+    po = clean_location(pa.get("post_office"))
     raw_pc = clean_bn(pa.get("postal_code", "")).strip()
     pc = "" if not re.sub(r'[-–—\s]', '', raw_pc) else bn_digits(raw_pc)
     if po and pc:
@@ -190,15 +210,15 @@ def compose_address(pa, data=None):
         parts.append("ডাকঘর: " + pc)
 
     # 4. উপজেলা, RMO (পল্লী / সিটি কর্পোরেশন / পৌরসভা / শহর) ও জেলা
-    upozila = clean_bn(pa.get("upozila", "")).strip() or clean_bn(data.get("Upozila", "")).strip()
+    upozila = clean_location(pa.get("upozila")) or clean_location(data.get("Upozila"))
     city_full = ""
-    rmo_val = clean_bn(pa.get("rmo", "")).strip() or clean_bn(data.get("RMO", "")).strip()
+    rmo_val = clean_location(pa.get("rmo")) or clean_location(data.get("RMO"))
     if "সিটি" in rmo_val or "পৌরসভা" in rmo_val or "শহর" in rmo_val:
-        c_parts = [clean_bn(pa.get(k, "")).strip()
+        c_parts = [clean_location(pa.get(k))
                    for k in ("city_corp", "city_corp2", "city_corp3")]
         c_parts = [c for c in c_parts if c and re.sub(r'[-–—\s]', '', c)]
         city_full = " ".join(c_parts)
-    district = clean_bn(pa.get("district", "")).strip() or clean_bn(data.get("District", "")).strip()
+    district = clean_location(pa.get("district")) or clean_location(data.get("District"))
 
     if upozila:
         parts.append(upozila)
@@ -307,7 +327,7 @@ def build_fields(data, tpl):
         elif in_field == "Name(English)":
             val = re.sub(r"^NAME\s*[:：]?\s*", "", str(val or "").strip(), flags=re.I).upper()
         else:
-            val = clean_bn(val)
+            val = clean_location(val) if in_field == "Birth Place" else clean_bn(val)
             if tpl_label == "নাম:":
                 val = re.sub(r"^নাম\s*[:：]?\s*", "", val).strip()
             elif tpl_label == "পিতা:":

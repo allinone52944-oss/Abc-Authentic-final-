@@ -88,6 +88,25 @@ class TestCleanBn(unittest.TestCase):
         self.assertEqual(mf.clean_bn("প্রি"), "প্রি")
         self.assertIn("ঞ্জ", mf.clean_bn("ǻ"))
 
+    def test_legacy_web_print_glyphs_are_repaired(self):
+        self.assertEqual(mf.clean_bn("˙ ǘিত িƵয়"), "রু ক্ষিত প্রিয়")
+
+    def test_geographic_glyphs_recover_city_before_composing_address(self):
+        tpl = {"layout": "nid_card_v2", "pages": [{"texts": []}]}
+        fields = mf.build_fields({
+            "Name(Bangla)": "জুনাবআলী",
+            "Birth Place": "িসেলট",
+            "Present Address": {
+                "holding": "12",
+                "rmo": "িসǅ কেপŪােরশন",
+                "city_corp": "চǾƣাম িসǅ কেপŪােরশন",
+                "district": "চǾƣাম"
+            }
+        }, tpl)
+        self.assertEqual(fields["নাম:"], "জুনাবআলী")
+        self.assertEqual(fields["জন্মস্থান:"], "সিলেট")
+        self.assertEqual(fields["ঠিকানা:"], "বাসা/হোল্ডিং: ১২, চট্টগ্রাম সিটি কর্পোরেশন, চট্টগ্রাম")
+
     def test_control_bytes_stripped(self):
         self.assertEqual(mf.clean_bn("নাম\x00\x01"), "নাম")
 
