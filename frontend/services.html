@@ -163,7 +163,7 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
-<link rel="stylesheet" href="/css/service-journey.css?v=20261122-1">
+<link rel="stylesheet" href="/css/service-journey.css?v=20261122-2">
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
 </head>
@@ -408,32 +408,28 @@ function switchFilter(f){
   saveViewState();
 }
 
-function showFilteredServices(f){
-  document.getElementById('catView').style.display = 'none';
-  const v = document.getElementById('svcView');
-  v.style.display = '';
-
-  let list = ALL_SERVICES;
-  let title = '📋 সকল ডিজিটাল সেবা (' + bnNum(list.length) + 'টি)';
-  if (f === 'auto') {
-    list = ALL_SERVICES.filter(s => s.type !== 'manual');
-    title = '⚡ স্বয়ংক্রিয় ইনস্ট্যান্ট সেবাসমূহ (' + bnNum(list.length) + 'টি)';
-  } else if (f === 'manual') {
-    list = ALL_SERVICES.filter(s => s.type === 'manual');
-    title = '📝 অর্ডার সার্ভিস (' + bnNum(list.length) + 'টি)';
-  }
-
-  const eligible = new Set(list);
+function serviceTypeSection(kind){
+  const manual = kind === 'manual';
+  const title = manual ? 'অর্ডার সার্ভিস' : 'স্বয়ংক্রিয় সেবা';
+  let count = 0;
   const sections = GROUPS.map(group => {
-    const items = group.services.filter(service => eligible.has(service));
-    return items.length ? '<section class="svc-directory-group"><h4>' + esc(group.name) + '</h4><div class="svc-grid">' +
+    const items = group.services.filter(service => (service.type === 'manual') === manual);
+    count += items.length;
+    return items.length ? '<section class="svc-directory-group"><h4 class="svc-directory-category">' + esc(group.name) + '</h4><div class="svc-grid">' +
       items.map(card).join('') + '</div></section>' : '';
   }).join('');
-  v.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
-    '<h3 style="font-size:17px;font-weight:800;color:#0f172a;">' + title + '</h3>' +
-    '<span class="back-nav" style="margin-bottom:0;" onclick="switchFilter(\'cats\')">← ক্যাটাগরি ভিউ</span>' +
-    '</div>' +
-    (sections || '<p style="color:#64748b;padding:30px 0;text-align:center;">এই বিভাগে কোনো সেবা পাওয়া যায়নি।</p>');
+  return '<section class="svc-directory-type" data-service-kind="' + kind + '" aria-labelledby="directory-' + kind + '">' +
+    '<header class="svc-directory-type-head"><h3 id="directory-' + kind + '">' + title + '</h3>' +
+    '<span>' + bnNum(count) + 'টি সেবা</span></header>' +
+    (sections || '<p class="svc-directory-empty">এই তালিকায় এখন কোনো সেবা নেই।</p>') + '</section>';
+}
+
+function showFilteredServices(f){
+  document.getElementById('catView').style.display = 'none';
+  const view = document.getElementById('svcView');
+  view.style.display = '';
+  view.innerHTML = f === 'all' ? '<div class="svc-directory-types">' +
+    serviceTypeSection('auto') + serviceTypeSection('manual') + '</div>' : serviceTypeSection(f);
 }
 
 function onSearchInput(val){

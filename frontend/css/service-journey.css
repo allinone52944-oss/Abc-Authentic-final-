@@ -7,7 +7,20 @@
 .page-services .svc-card { align-content: start; }
 .page-services .svc-info h4 { line-height: 1.65; }
 .page-services .svc-directory-group + .svc-directory-group { margin-top: 20px; }
-.page-services .svc-directory-group > h4 { margin: 0 0 10px; color: var(--layout-emerald); font-weight: 800; }
+.page-services .svc-directory-category { margin: 0 0 10px; color: var(--layout-emerald); font-weight: 800; }
+.page-services .svc-directory-types { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 16px; }
+.page-services .svc-directory-type { min-width: 0; }
+.page-services .svc-directory-type-head {
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;
+  gap: 6px 10px; margin-bottom: 14px; padding: 10px 14px; border-radius: 9px;
+  background: var(--layout-soft); color: var(--layout-emerald);
+}
+.page-services .svc-directory-type-head h3 { margin: 0; font-size: 17px; font-weight: 800; }
+.page-services .svc-directory-type-head span { font-size: 13px; }
+.page-services .svc-directory-type[data-service-kind="manual"] .svc-directory-type-head { background: #fff2d6; color: #714b0a; }
+.page-services .svc-directory-types .svc-grid { grid-template-columns: minmax(0, 1fr); }
+.page-services .svc-directory-type .cat-pill { display: none; }
+.page-services .svc-directory-empty { padding: 12px 0; color: var(--layout-muted); }
 .page-services :is(.cat-pill,.ptype) { white-space: normal; }
 .page-services .service-load-error { padding: 28px 0; color: var(--layout-muted); }
 .page-services .service-load-error button { margin-top: 16px; }
@@ -27,6 +40,7 @@
   .page-service-detail #detail > * { grid-column: 1 !important; grid-row: auto !important; }
 }
 @media (max-width: 600px) {
+  .page-services .svc-directory-types { grid-template-columns: minmax(0,1fr); }
   .page-services .svc-grid { grid-template-columns: minmax(0,1fr); }
   .page-services .svc-card { display: grid; grid-template-columns: 44px minmax(0,1fr); gap: 12px; padding: 18px; }
   .page-services .svc-ico { grid-column: 1; grid-row: 1; }
