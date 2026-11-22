@@ -35,9 +35,10 @@ import html
 import datetime
 
 import pymupdf
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 import build_output as bo
+from signature_image import signature_ink
 
 
 def _log(msg):
@@ -671,61 +672,25 @@ def _fit_holder_signature(path):
     px = int(round(146 / 2.0 - ink_cx))
     py = int(round(73 / 2.0 - ink_cy))
     canvas = Image.new("RGBA", (146, 73), (0, 0, 0, 0))
-    canvas.paste(im, (px, py), im)
+    canvas.alpha_composite(im, (px, py))
     return canvas
 
 
 def _clean_signature(path):
-    """Scanned holder signature (dark ink on white paper) -> transparent-bg
-    RGBA PNG, cropped to the ink bounding box.
-
-    Form theke extract kora sign.png-er kagoj saada na — scan-er
-    gradient (upore majhari gray, niche pray saada). Fixed white
-    threshold dile kagoj-tai gray box hoye card-er guilloche dheke
-    dito. Tai kagoj-ta per-pixel estimate kori (wide Gaussian blur)
-    ar kali = kagoj - gray: kali onek dark, kagoj pray shoman —
-    tai gradient thakleo kali alada hoy. Source-e alpha thakle
-    setao manjo. Ink-er bbox-e crop kori jate slot-e signature
-    chhoto na hoye jay.
-    Returns the path of the cleaned temp PNG.
-    Raises RuntimeError (Bengali) if the file cannot be read or has no ink.
-    """
+    """Save the holder's visible signature ink as a temporary PNG."""
     try:
-        im = Image.open(path)
+        with Image.open(path) as image:
+            out = signature_ink(image)
     except Exception as e:
         raise RuntimeError("ধারকের স্বাক্ষর পড়া যায়নি: %s" % e)
+    if out is None:
+        raise RuntimeError(
+            "ধারকের স্বাক্ষরে স্পষ্ট দাগ পাওয়া যায়নি। "
+            "অন্য ছবি দিন অথবা ফর্ম থেকে স্বাক্ষরটি সরিয়ে আবার চেষ্টা করুন।")
     try:
-        rgb = im.convert("RGB")
-        gray = rgb.convert("L")
-        # Background estimate: strokes wash out, paper gradient stays.
-        radius = max(8, min(im.width, im.height) // 10)
-        bg = gray.filter(ImageFilter.GaussianBlur(radius=radius))
-        dark = ImageChops.subtract(bg, gray)
-        # darkness <20 -> paper (transparent), >60 -> solid ink.
-        alpha = dark.point(
-            lambda d: 0 if d < 20 else (255 if d > 60 else
-                                       int((d - 20) * 255 / 40)))
-        if im.mode == "RGBA":
-            try:
-                alpha = ImageChops.darker(alpha, im.split()[3])
-            except Exception:
-                pass
-        out = rgb.convert("RGBA")
-        out.putalpha(alpha)
-        bbox = alpha.getbbox()
-        if not bbox:
-            raise RuntimeError(
-                "ধারকের স্বাক্ষরে কালি পাওয়া যায়নি — ফাঁকা ছবি। "
-                "সঠিক স্বাক্ষরের ছবি দিন।")
-        m = 2
-        out = out.crop((max(0, bbox[0] - m), max(0, bbox[1] - m),
-                        min(out.width, bbox[2] + m),
-                        min(out.height, bbox[3] + m)))
         tmp = bo._w("temp_renders", "v2_holder_sign_clean.png")
         out.save(tmp)
         return tmp
-    except RuntimeError:
-        raise
     except Exception as e:
         raise RuntimeError("ধারকের স্বাক্ষর বসানো যায়নি: %s" % e)
 

@@ -191,6 +191,36 @@ class TestExtractSample(unittest.TestCase):
         self.assertTrue(str(data.get("Date of Birth", "") or "").strip())
         self.assertIn("photo", images)
 
+    def test_extract_keeps_only_a_signature_with_visible_ink(self):
+        import pymupdf
+        from PIL import Image, ImageDraw
+        photo = os.path.join(self.tmp, "photo.png")
+        _fake_photo(photo)
+
+        for has_ink in (False, True):
+            with self.subTest(has_ink=has_ink):
+                signature = os.path.join(self.tmp, "signature.png")
+                scan = Image.new("RGBA", (160, 60), (0, 0, 0, 0))
+                if has_ink:
+                    ImageDraw.Draw(scan).line([(10, 35), (50, 12), (85, 47), (145, 21)],
+                                              fill=(0, 0, 0, 210), width=4)
+                scan.save(signature)
+                form = os.path.join(self.tmp, "fixture-" + str(has_ink) + ".pdf")
+                with pymupdf.open() as doc:
+                    page = doc.new_page()
+                    for index, text in enumerate(("Sample form", "Field 1", "Field 2", "Field 3", "Field 4")):
+                        page.insert_text((30, 40 + index * 18), text)
+                    page.insert_image(pymupdf.Rect(420, 40, 500, 140), filename=photo)
+                    page.insert_image(pymupdf.Rect(420, 165, 500, 195), filename=signature)
+                    doc.save(form)
+                work = os.path.join(self.tmp, "work-" + str(has_ink))
+                _data, images = ei.extract(form, work)
+                ei._DOC.close()
+                ei._DOC = None
+                self.assertIn("photo", images)
+                self.assertEqual("sign" in images, has_ink)
+                self.assertEqual(os.path.exists(os.path.join(work, "images", "sign.png")), has_ink)
+
     def test_template_layout_is_v2(self):
         # extract_template.py writes template.json in the job work dir.
         import subprocess
@@ -495,6 +525,41 @@ class TestHolderSignature(unittest.TestCase):
                 holder_sign_path=bad)
         self.assertIn("স্বাক্ষর", str(cm.exception))
         self.assertFalse(os.path.exists(self.out))
+
+    def test_clean_keeps_transparent_and_faint_signatures(self):
+        from PIL import Image, ImageDraw
+        bo.configure(ENGINE_DIR, self.work)
+        os.makedirs(bo._w("temp_renders"), exist_ok=True)
+        samples = (
+            ((0, 0, 0, 0), (0, 0, 0, 215)),
+            ((230, 230, 230, 255), (216, 216, 216, 255)),
+        )
+        for background, ink in samples:
+            with self.subTest(background=background):
+                scan = Image.new("RGBA", (240, 100), background)
+                ImageDraw.Draw(scan).line([(20, 65), (65, 25), (100, 73), (150, 30), (215, 66)],
+                                          fill=ink, width=5)
+                scan.save(self.sign_path)
+                cleaned = v2._clean_signature(self.sign_path)
+                fitted = v2._fit_holder_signature(cleaned)
+                self.assertIsNotNone(fitted.getchannel("A").getbbox())
+                self.assertGreater(fitted.getchannel("A").getextrema()[1], 100)
+
+    def test_blank_images_still_require_a_valid_signature_or_removal(self):
+        from PIL import Image, ImageDraw
+        bo.configure(ENGINE_DIR, self.work)
+        for background in ((255, 255, 255, 255), (0, 0, 0, 0)):
+            with self.subTest(background=background):
+                empty = Image.new("RGBA", (240, 100), background)
+                empty.save(self.sign_path)
+                with self.assertRaisesRegex(RuntimeError, "স্পষ্ট দাগ পাওয়া যায়নি"):
+                    v2._clean_signature(self.sign_path)
+        noisy = Image.new("RGB", (240, 100), (230, 230, 230))
+        ImageDraw.Draw(noisy).point([(30, 46), (50, 27), (125, 68), (155, 35)],
+                                   fill=(216, 216, 216))
+        noisy.save(self.sign_path)
+        with self.assertRaisesRegex(RuntimeError, "স্পষ্ট দাগ পাওয়া যায়নি"):
+            v2._clean_signature(self.sign_path)
 
     def test_slot_holds_holder_sign_not_authority(self):
         out = self._build(holder_sign=True)

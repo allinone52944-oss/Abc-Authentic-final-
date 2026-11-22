@@ -11,7 +11,11 @@ import sys
 import os
 import json
 import difflib
+from io import BytesIO
 import re
+
+from PIL import Image
+from signature_image import signature_ink
 
 if hasattr(sys.stdout, "reconfigure"):
     try:
@@ -1291,6 +1295,12 @@ def extract(pdf_path="input.pdf", work_dir="work"):
                 pix = pymupdf.Pixmap(pix, m)
             elif pix.n > 4:
                 pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
+            if kind == "sign":
+                # Some form PDFs contain a placeholder image in the
+                # signature box even though the applicant left it blank.
+                with Image.open(BytesIO(pix.tobytes("png"))) as signature:
+                    if signature_ink(signature) is None:
+                        continue
             fname = os.path.join(work_dir, "images", "%s.png" % kind)
             pix.save(fname)
             images[kind] = fname
