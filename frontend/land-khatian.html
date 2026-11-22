@@ -139,6 +139,10 @@
         ⚠️ এই রিপোর্টটি তথ্যের সারাংশ মাত্র — এটি সরকারি সার্টিফাইড কপি নয়, মালিকানা / স্বত্ব / দখলের প্রমাণ নয়।
         অফিসিয়াল কাজে সরকারি পোর্টালে যাচাই করে নিন।
       </div>
+      <details id="directoryServiceRules" hidden>
+        <summary>সেবার নিয়ম</summary>
+        <p id="directoryServiceRulesText"></p>
+      </details>
 
       <div class="err" id="errBox"></div>
       <div class="ok" id="okBox"></div>
@@ -239,6 +243,8 @@
   const $ = (id) => document.getElementById(id);
   let offeredSurveys = [];
   let currentIdem = null;
+  const directoryService = new URLSearchParams(location.search).get('service');
+  let directoryReady = !directoryService;
 
   // ABC.api() adds '/api' itself, so strip the leading '/api'
   // from the full paths above before calling it.
@@ -378,6 +384,7 @@
           $('priceText').textContent = 'সেবা চার্জ: ৳' + bn(d.price) + ' (শুধু রেকর্ড পেলেই কাটবে)';
         }
         if (!d.allowed) showErr('⚠️ এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।');
+        return d.allowed === true;
       }
     } catch (e) { /* price line stays as-is */ }
   }
@@ -539,6 +546,7 @@
 
   $('searchForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (!directoryReady) return;
     const area = areaBody();
     if (!area) return showErr('⚠️ বিভাগ, জেলা, উপজেলা ও মৌজা — সবগুলো বেছে নিন।');
     const khatianNo = $('khatianNo').value.trim();
@@ -630,8 +638,42 @@
     btn.textContent = '🔍 খুঁজুন';
   });
 
-  loadPrice();
-  loadDivisions();
+  async function startKhatianForm() {
+    if (!directoryService) {
+      loadPrice();
+      loadDivisions();
+      return;
+    }
+    const form = $('searchForm');
+    form.hidden = true;
+    try {
+      const response = await apiCall('/api/services/' + encodeURIComponent(directoryService));
+      if (response.status === 401) {
+        location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search);
+        return;
+      }
+      const service = response.ok ? (await response.json()).service : null;
+      if (!service || service.engine_id !== 'land-khatian' || !service.open) {
+        showErr('সেবাটি এখন খোলা যাচ্ছে না। সেবার তালিকা থেকে আবার চেষ্টা করুন।');
+        return;
+      }
+      if (service.rules_text) {
+        $('directoryServiceRulesText').textContent = service.rules_text;
+        $('directoryServiceRules').hidden = false;
+      }
+      if (!await loadPrice()) {
+        if (!$('errBox').classList.contains('on')) showErr('সেবার ফি লোড হয়নি। পেজটি রিফ্রেশ করুন।');
+        return;
+      }
+      directoryReady = true;
+      form.hidden = false;
+      loadDivisions();
+    } catch (_) {
+      showErr('সেবা লোড হয়নি। সংযোগ দেখে আবার চেষ্টা করুন।');
+    }
+  }
+
+  startKhatianForm();
 </script>
 
 <!-- Audit #53 — mobile tabbar (sidebar hides ≤768px) -->

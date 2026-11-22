@@ -322,6 +322,14 @@ router.get('/orders', async (req, res) => {
     const params = [req.user.id];
     let i = 2;
     if (req.query.status) { conds.push(`o.status = $${i++}`); params.push(req.query.status); }
+    if (req.query.service_id !== undefined) {
+      const serviceId = req.query.service_id;
+      if (typeof serviceId !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(serviceId)) {
+        return res.status(400).json({ error: 'INVALID_SERVICE' });
+      }
+      conds.push(`o.service_id = $${i++}`);
+      params.push(serviceId);
+    }
     const where = 'WHERE ' + conds.join(' AND ');
     const total = await db.query(`SELECT COUNT(*) FROM orders o JOIN services s ON s.id = o.service_id ${where}`, params);
     const rows = await db.query(

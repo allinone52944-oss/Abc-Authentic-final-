@@ -17,10 +17,10 @@
     '<div class="dv2-quick">' +
       '<a class="dv2-q dv2-q-gold" href="/services.html"><span class="dv2-q-ico">🚀</span><span><b>সেবা নিন</b><small>সব সেবা এক জায়গায় →</small></span></a>' +
       '<a class="dv2-q" href="/orders.html"><span class="dv2-q-ico">📦</span><span><b>আমার অর্ডার</b><small>অর্ডারের অবস্থা দেখুন →</small></span></a>' +
-      '<form class="dv2-service-search" action="/services.html" role="search" aria-label="সেবা খুঁজুন">' +
-        '<input type="search" name="q" aria-label="সেবার নাম" placeholder="সেবার নাম লিখুন" required>' +
-        '<button type="submit">সেবা খুঁজুন</button>' +
-      '</form>' +
+      '<nav class="dv2-service-links" aria-label="সেবার ধরন">' +
+        '<a href="/services.html?type=auto">স্বয়ংক্রিয় সেবা</a>' +
+        '<a href="/services.html?type=manual">অর্ডার সার্ভিস</a>' +
+      '</nav>' +
     '</div>';
   const HIST = suffix =>
     '<div class="dv2-hist card">' +

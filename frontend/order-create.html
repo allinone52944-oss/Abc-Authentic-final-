@@ -109,6 +109,20 @@
     overflow-y: auto;
     margin: 8px 0 10px;
   }
+  #manualOrderForm[hidden], #closedServiceNotice[hidden], #serviceOrders[hidden] { display: none; }
+  .service-orders { max-width: 780px; }
+  .service-order-row { padding: 12px 0; border-top: 1px solid var(--layout-line, #dce5df); }
+  .service-order-row-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
+  .service-order-row-head h3 { margin: 0; }
+  .service-order-row-head small { display: block; color: #53665d; }
+  .service-order-row-head a { text-decoration: none; }
+  .service-order-row-head .btn, .service-order-files .btn { min-height: 44px; }
+  .service-order-files { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .service-order-files button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+  .service-order-warning { margin: 8px 0 0; color: #874710; }
+  #serviceOrderMessage { margin: 10px 0; color: #53665d; }
+  #serviceOrderMessage:empty { display: none; }
+  #serviceOrders { scroll-margin-top: 24px; }
 </style>
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
@@ -161,7 +175,12 @@
       </div>
     </div>
 
-    <div class="card manual-workspace" style="max-width:780px;">
+    <div id="closedServiceNotice" class="card" hidden>
+      <h3>এই সেবা সাময়িকভাবে বন্ধ</h3>
+      <a class="btn btn-secondary" href="/services.html?type=manual">অর্ডার সার্ভিস দেখুন</a>
+    </div>
+
+    <div id="manualOrderForm" class="card manual-workspace" style="max-width:780px;">
       <div class="order-meta">
         <div>
           <h2 id="svcName" style="font-size:20px;font-weight:800;color:#0f172a;margin-bottom:4px;">লোড হচ্ছে…</h2>
@@ -231,6 +250,15 @@
       <div id="submitNotice" role="status" style="display:none;margin-top:12px;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;color:#1e40af;font-size:13px;text-align:center;"></div>
     </div>
 
+    <section id="serviceOrders" class="card service-orders" aria-labelledby="serviceOrdersTitle" hidden>
+      <div class="service-order-row-head">
+        <h3 id="serviceOrdersTitle">এই সেবায় আমার অর্ডার</h3>
+        <button type="button" class="btn btn-secondary" id="refreshServiceOrders">আবার দেখুন</button>
+      </div>
+      <p id="serviceOrderMessage" role="status">অর্ডার লোড হচ্ছে…</p>
+      <div id="serviceOrderList"></div>
+    </section>
+
   </div>
 </div>
 
@@ -245,6 +273,7 @@
 </div>
 
 <script src="/js/app.js?v=22"></script>
+<script src="/js/service-order-panel.js?v=20261122-1"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -501,6 +530,12 @@ async function init(){
     const d=await r.json();
     svc=d.service;
     if(svc.engine_id){location.href='/service-detail.html?id='+encodeURIComponent(sid);return;}
+    window.ServiceOrderPanel?.mount(svc);
+    if (svc.open === false) {
+      document.getElementById('manualOrderForm').hidden = true;
+      document.getElementById('closedServiceNotice').hidden = false;
+      return;
+    }
     svc.fields_required = safeArray(svc.fields_required);
     const svcPrice = Number(svc.price || 0);
 
@@ -983,7 +1018,8 @@ async function submit(){
   LocalIdem.clear('order_submit_' + sid);
   if(draftKey) LocalDraft.clear(draftKey);
 
-  location.href = '/order-status.html?id=' + encodeURIComponent(orderId)
+  const returnToService = window.ServiceOrderPanel?.checkoutReturn(orderId, uploadErrors);
+  location.href = returnToService || '/order-status.html?id=' + encodeURIComponent(orderId)
     + (uploadErrors > 0 ? '&doc_warning=1' : '');
 }
 

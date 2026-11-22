@@ -6,6 +6,8 @@
 .page-services :is(.svc-card,.cat-card,.back-nav):focus-visible { outline: 2px solid var(--layout-emerald); outline-offset: 3px; }
 .page-services .svc-card { align-content: start; }
 .page-services .svc-info h4 { line-height: 1.65; }
+.page-services .svc-directory-group + .svc-directory-group { margin-top: 20px; }
+.page-services .svc-directory-group > h4 { margin: 0 0 10px; color: var(--layout-emerald); font-weight: 800; }
 .page-services :is(.cat-pill,.ptype) { white-space: normal; }
 .page-services .service-load-error { padding: 28px 0; color: var(--layout-muted); }
 .page-services .service-load-error button { margin-top: 16px; }

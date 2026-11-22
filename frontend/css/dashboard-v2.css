@@ -183,28 +183,28 @@ body.dash-v2 .dv2-tag { white-space: normal; }
 body.dash-v2 :is(.hero-bal-toggle,#greetVoiceBtn,#greetVoiceBtnM) { min-height: 44px; min-width: 44px; }
 body.dash-v2 :is(.svc2,.dv2-q):focus-visible { outline: 2px solid var(--pv-primary); outline-offset: 3px; }
 
-body.dash-v2 .dv2-service-search {
+body.dash-v2 .dv2-service-links {
   grid-column: 1 / -1;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   min-width: 0;
-  padding: 6px;
-  background: #fff;
-  border: 1px solid #dce5df;
-  border-radius: 14px;
 }
-body.dash-v2 .dv2-service-search input {
-  flex: 1;
-  min-width: 0;
+body.dash-v2 .dv2-service-links a {
+  display: grid;
+  place-items: center;
   min-height: 44px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 8px;
-  color: #0f172a;
-  font: inherit;
-  font-size: 16px;
+  padding: 8px;
+  border: 1px solid #dce5df;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--pv-primary, #065f46);
+  text-align: center;
+  text-decoration: none;
+  font-weight: 700;
 }
-body.dash-v2 .dv2-service-search button,
+body.dash-v2 .dv2-service-links a:hover { background: #ecf7ef; }
+body.dash-v2 .sidebar .side-sub { text-decoration: none; }
 .dashboard-load-status button {
   min-height: 44px;
   padding: 0 12px;
@@ -216,7 +216,7 @@ body.dash-v2 .dv2-service-search button,
   font-weight: 700;
   cursor: pointer;
 }
-body.dash-v2 .dv2-service-search :focus-visible,
+body.dash-v2 .dv2-service-links a:focus-visible,
 .dashboard-load-status button:focus-visible {
   outline: 2px solid var(--pv-primary, #065f46);
   outline-offset: 2px;

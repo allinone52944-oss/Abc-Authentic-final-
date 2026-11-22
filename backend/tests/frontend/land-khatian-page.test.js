@@ -112,10 +112,14 @@ describe('services.html own card (not collapsed)', () => {
     expect(m[0]).toContain('land-mouza-value');
   });
 
-  test('normal card path renders a service-detail link for any non-group service', () => {
-    // Same escaped-quote form as the dashboard grid (see above).
-    expect(SERVICES).toContain("location.href=\\'/service-detail.html?id='+s.id");
-    expect(SERVICES).toContain('function card(s)');
+  test('only an open khatian service takes the direct route; other cards keep details', () => {
+    const source = SERVICES.slice(SERVICES.indexOf('function serviceDestination('), SERVICES.indexOf('function card('));
+    const context = { window: {} };
+    vm.runInNewContext(source, context);
+    const land = { id: 'land-fixture', engine_id: 'land-khatian', open: true };
+    expect(context.serviceDestination(land)).toBe('/land-khatian.html?service=land-fixture');
+    expect(context.serviceDestination({ ...land, open: false })).toBe('/service-detail.html?id=land-fixture');
+    expect(context.serviceDestination({ id: 'other', engine_id: 'other', open: true })).toBe('/service-detail.html?id=other');
   });
 });
 

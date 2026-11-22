@@ -192,6 +192,35 @@ describe('orders read + chat', () => {
     expect(r.body.limit).toBe(5);
   });
 
+  test('a service filter constrains both the total and the paginated rows for the owner', async () => {
+    const serviceId = 'da426b90-e01b-42a6-9393-90805221d0a1';
+    const scopedCalls = [];
+    db.__routeQuery([
+      ['SELECT COUNT(*) FROM orders o', (sql, params) => {
+        scopedCalls.push([sql, params]);
+        return { rows: [{ count: '1' }] };
+      }],
+      ['FROM orders o JOIN services', (sql, params) => {
+        scopedCalls.push([sql, params]);
+        return { rows: [{ id: 'order-1', service_id: serviceId }] };
+      }],
+    ]);
+    const result = await withUser(request(app()).get('/api/orders?service_id=' + serviceId + '&limit=5')).expect(200);
+    expect(result.body.orders[0].service_id).toBe(serviceId);
+    expect(scopedCalls).toHaveLength(2);
+    for (const [sql, params] of scopedCalls) {
+      expect(sql).toContain('o.user_id = $1');
+      expect(sql).toContain('o.service_id = $2');
+      expect(params.slice(0, 2)).toEqual(['u1', serviceId]);
+    }
+    expect(scopedCalls[1][1].slice(2)).toEqual([5, 0]);
+  });
+
+  test('an invalid service filter returns 400', async () => {
+    const result = await withUser(request(app()).get('/api/orders?service_id=invalid')).expect(400);
+    expect(result.body.error).toBe('INVALID_SERVICE');
+  });
+
   test('audit #52 — list rows carry service_type, and a refunded row carries delivered_before_refund', async () => {
     db.__routeQuery([
       ['SELECT COUNT(*) FROM orders o', { rows: [{ count: '2' }] }],
