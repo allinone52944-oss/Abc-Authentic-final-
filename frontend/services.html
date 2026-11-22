@@ -94,7 +94,7 @@
     justify-content: center;
   }
   .search-clear:hover { background: #e2e8f0; }
-  .sidebar .side-sub { text-decoration: none; }
+  .sidebar a.side-link { text-decoration: none; }
   .svc-summary {
     margin: 3px 0 6px;
     color: #475569;
@@ -179,7 +179,7 @@
     </div>
     <nav>
       <div class="side-link" onclick="location.href='/dashboard.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span> ড্যাশবোর্ড</div>
-      <div class="side-link on"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></span> সকল সেবা</div>
+      <a class="side-link on" href="/services.html" data-directory-type="all" aria-current="page"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></span> সকল সেবা</a>
       <a class="side-link side-sub" href="/services.html?type=auto" data-directory-type="auto">স্বয়ংক্রিয় সেবা</a>
       <a class="side-link side-sub" href="/services.html?type=manual" data-directory-type="manual">অর্ডার সার্ভিস</a>
       <div class="side-link" onclick="location.href='/orders.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span> অর্ডার</div>
@@ -214,10 +214,10 @@
 
     <!-- Filter Segment Tabs -->
     <div class="filter-tabs" id="filterTabs">
-      <button class="ftab on" id="tabCats" onclick="switchFilter('cats')">📁 ক্যাটাগরি ভিউ</button>
-      <button class="ftab" id="tabAll" onclick="switchFilter('all')">📋 সকল সেবা (<span id="cntAll">–</span>)</button>
+      <button class="ftab on" id="tabAll" onclick="switchFilter('all')">📋 সকল সেবা (<span id="cntAll">–</span>)</button>
       <button class="ftab" id="tabAuto" onclick="switchFilter('auto')">⚡ স্বয়ংক্রিয় সেবা (<span id="cntAuto">–</span>)</button>
       <button class="ftab" id="tabManual" onclick="switchFilter('manual')">📝 অর্ডার সার্ভিস (<span id="cntManual">–</span>)</button>
+      <button class="ftab" id="tabCats" onclick="switchFilter('cats')">📁 ক্যাটাগরি ভিউ</button>
     </div>
 
     <!-- Category Grid View -->
@@ -351,7 +351,12 @@ function card(s){
 
 let GROUPS = [];
 let ALL_SERVICES = [];
-let CURRENT_FILTER = 'cats';
+let CURRENT_FILTER = 'all';
+
+function directoryFilter(params){
+  const type = params.get('type');
+  return ['cats', 'auto', 'manual'].includes(type) ? type : 'all';
+}
 
 // B2#4 — BDRIS charges twice (application + original PDF). The
 // catalog card shows only the application price until the PDF
@@ -381,7 +386,7 @@ function switchFilter(f){
   CURRENT_FILTER = f;
   document.querySelectorAll('.ftab').forEach(b => b.classList.remove('on'));
   document.querySelectorAll('[data-directory-type]').forEach(link => {
-    const active = link.dataset.directoryType === f;
+    const active = link.dataset.directoryType === (f === 'cats' ? 'all' : f);
     link.classList.toggle('on', active);
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
@@ -604,23 +609,19 @@ async function init(){
   input.value = query.trim();
   document.getElementById('serviceSearchBar').hidden = !input.value;
   document.getElementById('searchClear').style.display = input.value ? 'inline-flex' : 'none';
-  const requested = saved?.f ?? params.get('type');
-  const filter = ['cats', 'all', 'auto', 'manual'].includes(requested) ? requested : (GROUPS.length ? 'cats' : 'all');
-  switchFilter(filter);
+  switchFilter(directoryFilter(params));
 }
 
-// B2#14 — remember the current query + filter in history state
-// (replaceState: no extra history entries) so Back/Forward
-// restores the same view instead of the category view.
+// Back and Forward restore the directory URL and its search input.
 function saveViewState(){
   try {
     const q = (document.getElementById('svcSearch').value || '').trim();
     const url = new URL(location.href);
     if (q) url.searchParams.set('q', q);
     else url.searchParams.delete('q');
-    if (CURRENT_FILTER === 'cats') url.searchParams.delete('type');
+    if (CURRENT_FILTER === 'all') url.searchParams.delete('type');
     else url.searchParams.set('type', CURRENT_FILTER);
-    history.replaceState({ q, f: CURRENT_FILTER }, '', url);
+    history.replaceState({ q }, '', url);
   } catch (e) {}
 }
 window.addEventListener('popstate', function (ev) {
@@ -630,7 +631,7 @@ window.addEventListener('popstate', function (ev) {
   document.getElementById('svcSearch').value = q;
   document.getElementById('serviceSearchBar').hidden = !q;
   document.getElementById('searchClear').style.display = q ? 'inline-flex' : 'none';
-  switchFilter(['cats', 'all', 'auto', 'manual'].includes(st.f) ? st.f : 'cats');
+  switchFilter(directoryFilter(new URLSearchParams(location.search)));
 });
 init();
 </script>
