@@ -183,12 +183,24 @@ body.dash-v2 .dv2-tag { white-space: normal; }
 body.dash-v2 :is(.hero-bal-toggle,#greetVoiceBtn,#greetVoiceBtnM) { min-height: 44px; min-width: 44px; }
 body.dash-v2 :is(.svc2,.dv2-q):focus-visible { outline: 2px solid var(--pv-primary); outline-offset: 3px; }
 
-body.dash-v2 .dv2-service-links {
+body.dash-v2 .dv2-service-menu {
   grid-column: 1 / -1;
+  min-width: 0;
+}
+body.dash-v2 .dv2-service-menu > summary {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid #dce5df;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--pv-primary, #065f46);
+  font-weight: 700;
+}
+body.dash-v2 .dv2-service-links {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  min-width: 0;
+  margin-top: 8px;
 }
 body.dash-v2 .dv2-service-links a {
   display: grid;
@@ -216,7 +228,7 @@ body.dash-v2 .sidebar .side-sub { text-decoration: none; }
   font-weight: 700;
   cursor: pointer;
 }
-body.dash-v2 .dv2-service-links a:focus-visible,
+body.dash-v2 .dv2-service-menu :is(summary,a):focus-visible,
 .dashboard-load-status button:focus-visible {
   outline: 2px solid var(--pv-primary, #065f46);
   outline-offset: 2px;

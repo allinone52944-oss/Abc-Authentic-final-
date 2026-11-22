@@ -1,6 +1,9 @@
 /* Presentation only; preserve service identities, pricing and document output. */
-.page-services .filter-tabs { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; overflow: visible; padding: 0 0 20px; }
+.page-services .filter-tabs { display: grid; grid-template-columns: minmax(0,2fr) repeat(2,minmax(0,1fr)); align-items: start; gap: 8px; overflow: visible; padding: 0 0 20px; }
 .page-services.flagship-app .ftab { min-height: 44px; white-space: normal; min-width: 0; padding: 12px 8px; line-height: 1.6; border-radius: 8px; }
+.page-services.flagship-app .directory-filter-menu > summary { padding-inline: 14px; }
+.page-services .directory-type-filters { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-top: 8px; }
+.page-services .filter-tabs :is(button,summary):focus-visible { outline: 2px solid var(--layout-emerald); outline-offset: 2px; }
 .page-services :is(.svc-card,.cat-card) { border-radius: 8px; }
 .page-services :is(.svc-card,.cat-card):hover { border-color: var(--layout-emerald); background: var(--layout-soft); }
 .page-services :is(.svc-card,.cat-card,.back-nav):focus-visible { outline: 2px solid var(--layout-emerald); outline-offset: 3px; }
@@ -36,6 +39,7 @@
 .page-service-detail #detail .detail-header > div:first-child > div:last-child { min-width: 0; }
 @media (max-width: 1100px) {
   .page-services .filter-tabs { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .page-services .directory-filter-menu { grid-column: 1 / -1; }
   .page-service-detail #detail { grid-template-columns: minmax(0,1fr); gap: 20px; }
   .page-service-detail #detail > * { grid-column: 1 !important; grid-row: auto !important; }
 }
