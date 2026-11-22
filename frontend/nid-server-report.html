@@ -214,16 +214,16 @@
     border-color: #f87171;
   }
 
-  #fieldForm {
+  #fieldForm, #reportExtraFields {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
     margin-top: 14px;
   }
-  #fieldForm .field { margin: 0; }
+  #fieldForm .field, #reportExtraFields .field { margin: 0; min-width: 0; }
   #fieldForm .field.full { grid-column: 1 / -1; }
-  #fieldForm label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 4px; }
-  #fieldForm input, #fieldForm textarea {
+  :is(#fieldForm,#reportExtraFields) label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 4px; }
+  :is(#fieldForm,#reportExtraFields) :is(input,textarea) {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid #cbd5e1;
@@ -234,6 +234,9 @@
     font-family: inherit;
   }
   #fieldForm textarea { min-height: 70px; }
+  #reportExtraFields input { min-height: 48px; font-size: 16px; }
+  #editFields { margin-top: 16px; }
+  .page-nid-server-report #w2 .imgprev { grid-template-columns: minmax(0, 280px); justify-content: center; }
   #fieldForm [aria-invalid="true"] { border-color: #b91c1c; }
   #reportFieldErrors { color: #b91c1c; margin-top: 12px; }
   #fieldForm .addr-head {
@@ -277,7 +280,7 @@
   .opt-card .d { font-size: 13px; color: #475569; line-height: 1.6; flex: 1; }
 
   @media (max-width: 768px) {
-    #fieldForm { grid-template-columns: 1fr; }
+    #fieldForm, #reportExtraFields { grid-template-columns: minmax(0, 1fr); }
     .opt-grid { grid-template-columns: 1fr; }
   }
 </style>
@@ -361,13 +364,15 @@
     <div class="wiz" id="w2">
       <div class="form-card">
         <h3 style="color:var(--primary-700); font-size:17px; font-weight:700; margin-bottom:6px;">তথ্য মিলিয়ে নিন</h3>
-        <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">ধাপ ২ / ৩ · ভুল থাকলে সংশোধন করুন — বদলানো মানই রিপোর্টে বসবে</p>
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">ধাপ ২ / ৩ · ভুল থাকলে সংশোধন করুন</p>
         <button type="button" class="nid-back" onclick="go(1)">← PDF পরিবর্তন করুন</button>
-        <p class="note" style="text-align:left;">✏️ সব তথ্য এডিট করা যাবে — নিচে সাজানো আছে, ভুল থাকলে ঠিক করে তারপর তৈরি করুন।</p>
         <div class="imgprev" id="imgPrev"></div>
-        <div id="editFields"></div>
         <p id="reportFieldErrors" role="alert" hidden></p>
         <div id="fieldForm"></div>
+        <details id="editFields" class="nid-help">
+          <summary>রিপোর্টের অতিরিক্ত তথ্য</summary>
+          <div id="reportExtraFields"></div>
+        </details>
         <div style="height:18px;"></div>
         <button class="btn btn-primary" id="b3" onclick="doCreate()" style="width:100%;">নিশ্চিত করে তৈরি করুন →</button>
       </div>
@@ -488,19 +493,21 @@ function go(n){
 const STANDARD_FIELDS = [
   { key: 'Name(Bangla)', label: 'নাম (বাংলা)', placeholder: 'নাম বাংলায় লিখুন' },
   { key: 'Name(English)', label: 'Name (English)', placeholder: 'Name in English' },
-  { key: 'Date of Birth', label: 'জন্ম তারিখ', placeholder: 'যেমন: 01 Jan 1990 বা ০১/০১/১৯৯০' },
-  { key: 'National ID', label: 'জাতীয় পরিচয়পত্র নম্বর', placeholder: '১০, ১৩ বা ১৭ সংখ্যার নম্বর' },
-  { key: 'Pin', label: 'পিন নম্বর', placeholder: 'পিন নম্বর' },
-  { key: 'Voter No', label: 'ভোটার নম্বর', placeholder: 'ভোটার নম্বর' },
-  { key: 'Voter Area', label: 'ভোটার এরিয়া কোড', placeholder: 'ভোটার এরিয়া কোড' },
   { key: 'Father Name', label: 'পিতার নাম', placeholder: 'পিতার নাম লিখুন' },
   { key: 'Mother Name', label: 'মাতার নাম', placeholder: 'মাতার নাম লিখুন' },
+  { key: 'Date of Birth', label: 'জন্ম তারিখ', placeholder: 'যেমন: 01 Jan 1990 বা ০১/০১/১৯৯০' },
+  { key: 'National ID', label: 'জাতীয় পরিচয়পত্র নম্বর', placeholder: '১০, ১৩ বা ১৭ সংখ্যার নম্বর' },
+  { key: 'Birth Place', label: 'জন্মস্থান (জেলা)', placeholder: 'যেমন: ঢাকা, বগুড়া ইত্যাদি' },
+  { key: 'Blood Group', label: 'রক্তের গ্রুপ (Blood Group)', placeholder: 'যেমন: A+, B+, O+, AB+' },
+  { key: 'Pin', label: 'পিন নম্বর', placeholder: 'পিন নম্বর' },
+];
+const REPORT_FIELDS = [
+  { key: 'Voter No', label: 'ভোটার নম্বর', placeholder: 'ভোটার নম্বর' },
+  { key: 'Voter Area', label: 'ভোটার এরিয়া কোড', placeholder: 'ভোটার এরিয়া কোড' },
   { key: 'Spouse Name', label: 'স্বামী/স্ত্রীর নাম', placeholder: 'স্বামী/স্ত্রীর নাম লিখুন' },
   { key: 'Gender', label: 'লিঙ্গ', placeholder: 'যেমন: পুরুষ / মহিলা' },
   { key: 'Religion', label: 'ধর্ম', placeholder: 'যেমন: ইসলাম' },
   { key: 'Occupation', label: 'পেশা', placeholder: 'পেশা লিখুন' },
-  { key: 'Birth Place', label: 'জন্মস্থান', placeholder: 'জন্মস্থান লিখুন' },
-  { key: 'Blood Group', label: 'রক্তের গ্রুপ (Blood Group)', placeholder: 'যেমন: A+, B+, O+, AB+' },
   { key: 'Mobile', label: 'মোবাইল', placeholder: 'মোবাইল নম্বর' },
 ];
 const ADDR_PARTS = [
@@ -589,20 +596,22 @@ function fieldInput(id, label, value, attrs){
 
 function renderFieldsUI(){
   const ff = document.getElementById('fieldForm');
-  if(!ff) return;
-  ff.innerHTML = '';
+  const extras = document.getElementById('reportExtraFields');
+  ff.replaceChildren();
+  extras.replaceChildren();
+  document.getElementById('editFields').open = false;
   const fields = Object.assign({}, S.fields || {});
   const renderedKeys = new Set();
 
-  STANDARD_FIELDS.forEach((sf, i) => {
-    renderedKeys.add(sf.key);
-    const val = fields[sf.key] ?? '';
+  function addField(field, container, id) {
+    renderedKeys.add(field.key);
     const d = document.createElement('div');
     d.className = 'field';
-    const id = 'std_fld_' + i;
-    d.innerHTML = fieldInput(id, sf.label, val, 'data-k="' + esc(sf.key) + '" placeholder="' + esc(sf.placeholder) + '"');
-    ff.appendChild(d);
-  });
+    d.innerHTML = fieldInput(id, field.label, fields[field.key] ?? '',
+      'data-k="' + esc(field.key) + '" placeholder="' + esc(field.placeholder) + '"');
+    container.appendChild(d);
+  }
+  STANDARD_FIELDS.forEach((field, i) => addField(field, ff, 'std_fld_' + i));
 
   // Keep one editable field per address. Wrapping keeps the full
   // extracted value readable on narrow screens.
@@ -611,26 +620,24 @@ function renderFieldsUI(){
     const d = document.createElement('div');
     d.className = 'field full';
     const id = 'addr_' + sec.key.replace(/\s/g, '_');
+    const text = fields._address_lines?.[sec.key] ?? joinAddressParts(fields[sec.key]);
     d.innerHTML = '<label for="' + id + '">' + esc(sec.label) + '</label>' +
       '<textarea rows="2" id="' + id + '" data-k="' + esc(sec.key) + '">' +
-      esc(joinAddressParts(fields[sec.key])) + '</textarea>';
+      esc(text) + '</textarea>';
     ff.appendChild(d);
   });
 
+  REPORT_FIELDS.forEach((field, i) => addField(field, extras, 'report_fld_' + i));
   Object.keys(fields).forEach((k, idx) => {
     if(renderedKeys.has(k) || k.startsWith('_')) return;
     if(typeof fields[k] === 'object') return; // address dicts already rendered
-    const d = document.createElement('div');
-    d.className = 'field';
-    const id = 'extra_fld_' + idx;
-    d.innerHTML = fieldInput(id, k, fields[k], 'data-k="' + esc(k) + '"');
-    ff.appendChild(d);
+    addField({ key: k, label: k, placeholder: '' }, extras, 'extra_fld_' + idx);
   });
 }
 
 function collectFields(){
   const out = {};
-  document.querySelectorAll('#fieldForm [data-k]').forEach(inp => { out[inp.dataset.k] = inp.value; });
+  document.querySelectorAll('#fieldForm [data-k], #reportExtraFields [data-k]').forEach(inp => { out[inp.dataset.k] = inp.value; });
   return out;
 }
 

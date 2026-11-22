@@ -14,6 +14,8 @@ import json
 import difflib
 import unicodedata
 
+from review_addresses import review_addresses
+
 if hasattr(sys.stdout, "reconfigure"):
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -1410,6 +1412,7 @@ def extract(pdf_path="input.pdf", work_dir="work"):
     # Spelling repair pass — sample PDF-er bhul spelling/shaping thakleo
     # output value canonical hobe (name, address, place sob).
     data = _clean_data(data)
+    data["_address_lines"] = review_addresses(data)
 
     with open(os.path.join(work_dir, "input_data.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=1)

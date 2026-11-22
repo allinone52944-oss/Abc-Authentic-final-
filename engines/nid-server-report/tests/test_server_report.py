@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import extract_input as ei  # noqa: E402
 import build_reports as br  # noqa: E402
+from review_addresses import review_addresses  # noqa: E402
 
 ENGINE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 V1_TEMPLATE = os.path.join(ENGINE_DIR, "report_v1_template.pdf")
@@ -67,6 +68,34 @@ FAKE = {
         "division": "ঢাকা",
     },
 }
+
+
+class TestReviewAddresses(unittest.TestCase):
+    def test_nid_address_format_with_independent_current_and_permanent_fields(self):
+        addresses = review_addresses({
+            "District": "ঢাকা",
+            "Upozila": "মিরপুর",
+            "Present Address": {
+                "holding": "12",
+                "village": "পরীক্ষা গ্রাম",
+                "mouza": "পরীক্ষা গ্রাম",
+                "post_office": "পরীক্ষা ডাকঘর",
+                "postal_code": "1200",
+            },
+            "Permanent Address": {"district": "চট্টগ্রাম", "holding": "-"},
+        })
+        self.assertEqual(
+            addresses["Present Address"],
+            "বাসা/হোল্ডিং: ১২, গ্রাম/রাস্তা: পরীক্ষা গ্রাম, ডাকঘর: পরীক্ষা ডাকঘর - ১২০০, মিরপুর, ঢাকা",
+        )
+        self.assertEqual(addresses["Permanent Address"], "চট্টগ্রাম")
+
+    def test_report_city_and_ward_are_kept_without_filling_a_missing_address(self):
+        addresses = review_addresses({"Present Address": {
+            "union_ward": "5", "city_corp": "ঢাকা সিটি কর্পোরেশন",
+        }})
+        self.assertEqual(addresses["Present Address"], "ঢাকা সিটি কর্পোরেশন, ইউনিয়ন/ওয়ার্ড: ৫")
+        self.assertEqual(addresses["Permanent Address"], "")
 
 
 class TestSpellingRepair(unittest.TestCase):
@@ -169,6 +198,7 @@ class TestExtractTemplates(unittest.TestCase):
         self.assertTrue(str(data.get("Name(Bangla)", "") or "").strip())
         self.assertTrue(str(data.get("Date of Birth", "") or "").strip())
         self.assertIsInstance(data.get("Present Address", {}), dict)
+        self.assertEqual(data["_address_lines"], review_addresses(data))
         self.assertIn("photo", images)
 
     def test_extract_v1_template_shape(self):
@@ -274,7 +304,9 @@ class TestBuildReports(unittest.TestCase):
         import pymupdf
         for suffix in ("-v1.pdf", "-v2.pdf"):
             with pymupdf.open(os.path.join(self.out, "1010101010" + suffix)) as doc:
-                text = doc[0].get_text()
+                # The PDF text layer can represent a visible space as
+                # a non-breaking space, depending on the font engine.
+                text = doc[0].get_text().replace("\u00a0", " ")
             self.assertIn("12, Mirpur, Dhaka 1200", text)
             self.assertIn("34, Uttara, Dhaka 1230", text)
 

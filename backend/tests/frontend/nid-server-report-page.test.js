@@ -60,7 +60,9 @@ describe('nid-server-report.html', () => {
     expect(html).toContain('id="editFields"');
     expect(html).toContain('id="fieldForm"');
     expect(html).toContain('id="imgPrev"');
-    expect(html).toContain('সব তথ্য এডিট করা যাবে');
+    expect(html.indexOf('id="imgPrev"')).toBeLessThan(html.indexOf('id="fieldForm"'));
+    expect(html).toContain('রিপোর্টের অতিরিক্ত তথ্য');
+    expect(html).not.toContain('handleSignatureUpload');
     expect(html).toContain('PHOTO_STATE');
   });
   test('download sends photo override + reports both files to engine-jobs', () => {
@@ -78,6 +80,7 @@ describe('nid-server-report.html', () => {
     expect(html).not.toContain('ADDR_CORE');
     expect(html).toContain('function joinAddressParts');
     expect(html).toContain('joinAddressParts(fields[sec.key])');
+    expect(html).toContain('fields._address_lines?.[sec.key]');
     expect(html).toContain('<textarea rows="2" id="');
   });
   test('joinAddressParts: ADDR_PARTS order, empties + placeholders skipped, strings pass through', () => {
