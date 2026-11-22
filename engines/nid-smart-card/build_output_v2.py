@@ -56,7 +56,14 @@ FRONT_NID = {"x": 162.79, "baseline": 195.23, "size": 8.98}
 
 ADDRESS = {"x": 313.50, "baseline1": 110.25, "line_step": 7.50,
            "size": 7.50, "min_size": 5.40, "max_right": 527.50,
-           "max_lines": 3, "gap": 1.92, "bottom_limit": 132.00}
+           "max_lines": 3, "gap": 1.92, "bottom_limit": 132.00,
+           # Sample card-er moto wrap: official renderer wrap-er somoy
+           # text-er metric ~1.45x chowra dhore (render 7.50pt-ei hoy),
+           # tai line age vange — sample-structured address-e 6+7+1 ase.
+           # Jachai-kora window (1.40, 1.49]; 1.45 majhamajhi. Shrink
+           # loop ager motoi ≤3 line nischit kore; eta kono nirdisto
+           # address-er jonno hardcode na — sob address-e ek niyom.
+           "wrap_factor": 1.45}
 
 BACK_BLOOD = {"x": 343.20, "baseline": 144.18, "size": 6.29}
 BACK_PLACE_LABEL = {"x": 363.00, "baseline": 142.65, "size": 4.88}
@@ -386,14 +393,22 @@ def insert_latin(page, txt, x0, baseline, size, bold=False, color=(0, 0, 0),
 # ---------------------------------------------------------------------------
 # address wrap
 # ---------------------------------------------------------------------------
-def _wrap_bn(parts, font_path, size, first_width, width, stroke_pt=0.0):
-    """Word-wrap; first line-er available width alada (label baad diye)."""
+def _wrap_bn(parts, font_path, size, first_width, width, stroke_pt=0.0,
+             wrap_factor=1.0):
+    """Word-wrap; first line-er available width alada (label baad diye).
+
+    wrap_factor > 1 hole candidate size*wrap_factor-e mapa hoy (render
+    size-ei hoy): official renderer-er moto chowra metric-e wrap kore,
+    tai line age vange (sample-er 6+7+1 split-er moto). Fit-check-er
+    mapa (layout-e) render size-ei hoy, tai overflow hoy na.
+    """
     words = parts.split()
     lines, cur = [], ""
     limit = first_width
+    msize = size * wrap_factor
     for w in words:
         cand = (cur + " " + w).strip()
-        cw, _, _, _ = _measure_bn(cand, font_path, size, stroke_pt)
+        cw, _, _, _ = _measure_bn(cand, font_path, msize, stroke_pt)
         if cw <= limit or not cur:
             cur = cand
         else:
@@ -418,12 +433,14 @@ def _layout_address(addr_val, label, font_path, box):
     gap = box["gap"]
     maxw = box["max_right"] - box["x"]
     max_lines = box["max_lines"]
+    wrap_factor = box.get("wrap_factor", 1.0)
     size = box["size"]
     min_size = box["min_size"]
     lw, _, _, l_ink = _measure_bn(label, font_path, size)
 
     for _ in range(80):
-        lines = _wrap_bn(addr_val, font_path, size, maxw - lw - gap, maxw)
+        lines = _wrap_bn(addr_val, font_path, size, maxw - lw - gap, maxw,
+                         wrap_factor=wrap_factor)
         widths, inks = [], []
         for ln in lines:
             w, _, _, ink = _measure_bn(ln, font_path, size)
