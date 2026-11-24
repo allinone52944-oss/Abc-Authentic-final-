@@ -1200,9 +1200,13 @@ function buildCertificateHtml(d, assets) {
 }
 
 
+let certificateImages;
 async function buildAssets(d) {
-    const sealBase64 = fs.readFileSync(path.join(__dirname, '..', 'shared', 'assets', 'seal.jpg')).toString('base64');
-    const logoBase64 = fs.readFileSync(path.join(__dirname, '..', 'shared', 'assets', 'logo.png')).toString('base64');
+    if (!certificateImages) {
+        const seal = fs.readFileSync(path.join(__dirname, '..', 'shared', 'assets', 'seal.jpg')).toString('base64');
+        const logo = fs.readFileSync(path.join(__dirname, '..', 'shared', 'assets', 'logo.png')).toString('base64');
+        certificateImages = { seal: `data:image/jpeg;base64,${seal}`, logo: `data:image/png;base64,${logo}` };
+    }
     const brnText = String(d.brn || '').trim();
     let qrDataUrl;
     let barcodeDataUrl = '';
@@ -1217,8 +1221,7 @@ async function buildAssets(d) {
         qrDataUrl = await QRCode.toDataURL(' ', { width: 400, margin: 0, errorCorrectionLevel: 'M' });
     }
     return {
-        seal: `data:image/jpeg;base64,${sealBase64}`,
-        logo: `data:image/png;base64,${logoBase64}`,
+        ...certificateImages,
         qr: qrDataUrl,
         barcode: barcodeDataUrl,
         code
@@ -1311,7 +1314,10 @@ app.post('/generate-pdf', async (req, res) => {
         // address auto-fit script sesh hote dao (preview-e jothajoth dekha jay,
         // PDF-eo same layout) — fit na holeo PDF generation ruk hobe na.
         try { await page.waitForFunction('window.__fitDone === true', { timeout: 1000 }); } catch (_) {}
-        await new Promise(r => setTimeout(r, 120));
+        await page.evaluate(async () => {
+            await document.fonts.ready;
+            await Promise.all([...document.images].map(img => img.decode().catch(() => {})));
+        });
         // VECTOR PDF (preferCSSPageSize honours @page A4, margin 0) — same as
         // the audited deliverable birth-certificate.pdf (486 KB). Text stays
         // selectable + file stays small; the old 300 DPI raster embed made
@@ -1321,8 +1327,6 @@ app.post('/generate-pdf', async (req, res) => {
             preferCSSPageSize: true,
             margin: { top: 0, right: 0, bottom: 0, left: 0 }
         });
-        await browser.close();
-
         const brnText = String(d.brn || '').trim();
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=Certificate_${brnText || 'output'}.pdf`);
@@ -1331,7 +1335,7 @@ app.post('/generate-pdf', async (req, res) => {
         console.error('PDF generation error:', err);
         res.status(500).json({ success: false, error: 'Failed to generate PDF' });
     } finally {
-        if (browser) await browser.close();
+        if (browser) await browser.close().catch(() => {});
     }
 });
 

@@ -52,11 +52,11 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const { PYTHON, runCardPython, prepareCardTemplate, queueCardJob } = require('../shared/card-worker');
 
 const ENGINE_DIR = __dirname;
 const JOBS_DIR = path.join(ENGINE_DIR, 'work', 'jobs');
 const KEEP_JOBS = 50;
-const TIMEOUT_MS = 120000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 let _config = {};
@@ -85,22 +85,7 @@ function pruneJobs() {
 }
 
 function runPython(scriptName, args, cwd) {
-    const script = path.join(ENGINE_DIR, scriptName);
-    const r = spawnSync('python3', [script, ...args], {
-        cwd,
-        timeout: TIMEOUT_MS,
-        encoding: 'utf8',
-        maxBuffer: 32 * 1024 * 1024,
-    });
-    return {
-        ok: r.status === 0,
-        exitCode: r.status,
-        signal: r.signal || null,
-        timedOut: !!r.error && r.error.code === 'ETIMEDOUT',
-        stdout: String(r.stdout || ''),
-        // stderr kept for server logs only — never sent to client
-        stderr: String(r.stderr || ''),
-    };
+    return runCardPython(path.join(ENGINE_DIR, scriptName), args, cwd);
 }
 
 // The build script prints log lines then ONE JSON line:
@@ -200,12 +185,12 @@ async function extractFields(pdfBuffer, ownerId) {
         pruneJobs();
 
         const steps = [
-            ['extract_input.py', ['input.pdf']],
-            ['extract_template.py', [path.join(ENGINE_DIR, 'output_template.pdf')]],
-            ['make_fields.py', []],
+            ['extract_input.py', () => runPython('extract_input.py', ['input.pdf'], dir)],
+            ['extract_template.py', () => prepareCardTemplate(ENGINE_DIR, dir)],
+            ['make_fields.py', () => runPython('make_fields.py', [], dir)],
         ];
-        for (const [script, args] of steps) {
-            const r = runPython(script, args, dir);
+        for (const [script, run] of steps) {
+            const r = await run();
             if (!r.ok) {
                 console.warn(`[nid-smart-card] ${script} failed (job ${id}): exit=${r.exitCode} signal=${r.signal} timedOut=${r.timedOut}`);
                 if (r.stderr) console.warn('[nid-smart-card] stderr tail:', r.stderr.slice(-800));
@@ -333,7 +318,7 @@ async function buildCard(jobId, fieldsJson, images, ownerId) {
         // holder's signature never leaks) and the build succeeds.
         const signPath = path.join(imgDir, 'sign.png');
         if (fs.existsSync(signPath)) args.push('--holder-sign', signPath);
-        const r = runPython('build_output_v2.py', args, dir);
+        const r = await runPython('build_output_v2.py', args, dir);
         const buildJson = parseBuildJson(r.stdout);
         if (!r.ok) {
             console.warn(`[nid-smart-card] build_output_v2.py failed (job ${jobId}): exit=${r.exitCode} signal=${r.signal} timedOut=${r.timedOut}`);
@@ -387,14 +372,14 @@ function init(config) {
     try { fs.mkdirSync(JOBS_DIR, { recursive: true }); } catch (_) {}
     // Preflight: python3 + deps present?
     try {
-        const r = spawnSync('python3', ['-c', 'import pymupdf, PIL, pdf417gen; print("ok")'],
+        const r = spawnSync(PYTHON, ['-c', 'import pymupdf, PIL, pdf417gen; print("ok")'],
             { timeout: 15000, encoding: 'utf8' });
         if (r.status === 0) {
             console.log('[nid-smart-card] engine ready (python deps ok)');
         } else {
             console.warn('[nid-smart-card] python deps missing — run: pip3 install pymupdf Pillow pdf417gen opencv-python-headless');
         }
-        const c = spawnSync('python3', ['-c', 'import cv2; print("ok")'],
+        const c = spawnSync(PYTHON, ['-c', 'import cv2; print("ok")'],
             { timeout: 15000, encoding: 'utf8' });
         if (c.status !== 0) {
             console.warn('[nid-smart-card] cv2 missing — photo background sanitize degrades to the original photo (visible WARNING log); install: pip3 install opencv-python-headless');
@@ -417,4 +402,9 @@ function getInfo() {
     };
 }
 
-module.exports = { init, getInfo, extractFields, buildCard, validateJob, hasCoreData, missingCoreGroups, outputBase, NO_CORE_DATA_MESSAGE, parseBuildJson };
+module.exports = {
+    init, getInfo,
+    extractFields: queueCardJob(extractFields),
+    buildCard: queueCardJob(buildCard),
+    validateJob, hasCoreData, missingCoreGroups, outputBase, NO_CORE_DATA_MESSAGE, parseBuildJson,
+};

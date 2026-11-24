@@ -9,7 +9,10 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { spawn, spawnSync } = require('child_process');
+const { spawn, spawnSync, execFile } = require('child_process');
+const { promisify } = require('node:util');
+const { pathToFileURL } = require('node:url');
+const execChrome = promisify(execFile);
 let CE; try { CE = require('../shared/cert-engine-standalone.js'); } catch (_) { CE = require('./cert-engine-standalone.js'); }
 
 // AUDIT #5 (2026-11-05): engine-side render check — same rule as
@@ -662,9 +665,13 @@ const KNOWN_DEATH = {
     }
 };
 
+let certificateImages;
 async function buildAssets(d) {
-    const sealBase64 = fs.readFileSync(path.join(__dirname, '..', 'shared', 'assets', 'seal.jpg')).toString('base64');
-    const logoBase64 = fs.readFileSync(path.join(__dirname, '..', 'shared', 'assets', 'logo.png')).toString('base64');
+    if (!certificateImages) {
+        const seal = fs.readFileSync(path.join(__dirname, '..', 'shared', 'assets', 'seal.jpg')).toString('base64');
+        const logo = fs.readFileSync(path.join(__dirname, '..', 'shared', 'assets', 'logo.png')).toString('base64');
+        certificateImages = { seal: `data:image/jpeg;base64,${seal}`, logo: `data:image/png;base64,${logo}` };
+    }
     const brnText = String(d.brn == null ? '' : d.brn).trim();
     const knownRec = KNOWN_DEATH[brnText];
     let qrDataUrl = '', barcodeDataUrl = '';
@@ -680,8 +687,7 @@ async function buildAssets(d) {
         if (!code) code = built.code || '';
     }
     return {
-        seal: 'data:image/jpeg;base64,' + sealBase64,
-        logo: 'data:image/png;base64,' + logoBase64,
+        ...certificateImages,
         qr: qrDataUrl,
         barcode: barcodeDataUrl,
         code: code
@@ -1132,26 +1138,20 @@ async function routePdf(req, res) {
         tmpHtml = path.join(require('os').tmpdir(), `dcert_${rnd}.html`);
         tmpPdf = path.join(require('os').tmpdir(), `dcert_${rnd}.pdf`);
         prof = path.join(require('os').tmpdir(), `dcert_prof_${rnd}`);
-        fs.writeFileSync(tmpHtml, html, 'utf8');
-
-        const url = 'file:///' + tmpHtml.replace(/\\/g, '/');
-        await new Promise((resolve, reject) => {
-            const ch = spawn(CHROME, [
-                '--headless', '--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage',
-                '--no-pdf-header-footer',
-                '--user-data-dir=' + prof,
-                '--print-to-pdf=' + tmpPdf,
-                url
-            ], { windowsHide: true });
-            let err = '';
-            ch.stderr.on('data', d2 => { err += d2; });
-            ch.on('error', reject);
-            ch.on('close', code => {
-                if (code === 0 && fs.existsSync(tmpPdf)) resolve();
-                else reject(new Error('Chrome pdf failed (code ' + code + '): ' + err.slice(0, 300)));
-            });
+        await fs.promises.writeFile(tmpHtml, html, 'utf8');
+        await execChrome(CHROME, [
+            '--headless', '--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage',
+            '--no-pdf-header-footer',
+            '--user-data-dir=' + prof,
+            '--print-to-pdf=' + tmpPdf,
+            pathToFileURL(tmpHtml).href,
+        ], {
+            windowsHide: true,
+            timeout: 45000,
+            killSignal: 'SIGKILL',
+            maxBuffer: 1024 * 1024,
         });
-        const buf = fs.readFileSync(tmpPdf);
+        const buf = await fs.promises.readFile(tmpPdf);
         res.writeHead(200, {
             'Content-Type': 'application/pdf',
             'Content-Disposition': `attachment; filename=Death_Certificate_${String(d.brn || '').trim() || 'output'}.pdf`,
@@ -1159,10 +1159,12 @@ async function routePdf(req, res) {
         });
         res.end(buf);
     } catch (e) {
-        json(res, 500, { success: false, error: 'PDF failed: ' + e.message });
+        console.error('[death-final] PDF failed:', e.code || e.signal || e.name);
+        json(res, 500, { success: false, error: 'PDF তৈরি করা যায়নি। আবার চেষ্টা করুন।' });
     } finally {
-        for (const f of [tmpHtml, tmpPdf]) { try { if (f) fs.unlinkSync(f); } catch (_) {} }
-        if (prof) { try { fs.rmSync(prof, { recursive: true, force: true }); } catch (_) {} }
+        if (tmpHtml) await fs.promises.unlink(tmpHtml).catch(() => {});
+        if (tmpPdf) await fs.promises.unlink(tmpPdf).catch(() => {});
+        if (prof) await fs.promises.rm(prof, { recursive: true, force: true }).catch(() => {});
     }
 }
 

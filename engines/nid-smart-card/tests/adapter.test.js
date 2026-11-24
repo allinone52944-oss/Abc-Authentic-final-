@@ -13,14 +13,14 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const childProcess = require('node:child_process');
 
-// Capture every spawnSync call (delegating to the real one) so the
+// Capture every execFile call (delegating to the real one) so the
 // buildCard wiring tests can assert the exact Python argv
 // (--holder-sign) without depending on the Python outcome.
 const spawnCalls = [];
-const realSpawnSync = childProcess.spawnSync;
-childProcess.spawnSync = (...args) => {
+const realExecFile = childProcess.execFile;
+childProcess.execFile = (...args) => {
   spawnCalls.push(args);
-  return realSpawnSync(...args);
+  return realExecFile(...args);
 };
 
 const adapter = require('../adapter');
