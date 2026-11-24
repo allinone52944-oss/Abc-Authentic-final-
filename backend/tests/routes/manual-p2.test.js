@@ -44,6 +44,14 @@ const DOCS = [
   { filename: 'manual-del.pdf', originalname: 'result.pdf', uploaded_by: 'admin', type: 'delivery' },
 ];
 
+test('a closed office rejects linked submissions through the legacy manual entry', async () => {
+  db.__routeQuery([['FOR SHARE', { rows: [{ type: 'manual', status: 'active', schedule: { order_intake_open: false } }] }]]);
+  const r = await asUser(request(app()).post('/api/manual/submit'))
+    .field('service_id', 's1').field('raw_text', 'নমুনা আবেদন').expect(403);
+  expect(r.body.error).toBe('SERVICE_CLOSED');
+  expect(db.__client.query.mock.calls.map(([sql]) => sql).join('\n')).not.toContain('INSERT INTO manual_submissions');
+});
+
 describe('P2 items 1+6: /mine hides admin notes and undelivered admin files', () => {
   test('processing submission: own file lists, admin file does not; SQL has no admin_note', async () => {
     db.__routeQuery([

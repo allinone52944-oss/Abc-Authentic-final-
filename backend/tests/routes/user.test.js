@@ -92,6 +92,16 @@ describe('GET /api/services/:id', () => {
     const r = await withUser(request(app()).get('/api/services/s1')).expect(403);
     expect(r.body.error).toBe('NO_ACCESS');
   });
+
+  test('an office-closed manual service stays in the catalog and detail with open false', async () => {
+    const paused = { ...SERVICE, schedule: { order_intake_open: false } };
+    db.__routeQuery([['FROM services s', { rows: [paused] }]]);
+    const api = app();
+    const list = await withUser(request(api).get('/api/services')).expect(200);
+    const detail = await withUser(request(api).get('/api/services/s1')).expect(200);
+    expect(list.body.services[0]).toMatchObject({ id: 's1', open: false });
+    expect(detail.body.service).toMatchObject({ id: 's1', open: false });
+  });
 });
 
 describe('POST /api/orders', () => {
@@ -129,6 +139,34 @@ describe('POST /api/orders', () => {
     db.__routeQuery(serviceHandlers(closed));
     const r = await withUser(request(app()).post('/api/orders')).send({ service_id: 's1' }).expect(403);
     expect(r.body.error).toBe('SERVICE_CLOSED');
+  });
+
+  test('an office closure detected under the service lock blocks both the debit and the order', async () => {
+    const schedule = { order_intake_open: false };
+    db.__routeQuery([['FOR SHARE', { rows: [{ ...SERVICE, schedule }] }], ...serviceHandlers()]);
+    const r = await withUser(request(app()).post('/api/orders'))
+      .send({ service_id: 's1' }).expect(403);
+    expect(r.body).toEqual({ error: 'SERVICE_CLOSED', schedule });
+    const statements = db.__client.query.mock.calls.map(([sql]) => sql).join('\n');
+    expect(statements).toContain('FOR SHARE');
+    expect(statements).not.toMatch(/wallet_apply|INSERT INTO orders/);
+  });
+
+  test('a successful submission replays after the office closes', async () => {
+    const paused = { ...SERVICE, schedule: { order_intake_open: false } };
+    db.__routeQuery([
+      ['FROM orders WHERE user_id', { rows: [{ id: 'saved-order', price: 100 }] }],
+      ...serviceHandlers(paused),
+    ]);
+    const r = await withUser(request(app()).post('/api/orders'))
+      .send({ service_id: 's1', idempotency_key: 'already-saved' }).expect(200);
+    expect(r.body).toMatchObject({ order: { id: 'saved-order' }, duplicate: true });
+    expect(db.__client.query.mock.calls.map(([sql]) => sql).join('\n')).not.toContain('wallet_apply');
+  });
+
+  test('an explicit open command resumes manual intake outside the legacy schedule', async () => {
+    db.__routeQuery(serviceHandlers({ ...SERVICE, schedule: { open: '00:00', days: [99], order_intake_open: true } }));
+    await withUser(request(app()).post('/api/orders')).send({ service_id: 's1' }).expect(201);
   });
 
   test('missing required documents → 400 MISSING_DOCUMENTS', async () => {

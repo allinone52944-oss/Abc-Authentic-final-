@@ -185,7 +185,7 @@ async function init(){
   const {service:s}=await r.json();
 
   const isAuto = s.type !== 'manual';
-  const hasEngine = Boolean(s.engine_id);
+  const hasEngine = Boolean(String(s.engine_id || '').trim());
   const price = Number(s.price || 0);
   const catName = s.category_name_bn || s.category_name;
   const icon = (s.icon && s.icon !== '🛎️') ? s.icon : autoIcon(s.name_bn || s.name);
@@ -193,7 +193,8 @@ async function init(){
   // Docs — B1#4/B2#9: entries are strings (required) or
   // {name, required:false} (optional); optional docs are marked (ঐচ্ছিক).
   const docs=safeArray(s.documents_required).map(d=>{const n=typeof d==='string'?d:(d&&d.name)||'';const opt=d&&typeof d==='object'&&d.required===false;return '<li>📄 '+esc(n)+(opt?' <span style="color:#64748b;">(ঐচ্ছিক)</span>':'')+'</li>';}).join('')||'<li>কোনো বিশেষ ডকুমেন্ট প্রয়োজন নেই</li>';
-  const sched=(s.schedule&&s.schedule.open)?'<div style="color:#64748b;font-size:13px;margin:8px 0;">🕘 সেবার সময়সূচি: '+esc(s.schedule.open)+' - '+esc(s.schedule.close||'')+'</div>':'';
+  const sched = (s.schedule?.open && (isAuto || hasEngine || typeof s.schedule.order_intake_open !== 'boolean'))
+    ? '<div style="color:#64748b;font-size:13px;margin:8px 0;">🕘 সেবার সময়সূচি: ' + esc(s.schedule.open) + ' - ' + esc(s.schedule.close || '') + '</div>' : '';
 
   // Balance Check
   const credit = hasEngine ? 0 : Number(s.service_credit || 0);
@@ -226,7 +227,10 @@ async function init(){
   // Action CTA Logic
   let actionHtml = '';
   if (!s.open) {
-    actionHtml = '<div style="color:#dc2626;margin-top:14px;background:#fef2f2;border:1px solid #fecaca;padding:14px;border-radius:12px;text-align:center;font-weight:700;font-size:14px;">⚠️ এই সেবাটি বর্তমানে সাময়িকভাবে বন্ধ আছে। কিছুক্ষণের মধ্যে চালু হবে।</div>';
+    const officeClosed = s.type === 'manual' && !hasEngine;
+    actionHtml = '<div style="color:#dc2626;margin-top:14px;background:#fef2f2;border:1px solid #fecaca;padding:14px;border-radius:12px;text-align:center;font-weight:700;font-size:14px;">' +
+      (officeClosed ? 'এখন অফিস বন্ধ' : 'এই সেবাটি সাময়িকভাবে বন্ধ আছে।') + '</div>' +
+      (officeClosed ? '<a class="btn btn-secondary" href="/order-create.html?service=' + encodeURIComponent(s.id) + '&amp;flow=directory">আগের অর্ডার দেখুন</a>' : '');
   } else if (hasEngine) {
     // AUTOMATED ENGINE SERVICE: Single focused engine action
     let engineUrl = '/' + s.engine_id + '.html';
@@ -302,7 +306,7 @@ async function init(){
       '<div id="bdrisFeeNote"></div>' +
     '</div>' +
 
-    balBoxHtml +
+    (!s.open && !isAuto && !hasEngine ? '' : balBoxHtml) +
 
     '<div style="margin-bottom:16px;">' +
       '<div style="font-size:15px;font-weight:700;color:#334155;">প্রয়োজনীয় তথ্যাদি ও ডকুমেন্ট:</div>' +

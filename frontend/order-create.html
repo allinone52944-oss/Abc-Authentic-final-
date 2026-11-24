@@ -175,8 +175,9 @@
       </div>
     </div>
 
-    <div id="closedServiceNotice" class="card" hidden>
-      <h3>এই সেবা সাময়িকভাবে বন্ধ</h3>
+    <div id="closedServiceNotice" class="card" role="status" hidden>
+      <h3 id="closedServiceTitle">এখন অফিস বন্ধ</h3>
+      <p>অফিস চালু হলে নতুন অর্ডার নেওয়া হবে।</p>
       <a class="btn btn-secondary" href="/services.html?type=manual">অর্ডার সার্ভিস দেখুন</a>
     </div>
 
@@ -283,7 +284,7 @@
 </div>
 
 <script src="/js/app.js?v=22"></script>
-<script src="/js/service-order-panel.js?v=20261122-4"></script>
+<script src="/js/service-order-panel.js?v=20261124-2"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -495,6 +496,15 @@ function renderFeeBreakdown(price){
 
 let promoQuote = null;
 function checkoutPrice(){return promoQuote ? promoQuote.payable : Number(svc?.price || 0);}
+function showClosedOrderService() {
+  svc.open = false;
+  document.getElementById('closedServiceTitle').textContent = svc.type === 'manual' ? 'এখন অফিস বন্ধ' : 'এই সেবা সাময়িকভাবে বন্ধ';
+  document.getElementById('balWarning').style.display = 'none';
+  document.getElementById('manualOrderForm').hidden = true;
+  document.getElementById('newServiceOrder').hidden = true;
+  document.getElementById('closedServiceNotice').hidden = false;
+}
+
 async function init(){
   const reviewButton = document.getElementById('submitBtn');
   if(reviewButton) reviewButton.disabled = true;
@@ -539,13 +549,9 @@ async function init(){
     }
     const d=await r.json();
     svc=d.service;
-    if(svc.engine_id){location.href='/service-detail.html?id='+encodeURIComponent(sid);return;}
+    if(String(svc.engine_id || '').trim()){location.href='/service-detail.html?id='+encodeURIComponent(sid);return;}
     window.ServiceOrderPanel?.mount(svc);
-    if (svc.open === false) {
-      document.getElementById('manualOrderForm').hidden = true;
-      document.getElementById('closedServiceNotice').hidden = false;
-      return;
-    }
+    if (svc.open === false) { showClosedOrderService(); return; }
     svc.fields_required = safeArray(svc.fields_required);
     const svcPrice = Number(svc.price || 0);
 
@@ -967,6 +973,11 @@ async function submit(){
       return;
     }
     releaseSubmission();
+    if(d.error === 'SERVICE_CLOSED'){
+      showClosedOrderService();
+      document.getElementById('closedServiceNotice').scrollIntoView({ block: 'nearest' });
+      return;
+    }
     if(d.error === 'PRICE_CHANGED'){
       notice.style.display='none';err.style.display='block';
       err.textContent='সেবার দাম বা ছাড় বদলেছে; কোনো টাকা কাটা হয়নি। পাতা রিফ্রেশ করে নতুন দাম যাচাই করুন।';
@@ -978,7 +989,7 @@ async function submit(){
     err.textContent = d.error === 'INSUFFICIENT_BALANCE' ? '⚠️ ওয়ালেটে পর্যাপ্ত ব্যালেন্স নেই! আগে টাকা রিচার্জ করুন।' :
       d.error === 'MISSING_DOCUMENTS' ? '⚠️ প্রয়োজনীয় ডকুমেন্ট দিন: ' + (d.missing || []).join(', ') :
       (promoQuote && ['EXPIRED_CODE','USER_LIMIT','OFFER_LIMIT','INVALID_CODE','WRONG_SERVICE','OFFER_NOT_STARTED'].includes(d.error)) ? ABCPromo.message(d.error) :
-      d.error === 'SERVICE_CLOSED' ? '⚠️ এই সেবাটি সাময়িকভাবে বন্ধ আছে' : '❌ ' + (d.error || 'অর্ডার করতে সমস্যা হয়েছে');
+      '❌ ' + (d.error || 'অর্ডার করতে সমস্যা হয়েছে');
     return;
   }
 

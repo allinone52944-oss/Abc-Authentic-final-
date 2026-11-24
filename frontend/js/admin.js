@@ -3202,11 +3202,17 @@ TABS.services = async () => {
       filtered.forEach(s => {
         const isManual = s.type === 'manual';
         const isActive = s.status === 'active';
+        const isOrderService = isManual && !String(s.engine_id || '').trim();
+        const intakeOpen = s.orders_open ?? (isActive && s.schedule?.order_intake_open !== false);
+        const statusButton = '<button type="button" class="mini-btn" onclick="AdmSvc.toggleStatus(\'' + s.id + '\',\'' + s.status + '\')" style="padding:6px 10px;" title="চালু/বন্ধ">' + (isActive ? '🔴 বন্ধ' : '🟢 চালু') + '</button>';
+        const orderSwitch = '<button type="button" class="mini-btn" data-open="' + intakeOpen + '" onclick="AdmSvc.toggleOrderAvailability(\'' + s.id + '\',this)" style="min-height:44px;padding:6px 10px;">' +
+          (intakeOpen ? '🔴 বন্ধ করুন' : '🟢 চালু করুন') + '</button>' +
+          '<span class="badge" data-office-status role="status">' + (intakeOpen ? 'অর্ডার নেওয়া হচ্ছে' : 'অর্ডার বন্ধ') + '</span>';
         const cat = cats.find(c => c.id === s.category_id);
         const catName = cat ? (cat.name_bn || cat.name) : (s.category_name_bn || s.category_name || 'অন্যান্য');
         const catIcon = cat ? (cat.icon || '📁') : '📦';
 
-        html += '<div style="background:#ffffff;border:1px solid ' + (isActive ? 'var(--border-light)' : '#fecaca') + ';border-radius:var(--r-lg);padding:16px;box-shadow:var(--shadow-xs);display:flex;flex-direction:column;justify-content:space-between;transition:box-shadow 0.2s;">' +
+        html += '<div data-service-card style="background:#ffffff;border:1px solid ' + (isActive ? 'var(--border-light)' : '#fecaca') + ';border-radius:var(--r-lg);padding:16px;box-shadow:var(--shadow-xs);display:flex;flex-direction:column;justify-content:space-between;transition:box-shadow 0.2s;">' +
           '<div>' +
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">' +
               '<div style="display:flex;align-items:center;gap:10px;">' +
@@ -3221,7 +3227,7 @@ TABS.services = async () => {
 
             '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:10px 0;">' +
               '<span class="badge" style="background:' + (isManual ? '#eff6ff;color:#1e40af;border:1px solid #bfdbfe;' : '#f5f3ff;color:#6b21a8;border:1px solid #ddd6fe;') + '">' + (isManual ? '📝 ম্যানুয়াল' : '⚡ অটোমেটেড') + '</span>' +
-            '<button class="mini-btn" onclick="AdmSvc.toggleStatus(\'' + s.id + '\',\'' + s.status + '\')" style="padding:6px 10px;" title="চালু/বন্ধ">' + (isActive ? '🔴 বন্ধ' : '🟢 চালু') + '</button>' +
+              (isOrderService ? orderSwitch : statusButton) +
               '<span class="badge" style="background:#f8fafc;color:#475569;border:1px solid #e2e8f0;">' + esc(catIcon) + ' ' + esc(catName) + '</span>' +
               (s.engine_id ? '<span class="badge" style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;">🔌 ' + esc(s.engine_id) + '</span>' : '') +
             '</div>' +
@@ -3233,7 +3239,7 @@ TABS.services = async () => {
           '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;border-top:1px solid #f1f5f9;padding-top:12px;margin-top:10px;">' +
             '<button class="mini-btn" onclick="AdmSvc.edit(\'' + s.id + '\')" style="flex:1;min-width:60px;">✏️ এডিট</button>' +
             '<button class="mini-btn" onclick="AdmSvc.duplicate(\'' + s.id + '\')" title="এই সেবার হুবহু কপি তৈরি করুন" style="flex:1;min-width:65px;">📋 ডুপ্লিকেট</button>' +
-            '<button class="mini-btn" onclick="AdmSvc.toggleStatus(\'' + s.id + '\',\'' + s.status + '\')" style="padding:6px 10px;" title="চালু/বন্ধ">' + (isActive ? '🔴 বন্ধ' : '🟢 চালু') + '</button>' +
+            (isOrderService ? '' : statusButton) +
             '<button class="mini-btn danger" onclick="AdmSvc.del(\'' + s.id + '\')" style="padding:6px 10px;" title="ডিলিট">🗑️</button>' +
           '</div>' +
           '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding-top:8px;">' +
@@ -3299,6 +3305,29 @@ window.AdmSvc = {
     const r = await ABC.api('/admin/services/' + id, { method: 'PUT', body: { status: next } });
     if (!r.ok) { alert('ব্যর্থ'); return; }
     show('services');
+  },
+  async toggleOrderAvailability(id, button) {
+    if (button.disabled) return;
+    const open = button.dataset.open !== 'true';
+    button.disabled = true;
+    try {
+      const response = await ABC.api('/admin/services/' + encodeURIComponent(id) + '/order-availability', {
+        method: 'PUT', body: { open },
+      });
+      if (!response.ok) throw new Error('UPDATE_FAILED');
+      const { service } = await response.json();
+      if (service?.schedule?.order_intake_open !== open) throw new Error('UPDATE_UNCONFIRMED');
+      button.dataset.open = String(open);
+      button.textContent = open ? '🔴 বন্ধ করুন' : '🟢 চালু করুন';
+      const status = button.nextElementSibling;
+      if (status) status.textContent = open ? 'অর্ডার নেওয়া হচ্ছে' : 'অর্ডার বন্ধ';
+      const card = button.closest('[data-service-card]');
+      if (card) card.style.borderColor = 'var(--border-light)';
+    } catch (_) {
+      alert('পরিবর্তন নিশ্চিত করা যায়নি। আবার চেষ্টা করুন।');
+    } finally {
+      button.disabled = false;
+    }
   },
   async duplicate(id) {
     if (!confirm('এই সেবাটির একটি হুবহু কপি (ডুপ্লিকেট) তৈরি করবেন?')) return;

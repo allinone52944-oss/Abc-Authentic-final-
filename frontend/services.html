@@ -216,7 +216,7 @@
 </div>
 
 <script src="/js/app.js?v=22"></script>
-<script src="/js/service-navigation.js?v=20261122-5"></script>
+<script src="/js/service-navigation.js?v=20261124-2"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -300,10 +300,10 @@ function card(s){
       '<span class="ptype auto">⚡ স্বয়ংক্রিয়</span>' + (s.open ? '' : '<span class="ptype closed">সাময়িক বন্ধ</span>') + '</div></div>' +
       '<div class="svc-pr">৳' + bnNum(s.price) + ' থেকে' + chargeRuleHtml(s) + '</div></a>';
   }
-  const closed = s.open ? '' : '<span class="ptype closed">সাময়িক বন্ধ</span>';
   const catName = s.category_name_bn || s.category_name;
   const catHtml = catName ? '<span class="cat-pill">📁 ' + esc(catName) + '</span>' : '';
   const isAuto = !isOrderService(s);
+  const closed = s.open ? '' : '<span class="ptype closed">' + (isAuto ? 'সাময়িক বন্ধ' : 'এখন অফিস বন্ধ') + '</span>';
   const summary = isAuto ? SERVICE_SUMMARIES.get(s.engine_id) : '';
   const target = window.ServiceNavigation?.destination(s) || '/service-detail.html?id=' + encodeURIComponent(s.id);
   return '<a class="svc-card" href="'+esc(target)+'">'+

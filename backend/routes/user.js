@@ -15,6 +15,7 @@ const fs = require('fs');
 // Filenames stay random (C-2: never embed req.params.id).
 const push = require('../utils/push');
 const { chargeRuleFor } = require('../lib/chargeRule'); // audit #49
+const { isManualOrderService, serviceAcceptsNewWork } = require('../lib/serviceAvailability');
 const wa = require('../utils/whatsapp');
 const { tryAutoMatchRecharge, tryAutoMatchBySender } = require('./sms');
 const serviceCredits = require('../lib/serviceCredits');
@@ -105,28 +106,6 @@ async function effectivePrice(userId, service) {
   return { allowed: true, price: Number(service.price) };
 }
 
-// ---- service schedule check -----------------------------------
-// M-11 fix (2026-10-15): evaluated in Asia/Dhaka (was server-local TZ).
-// schedule.days uses JS numbering: 0=Sunday … 6=Saturday.
-function serviceOpen(schedule) {
-  if (!schedule || (!schedule.open && !schedule.close)) return true;
-  try {
-    const parts = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Dhaka', weekday: 'short', hour: '2-digit', minute: '2-digit',
-      hourCycle: 'h23',
-    }).formatToParts(new Date());
-    const get = (t) => (parts.find((p) => p.type === t) || {}).value;
-    const wd = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[get('weekday')];
-    if (Array.isArray(schedule.days) && schedule.days.length && !schedule.days.includes(wd)) {
-      return false;
-    }
-    const hhmm = get('hour') + ':' + get('minute');
-    if (schedule.open && hhmm < schedule.open) return false;
-    if (schedule.close && hhmm > schedule.close) return false;
-    return true;
-  } catch (e) { return true; }
-}
-
 // ============================================================
 // SERVICES
 // ============================================================
@@ -158,7 +137,7 @@ router.get('/services', async (req, res) => {
         documents_required: safeJsonArray(s.documents_required),
         fields_required: safeJsonArray(s.fields_required),
         schedule: s.schedule, rules_text: s.rules_text,
-        engine_id: s.engine_id, open: serviceOpen(s.schedule),
+        engine_id: s.engine_id, open: serviceAcceptsNewWork(s),
         charge_rule: chargeRuleFor(s), // audit #49 — when the fee is cut
         manual_instructions: s.manual_instructions || null,
         manual_sample: s.manual_sample || null,
@@ -192,7 +171,7 @@ router.get('/services/:id', async (req, res) => {
         price: eff.price, service_credit: Number(s.service_credit || 0), documents_required: safeJsonArray(s.documents_required),
         fields_required: safeJsonArray(s.fields_required), schedule: s.schedule,
         rules_text: s.rules_text, engine_id: s.engine_id,
-        open: serviceOpen(s.schedule),
+        open: serviceAcceptsNewWork(s),
         charge_rule: chargeRuleFor(s), // audit #49 — when the fee is cut
         category_id: s.cat_id || null,
         category_name: s.cat_name || null,
@@ -230,7 +209,8 @@ router.post('/orders', async (req, res) => {
     if (promo_code && service.engine_id) return res.status(400).json({error:'USE_ENGINE_PROMO'});
     const eff = await effectivePrice(req.user.id, service);
     if (!eff.allowed) return res.status(403).json({ error: 'NO_ACCESS' });
-    if (!serviceOpen(service.schedule)) {
+    const manualOrder = isManualOrderService(service);
+    if (!manualOrder && !serviceAcceptsNewWork(service)) {
       return res.status(403).json({ error: 'SERVICE_CLOSED', schedule: service.schedule });
     }
 
@@ -254,6 +234,17 @@ router.post('/orders', async (req, res) => {
       await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
       const existing = await client.query('SELECT * FROM orders WHERE user_id = $1 AND idempotency_key = $2 LIMIT 1', [req.user.id, clientKey]);
       if (existing.rows.length) { duplicate = true; return existing.rows[0]; }
+      if (manualOrder) {
+        // Hold the service row until the debit and order commit. The
+        // office switch and a simultaneous checkout are then ordered.
+        const current = await client.query(
+          "SELECT type, engine_id, schedule FROM services WHERE id = $1 AND status = 'active' FOR SHARE",
+          [service_id]);
+        const latest = current.rows[0];
+        if (!latest || !isManualOrderService(latest) || !serviceAcceptsNewWork(latest)) {
+          throw Object.assign(new Error('SERVICE_CLOSED'), { statusCode: 403, schedule: latest?.schedule ?? null });
+        }
+      }
       const offer = promo_code ? await promotions.quote(client, promo_code, req.user.id, service_id, eff.price, true) : null;
       const payable = offer ? offer.payable : eff.price;
       if (expected_payable !== undefined && (typeof expected_payable !== 'number' || !Number.isFinite(expected_payable) || Math.round(expected_payable * 100) !== Math.round(payable * 100))) promotions.fail('PRICE_CHANGED',409);
@@ -286,6 +277,9 @@ router.post('/orders', async (req, res) => {
     delete order.admin_note;
     res.status(duplicate ? 200 : 201).json({ order, ...(duplicate ? {duplicate:true} : {}) });
   } catch (e) {
+    if (e.message === 'SERVICE_CLOSED' && e.statusCode === 403) {
+      return res.status(403).json({ error: 'SERVICE_CLOSED', schedule: e.schedule });
+    }
     safeLog('[user] order create error:', e.message);
     if (e.statusCode) return res.status(e.statusCode).json({error:e.message});
     if (/INSUFFICIENT_BALANCE/.test(e.message)) {
@@ -1294,7 +1288,7 @@ router.post('/promos/quote', async (req,res) => {
     if (!sr.rows.length) return res.status(404).json({error:'SERVICE_NOT_FOUND'});
     const eff = await effectivePrice(req.user.id,sr.rows[0]);
     if (!eff.allowed) return res.status(403).json({error:'NO_ACCESS'});
-    if (!serviceOpen(sr.rows[0].schedule)) promotions.fail('SERVICE_CLOSED');
+    if (!serviceAcceptsNewWork(sr.rows[0])) promotions.fail('SERVICE_CLOSED');
     const q = await promotions.quote(db,code,req.user.id,service_id,eff.price);
     res.json(promotions.publicQuote(q));
   } catch(e) { res.status(e.statusCode || 500).json({error:e.statusCode ? e.message : 'FAILED'}); }
@@ -1319,7 +1313,7 @@ router.post('/promos/claim', async (req,res) => {
       const service=sr.rows[0], eff = await effectivePrice(req.user.id,service);
       if (!eff.allowed) promotions.fail('NO_ACCESS',403);
       if (!service.engine_id) promotions.fail('USE_AT_CHECKOUT');
-      if (!serviceOpen(service.schedule)) promotions.fail('SERVICE_CLOSED');
+      if (!serviceAcceptsNewWork(service)) promotions.fail('SERVICE_CLOSED');
       const q=await promotions.quote(client,code,req.user.id,service_id,eff.price,true);
       const outstanding=await serviceCredits.availableFor(client,req.user.id,service_id);
       if(outstanding > 0) promotions.fail('CREDIT_ALREADY_AVAILABLE');

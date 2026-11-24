@@ -14,6 +14,7 @@ const { safeLog, orderDocUpload, safeJsonArray } = require('../security');
 const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
 const serviceCredits = require('../lib/serviceCredits');
+const { isManualOrderService, serviceAcceptsNewWork } = require('../lib/serviceAvailability');
 const { approveRechargeTx } = require('./sms');
 
 // Delivery document uploads: settings-driven via orderDocUpload(db, 'delivery') (H-12).
@@ -1754,7 +1755,9 @@ router.get('/services', async (req, res) => {
       `SELECT s.*, sc.name AS category_name, sc.name_bn AS category_name_bn, sc.icon AS category_icon
        FROM services s LEFT JOIN service_categories sc ON sc.id = s.category_id
        ORDER BY s.serial ASC, s.created_at ASC`);
-    res.json({ services: rows.rows });
+    res.json({ services: rows.rows.map(service => isManualOrderService(service)
+      ? { ...service, orders_open: service.status === 'active' && serviceAcceptsNewWork(service) }
+      : service) });
   } catch (e) {
     safeLog('[admin] services list error:', e.message);
     res.status(500).json({ error: 'FAILED' });
@@ -1829,6 +1832,29 @@ router.put('/services/:id/display', async (req, res) => {
   } catch (e) {
     safeLog('[admin] service display error:', e.message);
     res.status(500).json({ error: 'FAILED' });
+  }
+});
+
+router.put('/services/:id/order-availability', async (req, res) => {
+  const open = req.body?.open;
+  if (typeof open !== 'boolean') return res.status(400).json({ error: 'INVALID_ORDER_AVAILABILITY' });
+  try {
+    const r = await db.query(
+      `UPDATE services
+          SET schedule = jsonb_set(
+                CASE WHEN jsonb_typeof(schedule) = 'object' THEN schedule ELSE '{}'::jsonb END,
+                '{order_intake_open}', to_jsonb($1::boolean)),
+              status = CASE WHEN $1::boolean THEN 'active' ELSE status END,
+              updated_at = NOW()
+        WHERE id = $2 AND type = 'manual' AND NULLIF(BTRIM(engine_id), '') IS NULL
+          AND (status = 'active' OR ($1::boolean AND status = 'disabled'))
+        RETURNING id, status, schedule`, [open, req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'MANUAL_SERVICE_NOT_FOUND' });
+    await logActivity(req.user.id, 'service.order_availability', { service_id: req.params.id, open });
+    res.json({ service: r.rows[0] });
+  } catch (e) {
+    safeLog('[admin] order availability error:', e.message);
+    res.status(500).json({ error: 'UPDATE_FAILED' });
   }
 });
 

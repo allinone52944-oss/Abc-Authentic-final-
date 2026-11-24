@@ -68,6 +68,21 @@ test('JSON-encoded admin fields can be reviewed with fee 100 and remaining walle
 test('failed service load leaves review disabled', async () => {
   const { context, get } = setup({ fail: true }); await vm.runInContext('init()', context); expect(get('submitBtn').disabled).toBe(true);
 });
+
+test('a form that was already open shows the office closure after the server rejects checkout', async () => {
+  const { context, input, get } = setup();
+  const api = context.ABC.api;
+  context.ABC.api = async url => url === '/orders'
+    ? { ok: false, status: 403, json: async () => ({ error: 'SERVICE_CLOSED' }) }
+    : api(url);
+  await vm.runInContext('init()', context);
+  vm.runInContext("svc.type = 'manual'; showReview()", context);
+  await vm.runInContext('submit()', context);
+  expect(get('closedServiceTitle').textContent).toBe('এখন অফিস বন্ধ');
+  expect(get('closedServiceNotice').hidden).toBe(false);
+  expect(get('manualOrderForm').hidden).toBe(true);
+  expect(input.value).toBe('Test Applicant');
+});
 test('saved draft wins over applicant profile', async () => {
   const { context, input } = setup(); context.ABC.Drafts = { get: () => ({ applicant_name: 'Saved applicant' }) }; await vm.runInContext('init()', context); expect(input.value).toBe('Saved applicant');
 });

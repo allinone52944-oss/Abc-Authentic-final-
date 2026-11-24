@@ -23,7 +23,7 @@
   }
 
   function isManual(service) {
-    return service?.type === 'manual' && !service.engine_id;
+    return service?.type === 'manual' && !String(service.engine_id || '').trim();
   }
 
   function destination(service) {

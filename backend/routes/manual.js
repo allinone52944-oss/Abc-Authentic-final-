@@ -20,6 +20,7 @@ const multer = require('multer');
 const db = require('../db');
 const { requireAuth, requireAdmin } = require('../auth');
 const { safeLog } = require('../security');
+const { serviceAcceptsNewWork } = require('../lib/serviceAvailability');
 const parser = require('../utils/manual-parser');
 const push = require('../utils/push');
 const wa = require('../utils/whatsapp');
@@ -186,13 +187,6 @@ customerManual.post('/submit', (req, res) => {
       // priced automated services) with no lookup at all — a free
       // intake path for paid services. Null service_id keeps the
       // old behaviour (unlinked submission).
-      if (serviceId) {
-        const sr = await db.query('SELECT type FROM services WHERE id = $1', [serviceId]);
-        if (!sr.rows.length || sr.rows[0].type !== 'manual') {
-          for (const f of (req.files || [])) { try { fs.unlinkSync(f.path); } catch (_) {} }
-          return res.status(400).json({ error: sr.rows.length ? 'NOT_MANUAL_SERVICE' : 'SERVICE_NOT_FOUND' });
-        }
-      }
       const parsed = parser.parseManualText(rawText);
       const docs = (req.files || []).map(f => ({
         filename: f.filename,
@@ -201,12 +195,29 @@ customerManual.post('/submit', (req, res) => {
         mimetype: f.mimetype,
         uploaded_by: 'customer',
       }));
-      const ins = await db.query(
-        `INSERT INTO manual_submissions (user_id, service_id, raw_text, parsed_data, documents)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id, status, created_at`,
-        [req.user.id, serviceId, rawText, JSON.stringify(parsed), JSON.stringify(docs)]
-      );
-      const sub = ins.rows[0];
+      const save = async client => {
+        if (serviceId) {
+          const sr = await client.query(
+            'SELECT type, engine_id, status, schedule FROM services WHERE id = $1 FOR SHARE', [serviceId]);
+          const service = sr.rows[0];
+          if (!service) return { status: 400, error: 'SERVICE_NOT_FOUND' };
+          if (service.type !== 'manual') return { status: 400, error: 'NOT_MANUAL_SERVICE' };
+          if (service.status !== 'active' || !serviceAcceptsNewWork(service)) {
+            return { status: 403, error: 'SERVICE_CLOSED' };
+          }
+        }
+        const ins = await client.query(
+          `INSERT INTO manual_submissions (user_id, service_id, raw_text, parsed_data, documents)
+           VALUES ($1, $2, $3, $4, $5) RETURNING id, status, created_at`,
+          [req.user.id, serviceId, rawText, JSON.stringify(parsed), JSON.stringify(docs)]
+        );
+        return { sub: ins.rows[0] };
+      };
+      const { sub, error, status } = serviceId ? await db.withTransaction(save) : await save(db);
+      if (error) {
+        for (const f of (req.files || [])) { try { fs.unlinkSync(f.path); } catch (_) {} }
+        return res.status(status).json({ error });
+      }
       // Notify admins: Web Push (async, non-blocking)
       try {
         const uname = req.user.name || req.user.phone || 'গ্রাহক';

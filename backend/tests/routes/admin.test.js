@@ -529,6 +529,18 @@ describe('services', () => {
     expect(r.body.services).toHaveLength(1);
   });
 
+  test.each([false, true])('sets manual order intake to %s while retaining the schedule', async open => {
+    db.__routeQuery([['UPDATE services', (sql, params) => {
+      expect(params).toEqual([open, 's1']);
+      expect(sql).toContain("type = 'manual'");
+      expect(sql).toContain("NULLIF(BTRIM(engine_id), '') IS NULL");
+      expect(sql).toContain("'{order_intake_open}'");
+      return { rows: [{ id: 's1', status: 'active', schedule: { open: '09:00', order_intake_open: open } }] };
+    }]]);
+    const r = await withAdmin(request(app()).put('/api/admin/services/s1/order-availability')).send({ open }).expect(200);
+    expect(r.body.service).toMatchObject({ status: 'active', schedule: { open: '09:00', order_intake_open: open } });
+  });
+
   test('POST /services: invalid type → 400; invalid category → 400; happy → 201', async () => {
     const base = { name: 'Test Service', type: 'manual' };
     const r1 = await withAdmin(request(app()).post('/api/admin/services')).send({ ...base, type: 'magic' }).expect(400);
