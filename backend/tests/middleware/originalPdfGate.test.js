@@ -1,9 +1,8 @@
 /**
  * Original-PDF gate middleware (MONEY/PDF cycle 4, B10).
  * Original Form-1 PDFs were anonymous static files under predictable
- * names; the gate requires a charge token minted for exactly the
- * requested file, or an owned server record with the original
- * flagged available. No personal values.
+ * names. The gate requires an owned server record plus a matching
+ * charge receipt or a stored original-ready flag.
  *
  * PREIUM-PRIVATE (2026-11-13): an entitled request is now SERVED from
  * the private store by the gate itself — passing it on with next()
@@ -71,15 +70,23 @@ describe('originalPdfGate', () => {
   });
 
   test('valid JWT + charge token for THIS file → the stored copy is served', async () => {
+    db.__routeQuery([['FROM bdris_applications', { rows: [{ original_pdf_available: false }] }]]);
     const ct = mintPdfToken('u1', '1234567');
     const r = await request(app()).get('/bdris-original-1234567.pdf')
       .set('Authorization', 'Bearer ' + token())
       .set('X-Charge-Token', ct).expect(200);
     expect(r.body.toString().startsWith('%PDF-')).toBe(true);
+    expect(r.headers['cache-control']).toBe('private, no-store');
+  });
+
+  test('valid JWT + matching receipt + no owned record → 403', async () => {
+    await request(app()).get('/bdris-original-1234567.pdf')
+      .set('Authorization', 'Bearer ' + token())
+      .set('X-Charge-Token', mintPdfToken('u1', '1234567')).expect(403);
   });
 
   test('valid JWT + charge token for ANOTHER file → 403', async () => {
-    db.__routeQuery([['FROM bdris_applications', { rows: [] }]]);
+    db.__routeQuery([['FROM bdris_applications', { rows: [{ original_pdf_available: false }] }]]);
     const ct = mintPdfToken('u1', '7654321');
     await request(app()).get('/bdris-original-1234567.pdf')
       .set('Authorization', 'Bearer ' + token())
@@ -93,7 +100,7 @@ describe('originalPdfGate', () => {
   });
 
   test('valid JWT + no token + owned entitled record → the stored copy is served (re-download)', async () => {
-    db.__routeQuery([['FROM bdris_applications', { rows: [{ 1: 1 }] }]]);
+    db.__routeQuery([['FROM bdris_applications', { rows: [{ original_pdf_available: true }] }]]);
     const r = await request(app()).get('/bdris-original-1234567.pdf')
       .set('Authorization', 'Bearer ' + token()).expect(200);
     expect(r.body.toString().startsWith('%PDF-')).toBe(true);
@@ -102,7 +109,7 @@ describe('originalPdfGate', () => {
   });
 
   test('charge token for another user → 403', async () => {
-    db.__routeQuery([['FROM bdris_applications', { rows: [] }]]);
+    db.__routeQuery([['FROM bdris_applications', { rows: [{ original_pdf_available: false }] }]]);
     const ct = mintPdfToken('u2', '1234567');
     await request(app()).get('/bdris-original-1234567.pdf')
       .set('Authorization', 'Bearer ' + token())
@@ -110,6 +117,7 @@ describe('originalPdfGate', () => {
   });
 
   test('entitled but the stored copy is gone → 404, never a web-root read', async () => {
+    db.__routeQuery([['FROM bdris_applications', { rows: [{ original_pdf_available: false }] }]]);
     fs.unlinkSync(path.join(ORIGINALS, FN));
     const ct = mintPdfToken('u1', '1234567');
     const r = await request(app()).get('/bdris-original-1234567.pdf')

@@ -1,11 +1,5 @@
-// PREIUM-PRIVATE (2026-11-13): GET /api/bdris-apply/applications/:ack/original
-// is the ONLY way a stored original Form-1 PDF reaches a browser. Two
-// proofs are accepted, and nothing else:
-//   (a) the owner's submitted server record with the original flagged, or
-//   (b) a charge receipt minted for exactly this file (the DONE-time
-//       record POST can be lost — a paid copy must still download).
-// No record and no receipt → 404, and the file is never read from the
-// web root.
+// A submitted owner record is required. An original-ready flag or a
+// matching receipt grants access to the stored Form-1 PDF.
 jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
 
 const express = require('express');
@@ -47,12 +41,19 @@ beforeEach(() => {
 });
 afterEach(() => { try { fs.unlinkSync(path.join(ORIGINALS, FN)); } catch {} });
 
-describe('original download — charge receipt is proof without a record', () => {
-  test('no server record + receipt for THIS file → the paid copy downloads', async () => {
-    db.__routeQuery([['FROM bdris_applications', { rows: [] }]]);
+describe('original download requires an owned application', () => {
+  const owned = ['FROM bdris_applications', { rows: [{ original_pdf_available: false }] }];
+
+  test('owned server record + receipt for THIS file → the paid copy downloads', async () => {
+    db.__routeQuery([owned]);
     const r = await withUser(request(app()).get('/api/bdris-apply/applications/' + KEY + '/original'))
       .set('X-Charge-Token', mintPdfToken('u1', KEY)).expect(200);
     expect(r.body.toString().startsWith('%PDF-')).toBe(true);
+  });
+
+  test('matching receipt with no server record → 404', async () => {
+    await withUser(request(app()).get('/api/bdris-apply/applications/' + KEY + '/original'))
+      .set('X-Charge-Token', mintPdfToken('u1', KEY)).expect(404);
   });
 
   test('no server record + no receipt → 404 NOT_FOUND, no file served', async () => {
@@ -62,20 +63,20 @@ describe('original download — charge receipt is proof without a record', () =>
   });
 
   test('receipt minted for ANOTHER ack → 404, this copy stays closed', async () => {
-    db.__routeQuery([['FROM bdris_applications', { rows: [] }]]);
+    db.__routeQuery([owned]);
     const r = await withUser(request(app()).get('/api/bdris-apply/applications/' + KEY + '/original'))
       .set('X-Charge-Token', mintPdfToken('u1', '999999999')).expect(404);
-    expect(r.body.error).toBe('NOT_FOUND');
+    expect(r.body.error).toBe('PDF_NOT_AVAILABLE');
   });
 
   test('receipt minted for ANOTHER user → 404', async () => {
-    db.__routeQuery([['FROM bdris_applications', { rows: [] }]]);
+    db.__routeQuery([owned]);
     await withUser(request(app()).get('/api/bdris-apply/applications/' + KEY + '/original'))
       .set('X-Charge-Token', mintPdfToken('u2', KEY)).expect(404);
   });
 
   test('expired receipt (over 30 min) → 404', async () => {
-    db.__routeQuery([['FROM bdris_applications', { rows: [] }]]);
+    db.__routeQuery([owned]);
     const ref = 'bdris-apply-pdf-pdf-' + KEY + '-u1';
     const body = ['v1', 'u1', 'pdf', ref, String(Date.now() - 31 * 60 * 1000)].join('.');
     const mac = crypto.createHmac('sha256', process.env.JWT_SECRET).update(body).digest('hex');

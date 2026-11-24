@@ -22,11 +22,10 @@ const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
 const db = require('../db');
 const { storedOriginalAvailable, storedOriginalPath, originalFileKey } = require('../lib/storedOriginal');
-// PREIUM-PRIVATE (2026-11-13): the same charge-receipt proof the PDF gate
-// accepted, so a paid copy is reachable even when the DONE-time record
-// was lost.
+// A receipt permits the first download from an owned submission.
 const { verifyPdfChargeToken } = require('../middleware/originalPdfGate');
 const { mintOriginalLink } = require('../lib/originalLink');
+const { verifyApplication } = require('../../shared/bdrisApplicationProof');
 
 const router = express.Router();
 
@@ -157,13 +156,18 @@ router.post('/charge/submit', requireAuth, async (req, res) => {
 // POST /api/bdris-apply/charge/pdf
 // Deduct PDF download price before FETCH_ORIGINAL.
 router.post('/charge/pdf', requireAuth, async (req, res) => {
+  const clientKey = String(req.body?.idempotency_key || '');
+  const match = /^pdf-(\d{4,20})$/.exec(clientKey);
+  if (!match) return res.status(400).json({ error: 'MISSING_ACK', message: 'আবেদন নম্বর লাগবে।' });
+  const ref = 'bdris-apply-pdf-' + clientKey + '-' + req.user.id;
   try {
+    if (!await findOwnedSubmission(req.user.id, match[1])) {
+      return res.status(404).json({ error: 'NOT_FOUND', message: 'আপনার আবেদনটি পাওয়া যায়নি।' });
+    }
     const price = await getPdfPrice();
     if (price <= 0) {
-      return res.json({ ok: true, charged: 0, message: 'ফ্রি ডাউনলোড', chargeToken: mintChargeToken(req.user.id, 'pdf', 'free') });
+      return res.json({ ok: true, charged: 0, message: 'ফ্রি ডাউনলোড', chargeToken: mintChargeToken(req.user.id, 'pdf', ref) });
     }
-    const clientKey = (req.body && req.body.idempotency_key) ? String(req.body.idempotency_key).slice(0, 64) : Date.now();
-    const ref = 'bdris-apply-pdf-' + clientKey + '-' + req.user.id;
     const r = await chargeWallet(req.user.id, price, ref);
     safeLog('[bdris-apply] pdf charged', price, 'for user', req.user.id);
     res.json({ ok: true, charged: r.charged, newBalance: r.newBalance, chargeToken: mintChargeToken(req.user.id, 'pdf', ref) });
@@ -176,8 +180,6 @@ router.post('/charge/pdf', requireAuth, async (req, res) => {
     }
     // 2026-10-25 double-charge fix: same rule as submit above.
     if (isAlreadyChargedError(e)) {
-      const clientKey = (req.body && req.body.idempotency_key) ? String(req.body.idempotency_key).slice(0, 64) : Date.now();
-      const ref = 'bdris-apply-pdf-' + clientKey + '-' + req.user.id;
       return res.json({ ok: true, charged: 0, alreadyCharged: true, message: 'আগে চার্জ হয়ে গেছে — আবার কাটা হয়নি', chargeToken: mintChargeToken(req.user.id, 'pdf', ref) });
     }
     if (/INSUFFICIENT_BALANCE/.test(e.message)) {
@@ -278,6 +280,13 @@ router.post('/applications', requireAuth, async (req, res) => {
     const name = String((req.body && req.body.name) || '').trim().slice(0, 160);
     const origFlag = (req.body && req.body.original_pdf_available) === true;
     if (!ackNo) return res.status(400).json({ error: 'MISSING_ACK' });
+    if (origFlag && !verifyPdfChargeToken(req.headers['x-charge-token'], req.user.id, originalFileKey(ackNo), process.env.JWT_SECRET || '')) {
+      return res.status(403).json({ error: 'PDF_CHARGE_REQUIRED' });
+    }
+    if ((origFlag || !verifyApplication(req.body?.submission_proof, req.user.id, ackNo))
+        && !await findOwnedSubmission(req.user.id, ackNo)) {
+      return res.status(403).json({ error: 'UNVERIFIED_APPLICATION' });
+    }
     const r = await db.query(
       `INSERT INTO bdris_applications (user_id, ack_no, applicant_name, original_pdf_available)
        VALUES ($1, $2, $3, $4)
@@ -380,22 +389,25 @@ router.get('/applications', requireAuth, async (req, res) => {
 // disk as a real PDF. Anything else is a 404 with no entitlement
 // detail leaked. The filename is digits-only (storedOriginal
 // helper), so a crafted ack can never escape the directory.
-// Shared entitlement for the stored original: owner record flagged
-// available, OR a charge receipt minted for exactly this file (the
-// DONE-time record POST can be lost). Returns the file key or an error.
-async function originalEntitlement(req) {
-  const ackNo = canonicalAckNo(req.params.ackNo || '');
-  if (!ackNo) return { status: 400, error: 'MISSING_ACK' };
+async function findOwnedSubmission(userId, ackNo) {
   const r = await db.query(
     `SELECT original_pdf_available FROM bdris_applications
      WHERE user_id = $1 AND status = 'submitted'
      AND (ack_no = $2 OR regexp_replace(ack_no, '\\D', '', 'g') = $2) LIMIT 1`,
-    [req.user.id, ackNo]
+    [userId, ackNo]
   );
-  if (!r.rows.length || !r.rows[0].original_pdf_available) {
+  return r.rows[0];
+}
+
+async function originalEntitlement(req) {
+  const ackNo = canonicalAckNo(req.params.ackNo || '');
+  if (!ackNo) return { status: 400, error: 'MISSING_ACK' };
+  const owned = await findOwnedSubmission(req.user.id, ackNo);
+  if (!owned) return { status: 404, error: 'NOT_FOUND' };
+  if (!owned.original_pdf_available) {
     const ct = req.headers['x-charge-token'] || (req.query && req.query.ct) || null;
     const paid = verifyPdfChargeToken(ct, req.user.id, originalFileKey(ackNo), process.env.JWT_SECRET || '');
-    if (!paid) return { status: 404, error: r.rows.length ? 'PDF_NOT_AVAILABLE' : 'NOT_FOUND' };
+    if (!paid) return { status: 404, error: 'PDF_NOT_AVAILABLE' };
   }
   const fp = storedOriginalPath(ackNo);
   if (!fp || !storedOriginalAvailable(ackNo)) return { status: 404, error: 'FILE_MISSING' };
@@ -408,6 +420,7 @@ router.get('/applications/:ackNo/original', requireAuth, async (req, res) => {
   try {
     const ent = await originalEntitlement(req);
     if (ent.error) return res.status(ent.status).json({ error: ent.error });
+    res.set('Cache-Control', 'private, no-store');
     res.download(ent.fp, 'bdris-original-' + originalFileKey(ent.ackNo) + '.pdf');
   } catch (e) {
     safeLog('[bdris-apply] original download error:', e.message);

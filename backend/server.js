@@ -9,6 +9,7 @@ const cors = require('cors');
 const path = require('path');
 const db = require('./db');
 const { loadEngines } = require('./engines-loader');
+const { requireAuth } = require('./auth');
 const {
   secureHeaders,
   authLimiter,
@@ -45,6 +46,8 @@ app.use(cors({
     cb(new Error('CORS_BLOCKED'));
   },
 }));
+app.post(['/api/bdris-apply/draft-save', '/api/bdris-apply/http-chain'],
+  requireAuth, express.json({ limit: '20mb' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(xssClean);
 app.use(sameOrigin);
@@ -216,7 +219,6 @@ app.use('/api/invite', apiLimiter, publicInvites);
 // (/api/captcha, /api/verify, /api/preview, /generate-pdf, ...) are used
 // as-is. Auth required: captcha/verify hit the live BDRIS portal.
 const { rateLimit } = require('express-rate-limit');
-const { requireAuth } = require('./auth');
 // Charge gate for the paid certificate engines (2026-10-30 audit item 3):
 // verify is charged on success only, preview/PDF need a charged attempt.
 const { chargeGate } = require('./lib/engineChargeGate');

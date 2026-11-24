@@ -49,8 +49,17 @@ const fs = require('fs');
 function draftsDirFor(uid) {
   const safe = String(uid || 'anon').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 64) || 'anon';
   const d = path.join(__dirname, '..', 'drafts', 'u_' + safe);
-  try { fs.mkdirSync(d, { recursive: true }); } catch {}
+  try { fs.mkdirSync(d, { recursive: true, mode: 0o700 }); } catch {}
   return d;
+}
+function deleteDraftRecord(uid, id) {
+  const safe = String(id || '').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 80);
+  if (!safe) throw new Error('MISSING_DRAFT_ID');
+  const dir = draftsDirFor(uid);
+  // Keep a marker so a delayed save cannot recreate a deleted or submitted draft.
+  fs.writeFileSync(path.join(dir, safe + '.deleted'), '', { mode: 0o600 });
+  try { fs.unlinkSync(path.join(dir, safe + '.json')); }
+  catch (err) { if (err.code !== 'ENOENT') throw err; }
 }
 function saveDraftRecord(uid, data) {
   // DRAFTS/AUTH (A8): server-side dedupe by filing identity. A save
@@ -82,8 +91,25 @@ function saveDraftRecord(uid, data) {
   // the second would silently overwrite a DIFFERENT filing.
   if (!raw) raw = 'draft-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const id = String(raw).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 80) || ('draft-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
+  const dir = draftsDirFor(uid);
+  if (fs.existsSync(path.join(dir, id + '.deleted'))) throw new Error('DRAFT_CLOSED');
+  const target = path.join(dir, id + '.json');
+  if (Number.isSafeInteger(data.writeVersion)) {
+    let saved;
+    try { saved = JSON.parse(fs.readFileSync(target, 'utf8')); }
+    catch (err) { if (err.code !== 'ENOENT' && !(err instanceof SyntaxError)) throw err; }
+    if (saved?.writeVersion >= data.writeVersion) {
+      return { draftId: id, savedAt: saved.savedAt, obsolete: saved.writeVersion > data.writeVersion };
+    }
+  }
   const rec = Object.assign({}, data, { draftId: id, savedAt: new Date().toISOString() });
-  fs.writeFileSync(path.join(draftsDirFor(uid), id + '.json'), JSON.stringify(rec));
+  const temp = path.join(dir, '.' + crypto.randomUUID() + '.tmp');
+  try {
+    fs.writeFileSync(temp, JSON.stringify(rec), { mode: 0o600, flag: 'wx' });
+    fs.renameSync(temp, target);
+  } finally {
+    try { fs.unlinkSync(temp); } catch {}
+  }
   return { draftId: id, savedAt: rec.savedAt };
 }
 function draftFilingIdentity(data) {
@@ -465,12 +491,10 @@ class BdrisEngineV2 {
         }
 
         const ack = String(data.ack || data.ackId || '').replace(/\D/g, '');
-        // rec সরাসরি আসতে পারে, নইলে shared index (v1-এর সাথে continuity) থেকে
-        let rec = data.rec || null;
-        if (!rec) {
-          if (!ack) throw new Error('MISSING_ACK');
-          rec = this.originalFetcher.loadRec(ack);
+        if (!ack || String(data._chargeToken).split('.')[3] !== 'bdris-apply-pdf-pdf-' + ack + '-' + userId) {
+          throw new Error('CHARGE_REQUIRED');
         }
+        const rec = this.originalFetcher.loadRec(ack);
         if (!rec) throw new Error('NO_RECORD');
 
         // PREMIUM-PROGRESS (2026-10-28): ফেচের লাইভ ধাপ ফ্রন্টএন্ডে —
@@ -1184,6 +1208,7 @@ class BdrisEngineV2 {
                 status: 'COMPLETED',
                 ackId: result.ackId,
                 ackNum: result.ackNum,
+                submissionProof: result.submissionProof,
                 screenshot: result.screenshot,
                 pdf: result.pdf,
                 original: result.originalRec || null,
@@ -1242,21 +1267,13 @@ class BdrisEngineV2 {
       });
 
       // Legacy: Draft handlers (v1 compat) — writes via the
-      // module-level saveDraftRecord (shared with HTTP /draft-save);
-      // reads keep the local dir helper below, unchanged.
-      const DRAFTS_BASE = path.join(__dirname, '..', 'drafts');
-      const draftsDirFor = (uid) => {
-        const safe = String(uid || 'anon').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 64) || 'anon';
-        const d = path.join(DRAFTS_BASE, 'u_' + safe);
-        try { fs.mkdirSync(d, { recursive: true }); } catch {}
-        return d;
-      };
+      // same store as HTTP /draft-save.
       socket.on('SAVE_DRAFT', (data, callback) => {
         try {
           const uid = socket.abcUser?.id || userId || 'anon';
           const r = saveDraftRecord(uid, data);
-          socket.emit('BOT_STATUS', { status: 'PROGRESS', message: `💾 খসড়া সংরক্ষিত (${r.draftId})` });
-          if (callback) callback({ ok: true, draftId: r.draftId, savedAt: r.savedAt });
+          if (!r.obsolete) socket.emit('BOT_STATUS', { status: 'PROGRESS', message: `💾 খসড়া সংরক্ষিত (${r.draftId})` });
+          if (callback) callback({ ok: true, ...r });
         } catch (e) { if (callback) callback({ ok: false, error: 'খসড়া সংরক্ষণ করা যায়নি' }); }
       });
       socket.on('LIST_DRAFTS', (callback) => {
@@ -1286,8 +1303,7 @@ class BdrisEngineV2 {
       socket.on('DELETE_DRAFT', (draftId, callback) => {
         try {
           const uid = socket.abcUser?.id || userId || 'anon';
-          const f = path.join(draftsDirFor(uid), String(draftId).replace(/[^a-zA-Z0-9-]/g, '') + '.json');
-          fs.unlinkSync(f);
+          deleteDraftRecord(uid, draftId);
           if (callback) callback({ ok: true });
         } catch (e) { if (callback) callback({ ok: false }); }
       });
@@ -1729,8 +1745,8 @@ class BdrisEngineV2 {
           return;
         }
         const r = saveDraftRecord(userId, body.draft);
-        console.log(`DRAFT-AUTOSAVE: user draft ${r.draftId} saved via HTTP`);
-        res.status(200).json({ ok: true, draftId: r.draftId, savedAt: r.savedAt });
+        if (!r.obsolete) console.log(`DRAFT-AUTOSAVE: user draft ${r.draftId} saved via HTTP`);
+        res.status(200).json({ ok: true, ...r });
       } catch {
         res.status(500).json({ ok: false, error: 'DRAFT_SAVE_FAILED' });
       }
@@ -1758,8 +1774,7 @@ class BdrisEngineV2 {
           res.status(400).json({ ok: false, error: 'BAD_REQUEST', message: 'draftId required.' });
           return;
         }
-        const f = path.join(draftsDirFor(userId), draftId + '.json');
-        try { fs.unlinkSync(f); } catch { /* already gone — idempotent */ }
+        deleteDraftRecord(userId, draftId);
         res.status(200).json({ ok: true, draftId });
       } catch {
         res.status(500).json({ ok: false, error: 'DRAFT_DELETE_FAILED' });
@@ -1810,7 +1825,7 @@ class BdrisEngineV2 {
   }
 }
 
-module.exports = { BdrisEngineV2, mergeStepParams, buildPlaywrightFallbackPlan, httpChainGuardKey, HTTP_CHAIN_DEDUP_TTL_MS, saveDraftRecord, draftFilingIdentity, draftsDirFor };
+module.exports = { BdrisEngineV2, mergeStepParams, buildPlaywrightFallbackPlan, httpChainGuardKey, HTTP_CHAIN_DEDUP_TTL_MS, saveDraftRecord, deleteDraftRecord, draftFilingIdentity, draftsDirFor };
 
 // ── Bootstrap: standalone subprocess entry point ──
 // Adapter (index.js) এই file-কে subprocess হিসেবে spawn করে।
@@ -1823,6 +1838,7 @@ if (require.main === module) {
 
   const PORT = parseInt(process.env.BDRIS_APPLY_PORT || '3102', 10);
   const app = express();
+  app.post(['/draft-save', '/http-chain'], express.json({ limit: '20mb' }));
   app.use(express.json({ limit: '10mb' }));
 
   app.get('/api/health', (req, res) => {
@@ -1839,6 +1855,7 @@ if (require.main === module) {
   // regular traffic.
   const io = new Server(server, {
     cors: { origin: true, credentials: true },
+    maxHttpBufferSize: 20 * 1024 * 1024,
     pingInterval: 25000,
     pingTimeout: 60000,
   });

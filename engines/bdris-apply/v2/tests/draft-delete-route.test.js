@@ -36,9 +36,7 @@ test('draft-delete sanitises the id exactly like draft-save', () => {
   );
 });
 
-test('deleting a missing draft is ok (idempotent, not an error)', () => {
-  assert.match(
-    SRC,
-    /draft-delete[\s\S]{0,2000}?try \{ fs\.unlinkSync\(f\); \} catch \{ \/\* already gone — idempotent \*\/ \}/
-  );
+test('HTTP and socket deletion use the shared idempotent store', () => {
+  assert.match(SRC, /app\.post\('\/draft-delete'[\s\S]{0,2000}?deleteDraftRecord\(userId, draftId\)/);
+  assert.match(SRC, /socket\.on\('DELETE_DRAFT'[\s\S]{0,2000}?deleteDraftRecord\(uid, draftId\)/);
 });

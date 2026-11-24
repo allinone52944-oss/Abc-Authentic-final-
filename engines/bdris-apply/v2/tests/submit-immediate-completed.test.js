@@ -23,6 +23,7 @@ const { test } = require('node:test');
 const nodeCrypto = require('node:crypto');
 
 const { StepHandler } = require('../services/StepHandler');
+const { verifyApplication } = require('../../../../shared/bdrisApplicationProof');
 
 function validChargeToken(userId, secret, ref) {
   const head = `v1.${userId}.submit.${ref}.${Date.now()}`;
@@ -49,7 +50,7 @@ test('COMPLETED emits before screenshot/PDF capture completes', async () => {
         // the toast check) reports visible success.
         if (src.includes('jq-toast-single')) return { succ: true, errs: [] };
         // Ack-text / live-number probes read the success banner.
-        return 'আবেদন নম্বর: 123456789';
+        return src.includes('const body') ? '123456789' : 'আবেদন নম্বর: 123456789';
       },
     };
     const h = new StepHandler({ page }, {
@@ -75,6 +76,8 @@ test('COMPLETED emits before screenshot/PDF capture completes', async () => {
     assert.ok(completed, 'COMPLETED must fire even while screenshot capture hangs');
     assert.equal(completed.payload.attachmentsPending, true);
     assert.match(String(completed.payload.ackId || ''), /123456789/);
+    assert.equal(verifyApplication(completed.payload.submissionProof, 'u1', '123456789'), true);
+    assert.equal(verifyApplication(completed.payload.submissionProof, 'u2', '123456789'), false);
     // And the handler itself must still be stuck in capture (it
     // has NOT returned — the banner did not wait for it).
     assert.equal(settled, false, 'submitS4 must still be pending in capture');

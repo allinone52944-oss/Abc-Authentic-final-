@@ -1070,15 +1070,23 @@ function reportAckToServer(a) {
     // the same key. A sentinel/digitless value is never sent at all
     // (it was never an ack, and the old guard only excluded the exact
     // sentinel string, not other digitless values).
-    if (!a || isSentinelAck(a.no)) return;
-    fetch('/api/bdris-apply/applications', {
+    if (!a || isSentinelAck(a.no)) return Promise.resolve(false);
+    const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined;
+    return fetch('/api/bdris-apply/applications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
-      body: JSON.stringify({ ack_no: canonicalAck(a.no), name: a.name || '', charge_key: submitChargeKeyForRecord() })
+      signal,
+      body: JSON.stringify({
+        ack_no: canonicalAck(a.no), name: a.name || '',
+        charge_key: a.chargeKey,
+        submission_proof: a.submissionProof
+      })
     }).then(r => {
-      if (r && r.ok) clearAckPending(a); else markAckPending(a);
-    }).catch(() => { markAckPending(a); });
-  } catch {}
+      if (r?.ok) { clearAckPending(a); return true; }
+      markAckPending(a);
+      return false;
+    }).catch(() => { markAckPending(a); return false; });
+  } catch { return Promise.resolve(false); }
 }
 function markAckPending(a) {
   try {
@@ -1103,9 +1111,11 @@ function reportOriginalAvailable(ackNo) {
   // same ack, which re-sends the flag.
   try {
     if (!ackNo) return;
+    const receipt = S._pdfTok?.[pdfChargeKey(ackNo)]?.tok;
+    if (!receipt) return;
     fetch('/api/bdris-apply/applications', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken(), 'X-Charge-Token': receipt },
       body: JSON.stringify({ ack_no: String(ackNo), name: '', original_pdf_available: true })
     }).catch(() => {});
   } catch {}
@@ -1124,6 +1134,7 @@ function reportApplicationFailure(reason) {
   } catch {}
 }
 function addAck(a) {
+  if (!isSentinelAck(a.no)) markAckPending(a);
   reportAckToServer(a);
   // HOME-LIST (2026-10-31): drop any existing entry with the same
   // number first — a re-add replaces, never duplicates (getAcks() is
@@ -1859,6 +1870,8 @@ function renderDrafts() {
   }, 10000);
 }
 function openDraft(draftId) {
+  const load = Symbol();
+  S._loadingDraft = load;
   S._heldPrep = null; // switching application context — the old flow's parked send dies here
   S._directOtp = false; // DIRECT-PATH WIRING: a new draft is never a direct OTP view
   // OTP-TRAP (A5): a new draft is a new flow — the old flow's
@@ -1869,9 +1882,12 @@ function openDraft(draftId) {
   directAckClear(); // DIRECT ACK TIMEOUT: no fallback after switching drafts
   busy(true, 'খসড়া প্রস্তুত হচ্ছে…');
   emitDraftOp('LOAD_DRAFT', draftId, (res) => {
+    if (S._loadingDraft !== load) return;
+    S._loadingDraft = null;
     busy(false);
     if (!res || !res.ok || !res.draft) { note('খসড়া খোলা যায়নি — আবার চেষ্টা করুন', 'err'); return; }
     const dr = res.draft;
+    resetDraftPayment();
     setDraftId(dr.draftId || draftId);
     try { var savedKey = localStorage.getItem('bdris_submit_key_for_' + S.draftId); if (savedKey) S._submitKey = savedKey; } catch (e) {}
     S.mode = dr.mode === 'auto' ? 'auto' : 'manual';
@@ -1885,6 +1901,7 @@ function openDraft(draftId) {
       docsSaved: savedDocs.length,
       email: dr.email || '', phone: dr.phone || ''
     };
+    draftWriteScope().version = Number.isSafeInteger(dr.writeVersion) ? dr.writeVersion : 0;
     resetSent(); // খসড়া চালু মানে চেইন শুরু থেকেই যাবে — ধাপ-রেকর্ড নতুন
     S._passedOps = {}; // FINAL-PACK stale-banner: new draft = new flow, old passes void
     renderResume();
@@ -2082,9 +2099,25 @@ function freshData(mode) {
   };
 }
 function startManual() {
-  S.mode = 'manual';
-  if (!S.d || !S.d.mode || S.d.mode !== 'manual') { S.d = freshData('manual'); resetSent(); }
+  startNewFiling('manual');
   goStep(1);
+}
+function resetDraftPayment() {
+  S._submitKey = null;
+  S._submitTok = null;
+  S._submitTokAt = 0;
+  try { sessionStorage.removeItem('bdris_submit_key'); } catch {}
+}
+function startNewFiling(mode) {
+  S._loadingDraft = null;
+  setDraftId(null);
+  resetDraftPayment();
+  S.mode = mode;
+  S.d = freshData(mode);
+  S._passedOps = {};
+  S._heldPrep = null;
+  S.otpStage = 'review';
+  resetSent();
 }
 function goStep(n) {
   S.cur = n;
@@ -2104,12 +2137,23 @@ function goStep(n) {
 }
 function draftPayload(uiStep) {
   return {
-    draftId: S.draftId || undefined,
+    draftId: draftWriteScope().id,
     mode: S.mode, uiStep: uiStep != null ? uiStep : (S.d.uiStep || 0),
     s0: S.d.s0 || {}, s1: S.d.s1 || {}, s2: S.d.s2 || {}, s2b: S.d.s2b || {},
     relation: S.d.relation || '', other: S.d.other || {}, docs: docsMetaOf(S.d.docs),
     email: S.d.email || '', phone: S.d.phone || ''
   };
+}
+const draftWrites = new WeakMap();
+function draftWriteScope() {
+  let scope = draftWrites.get(S.d);
+  if (!scope) {
+    const random = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
+    scope = { id: S.draftId || 'draft-' + random, queue: Promise.resolve(), signature: null, version: 0, closed: false };
+    draftWrites.set(S.d, scope);
+  }
+  return scope;
 }
 /* খসড়ায় ছবিসহ (2026-10-13): ডকুমেন্টের ছবিও খসড়ায় জমা থাকবে —
    খসড়া চালু করলে ছবি আবার দিতে হবে না */
@@ -2148,27 +2192,47 @@ function deleteDraftReliable(draftId, cb) {
     }, 8000);
   } else viaHttp(true, cb);
 }
-function saveDraft(uiStep, cb) {
-  // FINAL-PACK: a SAVE_DRAFT whose socket ack never arrives (dead
-  // socket at save time) used to fail silently — the user believed
-  // the draft was saved and a later reload lost the step. The
-  // watchdog only WARNS (throttled: once until a save succeeds
-  // again); it never invents data, never retries in a loop, and
-  // never double-calls cb — the next navigation save is the retry.
-  let done = false;
-  const wd = setTimeout(() => {
-    if (done || S._draftSaveWarned) return;
-    S._draftSaveWarned = true;
-    note('⚠️ খসড়া সেভ হয়নি (সংযোগ নেই) — সংযোগ ফিরলে “খসড়ায় রাখুন” চাপুন বা পরের ধাপে যান', 'warn');
-  }, 10000);
-  emitDraftOp('SAVE_DRAFT', draftPayload(uiStep), (r) => {
-    done = true; clearTimeout(wd);
-    if (r && r.ok) {
-      setDraftId(r.draftId); updDraftsCnt(); S._draftSaveWarned = false;
-      try { if (S._submitKey) localStorage.setItem('bdris_submit_key_for_' + r.draftId, S._submitKey); } catch (e) {}
+function saveDraft(uiStep, cb, automatic = false) {
+  const form = S.d;
+  const scope = draftWriteScope();
+  const draft = draftPayload(uiStep);
+  const payload = JSON.stringify(draft);
+  const token = curAccessToken();
+  if (scope.closed || (automatic && payload === scope.signature)) return scope.queue;
+  scope.signature = payload;
+  scope.version = Math.max(scope.version + 1, Date.now());
+  draft.writeVersion = scope.version;
+  const sendHttp = async () => {
+    const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined;
+    try {
+      const response = await fetch('/api/bdris-apply/draft-save', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ draft, _authToken: token }), signal
+      });
+      return await response.json();
+    } catch { return { ok: false }; }
+  };
+  const sendSocket = () => typeof socket !== 'undefined' && socket && socket.connected
+    ? new Promise(resolve => emitDraftOp('SAVE_DRAFT', draft, resolve, 15000))
+    : Promise.resolve({ ok: false });
+  const task = scope.queue.then(async () => {
+    if (scope.closed || token !== curAccessToken()) return { ok: false };
+    const first = await (automatic ? sendHttp() : sendSocket());
+    if (first?.ok || scope.closed || token !== curAccessToken()) return first;
+    return automatic ? sendSocket() : sendHttp();
+  });
+  scope.queue = task.then(r => {
+    if ((!r?.ok || r.obsolete) && scope.signature === payload) scope.signature = null;
+    if (S.d !== form || scope.closed || token !== curAccessToken()) return r;
+    if (r?.ok && !r.obsolete) {
+      setDraftId(r.draftId);
+      updDraftsCnt();
+      try { if (S._submitKey) localStorage.setItem('bdris_submit_key_for_' + r.draftId, S._submitKey); } catch {}
     }
-    if (cb) cb(r);
-  }, 15000);
+    if (cb) cb(r?.obsolete ? { ok: false, error: 'DRAFT_UPDATED' } : r);
+    return r;
+  }).catch(() => { if (scope.signature === payload) scope.signature = null; });
+  return scope.queue;
 }
 /* FINAL-SOLUTION (2026-10-30, problem-map #9): silent
    server-side auto-save. The explicit "খসড়ায় রাখুন" button was
@@ -2185,32 +2249,7 @@ function saveDraft(uiStep, cb) {
    this id with a fresh savedAt afterwards. Silent: no note, no
    banner — the draft-count update is the only trace. */
 function autoSaveDraft(uiStep) {
-  try {
-    const payload = draftPayload(uiStep);
-    const sig = sigOf(payload);
-    if (S._autoDraftSig === sig) return;
-    S._autoDraftSig = sig;
-    const done = (r) => {
-      if (r && r.ok) {
-        setDraftId(r.draftId); updDraftsCnt(); S._draftSaveWarned = false;
-        try { if (S._submitKey) localStorage.setItem('bdris_submit_key_for_' + r.draftId, S._submitKey); } catch (e) {}
-      } else {
-        // A failed auto-save must not poison the guard: the next
-        // preview/send retries instead of assuming it landed.
-        S._autoDraftSig = null;
-      }
-    };
-    const sig2 = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(30000) : undefined;
-    fetch('/api/bdris-apply/draft-save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + curAccessToken() },
-      body: JSON.stringify({ draft: payload, _authToken: curAccessToken() }),
-      signal: sig2
-    }).then(r => r.json().catch(() => null)).then(d => {
-      if (d && d.ok) done(d);
-      else saveDraft(uiStep, done);
-    }).catch(() => saveDraft(uiStep, done));
-  } catch (e) { /* auto-save never blocks the flow */ }
+  try { saveDraft(uiStep, null, true); } catch { /* auto-save never blocks the flow */ }
 }
 /* ধাপ-রেকর্ড (2026-10-11): কোন ধাপ সাইটে সত্যিই গেছে + শেষ পাঠানো তথ্য।
    ব্যবহারকারী পিছনে গিয়ে তথ্য বদলে আবার “পরবর্তী” চাপলে কেবল সেই এক ধাপই আবার
@@ -3404,6 +3443,7 @@ function renderStep4() {
     addrQuickPick((rec) => { S.d.s2b.perm = Object.assign({}, rec); S.d.s2b.permCopy = false; renderStep4(); if (S.draftId) saveDraft(4, () => {}); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderStep4());
   };
   if ($('rpFromPerm')) $('rpFromPerm').onclick = () => {
+    if ($('sp_same')?.checked) { fillPrefixFromBirth('rp'); return; }
     fillPrefixFrom('rp', readAddrFields('sp', (S.d.s2b && S.d.s2b.perm) || {}));
     note('✔ স্থায়ী ঠিকানা থেকে বসানো হয়েছে — প্রয়োজনে বদলে নিন', 'ok');
   };
@@ -3419,11 +3459,6 @@ function renderStep4() {
 }
 function submitStep4() {
   collectStep4();
-  if ((S.d.uiStep || 0) >= 5) {
-    // ফিরে এসে ঠিকানা বদলালে কেবল এই এক ধাপই আবার সাইটে বসাই (লকস্টেপ)
-    if (stepChanged('SUBMIT_S2B', payloadFor('SUBMIT_S2B'))) { resendFrom('SUBMIT_S2B'); return; }
-    goStep(5); return;
-  }
   const z = S.d.s2b, bad = [];
   const need = (o, who) => {
     [['division', 'বিভাগ'], ['district', 'জেলা'], ['cityCorpUpazila', 'সিটি কর্পোরেশন / উপজেলা'],
@@ -3436,6 +3471,10 @@ function submitStep4() {
   if (!z.presCopy && z.pres) need(z.pres, 'বর্তমান');
   if (bad.length) { showFail(bad); note('⚠️ কিছু ঘর পূরণ করুন', 'warn'); return; }
   hideFail();
+  if ((S.d.uiStep || 0) >= 5) {
+    if (stepChanged('SUBMIT_S2B', payloadFor('SUBMIT_S2B'))) { resendFrom('SUBMIT_S2B'); return; }
+    goStep(5); return;
+  }
   advanceAndSend(5, 'SUBMIT_S2B', Object.assign({}, z));
 }
 
@@ -4068,6 +4107,7 @@ function directSendAck(r) {
   note('⚠️ কোড পাঠানো যায়নি — আবার চেষ্টা করুন', 'warn');
 }
 async function directSubmit(otp, alreadyVerified) {
+  const filing = S.d;
   // RESEED (2026-10-30): remember the submitted code so a
   // deliberate retry after outcome-unknown can re-submit with
   // the SAME code (no new send) on the already-verified session.
@@ -4083,7 +4123,7 @@ async function directSubmit(otp, alreadyVerified) {
   // AUDIT #71 (2026-11-05): the 30s submit tick must be VISIBLE — 'info'
   // is dropped by note(), so a 200s submit looked frozen. 'warn' passes
   // the gate; the tick itself is the elapsed-time progress.
-  S._submitProgressTimer = setInterval(() => {
+  const progressTimer = S._submitProgressTimer = setInterval(() => {
     try { note('⏳ আবেদন জমা হচ্ছে… (' + Math.round((Date.now() - _submitT0) / 1000) + ' সেকেন্ড)', 'warn'); } catch (e) {}
   }, 30000);
   S.otpStage = 'submitting'; S._failReported = false;
@@ -4100,6 +4140,11 @@ async function directSubmit(otp, alreadyVerified) {
     return;
   }
   const tok = await getTok();
+  if (S.d !== filing) {
+    clearInterval(progressTimer);
+    if (S._submitProgressTimer === progressTimer) S._submitProgressTimer = null;
+    return;
+  }
   if (!tok) { clearInterval(S._submitProgressTimer); S._submitProgressTimer = null; busy(false); S.otpStage = 'code'; return; } // charge() already alerted
   const payload = Object.assign({}, directCtx(), { phase: 'submit', uiDirect: true, otp: otp, _chargeToken: tok },
     // RESEED (2026-10-30): a deliberate retry after
@@ -4420,7 +4465,11 @@ function renderPreview(backFn, editable) {
   setBtns(
     (editable ? [
       { html: '🚀 আবেদন জমা দিন', fn: () => submitAuto() },
-      { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => saveDraft(6, () => { note('✔ খসড়ায় রাখা হয়েছে — পরে প্রিভিউ থেকেই OTP দিয়ে শেষ করতে পারবেন', 'ok'); setTimeout(renderDrafts, 700); }) },
+      { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => saveDraft(6, (r) => {
+        if (!r?.ok) { note('⚠️ খসড়া সেভ হয়নি — সংযোগ ফিরলে আবার চাপুন', 'err'); return; }
+        note('✔ খসড়ায় রাখা হয়েছে — পরে প্রিভিউ থেকেই OTP দিয়ে শেষ করতে পারবেন', 'ok');
+        setTimeout(renderDrafts, 700);
+      }) },
     ] : []).concat([
       { html: editable ? '← ফর্মে ফিরে যান' : '← তথ্য মিলিয়ে ফিরে যান', cls: 'ghost', fn: () => { S.pvMode = false; if (backFn) backFn(); else renderHome(); } }
     ])
@@ -4551,12 +4600,16 @@ function showDone(d, restore) {
   const rec = {
     id: 'ack-' + Date.now().toString(36), no: no || 'সংরক্ষিত নয়', name: nm,
     at: new Date().toISOString(),
+    submissionProof: d.submissionProof || null, chargeKey: submitChargeKeyForRecord(),
     pdfB64: (S.pdf && S.pdf.base64) || null, pdfName: (S.pdf && S.pdf.name) || null
   };
   if (!restore) {
     try { addAck(rec); } catch {}
-    if (S.draftId) {
-      const _did = S.draftId; setDraftId(null);
+    const draftScope = draftWrites.get(S.d);
+    if (S.draftId || draftScope) {
+      const _did = S.draftId || draftScope.id;
+      if (draftScope) draftScope.closed = true;
+      setDraftId(null);
       // DRAFTS/AUTH (B16): the old fire-and-forget delete + an
       // immediate count refresh let submitted drafts reappear (the
       // count refreshed before the delete landed, and a failed
@@ -4723,8 +4776,7 @@ async function downloadOriginal(url, no) {
 }
 /* ═══════════ অটো আবেদন — এক ফর্মে সব ═══════════ */
 function startAuto(resume) {
-  S.mode = 'auto';
-  if (!S.d || !S.d.mode || S.d.mode !== 'auto') { S.d = freshData('auto'); resetSent(); }
+  if (!resume) startNewFiling('auto');
   renderAuto();
 }
 function autoSel(id, list, want) {
@@ -6067,6 +6119,7 @@ socket.on('BOT_STATUS', (d) => {
     return;
   }
   if (st === 'COMPLETED') {
+    if (S.view !== 'done' && d.ackId && d.ackId === S._done?.ackId) return;
     busy(false);
     opAbort();
     S._heldPrep = null; // submitted — a parked send must never resurrect after DONE
@@ -6084,6 +6137,7 @@ socket.on('BOT_STATUS', (d) => {
         screenshot: d.screenshot || S._done.screenshot || null,
         pdf: (d.pdf && d.pdf.base64) ? d.pdf : (S._done.pdf || null),
         ackNum: d.ackNum || S._done.ackNum,
+        submissionProof: d.submissionProof || S._done.submissionProof,
         original: d.original || S._done.original,
         attachmentsPending: !!d.attachmentsPending,
       });
@@ -6287,7 +6341,9 @@ $('logoutBtn').onclick = async () => {
   // double-charge. Charge order is unchanged: submit before OTP,
   // pdf before FETCH_ORIGINAL, HMAC token verified server-side.
   function submitChargeKey() {
-    if (S.draftId) return 'draft-' + S.draftId + '-submit';
+    if (S._submitKey) return S._submitKey;
+    const draftId = S.draftId || draftWrites.get(S.d)?.id;
+    if (draftId) return (S._submitKey = 'draft-' + draftId + '-submit');
     try {
       var k = sessionStorage.getItem('bdris_submit_key');
       if (!k) {
@@ -6304,6 +6360,15 @@ $('logoutBtn').onclick = async () => {
   }
   async function charge(kind, idempotencyKey) {
     try {
+      if (kind === 'pdf' && idempotencyKey) {
+        const ack = idempotencyKey.slice(4);
+        const pending = JSON.parse(localStorage.getItem('bdris_acks_pending') || '{}');
+        const record = pending[ack] && getAcks().find(a => canonicalAck(a.no) === ack && a.submissionProof);
+        if (record && !await reportAckToServer(record)) {
+          note('আবেদন রেকর্ড এখনো সংরক্ষিত হয়নি। একটু পরে আবার চেষ্টা করুন।', 'err');
+          return null;
+        }
+      }
       // PREMIUM-RESET (2026-10-28): timeout-ছাড়া fetch চিরকাল ঝুলতে পারে
       // (2026-10-28 লাইভ: সার্ভারে চার্জ সফল, তবু ক্লায়েন্ট কখনো ফেরেনি) —
       // চার্জ ডিবি-কাজ মিলিসেকেন্ডের, তাই 30s উদার সীমা। টাইমআউট হলে
@@ -6357,9 +6422,11 @@ $('logoutBtn').onclick = async () => {
     var orig = emitStep;
     window.emitStep = async function (op, payload, onAckExtra) {
       if (op === 'SUBMIT_S4_OTP') {
+        var filing = S.d;
         var tok = cachedSubmitToken();
         if (!tok) {
           tok = await charge('submit', submitChargeKey());
+          if (S.d !== filing) return false;
           // Debug-2 (2026-10-26): this wrapper is async, so callers'
           // `emitStep(...) === false` checks can NEVER see this
           // false (they get a Promise) — before this fix a failed

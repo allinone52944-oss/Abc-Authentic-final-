@@ -5,11 +5,9 @@
 // (/bdris-original-<digits>.pdf) — anyone guessing a number could
 // download anyone's application copy, and the DONE direct button
 // skipped the charge entirely. This gate runs BEFORE static serving:
-// a PDF downloads only with (a) a fresh charge token minted for
-// exactly this file, or (b) a logged-in user who owns a server
-// record for this ack with the original flagged available (a
-// legitimate re-download of one's own already-paid copy).
-// It never invents entitlement: no token and no record → 403.
+// An authenticated user must own the submitted application.
+// A file-specific receipt permits the first download before the
+// availability flag is set. An owned, flagged copy can be downloaded again.
 
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
@@ -56,25 +54,23 @@ function originalPdfGate(db) {
     let user;
     try { user = jwt.verify(rawJwt, secret); } catch { return res.status(401).json({ error: 'INVALID_TOKEN' }); }
     const ct = req.headers['x-charge-token'] || (req.query && req.query.ct) || null;
-    let allowed = verifyPdfChargeToken(ct, user.id, fileKey, secret);
-    if (!allowed) {
-      // Re-download of one's own paid copy: the server record links
-      // this user + ack and flags the original available.
-      try {
-        const r = await db.query(
-          `SELECT 1 FROM bdris_applications WHERE user_id = $1 AND original_pdf_available = true
-           AND (ack_no = $2 OR regexp_replace(ack_no, '\\D', '', 'g') = $2) LIMIT 1`,
-          [user.id, fileKey]
-        );
-        allowed = !!(r.rows && r.rows.length);
-      } catch { /* fall through to 403 */ }
-    }
+    let allowed = false;
+    try {
+      const r = await db.query(
+        `SELECT original_pdf_available FROM bdris_applications WHERE user_id = $1 AND status = 'submitted'
+         AND (ack_no = $2 OR regexp_replace(ack_no, '\\D', '', 'g') = $2) LIMIT 1`,
+        [user.id, fileKey]
+      );
+      const owned = r.rows[0];
+      allowed = !!owned && (owned.original_pdf_available || verifyPdfChargeToken(ct, user.id, fileKey, secret));
+    } catch { /* fall through to 403 */ }
     if (!allowed) return res.status(403).json({ error: 'PDF_NOT_ENTITLED' });
     // PREIUM-PRIVATE: serve the entitled copy straight from the private
     // store. Handing the request to `next()` would let static serving
     // answer it from the web root — the exact hole this closes.
     const fp = storedOriginalPath(fileKey);
     if (!fp || !storedOriginalAvailable(fileKey)) return res.status(404).json({ error: 'FILE_MISSING' });
+    res.set('Cache-Control', 'private, no-store');
     return res.download(fp, originalFileName(fileKey));
   };
 }

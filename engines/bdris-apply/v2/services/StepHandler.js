@@ -16,6 +16,7 @@
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+const { signApplication } = require('../../../../shared/bdrisApplicationProof');
 
 // ═══════════════════════════════════════════════════════════════
 // Charge receipt verification — copied faithfully from v1
@@ -2893,35 +2894,34 @@ class StepHandler {
         const sels = ['.alert-success', '.success-message', '#applicationId', '[id*="trackingId"]', '[id*="ack"]', '[class*="success"]'];
         for (const sel of sels) {
           const el = document.querySelector(sel);
-          if (el && el.innerText.trim()) return el.innerText.trim();
+          const value = el?.innerText?.trim();
+          if (!value) continue;
+          if ((sel === '#applicationId' || sel === '[id*="trackingId"]')
+              && /^[\d\u09E6-\u09EF]{4,20}$/.test(value)) return 'আবেদন নম্বর: ' + value;
+          return value;
         }
         return '';
       });
     } catch {
-      // ২৫ সেকেন্ডে দৃশ্যমান সাফল্য আসেনি — শুধু ১৭-ডিজিট নম্বর থাকলে সেটাই প্রমাণ
+      // The acknowledgement label can be visible outside the success banner.
       ackText = await this.page.evaluate(() => {
         const body = document.body.innerText || '';
-        const m = body.match(/\b\d{17}\b/);
-        if (m) return 'আবেদন নম্বর: ' + m[0];
-        return '';
+        return body.match(/আবেদন(?:পত্র)?\s*নম্বর\s*[:：]?\s*[\d\u09E6-\u09EF]{4,20}/)?.[0] || '';
       }).catch(() => '');
       if (ackText) sawSuccess = true;
     }
 
     // লাইভ 2026-10-11: সাফল্যের banner-এ নম্বর থাকে না — নম্বর থাকে নিচের প্যানেলে
     // ("আবেদনপত্র নম্বর : 265370215")। তাই পুরো পাতার টেক্সট থেকেও নম্বর খোঁজা হয় —
-    // কিন্তু শুধু লেবেল-যুক্ত বা ১৭-ডিজিট নম্বরই সাফল্যের প্রমাণ (extractAckNumber);
-    // যেকোনো ৭–১২ ডিজিটের সংখ্যা আর প্রমাণ নয়।
+    // Whole-page text requires the application label because it can also contain BRNs.
     try {
       const liveNum = await this.page.evaluate(() => {
         const body = document.body.innerText || '';
-        let m = body.match(/আবেদন(?:পত্র)?\s*নম্বর\s*[:：]?\s*([\d\u09E6-\u09EF]{4,20})/);
-        if (!m) m = body.match(/\b\d{17}\b/);
-        return m ? (m[1] || m[0]) : '';
+        return body.match(/আবেদন(?:পত্র)?\s*নম্বর\s*[:：]?\s*([\d\u09E6-\u09EF]{4,20})/)?.[1] || '';
       }).catch(() => '');
       if (liveNum) {
         sawSuccess = true;
-        if (!String(ackText).includes(liveNum)) {
+        if (extractAckNumber(ackText) !== liveNum) {
           ackText = (ackText ? ackText + ' — ' : '') + 'আবেদন নম্বর: ' + liveNum;
         }
       }
@@ -2966,9 +2966,13 @@ class StepHandler {
     // Charge token: consumed here — the clean success point is
     // site acceptance (sawSuccess + ack above), unchanged.
     consumeSubmitToken(data._chargeToken);
+    const ackNum = extractAckNumber(ackText)
+      .replace(/[\u09E6-\u09EF]/g, (c) => String(c.charCodeAt(0) - 0x09E6));
+    const submissionProof = signApplication(this.userId, ackNum);
     this.emit('BOT_STATUS', {
       status: 'COMPLETED', message: '🎉 BDRIS আবেদন সফলভাবে জমা হয়েছে!',
       level: 'ok', ackId: ackText || 'BDRIS পোর্টালে সফলভাবে জমা হয়েছে.',
+      ackNum, submissionProof,
       screenshot: null, pdf: null, original: null,
       attachmentsPending: true,
       brnNote: s4BrnNote || undefined,
@@ -3017,14 +3021,6 @@ class StepHandler {
     } catch (e) { console.warn('PDF capture:', e.message.slice(0, 80)); }
 
     // যাচাই: ডাউনলোড আসল PDF কিনা — stub/ভাঙা ফাইল হলে বাদ
-    let ackNum = '';
-    {
-      const at = String(ackText || '');
-      const labeled = at.match(/আবেদন(?:পত্র)?\s*নম্বর\s*[:：]?\s*([\d\u09E6-\u09EF]{4,20})/);
-      const generic = labeled ? null : (at.match(/\b\d{17}\b/) || at.match(/\b\d{7,12}\b/));
-      ackNum = (labeled ? labeled[1] : (generic ? generic[0] : ''))
-        .replace(/[\u09E6-\u09EF]/g, (c) => String(c.charCodeAt(0) - 0x09E6));
-    }
     if (pdf) {
       let ok = false;
       try { ok = isValidPdf(Buffer.from(pdf.base64, 'base64')); } catch { ok = false; }
@@ -3074,7 +3070,7 @@ class StepHandler {
     return {
       ok: true, completed: true, step: 7, blocked: false,
       message: '🎉 BDRIS আবেদন সফলভাবে জমা হয়েছে!',
-      ackId: ackText, ackNum, screenshot,
+      ackId: ackText, ackNum, submissionProof, screenshot,
       pdf: pdf ? { name: pdf.name, bytes: pdf.base64.length } : null,
       originalRec,
       failed: [],

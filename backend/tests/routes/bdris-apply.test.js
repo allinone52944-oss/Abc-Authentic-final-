@@ -8,6 +8,7 @@ jest.mock('../../utils/push', () => ({
 }));
 
 const express = require('express');
+const crypto = require('node:crypto');
 const request = require('supertest');
 const fs = require('fs');
 const path = require('path');
@@ -16,6 +17,9 @@ const auth = require('../../auth');
 const bdrisRouter = require('../../routes/bdris-apply');
 const push = require('../../utils/push');
 const storedOriginal = require('../../lib/storedOriginal');
+const { signApplication } = require('../../../shared/bdrisApplicationProof');
+const pdfChargeKey = 'pdf-123456789';
+const owner = ['SELECT original_pdf_available FROM bdris_applications', { rows: [{ original_pdf_available: false }] }];
 
 // PREIUM-PRIVATE (2026-11-13): stored originals live outside the web
 // root; point the private store at a scratch dir for these tests.
@@ -135,6 +139,7 @@ describe('POST /api/bdris-apply/charge/submit', () => {
 describe('POST /api/bdris-apply/charge/pdf', () => {
   function priceHandlers(priceValue) {
     return [
+      owner,
       ["SELECT value FROM settings WHERE key = 'bdris_apply.pdf_price'", { rows: [{ value: priceValue }] }],
       ['wallet_apply', { rows: [{ new_balance: '950' }] }],
     ];
@@ -142,33 +147,41 @@ describe('POST /api/bdris-apply/charge/pdf', () => {
 
   test('price 0 → free download, no wallet hit', async () => {
     db.__routeQuery(priceHandlers(0));
-    const r = await withUser(request(app()).post('/api/bdris-apply/charge/pdf')).send({}).expect(200);
+    const r = await withUser(request(app()).post('/api/bdris-apply/charge/pdf')).send({ idempotency_key: pdfChargeKey }).expect(200);
     expect(r.body).toMatchObject({ ok: true, charged: 0 });
   });
 
   test('charges pdf price with stable ref', async () => {
     db.__routeQuery(priceHandlers(50));
     const r = await withUser(request(app()).post('/api/bdris-apply/charge/pdf'))
-      .send({ idempotency_key: 'pdf-job-1' }).expect(200);
+      .send({ idempotency_key: pdfChargeKey }).expect(200);
     expect(r.body.charged).toBe(50);
-    expect(walletRefOfLastCharge()).toBe('bdris-apply-pdf-pdf-job-1-u1');
+    expect(walletRefOfLastCharge()).toBe('bdris-apply-pdf-' + pdfChargeKey + '-u1');
   });
 
   test('string-encoded JSON price setting is parsed', async () => {
     db.__routeQuery(priceHandlers('"75"'));
     const r = await withUser(request(app()).post('/api/bdris-apply/charge/pdf'))
-      .send({ idempotency_key: 'k' }).expect(200);
+      .send({ idempotency_key: pdfChargeKey }).expect(200);
     expect(r.body.charged).toBe(75);
   });
 
   test('insufficient balance → 402', async () => {
     db.__routeQuery([
+      owner,
       ["SELECT value FROM settings WHERE key = 'bdris_apply.pdf_price'", { rows: [{ value: 50 }] }],
       ['users WHERE id = $1 FOR UPDATE', { rows: [{ balance: 0 }] }],
     ]);
     const r = await withUser(request(app()).post('/api/bdris-apply/charge/pdf'))
-      .send({ idempotency_key: 'k' }).expect(402);
+      .send({ idempotency_key: pdfChargeKey }).expect(402);
     expect(r.body.error).toBe('INSUFFICIENT_BALANCE');
+  });
+
+  test('no owned application prevents the PDF charge', async () => {
+    const r = await withUser(request(app()).post('/api/bdris-apply/charge/pdf'))
+      .send({ idempotency_key: pdfChargeKey }).expect(404);
+    expect(r.body.error).toBe('NOT_FOUND');
+    expect(walletRefOfLastCharge()).toBeNull();
   });
 });
 
@@ -195,12 +208,20 @@ describe('GET /api/bdris-apply/prices', () => {
 });
 
 describe('POST/GET/DELETE /api/bdris-apply/applications (আবেদনের সার্ভার রেকর্ড)', () => {
+  const filed = { ack_no: '265530312', name: 'টেস্ট', submission_proof: signApplication('u1', '265530312') };
+
+  test('another user’s submission proof cannot create a record', async () => {
+    await withUser(request(app()).post('/api/bdris-apply/applications'))
+      .send({ ...filed, submission_proof: signApplication('u2', filed.ack_no) }).expect(403);
+    expect(db.query.mock.calls.some(c => /INSERT INTO bdris_applications/.test(c[0]))).toBe(false);
+  });
+
   test('record a submitted application → 201, idempotent on (user, ack)', async () => {
     db.__routeQuery([
       ['INSERT INTO bdris_applications', { rows: [{ id: 'a1', ack_no: '265530312', applicant_name: 'টেস্ট', created_at: 'x', inserted: true }] }],
     ]);
     const r = await withUser(request(app()).post('/api/bdris-apply/applications'))
-      .send({ ack_no: '265530312', name: 'টেস্ট' }).expect(201);
+      .send(filed).expect(201);
     expect(r.body.application.ack_no).toBe('265530312');
     const ins = db.query.mock.calls.find((c) => /INSERT INTO bdris_applications/.test(c[0]));
     // ALL-BUGS (i): the conflict clause upgrades the original-PDF
@@ -213,10 +234,14 @@ describe('POST/GET/DELETE /api/bdris-apply/applications (আবেদনের �
 
   test('flag-only re-POST on an existing record → duplicate, flag upgraded, NO repeat notification', async () => {
     db.__routeQuery([
+      owner,
       ['INSERT INTO bdris_applications', { rows: [{ id: 'a1', ack_no: '265530312', applicant_name: 'টেস্ট', created_at: 'x', inserted: false }] }],
       ['FROM bdris_applications WHERE user_id', { rows: [{ id: 'a1', ack_no: '265530312', applicant_name: 'টেস্ট', created_at: 'x', original_pdf_available: true }] }],
     ]);
+    const receipt = 'v1.u1.pdf.bdris-apply-pdf-pdf-265530312-u1.' + Date.now();
+    const mac = crypto.createHmac('sha256', process.env.JWT_SECRET).update(receipt).digest('hex');
     const r = await withUser(request(app()).post('/api/bdris-apply/applications'))
+      .set('X-Charge-Token', receipt + '.' + mac)
       .send({ ack_no: '265530312', name: '', original_pdf_available: true }).expect(200);
     expect(r.body.duplicate).toBe(true);
     expect(r.body.application.original_pdf_available).toBe(true);
@@ -225,6 +250,13 @@ describe('POST/GET/DELETE /api/bdris-apply/applications (আবেদনের �
     expect(ins[0]).not.toMatch(/applicant_name\s*=/);
     // …and the customer is NOT notified again for the same filing.
     expect(push.notifyUser).not.toHaveBeenCalled();
+  });
+
+  test('a submission proof cannot upgrade the download flag without a matching receipt', async () => {
+    db.__routeQuery([owner]);
+    await withUser(request(app()).post('/api/bdris-apply/applications'))
+      .send({ ...filed, original_pdf_available: true }).expect(403);
+    expect(db.query.mock.calls.some(c => /INSERT INTO bdris_applications/.test(c[0]))).toBe(false);
   });
 
   test('own list carries the original-PDF flag', async () => {
@@ -289,7 +321,7 @@ describe('POST/GET/DELETE /api/bdris-apply/applications (আবেদনের �
       ['INSERT INTO orders', { rows: [{ id: 'o1' }] }],
     ]);
     const r = await withUser(request(app()).post('/api/bdris-apply/applications'))
-      .send({ ack_no: '265530312', name: 'টেস্ট' }).expect(201);
+      .send(filed).expect(201);
     expect(r.body.application.ack_no).toBe('265530312');
     const ord = db.query.mock.calls.find((c) => /INSERT INTO orders/.test(c[0]));
     expect(ord).toBeDefined();
@@ -325,7 +357,7 @@ describe('POST/GET/DELETE /api/bdris-apply/applications (আবেদনের �
       ['SELECT id, price FROM services WHERE engine_id', { rows: [] }],
     ]);
     const r = await withUser(request(app()).post('/api/bdris-apply/applications'))
-      .send({ ack_no: '265530312', name: 'টেস্ট' }).expect(201);
+      .send(filed).expect(201);
     expect(r.body.application.ack_no).toBe('265530312');
     expect(db.query.mock.calls.filter((c) => /INSERT INTO orders/.test(c[0]))).toHaveLength(0);
   });
@@ -343,7 +375,7 @@ describe('POST/GET/DELETE /api/bdris-apply/applications (আবেদনের �
       ['INSERT INTO orders', { rows: [{ id: 'o3' }] }],
     ]);
     const r = await withUser(request(app()).post('/api/bdris-apply/applications'))
-      .send({ ack_no: '265530312', name: 'টেস্ট', charge_key: 'draft-x-submit' }).expect(201);
+      .send({ ...filed, charge_key: 'draft-x-submit' }).expect(201);
     expect(r.body.application.ack_no).toBe('265530312');
     const ord = db.query.mock.calls.find((c) => /INSERT INTO orders/.test(c[0]));
     expect(ord).toBeDefined();
@@ -452,11 +484,12 @@ describe('MONEY/PDF cycle 4 (2026-11-03)', () => {
 
   test('C21 pdf: concurrent same-key charge (unique violation) → already-charged, not 500', async () => {
     db.__routeQuery([
+      owner,
       ["SELECT value FROM settings WHERE key = 'bdris_apply.pdf_price'", { rows: [{ value: 10 }] }],
       ['wallet_apply', () => { throw dupKeyError(); }],
     ]);
     const r = await withUser(request(app()).post('/api/bdris-apply/charge/pdf'))
-      .send({ idempotency_key: 'pdf-race-1' }).expect(200);
+      .send({ idempotency_key: pdfChargeKey }).expect(200);
     expect(r.body).toMatchObject({ ok: true, charged: 0, alreadyCharged: true });
   });
 
@@ -465,7 +498,7 @@ describe('MONEY/PDF cycle 4 (2026-11-03)', () => {
       ['INSERT INTO bdris_applications', { rows: [] }],
     ]);
     const r = await withUser(request(app()).post('/api/bdris-apply/applications'))
-      .send({ ack_no: 'TRK-1234567890', name: 'টেস্ট' }).expect(200);
+      .send({ ack_no: 'TRK-1234567890', name: 'টেস্ট', submission_proof: signApplication('u1', '1234567890') }).expect(200);
     expect(r.body).toMatchObject({ ok: true, duplicate: true });
     const ins = db.query.mock.calls.find((c) => /INSERT INTO bdris_applications/.test(c[0]));
     expect(ins).toBeDefined();

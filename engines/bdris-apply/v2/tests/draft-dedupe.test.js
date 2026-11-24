@@ -20,7 +20,7 @@ const { test } = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { saveDraftRecord, draftsDirFor } = require('../server');
+const { saveDraftRecord, deleteDraftRecord, draftsDirFor } = require('../server');
 
 const UID = 'test-dedupe-' + Date.now().toString(36);
 
@@ -76,5 +76,27 @@ test('an explicit draftId is always honoured', () => {
       s1: { firstNameBn: 'Test', lastNameBn: 'User', dob: '2000-01-01' },
     });
     assert.strictEqual(r.draftId, 'draft-explicit-1');
+  } finally { cleanup(); }
+});
+
+test('deleting a draft is repeatable and blocks a late save', () => {
+  const draft = { draftId: 'draft-delayed-save', uiStep: 4 };
+  try {
+    saveDraftRecord(UID, draft);
+    deleteDraftRecord(UID, draft.draftId);
+    deleteDraftRecord(UID, draft.draftId);
+    assert.throws(() => saveDraftRecord(UID, draft), /DRAFT_CLOSED/);
+    assert.strictEqual(fs.existsSync(path.join(draftsDirFor(UID), draft.draftId + '.json')), false);
+  } finally { cleanup(); }
+});
+
+test('a delayed fallback cannot replace a more recently saved draft', () => {
+  const draftId = 'draft-delayed-fallback';
+  try {
+    saveDraftRecord(UID, { draftId, uiStep: 4, writeVersion: 20 });
+    const stale = saveDraftRecord(UID, { draftId, uiStep: 3, writeVersion: 19 });
+    assert.strictEqual(stale.obsolete, true);
+    const data = JSON.parse(fs.readFileSync(path.join(draftsDirFor(UID), draftId + '.json'), 'utf8'));
+    assert.strictEqual(data.uiStep, 4);
   } finally { cleanup(); }
 });

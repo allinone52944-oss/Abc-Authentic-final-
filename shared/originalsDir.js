@@ -26,12 +26,13 @@ const DEFAULT_DIR = path.join(REPO_ROOT, 'private', 'bdris-originals');
 // elsewhere with BDRIS_ORIGINALS_DIR without a code change.
 function originalsDir() {
   const env = String(process.env.BDRIS_ORIGINALS_DIR || '').trim();
-  return env ? path.resolve(env) : DEFAULT_DIR;
+  const dir = env ? path.resolve(env) : DEFAULT_DIR;
+  return isInsideWebRoot(dir) ? DEFAULT_DIR : dir;
 }
 
 function ensureOriginalsDir() {
   const dir = originalsDir();
-  try { fs.mkdirSync(dir, { recursive: true }); } catch { /* best effort */ }
+  try { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); } catch { /* best effort */ }
   return dir;
 }
 

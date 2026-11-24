@@ -26,6 +26,7 @@ engines/bdris-apply/downloads/
 engines/bdris-apply/drafts/
 # PREIUM-PRIVATE: original Form-1 PDFs (personal records) — never committed
 private/
+frontend/bdris-original-*.pdf
 engines/bdris-apply/addresses_*.json
 engines/bdris-apply/originals-index.json
 engines/*-engine-new/
