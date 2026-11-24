@@ -482,13 +482,17 @@ test('no hologram overlay over the uploaded photo (2026-11-18)', () => {
   assert.ok(script.includes("stamp.className='stamp-overlay'"));
   assert.ok(script.includes('stamp.src=model.assets.stampOverlay'));
 });
-test('photo slot backing shows the scan plate in edit and print css (no preview state)', () => {
-  assert.ok(html.includes('.image-slot.photo.changed .slot-patch{display:block}'));
+test('photo backing covers the scan with or without an upload and the lower patch fits its edge', () => {
+  assert.ok(html.includes('.image-slot.photo .slot-patch{display:block}'));
   assert.ok(!html.includes('body.preview'), 'no preview state remains');
-  const printBlock = html.slice(html.indexOf('@media print{'), html.indexOf('</style>'));
-  assert.ok(printBlock.includes('.image-slot.photo.changed .slot-patch{display:block!important}'));
-  assert.ok(!/\.image-slot\.photo\.changed\{background:#eef0ea/.test(html), 'flat backing colour must not replace the scan plate');
   assert.ok(script.includes("if(type==='photo')patch.src=model.assets.photoBackground;"));
+  const photo = original.slots.photo;
+  const bottom = original.slots.photoBottomPatch;
+  const png = decodePngRgb(Buffer.from(original.assets.photoBottomPatch.split(',')[1], 'base64'));
+  assert.equal(bottom.y, photo.y + photo.h);
+  assert.ok(bottom.x >= photo.x && bottom.x + bottom.w <= photo.x + photo.w);
+  assert.equal(png.width, bottom.w);
+  assert.equal(png.height, bottom.h);
 });
 test('cutoutMask separates a flat backdrop from a textured person touching the bottom', () => {
   const w = 64, h = 96;
@@ -510,14 +514,19 @@ test('cutoutMask falls back when the person does not reach the bottom edge', () 
   const p = syntheticPixels(w, h, (x, y) => (x >= 16 && x < 48 && y >= 20 && y < 60) ? [60 + (x * 7 + y * 13) % 40, 70 + (x * 5 + y * 11) % 35, 80 + (x * 3 + y * 17) % 30] : [240, 240, 240]);
   assert.equal(runCutoutMask(p, w, h).ok, false);
 });
-test('renderImage prefers the cutout render and falls back to the uploaded photo (no panel sync)', () => {
+test('renderImage prefers the cutout and covers the lower fragment whenever the photo seal is hidden', () => {
   const slotImg = { style:{}, src:'', removeAttribute(){ this.src = ''; } };
-  const ctx = vm.createContext({ model:{ images:{ photo:{ data:'DATA', cutout:true, cutoutRendered:'CUT', preserveStamp:true, fit:'cover', x:50, y:50, zoom:1 } }, assets:{ photoOriginal:'ORIG' } }, imageNodes:new Map([['photo', { el:{ classList:{ toggle(){} } }, img:slotImg }]]), syncBusy(){} });
+  const bottom = { hidden:false };
+  const ctx = vm.createContext({ model:{ images:{ photo:{ data:'DATA', cutout:true, cutoutRendered:'CUT', preserveStamp:true, fit:'cover', x:50, y:50, zoom:1 } } }, imageNodes:new Map([['photo', { el:{ classList:{ toggle(){} } }, img:slotImg, bottom }]]), syncBusy(){} });
   vm.runInContext(renderImageCode, ctx);
   ctx.renderImage('photo'); assert.equal(slotImg.src, 'CUT'); assert.equal(slotImg.style.objectFit, 'cover'); assert.equal(slotImg.style.objectPosition, '50% 50%');
+  assert.equal(bottom.hidden, true);
   ctx.model.images.photo.cutout = false; ctx.renderImage('photo'); assert.equal(slotImg.src, 'DATA');
   ctx.model.images.photo.cutout = true; ctx.model.images.photo.cutoutRendered = ''; ctx.renderImage('photo'); assert.equal(slotImg.src, 'DATA');
+  ctx.model.images.photo.preserveStamp = false; ctx.renderImage('photo'); assert.equal(bottom.hidden, false);
+  ctx.model.images.photo.preserveStamp = true;
   ctx.model.images.photo.data = ''; ctx.renderImage('photo'); assert.equal(slotImg.src, '');
+  assert.equal(bottom.hidden, false);
 });
 test('resetImage restores the photo cutout default and clears the render', () => {
   const ctx = vm.createContext({ model:{ images:{ photo:{ data:'X', cutoutRendered:'Y', cutout:false, fit:'contain', x:1, y:2, zoom:3, preserveStamp:false } } }, imageRevision:{ photo:0 }, renderImage(){}, mark(){} });
