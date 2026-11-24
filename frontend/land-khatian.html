@@ -118,6 +118,7 @@
   </div>
 
   <div class="main">
+    <a id="backToKhatianCatalog" class="btn btn-secondary" href="/services.html?type=auto">← সেবার তালিকায় ফিরুন</a>
     <div class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
       <div>
         <h2>🌾 খতিয়ান অনুসন্ধান</h2>
@@ -654,6 +655,9 @@
         return;
       }
       const service = response.ok ? (await response.json()).service : null;
+      if (service?.id === directoryService) {
+        $('backToKhatianCatalog').href = '/services.html?' + new URLSearchParams({ type: 'auto', category: service.category_id || 'uncategorized' });
+      }
       if (!service || service.engine_id !== 'land-khatian' || !service.open) {
         showErr('সেবাটি এখন খোলা যাচ্ছে না। সেবার তালিকা থেকে আবার চেষ্টা করুন।');
         return;

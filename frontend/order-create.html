@@ -155,7 +155,7 @@
   </div>
 
   <div class="main">
-    <a class="back-nav" href="/services.html?type=manual">← অর্ডার সার্ভিসে ফিরুন</a>
+    <a class="back-nav" id="backToOrderCatalog" href="/services.html?type=manual">← অর্ডার সার্ভিসে ফিরুন</a>
 
     <div class="topbar">
       <div>
@@ -178,7 +178,7 @@
     <div id="closedServiceNotice" class="card" role="status" hidden>
       <h3 id="closedServiceTitle">এখন অফিস বন্ধ</h3>
       <p>অফিস চালু হলে নতুন অর্ডার নেওয়া হবে।</p>
-      <a class="btn btn-secondary" href="/services.html?type=manual">অর্ডার সার্ভিস দেখুন</a>
+      <a class="btn btn-secondary" id="closedServiceCatalogLink" href="/services.html?type=manual">অর্ডার সার্ভিস দেখুন</a>
     </div>
 
     <div id="manualOrderForm" class="card manual-workspace" style="max-width:780px;">
@@ -550,6 +550,9 @@ async function init(){
     const d=await r.json();
     svc=d.service;
     if(String(svc.engine_id || '').trim()){location.href='/service-detail.html?id='+encodeURIComponent(sid);return;}
+    const catalog = '/services.html?' + new URLSearchParams({ type: 'manual', category: svc.category_id || 'uncategorized' });
+    document.getElementById('backToOrderCatalog').href = catalog;
+    document.getElementById('closedServiceCatalogLink').href = catalog;
     window.ServiceOrderPanel?.mount(svc);
     if (svc.open === false) { showClosedOrderService(); return; }
     svc.fields_required = safeArray(svc.fields_required);

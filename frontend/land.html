@@ -77,6 +77,7 @@
   .price-line { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; background:linear-gradient(135deg,#fffbeb,#fef3c7); border:1px solid #f59e0b66; color:#92400e; padding:9px 14px; border-radius:12px; font-size:13px; font-weight:700; margin-bottom:12px; }
   #goBtn { background:linear-gradient(135deg,#14532d,#16a34a) !important; border:none; border-radius:14px; box-shadow:0 8px 20px rgba(20,83,45,.35); letter-spacing:.2px; }
   #goBtn:disabled { opacity:.75; }
+  .mode-card[aria-disabled="true"] { opacity: .7; cursor: default; }
   .note { font-size:12px; color:#64748b; margin-top:10px; line-height:1.7; }
   .rec { border:1.5px solid #d6c9ae; background:#fffdf8; border-radius:16px; padding:16px 18px; margin-top:14px; box-shadow:0 6px 18px rgba(111,78,46,.08); }
   .rec .rec-hd { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
@@ -100,7 +101,7 @@
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
 <link rel="stylesheet" href="/css/engine-polish.css?v=20261111-4">
 <link rel="stylesheet" href="/css/service-entry.css?v=20261122-4">
-<script src="/js/service-navigation.js?v=20261122-4" defer></script>
+<script src="/js/service-navigation.js?v=20261124-3" defer></script>
 <script src="/js/engine-feedback.js?v=20261118-3" defer></script>
 </head>
 <body class="has-tabbar flagship-app service-workspace page-land">
@@ -125,7 +126,7 @@
   </div>
 
   <div class="main">
-    <span class="back-nav" onclick="location.href='/services.html'">← সকল সেবায় ফিরুন</span>
+    <a class="back-nav" id="backToLandCatalog" href="/services.html?type=auto">← সেবার তালিকায় ফিরুন</a>
     <div class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
       <div>
         <h2>🌾 ভূমি সেবা (খতিয়ান)</h2>
@@ -150,17 +151,17 @@
       <div class="modes" id="modes" role="radiogroup" aria-label="সেবার ধরন">
         <div class="mode-card on" data-mode="scan" role="radio" tabindex="0" aria-checked="true">
           <div class="ic">👤</div><div class="t">নামে সন্ধান</div>
-          <div class="p">৳<span data-price="scan">–</span></div>
+          <div class="p"><span data-price="scan">৳–</span></div>
           <div class="d">এক নামে পুরো মৌজার সব খতিয়ান</div>
         </div>
         <div class="mode-card" data-mode="verify" role="radio" tabindex="0" aria-checked="false">
           <div class="ic">✅</div><div class="t">জমি যাচাই</div>
-          <div class="p">৳<span data-price="verify">–</span></div>
+          <div class="p"><span data-price="verify">৳–</span></div>
           <div class="d">কেনার আগে দাবি বনাম রেকর্ড</div>
         </div>
         <div class="mode-card" data-mode="mouza" role="radio" tabindex="0" aria-checked="false">
           <div class="ic">📋</div><div class="t">মৌজা মূল্য</div>
-          <div class="p">৳<span data-price="mouza">–</span></div>
+          <div class="p"><span data-price="mouza">৳–</span></div>
           <div class="d">হার × জমি = সর্বনিম্ন মূল্য রিপোর্ট</div>
         </div>
       </div>
@@ -322,6 +323,9 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let MODE = 'scan';
   const prices = {};
+  const modeAccess = {};
+  const pendingPrices = new Set();
+  let submitting = false;
 
   const $ = (id) => document.getElementById(id);
   function showErr(msg) { const b = $('errBox'); b.textContent = msg; b.classList.add('on'); $('okBox').classList.remove('on'); }
@@ -349,25 +353,37 @@
       setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
     } catch (e) { showErr('ডাউনলোড ব্যর্থ হয়েছে — আবার চেষ্টা করুন।'); }
   }
+  function setModeAccess(mode, allowed) {
+    modeAccess[mode] = allowed;
+    document.querySelector('[data-mode="' + mode + '"]').setAttribute('aria-disabled', String(!allowed));
+    document.querySelector('[data-price="' + mode + '"]').textContent = allowed ? '৳' + bn(prices[mode]) : 'সাময়িক বন্ধ';
+  }
   async function loadPrice(mode) {
+    if (pendingPrices.has(mode)) return;
+    pendingPrices.add(mode);
     try {
       const { data: r } = await apiJson(API + '/price?mode=' + mode);
       if (r && r.ok) {
         prices[mode] = r.price;
-        document.querySelector('[data-price="' + mode + '"]').textContent = bn(r.price);
+        setModeAccess(mode, r.allowed === true);
         if (mode === MODE) {
-          $('priceVal').textContent = bn(r.price);
+          $('priceVal').textContent = r.allowed === true ? bn(r.price) : '–';
           $('balVal').textContent = bn(r.balance);
           updateBtn();
         }
       }
     } catch (e) { /* price stays as-is */ }
+    finally { pendingPrices.delete(mode); }
   }
   function updateBtn() {
     const labels = { scan: '👤 সন্ধান করুন', verify: '✅ যাচাই করুন', mouza: '📋 রিপোর্ট তৈরি করুন' };
-    $('goBtn').textContent = labels[MODE] + (prices[MODE] != null ? ' — ৳' + bn(prices[MODE]) : '');
+    if (submitting) return;
+    const button = $('goBtn');
+    button.disabled = modeAccess[MODE] === false;
+    button.textContent = button.disabled ? 'সাময়িক বন্ধ' : labels[MODE] + (prices[MODE] != null ? ' — ৳' + bn(prices[MODE]) : '');
   }
   function setMode(mode) {
+    if (submitting || modeAccess[mode] === false) return;
     MODE = mode;
     if (prices[mode] == null) loadPrice(mode);
     document.querySelectorAll('.mode-card').forEach((c) => { c.classList.toggle('on', c.dataset.mode === mode); c.setAttribute('aria-checked', String(c.dataset.mode === mode)); });
@@ -1091,6 +1107,7 @@
 
   $('lform').addEventListener('submit', async (ev) => {
     ev.preventDefault();
+    if (submitting || modeAccess[MODE] === false) return;
     clearBoxes();
     // Mouza mode sends NO cascade: office + lines only, and the
     // server derives the report area from them (so the header
@@ -1131,6 +1148,7 @@
       }
     }
     const btn = $('goBtn');
+    submitting = true;
     btn.disabled = true;
     btn.innerHTML = '<span class="spin"></span> সরকারি রেকর্ডে খোঁজা হচ্ছে…';
     try {
@@ -1141,6 +1159,11 @@
           : 'রেকর্ড পাওয়া গেছে — ৳' + bn(r.charged) + ' চার্জ হয়েছে। রিপোর্টটি ইতিহাসেও সংরক্ষিত আছে।');
         if (r.balance != null) $('balVal').textContent = bn(r.balance);
         renderResult(r);
+      } else if (r.error === 'SERVICE_CLOSED' || r.error === 'SERVICE_ACCESS_DISABLED') {
+        setModeAccess(MODE, false);
+        $('priceVal').textContent = '–';
+        showErr(r.message || 'এই ভূমি সেবাটি সাময়িকভাবে বন্ধ আছে।');
+        $('result').textContent = '';
       } else {
         showErr(r.message || 'কোনো রেকর্ড পাওয়া যায়নি — কোনো টাকা কাটা হয়নি।');
         // Audit R1 — no receipt button on a failed lookup: the
@@ -1152,7 +1175,7 @@
     } catch (e) {
       showErr('সংযোগে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
     } finally {
-      btn.disabled = false;
+      submitting = false;
       updateBtn();
     }
   });
@@ -1164,11 +1187,13 @@
   // an old ?mode=search link lands there instead of on a page
   // with no search mode.
   const _qm = new URLSearchParams(location.search).get('mode');
+  const returnCategory = new URLSearchParams(location.search).get('category');
+  if (returnCategory) $('backToLandCatalog').href = '/services.html?' + new URLSearchParams({ type: 'auto', category: returnCategory });
   if (_qm === 'search') { location.replace('/land-khatian.html'); }
   setMode(['scan', 'verify', 'mouza'].includes(_qm) ? _qm : 'scan');
   // The other prices arrive a breath later — firing every
   // call at once can collide with a token refresh on page open.
-  setTimeout(() => { loadPrice('scan'); loadPrice('verify'); loadPrice('mouza'); }, 1500);
+  setTimeout(() => { ['scan', 'verify', 'mouza'].filter(mode => prices[mode] == null).forEach(loadPrice); }, 1500);
 </script>
 <div class="m-tabbar">
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/dashboard.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>হোম</div>

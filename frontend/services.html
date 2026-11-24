@@ -216,7 +216,7 @@
 </div>
 
 <script src="/js/app.js?v=22"></script>
-<script src="/js/service-navigation.js?v=20261124-2"></script>
+<script src="/js/service-navigation.js?v=20261124-3"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -249,15 +249,22 @@ function autoIcon(name){
 // _landSearch keeps every sub-service name searchable, so
 // searching "মৌজা" still finds the group card.
 const LAND_ENGINES = ['land-search', 'land-scan', 'land-verify', 'land-mouza-value'];
+const LAND_MODES = { 'land-scan': 'scan', 'land-verify': 'verify', 'land-mouza-value': 'mouza' };
 function groupLand(list){
   const lands = list.filter(s => LAND_ENGINES.includes(s.engine_id));
   if (lands.length < 2) return list;
   const rest = list.filter(s => !LAND_ENGINES.includes(s.engine_id));
-  const first = lands.find(s => s.engine_id === 'land-search') || lands[0];
+  const modes = lands.filter(s => Object.hasOwn(LAND_MODES, s.engine_id));
+  const first = modes[0] || lands[0];
+  const available = modes.filter(s => s.open === true);
+  const priced = available.length ? available : modes;
   const group = Object.assign({}, first, {
     name: 'Land Services', name_bn: 'ভূমি সেবা (খতিয়ান)', icon: '🌾',
-    price: Math.min.apply(null, lands.map(s => Number(s.price) || 0)),
-    open: lands.some(s => s.open), _landGroup: true,
+    price: Math.min.apply(null, (priced.length ? priced : lands).map(s => Number(s.price) || 0)),
+    open: available.length > 0, _landGroup: true,
+    _landMode: LAND_MODES[available[0]?.engine_id],
+    _landModeId: available[0]?.id,
+    _landDetailId: first.id,
     _landSearch: 'নামে সন্ধান জমি যাচাই মৌজা মূল্য মৌজা মূল্য রিপোর্ট',
   });
   rest.splice(Math.min(list.indexOf(first), rest.length), 0, group);
@@ -292,7 +299,10 @@ const SERVICE_SUMMARIES = new Map([
 
 function card(s){
   if (s._landGroup) {
-    return '<a class="svc-card" href="/land.html">' +
+    const target = s.open
+      ? '/land.html?' + new URLSearchParams({ mode: s._landMode, service: s._landModeId, flow: 'directory', category: s.category_id || 'uncategorized' })
+      : '/service-detail.html?id=' + encodeURIComponent(s._landDetailId);
+    return '<a class="svc-card" href="' + esc(target) + '">' +
       '<div class="svc-ico">🌾</div>' +
       '<div class="svc-info"><h4>ভূমি সেবা (খতিয়ান)</h4>' +
       '<p class="svc-summary">নামে সন্ধান · জমি যাচাই · মৌজা মূল্য</p>' +
@@ -519,19 +529,17 @@ async function init(){
     document.getElementById('svcView').style.display = 'none';
     const view = document.getElementById('catView');
     view.style.display = '';
-    let msg, action;
+    let msg;
+    let action = '<button type="button" class="btn btn-secondary" onclick="this.disabled=true;init()">আবার চেষ্টা করুন</button>';
     if (kind === 'session') {
       msg = 'আপনার সেশন শেষ হয়ে গেছে। আবার লগইন করুন।';
       action = '<a class="btn btn-secondary" href="' + esc(loginUrl()) + '">লগইন করুন</a>';
     } else if (kind === 'server') {
       msg = 'সার্ভার সমস্যা হচ্ছে। কিছুক্ষণ পর আবার চেষ্টা করুন।';
-      action = '<button class="btn btn-secondary" onclick="init()">আবার চেষ্টা করুন</button>';
     } else if (kind === 'network') {
       msg = 'ইন্টারনেট সংযোগ পাওয়া যাচ্ছে না। সংযোগ দেখে আবার চেষ্টা করুন।';
-      action = '<button class="btn btn-secondary" onclick="init()">আবার চেষ্টা করুন</button>';
     } else {
       msg = 'সেবার তালিকা আনা যায়নি। সংযোগ দেখে আবার চেষ্টা করুন।';
-      action = '<button class="btn btn-secondary" onclick="init()">আবার চেষ্টা করুন</button>';
     }
     view.innerHTML = '<div class="service-load-error" role="alert">' + msg + '<br>' + action + '</div>';
   }
@@ -546,7 +554,9 @@ async function init(){
     showLoadError(me && me.status >= 500 ? 'server' : 'network');
     return;
   }
-  const u=(await me.json()).user;
+  const account = await me.json().catch(() => null);
+  const u = account?.user;
+  if (!u || typeof u !== 'object') { showLoadError('server'); return; }
   document.getElementById('topUserBal').textContent = '৳' + bnNum(u.balance || 0);
   document.getElementById('waFab').onclick=()=>{
     window.open('https://wa.me/8801835414122?text='+encodeURIComponent('আমি '+u.name+'। সেবা সম্পর্কে জানতে চাই।'),'_blank');
@@ -564,6 +574,7 @@ async function init(){
       throw new Error('service-load');
     }
     ({services}=await r.json());
+    if (!Array.isArray(services) || services.some(s => !s || typeof s !== 'object')) throw new Error('service-load');
   } catch (_) {
     showLoadError(loadKind);
     return;

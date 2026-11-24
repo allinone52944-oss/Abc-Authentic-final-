@@ -110,7 +110,7 @@
   </div>
 
   <div class="main">
-    <span class="back-nav" onclick="location.href='/services.html'">← সকল সেবায় ফিরুন</span>
+    <a class="back-nav" id="backToServiceCatalog" href="/services.html">← সেবার তালিকায় ফিরুন</a>
     <div class="svc-hero-card" id="detail">
       <div class="skel" style="height:120px;margin-bottom:12px;"></div>
       <div class="skel" style="height:80px;"></div>
@@ -131,6 +131,7 @@
 </div>
 
 <script src="/js/app.js?v=22"></script>
+<script src="/js/service-navigation.js?v=20261124-3"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -177,7 +178,12 @@ async function init(){
     return;
   }
 
-  const r=await ABC.api('/services/'+id);
+  const r=await ABC.api('/services/'+encodeURIComponent(id));
+  if (r.status === 401) {
+    location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search);
+    return;
+  }
+  if (r.status >= 500 || r.status === 429) throw new Error('SERVICE_UNAVAILABLE');
   if(!r.ok){
     document.getElementById('detail').innerHTML='<div style="color:#dc2626;padding:20px 0;">সেবাটি খুঁজে পাওয়া যায়নি</div>';
     return;
@@ -186,6 +192,9 @@ async function init(){
 
   const isAuto = s.type !== 'manual';
   const hasEngine = Boolean(String(s.engine_id || '').trim());
+  const catalogType = isAuto || hasEngine ? 'auto' : 'manual';
+  const nav = window.ServiceNavigation;
+  document.getElementById('backToServiceCatalog').href = nav?.catalogHref?.(catalogType, s.category_id || 'uncategorized') || '/services.html?type=' + catalogType;
   const price = Number(s.price || 0);
   const catName = s.category_name_bn || s.category_name;
   const icon = (s.icon && s.icon !== '🛎️') ? s.icon : autoIcon(s.name_bn || s.name);
@@ -233,7 +242,7 @@ async function init(){
       (officeClosed ? '<a class="btn btn-secondary" href="/order-create.html?service=' + encodeURIComponent(s.id) + '&amp;flow=directory">আগের অর্ডার দেখুন</a>' : '');
   } else if (hasEngine) {
     // AUTOMATED ENGINE SERVICE: Single focused engine action
-    let engineUrl = '/' + s.engine_id + '.html';
+    let engineUrl = '/' + encodeURIComponent(s.engine_id) + '.html';
     let engineLabel = '⚡ সরাসরি ইঞ্জিন সেবা শুরু করুন →';
     // The land services share land.html with a mode preselect,
     // except the khatian search, which lives on its own page
@@ -264,8 +273,10 @@ async function init(){
     else if (s.engine_id === 'nid-server-report') { engineUrl = '/nid-server-report.html'; engineLabel = '⚡ এখনই সাইন টু সার্ভার কপি নিন →'; }
     else if (s.engine_id === 'nid-smart-card') { engineUrl = '/nid-smart-card.html'; engineLabel = '⚡ এখনই স্মার্ট কার্ড নিন →'; }
 
+    const direct = nav?.destination(s);
+    if (direct && !direct.startsWith('/service-detail.html?')) engineUrl = direct;
     actionHtml = '<div style="margin-top:10px;">' +
-      '<button class="btn btn-primary" style="width:100%;padding:15px;font-size:16px;font-weight:700;box-shadow:0 4px 14px rgba(37,99,235,0.3);" onclick="location.href=\'' + engineUrl + '\'">' + engineLabel + '</button>' +
+      '<a class="btn btn-primary" style="width:100%;padding:15px;font-size:16px;font-weight:700;box-shadow:0 4px 14px rgba(37,99,235,0.3);" href="' + esc(engineUrl) + '">' + engineLabel + '</a>' +
       '<div style="font-size:12px;color:#64748b;margin-top:8px;text-align:center;">ℹ️ এটি একটি পূর্ণাঙ্গ স্বয়ংক্রিয় সেবা। বাটনে ক্লিক করে সরাসরি প্রয়োজনীয় তথ্য দিয়ে কাজ সম্পন্ন করুন।</div>' +
     '</div>';
   } else {

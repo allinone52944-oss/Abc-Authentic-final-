@@ -43,6 +43,7 @@ const { requireAuth } = require('../auth');
 const { safeLog, safeJsonArray } = require('../security');
 const db = require('../db');
 const serviceCredits = require('../lib/serviceCredits');
+const { serviceAcceptsNewWork } = require('../lib/serviceAvailability');
 const { alertMissingPrice } = require('../lib/missingPriceAlert');
 const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
@@ -65,16 +66,18 @@ const MODES = {
 // ---------- pricing (per engine, same rules as qr-verify) ----------
 async function getServicePrice(engineId, userId) {
   const r = await db.query(
-    `SELECT id, price FROM services WHERE engine_id = $1 AND status = 'active' LIMIT 1`, [engineId]
+    `SELECT id, price, status, schedule FROM services WHERE engine_id = $1
+     ORDER BY (status = 'active') DESC, serial, created_at LIMIT 1`, [engineId]
   );
   if (!r.rows.length) {
-    // Audit #17 — no active price row: the service runs free.
-    // Price 0 is the design decision, so the gate stays open;
-    // the admin is alerted (throttled, once per engine per hour).
+    // Preserve the legacy missing-price policy for unconfigured modes.
     alertMissingPrice(db, engineId);
     return { allowed: true, price: 0, serviceId: null };
   }
   const serviceId = r.rows[0].id;
+  if (r.rows[0].status === 'disabled' || !serviceAcceptsNewWork(r.rows[0])) {
+    return { allowed: false, closed: true, price: 0, serviceId };
+  }
   const basePrice = Number(r.rows[0].price) || 0;
   const ov = await db.query(
     `SELECT custom_price, access_enabled FROM user_services WHERE user_id = $1 AND service_id = $2 LIMIT 1`,
@@ -90,10 +93,10 @@ async function getServicePrice(engineId, userId) {
 
 router.get('/price', requireAuth, async (req, res) => {
   try {
-    const mode = MODES[req.query.mode] ? req.query.mode : 'scan';
-    const { allowed, price, serviceId } = await getServicePrice(MODES[mode].engineId, req.user.id);
+    const mode = Object.hasOwn(MODES, req.query.mode) ? req.query.mode : 'scan';
+    const { allowed, closed, price, serviceId } = await getServicePrice(MODES[mode].engineId, req.user.id);
     const u = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
-    res.json({ ok: true, mode, allowed, price, serviceId, balance: u.rows[0] ? Number(u.rows[0].balance) : 0 });
+    res.json({ ok: true, mode, allowed, ...(closed ? { closed } : {}), price, serviceId, balance: u.rows[0] ? Number(u.rows[0].balance) : 0 });
   } catch (e) {
     safeLog('[land] price error:', e.message);
     res.status(500).json({ error: 'PRICE_CHECK_FAILED' });
@@ -265,7 +268,11 @@ async function replayIfExists(req, res, idem) {
 }
 
 async function precheck(req, res, mode) {
-  const { allowed, price, serviceId } = await getServicePrice(MODES[mode].engineId, req.user.id);
+  const { allowed, closed, price, serviceId } = await getServicePrice(MODES[mode].engineId, req.user.id);
+  if (closed) {
+    res.status(403).json({ error: 'SERVICE_CLOSED', message: 'এই ভূমি সেবাটি সাময়িকভাবে বন্ধ আছে।' });
+    return null;
+  }
   if (!allowed) {
     res.status(403).json({ error: 'SERVICE_ACCESS_DISABLED', message: 'এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।' });
     return null;

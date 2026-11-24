@@ -69,7 +69,7 @@ describe('service-detail routing map', () => {
   });
 
   test('generic rule still exists as the fallback (page name matches it)', () => {
-    expect(DETAIL).toContain("let engineUrl = '/' + s.engine_id + '.html'");
+    expect(DETAIL).toContain("let engineUrl = '/' + encodeURIComponent(s.engine_id) + '.html'");
     expect(fs.existsSync(path.join(FRONTEND, 'land-khatian.html'))).toBe(true);
   });
 

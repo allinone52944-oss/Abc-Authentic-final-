@@ -104,6 +104,20 @@ describe('GET /api/land/price', () => {
     const r = await withUser(request(app()).get('/api/land/price?mode=scan')).expect(200);
     expect(r.body).toMatchObject({ ok: true, mode: 'scan', price: 50, balance: 500, serviceId: 32 });
   });
+  test.each([
+    { status: 'disabled', schedule: {} },
+    { status: 'active', schedule: { open: '00:00', days: [99] } },
+  ])('a closed scan is blocked before lookup or payment (%j)', async service => {
+    db.__routeQuery(baseRoutes([['FROM services WHERE', { rows: [{ id: 32, price: 50, ...service }] }]]));
+    const router = app();
+    const price = await withUser(request(router).get('/api/land/price?mode=scan')).expect(200);
+    expect(price.body).toMatchObject({ allowed: false, closed: true, serviceId: 32 });
+    const run = await withUser(request(router).post('/api/land/scan'))
+      .send({ ...AREA, owner_name: 'Fixture owner' }).expect(403);
+    expect(run.body.error).toBe('SERVICE_CLOSED');
+    expect(client.surveys).not.toHaveBeenCalled();
+    expect(db.query.mock.calls.map(([sql]) => sql).join('\n')).not.toMatch(/wallet_apply|INSERT INTO orders/);
+  });
 });
 
 describe('GET /api/land/geo/divisions', () => {

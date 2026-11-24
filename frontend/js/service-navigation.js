@@ -26,6 +26,12 @@
     return service?.type === 'manual' && !String(service.engine_id || '').trim();
   }
 
+  function catalogHref(type, category) {
+    const params = new URLSearchParams({ type });
+    if (category) params.set('category', category);
+    return '/services.html?' + params;
+  }
+
   function destination(service) {
     if (isManual(service)) {
       return '/order-create.html?service=' + encodeURIComponent(service.id) + '&flow=directory';
@@ -39,7 +45,7 @@
     return page + (page.includes('?') ? '&' : '?') + 'service=' + encodeURIComponent(service.id) + '&flow=directory';
   }
 
-  window.ServiceNavigation = { destination, isManual };
+  window.ServiceNavigation = { destination, isManual, catalogHref };
 
   function enhance() {
     document.querySelectorAll('.svc-card[onclick],.cat-card[onclick],.svc2[onclick],.back-nav[onclick]').forEach(function (node) {
@@ -109,7 +115,8 @@
     panel.className = 'directory-service-entry';
     const links = document.createElement('nav');
     links.setAttribute('aria-label', 'সেবার লিংক');
-    links.append(engineLink('← সেবার তালিকা', '/services.html?type=auto'));
+    const back = engineLink('← সেবার তালিকা', catalogHref('auto', query.get('category')));
+    links.append(back);
     const status = document.createElement('p');
     status.setAttribute('role', 'status');
     const retry = document.createElement('button');
@@ -136,6 +143,7 @@
         }
         if (!response.ok) throw new Error('Service check unavailable');
         const { service } = await response.json();
+        if (service?.id === id) back.href = catalogHref('auto', query.get('category') || service.category_id || 'uncategorized');
         const engine = service && Object.hasOwn(enginePages, service.engine_id) && enginePages[service.engine_id];
         const route = engine && new URL(engine, location.origin);
         if (!route || service.id !== id || service.open !== true || route.pathname !== location.pathname ||

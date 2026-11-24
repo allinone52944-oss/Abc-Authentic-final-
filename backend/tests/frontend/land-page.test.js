@@ -165,9 +165,23 @@ describe('catalog shows land ONCE (the duplicate complaint)', () => {
     expect(results.innerHTML).toContain('ভূমি সেবা (খতিয়ান)');
     expect(results.innerHTML).not.toContain('জন্ম নিবন্ধন সনদ');
   });
-  test('the group card opens the single land page', () => {
-    expect(svcs).toContain("if (s._landGroup)");
-    expect(svcs).toContain('<a class="svc-card" href="/land.html">');
+  test('the group opens an available mode, or service details when every mode is closed', () => {
+    const groupSource = svcs.slice(svcs.indexOf('const LAND_ENGINES'), svcs.indexOf('function chargeRuleHtml'));
+    const cardSource = svcs.slice(svcs.indexOf('function card(s)'), svcs.indexOf('let GROUPS'));
+    const entries = [
+      { id: 'legacy', engine_id: 'land-search', price: 5, open: true },
+      { id: 'scan', engine_id: 'land-scan', price: 10, open: false, category_id: 'land' },
+      { id: 'verify', engine_id: 'land-verify', price: 20, open: false, category_id: 'land' },
+    ];
+    const context = { entries, esc: String, bnNum: String, chargeRuleHtml: () => '', URLSearchParams };
+    vm.runInNewContext(groupSource + cardSource + '\nthis.groupLand = groupLand; this.card = card;', context);
+    const [closed] = context.groupLand(entries);
+    expect(context.card(closed)).toContain('href="/service-detail.html?id=scan"');
+    expect(context.card(closed)).toContain('সাময়িক বন্ধ');
+    entries[2].open = true;
+    const [open] = context.groupLand(entries);
+    expect(open.price).toBe(20);
+    expect(context.card(open)).toContain('href="/land.html?mode=verify&service=verify&flow=directory');
   });
 });
 
@@ -175,7 +189,7 @@ describe('back navigation (owner: "back button nai")', () => {
   test('land page carries the app-standard back-nav to the services list', () => {
     const html = read('frontend/land.html');
     expect(html).toContain('class="back-nav"');
-    expect(html).toContain("location.href='/services.html'\">← সকল সেবায় ফিরুন");
+    expect(html).toContain('id="backToLandCatalog" href="/services.html?type=auto"');
   });
 });
 
@@ -238,7 +252,7 @@ describe('mouza-value mode (land-mouza-value)', () => {
     expect(html).toContain('মৌজা মূল্য');
     expect(html).toContain('id="pane-mouza"');
     expect(html).toContain("'scan', 'verify', 'mouza'");
-    expect(html).toContain("loadPrice('mouza')");
+    expect(html).toContain("['scan', 'verify', 'mouza'].filter(mode => prices[mode] == null).forEach(loadPrice)");
     expect(html).toContain("API + '/' + MODE");
   });
   test('service-detail maps land-mouza-value to the shared land page (no separate page)', () => {
