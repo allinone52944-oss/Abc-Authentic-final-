@@ -6,7 +6,7 @@
 // existing flow exactly. E-passport: form → Create → real
 // PDF, NO editor/workbench surface (like the MRP engine).
 // The e-passport document is the user-provided document-data
-// engine's template (57 fields, 3 slots), integrated with a
+// engine's template (57 fields, 4 slots), integrated with a
 // ported minimal renderer (derive/render/slotGeometry).
 //
 // Editability (user requirement 2026-11-17): EVERY output
@@ -16,12 +16,8 @@
 // the source file's read-only reference MRZ, which does not
 // follow edits); the 30 heading/label values are template
 // text, not user data, and stay as the template's own text.
-// Photo (user requirement 2026-11-17): one upload → the
-// document's photo slots. The source document has exactly
-// TWO photo placements (primary + secondary portrait) — the
-// test asserts photoSlotCount() === 2 and that one upload
-// fills both. There is NO third placement in the source;
-// do not invent one (see the build report).
+// One upload fills the main photograph, the lower ghost portrait,
+// and the oval portrait above it that was baked into the scan.
 //
 // The passport number / names below are synthetic test
 // fixtures, not real document data.
@@ -447,12 +443,11 @@ describe('e-passport page structure', () => {
     expect(nameAt).toBeGreaterThan(photoAt);
     expect(passportAt).toBeGreaterThan(nameAt);
   });
-  test('model has 57 fields and 3 slots (2 photo + 1 signature)', () => {
+  test('model has 57 fields and 4 slots (3 photo + 1 signature)', () => {
     expect(MODEL.fields.length).toBe(57);
-    expect(MODEL.slots.length).toBe(3);
+    expect(MODEL.slots.length).toBe(4);
     const photoSlots = MODEL.slots.filter((s) => s.asset === 'photo');
-    expect(photoSlots.length).toBe(2);
-    expect(photoSlots.map((s) => s.id).sort()).toEqual(['portrait', 'secondary-portrait']);
+    expect(photoSlots.map((s) => s.id).sort()).toEqual(['oval-portrait', 'portrait', 'secondary-portrait']);
     expect(MODEL.slots.filter((s) => s.asset === 'signature').length).toBe(1);
   });
 });
@@ -782,25 +777,42 @@ describe('upper page: name + address match the scan (position + font)', () => {
   });
 });
 
-describe('photo propagation (one upload → both photo slots)', () => {
-  test('photoSlotCount is 2 — the source has two photo placements, not three', () => {
+describe('photo propagation (one upload → three photo slots)', () => {
+  test('the oval portrait is above the lower ghost portrait', () => {
     const { api } = runPage();
-    expect(api.photoSlotCount()).toBe(2);
-    expect(api.slotCount()).toBe(3);
+    expect(api.photoSlotCount()).toBe(3);
+    expect(api.slotCount()).toBe(4);
+    const oval = MODEL.slots.find(s => s.id === 'oval-portrait');
+    const secondary = MODEL.slots.find(s => s.id === 'secondary-portrait');
+    expect(oval.y + oval.h).toBeLessThan(secondary.y);
   });
-  test('one photo fills both slots with the same image; signature stays empty', () => {
+  test('one photo fills all three slots and removing it clears all three', async () => {
     const { api, els } = runPage();
-    api.state().assets.photo = { dataUrl: 'data:image/png;base64,AAA', width: 100, height: 100 };
+    api.state().assets.photo = {
+      dataUrl: 'data:image/png;base64,AAA', width: 100, height: 100,
+      ovalRendered: 'data:image/png;base64,OVAL',
+    };
     api.render();
     const slots = els['ep-asset-slots'].children;
     const portrait = slots.find((s) => s.dataset.slot === 'portrait');
     const secondary = slots.find((s) => s.dataset.slot === 'secondary-portrait');
+    const oval = slots.find((s) => s.dataset.slot === 'oval-portrait');
     const signature = slots.find((s) => s.dataset.slot === 'signature');
     expect(portrait.children[1].src).toBe('data:image/png;base64,AAA');
     expect(secondary.children[1].src).toBe('data:image/png;base64,AAA');
+    expect(oval.children[1].src).toBe('data:image/png;base64,OVAL');
     expect(portrait._class.has('active')).toBe(true);
     expect(secondary._class.has('active')).toBe(true);
+    expect(oval._class.has('active')).toBe(true);
     expect(signature.children[1].src).toBe('');
+    const snapshot = await api.snapshotHTML();
+    expect(snapshot.html).toContain('.asset-slot.oval-portrait{border-radius:50%}');
+    expect(snapshot.html).toContain('data:image/png;base64,OVAL');
+    await api.setAsset('photo', null);
+    for (const slot of [portrait, secondary, oval]) {
+      expect(slot._class.has('active')).toBe(false);
+      expect(slot.children[1].src).toBe('');
+    }
   });
   test('no signature → signature area is blanked by the clearPatch (MRP rule)', () => {
     const { api, els } = runPage();
