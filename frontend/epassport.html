@@ -575,8 +575,11 @@ function renderBarcodeDataURL(num){
   ctx.fillStyle='#000';ctx.font='bold 80px Arial, sans-serif';
   ctx.textAlign='center';ctx.textBaseline='middle';
   var n=s.length;
+  var first=ctx.measureText(s[0]),last=ctx.measureText(s[n-1]);
+  var firstX=Math.max(30,Math.ceil(first.actualBoundingBoxLeft??first.width/2)+4);
+  var lastX=W-Math.max(30,Math.ceil(last.actualBoundingBoxRight??last.width/2)+4);
   for(i=0;i<n;i++){
-    var cx=(n===1)?W/2:(30+i*(W-60)/Math.max(1,n-1));
+    var cx=n===1?W/2:firstX+i*(lastX-firstX)/(n-1);
     ctx.fillText(s[i],cx,269);
   }
   var fc=document.createElement('canvas');fc.width=340;fc.height=915;
@@ -626,7 +629,7 @@ var PERF_FONT={
  'W':['11111','11111','00110','11111'],'X':['11011','11011','00100','11011'],
  'Y':['11000','11000','00111','11000'],'Z':['11001','11001','10101','10011']
 };
-function renderPerfDataURL(num,pageOffset,baseY,height){
+function renderPerfDataURL(num,pageOffset,baseY,height,portrait){
   var s=String(num||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
   if(!s)return '';
   var cv=document.createElement('canvas');cv.width=180;cv.height=height;
@@ -645,6 +648,9 @@ function renderPerfDataURL(num,pageOffset,baseY,height){
       }
     }
   }
+  // The lower strip sits behind the portrait, including when the
+  // portrait is still the scan's own image instead of an upload.
+  if(portrait)ctx.clearRect(portrait.x-100,portrait.y-baseY,portrait.w,portrait.h);
   return cv.toDataURL('image/png');
 }
 
@@ -807,7 +813,7 @@ function render(){
       if(perfCache.no!==pp){
         perfCache.no=pp;
         perfCache.top=renderPerfDataURL(pp,0,200,1500);
-        perfCache.bot=renderPerfDataURL(pp,2019,2019,2019);
+        perfCache.bot=renderPerfDataURL(pp,2019,2019,2019,SLOTS.find(function(slot){return slot.id==='portrait';}));
       }
       if(th){if(perfCache.top){th.src=perfCache.top;th.style.display='block';}else th.style.display='none';}
       if(bh){if(perfCache.bot){bh.src=perfCache.bot;bh.style.display='block';}else bh.style.display='none';}

@@ -240,14 +240,14 @@ function runPage(options = {}) {
         // geometry test can read the drawn holes back.
         const ctx = {
           fillStyle: '', strokeStyle: '', globalAlpha: 1, font: '',
-          arcs: [],
-          fillRect() {}, clearRect() {}, save() {}, restore() {},
+          arcs: [], cleared: [], labels: [],
+          fillRect() {}, clearRect(...coords) { ctx.cleared.push(coords); }, save() {}, restore() {},
           translate() {}, rotate() {}, scale() {}, drawImage() {},
-          fillText() {}, beginPath() {},
+          fillText(text, x, y) { ctx.labels.push({ text, x, y }); }, beginPath() {},
           arc(x, y, r) { ctx.arcs.push({ x, y, r, fill: ctx.fillStyle }); },
           fill() {}, stroke() {},
           moveTo() {}, lineTo() {}, closePath() {},
-          measureText: (t) => ({ width: String(t).length * 8 }),
+          measureText: options.measureText || ((t) => ({ width: String(t).length * 8 })),
           createLinearGradient: () => ({ addColorStop() {} }),
           createRadialGradient: () => ({ addColorStop() {} }),
           getImageData: (x, y, w, h) => {
@@ -1004,6 +1004,33 @@ describe('Point 1: DOB once → 2 derived places; passport number once → 4 pla
     const { api } = runPage();
     expect(api.renderBarcodeDataURL('EP0000001').startsWith('data:image/png;base64,')).toBe(true);
     expect(api.renderPerfDataURL('EP0000001', 0, 200, 1500).startsWith('data:image/png;base64,')).toBe(true);
+  });
+  test('wide first and last characters fit inside the text beside the barcode', () => {
+    const { api, canvases } = runPage({
+      measureText: text => text === 'W'
+        ? { width: 82, actualBoundingBoxLeft: 40, actualBoundingBoxRight: 42 }
+        : { width: String(text).length * 8 },
+    });
+    const before = canvases.length;
+    const number = 'WZ123456W';
+    api.renderBarcodeDataURL(number);
+    const canvas = canvases[before];
+    const labels = canvas._ctx.labels;
+    expect(labels.map(label => label.text).join('')).toBe(number);
+    expect(labels[0].x - 40).toBeGreaterThanOrEqual(4);
+    expect(labels.at(-1).x + 42).toBeLessThanOrEqual(canvas.width - 4);
+  });
+  test('the lower perforation layer leaves the portrait area clear before an upload', () => {
+    const { api, canvases, els } = runPage();
+    const before = canvases.length;
+    fillForm(els, { ...FULL_FORM, passportNo: 'WZ123456W' });
+    api.applyAll();
+    const top = canvases.slice(before).find(c => c.height === 1500);
+    const bottom = canvases.slice(before).find(c => c.height === 2019);
+    const portrait = api.model().slots.find(s => s.id === 'portrait');
+    expect(api.state().assets.photo).toBeNull();
+    expect(top._ctx.cleared).toEqual([]);
+    expect(bottom._ctx.cleared).toEqual([[portrait.x - 100, portrait.y - 2019, portrait.w, portrait.h]]);
   });
 });
 
