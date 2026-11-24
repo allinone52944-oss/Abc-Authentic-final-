@@ -387,8 +387,8 @@
     </a>
 
     <div class="brand-hero">
-      <h2>সব সরকারি সেবা,<br><span>এক জায়গায়।</span></h2>
-      <p><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>আপনার তথ্য সম্পূর্ণ নিরাপদ</p>
+      <h2>প্রয়োজনীয় ডিজিটাল সেবা<br><span>এক জায়গায়</span></h2>
+      <p>All In One একটি স্বতন্ত্র ডিজিটাল সেবা ও আবেদন সহায়তা প্ল্যাটফর্ম।</p>
     </div>
   </div>
 
@@ -449,7 +449,7 @@
       <!-- Registration Tab -->
       <div id="tab-reg" style="display:none;">
         <div class="form-title">নতুন অ্যাকাউন্ট</div>
-        <div class="form-sub">১ মিনিটে ফ্রি রেজিস্ট্রেশন</div>
+        <div class="form-sub">অ্যাকাউন্ট খুলতে নিচের তথ্য পূরণ করুন</div>
 
         <div class="field">
           <label>পূর্ণ নাম *</label>
@@ -750,19 +750,27 @@ async function doRegister() {
 (async()=>{
   // Invite link (?invite=INV-...): keep the code for registration and
   // never hide the register tab for invited visitors.
+  const params = new URLSearchParams(location.search);
+  const wantsRegistration = params.get('tab') === 'register';
   try {
-    const inv = new URLSearchParams(location.search).get('invite');
+    const inv = params.get('invite');
     if (inv) sessionStorage.setItem('abc_invite', inv);
   } catch (e) {}
   const hasInvite = !!sessionStorage.getItem('abc_invite');
   try{
     const r = await fetch('/api/auth/registration-status');
+    if (!r.ok) throw new Error('REGISTRATION_STATUS_UNAVAILABLE');
     const d = await r.json();
+    const regTab = document.querySelectorAll('.tab')[1];
     if(d.enabled === false && !hasInvite){
-      const regTab = document.querySelectorAll('.tab')[1];
       if (regTab) regTab.style.display = 'none';
+      if (wantsRegistration) document.getElementById('lg_err').textContent = 'এখন নতুন অ্যাকাউন্ট খোলা যাচ্ছে না।';
+    } else if (wantsRegistration && regTab) {
+      showTab('reg', regTab);
     }
-  }catch(e){}
+  } catch (e) {
+    if (wantsRegistration) document.getElementById('lg_err').textContent = 'অ্যাকাউন্ট খোলার তথ্য লোড হয়নি। আবার চেষ্টা করুন।';
+  }
 })();
 </script>
 </body>
