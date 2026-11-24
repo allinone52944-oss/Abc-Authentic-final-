@@ -88,23 +88,25 @@ describe('audit #82 — engine cards render once from ENGINE_CARDS', () => {
     // front+back one page, MRZ + barcode) joined the eight.
     expect(m[1].split('href:').length - 1).toBe(9);
     expect(m[1]).toContain("href: '/nid-smart-card.html'");
-    // The only '<div class="engine-card"' left is the renderer's
+    // The only '<a class="engine-card"' left is the renderer's
     // own template string — the 14 hardcoded blocks are gone.
-    expect(DASH.split('<div class="engine-card"').length - 1).toBe(1);
+    expect(DASH.split('<a class="engine-card"').length - 1).toBe(1);
     expect(DASH).not.toContain('<!-- Engine 1:');
     expect(DASH).not.toContain('<!-- M Engine 1');
   });
 
-  test('both grids render from the array, before loadServices updates charges', () => {
+  test('both grids wait for the account catalog before showing cards', () => {
     expect(DASH).toContain('id="engineGridDesk"');
     expect(DASH).toContain('id="engineGridMob"');
     expect(DASH).toContain('function renderEngineCards()');
-    const init = DASH.slice(DASH.indexOf('async function init()'));
-    expect(init.indexOf('renderEngineCards();')).toBeLessThan(init.indexOf('loadServices();'));
+    const init = DASH.slice(DASH.indexOf('async function init()'), DASH.indexOf('function setText('));
+    expect(init).not.toContain('renderEngineCards();');
+    const loader = fnBody('loadServices');
+    expect(loader.indexOf('_allServices = d.services')).toBeLessThan(loader.indexOf('renderEngineCards();'));
   });
 
   test('the land card price reads the live land-khatian row, not the removed land-search row', () => {
-    expect(DASH).toContain("s.engine_id === 'land-khatian'");
-    expect(DASH).not.toContain("s.engine_id === 'land-search'");
+    expect(DASH).toContain("engineId: 'land-khatian'");
+    expect(DASH).not.toContain("engineId: 'land-search'");
   });
 });

@@ -46,6 +46,36 @@ test('submitted automatic registration stays in instant history', async () => {
   expect(result).toContain('REGISTRATION');
 });
 
+test('an unsuccessful history entry with no date reports the file status', async () => {
+  const result = await history([{ kind: 'engine', title: 'নমুনা — ব্যর্থ', documents: [], created_at: '' }]);
+  expect(result).toContain('ফাইল তৈরি হয়নি');
+  expect(result).not.toContain('NaN');
+  expect(result).not.toContain('চার্জ কাটা হয়নি');
+});
+
+test('special service cards use the visible account catalog and its zero price and closure', () => {
+  const start = html.indexOf('const ENGINE_CARDS =');
+  const end = html.indexOf('function renderServiceGrid', start);
+  const targets = { engineGridDesk: { innerHTML: '' }, engineGridMob: { innerHTML: '' } };
+  const context = {
+    _allServices: [
+      { id: 'free', engine_id: 'birth-final', open: true, price: 0 },
+      { id: 'closed', engine_id: 'nid-replica', open: false, price: 35 },
+      { id: 'hidden', engine_id: 'nid-smart-card', open: true, price: 70, show_on_dashboard: false },
+    ],
+    document: { getElementById: id => targets[id] },
+    window: {}, escapeHtml: String, bnNum: value => Number(value).toLocaleString('bn-BD'),
+  };
+  vm.runInNewContext(html.slice(start, end) + '\nrenderEngineCards();', context);
+  for (const target of Object.values(targets)) {
+    expect(target.innerHTML).toContain('৳০');
+    expect(target.innerHTML).toContain('সাময়িক বন্ধ');
+    expect(target.innerHTML).toContain('/service-detail.html?id=closed');
+    expect(target.innerHTML).not.toContain('/nid-smart-card.html');
+    expect(target.innerHTML).not.toContain('/nid-server-copy.html');
+  }
+});
+
 test('highlight does not move a service ahead of the admin serial order', () => {
   const result = ordered([{ id: 'first', serial: 1 }, { id: 'highlight', serial: 2, featured: true }, { id: 'hidden', serial: 0, show_on_dashboard: false }]);
   expect(Array.from(result)).toEqual(['first', 'highlight']);

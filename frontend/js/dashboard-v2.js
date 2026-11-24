@@ -8,10 +8,12 @@
   const BN = '০১২৩৪৫৬৭৮৯';
   const bnNum = n => String(n).replace(/\d/g, d => BN[d]);
   function when(iso) {
-    const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    const time = iso ? Date.parse(iso) : NaN;
+    if (!Number.isFinite(time)) return '';
+    const m = Math.max(0, Math.floor((Date.now() - time) / 60000));
     if (m < 60) return bnNum(m) + ' মিনিট আগে';
-    const h = Math.round(m / 60); if (h < 24) return bnNum(h) + ' ঘণ্টা আগে';
-    return bnNum(Math.round(h / 24)) + ' দিন আগে';
+    const h = Math.floor(m / 60); if (h < 24) return bnNum(h) + ' ঘণ্টা আগে';
+    return bnNum(Math.floor(h / 24)) + ' দিন আগে';
   }
   const QUICK =
     '<div class="dv2-quick">' +
@@ -32,19 +34,35 @@
     '</div>';
 
   const items = [];
-  async function download(i) {
-    const d = items[i] && items[i].documents && items[i].documents[0];
-    if (!d) return;
-    const w = window.open('', '_blank');
+  const pendingDownloads = new Set();
+  let historyLoading = false;
+
+  async function download(i, button) {
+    const doc = items[i]?.documents?.[0];
+    if (!doc?.url || pendingDownloads.has(doc.url)) return;
+    pendingDownloads.add(doc.url);
+    if (button) button.disabled = true;
     try {
-      const r = await ABC.api(d.url);
-      if (!r.ok) throw new Error('bad');
-      const url = URL.createObjectURL(await r.blob());
-      if (w) w.location.href = url; else location.href = url;
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch (e) { if (w) w.close(); alert('ফাইল পাওয়া যায়নি — ইতিহাস পাতা থেকে চেষ্টা করুন'); }
+      const response = await ABC.api(doc.url);
+      if (!response.ok) {
+        ABC.showPageMsg(ABC.httpErrBn(response.status, 'ডাউনলোড'), 'err');
+        return;
+      }
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(await response.blob());
+      link.download = doc.originalname || doc.filename || 'ডাউনলোড';
+      document.body.appendChild(link);
+      const url = link.href;
+      setTimeout(() => { URL.revokeObjectURL(url); link.remove(); }, 4000);
+      link.click();
+    } catch (_) {
+      ABC.showPageMsg(ABC.httpErrBn(0, 'ডাউনলোড'), 'err');
+    } finally {
+      pendingDownloads.delete(doc.url);
+      if (button) button.disabled = false;
+    }
   }
-  window.DashV2 = { download };
+  window.DashV2 = { download, loadHistory };
 
   function render(list, target) {
     if (!target) return;
@@ -54,23 +72,28 @@
     }
     target.innerHTML = list.map(({ it, i }) => {
       const failed = /— ব্যর্থ$/.test(it.title || '');
-      const has = it.documents && it.documents.length;
+      const has = Boolean(it.documents?.[0]?.url);
+      const ago = when(it.created_at);
       return '<div class="dv2-row">' +
-        '<span class="dv2-dot ' + (failed ? 'bad' : 'ok') + '">' + (failed ? '✕' : '✓') + '</span>' +
-        '<div class="dv2-row-main"><b>' + esc(it.title || 'সেবা') + '</b><small>' + esc(when(it.created_at)) + '</small></div>' +
-        (has ? '<button class="dv2-dl" onclick="DashV2.download(' + i + ')">⬇ ডাউনলোড</button>'
-             : '<span class="dv2-tag">' + (failed ? 'চার্জ কাটা হয়নি' : '—') + '</span>') +
+        '<span class="dv2-dot ' + (failed ? 'bad' : 'ok') + '" aria-hidden="true">' + (failed ? '✕' : '✓') + '</span>' +
+        '<div class="dv2-row-main"><b>' + esc(it.title || 'সেবা') + '</b>' + (ago ? '<small>' + esc(ago) + '</small>' : '') + '</div>' +
+        (has ? '<button type="button" class="dv2-dl" onclick="DashV2.download(' + i + ',this)">⬇ ডাউনলোড</button>'
+             : '<span class="dv2-tag">' + (failed ? 'ফাইল তৈরি হয়নি' : '—') + '</span>') +
       '</div>';
     }).join('');
   }
 
-  async function loadHistory() {
+  async function loadHistory(button) {
+    if (historyLoading) return;
+    historyLoading = true;
+    if (button) button.disabled = true;
     try {
       const r = await ABC.api('/history');
       if (!r.ok) throw new Error('bad');
       const d = await r.json();
       items.length = 0;
-      (d.items || []).forEach(x => items.push(x));
+      if (!Array.isArray(d?.items)) throw new Error('bad');
+      d.items.forEach(x => items.push(x));
       // /history is a unified archive. This panel is only instant engine work;
       // keep original indices so downloads still address the correct stored file.
       const top = items.map((it, i) => ({ it, i }))
@@ -80,8 +103,11 @@
     } catch (e) {
       ['dv2HistD', 'dv2HistM'].forEach(id => {
         const t = document.getElementById(id);
-        if (t) t.innerHTML = '<div class="dv2-empty">লোড হয়নি — <a href="/history.html">ইতিহাস পাতায় দেখুন</a></div>';
+        if (t) t.innerHTML = '<div class="dv2-empty">সাম্প্রতিক সেবা লোড হয়নি। <button type="button" class="dv2-retry" onclick="DashV2.loadHistory(this)">আবার চেষ্টা করুন</button></div>';
       });
+    } finally {
+      historyLoading = false;
+      if (button) button.disabled = false;
     }
   }
 

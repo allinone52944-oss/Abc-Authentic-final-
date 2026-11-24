@@ -95,7 +95,7 @@ describe('dashboard + admin + service-detail wiring', () => {
   test('dashboard links to /nid-smart-card.html (one ENGINE_CARDS entry, both grids)', () => {
     const dash = read('frontend/dashboard.html');
     expect(dash.split("href: '/nid-smart-card.html'").length - 1).toBe(1);
-    expect(dash).toContain("s.engine_id === 'nid-smart-card'");
+    expect(dash).toContain("engineId: 'nid-smart-card'");
     expect(dash).toContain("chargeId: 'engChargeNidSmart'");
     // Audit #82 — the mobile id is derived ('m' + capitalised
     // chargeId), not a second hardcoded span.

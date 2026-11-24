@@ -945,7 +945,7 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/dashboard-polish.css?v=20261110-1">
-<link rel="stylesheet" href="/css/dashboard-v2.css?v=20261122-3">
+<link rel="stylesheet" href="/css/dashboard-v2.css?v=20261124-1">
 <script defer src="/js/service-navigation.js?v=20261122-4"></script>
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261122-3">
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
@@ -981,7 +981,7 @@
       <div class="side-user-avatar" id="sideAvatar">ইউ</div>
       <div class="side-user-info">
         <div class="side-user-name" id="sideUserName">লোড হচ্ছে...</div>
-        <div class="side-user-bal" id="sideUserBal">ব্যালেন্স: ৳০</div>
+        <div class="side-user-bal" id="sideUserBal">ব্যালেন্স: ৳—</div>
       </div>
     </div>
   </div>
@@ -996,7 +996,7 @@
       <div class="user-badge-wrap">
         <div class="quick-bal-pill" onclick="location.href='/wallet.html'" title="ব্যালেন্স দেখুন বা রিচার্জ করুন">
           <span>💳 ওয়ালেট:</span>
-          <span id="quickBalText">৳০</span>
+          <span id="quickBalText">৳—</span>
         </div>
         <button id="greetVoiceBtn" style="display:none;background:#f8fafc;border:1px solid #cbd5e1;padding:7px 14px;border-radius:10px;cursor:pointer;font-size:13px;align-items:center;gap:6px;font-weight:600;color:#334155;transition:all 0.2s;" title="ধর্মভিত্তিক শুভেচ্ছা ভয়েস শুনুন">🔊 <span>ভয়েস শুনুন</span></button>
         <div class="avatar" id="avatar" title="প্রোফাইল">র</div>
@@ -1018,7 +1018,7 @@
             <span>✨ বর্তমান ওয়ালেট ব্যালেন্স</span>
             <button class="hero-bal-toggle" id="balToggleDesk" onclick="toggleBalVisibility()" title="ব্যালেন্স লুকান বা দেখুন">👁️ লুকান</button>
           </div>
-          <div class="amt" id="balancePill">৳০</div>
+          <div class="amt" id="balancePill">৳—</div>
         </div>
         <div class="hero-actions">
           <button class="btn-hero-primary" onclick="location.href='/wallet.html'">+ ইনস্ট্যান্ট টাকা যোগ</button>
@@ -1087,7 +1087,7 @@
         </div>
         <span class="engine-hub-sub">১০০% দ্রুত ও স্বয়ংক্রিয় প্রসেসিং</span>
       </div>
-      <div class="engine-cards-grid" id="engineGridDesk"></div>
+      <div class="engine-cards-grid" id="engineGridDesk"><div class="engine-grid-status skel" style="height:72px;"></div></div>
     </div>
 
     <div class="workspace-overview">
@@ -1172,7 +1172,7 @@
           <span style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">ওয়ালেট ব্যালেন্স</span>
           <button class="hero-bal-toggle" id="balToggleMob" style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;padding:4px 8px;font-size:14px;border-radius:8px;" onclick="toggleBalVisibility()" title="ব্যালেন্স লুকান বা দেখুন">👁️</button>
         </div>
-        <div id="hubBalance" style="font-size:28px;font-weight:800;color:#1e40af;margin-top:2px;">৳০</div>
+        <div id="hubBalance" style="font-size:28px;font-weight:800;color:#1e40af;margin-top:2px;">৳—</div>
       </div>
       <button class="btn" style="padding:10px 18px;font-size:13px;border-radius:12px;font-weight:700;" onclick="location.href='/wallet.html'">+ রিচার্জ</button>
     </div>
@@ -1207,7 +1207,7 @@
       </div>
       <span style="font-size:11px;font-weight:700;color:#2563eb;">তাৎক্ষণিক ডেলিভারি</span>
     </div>
-    <div class="engine-cards-grid" id="engineGridMob"></div>
+    <div class="engine-cards-grid" id="engineGridMob"><div class="engine-grid-status skel" style="height:72px;"></div></div>
   </div>
 
   <!-- Mobile Main Content -->
@@ -1328,7 +1328,7 @@ const STBN = {
   refunded: 'রিফান্ডেড'
 };
 
-let _userBal = 0;
+let _userBal = null;
 let _balVisible = true;
 try {
   _balVisible = localStorage.getItem('abc_bal_hidden') !== '1';
@@ -1337,7 +1337,7 @@ try {
 let _allServices = [];
 
 function updateBalUI() {
-  const t = _balVisible ? ('৳' + bnNum(_userBal)) : '৳•••••';
+  const t = _balVisible ? (_userBal === null ? '৳—' : '৳' + bnNum(_userBal)) : '৳•••••';
   setText('balancePill', t);
   setText('hubBalance', t);
   setText('quickBalText', t);
@@ -1591,9 +1591,6 @@ async function init() {
   const tg = getPersonalizedGreeting(user, window._vgCfg || {});
   setText('greet', tg); setText('greetM', tg);
 
-  // Audit #82 — the engine-card spans must exist before
-  // loadServices() updates their charges by id.
-  renderEngineCards();
   loadCounts();
   loadRecentOrders();
   loadServices();
@@ -1650,7 +1647,7 @@ async function loadRecentOrders() {
           '</div>';
       }
       if (mob) {
-        mob.innerHTML = '<div class="m-active-order-pill" onclick="location.href=\'/services.html\'" style="background:#f8fafc;border:1px dashed #cbd5e1;">' +
+        mob.innerHTML = '<a class="m-active-order-pill" href="/services.html" style="background:#f8fafc;border:1px dashed #cbd5e1;">' +
           '<div style="display:flex;align-items:center;gap:10px;">' +
             '<div style="font-size:20px;">🛎️</div>' +
             '<div>' +
@@ -1659,7 +1656,7 @@ async function loadRecentOrders() {
             '</div>' +
           '</div>' +
           '<span style="font-size:12px;color:#2563eb;font-weight:700;">শুরু করুন →</span>' +
-        '</div>';
+        '</a>';
       }
       return;
     }
@@ -1682,19 +1679,19 @@ async function loadRecentOrders() {
           '</div>' +
           '<div class="ro-right">' +
             '<span class="st st-' + escapeHtml(stKey) + '">' + escapeHtml(stText) + '</span>' +
-            '<button class="ro-btn" onclick="location.href=\'/order-detail.html?id=' + encodeURIComponent(o.id) + '\'">ট্র্যাক করুন →</button>' +
+          '<a class="ro-btn" href="/order-detail.html?id=' + encodeURIComponent(o.id) + '">ট্র্যাক করুন →</a>' +
           '</div>' +
         '</div>';
       }).join('');
     }
 
     if (mob) {
-      const activeOrder = orders.find(o => ['pending', 'processing', 'received', 'registered'].includes(String(o.status).toLowerCase())) || orders[0];
+      const activeOrder = orders.find(o => ['new', 'pending', 'processing', 'received', 'registered'].includes(String(o.status).toLowerCase())) || orders[0];
       if (activeOrder) {
         const sName = escapeHtml(activeOrder.service_name_bn || activeOrder.service_name || 'সেবা');
         const stKey = String(activeOrder.status || 'pending').toLowerCase();
         const stText = STBN[stKey] || activeOrder.status;
-        mob.innerHTML = '<div class="m-active-order-pill" onclick="location.href=\'/order-detail.html?id=' + encodeURIComponent(activeOrder.id) + '\'">' +
+        mob.innerHTML = '<a class="m-active-order-pill" href="/order-detail.html?id=' + encodeURIComponent(activeOrder.id) + '">' +
           '<div style="display:flex;align-items:center;gap:10px;">' +
             '<div style="font-size:20px;">' + autoIcon(sName) + '</div>' +
             '<div>' +
@@ -1703,7 +1700,7 @@ async function loadRecentOrders() {
             '</div>' +
           '</div>' +
           '<span style="font-size:12px;color:#2563eb;font-weight:700;">ট্র্যাক →</span>' +
-        '</div>';
+        '</a>';
       } else {
         mob.innerHTML = '';
       }
@@ -1714,34 +1711,29 @@ async function loadRecentOrders() {
   }
 }
 
-// Audit #82 — the engine cards had two hardcoded copies (desktop +
-// mobile) that drifted apart, so every card change had to be made
-// twice. Both grids now render from this ONE array: a card changes
-// in exactly one place. The mobile grid is the compact variant (no
-// description, shorter tag/title/button, bare charge); the desktop
-// grid is the full variant. Every id, class and text below matches
-// the old hardcoded cards exactly — the render is verified by a
-// diff against the pre-refactor markup (see dashboard-loaders
-// tests). The banner strips, service search and help card are still
-// duplicated — they are the next steps, not this one.
+// Card copy is shared by desktop and mobile. Visibility, price and
+// availability come from the signed-in customer's service catalog.
 const ENGINE_CARDS = [
-  { href: '/bdris-apply.html', icon: '👶', iconStyle: 'background:linear-gradient(135deg, #eff6ff, #dbeafe);color:#1d4ed8;', tag: 'লাইভ আবেদন', tagM: 'আবেদন', tagStyle: 'background:#dbeafe;color:#1e40af;', title: 'জন্ম নিবন্ধন আবেদন', titleM: 'জন্ম আবেদন', desc: 'BDRIS রিয়েল-টাইম আবেদন, ড্রাফট সংরক্ষণ ও অটো-ফিল সেবা', btn: 'আবেদন শুরু →', btnM: 'শুরু →', chargeId: 'engChargeApply', charge: 'চার্জ: ৳১০০' },
-  { href: '/birth-final.html', icon: '📜', iconStyle: 'background:linear-gradient(135deg, #f0fdf4, #dcfce7);color:#15803d;', tag: 'তাৎক্ষণিক সনদ', tagM: 'সনদ', tagStyle: 'background:#dcfce7;color:#166534;', title: 'জন্ম নিবন্ধন সনদ', titleM: 'জন্ম সনদ', desc: 'ভেরিফাইড QR কোড ও নিখুঁত অফিসিয়াল ফরম্যাটে সনদ ডাউনলোড', btn: 'তৈরি করুন →', btnM: 'তৈরি →', chargeId: 'engChargeCert', charge: 'চার্জ: ৳৫০' },
-  { href: '/nid-replica.html', icon: '🪪', iconStyle: 'background:linear-gradient(135deg, #faf5ff, #f3e8ff);color:#7e22ce;', tag: 'এইচডি প্রিন্ট', tagM: 'কার্ড', tagStyle: 'background:#f3e8ff;color:#6b21a8;', title: 'এনআইডি কার্ড রিপ্রিন্ট', titleM: 'এনআইডি রিপ্রিন্ট', desc: 'PDF এক্সট্রাক্ট, ছবি-স্বাক্ষর সম্পাদনা ও প্রিন্ট রেডি স্মার্ট কার্ড', btn: 'প্রিন্ট নিন →', btnM: 'প্রিন্ট →', chargeId: 'engChargeNid', charge: 'চার্জ: ৳৫০' },
-  { href: '/nid-server-copy.html', icon: '🪪', iconStyle: 'background:linear-gradient(135deg, #f0fdf4, #dcfce7);color:#15803d;', tag: 'পোর্টাল লগইন', tagM: 'লগইন', tagStyle: 'background:#dcfce7;color:#166534;', title: 'এনআইডি সার্ভার কপি', desc: 'NID পোর্টালের আইডি-পাসওয়ার্ডে লগইন করে সরাসরি কার্ড — সব সালের NID', btn: 'কার্ড নিন →', btnM: 'কার্ড →', chargeId: 'engChargeNidSc', charge: 'চার্জ: ৳১৫০' },
-  { href: '/nid-server-report.html', icon: '🧾', iconStyle: 'background:linear-gradient(135deg, #fef3c7, #fde68a);color:#92400e;', tag: 'PDF থেকে', tagM: 'রিপোর্ট', tagStyle: 'background:#fef3c7;color:#92400e;', title: 'সাইন টু সার্ভার কপি', titleM: 'সার্ভার কপি', desc: 'NID ফর্ম PDF থেকে v1 + v2 সার্ভার কপি রিপোর্ট — এক চার্জে দুটো ফাইল', btn: 'রিপোর্ট নিন →', btnM: 'রিপোর্ট →', chargeId: 'engChargeNidSr', charge: 'চার্জ: ৳০' },
-  { href: '/nid-smart-card.html', icon: '💳', iconStyle: 'background:linear-gradient(135deg, #ede9fe, #ddd6fe);color:#5b21b6;', tag: 'PDF থেকে', tagM: 'কার্ড', tagStyle: 'background:#ede9fe;color:#5b21b6;', title: 'সাইন টু স্মার্ট কার্ড পিডিএফ', titleM: 'স্মার্ট কার্ড', desc: 'NID ফর্ম PDF থেকে নতুন স্মার্ট কার্ড — সামনে+পেছনে এক পাতা, MRZ + বারকোড', btn: 'কার্ড নিন →', btnM: 'কার্ড →', chargeId: 'engChargeNidSmart', charge: 'চার্জ: ৳০' },
-  { href: '/death-final.html', icon: '🕊️', iconStyle: 'background:linear-gradient(135deg, #fff7ed, #ffedd5);color:#c2410c;', tag: 'যাচাই ও কপি', tagM: 'যাচাই', tagStyle: 'background:#ffedd5;color:#9a3412;', title: 'মৃত্যু সনদ যাচাই', titleM: 'মৃত্যু সনদ', desc: 'অনলাইন মৃত্যু নিবন্ধন নম্বর দিয়ে যাচাই ও অফিসিয়াল সনদ ডাউনলোড', btn: 'যাচাই করুন →', btnM: 'কপি →', chargeId: 'engChargeDeath', charge: 'চার্জ: ৳৫০' },
-  { href: '/qr-photo-verify.html', icon: '🔍', iconStyle: 'background:linear-gradient(135deg, #ecfdf5, #d1fae5);color:#047857;', tag: 'মুখ যাচাই', tagM: 'যাচাই', tagStyle: 'background:#d1fae5;color:#065f46;', title: 'QR + ছবি যাচাই', desc: 'NID-এর QR কোড ও ব্যক্তির ছবি মিলিয়ে তাৎক্ষণিক পরিচয় যাচাই', btn: 'যাচাই করুন →', btnM: 'যাচাই →', chargeId: 'engChargeQr', charge: 'চার্জ: ৳৫০' },
-  { href: '/land-khatian.html', icon: '🌾', iconStyle: 'background:linear-gradient(135deg, #f0fdf4, #dcfce7);color:#14532d;', tag: 'ভূমি রেকর্ড', tagM: 'ভূমি', tagStyle: 'background:#dcfce7;color:#14532d;', title: 'ভূমি সেবা (খতিয়ান)', desc: 'খতিয়ান খোঁজ, নামে সম্পত্তি সন্ধান ও জমি যাচাই রিপোর্ট — সরকারি রেকর্ড থেকে সরাসরি', btn: 'সেবা নিন →', chargeId: 'engChargeLand', charge: 'চার্জ: ৳২০ থেকে' },
+  { engineId: 'bdris-apply', href: '/bdris-apply.html', icon: '👶', iconStyle: 'background:linear-gradient(135deg, #eff6ff, #dbeafe);color:#1d4ed8;', tag: 'লাইভ আবেদন', tagM: 'আবেদন', tagStyle: 'background:#dbeafe;color:#1e40af;', title: 'জন্ম নিবন্ধন আবেদন', titleM: 'জন্ম আবেদন', desc: 'BDRIS রিয়েল-টাইম আবেদন, ড্রাফট সংরক্ষণ ও অটো-ফিল সেবা', btn: 'আবেদন শুরু →', btnM: 'শুরু →', chargeId: 'engChargeApply' },
+  { engineId: 'birth-final', href: '/birth-final.html', icon: '📜', iconStyle: 'background:linear-gradient(135deg, #f0fdf4, #dcfce7);color:#15803d;', tag: 'তাৎক্ষণিক সনদ', tagM: 'সনদ', tagStyle: 'background:#dcfce7;color:#166534;', title: 'জন্ম নিবন্ধন সনদ', titleM: 'জন্ম সনদ', desc: 'ভেরিফাইড QR কোড ও নিখুঁত অফিসিয়াল ফরম্যাটে সনদ ডাউনলোড', btn: 'তৈরি করুন →', btnM: 'তৈরি →', chargeId: 'engChargeCert' },
+  { engineId: 'nid-replica', href: '/nid-replica.html', icon: '🪪', iconStyle: 'background:linear-gradient(135deg, #faf5ff, #f3e8ff);color:#7e22ce;', tag: 'এইচডি প্রিন্ট', tagM: 'কার্ড', tagStyle: 'background:#f3e8ff;color:#6b21a8;', title: 'এনআইডি কার্ড রিপ্রিন্ট', titleM: 'এনআইডি রিপ্রিন্ট', desc: 'PDF এক্সট্রাক্ট, ছবি-স্বাক্ষর সম্পাদনা ও প্রিন্ট রেডি স্মার্ট কার্ড', btn: 'প্রিন্ট নিন →', btnM: 'প্রিন্ট →', chargeId: 'engChargeNid' },
+  { engineId: 'nid-server-copy', href: '/nid-server-copy.html', icon: '🪪', iconStyle: 'background:linear-gradient(135deg, #f0fdf4, #dcfce7);color:#15803d;', tag: 'পোর্টাল লগইন', tagM: 'লগইন', tagStyle: 'background:#dcfce7;color:#166534;', title: 'এনআইডি সার্ভার কপি', desc: 'NID পোর্টালের আইডি-পাসওয়ার্ডে লগইন করে সরাসরি কার্ড — সব সালের NID', btn: 'কার্ড নিন →', btnM: 'কার্ড →', chargeId: 'engChargeNidSc' },
+  { engineId: 'nid-server-report', href: '/nid-server-report.html', icon: '🧾', iconStyle: 'background:linear-gradient(135deg, #fef3c7, #fde68a);color:#92400e;', tag: 'PDF থেকে', tagM: 'রিপোর্ট', tagStyle: 'background:#fef3c7;color:#92400e;', title: 'সাইন টু সার্ভার কপি', titleM: 'সার্ভার কপি', desc: 'NID ফর্ম PDF থেকে v1 + v2 সার্ভার কপি রিপোর্ট — এক চার্জে দুটো ফাইল', btn: 'রিপোর্ট নিন →', btnM: 'রিপোর্ট →', chargeId: 'engChargeNidSr' },
+  { engineId: 'nid-smart-card', href: '/nid-smart-card.html', icon: '💳', iconStyle: 'background:linear-gradient(135deg, #ede9fe, #ddd6fe);color:#5b21b6;', tag: 'PDF থেকে', tagM: 'কার্ড', tagStyle: 'background:#ede9fe;color:#5b21b6;', title: 'সাইন টু স্মার্ট কার্ড পিডিএফ', titleM: 'স্মার্ট কার্ড', desc: 'NID ফর্ম PDF থেকে নতুন স্মার্ট কার্ড — সামনে+পেছনে এক পাতা, MRZ + বারকোড', btn: 'কার্ড নিন →', btnM: 'কার্ড →', chargeId: 'engChargeNidSmart' },
+  { engineId: 'death-final', href: '/death-final.html', icon: '🕊️', iconStyle: 'background:linear-gradient(135deg, #fff7ed, #ffedd5);color:#c2410c;', tag: 'যাচাই ও কপি', tagM: 'যাচাই', tagStyle: 'background:#ffedd5;color:#9a3412;', title: 'মৃত্যু সনদ যাচাই', titleM: 'মৃত্যু সনদ', desc: 'অনলাইন মৃত্যু নিবন্ধন নম্বর দিয়ে যাচাই ও অফিসিয়াল সনদ ডাউনলোড', btn: 'যাচাই করুন →', btnM: 'কপি →', chargeId: 'engChargeDeath' },
+  { engineId: 'qr-photo-verify', href: '/qr-photo-verify.html', icon: '🔍', iconStyle: 'background:linear-gradient(135deg, #ecfdf5, #d1fae5);color:#047857;', tag: 'মুখ যাচাই', tagM: 'যাচাই', tagStyle: 'background:#d1fae5;color:#065f46;', title: 'QR + ছবি যাচাই', desc: 'NID-এর QR কোড ও ব্যক্তির ছবি মিলিয়ে তাৎক্ষণিক পরিচয় যাচাই', btn: 'যাচাই করুন →', btnM: 'যাচাই →', chargeId: 'engChargeQr' },
+  { engineId: 'land-khatian', href: '/land-khatian.html', icon: '🌾', iconStyle: 'background:linear-gradient(135deg, #f0fdf4, #dcfce7);color:#14532d;', tag: 'ভূমি রেকর্ড', tagM: 'ভূমি', tagStyle: 'background:#dcfce7;color:#14532d;', title: 'ভূমি সেবা (খতিয়ান)', desc: 'খতিয়ান খোঁজ, নামে সম্পত্তি সন্ধান ও জমি যাচাই রিপোর্ট — সরকারি রেকর্ড থেকে সরাসরি', btn: 'সেবা নিন →', chargeId: 'engChargeLand' },
 ];
-function engineCardHtml(c, mobile) {
-  const tag = mobile ? (c.tagM || c.tag) : c.tag;
+function engineCardHtml(c, service, mobile) {
+  const open = service.open === true;
+  const tag = open ? (mobile ? c.tagM || c.tag : c.tag) : 'সাময়িক বন্ধ';
   const title = mobile ? (c.titleM || c.title) : c.title;
-  const btn = mobile ? (c.btnM || c.btn) : c.btn;
-  const charge = mobile ? c.charge.replace(/^চার্জ: /, '') : c.charge;
+  const btn = open ? (mobile ? c.btnM || c.btn : c.btn) : 'বিস্তারিত →';
+  const charge = (mobile ? '' : 'চার্জ: ') + '৳' + bnNum(service.price) + (c.engineId === 'land-khatian' && Number(service.price) > 0 ? ' থেকে' : '');
   const chargeId = mobile ? 'm' + c.chargeId[0].toUpperCase() + c.chargeId.slice(1) : c.chargeId;
-  return '<div class="engine-card" onclick="location.href=\'' + c.href + '\'">' +
+  const destination = window.ServiceNavigation?.destination(service) ||
+    (open ? c.href : '/service-detail.html?id=' + encodeURIComponent(service.id));
+  return '<a class="engine-card" href="' + escapeHtml(destination) + '">' +
     '<div class="engine-card-top">' +
       '<div class="engine-icon-wrap" style="' + c.iconStyle + '">' + c.icon + '</div>' +
       '<span class="engine-tag" style="' + c.tagStyle + '">' + tag + '</span>' +
@@ -1752,13 +1744,17 @@ function engineCardHtml(c, mobile) {
       '<span class="engine-charge" id="' + chargeId + '">' + charge + '</span>' +
       '<span class="engine-btn">' + btn + '</span>' +
     '</div>' +
-  '</div>';
+  '</a>';
 }
 function renderEngineCards() {
   const desk = document.getElementById('engineGridDesk');
-  if (desk) desk.innerHTML = ENGINE_CARDS.map((c) => engineCardHtml(c, false)).join('\n');
+  const available = dashboardServices();
+  const cards = ENGINE_CARDS.map(card => ({ card, service: available.find(s => s.engine_id === card.engineId) }))
+    .filter(({ service }) => service);
+  const empty = '<p class="engine-grid-status">এখন কোনো বিশেষ সেবা নেই।</p>';
+  if (desk) desk.innerHTML = cards.map(({ card, service }) => engineCardHtml(card, service, false)).join('\n') || empty;
   const mob = document.getElementById('engineGridMob');
-  if (mob) mob.innerHTML = ENGINE_CARDS.map((c) => engineCardHtml(c, true)).join('\n');
+  if (mob) mob.innerHTML = cards.map(({ card, service }) => engineCardHtml(card, service, true)).join('\n') || empty;
 }
 
 // Admin-controlled dashboard list: visibility and serial order; highlight is decoration only.
@@ -1781,7 +1777,9 @@ function renderServiceGrid(containerId, list) {
       '<div class="ico">' + ico + '</div>' +
       (s.featured ? '<span class="svc2-badge">⭐ বিশেষ</span>' : '') +
       '<h4>' + name + '</h4>' +
-      '<div class="pr">৳' + bnNum(s.price) + '</div>' +
+      '<div class="pr">৳' + bnNum(s.price) +
+        (s.open === false ? '<small class="svc2-availability">সাময়িক বন্ধ</small>' : '') +
+      '</div>' +
     '</a>';
   }).join('');
 }
@@ -1808,55 +1806,11 @@ async function loadServices() {
     const r = await ABC.api('/services');
     if (!r.ok) throw new Error('bad');
     const d = await r.json();
-    _allServices = d.services || [];
+    if (!Array.isArray(d?.services)) throw new Error('bad');
+    _allServices = d.services;
     setText('hubServices', bnNum(_allServices.length));
 
-    // Update dynamic engine charges if found in services list
-    const applySvc = _allServices.find(s => s.engine_id === 'bdris-apply');
-    if (applySvc && applySvc.price) {
-      setText('engChargeApply', 'চার্জ: ৳' + bnNum(applySvc.price));
-      setText('mEngChargeApply', '৳' + bnNum(applySvc.price));
-    }
-    const certSvc = _allServices.find(s => s.engine_id === 'birth-final');
-    if (certSvc && certSvc.price) {
-      setText('engChargeCert', 'চার্জ: ৳' + bnNum(certSvc.price));
-      setText('mEngChargeCert', '৳' + bnNum(certSvc.price));
-    }
-    const nidSvc = _allServices.find(s => s.engine_id === 'nid-replica');
-    if (nidSvc && nidSvc.price) {
-      setText('engChargeNid', 'চার্জ: ৳' + bnNum(nidSvc.price));
-      setText('mEngChargeNid', '৳' + bnNum(nidSvc.price));
-    }
-    const nidScSvc = _allServices.find(s => s.engine_id === 'nid-server-copy');
-    if (nidScSvc && nidScSvc.price) {
-      setText('engChargeNidSc', 'চার্জ: ৳' + bnNum(nidScSvc.price));
-      setText('mEngChargeNidSc', '৳' + bnNum(nidScSvc.price));
-    }
-    const nidSrSvc = _allServices.find(s => s.engine_id === 'nid-server-report');
-    if (nidSrSvc && nidSrSvc.price) {
-      setText('engChargeNidSr', 'চার্জ: ৳' + bnNum(nidSrSvc.price));
-      setText('mEngChargeNidSr', '৳' + bnNum(nidSrSvc.price));
-    }
-    const nidSmartSvc = _allServices.find(s => s.engine_id === 'nid-smart-card');
-    if (nidSmartSvc && nidSmartSvc.price) {
-      setText('engChargeNidSmart', 'চার্জ: ৳' + bnNum(nidSmartSvc.price));
-      setText('mEngChargeNidSmart', '৳' + bnNum(nidSmartSvc.price));
-    }
-    const deathSvc = _allServices.find(s => s.engine_id === 'death-final');
-    if (deathSvc && deathSvc.price) {
-      setText('engChargeDeath', 'চার্জ: ৳' + bnNum(deathSvc.price));
-      setText('mEngChargeDeath', '৳' + bnNum(deathSvc.price));
-    }
-    const landSvc = _allServices.find(s => s.engine_id === 'land-khatian');
-    if (landSvc && landSvc.price) {
-      setText('engChargeLand', 'চার্জ: ৳' + bnNum(landSvc.price) + ' থেকে');
-      setText('mEngChargeLand', '৳' + bnNum(landSvc.price) + ' থেকে');
-    }
-    const qrSvc = _allServices.find(s => s.engine_id === 'qr-photo-verify');
-    if (qrSvc && qrSvc.price) {
-      setText('engChargeQr', 'চার্জ: ৳' + bnNum(qrSvc.price));
-      setText('mEngChargeQr', '৳' + bnNum(qrSvc.price));
-    }
+    renderEngineCards();
 
     renderServiceGrid('popularServices', dashboardServices().slice(0, 4));
     renderServiceGrid('mobileServices', dashboardServices().slice(0, 6));
@@ -1864,6 +1818,10 @@ async function loadServices() {
     setText('hubServices', '–');
     if (pop) pop.innerHTML = retryBox('loadServices');
     if (mob) mob.innerHTML = retryBox('loadServices');
+    for (const id of ['engineGridDesk', 'engineGridMob']) {
+      const grid = document.getElementById(id);
+      if (grid) grid.innerHTML = '<div class="engine-grid-status">' + retryBox('loadServices') + '</div>';
+    }
   }
 }
 
@@ -1982,6 +1940,6 @@ async function showNotices() {
 
 init();
 </script>
-<script src="/js/dashboard-v2.js?v=20261122-3"></script>
+<script src="/js/dashboard-v2.js?v=20261124-1"></script>
 </body>
 </html>

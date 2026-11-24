@@ -180,8 +180,21 @@ body.dash-v2 .dv2-hist-hdr a { min-height: 44px; align-items: center; }
 body.dash-v2 .dv2-row { flex-wrap: wrap; }
 body.dash-v2 .dv2-row-main b { white-space: normal; overflow: visible; overflow-wrap: anywhere; line-height: 1.6; }
 body.dash-v2 .dv2-tag { white-space: normal; }
+body.dash-v2 .dv2-dl { min-height: 44px; }
+body.dash-v2 .dv2-dl:disabled { opacity: .65; cursor: wait; }
+body.dash-v2 .dv2-retry {
+  min-height: 44px; padding: 4px 10px; border: 0; border-radius: 8px;
+  background: var(--layout-soft); color: var(--layout-emerald); font: inherit; font-weight: 700; cursor: pointer;
+}
+body.dash-v2 :is(a.engine-card, a.m-active-order-pill, a.ro-btn) { text-decoration: none; }
+body.dash-v2 a.engine-card { color: inherit; min-width: 0; }
+body.dash-v2 a.m-active-order-pill { gap: 10px; }
+body.dash-v2 a.m-active-order-pill > div { min-width: 0; overflow-wrap: anywhere; }
+body.dash-v2 a.m-active-order-pill > span { flex: none; }
+body.dash-v2 .engine-grid-status { grid-column: 1 / -1; color: var(--layout-muted); }
+body.dash-v2 .svc2-availability { display: block; font-size: 12px; color: #7a4e15; white-space: normal; }
 body.dash-v2 :is(.hero-bal-toggle,#greetVoiceBtn,#greetVoiceBtnM) { min-height: 44px; min-width: 44px; }
-body.dash-v2 :is(.svc2,.dv2-q):focus-visible { outline: 2px solid var(--pv-primary); outline-offset: 3px; }
+body.dash-v2 :is(.svc2,.dv2-q,.dv2-dl,.dv2-retry,.engine-card,.m-active-order-pill,.ro-btn):focus-visible { outline: 2px solid var(--pv-primary); outline-offset: 3px; }
 
 body.dash-v2 .dv2-service-menu {
   grid-column: 1 / -1;
