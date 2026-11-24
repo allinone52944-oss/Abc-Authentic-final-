@@ -20,7 +20,7 @@ const push = require('../utils/push');
 const ALERT_INTERVAL_MS = 3600e3;
 const lastAlerted = new Map();
 
-function alertMissingPrice(db, engineId) {
+function alertMissingPrice(db, engineId, { unavailable = false } = {}) {
   if (!engineId) return;
   const now = Date.now();
   const last = lastAlerted.get(engineId);
@@ -30,8 +30,10 @@ function alertMissingPrice(db, engineId) {
   try {
     const p = push.notifyAdmins(
       db,
-      '⚠️ দাম ছাড়া সেবা চলছে: ' + engineId,
-      'এই ইঞ্জিনের জন্য services টেবিলে কোনো সক্রিয় দাম নেই — সেবাটি ফ্রি চলছে। অ্যাডমিনে গিয়ে সঠিক engine_id-তে দাম বসান।',
+      (unavailable ? '⚠️ সেবার সেটআপ পাওয়া যায়নি: ' : '⚠️ দাম ছাড়া সেবা চলছে: ') + engineId,
+      unavailable
+        ? 'এই ইঞ্জিনের জন্য services টেবিলে কোনো এন্ট্রি নেই। অ্যাডমিনে সেবা সেটআপ করুন।'
+        : 'এই ইঞ্জিনের জন্য services টেবিলে কোনো সক্রিয় দাম নেই — সেবাটি ফ্রি চলছে। অ্যাডমিনে গিয়ে সঠিক engine_id-তে দাম বসান।',
       '/admin.html'
     );
     if (p && typeof p.catch === 'function') p.catch(() => {});

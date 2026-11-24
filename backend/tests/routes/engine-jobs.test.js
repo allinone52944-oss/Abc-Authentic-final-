@@ -125,6 +125,51 @@ describe('POST /api/engine-jobs — report a delivery copy', () => {
     expect(dirCount()).toBe(before);
   });
 
+  test('e-passport history stores the matching paid PDF and labels it ই-পাসপোর্ট', async () => {
+    let saved;
+    db.__routeQuery([
+      ['FROM orders WHERE', (_text, params) => {
+        expect(params).toEqual(['u1', 'epassport-sample', 'EP0000001']);
+        return { rows: [{ matched: true }] };
+      }],
+      ['INSERT INTO engine_jobs', (_text, params) => { saved = params; return { rows: [{ id: 'ep1' }] }; }],
+      ['DELETE FROM engine_jobs', { rows: [] }],
+      ['SELECT filename, originalname FROM engine_jobs WHERE id = $1 AND user_id = $2', (_text, params) => ({
+        rows: params[0] === 'ep1' && params[1] === 'u1' ? [{ filename: saved[4], originalname: saved[5] }] : [],
+      })],
+      ['FROM engine_jobs', () => ({
+        rows: [{ id: 'ep1', engine_id: saved[1], subject_name: saved[3], filename: saved[4], originalname: saved[5], created_at: '2026-11-24T08:00:00Z' }],
+      })],
+    ]);
+    try {
+      await asUser(request(app()).post('/api/engine-jobs'))
+        .field('engine_id', 'epassport').field('ref_no', 'EP0000001').field('name', 'SAMPLE ONLY')
+        .field('idempotency_key', 'epassport-sample')
+        .attach('file', Buffer.from('%PDF-1.4 sample'), 'E-Passport-EP0000001.pdf').expect(201);
+      expect(wa.notifyServiceCompleted.mock.calls[0][2]).toBe('ই-পাসপোর্ট');
+      expect(push.notifyUser.mock.calls[0][3]).toContain('ই-পাসপোর্টটি');
+      const history = await asUser(request(app()).get('/api/history')).expect(200);
+      expect(history.body.items[0]).toMatchObject({
+        title: 'ই-পাসপোর্ট — SAMPLE ONLY',
+        documents: [{ originalname: 'E-Passport-EP0000001.pdf', url: '/engine-jobs/ep1/file' }],
+      });
+      const file = await asUser(request(app()).get('/api/engine-jobs/ep1/file')).expect(200);
+      expect(file.headers['content-disposition']).toContain('E-Passport-EP0000001.pdf');
+      expect(file.body.toString()).toBe('%PDF-1.4 sample');
+    } finally {
+      if (saved) dropFile(saved[4]);
+    }
+  });
+
+  test('an e-passport upload without a matching order leaves no file or history entry', async () => {
+    const before = dirCount();
+    await asUser(request(app()).post('/api/engine-jobs'))
+      .field('engine_id', 'epassport').field('ref_no', 'EP0000001').field('idempotency_key', 'epassport-missing')
+      .attach('file', Buffer.from('%PDF-1.4 sample'), 'E-Passport-EP0000001.pdf').expect(402);
+    expect(dirCount()).toBe(before);
+    expect(db.query.mock.calls.some(([sql]) => sql.includes('INSERT INTO engine_jobs'))).toBe(false);
+  });
+
   test('non-PDF file → 400', async () => {
     const r = await asUser(request(app()).post('/api/engine-jobs'))
       .field('engine_id', 'birth-final')

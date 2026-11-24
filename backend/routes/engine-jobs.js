@@ -22,13 +22,13 @@ const { buildReceiptPdf } = require('../lib/receiptPdf');
 const { requireAuth, requireAdmin } = require('../auth');
 const { safeLog } = require('../security');
 
-const SERVICE_LABELS = { 'birth-final': 'জন্ম সনদ যাচাই', 'death-final': 'মৃত্যু সনদ যাচাই', 'passport': 'পাসপোর্ট ইঞ্জিন', 'nid-server-report': 'সাইন টু সার্ভার কপি', 'nid-smart-card': 'স্মার্ট কার্ড পিডিএফ' };
-const SUBJECT_LABELS = { 'birth-final': 'জন্ম নিবন্ধন নম্বর', 'death-final': 'মৃত্যু নিবন্ধন নম্বর', 'passport': 'পাসপোর্ট নম্বর', 'nid-server-report': 'জাতীয় পরিচয়পত্র নম্বর', 'nid-smart-card': 'জাতীয় পরিচয়পত্র নম্বর' };
+const SERVICE_LABELS = { 'birth-final': 'জন্ম সনদ যাচাই', 'death-final': 'মৃত্যু সনদ যাচাই', 'passport': 'পাসপোর্ট ইঞ্জিন', 'epassport': 'ই-পাসপোর্ট ইঞ্জিন', 'nid-server-report': 'সাইন টু সার্ভার কপি', 'nid-smart-card': 'স্মার্ট কার্ড পিডিএফ' };
+const SUBJECT_LABELS = { 'birth-final': 'জন্ম নিবন্ধন নম্বর', 'death-final': 'মৃত্যু নিবন্ধন নম্বর', 'passport': 'পাসপোর্ট নম্বর', 'epassport': 'পাসপোর্ট নম্বর', 'nid-server-report': 'জাতীয় পরিচয়পত্র নম্বর', 'nid-smart-card': 'জাতীয় পরিচয়পত্র নম্বর' };
 // Delivery-copy notifications: the service name the customer is told
 // was created (WhatsApp + push). Passport must not be called a
 // birth/death certificate.
-const DELIVERY_LABELS = { 'birth-final': 'জন্ম সনদ (সার্টিফিকেট)', 'death-final': 'মৃত্যু সনদ', 'passport': 'পাসপোর্ট', 'nid-server-report': 'সাইন টু সার্ভার কপি', 'nid-smart-card': 'স্মার্ট কার্ড পিডিএফ' };
-const DELIVERY_SHORT = { 'birth-final': 'জন্ম সনদ', 'death-final': 'মৃত্যু সনদ', 'passport': 'পাসপোর্ট', 'nid-server-report': 'সার্ভার কপি রিপোর্ট', 'nid-smart-card': 'স্মার্ট কার্ড' };
+const DELIVERY_LABELS = { 'birth-final': 'জন্ম সনদ (সার্টিফিকেট)', 'death-final': 'মৃত্যু সনদ', 'passport': 'পাসপোর্ট', 'epassport': 'ই-পাসপোর্ট', 'nid-server-report': 'সাইন টু সার্ভার কপি', 'nid-smart-card': 'স্মার্ট কার্ড পিডিএফ' };
+const DELIVERY_SHORT = { 'birth-final': 'জন্ম সনদ', 'death-final': 'মৃত্যু সনদ', 'passport': 'পাসপোর্ট', 'epassport': 'ই-পাসপোর্ট', 'nid-server-report': 'সার্ভার কপি রিপোর্ট', 'nid-smart-card': 'স্মার্ট কার্ড' };
 
 // Bengali rendering of an engine failure — the engine's own
 // message may be English or system-flavoured; the customer only
@@ -43,7 +43,7 @@ function failureReasonBn(raw) {
 }
 
 const UPLOAD_DIR = '/opt/all-in-one-abc-authentic/uploads/engine-jobs';
-const ENGINES = ['birth-final', 'death-final', 'passport', 'nid-server-report', 'nid-smart-card'];
+const ENGINES = ['birth-final', 'death-final', 'passport', 'epassport', 'nid-server-report', 'nid-smart-card'];
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -83,7 +83,7 @@ customerEngineJobs.post('/failure', async (req, res) => {
   let fn = null;
   try {
     const engineId = String((req.body && req.body.engine_id) || '').trim();
-    if (!ENGINES.includes(engineId)) return res.status(400).json({ error: 'BAD_ENGINE' });
+    if (!ENGINES.includes(engineId) || engineId === 'epassport') return res.status(400).json({ error: 'BAD_ENGINE' });
     const refNo = String((req.body && req.body.ref_no) || '').trim().slice(0, 64);
     const name = String((req.body && req.body.name) || '').trim().slice(0, 160);
     const idem = String((req.body && req.body.idempotency_key) || '').trim().slice(0, 80);
@@ -170,6 +170,14 @@ customerEngineJobs.post('/', (req, res) => {
       const name = String((req.body && req.body.name) || '').trim().slice(0, 160);
       let idem = String((req.body && req.body.idempotency_key) || '').trim().slice(0, 80);
       if (!idem) idem = engineId + '-' + (refNo || req.file.filename);
+      if (engineId === 'epassport') {
+        const order = await db.query(
+          `SELECT 1 FROM orders WHERE user_id = $1 AND idempotency_key = $2 AND status = 'completed'
+             AND data->>'engine' = 'epassport' AND upper(data->>'passport_no') = $3`,
+          [req.user.id, idem, refNo.toUpperCase()]
+        );
+        if (!order.rows.length) { cleanup(); return res.status(402).json({ error: 'NOT_PAID' }); }
+      }
       const r = await db.query(
         `INSERT INTO engine_jobs (user_id, engine_id, ref_no, subject_name, filename, originalname, idempotency_key)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -205,10 +213,11 @@ customerEngineJobs.post('/', (req, res) => {
       // (WhatsApp + own-device push).
       const label = DELIVERY_LABELS[engineId] || 'জন্ম সনদ (সার্টিফিকেট)';
       const short = DELIVERY_SHORT[engineId] || 'জন্ম সনদ';
+      const subject = engineId === 'passport' || engineId === 'epassport' ? short + 'টি' : 'সনদটি';
       wa.notifyServiceCompleted(db, req.user.id, label).catch(() => {});
       push.notifyUser(db, req.user.id,
         '✅ ' + short + ' তৈরি হয়েছে',
-        'আপনার ' + (engineId === 'passport' ? 'পাসপোর্টটি' : 'সনদটি') + ' তৈরি হয়েছে — ইতিহাস থেকে যেকোনো সময় ডাউনলোড করতে পারবেন।', '/history.html').catch(() => {});
+        'আপনার ' + subject + ' তৈরি হয়েছে — ইতিহাস থেকে যেকোনো সময় ডাউনলোড করতে পারবেন।', '/history.html').catch(() => {});
       res.status(201).json({ ok: true, id: r.rows[0].id });
     } catch (e) {
       cleanup();

@@ -52,7 +52,7 @@ const token = () => auth.signAccess({ id: 'u1', role: 'user' });
 const withUser = (req) => req.set('Authorization', 'Bearer ' + token());
 
 const PDF_HTML = '<!doctype html><html><head><style>@page{size:A4;margin:0}</style></head><body><div class="page-shell" id="page-shell">e-passport</div></body></html>';
-const PAID_ORDER = [{ id: 'o1', price: 30, status: 'completed' }];
+const PAID_ORDER = [{ id: 'o1', price: 30, status: 'completed', engine: 'epassport', passport_no: 'EP0000001' }];
 
 function baseRoutes(extra = []) {
   return [
@@ -122,6 +122,16 @@ describe('POST /api/epassport/pdf', () => {
     const r = await withUser(request(app()).post('/api/epassport/pdf?passport_no=EP0000001&idempotency_key=pending-1'))
       .set('Content-Type', 'text/html').send(PDF_HTML).expect(402);
     expect(r.body.error).toBe('NOT_PAID');
+    expect(renderEpassportPdf).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    { engine: 'passport' },
+    { passport_no: 'EP0000002' },
+  ])('completed order must match the engine and passport: %j', async (mismatch) => {
+    db.__routeQuery(baseRoutes([['FROM orders WHERE', { rows: [{ ...PAID_ORDER[0], ...mismatch }] }]]));
+    await withUser(request(app()).post('/api/epassport/pdf?passport_no=EP0000001&idempotency_key=mismatched'))
+      .set('Content-Type', 'text/html').send(PDF_HTML).expect(402);
     expect(renderEpassportPdf).not.toHaveBeenCalled();
   });
 

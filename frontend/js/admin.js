@@ -3366,6 +3366,7 @@ window.AdmSvc = {
           '<option value="land-khatian">খতিয়ান অনুসন্ধান ইঞ্জিন (DLRMS সারাংশ)</option>' +
           '<option value="land-mouza-map">মৌজা ম্যাপ ইঞ্জিন (DLRMS প্রিভিউ)</option>' +
           '<option value="passport">পাসপোর্ট ইঞ্জিন</option>' +
+          '<option value="epassport">ই-পাসপোর্ট ইঞ্জিন</option>' +
           '<option value="sanad">সনদ ও সার্টিফিকেট ইঞ্জিন</option>' +
           '<option value="nid-server-copy">এনআইডি সার্ভার কপি ইঞ্জিন (Portal Login)</option>' +
           '<option value="nid-server-report">সাইন টু সার্ভার কপি ইঞ্জিন (PDF Upload)</option>' +
@@ -3442,6 +3443,7 @@ window.AdmSvc = {
           '<option value="land-khatian"' + (s.engine_id === 'land-khatian' ? ' selected' : '') + '>খতিয়ান অনুসন্ধান ইঞ্জিন (DLRMS সারাংশ)</option>' +
           '<option value="land-mouza-map"' + (s.engine_id === 'land-mouza-map' ? ' selected' : '') + '>মৌজা ম্যাপ ইঞ্জিন (DLRMS প্রিভিউ)</option>' +
           '<option value="passport"' + (s.engine_id === 'passport' ? ' selected' : '') + '>পাসপোর্ট ইঞ্জিন</option>' +
+          '<option value="epassport"' + (s.engine_id === 'epassport' ? ' selected' : '') + '>ই-পাসপোর্ট ইঞ্জিন</option>' +
           '<option value="sanad"' + (s.engine_id === 'sanad' ? ' selected' : '') + '>সনদ ও সার্টিফিকেট ইঞ্জিন</option>' +
           '<option value="nid-server-copy"' + (s.engine_id === 'nid-server-copy' ? ' selected' : '') + '>এনআইডি সার্ভার কপি ইঞ্জিন (Portal Login)</option>' +
           '<option value="nid-server-report"' + (s.engine_id === 'nid-server-report' ? ' selected' : '') + '>সাইন টু সার্ভার কপি ইঞ্জিন (PDF Upload)</option>' +

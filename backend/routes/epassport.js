@@ -29,7 +29,7 @@
 // The HTML is sent as text/html (not JSON): the document is
 // ~9MB and user photos can push it past the global 10MB JSON
 // limit, while the global parser ignores non-JSON bodies —
-// so a route-level text parser with a 60MB bound is used
+// so a route-level text parser with a 20MB bound is used
 // instead. No server.js change, no new global surface.
 //
 // Money discipline (same as backend/routes/land-khatian.js
@@ -57,7 +57,6 @@ const { safeLog } = require('../security');
 const db = require('../db');
 const serviceCredits = require('../lib/serviceCredits');
 const { renderEpassportPdf } = require('../lib/epassportPdf');
-const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
 const { alertMissingPrice } = require('../lib/missingPriceAlert');
 
@@ -66,20 +65,18 @@ const ENGINE_ID = 'epassport';
 const LABEL = 'ই-পাসপোর্ট ইঞ্জিন';
 
 // ---------- pricing (per engine, same rules as land-khatian) ----------
-async function getServicePrice(userId) {
-  const r = await db.query(
-    `SELECT id, price FROM services WHERE engine_id = $1 AND status = 'active' LIMIT 1`, [ENGINE_ID]
+async function getServicePrice(userId, client = db) {
+  const r = await client.query(
+    `SELECT id, price, status FROM services WHERE engine_id = $1 ORDER BY (status = 'active') DESC LIMIT 1`, [ENGINE_ID]
   );
   if (!r.rows.length) {
-    // Audit #17 — no active price row: the service runs free.
-    // Price 0 is the design decision, so the gate stays open;
-    // the admin is alerted (throttled, once per engine per hour).
-    alertMissingPrice(db, ENGINE_ID);
-    return { allowed: true, price: 0, serviceId: null };
+    alertMissingPrice(db, ENGINE_ID, { unavailable: true });
+    return { allowed: false, price: 0, serviceId: null };
   }
+  if (r.rows[0].status !== 'active') return { allowed: false, price: 0, serviceId: null };
   const serviceId = r.rows[0].id;
   const basePrice = Number(r.rows[0].price) || 0;
-  const ov = await db.query(
+  const ov = await client.query(
     `SELECT custom_price, access_enabled FROM user_services WHERE user_id = $1 AND service_id = $2 LIMIT 1`,
     [userId, serviceId]
   );
@@ -109,113 +106,86 @@ function idemOf(body) {
   return idem;
 }
 
-async function replayIfExists(req, res, idem) {
-  const prev = await db.query(
-    'SELECT id, price, status FROM orders WHERE user_id = $1 AND idempotency_key = $2',
-    [req.user.id, idem]
+function normalizePassportNo(value) {
+  return String(value || '').toUpperCase().replace(/\s/g, '');
+}
+
+async function findOrder(client, userId, idem) {
+  const result = await client.query(
+    `SELECT id, price, status, data->>'engine' AS engine, data->>'passport_no' AS passport_no
+       FROM orders WHERE user_id = $1 AND idempotency_key = $2`,
+    [userId, idem]
   );
-  if (!prev.rows.length) return false;
-  const row = prev.rows[0];
-  const u = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
-  res.json({
-    ok: true, duplicate: true, charged: Number(row.price) || 0, orderId: row.id,
-    balance: u.rows[0] ? Number(u.rows[0].balance) : null,
-  });
-  return true;
+  return result.rows[0];
 }
 
-async function precheck(req, res) {
-  const { allowed, price, serviceId } = await getServicePrice(req.user.id);
-  if (!allowed) {
-    res.status(403).json({ error: 'SERVICE_ACCESS_DISABLED', message: 'এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।' });
-    return null;
-  }
-  if (price > 0) {
-    const u = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
-    const balance = u.rows[0] ? Number(u.rows[0].balance) : 0;
-    const lockedCredit = await serviceCredits.availableFor(db, req.user.id, serviceId);
-    if (balance + lockedCredit < price) {
-      res.status(402).json({
-        error: 'INSUFFICIENT_BALANCE',
-        message: `পর্যাপ্ত ব্যালেন্স নেই। সেবাটির মূল্য ৳${price}, বর্তমান ব্যালেন্স ৳${balance}।`,
-        required: price, balance,
-      });
-      return null;
-    }
-  }
-  return { price, serviceId };
-}
-
-async function chargeOnce(req, price, serviceId, idem) {
-  if (price <= 0) return;
-  const ref = 'epassport-' + idem;
-  const alreadyPaid = await db.query(
-    `SELECT 1 FROM transactions WHERE user_id = $1 AND trxid IN ($2, $3) AND status = 'approved' LIMIT 1`,
-    [req.user.id, ref, ref + ':svc']
-  );
-  if (alreadyPaid.rows.length) return;
-  await db.withTransaction((clientTx) => serviceCredits.payForService(clientTx, {
-    userId: req.user.id, serviceId, amount: Math.abs(price), ref,
-  }));
-}
-
-async function recordOrder(req, serviceId, status, price, idem, data) {
-  const ins = await db.query(
-    `INSERT INTO orders (user_id, service_id, status, data, price, idempotency_key)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
-     RETURNING id`,
-    [req.user.id, serviceId, status, JSON.stringify(data), price, idem]
-  ).catch((e) => { safeLog('[epassport] order insert error:', e.message); return null; });
-  if (ins && ins.rows.length) return ins.rows[0].id;
-  const again = await db.query(
-    'SELECT id FROM orders WHERE user_id = $1 AND idempotency_key = $2', [req.user.id, idem]
-  ).catch(() => null);
-  return again && again.rows.length ? again.rows[0].id : null;
-}
-
-function notifyDone(req, price) {
-  wa.notifyServiceCompleted(db, req.user.id, LABEL).catch(() => {});
-  push.notifyUser(db, req.user.id, '✅ ' + LABEL,
-    'আপনার ই-পাসপোর্ট তৈরি হয়েছে — ডাউনলোড দেখুন। অর্ডারটি ইতিহাসে (History) পাবেন।', '/history.html').catch(() => {});
-  push.notifyAdmins(db, '✅ ' + LABEL, `একটি ই-পাসপোর্ট তৈরি হয়েছে — চার্জ ৳${price}।`, '/admin.html').catch(() => {});
+function matchesOrder(order, passportNo) {
+  return order && order.status === 'completed' && order.engine === ENGINE_ID &&
+    normalizePassportNo(order.passport_no) === passportNo;
 }
 
 // ---------- POST /create ----------
 router.post('/create', requireAuth, async (req, res) => {
   try {
     const body = req.body || {};
-    const passportNo = String(body.passport_no || '').trim().slice(0, 20);
-    if (!passportNo) {
-      return res.status(400).json({ error: 'BAD_INPUT', message: 'পাসপোর্ট নম্বর লাগবে।' });
+    const passportNo = normalizePassportNo(body.passport_no);
+    if (!/^[A-Z0-9]{1,9}$/.test(passportNo)) {
+      return res.status(400).json({ error: 'BAD_INPUT', message: 'পাসপোর্ট নম্বরে ১ থেকে ৯টি ইংরেজি অক্ষর বা সংখ্যা দিন।' });
     }
     const idem = idemOf(body);
-    if (await replayIfExists(req, res, idem)) return;
-    const chk = await precheck(req, res);
-    if (!chk) return;
-    try {
-      await chargeOnce(req, chk.price, chk.serviceId, idem);
-    } catch (e) {
-      if (/INSUFFICIENT_BALANCE/.test(e.message)) {
-        return res.status(402).json({ error: 'INSUFFICIENT_BALANCE', message: 'পর্যাপ্ত ব্যালেন্স নেই। অনুগ্রহ করে ওয়ালেট রিচার্জ করুন।' });
+    const userId = req.user.id;
+    const result = await db.withTransaction(async (client) => {
+      const locked = await client.query('SELECT balance FROM users WHERE id = $1 FOR UPDATE', [userId]);
+      if (!locked.rows.length) throw new Error('USER_NOT_FOUND');
+      let balance = Number(locked.rows[0].balance);
+      const order = await findOrder(client, userId, idem);
+      if (order) {
+        if (!matchesOrder(order, passportNo)) return { conflict: true };
+        return { ok: true, duplicate: true, charged: Number(order.price), orderId: order.id, balance };
       }
-      if (!/DUPLICATE_TRANSACTION/.test(e.message)) throw e;
-      // Already paid under this ref (concurrent retry) — continue
-      // to the order; the charge is not applied twice.
-    }
-    const filename = 'E-Passport-' + passportNo.replace(/[^A-Z0-9]/gi, '').toUpperCase() + '.pdf';
-    let orderId = null;
-    if (chk.serviceId) {
-      orderId = await recordOrder(req, chk.serviceId, 'completed', chk.price, idem,
-        { passport_no: passportNo, filename, engine: ENGINE_ID });
-      if (orderId) notifyDone(req, chk.price);
-    }
-    const u2 = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
-    return res.json({
-      ok: true, charged: chk.price, orderId,
-      balance: u2.rows[0] ? Number(u2.rows[0].balance) : null,
+      const { allowed, price, serviceId } = await getServicePrice(userId, client);
+      if (!allowed) return { unavailable: !serviceId, disabled: Boolean(serviceId) };
+
+      // Earlier releases could commit the debit without saving the order.
+      // Recover that order at its original price before trying another debit.
+      const ref = ENGINE_ID + '-' + idem;
+      const prior = await client.query(
+        `SELECT amount FROM transactions WHERE user_id = $1 AND trxid IN ($2, $3) AND status = 'approved'`,
+        [userId, ref, ref + ':svc']
+      );
+      const charged = prior.rows.length
+        ? Math.round(prior.rows.reduce((sum, payment) => sum + Math.abs(Number(payment.amount)), 0) * 100) / 100
+        : price;
+      if (charged > 0 && !prior.rows.length) {
+        const payment = await serviceCredits.payForService(client, { userId, serviceId, amount: charged, ref });
+        balance = payment.newBalance;
+      }
+
+      const data = { passport_no: passportNo, filename: 'E-Passport-' + passportNo + '.pdf', engine: ENGINE_ID, charge_ref: ref };
+      const inserted = await client.query(
+        'INSERT INTO orders (user_id, service_id, status, data, price, idempotency_key) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+        [userId, serviceId, 'completed', JSON.stringify(data), charged, idem]
+      );
+      if (!inserted.rows.length) throw new Error('ORDER_NOT_SAVED');
+      return { ok: true, charged, orderId: inserted.rows[0].id, balance };
     });
+    if (result.conflict) {
+      return res.status(409).json({ error: 'ORDER_MISMATCH', message: 'এই অর্ডারের সঙ্গে পাসপোর্ট নম্বর বা সেবা মিলছে না।' });
+    }
+    if (result.unavailable || result.disabled) {
+      return res.status(403).json({
+        error: result.unavailable ? 'SERVICE_UNAVAILABLE' : 'SERVICE_ACCESS_DISABLED',
+        message: result.unavailable ? 'ই-পাসপোর্ট সেবা এখন বন্ধ আছে।' : 'এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।',
+      });
+    }
+    if (!result.duplicate) {
+      push.notifyAdmins(db, LABEL, `ই-পাসপোর্ট অর্ডার সেভ হয়েছে। চার্জ ৳${result.charged}।`, '/admin.html').catch(() => {});
+    }
+    return res.json({ ...result, idempotencyKey: idem });
   } catch (e) {
+    if (/INSUFFICIENT_BALANCE/.test(e.message)) {
+      return res.status(402).json({ error: 'INSUFFICIENT_BALANCE', message: 'পর্যাপ্ত ব্যালেন্স নেই। অনুগ্রহ করে ওয়ালেট রিচার্জ করুন।' });
+    }
     safeLog('[epassport] create error:', e.message);
     res.status(500).json({ error: 'CREATE_FAILED' });
   }
@@ -232,17 +202,18 @@ router.post('/create', requireAuth, async (req, res) => {
 // clear 500 and the frontend downloads NOTHING (no HTML
 // fallback). The HTML arrives as text/html so the global 10MB
 // JSON limit (which the ~9MB document + user photos can exceed)
-// never applies; the route-level text parser bounds it at 60MB.
+// never applies; the route-level text parser matches the live
+// reverse proxy's 20MB limit.
 router.post('/pdf',
   requireAuth,
-  express.text({ type: 'text/html', limit: '60mb' }),
+  express.text({ type: 'text/html', limit: '20mb' }),
   async (req, res) => {
     try {
-      const passportNo = String(req.query.passport_no || '').trim().slice(0, 20);
+      const passportNo = normalizePassportNo(req.query.passport_no);
       const idem = String(req.query.idempotency_key || '').trim().slice(0, 80);
       const html = req.body;
-      if (!passportNo) {
-        return res.status(400).json({ error: 'BAD_INPUT', message: 'পাসপোর্ট নম্বর লাগবে।' });
+      if (!/^[A-Z0-9]{1,9}$/.test(passportNo)) {
+        return res.status(400).json({ error: 'BAD_INPUT', message: 'পাসপোর্ট নম্বরে ১ থেকে ৯টি ইংরেজি অক্ষর বা সংখ্যা দিন।' });
       }
       if (!idem) {
         return res.status(400).json({ error: 'BAD_INPUT', message: 'আইডেমপোটেন্সি কি লাগবে।' });
@@ -253,11 +224,8 @@ router.post('/pdf',
       // Paid-order gate: the Create for this idempotency key must
       // have completed. Without it there is no charge and no PDF —
       // the PDF can never be used to bypass payment.
-      const ord = await db.query(
-        'SELECT id, price, status FROM orders WHERE user_id = $1 AND idempotency_key = $2',
-        [req.user.id, idem]
-      );
-      if (!ord.rows.length || ord.rows[0].status !== 'completed') {
+      const order = await findOrder(db, req.user.id, idem);
+      if (!matchesOrder(order, passportNo)) {
         return res.status(402).json({ error: 'NOT_PAID', message: 'আগে Create করে চার্জ সম্পন্ন করুন, তারপর PDF ডাউনলোড হবে।' });
       }
       let pdf;
@@ -267,7 +235,7 @@ router.post('/pdf',
         safeLog('[epassport] pdf render error:', e.message);
         return res.status(500).json({ error: 'PDF_FAILED', message: 'PDF তৈরি করা যায়নি — আবার চেষ্টা করুন।' });
       }
-      const filename = 'E-Passport-' + passportNo.replace(/[^A-Z0-9]/gi, '').toUpperCase() + '.pdf';
+      const filename = 'E-Passport-' + passportNo + '.pdf';
       res.set('Content-Type', 'application/pdf');
       res.set('Content-Disposition', 'attachment; filename="' + filename + '"');
       res.set('Content-Length', String(pdf.length));

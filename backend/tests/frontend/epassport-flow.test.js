@@ -284,6 +284,8 @@ function runPage(options = {}) {
     setTimeout: options.setTimeout || setTimeout,
     clearTimeout,
     Promise,
+    Blob: options.Blob || Blob,
+    FormData,
     URL: { createObjectURL: () => 'blob:fake', revokeObjectURL: () => {} },
     fetch: async () => ({ ok: true }),
     sessionStorage: { getItem: () => '' },
@@ -470,6 +472,7 @@ describe('date-paste universality (MRP rule, all formats)', () => {
     ['17/12/1979', '1979-12-17'], // first > 12 → DD/MM
     ['05/06/1979', '1979-06-05'], // both ≤ 12 → DD/MM
     ['32/13/1979', ''],
+    ['17 Septembx 1979', ''],
     ['', ''],
   ];
   test.each(cases)('parsePastedDate(%s) → %s', (input, expected) => {
@@ -852,6 +855,11 @@ describe('validation blocks Create with the reason named', () => {
     api.applyAll();
     expect(api.validateEngine().length).toBeGreaterThan(0);
   });
+  test('expiry before birth is flagged even if issue date was left blank', () => {
+    const { api, els } = runPage();
+    fillForm(els, { ...FULL_FORM, dob: '17/12/1979', issueDate: '', expiryDate: '1979-12-16' });
+    expect(api.validateEngine()).toContain('মেয়াদের তারিখ জন্মতারিখের আগে হতে পারে না।');
+  });
 });
 
 describe('snapshot (document-only HTML for the PDF render)', () => {
@@ -917,6 +925,7 @@ describe('Point 1: DOB once → 2 derived places; passport number once → 4 pla
     }
     expect(api.code128Runs('')).toBeNull();
     expect(api.code128Runs('---')).toBeNull();
+    expect(api.code128Runs('A2B3C4D5E')).toHaveLength(73);
   });
   test('barcode + perforation regenerate for an entered number, stay as scan art for the sample number', () => {
     const { api, els } = runPage();
@@ -1118,27 +1127,34 @@ describe('Point 4: form flow like MRP', () => {
 });
 
 describe('e-passport output and retry', () => {
-  function pageWithResponses({ invalidPdf = false, loseChargeResponse = false } = {}) {
-    const chargeKeys = [], pdfUrls = [], downloads = [];
+  function pageWithResponses({ invalidPdf = false, loseChargeResponse = false, beforeCharge, snapshotBytes, failHistory = false } = {}) {
+    const chargeKeys = [], pdfUrls = [], pdfBodies = [], downloads = [], history = [];
     const page = runPage({
       setTimeout: () => 0,
       onDownload: blob => downloads.push(blob),
+      Blob: snapshotBytes && function () { return { size: snapshotBytes }; },
       api: async (url, options) => {
         if (url === '/epassport/create') {
           chargeKeys.push(options.body.idempotency_key);
+          if (beforeCharge) await beforeCharge(page);
           if (loseChargeResponse && chargeKeys.length === 1) throw new Error('response lost');
         }
         if (url.startsWith('/epassport/pdf?')) {
           pdfUrls.push(url);
+          pdfBodies.push(options.body);
           const bytes = invalidPdf && pdfUrls.length === 1 ? '%PDF-1.7\npartial' : '%PDF-1.7\n%%EOF\n';
           return {ok: true, headers: {get: () => 'application/pdf'}, blob: async () => new Blob([bytes])};
+        }
+        if (url === '/engine-jobs') {
+          history.push(options.body);
+          if(failHistory && history.length === 1) return {ok: false};
         }
         return {ok: true, json: async () => ({ok: true, charged: 20, balance: 480})};
       },
     });
     page.els['start-passport-button'].click();
     fillForm(page.els, FULL_FORM);
-    return { ...page, chargeKeys, pdfUrls, downloads };
+    return { ...page, chargeKeys, pdfUrls, pdfBodies, downloads, history };
   }
   async function clickCreate(page) {
     page.els['create-passport-button'].click();
@@ -1163,6 +1179,38 @@ describe('e-passport output and retry', () => {
     await clickCreate(page);
     expect(page.chargeKeys).toEqual([page.chargeKeys[0], page.chargeKeys[0]]);
     expect(page.downloads).toHaveLength(1);
+  });
+  test('an edit made while the charge is pending cannot enter the submitted PDF', async () => {
+    const page = pageWithResponses({
+      beforeCharge: ({els}) => fillForm(els, {...FULL_FORM, givenName: 'LATER EDIT', passportNo: 'ZZ9999999'}),
+    });
+    await clickCreate(page);
+    expect(page.downloads).toHaveLength(1);
+    expect(page.pdfUrls[0]).toContain('passport_no=' + FULL_FORM.passportNo);
+    expect(page.pdfBodies[0]).toContain('>' + FULL_FORM.givenName + '<');
+    expect(page.pdfBodies[0]).not.toContain('>LATER EDIT<');
+    expect(page.history[0].get('name')).toBe(FULL_FORM.givenName + ' ' + FULL_FORM.surname);
+    expect(page.history[0].get('ref_no')).toBe(FULL_FORM.passportNo);
+  });
+  test('oversize snapshots stop before the charge', async () => {
+    const page = pageWithResponses({snapshotBytes:20 * 1024 * 1024 + 1});
+    await clickCreate(page);
+    expect(page.chargeKeys).toHaveLength(0);
+    expect(page.pdfUrls).toHaveLength(0);
+    expect(page.els['create-message'].textContent).toContain('ছবিগুলো অনেক বড়');
+  });
+  test('download again can retry a failed history save without another charge or render', async () => {
+    const page = pageWithResponses({failHistory:true});
+    await clickCreate(page);
+    expect(page.downloads).toHaveLength(1);
+    expect(page.history).toHaveLength(1);
+    expect(page.els['result-message'].textContent).toContain('ইতিহাসে সেভ হয়নি');
+    page.els['download-again-button'].click();
+    await new Promise(resolve => setImmediate(resolve));
+    expect(page.history[1].get('idempotency_key')).toBe(page.history[0].get('idempotency_key'));
+    expect(page.chargeKeys).toHaveLength(1);
+    expect(page.pdfUrls).toHaveLength(1);
+    expect(page.els['result-message'].textContent).not.toContain('ইতিহাসে সেভ হয়নি');
   });
 
   test('Create waits for both uploads and a removed upload cannot reappear', async () => {

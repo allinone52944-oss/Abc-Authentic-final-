@@ -80,13 +80,13 @@ describe('audit #14 — gate IDs are the directory names', () => {
     // set is now four engines; its ID is its directory name,
     // per the same audit #14 rule.
     // nid-smart-card joined 2026-11-19 (Smart Card engine: new
-    // NID card, front+back one page, MRZ + PDF417 barcode) — the
-    // closed set is now five engines; its ID is its directory
+    // NID card, front+back one page, MRZ + PDF417 barcode) — its ID is its directory
     // name, per the same audit #14 rule.
-    expect(jobs).toContain("const ENGINES = ['birth-final', 'death-final', 'passport', 'nid-server-report', 'nid-smart-card'];");
+    expect(jobs).toContain("const ENGINES = ['birth-final', 'death-final', 'passport', 'epassport', 'nid-server-report', 'nid-smart-card'];");
     expect(jobs).toContain("'birth-final': 'জন্ম সনদ যাচাই'");
     expect(jobs).toContain("'death-final': 'মৃত্যু সনদ যাচাই'");
     expect(jobs).toContain("'passport': 'পাসপোর্ট ইঞ্জিন'");
+    expect(jobs).toContain("'epassport': 'ই-পাসপোর্ট ইঞ্জিন'");
     expect(jobs).toContain("'nid-server-report': 'সাইন টু সার্ভার কপি'");
     expect(jobs).toContain("'nid-smart-card': 'স্মার্ট কার্ড পিডিএফ'");
     expect(jobs).not.toContain('bdris-certificate');

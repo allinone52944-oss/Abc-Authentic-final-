@@ -35,6 +35,7 @@ const auth = require('../../auth');
 const push = require('../../utils/push');
 const { _resetForTests } = require('../../lib/missingPriceAlert');
 const epassportRouter = require('../../routes/epassport');
+const SAVED_ORDER = { id: 'o1', price: 30, status: 'completed', engine: 'epassport', passport_no: 'EP0000001' };
 
 function app() {
   const a = express();
@@ -49,18 +50,18 @@ function baseRoutes(extra = []) {
   return [
     ...extra, // per-test overrides win over the defaults below
     ['FROM orders WHERE', { rows: [] }],
-    ['FROM services WHERE', { rows: [{ id: 15, price: 30 }] }],
+    ['FROM services WHERE', { rows: [{ id: 15, price: 30, status: 'active' }] }],
     ['FROM user_services WHERE', { rows: [] }],
     ['FROM users WHERE', { rows: [{ balance: 500 }] }],
     ['FROM service_credits', { rows: [] }],
     ['FROM transactions WHERE', { rows: [] }],
-    ['wallet_apply', { rows: [{ balance: 470 }] }],
+    ['wallet_apply', { rows: [{ new_balance: 470 }] }],
     ['INSERT INTO orders', { rows: [{ id: 'o1' }] }],
   ];
 }
 
 const walletCalls = () => db.__client.query.mock.calls.filter((c) => String(c[0]).includes('wallet_apply'));
-const orderInserts = () => db.query.mock.calls.filter((c) => String(c[0]).includes('INSERT INTO orders'));
+const orderInserts = () => db.__client.query.mock.calls.filter((c) => String(c[0]).includes('INSERT INTO orders'));
 
 beforeEach(() => {
   db.__reset();
@@ -90,15 +91,21 @@ describe('GET /api/epassport/price', () => {
     const r = await withUser(request(app()).get('/api/epassport/price')).expect(200);
     expect(r.body.allowed).toBe(false);
   });
-  test('no services row → price 0 AND admin missing-price alert fires (audit #17)', async () => {
+  test('no active services row → unavailable and admin alert', async () => {
     _resetForTests(); // the alert is throttled once per engine per hour
     db.__routeQuery(baseRoutes([
       ['FROM services WHERE', { rows: [] }],
     ]));
     const r = await withUser(request(app()).get('/api/epassport/price')).expect(200);
-    expect(r.body).toMatchObject({ ok: true, price: 0, serviceId: null, allowed: true });
+    expect(r.body).toMatchObject({ ok: true, price: 0, serviceId: null, allowed: false });
     expect(push.notifyAdmins).toHaveBeenCalledTimes(1);
     expect(push.notifyAdmins.mock.calls[0][1]).toContain('epassport');
+  });
+  test('an intentionally inactive service is unavailable without a missing setup alert', async () => {
+    db.__routeQuery(baseRoutes([['FROM services WHERE', { rows: [{ id: 15, price: 30, status: 'inactive' }] }]]));
+    const r = await withUser(request(app()).get('/api/epassport/price')).expect(200);
+    expect(r.body.allowed).toBe(false);
+    expect(push.notifyAdmins).not.toHaveBeenCalled();
   });
 });
 
@@ -117,7 +124,7 @@ describe('POST /api/epassport/create', () => {
   test('price > 0 → 200, charged 30, completed order + history', async () => {
     const r = await withUser(request(app()).post('/api/epassport/create'))
       .send({ passport_no: 'EP0000001', idempotency_key: 't-ep-1' }).expect(200);
-    expect(r.body).toMatchObject({ ok: true, charged: 30, orderId: 'o1' });
+    expect(r.body).toMatchObject({ ok: true, charged: 30, orderId: 'o1', balance: 470 });
     expect(walletCalls()).toHaveLength(1);
     expect(orderInserts()).toHaveLength(1);
     const ins = orderInserts()[0];
@@ -125,11 +132,12 @@ describe('POST /api/epassport/create', () => {
     expect(ins[1]).toContain(30); // price
     expect(ins[1]).toContain('t-ep-1'); // idempotency_key
     expect(String(ins[1][3])).toContain('EP0000001'); // passport number in order data (JSON param)
-    expect(push.notifyUser).toHaveBeenCalled();
+    expect(push.notifyAdmins).toHaveBeenCalled();
+    expect(push.notifyUser).not.toHaveBeenCalled();
   });
   test('price 0 → 200, charged 0, wallet untouched, order still recorded', async () => {
     db.__routeQuery(baseRoutes([
-      ['FROM services WHERE', { rows: [{ id: 15, price: 0 }] }],
+      ['FROM services WHERE', { rows: [{ id: 15, price: 0, status: 'active' }] }],
     ]));
     const r = await withUser(request(app()).post('/api/epassport/create'))
       .send({ passport_no: 'EP0000001', idempotency_key: 't-ep-0' }).expect(200);
@@ -169,7 +177,8 @@ describe('POST /api/epassport/create', () => {
   });
   test('idempotency replay → stored outcome, no second charge', async () => {
     db.__routeQuery(baseRoutes([
-      ['FROM orders WHERE', { rows: [{ id: 'o1', price: 30, status: 'completed' }] }],
+      ['FROM orders WHERE', { rows: [SAVED_ORDER] }],
+      ['FROM services WHERE', { rows: [] }],
     ]));
     const r = await withUser(request(app()).post('/api/epassport/create'))
       .send({ passport_no: 'EP0000001', idempotency_key: 't-ep-1' }).expect(200);
@@ -177,15 +186,50 @@ describe('POST /api/epassport/create', () => {
     expect(walletCalls()).toHaveLength(0);
     expect(orderInserts()).toHaveLength(0);
   });
-  test('already-paid ref (concurrent retry) → no second charge, order still recorded', async () => {
+  test('recovers an earlier debit at its original price even with a low balance', async () => {
     db.__routeQuery(baseRoutes([
-      ['FROM transactions WHERE', { rows: [{ '?column?': 1 }] }],
+      ['FROM transactions WHERE', { rows: [{ amount: '-16.50' }, { amount: '-3.50' }] }],
+      ['FROM users WHERE', { rows: [{ balance: 0 }] }],
     ]));
     const r = await withUser(request(app()).post('/api/epassport/create'))
       .send({ passport_no: 'EP0000001', idempotency_key: 't-ep-dup' }).expect(200);
-    expect(r.body).toMatchObject({ ok: true, charged: 30, orderId: 'o1' });
+    expect(r.body).toMatchObject({ ok: true, charged: 20, orderId: 'o1', balance: 0 });
     expect(walletCalls()).toHaveLength(0);
     expect(orderInserts()).toHaveLength(1);
+  });
+  test('missing service stops before the debit and order insert', async () => {
+    db.__routeQuery(baseRoutes([['FROM services WHERE', { rows: [] }]]));
+    const r = await withUser(request(app()).post('/api/epassport/create'))
+      .send({ passport_no: 'EP0000001', idempotency_key: 't-ep-missing' }).expect(403);
+    expect(r.body.error).toBe('SERVICE_UNAVAILABLE');
+    expect(walletCalls()).toHaveLength(0);
+    expect(orderInserts()).toHaveLength(0);
+  });
+  test('same request key with a different passport does not replay or debit', async () => {
+    db.__routeQuery(baseRoutes([['FROM orders WHERE', { rows: [SAVED_ORDER] }]]));
+    await withUser(request(app()).post('/api/epassport/create'))
+      .send({ passport_no: 'EP0000002', idempotency_key: 't-ep-1' }).expect(409);
+    expect(walletCalls()).toHaveLength(0);
+    expect(orderInserts()).toHaveLength(0);
+  });
+  test('an order insert failure rolls back the debit and sends no success notification', async () => {
+    db.__routeQuery(baseRoutes([['INSERT INTO orders', () => { throw new Error('ORDER_NOT_SAVED'); }]]));
+    const actualDb = jest.requireActual('../../db');
+    const connect = jest.spyOn(actualDb.pool, 'connect').mockResolvedValue(db.__client);
+    db.withTransaction.mockImplementation(actualDb.withTransaction);
+    try {
+      await withUser(request(app()).post('/api/epassport/create'))
+        .send({ passport_no: 'EP0000001', idempotency_key: 't-ep-rollback' }).expect(500);
+      const sql = db.__client.query.mock.calls.map(([text]) => text);
+      expect(sql[0]).toBe('BEGIN');
+      expect(sql.at(-1)).toBe('ROLLBACK');
+      expect(sql).not.toContain('COMMIT');
+      expect(walletCalls()).toHaveLength(1);
+      expect(orderInserts()).toHaveLength(1);
+      expect(push.notifyAdmins).not.toHaveBeenCalled();
+    } finally {
+      connect.mockRestore();
+    }
   });
   test('no idempotency key → server generates one with the epassport- prefix, still charges once', async () => {
     const r = await withUser(request(app()).post('/api/epassport/create'))

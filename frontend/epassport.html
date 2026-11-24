@@ -203,7 +203,7 @@
      <textarea id="eng-mrz1" data-engine="mrz1" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
      <label for="eng-mrz2">২য় লাইন</label>
      <textarea id="eng-mrz2" data-engine="mrz2" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
-     <p class="engine-hint">দুটো লাইনই উপরের তথ্য থেকে আবার তৈরি হয় (৪৪ অক্ষর, চেক ডিজিট হিসাব করা হয়)। পরের তথ্য বদলানো পর্যন্ত এখানে লিখে বদলে নিতে পারেন।</p>
+     <p class="engine-hint">Create চাপলে ফর্মের তথ্য থেকে ৪৪ অক্ষরের MRZ ও চেক ডিজিট আবার হিসাব করা হবে।</p>
      <div class="engine-actions"><button type="button" id="eng-remrz">MRZ আবার তৈরি করুন</button><button type="button" id="eng-reapply">পাতায় আবার বসান</button></div>
     </div>
     <div class="create-actions">
@@ -262,9 +262,10 @@ function validDate(iso){
   return y>0&&mo>=1&&mo<=12&&d>=1&&d<=[31,leap?29:28,31,30,31,30,31,31,30,31,30,31][mo-1];
  }
 function parseDisplay(t){
-  var m=/^(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})$/.exec(String(t||'').trim());
+  var m=/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/.exec(t);
   if(!m)return '';
-  var mi=EN_MON.indexOf(m[2].toUpperCase().slice(0,3));
+  var month=m[2].toUpperCase();
+  var mi=(month.length===3?EN_MON:EN_MON_FULL).indexOf(month);
   if(mi<0)return '';
   var iso=m[3]+'-'+String(mi+1).padStart(2,'0')+'-'+m[1].padStart(2,'0');
   return validDate(iso)?iso:'';
@@ -282,10 +283,7 @@ function parsePastedDate(text){
    var iso=num[3]+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0');
    return validDate(iso)?iso:'';
   }
-  var short=parseDisplay(t);if(short)return short;
-  var full=/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/.exec(t);
-  if(full){var mi=EN_MON_FULL.indexOf(full[2].toUpperCase());if(mi<0)return '';var iso2=full[3]+'-'+String(mi+1).padStart(2,'0')+'-'+full[1].padStart(2,'0');return validDate(iso2)?iso2:'';}
-  return '';
+  return parseDisplay(t);
  }
 function displayDate(iso,short){
   if(!validDate(iso))return '';
@@ -526,10 +524,10 @@ function c128Value(ch){var c=ch.charCodeAt(0);if(c>=48&&c<=57)return c-48+16;if(
 function code128Runs(num){
   var s=String(num||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
   if(!s)return null;
-  var m=/^([A-Z]*)(\d*)$/.exec(s);if(!m)return null;
+  var m=/^([A-Z]*)(\d*)$/.exec(s);
   var vals=[],pats=[],i;
-  var d=m[2];
-  if(!m[1]&&d.length>=2){
+  var prefix=m?m[1]:s,d=m?m[2]:'';
+  if(!prefix&&d.length>=2){
     /* All digits: Start C (the bwip-js auto choice) — digit pairs
        throughout, switching to B for a trailing single digit. */
     vals.push(105);pats.push(C128[105]);
@@ -541,7 +539,7 @@ function code128Runs(num){
     }
   }else{
     vals.push(104);pats.push(C128[104]);
-    for(i=0;i<m[1].length;i++){var v=c128Value(m[1][i]);if(v<0)return null;vals.push(v);pats.push(C128[v]);}
+    for(i=0;i<prefix.length;i++){var v=c128Value(prefix[i]);vals.push(v);pats.push(C128[v]);}
     if(d.length>=2){
       if(d.length%2===1){var v1=c128Value(d[0]);vals.push(v1);pats.push(C128[v1]);d=d.slice(1);}
       vals.push(99);pats.push(C128[99]);
@@ -874,7 +872,11 @@ function regenerateMRZ(){
   try{
     /* A regenerate replaces any hand edit (MRP: "MRZ আবার তৈরি করুন"
        overwrites what was typed in the MRZ boxes). */
-    if(state.overrides){delete state.overrides['mrz-1'];delete state.overrides['mrz-2'];}
+    var overrides=state.overrides;
+    if(overrides && ('mrz-1' in overrides || 'mrz-2' in overrides)){
+      delete overrides['mrz-1'];delete overrides['mrz-2'];
+      render();
+    }
     setEng('mrz1',buildMrz1());
     setEng('mrz2',buildMrz2());
     updatePassportPreview();
@@ -946,6 +948,9 @@ function loadImage(uri){
   });
 }
 const pendingUploads = new Map();
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+// The live reverse proxy accepts at most 20 MiB per request.
+const MAX_SNAPSHOT_BYTES = 20 * 1024 * 1024;
 function updateCreateButton(){
   if(createBtn) createBtn.disabled = creating || pendingUploads.size > 0;
 }
@@ -965,13 +970,24 @@ async function setAsset(kind,file){
     say(labels.removed);
     return;
   }
+  if(file.size>MAX_UPLOAD_BYTES){
+    say('২০ MB-এর ছোট ছবি ব্যবহার করুন।');
+    return;
+  }
   const job = Symbol(kind);
   pendingUploads.set(kind,job);
   if(button) button.disabled = true;
   updateCreateButton();
   try {
     const dataUrl = await readFileAsDataURL(file);
+    if(!/^data:image\/(png|jpeg|webp);base64,/i.test(dataUrl)){
+      throw new Error('image format');
+    }
     const {width,height} = await loadImageDims(dataUrl);
+    if(width*height>50000000){
+      if(pendingUploads.get(kind)===job) say('৫০ মেগাপিক্সেলের কম ছবি ব্যবহার করুন।');
+      return;
+    }
     const cutoutRendered = kind === 'photo' ? await processPhotoCutout(dataUrl) : '';
     if(pendingUploads.get(kind) !== job) return;
     state.assets[kind] = {dataUrl,width,height,cutoutRendered:cutoutRendered || ''};
@@ -1010,8 +1026,10 @@ function validateEngine(){
     var value=raw(pair[0]);
     if(value&&!validDate(value)&&!parsePastedDate(value))add(pair[0],pair[1]+' সঠিক ক্যালেন্ডার তারিখ নয়।');
   });
-  if(validDate(raw('dob'))&&validDate(raw('issueDate'))&&raw('dob')>raw('issueDate'))add('issueDate','ইস্যুর তারিখ জন্মতারিখের আগে হতে পারে না।');
-  if(validDate(raw('issueDate'))&&validDate(raw('expiryDate'))&&raw('issueDate')>raw('expiryDate'))add('expiryDate','মেয়াদের তারিখ ইস্যুর তারিখের আগে হতে পারে না।');
+  var birth=parsePastedDate(raw('dob')),issue=parsePastedDate(raw('issueDate')),expiry=parsePastedDate(raw('expiryDate'));
+  if(birth&&issue&&birth>issue)add('issueDate','ইস্যুর তারিখ জন্মতারিখের আগে হতে পারে না।');
+  if(issue&&expiry&&issue>expiry)add('expiryDate','মেয়াদের তারিখ ইস্যুর তারিখের আগে হতে পারে না।');
+  else if(birth&&expiry&&birth>expiry)add('expiryDate','মেয়াদের তারিখ জন্মতারিখের আগে হতে পারে না।');
   for(var m=0;m<['mrz1','mrz2'].length;m++){
     var mk=['mrz1','mrz2'][m];
     if(raw(mk)&&!/^[A-Z0-9<]{44}$/.test(raw(mk)))add(mk,'MRZ লাইন '+(mk==='mrz1'?'১':'২')+'-এ ঠিক ৪৪টি বড় লাতিন অক্ষর, সংখ্যা বা < চিহ্ন থাকতে হবে।');
@@ -1062,16 +1080,6 @@ function epDocumentCSS(){
     '#ep-top-regions .region.changed{color:var(--ink,#111)}'
   ].join('\n');
 }
-function drainImages(){
-  var imgs=document.querySelectorAll('#page-shell img[src]');
-  var jobs=[];
-  for(var i=0;i<imgs.length;i++){
-    (function(img){
-      jobs.push((typeof img.decode==='function'?img.decode():Promise.resolve()).catch(function(){}));
-    })(imgs[i]);
-  }
-  return Promise.all(jobs);
-}
 function cleanDocumentShell(shell){
   var els=shell.querySelectorAll('*');
   for(var i=0;i<els.length;i++){
@@ -1090,7 +1098,6 @@ function documentTitle(){
   return 'E-Passport-'+pp+'.pdf';
 }
 function snapshotHTML(){
-  return drainImages().then(function(){
     render();
     var shell=$('page-shell').cloneNode(true);
     cleanDocumentShell(shell);
@@ -1098,7 +1105,6 @@ function snapshotHTML(){
     var title=documentTitle();
     var html='<!doctype html>\n<html lang="bn"><head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<title>'+escapeHtml(title)+'</title>\n<style>\n'+css+'\nbody{margin:0;background:#fff}\n/* The stage renders scaled (1106.6px) but its layout height is the\n   unscaled 4038px — without a fixed shell height the document\n   paginates to 3 pages (mostly blank). Pin the shell to the scaled\n   height so the document is exactly one A4 page. */\n.ep-page-shell{width:792px;height:1107px;margin:0 auto;overflow:hidden}\n#ep-stage{transform:scale('+A4_SCALE+');transform-origin:top left}\n#ep-text-regions .region,#ep-asset-slots .asset-slot{pointer-events:none!important}\n</style>\n</head>\n<body>\n'+shell.outerHTML+'\n</body></html>';
     return {html:html,revision:editRevision};
-  });
 }
 
 /* ===== charge + create (mirrors MRP) ===== */
@@ -1113,7 +1119,7 @@ function loadPrice(){
     return r.json().catch(function(){return null;}).then(function(d){
       if(!r.ok||!d||d.ok!==true){if(line)line.textContent='সেবা চার্জ জানা যায়নি — Create চাপলে যাচাই করা হবে।';return;}
       if(d.balance!=null)updateBalancePills(d.balance);
-      if(d.allowed===false){if(line)line.textContent='এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।';return;}
+      if(d.allowed===false){if(line)line.textContent=d.serviceId===null?'ই-পাসপোর্ট সেবা এখন বন্ধ আছে।':'এই সেবায় আপনার প্রবেশাধিকার স্থগিত রয়েছে।';return;}
       if(line)line.textContent=(d.price>0)?('সেবা চার্জ: ৳'+d.price+' · ব্যালেন্স: ৳'+(d.balance||0)):'এই সেবাটি এখন বিনামূল্যে — কোনো চার্জ কাটা হবে না।';
     });
   }).catch(function(){if(line)line.textContent='সেবা চার্জ জানা যায়নি — Create চাপলে যাচাই করা হবে।';});
@@ -1123,7 +1129,10 @@ function chargeCreate(idem,passportNo){
   if(!ABCref||!ABCref.api)return Promise.resolve({ok:false,message:'সেবার সাথে সংযোগ করা যাচ্ছে না — পেজটি রিফ্রেশ করে আবার চেষ্টা করুন।'});
   return ABCref.api('/epassport/create',{method:'POST',body:{idempotency_key:idem,passport_no:passportNo}}).then(function(r){
     return r.json().catch(function(){return {};}).then(function(d){
-      if(r.ok&&d&&d.ok)return {ok:true,charged:d.charged,orderId:d.orderId};
+      if(r.ok&&d&&d.ok){
+        if(d.balance!=null)updateBalancePills(d.balance);
+        return {ok:true,charged:d.charged,orderId:d.orderId};
+      }
       if(r.status===401)return {ok:false,message:'লগইন শেষ হয়ে গেছে — আবার লগইন করে চেষ্টা করুন।'};
       return {ok:false,message:(d&&d.message)?String(d.message):'চার্জ যাচাই করা যায়নি — আবার চেষ্টা করুন।'};
     });
@@ -1131,24 +1140,11 @@ function chargeCreate(idem,passportNo){
     return {ok:false,message:'ইন্টারনেট সংযোগ নেই — সংযোগ ফিরলে আবার চেষ্টা করুন।'};
   });
 }
-function exportPdf(idem,passportNo){
+function exportPdf(idem,passportNo,html){
   var ABCref=window.ABC;
   if(!ABCref||!ABCref.api)return Promise.resolve({ok:false,message:'সেবার সাথে সংযোগ করা যাচ্ছে না — পেজটি রিফ্রেশ করে আবার চেষ্টা করুন।'});
-  var ready=Promise.resolve();
-  try{
-    var fontReady=(document.fonts&&document.fonts.ready)?document.fonts.ready:Promise.resolve();
-    var imgs=document.querySelectorAll('#page-shell img[src]');
-    var decoded=[];
-    for(var i=0;i<imgs.length;i++){
-      (function(img){decoded.push((typeof img.decode==='function'?img.decode():Promise.resolve()).catch(function(){}));})(imgs[i]);
-    }
-    ready=Promise.all([fontReady].concat(decoded));
-  }catch(e){ready=Promise.resolve();}
-  return ready.then(function(){
-    return snapshotHTML();
-  }).then(function(snap){
-    var qs='passport_no='+encodeURIComponent(passportNo)+'&idempotency_key='+encodeURIComponent(idem);
-    return ABCref.api('/epassport/pdf?'+qs,{method:'POST',body:snap.html,headers:{'Content-Type':'text/html;charset=utf-8'},timeout:60000}).then(function(r){
+  var qs='passport_no='+encodeURIComponent(passportNo)+'&idempotency_key='+encodeURIComponent(idem);
+  return ABCref.api('/epassport/pdf?'+qs,{method:'POST',body:html,headers:{'Content-Type':'text/html;charset=utf-8'},timeout:60000}).then(function(r){
       if(!r.ok){
         return r.json().catch(function(){return {};}).then(function(d){
           if(r.status===413)return {ok:false,message:(d&&d.message)?String(d.message):'ছবি অনেক বড় — ছোট ছবি দিয়ে আবার চেষ্টা করুন।'};
@@ -1167,26 +1163,33 @@ function exportPdf(idem,passportNo){
         }
         return {ok:true,blob:blob};
       });
-    });
   }).catch(function(){
     return {ok:false,message:'ইন্টারনেট সংযোগ নেই — সংযোগ ফিরলে আবার চেষ্টা করুন।'};
   });
 }
-function reportEngineJob(engineId,refNo,name,blob,fname,idem){
-  try{
+function saveHistoryCopy(pdf){
+  if(pdf.historySave)return;
+  pdf.historySave=Promise.resolve().then(function(){
     var fd=new FormData();
-    fd.append('file',blob,fname);
-    fd.append('engine_id',engineId);
-    fd.append('ref_no',refNo||'');
-    fd.append('name',name||'');
-    fd.append('idempotency_key',idem||(engineId+'-'+(refNo||Date.now())));
-    var token=sessionStorage.getItem('abc_access_token')||'';
-    fetch('/api/engine-jobs',{method:'POST',headers:{'Authorization':'Bearer '+token},body:fd}).catch(function(){});
-  }catch(e){}
+    fd.append('file',pdf.blob,pdf.name);
+    fd.append('engine_id','epassport');
+    fd.append('ref_no',pdf.no);
+    fd.append('name',pdf.personName);
+    fd.append('idempotency_key',pdf.idem);
+    return window.ABC.api('/engine-jobs',{method:'POST',body:fd,timeout:60000});
+  }).then(function(r){
+    if(!r.ok)throw new Error('history save');
+    if(lastPdf===pdf&&resultMessage)resultMessage.textContent=pdf.doneText;
+  }).catch(function(){
+    pdf.historySave=null;
+    if(lastPdf===pdf&&resultMessage){
+      resultMessage.textContent=pdf.doneText+' ইতিহাসে সেভ হয়নি। আবার ডাউনলোড চাপলে সেভের চেষ্টা হবে।';
+    }
+  });
 }
-function finishCreateWithPdf(idem,no,name,charged){
+function finishCreateWithPdf(idem,no,name,charged,html,personName){
   say('PDF তৈরি করা হচ্ছে…');
-  return exportPdf(idem,no).then(function(pdf){
+  return exportPdf(idem,no,html).then(function(pdf){
     setCreating(false);
     if(!pdf||!pdf.ok){
       pdfRetry={idem:idem,no:no,charged:charged};
@@ -1196,12 +1199,11 @@ function finishCreateWithPdf(idem,no,name,charged){
     pdfRetry=null;
     createAttempts.delete(no);
     downloadBlob(pdf.blob,name);
-    var nameParts=[engInput('givenName'),engInput('surname')].map(function(el){return el?String(el.value||'').trim():'';}).filter(Boolean);
-    reportEngineJob('epassport',no,nameParts.join(' '),pdf.blob,name,idem);
-    lastPdf={blob:pdf.blob,name:name};
     body.classList.remove('flow-form');
     body.classList.add('flow-result');
-    var doneText='ই-পাসপোর্ট PDF তৈরি হয়েছে — '+name+' ডাউনলোড দেখুন।'+(charged?' চার্জ কাটা হয়েছে: ৳'+charged+'।':' কোনো চার্জ কাটা হয়নি।')+' কিছু বদলাতে চাইলে আবার Create করে ডাউনলোড করুন।';
+    var doneText='ই-পাসপোর্ট PDF তৈরি হয়েছে।'+(charged?' চার্জ: ৳'+charged+'।':' কোনো চার্জ কাটা হয়নি।');
+    lastPdf={blob:pdf.blob,name:name,no:no,personName:personName,idem:idem,doneText:doneText,historySave:null};
+    saveHistoryCopy(lastPdf);
     if(resultMessage)resultMessage.textContent=doneText;
     say(doneText);
     return true;
@@ -1221,16 +1223,31 @@ function createEpassport(){
   var issues=validateEngine();
   if(issues.length){
     say('পাসপোর্ট তৈরির আগে ঠিক করুন: '+issues[0]);
+    var invalid=document.querySelector('[data-engine]:invalid');
+    if(invalid)invalid.focus();
     return;
   }
   var pp=up(raw('passportNo')).replace(/\s/g,'');
   var name='E-Passport-'+pp+'.pdf';
+  var personName=fullName(state);
+  // Capture the exact form and images behind this charge before any request.
+  var html;
+  try{
+    html=snapshotHTML().html;
+    if(new Blob([html]).size>MAX_SNAPSHOT_BYTES){
+      say('PDF-এর জন্য ছবিগুলো অনেক বড়। ছোট ছবি বা স্বাক্ষর দিয়ে আবার চেষ্টা করুন।');
+      return;
+    }
+  }catch(e){
+    say('PDF-এর তথ্য প্রস্তুত করা যায়নি। আবার চেষ্টা করুন।');
+    return;
+  }
   /* Retry of a failed PDF export: the Create for this passport number
      already succeeded and was charged — reuse its idempotency key and
      skip the charge entirely. The key is kept until a PDF succeeds. */
   if(pdfRetry&&pdfRetry.no===pp){
     setCreating(true);
-    finishCreateWithPdf(pdfRetry.idem,pp,name,pdfRetry.charged);
+    finishCreateWithPdf(pdfRetry.idem,pp,name,pdfRetry.charged,html,personName);
     return;
   }
   let idem = createAttempts.get(pp);
@@ -1242,7 +1259,7 @@ function createEpassport(){
   say('চার্জ যাচাই করা হচ্ছে…');
   chargeCreate(idem,pp).then(function(ch){
     if(!ch||!ch.ok){setCreating(false);say(ch&&ch.message?ch.message:'চার্জ যাচাই করা যায়নি — আবার চেষ্টা করুন।');return;}
-    finishCreateWithPdf(idem,pp,name,ch.charged);
+    finishCreateWithPdf(idem,pp,name,ch.charged,html,personName);
   });
 }
 
@@ -1265,6 +1282,8 @@ function clearForm(){
   for(const kind of ['photo','signature']){
     const button = $('form-upload-'+kind+'-button');
     if(button) button.disabled = false;
+    const input = $('form-'+kind+'-upload');
+    if(input) input.value = '';
   }
   updateCreateButton();
   FORM_KEYS.forEach(function(k){setEng(k,FORM_DEFAULTS[k]||'');});
@@ -1336,7 +1355,11 @@ function initEngine(){
   if(back)back.addEventListener('click',showLanding);
   if(createBtn)createBtn.addEventListener('click',createEpassport);
   var dlAgain=$('download-again-button');
-  if(dlAgain)dlAgain.addEventListener('click',function(){if(lastPdf)downloadBlob(lastPdf.blob,lastPdf.name);});
+  if(dlAgain)dlAgain.addEventListener('click',function(){
+    if(!lastPdf)return;
+    downloadBlob(lastPdf.blob,lastPdf.name);
+    saveHistoryCopy(lastPdf);
+  });
   var backForm=$('back-to-form-button');
   if(backForm)backForm.addEventListener('click',function(){body.classList.remove('flow-result');body.classList.add('flow-form');});
   var newBtn=$('new-passport-button');

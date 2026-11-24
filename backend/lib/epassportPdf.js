@@ -103,6 +103,15 @@ async function renderOnce(html) {
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
+    // The snapshot has inline styles and data images. It needs neither
+    // document scripts nor access to external resources.
+    await page.setJavaScriptEnabled(false);
+    await page.setRequestInterception(true);
+    page.on('request', (request) => {
+      const url = request.url();
+      const allowed = url === 'about:blank' || url.startsWith('data:');
+      return (allowed ? request.continue() : request.abort()).catch(() => {});
+    });
     // A4 at 96dpi — the document shell is 792px wide, so it fills
     // the page width exactly; the scaled layer is ~1121px tall
     // against a 1123px page, so it stays on one page.
