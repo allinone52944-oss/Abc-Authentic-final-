@@ -788,9 +788,9 @@ describe('DRAFTS/AUTH cycle 3 (2026-10-31): A8 draftId persistence, A10 timeouts
     expect(html).toMatch(/onSessionExpired\('সেশন শেষ হয়ে গেছে \(SESSION_EXPIRED\)'\)/);
   });
 
-  test('C2: fresh-READY reports a lost OTP view loudly, and the dropped-op failures survive goStep(1)', () => {
-    expect(html).toMatch(/const wasOtpView = S\.otpStage === 'code'/);
-    expect(html).toMatch(/OTP-র পর্দা চলে গেছে/);
+  test('C2: fresh-READY preserves the final step and shows a reconnection warning', () => {
+    expect(html).toMatch(/if \(wasOtpView\) returnToSubmitReview\(\)/);
+    expect(html).toContain('সংযোগ নতুন হয়েছে। তথ্য এখানেই আছে।');
     expect(html).toMatch(/goStep\(1\);[\s\S]{0,2000}?failedOps\.map\(op => opLabel\(op\)/);
   });
 

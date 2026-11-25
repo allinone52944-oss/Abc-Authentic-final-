@@ -41,7 +41,7 @@ function toStepAck(result) {
     ok: r.ok,
     resumable: r.resumable || undefined,
     otpSent: r.otpSent,
-    code: r.code || undefined,
+    code: r.code || (r.error === 'TIMEOUT' ? 'TIMEOUT' : undefined),
     relationBn: r.relationBn,
   };
 }

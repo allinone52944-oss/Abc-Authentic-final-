@@ -628,7 +628,15 @@ setInterval(() => { try { if (socket.connected) socket.emit('KEEPALIVE'); } catc
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && socket.connected) { try { socket.emit('KEEPALIVE'); } catch {} }
 });
-socket.on('disconnect', () => { S.ready = false; S.starting = false; clearTimeout(S._startT); directAckOnDisconnect(); });
+socket.on('disconnect', () => {
+  S.ready = false; S.starting = false; clearTimeout(S._startT);
+  if (S.view === 'flow' && S.otpStage === 'submitting' && S._inFlight?.op === 'SUBMIT_S4_OTP' && S._directSubmitForm !== S.d) {
+    opAbort();
+    showUnconfirmedSocketSubmission();
+    return;
+  }
+  directAckOnDisconnect();
+});
 
 const S = {
   mode: null,        // 'auto' | 'manual'
@@ -640,7 +648,7 @@ const S = {
   draftId: null,
   view: 'home',      // home|flow|drafts|addr|progress|done
   chain: null,       // {ops,k,onDone,warns}
-  otpStage: 'review',// review|code|submitting|done
+  otpStage: 'review',// review|code|submitting|unknown|done
   docsDone: false,
   awaitOtpSent: false,
   phaseA: null,
@@ -858,7 +866,7 @@ function note(msg, cls = '') {
 function sanitizeCls(c) { return ['ok', 'warn', 'err', 'info'].includes(c) ? c : ''; }
 function noteOff() { $('liveNote').className = 'livenote'; }
 function busy(on, msg, watchdogMs) {
-  els('#btnRow .btn').forEach(b => {
+  els('#btnRow .btn, #pvOtpGo, #pvOtpRe, #pvPhGo, #pvPhEdit').forEach(b => {
     if (on) { if (!b.disabled) { b.dataset.was = '1'; b.disabled = true; } }
     else if (b.dataset.was) { b.disabled = false; delete b.dataset.was; }
   });
@@ -867,7 +875,11 @@ function busy(on, msg, watchdogMs) {
   // SUBMIT-SAFETY (2026-10-30): submit passes its own 200s window
   // (same policy as the submit fetch) — a 90s watchdog here used
   // to re-enable buttons mid-submit while the server kept working.
-  if (on) S._busyWdog = setTimeout(() => { busy(false); note('⏳ একটু দেরি হচ্ছে — আবার চেষ্টা করুন', 'warn'); }, watchdogMs || 90000);
+  if (on) S._busyWdog = setTimeout(() => {
+    if (S.otpStage === 'submitting') { note('⏳ জমার ফলের জন্য অপেক্ষা চলছে…', 'warn'); return; }
+    busy(false);
+    note('⏳ একটু দেরি হচ্ছে — আবার চেষ্টা করুন', 'warn');
+  }, watchdogMs || 90000);
   // AUDIT #71 (2026-11-05): a busy message is the user waiting (login, OTP
   // send, submit…) — it must be VISIBLE, not dropped by note()'s info
   // filter. 'warn' (amber) is the waiting state; 'ok' would lie that the
@@ -2106,6 +2118,7 @@ function resetDraftPayment() {
   S._submitKey = null;
   S._submitTok = null;
   S._submitTokAt = 0;
+  S._lastDirectOtp = null;
   try { sessionStorage.removeItem('bdris_submit_key'); } catch {}
 }
 function startNewFiling(mode) {
@@ -2113,6 +2126,8 @@ function startNewFiling(mode) {
   setDraftId(null);
   resetDraftPayment();
   S.mode = mode;
+  S.cur = null;
+  S.pvMode = false;
   S.d = freshData(mode);
   S._passedOps = {};
   S._heldPrep = null;
@@ -2392,6 +2407,11 @@ function guardOpBusy() {
   // ভুলে না কাটে; BOT_STATUS জীবিত-খবর এলে _opStartedAt রিফ্রেশ হয়,
   // তাই চলন্ত অপ এই সীমা ছোঁবে না (মূল guardOpBusy-র নকশাই)।
   const stuck = S._waitingAck;
+  if (stuck === 'SUBMIT_S4_OTP' && S.otpStage === 'submitting') {
+    opAbort();
+    showUnconfirmedSocketSubmission();
+    return false;
+  }
   const savedPrep = takeQueuedPrep();
   const dropped = (S._opQ || []).map(j => j.op);
   opAbort();
@@ -4140,7 +4160,7 @@ async function directSubmit(otp, alreadyVerified) {
     return;
   }
   const tok = await getTok();
-  if (S.d !== filing) {
+  if (S.d !== filing || S.view !== 'flow' || S.otpStage !== 'submitting') {
     clearInterval(progressTimer);
     if (S._submitProgressTimer === progressTimer) S._submitProgressTimer = null;
     return;
@@ -4159,7 +4179,14 @@ async function directSubmit(otp, alreadyVerified) {
   // the submit phase uploads from data.docs. A fetch failure
   // means outcome-unknown handling — NEVER a bot submit, NEVER
   // a socket emit, NEVER a retry (a submit may already exist).
+  S._directSubmitForm = filing;
   const posted = await directHttpPost(Object.assign({}, payload, { _authToken: curAccessToken() }), DIRECT_HTTP_SUBMIT_TIMEOUT_MS);
+  if (S._directSubmitForm === filing) S._directSubmitForm = null;
+  if (S.d !== filing || S.view !== 'flow' || S.otpStage !== 'submitting') {
+    clearInterval(progressTimer);
+    if (S._submitProgressTimer === progressTimer) S._submitProgressTimer = null;
+    return;
+  }
   if (!posted.acked) { directSubmitUnknown(); return; }
   directSubmitAck(posted.r, otp);
 }
@@ -4324,6 +4351,7 @@ function renderOtpCode(sent) {
   if (boxes[0]) boxes[0].focus();
   setBtns([
     { html: '✅ আবেদন জমা দিন', fn: () => {
+        if (S.otpStage !== 'code') return;
         const otp = val();
         if (otp.length < 6) { note('⚠️ মোবাইলে আসা ৬ ডিজিটের কোডটি সম্পূর্ণ লিখুন', 'warn'); return; }
         // DIRECT-PATH WIRING (2026-10-28): an OTP view reached via
@@ -4522,6 +4550,7 @@ function showPvOtp() {
   });
   if (boxes[0]) boxes[0].focus();
   $('pvOtpGo').onclick = () => {
+    if (S.otpStage !== 'code') return;
     const otp = val();
     if (otp.length < 6) { note('⚠️ মোবাইলে আসা ৬ ডিজিটের কোডটি সম্পূর্ণ লিখুন', 'warn'); return; }
     S.otpStage = 'submitting'; S._failReported = false;
@@ -5581,6 +5610,12 @@ function onSessionReady() {
 }
 function sessionLost() {
   S.ready = false; S.starting = false;
+  if (S.view === 'flow' && S._directSubmitForm === S.d) return;
+  if (S.view === 'flow' && S.otpStage === 'submitting' && S._inFlight?.op === 'SUBMIT_S4_OTP') {
+    opAbort();
+    showUnconfirmedSocketSubmission();
+    return;
+  }
   S._directOtp = false; // DIRECT-PATH WIRING: session lost — the direct OTP phase dies with it
   S._otpSessionLive = false; // FINAL-SOLUTION (#2): dead session → no return button
   S._pendingSubmit = null; // FINAL-SOLUTION (#4): held submit dies with the session
@@ -5637,6 +5672,11 @@ function manualStepAck(d) {
   if (op !== 'SUBMIT_S4_OTP') busy(false);
   const failed = Array.isArray(d.failed) ? d.failed : [];
   if (d.relationBn) S.d.relation = d.relationBn;
+  if (op === 'SUBMIT_S4_OTP' && d.code === 'TIMEOUT') {
+    opAbort();
+    showUnconfirmedSocketSubmission();
+    return;
+  }
   // DRAFTS/AUTH (C2): a SESSION_EXPIRED ack is not a generic step
   // failure and must never trigger a same-op retry on the dead
   // session — it goes to the session handler, which shows the real
@@ -5690,6 +5730,7 @@ function manualStepAck(d) {
   // shown, never silent — the draft still holds the given BRN.
   if (d.brnNote) note(d.brnNote, 'warn');
   if (d.blocked || failed.length) {
+    if (op === 'SUBMIT_S4_OTP') S.otpStage = 'code';
     // FINAL-PACK stale-banner (folded from fix-bdris-stale-banner): this
     // step already PASSED in this session (recorded in the success
     // branch below) — a late/duplicate failure ack for it is stale
@@ -5894,6 +5935,29 @@ function onSessionExpired(reason) {
   showBanner('err', '⚠️ ' + san(reason || 'সেশন শেষ হয়ে গেছে') + ' — আবার লগইন করে সেশন refresh করুন, তারপর ধাপগুলো আবার এগোলে তথ্য বসে যাবে।',
     () => { location.href = '/login.html?next=' + encodeURIComponent(location.pathname); }, 'লগইন করুন');
 }
+
+function returnToSubmitReview() {
+  S.otpStage = 'review';
+  S._lastDirectOtp = null;
+  if (S.mode === 'auto') renderPreview(() => renderAuto(), true);
+  else goStep(6);
+}
+
+function showUnconfirmedSocketSubmission() {
+  S.otpStage = 'unknown';
+  S._directOtp = false;
+  S._otpSessionLive = false;
+  S._heldPrep = null;
+  S._pendingSubmit = null;
+  busy(false);
+  hideBanner();
+  hideFail();
+  noteOff();
+  showBody('<div class="sec" role="status"><div class="sub-h">জমার ফল এখনও নিশ্চিত হয়নি</div>' +
+    '<p>আবেদনটি জমা হয়ে থাকতে পারে। আবার পাঠানোর আগে আবেদনের অবস্থা যাচাই করুন।</p></div>');
+  setBtns([{ html: 'ফল যাচাই করেছি — ফর্মে ফিরুন', cls: 'ghost', fn: returnToSubmitReview }]);
+}
+
 if (typeof socket !== 'undefined' && socket && socket.on) socket.on('SESSION_EXPIRED', (d) => onSessionExpired(d && (d.message || d.reason)));
 socket.on('STEP_CHANGE_ACK', (d) => {
   d = (d && typeof d === 'object') ? d : {};
@@ -5912,17 +5976,39 @@ socket.on('STEP_CHANGE_ACK', (d) => {
    অপ চুপচাপ নয় — সত্যি ফেল হিসেবে জানাই। true = fresh-কেস সামলানো
    হয়েছে (কলার 'সংযোগ প্রস্তুত!' নোট দেখাবে না)। */
 function handleFreshReady(d) {
-  if (!(d.fresh && S.view === 'flow' && S.d && (S.d.uiStep || 0) > 0)) return false;
+  if (!(d.fresh && S.view === 'flow' && S.d)) return false;
+  if (S._directSubmitForm === S.d) return true;
+  if (S.otpStage === 'unknown' || S.otpStage === 'done') return true;
+  const inFlight = S._waitingAck;
+  const atReview = S.cur === 6 || S.pvMode;
+  const wasOtpView = S.otpStage === 'code' || S.otpStage === 'submitting' ||
+    !!S._directOtp || inFlight === 'SUBMIT_S4_PREP' || !!S._pendingSubmit;
+  if (atReview || wasOtpView) {
+    opAbort();
+    S._heldPrep = null;
+    S._pendingSubmit = null;
+    S._passedOps = {};
+    S.d.uiStep = 0;
+    resetSent();
+    directAckClear();
+    S._directOtp = false;
+    S._otpSessionLive = false;
+    S._sentPhone = null;
+    if (inFlight === 'SUBMIT_S4_OTP') {
+      showUnconfirmedSocketSubmission();
+      return true;
+    }
+    if (wasOtpView) returnToSubmitReview();
+    busy(false);
+    showBanner('warn', 'সংযোগ নতুন হয়েছে। তথ্য এখানেই আছে। ফোন নম্বর মিলিয়ে কোড পাঠান।');
+    return true;
+  }
+  if (!(S.d.uiStep > 0)) return false;
   // cold start: প্রথম ধাপের অপ এখনো পাঠানোই হয়নি (queue-তে বসে সেশনের অপেক্ষা) —
   // তখন bounce করলে ব্যবহারকারীর ক্লিক বৃথা যায়; queue আগে চলতে দিই
   const pendingUnsent = (S._opQ || []).length > 0 && !S._sentAny;
   if (pendingUnsent) return true;
   // সাইটের সেশন সত্যিই নতুন (আগের ধাপগুলো সাইটে হারিয়ে গেছে) — UI ধাপ ১ থেকে সাজাই
-  const inFlight = S._waitingAck;
-  // DRAFTS/AUTH (C2): remember whether an OTP view dies in this
-  // reset — it must be reported loudly below, never silently
-  // dropped (the 2026-10-31 step-6 → step-1 report).
-  const wasOtpView = S.otpStage === 'code' || !!S._directOtp || inFlight === 'SUBMIT_S4_PREP' || !!S._pendingSubmit;
   const savedPrep = takeQueuedPrep();
   const heldPrep = S._heldPrep || null;
   const dropped = (S._opQ || []).map(j => j.op);
@@ -5979,16 +6065,10 @@ function handleFreshReady(d) {
   // message is the whole handling.
   if (_freshDirectFallback) note('🔄 সংযোগ নতুন হওয়ায় সরাসরি পাঠানো যায়নি — বট দিয়ে আবার পাঠানো হচ্ছে', 'info');
   else if (_freshDirectKind === 'submit') directSubmitUnknown();
-  // DRAFTS/AUTH (C2): these messages used to sit BEFORE goStep(1),
-  // which clears fail + notes — so the reset looked silent. They
-  // land here, after the reset, where they survive. The step-1
-  // reset itself is DELIBERATE (the site-side steps are genuinely
-  // lost on a truly new session) and stays; what changes is that
-  // the user is told why, and an OTP view is never dropped quietly:
-  // the form data (S.d) was never wiped, only the site-side steps.
+  // Early steps still reset the site's progress. Report after rendering so
+  // the view change cannot erase the notice.
   if (failedOps.length) showFail(failedOps.map(op => opLabel(op) + ' — সংযোগ নতুন হওয়ায় পাঠানো যায়নি'));
   note('🔄 সংযোগ নতুন — ধাপ ১ থেকে আবার সাজানো হবে (তথ্য আপনার হাতেই আছে)', 'info');
-  if (wasOtpView) showBanner('err', '⚠️ OTP-র পর্দা চলে গেছে — সাইটের সেশন নতুন হয়ে গেছে, তাই পুরোনো কোড আর চলবে না। আপনার তথ্য মুছে যায়নি — ধাপগুলো আবার এগোলে বসে যাবে, তারপর নতুন কোড পাঠাতে হবে।');
   return true;
 }
 socket.on('BOT_STATUS', (d) => {
@@ -6185,6 +6265,7 @@ socket.on('BOT_STATUS', (d) => {
       note(san(msg), 'err');
       return;
     }
+    if (S.otpStage === 'submitting') S.otpStage = 'code';
     if (S.view === 'progress' && S.chain) {
       const p = $('pr' + S.chain.k); if (p) p.className = 'prow err';
       showFail([san(msg)]);
@@ -6423,10 +6504,12 @@ $('logoutBtn').onclick = async () => {
     window.emitStep = async function (op, payload, onAckExtra) {
       if (op === 'SUBMIT_S4_OTP') {
         var filing = S.d;
+        var stage = S.otpStage;
+        var view = S.view;
         var tok = cachedSubmitToken();
         if (!tok) {
           tok = await charge('submit', submitChargeKey());
-          if (S.d !== filing) return false;
+          if (S.d !== filing || S.otpStage !== stage || S.view !== view) return false;
           // Debug-2 (2026-10-26): this wrapper is async, so callers'
           // `emitStep(...) === false` checks can NEVER see this
           // false (they get a Promise) — before this fix a failed
@@ -6524,10 +6607,11 @@ $('logoutBtn').onclick = async () => {
   // so the direct submit caller can attach _chargeToken to its
   // ENGINE_COMMAND params; the engine gate verifies it server-side.
   window.abcDirectSubmitToken = async function () {
+    var filing = S.d;
     var tok = cachedSubmitToken();
     if (tok) return tok;
     tok = await charge('submit', submitChargeKey());
-    if (!tok) return null;
+    if (!tok || S.d !== filing) return null;
     S._submitTok = tok; S._submitTokAt = Date.now();
     try { if (S.draftId) localStorage.setItem('bdris_submit_key_for_' + S.draftId, submitChargeKey()); } catch (e) {}
     return tok;
