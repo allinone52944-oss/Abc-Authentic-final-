@@ -28,7 +28,7 @@ test('failed charge token stops progress and sends no official submission', asyn
 
 test('starting a new filing clears the old draft and its charge reference', () => {
   const c = {
-    S: { draftId: 'old-draft', _submitKey: 'old-charge', _submitTok: 'old-receipt', d: { s1: { firstNameBn: 'পুরোনো' } } },
+    S: { draftId: 'old-draft', _submitKey: 'old-charge', _submitTok: 'old-receipt', _pasteRaw: 'পুরোনো', d: { s1: { firstNameBn: 'পুরোনো' } } },
     setDraftId(id) { c.S.draftId = id; },
     sessionStorage: { removeItem: jest.fn() },
     resetSent: jest.fn(),
@@ -37,9 +37,36 @@ test('starting a new filing clears the old draft and its charge reference', () =
   vm.createContext(c);
   vm.runInContext(extract('freshData', 'function goStep(n)'), c);
   c.startManual();
-  expect(c.S).toMatchObject({ draftId: null, _submitKey: null, _submitTok: null, otpStage: 'review' });
+  expect(c.S).toMatchObject({ draftId: null, _submitKey: null, _submitTok: null, _pasteRaw: '', otpStage: 'review' });
   expect(c.S.d.s1.firstNameBn).toBeUndefined();
   expect(c.goStep).toHaveBeenCalledWith(1);
+});
+
+test('auto paste keeps three labelled addresses separate and reads Bengali phone digits', () => {
+  const c = {};
+  vm.createContext(c);
+  vm.runInContext(extract('bnDigits', 'function'), c);
+  vm.runInContext(extract('pvClean', 'function applyPaste()'), c);
+  const d = { s2b: { permCopy: true, presCopy: true } };
+  const raw = [
+    'জন্মস্থানের ঠিকানা:',
+    'বিভাগঃ ঢাকা',
+    'স্থায়ী ঠিকানা: বিভাগঃ রাজশাহী',
+    'বর্তমান ঠিকানা:',
+    'বিভাগঃ চট্টগ্রাম',
+    'মোবাইল নম্বর: ০১০০০০০০০০০',
+  ].join('\n');
+  expect(c.parsePastedData(raw, d)).toMatchObject({ n: 4, miss: 0 });
+  expect(d).toMatchObject({
+    phone: '01000000000',
+    s1: { division: 'ঢাকা' },
+    s2b: {
+      permCopy: false, presCopy: false,
+      perm: { division: 'রাজশাহী' }, pres: { division: 'চট্টগ্রাম' },
+    },
+  });
+  c.parsePastedData('----- স্থায়ী+বর্তমান সেইম হবে --', d);
+  expect(d.s2b.presCopy).toBe(true);
 });
 
 test('a draft save that finishes after switching forms cannot attach its id to the new form', async () => {

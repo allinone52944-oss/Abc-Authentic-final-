@@ -2,11 +2,11 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const html = fs.readFileSync(path.join(__dirname, '../../../frontend/bdris-apply.html'), 'utf8');
-const start = html.indexOf('function submitAuto(');
+const start = html.indexOf('function cancelAutoStart(');
 const src = html.slice(start, html.indexOf('\nfunction autoPrep()', start));
 function ctx() {
   const queued = []; const chains = []; const notes = [];
-  const c = { S: { pvMode: true }, console: { log() {} }, validateAuto: () => [], hideFail() {}, parentBrnWarnings: () => [],
+  const c = { S: { pvMode: true, d: {} }, console: { log() {} }, validateAuto: () => [], hideFail() {}, parentBrnWarnings: () => [],
     note: m => notes.push(m), showFail() {}, el: () => null, OPS: ['x'],
     ensureReady: cb => queued.push(cb), saveDraft: (s, cb) => cb(), runChain: () => chains.push(1), autoPrep() {},
     setTimeout: () => 1, clearTimeout() {} };
@@ -33,4 +33,30 @@ test('failed validation does not lock the submit button', () => {
   t.c.validateAuto = () => [];
   t.c.submitAuto();
   expect(t.queued.length).toBe(1);
+});
+
+test('a late connection callback cannot start preparation after changing filings', () => {
+  const { c, queued, chains } = ctx();
+  c.submitAuto();
+  c.cancelAutoStart();
+  c.S.d = {};
+  c.submitAuto();
+  queued[0]();
+  expect(chains).toHaveLength(0);
+  queued[1]();
+  expect(chains).toHaveLength(1);
+});
+
+test('a late save and its fallback cannot start preparation after returning to edit', () => {
+  const { c, queued, chains } = ctx();
+  let finishSave;
+  const timers = [];
+  c.saveDraft = (_, callback) => { finishSave = callback; };
+  c.setTimeout = callback => timers.push(callback);
+  c.submitAuto();
+  queued[0]();
+  c.cancelAutoStart();
+  finishSave();
+  timers.forEach(callback => callback());
+  expect(chains).toHaveLength(0);
 });

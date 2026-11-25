@@ -924,6 +924,7 @@ function b64Of(dataUrl) { const i = String(dataUrl || '').indexOf(','); return i
 /* ═══════════ views & stepper ═══════════ */
 function setView(v) {
   if (v !== 'drafts') S._loadingDraft = null;
+  if (v !== S.view) cancelAutoStart();
   // চেইন কেবল progress স্ক্রিনেই চলে — ইউজার অন্য স্ক্রিনে গেলে বাকি ধাপ আর নিজে থেকে যায় না
   if (S.chain && v !== 'progress') { S.chain = null; opAbort(); }
   // FINAL-SOLUTION (2026-10-30, problem-map #11): fail panels
@@ -952,6 +953,7 @@ function setBtns(list) {
   r.style.cssText = 'display:flex; gap:10px; flex-wrap:wrap; margin-top:18px';
   list.forEach(b => {
     const btn = document.createElement('button');
+    if (b.id) btn.id = b.id;
     btn.type = 'button';
     btn.className = 'btn ' + (b.cls || '');
     btn.innerHTML = b.html;
@@ -1962,6 +1964,7 @@ async function openDraft(draftId) {
   if (!res || !res.ok || !res.draft) { note('খসড়া খোলা যায়নি — আবার চেষ্টা করুন', 'err'); return; }
   const dr = res.draft;
   resetDraftPayment();
+  S._pasteRaw = '';
   setDraftId(dr.draftId || draftId);
   try { var savedKey = localStorage.getItem('bdris_submit_key_for_' + S.draftId); if (savedKey) S._submitKey = savedKey; } catch (e) {}
   S.mode = dr.mode === 'auto' ? 'auto' : 'manual';
@@ -2221,6 +2224,7 @@ function startNewFiling(mode) {
   S.mode = mode;
   S.cur = null;
   S.pvMode = false;
+  S._pasteRaw = '';
   S.d = freshData(mode);
   S._passedOps = {};
   S._heldPrep = null;
@@ -4612,12 +4616,13 @@ function bindPvEdits(onEdit) {
   });
 }
 function renderPreview(backFn, editable) {
+  cancelAutoStart();
   setView('flow'); $('stepper').className = 'stepper hidden'; hideFail(); busy(false); noteOff();
   S.pvMode = !!editable; // সব-এক-পেজে প্রিভিউ: OTP ও খসড়া এই পেজেই
   showBody(
     '<div class="sec"><div class="sub-h"><span class="snum">👁️</span> আবেদন প্রিভিউ — জমার আগে মিলিয়ে নিন</div>' +
     (editable
-      ? '<p class="hint">নিচের তথ্যগুলোই মূল জন্ম নিবন্ধন সাইটে যাবে। কোনো অংশে ভুল দেখলে সেই অংশের পাশের “✏️ ঠিক করুন” চাপলেই ফর্মে ফিরে ঠিক করতে পারবেন। সব ঠিক থাকলে নিচের “🚀 আবেদন জমা দিন” চাপুন — OTP এই পেজেই বসাবেন।</p></div>'
+      ? '<p class="hint">তথ্য মিলিয়ে নিন। সব ঠিক থাকলে “কোড পাঠান” চাপুন। কোডটি এই পেজেই বসাতে পারবেন।</p></div>'
       : '<p class="hint">নিচের তথ্যগুলোই মূল জন্ম নিবন্ধন সাইটে যাবে। কিছু ভুল থাকলে “← তথ্য মিলিয়ে ফিরে যান” চেপে ঠিক করে আবার আসুন।</p></div>') +
     pvSheetHtml(!!editable) +
     (editable ? '<div id="pvOtpSec"></div>' : '')
@@ -4625,19 +4630,27 @@ function renderPreview(backFn, editable) {
   if (editable) bindPvEdits(() => { hideFail(); if (backFn) backFn(); });
   setBtns(
     (editable ? [
-      { html: '🚀 আবেদন জমা দিন', fn: () => submitAuto() },
+      { id: 'pvRequestOtp', html: '📲 কোড পাঠান', fn: () => submitAuto() },
       { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => saveDraft(6, (r) => {
         if (!r?.ok) { note('⚠️ খসড়া সেভ হয়নি — সংযোগ ফিরলে আবার চাপুন', 'err'); return; }
         note('✔ খসড়ায় রাখা হয়েছে — পরে প্রিভিউ থেকেই OTP দিয়ে শেষ করতে পারবেন', 'ok');
-        setTimeout(renderDrafts, 700);
       }) },
     ] : []).concat([
       { html: editable ? '← ফর্মে ফিরে যান' : '← তথ্য মিলিয়ে ফিরে যান', cls: 'ghost', fn: () => { S.pvMode = false; if (backFn) backFn(); else renderHome(); } }
     ])
   );
 }
-/* ── প্রিভিউ পেজেই OTP (2026-10-13): “🚀 আবেদন জমা দিন” চাপলে কোড এই পেজেই আসে ── */
-function showPvOtp() {
+function showAutoOtpOnPreview(previousCode) {
+  const message = $('pvOtpMessage');
+  if (previousCode && message && S._sentPhone === S.d.phone) {
+    message.textContent = 'নম্বরের আগের কোডটি এখনও ব্যবহার করা যাবে।';
+    return;
+  }
+  if (!$('pvOtpSec') || S._sentPhone !== S.d.phone) renderPreview(() => renderAuto(), true);
+  showPvOtp(previousCode);
+}
+
+function showPvOtp(previousCode) {
   S.pvMode = true; S.otpStage = 'code';
   const sec = $('pvOtpSec');
   // Audit #16 — showPvOtp runs only after a send (otpSent:true
@@ -4646,10 +4659,14 @@ function showPvOtp() {
   // "কোড পাঠানো হচ্ছে…" with no send in flight.
   if (!sec) { renderOtpCode(true); return; }
   const ph = S.d.phone || '';
-  const tail = ph.length >= 4 ? ph.slice(-4) : ph;
+  S._otpSessionLive = true;
+  S._sentPhone = ph;
+  const request = $('pvRequestOtp');
+  if (request) request.classList.add('hidden');
   sec.innerHTML =
     '<div class="pvotp"><div class="sub-h"><span class="snum">🔐</span> কোড বসান — এই পেজেই</div>' +
-    '<p class="hint"><b>' + esc(ph) + '</b> নম্বরে কোড পাঠানো হয়েছে। ' +
+    '<p class="hint"><b>' + esc(ph) + '</b> <span id="pvOtpMessage">' +
+    (previousCode ? 'নম্বরের আগের কোডটি এখনও ব্যবহার করা যাবে।' : 'নম্বরে কোড পাঠানো হয়েছে।') + '</span> ' +
     '<button class="btn ghost small" id="pvPhEdit">✏️ নম্বর বদলান</button><br>এক নম্বরে OTP না এলে/লিমিট শেষ হলে নম্বর বদলে আবার পাঠাতে পারবেন। <b>কোড কারও সাথে শেয়ার করবেন না।</b></p>' +
     '<div id="pvPhRow" style="display:none"><div class="fld"><label for="pvPhInp">মোবাইল নম্বর (OTP যাবে)</label>' +
     '<input type="text" id="pvPhInp" inputmode="numeric" placeholder="01XXXXXXXXX" value="' + esc(ph) + '"></div>' +
@@ -4659,24 +4676,29 @@ function showPvOtp() {
     '<button class="btn ghost" id="pvOtpRe">📲 আবার কোড পাঠান</button></div></div>';
   $('pvPhEdit').onclick = () => { const r = $('pvPhRow'); r.style.display = r.style.display === 'none' ? '' : 'none'; };
   $('pvPhGo').onclick = () => {
+    if (S.otpStage !== 'code') return;
     const np = bnDigits($('pvPhInp').value).replace(/\D/g, '');
     if (!/^01\d{9}$/.test(np)) { note('⚠️ সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (01XXXXXXXXX)', 'warn'); return; }
+    if (S.d.phone !== np) {
+      boxes.forEach(b => { b.value = ''; });
+      S._otpSessionLive = false;
+      S._sentPhone = null;
+      S._pendingSubmit = null;
+    }
     S.d.phone = np;
-    const af = $('a_phone'); if (af) af.value = np; // অটো ফর্মের ঘরটাও মিলিয়ে রাখি
-    busy(true, '⏳ নতুন নম্বরে কোড পাঠানো হচ্ছে…');
-    if (emitStep('SUBMIT_S4_PREP', { email: S.d.email || '', phone: np, docs: S.d.docs || [], relation: S.d.relation || defaultRelation(), other: S.d.other || {} }) === false) busy(false);
+    resend('⏳ নম্বরে কোড পাঠানো হচ্ছে…');
   };
   const boxes = [0, 1, 2, 3, 4, 5].map(i => $('pvob' + i));
   const val = () => boxes.map(b => (b.value || '').replace(/\D/g, '')).join('');
   boxes.forEach((b, i) => {
     b.oninput = () => {
-      b.value = b.value.replace(/\D/g, '').slice(-1);
+      b.value = bnDigits(b.value).replace(/\D/g, '').slice(-1);
       if (b.value && boxes[i + 1]) boxes[i + 1].focus();
     };
     b.onkeydown = (e) => { if (e.key === 'Backspace' && !b.value && boxes[i - 1]) { boxes[i - 1].focus(); boxes[i - 1].value = ''; } };
     b.onpaste = (e) => {
       e.preventDefault();
-      const txt = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
+      const txt = bnDigits((e.clipboardData || window.clipboardData).getData('text')).replace(/\D/g, '');
       for (let k = 0; k < boxes.length; k++) boxes[k].value = txt[k] || '';
       (boxes[Math.min(txt.length, boxes.length - 1)] || boxes[0]).focus();
     };
@@ -4684,16 +4706,25 @@ function showPvOtp() {
   if (boxes[0]) boxes[0].focus();
   $('pvOtpGo').onclick = () => {
     if (S.otpStage !== 'code') return;
+    if (S._sentPhone !== S.d.phone || !S._otpSessionLive) {
+      note('⚠️ এই নম্বরে কোড পাঠানো এখনও নিশ্চিত হয়নি। আগে কোড পাঠান।', 'warn');
+      return;
+    }
     const otp = val();
     if (otp.length < 6) { note('⚠️ মোবাইলে আসা ৬ ডিজিটের কোডটি সম্পূর্ণ লিখুন', 'warn'); return; }
     S.otpStage = 'submitting'; S._failReported = false;
     busy(true, '⏳ আবেদন জমা হচ্ছে… একটু অপেক্ষা করুন');
+    hideFail(); hideBanner(); noteOff();
     if (emitStep('SUBMIT_S4_OTP', { otp: otp, _submitSource: 'user-press' }) === false) { S.otpStage = 'code'; busy(false); }
   };
-  $('pvOtpRe').onclick = () => {
-    busy(true, '⏳ আবার কোড পাঠানো হচ্ছে…');
+  function resend(message) {
+    if (S.otpStage !== 'code') return;
+    if (S._passedOps) delete S._passedOps.SUBMIT_S4_PREP;
+    hideFail(); hideBanner();
+    busy(true, message);
     if (emitStep('SUBMIT_S4_PREP', payloadFor('SUBMIT_S4_PREP')) === false) busy(false);
-  };
+  }
+  $('pvOtpRe').onclick = () => resend('⏳ আবার কোড পাঠানো হচ্ছে…');
   sec.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 /* ═══════════ অটো আবেদন — জমার আগের প্রিভিউ (2026-10-13) ═══════════ */
@@ -4986,18 +5017,18 @@ function parsePastedData(raw, d) {
   const lines = String(raw || '').replace(/\r/g, '').replace(/\u00A0/g, ' ').split('\n');
   let hasBirthHdr = false, basis = '';
   for (const L0 of lines) {
-    if (/ভিত্তিতে/.test(L0)) basis = /স্থায়ী|স্তায়ী|স্টায়ী/.test(L0) ? 'PERMANENT' : 'BIRTHPLACE';
-    if (/জন্মস্থান\s*ঠিকানা/.test(L0)) hasBirthHdr = true;
+    if (/ভিত্তিতে/.test(L0)) basis = /স্থায়ী|স্থায়ী|স্তায়ী|স্টায়ী/.test(L0) ? 'PERMANENT' : 'BIRTHPLACE';
+    if (/^\s*জন্ম\s*স্থান(?:ের)?\s*ঠিকানা/.test(L0)) hasBirthHdr = true;
   }
   if (basis) d.s0.addressType = basis;
   // দুই-ব্লক টেমপ্লেটে (জন্মস্থান হেডার আছে) প্রথম ব্লক = স্থায়ী; নইলে ভিত্তি অনুযায়ী
   let state = hasBirthHdr ? 'perm' : (d.s0.addressType === 'PERMANENT' && basis ? 'perm' : 'birth');
-  let n = 0, miss = 0, permN = 0, brnWarn = false;
+  let n = 0, miss = 0, permN = 0, presN = 0, brnWarn = false;
   for (let L of lines) {
     L = String(L).trim();
     if (!L) continue;
     // '-----------স্থায়ী+বর্তমান সেইম হবে--' সেপারেটর (কখনো সারির শেষে জোড়া লাগা থাকে)
-    const sep = L.match(/-{3,}\s*(?:স্থায়ী|স্তায়ী|স্টায়ী)\s*\+\s*বর্তমান/);
+    const sep = L.match(/(?:-{3,}\s*|^)(?:স্থায়ী|স্থায়ী|স্তায়ী|স্টায়ী)\s*\+\s*বর্তমান/);
     if (sep) {
       z.presCopy = true; n++;
       L = L.slice(0, sep.index).trim();
@@ -5006,9 +5037,16 @@ function parsePastedData(raw, d) {
     // ভিত্তি-হেডার: 'আবেদনটি যে ঠিকানার ভিত্তিতে করা হবে তা স্থায়ী ঠিকানা  -  বিভাগঃ ঢাকা'
     if (/ভিত্তিতে/.test(L)) {
       const tail = L.slice(L.indexOf('ভিত্তিতে'));
-      const hm = tail.match(/^.*?(?:স্থায়ী\s*ঠিকানা|জন্ম\s*স্থান|স্থায়ী|স্তায়ী|স্টায়ী)\s*[:\-–—]*\s*([\s\S]*)$/);
+      const hm = tail.match(/^.*?(?:(?:স্থায়ী|স্থায়ী)\s*ঠিকানা|জন্ম\s*স্থান|স্থায়ী|স্থায়ী|স্তায়ী|স্টায়ী)\s*[:\-–—]*\s*([\s\S]*)$/);
       n++;
       L = (hm ? hm[1] : '').replace(/^[\-–—:ঃ.\s]+/, '').trim();
+      if (!L) continue;
+    }
+    const addressHeader = L.match(/^(জন্ম\s*স্থান(?:ের)?|স্থায়ী|স্থায়ী|বর্তমান)\s*ঠিকানা\s*[:ঃ\-–—]*\s*(.*)$/);
+    if (addressHeader) {
+      const kind = addressHeader[1];
+      state = kind === 'বর্তমান' ? 'pres' : kind.startsWith('জন্ম') ? 'birth' : 'perm';
+      L = addressHeader[2].trim();
       if (!L) continue;
     }
     let v;
@@ -5018,7 +5056,6 @@ function parsePastedData(raw, d) {
     if ((v = g(/^Father['’`]?s?\s*name\s*[:ঃ\-–—.\s]*(.*)$/i)) !== null) { if (v) { f.nameEn = v; n++; } continue; }
     if ((v = g(/^মাতার?\s*নাম\s*[:ঃ\-–—.\s]*(.*)$/)) !== null) { state = 'mother'; if (v) { m.nameBn = v; n++; } continue; }
     if ((v = g(/^Mother['’`]?s?\s*name\s*[:ঃ\-–—.\s]*(.*)$/i)) !== null) { if (v) { m.nameEn = v; n++; } continue; }
-    if (/জন্মস্থান\s*ঠিকানা/.test(L)) { state = 'birth'; continue; }
     if (/^(?:ব্যাক্তির|ব্যক্তির)/.test(L)) continue; // ব্যক্তির NID — সাইটের ফর্মে ঘর নেই, চুপচাপ এড়াই
     // নাম — সেকশন বুঝে আবেদনকারী/পিতা/মাতা
     if ((v = g(/^নাম\s*[:ঃ\-–—.\s]+(.+)$/)) !== null) {
@@ -5053,8 +5090,7 @@ function parsePastedData(raw, d) {
       continue;
     }
     // জন্ম নিবন্ধন নাম্বার — ১৭ ডিজিট হলে BRN; ছোটটা পুরোনো NID (সাইটের BRN ঘরে চলে না, ২০১৩-পূর্বে লাগেও না)
-    if ((v = g(/^জন্ম\s*নিবন্ধন\s*নাম্বার\s*\/\s*এনআইডি\s*[:ঃ\-–—.\s]*(.*)$/)) !== null
-      || (v = g(/^জন্ম\s*নিবন্ধন\s*নাম্বার\s*[:ঃ\-–—.\s]*(.*)$/)) !== null) {
+    if ((v = g(/^জন্ম\s*নিবন্ধন\s*(?:নাম্বার|নম্বর)(?:\s*\/\s*এনআইডি)?\s*[:ঃ\-–—.\s]*(.*)$/)) !== null) {
       const dd = bnDigits(v).replace(/\D/g, '');
       // Parent-BRN paste (2026-10-29, point 1): the number is kept
       // as given (digits-normalised) even when it is not 17 digits
@@ -5064,15 +5100,14 @@ function parsePastedData(raw, d) {
       continue;
     }
     // মোবাইল → যোগাযোগ ঘরে
-    if (/^মোবাইল\s*নাম/.test(L)) {
-      const dg = bnDigits(L).match(/01\d{9}/);
-      if (dg) { d.phone = dg[0]; n++; }
+    if ((v = g(/^(?:মোবাইল(?:\s*(?:নাম্বার|নম্বর))?|Phone|Mobile(?:\s+Number)?)\s*[:ঃ\-–—.\s]+(.+)$/i)) !== null) {
+      const phone = bnDigits(v).replace(/[\s-]/g, '');
+      if (/^01\d{9}$/.test(phone)) { d.phone = phone; n++; } else miss++;
       continue;
     }
-    // ঠিকানা লেবেল — perm ব্লক / জন্মস্থান ব্লক
-    const addrT = state === 'perm' ? z.perm : (state === 'birth' ? s1 : null);
+    const addrT = state === 'perm' ? z.perm : state === 'pres' ? (z.pres ||= {}) : state === 'birth' ? s1 : null;
     if (addrT) {
-      const bump = () => { n++; if (addrT === z.perm) permN++; };
+      const bump = () => { n++; if (state === 'perm') permN++; if (state === 'pres') presN++; };
       if ((v = g(/^বিভাগ\s*[:ঃ\-–—.\s]+(.+)$/)) !== null) { addrT.division = v; bump(); continue; }
       if ((v = g(/^জেলা\s*[:ঃ\-–—.\s]+(.+)$/)) !== null) { addrT.district = v; bump(); continue; }
       if ((v = g(/^উপজেলা\s*[:ঃ\-–—.\s]+(.+)$/)) !== null) { addrT.cityCorpUpazila = v; bump(); continue; }
@@ -5091,6 +5126,7 @@ function parsePastedData(raw, d) {
     if (/[:ঃ]/.test(L)) miss++;
   }
   if (permN > 0) z.permCopy = false;
+  if (presN > 0) z.presCopy = false;
   return { n: n, miss: miss, brnWarn: brnWarn };
 }
 function applyPaste() {
@@ -5108,6 +5144,7 @@ function applyPaste() {
 // এই ফরম্যাটেই বট তথ্য চিনতে পারে — ইউজার এটা দেখে/কপি করে নিজের তথ্য বসিয়ে দেবেন
 const PASTE_SAMPLE = [
 'আবেদনটি যে ঠিকানার ভিত্তিতে করা হবে তা জন্মস্থান',
+'স্থায়ী ঠিকানা:',
 'বিভাগঃ ঢাকা',
 'জেলাঃ ঢাকা',
 'উপজেলাঃ ঢাকা উত্তর সিটি কর্পোরেশন',
@@ -5148,6 +5185,13 @@ const PASTE_SAMPLE = [
 ].join('\n');
 
 function renderAuto() {
+  cancelAutoStart();
+  S.pvMode = false;
+  S.otpStage = 'review';
+  S._directOtp = false;
+  S._otpSessionLive = false;
+  S._sentPhone = null;
+  S._pendingSubmit = null;
   setView('flow'); renderStepper(-1); hideFail();
   const s0 = S.d.s0 || {}, s1 = S.d.s1 || {}, s2 = S.d.s2 || {}, z = S.d.s2b || {};
   const f = s2.father || {}, m = s2.mother || {};
@@ -5448,7 +5492,13 @@ function validateAuto() {
   if (S.d.email && !/^\S+@\S+\.\S+$/.test(S.d.email)) { bad.push('ইমেইল ঠিক নেই'); mark('a_email'); }
   return bad;
 }
+function cancelAutoStart() {
+  if (!S._autoStarting) return;
+  S._autoStarting = null;
+  clearTimeout(S._autoStartT);
+}
 function submitAuto() {
+  if (S._autoStarting) { note('⏳ আবেদন প্রস্তুত হচ্ছে — একটু অপেক্ষা করুন', 'warn'); return; }
   console.log('[bdris] submitAuto called, S.ready=' + S.ready);
   // Preview থেকে আসলে S.d আগেই ভরা আছে — collectAuto() form field খুঁজে throw করবে
   if (!S.pvMode) {
@@ -5470,17 +5520,22 @@ function submitAuto() {
   // A second click there queued a second chain and a second preparation.
   // One pending start at a time; released when the chain takes over, or
   // after the session-start window so a stalled session can be retried.
-  if (S._autoStarting) { note('⏳ আবেদন প্রস্তুত হচ্ছে — একটু অপেক্ষা করুন', 'warn'); return; }
-  S._autoStarting = true;
-  clearTimeout(S._autoStartT);
-  S._autoStartT = setTimeout(() => { S._autoStarting = false; }, 65000);
+  const filing = S.d;
+  const start = Symbol();
+  S._autoStarting = start;
+  const stillCurrent = () => S._autoStarting === start && S.d === filing;
+  S._autoStartT = setTimeout(() => { if (stillCurrent()) cancelAutoStart(); }, 65000);
   ensureReady(() => {
+    if (!stillCurrent()) return;
     // Permanent (2026-10-15): submit-এর আগে খসড়া auto-save — manual "খসড়ায় রাখুন"
     // না চাপলেও draft থাকবে। Save না হলে (3s timeout) submit আটকাবে না।
-    let saved = false;
-    const proceed = () => { if (!saved) { saved = true; S._autoStarting = false; clearTimeout(S._autoStartT); runChain(OPS, () => { autoPrep(); }, 'আবেদন প্রস্তুত হচ্ছে'); } };
+    const proceed = () => {
+      if (!stillCurrent()) return;
+      cancelAutoStart();
+      runChain(OPS, () => { autoPrep(); }, 'আবেদন প্রস্তুত হচ্ছে');
+    };
     try { saveDraft(6, proceed); } catch (e) { proceed(); }
-    setTimeout(proceed, 3000);
+    if (stillCurrent()) setTimeout(proceed, 3000);
   });
 }
 function autoPrep() {
@@ -5602,6 +5657,9 @@ function chainAck(d) {
   }
 }
 function abortChain() {
+  const filing = S.d;
+  const body = $('stepBody').firstElementChild;
+  const stillHere = () => S.d === filing && $('stepBody').firstElementChild === body;
   S.chain = null;
   opAbort();
   S._heldPrep = null; // user chose to pause in a draft — no auto-resend of the parked send
@@ -5609,13 +5667,15 @@ function abortChain() {
   directAckClear(); // DIRECT ACK TIMEOUT: no fallback after pausing to draft
   S._staleAcks = 0;
   saveDraft(S.d.uiStep || 0, (r) => {
+    if (!stillHere()) return;
     // 2026-11-13: a failed save no longer claims success and leaves.
     if (!r || !r.ok) {
       note('⚠️ খসড়া সেভ হয়নি — তথ্য এখানেই আছে, সংযোগ ফিরলে আবার চেষ্টা করুন', 'err');
       setBtns([{ html: '💾 আবার খসড়ায় রাখুন', fn: () => abortChain() }, { html: '🏠 মূল পাতায় যান', cls: 'ghost', fn: () => renderHome() }]);
       return;
     }
-    note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে পরে চালু করুন', 'ok'); setTimeout(renderHome, 500);
+    note('✔ খসড়ায় রাখা হয়েছে — “খসড়া” থেকে পরে চালু করুন', 'ok');
+    setTimeout(() => { if (stillHere()) renderHome(); }, 500);
   });
 }
 /* অটো-চেইন শেষ হওয়ার পরের ধাপ: ওটিপি-প্রস্তুতির ack (progress view-তে chain আর থাকে না) */
@@ -5656,9 +5716,7 @@ function otpPrepAck(d) {
   if (failed.some(x => /মেয়াদ শেষ হয়নি|not expired/i.test(x.reason || ''))) {
     hideFail();
     S._directOtp = false;
-    renderOtpCode(true);
-    const h = document.getElementById('otpSentHint');
-    if (h) h.innerHTML = esc('আগের কোডের মেয়াদ এখনো আছে — নতুন কোড আসবে না, আগের কোডটাই বসান।') + ' <b>কোড কারও সাথে শেয়ার করবেন না।</b>';
+    showAutoOtpOnPreview(true);
     note('📲 আগের কোডের মেয়াদ এখনো আছে — নতুন কোড আসবে না, আগের কোডটাই বসান', 'ok');
     return;
   }
@@ -5671,7 +5729,8 @@ function otpPrepAck(d) {
     hideFail();
     const _capReason = (failed.find(x => isOtpCapReason(x.reason || '')) || {}).reason || 'এই নম্বরে সর্বোচ্চ বার কোড পাঠানো হয়ে গেছে';
     showBanner('warn', '⚠️ ' + san(_capReason) + ' — এই নম্বরে আর কোড আসবে না, অন্য নম্বর ব্যবহার করুন।', () => {
-      hideBanner(); hideFail(); goStep(6);
+      renderAuto();
+      $('a_phone')?.focus();
     }, 'নম্বর বদলান');
     return;
   }
@@ -5691,8 +5750,7 @@ function otpPrepAck(d) {
   // An ok ack without otpSent is not delivery proof — stay in
   // 'sending' state instead of claiming the code was sent.
   if (d.otpSent === true) {
-    // নোট রেন্ডারের পরে — নইলে renderOtpCode-এর noteOff() তাজা নোট মুছে দিত
-    renderOtpCode(true);
+    showAutoOtpOnPreview();
     note('📲 কোড পাঠানো হয়েছে — মোবাইলে এসেছে কি না দেখুন', 'ok');
     autoSaveDraft(6); // FINAL-SOLUTION (#9): send success auto-saves
   } else {
@@ -5794,6 +5852,7 @@ function retrySession() {
 /* ═══════════ STEP_CHANGE_ACK রাউটিং ═══════════ */
 function manualStepAck(d) {
   const op = S._waitingAck;
+  const inlineAutoOtp = S.pvMode && S.mode === 'auto' && !!$('pvOtpSec');
   traceQ('ACK', op, { q: (S._opQ || []).length, failed: Array.isArray(d.failed) ? d.failed.length : 0, blocked: !!d.blocked });
   // সেশন-নতুন হওয়ার মেরামতে বাতিল-হওয়া পুরনো ধাপের ack এলে চুপচাপ গিলে ফেলি
   const staleAck = (S._staleAcks || 0) > 0 && (Date.now() - (S._staleAcksAt || 0)) < 180000;
@@ -5823,6 +5882,13 @@ function manualStepAck(d) {
     // লকস্টেপ: নতুন সেশন মানেই বট নিজে পুরো চেইন চালাবে না — ইউজারের সেই ক্লিকের ধাপটিই
     // (এক চাপে) আবার পাঠানোর সুযোগ দিই; ব্যাকএন্ডের ensureAligned আগের ধাপগুলো নিজে সাজায়
     opAbort();
+    if (inlineAutoOtp && op === 'SUBMIT_S4_OTP') {
+      S._otpSessionLive = false;
+      S._sentPhone = null;
+      returnToSubmitReview();
+      note('🔄 সংযোগ নতুন — আবার কোড পাঠিয়ে জমা দিতে হবে', 'warn');
+      return;
+    }
     if (op === 'SUBMIT_S4_OTP') { if (S.otpStage !== 'code') { renderOtpCode(); const h = document.getElementById('otpSentHint'); if (h) h.innerHTML = esc('সংযোগ নতুন — “আবার কোড পাঠান” চাপলে নতুন কোড আসবে, তারপর জমা দিন।') + ' <b>কোড কারও সাথে শেয়ার করবেন না।</b>'; } note('🔄 সংযোগ নতুন — আবার কোড পাঠিয়ে জমা দিতে হবে', 'warn'); return; }
     if (op === 'SUBMIT_S4_PREP') {
       // নতুন সেশনে সাইট ধাপ ১-এ ফিরে গেছে — কাগজপত্র ছাড়া ওটিপি-ধাপে ফেরা যায় না।
@@ -5940,7 +6006,8 @@ function manualStepAck(d) {
     // view with the still-valid hint instead.
     if (op === 'SUBMIT_S4_PREP' && /মেয়াদ শেষ হয়নি|not expired/i.test(_allReasons)) {
       hideFail();
-      if (S.otpStage !== 'code') { if (S.pvMode && S.mode === 'auto') showPvOtp(); else renderOtpCode(true); }
+      if (inlineAutoOtp) showAutoOtpOnPreview(true);
+      else if (S.otpStage !== 'code') renderOtpCode(true);
       const h = document.getElementById('otpSentHint');
       if (h) h.innerHTML = esc('আগের কোডের মেয়াদ এখনো আছে — নতুন কোড আসবে না, আগের কোডটাই বসান।') + ' <b>কোড কারও সাথে শেয়ার করবেন না।</b>';
       note('📲 আগের কোডের মেয়াদ এখনো আছে — নতুন কোড আসবে না, আগের কোডটাই বসান', 'ok');
@@ -5952,7 +6019,11 @@ function manualStepAck(d) {
     // (Shared classifier — see otpPrepAck.)
     if (op === 'SUBMIT_S4_PREP' && isOtpCapReason(_allReasons)) {
       showBanner('warn', '⚠️ ' + san(_firstReason) + ' — এই নম্বরে আর কোড আসবে না, অন্য নম্বর ব্যবহার করুন।', () => {
-        hideBanner(); hideFail(); goStep(6);
+        hideBanner(); hideFail();
+        if (S.mode === 'auto') {
+          renderAuto();
+          $('a_phone')?.focus();
+        } else goStep(6);
       }, 'নম্বর বদলান');
       return;
     }
@@ -5967,8 +6038,9 @@ function manualStepAck(d) {
     // (The HTTP-chain path needs no branch: its retry re-runs
     // the fallback plan, which walks the page properly.)
     if (op === 'SUBMIT_S4_OTP' && (d.code === 'BOT_PAGE_NOT_ON_OTP_STEP' || failed.some(x => x && x.code === 'BOT_PAGE_NOT_ON_OTP_STEP'))) {
+      if (inlineAutoOtp) { S._otpSessionLive = false; S._sentPhone = null; }
       showBanner('warn', '⚠️ ' + san(_firstReason || 'বটের পেজ OTP ধাপে নেই') + ' — এই কোড দিয়ে জমা হবে না। বটের পথে আবার কোড পাঠিয়ে জমা দিন।', () => {
-        hideBanner(); hideFail(); goStep(6);
+        hideBanner(); hideFail(); returnToSubmitReview();
       }, 'বটের পথে আবার কোড পাঠান');
       return;
     }
@@ -6009,7 +6081,11 @@ function manualStepAck(d) {
   if (op === 'SUBMIT_S4_PREP') {
     // 'sent' only on an otpSent:true ack (see sendOtp comment).
     if (d.otpSent === true) {
-      if (S.otpStage !== 'code') { if (S.pvMode && S.mode === 'auto') showPvOtp(); else renderOtpCode(true); }
+      if (inlineAutoOtp) {
+        if (staleAck) return;
+        if (S.otpStage !== 'code' || S._sentPhone !== S.d.phone) showAutoOtpOnPreview();
+        else $('pvOtpMessage').textContent = 'নম্বরে কোড পাঠানো হয়েছে।';
+      } else if (S.otpStage !== 'code') renderOtpCode(true);
       else { const h = document.getElementById('otpSentHint'); if (h) h.innerHTML = esc((S.d.phone || '').slice(-4)) + '-এ শেষ হওয়া নম্বরে কোড পাঠানো হয়েছে। না এলে “আবার কোড পাঠান” চাপুন। <b>কোড কারও সাথে শেয়ার করবেন না।</b>'; else renderOtpCode(true); busy(false); }
       // OTP-TRAP (A5): a re-send on the code view updates the
       // hint without renderOtpCode — refresh the sent phone
@@ -6042,7 +6118,7 @@ function manualStepAck(d) {
       // open a 'sending' OTP view on unproven delivery — show
       // the truthful failure at the send step instead.
       busy(false);
-      if (S.otpStage === 'code') {
+      if (S.otpStage === 'code' && (!inlineAutoOtp || S._sentPhone === S.d.phone)) {
         note('⏳ কোড পাঠানো যাচাই হয়নি — আগের কোড থাকলে সেটাই বসান, না এলে আবার চেষ্টা করুন', 'warn');
       } else {
         showFail(['কোড পাঠানো যাচাই হয়নি — সার্ভারের নিশ্চিত জবাব (কোড পাঠানো হয়েছে) আসেনি, তাই কোডের পর্দা খোলা হয়নি। আবার চেষ্টা করুন।']);

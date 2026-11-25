@@ -22,7 +22,7 @@ test('returning to the parents step with a cleared name shows errors and re-send
 test('a failed draft save on pause does not claim it was saved', () => {
   const notes = []; let home = 0;
   const c = { S: { d: {} }, opAbort() {}, directAckClear() {}, note: (m, k) => notes.push(k), setBtns() {},
-    renderHome: () => { home++; }, setTimeout: f => f(), saveDraft: (s, cb) => cb({ ok: false }) };
+    $: () => ({ firstElementChild: null }), renderHome: () => { home++; }, setTimeout: f => f(), saveDraft: (s, cb) => cb({ ok: false }) };
   vm.createContext(c); vm.runInContext(fn('abortChain'), c); c.abortChain();
   expect(notes).toEqual(['err']); expect(home).toBe(0);
 });

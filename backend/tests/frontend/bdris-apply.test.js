@@ -882,10 +882,10 @@ describe('OTHERS-FILL cycle (2026-11-01): Others/Guardian person fields end to e
     expect(html).toMatch(/syncOtherFromDom\(\);\s*otherPersonErrors\(\)\.forEach\(e => \{ bad\.push\(e\.msg\); mark\(e\.id\); \}\);/);
   });
 
-  test('payloadFor S3 and S4_PREP, the direct S4_PREP emit, and directCtx all carry other', () => {
+  test('S3, S4_PREP and auto resend use payloads carrying the other person', () => {
     expect(html).toMatch(/if \(op === 'SUBMIT_S3_DOCS'\) return \{ relation: S\.d\.relation \|\| defaultRelation\(\), other: S\.d\.other \|\| \{\}, docs: S\.d\.docs \|\| \[\] \};/);
     expect(html).toMatch(/if \(op === 'SUBMIT_S4_PREP'\) return \{ email: S\.d\.email \|\| '', phone: S\.d\.phone \|\| '', docs: S\.d\.docs \|\| \[\], relation: S\.d\.relation \|\| defaultRelation\(\), other: S\.d\.other \|\| \{\} \};/);
-    expect(html).toMatch(/relation: S\.d\.relation \|\| defaultRelation\(\), other: S\.d\.other \|\| \{\} \}\) === false\) busy\(false\);/);
+    expect(html.match(/function resend\(message\) \{[\s\S]*?\n  \}/)?.[0]).toContain("emitStep('SUBMIT_S4_PREP', payloadFor('SUBMIT_S4_PREP'))");
     expect(html).toMatch(/s3: \{ relation: S\.d\.relation \|\| defaultRelation\(\), other: S\.d\.other \|\| \{\} \},/);
     expect(html).toMatch(/relation: S\.d\.relation \|\| defaultRelation\(\),\s*other: S\.d\.other \|\| \{\},/);
   });
