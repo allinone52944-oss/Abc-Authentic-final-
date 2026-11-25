@@ -173,7 +173,7 @@ describe('address-book pick no longer loses the picked address', () => {
 describe('post-submit location: server records merge into home', () => {
   test('home fetches the existing server applications endpoint and dedups by number', () => {
     expect(html).toContain("fetch('/api/bdris-apply/applications'");
-    expect(html).toContain('const localNos = new Set(getAcks().map(a => String(a.no)));');
+    expect(html).toContain('const localNos = new Set(acks.slice(0, 3).map(a => canonicalAck(a.no)));');
     expect(html).toContain("data-srvdel=");
   });
 });

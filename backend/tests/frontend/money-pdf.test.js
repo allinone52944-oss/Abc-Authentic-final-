@@ -110,7 +110,11 @@ describe('delAck honesty (B7)', () => {
       extractFn(html, 'canonicalAck'),
       extractFn(html, 'isSentinelAck'),
       extractFn(html, 'dedupeAcks'),
+      extractFn(html, 'historyKey'),
       extractFn(html, 'getAcks'),
+      extractFn(html, 'getPendingAcks'),
+      extractFn(html, 'clearAckPending'),
+      extractFn(html, 'saveAckHistory'),
       extractFn(html, 'delAck'),
     ].join('\n');
     const run = new Function('localStorage', 'fetch', 'getToken', 'note',
@@ -118,9 +122,9 @@ describe('delAck honesty (B7)', () => {
     return {
       localStorage,
       notes,
-      seed: (acks) => { store.bdris_acks = JSON.stringify(acks); },
-      read: () => JSON.parse(store.bdris_acks || '[]'),
-      delAck: run(localStorage, fetchImpl, () => 'tok', (m) => notes.push(m)),
+      seed: (acks) => { store['bdris_acks:fixture'] = JSON.stringify(acks); },
+      read: () => JSON.parse(store['bdris_acks:fixture'] || '[]'),
+      delAck: run(localStorage, fetchImpl, () => 'x.' + Buffer.from('{"id":"fixture"}').toString('base64url') + '.x', (m) => notes.push(m)),
     };
   }
 
@@ -195,7 +199,7 @@ describe('home original-PDF wiring (A14/B8/C14)', () => {
 describe('delete handlers honesty (B7)', () => {
   test('local-card delete awaits delAck and claims success only on ok', () => {
     expect(html).toMatch(/const ok = await delAck\(b\.dataset\.ackdel\)/);
-    expect(html).toMatch(/if \(ok\) note\('✔ সাম্প্রতিক আবেদন মুছে ফেলা হয়েছে'/);
+    expect(html).toMatch(/if \(ok && isCurrentHome\(\)\) \{\s*renderHome\(\);\s*note\('✔ সাম্প্রতিক আবেদন মুছে ফেলা হয়েছে'/);
   });
 
   test('server-card delete checks r.ok instead of rendering regardless', () => {

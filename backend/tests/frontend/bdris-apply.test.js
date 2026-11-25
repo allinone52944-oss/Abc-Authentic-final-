@@ -129,8 +129,7 @@ describe('recent applications delete (2026-10-15)', () => {
   test('delAck removes entry from localStorage by id', () => {
     const m = html.match(/function delAck\(id\) \{([\s\S]*?)\n\}/);
     expect(m).not.toBeNull();
-    expect(m[1]).toMatch(/getAcks\(\)\.filter/);
-    expect(m[1]).toMatch(/localStorage\.setItem\('bdris_acks'/);
+    expect(m[1]).toMatch(/saveAckHistory\(getAcks\(key\)\.filter/);
   });
 
   test('ack card has delete button wired to delAck', () => {
@@ -273,7 +272,7 @@ describe('header back button must not use browser history (2026-10-25)', () => {
     // to the entry page recorded on load, falling back to the in-app
     // start screen only when no entry page is known. It never leaves
     // via history and never targets login.html.
-    expect(html).toMatch(/<button id="topBackBtn"[^>]*>← ফিরে যান<\/button>/);
+    expect(html).toMatch(/<button[^>]+id="topBackBtn"[^>]+aria-label="ফিরে যান"/);
     expect(html).toMatch(/\$\('topBackBtn'\)\.onclick = \(\) => goBackToEntry\(\);/);
     expect(html).toMatch(/function goBackToEntry\(\)/);
     expect(html).toMatch(/sessionStorage\.getItem\('bdris_apply_entry'\)/);
@@ -570,7 +569,7 @@ describe('ALL-BUGS cycle (2026-10-30): OTP view, real errors, PDF path, step-1, 
     expect(html).toMatch(/function reportOriginalAvailable\(ackNo\)/);
     expect(html).toMatch(/bdris_acks_pending/);
     expect(html).toMatch(/fetch\('\/api\/bdris-apply\/draft-delete'/);
-    expect(html).toMatch(/localStorage\.setItem\('bdris_acks', JSON\.stringify\(meta\)\)/);
+    expect(html).toMatch(/localStorage\.setItem\(key, JSON\.stringify\(meta\)\)/);
   });
 });
 
@@ -604,9 +603,9 @@ describe('HOME-LIST cycle (2026-10-31): duplicate cards, silent server-fetch fai
   });
 
   test('(1) addAck drops the same number before unshift; getAcks reads through dedupeAcks (render can never show a dup)', () => {
-    expect(html).toMatch(/l = l\.filter\(x => String\(x && x\.no\) !== String\(a\.no\)\)/);
-    expect(html).toMatch(/function getAcks\(\) \{ try \{ return dedupeAcks\(/);
-    expect(html).toMatch(/const acks = getAcks\(\);/);
+    expect(html).toMatch(/l = l\.filter\(x => canonicalAck\(x\.no\) !== ack\)/);
+    expect(html).toMatch(/try \{ return key \? dedupeAcks\(/);
+    expect(html).toMatch(/const acks = getAcks\(accountKey\);/);
   });
 
   test('(2) classifyServerAcksFailure: missing/expired session -> login; everything else -> retry with the real reason', () => {
@@ -624,7 +623,7 @@ describe('HOME-LIST cycle (2026-10-31): duplicate cards, silent server-fetch fai
   });
 
   test('(2) server-fetch failure renders a status line (never silent): token-empty, !ok, and network paths all show it; success clears it', () => {
-    expect(html).toMatch(/if \(!getToken\(\)\) \{ renderServerAcksStatus\(classifyServerAcksFailure\(\{ tokenPresent: false \}\)\)/);
+    expect(html).toMatch(/if \(!accessToken\) \{ renderServerAcksStatus\(classifyServerAcksFailure\(\{ tokenPresent: false \}\)\)/);
     expect(html).toMatch(/renderServerAcksStatus\(classifyServerAcksFailure\(\{ networkError: true, tokenPresent: true \}\)\)/);
     expect(html).toMatch(/if \(fail\) renderServerAcksStatus\(fail\); else clearServerAcksStatus\(\);/);
     expect(html).toMatch(/id="srvAckRetry"/);
@@ -745,8 +744,8 @@ describe('DRAFTS/AUTH cycle 3 (2026-10-31): A8 draftId persistence, A10 timeouts
     expect(html).toMatch(/function emitDraftOp\(event, data, cb, ms\)/);
     expect(html).toMatch(/SOCKET_TIMEOUT/);
     expect(html).toMatch(/SOCKET_UNAVAILABLE/);
-    expect(html).toMatch(/emitDraftOp\('LIST_DRAFTS'/);
-    expect(html).toMatch(/emitDraftOp\('LOAD_DRAFT'/);
+    expect(html).toMatch(/emitDraftOp\(listing \? 'LIST_DRAFTS' : 'LOAD_DRAFT'/);
+    expect(html).toContain("fetch('/api/bdris-apply/draft-read'");
     expect(html).toMatch(/emitDraftOp\('SAVE_DRAFT'/);
   });
 
@@ -1003,7 +1002,8 @@ describe('bdris-apply.html — global navigation (audit #54)', () => {
   });
 
   test('the button sits in the header actions (reachable on mobile, where .hacts wraps full-width)', () => {
-    const hacts = html.slice(html.indexOf('<div class="hacts">'), html.indexOf('</div>', html.indexOf('<div class="hacts">')));
+    const start = html.indexOf('<nav class="hacts"');
+    const hacts = html.slice(start, html.indexOf('</nav>', start));
     expect(hacts).toContain("location.href='/dashboard.html'");
   });
 

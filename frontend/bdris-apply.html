@@ -456,20 +456,17 @@ input.bad, select.bad{border-color:var(--status-danger); box-shadow:0 0 0 3px rg
 <link rel="stylesheet" href="/css/service-entry.css?v=20261122-4">
 <script src="/js/service-navigation.js?v=20261124-3" defer></script>
 <script src="/js/engine-feedback.js?v=20261118-3" defer></script>
-<link rel="stylesheet" href="/css/bdris-application-clean.css?v=20261125-1">
+<link rel="stylesheet" href="/css/bdris-application-clean.css?v=20261125-2">
 </head>
 <body class="page-bdris-apply">
 <div class="wrap">
   <div class="topbar">
-    <button id="topBackBtn" style="background:none;border:1px solid var(--primary-600);color:var(--primary-600);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:14px;">← ফিরে যান</button>
-    <div class="brand" id="brandHome">
-      <div class="blogo">জ</div>
-      <div>
-        <div class="bname">জন্ম নিবন্ধন সহায়ক</div>
-        <div class="btag">অনলাইন জন্ম নিবন্ধন আবেদন — সহজ ও নিরাপদ</div>
-      </div>
-    </div>
-    <div class="hacts">
+    <button type="button" id="topBackBtn" class="btn ghost small" aria-label="ফিরে যান"><span aria-hidden="true">←</span><span class="back-label"> ফিরে যান</span></button>
+    <button type="button" class="brand" id="brandHome" aria-label="জন্ম নিবন্ধন আবেদনের শুরুতে যান">
+      <span class="blogo" aria-hidden="true">জ</span>
+      <span class="bname">জন্ম নিবন্ধন সহায়ক</span>
+    </button>
+    <nav class="hacts" aria-label="আবেদনের মেনু">
       <!-- Audit #54 — the page has no global navigation (the brand
            goes to the in-page filing home, the back button to the
            entry step). This takes the user to the site dashboard,
@@ -479,8 +476,8 @@ input.bad, select.bad{border-color:var(--status-danger); box-shadow:0 0 0 3px rg
       <button class="btn ghost small" onclick="location.href='/dashboard.html'">🏠 হোম</button>
       <button class="btn ghost small" id="draftsBtn">🗂️ খসড়া <span id="draftsCnt"></span></button>
       <button class="btn ghost small" id="addrBtn">📍 ঠিকানা বই</button>
-      <button class="btn ghost small" id="logoutBtn" title="লগআউট">⏻</button>
-    </div>
+      <button class="btn ghost small" id="logoutBtn" title="লগআউট" aria-label="লগআউট">⏻</button>
+    </nav>
   </div>
 
   <main class="card">
@@ -493,8 +490,7 @@ input.bad, select.bad{border-color:var(--status-danger); box-shadow:0 0 0 3px rg
   </main>
 
   <div class="footer">
-    নিরাপদ অনলাইন আবেদন <span class="fl">•</span> আপনার তথ্য সুরক্ষিত থাকে<br>
-    বিডিআরআইএস-এ আবেদন <span class="fl">•</span> <span id="abcFeeNote">ফি জমা/আসল পিডিএফ-এর আগে একবারই কাটে — চার্জ ব্যর্থ হলে ৳০, একই কাজে দুবার নয়</span>
+    <span id="abcFeeNote">ফি জমা/আসল পিডিএফ-এর আগে একবারই কাটে — চার্জ ব্যর্থ হলে ৳০, একই কাজে দুবার নয়</span>
   </div>
 </div>
 <script src="/js/socket.io.min.js?v=1"></script>
@@ -509,7 +505,7 @@ input.bad, select.bad{border-color:var(--status-danger); box-shadow:0 0 0 3px rg
    (3) if refresh fails the user sees a VISIBLE banner (no silent hang),
    (4) proactive refresh every 12 min keeps long sessions alive. */
 const LS_ACCESS_T = 'abc_access_token', LS_REFRESH_T = 'abc_refresh_token';
-function curAccessToken() { try { return sessionStorage.getItem(LS_ACCESS_T) || ''; } catch (e) { return ''; } }
+function curAccessToken() { return getToken(); }
 // Shared HTTP actions execute outside the wallet IIFE: they need the
 // current session token too, not the private getToken in that closure.
 function getToken() {
@@ -927,6 +923,7 @@ function b64Of(dataUrl) { const i = String(dataUrl || '').indexOf(','); return i
 
 /* ═══════════ views & stepper ═══════════ */
 function setView(v) {
+  if (v !== 'drafts') S._loadingDraft = null;
   // চেইন কেবল progress স্ক্রিনেই চলে — ইউজার অন্য স্ক্রিনে গেলে বাকি ধাপ আর নিজে থেকে যায় না
   if (S.chain && v !== 'progress') { S.chain = null; opAbort(); }
   // FINAL-SOLUTION (2026-10-30, problem-map #11): fail panels
@@ -968,7 +965,58 @@ function setBtns(list) {
 function clearBtns() { $('btnRow').innerHTML = ''; }
 
 /* ═══════════ acks / storage helpers ═══════════ */
-function getAcks() { try { return dedupeAcks(JSON.parse(localStorage.getItem('bdris_acks') || '[]')); } catch { return []; } }
+function historyKey(base, token = getToken()) {
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const userId = JSON.parse(atob(payload)).id;
+    return (typeof userId === 'string' && userId) || Number.isSafeInteger(userId) ? base + ':' + userId : null;
+  } catch { return null; }
+}
+function getAcks(key = historyKey('bdris_acks')) {
+  try { return key ? dedupeAcks(JSON.parse(localStorage.getItem(key) || '[]')) : []; }
+  catch { return []; }
+}
+function getPendingAcks(key = historyKey('bdris_acks_pending')) {
+  try { return key ? JSON.parse(localStorage.getItem(key) || '{}') || {} : {}; }
+  catch { return {}; }
+}
+function saveAckHistory(entries, key = historyKey('bdris_acks')) {
+  if (!key) return false;
+  const list = entries.slice(0, 20);
+  try {
+    localStorage.setItem(key, JSON.stringify(list));
+  } catch {
+    const meta = list.map(({ pdfB64, pdfName, ...entry }) => entry);
+    try { localStorage.setItem(key, JSON.stringify(meta)); } catch { return false; }
+  }
+  return true;
+}
+function restoreOwnedAckCopies(rows) {
+  const local = getAcks();
+  const existing = new Set(local.map(a => canonicalAck(a.no)));
+  const owned = new Map(rows.filter(r => r?.ack_no).map(r => [canonicalAck(r.ack_no), r]));
+  const recovered = [];
+  for (const entry of getAcks('bdris_acks')) {
+    const ack = canonicalAck(entry.no);
+    const row = ack && owned.get(ack);
+    if (!row || existing.has(ack)) continue;
+    recovered.push({ id: entry.id, no: ack, name: row.applicant_name || entry.name, at: row.created_at || entry.at,
+      pdfB64: entry.pdfB64, pdfName: entry.pdfName });
+  }
+  if (!recovered.length) return false;
+  const merged = local.concat(recovered).sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+  if (!merged.slice(0, 20).some(entry => recovered.includes(entry))) return false;
+  return saveAckHistory(merged);
+}
+function storeAckCopy(id, pdf) {
+  if (!id || !pdf?.base64) return;
+  const list = getAcks();
+  const entry = list.find(a => a.id === id);
+  if (!entry || entry.pdfB64 === pdf.base64) return;
+  entry.pdfB64 = pdf.base64;
+  entry.pdfName = pdf.name;
+  saveAckHistory(list);
+}
 // HOME-LIST (2026-10-31): one number = one card, always. addAck used to
 // unshift without dedupe, so a double-add rendered the same application
 // twice (live: same number + time twice). Dedupe by ack number here so
@@ -978,6 +1026,7 @@ function getAcks() { try { return dedupeAcks(JSON.parse(localStorage.getItem('bd
 function dedupeAcks(list) {
   const seen = new Set(); const out = [];
   (Array.isArray(list) ? list : []).forEach(a => {
+    if (!a || typeof a !== 'object') return;
     // MONEY/PDF (B9): the dedupe key must be the canonical number —
     // the old raw String(a.no) let the 'সংরক্ষিত নয়' sentinel act as
     // a key, collapsing every distinct numberless application into
@@ -1083,10 +1132,12 @@ function reportAckToServer(a) {
     // (it was never an ack, and the old guard only excluded the exact
     // sentinel string, not other digitless values).
     if (!a || isSentinelAck(a.no)) return Promise.resolve(false);
+    const token = getToken();
+    const pendingKey = historyKey('bdris_acks_pending', token);
     const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined;
     return fetch('/api/bdris-apply/applications', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
       signal,
       body: JSON.stringify({
         ack_no: canonicalAck(a.no), name: a.name || '',
@@ -1094,24 +1145,26 @@ function reportAckToServer(a) {
         submission_proof: a.submissionProof
       })
     }).then(r => {
-      if (r?.ok) { clearAckPending(a); return true; }
-      markAckPending(a);
+      if (r?.ok) { clearAckPending(a, pendingKey); return true; }
+      markAckPending(a, pendingKey);
       return false;
-    }).catch(() => { markAckPending(a); return false; });
+    }).catch(() => { markAckPending(a, pendingKey); return false; });
   } catch { return Promise.resolve(false); }
 }
-function markAckPending(a) {
+function markAckPending(a, key = historyKey('bdris_acks_pending')) {
+  if (!key) return;
   try {
-    const p = JSON.parse(localStorage.getItem('bdris_acks_pending') || '{}');
-    p[String(a.no)] = 1;
-    localStorage.setItem('bdris_acks_pending', JSON.stringify(p));
+    const p = getPendingAcks(key);
+    p[canonicalAck(a.no)] = 1;
+    localStorage.setItem(key, JSON.stringify(p));
   } catch {}
 }
-function clearAckPending(a) {
+function clearAckPending(a, key = historyKey('bdris_acks_pending')) {
+  if (!key) return;
   try {
-    const p = JSON.parse(localStorage.getItem('bdris_acks_pending') || '{}');
-    delete p[String(a.no)];
-    localStorage.setItem('bdris_acks_pending', JSON.stringify(p));
+    const p = getPendingAcks(key);
+    delete p[canonicalAck(a.no)];
+    localStorage.setItem(key, JSON.stringify(p));
   } catch {}
 }
 function reportOriginalAvailable(ackNo) {
@@ -1152,20 +1205,15 @@ function addAck(a) {
   // number first — a re-add replaces, never duplicates (getAcks() is
   // already deduped, so this also repairs lists written before).
   let l = getAcks();
-  if (a && a.no) l = l.filter(x => String(x && x.no) !== String(a.no));
+  const ack = canonicalAck(a.no);
+  if (ack) l = l.filter(x => canonicalAck(x.no) !== ack);
   l.unshift(a);
   // পুরোনো এন্ট্রির PDF খোঁচা বাদ — localStorage ফুলে উড়ে না যায় (শুধু শেষ আবেদনের কপি থাকে)
   l.slice(1).forEach(x => { if (x.pdfB64) { delete x.pdfB64; delete x.pdfName; } });
   // ALL-BUGS (i): a quota throw used to silently drop the whole
   // recent list. Retry once with metadata only (copies stripped)
   // so the numbers + names always survive.
-  try { localStorage.setItem('bdris_acks', JSON.stringify(l.slice(0, 20))); }
-  catch {
-    try {
-      const meta = l.slice(0, 20).map(x => { const y = Object.assign({}, x); delete y.pdfB64; delete y.pdfName; return y; });
-      localStorage.setItem('bdris_acks', JSON.stringify(meta));
-    } catch {}
-  }
+  saveAckHistory(l);
 }
 async function delAck(id) {
   // MONEY/PDF (B7): deletion used to lie — local remove was
@@ -1176,13 +1224,15 @@ async function delAck(id) {
   // the real reason is shown. Returns true only when the entry is
   // actually gone.
   try {
-    const rec = getAcks().find(x => String(x.id) === String(id));
+    const token = getToken();
+    const key = historyKey('bdris_acks', token);
+    const rec = getAcks(key).find(x => String(x.id) === String(id));
     if (rec && rec.no && !isSentinelAck(rec.no)) {
       let r = null;
       try {
         r = await fetch('/api/bdris-apply/applications/' + encodeURIComponent(canonicalAck(rec.no)), {
           method: 'DELETE',
-          headers: { 'Authorization': 'Bearer ' + getToken() }
+          headers: { 'Authorization': 'Bearer ' + token }
         });
       } catch (e) {
         note('⚠️ সার্ভার থেকে মোছা যায়নি — সংযোগ সমস্যা, কার্ডটি রয়ে গেছে', 'err');
@@ -1193,24 +1243,22 @@ async function delAck(id) {
         return false;
       }
     }
-    const l = getAcks().filter(x => String(x.id) !== String(id));
-    localStorage.setItem('bdris_acks', JSON.stringify(l));
-    return true;
+    if (rec) clearAckPending(rec, historyKey('bdris_acks_pending', token));
+    return saveAckHistory(getAcks(key).filter(x => String(x.id) !== String(id)), key);
   } catch (e) { return false; }
 }
 function fmtTime(iso) {
   try { return new Date(iso).toLocaleString('bn-BD', { dateStyle: 'medium', timeStyle: 'short' }); }
   catch { return String(iso || ''); }
 }
-function updDraftsCnt() {
-  // DRAFTS/AUTH (A10): timeout-guarded; on error the count simply
-  // stays as it was — a background count must never hang, and
-  // showing a stale count beats clearing it on a transient blip.
-  emitDraftOp('LIST_DRAFTS', undefined, (list) => {
-    if (!list || list.error) return;
-    const n = Array.isArray(list) ? list.length : 0;
-    const c = $('draftsCnt'); if (c) c.textContent = n ? '(' + n + ')' : '';
-  }, 10000);
+async function updDraftsCnt() {
+  const count = $('draftsCnt');
+  if (!count) return;
+  const request = Symbol();
+  count.draftRequest = request;
+  const list = await readDraftState();
+  if (count.draftRequest !== request || !Array.isArray(list)) return;
+  count.textContent = list.length ? '(' + list.length.toLocaleString('bn-BD') + ')' : '';
 }
 
 /* ═══════════ date of birth helpers (copy-paste friendly, 2026-10-11) ═══════════ */
@@ -1558,44 +1606,43 @@ function renderHome() {
   S._pendingSubmit = null; // FINAL-SOLUTION (#4): held submit dies with the flow
   directAckClear(); // DIRECT ACK TIMEOUT: no fallback after leaving the flow
   setView('home'); renderStepper(-1); hideFail(); hideBanner(); noteOff();
+  busy(false);
   S._passedOps = {}; // FINAL-PACK stale-banner: home = flow over, old passes void
   clearBtns();
-  const acks = getAcks();
+  const accessToken = getToken();
+  const accountKey = historyKey('bdris_acks', accessToken);
+  const acks = getAcks(accountKey);
   const ackHtml = acks.length ? ('<div class="sec" id="recentSec"><div class="sub-h"><span class="snum">🕘</span> সাম্প্রতিক আবেদন</div>' +
     acks.slice(0, 3).map(a => '<div class="draft-card"><div class="di">🎫</div><div><div class="dt">' + esc(a.name || 'আবেদন') + '</div>' +
       '<div class="ds">নম্বর: ' + esc(a.no) + ' • ' + esc(fmtTime(a.at)) + '</div></div>' +
-      '<div class="da"><button class="btn small" data-copy="' + esc(a.no) + '">📋 নম্বর কপি</button>' +
+      '<div class="da">' +
+      (!isSentinelAck(a.no) ? '<button class="btn small" data-copy="' + esc(a.no) + '">📋 নম্বর কপি</button>' : '') +
       (a.pdfB64 ? '<button class="btn ghost small" data-pdf="' + esc(a.id) + '">⬇️ কপি</button>' : '') +
-      '<button class="btn small" data-orig="' + esc(a.no) + '">⬇️ আসল PDF</button>' +
+      (!isSentinelAck(a.no) ? '<button class="btn small" data-orig="' + esc(a.no) + '">⬇️ আসল PDF</button>' : '') +
       '<button class="btn danger small" data-ackdel="' + esc(a.id) + '">🗑️ মুছুন</button></div></div>').join('') + '</div>') : '';
   showBody(
-    '<div class="hero compact">' +
-      '<span class="hbean" style="top:14%;left:7%">☕</span>' +
-      '<span class="hbean" style="top:62%;right:6%;animation-delay:-5s">☕</span>' +
-      '<div class="hico">📜</div>' +
-      '<div class="hpill">বাংলাদেশ জন্ম ও মৃত্যু নিবন্ধন (BDRIS)</div>' +
-      '<h1 class="htitle">ঘরে বসেই <span class="gold">জন্ম নিবন্ধন আবেদন</span></h1>' +
-      '<p class="hsub">নিচের যেকোনো একটি পদ্ধতি বেছে নিন।</p>' +
+    '<div class="hero compact" id="applicationHome">' +
+      '<h1 class="htitle">জন্ম নিবন্ধন আবেদন</h1>' +
+      '<p class="hsub">আবেদন পদ্ধতি বেছে নিন।</p>' +
     '</div>' +
-    '<details class="guide-det"><summary>💡 কী কী পদ্ধতিতে আবেদন হবে</summary><div class="gbody">' +
+    '<div class="dash2">' +
+      '<button type="button" class="mode-card compact" id="mAuto"><span class="mico" aria-hidden="true">⚡</span>' +
+        '<span class="mt">অটো আবেদন</span><span class="ms">এক ফর্মে সব তথ্য দিন।</span></button>' +
+      '<button type="button" class="mode-card compact" id="mManual"><span class="mico" aria-hidden="true">🧭</span>' +
+        '<span class="mt">ধাপে ধাপে আবেদন</span><span class="ms">৬টি ধাপে তথ্য মিলিয়ে এগোন।</span></button>' +
+    '</div>' +
+    '<details class="guide-det"><summary>আবেদনের নির্দেশিকা</summary><div class="gbody">' +
     '<div class="gsteps">' +
       '<div class="gstep"><div class="n">১</div><div class="t"><b>পদ্ধতি বেছে নিন</b> — ⚡ অটো (এক ফর্মে সব তথ্য) অথবা 🧭 ধাপে ধাপে (৬টি ধাপে দেখে দেখে)।</div></div>' +
       '<div class="gstep"><div class="n">২</div><div class="t"><b>তথ্য দিন</b> — অটোতে “📋 নমুনা ফরম্যাট” দেখে নিজের তথ্য বসিয়ে “📥 সব ঘর বসান” চাপুন।</div></div>' +
       '<div class="gstep"><div class="n">৩</div><div class="t"><b>কাগজের ছবি যোগ করুন</b> — ধরন ৪০ ও ৪১-এর কাগজপত্রের ছবি তুলে/বেছে দিন।</div></div>' +
       '<div class="gstep"><div class="n">৪</div><div class="t"><b>প্রিভিউতে মিলিয়ে নিন</b> — “👁️ প্রিভিউ দেখুন” চাপলে পুরো আবেদন এক পর্দায়; ভুল থাকলে “✏️ ঠিক করুন”।</div></div>' +
       '<div class="gstep"><div class="n">৫</div><div class="t"><b>OTP বসান — জমা!</b> — মোবাইলে আসা কোডটি বসালেই আবেদন জমা হবে; নম্বর ও আসল PDF পেয়ে যাবেন।</div></div>' +
-    '</div>' +
-    '<p class="hint">🤝 আপনার কাজ মাত্র ২টি — কাগজের ছবি দেওয়া আর OTP কোড বসানো। বাকি সব এখান থেকেই হবে।</p></div></details>' +
-    '<div class="dash2">' +
-      '<button class="mode-card compact" id="mAuto"><div class="mico">⚡</div>' +
-        '<div class="mt">অটো আবেদন <span class="mtag">দ্রুত</span></div>' +
-        '<div class="ms">একটি ফর্মে সব তথ্য — বাকি ধাপ নিজে থেকে এগোবে।</div></button>' +
-      '<button class="mode-card compact" id="mManual"><div class="mico">🧭</div>' +
-        '<div class="mt">ধাপে ধাপে আবেদন</div>' +
-        '<div class="ms">৬টি ধাপে দেখে দেখে, নিজের গতিতে।</div></button>' +
-    '</div>' +
+    '</div></div></details>' +
     ackHtml
   );
+  const home = $('applicationHome');
+  const isCurrentHome = () => home.isConnected && S.view === 'home' && historyKey('bdris_acks') === accountKey;
   $('mAuto').onclick = () => startAuto();
   $('mManual').onclick = () => startManual();
   els('[data-copy]').forEach(b => b.onclick = () => copyText(b.dataset.copy));
@@ -1611,16 +1658,18 @@ function renderHome() {
     // pending), say so in the confirm — deleting it loses the copy.
     let warn = '';
     try {
-      const pend = JSON.parse(localStorage.getItem('bdris_acks_pending') || '{}');
-      if (rec && rec.pdfB64 && (isSentinelAck(rec.no) || pend[String(rec.no)])) warn = '\n⚠️ এই কার্ডের PDF কপি শুধু এই ব্রাউজারে আছে — মুছলে কপিটি হারিয়ে যাবে।';
+      const pend = getPendingAcks();
+      if (rec && rec.pdfB64 && (isSentinelAck(rec.no) || pend[canonicalAck(rec.no)])) warn = '\n⚠️ এই কার্ডের PDF কপি শুধু এই ব্রাউজারে আছে — মুছলে কপিটি হারিয়ে যাবে।';
     } catch {}
     if (!confirm('এই আবেদনটি সাম্প্রতিক তালিকা থেকে মুছে ফেলবেন?' + warn)) return;
     // MONEY/PDF (B7): success is claimed only when the entry is
     // actually gone — a failed server delete keeps the card and its
     // note says so (delAck reports the failure itself).
     const ok = await delAck(b.dataset.ackdel);
-    renderHome();
-    if (ok) note('✔ সাম্প্রতিক আবেদন মুছে ফেলা হয়েছে', 'ok');
+    if (ok && isCurrentHome()) {
+      renderHome();
+      note('✔ সাম্প্রতিক আবেদন মুছে ফেলা হয়েছে', 'ok');
+    }
   });
   // আসল PDF (2026-10-17): recent list থেকেও original PDF আনা যাবে
   // PREMIUM-RESET (2026-10-28): চার্জ-কল না-ফিরলে (2026-10-28 লাইভ:
@@ -1643,8 +1692,11 @@ function renderHome() {
   // (or fresh-login on expired token); local entries still render,
   // but never as a silent complete list.
   try {
-    if (!getToken()) { renderServerAcksStatus(classifyServerAcksFailure({ tokenPresent: false })); }
-    else fetch('/api/bdris-apply/applications', { headers: { 'Authorization': 'Bearer ' + getToken() } })
+    if (!accessToken) { renderServerAcksStatus(classifyServerAcksFailure({ tokenPresent: false })); }
+    else fetch('/api/bdris-apply/applications', {
+      headers: { 'Authorization': 'Bearer ' + accessToken },
+      signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined,
+    })
       .then(async r => {
         if (!r.ok) return { __fail: classifyServerAcksFailure({ status: r.status, tokenPresent: true }) };
         const d = await r.json().catch(() => null);
@@ -1652,23 +1704,26 @@ function renderHome() {
         return d;
       })
       .then(d => {
-        if (!d) return;
+        if (!d || !isCurrentHome()) return;
         const fail = d.__fail;
         if (fail) renderServerAcksStatus(fail); else clearServerAcksStatus();
         const rows = (!fail && Array.isArray(d.applications)) ? d.applications : [];
+        if (fail) return;
+        if (restoreOwnedAckCopies(rows)) { renderHome(); return; }
         // ALL-BUGS (i): flush pending server reports — one
         // attempt per home render, only for ack numbers the
         // server still lacks. A lost DONE-time report heals here
         // instead of vanishing; a later success clears the flag.
         try {
-          const pend = JSON.parse(localStorage.getItem('bdris_acks_pending') || '{}');
-          const serverNos = new Set(rows.map(x => String(x.ack_no)));
+          const pend = getPendingAcks();
+          const serverNos = new Set(rows.map(x => canonicalAck(x?.ack_no)));
           getAcks().forEach(a => {
-            if (a && a.no && pend[String(a.no)] && !serverNos.has(String(a.no))) reportAckToServer(a);
+            const no = canonicalAck(a.no);
+            if (no && pend[no] && !serverNos.has(no)) reportAckToServer(a);
           });
         } catch {}
-        const localNos = new Set(getAcks().map(a => String(a.no)));
-        const extra = rows.filter(x => x && x.ack_no && !localNos.has(String(x.ack_no)));
+        const localNos = new Set(acks.slice(0, 3).map(a => canonicalAck(a.no)));
+        const extra = rows.filter(x => x && x.ack_no && !localNos.has(canonicalAck(x.ack_no)));
         if (!extra.length) return;
         let sec = $('recentSec');
         if (!sec) {
@@ -1689,16 +1744,16 @@ function renderHome() {
           // MONEY/PDF (B7): the old .then(renderHome).catch(renderHome)
           // claimed success whatever the server said. Report honestly.
           try {
-            const r = await fetch('/api/bdris-apply/applications/' + encodeURIComponent(b.dataset.srvdel), { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getToken() } });
+            const r = await fetch('/api/bdris-apply/applications/' + encodeURIComponent(b.dataset.srvdel), { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + accessToken } });
+            if (!isCurrentHome()) return;
             if (!r.ok) { note('⚠️ সার্ভার থেকে মোছা যায়নি (সার্ভার জবাব ' + r.status + ')', 'err'); return; }
+            renderHome();
             note('✔ সার্ভার রেকর্ড মুছে ফেলা হয়েছে', 'ok');
           } catch (e) {
-            note('⚠️ সার্ভার থেকে মোছা যায়নি — সংযোগ সমস্যা', 'err');
-            return;
+            if (isCurrentHome()) note('⚠️ সার্ভার থেকে মোছা যায়নি — সংযোগ সমস্যা', 'err');
           }
-          renderHome();
         });
-      }).catch(() => { renderServerAcksStatus(classifyServerAcksFailure({ networkError: true, tokenPresent: true })); });
+      }).catch(() => { if (isCurrentHome()) renderServerAcksStatus(classifyServerAcksFailure({ networkError: true, tokenPresent: true })); });
   } catch {}
   els('[data-orig]').forEach(b => b.onclick = () => fetchHomeOriginal(b, b.dataset.orig));
 }
@@ -1838,52 +1893,57 @@ function renderStatusResult(d) {
 }
 
 /* ═══════════ drafts view ═══════════ */
-function renderDrafts() {
+async function renderDrafts() {
+  S._loadingDraft = null;
   setView('drafts'); renderStepper(-1); hideFail();
+  busy(false);
   showBody(
     '<div class="sec"><div class="sub-h"><span class="snum">🗂️</span> সংরক্ষিত খসড়া</div>' +
     '<p class="hint">আগের অসমাপ্ত আবেদন এখানে জমা থাকে — “চালিয়ে যান” চাপলে বাকি ধাপ শেষ করা যাবে।</p></div>' +
     '<div id="draftList"><div class="draft-card">খসড়া তালিকা আসছে…</div></div>'
   );
   setBtns([{ html: '← ফিরে যান', cls: 'ghost', fn: () => renderHome() }]);
-  emitDraftOp('LIST_DRAFTS', undefined, (list) => {
-    const l = $('draftList'); if (!l) return;
-    if (!list || list.error) {
-      // DRAFTS/AUTH (A10): dead socket / timeout — never hang on
-      // "খসড়া তালিকা আসছে…"; show the real failure + retry.
-      l.innerHTML = '<div class="draft-card"><div class="di">⚠️</div><div><div class="dt">খসড়া তালিকা আনা যায়নি</div>' +
-        '<div class="ds">সংযোগ নেই বা সার্ভার জবাব দিচ্ছে না — আবার চেষ্টা করুন।</div></div>' +
-        '<div class="da"><button class="btn small" id="dlRetry">↻ আবার চেষ্টা করুন</button></div></div>';
-      const rb = $('dlRetry'); if (rb) rb.onclick = () => renderDrafts();
-      return;
-    }
-    if (!Array.isArray(list) || !list.length) {
-      l.innerHTML = '<div class="draft-card"><div class="di">📭</div><div><div class="dt">কোনো খসড়া নেই</div>' +
-        '<div class="ds">আবেদন পূরণ করে “খসড়ায় রাখুন” চাপলে এখানে জমা হবে।</div></div></div>';
-      return;
-    }
-    const bnN = (n) => String(n).replace(/\d/g, x => '০১২৩৪৫৬৭৮৯'[+x]);
-    const stepTxt = (d) => { const n = parseInt(d.uiStep, 10) || 0;
-      if (n >= 6) return ' • অবস্থা: শুধু OTP দিয়ে জমা বাকি';
-      if (n >= 1) return ' • ধাপ ' + bnN(n) + ' (' + esc(STEP_LBL[n - 1] || '') + ') পর্যন্ত করা';
-      return ''; };
-    l.innerHTML = list.map(d => '<div class="draft-card"><div class="di">📝</div>' +
-      '<div><div class="dt">' + esc(d.name || 'নাম দেওয়া হয়নি') + '</div>' +
-      '<div class="ds">জন্ম তারিখ: ' + esc(d.dob || '—') + ' • সংরক্ষিত: ' + esc(fmtTime(d.savedAt)) + stepTxt(d) + '</div></div>' +
-      '<div class="da"><button class="btn small" data-open="' + esc(d.draftId) + '">▶ চালিয়ে যান</button>' +
-      '<button class="btn danger small" data-del="' + esc(d.draftId) + '">মুছুন</button></div></div>').join('');
-    l.querySelectorAll('[data-open]').forEach(b => b.onclick = () => openDraft(b.dataset.open));
-    l.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
-      // DRAFTS/AUTH (A10): the old handler reported success
-      // unconditionally — a dead socket still showed "deleted".
-      deleteDraftReliable(b.dataset.del, (ok) => {
-        if (ok) { updDraftsCnt(); renderDrafts(); note('✔ খসড়া মুছে ফেলা হয়েছে', 'ok'); }
-        else note('⚠️ খসড়া মোছা যায়নি — সংযোগ ফিরলে আবার চেষ্টা করুন', 'err');
-      });
+  const l = $('draftList');
+  const list = await readDraftState();
+  if (!l?.isConnected) return;
+  if (!list || list.error) {
+    // DRAFTS/AUTH (A10): dead socket / timeout — never hang on
+    // "খসড়া তালিকা আসছে…"; show the real failure + retry.
+    l.innerHTML = '<div class="draft-card"><div class="di">⚠️</div><div><div class="dt">খসড়া তালিকা আনা যায়নি</div>' +
+      '<div class="ds">সংযোগ নেই বা সার্ভার জবাব দিচ্ছে না — আবার চেষ্টা করুন।</div></div>' +
+      '<div class="da"><button class="btn small" id="dlRetry">↻ আবার চেষ্টা করুন</button></div></div>';
+    const rb = $('dlRetry'); if (rb) rb.onclick = () => renderDrafts();
+    return;
+  }
+  if (!Array.isArray(list) || !list.length) {
+    l.innerHTML = '<div class="draft-card"><div class="di">📭</div><div><div class="dt">কোনো খসড়া নেই</div>' +
+      '<div class="ds">আবেদন পূরণ করে “খসড়ায় রাখুন” চাপলে এখানে জমা হবে।</div></div></div>';
+    return;
+  }
+  const bnN = (n) => String(n).replace(/\d/g, x => '০১২৩৪৫৬৭৮৯'[+x]);
+  const stepTxt = (d) => { const n = parseInt(d.uiStep, 10) || 0;
+    if (n >= 6) return ' • জমার আগে তথ্য মিলিয়ে নিন';
+    if (n >= 1) return ' • ধাপ ' + bnN(n) + ' (' + esc(STEP_LBL[n - 1] || '') + ') পর্যন্ত করা';
+    return ''; };
+  l.innerHTML = list.map(d => '<div class="draft-card"><div class="di">📝</div>' +
+    '<div><div class="dt">' + esc(d.name || 'নাম দেওয়া হয়নি') + '</div>' +
+    '<div class="ds">জন্ম তারিখ: ' + esc(d.dob || '—') + ' • সংরক্ষিত: ' + esc(fmtTime(d.savedAt)) + stepTxt(d) + '</div></div>' +
+    '<div class="da"><button class="btn small" data-open="' + esc(d.draftId) + '">▶ চালিয়ে যান</button>' +
+    '<button class="btn danger small" data-del="' + esc(d.draftId) + '">মুছুন</button></div></div>').join('');
+  l.querySelectorAll('[data-open]').forEach(b => b.onclick = () => openDraft(b.dataset.open));
+  l.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
+    // DRAFTS/AUTH (A10): the old handler reported success
+    // unconditionally — a dead socket still showed "deleted".
+    if (!confirm('এই খসড়াটি মুছে ফেলবেন?')) return;
+    deleteDraftReliable(b.dataset.del, (ok) => {
+      if (ok) updDraftsCnt();
+      if (!l.isConnected) return;
+      if (ok) { renderDrafts(); note('✔ খসড়া মুছে ফেলা হয়েছে', 'ok'); }
+      else note('⚠️ খসড়া মোছা যায়নি — সংযোগ ফিরলে আবার চেষ্টা করুন', 'err');
     });
-  }, 10000);
+  });
 }
-function openDraft(draftId) {
+async function openDraft(draftId) {
   const load = Symbol();
   S._loadingDraft = load;
   S._heldPrep = null; // switching application context — the old flow's parked send dies here
@@ -1895,31 +1955,30 @@ function openDraft(draftId) {
   S._otpSessionLive = false; S._sentPhone = null;
   directAckClear(); // DIRECT ACK TIMEOUT: no fallback after switching drafts
   busy(true, 'খসড়া প্রস্তুত হচ্ছে…');
-  emitDraftOp('LOAD_DRAFT', draftId, (res) => {
-    if (S._loadingDraft !== load) return;
-    S._loadingDraft = null;
-    busy(false);
-    if (!res || !res.ok || !res.draft) { note('খসড়া খোলা যায়নি — আবার চেষ্টা করুন', 'err'); return; }
-    const dr = res.draft;
-    resetDraftPayment();
-    setDraftId(dr.draftId || draftId);
-    try { var savedKey = localStorage.getItem('bdris_submit_key_for_' + S.draftId); if (savedKey) S._submitKey = savedKey; } catch (e) {}
-    S.mode = dr.mode === 'auto' ? 'auto' : 'manual';
-    const savedDocs = Array.isArray(dr.docs) ? dr.docs : [];
-    S.d = {
-      mode: S.mode, uiStep: parseInt(dr.uiStep, 10) || 0,
-      s0: dr.s0 || {}, s1: dr.s1 || {}, s2: dr.s2 || {}, s2b: dr.s2b || {},
-      relation: dr.relation || '',
-      other: dr.other || {},
-      docs: savedDocs.filter(x => x && x.base64),
-      docsSaved: savedDocs.length,
-      email: dr.email || '', phone: dr.phone || ''
-    };
-    draftWriteScope().version = Number.isSafeInteger(dr.writeVersion) ? dr.writeVersion : 0;
-    resetSent(); // খসড়া চালু মানে চেইন শুরু থেকেই যাবে — ধাপ-রেকর্ড নতুন
-    S._passedOps = {}; // FINAL-PACK stale-banner: new draft = new flow, old passes void
-    renderResume();
-  }, 15000);
+  const res = await readDraftState(draftId);
+  if (S._loadingDraft !== load) return;
+  S._loadingDraft = null;
+  busy(false);
+  if (!res || !res.ok || !res.draft) { note('খসড়া খোলা যায়নি — আবার চেষ্টা করুন', 'err'); return; }
+  const dr = res.draft;
+  resetDraftPayment();
+  setDraftId(dr.draftId || draftId);
+  try { var savedKey = localStorage.getItem('bdris_submit_key_for_' + S.draftId); if (savedKey) S._submitKey = savedKey; } catch (e) {}
+  S.mode = dr.mode === 'auto' ? 'auto' : 'manual';
+  const savedDocs = Array.isArray(dr.docs) ? dr.docs : [];
+  S.d = {
+    mode: S.mode, uiStep: parseInt(dr.uiStep, 10) || 0,
+    s0: dr.s0 || {}, s1: dr.s1 || {}, s2: dr.s2 || {}, s2b: dr.s2b || {},
+    relation: dr.relation || '',
+    other: dr.other || {},
+    docs: savedDocs.filter(x => x && x.base64),
+    docsSaved: savedDocs.length,
+    email: dr.email || '', phone: dr.phone || ''
+  };
+  draftWriteScope().version = Number.isSafeInteger(dr.writeVersion) ? dr.writeVersion : 0;
+  resetSent(); // খসড়া চালু মানে চেইন শুরু থেকেই যাবে — ধাপ-রেকর্ড নতুন
+  S._passedOps = {}; // FINAL-PACK stale-banner: new draft = new flow, old passes void
+  renderResume();
 }
 function renderResume() {
   setView('drafts'); renderStepper(-1); hideFail();
@@ -1945,8 +2004,12 @@ function renderResume() {
   setBtns([
     { html: '▶ চালিয়ে যান', fn: () => resumeGo() },
     { html: '🗑️ খসড়া মুছুন', cls: 'danger', fn: () => {
+        if (!confirm('এই খসড়াটি মুছে ফেলবেন?')) return;
+        const currentDraft = S.d;
         deleteDraftReliable(S.draftId, (ok) => {
-          if (ok) { setDraftId(null); updDraftsCnt(); renderHome(); }
+          if (ok) updDraftsCnt();
+          if (S.view !== 'drafts' || S.d !== currentDraft) return;
+          if (ok) { setDraftId(null); renderHome(); }
           else note('⚠️ খসড়া মোছা যায়নি — সংযোগ ফিরলে আবার চেষ্টা করুন', 'err');
         });
       } },
@@ -2220,6 +2283,32 @@ function emitDraftOp(event, data, cb, ms) {
     if (data === undefined) socket.emit(event, finish);
     else socket.emit(event, data, finish);
   } catch (e) { finish({ ok: false, error: 'SOCKET_TIMEOUT' }); }
+}
+async function readDraftState(draftId) {
+  const token = getToken();
+  if (!token) return null;
+  const key = historyKey('bdris_acks', token);
+  const listing = draftId === undefined;
+  const valid = result => listing ? Array.isArray(result) : result?.ok && result.draft;
+  if (socket.connected) {
+    const result = await new Promise(resolve => emitDraftOp(listing ? 'LIST_DRAFTS' : 'LOAD_DRAFT', draftId, resolve, 5000));
+    if (historyKey('bdris_acks') !== key) return null;
+    if (valid(result)) return result;
+  }
+  try {
+    const currentToken = getToken();
+    const response = await fetch('/api/bdris-apply/draft-read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + currentToken },
+      signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined,
+      body: JSON.stringify({ _authToken: currentToken, draftId }),
+    });
+    if (!response.ok) return null;
+    const result = await response.json();
+    if (historyKey('bdris_acks') !== key) return null;
+    const value = listing ? result.drafts : result;
+    return valid(value) ? value : null;
+  } catch { return null; }
 }
 function deleteDraftReliable(draftId, cb) {
   const viaHttp = (retry, done) => {
@@ -4677,6 +4766,7 @@ function showDone(d, restore) {
     pdfB64: (S.pdf && S.pdf.base64) || null, pdfName: (S.pdf && S.pdf.name) || null
   };
   if (!restore) {
+    S._doneLocalAckId = rec.id;
     try { addAck(rec); } catch {}
     const draftScope = draftWrites.get(S.d);
     if (S.draftId || draftScope) {
@@ -6278,7 +6368,10 @@ socket.on('BOT_STATUS', (d) => {
     // is ignored, so application B can never show application A's copy.
     if (d.ackId && S._done && S._done.ackId && d.ackId !== S._done.ackId) return;
     if (d.screenshot) S.photo = d.screenshot;
-    if (d.pdf && d.pdf.base64) S.pdf = d.pdf;
+    if (d.pdf && d.pdf.base64) {
+      S.pdf = d.pdf;
+      if (S._done?.ackId && S._done.ackId === d.ackId) storeAckCopy(S._doneLocalAckId, d.pdf);
+    }
     if (S.view === 'done' && S._done) {
       const merged = Object.assign({}, S._done, {
         screenshot: d.screenshot || S._done.screenshot || null,
@@ -6439,7 +6532,7 @@ $('logoutBtn').onclick = async () => {
 };
 </script>
 <!-- Audit #83 — WhatsApp help (same button as wallet / order-status / dashboard) -->
-<button class="wa-fab" id="waFab" aria-label="WhatsApp-এ সাহায্য চান" title="WhatsApp-এ সরাসরি সাহায্য চান"><img src="/icons/whatsapp.svg" alt="WhatsApp"></button>
+<button type="button" class="wa-fab" id="waFab" aria-label="WhatsApp-এ সাহায্য চান" title="WhatsApp-এ সরাসরি সাহায্য চান"><img src="/icons/whatsapp.svg" alt=""><span>WhatsApp সহায়তা</span></button>
 <script>
 /* ═══════════ ABC Authentic: wallet charging + charge receipts (C-1 fix, 2026-10-15) ═══════════
    Main-page shim. (আগের shim ভুল করে ডকুমেন্ট-ভিউয়ার popup-এর ভেতরে ছিল — কখনো চলত না।)
@@ -6485,7 +6578,7 @@ $('logoutBtn').onclick = async () => {
     try {
       if (kind === 'pdf' && idempotencyKey) {
         const ack = idempotencyKey.slice(4);
-        const pending = JSON.parse(localStorage.getItem('bdris_acks_pending') || '{}');
+        const pending = getPendingAcks();
         const record = pending[ack] && getAcks().find(a => canonicalAck(a.no) === ack && a.submissionProof);
         if (record && !await reportAckToServer(record)) {
           note('আবেদন রেকর্ড এখনো সংরক্ষিত হয়নি। একটু পরে আবার চেষ্টা করুন।', 'err');

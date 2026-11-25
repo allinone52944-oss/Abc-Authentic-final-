@@ -53,6 +53,24 @@ function draftsDirFor(uid) {
   try { fs.mkdirSync(d, { recursive: true, mode: 0o700 }); } catch {}
   return d;
 }
+function listDraftRecords(uid) {
+  const dir = draftsDirFor(uid);
+  return fs.readdirSync(dir).filter(file => file.endsWith('.json')).map(file => {
+    try {
+      const draft = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
+      return {
+        draftId: draft.draftId, savedAt: draft.savedAt, uiStep: parseInt(draft.uiStep, 10) || 0,
+        name: [draft.s1?.firstNameBn, draft.s1?.lastNameBn].filter(Boolean).join(' ') || '(নাম নেই)',
+        dob: draft.s1?.dob || '',
+      };
+    } catch { return null; }
+  }).filter(Boolean).sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')));
+}
+function loadDraftRecord(uid, id) {
+  const safe = String(id || '').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 80);
+  if (!safe) throw new Error('MISSING_DRAFT_ID');
+  return JSON.parse(fs.readFileSync(path.join(draftsDirFor(uid), safe + '.json'), 'utf8'));
+}
 function deleteDraftRecord(uid, id) {
   const safe = String(id || '').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 80);
   if (!safe) throw new Error('MISSING_DRAFT_ID');
@@ -1266,24 +1284,13 @@ class BdrisEngineV2 {
       socket.on('LIST_DRAFTS', (callback) => {
         try {
           const uid = socket.abcUser?.id || userId || 'anon';
-          const list = fs.readdirSync(draftsDirFor(uid)).filter(f => f.endsWith('.json')).map(f => {
-            try {
-              const r = JSON.parse(fs.readFileSync(path.join(draftsDirFor(uid), f), 'utf8'));
-              return {
-                draftId: r.draftId, savedAt: r.savedAt, uiStep: parseInt(r.uiStep, 10) || 0,
-                name: [r.s1 && r.s1.firstNameBn, r.s1 && r.s1.lastNameBn].filter(Boolean).join(' ') || '(নাম নেই)',
-                dob: (r.s1 && r.s1.dob) || '',
-              };
-            } catch { return null; }
-          }).filter(Boolean).sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')));
-          if (callback) callback(list);
-        } catch { if (callback) callback([]); }
+          if (callback) callback(listDraftRecords(uid));
+        } catch { if (callback) callback({ error: 'DRAFT_LIST_FAILED' }); }
       });
       socket.on('LOAD_DRAFT', (draftId, callback) => {
         try {
           const uid = socket.abcUser?.id || userId || 'anon';
-          const f = path.join(draftsDirFor(uid), String(draftId).replace(/[^a-zA-Z0-9-]/g, '') + '.json');
-          const draft = JSON.parse(fs.readFileSync(f, 'utf8'));
+          const draft = loadDraftRecord(uid, draftId);
           if (callback) callback({ ok: true, draft });
         } catch (e) { if (callback) callback({ ok: false, error: 'খসড়া পাওয়া যায়নি' }); }
       });
@@ -1736,6 +1743,25 @@ class BdrisEngineV2 {
         res.status(200).json({ ok: true, ...r });
       } catch {
         res.status(500).json({ ok: false, error: 'DRAFT_SAVE_FAILED' });
+      }
+    });
+    app.post('/draft-read', (req, res) => {
+      res.set('Cache-Control', 'private, no-store');
+      const body = req.body || {};
+      const secret = process.env.ABC_JWT_SECRET || process.env.JWT_SECRET || '';
+      const claims = verifyJwtHS256(body._authToken, secret);
+      const userId = claims && (claims.id || claims.sub || claims.userId);
+      if (!userId) return res.status(401).json({ ok: false, error: 'UNAUTHORIZED' });
+      const id = body.draftId;
+      if (id !== undefined && (typeof id !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(id))) {
+        return res.status(400).json({ ok: false, error: 'BAD_DRAFT_ID' });
+      }
+      try {
+        if (id === undefined) return res.json({ ok: true, drafts: listDraftRecords(userId) });
+        return res.json({ ok: true, draft: loadDraftRecord(userId, id) });
+      } catch (err) {
+        const missing = err.code === 'ENOENT';
+        return res.status(missing ? 404 : 500).json({ ok: false, error: missing ? 'DRAFT_NOT_FOUND' : 'DRAFT_READ_FAILED' });
       }
     });
     // ALL-BUGS (i): POST /draft-delete — DONE via direct HTTP
