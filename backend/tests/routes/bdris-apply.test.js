@@ -2,6 +2,7 @@
 // Covers the security fix: client-supplied idempotency_key (≤64 chars)
 // builds a stable wallet ref instead of a fresh Date.now() each retry.
 jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
+jest.mock('../../../shared/bdrisAddressBook', () => ({ loadAddresses: jest.fn() }));
 jest.mock('../../utils/push', () => ({
   notifyAdmins: jest.fn().mockResolvedValue({ ok: true }),
   notifyUser: jest.fn().mockResolvedValue({ ok: true }),
@@ -18,6 +19,7 @@ const bdrisRouter = require('../../routes/bdris-apply');
 const push = require('../../utils/push');
 const storedOriginal = require('../../lib/storedOriginal');
 const { signApplication } = require('../../../shared/bdrisApplicationProof');
+const { loadAddresses } = require('../../../shared/bdrisAddressBook');
 const pdfChargeKey = 'pdf-123456789';
 const owner = ['SELECT original_pdf_available FROM bdris_applications', { rows: [{ original_pdf_available: false }] }];
 
@@ -54,6 +56,23 @@ function walletRefOfLastCharge() {
   const call = db.__client.query.mock.calls.filter((c) => /wallet_apply/.test(c[0])).pop();
   return call ? call[1][3] : null;
 }
+
+describe('GET /api/bdris-apply/addresses', () => {
+  test('requires authentication before reading the address book', async () => {
+    loadAddresses.mockClear();
+    await request(app()).get('/api/bdris-apply/addresses').expect(401);
+    expect(loadAddresses).not.toHaveBeenCalled();
+  });
+
+  test('loads only the signed-in account and prevents shared caching', async () => {
+    const addresses = [{ id: 'fixture', name: 'নমুনা ঠিকানা' }];
+    loadAddresses.mockReturnValueOnce(addresses);
+    const response = await withUser(request(app()).get('/api/bdris-apply/addresses?user_id=u2'))
+      .expect('Cache-Control', 'private, no-store').expect(200);
+    expect(loadAddresses).toHaveBeenLastCalledWith('u1');
+    expect(response.body).toEqual({ ok: true, addresses });
+  });
+});
 
 describe('POST /api/bdris-apply/charge/submit', () => {
   test('requires auth → 401', async () => {

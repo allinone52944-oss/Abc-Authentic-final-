@@ -456,7 +456,7 @@ input.bad, select.bad{border-color:var(--status-danger); box-shadow:0 0 0 3px rg
 <link rel="stylesheet" href="/css/service-entry.css?v=20261122-4">
 <script src="/js/service-navigation.js?v=20261124-3" defer></script>
 <script src="/js/engine-feedback.js?v=20261118-3" defer></script>
-<link rel="stylesheet" href="/css/bdris-application-clean.css?v=20261113-2">
+<link rel="stylesheet" href="/css/bdris-application-clean.css?v=20261125-1">
 </head>
 <body class="page-bdris-apply">
 <div class="wrap">
@@ -1341,7 +1341,9 @@ function addrGeoInputs(prefix, d) {
   d = d || {};
   const Ls = addrGeoLevels(prefix);
   const selBox = (L) => '<div class="fld"><label id="' + L.ui + '_lbl">' + esc(L.lbl) + '</label>' +
-    '<select id="' + L.ui + '" aria-labelledby="' + L.ui + '_lbl"><option value="">লোড হচ্ছে…</option></select></div>';
+    '<select id="' + L.ui + '" aria-labelledby="' + L.ui + '_lbl">' +
+    (d[L.k] ? '<option data-saved-address="1" value="' + esc(d[L.k]) + '">' + esc(d[L.k]) + '</option>'
+      : '<option value="">লোড হচ্ছে…</option>') + '</select></div>';
   const txt = (k, lbl) => '<div class="fld"><label for="' + prefix + '_' + k + '">' + esc(lbl) + '</label>' +
     '<input type="text" id="' + prefix + '_' + k + '" value="' + esc(d[k] || '') + '"></div>';
   return Ls.map(selBox).join('') +
@@ -1482,8 +1484,8 @@ function readAddrFields(prefix, prev) {
       // Phase 1: engine-এর value-first selection-এর জন্য option id-ও
       // পাঠাই (নাম শুধু পাঠালে বানান ভ্যারিয়েন্টে মেলে না)।
       if (e.tagName === 'SELECT') {
-        if (e.value) o[k + 'Id'] = e.value;
-        else if (prev && prev[k + 'Id']) o[k + 'Id'] = prev[k + 'Id'];
+        if (e.value && !e.selectedOptions?.[0]?.dataset?.savedAddress) o[k + 'Id'] = e.value;
+        else if (!e.value && prev && prev[k + 'Id']) o[k + 'Id'] = prev[k + 'Id'];
       }
     }
     // পিছনে-এসে দ্রুত “পরবর্তী” চাপলে cascade এখনো ফেরত আসেনি — খালি DOM পুরনো ভালো মান মুছবে না
@@ -2026,79 +2028,107 @@ function renderAddrBook(pickFn, backFn) {
   };
   loadAddrList();
 }
+async function savedAddresses() {
+  try {
+    const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined;
+    const response = await fetch('/api/bdris-apply/addresses', {
+      headers: { Authorization: 'Bearer ' + getToken() },
+      signal,
+    });
+    if (response.ok) {
+      const result = await response.json();
+      if (result.ok && Array.isArray(result.addresses)) return result.addresses;
+    }
+  } catch {}
+  if (!socket.connected) return null;
+  const result = await new Promise(resolve => emitDraftOp('LIST_ADDRESSES', undefined, resolve, 5000));
+  return result?.ok && Array.isArray(result.addresses) ? result.addresses : null;
+}
+function addressListError(list, retry) {
+  list.innerHTML = '<div class="draft-card"><div class="di">⚠️</div><div class="dt">ঠিকানার তালিকা আসেনি</div>' +
+    '<div class="da"><button type="button" class="btn small">আবার চেষ্টা করুন</button></div></div>';
+  list.querySelector('button').onclick = retry;
+}
 /* ADDRBOOK-QUICKPICK (2026-11-13): the form's "ঠিকানা বই" buttons used to
    open the full book page, so filling needed two screens. This shows the
    saved list in a small popup on the same page; one tap applies the record
-   through the SAME pickFn the full book uses. No addresses / list failure /
-   "সব ঠিকানা" falls back to the full book (renderAddrBook). */
-function addrQuickPick(pickFn, backFn) {
+   through the same pick handler as the full book. An empty list
+   opens the full book so the user can add an address. */
+function addrQuickPick(pickFn, backFn, title = 'ঠিকানা বেছে নিন') {
   const openFull = () => { closeQ(); renderAddrBook(pickFn, backFn); };
   const old = document.getElementById('abQuick'); if (old) old.remove();
   const wrap = document.createElement('div');
   wrap.id = 'abQuick';
   wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.45)';
-  wrap.innerHTML = '<div class="sec" role="dialog" aria-label="ঠিকানা বেছে নিন" style="background:var(--card,#fff);border-radius:14px;width:100%;max-width:520px;max-height:80vh;overflow:auto;padding:16px;box-shadow:0 10px 40px rgba(0,0,0,.25)">' +
-    '<div class="sub-h" style="display:flex;justify-content:space-between;align-items:center"><span><span class="snum">📍</span> ঠিকানা বেছে নিন</span>' +
+  wrap.innerHTML = '<div class="sec" role="dialog" aria-modal="true" aria-label="' + esc(title) + '" style="background:var(--card,#fff);border-radius:14px;width:100%;max-width:520px;max-height:80vh;overflow:auto;padding:16px;box-shadow:0 10px 40px rgba(0,0,0,.25)">' +
+    '<div class="sub-h" style="display:flex;justify-content:space-between;align-items:center"><span><span class="snum">📍</span> ' + esc(title) + '</span>' +
     '<button class="btn small ghost" id="abQClose" aria-label="বন্ধ">✕</button></div>' +
     '<div id="abQList"><div class="draft-card">তালিকা আসছে…</div></div>' +
     '<div class="mt8"><button class="btn small ghost" id="abQFull">📖 সব ঠিকানা / নতুন যোগ করুন</button></div></div>';
   document.body.appendChild(wrap);
-  let done = false;
-  function closeQ() { done = true; const w = document.getElementById('abQuick'); if (w) w.remove(); }
+  function closeQ() { wrap.remove(); }
   wrap.onclick = (e) => { if (e.target === wrap) closeQ(); };
   $('abQClose').onclick = closeQ;
   $('abQFull').onclick = openFull;
-  const to = setTimeout(() => { if (!done) openFull(); }, 12000);
-  socket.emit('LIST_ADDRESSES', (r) => {
-    clearTimeout(to); if (done) return;
-    const list = (r && r.addresses) || [];
+  async function loadQuickList() {
+    const l = wrap.querySelector('#abQList');
+    l.textContent = 'তালিকা আসছে…';
+    const list = await savedAddresses();
+    if (!wrap.isConnected) return;
+    if (!list) { addressListError(l, loadQuickList); return; }
     if (!list.length) { openFull(); return; }
-    const l = $('abQList'); if (!l) return;
     l.innerHTML = list.map(a => '<button type="button" class="draft-card" data-qpick="' + esc(a.id) + '" style="width:100%;text-align:left;cursor:pointer">' +
       '<div class="di">📍</div><div><div class="dt">' + esc(a.name) + '</div><div class="ds">' +
       esc([a.division, a.district, a.cityCorpUpazila, a.paurasavaUnion, a.ward].filter((v, i, arr) => v && arr.indexOf(v) === i).join(' • ')) +
       '</div></div></button>').join('');
     l.querySelectorAll('[data-qpick]').forEach(b => b.onclick = () => {
-      const rec = list.find(x => x.id === b.dataset.qpick);
+      const rec = list.find(x => String(x.id) === b.dataset.qpick);
       if (!rec) return;
       closeQ(); pickFn(rec);
     });
-  });
+  }
+  loadQuickList();
 }
-function loadAddrList() {
-  // FINAL-PACK: the list used to sit on "coming…" forever when the
-  // socket answer never arrived. A 15s watchdog only replaces the
-  // loading text with a retry button — it touches no data.
-  let addrDone = false;
-  setTimeout(() => {
-    if (addrDone) return;
-    const l = $('addrList'); if (!l || !/তালিকা আসছে/.test(l.innerHTML)) return;
-    l.innerHTML = '<div class="draft-card"><div class="di">📭</div><div><div class="dt">তালিকা আসেনি — সংযোগ দেখে আবার চেষ্টা করুন</div></div>' +
-      '<div class="da"><button class="btn small" id="addrRetry">↻ আবার চেষ্টা</button></div></div>';
-    const rb = $('addrRetry'); if (rb) rb.onclick = () => loadAddrList();
-  }, 15000);
-  socket.emit('LIST_ADDRESSES', (r) => {
-    addrDone = true;
-    const l = $('addrList'); if (!l) return;
-    const list = (r && r.addresses) || [];
-    if (!list.length) {
-      l.innerHTML = '<div class="draft-card"><div class="di">📭</div><div><div class="dt">এখনো কিছু সেভ করা হয়নি</div>' +
-        '<div class="ds">নিচে নাম দিয়ে ঠিকানা সেভ করুন।</div></div></div>';
-      return;
-    }
-    l.innerHTML = list.map(a => '<div class="draft-card"><div class="di">📍</div>' +
-      '<div><div class="dt">' + esc(a.name) + '</div><div class="ds">' +
-        esc([a.division, a.district, a.cityCorpUpazila, a.paurasavaUnion, a.ward].filter((v, i, arr) => v && arr.indexOf(v) === i).join(' • ')) +
-      '</div></div><div class="da">' +
-      (S.addrPick ? '<button class="btn small" data-picka="' + esc(a.id) + '">বসিয়ে দিন</button>' : '') +
-      '<button class="btn danger small" data-dela="' + esc(a.id) + '">মুছুন</button></div></div>').join('');
-    l.querySelectorAll('[data-picka]').forEach(b => b.onclick = () => {
-      const rec = list.find(x => x.id === b.dataset.picka);
-      if (rec && S.addrPick) { const f = S.addrPick; S.addrPick = null; f(rec); }
-    });
-    l.querySelectorAll('[data-dela]').forEach(b => b.onclick = () =>
-      socket.emit('DELETE_ADDRESS', b.dataset.dela, () => loadAddrList()));
+async function loadAddrList() {
+  const l = $('addrList');
+  if (!l) return;
+  l.textContent = 'তালিকা আসছে…';
+  const list = await savedAddresses();
+  if (!l.isConnected) return;
+  if (!list) { addressListError(l, loadAddrList); return; }
+  if (!list.length) {
+    l.innerHTML = '<div class="draft-card"><div class="di">📭</div><div><div class="dt">এখনো কিছু সেভ করা হয়নি</div>' +
+      '<div class="ds">নিচে নাম দিয়ে ঠিকানা সেভ করুন।</div></div></div>';
+    return;
+  }
+  l.innerHTML = list.map(a => '<div class="draft-card"><div class="di">📍</div>' +
+    '<div><div class="dt">' + esc(a.name) + '</div><div class="ds">' +
+      esc([a.division, a.district, a.cityCorpUpazila, a.paurasavaUnion, a.ward].filter((v, i, arr) => v && arr.indexOf(v) === i).join(' • ')) +
+    '</div></div><div class="da">' +
+    (S.addrPick ? '<button class="btn small" data-picka="' + esc(a.id) + '">বসিয়ে দিন</button>' : '') +
+    '<button class="btn danger small" data-dela="' + esc(a.id) + '">মুছুন</button></div></div>').join('');
+  l.querySelectorAll('[data-picka]').forEach(b => b.onclick = () => {
+    const rec = list.find(x => String(x.id) === b.dataset.picka);
+    if (rec && S.addrPick) { const f = S.addrPick; S.addrPick = null; f(rec); }
   });
+  l.querySelectorAll('[data-dela]').forEach(b => b.onclick = () =>
+    socket.emit('DELETE_ADDRESS', b.dataset.dela, () => loadAddrList()));
+}
+function pickFilingAddress(kind, collect, render, persist) {
+  const filing = S.d;
+  const permanent = kind === 'perm';
+  const label = permanent ? 'স্থায়ী' : 'বর্তমান';
+  collect();
+  addrQuickPick(rec => {
+    if (S.d !== filing) return;
+    const addresses = filing.s2b;
+    addresses[kind] = addrBookSaveRecord(rec);
+    addresses[kind + 'Copy'] = false;
+    render();
+    persist();
+    $(permanent ? 'permSec' : 'presSec')?.scrollIntoView({ block: 'nearest' });
+    note('✔ ' + label + ' ঠিকানা বসানো হয়েছে', 'ok');
+  }, render, label + ' ঠিকানা বেছে নিন');
 }
 
 /* ═══════════ mode starters & step router ═══════════ */
@@ -2726,9 +2756,10 @@ function setSelByText(id, text) {
   // 2026-11-13: partial-name matches are accepted only when exactly one
   // real option matches; an ambiguous name (e.g. "ঢাকা" vs North/South
   // city corporation) is left unselected for the user instead of guessed.
-  const uniqueOpt = (fn) => { const m = Array.from(node.options).filter(o => o.value && fn(o)); return m.length === 1 ? m[0] : null; };
-  const opt = Array.from(node.options).find(o => o.text.trim() === want) ||
-    Array.from(node.options).find(o => norm(o.text) === wN) ||
+  const options = Array.from(node.options).filter(o => !o.dataset?.savedAddress);
+  const uniqueOpt = (fn) => { const m = options.filter(o => o.value && fn(o)); return m.length === 1 ? m[0] : null; };
+  const opt = options.find(o => o.text.trim() === want) ||
+    options.find(o => norm(o.text) === wN) ||
     uniqueOpt(o => o.text.trim() && (norm(o.text).includes(wN) || wN.includes(norm(o.text.trim())))) ||
     uniqueOpt(o => o.text.trim() && (o.text.includes(want) || want.includes(o.text.trim())));
   if (opt) { node.value = opt.value; return true; }
@@ -2803,10 +2834,13 @@ function getGeoState(k, Ls) {
 async function geoLoad(k, Ls, data, wantOv) {
   Ls = Ls || GEO_LEVELS; data = data || (S.d.s1 = S.d.s1 || {});
   const L = levelOf(k, Ls); if (!L) return;
+  const field = $(L.ui);
+  if (!field) return;
   setGeoState(k, Ls, 'loading');
   // স্থির তালিকা প্রথমে — থাকলে সাথে সাথে বসে, engine-এর জন্য অপেক্ষা নেই
   // (draft থেকে ঠিকানা বদলালেও তাৎক্ষণিক)। না থাকলে engine fallback।
   await loadGeoData();
+  if ($(L.ui) !== field) return;
   let opts = staticGeoOpts(k, data) || [];
   let fromAlt = false;
   if (!opts.length) {
@@ -2824,6 +2858,7 @@ async function geoLoad(k, Ls, data, wantOv) {
       const uiId = L.ui || '';
       const form = uiId.startsWith('sp_') ? 'perm' : (uiId.startsWith('rp_') ? 'prsnt' : 'birth');
       const addrRes = await fetchAddrOpts(lvl, parents, 40000, form);
+      if ($(L.ui) !== field) return;
       opts = addrRes.options || [];
       // 2026-10-25 zone fix: a failed zone/ward fetch must NOT degrade
       // to a text input. A typed zone never triggers a ward load, so
@@ -2864,7 +2899,7 @@ async function geoLoad(k, Ls, data, wantOv) {
     }
   }
   L._alt = fromAlt; // মিরর কোন slot-এ বসবে (সিটি কর্পোরেশনে অঞ্চল WardInCityCorp-এ)
-  if (!$(L.ui)) { setGeoState(k, Ls, 'error'); return; }
+  if ($(L.ui) !== field) return;
   const want = (wantOv != null && wantOv !== '') ? wantOv : (data[k] || '');
   if (!opts.length) {
     if (k === 'country' && $(L.ui) && $(L.ui).tagName === 'SELECT') {
@@ -2884,7 +2919,12 @@ async function geoLoad(k, Ls, data, wantOv) {
     degradeToText(L.ui, L.lbl, want);
     return;
   }
+  const saved = field.querySelector?.('[data-saved-address]');
   fillSelOpts(L.ui, opts, want);
+  if (saved && !field.value) {
+    field.add(saved);
+    saved.selected = true;
+  }
   setGeoState(k, Ls, 'loaded');
   if (k === 'paurasavaUnion' || k === 'ward') hideBanner();
   const lblEl = $(L.ui + '_lbl');
@@ -3087,20 +3127,12 @@ async function addrWarm(prefix, rec) {
   rec = rec || {};
   const Ls = addrGeoLevels(prefix);
   const data = addrRec(prefix);
+  const root = $(Ls[0].ui);
+  const current = () => $(Ls[0].ui) === root;
   await geoLoad(Ls[0].k, Ls, data, rec[Ls[0].k]);
-  // FINAL-SOLUTION (#12): the old loop BROKE on the first
-  // unmatched level — a zone label that did not match live
-  // option text ('Zone-8' vs 'অঞ্চল - ৮') silently lost zone
-  // AND ward (3x live: the user had to hand-restore both).
-  // Now: a missed level is recorded and the loop CONTINUES
-  // (a child load is skipped only when its parent missed, since
-  // a child cannot load without its parent); a second pass
-  // retries missed levels once the cascade catches up; and any
-  // level still unlanded is EMPTIED in the record (not left
-  // holding the wanted label — the old readAddrFields
-  // prev-fallback would otherwise re-show it as set while the
-  // select sat empty) and NAMED to the user, so the loss is
-  // visible and hand-pickable instead of silent.
+  if (!current()) return;
+  // Match the saved labels to official options when the cascade responds.
+  // Preserve the saved labels when a list is unavailable.
   const missed = [];
   let parentMissed = false;
   for (const L of Ls) {
@@ -3109,6 +3141,7 @@ async function addrWarm(prefix, rec) {
     const node = $(L.ui); if (!node) break;
     if (node.tagName === 'SELECT') {
       if (!parentMissed && node.options.length <= 1) await geoLoad(L.k, Ls, data, want);
+      if (!current()) return;
       if (!setSelByText(L.ui, want)) { missed.push(L); parentMissed = true; continue; }
       parentMissed = false;
     }
@@ -3128,11 +3161,25 @@ async function addrWarm(prefix, rec) {
     const parentOk = idx <= 0 || !missed.includes(Ls[idx - 1]);
     if (parentOk) await geoLoad(L.k, Ls, data, want);
     else await new Promise(r => setTimeout(r, 1200));
+    if (!current()) return;
     if (setSelByText(L.ui, want)) { data[L.k] = want; missed.splice(missed.indexOf(L), 1); }
   }
   if (missed.length) {
-    for (const L of missed) data[L.k] = '';
-    note('⚠️ ঠিকানা বই থেকে ' + missed.map(L => L.lbl).join(', ') + ' স্বয়ংক্রিয়ভাবে বসেনি — হাতে বেছে নিন', 'warn');
+    for (const L of missed) {
+      const node = $(L.ui);
+      const label = String(rec[L.k] || data[L.k] || '').trim();
+      if (!node || node.tagName !== 'SELECT' || !label) continue;
+      let option = node.querySelector('[data-saved-address]');
+      if (!option) {
+        option = new Option(label, label);
+        option.dataset.savedAddress = '1';
+        node.add(option);
+      }
+      option.selected = true;
+      data[L.k] = label;
+      delete data[L.k + 'Id'];
+    }
+    note('⚠️ ' + missed.map(L => L.lbl).join(', ') + ' তালিকায় মেলেনি। সংরক্ষিত মান রাখা হয়েছে, মিলিয়ে নিন।', 'warn');
   }
 }
 function renderStep2() {
@@ -3377,6 +3424,17 @@ function fillPrefixFromBirth(prefix) {
   });
   note('✔ জন্মস্থানের তথ্য বসানো হয়েছে — প্রয়োজনে বদলে নিন', 'ok');
 }
+function fillPresentFromPermanent() {
+  if ($('sp_same')?.checked) { fillPrefixFromBirth('rp'); return; }
+  fillPrefixFrom('rp', readAddrFields('sp', S.d.s2b?.perm));
+  note('✔ স্থায়ী ঠিকানা থেকে বসানো হয়েছে — প্রয়োজনে বদলে নিন', 'ok');
+}
+function addressCopyChoice(prefix, checked, label, bookLabel) {
+  return '<div class="address-choice"><label class="chk"><input type="checkbox" id="' + prefix + '_same"' +
+    (checked ? ' checked' : '') + '><span>' + esc(label) + '</span></label>' +
+    '<button type="button" class="btn ghost small" id="' + prefix + 'Book" aria-label="' + esc(bookLabel) +
+    '">📚 ঠিকানা বই</button></div>';
+}
 function renderStep4() {
   setView('flow');
   const z = S.d.s2b || {};
@@ -3389,19 +3447,15 @@ function renderStep4() {
   showBody(
     '<div class="sec"><div class="sub-h"><span class="snum">৪</span> স্থায়ী ও বর্তমান ঠিকানা</div>' +
     '<p class="hint">ঠিকানা একই হলে টিক দিন — আলাদা হলে ঘরগুলো পূরণ করুন। “ঠিকানা বই” থেকে সংরক্ষিত ঠিকানা এক চাপে বসাতে পারবেন।</p></div>' +
-    '<label class="chk"><input type="checkbox" id="sp_same"' + (permCopy ? ' checked' : '') + '>' +
-      '<span>জন্মস্থানের ঠিকানা ও স্থায়ী ঠিকানা একই</span></label>' +
+    addressCopyChoice('sp', permCopy, 'জন্মস্থানের ঠিকানা ও স্থায়ী ঠিকানা একই', 'বই থেকে স্থায়ী ঠিকানা নিন') +
     '<div id="permSec"' + (permCopy ? ' style="display:none"' : '') + '>' +
       secAddr('sp', 'স্থায়ী ঠিকানা',
-        '<button class="btn ghost small" id="spFromBirth" style="margin-left:auto">📍 জন্মস্থান থেকে বসান</button>' +
-        '<button class="btn ghost small" id="spBook" style="margin-left:8px">📚 ঠিকানা বই</button>') +
+        '<button class="btn ghost small" id="spFromBirth" style="margin-left:auto">📍 জন্মস্থান থেকে বসান</button>') +
     '</div>' +
-    '<label class="chk mt8"><input type="checkbox" id="rp_same"' + (presCopy ? ' checked' : '') + '>' +
-      '<span>স্থায়ী ঠিকানা ও বর্তমান ঠিকানা একই</span></label>' +
+    addressCopyChoice('rp', presCopy, 'স্থায়ী ঠিকানা ও বর্তমান ঠিকানা একই', 'বই থেকে বর্তমান ঠিকানা নিন') +
     '<div id="presSec"' + (presCopy ? ' style="display:none"' : '') + '>' +
       secAddr('rp', 'বর্তমান ঠিকানা',
-        '<button class="btn ghost small" id="rpFromPerm" style="margin-left:auto">📍 স্থায়ী ঠিকানা থেকে বসান</button>' +
-        '<button class="btn ghost small" id="rpBook" style="margin-left:8px">📚 ঠিকানা বই</button>') +
+        '<button class="btn ghost small" id="rpFromPerm" style="margin-left:auto">📍 স্থায়ী ঠিকানা থেকে বসান</button>') +
     '</div>'
   );
   const addrWireOnly = (prefix) => {
@@ -3442,7 +3496,7 @@ function renderStep4() {
         rpPreview.className = 'addr-preview';
         $('presSec').parentNode.insertBefore(rpPreview, $('presSec'));
       }
-      const p = (S.d.s2b && S.d.s2b.perm) || readAddrFields('sp', {});
+      const p = spChecked ? (S.d.s1 || {}) : readAddrFields('sp', S.d.s2b?.perm);
       const parts = [p.division, p.district, p.cityCorpUpazila, p.paurasavaUnion, p.ward].filter(Boolean);
       rpPreview.innerHTML = '<div class="preview-label">📍 স্থায়ী ঠিকানা থেকে কপি:</div><div class="preview-addr">' +
         (parts.length ? esc(parts.join(', ')) : '<span class="muted">স্থায়ী ঠিকানা এখনো পূরণ হয়নি</span>') + '</div>';
@@ -3458,19 +3512,9 @@ function renderStep4() {
   if (!permCopy) addrWire('sp', z.perm || {});
   if (!presCopy) addrWire('rp', z.pres || {});
   if ($('spFromBirth')) $('spFromBirth').onclick = () => fillPrefixFromBirth('sp');
-  if ($('spBook')) $('spBook').onclick = () => {
-    collectStep4();
-    addrQuickPick((rec) => { S.d.s2b.perm = Object.assign({}, rec); S.d.s2b.permCopy = false; renderStep4(); if (S.draftId) saveDraft(4, () => {}); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderStep4());
-  };
-  if ($('rpFromPerm')) $('rpFromPerm').onclick = () => {
-    if ($('sp_same')?.checked) { fillPrefixFromBirth('rp'); return; }
-    fillPrefixFrom('rp', readAddrFields('sp', (S.d.s2b && S.d.s2b.perm) || {}));
-    note('✔ স্থায়ী ঠিকানা থেকে বসানো হয়েছে — প্রয়োজনে বদলে নিন', 'ok');
-  };
-  if ($('rpBook')) $('rpBook').onclick = () => {
-    collectStep4();
-    addrQuickPick((rec) => { S.d.s2b.pres = Object.assign({}, rec); S.d.s2b.presCopy = false; renderStep4(); if (S.draftId) saveDraft(4, () => {}); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderStep4());
-  };
+  $('spBook').onclick = () => pickFilingAddress('perm', collectStep4, renderStep4, () => autoSaveDraft(4));
+  $('rpFromPerm').onclick = fillPresentFromPermanent;
+  $('rpBook').onclick = () => pickFilingAddress('pres', collectStep4, renderStep4, () => autoSaveDraft(4));
   setBtns([
     { html: 'পরবর্তী →', fn: () => submitStep4() },
     { html: '💾 খসড়ায় রাখুন', cls: 'ghost', fn: () => { collectStep4(); saveDraft(4, (r) => { if (r && r.ok) note('✔ খসড়ায় রাখা হয়েছে', 'ok'); else note('⚠️ খসড়া সেভ হয়নি — সংযোগ ফিরলে আবার চাপুন', 'err'); }); } },
@@ -5068,15 +5112,13 @@ function renderAuto() {
     personAuto('af', 'পিতা', f) + personAuto('am', 'মাতা', m) +
 
     '<div class="sec"><div class="sub-h"><span class="snum">৪</span> স্থায়ী ও বর্তমান ঠিকানা</div></div>' +
-    '<label class="chk"><input type="checkbox" id="sp_same"' + (permCopy ? ' checked' : '') + '><span>জন্মস্থানের ঠিকানা ও স্থায়ী ঠিকানা একই</span></label>' +
+    addressCopyChoice('sp', permCopy, 'জন্মস্থানের ঠিকানা ও স্থায়ী ঠিকানা একই', 'বই থেকে স্থায়ী ঠিকানা নিন') +
     '<div id="permSec"' + (permCopy ? ' style="display:none"' : '') + '><div class="addrwrap"><div class="ah"><span class="t">স্থায়ী ঠিকানা</span>' +
-      '<button class="btn ghost small" id="spFromBirth" style="margin-left:auto">📍 জন্মস্থান থেকে বসান</button>' +
-      '<button class="btn ghost small" id="spBook" style="margin-left:8px">📚 ঠিকানা বই</button></div>' +
+      '<button class="btn ghost small" id="spFromBirth" style="margin-left:auto">📍 জন্মস্থান থেকে বসান</button></div>' +
       '<div class="row2">' + addrTextInputs('sp', z.perm || {}) + '</div></div></div>' +
-    '<label class="chk mt8"><input type="checkbox" id="rp_same"' + (presCopy ? ' checked' : '') + '><span>স্থায়ী ঠিকানা ও বর্তমান ঠিকানা একই</span></label>' +
+    addressCopyChoice('rp', presCopy, 'স্থায়ী ঠিকানা ও বর্তমান ঠিকানা একই', 'বই থেকে বর্তমান ঠিকানা নিন') +
     '<div id="presSec"' + (presCopy ? ' style="display:none"' : '') + '><div class="addrwrap"><div class="ah"><span class="t">বর্তমান ঠিকানা</span>' +
-      '<button class="btn ghost small" id="rpFromPerm" style="margin-left:auto">📍 স্থায়ী ঠিকানা থেকে বসান</button>' +
-      '<button class="btn ghost small" id="rpBook" style="margin-left:8px">📚 ঠিকানা বই</button></div>' +
+      '<button class="btn ghost small" id="rpFromPerm" style="margin-left:auto">📍 স্থায়ী ঠিকানা থেকে বসান</button></div>' +
       '<div class="row2">' + addrTextInputs('rp', z.pres || {}) + '</div></div></div>' +
 
     '<div class="sec"><div class="sub-h"><span class="snum">৫</span> আবেদনকারী ও কাগজপত্র</div>' +
@@ -5111,9 +5153,9 @@ function renderAuto() {
   $('sp_same').onchange = toggle;
   $('rp_same').onchange = toggle;
   $('spFromBirth').onclick = () => fillPrefixFromBirth('sp');
-  $('spBook').onclick = () => { collectAuto(); addrQuickPick((rec) => { S.d.s2b.perm = Object.assign({}, rec); S.d.s2b.permCopy = false; renderAuto(); autoSaveDraft(S.d.uiStep || 0); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
-  $('rpFromPerm').onclick = () => { fillPrefixFrom('rp', readAddrFields('sp')); note('✔ স্থায়ী ঠিকানা থেকে বসানো হয়েছে', 'ok'); };
-  $('rpBook').onclick = () => { collectAuto(); addrQuickPick((rec) => { S.d.s2b.pres = Object.assign({}, rec); S.d.s2b.presCopy = false; renderAuto(); autoSaveDraft(S.d.uiStep || 0); note('✔ ঠিকানা বসানো হয়েছে', 'ok'); }, () => renderAuto()); };
+  $('spBook').onclick = () => pickFilingAddress('perm', collectAuto, renderAuto, () => autoSaveDraft(S.d.uiStep || 0));
+  $('rpFromPerm').onclick = fillPresentFromPermanent;
+  $('rpBook').onclick = () => pickFilingAddress('pres', collectAuto, renderAuto, () => autoSaveDraft(S.d.uiStep || 0));
   // Auto mode জন্মস্থানে ঠিকানা বই (2026-10-17)
   // ADDRBOOK-PICK (2026-10-31): the old pick wrote the record into
   // DOM geo_* inputs and then renderAuto() replaced #stepBody from

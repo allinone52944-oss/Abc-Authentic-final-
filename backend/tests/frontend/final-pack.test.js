@@ -139,23 +139,19 @@ describe('fill survival: live-save and previous-button save', () => {
     expect(html).toContain("collectStep6(); if (S.draftId) saveDraft(5, () => {}); goStep(5);");
   });
 
-  test('draft-save watchdog warns once and never double-calls the callback', () => {
+  test('draft saves have bounded socket and HTTP calls', () => {
     const src = extractFn(html, 'saveDraft');
-    expect(src).toContain('setTimeout(() => {');
-    expect(src).toContain('10000');
-    expect(src).toContain('S._draftSaveWarned');
-    // DRAFTS/AUTH (A10): saveDraft now emits via the timeout wrapper
-    // emitDraftOp, not raw socket.emit — the timer-body assertion is
-    // unchanged in intent (the watchdog itself must never call cb).
-    const timerBody = src.slice(src.indexOf('setTimeout'), src.indexOf('emitDraftOp'));
-    expect(timerBody).not.toContain('cb(');
+    expect(src).toContain('AbortSignal.timeout(30000)');
+    expect(src).toContain("emitDraftOp('SAVE_DRAFT', draft, resolve, 15000)");
+    expect(src.match(/\bcb\(/g)).toHaveLength(1);
   });
 });
 
 describe('address-book pick no longer loses the picked address', () => {
   test('manual permanent/present picks clear the copy flag and save the draft', () => {
-    expect(html).toContain('S.d.s2b.permCopy = false; renderStep4(); if (S.draftId) saveDraft(4, () => {});');
-    expect(html).toContain('S.d.s2b.presCopy = false; renderStep4(); if (S.draftId) saveDraft(4, () => {});');
+    expect(extractFn(html, 'pickFilingAddress')).toContain("addresses[kind + 'Copy'] = false;");
+    expect(html).toContain("pickFilingAddress('perm', collectStep4, renderStep4, () => autoSaveDraft(4))");
+    expect(html).toContain("pickFilingAddress('pres', collectStep4, renderStep4, () => autoSaveDraft(4))");
   });
 
   test('birthplace and auto picks save the draft', () => {
@@ -163,14 +159,14 @@ describe('address-book pick no longer loses the picked address', () => {
     // DRAFTS/AUTH (B14): auto picks now auto-save unconditionally —
     // the old conditional save skipped a fresh auto form with no
     // draftId yet, which is exactly how a filled auto form was lost.
-    expect(html).toContain('S.d.s2b.permCopy = false; renderAuto(); autoSaveDraft(S.d.uiStep || 0);');
-    expect(html).toContain('S.d.s2b.presCopy = false; renderAuto(); autoSaveDraft(S.d.uiStep || 0);');
+    expect(html).toContain("pickFilingAddress('perm', collectAuto, renderAuto, () => autoSaveDraft(S.d.uiStep || 0))");
+    expect(html).toContain("pickFilingAddress('pres', collectAuto, renderAuto, () => autoSaveDraft(S.d.uiStep || 0))");
   });
 
-  test('address-book list has a retry when the socket answer never arrives', () => {
+  test('address-book list offers a retry when neither connection returns the list', () => {
     const src = extractFn(html, 'loadAddrList');
-    expect(src).toContain('15000');
-    expect(src).toContain("id=\"addrRetry\"");
+    expect(src).toContain('const list = await savedAddresses()');
+    expect(src).toContain('addressListError(l, loadAddrList)');
   });
 });
 

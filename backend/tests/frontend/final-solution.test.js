@@ -109,10 +109,11 @@ describe('final-solution #9: silent server-side auto-save', () => {
   test('autoSaveDraft posts to HTTP /draft-save with socket fallback', () => {
     expect(html).toMatch(/function autoSaveDraft\(/);
     expect(html).toMatch(/\/api\/bdris-apply\/draft-save/);
-    expect(html).toMatch(/saveDraft\(uiStep, done\)/);
+    expect(html).toMatch(/saveDraft\(uiStep, null, true\)/);
+    expect(html).toContain('return automatic ? sendSocket() : sendHttp();');
   });
   test('auto-save is signature-guarded and hooked to preview + send success', () => {
-    expect(html).toMatch(/S\._autoDraftSig/);
+    expect(html).toContain('automatic && payload === scope.signature');
     expect(html).toMatch(/autoSaveDraft\(6\)/);
   });
 });
@@ -141,7 +142,7 @@ describe('final-solution #12: address-book zone/ward pick-back', () => {
   });
   test('addrWarm no longer breaks on a miss; missed levels are named', () => {
     expect(html).toMatch(/missed\.push\(L\); parentMissed = true; continue/);
-    expect(html).toMatch(/স্বয়ংক্রিয়ভাবে বসেনি — হাতে বেছে নিন/);
+    expect(html).toContain('তালিকায় মেলেনি। সংরক্ষিত মান রাখা হয়েছে');
   });
 });
 

@@ -26,8 +26,18 @@ const { storedOriginalAvailable, storedOriginalPath, originalFileKey } = require
 const { verifyPdfChargeToken } = require('../middleware/originalPdfGate');
 const { mintOriginalLink } = require('../lib/originalLink');
 const { verifyApplication } = require('../../shared/bdrisApplicationProof');
+const { loadAddresses } = require('../../shared/bdrisAddressBook');
 
 const router = express.Router();
+
+router.get('/addresses', requireAuth, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  try {
+    return res.json({ ok: true, addresses: loadAddresses(req.user.id) });
+  } catch {
+    return res.status(500).json({ ok: false, error: 'ADDRESS_BOOK_UNAVAILABLE' });
+  }
+});
 
 // ---- helpers -------------------------------------------------
 

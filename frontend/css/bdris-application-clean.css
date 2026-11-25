@@ -45,6 +45,9 @@
 .page-bdris-apply :is(.banner,.failbox,.livenote,.draft-card) { overflow-wrap: anywhere; }
 .page-bdris-apply :is(.banner,.failbox,.livenote):focus { outline: 2px solid var(--layout-emerald); outline-offset: 3px; }
 .page-bdris-apply .footer { line-height: 1.8; }
+.page-bdris-apply .address-choice { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; align-items: center; margin-bottom: 12px; }
+.page-bdris-apply .address-choice .chk { margin: 0; }
+.page-bdris-apply .address-choice .btn { min-height: 44px; white-space: nowrap; }
 @media (max-width: 760px) {
   .page-bdris-apply .dash2 { grid-template-columns: minmax(0,1fr); }
   .page-bdris-apply .wrap > main.card { padding: 0; }
