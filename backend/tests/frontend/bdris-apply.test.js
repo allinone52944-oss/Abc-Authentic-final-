@@ -887,7 +887,7 @@ describe('OTHERS-FILL cycle (2026-11-01): Others/Guardian person fields end to e
     expect(html).toMatch(/if \(op === 'SUBMIT_S3_DOCS'\) return \{ relation: S\.d\.relation \|\| defaultRelation\(\), other: S\.d\.other \|\| \{\}, docs: S\.d\.docs \|\| \[\] \};/);
     expect(html).toMatch(/if \(op === 'SUBMIT_S4_PREP'\) return \{ email: S\.d\.email \|\| '', phone: S\.d\.phone \|\| '', docs: S\.d\.docs \|\| \[\], relation: S\.d\.relation \|\| defaultRelation\(\), other: S\.d\.other \|\| \{\} \};/);
     expect(html).toMatch(/relation: S\.d\.relation \|\| defaultRelation\(\), other: S\.d\.other \|\| \{\} \}\) === false\) busy\(false\);/);
-    expect(html).toMatch(/s3: \{ relation: S\.d\.relation \|\| defaultRelation\(\), other: S\.d\.other \|\| \{\}, docs: S\.d\.docs \|\| \[\] \},/);
+    expect(html).toMatch(/s3: \{ relation: S\.d\.relation \|\| defaultRelation\(\), other: S\.d\.other \|\| \{\} \},/);
     expect(html).toMatch(/relation: S\.d\.relation \|\| defaultRelation\(\),\s*other: S\.d\.other \|\| \{\},/);
   });
 

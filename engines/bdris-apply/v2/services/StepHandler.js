@@ -1918,12 +1918,12 @@ class StepHandler {
     if (decl) { await decl.check().catch(async () => { await decl.click(); }); }
 
     // ডকুমেন্ট — শুধু image (jpg/jpeg/png), প্রতিটি ≤2MB, কমপক্ষে ১টি বাধ্যতামূলক
-    const docs = (Array.isArray(data.docs) ? data.docs : []).filter(d => d && d.base64);
+    const docs = (Array.isArray(data.docs) ? data.docs : []).filter(d => typeof d?.base64 === 'string' && d.base64.length);
     const bad = [];
     const good = docs.filter(d => {
       const mt = (d.mimeType || '').toLowerCase();
       const isImg = mt.startsWith('image/') || /\.(jpe?g|png)$/i.test(d.name || '');
-      const size = Math.round((d.base64.length * 3) / 4);
+      const size = Buffer.byteLength(d.base64, 'base64');
       if (!isImg) { bad.push(`${d.name || 'ফাইল'} — শুধু JPG/PNG চলবে`); return false; }
       if (size > 2 * 1024 * 1024) { bad.push(`${d.name || 'ফাইল'} — 2MB-এর বেশি`); return false; }
       return true;

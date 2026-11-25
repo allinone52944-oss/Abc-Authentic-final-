@@ -123,6 +123,16 @@ describe('submitS3 anchor recovery: site behind at address step', () => {
     assert.strictEqual(state.uploads, 2);
   });
 
+  it('accepts both required document types at the exact 2 MiB limit', async () => {
+    const state = { uploads: 0, docsAnchorCalls: 1 };
+    const handler = makeHandler(state);
+    installWait(handler, state);
+    const base64 = Buffer.alloc(2 * 1024 * 1024).toString('base64');
+    const out = await handler.submitS3({ docs: docs().map(doc => ({ ...doc, base64 })) });
+    assert.strictEqual(out.ok, true, JSON.stringify(out.failed));
+    assert.strictEqual(state.uploads, 2);
+  });
+
   it('catch-up fails honestly: classified code, replay reason, zero uploads', async () => {
     const state = { uploads: 0, docsAnchorCalls: 0, s2bCalls: 0 };
     const h = makeHandler(state);

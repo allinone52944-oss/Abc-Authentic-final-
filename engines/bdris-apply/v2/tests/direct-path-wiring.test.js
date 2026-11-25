@@ -350,6 +350,16 @@ describe('frontend directCtx: recorded state, never DOM re-collect', () => {
     assert.equal(out.s4prep.phone, '01700000000');
   });
 
+  it('six 2 MiB files fit the HTTP request and appear only once', () => {
+    const base64 = Buffer.alloc(2 * 1024 * 1024).toString('base64');
+    const docs = Array.from({ length: 6 }, (_, i) => ({ name: 'fixture-' + i + '.png', base64 }));
+    const context = vm.createContext({ S: { d: { docs } }, defaultRelation: () => 'FATHER' });
+    const payload = vm.runInContext(extractFn('directCtx') + '\ndirectCtx()', context);
+    assert.equal(payload.docs, docs);
+    assert.equal(payload.s3.docs, undefined);
+    assert.ok(Buffer.byteLength(JSON.stringify(payload)) < 20 * 1024 * 1024);
+  });
+
   it('send/submit/resend gates and the READY probe exist', () => {
     assert.match(html, /if \(directHttpEnabled\(\)\) \{ directSend\(\); return; \}/);
     assert.match(html, /if \(directHttpEnabled\(\) && S\._directOtp\) \{ directSubmit\(otp\); return; \}/);

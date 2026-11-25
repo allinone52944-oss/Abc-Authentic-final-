@@ -3516,7 +3516,7 @@ function renderDocRows() {
   const docs = S.d.docs || [];
   if (!docs.length) {
     box.innerHTML = '<div class="draft-card"><div class="di">🖼️</div><div><div class="dt">এখনো কোনো কাগজ যোগ করা হয়নি</div>' +
-      '<div class="ds">নিচের “ছবি যোগ করুন” চেপে ফোন/কম্পিউটার থেকে ছবি বেছে নিন (JPG/PNG, প্রতিটি ২MB-এর কম)।</div></div></div>';
+      '<div class="ds">নিচের “ছবি যোগ করুন” চেপে ফোন/কম্পিউটার থেকে ছবি বেছে নিন (JPG/PNG, প্রতিটি সর্বোচ্চ ২ MB)।</div></div></div>';
   } else {
     box.innerHTML = docs.map((d, i) => '<div class="docrow">' +
       (d.base64 ? '<img class="dthumb" data-full="' + i + '" src="data:' + esc(d.mimeType || 'image/jpeg') + ';base64,' + d.base64 + '" alt="">' : '<span class="dthumb" style="display:flex;align-items:center;justify-content:center;font-size:20px">🖼️</span>') +
@@ -3890,7 +3890,7 @@ function directCtx() {
   const applicantNameEn = [s1.firstNameEn, s1.lastNameEn].filter(Boolean).join(' ');
   return {
     s0: s0, s1: s1, s2: S.d.s2 || {}, s2b: S.d.s2b || {},
-    s3: { relation: S.d.relation || defaultRelation(), other: S.d.other || {}, docs: S.d.docs || [] },
+    s3: { relation: S.d.relation || defaultRelation(), other: S.d.other || {} },
     s4prep: { email: S.d.email || '', phone: S.d.phone || '' },
     docs: S.d.docs || [],
     birthPlace: birthPlace,
@@ -5080,7 +5080,7 @@ function renderAuto() {
       '<div class="row2">' + addrTextInputs('rp', z.pres || {}) + '</div></div></div>' +
 
     '<div class="sec"><div class="sub-h"><span class="snum">৫</span> আবেদনকারী ও কাগজপত্র</div>' +
-    '<p class="hint">আবেদনকারী কে তা বেছে নিন। তারপর দুই ধরনের কাগজের ছবি দিন (JPG/PNG, প্রতিটি ২MB-এর কম)।</p></div>' +
+    '<p class="hint">আবেদনকারী কে তা বেছে নিন। তারপর দুই ধরনের কাগজের ছবি দিন (JPG/PNG, প্রতিটি সর্বোচ্চ ২ MB)।</p></div>' +
     '<div class="relgrid">' + (() => { const st = relationRenderState(S.d.relation); S.d.relation = st.value; S._relDropped = st.dropped; return relationsForAge().map(r => '<div class="rcard rsm' + (S.d.relation === r ? ' sel' : '') + '" data-rel="' + esc(r) + '">' +
       '<span class="rdot"></span><div><div class="rt">' + esc(r) + '</div></div></div>').join(''); })() + '</div>' +
     (S._relDropped ? '<p class="hint" id="relNote">⚠️ সংরক্ষিত সম্পর্ক (' + esc(S._relDropped) + ') বসানো যায়নি — আবার বেছে নিন।</p>' : '') +
