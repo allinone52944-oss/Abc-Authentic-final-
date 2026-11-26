@@ -296,7 +296,10 @@ async function step1(retry){
   try{
     const r=await ABC.api(API+'/api/captcha',{timeout:25000,retryNetwork:false});
     const j=await r.json().catch(()=>null);
-    if(!r.ok||!j?.success||!j.sessionId||!j.image)throw new Error(j?.message||(j?.error!=='NETWORK_ERROR'&&j?.error)||'ক্যাপচা সার্ভারের জবাব পাওয়া যায়নি। আবার চেষ্টা করুন।');
+    if(!r.ok||!j?.success||!j.sessionId||!j.image){
+      const fallback=r.status===504?'ক্যাপচা আনার অনুরোধের সময় শেষ হয়েছে।':'ক্যাপচা সার্ভারের জবাব পাওয়া যায়নি। আবার চেষ্টা করুন।';
+      throw new Error(j?.message||(j?.error!=='NETWORK_ERROR'&&j?.error)||fallback);
+    }
     S.brn=brn;S.dob=dob;
     S.sessionId=j.sessionId;
     // A replacement captcha for the same verification keeps its charge key.

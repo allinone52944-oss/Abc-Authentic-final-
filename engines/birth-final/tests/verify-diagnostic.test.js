@@ -174,8 +174,11 @@ describe('birth verify diagnostic (audit item 2)', () => {
   it('a connection failure loading the captcha is reported without further requests', async () => {
     mockConnectionFailure = 'https://everify.bdris.gov.bd/';
     const response = await fetch(base + '/api/captcha', { headers: { [ENGINE_SECRET_HEADER]: ENGINE_SECRET } });
-    assert.strictEqual(response.status, 504);
-    assert.strictEqual((await response.json()).code, 'BDRIS_CONNECTION_FAILED');
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.headers.get('cache-control'), 'no-store');
+    const body = await response.json();
+    assert.strictEqual(body.success, false);
+    assert.strictEqual(body.code, 'BDRIS_CONNECTION_FAILED');
     assert.strictEqual(upstreamAttempts, 1);
   });
 
@@ -183,8 +186,10 @@ describe('birth verify diagnostic (audit item 2)', () => {
     const sessionId = await newSession();
     mockConnectionFailure = 'https://everify.bdris.gov.bd/UBRNVerification/Search';
     const response = await doVerify(sessionId);
-    assert.strictEqual(response.status, 504);
-    assert.strictEqual((await response.json()).code, 'BDRIS_CONNECTION_FAILED');
+    assert.strictEqual(response.status, 200);
+    const body = await response.json();
+    assert.strictEqual(body.success, false);
+    assert.strictEqual(body.code, 'BDRIS_CONNECTION_FAILED');
     const retry = await doVerify(sessionId);
     assert.strictEqual(retry.status, 400);
     assert.strictEqual((await retry.json()).code, 'CAPTCHA_EXPIRED');

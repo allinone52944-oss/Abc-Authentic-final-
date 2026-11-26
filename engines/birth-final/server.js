@@ -145,10 +145,12 @@ function isBdrisConnectionError(error) {
 }
 
 function sendBdrisConnectionError(res) {
-    return res.status(504).json({
+    // The public proxy can replace 504 bodies. Keep upstream BDRIS failures
+    // in the engine's application response, as with other BDRIS error pages.
+    return res.set('Cache-Control', 'no-store').json({
         success: false,
         code: 'BDRIS_CONNECTION_FAILED',
-        error: 'BDRIS-এর সাথে সংযোগ পাওয়া যাচ্ছে না। কিছুক্ষণ পর আবার চেষ্টা করুন।'
+        error: 'আমাদের সার্ভার থেকে BDRIS-এর সাথে সংযোগ পাওয়া যাচ্ছে না। তাই ক্যাপচা বা যাচাই এগোচ্ছে না।'
     });
 }
 
