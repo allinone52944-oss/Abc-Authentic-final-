@@ -113,6 +113,8 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 
 const sessions = new Map();
 const SESSION_TTL_MS = 5 * 60 * 1000;
+const CAPTCHA_TIMEOUT_MS = 18000;
+const VERIFY_TIMEOUT_MS = 50000;
 
 const _sessionSweep = setInterval(() => {
     const now = Date.now();
@@ -138,9 +140,25 @@ function jarHeader(jar) {
     return Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ');
 }
 
-async function eGet(path, jar, extraHeaders) {
+function isBdrisConnectionError(error) {
+    return error?.name === 'TimeoutError' || error?.name === 'AbortError' || error?.message === 'fetch failed';
+}
+
+function sendBdrisConnectionError(res) {
+    return res.status(504).json({
+        success: false,
+        code: 'BDRIS_CONNECTION_FAILED',
+        error: 'BDRIS-এর সাথে সংযোগ পাওয়া যাচ্ছে না। কিছুক্ষণ পর আবার চেষ্টা করুন।'
+    });
+}
+
+function sendCaptchaExpired(res) {
+    return res.status(400).json({ success: false, error: 'ক্যাপচার মেয়াদ শেষ হয়েছে।', code: 'CAPTCHA_EXPIRED' });
+}
+
+async function eGet(path, jar, signal, extraHeaders) {
     const r = await fetch(EVERIFY + path, {
-        signal: AbortSignal.timeout(30000),
+        signal,
         headers: {
             'User-Agent': UA,
             'Cookie': jarHeader(jar),
@@ -192,20 +210,23 @@ async function solveCaptchaWithGemini(captchaB64, mimeType) {
 // must come from the SAME form page that will receive the search POST.
 app.get('/api/captcha', async (req, res) => {
     const pagePath = '/';
+    const signal = AbortSignal.timeout(CAPTCHA_TIMEOUT_MS);
     let lastErr = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
         try {
             const jar = {};
-            const pageRes = await eGet(pagePath, jar);
+            const pageRes = await eGet(pagePath, jar, signal);
+            if (!pageRes.ok) throw new Error('BDRIS যাচাই পেজ থেকে HTTP ' + pageRes.status + ' এসেছে।');
             const html = await pageRes.text();
             const { token, captchaDeText, imgUrl } = parseFormPage(html);
 
-            const imgRes = await eGet(imgUrl, jar, {
+            const imgRes = await eGet(imgUrl, jar, signal, {
                 'Referer': EVERIFY + pagePath,
                 'Sec-Fetch-Dest': 'image',
                 'Sec-Fetch-Mode': 'no-cors',
                 'Sec-Fetch-Site': 'same-origin'
             });
+            if (!imgRes.ok) throw new Error('BDRIS থেকে ক্যাপচা ছবির জবাব আসেনি।');
             const buf = Buffer.from(await imgRes.arrayBuffer());
             if (!buf.length) throw new Error('Empty captcha image.');
             if (buf.slice(0, 6).toString('ascii').indexOf('GIF') !== 0)
@@ -236,7 +257,8 @@ app.get('/api/captcha', async (req, res) => {
             });
         } catch (e) {
             lastErr = e;
-            await new Promise(r => setTimeout(r, 1200));
+            if (signal.aborted || isBdrisConnectionError(e)) return sendBdrisConnectionError(res);
+            if (attempt < 3) await new Promise(r => setTimeout(r, 1200));
         }
     }
     res.status(500).json({ success: false, error: 'Could not load captcha: ' + (lastErr && lastErr.message) });
@@ -319,7 +341,7 @@ async function solveCaptchaLocal(captchaB64, mimeType) {
 // Chain: 1) LOCAL offline solver -> 2) Gemini (key thakle) -> 3) manual input.
 app.post('/api/solve-captcha', async (req, res) => {
     const s = sessions.get((req.body || {}).sessionId);
-    if (!s) return res.status(400).json({ success: false, error: 'Session expired. Fetch a new captcha.' });
+    if (!s) return sendCaptchaExpired(res);
     const local = await solveCaptchaLocal(s.captchaB64, s.captchaMime);
     if (local) return res.json({ success: true, answer: local, method: 'local' });
     if (!GEMINI_API_KEY || GEMINI_API_KEY === 'PASTE_YOUR_KEY_HERE')
@@ -778,7 +800,7 @@ function normalizeBdrisData(data) {
 app.post('/api/verify', async (req, res) => {
     const { sessionId, brn, dob, captcha } = req.body || {};
     const s = sessions.get(sessionId);
-    if (!s) return res.status(400).json({ success: false, error: 'Session expired. Fetch a new captcha.' });
+    if (!s) return sendCaptchaExpired(res);
     if (!brn || !dob || !captcha) {
         return res.status(400).json({ success: false, error: 'BRN, DOB and captcha answer are required.' });
     }
@@ -805,7 +827,7 @@ app.post('/api/verify', async (req, res) => {
         });
         const r = await fetch(EVERIFY + searchPath, {
             method: 'POST',
-            signal: AbortSignal.timeout(60000),
+            signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS),
             headers: {
                 'User-Agent': UA,
                 'Cookie': jarHeader(s.jar),
@@ -899,6 +921,7 @@ app.post('/api/verify', async (req, res) => {
         // is dropped when this handler returns — nothing on disk.
         res.json({ success: true, data });
     } catch (e) {
+        if (isBdrisConnectionError(e)) return sendBdrisConnectionError(res);
         res.status(500).json({ success: false, error: e.message });
     }
 });

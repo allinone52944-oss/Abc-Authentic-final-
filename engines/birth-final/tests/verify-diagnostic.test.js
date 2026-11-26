@@ -50,6 +50,8 @@ const RESULT_UPSTREAM_ERROR = '<html><head><title>Error</title></head><body>' +
 
 let mockResultHtml = RESULT_SUCCESS;
 let mockResultStatus = 200;
+let mockConnectionFailure = '';
+let upstreamAttempts = 0;
 
 function mockResp({ text, buf, contentType, status = 200 }) {
   return {
@@ -67,6 +69,10 @@ function mockResp({ text, buf, contentType, status = 200 }) {
 global.fetch = async (url, opts) => {
   const u = String(url);
   if (u.startsWith('http://127.0.0.1')) return realFetch(u, opts); // this test's own calls to the local engine
+  if (u === mockConnectionFailure) {
+    upstreamAttempts++;
+    throw new TypeError('fetch failed');
+  }
   if (u === 'https://everify.bdris.gov.bd/') return mockResp({ text: FORM_PAGE });
   if (u.startsWith('https://everify.bdris.gov.bd/DefaultCaptcha/Generate')) return mockResp({ buf: GIF_1X1, contentType: 'image/gif' });
   if (u === 'https://everify.bdris.gov.bd/UBRNVerification/Search' && opts && opts.method === 'POST') return mockResp({ text: mockResultHtml, status: mockResultStatus });
@@ -111,6 +117,8 @@ describe('birth verify diagnostic (audit item 2)', () => {
   beforeEach(() => {
     mockResultHtml = RESULT_SUCCESS;
     mockResultStatus = 200;
+    mockConnectionFailure = '';
+    upstreamAttempts = 0;
   });
 
   it('successful verify leaves no last-result.html on disk', async () => {
@@ -161,6 +169,26 @@ describe('birth verify diagnostic (audit item 2)', () => {
     assert.strictEqual(b.code, 'BDRIS_UPSTREAM_ERROR');
     assert.ok(!b.error.includes('Could not read the result'));
     assert.strictEqual(fs.existsSync(LAST_RESULT), false);
+  });
+
+  it('a connection failure loading the captcha is reported without further requests', async () => {
+    mockConnectionFailure = 'https://everify.bdris.gov.bd/';
+    const response = await fetch(base + '/api/captcha', { headers: { [ENGINE_SECRET_HEADER]: ENGINE_SECRET } });
+    assert.strictEqual(response.status, 504);
+    assert.strictEqual((await response.json()).code, 'BDRIS_CONNECTION_FAILED');
+    assert.strictEqual(upstreamAttempts, 1);
+  });
+
+  it('a failed verify connection consumes the captcha and returns a distinct reason', async () => {
+    const sessionId = await newSession();
+    mockConnectionFailure = 'https://everify.bdris.gov.bd/UBRNVerification/Search';
+    const response = await doVerify(sessionId);
+    assert.strictEqual(response.status, 504);
+    assert.strictEqual((await response.json()).code, 'BDRIS_CONNECTION_FAILED');
+    const retry = await doVerify(sessionId);
+    assert.strictEqual(retry.status, 400);
+    assert.strictEqual((await retry.json()).code, 'CAPTCHA_EXPIRED');
+    assert.strictEqual(upstreamAttempts, 1);
   });
 
   it('concurrent verifies do not clobber each other and leave no file', async () => {

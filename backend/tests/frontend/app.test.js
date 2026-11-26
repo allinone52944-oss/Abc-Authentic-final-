@@ -458,6 +458,19 @@ describe('api() — Fix 14 retry safety: timeout preserved, unkeyed writes never
     expect(r.status).toBe(503);
   });
 
+  test.each([false, true])('one-shot verification opts out of retries (HTTP response: %s)', async (httpResponse) => {
+    const ABC = loadApp();
+    if (httpResponse) global.fetch.mockResolvedValueOnce(errStatus(504));
+    else global.fetch.mockRejectedValueOnce(new Error('offline'));
+    const response = await ABC.api('/bdris-engine/api/verify', {
+      method: 'POST',
+      body: { idempotency_key: 'fixture-verification' },
+      retryNetwork: false,
+    });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(httpResponse ? 504 : 503);
+  });
+
   test('GET still retries on network failure and on 503', async () => {
     jest.useFakeTimers();
     try {

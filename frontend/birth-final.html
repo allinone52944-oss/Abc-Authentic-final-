@@ -157,7 +157,7 @@
         </div>
         <div class="row2">
           <button class="btn-secondary" id="bAuto" onclick="autoSolve()">✨ স্বয়ংক্রিয় সমাধান</button>
-          <button class="btn-secondary" onclick="step1(true)">🔄 নতুন ছবি</button>
+          <button class="btn-secondary" id="bRefresh" onclick="step1(true)">🔄 নতুন ছবি</button>
         </div>
         <div style="height:14px;"></div>
         <button class="btn" id="b2" onclick="step2()">যাচাই করুন →</button>
@@ -196,7 +196,7 @@
   <div class="m-tab" tabindex="0" role="button" onclick="location.href='/profile.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>প্রোফাইল</div>
 </div>
 <button class="wa-fab" id="waFab" aria-label="WhatsApp" title="WhatsApp-এ সরাসরি সাহায্য চান"><img src="/icons/whatsapp.svg" alt="WhatsApp"></button>
-<script src="/js/app.js?v=22"></script>
+<script src="/js/app.js?v=23"></script>
 <script>
 const API='/bdris-engine';
 // B1#7/B2#6 — Bengali-digit formatter (local, like nid-server-copy;
@@ -221,7 +221,7 @@ async function loadPrice(){
     if (el) el.textContent = 'সেবা চার্জ লোড করা যায়নি';
   }
 }
-let S={sessionId:null,brn:'',dob:'',record:null,pdfBlob:null,attemptKey:null};
+let S={sessionId:null,brn:'',dob:'',record:null,pdfBlob:null,attemptKey:null,captchaPending:false,verifyUnconfirmed:false};
 function showWalletBalance(user){
   if(user?.balance != null) document.getElementById('balVal').textContent = bn(user.balance);
 }
@@ -256,7 +256,23 @@ function busy(id,on,txt){
   else{b.innerHTML=b.dataset.t||b.innerHTML;b.disabled=false;}
 }
 
+function captchaBusy(id,on,label){
+  S.captchaPending=on;
+  busy(id,on,label);
+  document.getElementById('b1').disabled=on;
+  document.getElementById('bRefresh').disabled=on;
+  document.getElementById('bAuto').disabled=on||!S.sessionId;
+  document.getElementById('b2').disabled=on||!S.sessionId;
+}
+
+function clearConsumedCaptcha(){
+  S.sessionId=null;
+  document.getElementById('capImg').style.display='none';
+  document.getElementById('capAns').value='';
+}
+
 async function step1(retry){
+  if(S.captchaPending)return;
   const brn=document.getElementById('brn').value.trim();
   let dob=document.getElementById('dob').value.trim();
   if(!/^\d{17}$/.test(brn)){showErr('BRN ঠিক ১৭ সংখ্যার হতে হবে।');return;}
@@ -274,42 +290,69 @@ async function step1(retry){
     }
   }
   document.getElementById('dob').value=dob;
-  S.brn=brn;S.dob=dob;
-  busy('b1',true,'ক্যাপচা আনা হচ্ছে…');
+  const sameAttempt=retry&&S.attemptKey&&S.brn===brn&&S.dob===dob;
+  const button=retry?'bRefresh':'b1';
+  captchaBusy(button,true,'ক্যাপচা আনা হচ্ছে…');
   try{
-    const r=await ABC.api(API+'/api/captcha');
-    const j=await r.json();
-    if(!j.success)throw new Error(j.error||'ক্যাপচা আসেনি');
+    const r=await ABC.api(API+'/api/captcha',{timeout:25000,retryNetwork:false});
+    const j=await r.json().catch(()=>null);
+    if(!r.ok||!j?.success||!j.sessionId||!j.image)throw new Error(j?.message||(j?.error!=='NETWORK_ERROR'&&j?.error)||'ক্যাপচা সার্ভারের জবাব পাওয়া যায়নি। আবার চেষ্টা করুন।');
+    S.brn=brn;S.dob=dob;
     S.sessionId=j.sessionId;
-    // চার্জ গেটের চেষ্টা-কী (2026-10-30): এক চেষ্টার verify→preview→PDF
-    // সবাই একই কী পাঠায়, তাই রিট্রাইয়ে দুবার চার্জ হয় না; নতুন
-    // ক্যাপচা মানেই নতুন চেষ্টা, নতুন কী, নতুন চার্জ হতে পারে।
-    S.attemptKey=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():'att-'+Date.now()+'-'+Math.random().toString(36).slice(2);
+    // A replacement captcha for the same verification keeps its charge key.
+    if(!sameAttempt){
+      S.attemptKey=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():'att-'+Date.now()+'-'+Math.random().toString(36).slice(2);
+      S.verifyUnconfirmed=false;
+    }
+    hideFailReceipt();
     document.getElementById('capImg').src=j.image;
+    document.getElementById('capImg').style.display='';
     document.getElementById('capAns').value='';
     go(2);
   }catch(e){showErr(e.message||'ক্যাপচা আনতে ব্যর্থ। আবার চেষ্টা করুন।');}
-  busy('b1',false);
+  finally{captchaBusy(button,false);}
 }
 async function autoSolve(){
-  if(!S.sessionId)return;
-  busy('bAuto',true,'চেষ্টা চলছে…');
+  if(S.captchaPending||!S.sessionId)return;
+  captchaBusy('bAuto',true,'চেষ্টা চলছে…');
   try{
     const r=await ABC.api(API+'/api/solve-captcha',{method:'POST',body:{sessionId:S.sessionId}});
     const j=await r.json();
+    if(j.code==='CAPTCHA_EXPIRED'){
+      clearConsumedCaptcha();
+      showErr(j.error+' আবার যাচাই করতে “নতুন ছবি” চাপুন।');
+      return;
+    }
     if(j.success&&j.answer){document.getElementById('capAns').value=j.answer;showOk('স্বয়ংক্রিয় সমাধান বসানো হয়েছে ✓');}
     else throw new Error(j.error||'স্বয়ংক্রিয় সমাধান ব্যর্থ');
   }catch(e){showErr('নিজে লিখুন: '+(e.message||''));}
-  busy('bAuto',false);
+  finally{captchaBusy('bAuto',false);}
 }
 async function step2(){
+  if(S.captchaPending||!S.sessionId)return;
   const ans=document.getElementById('capAns').value.trim();
   if(!ans){showErr('ক্যাপচা উত্তর লিখুন।');return;}
-  busy('b2',true,'BDRIS যাচাই চলছে… (৩০-৬০ সেকেন্ড লাগতে পারে)');
+  const sessionId=S.sessionId;
+  let receivedRecord=false;
+  captchaBusy('b2',true,'BDRIS যাচাই চলছে… (৩০-৬০ সেকেন্ড লাগতে পারে)');
   try{
-    const r=await ABC.api(API+'/api/verify',{method:'POST',body:{sessionId:S.sessionId,brn:S.brn,dob:S.dob,captcha:ans,idempotency_key:S.attemptKey},timeout:60000});
-    const j=await r.json();
-    if(!j.success)throw new Error(j.message||j.error||'যাচাই ব্যর্থ');
+    // The answer is single-use even though the charge has an idempotency key.
+    const r=await ABC.api(API+'/api/verify',{method:'POST',body:{sessionId,brn:S.brn,dob:S.dob,captcha:ans,idempotency_key:S.attemptKey},timeout:65000,retryNetwork:false});
+    const j=await r.json().catch(()=>null);
+    if(!j)throw new Error('Verification response unavailable');
+    if(!r.ok||!j.success||!j.data){
+      const confirmedFailure=j.code==='CAPTCHA_EXPIRED'||j.code==='BDRIS_CONNECTION_FAILED'||(r.ok&&j.success===false);
+      if(!confirmedFailure&&(r.status>=500||r.ok))throw new Error('Verification result unavailable');
+      const message=j.message||j.error||'যাচাই ব্যর্থ।';
+      if(confirmedFailure){
+        if(!S.verifyUnconfirmed)reportEngineFailure('birth-final',S.brn,message);
+        clearConsumedCaptcha();
+      }
+      showErr(message+(confirmedFailure?' আবার যাচাই করতে “নতুন ছবি” চাপুন।':''));
+      return;
+    }
+    receivedRecord=true;
+    S.verifyUnconfirmed=false;
     S.record=j.data;
     const d=j.data;
     const fields=[
@@ -331,8 +374,14 @@ async function step2(){
     fields.forEach(f=>{const el=document.getElementById('rec_'+f[0]); if(el) el.oninput=()=>{S.record[f[0]]=el.value;};});
     go(3);showOk('যাচাই করা তথ্য পাওয়া গেছে। সেবা চার্জ কাটা হয়েছে।');hideFailReceipt();
     ABC.api('/auth/me').then(r=>r.ok?r.json():null).then(d=>showWalletBalance(d?.user)).catch(()=>{});
-  }catch(e){showErr(e.message||'যাচাই ব্যর্থ।');reportEngineFailure('birth-final', S.brn, e.message);}
-  busy('b2',false);
+  }catch(e){
+    if(receivedRecord)showErr('যাচাই করা তথ্য দেখানো যায়নি।');
+    else{
+      S.verifyUnconfirmed=true;
+      clearConsumedCaptcha();
+      showErr('যাচাইয়ের ফল পাওয়া যায়নি। একই তথ্য দিয়ে আবার চেষ্টা করতে “নতুন ছবি” চাপুন।');
+    }
+  }finally{captchaBusy('b2',false);}
 }
 async function step3(){
   busy('b3',true,'সনদ তৈরি হচ্ছে…');
@@ -354,12 +403,13 @@ async function step3(){
 // একই সেশনে পরে সফল হলে সার্ভার ব্যর্থ রেকর্ডটি সরিয়ে দেয়।
 function reportEngineFailure(engineId, refNo, reason){
   try{
+    const sessionId=S.sessionId;
     const token=sessionStorage.getItem('abc_access_token')||'';
     fetch('/api/engine-jobs/failure',{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({
       engine_id:engineId, ref_no:refNo||'', name:'', reason:String(reason||'').slice(0,200),
-      idempotency_key:engineId+'-fail-'+(S.sessionId||Date.now())
+      idempotency_key:engineId+'-fail-'+(sessionId||Date.now())
     })}).then(r=>r.json()).then(d=>{
-      if(d&&d.receipt){
+      if(d&&d.receipt&&(S.sessionId===sessionId||(!S.sessionId&&!S.record))){
         const box=document.getElementById('failReceipt');
         if(box){box.style.display='block';box.innerHTML='<span style="color:#166534;font-size:13px;font-weight:600;">✅ কোনো টাকা কাটা হয়নি</span> <span style="color:#6b7280;font-size:12px;">— এই চেষ্টার রেকর্ড আপনার ইতিহাসে থাকবে।</span> <a href="/history.html" style="font-size:12px;">ইতিহাসে দেখুন →</a>';}
       }

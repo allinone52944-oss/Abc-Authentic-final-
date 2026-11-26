@@ -299,7 +299,7 @@
       // Fix 14: only safe requests retry (GETs + idempotency-keyed
       // writes); an unkeyed mutating request may already have
       // executed server-side, so it fails fast instead of re-sending.
-      if (_retry < 2 && apiCanRetry(path, opts)) {
+      if (_retry < 2 && opts.retryNetwork !== false && apiCanRetry(path, opts)) {
         retryNoteShow(_retry + 2);
         await new Promise(function (res) { setTimeout(res, 1000 * (_retry + 1)); });
         try { return await api(path, opts, _retry + 1); }
@@ -315,7 +315,7 @@
     // Callers may pass skip503Retry when a 503 is deterministic for
     // them (e.g. QR verify's GATEWAY_NOT_CONFIGURED) so the user
     // is not made to wait through two pointless retries.
-    if ((r.status === 503 || r.status === 504) && _retry < 2 && !opts.skip503Retry && apiCanRetry(path, opts)) {
+    if ((r.status === 503 || r.status === 504) && _retry < 2 && opts.retryNetwork !== false && !opts.skip503Retry && apiCanRetry(path, opts)) {
       retryNoteShow(_retry + 2);
       await new Promise(function (res) { setTimeout(res, 1000 * (_retry + 1)); });
       try { return await api(path, opts, _retry + 1); }
