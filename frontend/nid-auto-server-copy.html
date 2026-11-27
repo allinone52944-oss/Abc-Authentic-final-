@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
   <link rel="stylesheet" href="/css/service-entry.css?v=20261122-4">
   <link rel="stylesheet" href="/css/engine-form-layout.css?v=20261127-1">
-  <link rel="stylesheet" href="/css/nid-auto-server-copy.css?v=2">
+  <link rel="stylesheet" href="/css/nid-auto-server-copy.css?v=3">
   <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
   <script src="/js/service-navigation.js?v=20261127-2" defer></script>
 </head>
@@ -40,92 +40,95 @@
 
     <main class="main">
       <div class="ansc">
-        <header class="ansc-header">
-          <div>
-            <div class="ansc-links" data-service-entry-slot>
-              <a class="ansc-back" href="/services.html?type=auto">← স্বয়ংক্রিয় সেবায় ফিরুন</a>
-            </div>
-            <h1>অটো NID সার্ভার কপি</h1>
-          </div>
-          <a class="ansc-wallet" id="balanceLink" href="/wallet.html" hidden>
-            ওয়ালেট <strong id="balance"></strong>
+        <header class="engine-form-header ansc-header">
+          <h1>অটো NID সার্ভার কপি</h1>
+          <a class="engine-form-wallet ansc-wallet" id="balanceLink" href="/wallet.html" hidden>
+            ব্যালেন্স <strong id="balance"></strong>
           </a>
         </header>
+        <div class="engine-form-links" data-service-entry-slot>
+          <a href="/services.html?type=auto">← সেবার তালিকা</a>
+        </div>
 
-        <form class="ansc-panel" id="lookupForm" autocomplete="off">
-          <fieldset class="ansc-options" id="options" disabled>
-            <legend>কপির ধরন বেছে নিন</legend>
-            <div class="ansc-option-grid">
-              <label class="ansc-option">
-                <input type="radio" name="type" value="backup" aria-labelledby="typeBackup" aria-describedby="noteBackup priceBackup" disabled>
-                <span class="ansc-tile">
-                  <span class="ansc-option-copy">
-                    <span class="ansc-name" id="typeBackup" lang="en">Server Copy (SV Backup)</span>
-                    <span class="ansc-option-note" id="noteBackup">অসম্পূর্ণ তথ্য</span>
+        <div class="engine-form-panel ansc-panel">
+          <form id="lookupForm" autocomplete="off">
+            <fieldset class="ansc-options" id="options" disabled>
+              <legend>কপির ধরন বেছে নিন</legend>
+              <div class="ansc-option-grid">
+                <label class="ansc-option">
+                  <input type="radio" name="type" value="backup" aria-labelledby="typeBackup" aria-describedby="noteBackup priceBackup" disabled>
+                  <span class="ansc-tile">
+                    <span class="ansc-option-copy">
+                      <span class="ansc-name" id="typeBackup" lang="en">Server Copy (SV Backup)</span>
+                      <span class="ansc-option-note" id="noteBackup">অসম্পূর্ণ তথ্য</span>
+                    </span>
+                    <span class="ansc-option-price" id="priceBackup">লোড হচ্ছে…</span>
                   </span>
-                  <span class="ansc-option-price" id="priceBackup">লোড হচ্ছে…</span>
-                </span>
-              </label>
-              <label class="ansc-option">
-                <input type="radio" name="type" value="premium" aria-labelledby="typePremium" aria-describedby="notePremium pricePremium" disabled>
-                <span class="ansc-tile">
-                  <span class="ansc-option-copy">
-                    <span class="ansc-name" id="typePremium" lang="en">SV Copy Premium</span>
-                    <span class="ansc-option-note" id="notePremium">পূর্ণ তথ্য</span>
+                </label>
+                <label class="ansc-option">
+                  <input type="radio" name="type" value="premium" aria-labelledby="typePremium" aria-describedby="notePremium pricePremium" disabled>
+                  <span class="ansc-tile">
+                    <span class="ansc-option-copy">
+                      <span class="ansc-name" id="typePremium" lang="en">SV Copy Premium</span>
+                      <span class="ansc-option-note" id="notePremium">পূর্ণ তথ্য</span>
+                    </span>
+                    <span class="ansc-option-price" id="pricePremium">লোড হচ্ছে…</span>
                   </span>
-                  <span class="ansc-option-price" id="pricePremium">লোড হচ্ছে…</span>
-                </span>
-              </label>
-              <label class="ansc-option">
-                <input type="radio" name="type" value="half" aria-labelledby="typeHalf" aria-describedby="noteHalf priceHalf" disabled>
-                <span class="ansc-tile">
-                  <span class="ansc-option-copy">
-                    <span class="ansc-name" id="typeHalf" lang="en">Half Server Copy</span>
-                    <span class="ansc-option-note" id="noteHalf">অর্ধেক তথ্য</span>
+                </label>
+                <label class="ansc-option">
+                  <input type="radio" name="type" value="half" aria-labelledby="typeHalf" aria-describedby="noteHalf priceHalf" disabled>
+                  <span class="ansc-tile">
+                    <span class="ansc-option-copy">
+                      <span class="ansc-name" id="typeHalf" lang="en">Half Server Copy</span>
+                      <span class="ansc-option-note" id="noteHalf">অর্ধেক তথ্য</span>
+                    </span>
+                    <span class="ansc-option-price" id="priceHalf">লোড হচ্ছে…</span>
                   </span>
-                  <span class="ansc-option-price" id="priceHalf">লোড হচ্ছে…</span>
-                </span>
-              </label>
+                </label>
+              </div>
+            </fieldset>
+
+            <div class="ansc-recovery" id="recovery" hidden>
+              <p id="availability" role="status"></p>
+              <button class="btn btn-secondary" id="reloadOptions" type="button" hidden>আবার চেষ্টা করুন</button>
             </div>
-          </fieldset>
 
-          <div class="ansc-recovery" id="recovery" hidden>
-            <p id="availability" role="status"></p>
-            <button class="btn btn-secondary" id="reloadOptions" type="button" hidden>আবার চেষ্টা করুন</button>
-          </div>
+            <fieldset class="ansc-inputs" id="inputs" aria-label="পরিচয়পত্রের তথ্য" disabled>
+              <div class="ansc-fields">
+                <label for="nid">NID নম্বর
+                  <input id="nid" name="nid" type="text" inputmode="numeric" maxlength="17"
+                    autocomplete="off" spellcheck="false" placeholder="১০, ১৩ বা ১৭ সংখ্যা" required>
+                </label>
+                <label for="dob">জন্ম তারিখ
+                  <input id="dob" name="dob" type="text" inputmode="numeric" maxlength="24"
+                    autocomplete="off" spellcheck="false" placeholder="দিন-মাস-বছর" required>
+                </label>
+              </div>
+              <label class="ansc-consent" for="authorized">
+                <input type="checkbox" id="authorized" name="authorized" required>
+                <span>NID ব্যবহারের অনুমতি আছে</span>
+              </label>
+            </fieldset>
 
-          <fieldset class="ansc-inputs" id="inputs" aria-label="পরিচয়পত্রের তথ্য" disabled>
-            <div class="ansc-fields">
-              <label for="nid">NID নম্বর
-                <input id="nid" name="nid" type="text" inputmode="numeric" maxlength="17"
-                  autocomplete="off" spellcheck="false" placeholder="১০, ১৩ বা ১৭ সংখ্যার নম্বর" required>
-              </label>
-              <label for="dob">জন্ম তারিখ
-                <input id="dob" name="dob" type="text" inputmode="numeric" maxlength="24"
-                  autocomplete="off" spellcheck="false" placeholder="দিন-মাস-বছর" required>
-              </label>
+            <div class="ansc-action">
+              <p id="total" role="status">সেবা চার্জ <strong id="selectedPrice">—</strong></p>
+              <button class="btn btn-primary" id="lookup" type="submit" disabled>সার্ভার কপি তৈরি করুন</button>
             </div>
-            <label class="ansc-consent" for="authorized">
-              <input type="checkbox" id="authorized" name="authorized" required>
-              <span>NID ব্যবহারের অনুমতি আছে</span>
-            </label>
-          </fieldset>
+            <p class="ansc-error" id="error" role="alert" hidden></p>
+          </form>
 
-          <div class="ansc-action">
-            <p id="total" role="status">সেবা চার্জ <strong id="selectedPrice">—</strong></p>
-            <button class="btn btn-primary" id="lookup" type="submit" disabled>সার্ভার কপি তৈরি করুন</button>
-          </div>
-          <p class="ansc-error" id="error" role="alert" hidden></p>
-        </form>
-
-        <section class="ansc-result" id="result" aria-labelledby="resultTitle" tabindex="-1" hidden>
-          <div>
-            <h2 id="resultTitle">সার্ভার কপি প্রস্তুত</h2>
-            <p id="resultType"></p>
-          </div>
-          <button class="btn btn-primary" id="download" type="button">PDF ডাউনলোড করুন</button>
-          <p class="ansc-error" id="downloadError" role="alert" hidden></p>
-        </section>
+          <section class="ansc-result" id="result" aria-labelledby="resultTitle" tabindex="-1" hidden>
+            <div class="ansc-result-copy">
+              <span class="ansc-result-mark" aria-hidden="true">✓</span>
+              <div>
+                <h2 id="resultTitle">সার্ভার কপি প্রস্তুত</h2>
+                <p id="resultType"></p>
+              </div>
+            </div>
+            <button class="btn btn-primary" id="download" type="button">PDF ডাউনলোড করুন</button>
+            <p class="ansc-error" id="downloadError" role="alert" hidden></p>
+          </section>
+        </div>
       </div>
     </main>
   </div>
@@ -253,7 +256,7 @@
 
           byId('balanceLink').hidden = !Number.isFinite(balance);
           if (Number.isFinite(balance)) byId('balance').textContent = money(balance);
-          if (!optionPrices.size) setAvailability('সেবাগুলো এখন বন্ধ আছে।', true);
+          if (!optionPrices.size) setAvailability('এই অ্যাকাউন্টে সেবাটি এখন ব্যবহার করা যাচ্ছে না।', true);
         } catch (_) {
           optionPrices.clear();
           for (const radio of radios) {
