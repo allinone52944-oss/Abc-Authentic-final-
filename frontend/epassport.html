@@ -24,16 +24,26 @@
 <link rel="stylesheet" href="/css/engine-polish.css?v=20261111-4">
 <link rel="stylesheet" href="/css/passport-flow.css?v=7">
 <link rel="stylesheet" href="/css/service-entry.css?v=20261122-4">
-<script src="/js/service-navigation.js?v=20261124-3" defer></script>
+<link rel="stylesheet" href="/css/engine-form-layout.css?v=20261127-1">
+<script src="/js/service-navigation.js?v=20261127-2" defer></script>
 <script src="/js/engine-feedback.js?v=20261118-3" defer></script>
 <style>
 /* Base form-input sizing (mirrors the MRP page's inline rule): without
    width:100% the text inputs fall back to their default ~233px size and
    overflow their 121px grid tracks on mobile (right column clipped). */
 #panel-engine input[type=text],#panel-engine input[type=date],#panel-engine input[type=number],#panel-engine select,#panel-engine textarea{width:100%;min-width:0}
+body.engine-form-page.flow-landing .passport-landing-inner{margin:12px auto;padding:18px;text-align:left}
+body.engine-form-page.flow-landing .passport-landing-inner h2{font-size:20px;margin:0 0 12px}
+.passport-choice{display:flex;flex-wrap:wrap;gap:8px}
+body.engine-form-page.flow-landing .passport-choice .primary{min-height:44px;margin:0;padding:8px 16px;border-radius:10px;font-size:14px}
+.passport-choice a{display:inline-flex;align-items:center;text-decoration:none}
+body.engine-form-page.flow-form .form-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:2px 12px;margin-bottom:8px}
+body.engine-form-page.flow-form .form-head h2{order:-1;margin:0}
+body.engine-form-page.flow-form .form-head .back-button{min-height:44px}
+@media(prefers-reduced-motion:reduce){body.engine-form-page .passport-choice .primary{transition:none}}
 </style>
 </head>
-<body class="has-tabbar flagship-app service-workspace page-epassport flow-landing">
+<body class="has-tabbar flagship-app service-workspace page-epassport flow-landing engine-form-page">
 <div class="desktop">
   <div class="sidebar">
     <div class="side-logo">
@@ -64,14 +74,15 @@
    <div id="walletBadge" style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">💳 ব্যালেন্স: ৳<span id="balVal">০</span></div>
   </div>
 
+  <div class="engine-form-links" data-service-entry-slot></div>
 <main>
  <section class="passport-landing" id="passport-landing" aria-label="ই-পাসপোর্ট তৈরি করুন">
   <div class="passport-landing-inner">
-   <p class="kicker">ই-পাসপোর্ট ইঞ্জিন</p>
-   <h2>ই-পাসপোর্ট তৈরি করুন</h2>
-   <p>ফর্মটি পূরণ করুন — পাসপোর্ট নম্বর, নাম, জন্মতারিখসহ সব তথ্য। Create চাপলে ই-পাসপোর্ট PDF তৈরি হয়ে ডাউনলোড হবে।</p>
-   <button type="button" id="start-passport-button" class="primary">ই-পাসপোর্ট তৈরি করুন</button>
-   <p class="small-note">ছবি ও স্বাক্ষর ফর্মেই যোগ করুন — পরে বদলালে আবার ডাউনলোড করতে হবে।</p>
+   <h2>পাসপোর্টের ধরন</h2>
+   <div class="passport-choice">
+    <a href="/passport.html" class="primary">MRP পাসপোর্ট</a>
+    <button type="button" id="start-passport-button" class="primary">ই-পাসপোর্ট</button>
+   </div>
   </div>
  </section>
 
@@ -92,12 +103,12 @@
   </section>
  <section class="passport-form" id="panel-engine" aria-label="ই-পাসপোর্ট ফর্ম">
     <header class="form-head" id="passport-form-head">
-     <button type="button" id="back-to-landing-button" class="back-button">← ফিরে যান</button>
+     <button type="button" id="back-to-landing-button" class="back-button">← ধরনের তালিকায় ফিরে যান</button>
      <h2>E-Passport তৈরি করুন</h2>
-     <p>তথ্য ও ছবি/স্বাক্ষর পূরণ করুন — Create চাপলে ই-পাসপোর্ট PDF তৈরি হয়ে সরাসরি ডাউনলোড হবে।</p>
     </header>
     <div class="engine-group" id="eng-photo-group">
      <p class="engine-legend">ছবি ও স্বাক্ষর</p>
+     <p class="small-note">ছবি ও স্বাক্ষর ফর্মেই যোগ করুন। পরে বদলালে আবার ডাউনলোড করতে হবে।</p>
      <div class="form-upload-row">
       <div>
        <label for="form-photo-upload">ছবি</label>
@@ -1278,13 +1289,13 @@ function createEpassport(){
 }
 
 /* ===== views + form lifecycle ===== */
-function showForm(){
+function showForm(focusFirst){
   body.classList.remove('flow-landing');
   body.classList.add('flow-form');
   if(!formEntered){clearForm();formEntered=true;}
   loadPrice();
   var first=engInput('passportNo');
-  if(first)first.focus();
+  if(first&&focusFirst!==false)first.focus();
 }
 function showLanding(){
   body.classList.remove('flow-form');
@@ -1364,7 +1375,7 @@ function initEngine(){
   var reapp=$('eng-reapply');
   if(reapp)reapp.addEventListener('click',function(){reapplyMRZ();toast('MRZ পাতায় বসানো হয়েছে।');});
   var start=$('start-passport-button');
-  if(start)start.addEventListener('click',showForm);
+  if(start)start.addEventListener('click',function(event){showForm(event?.isTrusted!==false);});
   var back=$('back-to-landing-button');
   if(back)back.addEventListener('click',showLanding);
   if(createBtn)createBtn.addEventListener('click',createEpassport);
@@ -1380,6 +1391,13 @@ function initEngine(){
   if(newBtn)newBtn.addEventListener('click',function(){formEntered=false;body.classList.remove('flow-result');showForm();});
   applyAll();
   regenerateMRZ();
+  if(body.classList.contains('engine-form-page')){
+    var entry=new URLSearchParams(location.search);
+    if(entry.get('flow')!=='directory'||!entry.get('service')){
+      showForm(false);
+      return;
+    }
+  }
   loadPrice();
 }
 

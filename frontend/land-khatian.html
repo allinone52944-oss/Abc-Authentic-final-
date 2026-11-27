@@ -95,8 +95,9 @@
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
 <link rel="stylesheet" href="/css/engine-polish.css?v=20261111-4">
 <script src="/js/engine-feedback.js?v=20261118-3" defer></script>
+<link rel="stylesheet" href="/css/engine-form-layout.css?v=20261127-1">
 </head>
-<body class="has-tabbar flagship-app service-workspace page-land-khatian">
+<body class="has-tabbar flagship-app service-workspace page-land-khatian engine-form-page">
 <div class="desktop">
   <div class="sidebar">
     <div class="side-logo">
@@ -118,19 +119,17 @@
   </div>
 
   <div class="main">
-    <a id="backToKhatianCatalog" class="btn btn-secondary" href="/services.html?type=auto">← সেবার তালিকায় ফিরুন</a>
-    <div class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-      <div>
-        <h2>🌾 খতিয়ান অনুসন্ধান</h2>
-        <p>এলাকা বেছে খতিয়ান নম্বর, মালিকের নাম বা দাগ নম্বর দিয়ে খুঁজুন</p>
-      </div>
-      <div id="walletBadge" style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">
-        💳 ব্যালেন্স: ৳<span id="balVal">০</span>
-      </div>
+    <div class="topbar engine-form-header">
+      <h2>খতিয়ান অনুসন্ধান</h2>
+      <a class="engine-form-wallet" id="walletBadge" href="/wallet.html">ব্যালেন্স ৳<span id="balVal">০</span></a>
+    </div>
+    <div class="engine-form-links">
+      <a id="backToKhatianCatalog" href="/services.html?type=auto">← সেবার তালিকা</a>
+      <span id="directoryServiceDetails" hidden><a>নিয়ম ও ছাড়</a></span>
     </div>
 
     <div class="land-layout">
-    <div class="form-card">
+    <div class="form-card engine-form-panel">
       <div class="price-line" id="priceLine">
         <span id="priceText">সেবা চার্জ লোড হচ্ছে…</span>
         <span>ফলাফল না পেলে চার্জ ৳০</span>
@@ -144,12 +143,11 @@
         <summary>সেবার নিয়ম</summary>
         <p id="directoryServiceRulesText"></p>
       </details>
-      <p id="directoryServiceDetails" hidden><a>সেবার বিস্তারিত ও ছাড়</a></p>
 
       <div class="err" id="errBox"></div>
       <div class="ok" id="okBox"></div>
 
-      <form id="searchForm">
+      <form id="searchForm" class="engine-fields-grid">
         <div class="field">
           <label for="divisionSel">বিভাগ *</label>
           <select id="divisionSel"><option value="">— বেছে নিন —</option></select>

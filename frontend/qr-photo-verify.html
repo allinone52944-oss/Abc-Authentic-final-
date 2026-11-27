@@ -70,10 +70,11 @@
 <link rel="stylesheet" href="/css/engine-inputs.css?v=20261110-13">
 <script src="/js/engine-inputs.js?v=20261110-13" defer></script>
 <link rel="stylesheet" href="/css/service-entry.css?v=20261122-4">
-<script src="/js/service-navigation.js?v=20261124-3" defer></script>
+<link rel="stylesheet" href="/css/engine-form-layout.css?v=20261127-1">
+<script src="/js/service-navigation.js?v=20261127-2" defer></script>
 <script src="/js/engine-feedback.js?v=20261118-3" defer></script>
 </head>
-<body class="has-tabbar flagship-app service-workspace page-qr-photo-verify">
+<body class="has-tabbar flagship-app service-workspace page-qr-photo-verify engine-form-page">
 <div class="desktop">
   <div class="sidebar">
     <div class="side-logo">
@@ -95,41 +96,39 @@
   </div>
 
   <div class="main">
-    <div class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-      <div>
-        <h2>🔍 QR + ছবি যাচাই</h2>
-        <p>NID-এর QR কোড ও ব্যক্তির ছবি মিলিয়ে তাৎক্ষণিক যাচাই</p>
-      </div>
-      <div id="walletBadge" style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">
-        💳 ব্যালেন্স: ৳<span id="balVal">০</span>
-      </div>
+    <div class="topbar engine-form-header">
+      <h2>QR ও ছবি যাচাই</h2>
+      <a class="engine-form-wallet" id="walletBadge" href="/wallet.html">ব্যালেন্স ৳<span id="balVal">০</span></a>
+    </div>
+    <div class="engine-form-links" data-service-entry-slot>
+      <a href="/services.html?type=auto">← সেবার তালিকা</a>
     </div>
 
-    <div class="form-card">
+    <div class="form-card engine-form-panel">
       <div class="price-line">
         <span>সেবা চার্জ: ৳<span id="priceVal">–</span> (শুধু যাচাই সফল হলেই কাটবে)</span>
-        <span>ব্যর্থ যাচাইয়ে চার্জ: ৳০</span>
       </div>
 
       <div class="err" id="errBox"></div>
       <div class="ok" id="okBox"></div>
 
-      <form id="vform">
-        <label style="display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px;">১) তার NID-এর QR কোডের ছবি *</label>
-        <label class="drop" id="qrDrop">
-          <input type="file" id="qrFile" accept="image/*">
-          <div>📷 QR-এর ছবি বেছে নিন</div>
-          <img id="qrPrev" style="display:none" alt="">
-          <div class="fname" id="qrName"></div>
-        </label>
-
-        <label style="display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px;">২) ব্যক্তির স্পষ্ট ছবি *</label>
-        <label class="drop" id="photoDrop">
-          <input type="file" id="photoFile" accept="image/*">
-          <div>🧑 ছবি বেছে নিন</div>
-          <img id="photoPrev" style="display:none" alt="">
-          <div class="fname" id="photoName"></div>
-        </label>
+      <form id="vform" class="engine-fields-grid">
+        <div class="engine-upload-group">
+          <label class="drop" id="qrDrop">
+            <input type="file" id="qrFile" accept="image/*">
+            <div>NID-এর QR কোডের ছবি বেছে নিন</div>
+            <img id="qrPrev" style="display:none" alt="">
+            <div class="fname" id="qrName"></div>
+          </label>
+        </div>
+        <div class="engine-upload-group">
+          <label class="drop" id="photoDrop">
+            <input type="file" id="photoFile" accept="image/*">
+            <div>ব্যক্তির স্পষ্ট ছবি বেছে নিন</div>
+            <img id="photoPrev" style="display:none" alt="">
+            <div class="fname" id="photoName"></div>
+          </label>
+        </div>
 
         <button type="submit" class="btn btn-primary" id="goBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700;">
           ✅ যাচাই করুন

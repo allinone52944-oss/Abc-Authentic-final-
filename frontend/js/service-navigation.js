@@ -163,6 +163,9 @@
         if (service.engine_id === 'passport' || service.engine_id === 'epassport') {
           document.getElementById('start-passport-button')?.click();
         }
+        if (service.engine_id === 'bdris-apply') {
+          document.getElementById('mAuto')?.click();
+        }
       } catch (_) {
         status.textContent = 'সেবা লোড হয়নি। সংযোগ দেখে আবার চেষ্টা করুন।';
         retry.hidden = false;

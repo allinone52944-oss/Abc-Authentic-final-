@@ -19,37 +19,6 @@
     margin-bottom: 20px;
     max-width: 680px;
   }
-  .hero {
-    background: linear-gradient(135deg, #0f2a5c, #1e40af 55%, #2563eb);
-    color: #ffffff;
-    border-radius: var(--r-xl);
-    padding: 22px 24px;
-    margin-bottom: 16px;
-    box-shadow: var(--shadow-glow);
-    max-width: 680px;
-  }
-  .hero h2 { font-size: 22px; margin: 0 0 6px; }
-  .hero p { font-size: 13.5px; color: rgba(255,255,255,0.88); margin: 0; line-height: 1.7; }
-  .hero-row { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; }
-  .wallet-pill {
-    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
-    background: rgba(255,255,255,0.16); color: #ffffff; border: 1px solid rgba(255,255,255,0.35);
-    padding: 8px 14px; border-radius: 20px; font-size: 13px; font-weight: 700; cursor: pointer;
-  }
-  .steps { display: flex; gap: 8px; margin-bottom: 18px; max-width: 680px; }
-  .step {
-    flex: 1; display: flex; align-items: center; gap: 8px;
-    background: #ffffff; border: 1px solid var(--border-light); border-radius: var(--r-md);
-    padding: 10px 12px; font-size: 13px; font-weight: 700; color: var(--text-muted);
-  }
-  .step .num {
-    width: 24px; height: 24px; flex: none; display: inline-flex; align-items: center; justify-content: center;
-    border-radius: 50%; background: var(--bg-subtle); color: var(--text-muted); font-size: 13px;
-  }
-  .step.on { border-color: var(--primary-300); background: var(--primary-50); color: var(--primary-800); }
-  .step.on .num { background: var(--primary-600); color: #ffffff; }
-  .step.done { color: var(--status-success-text); }
-  .step.done .num { background: var(--status-success); color: #ffffff; }
   .opt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
   .opt-card {
     background: var(--bg-subtle); border: 1px solid var(--border-light); border-radius: var(--r-lg);
@@ -58,23 +27,8 @@
   .opt-card .ico { font-size: 28px; margin-bottom: 6px; }
   .opt-card .t { font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px; }
   .opt-card .d { font-size: 12.5px; color: #475569; line-height: 1.7; margin-bottom: 12px; text-align: left; }
-  .trust-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-  .trust-chip {
-    background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;
-    padding: 8px 12px; border-radius: 20px; font-size: 12.5px; font-weight: 600;
-  }
-  /* Premium feel: motion + lift + glow */
   @keyframes nscFadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes nscPop { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
-  .hero { animation: nscFadeUp .45s ease both; }
-  .steps { animation: nscFadeUp .45s .08s ease both; }
-  .form-card { animation: nscFadeUp .45s .16s ease both; }
-  .hero-badge {
-    display: inline-block; background: rgba(255,215,0,0.18); border: 1px solid rgba(255,215,0,0.55);
-    color: #fef3c7; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-bottom: 10px;
-  }
-  .wallet-pill:hover { background: rgba(255,255,255,0.25); }
-  .step { transition: background .2s, border-color .2s, color .2s; }
   .opt-card { transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
   .opt-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--primary-300); }
   .form-card .btn-primary { transition: transform .15s ease, box-shadow .2s ease, filter .2s ease; box-shadow: var(--shadow-sm); }
@@ -115,15 +69,11 @@
   .captcha-box.on { animation: nscPop .3s ease both; }
   #cardFormPanel, #serverFormPanel { animation: nscFadeUp .35s ease both; }
   @media (prefers-reduced-motion: reduce) {
-    .hero, .steps, .form-card, .captcha-box.on, #cardFormPanel, #serverFormPanel { animation: none; }
+    .captcha-box.on, #cardFormPanel, #serverFormPanel { animation: none; }
     .opt-card, .form-card .btn-primary { transition: none; }
   }
   @media (max-width: 640px) {
     .form-card { padding: 18px; }
-    .hero { padding: 18px; }
-    .hero h2 { font-size: 19px; }
-    .steps { gap: 6px; }
-    .step { font-size: 12px; padding: 8px; }
     .opt-grid { grid-template-columns: 1fr; }
     .field input[type=text], .field input[type=password] { padding: 13px 12px; }
   }
@@ -166,12 +116,32 @@
     max-width: 100%; height: auto; border: 1px solid #cbd5e1; border-radius: 8px;
     background: #fff; margin-bottom: 12px;
   }
-  .back-nav {
-    display: inline-flex; align-items: center; gap: 8px; color: var(--primary-700);
-    font-weight: 700; font-size: 14px; cursor: pointer; margin-bottom: 16px;
-    padding: 6px 14px; border-radius: var(--r-md); background: var(--primary-50);
+  .nsc-credentials { display: flex; flex-wrap: wrap; gap: 12px; }
+  .nsc-credentials .btn { flex: 1 1 140px; }
+  .nsc-credentials [hidden] { display: none !important; }
+  .nsc-captcha-dialog {
+    position: fixed; inset: 0; margin: auto; padding: 0; width: min(464px, calc(100% - 32px));
+    max-height: calc(100dvh - 32px); border: 1px solid #abc5b8; border-radius: 20px;
+    background: #fff; color: #19372d; box-shadow: 0 18px 60px rgba(5, 33, 23, .3);
+    overflow: auto; overscroll-behavior: contain;
   }
-  .back-nav:hover { background: var(--primary-100); }
+  .nsc-captcha-dialog[open] { animation: nscDialogIn .24s ease-out; }
+  .nsc-captcha-dialog::backdrop { background: rgba(5, 26, 19, .62); }
+  @keyframes nscDialogIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  .nsc-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; background: linear-gradient(110deg, #092f23, #0a5b41); color: #fff; }
+  .nsc-dialog-header h2 { font-size: 20px; color: inherit; margin: 0; }
+  .nsc-dialog-close { width: 44px; height: 44px; border: 1px solid rgba(255, 255, 255, .35); border-radius: 10px; background: transparent; color: #fff; font-size: 24px; cursor: pointer; }
+  .nsc-dialog-close:focus-visible { outline: 2px solid #f2d48a; outline-offset: 2px; }
+  .nsc-dialog-content { padding: 18px; }
+  .nsc-dialog-image { display: grid; min-height: 72px; place-items: center; padding: 8px; margin-bottom: 14px; border: 1px solid #c7dcd0; border-radius: 10px; background: #edf5f0; }
+  .nsc-dialog-image img { max-width: 100%; object-fit: contain; }
+  @media (max-width: 600px) {
+    .nsc-captcha-dialog { inset: auto 0 0; margin: 0; width: 100%; max-width: none; border-radius: 20px 20px 0 0; }
+    .nsc-dialog-content { padding-bottom: max(18px, env(safe-area-inset-bottom)); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .nsc-captcha-dialog[open], .nsc-captcha-dialog .spin, #startBtn .spin { animation: none; }
+  }
 </style>
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
@@ -181,10 +151,11 @@
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
 <link rel="stylesheet" href="/css/engine-polish.css?v=20261111-4">
 <link rel="stylesheet" href="/css/service-entry.css?v=20261122-4">
-<script src="/js/service-navigation.js?v=20261124-3" defer></script>
+<link rel="stylesheet" href="/css/engine-form-layout.css?v=20261127-1">
+<script src="/js/service-navigation.js?v=20261127-2" defer></script>
 <script src="/js/engine-feedback.js?v=20261118-3" defer></script>
 </head>
-<body class="has-tabbar flagship-app service-workspace page-nid-server-copy">
+<body class="has-tabbar flagship-app service-workspace page-nid-server-copy engine-form-page">
 <div class="desktop">
   <div class="sidebar">
     <div class="side-logo">
@@ -206,59 +177,53 @@
   </div>
 
   <div class="main">
-    <span class="back-nav" onclick="location.href='/services.html'">← সকল সেবায় ফিরুন</span>
-    <div class="hero">
-      <div class="hero-row">
-        <div>
-          <span class="hero-badge">✦ প্রিমিয়াম সার্ভিস</span>
-          <h2>🪪 এনআইডি সার্ভার কপি</h2>
-          <p>NID পোর্টালের আইডি + পাসওয়ার্ড দিয়ে লগইন করে সরাসরি NID কার্ড ও সার্ভার কপি (PDF) ডাউনলোড করুন</p>
-        </div>
-        <div id="walletBadge" class="wallet-pill" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">
-          💳 ব্যালেন্স: ৳<span id="balVal">০</span>
-        </div>
-      </div>
+    <header class="engine-form-header">
+      <h2>এনআইডি সার্ভার কপি</h2>
+      <a id="walletBadge" class="engine-form-wallet" href="/wallet.html">ব্যালেন্স ৳<span id="balVal">০</span></a>
+    </header>
+    <div class="engine-form-links" data-service-entry-slot>
+      <a href="/services.html">← সকল সেবায় ফিরুন</a>
     </div>
 
-    <div class="steps" id="stepsBar">
-      <div class="step on" id="step1"><span class="num">১</span> লগইন তথ্য</div>
-      <div class="step" id="step2"><span class="num">২</span> ক্যাপচা</div>
-      <div class="step" id="step3"><span class="num">৩</span> ডাউনলোড</div>
-    </div>
-
-    <div class="form-card">
+    <div class="form-card engine-form-panel">
       <div class="price-line">
         <span>সেবা চার্জ: ৳<span id="priceVal">–</span> (প্রতিটি ডাউনলোডে কাটবে)</span>
         <span>ব্যর্থ হলে চার্জ: ৳০</span>
       </div>
 
-      <div class="err" id="errBox"></div>
-      <div class="ok" id="okBox"></div>
+      <div class="err" id="errBox" role="alert"></div>
+      <div class="ok" id="okBox" role="status"></div>
 
-      <form id="credForm" autocomplete="off">
+      <form id="credForm" class="engine-fields-grid" autocomplete="off">
         <div class="field">
-          <label for="username">১) NID পোর্টালের আইডি (ইউজারনেম / NID নম্বর) *</label>
+          <label for="username">NID পোর্টালের আইডি</label>
           <input type="text" id="username" placeholder="পোর্টালের আইডি লিখুন" autocomplete="off">
         </div>
         <div class="field">
-          <label for="password">২) NID পোর্টালের পাসওয়ার্ড *</label>
+          <label for="password">NID পোর্টালের পাসওয়ার্ড</label>
           <input type="password" id="password" placeholder="পোর্টালের পাসওয়ার্ড লিখুন" autocomplete="new-password">
         </div>
-        <button type="submit" class="btn btn-primary" id="startBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700;">
-          🔐 ক্যাপচা আনুন
-        </button>
+        <div class="nsc-credentials">
+          <button type="submit" class="btn btn-primary" id="startBtn">ক্যাপচা আনুন</button>
+          <button type="button" class="btn btn-secondary" id="resumeCaptchaBtn" hidden>ক্যাপচা খুলুন</button>
+        </div>
       </form>
 
-      <div class="captcha-box" id="captchaBox">
-        <div style="font-size:13px; font-weight:600; color:#334155; margin-bottom:8px;">৩) ছবির লেখাটি হুবহু লিখুন</div>
-        <img id="captchaImg" alt="ক্যাপচা">
-        <div class="field" style="text-align:left;">
-          <input type="text" id="captchaText" placeholder="ক্যাপচার লেখা লিখুন" autocomplete="off">
+      <dialog class="nsc-captcha-dialog" id="captchaBox" aria-labelledby="captchaHeading">
+        <div class="nsc-dialog-header">
+          <h2 id="captchaHeading">ক্যাপচা যাচাই</h2>
+          <button type="button" class="nsc-dialog-close" id="captchaCloseBtn" aria-label="পপআপ বন্ধ করুন">×</button>
         </div>
-        <button type="button" class="btn btn-primary" id="goBtn" style="width:100%; padding:14px; font-size:16px; font-weight:700;">
-          🔓 লগইন করুন
-        </button>
-      </div>
+        <form class="nsc-dialog-content" id="captchaForm" autocomplete="off">
+          <div class="nsc-dialog-image"><img id="captchaImg" alt="NID পোর্টালের ক্যাপচা"></div>
+          <div class="err" id="captchaStatus" role="alert"></div>
+          <div class="field">
+            <label for="captchaText">ছবির লেখাটি লিখুন</label>
+            <input type="text" id="captchaText" placeholder="ক্যাপচার লেখা" autocomplete="off" autocapitalize="off" spellcheck="false">
+          </div>
+          <button type="submit" class="btn btn-primary" id="goBtn" style="width:100%;">লগইন করুন</button>
+        </form>
+      </dialog>
 
       <div class="captcha-box" id="optionBox" style="background:#ffffff; border-color:#bfdbfe; text-align:left;">
         <div style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:4px; text-align:center;">✅ লগইন সফল হয়েছে</div>
@@ -323,15 +288,7 @@
         <p class="note" style="text-align:left;">প্রতিটি ডাউনলোডে সেবা চার্জ প্রযোজ্য — একই ডকুমেন্ট একই লগইনে আবার ডাউনলোড করলে দ্বিতীয়বার চার্জ কাটবে না।</p>
       </div>
 
-      <p class="note">
-        🔒 আপনার পোর্টালের পাসওয়ার্ড আমাদের সার্ভারে সংরক্ষণ করা হয় না — শুধু এই একবারের লগইনের কাজে ব্যবহার হয়।<br>
-        ✅ লগইনের পর দুটি অপশন পাবেন — <b>NID কার্ড</b> ও <b>সার্ভার কপি</b>; যেটি লাগবে সেটি (বা দুটোই) ডাউনলোড করতে পারবেন। যেসব অ্যাকাউন্টে পোর্টালে সরাসরি ডাউনলোড আছে, সেখানে অফিসিয়াল কার্ডটিই সরাসরি পাবেন; ডাউনলোড না থাকলে (যেমন ২০১৯ সালের আগের NID) প্রোফাইলের তথ্য ও ছবি দিয়ে একই মানের কার্ড তৈরি করে দেওয়া হবে। ডকুমেন্ট তৈরি না হলে কোনো চার্জ কাটবে না।
-      </p>
-      <div class="trust-strip">
-        <span class="trust-chip">🔒 পাসওয়ার্ড সংরক্ষণ হয় না</span>
-        <span class="trust-chip">✅ ব্যর্থ হলে চার্জ ৳০</span>
-        <span class="trust-chip">📥 History থেকে আবার ডাউনলোড</span>
-      </div>
+      <p class="note">পোর্টালের পাসওয়ার্ড সংরক্ষণ করা হয় না।</p>
     </div>
   </div>
 </div>
@@ -364,23 +321,23 @@
     RATE_LIMITED: 'অনেকবার চেষ্টা করা হয়েছে — একটু অপেক্ষা করে আবার চেষ্টা করুন।',
   };
 
-  function setStep(n) {
-    for (let i = 1; i <= 3; i++) {
-      const el = $('step' + i);
-      if (!el) continue;
-      el.classList.toggle('on', i === n);
-      el.classList.toggle('done', i < n);
-    }
+  function showErr(msg) {
+    const b = $('captchaBox').open ? $('captchaStatus') : $('errBox');
+    b.textContent = msg; b.classList.add('on'); $('okBox').classList.remove('on');
   }
-  function showErr(msg) { const b = $('errBox'); b.textContent = msg; b.classList.add('on'); $('okBox').classList.remove('on'); }
   function showOk(msg) { const b = $('okBox'); b.textContent = msg; b.classList.add('on'); $('errBox').classList.remove('on'); }
-  function clearBoxes() { $('errBox').classList.remove('on'); $('okBox').classList.remove('on'); }
+  function clearBoxes() {
+    for (const id of ['errBox', 'okBox', 'captchaStatus']) $(id).classList.remove('on');
+  }
   // Success/error boxes sit above the form panels: after a download the
   // user is scrolled down at the panel, so bring the message into view —
   // otherwise a finished download looks like nothing happened.
   function scrollBoxIntoView() {
     const b = document.querySelector('.err.on, .ok.on');
-    if (b && b.scrollIntoView) b.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (b && b.scrollIntoView) b.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'center',
+    });
   }
   function msgOf(data, fallback) { return (data && (data.message || ERRMSG[data.error])) || fallback; }
 
@@ -396,14 +353,37 @@
     } catch (e) { /* price line just stays blank */ }
   }
 
+  function openCaptcha() {
+    if (!SESSION || $('captchaBox').open) return;
+    $('captchaStatus').classList.remove('on');
+    $('captchaBox').showModal();
+    $('captchaText').focus();
+  }
+
+  function closeCaptcha() {
+    if ($('captchaBox').open) $('captchaBox').close();
+    const resume = $('resumeCaptchaBtn');
+    resume.hidden = !SESSION;
+    if (!resume.hidden && !resume.disabled) resume.focus();
+  }
+
+  $('resumeCaptchaBtn').addEventListener('click', openCaptcha);
+  $('captchaCloseBtn').addEventListener('click', closeCaptcha);
+  $('captchaBox').addEventListener('cancel', (ev) => {
+    ev.preventDefault();
+    closeCaptcha();
+  });
+
   $('credForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
+    const btn = $('startBtn');
+    if (btn.disabled || $('goBtn').disabled) return;
     clearBoxes();
     const username = $('username').value.trim();
     const password = $('password').value;
     if (!username || !password) { showErr(ERRMSG.MISSING_CREDENTIALS); return; }
-    const btn = $('startBtn');
     btn.disabled = true;
+    $('resumeCaptchaBtn').disabled = true;
     btn.innerHTML = '<span class="spin"></span> পোর্টালে লগইন হচ্ছে…';
     try {
       const r = await ABC.api(API + '/start', { method: 'POST', body: { username, password }, timeout: 90000 });
@@ -415,15 +395,14 @@
       SESSION = d.sessionId;
       $('captchaImg').src = d.captcha;
       $('captchaText').value = '';
-      $('captchaBox').classList.add('on');
-      setStep(2);
-      showOk('ক্যাপচা এসেছে — ছবির লেখাটি লিখে "লগইন করুন" চাপুন।');
-      $('captchaText').focus();
+      $('resumeCaptchaBtn').hidden = !SESSION;
+      openCaptcha();
     } catch (e) {
       showErr('সার্ভারের সঙ্গে সংযোগ করা যাচ্ছে না — আবার চেষ্টা করুন।');
     } finally {
       btn.disabled = false;
-      btn.innerHTML = '🔐 ক্যাপচা আনুন';
+      $('resumeCaptchaBtn').disabled = false;
+      btn.textContent = 'ক্যাপচা আনুন';
     }
   });
 
@@ -626,7 +605,7 @@
     $('optionBox').classList.remove('on');
     JOB = null; PROFILE = null; HAS_DOWNLOAD = false; EDITS = {}; PHOTO_STATE = 'portal'; PHOTO_DATA = null;
     SIGN_STATE = 'none'; SIGN_DATA = null; PAD_OPEN = false;
-    setStep(1); showOptions();
+    showOptions();
   }
   async function loadProfile() {
     if (!JOB) return false;
@@ -667,13 +646,17 @@
     else { $('cardFormPanel').style.display = 'none'; $('serverFormPanel').style.display = 'block'; }
   }
 
-  $('goBtn').addEventListener('click', async () => {
+  $('captchaForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const btn = $('goBtn');
+    if (btn.disabled || !$('captchaBox').open) return;
     clearBoxes();
     if (!SESSION) { showErr(ERRMSG.SESSION_EXPIRED); return; }
     const captcha = $('captchaText').value.trim();
     if (!captcha) { showErr(ERRMSG.CAPTCHA_REQUIRED); return; }
-    const btn = $('goBtn');
     btn.disabled = true;
+    $('startBtn').disabled = true;
+    $('resumeCaptchaBtn').disabled = true;
     btn.innerHTML = '<span class="spin"></span> লগইন হচ্ছে… তথ্য সংগ্রহ করা হচ্ছে';
     try {
       const r = await ABC.api(API + '/captcha', { method: 'POST', body: { sessionId: SESSION, captcha }, timeout: 180000 });
@@ -683,11 +666,11 @@
         PROFILE = null; HAS_DOWNLOAD = false; EDITS = {}; PHOTO_STATE = 'portal'; PHOTO_DATA = null;
         SIGN_STATE = 'none'; SIGN_DATA = null; PAD_OPEN = false;
         SESSION = null;
-        $('captchaBox').classList.remove('on');
+        closeCaptcha();
         $('password').value = '';
         $('holderLine').textContent = d.holderName ? ('কার্ডের মালিক: ' + d.holderName) : '';
         $('optionBox').classList.add('on');
-        setStep(3);
+        $('showCardFormBtn').focus({ preventScroll: true });
         showOk('লগইন সফল — এবার যেটি লাগবে সেটির ফর্ম খুলুন, তারপর ডাউনলোড করুন।');
         return;
       }
@@ -695,20 +678,21 @@
         $('captchaImg').src = d.captcha;
         $('captchaText').value = '';
         showErr(msgOf(d, ERRMSG.LOGIN_FAILED) + ' নতুন ক্যাপচা এসেছে।');
-        $('captchaText').focus();
+        if ($('captchaBox').open) $('captchaText').focus();
         return;
       }
       if (d.final || d.error === 'SESSION_EXPIRED') {
         SESSION = null;
-        $('captchaBox').classList.remove('on');
-        setStep(1);
+        closeCaptcha();
       }
       showErr(msgOf(d, 'লগইন করা যায়নি — আবার চেষ্টা করুন।'));
     } catch (e) {
       showErr('সার্ভারের সঙ্গে সংযোগ করা যাচ্ছে না — আবার চেষ্টা করুন।');
     } finally {
       btn.disabled = false;
-      btn.innerHTML = '🔓 লগইন করুন';
+      $('startBtn').disabled = false;
+      $('resumeCaptchaBtn').disabled = false;
+      btn.textContent = 'লগইন করুন';
     }
   });
 

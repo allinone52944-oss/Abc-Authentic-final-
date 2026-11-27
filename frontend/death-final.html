@@ -14,33 +14,12 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Hind Siliguri', system-ui, sans-serif; background: var(--bg-page, #f8fafc); color: var(--text-main, #0f172a); min-height: 100vh; }
   .app-shell { max-width: 760px; margin: 0 auto; padding: 24px 16px 60px; }
-  .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-light, #e2e8f0); }
-  .brand { font-size: 20px; font-weight: 700; color: #1e40af; display: flex; align-items: center; gap: 8px; }
-  .icon-btn { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; padding: 8px 14px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; }
-  .icon-btn:hover { background: #dbeafe; }
-  .back-link { display: inline-flex; align-items: center; gap: 6px; color: #2563eb; cursor: pointer; font-size: 14px; font-weight: 600; margin-bottom: 16px; }
-  .back-link:hover { text-decoration: underline; }
   
-  .steps { display: flex; gap: 8px; margin: 16px 0 24px; }
-  .step { flex: 1; text-align: center; font-size: 12px; color: var(--text-muted, #64748b); position: relative; padding-top: 30px; font-weight: 600; }
-  .step .dot { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 26px; height: 26px; border-radius: 50%; border: 2px solid #cbd5e1; display: flex; align-items: center; justify-content: center; font-size: 12px; background: #ffffff; color: #64748b; font-weight: 700; transition: all 0.2s ease; }
-  .step.on { color: #1e40af; }
-  .step.on .dot { border-color: #2563eb; color: #2563eb; box-shadow: 0 0 0 4px rgba(37,99,235,0.15); }
-  .step.done { color: #15803d; }
-  .step.done .dot { border-color: #16a34a; background: #16a34a; color: #ffffff; }
-
   .wiz { display: none; }
   .wiz.on { display: block; animation: fadeUp .25s ease; }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
   .form-card { background: #ffffff; border: 1px solid var(--border-light, #e2e8f0); border-radius: 16px; padding: 26px 22px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-  /* B1#7/B2#6 — first-step fee summary (same as nid-server-copy). */
-  .price-line {
-    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
-    background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
-    padding: 10px 14px; border-radius: var(--r-md, 10px); font-size: 13px; font-weight: 600;
-    margin-bottom: 18px;
-  }
   .field { margin-bottom: 14px; text-align: left; }
   .field label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
   .field input, .field select, .field textarea { width: 100%; padding: 11px 14px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 14px; font-family: inherit; color: #0f172a; background: #ffffff; }
@@ -51,11 +30,9 @@
   .btn:disabled { opacity: 0.65; cursor: default; }
   .btn-secondary { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s ease; }
   .btn-secondary:hover { background: #dbeafe; }
-  .row2 { display: flex; gap: 10px; }
-  .row2 .btn, .row2 .btn-secondary { flex: 1; }
 
-  .captcha-img { display: block; margin: 0 auto 14px; max-width: 100%; height: 68px; border: 2px solid #bfdbfe; border-radius: 10px; background: #ffffff; image-rendering: pixelated; }
-  .spin { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #ffffff; border-radius: 50%; animation: sp 0.8s linear infinite; vertical-align: -2px; margin-right: 8px; }
+  .captcha-img { display: block; max-width: 100%; max-height: 68px; object-fit: contain; }
+  .spin { display: inline-block; flex: none; width: 16px; height: 16px; border: 2px solid transparent; border-top-color: currentColor; border-right-color: currentColor; border-radius: 50%; animation: sp 0.8s linear infinite; vertical-align: -2px; margin-right: 8px; }
   @keyframes sp { to { transform: rotate(360deg); } }
 
   #certFrame { width: 100%; height: 62vh; border: 1px solid #cbd5e1; border-radius: 12px; background: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
@@ -63,7 +40,6 @@
   .err.on { display: block; }
   .ok { display: none; background: #f0fdf4; border: 1px solid #86efac; color: #15803d; padding: 12px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 14px; }
   .ok.on { display: block; }
-  .hint { font-size: 12px; color: #64748b; margin-top: 8px; text-align: center; }
 
   #recView { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; text-align: left; }
   #recView .field { margin: 0; display: flex; flex-direction: column; }
@@ -74,12 +50,156 @@
     #recView { grid-template-columns: 1fr; }
     #recView .field { grid-column: 1 / -1; }
   }
+
+  .page-death-final [hidden] { display: none !important; }
+  html:has(.page-death-final .death-dialog[open]) { overflow: hidden; }
+  .page-death-final.service-workspace .main { padding: 0; }
+  .page-death-final.service-workspace .main.directory-service-paused { padding: 16px; }
+  .page-death-final .main > .app-shell { padding: 16px clamp(14px, 2vw, 22px) 92px; }
+  .death-page-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 2px 12px; }
+  .death-page-header h1 { color: var(--layout-ink, #19372d); font-size: clamp(21px, 3vw, 26px); line-height: 1.25; margin: 0; }
+  .death-wallet-link {
+    display: inline-flex; align-items: center; min-height: 44px; max-width: 100%;
+    color: var(--layout-emerald, #086749); font-size: 14px; font-weight: 700; text-underline-offset: 3px;
+  }
+  .death-service-links { margin: 1px 0 8px; }
+  .death-service-links .directory-service-entry { margin: 0; }
+  .death-service-links > a, .death-service-links nav a { font-size: 14px; }
+  .death-service-links > a {
+    display: inline-flex; align-items: center; min-height: 44px;
+    color: var(--layout-emerald, #086749); font-weight: 700; text-underline-offset: 3px;
+  }
+  .death-panel {
+    min-width: 0; display: flex; flex-direction: column; padding: clamp(18px, 3vw, 26px);
+    background: #fff; border: 1px solid var(--layout-line, #dce7e0); border-radius: 18px;
+    box-shadow: 0 6px 20px rgba(12, 61, 44, .05);
+  }
+  .death-heading { display: flex; align-items: center; gap: 11px; color: var(--layout-ink, #19372d); font-size: 20px; line-height: 1.3; margin: 0 0 18px; }
+  .page-death-final .death-panel .field { margin-bottom: 14px; }
+  .death-panel.death-identity { padding: clamp(15px, 2vw, 20px); }
+  .death-identity-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; }
+  .death-fee { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 8px; color: #496357; font-size: 13px; }
+  #priceText { color: #6f4912; font-size: 14px; font-weight: 700; }
+  .death-panel input:read-only, .page-death-final #recView input:disabled { background: #f3f6f4; color: var(--layout-ink, #19372d); opacity: 1; }
+  .death-identity-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 18px; }
+  .death-data-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .page-death-final .death-data-actions .death-verify-button { width: auto; min-width: 216px; margin: 0; }
+  .death-dialog {
+    --dialog-offset: translateY(20px) scale(.975);
+    --dialog-ease: cubic-bezier(.2,.78,.25,1);
+    position: fixed; inset: 0; margin: auto; padding: 0;
+    width: min(464px, calc(100% - 36px)); max-width: none; max-height: calc(100vh - 36px); max-height: calc(100dvh - 36px);
+    border: 1px solid #abc5b8; border-radius: 22px; overflow: auto; overscroll-behavior: contain;
+    background: #fff; color: var(--layout-ink, #19372d); box-shadow: 0 28px 80px rgba(4,33,23,.38), 0 8px 24px rgba(4,33,23,.18);
+  }
+  .death-dialog[open] { animation: deathDialogIn .28s var(--dialog-ease) both; }
+  .death-dialog::backdrop { background: rgba(5,26,19,.65); animation: deathBackdropIn .22s ease-out both; }
+  .death-dialog:not([open]), .death-dialog:not([open])::backdrop { pointer-events: none; }
+  @keyframes deathDialogIn { from { opacity: 0; transform: var(--dialog-offset); } to { opacity: 1; transform: none; } }
+  @keyframes deathBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+  @supports (overlay: auto) and (transition-behavior: allow-discrete) {
+    .death-dialog {
+      opacity: 0; transform: var(--dialog-offset);
+      transition: opacity .19s ease-out, transform .28s var(--dialog-ease), display .28s allow-discrete, overlay .28s allow-discrete;
+    }
+    .death-dialog[open] { opacity: 1; transform: none; animation: none; }
+    .death-dialog::backdrop {
+      opacity: 0; animation: none;
+      transition: opacity .2s ease-out, display .28s allow-discrete, overlay .28s allow-discrete;
+    }
+    .death-dialog[open]::backdrop { opacity: 1; }
+    @starting-style {
+      .death-dialog[open] { opacity: 0; transform: var(--dialog-offset); }
+      .death-dialog[open]::backdrop { opacity: 0; }
+    }
+  }
+  .death-dialog-header {
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 20px 22px;
+    color: #fff; border-bottom: 1px solid #bfaa68;
+    background: radial-gradient(ellipse at top right, rgba(206,175,96,.19), transparent 65%), linear-gradient(115deg, #092f23, #0a5b41);
+  }
+  .death-dialog-header h3 { color: inherit; font-size: 23px; line-height: 1.3; }
+  .death-dialog-header p { margin-top: 4px; font-size: 14px; color: #d2e9dc; }
+  .death-dialog-close {
+    flex: 0 0 44px; height: 44px; border: 1px solid rgba(235,251,241,.24); border-radius: 12px;
+    background: rgba(235,251,241,.09); color: #f3faf6; font: inherit; font-size: 24px; line-height: 1; cursor: pointer;
+  }
+  .death-dialog-close:hover { background: rgba(235,251,241,.17); }
+  .death-dialog .death-dialog-close:focus-visible { outline-color: #f2d48a; }
+  .death-dialog-body { padding: 18px 22px 22px; }
+  .death-dialog .field { margin-bottom: 12px; }
+  .death-captcha-frame {
+    position: relative; isolation: isolate; overflow: hidden;
+    min-height: 86px; display: grid; place-items: center; margin-bottom: 14px; padding: 8px 12px;
+    background: #edf5f0; border: 1px solid #c7dcd0; border-radius: 12px;
+    text-align: center; color: #416458; font-size: 14px;
+  }
+  .death-dialog:has(#bRefresh[aria-busy="true"]) .death-captcha-frame::before {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: linear-gradient(110deg, transparent 25%, rgba(255,255,255,.88) 50%, transparent 75%);
+    animation: captchaLoading .85s ease-out both;
+  }
+  @keyframes captchaLoading { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  .death-captcha-frame .captcha-img { border-radius: 6px; }
+  .death-captcha-frame .captcha-img:not([hidden]) { animation: revealCaptcha .24s ease-out both; }
+  @keyframes revealCaptcha { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .death-captcha-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .death-captcha-actions button { flex: 1 1 130px; min-width: 0; }
+  .death-captcha-actions button:disabled { opacity: .65; cursor: default; }
+  .page-death-final .btn.death-verify-button {
+    position: relative; isolation: isolate; overflow: hidden; display: flex; align-items: center; justify-content: center;
+    min-height: 54px; padding: 12px 15px; border: 1px solid transparent; border-radius: 11px;
+    background: linear-gradient(115deg, #07563d, #0b6b4e); font-size: 16px;
+    box-shadow: 0 7px 16px rgba(6, 86, 60, .2); transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .death-verify-button::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(110deg, transparent 34%, rgba(255,255,255,.22) 48%, transparent 64%);
+    transform: translateX(-105%); transition: transform .5s ease;
+  }
+  .page-death-final .death-verify-button:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 9px 19px rgba(6, 86, 60, .24); }
+  .death-verify-button:not(:disabled):hover::after { transform: translateX(105%); }
+  .death-verify-button:not(:disabled):active { transform: translateY(0); }
+  :is(.death-panel,.death-dialog) button:focus-visible { outline: 2px solid #0b6b4e; outline-offset: 3px; }
+  .page-death-final .death-verify-button:disabled:not([aria-busy="true"]) { opacity: 1; color: #3c6154; background: #eaf3ee; box-shadow: none; border-color: #d5e5dc; }
+  .page-death-final .death-verify-button[aria-busy="true"] { opacity: 1; }
+  .death-notice :is(.err,.ok).on { margin-top: 12px; margin-bottom: 0; }
+  .death-record { margin-top: 12px; }
+  .death-record-fields { border: 0; min-inline-size: 0; margin: 0; padding: 0; }
+  .death-record-note { color: #416458; font-size: 14px; margin: -5px 0 15px; }
+  .death-record[data-filled="true"] { border-color: #a2c8b5; }
+  .death-record-footer { display: flex; justify-content: flex-end; padding-top: 18px; }
+  .page-death-final .death-record-footer .btn { width: auto; min-width: 180px; }
+  @media (max-width: 600px) {
+    .page-death-final .main > .app-shell { padding-top: 14px; }
+    .death-identity-fields { grid-template-columns: minmax(0,1fr); }
+    .death-data-actions { flex-direction: column; align-items: stretch; width: 100%; }
+    .page-death-final .death-data-actions .death-verify-button { width: 100%; min-width: 0; }
+    .page-death-final .death-record-footer .btn { width: 100%; min-width: 0; }
+    .death-dialog {
+      --dialog-offset: translateY(48px);
+      inset: auto 0 0; width: 100%; margin: 0; max-height: calc(100vh - 14px); max-height: calc(100dvh - 14px);
+      border-radius: 21px 21px 0 0;
+    }
+    .death-dialog-header { padding: 16px; }
+    .death-dialog-body { padding: 16px 16px max(18px, env(safe-area-inset-bottom)); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .page-death-final :is(.wiz.on, .spin, .death-dialog[open], .death-captcha-frame .captcha-img:not([hidden])),
+    .death-dialog::backdrop { animation: none; transition: none; }
+    .death-dialog { transition: none; }
+    .death-dialog:has(#bRefresh[aria-busy="true"]) .death-captcha-frame::before { display: none; animation: none; }
+    .page-death-final .death-verify-button { transition: none; }
+    .page-death-final .death-verify-button:not(:disabled):hover,
+    .death-verify-button:not(:disabled):hover::after { transform: none; }
+    .death-verify-button::after { display: none; }
+  }
 </style>
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/registration-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/engine-polish.css?v=20261111-4">
 <link rel="stylesheet" href="/css/service-entry.css?v=20261122-4">
-<script src="/js/service-navigation.js?v=20261124-3" defer></script>
+<script src="/js/service-navigation.js?v=20261127-2" defer></script>
 <script src="/js/engine-feedback.js?v=20261118-3" defer></script>
 </head>
 <body class="has-tabbar flagship-app service-workspace page-death-final">
@@ -104,81 +224,89 @@
   </div>
 
   <div class="main">
-    <div class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-      <div>
-        <h2>🕊️ মৃত্যু নিবন্ধন যাচাই</h2>
-        <p>DRN + মৃত্যু তারিখ দিয়ে UDRN থেকে সরাসরি যাচাই করুন</p>
-      </div>
-      <div id="walletBadge" style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">
-        💳 ব্যালেন্স: ৳<span id="balVal">০</span>
-      </div>
-    </div>
-
     <div class="app-shell">
   <div class="page">
-    <span class="back-link" onclick="history.back()">← ফিরে যান</span>
-    <div class="steps" id="steps">
-      <div class="step on" data-s="1"><span class="dot">১</span>তথ্য</div>
-      <div class="step" data-s="2"><span class="dot">২</span>ক্যাপচা</div>
-      <div class="step" data-s="3"><span class="dot">৩</span>যাচাই</div>
-      <div class="step" data-s="4"><span class="dot">৪</span>সনদ</div>
+    <header class="death-page-header">
+      <h1>মৃত্যু নিবন্ধন যাচাই</h1>
+      <a class="death-wallet-link" id="walletBadge" href="/wallet.html">ব্যালেন্স ৳<span id="balVal">০</span></a>
+    </header>
+    <div class="death-service-links" data-service-entry-slot>
+      <a href="/services.html?type=auto">← সেবার তালিকা</a>
     </div>
-    <div class="err" id="err"></div>
-    <div class="ok" id="ok"></div>
-    <div id="failReceipt" style="display:none;margin:8px 0;"></div>
+    <div class="wiz on" id="deathEntry">
+      <section class="death-panel death-identity" id="w1" aria-label="নিবন্ধনের তথ্য">
+        <div class="death-identity-fields">
+          <div class="field">
+            <label for="drn">মৃত্যু নিবন্ধন নম্বর (১৭ সংখ্যা)</label>
+            <input id="drn" inputmode="numeric" maxlength="17" placeholder="১৭ সংখ্যার নম্বর">
+          </div>
+          <div class="field">
+            <label for="dod">মৃত্যুর তারিখ</label>
+            <input id="dod" type="text" placeholder="দিন-মাস-বছর" inputmode="numeric">
+          </div>
+        </div>
+        <div class="death-identity-footer">
+          <div class="death-fee">
+            <span id="priceText">চার্জ লোড হচ্ছে…</span>
+            <span>যাচাই ব্যর্থ হলে চার্জ ৳০</span>
+          </div>
+          <div class="death-data-actions">
+            <button type="button" class="btn death-verify-button" id="b1" onclick="openCaptcha()" aria-haspopup="dialog" aria-controls="w2">যাচাই করে তথ্য আনুন →</button>
+            <button type="button" class="btn-secondary" id="bEditIdentity" onclick="editIdentity()" hidden>নম্বর বা তারিখ বদলান</button>
+          </div>
+        </div>
+      </section>
+      <div class="death-notice" id="deathEntryNotice">
+        <div id="deathMessages">
+          <div class="err" id="err" role="alert"></div>
+          <div class="ok" id="ok" role="status"></div>
+          <div id="failReceipt" style="display:none;margin:8px 0;"></div>
+        </div>
+      </div>
+      <section class="death-panel death-record" id="w3" aria-labelledby="recordHeading">
+        <h3 class="death-heading" id="recordHeading">সনদের তথ্য</h3>
+        <p class="death-record-note" id="recordNote">যাচাই সফল হলে সনদের তথ্য এই ঘরগুলোতে বসবে।</p>
+        <fieldset id="recordFields" class="death-record-fields" aria-label="সনদের তথ্য" disabled>
+          <div id="recView"></div>
+        </fieldset>
+        <div class="death-record-footer"><button type="button" class="btn" id="b3" onclick="step3()" disabled>সনদ তৈরি করুন →</button></div>
+      </section>
+    </div>
 
-    <!-- STEP 1 -->
-    <div class="wiz on" id="w1">
-      <div class="form-card">
-        <div class="price-line">
-          <span id="priceText">সেবা চার্জ লোড হচ্ছে…</span>
-          <span>যাচাই ব্যর্থ হলে চার্জ ৳০</span>
+    <dialog class="death-dialog" id="w2" aria-labelledby="captchaHeading" aria-describedby="captchaInstruction">
+      <div class="death-dialog-header">
+        <div>
+          <h3 id="captchaHeading">ক্যাপচা যাচাই</h3>
+          <p id="captchaInstruction">ছবির অক্ষরগুলো লিখে যাচাই করুন।</p>
         </div>
-        <div class="field">
-          <label for="drn">Death Registration No (১৭ সংখ্যা) *</label>
-          <input id="drn" inputmode="numeric" maxlength="17" placeholder="যেমন: 19681517411127048">
-        </div>
-        <div class="field">
-          <label for="dod">মৃত্যু তারিখ *</label>
-          <input id="dod" type="text" placeholder="dd-mm-yyyy বা yyyy-mm-dd" inputmode="numeric">
-        </div>
-        <button class="btn" id="b1" onclick="step1()">ক্যাপচা আনুন →</button>
-        <div class="hint">BDRIS পোর্টাল (UDRN) থেকে সরাসরি যাচাই করা হবে।</div>
+        <button type="button" class="death-dialog-close" onclick="closeCaptcha()" aria-label="পপআপ বন্ধ করুন">×</button>
       </div>
-    </div>
-    <!-- STEP 2: CAPTCHA -->
-    <div class="wiz" id="w2">
-      <div class="form-card" style="text-align:center;">
-        <p style="color:#334155;font-size:14px;font-weight:600;margin-bottom:12px;">ছবিতে প্রদর্শিত অক্ষরগুলো লিখুন</p>
-        <img class="captcha-img" id="capImg" alt="captcha">
-        <div class="field">
-          <label for="capAns">ক্যাপচা উত্তর *</label>
-          <input id="capAns" placeholder="সঠিক উত্তর লিখুন" autocomplete="off">
+      <div class="death-dialog-body">
+        <div class="death-captcha-frame">
+          <img class="captcha-img" id="capImg" alt="BDRIS ক্যাপচা" hidden>
+          <span id="captchaNote" role="status"></span>
         </div>
-        <div class="row2">
-          <button class="btn-secondary" id="bAuto" onclick="autoSolve()">✨ স্বয়ংক্রিয় সমাধান</button>
-          <button class="btn-secondary" onclick="step1(true)">🔄 নতুন ছবি</button>
-        </div>
-        <div style="height:14px;"></div>
-        <button class="btn" id="b2" onclick="step2()">যাচাই করুন →</button>
+        <form onsubmit="event.preventDefault();step2()">
+          <div class="field">
+            <label for="capAns">ক্যাপচা উত্তর</label>
+            <input id="capAns" placeholder="ছবির অক্ষর লিখুন" autocomplete="off" autocapitalize="off" spellcheck="false" disabled>
+          </div>
+          <div class="death-captcha-actions">
+            <button type="button" class="btn-secondary" id="bRefresh" onclick="step1()">নতুন ছবি</button>
+            <button type="button" class="btn-secondary" id="bAuto" onclick="autoSolve()" hidden>স্বয়ংক্রিয় সমাধান</button>
+          </div>
+          <button type="submit" class="btn death-verify-button" id="b2" disabled>যাচাই করুন →</button>
+        </form>
+        <div class="death-notice" id="deathCaptchaNotice"></div>
       </div>
-    </div>
-
-    <!-- STEP 3: RECORD -->
-    <div class="wiz" id="w3">
-      <div class="form-card">
-        <h3 style="color:#1e40af;margin-bottom:12px;font-size:17px;font-weight:700;">✅ তথ্য পাওয়া গেছে</h3>
-        <div id="recView"></div>
-        <div style="height:16px;"></div>
-        <button class="btn" id="b3" onclick="step3()">সনদ তৈরি করুন →</button>
-      </div>
-    </div>
+    </dialog>
 
     <!-- STEP 4: CERTIFICATE -->
     <div class="wiz" id="w4">
       <div class="form-card">
         <h3 style="color:#15803d;margin-bottom:12px;font-size:17px;font-weight:700;">🎉 সনদ প্রস্তুত!</h3>
-        <iframe id="certFrame" title="certificate preview"></iframe>
+        <div id="deathPreviewNotice"></div>
+        <iframe id="certFrame" title="মৃত্যু সনদের প্রিভিউ"></iframe>
         <div style="height:16px;"></div>
         <button class="btn" id="b4" onclick="dlPdf()">📥 PDF ডাউনলোড করুন</button>
       </div>
@@ -221,9 +349,44 @@ async function loadPrice(){
     if (el) el.textContent = 'সেবা চার্জ: ৳– (যাচাই সফল হলে কাটবে)';
   }
 }
-let S={sessionId:null,drn:'',dod:'',record:null,attemptKey:null};
+const S={sessionId:null,drn:'',dod:'',record:null,attemptKey:null,captchaPending:false,editingIdentity:false};
+const captchaDialog=document.getElementById('w2');
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function codOther(sel){const other=document.getElementById(sel.id+'_other');const isOther=(sel.value==='Other'||sel.value==='অন্যান্য');other.style.display=isOther?'block':'none';if(isOther){S.record[sel.id.replace('rec_','')]=other.value;}else{S.record[sel.id.replace('rec_','')]=sel.value;other.value='';}}
+function renderRecordFields(record){
+  const d=record||{};
+  const fields=[
+    ['office1','অফিসের নাম',d.office1],['office2','অফিসের ঠিকানা',d.office2],
+    ['brn','DRN',d.brn],['nameEn','নাম (EN)',d.nameEn],['nameBn','নাম (বাংলা)',d.nameBn],
+    ['dod','মৃত্যু তারিখ',d.dod],['sex','লিঙ্গ',d.sex,'dropdown'],
+    ['placeOfDeathEn','মৃত্যুর স্থান (EN)',d.placeOfDeathEn],['placeOfDeathBn','মৃত্যুর স্থান (বাংলা)',d.placeOfDeathBn],
+    ['causeOfDeathEn','মৃত্যুর কারণ (EN)',d.causeOfDeathEn,'dropdown'],['causeOfDeathBn','মৃত্যুর কারণ (বাংলা)',d.causeOfDeathBn,'dropdown'],
+    ['motherNameEn','মাতা (EN)',d.motherNameEn],['motherNameBn','মাতা (বাংলা)',d.motherNameBn],
+    ['fatherNameEn','পিতা (EN)',d.fatherNameEn],['fatherNameBn','পিতা (বাংলা)',d.fatherNameBn],
+    ['registrationDate','নিবন্ধনের তারিখ',d.registrationDate],['issuanceDate','ইস্যুর তারিখ',d.issuanceDate],
+    ['dob','জন্ম তারিখ',d.dob],['nationalityEn','জাতীয়তা (EN)',record?'Bangladeshi':''],['nationalityBn','জাতীয়তা (বাংলা)',record?'বাংলাদেশী':'']
+  ];
+  const fullW=['brn','office1','office2'];
+  const codOpts=['','Natural Causes','Disease','Accident','Old Age','Other'];
+  const codOptsBn=['','স্বাভাবিক কারণ','রোগ','দুর্ঘটনা','বার্ধক্য','অন্যান্য'];
+  const sexOpts=['','Male','Female'];
+  document.getElementById('recView').innerHTML=fields.map(f=>{
+    const cls='field'+(fullW.includes(f[0])?' full':'');
+    const lbl='<label for="rec_'+f[0]+'">'+esc(f[1])+'</label>';
+    if(f[3]==='dropdown'){
+      const opts=f[0]==='sex'?sexOpts:(f[0].includes('Bn')?codOptsBn:codOpts);
+      const sel='<select id="rec_'+f[0]+'" onchange="codOther(this)">'+opts.map(o=>'<option value="'+esc(o)+'"'+(o===(f[2]||'')?' selected':'')+'>'+esc(o||'-- নির্বাচন করুন --')+'</option>').join('')+'</select><input type="text" id="rec_'+f[0]+'_other" placeholder="ম্যানুয়ালি লিখুন" style="display:none;margin-top:4px;" oninput="S.record[\''+f[0]+'\']=this.value">';
+      return '<div class="'+cls+'">'+lbl+sel+'</div>';
+    }
+    return '<div class="'+cls+'">'+lbl+'<input type="text" id="rec_'+f[0]+'" value="'+esc(f[2]||'')+'"></div>';
+  }).join('');
+  fields.forEach(f=>{const el=document.getElementById('rec_'+f[0]); if(el) el.oninput=()=>{S.record[f[0]]=el.value;};});
+  document.getElementById('recordFields').disabled=!record;
+  if(record){
+    document.getElementById('w3').dataset.filled='true';
+    document.getElementById('recordNote').textContent='তথ্য বসানো হয়েছে। প্রয়োজনে সংশোধন করে সনদ তৈরি করুন।';
+  }
+}
 function clearResultMessage(){
   document.getElementById('err').classList.remove('on');
   document.getElementById('ok').classList.remove('on');
@@ -236,22 +399,95 @@ function showResultMessage(id, message){
   box.textContent = message;
   box.classList.add('on');
 }
-function go(n){
+function showPreview(){
   clearResultMessage();
-  document.querySelectorAll('.wiz').forEach(w=>w.classList.remove('on'));
-  document.getElementById('w'+n).classList.add('on');
-  document.querySelectorAll('.step').forEach(s=>{
-    const k=+s.dataset.s;s.classList.toggle('on',k===n);s.classList.toggle('done',k<n);
-    if(k<n)s.querySelector('.dot').textContent='✓';
-  });
-  window.scrollTo({top:0,behavior:'smooth'});
+  document.getElementById('deathPreviewNotice').append(document.getElementById('deathMessages'));
+  document.getElementById('deathEntry').classList.remove('on');
+  document.getElementById('w4').classList.add('on');
+  window.scrollTo({top:0,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
 }
 function busy(id,on,txt){
   if(on) clearResultMessage();
 
   const b=document.getElementById(id);if(!b)return;
-  if(on){b.dataset.t=b.innerHTML;b.innerHTML='<span class="spin"></span>'+(txt||'অপেক্ষা করুন…');b.disabled=true;}
-  else{b.innerHTML=b.dataset.t||b.innerHTML;b.disabled=false;}
+  if(on){b.dataset.t=b.innerHTML;b.innerHTML='<span class="spin" aria-hidden="true"></span>'+(txt||'অপেক্ষা করুন…');b.setAttribute('aria-busy','true');b.disabled=true;}
+  else{b.innerHTML=b.dataset.t||b.innerHTML;b.removeAttribute('aria-busy');b.disabled=false;}
+}
+
+function syncVerificationControls(){
+  const pending=S.captchaPending;
+  const verified=Boolean(S.record);
+  const locked=Boolean(S.attemptKey)&&!S.editingIdentity;
+  const captchaReady=Boolean(S.sessionId)&&!verified;
+  for(const id of ['drn','dod'])document.getElementById(id).readOnly=pending||locked;
+  const initial=document.getElementById('b1');
+  initial.hidden=verified;
+  initial.disabled=pending;
+  initial.textContent=pending?'অপেক্ষা করুন…':'যাচাই করে তথ্য আনুন →';
+  const edit=document.getElementById('bEditIdentity');
+  edit.hidden=!locked||verified;
+  edit.disabled=pending;
+  const refresh=document.getElementById('bRefresh');
+  refresh.disabled=pending||verified;
+  const auto=document.getElementById('bAuto');
+  auto.hidden=!captchaReady;
+  auto.disabled=pending||!captchaReady;
+  document.getElementById('capImg').hidden=!captchaReady;
+  document.getElementById('capAns').disabled=pending||!captchaReady;
+  const note=document.getElementById('captchaNote');
+  note.hidden=captchaReady;
+  note.textContent=refresh.hasAttribute('aria-busy')?'ক্যাপচা আনা হচ্ছে…':'ক্যাপচা পেতে নতুন ছবি চাপুন।';
+  const verify=document.getElementById('b2');
+  verify.disabled=pending||!captchaReady;
+  document.getElementById('b3').disabled=pending||!verified;
+}
+
+function captchaBusy(id,on,label){
+  S.captchaPending=on;
+  busy(id,on,label);
+  syncVerificationControls();
+}
+
+function clearConsumedCaptcha(){
+  S.sessionId=null;
+  document.getElementById('capAns').value='';
+}
+
+function showCaptcha(){
+  if(captchaDialog.open)return;
+  document.getElementById('deathCaptchaNotice').append(document.getElementById('deathMessages'));
+  captchaDialog.showModal();
+}
+
+function closeCaptcha(){
+  if(!captchaDialog.open)return;
+  captchaDialog.close();
+  document.getElementById('deathEntryNotice').append(document.getElementById('deathMessages'));
+}
+
+captchaDialog.addEventListener('cancel',event=>{
+  event.preventDefault();
+  closeCaptcha();
+});
+
+function openCaptcha(){
+  if(S.captchaPending||S.record||captchaDialog.open)return;
+  if(!S.sessionId){
+    step1();
+    return;
+  }
+  showCaptcha();
+  document.getElementById('capAns').focus();
+}
+
+function editIdentity(){
+  if(S.captchaPending||S.record)return;
+  S.editingIdentity=true;
+  clearConsumedCaptcha();
+  clearResultMessage();
+  hideFailReceipt();
+  syncVerificationControls();
+  document.getElementById('drn').focus();
 }
 
 function toDDMMYYYY(v){
@@ -267,89 +503,72 @@ function toDDMMYYYY(v){
   }
   return s;
 }
-async function step1(retry){
+async function step1(){
+  if(S.captchaPending||S.record)return;
   const drn=document.getElementById('drn').value.trim();
   const dod=document.getElementById('dod').value;
-  if(!/^\d{17}$/.test(drn)){showErr('Death Registration No ঠিক ১৭ সংখ্যার হতে হবে।');return;}
-  if(!dod){showErr('মৃত্যু তারিখ দিন।');return;}
-  S.drn=drn;S.dod=toDDMMYYYY(dod);
-  busy('b1',true,'ক্যাপচা আনা হচ্ছে…');
+  if(!/^\d{17}$/.test(drn)){showErr('মৃত্যু নিবন্ধন নম্বর ঠিক ১৭ সংখ্যার হতে হবে।');return;}
+  if(!dod){showErr('মৃত্যুর তারিখ দিন।');return;}
+  showCaptcha();
+  captchaBusy('bRefresh',true,'ছবি আনা হচ্ছে…');
+  let captchaLoaded=false;
   try{
     const r=await ABC.api(API+'/api/captcha');
     const j=await r.json();
     if(!j.success)throw new Error(j.error||'ক্যাপচা আসেনি');
+    S.drn=drn;
+    S.dod=toDDMMYYYY(dod);
     S.sessionId=j.sessionId;
-    // চার্জ গেটের চেষ্টা-কী (2026-10-30): এক চেষ্টার verify→preview→PDF
-    // সবাই একই কী পাঠায়, তাই রিট্রাইয়ে দুবার চার্জ হয় না; নতুন
-    // ক্যাপচা মানেই নতুন চেষ্টা, নতুন কী, নতুন চার্জ হতে পারে।
+    S.editingIdentity=false;
+    // A new image starts a new attempt. Reopening the current image keeps its key.
     S.attemptKey=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():'att-'+Date.now()+'-'+Math.random().toString(36).slice(2);
     document.getElementById('capImg').src=j.image;
     document.getElementById('capAns').value='';
-    go(2);
+    hideFailReceipt();
+    captchaLoaded=true;
   }catch(e){showErr(e.message||'ক্যাপচা আনতে ব্যর্থ। আবার চেষ্টা করুন।');}
-  busy('b1',false);
+  finally{
+    captchaBusy('bRefresh',false);
+    if(captchaLoaded&&captchaDialog.open)document.getElementById('capAns').focus();
+  }
 }
 async function autoSolve(){
-  if(!S.sessionId)return;
-  busy('bAuto',true,'চেষ্টা চলছে…');
+  if(!captchaDialog.open||S.captchaPending||!S.sessionId||S.record)return;
+  captchaBusy('bAuto',true,'চেষ্টা চলছে…');
   try{
     const r=await ABC.api(API+'/api/solve-captcha',{method:'POST',body:{sessionId:S.sessionId}});
     const j=await r.json();
     if(j.success&&j.answer){document.getElementById('capAns').value=j.answer;showOk('স্বয়ংক্রিয় সমাধান বসানো হয়েছে ✓');}
     else throw new Error(j.error||'স্বয়ংক্রিয় সমাধান ব্যর্থ');
   }catch(e){showErr('নিজে লিখুন: '+(e.message||''));}
-  busy('bAuto',false);
+  finally{captchaBusy('bAuto',false);}
 }
 async function step2(){
+  if(!captchaDialog.open||S.captchaPending||!S.sessionId||S.record)return;
   const ans=document.getElementById('capAns').value.trim();
   if(!ans){showErr('ক্যাপচা উত্তর লিখুন।');return;}
-  busy('b2',true,'BDRIS যাচাই চলছে… (১৫-৪০ সেকেন্ড লাগতে পারে)');
+  captchaBusy('b2',true,'BDRIS যাচাই চলছে… (১৫-৪০ সেকেন্ড লাগতে পারে)');
   try{
     const r=await ABC.api(API+'/api/verify',{method:'POST',body:{sessionId:S.sessionId,drn:S.drn,dod:S.dod,captcha:ans,idempotency_key:S.attemptKey}});
     const j=await r.json();
     if(!j.success)throw new Error(j.message||j.error||'যাচাই ব্যর্থ');
     S.record=j.data;
-    S.record=j.data;
-    const d=j.data;
-    const fields=[
-      ['office1','অফিসের নাম',d.office1],['office2','অফিসের ঠিকানা',d.office2],
-      ['brn','DRN',d.brn],['nameEn','নাম (EN)',d.nameEn],['nameBn','নাম (বাংলা)',d.nameBn],
-      ['dod','মৃত্যু তারিখ',d.dod],['sex','লিঙ্গ',d.sex,'dropdown'],
-      ['placeOfDeathEn','মৃত্যুর স্থান (EN)',d.placeOfDeathEn],['placeOfDeathBn','মৃত্যুর স্থান (বাংলা)',d.placeOfDeathBn],
-      ['causeOfDeathEn','মৃত্যুর কারণ (EN)',d.causeOfDeathEn,'dropdown'],['causeOfDeathBn','মৃত্যুর কারণ (বাংলা)',d.causeOfDeathBn,'dropdown'],
-      ['motherNameEn','মাতা (EN)',d.motherNameEn],['motherNameBn','মাতা (বাংলা)',d.motherNameBn],
-      ['fatherNameEn','পিতা (EN)',d.fatherNameEn],['fatherNameBn','পিতা (বাংলা)',d.fatherNameBn],
-      ['registrationDate','নিবন্ধনের তারিখ',d.registrationDate],['issuanceDate','ইস্যুর তারিখ',d.issuanceDate],
-      ['dob','জন্ম তারিখ',d.dob],['nationalityEn','জাতীয়তা (EN)','Bangladeshi'],['nationalityBn','জাতীয়তা (বাংলা)','বাংলাদেশী']
-    ];
-    const fullW=['brn','office1','office2'];
-    const codOpts=['','Natural Causes','Disease','Accident','Old Age','Other'];
-    const codOptsBn=['','স্বাভাবিক কারণ','রোগ','দুর্ঘটনা','বার্ধক্য','অন্যান্য'];
-    const sexOpts=['','Male','Female'];
-    document.getElementById('recView').innerHTML=fields.map(f=>{
-      const cls='field'+(fullW.includes(f[0])?' full':'');
-      const lbl='<label for="rec_'+f[0]+'">'+esc(f[1])+'</label>';
-      if(f[3]==='dropdown'){
-        const opts=f[0]==='sex'?sexOpts:(f[0].includes('Bn')?codOptsBn:codOpts);
-        const otherVal=f[0].includes('Bn')?'অন্যান্য':'Other';
-        const sel='<select id="rec_'+f[0]+'" onchange="codOther(this)">'+opts.map(o=>'<option value="'+esc(o)+'"'+(o===(f[2]||'')?' selected':'')+'>'+esc(o||'-- নির্বাচন করুন --')+'</option>').join('')+'</select><input type="text" id="rec_'+f[0]+'_other" placeholder="ম্যানুয়ালি লিখুন" style="display:none;margin-top:4px;" oninput="S.record[\''+f[0]+'\']=this.value">';
-        return '<div class="'+cls+'">'+lbl+sel+'</div>';
-      }
-      return '<div class="'+cls+'">'+lbl+'<input type="text" id="rec_'+f[0]+'" value="'+esc(f[2]||'')+'"></div>';
-    }).join('')+'<div class="s full" style="color:var(--muted);font-size:12px;">✏️ সব তথ্য এডিট করা যাবে</div>';
-    fields.forEach(f=>{const el=document.getElementById('rec_'+f[0]); if(el) el.oninput=()=>{S.record[f[0]]=el.value;};});
-    go(3);showOk('মৃত্যু তথ্য যাচাই সফল ✓');hideFailReceipt();
+    renderRecordFields(S.record);
+    closeCaptcha();
+    showOk('মৃত্যু তথ্য যাচাই সফল ✓');
+    hideFailReceipt();
   }catch(e){showErr(e.message||'যাচাই ব্যর্থ।');reportEngineFailure('death-final', S.drn, e.message);}
-  busy('b2',false);
+  finally{captchaBusy('b2',false);}
 }
 async function step3(){
+  if(!S.record||document.getElementById('b3').disabled)return;
   busy('b3',true,'সনদ তৈরি হচ্ছে…');
   try{
     const r=await ABC.api(API+'/api/preview',{method:'POST',body:Object.assign({},S.record,{idempotency_key:S.attemptKey})});
     const j=await r.json();
     if(!j.success)throw new Error(j.message||j.error||'প্রিভিউ ব্যর্থ');
     document.getElementById('certFrame').srcdoc=j.html;
-    go(4);
+    showPreview();
     showOk('প্রিভিউ প্রস্তুত। নিচের বোতাম থেকে PDF ডাউনলোড করুন।');
   }catch(e){showErr(e.message||'সনদ তৈরি ব্যর্থ।');}
   busy('b3',false);
@@ -403,6 +622,8 @@ async function dlPdf(){
   }catch(e){showErr(e.message||'PDF ব্যর্থ।');reportEngineFailure('death-final', S.drn, 'সনদ তৈরি ব্যর্থ');}
   busy('b4',false);
 }
+renderRecordFields(null);
+syncVerificationControls();
 (async function init(){
   const me=await ABC.api('/auth/me');
   if(!me.ok){location.href='/login.html';return;}

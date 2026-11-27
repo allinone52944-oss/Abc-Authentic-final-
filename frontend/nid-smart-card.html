@@ -261,6 +261,28 @@
   @media (max-width: 768px) {
     #fieldForm { grid-template-columns: 1fr; }
   }
+  body.engine-form-page.page-nid-replica .main:has(#w3.on,#w4.on) .topbar { display:flex !important; }
+  body.engine-form-page.page-nid-replica .wiz .form-card {
+    max-width:none !important; padding:clamp(14px,2vw,22px); border:1px solid #dce8e1;
+    border-radius:16px; background:#fff;
+  }
+  .engine-form-page.page-nid-replica #dropZone { min-height:124px; padding:12px; border-width:1px; border-radius:12px; }
+  .engine-form-page.page-nid-replica #dropZone > div:nth-child(3) { font-size:17px !important; }
+  .engine-form-page.page-nid-replica .nid-help { margin:8px 0; }
+  .engine-form-page.page-nid-replica .price-line {
+    justify-content:flex-start; background:transparent; padding:4px 0; margin:0 0 8px; font-size:14px;
+  }
+  .nid-upload-current {
+    display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px 16px;
+    margin-bottom:10px; padding:10px 14px; background:#f2f7f4; border:1px solid #dce8e1; border-radius:12px;
+  }
+  .nid-upload-current[hidden] { display:none; }
+  .nid-upload-current > div { display:grid; min-width:0; flex:1 1 170px; overflow-wrap:anywhere; }
+  .nid-upload-current span { color:#416458; font-size:13px; }
+  body.engine-form-page.page-nid-replica :is(#w2,#w3,#w4) h3 {
+    font-size:20px !important; text-align:left; margin-bottom:12px !important;
+  }
+  #nidMessages { scroll-margin-top:12px; }
 </style>
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
@@ -272,11 +294,12 @@
 <link rel="stylesheet" href="/css/engine-inputs.css?v=20261110-13">
 <script src="/js/engine-inputs.js?v=20261110-13" defer></script>
 <link rel="stylesheet" href="/css/service-entry.css?v=20261122-4">
-<script src="/js/service-navigation.js?v=20261124-3" defer></script>
+<link rel="stylesheet" href="/css/engine-form-layout.css?v=20261127-1">
+<script src="/js/service-navigation.js?v=20261127-2" defer></script>
 <script src="/js/engine-feedback.js?v=20261118-3" defer></script>
 <link rel="stylesheet" href="/css/nid-simple.css?v=20261118-2">
 </head>
-<body class="has-tabbar flagship-app service-workspace page-nid-replica page-nid-smart-card">
+<body class="has-tabbar flagship-app service-workspace engine-form-page page-nid-replica page-nid-smart-card">
 <div class="desktop">
   <div class="sidebar">
     <div class="side-logo">
@@ -298,31 +321,33 @@
   </div>
 
   <div class="main">
-    <header class="nid-brand"><a href="/dashboard.html">All In One</a><a href="/services.html">সকল সেবা →</a></header>
-    <div class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+    <div class="topbar engine-form-header">
       <div>
         <h2>সাইন টু স্মার্ট কার্ড পিডিএফ</h2>
-        <p>PDF দিন, তথ্য মিলিয়ে নতুন স্মার্ট কার্ড ডাউনলোড করুন</p>
       </div>
-      <div id="walletBadge" style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">
-        💳 ব্যালেন্স: ৳<span id="balVal">০</span>
-      </div>
+      <a id="walletBadge" class="engine-form-wallet" href="/wallet.html">ব্যালেন্স ৳<span id="balVal">০</span></a>
     </div>
 
-    <div class="err" id="err" role="alert"></div>
-    <div class="ok" id="ok" role="status"></div>
+    <div class="engine-form-links" data-service-entry-slot></div>
+    <div id="nidMessages">
+      <div class="err" id="err" role="alert"></div>
+      <div class="ok" id="ok" role="status"></div>
+    </div>
 
     <!-- STEP 1: UPLOAD -->
     <div class="wiz on" id="w1">
-      <div class="form-card">
-        <p class="nid-step">ধাপ ১ / ৩ · PDF দিন</p>
+      <div class="nid-upload-current" id="uploadCurrent" hidden>
+        <div><strong>উৎস PDF</strong><span id="sourceName"></span></div>
+        <button type="button" class="btn btn-secondary" id="changePdfBtn" onclick="go(1)">PDF পরিবর্তন</button>
+      </div>
+      <div class="form-card" id="uploadForm">
         <label class="drop" id="dropZone">
           <input type="file" id="pdfFile" accept="application/pdf,.pdf">
-          <div style="font-size:42px; margin-bottom:8px;">📄</div>
+          <div style="font-size:24px; margin-bottom:2px;" aria-hidden="true">📄</div>
           <div style="font-size:16px; font-weight:700; color:var(--primary-700);">PDF বেছে নিন</div>
           <div style="font-size:13px; color:var(--text-muted); margin-top:4px;">সর্বোচ্চ ১০ MB · এখানে ফাইল ছেড়েও দিতে পারেন</div>
         </label>
-        <details class="nid-help"><summary>কোন PDF দিতে হবে?</summary><p>ভোটার নিবন্ধন তথ্যের PDF দিন। ফাইল থেকে পাওয়া তথ্য পরের ধাপে দেখে সংশোধন করতে পারবেন।</p></details>
+        <details class="nid-help"><summary>কোন PDF দিতে হবে?</summary><p>ভোটার নিবন্ধন তথ্যের PDF দিন।</p></details>
         <div class="price-line">
           <span>ফি ৳<span id="priceVal">–</span> · সফল হলে টাকা কাটবে</span>
         </div>
@@ -335,8 +360,6 @@
     <div class="wiz" id="w3">
       <div class="form-card">
         <h3 style="color:var(--primary-700); font-size:17px; font-weight:700; margin-bottom:6px;">তথ্য মিলিয়ে নিন</h3>
-        <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">ধাপ ২ / ৩ · ভুল থাকলে সংশোধন করুন</p>
-        <button type="button" class="nid-back" onclick="go(1)">← PDF পরিবর্তন করুন</button>
         <div class="imgprev" id="imgPrev"></div>
         <div id="fieldForm"></div>
         <div style="height:18px;"></div>
@@ -348,7 +371,6 @@
     <div class="wiz" id="w4">
       <div class="form-card">
         <h3 style="color:var(--success); font-size:17px; font-weight:700; margin-bottom:12px;">আপনার স্মার্ট কার্ড প্রস্তুত</h3>
-        <p class="nid-step">ধাপ ৩ / ৩ · PDF ডাউনলোড করুন</p>
         <iframe id="cardFrame" title="Smart card preview"></iframe>
         <div style="height:16px;"></div>
         <div class="row2">
@@ -403,17 +425,18 @@ function showResultMessage(id, message){
 }
 function busy(id,on,txt){
   if(on) clearResultMessage();
+  if(id==='b3') document.getElementById('changePdfBtn').disabled=on;
 const b=document.getElementById(id);if(!b)return;b.disabled=on;if(on&&txt){b.dataset.t=b.textContent;b.textContent=txt;}else if(b.dataset.t){b.textContent=b.dataset.t;delete b.dataset.t;}}
 function go(n){
   clearResultMessage();
-  document.querySelectorAll('.wiz').forEach(w=>w.classList.remove('on'));
-  document.getElementById('w'+n).classList.add('on');
-  document.querySelectorAll('.step').forEach(s=>{
-    const k=+s.dataset.s;s.classList.toggle('on',k===n);s.classList.toggle('done',k<n);
-    if(k<n)s.querySelector('.dot').textContent='✓';
-    else s.querySelector('.dot').textContent=k===1?'১':k===2?'২':k===3?'৩':'৪';
-  });
-  window.scrollTo(0,0);
+  const target = document.getElementById('w'+n);
+  const upload = document.getElementById('w1');
+  for(const view of document.querySelectorAll('.wiz')) view.classList.toggle('on', view===target || view===upload);
+  document.getElementById('uploadCurrent').hidden = n===1;
+  document.getElementById('uploadForm').hidden = n!==1;
+  const messages = document.getElementById('nidMessages');
+  target.before(messages);
+  messages.scrollIntoView({block:'start', behavior:'instant'});
 }
 
 // Standard fields (rendered first, in this order) — the card's slots.
@@ -573,6 +596,7 @@ async function doExtract(){
     const j=await r.json();
     if(!r.ok||!j.ok)throw new Error(j.message||(j.error==='NO_CORE_DATA'?NO_CORE_DATA_MSG:j.error==='PDF_TOO_LARGE'?'ফাইল অনেক বড়।':j.error==='NOT_A_PDF'?'শুধু PDF দিন।':'তথ্য বের করা যায়নি। আবার চেষ্টা করুন।'));
     S.jobId=j.jobId;
+    document.getElementById('sourceName').textContent = f.name;
     S.fields=j.fields||{};
     S.photo = null;
     S.sign = null;

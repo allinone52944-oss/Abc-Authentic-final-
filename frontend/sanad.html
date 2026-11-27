@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="bn">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -27,6 +27,28 @@
   .qr-box span { display: block; font-size: 10px; color: #64748b; margin-top: 2px; }
   .signature-box { text-align: center; font-size: 13px; font-weight: bold; color: #1e293b; }
   .signature-line { border-top: 1px solid #1e293b; width: 180px; margin-top: 45px; padding-top: 5px; }
+  @media screen {
+    body { display: grid; grid-template-columns: minmax(0, 900px); gap: 14px; padding: 16px; background: #f5f7f4; }
+    .control-panel {
+      width: auto; max-height: none; overflow: visible; display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px;
+      padding: 18px; border: 1px solid #dbe6e0; border-radius: 16px; box-shadow: 0 5px 18px rgba(12,61,44,.06);
+    }
+    .sanad-header, .control-panel > .btn { grid-column: 1 / -1; }
+    .sanad-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; }
+    .sanad-header h2 { margin: 0; padding: 0; border: 0; color: #19372d; font-size: 22px; }
+    .sanad-header a { display: inline-flex; align-items: center; min-height: 44px; color: #086749; font-size: 14px; font-weight: 700; }
+    .control-panel .form-group { margin: 0; min-width: 0; }
+    .control-panel .form-group label { color: #19372d; font-size: 14px; }
+    .control-panel .form-group :is(input,select) { min-width: 0; min-height: 46px; border-color: #dbe6e0; border-radius: 8px; font-size: 16px; }
+    .control-panel .btn { min-height: 48px; margin: 0; border-radius: 10px; background: #086749; font-size: 15px; }
+    .control-panel :is(input,select,a,button):focus-visible { outline: 2px solid #086749; outline-offset: 2px; }
+    .sanad-preview { min-width: 0; overflow-x: auto; padding: 1px; }
+  }
+  @media screen and (max-width: 600px) {
+    body { padding: 12px; }
+    .control-panel { grid-template-columns: minmax(0,1fr); padding: 14px; }
+  }
   @media print {
     body { background: none; padding: 0; display: block; }
     .control-panel { display: none; }
@@ -35,9 +57,12 @@
 </head>
 <body>
     <div class="control-panel">
-        <h2>BD Sanad Engine Control</h2>
+        <header class="sanad-header">
+            <h2>সনদ ও সার্টিফিকেট</h2>
+            <a href="/services.html?type=auto">← সেবার তালিকা</a>
+        </header>
         <div class="form-group">
-            <label>Select Union / Portal:</label>
+            <label for="sel-union">ইউনিয়ন বা পোর্টাল</label>
             <select id="sel-union" onchange="updateEngine()">
                 <option value="https://unionportals.gov.bd/union-1">1 No. Madhyapara Union Parishad</option>
                 <option value="https://unionportals.gov.bd/union-2">2 No. South Sadar Union Parishad</option>
@@ -45,7 +70,7 @@
             </select>
         </div>
         <div class="form-group">
-            <label>Sanad Type:</label>
+            <label for="sel-type">সনদের ধরন</label>
             <select id="sel-type" onchange="updateEngine()">
                 <option value="চারিত্রিক সনদপত্র">চারিত্রিক সনদপত্র (Character Certificate)</option>
                 <option value="নাগরিক সনদপত্র">নাগরিক সনদপত্র (Citizenship Certificate)</option>
@@ -53,32 +78,33 @@
             </select>
         </div>
         <div class="form-group">
-            <label>Memo / Smarak No:</label>
+            <label for="inp-memo">স্মারক নম্বর</label>
             <input type="text" id="inp-memo" value="সাপো/ইউপি/২০২৬/৮৫২" oninput="updateEngine()">
         </div>
         <div class="form-group">
-            <label>Applicant Name:</label>
+            <label for="inp-name">আবেদনকারীর নাম</label>
             <input type="text" id="inp-name" value="মোঃ পঙ্কজ দাস" oninput="updateEngine()">
         </div>
         <div class="form-group">
-            <label>Father's Name:</label>
+            <label for="inp-father">পিতার নাম</label>
             <input type="text" id="inp-father" value="মৃত হরেন্দ্র দাস" oninput="updateEngine()">
         </div>
         <div class="form-group">
-            <label>Mother's Name:</label>
+            <label for="inp-mother">মাতার নাম</label>
             <input type="text" id="inp-mother" value="বাসনা রানী দাস" oninput="updateEngine()">
         </div>
         <div class="form-group">
-            <label>Village / Address:</label>
+            <label for="inp-address">গ্রাম বা ঠিকানা</label>
             <input type="text" id="inp-address" value="গ্রাম: উত্তর পাড়া, ডাকঘর: সদর - ৪০০০" oninput="updateEngine()">
         </div>
         <div class="form-group">
-            <label>Issue Date:</label>
+            <label for="inp-date">ইস্যুর তারিখ</label>
             <input type="date" id="inp-date" value="2026-11-11" oninput="updateEngine()">
         </div>
-        <button class="btn btn-print" onclick="window.print()">Print / Save PDF</button>
+        <button class="btn btn-print" onclick="window.print()">প্রিন্ট / PDF সংরক্ষণ</button>
     </div>
 
+    <div class="sanad-preview" aria-label="সনদের প্রিভিউ" tabindex="0">
     <div class="certificate-container">
         <div>
             <div class="cert-header">
@@ -109,6 +135,7 @@
                 <div class="signature-line">চেয়ারম্যানের স্বাক্ষর</div>
             </div>
         </div>
+    </div>
     </div>
 
 <script>

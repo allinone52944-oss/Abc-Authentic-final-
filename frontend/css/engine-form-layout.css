@@ -1,0 +1,103 @@
+/* Compact entry layout shared by the form engines. Results keep their own styles. */
+.engine-form-page.service-workspace .main {
+  min-width: 0;
+  padding: 16px clamp(14px, 2.4vw, 28px) 96px;
+}
+
+.engine-form-page .engine-form-header,
+.engine-form-page .engine-form-links,
+.engine-form-page .main > .directory-service-entry { width: 100%; max-width: 1040px; margin-inline: auto; }
+
+.engine-form-page .engine-form-header {
+  display: flex;
+  flex-flow: row wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 2px 14px;
+  margin-bottom: 4px;
+}
+
+.engine-form-page .engine-form-header h2 {
+  font-size: clamp(20px, 3vw, 26px);
+  line-height: 1.3;
+  margin: 0;
+  color: var(--layout-ink, #19372d);
+}
+
+.engine-form-page .engine-form-wallet,
+.engine-form-page .engine-form-links > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--layout-emerald, #086749);
+  font-weight: 700;
+  font-size: 14px;
+  text-underline-offset: 3px;
+}
+
+.engine-form-page .engine-form-links { margin-bottom: 8px; }
+.engine-form-page .engine-form-links:empty { display: none; }
+.engine-form-page .engine-form-links .directory-service-entry { margin: 0; }
+.engine-form-page .engine-form-links .directory-service-entry nav { gap: 2px 14px; }
+.engine-form-page .engine-form-links .directory-service-entry nav a { font-size: 14px; }
+.engine-form-page .engine-form-links :is(a, summary):focus-visible { outline: 2px solid #087450; outline-offset: 2px; }
+
+.engine-form-page .land-layout,
+.engine-form-page .main > .engine-form-panel { width: 100%; max-width: 1040px; margin-inline: auto; }
+.engine-form-page .engine-form-panel {
+  min-width: 0;
+  padding: clamp(15px, 2.4vw, 24px);
+  border: 1px solid var(--layout-line, #dbe6e0);
+  border-radius: 16px;
+  box-shadow: 0 5px 18px rgba(12, 61, 44, .05);
+}
+
+.engine-form-page .engine-form-panel :is(.price-line, .disclaimer) { margin-bottom: 12px; }
+.engine-form-page .engine-form-panel .price-line {
+  padding: 6px 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--layout-line, #dbe6e0);
+  border-radius: 0;
+  font-size: 14px;
+  color: #724811;
+}
+
+.engine-form-page .engine-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+  align-items: start;
+}
+.engine-form-page .engine-fields-grid > :not(.field, .engine-upload-group) { grid-column: 1 / -1; }
+.engine-form-page .engine-fields-grid > :is(.field, .engine-upload-group) { min-width: 0; }
+.engine-form-page .engine-fields-grid[hidden] { display: none; }
+.engine-form-page .engine-form-panel :is(input:not([type="file"]), select, textarea) { max-width: 100%; }
+
+.engine-form-page .engine-form-panel form button.btn-primary:not(:disabled) {
+  border-radius: 10px;
+  background: linear-gradient(115deg, #07563d, #0b6b4e);
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(6, 86, 60, .17);
+  transition: box-shadow .18s ease, transform .18s ease;
+}
+.engine-form-page .engine-form-panel form button.btn-primary:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px rgba(6, 86, 60, .23);
+}
+
+.engine-form-page.page-bdris-apply > .wrap { padding-top: 14px; }
+.engine-form-page.page-bdris-apply .wrap > .topbar { margin-bottom: 14px; padding-bottom: 12px; }
+
+@media (max-width: 600px) {
+  .engine-form-page.service-workspace .main { padding: 14px 14px 96px; }
+  .engine-form-page .engine-fields-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .engine-form-page .engine-form-panel form button.btn-primary:not(:disabled),
+  .engine-form-page .engine-form-panel form button.btn-primary:not(:disabled):hover {
+    transform: none;
+    transition: none;
+  }
+}

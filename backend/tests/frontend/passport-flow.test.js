@@ -246,7 +246,7 @@ function runFlow(opts) {
 
 describe('landing (form-first entry)', () => {
   test('body starts in the landing state, inside the site shell', () => {
-    expect(PAGE).toContain('<body class="has-tabbar flagship-app service-workspace page-passport flow-landing">');
+    expect(PAGE).toContain('<body class="has-tabbar flagship-app service-workspace page-passport flow-landing engine-form-page">');
   });
 
   test('landing section with the Passport তৈরি করুন button, before the document area', () => {

@@ -101,10 +101,11 @@
 <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
 <link rel="stylesheet" href="/css/engine-polish.css?v=20261111-4">
 <link rel="stylesheet" href="/css/service-entry.css?v=20261122-4">
-<script src="/js/service-navigation.js?v=20261124-3" defer></script>
+<link rel="stylesheet" href="/css/engine-form-layout.css?v=20261127-1">
+<script src="/js/service-navigation.js?v=20261127-2" defer></script>
 <script src="/js/engine-feedback.js?v=20261118-3" defer></script>
 </head>
-<body class="has-tabbar flagship-app service-workspace page-land">
+<body class="has-tabbar flagship-app service-workspace page-land engine-form-page">
 <div class="desktop">
   <div class="sidebar">
     <div class="side-logo">
@@ -126,28 +127,16 @@
   </div>
 
   <div class="main">
-    <a class="back-nav" id="backToLandCatalog" href="/services.html?type=auto">← সেবার তালিকায় ফিরুন</a>
-    <div class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-      <div>
-        <h2>🌾 ভূমি সেবা (খতিয়ান)</h2>
-        <p>সরকারি ভূমি রেকর্ড থেকে সরাসরি — জরিপের ধরন নিজে খুঁজে নেবে</p>
-      </div>
-      <div style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">
-        💳 ব্যালেন্স: ৳<span id="balVal">০</span>
-      </div>
+    <div class="topbar engine-form-header">
+      <h2>ভূমি সেবা</h2>
+      <a class="engine-form-wallet" href="/wallet.html">ব্যালেন্স ৳<span id="balVal">০</span></a>
+    </div>
+    <div class="engine-form-links" data-service-entry-slot>
+      <a class="back-nav" id="backToLandCatalog" href="/services.html?type=auto">← সেবার তালিকা</a>
     </div>
 
     <div class="land-layout">
-    <div class="form-card">
-      <div class="hero">
-        <h3>সরকারি ভূমি রেকর্ড — সরাসরি আপনার হাতে</h3>
-        <p>কোনো অফিসে যাওয়া নয়, দালাল নয় — অফিসিয়াল রেকর্ড থেকেই রিপোর্ট</p>
-        <div class="badges">
-          <span class="badge">🏛️ সরকারি রেকর্ড থেকে সরাসরি</span>
-          <span class="badge">💸 রেকর্ড না পেলে ৳০</span>
-          <span class="badge">📄 PDF রিপোর্ট + ইতিহাসে সংরক্ষণ</span>
-        </div>
-      </div>
+    <div class="form-card engine-form-panel">
       <div class="modes" id="modes" role="radiogroup" aria-label="সেবার ধরন">
         <div class="mode-card on" data-mode="scan" role="radio" tabindex="0" aria-checked="true">
           <div class="ic">👤</div><div class="t">নামে সন্ধান</div>
@@ -167,7 +156,7 @@
       </div>
 
       <div class="price-line">
-        <span>সেবা চার্জ: ৳<span id="priceVal">–</span> (শুধু রেকর্ড পেলেই কাটবে)</span>
+        <span>সেবা চার্জ: ৳<span id="priceVal">–</span></span>
         <span>রেকর্ড না পেলে চার্জ: ৳০</span>
       </div>
 
