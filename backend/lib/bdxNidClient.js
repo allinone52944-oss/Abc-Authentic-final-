@@ -4,10 +4,12 @@ const PATHS = new Map([
   ['premium', '/api-portal/api/of-sv-copy.php'],
   ['half', '/api-portal/api/sv-half.php'],
 ]);
+const PREMIUM_FALLBACK_PATH = '/api-portal/api/sv-copy.php';
 const REQUEST_TIMEOUT_MS = 12_000;
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 const NID_PATTERN = /^(?:[0-9]{10}|[0-9]{13}|[0-9]{17})$/;
 const NO_RECORD_CODES = new Set(['not_found', 'record_not_found', 'no_record', 'no_data']);
+const RESPONSE_STATUS_FIELDS = new Set(['status', 'code', 'message', 'error', 'success', 'data']);
 
 function providerError(code = 'provider_unavailable') {
   return Object.assign(new Error(code), { code });
@@ -15,6 +17,28 @@ function providerError(code = 'provider_unavailable') {
 
 function recordObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function providerDebitStatus(payload) {
+  if (!recordObject(payload) || !Object.hasOwn(payload, 'response')) return undefined;
+  const { charged, http_status: httpStatus, from_cache: fromCache, amount } = payload;
+  if (typeof charged !== 'boolean' || !Number.isInteger(httpStatus) || httpStatus < 200 || httpStatus > 599) {
+    return undefined;
+  }
+  if (Object.hasOwn(payload, 'from_cache') && (typeof fromCache !== 'boolean' || (charged && fromCache))) {
+    return undefined;
+  }
+  if (Object.hasOwn(payload, 'amount') && (!Number.isFinite(amount) || (charged ? amount <= 0 : amount !== 0))) {
+    return undefined;
+  }
+  return charged;
+}
+
+function isEmptyRecordResponse(response) {
+  const { data } = response;
+  const emptyData = data == null || data === ''
+    || ((recordObject(data) || Array.isArray(data)) && Object.keys(data).length === 0);
+  return emptyData && Object.keys(response).every(field => RESPONSE_STATUS_FIELDS.has(field));
 }
 
 function cleanText(value, limit = 200) {
@@ -151,7 +175,6 @@ function normalizeResult(payload, { type, nid, dob }) {
   if (type === 'premium') {
     result.presentAddress = normalizeFullAddress(data.presentAddress);
     result.permanentAddress = normalizeFullAddress(data.permanentAddress);
-    if (!result.presentAddress || !result.permanentAddress) throw providerError('address_incomplete');
   } else if (type === 'backup') {
     result.presentAddress = normalizeAddress(data.presentAddress);
     result.permanentAddress = normalizeAddress(data.permanentAddress);
@@ -159,35 +182,59 @@ function normalizeResult(payload, { type, nid, dob }) {
   return result;
 }
 
-async function lookupBdxNid({ type, nid, dob, apiKey }, fetchImpl = globalThis.fetch) {
+async function lookupEndpoint(path, { type, nid, dob, apiKey }, fetchImpl, signal) {
+  let response;
+  let payload;
+  try {
+    const url = new URL(path, ORIGIN);
+    url.search = new URLSearchParams({ key: apiKey.trim(), nid, dob }).toString();
+    response = await fetchImpl(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json', 'Cache-Control': 'no-store' },
+      redirect: 'error',
+      signal,
+    });
+    if (!response.ok && response.status !== 404 && type !== 'premium') {
+      await response.body?.cancel();
+      throw providerError();
+    }
+    payload = await readBoundedJson(response);
+  } catch {
+    // Fetch and parse exceptions can contain the request URL or provider body.
+    throw providerError();
+  }
+
+  try {
+    if (!response.ok && (response.status !== 404 || payload?.http_status !== 404)) throw providerError();
+    return normalizeResult(payload, { type, nid, dob });
+  } catch (e) {
+    const error = providerError(e.code === 'record_not_found' ? 'record_not_found' : undefined);
+    if (type === 'premium') {
+      const charged = providerDebitStatus(payload);
+      if (charged === true || (charged === false && error.code === 'record_not_found' && isEmptyRecordResponse(payload.response))) {
+        error.providerCharged = charged;
+      }
+    }
+    throw error;
+  }
+}
+
+async function lookupBdxNid(input, fetchImpl = globalThis.fetch) {
+  const { type, nid, dob, apiKey } = input;
   const path = PATHS.get(type);
   if (!path || typeof apiKey !== 'string' || !apiKey.trim() || typeof nid !== 'string'
       || !NID_PATTERN.test(nid) || !isIsoDate(dob)) {
     throw providerError();
   }
 
-  let payload;
+  const signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   try {
-    const url = new URL(path, ORIGIN);
-    url.search = new URLSearchParams({ key: apiKey.trim(), nid, dob }).toString();
-    const response = await fetchImpl(url, {
-      method: 'GET',
-      headers: { Accept: 'application/json', 'Cache-Control': 'no-store' },
-      redirect: 'error',
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok && response.status !== 404) {
-      await response.body?.cancel();
-      throw providerError();
-    }
-    payload = await readBoundedJson(response);
-    if (!response.ok && payload?.http_status !== response.status) throw providerError();
-  } catch {
-    // Fetch and parse exceptions can contain the request URL or provider body.
-    throw providerError();
+    return await lookupEndpoint(path, input, fetchImpl, signal);
+  } catch (e) {
+    // A second call can incur a fee, so it needs an explicit free miss from the primary.
+    if (type !== 'premium' || e.code !== 'record_not_found' || e.providerCharged !== false || signal.aborted) throw e;
   }
-
-  return normalizeResult(payload, { type, nid, dob });
+  return lookupEndpoint(PREMIUM_FALLBACK_PATH, input, fetchImpl, signal);
 }
 
 module.exports = { lookupBdxNid };

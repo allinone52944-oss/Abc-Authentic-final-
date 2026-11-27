@@ -4,8 +4,8 @@ const input = { type: 'backup', nid: '0000000000', dob: '1901-02-03', apiKey: 't
 const identity = { name: 'পরীক্ষার রেকর্ড', nationalId: input.nid, dateOfBirth: input.dob };
 const addresses = { presentAddress: 'Current Sample Address', permanentAddress: 'Permanent Sample Address' };
 
-function reply(response, httpStatus = 200, status = 200) {
-  return new Response(JSON.stringify({ http_status: httpStatus, response }), { status });
+function reply(response, httpStatus = 200, status = 200, metadata = {}) {
+  return new Response(JSON.stringify({ ...metadata, http_status: httpStatus, response }), { status });
 }
 
 describe('BD-X NID adapter', () => {
@@ -84,11 +84,70 @@ describe('BD-X NID adapter', () => {
     ['permanentAddress', {}],
     ['presentAddress', '-'],
     ['permanentAddress', { addressLine: '—', district: 'N/A' }],
-  ])('rejects an unavailable Premium %s %# without another provider call', async (field, value) => {
+  ])('keeps the other Premium address when %s is unavailable %#', async (field, value) => {
     const fetchImpl = jest.fn().mockResolvedValue(reply({ status: 'success', data: {
       ...identity, ...addresses, [field]: value,
-    } }));
-    await expect(lookupBdxNid({ ...input, type: 'premium' }, fetchImpl)).rejects.toMatchObject({ code: 'address_incomplete' });
+    } }, 200, 200, { charged: false, amount: 0 }));
+    await expect(lookupBdxNid({ ...input, type: 'premium' }, fetchImpl)).resolves.toMatchObject({
+      nationalId: input.nid, dateOfBirth: input.dob, ...addresses, [field]: '',
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  test('returns verified Premium identity data from cache without any address', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(reply({ status: 'success', data: identity }, 200, 200, {
+      charged: false, from_cache: true, amount: 0,
+    }));
+    await expect(lookupBdxNid({ ...input, type: 'premium' }, fetchImpl)).resolves.toMatchObject({
+      nationalId: input.nid, dateOfBirth: input.dob, presentAddress: '', permanentAddress: '',
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  test('queries the previous Premium endpoint once after an explicitly free miss using the same deadline', async () => {
+    const fetchImpl = jest.fn()
+      .mockResolvedValueOnce(reply({ status: 'not_found', data: null }, 404, 404, { charged: false, amount: 0 }))
+      .mockResolvedValueOnce(reply({ status: 'success', data: {
+        ...identity, presentAddress: { villageOrRoad: 'Fallback Sample Road', upazila: 'Fallback Sample Upazila' },
+      } }, 200, 200, { charged: true, amount: 24 }));
+    await expect(lookupBdxNid({ ...input, type: 'premium' }, fetchImpl)).resolves.toMatchObject({
+      nationalId: input.nid, presentAddress: 'Fallback Sample Road, Fallback Sample Upazila', permanentAddress: '',
+    });
+    expect(fetchImpl.mock.calls.map(([url]) => url.pathname)).toEqual([
+      '/api-portal/api/of-sv-copy.php', '/api-portal/api/sv-copy.php',
+    ]);
+    for (const [url, options] of fetchImpl.mock.calls) {
+      expect(url.origin).toBe('https://api.bd-x.com');
+      expect(Object.fromEntries(url.searchParams)).toEqual({ key: input.apiKey, nid: input.nid, dob: input.dob });
+      expect(options).toMatchObject({ method: 'GET', redirect: 'error', signal: fetchImpl.mock.calls[0][1].signal });
+      expect(options.signal).toBe(fetchImpl.mock.calls[0][1].signal);
+    }
+  });
+
+  test.each([true, false])('returns the fallback miss with its own debit status %s and makes no third call', async charged => {
+    const fetchImpl = jest.fn()
+      .mockResolvedValueOnce(reply({ status: 'not_found' }, 200, 200, { charged: false }))
+      .mockResolvedValueOnce(reply({ status: 'not_found' }, 404, 404, { charged }));
+    await expect(lookupBdxNid({ ...input, type: 'premium' }, fetchImpl)).rejects.toMatchObject({
+      code: 'record_not_found', providerCharged: charged,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  test.each([
+    [{ status: 'not_found' }, {}, 200, 'record_not_found'],
+    [{ status: 'not_found' }, { charged: 'false' }, 200, 'record_not_found'],
+    [{ status: 'not_found' }, { charged: false, amount: 24 }, 200, 'record_not_found'],
+    [{ status: 'not_found', data: identity }, { charged: false }, 200, 'record_not_found'],
+    [{ status: 'not_found', ...identity }, { charged: false }, 200, 'record_not_found'],
+    [{ status: 'not_found', presentAddress: 'Partial Sample Address' }, { charged: false }, 200, 'record_not_found'],
+    [{ status: 'error' }, { charged: false }, 503, 'provider_unavailable'],
+    [{ status: 'success', data: { ...identity, nationalId: '0000000001' } }, { charged: false }, 200, 'provider_unavailable'],
+  ])('does not fall back after an ambiguous or unavailable Premium result %#', async (response, metadata, status, code) => {
+    const fetchImpl = jest.fn().mockResolvedValueOnce(reply(response, status, status, metadata));
+    const failed = lookupBdxNid({ ...input, type: 'premium' }, fetchImpl);
+    await expect(failed).rejects.toMatchObject({ code });
+    await expect(failed).rejects.not.toHaveProperty('providerCharged');
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
@@ -97,6 +156,62 @@ describe('BD-X NID adapter', () => {
       ...identity, ...addresses, nationalId: '0000000001',
     } });
     await expect(lookupBdxNid({ ...input, type: 'premium' }, fetchImpl)).rejects.toMatchObject({ code: 'provider_unavailable' });
+  });
+
+  test.each([
+    [200, 200, 'record_not_found'],
+    [404, 404, 'record_not_found'],
+    [502, 500, 'provider_unavailable'],
+  ])('confirms Premium debit on HTTPS %s with provider status %s without leaking the response', async (status, httpStatus, code) => {
+    const fetchImpl = jest.fn().mockResolvedValue(reply({
+      status: 'not_found', message: 'Private response body',
+    }, httpStatus, status, { charged: true, from_cache: false, amount: 24 }));
+    const failed = lookupBdxNid({ ...input, type: 'premium' }, fetchImpl);
+    await expect(failed).rejects.toMatchObject({ message: code, code, providerCharged: true });
+    await expect(failed).rejects.not.toHaveProperty('cause');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  test('confirms a Premium debit without returning an unmatched record', async () => {
+    const fetchImpl = async () => reply({ status: 'success', data: {
+      ...identity, ...addresses, nationalId: '0000000001',
+    } }, 200, 200, { charged: true });
+    await expect(lookupBdxNid({ ...input, type: 'premium' }, fetchImpl)).rejects.toMatchObject({
+      message: 'provider_unavailable', code: 'provider_unavailable', providerCharged: true,
+    });
+  });
+
+  test.each([
+    { http_status: 502, response: {}, charged: false },
+    { http_status: 502, response: {}, charged: 'true' },
+    { http_status: 502, response: {}, charged: true, from_cache: true },
+    { http_status: 502, response: {}, charged: true, amount: 0 },
+    { http_status: '502', response: {}, charged: true },
+    { http_status: 502, charged: true },
+  ])('does not confirm a Premium debit from ambiguous or malformed envelopes %#', async payload => {
+    const fetchImpl = async () => new Response(JSON.stringify(payload), { status: 502 });
+    const failed = lookupBdxNid({ ...input, type: 'premium' }, fetchImpl);
+    await expect(failed).rejects.toThrow(/^provider_unavailable$/);
+    await expect(failed).rejects.not.toHaveProperty('providerCharged');
+  });
+
+  test('does not confirm a Premium debit from unreadable JSON or a failed connection', async () => {
+    const malformed = lookupBdxNid({ ...input, type: 'premium' }, async () =>
+      new Response('{"charged":true', { status: 502 }));
+    const disconnected = lookupBdxNid({ ...input, type: 'premium' }, async url => {
+      throw new Error('Connection failed: ' + url);
+    });
+    for (const failed of [malformed, disconnected]) {
+      await expect(failed).rejects.toThrow(/^provider_unavailable$/);
+      await expect(failed).rejects.not.toHaveProperty('providerCharged');
+    }
+  });
+
+  test.each(['backup', 'half'])('retains the existing %s error contract even if the provider reports a debit', async type => {
+    const fetchImpl = async () => reply({ status: 'not_found' }, 404, 404, { charged: true });
+    const failed = lookupBdxNid({ ...input, type }, fetchImpl);
+    await expect(failed).rejects.toThrow(/^record_not_found$/);
+    await expect(failed).rejects.not.toHaveProperty('providerCharged');
   });
 
   test('normalizes the nested record and exposes only the allowed fields', async () => {

@@ -39,8 +39,12 @@ async function lockedCreditRows(client, userId, serviceId) {
   return r.rows;
 }
 
-async function availableFor(client, userId, serviceId) {
+async function availableFor(client, userId, serviceId, { lock = false } = {}) {
   if (!serviceId) return 0;
+  if (lock) {
+    const rows = await lockedCreditRows(client, userId, serviceId);
+    return rows.reduce((sum, row) => sum + Number(row.remaining), 0);
+  }
   const r = await client.query(
     `SELECT COALESCE(SUM(remaining), 0) AS s FROM service_credits
       WHERE user_id = $1 AND service_id = $2 AND remaining > 0

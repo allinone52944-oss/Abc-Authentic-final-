@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
   <link rel="stylesheet" href="/css/service-entry.css?v=20261122-4">
   <link rel="stylesheet" href="/css/engine-form-layout.css?v=20261127-1">
-  <link rel="stylesheet" href="/css/nid-auto-server-copy.css?v=3">
+  <link rel="stylesheet" href="/css/nid-auto-server-copy.css?v=4">
   <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
   <script src="/js/service-navigation.js?v=20261127-2" defer></script>
 </head>
@@ -110,19 +110,21 @@
               </label>
             </fieldset>
 
+            <p class="ansc-premium-terms" id="premiumTerms" hidden>মিল থাকা তথ্য এলে বা তথ্যদাতা ফি কাটলে দেখানো চার্জ কাটবে, PDF না এলেও। ঠিকানা আংশিক হতে পারে।</p>
             <div class="ansc-action">
-              <p id="total" role="status">সেবা চার্জ <strong id="selectedPrice">—</strong></p>
+              <p id="total" role="status"><span id="selectedPriceLabel">সেবা চার্জ</span> <strong id="selectedPrice">—</strong></p>
               <button class="btn btn-primary" id="lookup" type="submit" disabled>সার্ভার কপি তৈরি করুন</button>
             </div>
             <p class="ansc-error" id="error" role="alert" hidden></p>
           </form>
 
-          <section class="ansc-result" id="result" aria-labelledby="resultTitle" tabindex="-1" hidden>
+          <section class="ansc-result" id="result" aria-labelledby="resultTitle" aria-describedby="resultType resultAddressStatus" tabindex="-1" hidden>
             <div class="ansc-result-copy">
               <span class="ansc-result-mark" aria-hidden="true">✓</span>
               <div>
                 <h2 id="resultTitle">সার্ভার কপি প্রস্তুত</h2>
                 <p id="resultType"></p>
+                <p id="resultAddressStatus" hidden></p>
               </div>
             </div>
             <button class="btn btn-primary" id="download" type="button">PDF ডাউনলোড করুন</button>
@@ -161,13 +163,14 @@
       const authorizedInput = byId('authorized');
       const submitButton = byId('lookup');
       const downloadButton = byId('download');
+      const premiumTerms = byId('premiumTerms');
       const requestedType = new URLSearchParams(location.search).get('type');
       const errorMessages = {
         PRICE_CHANGED: 'সেবা চার্জ বদলেছে। নতুন চার্জ দেখে আবার চেষ্টা করুন।',
         SERVICE_UNAVAILABLE: 'এই সেবাটি এখন বন্ধ আছে।',
         INSUFFICIENT_BALANCE: 'পর্যাপ্ত ব্যালেন্স নেই। ওয়ালেট রিচার্জ করে আবার চেষ্টা করুন।',
         RECORD_NOT_FOUND: 'এই NID নম্বর ও জন্ম তারিখে কোনো তথ্য পাওয়া যায়নি।',
-        ADDRESS_INCOMPLETE: 'বর্তমান বা স্থায়ী ঠিকানার তথ্য অসম্পূর্ণ। কোনো চার্জ কাটা হয়নি।',
+        PREMIUM_TERMS_CHANGED: 'Premium-এর চার্জের নিয়ম বদলেছে। পেজটি রিলোড করে নতুন নিয়ম দেখুন।',
         PROVIDER_UNAVAILABLE: 'তথ্যের উৎস থেকে এখন সাড়া পাওয়া যাচ্ছে না। কিছুক্ষণ পর আবার চেষ্টা করুন।',
         INVALID_INPUT: 'NID নম্বর, জন্ম তারিখ ও অনুমতির তথ্য মিলিয়ে আবার চেষ্টা করুন।',
         LOOKUP_BUSY: 'অনুরোধটি প্রক্রিয়াধীন আছে। একটু অপেক্ষা করে একই তথ্য দিয়ে আবার চেষ্টা করুন।',
@@ -212,17 +215,26 @@
       }
 
       function currentPrice() {
-        return optionPrices.get(form.elements.type.value);
+        const type = form.elements.type.value;
+        return attempt?.type === type ? attempt.price : optionPrices.get(type);
       }
 
       function syncControls() {
         const busy = loading || submitting;
+        const type = form.elements.type.value;
         const price = currentPrice();
+        const showTerms = type === 'premium' && optionPrices.has(type);
         byId('options').disabled = busy;
         byId('inputs').disabled = busy || price === undefined;
         submitButton.disabled = busy || price === undefined;
+        byId('selectedPriceLabel').textContent = attempt?.type === type && price !== optionPrices.get(type)
+          ? 'আগের চার্জ' : 'সেবা চার্জ';
         byId('selectedPrice').textContent = price === undefined ? '—' : money(price);
-        submitButton.textContent = submitting ? 'সার্ভার কপি তৈরি হচ্ছে…' : 'সার্ভার কপি তৈরি করুন';
+        submitButton.textContent = submitting ? 'সার্ভার কপি তৈরি হচ্ছে…'
+          : attempt?.type === type ? 'আগের অনুরোধ যাচাই করুন' : 'সার্ভার কপি তৈরি করুন';
+        premiumTerms.hidden = !showTerms;
+        if (showTerms) submitButton.setAttribute('aria-describedby', premiumTerms.id);
+        else submitButton.removeAttribute('aria-describedby');
         form.setAttribute('aria-busy', String(busy));
       }
 
@@ -249,7 +261,9 @@
             prices[radio.value].textContent = available ? money(entry.price) : 'এখন বন্ধ';
           }
 
-          if (!optionPrices.has(form.elements.type.value)) {
+          if (attempt) {
+            radios.forEach((radio) => { radio.checked = radio.value === attempt.type; });
+          } else if (!optionPrices.has(form.elements.type.value)) {
             const initialRadio = radios.find((radio) => radio.value === requestedType && !radio.disabled)
               || radios.find((radio) => !radio.disabled);
             radios.forEach((radio) => { radio.checked = radio === initialRadio; });
@@ -262,7 +276,7 @@
           optionPrices.clear();
           for (const radio of radios) {
             radio.disabled = true;
-            radio.checked = false;
+            radio.checked = radio.value === attempt?.type;
             prices[radio.value].textContent = 'চার্জ পাওয়া যায়নি';
           }
           byId('balanceLink').hidden = true;
@@ -276,6 +290,14 @@
       function invalidateAttempt() {
         attempt = null;
         showMessage('error', '');
+        syncControls();
+      }
+
+      function paidFailureMessage(result) {
+        const amount = Number.isFinite(result.chargedAmount) && result.chargedAmount > 0
+          ? money(result.chargedAmount) : 'Premium';
+        const payment = result.refunded === true ? 'চার্জ ফেরত দেওয়া হয়েছে।' : amount + ' চার্জ কাটা হয়েছে।';
+        return 'রিপোর্ট পাওয়া যায়নি। ' + payment + (result.orderId ? ' অর্ডার ' + result.orderId : '');
       }
 
       function reportPath(result) {
@@ -300,7 +322,6 @@
       });
       byId('options').addEventListener('change', () => {
         invalidateAttempt();
-        syncControls();
       });
       byId('reloadOptions').addEventListener('click', loadOptions);
 
@@ -322,11 +343,17 @@
           dobInput.reportValidity();
           return;
         }
-        if (!attempt || attempt.price !== price) {
-          attempt = { price, idempotencyKey: crypto.randomUUID() };
+        if (!attempt || attempt.type !== type) {
+          attempt = { type, price, idempotencyKey: crypto.randomUUID() };
         }
         const idempotencyKey = attempt.idempotencyKey;
+        const body = { type, nid, dob, authorized: true, price, idempotencyKey };
+        if (type === 'premium') body.acceptPremiumChargeOnLookup = true;
         submitting = true;
+        downloadPath = '';
+        byId('result').hidden = true;
+        showMessage('resultAddressStatus', '');
+        showMessage('downloadError', '');
         syncControls();
         showMessage('error', '');
         try {
@@ -334,7 +361,7 @@
             method: 'POST',
             timeout: 50000,
             retryNetwork: false,
-            body: { type, nid, dob, authorized: true, price, idempotencyKey },
+            body,
           });
           const result = await response.json().catch(() => null);
           if (response.status === 401) {
@@ -342,9 +369,15 @@
             return;
           }
           if (!response.ok) {
+            if (type === 'premium' && result?.error === 'PREMIUM_CHARGED_NO_REPORT') {
+              showMessage('error', paidFailureMessage(result));
+              await loadOptions();
+              return;
+            }
             showMessage('error', Object.hasOwn(errorMessages, result?.error)
               ? errorMessages[result.error] : ABC.httpErrBn(response.status, 'সার্ভার কপি তৈরি'));
             if (result?.error === 'PRICE_CHANGED' || result?.error === 'SERVICE_UNAVAILABLE') {
+              attempt = null;
               await loadOptions();
             }
             return;
@@ -356,9 +389,10 @@
             return;
           }
           downloadPath = path;
-          showMessage('downloadError', '');
           byId('resultType').textContent = radios.find((radio) => radio.value === type)
             .closest('label').querySelector('.ansc-name').textContent;
+          showMessage('resultAddressStatus', type === 'premium' && result?.addressLimited === true
+            ? 'পাওয়া তথ্য দিয়ে কপি তৈরি হয়েছে। ঠিকানার কিছু তথ্য পাওয়া যায়নি।' : '');
           byId('result').hidden = false;
           nidInput.value = '';
           dobInput.value = '';
@@ -376,17 +410,21 @@
 
       downloadButton.addEventListener('click', async () => {
         if (!downloadPath || downloadButton.disabled) return;
+        const path = downloadPath;
         downloadButton.disabled = true;
         downloadButton.textContent = 'ডাউনলোড হচ্ছে…';
         showMessage('downloadError', '');
         try {
-          const response = await ABC.api(downloadPath, { cache: 'no-store' });
+          const response = await ABC.api(path, { cache: 'no-store' });
+          if (path !== downloadPath) return;
           if (!response.ok) {
             showMessage('downloadError', ABC.httpErrBn(response.status, 'ডাউনলোড'));
             return;
           }
           const file = await response.blob();
-          if (file.type.split(';', 1)[0] !== 'application/pdf' || await file.slice(0, 5).text() !== '%PDF-') {
+          const isPdf = file.type.split(';', 1)[0] === 'application/pdf' && await file.slice(0, 5).text() === '%PDF-';
+          if (path !== downloadPath) return;
+          if (!isPdf) {
             showMessage('downloadError', 'PDF ফাইলটি পাওয়া যায়নি। আবার চেষ্টা করুন।');
             return;
           }
@@ -399,7 +437,7 @@
           link.remove();
           setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
         } catch (_) {
-          showMessage('downloadError', ABC.httpErrBn(0, 'ডাউনলোড'));
+          if (path === downloadPath) showMessage('downloadError', ABC.httpErrBn(0, 'ডাউনলোড'));
         } finally {
           downloadButton.disabled = false;
           downloadButton.textContent = 'PDF ডাউনলোড করুন';

@@ -164,13 +164,12 @@ function render(){
     const hasPdf = it.kind === 'bdris' && (it.documents || []).length > 0;
     const hasDocs = (it.documents || []).length > 0;
     const isFailed = (it.title || '').includes('— ব্যর্থ');
-    // B2#8 — every row states its status and the next action. History
-    // only ever holds completed/delivered records (the /history SQL
-    // gates), so a file-less row is a completed record with no
-    // downloadable file — never a missing record. BDRIS rows with a
-    // retrievable PDF already state their PDF state in `extra` below,
-    // so they get no second status line.
-    const statusText = isFailed
+    const premiumFailure = hasDocs ? null : it.premium_failure;
+    const statusText = premiumFailure
+      ? (premiumFailure.refunded
+        ? 'রিপোর্ট পাওয়া যায়নি। চার্জ ফেরত দেওয়া হয়েছে।'
+        : 'রিপোর্ট পাওয়া যায়নি। চার্জ কাটা হয়েছে ৳' + Number(premiumFailure.chargedAmount).toLocaleString('bn-BD') + '।')
+      : isFailed
       ? '❌ ব্যর্থ হয়েছে — কোনো ফাইল তৈরি হয়নি। আবার চেষ্টা করুন।'
       : hasDocs
         ? '✅ ডেলিভারি ফাইল প্রস্তুত — নিচে ডাউনলোড করুন।'

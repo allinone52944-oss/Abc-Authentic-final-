@@ -208,6 +208,13 @@
   accent-color: var(--layout-emerald);
 }
 
+.ansc-premium-terms {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #51665a;
+}
+
 .ansc-action {
   display: flex;
   align-items: center;
@@ -257,6 +264,7 @@
   border: 1px solid #edc5c7;
   background: #fff3f3;
   color: #862827;
+  overflow-wrap: anywhere;
 }
 
 .ansc-recovery {

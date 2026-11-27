@@ -308,7 +308,7 @@ async function init(){
       '</div>' +
       // Audit #49 — when the fee is cut (never guessed; only when the
       // API carries a rule and the service is priced).
-      ((price > 0 && s.charge_rule) ?
+      ((s.engine_id !== 'nid-auto-server-copy' && price > 0 && s.charge_rule) ?
         '<div style="margin-top:8px;padding:10px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;font-size:13px;color:#1e40af;">💳 <b>' + esc(s.charge_rule.label) + '</b> — ' + esc(s.charge_rule.detail) + (s.charge_rule.rule === 'success' ? '। না পেলে ৳০ — কোনো টাকা কাটা হবে না।' : '।') + '</div>' : '') +
       // B2#4 — BDRIS charges twice, at two separate moments
       // (application ৳90 before submit, original PDF ৳10 before

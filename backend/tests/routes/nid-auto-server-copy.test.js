@@ -15,7 +15,7 @@ const db = require('../../db');
 const { availableFor, payForService } = require('../../lib/serviceCredits');
 const { lookupBdxNid } = require('../../lib/bdxNidClient');
 const { buildAutoNidReportPdf } = require('../../lib/autoNidReportPdf');
-const { decryptReport, encryptReport, storageKey } = require('../../lib/autoNidReportStore');
+const { decryptReport, encryptReport, fingerprint, storageKey } = require('../../lib/autoNidReportStore');
 const router = require('../../routes/nid-auto-server-copy');
 const userRouter = require('../../routes/user');
 
@@ -33,6 +33,7 @@ const route = '/api/nid-auto-server-copy';
 const pdf = Buffer.from('%PDF-1.4\n% Synthetic test report\n%%EOF');
 const syntheticRecord = { nameBn: 'নমুনা', nationalId: '0000000000', dateOfBirth: '2000-02-29' };
 const lookup = { type: 'backup', nid: syntheticRecord.nationalId, dob: syntheticRecord.dateOfBirth, authorized: true, price: 45, idempotencyKey };
+const premiumLookup = { type: 'premium', price: 85, acceptPremiumChargeOnLookup: true };
 const products = [
   ['backup', 'nid-auto-server-copy', 45, 'Server Copy (SV Backup)'],
   ['premium', 'nid-auto-server-copy-premium', 85, 'SV Copy Premium'],
@@ -51,16 +52,39 @@ function serviceFixture() {
   }));
 }
 
+function readOrderInsert([, [user, service, data, price, key, documents, status]]) {
+  return { user, service, status, data: JSON.parse(data), price, key, documents: JSON.parse(documents) };
+}
+
 function mockQueries({ services = serviceFixture(), balance = 100, acquired = true } = {}) {
-  let completed = null;
+  const orders = new Map();
+  let insertedOrder;
   db.__routeQuery([
     ['pg_try_advisory_xact_lock', { rows: [{ acquired }] }],
-    ['LEFT JOIN auto_nid_reports', () => ({ rows: completed ? [completed] : [] })],
+    ['LEFT JOIN auto_nid_reports', (_, [user, key]) => {
+      const row = orders.get(user + ':' + key);
+      return { rows: row ? [row] : [] };
+    }],
+    ['FOR KEY SHARE', (_, [id]) => ({ rows: [{ id }] })],
     ['FROM services s', typeof services === 'function' ? services : { rows: services }],
     ['SELECT balance FROM users', { rows: [{ balance }] }],
-    ['INSERT INTO orders', { rows: [{ id: orderId }] }],
-    ['INSERT INTO auto_nid_reports', (_, params) => {
-      completed = { id: params[0], status: 'completed', request_hash: params[1], filename: params[2] };
+    ['INSERT INTO orders', (sql, params) => {
+      const order = readOrderInsert([sql, params]);
+      insertedOrder = {
+        id: orderId,
+        status: order.status,
+        price: order.price,
+        paid_failure: order.data.auto_nid_paid_failure === true,
+        request_hash: order.data.auto_nid_request_hash || null,
+        address_limited: order.data.auto_nid_address_limited === true,
+        filename: null,
+      };
+      orders.set(order.user + ':' + order.key, insertedOrder);
+      return { rows: [{ id: orderId }] };
+    }],
+    ['INSERT INTO auto_nid_reports', (_, [, requestHash, filename]) => {
+      insertedOrder.request_hash = requestHash;
+      insertedOrder.filename = filename;
       return { rows: [] };
     }],
   ], (sql) => { throw new Error('Unexpected SQL: ' + sql); });
@@ -117,7 +141,8 @@ test.each(products)('%s generates one private report and pays only its quoted pr
     permanentAddress: 'Permanent Sample Address',
   } : syntheticRecord;
   lookupBdxNid.mockResolvedValueOnce(record);
-  const result = await postLookup({ type, price, nid: '০০০০০০০০০০', dob: '২০০০-০২-২৯' })
+  const consent = type === 'premium' ? { acceptPremiumChargeOnLookup: true } : {};
+  const result = await postLookup({ type, price, ...consent, nid: '০০০০০০০০০০', dob: '২০০০-০২-২৯' })
     .expect('Cache-Control', 'private, no-store')
     .expect(200);
   const filename = 'nid-' + type + '-report.pdf';
@@ -125,10 +150,11 @@ test.each(products)('%s generates one private report and pays only its quoted pr
   expect(lookupBdxNid).toHaveBeenCalledTimes(1);
   expect(lookupBdxNid).toHaveBeenCalledWith({ type, nid: lookup.nid, dob: lookup.dob, apiKey });
   expect(buildAutoNidReportPdf).toHaveBeenCalledWith({ label, record });
-  const [[, orderParams], [, reportParams]] = inserts();
-  expect(orderParams.slice(0, 5)).toEqual([
-    userId, 'service-' + type, JSON.stringify({ auto_nid_type: type }), price, 'nid-auto-server-copy:' + idempotencyKey,
-  ]);
+  const [orderInsert, [, reportParams]] = inserts();
+  expect(readOrderInsert(orderInsert)).toMatchObject({
+    user: userId, service: 'service-' + type, status: 'completed',
+    data: { auto_nid_type: type }, price, key: 'nid-auto-server-copy:' + idempotencyKey,
+  });
   expect(reportParams.slice(0, 3)).toEqual([orderId, expect.stringMatching(/^[a-f0-9]{64}$/), filename]);
   expect(reportParams[3]).not.toEqual(pdf);
   expect(decryptReport(storageKey(), orderId, reportParams[3])).toEqual(pdf);
@@ -145,7 +171,7 @@ test('unconfigured and unauthorized accounts cannot start paid lookups', async (
   mockQueries({ services });
   const { body } = await withUser(request(app).get(route + '/options')).expect(200);
   expect(body.options.map(({ available, price }) => [available, price])).toEqual(Array(3).fill([false, null]));
-  await postLookup({ type: 'premium', price: 85 }).expect(403, { error: 'SERVICE_UNAVAILABLE' });
+  await postLookup(premiumLookup).expect(403, { error: 'SERVICE_UNAVAILABLE' });
 
   mockQueries();
   delete process.env.BDX_NID_API_KEY;
@@ -202,13 +228,104 @@ test.each([
   expect(inserts()).toEqual([]);
 });
 
-test('incomplete Premium addresses stop after one lookup with no PDF, order or charge', async () => {
-  lookupBdxNid.mockRejectedValueOnce(Object.assign(new Error('Mock address detail stays private'), { code: 'address_incomplete' }));
-  await postLookup({ type: 'premium', price: 85 }).expect(422, { error: 'ADDRESS_INCOMPLETE' });
+test('a new Premium lookup requires consent to its terms, and a completed request remains replayable', async () => {
+  const oldRequest = { type: 'premium', price: 85 };
+  await postLookup(oldRequest).expect(409, { error: 'PREMIUM_TERMS_CHANGED' });
+  expect(lookupBdxNid).not.toHaveBeenCalled();
+  expect(payForService).not.toHaveBeenCalled();
+  expect(inserts()).toEqual([]);
+
+  const first = await postLookup(premiumLookup).expect(200);
+  await postLookup(oldRequest).expect(200, first.body);
   expect(lookupBdxNid).toHaveBeenCalledTimes(1);
+  expect(payForService).toHaveBeenCalledTimes(1);
+});
+
+test('a matching Premium record with missing addresses still produces a paid private PDF', async () => {
+  const record = { ...syntheticRecord, presentAddress: 'Sample Present Address', permanentAddress: '' };
+  lookupBdxNid.mockResolvedValueOnce(record);
+  const first = await postLookup(premiumLookup).expect(200, {
+    orderId, downloadUrl: '/api/orders/' + orderId + '/documents/nid-premium-report.pdf', addressLimited: true,
+  });
+  await postLookup(premiumLookup).expect(200, first.body);
+  expect(buildAutoNidReportPdf).toHaveBeenCalledTimes(1);
+  expect(buildAutoNidReportPdf).toHaveBeenCalledWith({ label: 'SV Copy Premium', record });
+  expect(lookupBdxNid).toHaveBeenCalledTimes(1);
+  expect(payForService).toHaveBeenCalledTimes(1);
+  expect(payForService).toHaveBeenCalledWith(db.__client, expect.objectContaining({ amount: 85 }));
+});
+
+test('Premium locks quoted service and covered funds before calling the provider, then settles the reviewed rate', async () => {
+  const services = serviceFixture();
+  mockQueries({ services: () => ({ rows: services }), balance: 55 });
+  availableFor.mockResolvedValueOnce(30);
+  lookupBdxNid.mockImplementationOnce(async () => {
+    const providerCall = lookupBdxNid.mock.invocationCallOrder[0];
+    const queryCalls = db.__client.query.mock.calls;
+    for (const lock of [/FROM services[\s\S]+FOR KEY SHARE/, /SELECT balance FROM users[\s\S]+FOR UPDATE/]) {
+      const index = queryCalls.findIndex(([sql]) => lock.test(sql));
+      expect(index).toBeGreaterThanOrEqual(0);
+      expect(db.__client.query.mock.invocationCallOrder[index]).toBeLessThan(providerCall);
+    }
+    expect(availableFor).toHaveBeenCalledWith(db.__client, userId, 'service-premium', { lock: true });
+    expect(availableFor.mock.invocationCallOrder[0]).toBeLessThan(providerCall);
+    services[1].price = '99';
+    return syntheticRecord;
+  });
+
+  await postLookup(premiumLookup).expect(200);
+  expect(payForService).toHaveBeenCalledTimes(1);
+  expect(payForService).toHaveBeenCalledWith(db.__client, expect.objectContaining({ amount: 85 }));
+  expect(readOrderInsert(inserts()[0]).price).toBe(85);
+});
+
+test.each([
+  ['record_not_found', 422, 'RECORD_NOT_FOUND'],
+  ['provider_unavailable', 502, 'PROVIDER_UNAVAILABLE'],
+])('unconfirmed Premium provider outcome %s cannot charge or create an order', async (code, status, error) => {
+  lookupBdxNid.mockRejectedValueOnce(Object.assign(new Error('Mock failure'), { code }));
+  await postLookup(premiumLookup).expect(status, { error });
   expect(buildAutoNidReportPdf).not.toHaveBeenCalled();
   expect(payForService).not.toHaveBeenCalled();
   expect(inserts()).toEqual([]);
+});
+
+test.each(['record_not_found', 'provider_unavailable'])('confirmed provider debit with %s pays once, stays private and replays without a PDF', async (code) => {
+  lookupBdxNid.mockRejectedValueOnce(Object.assign(new Error('Mock sensitive details'), { code, providerCharged: true }));
+  const first = await postLookup(premiumLookup).expect(422, {
+    error: 'PREMIUM_CHARGED_NO_REPORT', orderId, chargedAmount: 85,
+  });
+  await postLookup(premiumLookup).expect(422, first.body);
+  await postLookup({ ...premiumLookup, dob: '2000-02-28' }).expect(409, { error: 'IDEMPOTENCY_CONFLICT' });
+  expect(lookupBdxNid).toHaveBeenCalledTimes(1);
+  expect(buildAutoNidReportPdf).not.toHaveBeenCalled();
+  expect(payForService).toHaveBeenCalledTimes(1);
+  expect(payForService).toHaveBeenCalledWith(db.__client, expect.objectContaining({ amount: 85, serviceId: 'service-premium' }));
+  const orderInserts = inserts();
+  expect(orderInserts).toHaveLength(1);
+  expect(readOrderInsert(orderInserts[0])).toEqual({
+    user: userId, service: 'service-premium', status: 'failed', price: 85,
+    key: 'nid-auto-server-copy:' + idempotencyKey,
+    documents: [],
+    data: {
+      auto_nid_type: 'premium',
+      auto_nid_paid_failure: true,
+      auto_nid_request_hash: fingerprint(storageKey(), userId, { ...lookup, ...premiumLookup }),
+    },
+  });
+});
+
+test('PDF generation failure after verified Premium data remains a single paid failed order', async () => {
+  buildAutoNidReportPdf.mockRejectedValueOnce(new Error('Mock PDF failure'));
+  const first = await postLookup(premiumLookup).expect(422, {
+    error: 'PREMIUM_CHARGED_NO_REPORT', orderId, chargedAmount: 85,
+  });
+  await postLookup(premiumLookup).expect(422, first.body);
+  expect(lookupBdxNid).toHaveBeenCalledTimes(1);
+  expect(buildAutoNidReportPdf).toHaveBeenCalledTimes(1);
+  expect(payForService).toHaveBeenCalledTimes(1);
+  expect(inserts()).toHaveLength(1);
+  expect(readOrderInsert(inserts()[0])).toMatchObject({ status: 'failed', price: 85, documents: [] });
 });
 
 test('PDF generation failure creates no delivery and charges nothing', async () => {
