@@ -85,30 +85,62 @@
   .birth-data-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; flex-wrap: wrap; }
   .page-birth-final .birth-data-actions .birth-verify-button { width: auto; min-width: 216px; margin: 0; }
   .birth-dialog {
+    --dialog-offset: translateY(20px) scale(.975);
+    --dialog-ease: cubic-bezier(.2,.78,.25,1);
     position: fixed; inset: 0; margin: auto; padding: 0;
     width: min(464px, calc(100% - 36px)); max-width: none; max-height: calc(100vh - 36px); max-height: calc(100dvh - 36px);
-    border: 1px solid #dce8e1; border-radius: 22px; overflow: auto; overscroll-behavior: contain;
-    background: #fff; color: var(--layout-ink, #19372d); box-shadow: 0 28px 100px rgba(4,33,23,.32);
+    border: 1px solid #abc5b8; border-radius: 22px; overflow: auto; overscroll-behavior: contain;
+    background: #fff; color: var(--layout-ink, #19372d); box-shadow: 0 28px 80px rgba(4,33,23,.38), 0 8px 24px rgba(4,33,23,.18);
   }
-  .birth-dialog[open] { animation: birthDialogIn .24s cubic-bezier(.21,.8,.28,1) both; }
-  .birth-dialog::backdrop { background: rgba(7,28,22,.58); animation: birthBackdropIn .2s ease-out both; }
-  @keyframes birthDialogIn { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+  .birth-dialog[open] { animation: birthDialogIn .28s var(--dialog-ease) both; }
+  .birth-dialog::backdrop { background: rgba(5,26,19,.65); animation: birthBackdropIn .22s ease-out both; }
+  .birth-dialog:not([open]), .birth-dialog:not([open])::backdrop { pointer-events: none; }
+  @keyframes birthDialogIn { from { opacity: 0; transform: var(--dialog-offset); } to { opacity: 1; transform: none; } }
   @keyframes birthBackdropIn { from { opacity: 0; } to { opacity: 1; } }
-  .birth-dialog-content { padding: 22px; }
-  .birth-dialog-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
-  .birth-dialog-header h3 { font-size: 22px; line-height: 1.3; }
-  .birth-dialog-header p { margin-top: 4px; font-size: 14px; color: #496357; }
-  .birth-dialog-close {
-    flex: 0 0 44px; height: 44px; border: 1px solid #dce8e1; border-radius: 11px;
-    background: #f4f8f5; color: #285445; font: inherit; font-size: 24px; line-height: 1; cursor: pointer;
+  @supports (overlay: auto) and (transition-behavior: allow-discrete) {
+    .birth-dialog {
+      opacity: 0; transform: var(--dialog-offset);
+      transition: opacity .19s ease-out, transform .28s var(--dialog-ease), display .28s allow-discrete, overlay .28s allow-discrete;
+    }
+    .birth-dialog[open] { opacity: 1; transform: none; animation: none; }
+    .birth-dialog::backdrop {
+      opacity: 0; animation: none;
+      transition: opacity .2s ease-out, display .28s allow-discrete, overlay .28s allow-discrete;
+    }
+    .birth-dialog[open]::backdrop { opacity: 1; }
+    @starting-style {
+      .birth-dialog[open] { opacity: 0; transform: var(--dialog-offset); }
+      .birth-dialog[open]::backdrop { opacity: 0; }
+    }
   }
-  .birth-dialog-close:hover { background: #eaf3ee; }
+  .birth-dialog-header {
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 20px 22px;
+    color: #fff; border-bottom: 1px solid #bfaa68;
+    background: radial-gradient(ellipse at top right, rgba(206,175,96,.19), transparent 65%), linear-gradient(115deg, #092f23, #0a5b41);
+  }
+  .birth-dialog-header h3 { color: inherit; font-size: 23px; line-height: 1.3; }
+  .birth-dialog-header p { margin-top: 4px; font-size: 14px; color: #d2e9dc; }
+  .birth-dialog-close {
+    flex: 0 0 44px; height: 44px; border: 1px solid rgba(235,251,241,.24); border-radius: 12px;
+    background: rgba(235,251,241,.09); color: #f3faf6; font: inherit; font-size: 24px; line-height: 1; cursor: pointer;
+  }
+  .birth-dialog-close:hover { background: rgba(235,251,241,.17); }
+  .birth-dialog .birth-dialog-close:focus-visible { outline-color: #f2d48a; }
+  .birth-dialog-body { padding: 18px 22px 22px; }
   .birth-dialog .field { margin-bottom: 12px; }
   .birth-captcha-frame {
+    position: relative; isolation: isolate; overflow: hidden;
     min-height: 86px; display: grid; place-items: center; margin-bottom: 14px; padding: 8px 12px;
-    background: #f2f7f4; border: 1px dashed #a6c0b2; border-radius: 12px;
+    background: #edf5f0; border: 1px solid #c7dcd0; border-radius: 12px;
     text-align: center; color: #416458; font-size: 14px;
   }
+  .birth-dialog:has(#bRefresh[aria-busy="true"]) .birth-captcha-frame::before {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: linear-gradient(110deg, transparent 25%, rgba(255,255,255,.88) 50%, transparent 75%);
+    animation: captchaLoading .85s ease-out both;
+  }
+  @keyframes captchaLoading { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  .birth-captcha-frame .captcha-img { border-radius: 6px; }
   .birth-captcha-frame .captcha-img:not([hidden]) { animation: revealCaptcha .24s ease-out both; }
   @keyframes revealCaptcha { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
   .birth-captcha-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
@@ -145,16 +177,18 @@
     .page-birth-final .birth-data-actions .birth-verify-button { width: 100%; min-width: 0; }
     .page-birth-final .birth-record-footer .btn { width: 100%; min-width: 0; }
     .birth-dialog {
+      --dialog-offset: translateY(48px);
       inset: auto 0 0; width: 100%; margin: 0; max-height: calc(100vh - 14px); max-height: calc(100dvh - 14px);
       border-radius: 21px 21px 0 0;
     }
-    .birth-dialog[open] { animation-name: birthSheetIn; }
-    .birth-dialog-content { padding: 18px 16px max(18px, env(safe-area-inset-bottom)); }
+    .birth-dialog-header { padding: 16px; }
+    .birth-dialog-body { padding: 16px 16px max(18px, env(safe-area-inset-bottom)); }
   }
-  @keyframes birthSheetIn { from { opacity: .7; transform: translateY(40px); } to { opacity: 1; transform: none; } }
   @media (prefers-reduced-motion: reduce) {
     .page-birth-final :is(.wiz.on, .spin, .birth-dialog[open], .birth-captcha-frame .captcha-img:not([hidden])),
-    .birth-dialog::backdrop { animation: none; }
+    .birth-dialog::backdrop { animation: none; transition: none; }
+    .birth-dialog { transition: none; }
+    .birth-dialog:has(#bRefresh[aria-busy="true"]) .birth-captcha-frame::before { display: none; animation: none; }
     .page-birth-final .birth-verify-button { transition: none; }
     .page-birth-final .birth-verify-button:not(:disabled):hover,
     .birth-verify-button:not(:disabled):hover::after { transform: none; }
@@ -240,14 +274,14 @@
     </div>
 
     <dialog class="birth-dialog" id="w2" aria-labelledby="captchaHeading" aria-describedby="captchaInstruction">
-      <div class="birth-dialog-content">
-        <div class="birth-dialog-header">
-          <div>
-            <h3 id="captchaHeading">ক্যাপচা যাচাই</h3>
-            <p id="captchaInstruction">ছবির অক্ষরগুলো লিখে যাচাই করুন।</p>
-          </div>
-          <button type="button" class="birth-dialog-close" onclick="closeCaptcha()" aria-label="পপআপ বন্ধ করুন">×</button>
+      <div class="birth-dialog-header">
+        <div>
+          <h3 id="captchaHeading">ক্যাপচা যাচাই</h3>
+          <p id="captchaInstruction">ছবির অক্ষরগুলো লিখে যাচাই করুন।</p>
         </div>
+        <button type="button" class="birth-dialog-close" onclick="closeCaptcha()" aria-label="পপআপ বন্ধ করুন">×</button>
+      </div>
+      <div class="birth-dialog-body">
         <div class="birth-captcha-frame">
           <img class="captcha-img" id="capImg" alt="BDRIS ক্যাপচা" hidden>
           <span id="captchaNote" role="status"></span>
