@@ -23,13 +23,13 @@ describe('chargeRuleFor (audit #49)', () => {
     expect(chargeRuleFor({ engine_id: 'land-mouza-map' }).detail).toBe('ম্যাপ পেলেই');
   });
 
-  test('the map covers the whole closed engine set (11 IDs)', () => {
+  test('the map covers the closed engine set', () => {
     // Audit #14 — land-search left the set with its route (audit #6);
     // birth/death carry their directory names now.
     expect(Object.keys(RULES).sort()).toEqual([
       'bdris-apply', 'birth-final', 'death-final', 'land-khatian',
       'land-mouza-map', 'land-mouza-value', 'land-scan',
-      'land-verify', 'nid-replica', 'nid-server-copy', 'qr-photo-verify',
+      'land-verify', 'nid-auto-server-copy', 'nid-replica', 'nid-server-copy', 'qr-photo-verify',
     ]);
   });
 

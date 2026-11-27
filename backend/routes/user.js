@@ -21,6 +21,8 @@ const { tryAutoMatchRecharge, tryAutoMatchBySender } = require('./sms');
 const serviceCredits = require('../lib/serviceCredits');
 const promotions = require('../lib/promotions');
 const { bdrisOriginalDoc } = require('../lib/storedOriginal'); // past-applications list (2026-11-07)
+const { products: autoNidProducts, engineIds: autoNidEngineIds } = require('../lib/autoNidProducts');
+const { storageKey: autoNidStorageKey, decryptReport: decryptAutoNidReport } = require('../lib/autoNidReportStore');
 
 // Fraud alerts (duplicate TrxID / amount mismatch at submit) notify
 // the attempter + admins at most once per user+trxid per hour, so a
@@ -124,6 +126,8 @@ router.get('/services', async (req, res) => {
     const out = [];
     for (const s of rows.rows) {
       if (s.access_enabled === false) continue;
+      if (autoNidEngineIds.includes(s.engine_id) &&
+          (s.engine_id !== autoNidProducts.backup.engineId || s.access_enabled !== true)) continue;
       out.push({
         id: s.id, name: s.name, name_bn: s.name_bn, type: s.type,
         price: Number(s.custom_price ?? s.price), serial: s.serial,
@@ -163,6 +167,13 @@ router.get('/services/:id', async (req, res) => {
        WHERE s.id = $1 AND s.status = 'active'`, [req.params.id, req.user.id]);
     if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
     const s = r.rows[0];
+    if (autoNidEngineIds.includes(s.engine_id)) {
+      if (s.engine_id !== autoNidProducts.backup.engineId) return res.status(404).json({ error: 'NOT_FOUND' });
+      const access = await db.query(
+        'SELECT access_enabled FROM user_services WHERE user_id = $1 AND service_id = $2', [req.user.id, s.id]
+      );
+      if (access.rows[0]?.access_enabled !== true) return res.status(403).json({ error: 'NO_ACCESS' });
+    }
     const eff = await effectivePrice(req.user.id, s);
     if (!eff.allowed) return res.status(403).json({ error: 'NO_ACCESS' });
     res.json({
@@ -205,6 +216,7 @@ router.post('/orders', async (req, res) => {
       `SELECT * FROM services WHERE id = $1 AND status = 'active'`, [service_id]);
     if (!sr.rows.length) return res.status(404).json({ error: 'SERVICE_NOT_FOUND' });
     const service = sr.rows[0];
+    if (autoNidEngineIds.includes(service.engine_id)) return res.status(400).json({ error: 'USE_ENGINE' });
 
     if (promo_code && service.engine_id) return res.status(400).json({error:'USE_ENGINE_PROMO'});
     const eff = await effectivePrice(req.user.id, service);
@@ -668,6 +680,18 @@ router.get('/orders/:id/documents/:filename', async (req, res) => {
       } else {
         return res.status(403).json({ error: 'NOT_DELIVERED_YET' });
       }
+    }
+    if (doc.storage === 'auto-nid-report') {
+      res.set('Cache-Control', 'private, no-store');
+      const { rows } = await db.query(
+        `SELECT r.encrypted_pdf FROM auto_nid_reports r JOIN orders o ON o.id = r.order_id
+          WHERE r.order_id = $1 AND o.user_id = $2 AND r.filename = $3`,
+        [orderId, req.user.id, fn]
+      );
+      const key = autoNidStorageKey();
+      if (!rows.length || !key) return res.status(404).json({ error: 'FILE_MISSING' });
+      const pdf = decryptAutoNidReport(key, orderId, rows[0].encrypted_pdf);
+      return res.attachment(fn).type('application/pdf').send(pdf);
     }
     const fp = require('path').join('/opt/all-in-one-abc-authentic/uploads/orders', fn);
     const fs = require('fs');

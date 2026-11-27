@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#052e23">
+  <title>অটো NID সার্ভার কপি | All In One</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/fonts/hind-siliguri.css?v=1">
+  <link rel="stylesheet" href="/css/premium.css?v=20261110-1">
+  <link rel="stylesheet" href="/css/motion.css?v=20261110-1">
+  <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
+  <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
+  <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
+  <link rel="stylesheet" href="/css/service-workspace.css?v=20261110-1">
+  <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
+  <link rel="stylesheet" href="/css/service-entry.css?v=20261122-4">
+  <link rel="stylesheet" href="/css/engine-form-layout.css?v=20261127-1">
+  <link rel="stylesheet" href="/css/nid-auto-server-copy.css?v=1">
+  <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
+  <script src="/js/service-navigation.js?v=20261127-2" defer></script>
+</head>
+<body class="has-tabbar flagship-app service-workspace engine-form-page ansc-page">
+  <div class="desktop">
+    <aside class="sidebar">
+      <div class="side-logo">
+        <div class="logo-icon" aria-hidden="true">🔷</div>
+        <div><h2>All In One</h2><p>বিশ্বাস ও সেবার ঠিকানা</p></div>
+      </div>
+      <nav aria-label="প্রধান মেনু">
+        <a class="side-link" href="/dashboard.html">ড্যাশবোর্ড</a>
+        <a class="side-link" href="/services.html?type=auto">সকল সেবা</a>
+        <a class="side-link on" href="/nid-auto-server-copy.html" aria-current="page">অটো NID সার্ভার কপি</a>
+        <a class="side-link" href="/orders.html">অর্ডার</a>
+        <a class="side-link" href="/history.html">ইতিহাস</a>
+        <a class="side-link" href="/wallet.html">ওয়ালেট</a>
+        <a class="side-link" href="/profile.html">প্রোফাইল</a>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <div class="ansc">
+        <header class="ansc-header">
+          <div>
+            <div class="ansc-links" data-service-entry-slot>
+              <a class="ansc-back" href="/services.html?type=auto">← স্বয়ংক্রিয় সেবায় ফিরুন</a>
+            </div>
+            <h1>অটো NID সার্ভার কপি</h1>
+          </div>
+          <a class="ansc-wallet" id="balanceLink" href="/wallet.html" hidden>
+            ওয়ালেট <strong id="balance"></strong>
+          </a>
+        </header>
+
+        <form class="ansc-panel" id="lookupForm" autocomplete="off">
+          <fieldset class="ansc-options" id="options" disabled>
+            <legend>কপির ধরন বেছে নিন</legend>
+            <div class="ansc-option-grid">
+              <label class="ansc-option">
+                <input type="radio" name="type" value="backup" aria-labelledby="typeBackup" aria-describedby="priceBackup" disabled>
+                <span class="ansc-tile">
+                  <span class="ansc-name" id="typeBackup" lang="en">Server Copy (SV Backup)</span>
+                  <span class="ansc-option-price" id="priceBackup">লোড হচ্ছে…</span>
+                </span>
+              </label>
+              <label class="ansc-option">
+                <input type="radio" name="type" value="premium" aria-labelledby="typePremium" aria-describedby="pricePremium" disabled>
+                <span class="ansc-tile">
+                  <span class="ansc-name" id="typePremium" lang="en">SV Copy Premium</span>
+                  <span class="ansc-option-price" id="pricePremium">লোড হচ্ছে…</span>
+                </span>
+              </label>
+              <label class="ansc-option">
+                <input type="radio" name="type" value="half" aria-labelledby="typeHalf" aria-describedby="priceHalf" disabled>
+                <span class="ansc-tile">
+                  <span class="ansc-name" id="typeHalf" lang="en">Half Server Copy</span>
+                  <span class="ansc-option-price" id="priceHalf">লোড হচ্ছে…</span>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+
+          <div class="ansc-recovery" id="recovery" hidden>
+            <p id="availability" role="status"></p>
+            <button class="btn btn-secondary" id="reloadOptions" type="button" hidden>আবার চেষ্টা করুন</button>
+          </div>
+
+          <fieldset class="ansc-inputs" id="inputs" aria-label="পরিচয়পত্রের তথ্য" disabled>
+            <div class="ansc-fields">
+              <label for="nid">NID নম্বর
+                <input id="nid" name="nid" type="text" inputmode="numeric" maxlength="17"
+                  autocomplete="off" spellcheck="false" placeholder="১০, ১৩ বা ১৭ সংখ্যার নম্বর" required>
+              </label>
+              <label for="dob">জন্ম তারিখ
+                <input id="dob" name="dob" type="date" min="1900-01-01" autocomplete="off" required>
+              </label>
+            </div>
+            <label class="ansc-consent" for="authorized">
+              <input type="checkbox" id="authorized" name="authorized" required>
+              <span>যাচাইয়ের জন্য নিজের বা মালিকের অনুমতিপ্রাপ্ত NID নম্বর ও জন্মতারিখ বাইরের যাচাই সেবায় পাঠাতে আমি সম্মত।</span>
+            </label>
+          </fieldset>
+
+          <div class="ansc-action">
+            <p id="total" role="status">সেবা চার্জ <strong id="selectedPrice">—</strong></p>
+            <button class="btn btn-primary" id="lookup" type="submit" disabled>সার্ভার কপি তৈরি করুন</button>
+          </div>
+          <p class="ansc-error" id="error" role="alert" hidden></p>
+        </form>
+
+        <section class="ansc-result" id="result" aria-labelledby="resultTitle" tabindex="-1" hidden>
+          <div>
+            <h2 id="resultTitle">সার্ভার কপি প্রস্তুত</h2>
+            <p id="resultType"></p>
+          </div>
+          <button class="btn btn-primary" id="download" type="button">PDF ডাউনলোড করুন</button>
+          <p class="ansc-error" id="downloadError" role="alert" hidden></p>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <nav class="m-tabbar" aria-label="মোবাইল মেনু">
+    <a class="m-tab" href="/dashboard.html">হোম</a>
+    <a class="m-tab on" href="/services.html?type=auto">সেবা</a>
+    <a class="m-tab" href="/orders.html">অর্ডার</a>
+    <a class="m-tab" href="/history.html">ইতিহাস</a>
+    <a class="m-tab" href="/wallet.html">ওয়ালেট</a>
+    <a class="m-tab" href="/profile.html">প্রোফাইল</a>
+  </nav>
+
+  <script src="/js/app.js?v=22"></script>
+  <script>
+    (() => {
+      'use strict';
+
+      const apiPath = '/nid-auto-server-copy';
+      const byId = (id) => document.getElementById(id);
+      const form = byId('lookupForm');
+      const radios = [...form.querySelectorAll('input[name="type"]')];
+      const prices = { backup: byId('priceBackup'), premium: byId('pricePremium'), half: byId('priceHalf') };
+      const optionPrices = new Map();
+      const moneyFormat = new Intl.NumberFormat('bn-BD', { maximumFractionDigits: 2 });
+      const money = (value) => '৳' + moneyFormat.format(value);
+      const toEnglishDigits = (value) => value.replace(/[০-৯]/g, (digit) => String(digit.charCodeAt(0) - 0x09e6));
+      const nidInput = byId('nid');
+      const dobInput = byId('dob');
+      const authorizedInput = byId('authorized');
+      const submitButton = byId('lookup');
+      const downloadButton = byId('download');
+      const requestedType = new URLSearchParams(location.search).get('type');
+      const errorMessages = {
+        PRICE_CHANGED: 'সেবা চার্জ বদলেছে। নতুন চার্জ দেখে আবার চেষ্টা করুন।',
+        SERVICE_UNAVAILABLE: 'এই সেবাটি এখন বন্ধ আছে।',
+        INSUFFICIENT_BALANCE: 'পর্যাপ্ত ব্যালেন্স নেই। ওয়ালেট রিচার্জ করে আবার চেষ্টা করুন।',
+        RECORD_NOT_FOUND: 'এই NID নম্বর ও জন্ম তারিখে কোনো তথ্য পাওয়া যায়নি।',
+        PROVIDER_UNAVAILABLE: 'তথ্যের উৎস থেকে এখন সাড়া পাওয়া যাচ্ছে না। কিছুক্ষণ পর আবার চেষ্টা করুন।',
+        INVALID_INPUT: 'NID নম্বর, জন্ম তারিখ ও অনুমতির তথ্য মিলিয়ে আবার চেষ্টা করুন।',
+        LOOKUP_BUSY: 'অনুরোধটি প্রক্রিয়াধীন আছে। একটু অপেক্ষা করে একই তথ্য দিয়ে আবার চেষ্টা করুন।',
+        IDEMPOTENCY_CONFLICT: 'আগের অনুরোধটি এখনো প্রক্রিয়াধীন থাকতে পারে। একটু অপেক্ষা করে আবার চেষ্টা করুন।',
+        LOOKUP_FAILED: 'সার্ভার কপি তৈরি করা যায়নি। আবার চেষ্টা করুন।',
+        RATE_LIMITED: 'অল্প সময়ে অনেক অনুরোধ হয়েছে। কিছুক্ষণ পর আবার চেষ্টা করুন।',
+        NETWORK_ERROR: 'সংযোগে সমস্যা হয়েছে। একই তথ্য রেখে আবার চেষ্টা করুন।',
+      };
+
+      let loading = true;
+      let submitting = false;
+      let attempt = null;
+      let downloadPath = '';
+
+      const today = new Date();
+      dobInput.max = [today.getFullYear(), today.getMonth() + 1, today.getDate()]
+        .map((part) => String(part).padStart(2, '0')).join('-');
+
+      function showMessage(id, message) {
+        const box = byId(id);
+        box.textContent = message;
+        box.hidden = !message;
+      }
+
+      function setAvailability(message, canRetry = false) {
+        byId('recovery').hidden = !message;
+        byId('availability').textContent = message;
+        byId('reloadOptions').hidden = !canRetry;
+      }
+
+      function currentPrice() {
+        return optionPrices.get(form.elements.type.value);
+      }
+
+      function syncControls() {
+        const busy = loading || submitting;
+        const price = currentPrice();
+        byId('options').disabled = busy;
+        byId('inputs').disabled = busy || price === undefined;
+        submitButton.disabled = busy || price === undefined;
+        byId('selectedPrice').textContent = price === undefined ? '—' : money(price);
+        submitButton.textContent = submitting ? 'সার্ভার কপি তৈরি হচ্ছে…' : 'সার্ভার কপি তৈরি করুন';
+        form.setAttribute('aria-busy', String(busy));
+      }
+
+      async function loadOptions() {
+        loading = true;
+        setAvailability('');
+        syncControls();
+        try {
+          const response = await ABC.api(apiPath + '/options');
+          if (response.status === 401) {
+            location.replace('/login.html?next=' + encodeURIComponent(location.pathname + location.search));
+            return;
+          }
+          if (!response.ok) throw new Error('Unable to load options');
+
+          const { options, balance } = await response.json();
+          if (!Array.isArray(options)) throw new Error('Invalid service options');
+          optionPrices.clear();
+          for (const radio of radios) {
+            const entry = options.find((item) => item?.type === radio.value);
+            const available = entry?.available === true && Number.isFinite(entry.price) && entry.price > 0;
+            if (available) optionPrices.set(radio.value, entry.price);
+            radio.disabled = !available;
+            prices[radio.value].textContent = available ? money(entry.price) : 'এখন বন্ধ';
+          }
+
+          if (!optionPrices.has(form.elements.type.value)) {
+            const initialRadio = radios.find((radio) => radio.value === requestedType && !radio.disabled)
+              || radios.find((radio) => !radio.disabled);
+            radios.forEach((radio) => { radio.checked = radio === initialRadio; });
+          }
+
+          byId('balanceLink').hidden = !Number.isFinite(balance);
+          if (Number.isFinite(balance)) byId('balance').textContent = money(balance);
+          if (!optionPrices.size) setAvailability('সেবাগুলো এখন বন্ধ আছে।', true);
+        } catch (_) {
+          optionPrices.clear();
+          for (const radio of radios) {
+            radio.disabled = true;
+            radio.checked = false;
+            prices[radio.value].textContent = 'চার্জ পাওয়া যায়নি';
+          }
+          byId('balanceLink').hidden = true;
+          setAvailability('সেবার তালিকা আনা যায়নি।', true);
+        } finally {
+          loading = false;
+          syncControls();
+        }
+      }
+
+      function invalidateAttempt() {
+        attempt = null;
+        showMessage('error', '');
+      }
+
+      function reportPath(result) {
+        if (typeof result?.downloadUrl !== 'string') return '';
+        const match = /^\/api(\/orders\/([a-z0-9-]+)\/documents\/([a-z0-9_.%~-]+\.pdf))$/i.exec(result.downloadUrl);
+        if (!match || match[2] !== result.orderId) return '';
+        try {
+          if (/[/\\?#]/.test(decodeURIComponent(match[3]))) return '';
+          return match[1];
+        } catch (_) {
+          return '';
+        }
+      }
+
+      nidInput.addEventListener('input', () => {
+        nidInput.setCustomValidity('');
+        invalidateAttempt();
+      });
+      dobInput.addEventListener('input', invalidateAttempt);
+      byId('options').addEventListener('change', () => {
+        invalidateAttempt();
+        syncControls();
+      });
+      byId('reloadOptions').addEventListener('click', loadOptions);
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const type = form.elements.type.value;
+        const price = currentPrice();
+        if (loading || submitting || price === undefined || !authorizedInput.checked) return;
+
+        const nid = toEnglishDigits(nidInput.value).trim();
+        if (!/^(?:\d{10}|\d{13}|\d{17})$/.test(nid)) {
+          nidInput.setCustomValidity('১০, ১৩ বা ১৭ সংখ্যার NID নম্বর দিন।');
+          nidInput.reportValidity();
+          return;
+        }
+        const dob = dobInput.value;
+        if (!attempt || attempt.price !== price) {
+          attempt = { price, idempotencyKey: crypto.randomUUID() };
+        }
+        const idempotencyKey = attempt.idempotencyKey;
+        submitting = true;
+        syncControls();
+        showMessage('error', '');
+        try {
+          const response = await ABC.api(apiPath + '/lookup', {
+            method: 'POST',
+            timeout: 50000,
+            retryNetwork: false,
+            body: { type, nid, dob, authorized: true, price, idempotencyKey },
+          });
+          const result = await response.json().catch(() => null);
+          if (response.status === 401) {
+            showMessage('error', 'আপনার সেশনের মেয়াদ শেষ হয়েছে। আবার লগইন করুন।');
+            return;
+          }
+          if (!response.ok) {
+            showMessage('error', Object.hasOwn(errorMessages, result?.error)
+              ? errorMessages[result.error] : ABC.httpErrBn(response.status, 'সার্ভার কপি তৈরি'));
+            if (result?.error === 'PRICE_CHANGED' || result?.error === 'SERVICE_UNAVAILABLE') {
+              await loadOptions();
+            }
+            return;
+          }
+
+          const path = reportPath(result);
+          if (!path) {
+            showMessage('error', 'কপির ডাউনলোড পথ পাওয়া যায়নি। একই তথ্য রেখে আবার চেষ্টা করুন।');
+            return;
+          }
+          downloadPath = path;
+          showMessage('downloadError', '');
+          byId('resultType').textContent = radios.find((radio) => radio.value === type)
+            .closest('label').querySelector('.ansc-name').textContent;
+          byId('result').hidden = false;
+          nidInput.value = '';
+          dobInput.value = '';
+          authorizedInput.checked = false;
+          attempt = null;
+          byId('result').focus();
+          await loadOptions();
+        } catch (_) {
+          showMessage('error', errorMessages.NETWORK_ERROR);
+        } finally {
+          submitting = false;
+          syncControls();
+        }
+      });
+
+      downloadButton.addEventListener('click', async () => {
+        if (!downloadPath || downloadButton.disabled) return;
+        downloadButton.disabled = true;
+        downloadButton.textContent = 'ডাউনলোড হচ্ছে…';
+        showMessage('downloadError', '');
+        try {
+          const response = await ABC.api(downloadPath, { cache: 'no-store' });
+          if (!response.ok) {
+            showMessage('downloadError', ABC.httpErrBn(response.status, 'ডাউনলোড'));
+            return;
+          }
+          const file = await response.blob();
+          if (file.type.split(';', 1)[0] !== 'application/pdf' || await file.slice(0, 5).text() !== '%PDF-') {
+            showMessage('downloadError', 'PDF ফাইলটি পাওয়া যায়নি। আবার চেষ্টা করুন।');
+            return;
+          }
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(file);
+          link.download = 'nid-server-copy.pdf';
+          document.body.append(link);
+          link.click();
+          const objectUrl = link.href;
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
+        } catch (_) {
+          showMessage('downloadError', ABC.httpErrBn(0, 'ডাউনলোড'));
+        } finally {
+          downloadButton.disabled = false;
+          downloadButton.textContent = 'PDF ডাউনলোড করুন';
+        }
+      });
+
+      loadOptions();
+    })();
+  </script>
+</body>
+</html>

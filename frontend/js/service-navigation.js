@@ -11,6 +11,7 @@
     'land-scan': '/land.html?mode=scan',
     'land-verify': '/land.html?mode=verify',
     'nid-replica': '/nid-replica.html',
+    'nid-auto-server-copy': '/nid-auto-server-copy.html',
     'nid-server-copy': '/nid-server-copy.html',
     'nid-server-report': '/nid-server-report.html',
     'nid-smart-card': '/nid-smart-card.html',

@@ -2199,10 +2199,10 @@ window.AdmOrders = {
                 '<span style="font-size:22px;">✅</span>' +
                 '<div style="overflow:hidden;">' +
                   '<div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(d.originalname || d.filename) + '</div>' +
-                  '<div style="font-size:10px;color:#16a34a;">ডেলিভারি ফাইল</div>' +
+                  '<div style="font-size:10px;color:#16a34a;">' + (d.storage === 'auto-nid-report' ? 'গ্রাহকের ব্যক্তিগত রিপোর্ট' : 'ডেলিভারি ফাইল') + '</div>' +
                 '</div>' +
               '</div>' +
-              '<button class="mini-btn ok" aria-label="ডেলিভারি ফাইল ডাউনলোড" onclick="AdmOrders.dlDoc(\'' + o.id + '\',' + x.idx + ')">⬇️ ডাউনলোড</button>' +
+              (d.storage === 'auto-nid-report' ? '' : '<button class="mini-btn ok" aria-label="ডেলিভারি ফাইল ডাউনলোড" onclick="AdmOrders.dlDoc(\'' + o.id + '\',' + x.idx + ')">⬇️ ডাউনলোড</button>') +
             '</div>';
           }).join('') +
         '</div></div>';
@@ -3369,6 +3369,9 @@ window.AdmSvc = {
           '<option value="epassport">ই-পাসপোর্ট ইঞ্জিন</option>' +
           '<option value="sanad">সনদ ও সার্টিফিকেট ইঞ্জিন</option>' +
           '<option value="nid-server-copy">এনআইডি সার্ভার কপি ইঞ্জিন (Portal Login)</option>' +
+          '<option value="nid-auto-server-copy">অটো NID সার্ভার কপি (SV Backup)</option>' +
+          '<option value="nid-auto-server-copy-premium">অটো NID সার্ভার কপি (Premium)</option>' +
+          '<option value="nid-auto-server-copy-half">অটো NID সার্ভার কপি (Half)</option>' +
           '<option value="nid-server-report">সাইন টু সার্ভার কপি ইঞ্জিন (PDF Upload)</option>' +
           '<option value="nid-smart-card">স্মার্ট কার্ড পিডিএফ ইঞ্জিন (PDF Upload)</option>' +
         '</select></div>' +
@@ -3446,6 +3449,9 @@ window.AdmSvc = {
           '<option value="epassport"' + (s.engine_id === 'epassport' ? ' selected' : '') + '>ই-পাসপোর্ট ইঞ্জিন</option>' +
           '<option value="sanad"' + (s.engine_id === 'sanad' ? ' selected' : '') + '>সনদ ও সার্টিফিকেট ইঞ্জিন</option>' +
           '<option value="nid-server-copy"' + (s.engine_id === 'nid-server-copy' ? ' selected' : '') + '>এনআইডি সার্ভার কপি ইঞ্জিন (Portal Login)</option>' +
+          '<option value="nid-auto-server-copy"' + (s.engine_id === 'nid-auto-server-copy' ? ' selected' : '') + '>অটো NID সার্ভার কপি (SV Backup)</option>' +
+          '<option value="nid-auto-server-copy-premium"' + (s.engine_id === 'nid-auto-server-copy-premium' ? ' selected' : '') + '>অটো NID সার্ভার কপি (Premium)</option>' +
+          '<option value="nid-auto-server-copy-half"' + (s.engine_id === 'nid-auto-server-copy-half' ? ' selected' : '') + '>অটো NID সার্ভার কপি (Half)</option>' +
           '<option value="nid-server-report"' + (s.engine_id === 'nid-server-report' ? ' selected' : '') + '>সাইন টু সার্ভার কপি ইঞ্জিন (PDF Upload)</option>' +
           '<option value="nid-smart-card"' + (s.engine_id === 'nid-smart-card' ? ' selected' : '') + '>স্মার্ট কার্ড পিডিএফ ইঞ্জিন (PDF Upload)</option>' +
         '</select></div>' +

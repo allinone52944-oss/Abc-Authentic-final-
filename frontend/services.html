@@ -216,7 +216,7 @@
 </div>
 
 <script src="/js/app.js?v=22"></script>
-<script src="/js/service-navigation.js?v=20261124-3"></script>
+<script src="/js/service-navigation.js?v=20261127-2"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -282,6 +282,7 @@ function chargeRuleHtml(s){
 
 const SERVICE_SUMMARIES = new Map([
   ['nid-replica', 'তথ্য ও ছবি দিয়ে ফর্ম পূরণ করুন'],
+  ['nid-auto-server-copy', 'তিনটি রিপোর্ট থেকে বেছে নিন'],
   ['nid-server-copy', 'পোর্টাল লগইন প্রয়োজন'],
   ['qr-photo-verify', 'QR কোড ও ছবি দিয়ে যাচাই করুন'],
   ['bdris-apply', 'জন্ম নিবন্ধনের আবেদন ফর্ম পূরণ করুন'],
@@ -315,6 +316,7 @@ function card(s){
   const isAuto = !isOrderService(s);
   const closed = s.open ? '' : '<span class="ptype closed">' + (isAuto ? 'সাময়িক বন্ধ' : 'এখন অফিস বন্ধ') + '</span>';
   const summary = isAuto ? SERVICE_SUMMARIES.get(s.engine_id) : '';
+  const priceLabel = s.engine_id === 'nid-auto-server-copy' ? 'সেবাভেদে মূল্য' : '৳' + bnNum(s.price) + chargeRuleHtml(s);
   const target = window.ServiceNavigation?.destination(s) || '/service-detail.html?id=' + encodeURIComponent(s.id);
   return '<a class="svc-card" href="'+esc(target)+'">'+
     '<div class="svc-ico">'+esc((s.icon&&s.icon!=='🛎️')?s.icon:autoIcon(s.name_bn||s.name))+'</div>'+
@@ -322,7 +324,7 @@ function card(s){
     (summary ? '<p class="svc-summary">' + esc(summary) + '</p>' : '') +
     '<div class="svc-card-tags">' + catHtml +
     '<span class="ptype '+(isAuto?'auto':'manual')+'">'+(isAuto?'⚡ স্বয়ংক্রিয়':'📝 অর্ডার')+'</span>'+closed+'</div></div>'+
-    '<div class="svc-pr">৳'+bnNum(s.price)+chargeRuleHtml(s)+(s.engine_id === 'bdris-apply' ? '<div class="bdris-pdf-note" style="font-size:11px;color:#64748b;font-weight:600;margin-top:2px;">' + bdrisPdfNoteHtml() + '</div>' : '')+'</div></a>';
+    '<div class="svc-pr">'+priceLabel+(s.engine_id === 'bdris-apply' ? '<div class="bdris-pdf-note" style="font-size:11px;color:#64748b;font-weight:600;margin-top:2px;">' + bdrisPdfNoteHtml() + '</div>' : '')+'</div></a>';
 }
 
 let GROUPS = [];

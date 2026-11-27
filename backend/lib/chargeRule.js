@@ -33,6 +33,7 @@ const RULES = {
   'death-final': ['success', 'যাচাই সফল হলেই'],
   'nid-replica': ['success', 'কার্ড তৈরি হলেই'],
   'nid-server-copy': ['success', 'প্রতিটি সফল ডাউনলোডে'],
+  'nid-auto-server-copy': ['success', 'নির্বাচিত রিপোর্ট তৈরি হলেই'],
   'land-scan': ['success', 'রেকর্ড পেলেই'],
   'land-verify': ['success', 'রেকর্ড পেলেই'],
   'land-mouza-value': ['success', 'রিপোর্ট তৈরি হলেই'],

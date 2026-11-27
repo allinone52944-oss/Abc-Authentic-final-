@@ -138,6 +138,14 @@ CREATE INDEX IF NOT EXISTS idx_orders_service ON orders(service_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status  ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at DESC);
 
+-- Encrypted Auto NID deliveries are committed with the order and wallet debit.
+CREATE TABLE IF NOT EXISTS auto_nid_reports (
+    order_id UUID PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
+    request_hash CHAR(64) NOT NULL,
+    filename TEXT NOT NULL,
+    encrypted_pdf BYTEA NOT NULL
+);
+
 -- Order status transition history (H-1 fix, 2026-10-15)
 CREATE TABLE IF NOT EXISTS order_status_history (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

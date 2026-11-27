@@ -1661,6 +1661,7 @@ router.get('/orders/:id/documents/:filename', async (req, res) => {
     const docs = safeJsonArray(ord.rows[0].documents);
     const doc = docs.find(d => d && require('path').basename(d.filename) === fn);
     if (!doc) return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
+    if (doc.storage === 'auto-nid-report') return res.status(403).json({ error: 'PRIVATE_CUSTOMER_REPORT' });
     const fp = require('path').join('/opt/all-in-one-abc-authentic/uploads/orders', fn);
     const fs = require('fs');
     if (!fs.existsSync(fp)) return res.status(404).json({ error: 'FILE_MISSING' });

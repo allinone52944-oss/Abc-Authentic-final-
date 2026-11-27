@@ -131,7 +131,7 @@
 </div>
 
 <script src="/js/app.js?v=22"></script>
-<script src="/js/service-navigation.js?v=20261124-3"></script>
+<script src="/js/service-navigation.js?v=20261127-2"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -270,6 +270,7 @@ async function init(){
     else if (s.engine_id === 'nid-replica') engineLabel = '⚡ এখনই NID তৈরি করুন →';
     else if (s.engine_id === 'qr-photo-verify') engineLabel = '⚡ এখনই QR + ছবি যাচাই করুন →';
     else if (s.engine_id === 'nid-server-copy') engineLabel = '⚡ এখনই NID সার্ভার কপি নিন →';
+    else if (s.engine_id === 'nid-auto-server-copy') engineLabel = 'তিনটি সার্ভার কপি থেকে বেছে নিন →';
     else if (s.engine_id === 'nid-server-report') { engineUrl = '/nid-server-report.html'; engineLabel = '⚡ এখনই সাইন টু সার্ভার কপি নিন →'; }
     else if (s.engine_id === 'nid-smart-card') { engineUrl = '/nid-smart-card.html'; engineLabel = '⚡ এখনই স্মার্ট কার্ড নিন →'; }
 
@@ -303,7 +304,7 @@ async function init(){
       sched +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;background:#f8fafc;padding:12px 18px;border-radius:12px;border:1px solid #e2e8f0;">' +
         '<div style="font-size:14px;color:#475569;font-weight:600;">সেবা চার্জ:</div>' +
-        '<div style="font-size:24px;font-weight:800;color:#1e40af;">৳' + bnNum(price) + '</div>' +
+        '<div style="font-size:24px;font-weight:800;color:#1e40af;">' + (s.engine_id === 'nid-auto-server-copy' ? 'সেবাভেদে মূল্য' : '৳' + bnNum(price)) + '</div>' +
       '</div>' +
       // Audit #49 — when the fee is cut (never guessed; only when the
       // API carries a rule and the service is priced).
@@ -317,7 +318,7 @@ async function init(){
       '<div id="bdrisFeeNote"></div>' +
     '</div>' +
 
-    (!s.open && !isAuto && !hasEngine ? '' : balBoxHtml) +
+    ((!s.open && !isAuto && !hasEngine) || s.engine_id === 'nid-auto-server-copy' ? '' : balBoxHtml) +
 
     '<div style="margin-bottom:16px;">' +
       '<div style="font-size:15px;font-weight:700;color:#334155;">প্রয়োজনীয় তথ্যাদি ও ডকুমেন্ট:</div>' +

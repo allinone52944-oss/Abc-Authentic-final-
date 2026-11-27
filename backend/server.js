@@ -470,6 +470,19 @@ try {
   safeLog('[engines] nid-server-copy not mounted:', e.message);
 }
 
+// ---- Auto NID Server Copy (BD-X, separate from portal login) ----
+const autoNidLookupLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  keyGenerator: req => String(req.user.id),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'RATE_LIMITED' },
+});
+app.use('/api/nid-auto-server-copy', requireAuth, apiLimiter,
+  (req, res, next) => req.method === 'POST' ? autoNidLookupLimiter(req, res, next) : next(),
+  require('./routes/nid-auto-server-copy'));
+
 // ---- NID Server Copy Report (upload PDF -> v1+v2 reports, auth + limit) ---
 // A separate engine from nid-replica (card) and nid-server-copy
 // (portal login -> card): the customer uploads an NID form PDF (or
