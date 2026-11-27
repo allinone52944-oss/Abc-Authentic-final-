@@ -68,18 +68,38 @@
   }
 
   .page-birth-final [hidden] { display: none !important; }
-  .birth-access { display: grid; grid-template-columns: minmax(0, .94fr) minmax(0, 1.06fr); gap: 16px; align-items: stretch; }
+  html:has(.page-birth-final .birth-dialog[open]) { overflow: hidden; }
   .birth-panel {
     min-width: 0; display: flex; flex-direction: column; padding: clamp(18px, 3vw, 26px);
     background: #fff; border: 1px solid var(--layout-line, #dce7e0); border-radius: 18px;
     box-shadow: 0 6px 20px rgba(12, 61, 44, .05);
   }
   .birth-heading { display: flex; align-items: center; gap: 11px; color: var(--layout-ink, #19372d); font-size: 20px; line-height: 1.3; margin: 0 0 18px; }
-  .birth-number { display: grid; place-items: center; flex: 0 0 32px; height: 32px; border-radius: 10px; color: #096044; background: #e8f3ed; font-size: 15px; font-weight: 700; }
   .page-birth-final .birth-panel .field { margin-bottom: 14px; }
   .birth-panel input:read-only, .page-birth-final #recView input:disabled { background: #f3f6f4; color: var(--layout-ink, #19372d); opacity: 1; }
-  .birth-data-actions { display: flex; gap: 8px; margin-top: auto; }
-  .birth-data-actions button { width: 100%; }
+  .birth-identity-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 18px; }
+  .birth-data-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .page-birth-final .birth-data-actions .birth-verify-button { width: auto; min-width: 216px; margin: 0; }
+  .birth-dialog {
+    position: fixed; inset: 0; margin: auto; padding: 0;
+    width: min(464px, calc(100% - 36px)); max-width: none; max-height: calc(100vh - 36px); max-height: calc(100dvh - 36px);
+    border: 1px solid #dce8e1; border-radius: 22px; overflow: auto; overscroll-behavior: contain;
+    background: #fff; color: var(--layout-ink, #19372d); box-shadow: 0 28px 100px rgba(4,33,23,.32);
+  }
+  .birth-dialog[open] { animation: birthDialogIn .24s cubic-bezier(.21,.8,.28,1) both; }
+  .birth-dialog::backdrop { background: rgba(7,28,22,.58); animation: birthBackdropIn .2s ease-out both; }
+  @keyframes birthDialogIn { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+  @keyframes birthBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+  .birth-dialog-content { padding: 22px; }
+  .birth-dialog-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+  .birth-dialog-header h3 { font-size: 22px; line-height: 1.3; }
+  .birth-dialog-header p { margin-top: 4px; font-size: 14px; color: #496357; }
+  .birth-dialog-close {
+    flex: 0 0 44px; height: 44px; border: 1px solid #dce8e1; border-radius: 11px;
+    background: #f4f8f5; color: #285445; font: inherit; font-size: 24px; line-height: 1; cursor: pointer;
+  }
+  .birth-dialog-close:hover { background: #eaf3ee; }
+  .birth-dialog .field { margin-bottom: 12px; }
   .birth-captcha-frame {
     min-height: 86px; display: grid; place-items: center; margin-bottom: 14px; padding: 8px 12px;
     background: #f2f7f4; border: 1px dashed #a6c0b2; border-radius: 12px;
@@ -92,7 +112,7 @@
   .birth-captcha-actions button:disabled { opacity: .65; cursor: default; }
   .page-birth-final .btn.birth-verify-button {
     position: relative; isolation: isolate; overflow: hidden; display: flex; align-items: center; justify-content: center;
-    min-height: 54px; margin-top: auto; padding: 12px 15px; border: 1px solid transparent; border-radius: 11px;
+    min-height: 54px; padding: 12px 15px; border: 1px solid transparent; border-radius: 11px;
     background: linear-gradient(115deg, #07563d, #0b6b4e); font-size: 16px;
     box-shadow: 0 7px 16px rgba(6, 86, 60, .2); transition: transform .18s ease, box-shadow .18s ease;
   }
@@ -104,23 +124,32 @@
   .page-birth-final .birth-verify-button:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 9px 19px rgba(6, 86, 60, .24); }
   .birth-verify-button:not(:disabled):hover::after { transform: translateX(105%); }
   .birth-verify-button:not(:disabled):active { transform: translateY(0); }
-  .birth-panel button:focus-visible { outline: 2px solid #0b6b4e; outline-offset: 3px; }
+  :is(.birth-panel,.birth-dialog) button:focus-visible { outline: 2px solid #0b6b4e; outline-offset: 3px; }
   .page-birth-final .birth-verify-button:disabled:not([aria-busy="true"]) { opacity: 1; color: #3c6154; background: #eaf3ee; box-shadow: none; border-color: #d5e5dc; }
   .page-birth-final .birth-verify-button[aria-busy="true"] { opacity: 1; }
-  .birth-entry-notice { margin-top: 14px; }
+  .birth-notice :is(.err,.ok).on { margin-top: 12px; margin-bottom: 0; }
   .birth-record { margin-top: 16px; }
   .birth-record-fields { border: 0; min-inline-size: 0; margin: 0; padding: 0; }
   .birth-record-note { color: #416458; font-size: 14px; margin: -5px 0 15px; }
   .birth-record[data-filled="true"] { border-color: #a2c8b5; }
-  .birth-record[data-filled="true"] .birth-number { background: #086749; color: white; }
   .birth-record-footer { display: flex; justify-content: flex-end; padding-top: 18px; }
   .page-birth-final .birth-record-footer .btn { width: auto; min-width: 180px; }
-  @media (max-width: 760px) {
-    .birth-access { grid-template-columns: minmax(0, 1fr); }
+  @media (max-width: 600px) {
+    .birth-identity-fields { grid-template-columns: minmax(0,1fr); }
+    .birth-data-actions { flex-direction: column; align-items: stretch; }
+    .page-birth-final .birth-data-actions .birth-verify-button { width: 100%; min-width: 0; }
     .page-birth-final .birth-record-footer .btn { width: 100%; min-width: 0; }
+    .birth-dialog {
+      inset: auto 0 0; width: 100%; margin: 0; max-height: calc(100vh - 14px); max-height: calc(100dvh - 14px);
+      border-radius: 21px 21px 0 0;
+    }
+    .birth-dialog[open] { animation-name: birthSheetIn; }
+    .birth-dialog-content { padding: 18px 16px max(18px, env(safe-area-inset-bottom)); }
   }
+  @keyframes birthSheetIn { from { opacity: .7; transform: translateY(40px); } to { opacity: 1; transform: none; } }
   @media (prefers-reduced-motion: reduce) {
-    .page-birth-final :is(.wiz.on, .spin, .birth-captcha-frame .captcha-img:not([hidden])) { animation: none; }
+    .page-birth-final :is(.wiz.on, .spin, .birth-dialog[open], .birth-captcha-frame .captcha-img:not([hidden])),
+    .birth-dialog::backdrop { animation: none; }
     .page-birth-final .birth-verify-button { transition: none; }
     .page-birth-final .birth-verify-button:not(:disabled):hover,
     .birth-verify-button:not(:disabled):hover::after { transform: none; }
@@ -174,9 +203,9 @@
         <span id="priceText">সেবা চার্জ লোড হচ্ছে…</span>
         <span>ফর্মে যাচাই করা তথ্য এলে একবারই চার্জ কাটবে</span>
       </div>
-      <div class="birth-access">
-        <section class="birth-panel" id="w1" aria-labelledby="identityHeading">
-          <h3 class="birth-heading" id="identityHeading"><span class="birth-number">১</span> তথ্য</h3>
+      <section class="birth-panel" id="w1" aria-labelledby="identityHeading">
+        <h3 class="birth-heading" id="identityHeading">নিবন্ধনের তথ্য</h3>
+        <div class="birth-identity-fields">
           <div class="field">
             <label for="brn">জন্ম নিবন্ধন নম্বর (১৭ সংখ্যা)</label>
             <input id="brn" inputmode="numeric" maxlength="17" placeholder="যেমন 20001234567890123">
@@ -185,29 +214,13 @@
             <label for="dob">জন্ম তারিখ</label>
             <input id="dob" type="text" placeholder="দিন-মাস-বছর" inputmode="numeric">
           </div>
-          <div class="birth-data-actions">
-            <button type="button" class="btn" id="b1" onclick="step1()">ক্যাপচা আনুন →</button>
-            <button type="button" class="btn-secondary" id="bEditIdentity" onclick="editIdentity()" hidden>নম্বর বা তারিখ বদলান</button>
-          </div>
-        </section>
-        <section class="birth-panel" id="w2" aria-labelledby="captchaHeading">
-          <h3 class="birth-heading" id="captchaHeading"><span class="birth-number">২</span> ক্যাপচা</h3>
-          <div class="birth-captcha-frame">
-            <img class="captcha-img" id="capImg" alt="BDRIS ক্যাপচা" hidden>
-            <span id="captchaNote">ক্যাপচা আনুন চাপলে ছবি এখানে আসবে।</span>
-          </div>
-          <div class="field">
-            <label for="capAns">ক্যাপচা উত্তর</label>
-            <input id="capAns" placeholder="ছবির অক্ষর লিখুন" autocomplete="off" disabled>
-          </div>
-          <div class="birth-captcha-actions">
-            <button type="button" class="btn-secondary" id="bAuto" onclick="autoSolve()" hidden>স্বয়ংক্রিয় সমাধান</button>
-            <button type="button" class="btn-secondary" id="bRefresh" onclick="step1(true)" hidden>নতুন ছবি</button>
-          </div>
-          <button type="button" class="btn birth-verify-button" id="b2" onclick="step2()" disabled>যাচাই করে তথ্য আনুন →</button>
-        </section>
-      </div>
-      <div class="birth-entry-notice" id="birthEntryNotice">
+        </div>
+        <div class="birth-data-actions">
+          <button type="button" class="btn birth-verify-button" id="b1" onclick="openCaptcha()" aria-haspopup="dialog" aria-controls="w2">যাচাই করে তথ্য আনুন →</button>
+          <button type="button" class="btn-secondary" id="bEditIdentity" onclick="editIdentity()" hidden>নম্বর বা তারিখ বদলান</button>
+        </div>
+      </section>
+      <div class="birth-notice" id="birthEntryNotice">
         <div id="birthMessages">
           <div class="err" id="err" role="alert"></div>
           <div class="ok" id="ok" role="status"></div>
@@ -215,7 +228,7 @@
         </div>
       </div>
       <section class="birth-panel birth-record" id="w3" aria-labelledby="recordHeading">
-        <h3 class="birth-heading" id="recordHeading"><span class="birth-number">৩</span> যাচাই</h3>
+        <h3 class="birth-heading" id="recordHeading">সনদের তথ্য</h3>
         <p class="birth-record-note" id="recordNote">যাচাই সফল হলে সনদের তথ্য এই ঘরগুলোতে বসবে।</p>
         <fieldset id="recordFields" class="birth-record-fields" aria-label="সনদের তথ্য" disabled>
           <div id="recView"></div>
@@ -223,6 +236,34 @@
         <div class="birth-record-footer"><button type="button" class="btn" id="b3" onclick="step3()" disabled>সনদ তৈরি করুন →</button></div>
       </section>
     </div>
+
+    <dialog class="birth-dialog" id="w2" aria-labelledby="captchaHeading" aria-describedby="captchaInstruction">
+      <div class="birth-dialog-content">
+        <div class="birth-dialog-header">
+          <div>
+            <h3 id="captchaHeading">ক্যাপচা যাচাই</h3>
+            <p id="captchaInstruction">ছবির অক্ষরগুলো লিখে যাচাই করুন।</p>
+          </div>
+          <button type="button" class="birth-dialog-close" onclick="closeCaptcha()" aria-label="পপআপ বন্ধ করুন">×</button>
+        </div>
+        <div class="birth-captcha-frame">
+          <img class="captcha-img" id="capImg" alt="BDRIS ক্যাপচা" hidden>
+          <span id="captchaNote" role="status"></span>
+        </div>
+        <form onsubmit="event.preventDefault();step2()">
+          <div class="field">
+            <label for="capAns">ক্যাপচা উত্তর</label>
+            <input id="capAns" placeholder="ছবির অক্ষর লিখুন" autocomplete="off" autocapitalize="off" spellcheck="false" disabled>
+          </div>
+          <div class="birth-captcha-actions">
+            <button type="button" class="btn-secondary" id="bRefresh" onclick="step1()">নতুন ছবি</button>
+            <button type="button" class="btn-secondary" id="bAuto" onclick="autoSolve()" hidden>স্বয়ংক্রিয় সমাধান</button>
+          </div>
+          <button type="submit" class="btn birth-verify-button" id="b2" disabled>যাচাই করুন →</button>
+        </form>
+        <div class="birth-notice" id="birthCaptchaNotice"></div>
+      </div>
+    </dialog>
 
     <!-- STEP 4: CERTIFICATE -->
     <div class="wiz" id="w4">
@@ -288,6 +329,7 @@ const recordFields=[
   ['permEn','স্থায়ী ঠিকানা (ইংরেজি)',['permEn','permanentAddressEn']]
 ];
 const fullWidthRecordFields=new Set(['office1','office2','brn','permBn','permEn']);
+const captchaDialog=document.getElementById('w2');
 function renderRecordFields(){
   const view=document.getElementById('recView');
   for(const [key,label] of recordFields){
@@ -350,13 +392,14 @@ function syncVerificationControls(){
   const captchaReady=Boolean(S.sessionId)&&!verified;
   for(const id of ['brn','dob'])document.getElementById(id).readOnly=pending||locked;
   const initial=document.getElementById('b1');
-  initial.hidden=locked||verified;
+  initial.hidden=verified;
   initial.disabled=pending;
-  for(const id of ['bEditIdentity','bRefresh']){
-    const button=document.getElementById(id);
-    button.hidden=!locked||verified;
-    button.disabled=pending;
-  }
+  initial.textContent=pending?'অপেক্ষা করুন…':'যাচাই করে তথ্য আনুন →';
+  const edit=document.getElementById('bEditIdentity');
+  edit.hidden=!locked||verified;
+  edit.disabled=pending;
+  const refresh=document.getElementById('bRefresh');
+  refresh.disabled=pending||verified;
   const auto=document.getElementById('bAuto');
   auto.hidden=!captchaReady;
   auto.disabled=pending||!captchaReady;
@@ -364,10 +407,9 @@ function syncVerificationControls(){
   document.getElementById('capAns').disabled=pending||!captchaReady;
   const note=document.getElementById('captchaNote');
   note.hidden=captchaReady;
-  note.textContent=verified?'ক্যাপচা যাচাই সম্পন্ন হয়েছে।':locked?'আবার যাচাই করতে নতুন ছবি আনুন।':'ক্যাপচা আনুন চাপলে ছবি এখানে আসবে।';
+  note.textContent=refresh.hasAttribute('aria-busy')?'ক্যাপচা আনা হচ্ছে…':'ক্যাপচা পেতে নতুন ছবি চাপুন।';
   const verify=document.getElementById('b2');
   verify.disabled=pending||!captchaReady;
-  if(verified)verify.textContent='তথ্য বসানো হয়েছে ✓';
   document.getElementById('b3').disabled=pending||!verified;
 }
 
@@ -382,6 +424,33 @@ function clearConsumedCaptcha(){
   document.getElementById('capAns').value='';
 }
 
+function showCaptcha(){
+  if(captchaDialog.open)return;
+  document.getElementById('birthCaptchaNotice').append(document.getElementById('birthMessages'));
+  captchaDialog.showModal();
+}
+
+function closeCaptcha(){
+  if(!captchaDialog.open)return;
+  captchaDialog.close();
+  document.getElementById('birthEntryNotice').append(document.getElementById('birthMessages'));
+}
+
+captchaDialog.addEventListener('cancel',event=>{
+  event.preventDefault();
+  closeCaptcha();
+});
+
+function openCaptcha(){
+  if(S.captchaPending||S.record||captchaDialog.open)return;
+  if(!S.sessionId){
+    step1();
+    return;
+  }
+  showCaptcha();
+  document.getElementById('capAns').focus();
+}
+
 function editIdentity(){
   if(S.captchaPending||S.record)return;
   S.editingIdentity=true;
@@ -392,7 +461,7 @@ function editIdentity(){
   document.getElementById('brn').focus();
 }
 
-async function step1(retry){
+async function step1(){
   if(S.captchaPending||S.record)return;
   const brn=document.getElementById('brn').value.trim();
   let dob=document.getElementById('dob').value.trim();
@@ -412,9 +481,9 @@ async function step1(retry){
   }
   document.getElementById('dob').value=dob;
   const sameAttempt=S.attemptKey&&S.brn===brn&&S.dob===dob;
-  const button=retry?'bRefresh':'b1';
   let captchaLoaded=false;
-  captchaBusy(button,true,'ক্যাপচা আনা হচ্ছে…');
+  showCaptcha();
+  captchaBusy('bRefresh',true,'ছবি আনা হচ্ছে…');
   try{
     const r=await ABC.api(API+'/api/captcha',{timeout:25000,retryNetwork:false});
     const j=await r.json().catch(()=>null);
@@ -436,12 +505,12 @@ async function step1(retry){
     captchaLoaded=true;
   }catch(e){showErr(e.message||'ক্যাপচা আনতে ব্যর্থ। আবার চেষ্টা করুন।');}
   finally{
-    captchaBusy(button,false);
-    if(captchaLoaded)document.getElementById('capAns').focus();
+    captchaBusy('bRefresh',false);
+    if(captchaLoaded&&captchaDialog.open)document.getElementById('capAns').focus();
   }
 }
 async function autoSolve(){
-  if(S.captchaPending||!S.sessionId||S.record)return;
+  if(!captchaDialog.open||S.captchaPending||!S.sessionId||S.record)return;
   captchaBusy('bAuto',true,'চেষ্টা চলছে…');
   try{
     const r=await ABC.api(API+'/api/solve-captcha',{method:'POST',body:{sessionId:S.sessionId}});
@@ -457,7 +526,7 @@ async function autoSolve(){
   finally{captchaBusy('bAuto',false);}
 }
 async function step2(){
-  if(S.captchaPending||!S.sessionId||S.record)return;
+  if(!captchaDialog.open||S.captchaPending||!S.sessionId||S.record)return;
   const ans=document.getElementById('capAns').value.trim();
   if(!ans){showErr('ক্যাপচা উত্তর লিখুন।');return;}
   const sessionId=S.sessionId;
@@ -483,6 +552,7 @@ async function step2(){
     S.verifyUnconfirmed=false;
     S.record=j.data;
     fillRecordFields(S.record);
+    closeCaptcha();
     showOk('যাচাই করা তথ্য পাওয়া গেছে। সেবা চার্জ কাটা হয়েছে।');hideFailReceipt();
     ABC.api('/auth/me').then(r=>r.ok?r.json():null).then(d=>showWalletBalance(d?.user)).catch(()=>{});
   }catch(e){
