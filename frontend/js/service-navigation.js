@@ -111,6 +111,7 @@
     if (!id || query.get('flow') !== 'directory') return;
     const workspace = document.querySelector('.service-workspace .main, .page-bdris-apply .wrap > main');
     if (!workspace) return;
+    const entrySlot = workspace.querySelector('[data-service-entry-slot]');
     const panel = document.createElement('section');
     panel.className = 'directory-service-entry';
     const links = document.createElement('nav');
@@ -151,11 +152,12 @@
           status.textContent = 'এই সেবাটি এখন খোলা যাচ্ছে না। তালিকা থেকে আবার বেছে নিন।';
           return;
         }
-        links.append(engineLink('সেবার বিস্তারিত ও ছাড়', detailHref(service)));
-        const notes = serviceNotes(service);
+        links.append(engineLink(entrySlot ? 'নিয়ম ও ছাড়' : 'সেবার বিস্তারিত ও ছাড়', detailHref(service)));
+        const notes = entrySlot ? null : serviceNotes(service);
         if (notes) panel.append(notes);
         status.remove();
         retry.remove();
+        if (entrySlot) entrySlot.replaceChildren(panel);
         workspace.classList.remove('directory-service-paused');
         // Open the existing form view. The native create action stays user-initiated.
         if (service.engine_id === 'passport' || service.engine_id === 'epassport') {

@@ -14,25 +14,12 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Hind Siliguri', system-ui, sans-serif; background: var(--bg-page, #f8fafc); color: var(--text-main, #0f172a); min-height: 100vh; }
   .app-shell { max-width: 760px; margin: 0 auto; padding: 24px 16px 60px; }
-  .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-light, #e2e8f0); }
-  .brand { font-size: 20px; font-weight: 700; color: #1e40af; display: flex; align-items: center; gap: 8px; }
-  .icon-btn { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; padding: 8px 14px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; }
-  .icon-btn:hover { background: #dbeafe; }
-  .back-link { display: inline-flex; align-items: center; gap: 6px; color: #2563eb; cursor: pointer; font-size: 14px; font-weight: 600; margin-bottom: 16px; }
-  .back-link:hover { text-decoration: underline; }
   
   .wiz { display: none; }
   .wiz.on { display: block; animation: fadeUp .25s ease; }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
   .form-card { background: #ffffff; border: 1px solid var(--border-light, #e2e8f0); border-radius: 16px; padding: 26px 22px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-  /* B1#7/B2#6 — first-step fee summary (same as nid-server-copy). */
-  .price-line {
-    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
-    background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
-    padding: 10px 14px; border-radius: var(--r-md, 10px); font-size: 13px; font-weight: 600;
-    margin-bottom: 18px;
-  }
   .field { margin-bottom: 14px; text-align: left; }
   .field label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
   .field input, .field select, .field textarea { width: 100%; padding: 11px 14px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 14px; font-family: inherit; color: #0f172a; background: #ffffff; }
@@ -43,8 +30,6 @@
   .btn:disabled { opacity: 0.65; cursor: default; }
   .btn-secondary { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s ease; }
   .btn-secondary:hover { background: #dbeafe; }
-  .row2 { display: flex; gap: 10px; }
-  .row2 .btn, .row2 .btn-secondary { flex: 1; }
 
   .captcha-img { display: block; max-width: 100%; max-height: 68px; object-fit: contain; }
   .spin { display: inline-block; flex: none; width: 16px; height: 16px; border: 2px solid transparent; border-top-color: currentColor; border-right-color: currentColor; border-radius: 50%; animation: sp 0.8s linear infinite; vertical-align: -2px; margin-right: 8px; }
@@ -55,7 +40,6 @@
   .err.on { display: block; }
   .ok { display: none; background: #f0fdf4; border: 1px solid #86efac; color: #15803d; padding: 12px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 14px; }
   .ok.on { display: block; }
-  .hint { font-size: 12px; color: #64748b; margin-top: 8px; text-align: center; }
 
   #recView { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; text-align: left; }
   #recView .field { margin: 0; display: flex; flex-direction: column; }
@@ -69,6 +53,22 @@
 
   .page-birth-final [hidden] { display: none !important; }
   html:has(.page-birth-final .birth-dialog[open]) { overflow: hidden; }
+  .page-birth-final.service-workspace .main { padding: 0; }
+  .page-birth-final.service-workspace .main.directory-service-paused { padding: 16px; }
+  .page-birth-final .main > .app-shell { padding: 16px clamp(14px, 2vw, 22px) 92px; }
+  .birth-page-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 2px 12px; }
+  .birth-page-header h1 { color: var(--layout-ink, #19372d); font-size: clamp(21px, 3vw, 26px); line-height: 1.25; margin: 0; }
+  .birth-wallet-link {
+    display: inline-flex; align-items: center; min-height: 44px; max-width: 100%;
+    color: var(--layout-emerald, #086749); font-size: 14px; font-weight: 700; text-underline-offset: 3px;
+  }
+  .birth-service-links { margin: 1px 0 8px; }
+  .birth-service-links .directory-service-entry { margin: 0; }
+  .birth-service-links > a, .birth-service-links nav a { font-size: 14px; }
+  .birth-service-links > a {
+    display: inline-flex; align-items: center; min-height: 44px;
+    color: var(--layout-emerald, #086749); font-weight: 700; text-underline-offset: 3px;
+  }
   .birth-panel {
     min-width: 0; display: flex; flex-direction: column; padding: clamp(18px, 3vw, 26px);
     background: #fff; border: 1px solid var(--layout-line, #dce7e0); border-radius: 18px;
@@ -76,6 +76,10 @@
   }
   .birth-heading { display: flex; align-items: center; gap: 11px; color: var(--layout-ink, #19372d); font-size: 20px; line-height: 1.3; margin: 0 0 18px; }
   .page-birth-final .birth-panel .field { margin-bottom: 14px; }
+  .birth-panel.birth-identity { padding: clamp(15px, 2vw, 20px); }
+  .birth-identity-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; }
+  .birth-fee { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 8px; color: #496357; font-size: 13px; }
+  #priceText { color: #6f4912; font-size: 14px; font-weight: 700; }
   .birth-panel input:read-only, .page-birth-final #recView input:disabled { background: #f3f6f4; color: var(--layout-ink, #19372d); opacity: 1; }
   .birth-identity-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 18px; }
   .birth-data-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -128,15 +132,16 @@
   .page-birth-final .birth-verify-button:disabled:not([aria-busy="true"]) { opacity: 1; color: #3c6154; background: #eaf3ee; box-shadow: none; border-color: #d5e5dc; }
   .page-birth-final .birth-verify-button[aria-busy="true"] { opacity: 1; }
   .birth-notice :is(.err,.ok).on { margin-top: 12px; margin-bottom: 0; }
-  .birth-record { margin-top: 16px; }
+  .birth-record { margin-top: 12px; }
   .birth-record-fields { border: 0; min-inline-size: 0; margin: 0; padding: 0; }
   .birth-record-note { color: #416458; font-size: 14px; margin: -5px 0 15px; }
   .birth-record[data-filled="true"] { border-color: #a2c8b5; }
   .birth-record-footer { display: flex; justify-content: flex-end; padding-top: 18px; }
   .page-birth-final .birth-record-footer .btn { width: auto; min-width: 180px; }
   @media (max-width: 600px) {
+    .page-birth-final .main > .app-shell { padding-top: 14px; }
     .birth-identity-fields { grid-template-columns: minmax(0,1fr); }
-    .birth-data-actions { flex-direction: column; align-items: stretch; }
+    .birth-data-actions { flex-direction: column; align-items: stretch; width: 100%; }
     .page-birth-final .birth-data-actions .birth-verify-button { width: 100%; min-width: 0; }
     .page-birth-final .birth-record-footer .btn { width: 100%; min-width: 0; }
     .birth-dialog {
@@ -160,7 +165,7 @@
 <link rel="stylesheet" href="/css/registration-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/engine-polish.css?v=20261111-4">
 <link rel="stylesheet" href="/css/service-entry.css?v=20261122-4">
-<script src="/js/service-navigation.js?v=20261124-3" defer></script>
+<script src="/js/service-navigation.js?v=20261127-1" defer></script>
 <script src="/js/engine-feedback.js?v=20261118-3" defer></script>
 </head>
 <body class="has-tabbar flagship-app service-workspace page-birth-final">
@@ -185,26 +190,17 @@
   </div>
 
   <div class="main">
-    <div class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-      <div>
-        <h2>👶 জন্ম নিবন্ধন সনদ</h2>
-        <p>জন্ম নিবন্ধন নম্বর ও জন্ম তারিখ দিয়ে BDRIS থেকে তথ্য আনুন</p>
-      </div>
-      <div id="walletBadge" style="display:inline-flex; align-items:center; gap:6px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;" onclick="location.href='/wallet.html'" title="ওয়ালেট ব্যালেন্স">
-        💳 ব্যালেন্স: ৳<span id="balVal">০</span>
-      </div>
-    </div>
-
     <div class="app-shell">
   <div class="page">
-    <span class="back-link" onclick="history.back()">← ফিরে যান</span>
+    <header class="birth-page-header">
+      <h1>জন্ম নিবন্ধন সনদ</h1>
+      <a class="birth-wallet-link" id="walletBadge" href="/wallet.html">ব্যালেন্স ৳<span id="balVal">০</span></a>
+    </header>
+    <div class="birth-service-links" data-service-entry-slot>
+      <a href="/services.html?type=auto">← সেবার তালিকা</a>
+    </div>
     <div class="wiz on" id="birthEntry">
-      <div class="price-line">
-        <span id="priceText">সেবা চার্জ লোড হচ্ছে…</span>
-        <span>ফর্মে যাচাই করা তথ্য এলে একবারই চার্জ কাটবে</span>
-      </div>
-      <section class="birth-panel" id="w1" aria-labelledby="identityHeading">
-        <h3 class="birth-heading" id="identityHeading">নিবন্ধনের তথ্য</h3>
+      <section class="birth-panel birth-identity" id="w1" aria-label="নিবন্ধনের তথ্য">
         <div class="birth-identity-fields">
           <div class="field">
             <label for="brn">জন্ম নিবন্ধন নম্বর (১৭ সংখ্যা)</label>
@@ -215,9 +211,15 @@
             <input id="dob" type="text" placeholder="দিন-মাস-বছর" inputmode="numeric">
           </div>
         </div>
-        <div class="birth-data-actions">
-          <button type="button" class="btn birth-verify-button" id="b1" onclick="openCaptcha()" aria-haspopup="dialog" aria-controls="w2">যাচাই করে তথ্য আনুন →</button>
-          <button type="button" class="btn-secondary" id="bEditIdentity" onclick="editIdentity()" hidden>নম্বর বা তারিখ বদলান</button>
+        <div class="birth-identity-footer">
+          <div class="birth-fee">
+            <span id="priceText">চার্জ লোড হচ্ছে…</span>
+            <span>সফল যাচাইয়ে একবার কাটবে</span>
+          </div>
+          <div class="birth-data-actions">
+            <button type="button" class="btn birth-verify-button" id="b1" onclick="openCaptcha()" aria-haspopup="dialog" aria-controls="w2">যাচাই করে তথ্য আনুন →</button>
+            <button type="button" class="btn-secondary" id="bEditIdentity" onclick="editIdentity()" hidden>নম্বর বা তারিখ বদলান</button>
+          </div>
         </div>
       </section>
       <div class="birth-notice" id="birthEntryNotice">
