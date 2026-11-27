@@ -153,16 +153,27 @@
   color: #53675c;
 }
 
-.ansc-name,
+.ansc-option-copy,
 .ansc-option-price {
   grid-column: 2;
   overflow-wrap: anywhere;
+}
+
+.ansc-option-copy {
+  display: grid;
+  gap: 2px;
 }
 
 .ansc-name {
   font-size: 15px;
   font-weight: 700;
   line-height: 1.4;
+}
+
+.ansc-option-note {
+  color: #496659;
+  font-size: 13px;
+  line-height: 1.25;
 }
 
 .ansc-option-price {

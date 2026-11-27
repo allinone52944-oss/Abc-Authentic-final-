@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
   <link rel="stylesheet" href="/css/service-entry.css?v=20261122-4">
   <link rel="stylesheet" href="/css/engine-form-layout.css?v=20261127-1">
-  <link rel="stylesheet" href="/css/nid-auto-server-copy.css?v=1">
+  <link rel="stylesheet" href="/css/nid-auto-server-copy.css?v=2">
   <script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
   <script src="/js/service-navigation.js?v=20261127-2" defer></script>
 </head>
@@ -57,23 +57,32 @@
             <legend>কপির ধরন বেছে নিন</legend>
             <div class="ansc-option-grid">
               <label class="ansc-option">
-                <input type="radio" name="type" value="backup" aria-labelledby="typeBackup" aria-describedby="priceBackup" disabled>
+                <input type="radio" name="type" value="backup" aria-labelledby="typeBackup" aria-describedby="noteBackup priceBackup" disabled>
                 <span class="ansc-tile">
-                  <span class="ansc-name" id="typeBackup" lang="en">Server Copy (SV Backup)</span>
+                  <span class="ansc-option-copy">
+                    <span class="ansc-name" id="typeBackup" lang="en">Server Copy (SV Backup)</span>
+                    <span class="ansc-option-note" id="noteBackup">অসম্পূর্ণ তথ্য</span>
+                  </span>
                   <span class="ansc-option-price" id="priceBackup">লোড হচ্ছে…</span>
                 </span>
               </label>
               <label class="ansc-option">
-                <input type="radio" name="type" value="premium" aria-labelledby="typePremium" aria-describedby="pricePremium" disabled>
+                <input type="radio" name="type" value="premium" aria-labelledby="typePremium" aria-describedby="notePremium pricePremium" disabled>
                 <span class="ansc-tile">
-                  <span class="ansc-name" id="typePremium" lang="en">SV Copy Premium</span>
+                  <span class="ansc-option-copy">
+                    <span class="ansc-name" id="typePremium" lang="en">SV Copy Premium</span>
+                    <span class="ansc-option-note" id="notePremium">পূর্ণ তথ্য</span>
+                  </span>
                   <span class="ansc-option-price" id="pricePremium">লোড হচ্ছে…</span>
                 </span>
               </label>
               <label class="ansc-option">
-                <input type="radio" name="type" value="half" aria-labelledby="typeHalf" aria-describedby="priceHalf" disabled>
+                <input type="radio" name="type" value="half" aria-labelledby="typeHalf" aria-describedby="noteHalf priceHalf" disabled>
                 <span class="ansc-tile">
-                  <span class="ansc-name" id="typeHalf" lang="en">Half Server Copy</span>
+                  <span class="ansc-option-copy">
+                    <span class="ansc-name" id="typeHalf" lang="en">Half Server Copy</span>
+                    <span class="ansc-option-note" id="noteHalf">অর্ধেক তথ্য</span>
+                  </span>
                   <span class="ansc-option-price" id="priceHalf">লোড হচ্ছে…</span>
                 </span>
               </label>
@@ -92,7 +101,8 @@
                   autocomplete="off" spellcheck="false" placeholder="১০, ১৩ বা ১৭ সংখ্যার নম্বর" required>
               </label>
               <label for="dob">জন্ম তারিখ
-                <input id="dob" name="dob" type="date" min="1900-01-01" autocomplete="off" required>
+                <input id="dob" name="dob" type="text" inputmode="numeric" maxlength="24"
+                  autocomplete="off" spellcheck="false" placeholder="দিন-মাস-বছর" required>
               </label>
             </div>
             <label class="ansc-consent" for="authorized">
@@ -169,8 +179,21 @@
       let downloadPath = '';
 
       const today = new Date();
-      dobInput.max = [today.getFullYear(), today.getMonth() + 1, today.getDate()]
+      const latestDob = [today.getFullYear(), today.getMonth() + 1, today.getDate()]
         .map((part) => String(part).padStart(2, '0')).join('-');
+
+      function normalizeDob(value) {
+        const text = toEnglishDigits(value.trim()).replace(/\s*([./-])\s*/g, '$1');
+        const yearFirst = /^(\d{4})[./-](\d{1,2})[./-](\d{1,2})$/.exec(text);
+        const dayFirst = /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/.exec(text) ||
+          /^(\d{2})(\d{2})(\d{4})$/.exec(text);
+        const parts = yearFirst ? yearFirst.slice(1) : dayFirst?.slice(1).reverse();
+        if (!parts) return '';
+        const iso = parts.map(part => part.padStart(2, '0')).join('-');
+        if (iso < '1900-01-01' || iso > latestDob) return '';
+        const date = new Date(iso + 'T00:00:00Z');
+        return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === iso ? iso : '';
+      }
 
       function showMessage(id, message) {
         const box = byId(id);
@@ -267,7 +290,10 @@
         nidInput.setCustomValidity('');
         invalidateAttempt();
       });
-      dobInput.addEventListener('input', invalidateAttempt);
+      dobInput.addEventListener('input', () => {
+        dobInput.setCustomValidity('');
+        invalidateAttempt();
+      });
       byId('options').addEventListener('change', () => {
         invalidateAttempt();
         syncControls();
@@ -286,7 +312,12 @@
           nidInput.reportValidity();
           return;
         }
-        const dob = dobInput.value;
+        const dob = normalizeDob(dobInput.value);
+        if (!dob) {
+          dobInput.setCustomValidity('সঠিক জন্ম তারিখ দিন, যেমন ২৯-০২-২০০০।');
+          dobInput.reportValidity();
+          return;
+        }
         if (!attempt || attempt.price !== price) {
           attempt = { price, idempotencyKey: crypto.randomUUID() };
         }

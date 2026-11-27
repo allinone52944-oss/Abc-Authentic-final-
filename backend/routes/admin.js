@@ -367,8 +367,10 @@ router.put('/users/:id/service-pricing', async (req, res) => {
     const cp = custom_price === null || custom_price === '' ? null : Number(custom_price);
     if (cp !== null && (isNaN(cp) || cp < 0)) return res.status(400).json({ error: 'INVALID_PRICE' });
     await db.query(
-      `INSERT INTO user_services (user_id, service_id, custom_price)
-       VALUES ($1, $2, $3)
+      `INSERT INTO user_services (user_id, service_id, custom_price, access_enabled)
+       VALUES ($1, $2, $3, COALESCE((
+         SELECT engine_id IS DISTINCT FROM 'nid-auto-server-copy' FROM services WHERE id = $2
+       ), TRUE))
        ON CONFLICT (user_id, service_id)
        DO UPDATE SET custom_price = EXCLUDED.custom_price`,
       [req.params.id, service_id, cp]

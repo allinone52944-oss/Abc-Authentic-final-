@@ -837,7 +837,9 @@ window.AdmUsers = {
       let h = '<div style="display:grid; gap:8px; max-height:420px; overflow-y:auto; padding-right:4px;">';
       services.forEach(s => {
         const ov = overrides[s.id] || {};
-        const enabled = ov.access_enabled !== false;
+        const enabled = s.engine_id === 'nid-auto-server-copy'
+          ? ov.access_enabled === true
+          : ov.access_enabled !== false;
         const customPrice = ov.custom_price != null ? ov.custom_price : '';
         h += '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:9px;">' +
           '<div style="display:flex; align-items:center; gap:10px; flex:1;">' +
