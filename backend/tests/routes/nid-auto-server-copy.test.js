@@ -111,6 +111,12 @@ test('all three products quote separately without exposing internal service IDs'
 });
 
 test.each(products)('%s generates one private report and pays only its quoted price', async (type, _, price, label) => {
+  const record = type === 'premium' ? {
+    ...syntheticRecord,
+    presentAddress: 'Current Sample Address',
+    permanentAddress: 'Permanent Sample Address',
+  } : syntheticRecord;
+  lookupBdxNid.mockResolvedValueOnce(record);
   const result = await postLookup({ type, price, nid: '০০০০০০০০০০', dob: '২০০০-০২-২৯' })
     .expect('Cache-Control', 'private, no-store')
     .expect(200);
@@ -118,7 +124,7 @@ test.each(products)('%s generates one private report and pays only its quoted pr
   expect(result.body).toEqual({ orderId, downloadUrl: '/api/orders/' + orderId + '/documents/' + filename });
   expect(lookupBdxNid).toHaveBeenCalledTimes(1);
   expect(lookupBdxNid).toHaveBeenCalledWith({ type, nid: lookup.nid, dob: lookup.dob, apiKey });
-  expect(buildAutoNidReportPdf).toHaveBeenCalledWith({ label, record: syntheticRecord });
+  expect(buildAutoNidReportPdf).toHaveBeenCalledWith({ label, record });
   const [[, orderParams], [, reportParams]] = inserts();
   expect(orderParams.slice(0, 5)).toEqual([
     userId, 'service-' + type, JSON.stringify({ auto_nid_type: type }), price, 'nid-auto-server-copy:' + idempotencyKey,
@@ -191,6 +197,15 @@ test.each([
 ])('provider outcome %s never creates an order or charges the user', async (code, status, error) => {
   lookupBdxNid.mockRejectedValueOnce(Object.assign(new Error('Mock details must remain private'), { code }));
   await postLookup().expect(status, { error });
+  expect(buildAutoNidReportPdf).not.toHaveBeenCalled();
+  expect(payForService).not.toHaveBeenCalled();
+  expect(inserts()).toEqual([]);
+});
+
+test('incomplete Premium addresses stop after one lookup with no PDF, order or charge', async () => {
+  lookupBdxNid.mockRejectedValueOnce(Object.assign(new Error('Mock address detail stays private'), { code: 'address_incomplete' }));
+  await postLookup({ type: 'premium', price: 85 }).expect(422, { error: 'ADDRESS_INCOMPLETE' });
+  expect(lookupBdxNid).toHaveBeenCalledTimes(1);
   expect(buildAutoNidReportPdf).not.toHaveBeenCalled();
   expect(payForService).not.toHaveBeenCalled();
   expect(inserts()).toEqual([]);

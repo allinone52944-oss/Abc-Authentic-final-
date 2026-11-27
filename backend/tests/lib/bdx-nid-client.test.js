@@ -2,6 +2,7 @@ const { lookupBdxNid } = require('../../lib/bdxNidClient');
 
 const input = { type: 'backup', nid: '0000000000', dob: '1901-02-03', apiKey: 'test-only-key' };
 const identity = { name: 'পরীক্ষার রেকর্ড', nationalId: input.nid, dateOfBirth: input.dob };
+const addresses = { presentAddress: 'Current Sample Address', permanentAddress: 'Permanent Sample Address' };
 
 function reply(response, httpStatus = 200, status = 200) {
   return new Response(JSON.stringify({ http_status: httpStatus, response }), { status });
@@ -10,10 +11,11 @@ function reply(response, httpStatus = 200, status = 200) {
 describe('BD-X NID adapter', () => {
   test.each([
     ['backup', '/api-portal/api/s-v-becup.php'],
-    ['premium', '/api-portal/api/sv-copy.php'],
+    ['premium', '/api-portal/api/of-sv-copy.php'],
     ['half', '/api-portal/api/sv-half.php'],
   ])('routes %s to the documented HTTPS endpoint', async (type, endpoint) => {
-    const fetchImpl = jest.fn().mockResolvedValue(reply({ status: 'success', data: identity }));
+    const data = type === 'premium' ? { ...identity, ...addresses } : identity;
+    const fetchImpl = jest.fn().mockResolvedValue(reply({ status: 'success', data }));
     await expect(lookupBdxNid({ ...input, type }, fetchImpl)).resolves.toMatchObject({
       nationalId: input.nid,
       dateOfBirth: input.dob,
@@ -24,6 +26,77 @@ describe('BD-X NID adapter', () => {
     expect(url.pathname).toBe(endpoint);
     expect(Object.fromEntries(url.searchParams)).toEqual({ key: input.apiKey, nid: input.nid, dob: input.dob });
     expect(opts).toMatchObject({ method: 'GET', redirect: 'error', signal: expect.any(AbortSignal) });
+  });
+
+  test('enriches the Premium address line with useful structured fields and keeps both addresses separate', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(reply({ status: 'success', data: {
+      ...identity,
+      presentAddress: {
+        addressLine: 'Current Sample Road, Current Sample District',
+        villageOrRoad: 'Current Sample Road',
+        district: 'Current Sample District',
+        upazila: 'Current Sample Upazila',
+        postOffice: 'Current Sample Post Office',
+        postCode: '0000',
+        mouzaMoholla: 'Current Sample Mouza',
+        region: 'Current Sample Region',
+      },
+      permanentAddress: {
+        villageOrRoad: 'Permanent Sample Road',
+        upozila: 'Permanent Sample Upazila',
+        district: 'Permanent Sample District',
+      },
+      photo: 'https://example.invalid/photo',
+      religion: 'Private field',
+    } }));
+    const record = await lookupBdxNid({ ...input, type: 'premium' }, fetchImpl);
+    expect(record.presentAddress).toContain('Current Sample Road, Current Sample District');
+    expect(record.presentAddress.match(/Current Sample District/g)).toHaveLength(1);
+    for (const part of ['Current Sample Upazila', 'Current Sample Post Office', '0000', 'Current Sample Mouza', 'Current Sample Region']) {
+      expect(record.presentAddress).toContain(part);
+    }
+    for (const part of ['Permanent Sample Road', 'Permanent Sample Upazila', 'Permanent Sample District']) {
+      expect(record.permanentAddress).toContain(part);
+    }
+    expect(record.presentAddress).not.toContain('Permanent Sample');
+    expect(record.permanentAddress).not.toContain('Current Sample');
+    expect(record).not.toHaveProperty('photo');
+    expect(record).not.toHaveProperty('religion');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps a complete Premium address line without adding the same postal code in another script', async () => {
+    const addressLine = 'Sample Road, Sample Post Office ০০০০, Sample District';
+    const fetchImpl = async () => reply({ status: 'success', data: {
+      ...identity,
+      ...addresses,
+      presentAddress: {
+        addressLine, villageOrRoad: 'Sample Road', postOffice: 'Sample Post Office',
+        postCode: '0000', district: 'Sample District',
+      },
+    } });
+    await expect(lookupBdxNid({ ...input, type: 'premium' }, fetchImpl))
+      .resolves.toMatchObject({ presentAddress: addressLine });
+  });
+
+  test.each([
+    ['presentAddress', null],
+    ['permanentAddress', {}],
+    ['presentAddress', '-'],
+    ['permanentAddress', { addressLine: '—', district: 'N/A' }],
+  ])('rejects an unavailable Premium %s %# without another provider call', async (field, value) => {
+    const fetchImpl = jest.fn().mockResolvedValue(reply({ status: 'success', data: {
+      ...identity, ...addresses, [field]: value,
+    } }));
+    await expect(lookupBdxNid({ ...input, type: 'premium' }, fetchImpl)).rejects.toMatchObject({ code: 'address_incomplete' });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  test('checks Premium identity before returning the address result', async () => {
+    const fetchImpl = async () => reply({ status: 'success', data: {
+      ...identity, ...addresses, nationalId: '0000000001',
+    } });
+    await expect(lookupBdxNid({ ...input, type: 'premium' }, fetchImpl)).rejects.toMatchObject({ code: 'provider_unavailable' });
   });
 
   test('normalizes the nested record and exposes only the allowed fields', async () => {

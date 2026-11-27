@@ -1,7 +1,7 @@
 const ORIGIN = 'https://api.bd-x.com';
 const PATHS = new Map([
   ['backup', '/api-portal/api/s-v-becup.php'],
-  ['premium', '/api-portal/api/sv-copy.php'],
+  ['premium', '/api-portal/api/of-sv-copy.php'],
   ['half', '/api-portal/api/sv-half.php'],
 ]);
 const REQUEST_TIMEOUT_MS = 12_000;
@@ -53,6 +53,38 @@ function normalizeAddress(value) {
     value.homeOrHoldingNo, value.villageOrRoad, value.unionOrWard,
     value.upozila, value.district, value.division,
   ].map(part => cleanText(part)).filter(Boolean).join(', ').slice(0, 600);
+}
+
+function addressText(value, limit) {
+  const text = cleanText(value, limit);
+  return /^(?:[-–—./,?\s]+|n\s*\/?\s*a|null|none|unknown|not available|অপ্রযোজ্য|নেই)$/i.test(text) ? '' : text;
+}
+
+function addressWords(value) {
+  const words = normalizeDigits(value).normalize('NFC').toLowerCase()
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, ' ').trim();
+  return words ? ' ' + words + ' ' : '';
+}
+
+function normalizeFullAddress(value) {
+  if (!recordObject(value)) return addressText(value, 600);
+  const addressLine = addressText(value.addressLine, 600);
+  const parts = [
+    value.homeOrHoldingNo, value.villageOrRoad, value.mouzaMoholla, value.unionOrWard,
+    value.postOffice, value.postCode, addressText(value.upazila) || value.upozila,
+    value.district, value.region, value.division,
+  ];
+  const result = addressLine ? [addressLine] : [];
+  const lineWords = addressWords(addressLine);
+  const added = new Set();
+  for (const part of parts) {
+    const text = addressText(part);
+    const words = addressWords(text);
+    if (!words || lineWords.includes(words) || added.has(words)) continue;
+    result.push(text);
+    added.add(words);
+  }
+  return result.join(', ').slice(0, 600);
 }
 
 async function readBoundedJson(response) {
@@ -116,7 +148,11 @@ function normalizeResult(payload, { type, nid, dob }) {
     dateOfBirth,
     gender: cleanText(data.gender, 40),
   };
-  if (type !== 'half') {
+  if (type === 'premium') {
+    result.presentAddress = normalizeFullAddress(data.presentAddress);
+    result.permanentAddress = normalizeFullAddress(data.permanentAddress);
+    if (!result.presentAddress || !result.permanentAddress) throw providerError('address_incomplete');
+  } else if (type === 'backup') {
     result.presentAddress = normalizeAddress(data.presentAddress);
     result.permanentAddress = normalizeAddress(data.permanentAddress);
   }

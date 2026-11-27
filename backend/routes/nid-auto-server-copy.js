@@ -145,6 +145,7 @@ router.post('/lookup', async (req, res) => {
     return res.status(result.status).json(result.body);
   } catch (e) {
     if (e.code === 'record_not_found') return res.status(422).json({ error: 'RECORD_NOT_FOUND' });
+    if (e.code === 'address_incomplete') return res.status(422).json({ error: 'ADDRESS_INCOMPLETE' });
     if (e.code === 'provider_unavailable') return res.status(502).json({ error: 'PROVIDER_UNAVAILABLE' });
     if (e.message === 'INSUFFICIENT_BALANCE') return res.status(402).json({ error: 'INSUFFICIENT_BALANCE' });
     safeLog('[nid-auto-server-copy] purchase failed');
