@@ -69,6 +69,41 @@ function duplicateGuidance(orig, sameUser) {
 const router = express.Router();
 router.use(requireAuth);
 
+// ---- Telegram join banner (2026-11-28) -----------------------
+// Cross-device source of truth for "user has joined the Telegram
+// group". The banner sets this when the user clicks Join and reads
+// it on load; localStorage is the same-device fast path, this column
+// decides on a new device/browser. Both endpoints are idempotent
+// and user-scoped (requireAuth + req.user.id) — a user can only
+// read/set their own flag. Never throws a 500 for a missing column
+// on an unmigrated DB: a missing column reads as not-joined and a
+// failed write still returns joined:true (local flag already set).
+router.get('/user/telegram-joined', async (req, res) => {
+  try {
+    const r = await db.query('SELECT telegram_joined FROM users WHERE id = $1', [req.user.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    return res.json({ joined: r.rows[0].telegram_joined === true });
+  } catch (e) {
+    // Column missing (migration 067 not applied yet) or DB hiccup:
+    // treat as not-joined so the banner still shows; the local
+    // flag keeps already-joined users hidden on this device.
+    return res.json({ joined: false });
+  }
+});
+
+router.post('/user/telegram-joined', async (req, res) => {
+  try {
+    await db.query(
+      'UPDATE users SET telegram_joined = TRUE, updated_at = NOW() WHERE id = $1',
+      [req.user.id]
+    );
+  } catch (e) {
+    // Same tolerance as the GET: the local flag is already set by
+    // the banner, so a failed write must not surface an error.
+  }
+  return res.json({ joined: true });
+});
+
 function safeJsonArray(val) {
   if (!val) return [];
   if (Array.isArray(val)) return val;

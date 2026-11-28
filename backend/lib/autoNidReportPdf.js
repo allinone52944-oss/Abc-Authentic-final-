@@ -46,19 +46,6 @@ async function makeServerCopyQr(record) {
   });
 }
 
-function drawPortrait(doc, portrait, { x, y, width, height }) {
-  if (!Buffer.isBuffer(portrait)) return false;
-  try {
-    const image = doc.openImage(portrait);
-    if (!(image.width > 0 && image.height > 0 && image.width * image.height <= 4_000_000)) return false;
-    doc.image(image, x, y, { fit: [width, height], align: 'center', valign: 'center' });
-    return true;
-  } catch {
-    // A malformed optional portrait does not prevent delivery of verified information.
-    return false;
-  }
-}
-
 function drawServerCopyReport(doc, record, qr) {
   const missing = 'N/A';
   const value = (text) => text || missing;
@@ -87,7 +74,17 @@ function drawServerCopyReport(doc, record, qr) {
   // Portrait + name + QR (left column).
   doc.rect(COPY.portrait.x, COPY.portrait.y, COPY.portrait.width, COPY.portrait.height)
     .fillAndStroke('#ffffff', '#dbe8e0');
-  drawPortrait(doc, record.portrait, COPY.portrait);
+  if (Buffer.isBuffer(record.portrait)) {
+    try {
+      const image = doc.openImage(record.portrait);
+      if (image.width > 0 && image.height > 0 && image.width * image.height <= 4_000_000) {
+        doc.image(image, COPY.portrait.x, COPY.portrait.y,
+          { fit: [COPY.portrait.width, COPY.portrait.height], align: 'center', valign: 'center' });
+      }
+    } catch {
+      // A malformed optional portrait does not prevent delivery of verified information.
+    }
+  }
   if (record.nameEn) {
     doc.font('serif-bold').fontSize(9.8).fillColor(ink)
       .text(record.nameEn, COPY.portraitName.x, COPY.portraitName.y,
@@ -194,9 +191,6 @@ async function buildVerificationPdf({ type, label, record }) {
     const labelWidth = 124;
     const valueX = MARGIN + labelWidth;
     const valueWidth = pageWidth - labelWidth - 12;
-    const portraitWidth = 78;
-    const portraitHeight = 92;
-    let portraitBottom = 0;
     let pageNumber = 0;
     let cursorY;
 
@@ -235,8 +229,7 @@ async function buildVerificationPdf({ type, label, record }) {
 
     function detailRow(title, value) {
       doc.font('hind').fontSize(12);
-      const besidePortrait = pageNumber === 1 && cursorY < portraitBottom;
-      const valueOptions = { width: besidePortrait ? valueWidth - portraitWidth - 12 : valueWidth, lineGap: 2 };
+      const valueOptions = { width: valueWidth, lineGap: 2 };
       const height = Math.max(34, doc.heightOfString(value, valueOptions) + 14);
       ensureSpace(height);
       doc.font('hind-bold').fontSize(11).fillColor(MUTED)
@@ -245,9 +238,7 @@ async function buildVerificationPdf({ type, label, record }) {
         .text(value, valueX, cursorY + 7, valueOptions);
       cursorY += height;
       doc.lineWidth(0.65).strokeColor(LINE)
-        .moveTo(MARGIN, cursorY)
-        .lineTo(MARGIN + pageWidth - (pageNumber === 1 && cursorY < portraitBottom ? portraitWidth + 12 : 0), cursorY)
-        .stroke();
+        .moveTo(MARGIN, cursorY).lineTo(MARGIN + pageWidth, cursorY).stroke();
     }
 
     const identity = (tin ? [
@@ -282,16 +273,7 @@ async function buildVerificationPdf({ type, label, record }) {
 
     drawPage();
     sectionTitle('পরিচয়ের তথ্য', 34);
-    if (drawPortrait(doc, record.portrait, {
-      x: MARGIN + pageWidth - portraitWidth - 10,
-      y: cursorY + 4,
-      width: portraitWidth,
-      height: portraitHeight,
-    })) {
-      portraitBottom = cursorY + portraitHeight + 8;
-    }
     for (const [title, value] of identity) detailRow(title, value);
-    if (pageNumber === 1) cursorY = Math.max(cursorY, portraitBottom);
 
     if (addresses.length) {
       cursorY += 18;

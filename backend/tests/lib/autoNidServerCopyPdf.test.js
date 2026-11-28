@@ -37,17 +37,6 @@ describe('server copy premium output', () => {
     expect(pdf.length).toBeGreaterThan(100_000);
   });
 
-  test.each(['premium', 'half', 'backup'])('embeds the supplied portrait in the %s PDF', async type => {
-    const portrait = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAKCAIAAAAGpYjXAAAAFElEQVR4nGPcp+DFgA0wYRUdRhIAKgEBPLQA/HYAAAAASUVORK5CYII=',
-      'base64',
-    );
-    const without = await buildAutoNidReportPdf({ type, label: 'Sample', record });
-    const withPortrait = await buildAutoNidReportPdf({ type, label: 'Sample', record: { ...record, portrait } });
-    const imageCount = pdf => (pdf.toString('latin1').match(/\/Subtype \/Image\b/g) || []).length;
-    expect(imageCount(withPortrait)).toBe(imageCount(without) + 1);
-  });
-
   test('non-premium build still returns a report PDF', async () => {
     const pdf = await buildAutoNidReportPdf({ type: 'backup', label: 'Server Copy (SV Backup)', record });
     expect(Buffer.isBuffer(pdf)).toBe(true);

@@ -244,9 +244,11 @@ async function lookupEndpoint(path, { type, nid, dob, apiKey }, fetchImpl, signa
   try {
     if (!response.ok && (response.status !== 404 || payload?.http_status !== 404)) throw providerError();
     const record = normalizeResult(payload, { type, nid, dob });
-    const data = payload.response.data ?? payload.response;
-    const portrait = await fetchPortrait(data.photo, fetchImpl, signal);
-    if (portrait) record.portrait = portrait;
+    if (type === 'premium') {
+      const data = payload.response.data ?? payload.response;
+      const portrait = await fetchPortrait(data.photo, fetchImpl, signal);
+      if (portrait) record.portrait = portrait;
+    }
     return record;
   } catch (e) {
     const error = providerError(e.code === 'record_not_found' ? 'record_not_found' : undefined);
