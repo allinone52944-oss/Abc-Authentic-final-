@@ -188,7 +188,10 @@ body.dash-v2 .dv2-retry {
 }
 body.dash-v2 :is(a.engine-card, a.m-active-order-pill, a.ro-btn) { text-decoration: none; }
 body.dash-v2 a.engine-card { color: inherit; min-width: 0; }
-body.dash-v2 a.m-active-order-pill { gap: 10px; }
+body.dash-v2 a.m-active-order-pill { gap: 10px; min-height: 44px; }
+body.dash-v2 a.m-active-order-pill strong { display: block; color: #123c2c; font-size: 13px; }
+body.dash-v2 a.m-active-order-pill small { display: block; color: #435a52; font-size: 12px; }
+body.dash-v2 a.m-active-order-pill > span { color: #07543d; font-size: 12px; font-weight: 700; }
 body.dash-v2 a.m-active-order-pill > div { min-width: 0; overflow-wrap: anywhere; }
 body.dash-v2 a.m-active-order-pill > span { flex: none; }
 body.dash-v2 .engine-grid-status { grid-column: 1 / -1; color: var(--layout-muted); }

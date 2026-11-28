@@ -30,15 +30,24 @@
   const pendingDownloads = new Set();
   let historyLoading = false;
 
+  function downloadable(doc) {
+    return typeof doc?.url === 'string' && /^\/(?:api\/)?(?:orders|engine-jobs|bdris-apply)\//.test(doc.url);
+  }
+
   async function download(i, button) {
     const doc = items[i]?.documents?.[0];
-    if (!doc?.url || pendingDownloads.has(doc.url)) return;
+    if (!downloadable(doc) || pendingDownloads.has(doc.url)) return;
     pendingDownloads.add(doc.url);
     if (button) button.disabled = true;
     try {
       const response = await ABC.api(doc.url);
       if (!response.ok) {
         ABC.showPageMsg(ABC.httpErrBn(response.status, 'ডাউনলোড'), 'err');
+        return;
+      }
+      const type = response.headers.get('content-type') || '';
+      if (/(?:text\/html|[+/]json)(?:\s*;|$)/i.test(type)) {
+        ABC.showPageMsg('ফাইলটি পাওয়া যায়নি। আগের কাজ থেকে আবার চেষ্টা করুন।', 'err');
         return;
       }
       const link = document.createElement('a');
@@ -64,14 +73,17 @@
       return;
     }
     target.innerHTML = list.map(({ it, i }) => {
-      const failed = /— ব্যর্থ$/.test(it.title || '');
-      const has = Boolean(it.documents?.[0]?.url);
+      const paidFailure = it.tin_failure || it.premium_failure;
+      const failed = Boolean(paidFailure) || /— ব্যর্থ$/.test(it.title || '');
+      const has = !failed && downloadable(it.documents?.[0]);
+      const status = paidFailure?.refunded ? 'ফি ফেরত হয়েছে' : failed ? 'ফাইল তৈরি হয়নি' : '';
       const ago = when(it.created_at);
       return '<div class="dv2-row">' +
         '<span class="dv2-dot ' + (failed ? 'bad' : 'ok') + '" aria-hidden="true">' + (failed ? '✕' : '✓') + '</span>' +
         '<div class="dv2-row-main"><b>' + esc(it.title || 'সেবা') + '</b>' + (ago ? '<small>' + esc(ago) + '</small>' : '') + '</div>' +
         (has ? '<button type="button" class="dv2-dl" onclick="DashV2.download(' + i + ',this)">⬇ ডাউনলোড</button>'
-             : '<span class="dv2-tag">' + (failed ? 'ফাইল তৈরি হয়নি' : '—') + '</span>') +
+             : status ? '<span class="dv2-tag">' + status + '</span>'
+             : it.kind === 'bdris' ? '<a class="dv2-dl" href="/bdris-apply.html">আবেদন দেখুন</a>' : '') +
       '</div>';
     }).join('');
   }
@@ -127,7 +139,7 @@
     const mBal = document.querySelector('.m-bal');
     if (mBal) mBal.insertAdjacentElement('afterend', el(QUICK.replace('dv2-quick', 'dv2-quick dv2-quick-m')));
     const mOrders = document.getElementById('recentOrdersMob');
-    if (mOrders) { mOrders.insertAdjacentElement('beforebegin', el(HIST('M'))); mOrders.insertAdjacentElement('beforebegin', el('<h3 class="dv2-m-title">📦 আমার অর্ডার <small>(হাতে করা কাজ)</small></h3>')); }
+    if (mOrders) { mOrders.insertAdjacentElement('beforebegin', el(HIST('M'))); mOrders.insertAdjacentElement('beforebegin', el('<h3 class="dv2-m-title">সাম্প্রতিক অর্ডার</h3>')); }
     const mc = document.querySelector('.mobile-only .m-content');
     const mHelp = mc && mc.querySelector('.help-card-desk');
     const mEng = document.getElementById('engineGridMob');

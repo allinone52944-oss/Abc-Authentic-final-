@@ -36,4 +36,6 @@ test('mobile tracking prioritizes a newly placed order over the latest delivery'
   await context.loadRecentOrders();
   expect(mobile.innerHTML).toContain('href="/order-create.html?service=manual-service&flow=directory&order=new-order#serviceOrders"');
   expect(mobile.innerHTML).toContain('নতুন');
+  expect(mobile.innerHTML).toContain('/order-status.html?id=delivered');
+  expect(mobile.innerHTML.indexOf('order=new-order')).toBeLessThan(mobile.innerHTML.indexOf('id=delivered'));
 });

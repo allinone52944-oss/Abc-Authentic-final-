@@ -31,6 +31,7 @@ describe('dashboard loaders fail visibly (audit #76)', () => {
 
   test('loadNotices retry behavior is unchanged (the pattern copied)', () => {
     expect(fnBody('loadNotices')).toContain("box.innerHTML = retryBox('loadNotices');");
+    expect(fnBody('loadNotices')).toContain("mobile.innerHTML = retryBox('loadNotices');");
   });
 });
 
@@ -71,6 +72,7 @@ describe('B1#1/B2#12 — dashboard notices render **bold** / *italic*, never raw
     expect(fnBody('loadNotices')).toContain('renderNoticeText(n.title)');
     expect(fnBody('loadNotices')).toContain('renderNoticeText(trunc(n.message, 60))');
     expect(fnBody('loadNotices')).toContain('renderNoticeText(valid[0].title)');
+    expect(fnBody('loadNotices')).toContain('onclick="showNotices()"');
     expect(fnBody('showNotices')).toContain("renderNoticeText(n.title || 'বিজ্ঞপ্তি')");
     expect(fnBody('showNotices')).toContain("renderNoticeText(n.message || '')");
   });

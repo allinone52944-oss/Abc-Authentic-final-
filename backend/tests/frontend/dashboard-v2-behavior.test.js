@@ -85,3 +85,14 @@ test('dashboard search does not reveal services hidden by admin', () => {
   const result = ordered([{ id: 'hidden', name_bn: 'Secret', show_on_dashboard: false, price: 20 }], 'Secret');
   expect(result).not.toContain('id=hidden');
 });
+
+test('structured paid report failures show a failure or refund, with no download action', async () => {
+  const result = await history([
+    { kind: 'engine', title: 'TIN যাচাই', documents: [], tin_failure: { refunded: false } },
+    { kind: 'engine', title: 'সার্ভার কপি', documents: [], premium_failure: { refunded: true } },
+  ]);
+  expect(result.match(/dv2-dot bad/g)).toHaveLength(2);
+  expect(result).toContain('ফাইল তৈরি হয়নি');
+  expect(result).toContain('ফি ফেরত হয়েছে');
+  expect(result).not.toContain('DashV2.download');
+});

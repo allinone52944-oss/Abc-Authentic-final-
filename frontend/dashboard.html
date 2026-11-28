@@ -941,6 +941,31 @@
       padding: 16px 12px !important;
     }
   }
+.dashboard-mobile-notice:not([hidden]) {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px 12px;
+  flex-wrap: wrap; padding: 10px 12px; margin-bottom: 12px; border-radius: 12px;
+  background: #edf6f0; color: #123c2c;
+}
+.dashboard-mobile-notice p { margin: 2px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+.dashboard-notice-action {
+  min-height: 44px; padding: 0 10px; border: 1px solid #cbded4; border-radius: 8px;
+  background: #fff; color: #07543d; font: inherit; font-weight: 700; cursor: pointer;
+}
+#dashboardNoticesDialog {
+  width: min(100% - 28px, 520px); max-height: 85dvh; padding: 20px;
+  border: 1px solid #cbded4; border-radius: 16px; background: #fff; color: #123c2c;
+}
+#dashboardNoticesDialog::backdrop { background: #03241999; }
+#dashboardNoticesDialog h2 { font-size: 18px; }
+#dashboardNoticesDialog ul { padding: 0; margin: 14px 0; list-style: none; overflow-wrap: anywhere; }
+#dashboardNoticesDialog button { min-height: 44px; width: 100%; }
+.dashboard-mobile-wallet-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dashboard-coupon-link {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 10px;
+  color: #fff; font-size: 13px; font-weight: 700; text-decoration: underline;
+}
+.dashboard-coupon-link:focus-visible { outline: 2px solid #efb541; outline-offset: 2px; }
+.dashboard-orders-empty { padding: 12px 0; color: #52645b; font-size: 13px; }
 .dashboard-telegram {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
@@ -994,7 +1019,7 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/dashboard-polish.css?v=20261110-1">
-<link rel="stylesheet" href="/css/dashboard-v2.css?v=20261128-1">
+<link rel="stylesheet" href="/css/dashboard-v2.css?v=20261128-2">
 <script defer src="/js/service-navigation.js?v=20261128-3"></script>
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261128-4">
 <script src="/js/sidebar-nav.js?v=20261128-3" defer></script>
@@ -1071,8 +1096,7 @@
         </div>
         <div class="hero-actions">
           <button class="btn-hero-primary" onclick="location.href='/wallet.html'">+ ইনস্ট্যান্ট টাকা যোগ</button>
-          <button class="btn-hero-glass" onclick="location.href='/wallet.html#coupon'">🎁 ক্যাশব্যাক ও কুপন</button>
-          <button class="btn-hero-glass" onclick="location.href='/wallet.html'">📜 হিস্ট্রি</button>
+          <a class="dashboard-coupon-link" href="/wallet.html#couponCard">কুপন</a>
         </div>
       </div>
       <div class="hero-micro-bar">
@@ -1224,22 +1248,9 @@
         </div>
         <div id="hubBalance" style="font-size:28px;font-weight:800;color:#1e40af;margin-top:2px;">৳—</div>
       </div>
-      <button class="btn" style="padding:10px 18px;font-size:13px;border-radius:12px;font-weight:700;" onclick="location.href='/wallet.html'">+ রিচার্জ</button>
-    </div>
-
-    <!-- 4 Mobile Quick Action Icons -->
-    <div class="m-quick-actions">
-      <div class="m-qa-item" onclick="location.href='/wallet.html'">
-        <div class="m-qa-ico" style="background:#eff6ff;color:#1d4ed8;">➕</div>
-        <div class="m-qa-lbl">টাকা যোগ</div>
-      </div>
-      <div class="m-qa-item" onclick="location.href='/services.html'">
-        <div class="m-qa-ico" style="background:#faf5ff;color:#6b21a8;">🛎️</div>
-        <div class="m-qa-lbl">সকল সেবা</div>
-      </div>
-      <div class="m-qa-item" onclick="location.href='/wallet.html#coupon'">
-        <div class="m-qa-ico" style="background:#fff7ed;color:#c2410c;">🎁</div>
-        <div class="m-qa-lbl">কুপন ও বোনাস</div>
+      <div class="dashboard-mobile-wallet-actions">
+        <button type="button" class="btn" onclick="location.href='/wallet.html'">+ রিচার্জ</button>
+        <a class="dashboard-coupon-link" href="/wallet.html#couponCard">কুপন</a>
       </div>
     </div>
   </div>
@@ -1278,7 +1289,7 @@
     </div>
 
     <!-- Mobile Notice Alert -->
-    <div id="mNotices" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px;font-size:13px;color:#1e40af;margin-bottom:16px;"></div>
+    <div id="mNotices" class="dashboard-mobile-notice" hidden></div>
 
     <div data-telegram-invite-slot></div>
 
@@ -1731,28 +1742,12 @@ async function loadRecentOrders() {
     const r = await ABC.api('/orders?limit=3');
     if (!r.ok) throw new Error('bad');
     const d = await r.json();
-    const orders = (d && d.orders) ? d.orders : [];
-
+    if (!Array.isArray(d?.orders)) throw new Error('Orders unavailable');
+    const orders = d.orders;
     if (!orders.length) {
-      if (desk) {
-        desk.innerHTML = '<div style="text-align:center;padding:24px 12px;color:#64748b;background:#f8fafc;border-radius:12px;border:1px dashed #cbd5e1;">' +
-          '<div style="font-size:24px;margin-bottom:6px;">📋</div>' +
-          '<p style="font-size:13px;font-weight:600;color:#334155;">আপনার এখনো কোনো চলমান বা পূর্বের অর্ডার নেই</p>' +
-          '<button class="btn" style="margin-top:10px;padding:7px 16px;font-size:12px;border-radius:8px;" onclick="location.href=\'/services.html\'">+ নতুন সেবার আবেদন করুন</button>' +
-          '</div>';
-      }
-      if (mob) {
-        mob.innerHTML = '<a class="m-active-order-pill" href="/services.html" style="background:#f8fafc;border:1px dashed #cbd5e1;">' +
-          '<div style="display:flex;align-items:center;gap:10px;">' +
-            '<div style="font-size:20px;">🛎️</div>' +
-            '<div>' +
-              '<div style="font-size:13px;font-weight:700;color:#0f172a;">নতুন সেবার আবেদন করুন</div>' +
-              '<div style="font-size:11px;color:#64748b;">আপনার কোনো চলমান অর্ডার নেই</div>' +
-            '</div>' +
-          '</div>' +
-          '<span style="font-size:12px;color:#2563eb;font-weight:700;">শুরু করুন →</span>' +
-        '</a>';
-      }
+      const empty = '<p class="dashboard-orders-empty">এখনো কোনো অর্ডার নেই।</p>';
+      if (desk) desk.innerHTML = empty;
+      if (mob) mob.innerHTML = empty;
       return;
     }
 
@@ -1781,24 +1776,17 @@ async function loadRecentOrders() {
     }
 
     if (mob) {
-      const activeOrder = orders.find(o => ['new', 'pending', 'waiting', 'processing', 'received', 'registered'].includes(String(o.status).toLowerCase())) || orders[0];
-      if (activeOrder) {
-        const sName = escapeHtml(activeOrder.service_name_bn || activeOrder.service_name || 'সেবা');
-        const stKey = String(activeOrder.status || 'pending').toLowerCase();
-        const stText = STBN[stKey] || activeOrder.status;
-        mob.innerHTML = '<a class="m-active-order-pill" href="' + escapeHtml(serviceOrderHref(activeOrder)) + '">' +
-          '<div style="display:flex;align-items:center;gap:10px;">' +
-            '<div style="font-size:20px;">' + autoIcon(sName) + '</div>' +
-            '<div>' +
-              '<div style="font-size:13px;font-weight:700;color:#0f172a;">' + sName + '</div>' +
-              '<div style="font-size:11px;color:#64748b;">স্ট্যাটাস: <b style="color:#1d4ed8;">' + escapeHtml(stText) + '</b></div>' +
-            '</div>' +
-          '</div>' +
-          '<span style="font-size:12px;color:#2563eb;font-weight:700;">ট্র্যাক →</span>' +
-        '</a>';
-      } else {
-        mob.innerHTML = '';
-      }
+      const active = new Set(['new', 'pending', 'waiting', 'processing', 'received', 'registered']);
+      const ordered = [...orders.filter(order => active.has(String(order.status).toLowerCase())),
+        ...orders.filter(order => !active.has(String(order.status).toLowerCase()))];
+      mob.innerHTML = ordered.map(order => {
+        const name = escapeHtml(order.service_name_bn || order.service_name || 'সেবা');
+        const key = String(order.status || 'pending').toLowerCase();
+        const status = escapeHtml(STBN[key] || 'অর্ডারের অবস্থা');
+        return '<a class="m-active-order-pill" href="' + escapeHtml(serviceOrderHref(order)) + '">' +
+          '<div><strong>' + name + '</strong><small>' + status + '</small></div>' +
+          '<span>ট্র্যাক করুন →</span></a>';
+      }).join('');
     }
   } catch (e) {
     if (desk) desk.innerHTML = retryBox('loadRecentOrders');
@@ -1937,13 +1925,19 @@ async function loadNotices() {
     }
     const mn = document.getElementById('mNotices');
     if (mn) {
+      mn.hidden = !valid.length;
       if (valid.length) {
-        mn.style.display = 'block';
-        mn.innerHTML = '🔔 <b>' + renderNoticeText(valid[0].title) + '</b>: ' + renderNoticeText(trunc(valid[0].message, 50));
-      } else { mn.style.display = 'none'; }
+        mn.innerHTML = '<div><b>নোটিশ</b><p>' + renderNoticeText(valid[0].title) +
+          '</p></div><button type="button" class="dashboard-notice-action" onclick="showNotices()">সব নোটিশ</button>';
+      }
     }
   } catch (e) {
     if (box) box.innerHTML = retryBox('loadNotices');
+    const mobile = document.getElementById('mNotices');
+    if (mobile) {
+      mobile.hidden = false;
+      mobile.innerHTML = retryBox('loadNotices');
+    }
   }
 }
 
@@ -2025,11 +2019,15 @@ async function showNotices() {
         '<div style="font-size:13px;color:#475569;margin-top:4px;line-height:1.5;">' + renderNoticeText(n.message || '') + '</div>' +
       '</li>'
     ).join('') || '<li style="color:#64748b;font-size:13px;">কোনো নোটিশ নেই</li>';
-    const bg = document.createElement('div');
-    bg.className = 'modal-bg';
-    bg.innerHTML = '<div class="modal"><h3>🔔 সকল নোটিশ</h3><ul style="padding-left:0;margin:16px 0;list-style:none;">' + list + '</ul><button class="btn" style="width:100%;margin-top:10px;" onclick="this.closest(\'.modal-bg\').remove()">বন্ধ করুন</button></div>';
-    bg.onclick = (e) => { if (e.target === bg) bg.remove(); };
-    document.body.appendChild(bg);
+    if (document.getElementById('dashboardNoticesDialog')) return;
+    const dialog = document.createElement('dialog');
+    dialog.id = 'dashboardNoticesDialog';
+    dialog.setAttribute('aria-labelledby', 'dashboardNoticesTitle');
+    dialog.innerHTML = '<h2 id="dashboardNoticesTitle">সকল নোটিশ</h2><ul>' + list +
+      '</ul><form method="dialog"><button type="submit" class="btn" autofocus>বন্ধ করুন</button></form>';
+    dialog.addEventListener('close', () => dialog.remove());
+    document.body.appendChild(dialog);
+    dialog.showModal();
   } catch (e) {
     ABC.showPageMsg('নোটিশ লোড করা যায়নি — আবার চেষ্টা করুন।', 'err');
   }
@@ -2037,6 +2035,6 @@ async function showNotices() {
 
 init();
 </script>
-<script src="/js/dashboard-v2.js?v=20261128-1"></script>
+<script src="/js/dashboard-v2.js?v=20261128-2"></script>
 </body>
 </html>
