@@ -20,6 +20,7 @@ const { requireAuth } = require('../auth');
 const { safeLog } = require('../security');
 const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
+const telegramNotify = require('../lib/telegramNotify'); // group notifications (2026-11-28)
 const db = require('../db');
 const { storedOriginalAvailable, storedOriginalPath, originalFileKey } = require('../lib/storedOriginal');
 // A receipt permits the first download from an owned submission.
@@ -224,6 +225,28 @@ router.get('/prices', requireAuth, async (req, res) => {
 // tracking number instead of living only in the engine page's
 // session. Best-effort: a failed order insert never fails the
 // filing record itself.
+// Telegram group notification for a submitted BDRIS application
+// (2026-11-28). Fire-and-forget: runs after the application
+// record commits and can never fail the record (all errors
+// swallowed inside). Notification only — no filing/submit logic
+// is touched.
+async function telegramBdrisNotify(userId, orderId) {
+  try {
+    const u = await db.query('SELECT name, phone FROM users WHERE id = $1', [userId]);
+    const user = u.rows[0];
+    if (!user) return;
+    let fee = 0;
+    if (orderId) {
+      const o = await db.query('SELECT price FROM orders WHERE id = $1', [orderId]);
+      if (o.rows.length) fee = Number(o.rows[0].price) || 0;
+    }
+    await telegramNotify.notifySuccess({
+      userName: user.name, userPhone: user.phone,
+      serviceLabel: 'জন্ম নিবন্ধন আবেদন', fee, orderId: orderId ? String(orderId) : '',
+    });
+  } catch (_) { /* Telegram never fails a record */ }
+}
+
 async function recordBdrisOrder(userId, { ackNo, name, status, price, originalPdfAvailable, reason, chargeKey }) {
   try {
     const svc = await db.query(
@@ -309,7 +332,7 @@ router.post('/applications', requireAuth, async (req, res) => {
     // in "আমার অর্ডার"); a re-POST (flag upgrade) is a no-op there.
     // Bug-hunt F3 — carry the submit-charge key so the order is
     // priced from the ledger amount actually charged.
-    await recordBdrisOrder(req.user.id, {
+    const bdrisOrderId = await recordBdrisOrder(req.user.id, {
       ackNo, name, status: 'completed', originalPdfAvailable: origFlag,
       chargeKey: (req.body && req.body.charge_key) ? String(req.body.charge_key).slice(0, 80) : null,
     });
@@ -319,6 +342,8 @@ router.post('/applications', requireAuth, async (req, res) => {
       wa.notifyServiceCompleted(db, req.user.id, 'জন্ম নিবন্ধন আবেদন').catch(() => {});
       push.notifyUser(db, req.user.id, '✅ আবেদন জমা হয়েছে',
         'আপনার জন্ম নিবন্ধন আবেদনটি সফলভাবে জমা হয়েছে। আবেদন নম্বর: ' + ackNo, '/bdris-apply.html').catch(() => {});
+      // Telegram: same event to the group (async, non-blocking).
+      telegramBdrisNotify(req.user.id, bdrisOrderId).catch(() => {});
       return res.status(201).json({ ok: true, application: r.rows[0] });
     }
     const cur = await db.query(

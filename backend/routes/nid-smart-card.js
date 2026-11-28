@@ -31,6 +31,22 @@ const { alertMissingPrice } = require('../lib/missingPriceAlert');
 const serviceCredits = require('../lib/serviceCredits');
 const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
+const telegramNotify = require('../lib/telegramNotify'); // group notifications (2026-11-28)
+
+// Telegram group notification for a completed smart card
+// (2026-11-28). Fire-and-forget: runs after the order commits and
+// can never fail the build (all errors swallowed inside).
+async function telegramSuccessNotify(userId, serviceLabel, fee, orderId) {
+  try {
+    const u = await db.query('SELECT name, phone FROM users WHERE id = $1', [userId]);
+    const user = u.rows[0];
+    if (!user) return;
+    await telegramNotify.notifySuccess({
+      userName: user.name, userPhone: user.phone,
+      serviceLabel, fee: Number(fee) || 0, orderId: String(orderId),
+    });
+  } catch (_) { /* Telegram never fails a build */ }
+}
 
 const router = express.Router();
 
@@ -228,6 +244,8 @@ router.post('/build', requireAuth, async (req, res) => {
           'আপনার স্মার্ট কার্ডটি তৈরি হয়েছে — ইতিহাস থেকে যেকোনো সময় ডাউনলোড করতে পারবেন।', '/history.html').catch(() => {});
         push.notifyAdmins(db, '✅ ' + LABEL,
           `একটি স্মার্ট কার্ড সফলভাবে তৈরি হয়েছে — চার্জ ৳${price}।`, '/admin.html').catch(() => {});
+        // Telegram: same event to the group (async, non-blocking).
+        telegramSuccessNotify(req.user.id, LABEL, price, ins.rows[0].id).catch(() => {});
       }
     }
 

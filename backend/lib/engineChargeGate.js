@@ -59,6 +59,33 @@ const { mintRenderToken, verifyRenderToken, RENDER_TOKEN_HEADER } = require('../
 const dbModule = require('../db');
 const { alertMissingPrice } = require('./missingPriceAlert');
 const serviceCreditsModule = require('./serviceCredits');
+const telegramNotify = require('./telegramNotify'); // group notifications (2026-11-28)
+
+// Telegram group notification for a birth/death verification
+// (2026-11-28). Fire-and-forget: runs after the charge commits and
+// can never fail the verify (all errors swallowed inside).
+// kind 'order' = charged verify (posts as a new order);
+// kind 'verify' = free verify (price 0, no order row).
+async function telegramGateNotify(db, engineId, serviceId, userId, price, orderId, kind) {
+  try {
+    const r = await db.query(
+      `SELECT u.name, u.phone, s.name_bn FROM users u
+        LEFT JOIN services s ON s.id = $2 WHERE u.id = $1`,
+      [userId, serviceId]
+    );
+    const row = r.rows[0];
+    if (!row) return;
+    const label = row.name_bn || engineId;
+    if (kind === 'verify') {
+      await telegramNotify.notifyVerify({ userName: row.name, userPhone: row.phone, type: label });
+    } else {
+      await telegramNotify.notifyOrder({
+        userName: row.name, userPhone: row.phone,
+        serviceLabel: label, fee: Number(price) || 0, orderId: String(orderId),
+      });
+    }
+  } catch (_) { /* Telegram never fails a verify */ }
+}
 
 // Paths (relative to the engine mount) and their gate policy.
 // `verify` is the only path that charges; `render` paths require a
@@ -375,7 +402,12 @@ function chargeGate(engineId, engineKind, mount, deps) {
           // never charged.
           return send.forward(status, body);
         }
-        if (price <= 0 || !serviceId) return send.forward(status, body);
+        if (price <= 0 || !serviceId) {
+          // Free verify (death, price 0): no order row, but the
+          // verification still posts to the Telegram group.
+          telegramGateNotify(db, engineId, serviceId, userId, price, attemptKey, 'verify').catch(() => {});
+          return send.forward(status, body);
+        }
         let orderStatus;
         try {
           orderStatus = await chargeAndRecordOrder(
@@ -404,6 +436,8 @@ function chargeGate(engineId, engineKind, mount, deps) {
             message: 'এই অর্ডারটি রিফান্ড করা হয়েছে। প্রিভিউ/PDF খুলতে নতুন করে যাচাই করুন (নতুন চার্জ প্রযোজ্য হবে)।',
           });
         }
+        // Telegram: paid verify posts to the group (fire-and-forget).
+        telegramGateNotify(db, engineId, serviceId, userId, price, attemptKey, 'order').catch(() => {});
         if (generatedKey && parsed) {
           parsed.idempotency_key = attemptKey;
           return send.forward(status, Buffer.from(JSON.stringify(parsed)));

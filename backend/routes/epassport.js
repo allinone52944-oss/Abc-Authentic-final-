@@ -59,6 +59,22 @@ const serviceCredits = require('../lib/serviceCredits');
 const { renderEpassportPdf } = require('../lib/epassportPdf');
 const push = require('../utils/push');
 const { alertMissingPrice } = require('../lib/missingPriceAlert');
+const telegramNotify = require('../lib/telegramNotify'); // group notifications (2026-11-28)
+
+// Telegram group notification for a completed e-passport
+// (2026-11-28). Fire-and-forget: runs after the order commits and
+// can never fail the build (all errors swallowed inside).
+async function telegramSuccessNotify(userId, serviceLabel, fee, orderId) {
+  try {
+    const u = await db.query('SELECT name, phone FROM users WHERE id = $1', [userId]);
+    const user = u.rows[0];
+    if (!user) return;
+    await telegramNotify.notifySuccess({
+      userName: user.name, userPhone: user.phone,
+      serviceLabel, fee: Number(fee) || 0, orderId: String(orderId),
+    });
+  } catch (_) { /* Telegram never fails a build */ }
+}
 
 const router = express.Router();
 const ENGINE_ID = 'epassport';
@@ -180,6 +196,8 @@ router.post('/create', requireAuth, async (req, res) => {
     }
     if (!result.duplicate) {
       push.notifyAdmins(db, LABEL, `ই-পাসপোর্ট অর্ডার সেভ হয়েছে। চার্জ ৳${result.charged}।`, '/admin.html').catch(() => {});
+      // Telegram: same event to the group (async, non-blocking).
+      telegramSuccessNotify(req.user.id, LABEL, result.charged, result.orderId).catch(() => {});
     }
     return res.json({ ...result, idempotencyKey: idem });
   } catch (e) {

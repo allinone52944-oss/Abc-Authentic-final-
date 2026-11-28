@@ -14,6 +14,7 @@ const fs = require('fs');
 // Order document uploads: settings-driven via orderDocUpload(db, 'order') (H-12).
 // Filenames stay random (C-2: never embed req.params.id).
 const push = require('../utils/push');
+const telegramNotify = require('../lib/telegramNotify'); // group notifications (2026-11-28)
 const { chargeRuleFor } = require('../lib/chargeRule'); // audit #49
 const { isManualOrderService, serviceAcceptsNewWork } = require('../lib/serviceAvailability');
 const wa = require('../utils/whatsapp');
@@ -23,6 +24,21 @@ const promotions = require('../lib/promotions');
 const { bdrisOriginalDoc } = require('../lib/storedOriginal'); // past-applications list (2026-11-07)
 const { products: autoNidProducts, engineIds: autoNidEngineIds } = require('../lib/autoNidProducts');
 const { storageKey: autoNidStorageKey, decryptReport: decryptAutoNidReport } = require('../lib/autoNidReportStore');
+
+// Telegram group notification for a new paid manual order (2026-11-28).
+// Fire-and-forget: the lookup + send run after the order commits and
+// can never fail the order (all errors swallowed inside).
+async function telegramOrderNotify(order, serviceLabel) {
+  try {
+    const u = await db.query('SELECT name, phone FROM users WHERE id = $1', [order.user_id]);
+    const user = u.rows[0];
+    if (!user) return;
+    await telegramNotify.notifyOrder({
+      userName: user.name, userPhone: user.phone,
+      serviceLabel, fee: Number(order.price) || 0, orderId: String(order.id),
+    });
+  } catch (_) { /* Telegram never fails an order */ }
+}
 
 // Fraud alerts (duplicate TrxID / amount mismatch at submit) notify
 // the attempter + admins at most once per user+trxid per hour, so a
@@ -283,7 +299,11 @@ router.post('/orders', async (req, res) => {
     });
 
     // Web Push: notify admins of new order (async, non-blocking)
-    if (!duplicate) push.notifyNewOrder(db, order, service.name_bn || service.name, req.user.id).catch(() => {});
+    if (!duplicate) {
+      push.notifyNewOrder(db, order, service.name_bn || service.name, req.user.id).catch(() => {});
+      // Telegram: same event to the group (async, non-blocking).
+      telegramOrderNotify(order, service.name_bn || service.name).catch(() => {});
+    }
 
     // C1 (2026-11-03): INSERT ... RETURNING * carries admin_note
     // (null at creation, but the column must never leave the server
