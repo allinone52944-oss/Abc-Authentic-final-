@@ -32,9 +32,11 @@ describe('orders.html — ?status= deep link (audit #41)', () => {
     expect(initFn).not.toMatch(/status = wantStatus;\s*}\s*else/);
   });
 
-  test('the dashboard actually links here with ?status= (the links this fix serves)', () => {
-    expect(dashboard).toContain("'/orders.html?status=completed'");
-    expect(dashboard).toContain("'/orders.html?status=processing'");
+  test('dashboard order links open the corresponding service workspace', () => {
+    expect(dashboard.includes("'/order-create.html?' + new URLSearchParams")).toBe(true);
+    expect(dashboard.includes("service: order.service_id, flow: 'directory', order: order.id")).toBe(true);
+    expect(dashboard.includes("'/orders.html?status=completed'")).toBe(false);
+    expect(dashboard.includes("'/orders.html?status=processing'")).toBe(false);
   });
 });
 

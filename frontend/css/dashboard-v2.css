@@ -1,5 +1,5 @@
 /* Dashboard v2 — page-scoped presentation only. */
-body.dash-v2 .dv2-quick { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 14px; margin: 16px 0; }
+body.dash-v2 .dv2-quick { display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; margin: 16px 0; }
 body.dash-v2 .dv2-q { display: flex; align-items: center; gap: 12px; padding: 18px; border-radius: 16px; background: #fff; border: 1px solid #e2e8f0; text-decoration: none; color: #0f172a; box-shadow: 0 4px 14px rgba(6,78,59,.06); transition: transform .15s, box-shadow .15s; min-height: 76px; }
 body.dash-v2 .dv2-q:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(6,78,59,.12); }
 body.dash-v2 .dv2-q b { display: block; font-size: 16px; font-weight: 800; }

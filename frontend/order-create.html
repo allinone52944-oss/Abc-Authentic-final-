@@ -120,6 +120,16 @@
   .service-order-files { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .service-order-files button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
   .service-order-warning { margin: 8px 0 0; color: #874710; }
+  .service-order-row > summary { min-height: 44px; cursor: pointer; }
+  .service-order-row > summary::after { content: '⌄'; }
+  .service-order-row[open] > summary::after { content: '⌃'; }
+  .service-order-row > a { display: inline-flex; margin-top: 10px; }
+  .service-order-timeline :is(p:empty, ol:empty), #serviceOrders [hidden] { display: none !important; }
+  .service-order-data dt { font-weight: 700; }
+  .service-order-data dd { margin: 0 0 7px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .service-order-phase + .service-order-phase { margin-top: 18px; }
+  .service-order-phase h4 { margin: 0 0 8px; }
+  .service-order-pagination { display: flex; gap: 8px; margin-top: 8px; }
   #serviceOrderMessage { margin: 10px 0; color: #53665d; }
   #serviceOrderMessage:empty { display: none; }
   #serviceOrders { scroll-margin-top: 24px; }
@@ -130,7 +140,7 @@
 <link rel="stylesheet" href="/css/service-workspace.css?v=20261110-1">
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
 <link rel="stylesheet" href="/css/manual-order.css?v=20261122-4">
-<script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
+<script src="/js/sidebar-nav.js?v=20261128-1" defer></script>
 <script src="/js/promotions.js?v=20261111-2"></script>
 </head>
 <body class="has-tabbar flagship-app service-workspace page-order-create">
@@ -155,7 +165,7 @@
   </div>
 
   <div class="main">
-    <a class="back-nav" id="backToOrderCatalog" href="/services.html?type=manual">← অর্ডার সার্ভিসে ফিরুন</a>
+    <a class="back-nav" id="backToOrderCatalog" href="/services.html">← সেবার তালিকায় ফিরুন</a>
 
     <div class="topbar">
       <div>
@@ -178,7 +188,7 @@
     <div id="closedServiceNotice" class="card" role="status" hidden>
       <h3 id="closedServiceTitle">এখন অফিস বন্ধ</h3>
       <p>অফিস চালু হলে নতুন অর্ডার নেওয়া হবে।</p>
-      <a class="btn btn-secondary" id="closedServiceCatalogLink" href="/services.html?type=manual">অর্ডার সার্ভিস দেখুন</a>
+      <a class="btn btn-secondary" id="closedServiceCatalogLink" href="/services.html">সেবার তালিকা দেখুন</a>
     </div>
 
     <div id="manualOrderForm" class="card manual-workspace" style="max-width:780px;">
@@ -262,12 +272,26 @@
 
     <section id="serviceOrders" class="card service-orders" aria-labelledby="serviceOrdersTitle" tabindex="-1" hidden>
       <div class="service-order-row-head">
-        <h3 id="serviceOrdersTitle">এই সেবায় আমার অর্ডার</h3>
+        <h3 id="serviceOrdersTitle">এই সেবায় আমার কাজ</h3>
         <button type="button" class="btn btn-secondary" id="refreshServiceOrders">আবার দেখুন</button>
       </div>
       <p id="serviceOrderMessage" role="status">অর্ডার লোড হচ্ছে…</p>
-      <div id="serviceOrderList"></div>
-      <a class="btn btn-secondary" id="newServiceOrder" hidden>আরেকটি অর্ডার করুন</a>
+      <section class="service-order-phase" aria-labelledby="currentOrderTitle">
+        <h4 id="currentOrderTitle">চলতি কাজ</h4>
+        <div data-orders-list="active"></div>
+        <div class="service-order-pagination">
+          <button type="button" class="btn btn-secondary" data-orders-previous="active" hidden>আগের পৃষ্ঠা</button>
+          <button type="button" class="btn btn-secondary" data-orders-next="active" hidden>পরের পৃষ্ঠা</button>
+        </div>
+      </section>
+      <section class="service-order-phase" aria-labelledby="pastOrderTitle">
+        <h4 id="pastOrderTitle">আগের কাজ</h4>
+        <div data-orders-list="past"></div>
+        <div class="service-order-pagination">
+          <button type="button" class="btn btn-secondary" data-orders-previous="past" hidden>আগের পৃষ্ঠা</button>
+          <button type="button" class="btn btn-secondary" data-orders-next="past" hidden>পরের পৃষ্ঠা</button>
+        </div>
+      </section>
     </section>
 
   </div>
@@ -284,7 +308,7 @@
 </div>
 
 <script src="/js/app.js?v=22"></script>
-<script src="/js/service-order-panel.js?v=20261124-2"></script>
+<script src="/js/service-order-panel.js?v=20261128-1"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -501,7 +525,6 @@ function showClosedOrderService() {
   document.getElementById('closedServiceTitle').textContent = svc.type === 'manual' ? 'এখন অফিস বন্ধ' : 'এই সেবা সাময়িকভাবে বন্ধ';
   document.getElementById('balWarning').style.display = 'none';
   document.getElementById('manualOrderForm').hidden = true;
-  document.getElementById('newServiceOrder').hidden = true;
   document.getElementById('closedServiceNotice').hidden = false;
 }
 
@@ -545,12 +568,20 @@ async function init(){
           '<p style="color:#b91c1c;font-weight:700;">সেবাটি খুঁজে পাওয়া যায়নি অথবা বন্ধ রয়েছে।</p>' +
           '<button type="button" class="btn btn-primary" onclick="location.href=&quot;/services.html&quot;" style="margin-top:10px;">সেবা তালিকায় ফিরে যান</button>' +
         '</div>';
+      const orderId = new URLSearchParams(location.search).get('order');
+      if ((r.status === 403 || r.status === 404) && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(orderId || '')) {
+        const order = document.createElement('a');
+        order.className = 'btn btn-secondary';
+        order.href = '/order-status.html?id=' + encodeURIComponent(orderId);
+        order.textContent = 'আগের অর্ডারটি দেখুন';
+        document.getElementById('fieldsContainer').append(order);
+      }
       return;
     }
     const d=await r.json();
     svc=d.service;
     if(String(svc.engine_id || '').trim()){location.href='/service-detail.html?id='+encodeURIComponent(sid);return;}
-    const catalog = '/services.html?' + new URLSearchParams({ type: 'manual', category: svc.category_id || 'uncategorized' });
+    const catalog = '/services.html?' + new URLSearchParams({ category: svc.category_id || 'uncategorized' });
     document.getElementById('backToOrderCatalog').href = catalog;
     document.getElementById('closedServiceCatalogLink').href = catalog;
     window.ServiceOrderPanel?.mount(svc);

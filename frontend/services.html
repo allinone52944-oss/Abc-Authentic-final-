@@ -130,9 +130,9 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
-<link rel="stylesheet" href="/css/service-journey.css?v=20261122-5">
+<link rel="stylesheet" href="/css/service-journey.css?v=20261128-2">
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261122-3">
-<script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
+<script src="/js/sidebar-nav.js?v=20261128-1" defer></script>
 </head>
 <body class="has-tabbar flagship-app page-services">
 <div class="desktop">
@@ -149,16 +149,7 @@
       <div id="desktopServiceMenu">
         <details id="serviceMenu" class="service-disclosure service-menu" open>
           <summary class="side-link on"><span class="ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></span> সকল সেবা</summary>
-          <div class="service-menu-types" role="group" aria-label="সেবার ধরন">
-            <button type="button" class="service-menu-type" data-directory-type="auto" aria-expanded="false" aria-controls="autoServiceCategories" disabled>
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="m13 2-9 12h7l-1 8 10-12h-7z"/></svg>স্বয়ংক্রিয় সেবা
-            </button>
-            <ul id="autoServiceCategories" class="service-menu-categories" data-directory-categories="auto" hidden></ul>
-            <button type="button" class="service-menu-type" data-directory-type="manual" aria-expanded="false" aria-controls="manualServiceCategories" disabled>
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="16" height="18" x="4" y="4" rx="2"/><path d="M9 4V2h6v2m-7 6h8m-8 4h8"/></svg>অর্ডার সার্ভিস
-            </button>
-            <ul id="manualServiceCategories" class="service-menu-categories" data-directory-categories="manual" hidden></ul>
-          </div>
+          <ul class="service-menu-categories" data-directory-categories aria-label="সেবার ক্যাটাগরি"></ul>
         </details>
       </div>
       <div class="side-link" onclick="location.href='/orders.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span> অর্ডার</div>
@@ -216,7 +207,7 @@
 </div>
 
 <script src="/js/app.js?v=22"></script>
-<script src="/js/service-navigation.js?v=20261128-1"></script>
+<script src="/js/service-navigation.js?v=20261128-2"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -345,7 +336,7 @@ function placeServiceMenu(){
 
 function directoryFilter(params){
   const type = params.get('type');
-  return ['cats', 'auto', 'manual'].includes(type) ? type : 'all';
+  return ['auto', 'manual'].includes(type) && (params.has('category') || params.has('q')) ? type : 'all';
 }
 
 // B2#4 — BDRIS charges twice (application + original PDF). The
@@ -372,35 +363,25 @@ function isOrderService(service){
 }
 
 function categoryServices(group, type){
+  if (!DIRECTORY_TYPES[type]) return group.services;
   return group.services.filter(service => isOrderService(service) === (type === 'manual'));
 }
 
 function mountServiceCategories(){
-  for (const [type, label] of Object.entries(DIRECTORY_TYPES)) {
-    const categories = GROUPS.filter(group => categoryServices(group, type).length > 0);
-    const list = serviceMenu.querySelector('[data-directory-categories="' + type + '"]');
-    list.innerHTML = categories.map(group => {
-      const href = '/services.html?' + new URLSearchParams({ type, category: categoryKey(group) });
-      return '<li><a href="' + esc(href) + '" data-directory-category="' + esc(categoryKey(group)) +
-        '"><span class="service-category-icon" aria-hidden="true">' + esc(group.icon) + '</span>' + esc(group.name) + '</a></li>';
-    }).join('') || '<li class="service-menu-empty">কোনো ক্যাটাগরি নেই</li>';
-    list.setAttribute('aria-label', label);
-    serviceMenu.querySelector('[data-directory-type="' + type + '"]').disabled = false;
-  }
+  const list = serviceMenu.querySelector('[data-directory-categories]');
+  list.innerHTML = GROUPS.map(group => {
+    const href = '/services.html?' + new URLSearchParams({ category: categoryKey(group) });
+    return '<li><a href="' + esc(href) + '" data-directory-category="' + esc(categoryKey(group)) +
+      '"><span class="service-category-icon" aria-hidden="true">' + esc(group.icon) + '</span>' + esc(group.name) + '</a></li>';
+  }).join('') || '<li class="service-menu-empty">কোনো ক্যাটাগরি নেই</li>';
 }
 
 function restoreDirectory(){
   const params = new URLSearchParams(location.search);
   CURRENT_FILTER = directoryFilter(params);
-  CURRENT_CATEGORY = DIRECTORY_TYPES[CURRENT_FILTER] ? GROUPS.find(group =>
+  CURRENT_CATEGORY = GROUPS.find(group =>
     categoryKey(group) === params.get('category') && categoryServices(group, CURRENT_FILTER).length > 0
-  ) || null : null;
-
-  serviceMenu.querySelectorAll('[data-directory-type]').forEach(button => {
-    const open = button.dataset.directoryType === CURRENT_FILTER;
-    button.setAttribute('aria-expanded', String(open));
-    document.getElementById(button.getAttribute('aria-controls')).hidden = !open;
-  });
+  ) || null;
   serviceMenu.querySelectorAll('[data-directory-category]').forEach(link => {
     if (!link.closest('[hidden]') && CURRENT_CATEGORY && link.dataset.directoryCategory === categoryKey(CURRENT_CATEGORY)) {
       link.setAttribute('aria-current', 'page');
@@ -427,15 +408,14 @@ function showDirectory(){
   const type = DIRECTORY_TYPES[CURRENT_FILTER];
   if (!group) {
     const hasServices = type ? ALL_SERVICES.some(service => isOrderService(service) === (CURRENT_FILTER === 'manual')) : ALL_SERVICES.length > 0;
-    const guide = type ? 'মেনু থেকে একটি ক্যাটাগরি বেছে নিন।' : 'মেনু থেকে সেবার ধরন বেছে নিন।';
-    view.innerHTML = '<div class="service-directory-guide" role="status">' + (type ? '<h3>' + type + '</h3>' : '') + '<p>' +
-      (hasServices ? guide : 'এখন কোনো সেবা পাওয়া যাচ্ছে না।') + '</p></div>';
+    view.innerHTML = '<div class="service-directory-guide" role="status"><p>' +
+      (hasServices ? 'মেনু থেকে একটি ক্যাটাগরি বেছে নিন।' : 'এখন কোনো সেবা পাওয়া যাচ্ছে না।') + '</p></div>';
     return;
   }
 
   const items = categoryServices(group, CURRENT_FILTER);
   view.innerHTML = '<section class="directory-category-results" data-service-kind="' + CURRENT_FILTER + '" aria-labelledby="directoryCategoryTitle">' +
-    '<header class="directory-category-heading"><p>' + type + '</p><h3 id="directoryCategoryTitle" tabindex="-1">' + esc(group.name) +
+    '<header class="directory-category-heading">' + (type ? '<p>' + type + '</p>' : '') + '<h3 id="directoryCategoryTitle" tabindex="-1">' + esc(group.name) +
     '</h3><span role="status">' + bnNum(items.length) + 'টি সেবা</span></header>' +
     '<div class="svc-grid">' + items.map(card).join('') + '</div></section>';
 }
@@ -448,8 +428,7 @@ function onSearchInput(val){
     applySearch(val.trim());
   } else {
     clearBtn.style.display = 'none';
-    if (CURRENT_FILTER === 'cats') showCats();
-    else showDirectory();
+    showDirectory();
     saveViewState();
   }
 }
@@ -494,29 +473,6 @@ function applySearch(q){
     (filtered.map(card).join('') || '<div style="color:#64748b;padding:40px 0;grid-column:1/-1;text-align:center;background:#fff;border-radius:12px;border:1px dashed #cbd5e1;"><div style="font-size:32px;margin-bottom:8px;">🔍</div>কোনো সেবা খুঁজে পাওয়া যায়নি। সেবার নাম অন্যভাবে লিখে দেখুন।</div>') +
     '</div>';
   saveViewState();
-}
-
-function showCats(){
-  document.getElementById('catView').style.display = '';
-  document.getElementById('svcView').style.display = 'none';
-  let h = '<div class="cat-grid">';
-  GROUPS.forEach((g, i) => {
-    h += '<div class="cat-card" onclick="showCat('+i+')">'+
-      '<div class="cat-icon">'+esc(g.icon)+'</div>'+
-      '<div class="cat-name">'+esc(g.name)+'</div>'+
-      '<div class="cat-count">'+bnNum(g.services.length)+'টি সেবা উপলব্ধ</div></div>';
-  });
-  document.getElementById('catView').innerHTML = h + '</div>';
-}
-
-function showCat(i){
-  const g = GROUPS[i]; if(!g) return;
-  document.getElementById('catView').style.display = 'none';
-  const v = document.getElementById('svcView'); v.style.display = '';
-  v.innerHTML = '<span class="back-nav" onclick="showCats()">← সকল ক্যাটাগরিতে ফিরুন</span>' +
-    '<h3 style="margin:16px 0;font-size:18px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:8px;">'+esc(g.icon)+' '+esc(g.name)+' <span style="font-size:13px;font-weight:600;color:#64748b;">('+bnNum(g.services.length)+'টি)</span></h3>' +
-    '<div class="svc-grid">' +
-    (g.services.map(card).join('') || '<div style="color:#64748b;padding:20px 0;">এই ক্যাটাগরিতে কোনো সেবা নেই</div>') + '</div>';
 }
 
 async function init(){
@@ -623,12 +579,6 @@ function saveViewState(){
   } catch (e) {}
 }
 serviceMenu.addEventListener('click', event => {
-  const typeButton = event.target.closest('[data-directory-type]');
-  if (typeButton && !typeButton.disabled) {
-    const type = typeButton.dataset.directoryType;
-    openDirectory(type === CURRENT_FILTER ? '/services.html' : '/services.html?type=' + type);
-    return;
-  }
   const link = event.target.closest('[data-directory-category]');
   if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
   event.preventDefault();

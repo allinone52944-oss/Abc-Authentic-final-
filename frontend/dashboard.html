@@ -945,10 +945,10 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/dashboard-polish.css?v=20261110-1">
-<link rel="stylesheet" href="/css/dashboard-v2.css?v=20261124-1">
-<script defer src="/js/service-navigation.js?v=20261128-1"></script>
+<link rel="stylesheet" href="/css/dashboard-v2.css?v=20261128-1">
+<script defer src="/js/service-navigation.js?v=20261128-2"></script>
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261122-3">
-<script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
+<script src="/js/sidebar-nav.js?v=20261128-1" defer></script>
 </head>
 <body class="has-tabbar flagship-dashboard">
 
@@ -1034,7 +1034,7 @@
 
     <!-- 4 KPI Stats Grid -->
     <div class="stats">
-      <div class="stat-card" onclick="location.href='/orders.html'" title="সকল অর্ডার দেখুন">
+      <div class="stat-card">
         <div class="stat-card-left">
           <div class="ico" style="background:#dbeafe;color:#1d4ed8;">📦</div>
           <div>
@@ -1044,7 +1044,7 @@
         </div>
         <span class="stat-arrow">→</span>
       </div>
-      <div class="stat-card" onclick="location.href='/orders.html?status=completed'" title="সম্পন্ন হওয়া অর্ডার">
+      <div class="stat-card">
         <div class="stat-card-left">
           <div class="ico" style="background:#dcfce7;color:#166534;">✅</div>
           <div>
@@ -1054,7 +1054,7 @@
         </div>
         <span class="stat-arrow">→</span>
       </div>
-      <div class="stat-card" onclick="location.href='/orders.html?status=processing'" title="বর্তমানে প্রসেসিং হচ্ছে">
+      <div class="stat-card">
         <div class="stat-card-left">
           <div class="ico" style="background:#fef3c7;color:#92400e;">⏳</div>
           <div>
@@ -1095,7 +1095,7 @@
     <div class="recent-orders-card">
       <div class="recent-orders-hdr">
         <h3><span>📝 আমার অর্ডার <small style="font-weight:600;color:#64748b;font-size:12px;">(হাতে করা কাজ)</small></span></h3>
-        <a href="/orders.html">সকল অর্ডার দেখুন →</a>
+        <a href="/services.html">সেবার তালিকা →</a>
       </div>
       <div id="recentOrdersDesk">
         <div class="skel" style="height:52px;border-radius:10px;"></div>
@@ -1183,10 +1183,6 @@
         <div class="m-qa-ico" style="background:#eff6ff;color:#1d4ed8;">➕</div>
         <div class="m-qa-lbl">টাকা যোগ</div>
       </div>
-      <div class="m-qa-item" onclick="location.href='/orders.html'">
-        <div class="m-qa-ico" style="background:#f0fdf4;color:#166534;">📦</div>
-        <div class="m-qa-lbl">অর্ডার ট্র্যাক</div>
-      </div>
       <div class="m-qa-item" onclick="location.href='/services.html'">
         <div class="m-qa-ico" style="background:#faf5ff;color:#6b21a8;">🛎️</div>
         <div class="m-qa-lbl">সকল সেবা</div>
@@ -1217,15 +1213,15 @@
 
     <!-- Mobile 3 Stats Grid -->
     <div class="m-stats-grid">
-      <div class="m-stat-card" onclick="location.href='/orders.html'">
+      <div class="m-stat-card">
         <div class="num" id="mHubOrders">০</div>
         <div class="lbl">মোট অর্ডার</div>
       </div>
-      <div class="m-stat-card" onclick="location.href='/orders.html?status=processing'">
+      <div class="m-stat-card">
         <div class="num" id="mHubOrdersSub" style="color:#d97706;">০</div>
         <div class="lbl">চলমান প্রসেস</div>
       </div>
-      <div class="m-stat-card" onclick="location.href='/orders.html?status=completed'">
+      <div class="m-stat-card">
         <div class="num" id="mHubOrdersDone" style="color:#16a34a;">০</div>
         <div class="lbl">সম্পন্ন</div>
       </div>
@@ -1629,6 +1625,13 @@ async function loadCounts() {
   }
 }
 
+function serviceOrderHref(order) {
+  if (!order.service_id) return '/order-status.html?id=' + encodeURIComponent(order.id);
+  return '/order-create.html?' + new URLSearchParams({
+    service: order.service_id, flow: 'directory', order: order.id,
+  }) + '#serviceOrders';
+}
+
 async function loadRecentOrders() {
   const desk = document.getElementById('recentOrdersDesk');
   const mob = document.getElementById('recentOrdersMob');
@@ -1679,19 +1682,19 @@ async function loadRecentOrders() {
           '</div>' +
           '<div class="ro-right">' +
             '<span class="st st-' + escapeHtml(stKey) + '">' + escapeHtml(stText) + '</span>' +
-          '<a class="ro-btn" href="/order-detail.html?id=' + encodeURIComponent(o.id) + '">ট্র্যাক করুন →</a>' +
+          '<a class="ro-btn" href="' + escapeHtml(serviceOrderHref(o)) + '">ট্র্যাক করুন →</a>' +
           '</div>' +
         '</div>';
       }).join('');
     }
 
     if (mob) {
-      const activeOrder = orders.find(o => ['new', 'pending', 'processing', 'received', 'registered'].includes(String(o.status).toLowerCase())) || orders[0];
+      const activeOrder = orders.find(o => ['new', 'pending', 'waiting', 'processing', 'received', 'registered'].includes(String(o.status).toLowerCase())) || orders[0];
       if (activeOrder) {
         const sName = escapeHtml(activeOrder.service_name_bn || activeOrder.service_name || 'সেবা');
         const stKey = String(activeOrder.status || 'pending').toLowerCase();
         const stText = STBN[stKey] || activeOrder.status;
-        mob.innerHTML = '<a class="m-active-order-pill" href="/order-detail.html?id=' + encodeURIComponent(activeOrder.id) + '">' +
+        mob.innerHTML = '<a class="m-active-order-pill" href="' + escapeHtml(serviceOrderHref(activeOrder)) + '">' +
           '<div style="display:flex;align-items:center;gap:10px;">' +
             '<div style="font-size:20px;">' + autoIcon(sName) + '</div>' +
             '<div>' +
@@ -1941,6 +1944,6 @@ async function showNotices() {
 
 init();
 </script>
-<script src="/js/dashboard-v2.js?v=20261124-1"></script>
+<script src="/js/dashboard-v2.js?v=20261128-1"></script>
 </body>
 </html>

@@ -147,7 +147,7 @@ describe('catalog shows land ONCE (the duplicate complaint)', () => {
     expect(svcs).toContain('নামে সন্ধান · জমি যাচাই · মৌজা মূল্য');
     expect(svcs).not.toContain('খতিয়ান খোঁজ · নামে সন্ধান');
     const groupSource = svcs.slice(svcs.indexOf('const LAND_ENGINES'), svcs.indexOf('function chargeRuleHtml'));
-    const searchSource = svcs.slice(svcs.indexOf('function searchKey'), svcs.indexOf('function showCats'));
+    const searchSource = svcs.slice(svcs.indexOf('function searchKey'), svcs.indexOf('async function init'));
     const results = { style: {} };
     const inputs = [
       { engine_id: 'land-scan', name_bn: 'নামে সম্পত্তি সন্ধান', type: 'automated', open: true },

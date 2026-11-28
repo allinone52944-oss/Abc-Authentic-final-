@@ -9,6 +9,8 @@
     'epassport': '/epassport.html',
     'land-mouza-map': '/land-mouza-map.html',
     'land-mouza-value': '/land.html?mode=mouza',
+    'land-khatian': '/land-khatian.html',
+    'land-search': '/land-khatian.html',
     'land-scan': '/land.html?mode=scan',
     'land-verify': '/land.html?mode=verify',
     'nid-replica': '/nid-replica.html',
@@ -29,25 +31,26 @@
   }
 
   function catalogHref(type, category) {
-    const params = new URLSearchParams({ type });
+    const params = new URLSearchParams();
+    if (type) params.set('type', type);
     if (category) params.set('category', category);
-    return '/services.html?' + params;
+    return '/services.html' + (params.size ? '?' + params : '');
   }
 
   function destination(service) {
+    const context = new URLSearchParams({
+      service: service.id, flow: 'directory', category: service.category_id || 'uncategorized',
+    });
     if (isManual(service)) {
-      return '/order-create.html?service=' + encodeURIComponent(service.id) + '&flow=directory';
+      return '/order-create.html?' + context;
     }
     if (service.open !== true) return detailHref(service);
-    if (service.engine_id === 'land-khatian') {
-      return '/land-khatian.html?service=' + encodeURIComponent(service.id);
-    }
     if (!Object.hasOwn(enginePages, service.engine_id)) return detailHref(service);
     const page = enginePages[service.engine_id];
-    return page + (page.includes('?') ? '&' : '?') + 'service=' + encodeURIComponent(service.id) + '&flow=directory';
+    return page + (page.includes('?') ? '&' : '?') + context;
   }
 
-  window.ServiceNavigation = { destination, isManual, catalogHref };
+  window.ServiceNavigation = { destination, isManual, catalogHref, mountHistory };
 
   function enhance() {
     document.querySelectorAll('.svc-card[onclick],.cat-card[onclick],.svc2[onclick],.back-nav[onclick]').forEach(function (node) {
@@ -61,19 +64,126 @@
     });
   }
 
-  async function loadService(id) {
-    const path = '/services/' + encodeURIComponent(id);
+  async function customerApi(path) {
     if (window.ABC?.api) return window.ABC.api(path, { timeout: 12000 });
     // BDRIS application has its own shared token and refresh coordinator.
-    const fetchService = () => fetch('/api' + path, {
+    const fetchAuthorized = () => fetch('/api' + path, {
       headers: { Authorization: 'Bearer ' + window.getToken() },
       signal: AbortSignal.timeout(12000),
     });
-    const response = await fetchService();
+    const response = await fetchAuthorized();
     if (response.status !== 401) return response;
     const state = await window.refreshAccessToken();
     if (state === 'transient') throw new Error('Session check unavailable');
-    return state === 'ok' ? fetchService() : response;
+    return state === 'ok' ? fetchAuthorized() : response;
+  }
+
+  function mountHistory(workspace, id) {
+    if (!workspace || !id || workspace.querySelector('.directory-work-history')) return;
+    const panel = document.createElement('section');
+    panel.className = 'directory-work-history';
+    panel.innerHTML = '<header><h2>আগের কাজ</h2><button type="button" class="btn btn-secondary">আবার দেখুন</button></header>' +
+      '<p role="status"></p><div class="directory-history-list"></div>';
+    workspace.append(panel);
+    const refresh = panel.querySelector('button');
+    const message = panel.querySelector('p');
+    const list = panel.querySelector('.directory-history-list');
+    let fingerprint;
+    let timer;
+    let visibleCount = 6;
+    let rows = [];
+    const more = document.createElement('button');
+    more.className = 'btn btn-secondary';
+    more.type = 'button';
+    more.textContent = 'আরও দেখুন';
+    more.hidden = true;
+    panel.append(more);
+
+    function render() {
+      list.replaceChildren();
+      for (const item of rows.slice(0, visibleCount)) {
+        const row = document.createElement('article');
+        const heading = document.createElement('strong');
+        heading.textContent = item.title;
+        const date = document.createElement('small');
+        const time = new Date(item.created_at);
+        date.textContent = Number.isFinite(time.getTime()) ? time.toLocaleDateString('bn-BD') : '';
+        row.append(heading, date);
+        const failure = item.tin_failure || item.premium_failure;
+        if (failure) {
+          const detail = document.createElement('p');
+          detail.textContent = failure.refunded ? 'রিপোর্ট পাওয়া যায়নি। চার্জ ফেরত দেওয়া হয়েছে।'
+            : 'রিপোর্ট পাওয়া যায়নি। চার্জ কাটা হয়েছে ৳' + Number(failure.chargedAmount).toLocaleString('bn-BD') + '।';
+          row.append(detail);
+        }
+        for (const doc of item.documents || []) {
+          const path = typeof doc.url === 'string' ? doc.url.replace(/^\/api\//, '/') : '';
+          if (!/^\/(?:orders|manual|engine-jobs|bdris-apply)\//.test(path)) continue;
+          const download = document.createElement('button');
+          download.className = 'btn btn-secondary';
+          download.type = 'button';
+          download.textContent = doc.originalname || doc.filename || 'ফাইল ডাউনলোড';
+          download.addEventListener('click', async () => {
+            download.disabled = true;
+            message.textContent = '';
+            try {
+              const response = await customerApi(path);
+              if (!response.ok || /(?:text\/html|application\/json)/i.test(response.headers.get('content-type') || '')) throw new Error();
+              const href = URL.createObjectURL(await response.blob());
+              const link = document.createElement('a');
+              link.href = href;
+              link.download = doc.originalname || doc.filename || 'delivery';
+              document.body.append(link);
+              link.click();
+              link.remove();
+              setTimeout(() => URL.revokeObjectURL(href), 4000);
+            } catch (_) {
+              message.textContent = 'ফাইলটি নামানো যায়নি। আবার চেষ্টা করুন।';
+            } finally {
+              download.disabled = false;
+            }
+          });
+          row.append(download);
+        }
+        list.append(row);
+      }
+      more.hidden = visibleCount >= rows.length;
+    }
+
+    async function load() {
+      if (refresh.disabled) return;
+      refresh.disabled = true;
+      if (!fingerprint) message.textContent = 'আগের কাজ লোড হচ্ছে…';
+      try {
+        const response = await customerApi('/history?' + new URLSearchParams({ service_id: id }));
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+        if (!Array.isArray(data.items)) throw new Error();
+        const content = JSON.stringify(data.items);
+        if (fingerprint !== content) {
+          fingerprint = content;
+          rows = data.items;
+          render();
+        }
+        message.textContent = rows.length ? '' : 'এই সেবায় এখনো কোনো আগের কাজ নেই।';
+      } catch (_) {
+        message.textContent = 'আগের কাজ আনা যায়নি। আবার চেষ্টা করুন।';
+      } finally {
+        refresh.disabled = false;
+      }
+    }
+    const results = '#result, #okBox, #errBox, .ok, .failbox, [data-engine-feedback]';
+    new MutationObserver(changes => {
+      if (!changes.some(change => {
+        const target = change.target.nodeType === 1 ? change.target : change.target.parentElement;
+        return target && !panel.contains(target) && (target.matches(results) || target.closest(results));
+      })) return;
+      clearTimeout(timer);
+      timer = setTimeout(load, 1400);
+    }).observe(workspace, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class', 'style'] });
+    refresh.addEventListener('click', load);
+    more.addEventListener('click', () => { visibleCount += 6; render(); });
+    load();
   }
 
   function engineLink(label, href) {
@@ -118,7 +228,7 @@
     panel.className = 'directory-service-entry';
     const links = document.createElement('nav');
     links.setAttribute('aria-label', 'সেবার লিংক');
-    const back = engineLink('← সেবার তালিকা', catalogHref('auto', query.get('category')));
+    const back = engineLink('← সেবার তালিকা', catalogHref(null, query.get('category')));
     links.append(back);
     const status = document.createElement('p');
     status.setAttribute('role', 'status');
@@ -135,7 +245,7 @@
       retry.hidden = true;
       status.textContent = 'সেবা লোড হচ্ছে…';
       try {
-        const response = await loadService(id);
+        const response = await customerApi('/services/' + encodeURIComponent(id));
         if (response.status === 401) {
           location.replace('/login.html?next=' + encodeURIComponent(location.pathname + location.search));
           return;
@@ -146,7 +256,7 @@
         }
         if (!response.ok) throw new Error('Service check unavailable');
         const { service } = await response.json();
-        if (service?.id === id) back.href = catalogHref('auto', query.get('category') || service.category_id || 'uncategorized');
+        if (service?.id === id) back.href = catalogHref(null, query.get('category') || service.category_id || 'uncategorized');
         const engine = service && Object.hasOwn(enginePages, service.engine_id) && enginePages[service.engine_id];
         const route = engine && new URL(engine, location.origin);
         if (!route || service.id !== id || service.open !== true || route.pathname !== location.pathname ||
@@ -161,6 +271,7 @@
         retry.remove();
         if (entrySlot) entrySlot.replaceChildren(panel);
         workspace.classList.remove('directory-service-paused');
+        mountHistory(workspace, service.id);
         // Open the existing form view. The native create action stays user-initiated.
         if (service.engine_id === 'passport' || service.engine_id === 'epassport') {
           document.getElementById('start-passport-button')?.click();

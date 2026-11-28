@@ -36,6 +36,34 @@ const asUser = (req) => req.set('Authorization', 'Bearer ' + auth.signAccess({ i
 beforeEach(() => { db.__reset(); });
 
 describe('GET /api/history — deliverable PDF only (R1 follow-up)', () => {
+  test('scopes an engine workspace to the owner and service before limiting the history', async () => {
+    const service = '7551f674-9a69-4ed7-935b-e8ca7794e4f6';
+    db.__routeQuery([
+      ['SELECT engine_id FROM services WHERE id = $1', (_, params) => {
+        expect(params).toEqual([service]);
+        return { rows: [{ engine_id: 'birth-final' }] };
+      }],
+      ['FROM orders o LEFT JOIN services', (sql, params) => {
+        expect(sql).toMatch(/AND o\.service_id = \$3\s+ORDER BY/);
+        expect(params).toEqual(['u1', 'nid-auto-server-copy-premium', service]);
+        return { rows: [] };
+      }],
+      ['FROM manual_submissions', (sql, params) => {
+        expect(sql).toMatch(/m\.service_id = \$2/);
+        expect(params).toEqual(['u1', service]);
+        return { rows: [] };
+      }],
+      ['FROM engine_jobs', (sql, params) => {
+        expect(sql).toMatch(/engine_id = \$2/);
+        expect(params).toEqual(['u1', 'birth-final']);
+        return { rows: [] };
+      }],
+      ['FROM bdris_applications', () => { throw new Error('Unrelated history queried'); }],
+    ]);
+    await asUser(request(app()).get('/api/history').query({ service_id: service }))
+      .expect('Cache-Control', 'private, no-store').expect(200, { ok: true, items: [] });
+    await asUser(request(app()).get('/api/history').query({ service_id: 'invalid' })).expect(400);
+  });
   test.each([
     ['failed', 42, false],
     ['refunded', 0, true],

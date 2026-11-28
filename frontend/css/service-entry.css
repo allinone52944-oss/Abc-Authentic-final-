@@ -20,3 +20,17 @@
 .directory-service-entry details :is(p,ul) { margin: 0 0 12px; }
 .directory-service-entry details ul { padding-inline-start: 20px; }
 .directory-service-entry > button[hidden] { display: none !important; }
+.directory-work-history {
+  width: 100%; max-width: 1040px; margin: 24px auto 0; padding: 16px;
+  border: 1px solid var(--layout-line, #dce5df); border-radius: 12px;
+  background: var(--layout-paper, #fff); color: var(--layout-ink, #16392e);
+  overflow-wrap: anywhere;
+}
+.directory-work-history > header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+.directory-work-history :is(h2,p) { margin: 0; }
+.directory-work-history h2 { font-size: 19px; }
+.directory-work-history p:empty, .directory-work-history [hidden] { display: none !important; }
+.directory-work-history article { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 9px 0; border-bottom: 1px solid var(--layout-line, #dce5df); }
+.directory-work-history article small { color: var(--layout-muted, #53665d); }
+.directory-work-history .btn { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.directory-work-history > .btn { margin-top: 10px; }

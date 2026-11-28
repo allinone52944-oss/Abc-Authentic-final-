@@ -28,6 +28,20 @@ test('customer orders include only manual work; exclude NID and birth engine ent
   expect(r.body.orders.map(o => o.id)).toEqual(['manual-1']);
   expect(r.body.total).toBe(1);
 });
+test.each(['active', 'past'])('service order %s phase is scoped before pagination', async phase => {
+  const service = '7551f674-9a69-4ed7-935b-e8ca7794e4f6';
+  await get('/orders').query({ service_id: service, phase, page: 2, limit: 8 }).expect(200);
+  const queries = db.query.mock.calls.filter(([sql]) => sql.includes('FROM orders o JOIN services'));
+  expect(queries).toHaveLength(2);
+  for (const [sql, args] of queries) {
+    expect(sql).toContain('o.user_id = $1');
+    expect(sql).toContain('o.service_id = $2');
+    expect(sql).toContain("o.status IN ('new','pending','waiting','received','processing','registered')");
+    expect(sql.includes('NOT (o.status IN')).toBe(phase === 'past');
+    expect(args.slice(0, 2)).toEqual(['u1', service]);
+  }
+  expect(queries[1][1].slice(2)).toEqual([8, 8]);
+});
 test('customer order counters exclude instant engine completions', async () => {
   const r = await get('/order-counts').expect(200);
   expect(r.body).toEqual({ total: 1, done: 0, active: 1 });

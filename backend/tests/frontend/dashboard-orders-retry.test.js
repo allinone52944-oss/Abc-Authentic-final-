@@ -3,7 +3,7 @@ const path = require('path');
 const vm = require('vm');
 
 const html = fs.readFileSync(path.join(__dirname, '../../../frontend/dashboard.html'), 'utf8');
-const start = html.indexOf('async function loadRecentOrders()');
+const start = html.indexOf('function serviceOrderHref(');
 const end = html.indexOf('\nconst ENGINE_CARDS', start);
 const source = html.slice(start, end);
 
@@ -27,13 +27,13 @@ test('mobile tracking prioritizes a newly placed order over the latest delivery'
   const context = {
     ABC: { api: async () => ({
       ok: true,
-      json: async () => ({ orders: [{ id: 'delivered', status: 'delivered' }, { id: 'new-order', status: 'new' }] }),
+      json: async () => ({ orders: [{ id: 'delivered', status: 'delivered' }, { id: 'new-order', service_id: 'manual-service', status: 'new' }] }),
     }) },
     document: { getElementById: id => id === 'recentOrdersMob' ? mobile : null },
-    escapeHtml: String, autoIcon: () => '', STBN: { new: 'নতুন' },
+    escapeHtml: String, autoIcon: () => '', STBN: { new: 'নতুন' }, URLSearchParams,
   };
   vm.runInNewContext(source, context);
   await context.loadRecentOrders();
-  expect(mobile.innerHTML).toContain('href="/order-detail.html?id=new-order"');
+  expect(mobile.innerHTML).toContain('href="/order-create.html?service=manual-service&flow=directory&order=new-order#serviceOrders"');
   expect(mobile.innerHTML).toContain('নতুন');
 });

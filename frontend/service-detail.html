@@ -84,9 +84,10 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
-<link rel="stylesheet" href="/css/service-journey.css?v=20261110-9">
+<link rel="stylesheet" href="/css/service-journey.css?v=20261128-2">
+<link rel="stylesheet" href="/css/service-entry.css?v=20261128-1">
 <link rel="stylesheet" href="/css/sidebar-nav.css?v=20261110-11">
-<script src="/js/sidebar-nav.js?v=20261110-10" defer></script>
+<script src="/js/sidebar-nav.js?v=20261128-1" defer></script>
 <script src="/js/promotions.js?v=20261111-2"></script>
 </head>
 <body class="has-tabbar flagship-app page-service-detail">
@@ -131,7 +132,7 @@
 </div>
 
 <script src="/js/app.js?v=22"></script>
-<script src="/js/service-navigation.js?v=20261128-1"></script>
+<script src="/js/service-navigation.js?v=20261128-2"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -194,7 +195,7 @@ async function init(){
   const hasEngine = Boolean(String(s.engine_id || '').trim());
   const catalogType = isAuto || hasEngine ? 'auto' : 'manual';
   const nav = window.ServiceNavigation;
-  document.getElementById('backToServiceCatalog').href = nav?.catalogHref?.(catalogType, s.category_id || 'uncategorized') || '/services.html?type=' + catalogType;
+  document.getElementById('backToServiceCatalog').href = nav?.catalogHref?.(null, s.category_id || 'uncategorized') || '/services.html?type=' + catalogType;
   const price = Number(s.price || 0);
   const catName = s.category_name_bn || s.category_name;
   const icon = (s.icon && s.icon !== '🛎️') ? s.icon : autoIcon(s.name_bn || s.name);
@@ -337,6 +338,7 @@ async function init(){
   const promoHost=document.createElement('section');
   document.getElementById('detail').appendChild(promoHost);
   ABCPromo.mount(promoHost,{service:s,engine:hasEngine,onQuote:q=>{if(q){const link=document.createElement('a');link.className='btn';link.href='/order-create.html?service='+encodeURIComponent(s.id)+(s.type==='manual'&&!hasEngine?'&flow=directory':'');link.textContent='অর্ডার পাতায় কোড প্রয়োগ করুন →';promoHost.querySelector('.promo-result').appendChild(link);}}});
+  if (!s.open && !nav?.isManual(s)) nav?.mountHistory(document.querySelector('.main'), s.id);
 
   // B2#4 — BDRIS fee breakdown (disclosure only; amounts come from
   // the server, never hardcoded). Non-blocking: the detail is

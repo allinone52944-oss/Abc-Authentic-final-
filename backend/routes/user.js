@@ -330,6 +330,12 @@ router.get('/orders', async (req, res) => {
     const params = [req.user.id];
     let i = 2;
     if (req.query.status) { conds.push(`o.status = $${i++}`); params.push(req.query.status); }
+    const phase = req.query.phase;
+    if (phase !== undefined) {
+      if (phase !== 'active' && phase !== 'past') return res.status(400).json({ error: 'INVALID_PHASE' });
+      const current = "o.status IN ('new','pending','waiting','received','processing','registered')";
+      conds.push(phase === 'active' ? current : `NOT (${current})`);
+    }
     if (req.query.service_id !== undefined) {
       const serviceId = req.query.service_id;
       if (typeof serviceId !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(serviceId)) {
@@ -344,7 +350,7 @@ router.get('/orders', async (req, res) => {
       `SELECT o.*, s.name AS service_name, s.name_bn AS service_name_bn,
               s.type AS service_type
        FROM orders o JOIN services s ON s.id = o.service_id
-       ${where} ORDER BY o.created_at DESC LIMIT $${i} OFFSET $${i + 1}`,
+       ${where} ORDER BY o.created_at DESC, o.id DESC LIMIT $${i} OFFSET $${i + 1}`,
       [...params, limit, offset]);
     // P2 (2026-11-03): the internal admin note never reaches a
     // customer endpoint — not even inside a list payload no page
@@ -723,6 +729,25 @@ router.get('/orders/:id/documents/:filename', async (req, res) => {
 router.get('/history', async (req, res) => {
   try {
     const uid = req.user.id;
+    const serviceId = req.query.service_id;
+    let engine = null;
+    if (serviceId !== undefined) {
+      res.set('Cache-Control', 'private, no-store');
+      if (typeof serviceId !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(serviceId)) {
+        return res.status(400).json({ error: 'INVALID_SERVICE' });
+      }
+      const { rows: [service] } = await db.query('SELECT engine_id FROM services WHERE id = $1', [serviceId]);
+      if (!service) return res.status(404).json({ error: 'NOT_FOUND' });
+      engine = service.engine_id;
+    }
+    const scoped = serviceId !== undefined;
+    const landModes = ['land-scan', 'land-verify', 'land-mouza-value'];
+    const groupedEngines = engine === autoNidProducts.backup.engineId ? autoNidEngineIds
+      : landModes.includes(engine) ? landModes : null;
+    const orderScope = !scoped ? '' : groupedEngines ? ' AND s.engine_id = ANY($3::text[])' : ' AND o.service_id = $3';
+    const orderParams = [uid, autoNidProducts.premium.engineId];
+    if (scoped) orderParams.push(groupedEngines || serviceId);
+    const noRows = { rows: [] };
     const [orders, manual, engineJobs, bdrisApps] = await Promise.all([
       // P2 (2026-11-03): admin files surface in History only once
       // delivered — completed/delivered, or refunded after delivery
@@ -747,7 +772,8 @@ router.get('/history', async (req, res) => {
            OR (o.status IN ('failed', 'refunded') AND (
                  (s.engine_id = $2 AND o.data->>'auto_nid_paid_failure' = 'true')
                  OR (s.engine_id = 'auto-tin' AND o.data->>'auto_tin_paid_failure' = 'true'))))
-         ORDER BY o.created_at DESC LIMIT 100`, [uid, autoNidProducts.premium.engineId]),
+         ${orderScope}
+         ORDER BY o.created_at DESC LIMIT 100`, orderParams),
       // P2: same rule for manual submissions — admin files only
       // once the submission is completed (no delivered state here;
       // rejected hides them like cancelled does for orders).
@@ -755,20 +781,21 @@ router.get('/history', async (req, res) => {
         `SELECT m.id, m.documents, m.created_at,
                 s.name AS service_name, s.name_bn AS service_name_bn
          FROM manual_submissions m LEFT JOIN services s ON s.id = m.service_id
-         WHERE m.user_id = $1 AND m.status = 'completed'
-         ORDER BY m.created_at DESC LIMIT 100`, [uid]),
-      db.query(
+         WHERE m.user_id = $1 AND m.status = 'completed'${scoped ? ' AND m.service_id = $2' : ''}
+         ORDER BY m.created_at DESC LIMIT 100`, scoped ? [uid, serviceId] : [uid]),
+      !scoped || engine ? db.query(
         `SELECT id, engine_id, subject_name, filename, originalname, created_at, outcome
          FROM engine_jobs
-         WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`, [uid]),
+         WHERE user_id = $1${scoped ? ' AND engine_id = $2' : ''} ORDER BY created_at DESC LIMIT 100`,
+        scoped ? [uid, engine] : [uid]) : noRows,
       // Audit #39 — filed BDRIS applications, so the tracking number
       // is findable in History too (submitted only; failures stay
       // admin-side, as in the applications list).
-      db.query(
+      !scoped || engine === 'bdris-apply' ? db.query(
         `SELECT id, ack_no, applicant_name, created_at, original_pdf_available
          FROM bdris_applications
          WHERE user_id = $1 AND status = 'submitted'
-         ORDER BY created_at DESC LIMIT 100`, [uid]),
+         ORDER BY created_at DESC LIMIT 100`, [uid]) : noRows,
     ]);
     // R1 follow-up (2026-11-05): History shows ONLY the deliverable PDF
     // per record. Generated receipt PDFs (success or failure) are stored

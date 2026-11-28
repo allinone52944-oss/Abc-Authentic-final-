@@ -109,15 +109,15 @@ describe('services.html own card (not collapsed)', () => {
   });
 
   test('known engines and manual services go to their forms; unmapped and closed engines retain details', () => {
-    const context = { window: {}, document: { readyState: 'loading', addEventListener() {} } };
+    const context = { URLSearchParams, window: {}, document: { readyState: 'loading', addEventListener() {} } };
     vm.runInNewContext(read('js/service-navigation.js'), context);
     const { destination } = context.window.ServiceNavigation;
     const land = { id: 'land-fixture', engine_id: 'land-khatian', open: true };
-    expect(destination(land)).toBe('/land-khatian.html?service=land-fixture');
+    expect(destination(land)).toBe('/land-khatian.html?service=land-fixture&flow=directory&category=uncategorized');
     expect(destination({ ...land, open: false })).toBe('/service-detail.html?id=land-fixture');
-    expect(destination({ id: 'scan', engine_id: 'land-scan', open: true })).toBe('/land.html?mode=scan&service=scan&flow=directory');
-    expect(destination({ id: 'birth', engine_id: 'birth-final', open: true })).toBe('/birth-final.html?service=birth&flow=directory');
-    expect(destination({ id: 'manual', type: 'manual', open: true })).toBe('/order-create.html?service=manual&flow=directory');
+    expect(destination({ id: 'scan', engine_id: 'land-scan', open: true })).toBe('/land.html?mode=scan&service=scan&flow=directory&category=uncategorized');
+    expect(destination({ id: 'birth', engine_id: 'birth-final', open: true })).toBe('/birth-final.html?service=birth&flow=directory&category=uncategorized');
+    expect(destination({ id: 'manual', type: 'manual', open: true, category_id: 'nid' })).toBe('/order-create.html?service=manual&flow=directory&category=nid');
     expect(destination({ id: 'other', engine_id: 'other', open: true })).toBe('/service-detail.html?id=other');
   });
 });
