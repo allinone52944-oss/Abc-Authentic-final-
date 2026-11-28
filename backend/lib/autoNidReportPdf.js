@@ -2,9 +2,11 @@
 
 const path = require('path');
 const PDFDocument = require('pdfkit');
+const QRCode = require('qrcode');
 const { buildTinCertificatePdf } = require('./tinCertificatePdf');
 
 const FONT_DIR = path.join(__dirname, '..', '..', 'frontend', 'fonts');
+const SERVER_COPY_ASSETS = path.join(__dirname, 'nid-server-copy', 'assets');
 const MARGIN = 44;
 const INK = '#19382e';
 const MUTED = '#496358';
@@ -12,108 +14,169 @@ const LINE = '#dbe8e0';
 const EMERALD = '#07563e';
 const PAPER = '#f2f8f4';
 
-function drawPremiumReport(doc, label, record) {
-  const width = doc.page.width - 2 * MARGIN;
-  const portraitX = 106.5;
-  const portraitY = 205.5;
-  const portraitWidth = 91;
-  const portraitHeight = 105;
-  const tableX = 224.5;
-  const tableWidth = 274;
-  const footerY = doc.page.height - 52;
-  const missing = 'NA';
-  let page = 0;
-  let y;
+// The SV Copy Premium output is the NIDW portal "Server Copy" itself, laid
+// out exactly like the portal print (backend/lib/nid-server-copy/assets/
+// portal-background.png carries the banner, search chrome, table gridlines
+// and border; the text below is overlaid at the template's measured
+// positions). Data values come from the lookup record verbatim — nothing is
+// reformatted, added or dropped; only the presentation follows the template.
+const COPY = {
+  // Portal chrome (template page 595.92 x 841.92; A4 differs by 0.6pt).
+  background: { x: 16.5, y: 0, width: 562.5, height: 798.8 },
+  // Left column.
+  portrait: { x: 106.5, y: 205.5, width: 91, height: 105 },
+  qr: { x: 114.8, y: 351.8, size: 75 },
+  portraitName: { x: 106.5, y: 317, width: 91 },
+  // Right-column tables.
+  labelX: 225,
+  valueX: 326,
+  tableRight: 498.5,
+};
 
-  function startPage() {
-    page += 1;
-    doc.roundedRect(MARGIN, 35, width, 72, 10).fill(EMERALD);
-    doc.font('hind-bold').fontSize(12).fillColor('#d4eee2').text('All In One', MARGIN + 16, 45);
-    doc.font('hind-bold').fontSize(21).fillColor('#fff')
-      .text('এনআইডি তথ্য যাচাই প্রতিবেদন', MARGIN + 16, 64, { width: width - 32 });
-    doc.font('hind').fontSize(11).fillColor('#d4eee2')
-      .text(label, MARGIN + 16, 46, { width: width - 32, align: 'right' });
-    doc.lineWidth(.6).strokeColor(LINE).moveTo(MARGIN, footerY).lineTo(MARGIN + width, footerY).stroke();
-    doc.font('hind').fontSize(9).fillColor(MUTED).text('All In One · ব্যক্তিগত তথ্য', MARGIN, footerY + 8);
-    doc.text(String(page), MARGIN, footerY + 8, { width, align: 'right' });
-    y = page === 1 ? 212 : 126;
+const BENGALI_DIGITS = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+const BENGALI_WEEKDAYS = ['রবিবার', 'সোমবার', 'মঙ্গলবার', 'বুধবার', 'বৃহস্পতিবার', 'শুক্রবার', 'শনিবার'];
+
+function toBengaliDigits(text) {
+  return String(text).replace(/[0-9]/g, (digit) => BENGALI_DIGITS[Number(digit)]);
+}
+
+// Weekday of the date of birth, in Bengali (template: জন্মবার).
+function birthDayBn(isoDate) {
+  if (typeof isoDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return '';
+  const date = new Date(isoDate + 'T00:00:00Z');
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== isoDate) return '';
+  return BENGALI_WEEKDAYS[date.getUTCDay()];
+}
+
+// Age at generation time, in Bengali (template: ৭৪ বছর, ১০ মাস, ২৪ দিন).
+function ageBn(isoDate, now = new Date()) {
+  if (typeof isoDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return '';
+  const dob = new Date(isoDate + 'T00:00:00Z');
+  if (!Number.isFinite(dob.getTime()) || dob.toISOString().slice(0, 10) !== isoDate) return '';
+  let years = now.getUTCFullYear() - dob.getUTCFullYear();
+  let months = now.getUTCMonth() - dob.getUTCMonth();
+  let days = now.getUTCDate() - dob.getUTCDate();
+  if (days < 0) {
+    months -= 1;
+    days += new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0)).getUTCDate();
   }
-
-  function ensureRoom(height) {
-    if (y + height <= footerY - 14) return;
-    doc.addPage();
-    startPage();
+  if (months < 0) {
+    years -= 1;
+    months += 12;
   }
+  if (years < 0) return '';
+  return toBengaliDigits(`${years} বছর, ${months} মাস, ${days} দিন`);
+}
 
-  function heading(title) {
-    doc.rect(tableX, y, tableWidth, 23).fill('#d2e9eb');
-    doc.font('hind-bold').fontSize(12).fillColor(EMERALD)
-      .text(title, tableX + 7, y + 4, { width: tableWidth - 14 });
-    y += 23;
-  }
+// The portal QR encodes name, PIN and date of birth joined by ⇋ (U+21CB).
+function serverCopyQrPayload(record) {
+  return [record.nameEn || '', record.pin || record.nationalId || '', record.dateOfBirth || ''].join('⇋');
+}
 
-  function table(title, rows) {
-    const labelWidth = 101;
-    const valueWidth = tableWidth - labelWidth - 14;
-    const measured = rows.map(([name, value]) => {
-      const text = value || missing;
-      doc.font('hind').fontSize(10.5);
-      const labelHeight = doc.heightOfString(name, { width: labelWidth - 12 });
-      const valueHeight = doc.heightOfString(text, { width: valueWidth });
-      return { name, text, height: Math.max(21, Math.max(labelHeight, valueHeight) + 8) };
-    });
-    ensureRoom(23 + measured.reduce((sum, row) => sum + row.height, 0));
-    heading(title);
-    for (const { name, text, height } of measured) {
-      doc.lineWidth(.5).strokeColor(LINE).rect(tableX, y, tableWidth, height).stroke();
-      doc.moveTo(tableX + labelWidth, y).lineTo(tableX + labelWidth, y + height).stroke();
-      doc.font('hind').fontSize(10.5).fillColor(MUTED)
-        .text(name, tableX + 7, y + 4, { width: labelWidth - 12 });
-      doc.fillColor(INK).text(text, tableX + labelWidth + 7, y + 4, { width: valueWidth });
-      y += height;
-    }
-  }
+async function makeServerCopyQr(record) {
+  return QRCode.toBuffer(serverCopyQrPayload(record), {
+    errorCorrectionLevel: 'M',
+    margin: 0,
+    width: 150,
+  });
+}
 
-  function address(title, value) {
-    const text = value || missing;
-    const textOptions = { width: tableWidth - 14, lineGap: 2 };
-    doc.font('hind').fontSize(10.5);
-    const height = doc.heightOfString(text, textOptions) + 15;
-    ensureRoom(23 + height);
-    heading(title);
-    doc.lineWidth(.5).strokeColor(LINE).rect(tableX, y, tableWidth, height).stroke();
-    doc.font('hind').fontSize(10.5).fillColor(INK).text(text, tableX + 7, y + 7, textOptions);
-    y += height + 6;
-  }
+function drawServerCopyReport(doc, record, qr) {
+  const missing = 'N/A';
+  const value = (text) => text || missing;
+  const ink = '#070707';
 
-  startPage();
-  doc.rect(portraitX, portraitY, portraitWidth, portraitHeight).fillAndStroke(PAPER, LINE);
+  // Portal chrome: banner, search UI, table gridlines, border.
+  doc.image(path.join(SERVER_COPY_ASSETS, 'portal-background.png'),
+    COPY.background.x, COPY.background.y,
+    { width: COPY.background.width, height: COPY.background.height });
+
+  // Search section (static portal chrome text).
+  doc.font('serif-bold').fontSize(12).fillColor('#ffe000')
+    .text('National Identity Registration Wing (NIDW)', 185, 64);
+  doc.font('serif-bold').fontSize(10.5).fillColor('#ff2fa1')
+    .text('Select Your Search Category', 225, 87);
+  doc.font('serif').fontSize(8.2).fillColor('#ffffff').text('Home', 517, 92);
+  doc.font('serif').fontSize(9).fillColor('#087904')
+    .text('Search By NID / Voter No.', 270, 102);
+  doc.font('serif').fontSize(9).fillColor('#0777b8')
+    .text('Search By Form No.', 270, 114);
+  doc.font('serif-bold').fontSize(9).fillColor('#fc0000')
+    .text('NID or Voter No*', 185, 135);
+  doc.font('serif').fontSize(9).fillColor('#8f8f8f').text('NID', 270, 135);
+  doc.font('serif').fontSize(8.2).fillColor('#ffffff').text('Submit', 370, 137);
+
+  // Portrait + name + QR (left column).
+  doc.rect(COPY.portrait.x, COPY.portrait.y, COPY.portrait.width, COPY.portrait.height)
+    .fillAndStroke('#ffffff', '#dbe8e0');
   if (Buffer.isBuffer(record.portrait)) {
     try {
       const image = doc.openImage(record.portrait);
       if (image.width > 0 && image.height > 0 && image.width * image.height <= 4_000_000) {
-        doc.image(image, portraitX, portraitY, { fit: [portraitWidth, portraitHeight], align: 'center', valign: 'center' });
+        doc.image(image, COPY.portrait.x, COPY.portrait.y,
+          { fit: [COPY.portrait.width, COPY.portrait.height], align: 'center', valign: 'center' });
       }
     } catch {
       // A malformed optional portrait does not prevent delivery of verified information.
     }
   }
-  const portraitName = record.nameEn || record.nameBn;
-  if (portraitName) {
-    doc.font('hind').fontSize(9).fillColor(MUTED)
-      .text(portraitName, portraitX, portraitY + portraitHeight + 6, { width: portraitWidth, align: 'center' });
+  if (record.nameEn) {
+    doc.font('serif-bold').fontSize(9.8).fillColor(ink)
+      .text(record.nameEn, COPY.portraitName.x, COPY.portraitName.y,
+        { width: COPY.portraitName.width, align: 'center', lineGap: 1 });
   }
-  table('জাতীয় পরিচিতি তথ্য', [
-    ['জাতীয় পরিচয়পত্র নম্বর', record.nationalId], ['পিন নম্বর', record.pin],
-    ['পুরনো পরিচয়পত্র নম্বর', record.oldNid], ['ভোটার এলাকা', record.voterArea], ['জন্মস্থান', record.birthPlace],
-  ]);
-  table('ব্যক্তিগত তথ্য', [
-    ['নাম (বাংলা)', record.nameBn], ['নাম (ইংরেজি)', record.nameEn], ['জন্ম তারিখ', record.dateOfBirth],
-    ['পিতার নাম', record.fatherName], ['মাতার নাম', record.motherName],
-  ]);
-  table('অন্যান্য তথ্য', [['লিঙ্গ', record.gender], ['ধর্ম', record.religion], ['পেশা', record.profession]]);
-  address('বর্তমান ঠিকানা', record.presentAddress);
-  address('স্থায়ী ঠিকানা', record.permanentAddress);
+  if (Buffer.isBuffer(qr)) {
+    doc.image(qr, COPY.qr.x, COPY.qr.y, { width: COPY.qr.size, height: COPY.qr.size });
+  }
+
+  // Right-column tables. Each row is [labelY, valueY, label, value, labelFont, valueFont].
+  function heading(title, y) {
+    doc.font('hind-bold').fontSize(12).fillColor(ink).text(title, COPY.labelX, y);
+  }
+  function row(labelY, valueY, label, text, labelFont, valueFont, labelSize = 10.5, valueSize = 10.5) {
+    doc.font(labelFont).fontSize(labelSize).fillColor(ink)
+      .text(label, COPY.labelX, labelY, { width: COPY.valueX - COPY.labelX - 6 });
+    doc.font(valueFont).fontSize(valueSize).fillColor(ink)
+      .text(text, COPY.valueX, valueY, { width: COPY.tableRight - COPY.valueX });
+  }
+
+  heading('জাতীয় পরিচিতি তথ্য', 215);
+  row(239, 237, 'জাতীয় পরিচয় পত্র নম্বর', value(record.nationalId), 'hind', 'serif', 9.8);
+  row(261, 259, 'পিন নম্বর', value(record.pin), 'hind', 'serif', 9.8);
+  row(281, 279, 'পূর্ববর্তী পরিচয়পত্র নম্বর', value(record.oldNid), 'hind', 'serif', 9.8);
+  row(301, 299, 'ভোটার এলাকা', value(record.voterArea), 'hind', 'hind');
+  row(323, 321, 'জন্মস্থান', value(record.birthPlace), 'hind', 'hind');
+
+  heading('ব্যক্তিগত তথ্য', 343);
+  row(366, 364, 'নাম (বাংলা)', value(record.nameBn), 'hind', 'hind-bold');
+  row(390, 387, 'নাম (ইংরেজি)', value(record.nameEn), 'hind', 'serif');
+  row(409, 407, 'জন্ম তারিখ', value(record.dateOfBirth), 'hind', 'serif');
+  row(431, 431, 'পিতার নাম', value(record.fatherName), 'hind', 'hind');
+  row(451, 451, 'মাতার নাম', value(record.motherName), 'hind', 'hind');
+
+  heading('অন্যান্য তথ্য', 470);
+  row(498, 498, 'লিঙ্গ', value(record.gender), 'hind', 'hind');
+  row(519, 519, 'ধর্ম', value(record.religion), 'hind', 'hind');
+  row(541, 541, 'জন্মবার', value(birthDayBn(record.dateOfBirth)), 'hind', 'hind');
+  row(561, 561, 'বয়স', value(ageBn(record.dateOfBirth)), 'hind', 'hind');
+
+  // Addresses wrap inside the template's cells (9pt, 12pt line pitch).
+  function address(title, y, text) {
+    heading(title, y);
+    doc.font('hind').fontSize(9).fillColor(ink)
+      .text(value(text), COPY.labelX, y + 22,
+        { width: COPY.tableRight - COPY.labelX, lineGap: 3 });
+  }
+  address('বর্তমান ঠিকানা', 582, record.presentAddress);
+  address('স্থায়ী ঠিকানা', 656, record.permanentAddress);
+
+  // Footer disclaimers.
+  doc.font('hind').fontSize(9).fillColor('#ff0000')
+    .text('উপরে প্রদর্শিত তথ্যসমূহ জাতীয় পরিচয়পত্র সংশ্লিষ্ট, ভোটার তালিকার সাথে সরাসরি সম্পর্কযুক্ত নয়।',
+      0, 736, { width: doc.page.width, align: 'center' });
+  doc.font('serif').fontSize(9).fillColor('#030303')
+    .text("This is Software Generated Report From Bangladesh Election Commission, Signature & Seal Aren't Required.",
+      0, 747, { width: doc.page.width, align: 'center' });
 }
 
 function buildAutoNidReportPdf({ type, label, record }) {
@@ -126,9 +189,12 @@ function buildAutoTinReportPdf(record) {
   return buildTinCertificatePdf(record);
 }
 
-function buildVerificationPdf({ type, label, record }) {
+async function buildVerificationPdf({ type, label, record }) {
   const tin = type === 'tin';
   const title = tin ? 'TIN তথ্য যাচাই প্রতিবেদন' : 'এনআইডি তথ্য যাচাই প্রতিবেদন';
+  // The premium server copy carries a QR (name ⇋ PIN ⇋ DOB), generated here
+  // so the draw step stays synchronous.
+  const qr = type === 'premium' ? await makeServerCopyQr(record) : null;
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: 'A4',
@@ -142,8 +208,11 @@ function buildVerificationPdf({ type, label, record }) {
     // Both bundled Hind Siliguri faces cover Bengali and Latin in mixed text.
     doc.registerFont('hind', path.join(FONT_DIR, 'ijwTs5juQtsyLLR5jN4cxBEofJs.ttf'));
     doc.registerFont('hind-bold', path.join(FONT_DIR, 'ijwOs5juQtsyLLR5jN4cxBEoRCf_4uE.ttf'));
+    // Liberation Serif is metrically identical to the template's Times New Roman.
+    doc.registerFont('serif', path.join(FONT_DIR, 'LiberationSerif-Regular.ttf'));
+    doc.registerFont('serif-bold', path.join(FONT_DIR, 'LiberationSerif-Bold.ttf'));
     if (type === 'premium') {
-      drawPremiumReport(doc, label, record);
+      drawServerCopyReport(doc, record, qr);
       doc.end();
       return;
     }
@@ -257,4 +326,4 @@ function buildVerificationPdf({ type, label, record }) {
   });
 }
 
-module.exports = { buildAutoNidReportPdf, buildAutoTinReportPdf };
+module.exports = { buildAutoNidReportPdf, buildAutoTinReportPdf, birthDayBn, ageBn, serverCopyQrPayload };
