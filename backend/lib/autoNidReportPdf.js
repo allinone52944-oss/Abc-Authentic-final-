@@ -33,41 +33,6 @@ const COPY = {
   tableRight: 498.5,
 };
 
-const BENGALI_DIGITS = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
-const BENGALI_WEEKDAYS = ['রবিবার', 'সোমবার', 'মঙ্গলবার', 'বুধবার', 'বৃহস্পতিবার', 'শুক্রবার', 'শনিবার'];
-
-function toBengaliDigits(text) {
-  return String(text).replace(/[0-9]/g, (digit) => BENGALI_DIGITS[Number(digit)]);
-}
-
-// Weekday of the date of birth, in Bengali (template: জন্মবার).
-function birthDayBn(isoDate) {
-  if (typeof isoDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return '';
-  const date = new Date(isoDate + 'T00:00:00Z');
-  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== isoDate) return '';
-  return BENGALI_WEEKDAYS[date.getUTCDay()];
-}
-
-// Age at generation time, in Bengali (template: ৭৪ বছর, ১০ মাস, ২৪ দিন).
-function ageBn(isoDate, now = new Date()) {
-  if (typeof isoDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return '';
-  const dob = new Date(isoDate + 'T00:00:00Z');
-  if (!Number.isFinite(dob.getTime()) || dob.toISOString().slice(0, 10) !== isoDate) return '';
-  let years = now.getUTCFullYear() - dob.getUTCFullYear();
-  let months = now.getUTCMonth() - dob.getUTCMonth();
-  let days = now.getUTCDate() - dob.getUTCDate();
-  if (days < 0) {
-    months -= 1;
-    days += new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0)).getUTCDate();
-  }
-  if (months < 0) {
-    years -= 1;
-    months += 12;
-  }
-  if (years < 0) return '';
-  return toBengaliDigits(`${years} বছর, ${months} মাস, ${days} দিন`);
-}
-
 // The portal QR encodes name, PIN and date of birth joined by ⇋ (U+21CB).
 function serverCopyQrPayload(record) {
   return [record.nameEn || '', record.pin || record.nationalId || '', record.dateOfBirth || ''].join('⇋');
@@ -157,8 +122,7 @@ function drawServerCopyReport(doc, record, qr) {
   heading('অন্যান্য তথ্য', 470);
   row(498, 498, 'লিঙ্গ', value(record.gender), 'hind', 'hind');
   row(519, 519, 'ধর্ম', value(record.religion), 'hind', 'hind');
-  row(541, 541, 'জন্মবার', value(birthDayBn(record.dateOfBirth)), 'hind', 'hind');
-  row(561, 561, 'বয়স', value(ageBn(record.dateOfBirth)), 'hind', 'hind');
+  row(541, 541, 'পেশা', value(record.profession), 'hind', 'hind');
 
   // Addresses wrap inside the template's cells (9pt, 12pt line pitch).
   function address(title, y, text) {
@@ -326,4 +290,4 @@ async function buildVerificationPdf({ type, label, record }) {
   });
 }
 
-module.exports = { buildAutoNidReportPdf, buildAutoTinReportPdf, birthDayBn, ageBn, serverCopyQrPayload };
+module.exports = { buildAutoNidReportPdf, buildAutoTinReportPdf, serverCopyQrPayload };
