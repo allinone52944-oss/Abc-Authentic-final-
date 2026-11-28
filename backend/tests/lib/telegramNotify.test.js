@@ -4,7 +4,7 @@
 // call. The bot token here is a fake test value, never a real one.
 
 const telegramNotify = require('../../lib/telegramNotify');
-const { notifyOrder, notifyRecharge, notifyVerify, notifySuccess, maskName, maskPhone, dhakaTime, DEFAULT_CHAT_ID } = telegramNotify;
+const { notifyOrder, notifyRecharge, notifyVerify, notifySuccess, notifyPaidFailure, notifyReportReady, maskName, maskPhone, dhakaTime, DEFAULT_CHAT_ID } = telegramNotify;
 
 const FAKE_TOKEN = 'TESTTOKEN';
 const FAKE_STICKER = 'TEST-STICKER-FILE-ID';
@@ -82,7 +82,7 @@ describe('telegramNotify sending', () => {
     expect(body.text).toContain('<b>জা***</b>');
     expect(body.text).toContain('01XXXXXXX78');
     expect(body.text).toContain('NID Server Copy (Premium)');
-    expect(body.text).toContain('৳150');
+    expect(body.text).toContain('৳১৫০');
     expect(body.text).toContain('#abc-123');
     // No full identifier ever leaves the server.
     expect(body.text).not.toContain('জাগাতপ্রিয়া');
@@ -111,7 +111,7 @@ describe('telegramNotify sending', () => {
     const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
     expect(body.text).toContain('<b>রিচার্জ সফল</b>');
     expect(body.text).toContain('<b>Ra***</b>');
-    expect(body.text).toContain('৳500');
+    expect(body.text).toContain('৳৫০০');
     expect(body.text).toContain('bKash');
     expect(body.text).not.toContain('Rahim Uddin');
     expect(body.text).not.toContain('01911112222');
@@ -124,7 +124,7 @@ describe('telegramNotify sending', () => {
       userName: 'Fatema', userPhone: '01633334444', type: 'TIN Certificate',
     }, fetchImpl);
     const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
-    expect(body.text).toContain('<b>ভেরিফাই সফল</b>');
+    expect(body.text).toContain('<b>যাচাই সফল</b>');
     expect(body.text).toContain('<b>Fa***</b>');
     expect(body.text).toContain('TIN Certificate');
     expect(body.text).not.toContain('Fatema');
@@ -146,7 +146,7 @@ describe('telegramNotify sending', () => {
     expect(body.text).toContain('<b>জা***</b>');
     expect(body.text).toContain('01XXXXXXX78');
     expect(body.text).toContain('NID Server Copy (Premium)');
-    expect(body.text).toContain('৳150');
+    expect(body.text).toContain('৳১৫০');
     expect(body.text).toContain('#ord-9');
     expect(body.text).not.toContain('জাগাতপ্রিয়া');
     expect(body.text).not.toContain('01712345678');
@@ -165,7 +165,7 @@ describe('telegramNotify sending', () => {
     await expect(notifySuccess({
       userName: 'Karim', userPhone: '01700000000',
       serviceLabel: 'TIN', fee: 10, orderId: 'n2',
-    }, failingFetch)).resolves.toBe(true);
+    }, failingFetch)).resolves.toBe(false);
   });
 
   test('sticker is sent after the text only when configured', async () => {
@@ -195,16 +195,18 @@ describe('telegramNotify sending', () => {
 
   test('a Telegram failure never throws and never blocks', async () => {
     process.env.TELEGRAM_BOT_TOKEN = FAKE_TOKEN;
+    process.env.TELEGRAM_ANIMATED_STICKER_ID = FAKE_STICKER;
     const failingFetch = jest.fn().mockRejectedValue(new Error('network down'));
     await expect(notifyOrder({
       userName: 'Karim', userPhone: '01700000000',
       serviceLabel: 'TIN', fee: 10, orderId: 'f1',
-    }, failingFetch)).resolves.toBe(true);
+    }, failingFetch)).resolves.toBe(false);
 
+    expect(failingFetch).toHaveBeenCalledTimes(1);
     const notOkFetch = jest.fn().mockResolvedValue({ ok: false, status: 403 });
     await expect(notifyRecharge({
       userName: 'Karim', userPhone: '01700000000', amount: 100, method: 'nagad',
-    }, notOkFetch)).resolves.toBe(true);
+    }, notOkFetch)).resolves.toBe(false);
 
     // A failing sticker send must not fail the text send either.
     process.env.TELEGRAM_ANIMATED_STICKER_ID = FAKE_STICKER;
@@ -216,4 +218,41 @@ describe('telegramNotify sending', () => {
     }, flakyFetch)).resolves.toBe(true);
     expect(flakyFetch).toHaveBeenCalledTimes(2);
   });
+
+  test('a paid miss explains the outcome without a celebratory sticker or the full reference', async () => {
+    process.env.TELEGRAM_BOT_TOKEN = FAKE_TOKEN;
+    process.env.TELEGRAM_ANIMATED_STICKER_ID = FAKE_STICKER;
+    const fetchImpl = okFetch();
+    await expect(notifyPaidFailure({
+      userName: 'Sample Person', userPhone: '01801234567', fee: 1234.5,
+      serviceLabel: 'Test <Service>', orderId: 'deadbeef-1234-4567-a123-000000000001',
+    }, fetchImpl)).resolves.toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
+    expect(body.text).toContain('চার্জ হয়েছে, রিপোর্ট পাওয়া যায়নি');
+    expect(body.text).toContain('কাটা হয়েছে <b>৳১,২৩৪.৫</b>');
+    expect(body.text).toContain('Test &lt;Service&gt;');
+    expect(body.text).toContain('#deadbeef…');
+    expect(body.text).not.toContain('deadbeef-1234');
+    expect(body.link_preview_options).toEqual({ is_disabled: true });
+  });
+
+  test('a ready report sends once for the owning order and engine', async () => {
+    process.env.TELEGRAM_BOT_TOKEN = FAKE_TOKEN;
+    const originalFetch = global.fetch;
+    const fetchImpl = okFetch();
+    global.fetch = fetchImpl;
+    const db = { query: jest.fn()
+      .mockResolvedValueOnce({ rows: [{ name: 'Sample Person', phone: '01801234567', price: '50' }] })
+      .mockResolvedValueOnce({ rows: [] }) };
+    const order = { userId: 'u1', orderId: 'report-id', engineId: 'nid-server-report', serviceLabel: 'Report' };
+    try {
+      await expect(Promise.all([notifyReportReady(db, order), notifyReportReady(db, order)])).resolves.toEqual([true, false]);
+      expect(db.query).toHaveBeenCalledWith(expect.stringContaining("IS DISTINCT FROM 'true'"), ['report-id', 'u1', 'nid-server-report']);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
 });

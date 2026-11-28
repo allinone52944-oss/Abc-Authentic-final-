@@ -14,7 +14,7 @@ const telegramNotify = require('../lib/telegramNotify'); // group notifications 
 // Telegram group notification for an NID server-copy lookup
 // (2026-11-28). Fire-and-forget: runs after the charge commits and
 // can never fail the lookup (all errors swallowed inside).
-// kind 'success' = report delivered; kind 'order' = paid but no report.
+// kind 'success' = report delivered; kind 'paid-failure' = paid but no report.
 async function telegramNidCopyNotify(userId, type, fee, orderId, kind) {
   try {
     const u = await db.query('SELECT name, phone FROM users WHERE id = $1', [userId]);
@@ -26,7 +26,7 @@ async function telegramNidCopyNotify(userId, type, fee, orderId, kind) {
       serviceLabel: label, fee: Number(fee) || 0, orderId: String(orderId),
     };
     if (kind === 'success') await telegramNotify.notifySuccess(params);
-    else await telegramNotify.notifyOrder(params);
+    else await telegramNotify.notifyPaidFailure(params);
   } catch (_) { /* Telegram never fails a lookup */ }
 }
 
@@ -231,7 +231,7 @@ router.post('/lookup', async (req, res) => {
     // Telegram: fresh charge only (replays carry no fresh flag).
     if (result.fresh && result.body && result.body.orderId) {
       if (result.status === 200) telegramNidCopyNotify(req.user.id, lookup.type, lookup.price, result.body.orderId, 'success').catch(() => {});
-      else if (result.status === 422) telegramNidCopyNotify(req.user.id, lookup.type, lookup.price, result.body.orderId, 'order').catch(() => {});
+      else if (result.status === 422) telegramNidCopyNotify(req.user.id, lookup.type, lookup.price, result.body.orderId, 'paid-failure').catch(() => {});
     }
     return res.status(result.status).json(result.body);
   } catch (e) {

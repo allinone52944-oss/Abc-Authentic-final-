@@ -1,54 +1,11 @@
 'use strict';
 
-// Telegram group notifications for site activity (2026-11-28).
-//
-// Every paid order / successful recharge / successful verification
-// posts one formatted message to the "ABC Authentic Updates" group
-// via the @abc_authentic_bot Bot API — plus, when configured, one
-// animated sticker alongside it (animated emoji in the text +
-// animated sticker = the two motion options the owner picked).
-// A completed job also posts a premium success message
-// ("অভিনন্দন! আপনার কাজটি সফলভাবে সম্পন্ন হয়েছে।") so the group
-// — visible to everyone — sees the work succeeded, not just that
-// an order was placed.
-//
-// Configuration — all from process.env, read at call time:
-//   TELEGRAM_BOT_TOKEN          Bot API token from @BotFather. REQUIRED.
-//                               If unset, every function below is a
-//                               silent no-op: it never throws, never
-//                               blocks the request, never logs.
-//   TELEGRAM_CHAT_ID            Destination chat. Optional; defaults to
-//                               the "ABC Authentic Updates" supergroup
-//                               (-1005862040443). Env wins when set.
-//   TELEGRAM_ANIMATED_STICKER_ID  file_id of an animated sticker to send
-//                               after each text message. Optional: when
-//                               unset, only the text message is sent
-//                               (sticker never blocks the text).
-//
-//   How to obtain a sticker file_id (do NOT commit the token):
-//     1. Pick any animated sticker set (e.g. from @Stickers).
-//     2. curl "https://api.telegram.org/bot<TOKEN>/getStickerSet?name=<set_name>"
-//        and copy a sticker's file_id from the response, OR send an
-//        animated sticker to the bot and read its file_id from
-//        getUpdates. 3. Set TELEGRAM_ANIMATED_STICKER_ID to that
-//        file_id on the server (server .env, never git). No file_id
-//        is ever invented here.
-//
-// Privacy — the group is visible to everyone, so NO identifier ever
-// leaves the server in full: names show only the first 2 characters
-// + '***', phones show first 2 + last 2 digits with the middle
-// masked. NID / BRN / TIN / DOB and any other identifier are never
-// included. All interpolated values are HTML-escaped (parse_mode
-// is HTML).
-//
-// Safety — the token lives only in the request URL, which is never
-// logged. Every failure (no token, network error, non-OK response,
-// timeout) is swallowed silently so a Telegram outage can never
-// fail an order, a recharge, or a verification.
-
+// Public-group notifications. Only masked customer data and abbreviated order
+// references leave the site. Configuration is read from TELEGRAM_BOT_TOKEN,
+// TELEGRAM_CHAT_ID and TELEGRAM_ANIMATED_STICKER_ID at send time.
 const DEFAULT_CHAT_ID = '-1005862040443';
 const SEND_TIMEOUT_MS = 5000;
-const DIVIDER = '━━━━━━━━━━━━━━━━━━';
+const currency = new Intl.NumberFormat('bn-BD', { maximumFractionDigits: 2 });
 
 function token() {
   return (process.env.TELEGRAM_BOT_TOKEN || '').trim() || null;
@@ -81,7 +38,7 @@ function maskName(name) {
 // First 2 + last 2 characters, middle masked (01712345678 → 01XXXXXXX78).
 function maskPhone(phone) {
   const p = String(phone || '').trim();
-  if (!p) return '***';
+  if (p.length <= 2) return '***';
   if (p.length <= 4) return escapeHtml(p.slice(0, 2)) + 'X'.repeat(Math.max(0, p.length - 2));
   return escapeHtml(p.slice(0, 2)) + 'X'.repeat(p.length - 4) + escapeHtml(p.slice(-2));
 }
@@ -97,67 +54,50 @@ function dhakaTime(date = new Date()) {
   return `${get('day')} ${get('month')} ${get('year')}, ${get('hour')}:${get('minute')} ${get('dayPeriod').toUpperCase()}`;
 }
 
+function label(value, fallback) {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+  return escapeHtml(text.slice(0, 140) || fallback);
+}
+
+function amountLine(title, amount) {
+  const value = Number(amount);
+  return amount != null && Number.isFinite(value) && value >= 0
+    ? `${title} <b>৳${currency.format(value)}</b>` : '';
+}
+
 function methodLabel(method) {
   const m = String(method || '').trim().toLowerCase();
-  if (m === 'bkash_payment' || m === 'bkash_personal' || m === 'bkash') return 'bKash';
+  if (['bkash_payment', 'bkash_personal', 'bkash'].includes(m)) return 'bKash';
   if (m === 'nagad') return 'Nagad';
   if (m === 'rocket') return 'Rocket';
-  return m ? escapeHtml(method) : '—';
+  return label(method, '—');
 }
 
-function userLines(userName, userPhone) {
-  return `👤 <b>${maskName(userName)}</b> ✦\n📱 ${maskPhone(userPhone)}`;
+function orderLine(orderId) {
+  const raw = String(orderId ?? '').trim();
+  if (!raw) return '';
+  const reference = raw.length > 8 ? raw.slice(0, 8) + '…' : raw;
+  return `অর্ডার <code>#${escapeHtml(reference)}</code>`;
 }
 
-function buildOrderMessage({ userName, userPhone, serviceLabel, fee, orderId }) {
-  const amount = Number(fee) || 0;
+function buildMessage(headline, params, fields) {
+  const customer = `গ্রাহক <b>${maskName(params.userName)}</b> · ${maskPhone(params.userPhone)}`;
   return [
-    '✅ <b>নতুন অর্ডার</b>',
-    DIVIDER,
-    userLines(userName, userPhone),
-    `🔧 ${escapeHtml(serviceLabel || 'সেবা')}`,
-    `💰 ফি: ৳${amount}`,
-    `🆔 অর্ডার: #${escapeHtml(orderId == null ? '' : String(orderId))}`,
-    `🕐 ${dhakaTime()}`,
+    headline,
+    '',
+    fields.filter(Boolean).join('\n'),
+    '',
+    customer,
+    `<i>${dhakaTime()} · ঢাকা</i>`,
   ].join('\n');
 }
 
-function buildRechargeMessage({ userName, userPhone, amount, method }) {
-  const amt = Number(amount) || 0;
-  return [
-    '💰 <b>রিচার্জ সফল</b>',
-    DIVIDER,
-    userLines(userName, userPhone),
-    `💵 অ্যামাউন্ট: ৳${amt}`,
-    `💳 মাধ্যম: ${methodLabel(method)}`,
-    `🕐 ${dhakaTime()}`,
-  ].join('\n');
-}
-
-function buildVerifyMessage({ userName, userPhone, type }) {
-  return [
-    '🔍 <b>ভেরিফাই সফল</b>',
-    DIVIDER,
-    userLines(userName, userPhone),
-    `📄 টাইপ: ${escapeHtml(type || 'যাচাই')}`,
-    `🕐 ${dhakaTime()}`,
-  ].join('\n');
-}
-
-// Premium success message for the GROUP (visible to everyone):
-// the work is DONE, not just ordered. Headline wording is
-// owner-approved (2026-11-28) — do not reword it.
-function buildSuccessMessage({ userName, userPhone, serviceLabel, fee, orderId }) {
-  const amount = Number(fee) || 0;
-  return [
-    '🎉 <b>অভিনন্দন! আপনার কাজটি সফলভাবে সম্পন্ন হয়েছে।</b>',
-    DIVIDER,
-    userLines(userName, userPhone),
-    `🔧 ${escapeHtml(serviceLabel || 'সেবা')}`,
-    `💰 ফি: ৳${amount}`,
-    `🆔 অর্ডার: #${escapeHtml(orderId == null ? '' : String(orderId))}`,
-    `🕐 ${dhakaTime()}`,
-  ].join('\n');
+function serviceMessage(headline, params, amountTitle = 'ফি') {
+  return buildMessage(headline, params, [
+    `সেবা <b>${label(params.serviceLabel, 'ডিজিটাল সেবা')}</b>`,
+    amountLine(amountTitle, params.fee),
+    orderLine(params.orderId),
+  ]);
 }
 
 async function postTelegram(method, body, fetchImpl) {
@@ -178,57 +118,66 @@ async function postTelegram(method, body, fetchImpl) {
   }
 }
 
-// Internal: POST a text message. Returns false (no throw) when the
-// token is missing or the send fails.
-async function sendTelegram(text, fetchImpl = globalThis.fetch) {
-  return postTelegram('sendMessage', { text, parse_mode: 'HTML' }, fetchImpl);
+async function sendNotice(text, fetchImpl, withSticker = true) {
+  const sent = await postTelegram('sendMessage', {
+    text,
+    parse_mode: 'HTML',
+    link_preview_options: { is_disabled: true },
+  }, fetchImpl);
+  const fileId = sent && withSticker && stickerId();
+  if (fileId) await postTelegram('sendSticker', { sticker: fileId, disable_notification: true }, fetchImpl);
+  return sent;
 }
 
-// Internal: POST the configured animated sticker, if any. No-op
-// (false, no throw) when no sticker is configured or the send fails.
-async function sendSticker(fetchImpl = globalThis.fetch) {
-  const fileId = stickerId();
-  if (!fileId) return false;
-  return postTelegram('sendSticker', { sticker: fileId }, fetchImpl);
+function notifyOrder(params = {}, fetchImpl = globalThis.fetch) {
+  return sendNotice(serviceMessage('📥 <b>নতুন অর্ডার</b>', params), fetchImpl);
 }
 
-// Send the text message, then the animated sticker (when configured).
-// The sticker never blocks or replaces the text.
-async function sendTextAndSticker(text, fetchImpl = globalThis.fetch) {
-  await sendTelegram(text, fetchImpl);
-  await sendSticker(fetchImpl);
+function notifyRecharge(params = {}, fetchImpl = globalThis.fetch) {
+  const text = buildMessage('💳 <b>রিচার্জ সফল</b>', params, [
+    amountLine('ওয়ালেটে যোগ হয়েছে', params.amount),
+    `মাধ্যম <b>${methodLabel(params.method)}</b>`,
+  ]);
+  return sendNotice(text, fetchImpl);
 }
 
-// New paid engine order / paid lookup. Fire-and-forget from the
-// caller: the returned promise never rejects.
-async function notifyOrder(params, fetchImpl = globalThis.fetch) {
-  if (!token()) return false;
-  await sendTextAndSticker(buildOrderMessage(params || {}), fetchImpl);
-  return true;
+function notifyVerify(params = {}, fetchImpl = globalThis.fetch) {
+  const text = buildMessage('🔍 <b>যাচাই সফল</b>', params, [
+    `সেবা <b>${label(params.type, 'যাচাই')}</b>`,
+  ]);
+  return sendNotice(text, fetchImpl);
 }
 
-// Successful wallet recharge credit. Fire-and-forget; never rejects.
-async function notifyRecharge(params, fetchImpl = globalThis.fetch) {
-  if (!token()) return false;
-  await sendTextAndSticker(buildRechargeMessage(params || {}), fetchImpl);
-  return true;
+function notifySuccess(params = {}, fetchImpl = globalThis.fetch) {
+  return sendNotice(serviceMessage('🎉 <b>অভিনন্দন! আপনার কাজটি সফলভাবে সম্পন্ন হয়েছে।</b>', params), fetchImpl);
 }
 
-// Successful verification (no paid order attached). Fire-and-forget;
-// never rejects.
-async function notifyVerify(params, fetchImpl = globalThis.fetch) {
-  if (!token()) return false;
-  await sendTextAndSticker(buildVerifyMessage(params || {}), fetchImpl);
-  return true;
+function notifyPaidFailure(params = {}, fetchImpl = globalThis.fetch) {
+  return sendNotice(serviceMessage('⚠️ <b>চার্জ হয়েছে, রিপোর্ট পাওয়া যায়নি</b>', params, 'কাটা হয়েছে'), fetchImpl, false);
 }
 
-// Completed work (order delivered / filing submitted / verification
-// passed). Posts the premium success message to the GROUP, where
-// everyone sees it. Fire-and-forget; never rejects.
-async function notifySuccess(params, fetchImpl = globalThis.fetch) {
-  if (!token()) return false;
-  await sendTextAndSticker(buildSuccessMessage(params || {}), fetchImpl);
-  return true;
+// Some engines charge at Create and render later. Only the first generated
+// PDF for an order should announce completion, including concurrent downloads.
+async function notifyReportReady(db, { userId, orderId, engineId, serviceLabel }) {
+  if (!token() || !orderId) return false;
+  try {
+    const { rows: [order] } = await db.query(
+      `UPDATE orders o
+          SET data = o.data || '{"telegram_report_announced":true}'::jsonb
+         FROM users u
+        WHERE o.id = $1 AND o.user_id = $2 AND u.id = o.user_id
+          AND o.status = 'completed' AND o.data->>'engine' = $3
+          AND o.data->>'telegram_report_announced' IS DISTINCT FROM 'true'
+        RETURNING u.name, u.phone, o.price`,
+      [orderId, userId, engineId],
+    );
+    if (order) return notifySuccess({
+      userName: order.name, userPhone: order.phone, serviceLabel, fee: order.price, orderId,
+    });
+  } catch (_) {
+    // Group notifications cannot fail a document download.
+  }
+  return false;
 }
 
 module.exports = {
@@ -236,6 +185,8 @@ module.exports = {
   notifyRecharge,
   notifyVerify,
   notifySuccess,
+  notifyPaidFailure,
+  notifyReportReady,
   maskName,
   maskPhone,
   dhakaTime,

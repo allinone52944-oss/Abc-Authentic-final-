@@ -13,7 +13,7 @@ const telegramNotify = require('../lib/telegramNotify'); // group notifications 
 // Telegram group notification for a TIN lookup (2026-11-28).
 // Fire-and-forget: runs after the charge commits and can never
 // fail the lookup (all errors swallowed inside). kind 'success'
-// = certificate delivered; kind 'order' = paid but no report.
+// = certificate delivered; kind 'paid-failure' = paid but no report.
 async function telegramTinNotify(userId, fee, orderId, kind) {
   try {
     const u = await db.query('SELECT name, phone FROM users WHERE id = $1', [userId]);
@@ -26,7 +26,7 @@ async function telegramTinNotify(userId, fee, orderId, kind) {
       serviceLabel: label, fee: Number(fee) || 0, orderId: String(orderId),
     };
     if (kind === 'success') await telegramNotify.notifySuccess(params);
-    else await telegramNotify.notifyOrder(params);
+    else await telegramNotify.notifyPaidFailure(params);
   } catch (_) { /* Telegram never fails a lookup */ }
 }
 
@@ -178,7 +178,7 @@ router.post('/lookup', async (req, res) => {
     // Telegram: fresh charge only (replays carry no fresh flag).
     if (result.fresh && result.body && result.body.orderId) {
       if (result.status === 200) telegramTinNotify(req.user.id, lookup.price, result.body.orderId, 'success').catch(() => {});
-      else if (result.status === 422) telegramTinNotify(req.user.id, lookup.price, result.body.orderId, 'order').catch(() => {});
+      else if (result.status === 422) telegramTinNotify(req.user.id, lookup.price, result.body.orderId, 'paid-failure').catch(() => {});
     }
     return res.status(result.status).json(result.body);
   } catch (err) {

@@ -62,21 +62,6 @@ const push = require('../utils/push');
 const { alertMissingPrice } = require('../lib/missingPriceAlert');
 const telegramNotify = require('../lib/telegramNotify'); // group notifications (2026-11-28)
 
-// Telegram group notification for a completed passport
-// (2026-11-28). Fire-and-forget: runs after the order commits and
-// can never fail the build (all errors swallowed inside).
-async function telegramSuccessNotify(userId, serviceLabel, fee, orderId) {
-  try {
-    const u = await db.query('SELECT name, phone FROM users WHERE id = $1', [userId]);
-    const user = u.rows[0];
-    if (!user) return;
-    await telegramNotify.notifySuccess({
-      userName: user.name, userPhone: user.phone,
-      serviceLabel, fee: Number(fee) || 0, orderId: String(orderId),
-    });
-  } catch (_) { /* Telegram never fails a build */ }
-}
-
 const router = express.Router();
 const ENGINE_ID = 'passport';
 const LABEL = 'পাসপোর্ট ইঞ্জিন';
@@ -226,8 +211,6 @@ router.post('/create', requireAuth, async (req, res) => {
         { passport_no: passportNo, filename, engine: ENGINE_ID });
       if (orderId) {
         notifyDone(req, chk.price);
-        // Telegram: same event to the group (async, non-blocking).
-        telegramSuccessNotify(req.user.id, LABEL, chk.price, orderId).catch(() => {});
       }
     }
     const u2 = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
@@ -288,6 +271,11 @@ router.post('/pdf',
         return res.status(500).json({ error: 'PDF_FAILED', message: 'PDF তৈরি করা যায়নি — আবার চেষ্টা করুন।' });
       }
       const filename = 'Passport-' + passportNo.replace(/[^A-Z0-9]/gi, '').toUpperCase() + '.pdf';
+      if (pdf.subarray(0, 5).toString('ascii') === '%PDF-') {
+        telegramNotify.notifyReportReady(db, {
+          userId: req.user.id, orderId: ord.rows[0].id, engineId: ENGINE_ID, serviceLabel: LABEL,
+        }).catch(() => {});
+      }
       res.set('Content-Type', 'application/pdf');
       res.set('Content-Disposition', 'attachment; filename="' + filename + '"');
       res.set('Content-Length', String(pdf.length));

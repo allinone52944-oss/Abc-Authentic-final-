@@ -57,21 +57,6 @@ const push = require('../utils/push');
 const adapter = require('../../engines/nid-server-report/adapter');
 const telegramNotify = require('../lib/telegramNotify'); // group notifications (2026-11-28)
 
-// Telegram group notification for a completed server-copy report
-// (2026-11-28). Fire-and-forget: runs after the order commits and
-// can never fail the build (all errors swallowed inside).
-async function telegramSuccessNotify(userId, serviceLabel, fee, orderId) {
-  try {
-    const u = await db.query('SELECT name, phone FROM users WHERE id = $1', [userId]);
-    const user = u.rows[0];
-    if (!user) return;
-    await telegramNotify.notifySuccess({
-      userName: user.name, userPhone: user.phone,
-      serviceLabel, fee: Number(fee) || 0, orderId: String(orderId),
-    });
-  } catch (_) { /* Telegram never fails a build */ }
-}
-
 const router = express.Router();
 const ENGINE_ID = 'nid-server-report';
 const LABEL = 'সাইন টু সার্ভার কপি';
@@ -286,8 +271,6 @@ router.post('/create', requireAuth, async (req, res) => {
         { nid, filenames, engine: ENGINE_ID });
       if (orderId) {
         notifyDone(req, chk.price);
-        // Telegram: same event to the group (async, non-blocking).
-        telegramSuccessNotify(req.user.id, LABEL, chk.price, orderId).catch(() => {});
       }
     }
     const u2 = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
@@ -362,6 +345,11 @@ router.post('/pdf', requireAuth, async (req, res) => {
       return res.status(status).json(out);
     }
     const buf = kind === 'v1' ? built.v1Buffer : built.v2Buffer;
+    if (buf.subarray(0, 5).toString('ascii') === '%PDF-') {
+      telegramNotify.notifyReportReady(db, {
+        userId: req.user.id, orderId: ord.rows[0].id, engineId: ENGINE_ID, serviceLabel: LABEL,
+      }).catch(() => {});
+    }
     const filename = built.base + '-' + kind + '.pdf';
     res.set('Content-Type', 'application/pdf');
     res.set('Content-Disposition', 'attachment; filename="' + filename + '"');

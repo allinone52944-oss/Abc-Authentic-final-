@@ -23,6 +23,7 @@ jest.mock('../../lib/serviceCredits', () => ({
   availableFor: jest.fn().mockResolvedValue(0),
   payForService: jest.fn().mockResolvedValue({}),
 }));
+jest.mock('../../lib/telegramNotify', () => ({ notifyReportReady: jest.fn().mockResolvedValue(true) }));
 jest.mock('../../lib/missingPriceAlert', () => ({
   alertMissingPrice: jest.fn(),
 }));
@@ -36,6 +37,7 @@ const adapter = require('../../../engines/nid-server-report/adapter');
 const wa = require('../../utils/whatsapp');
 const push = require('../../utils/push');
 const serviceCredits = require('../../lib/serviceCredits');
+const telegramNotify = require('../../lib/telegramNotify');
 
 function app() {
   const a = express();
@@ -62,6 +64,7 @@ beforeEach(() => {
   wa.notifyServiceFailed.mockClear();
   push.notifyAdmins.mockClear();
   push.notifyUser.mockClear();
+  telegramNotify.notifyReportReady.mockClear();
   serviceCredits.availableFor.mockClear();
   serviceCredits.payForService.mockClear();
 });
@@ -257,6 +260,7 @@ describe('POST /api/nid-server-report/pdf', () => {
       .post('/api/nid-server-report/pdf?kind=v1&idempotency_key=k')
       .send({ jobId: 'job1', fields: FIELDS })).expect(422);
     expect(r.body.error).toBe('BUILD_FAILED');
+    expect(telegramNotify.notifyReportReady).not.toHaveBeenCalled();
     expect(wa.notifyServiceFailed).toHaveBeenCalled();
   });
 
@@ -279,5 +283,8 @@ describe('POST /api/nid-server-report/pdf', () => {
       .send({ jobId: 'job1', fields: FIELDS })).expect(200);
     expect(r.headers['content-disposition']).toContain('1010101010-v2.pdf');
     expect(Buffer.compare(Buffer.from(r.body), V2)).toBe(0);
+    expect(telegramNotify.notifyReportReady).toHaveBeenCalledWith(db, expect.objectContaining({
+      userId: 'u1', orderId: 77, engineId: 'nid-server-report',
+    }));
   });
 });
