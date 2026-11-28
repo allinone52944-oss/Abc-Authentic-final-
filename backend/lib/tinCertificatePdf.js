@@ -185,14 +185,24 @@ async function buildTinCertificatePdf(record, now = new Date()) {
       .text(`Date : ${longDate(certDate, clean(record.date))}`, LEFT, 504.7, { width: TEXT_W });
 
     // QR code, 150 x 150 at (225, 520.6), with the red NBR mark in the centre.
-    // The sample's mark is 16.9 x 5.0 pt; keep it that small so it never
-    // blocks the scan (error correction H already tolerates it).
+    // The sample's mark is three separate 5.2 x 5.0 pt red squares (N, B, R),
+    // 0.65 pt apart — not one bar. Keep it that small so it never blocks
+    // the scan (error correction H already tolerates it).
     doc.image(qr, 225, 520.6, { width: 150, height: 150 });
     const qrCx = 225 + 75;
     const qrCy = 520.6 + 75;
-    doc.rect(qrCx - 8.5, qrCy - 2.5, 17, 5).fill('#e11d2e');
-    doc.font('arial-bold').fontSize(4.5).fillColor('#ffffff')
-      .text('NBR', qrCx - 8.5, qrCy - 2, { width: 17, align: 'center' });
+    const markW = 5.2;
+    const markH = 5.0;
+    const markGap = 0.65;
+    const markTotal = markW * 3 + markGap * 2;
+    let markX = qrCx - markTotal / 2;
+    const markY = qrCy - markH / 2;
+    for (const letter of ['N', 'B', 'R']) {
+      doc.rect(markX, markY, markW, markH).fill('#e11d2e');
+      doc.font('arial-bold').fontSize(4).fillColor('#ffffff')
+        .text(letter, markX, markY + 0.5, { width: markW, align: 'center' });
+      markX += markW + markGap;
+    }
     doc.fillColor('#000000');
 
     // Please Note block, 6pt.
