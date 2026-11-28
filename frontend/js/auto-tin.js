@@ -88,6 +88,8 @@
     submitting = true;
     downloadPath = '';
     result.hidden = true;
+    byId('verifiedTin').textContent = '';
+    byId('verifiedTinRow').hidden = true;
     message('error', '');
     message('downloadError', '');
     sync();
@@ -120,6 +122,10 @@
         return;
       }
       downloadPath = link[1];
+      if (typeof reply.tin === 'string' && /^\d{12}$/.test(reply.tin)) {
+        byId('verifiedTin').textContent = reply.tin;
+        byId('verifiedTinRow').hidden = false;
+      }
       form.reset();
       attempt = null;
       result.hidden = false;

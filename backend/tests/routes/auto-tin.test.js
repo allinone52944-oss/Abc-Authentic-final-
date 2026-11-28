@@ -81,6 +81,7 @@ test('quotes the configured price and produces one encrypted PDF and debit on a 
   service.status = 'disabled';
   await submit().expect(200, first.body);
   expect(first.body.downloadUrl).toBe(`/api/orders/${id}/documents/tin-certificate.pdf`);
+  expect(first.body.tin).toBe(lookup.tin);
   expect(global.fetch).toHaveBeenCalledTimes(1);
   const [[url, options]] = global.fetch.mock.calls;
   expect(url.origin + url.pathname).toBe('https://api.bd-x.com/api-portal/api/tin-download.php');
@@ -116,11 +117,21 @@ test('uses the same query parameter for a 10-digit NID and builds the report for
   global.fetch.mockResolvedValueOnce(reply(providerResponse));
   const first = await submit({ tin: '২২২২২২২২২২' }).expect(200);
   await submit({ tin: nid }).expect(200, first.body);
+  expect(first.body.tin).toBe(returnedTin);
+  expect(JSON.stringify(savedOrder)).not.toContain(returnedTin);
   expect(global.fetch).toHaveBeenCalledTimes(1);
   expect(global.fetch.mock.calls[0][0].searchParams.get('tin')).toBe(nid);
   expect(payForService).toHaveBeenCalledTimes(1);
   expect(JSON.stringify(savedOrder)).not.toContain(nid);
   expect(decryptReport(storageKey(), id, savedPdf).subarray(0, 5).toString()).toBe('%PDF-');
+});
+
+test('replays older orders with their existing PDF link', async () => {
+  const first = await submit().expect(200);
+  delete savedOrder.data.auto_tin_encrypted_number;
+  await submit().expect(200, { orderId: id, downloadUrl: first.body.downloadUrl });
+  expect(global.fetch).toHaveBeenCalledTimes(1);
+  expect(payForService).toHaveBeenCalledTimes(1);
 });
 
 test('rejects a different NID or a malformed TIN in the provider result', async () => {

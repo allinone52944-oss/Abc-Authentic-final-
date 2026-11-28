@@ -7,7 +7,7 @@ const { serviceAcceptsNewWork } = require('../lib/serviceAvailability');
 const { availableFor, payForService } = require('../lib/serviceCredits');
 const { lookupBdxTin, normalizeTinIdentifier } = require('../lib/bdxTinClient');
 const { buildAutoTinReportPdf } = require('../lib/autoNidReportPdf');
-const { storageKey, tinFingerprint, encryptReport } = require('../lib/autoNidReportStore');
+const { storageKey, tinFingerprint, encryptReport, decryptReport } = require('../lib/autoNidReportStore');
 
 const router = express.Router();
 const filename = 'tin-certificate.pdf';
@@ -34,7 +34,7 @@ async function openService(client, userId, lock = false) {
     && serviceAcceptsNewWork(service) && Number.isFinite(price) && price > 0 ? { id: service.id, price } : null;
 }
 
-function outcome(order) {
+function outcome(order, encryptionKey) {
   if (order.data?.auto_tin_paid_failure === true) {
     return {
       status: 422,
@@ -46,7 +46,17 @@ function outcome(order) {
     };
   }
   if (!['completed', 'delivered', 'refunded'].includes(order.status)) return reject(409, 'SERVICE_UNAVAILABLE');
-  return { status: 200, body: { orderId: order.id, downloadUrl: `/api/orders/${order.id}/documents/${filename}` } };
+  const body = { orderId: order.id, downloadUrl: `/api/orders/${order.id}/documents/${filename}` };
+  if (typeof order.data?.auto_tin_encrypted_number === 'string') {
+    try {
+      const encrypted = Buffer.from(order.data.auto_tin_encrypted_number, 'base64');
+      const tin = decryptReport(encryptionKey, 'tin-number:' + order.data.auto_tin_request_hash, encrypted).toString('utf8');
+      if (/^\d{12}$/.test(tin)) body.tin = tin;
+    } catch {
+      // The saved PDF remains available if optional display metadata cannot be decoded.
+    }
+  }
+  return { status: 200, body };
 }
 
 async function purchase(client, userId, lookup, apiKey, encryptionKey) {
@@ -62,7 +72,7 @@ async function purchase(client, userId, lookup, apiKey, encryptionKey) {
   const hash = tinFingerprint(encryptionKey, userId, lookup);
   if (prior) {
     return prior.data?.auto_tin_request_hash === hash
-      ? outcome(prior) : reject(409, 'IDEMPOTENCY_CONFLICT');
+      ? outcome(prior, encryptionKey) : reject(409, 'IDEMPOTENCY_CONFLICT');
   }
 
   if (!apiKey) return reject(403, 'SERVICE_UNAVAILABLE');
@@ -90,6 +100,11 @@ async function purchase(client, userId, lookup, apiKey, encryptionKey) {
   }
 
   const data = { auto_tin_request_hash: hash, auto_tin_paid_failure: !pdf };
+  if (pdf) {
+    data.auto_tin_encrypted_number = encryptReport(
+      encryptionKey, 'tin-number:' + hash, Buffer.from(result.record.tin, 'utf8')
+    ).toString('base64');
+  }
   const documents = pdf
     ? [{ type: 'delivery', filename, originalname: filename, uploaded_by: 'admin', storage: 'auto-nid-report' }]
     : [];
@@ -109,7 +124,7 @@ async function purchase(client, userId, lookup, apiKey, encryptionKey) {
   await payForService(client, {
     userId, serviceId: service.id, amount: service.price, ref: 'order-' + lookup.key + '-' + userId,
   });
-  return outcome(order);
+  return outcome(order, encryptionKey);
 }
 
 router.get('/options', async (req, res) => {

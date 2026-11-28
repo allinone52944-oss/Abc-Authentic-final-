@@ -74,7 +74,10 @@
           <section class="ansc-result" id="result" aria-labelledby="resultTitle" tabindex="-1" hidden>
             <div class="ansc-result-copy">
               <span class="ansc-result-mark" aria-hidden="true">✓</span>
-              <h2 id="resultTitle">TIN যাচাই রিপোর্ট প্রস্তুত</h2>
+              <div>
+                <h2 id="resultTitle">TIN যাচাই রিপোর্ট প্রস্তুত</h2>
+                <p id="verifiedTinRow" hidden>TIN নম্বর <bdi id="verifiedTin" dir="ltr"></bdi></p>
+              </div>
             </div>
             <button class="btn btn-primary" id="download" type="button">PDF ডাউনলোড করুন</button>
             <p class="ansc-error" id="downloadError" role="alert" hidden></p>
@@ -93,6 +96,6 @@
     <a class="m-tab" href="/profile.html">প্রোফাইল</a>
   </nav>
   <script src="/js/app.js?v=24"></script>
-  <script src="/js/auto-tin.js?v=3"></script>
+  <script src="/js/auto-tin.js?v=4"></script>
 </body>
 </html>
