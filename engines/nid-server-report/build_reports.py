@@ -383,11 +383,26 @@ def rounded_photo(src, dst, rect, radius=4.0):
         return src
 
 
+V2_PHOTO_BOX = (103.1, 205.4, 194.6, 311.3)
+V2_QR_BOX = (118.2, 344.5, 182.5, 408.8)
+
+
+def clear_v2_sample_images(page):
+    slots = (V2_PHOTO_BOX, V2_QR_BOX)
+    for image in page.get_image_info(xrefs=True):
+        xref = image["xref"]
+        if xref and any(all(abs(actual - expected) < 0.5
+                            for actual, expected in zip(image["bbox"], slot))
+                        for slot in slots):
+            page.delete_image(xref)
+
+
 def make_v2(nid, pin, voter, area, serial, name_bn, name_en, dob, father,
             mother, spouse, gender, birth, religion, occ, p_addr, m_addr,
             photo, out_pdf):
     doc = pymupdf.open(os.path.join(ROOT, "report_v2_template.pdf"))
     page = doc[0]
+    clear_v2_sample_images(page)
     # puro block area — ghost glyph/jogfnog kichu na thake
     redact_text(page, [
         (330, 228, 582, 602),      # value column
@@ -400,8 +415,8 @@ def make_v2(nid, pin, voter, area, serial, name_bn, name_en, dob, father,
     if photo:
         ph = rounded_photo(photo,
                            os.path.join(os.path.dirname(out_pdf), "_ph2.png"),
-                           (103.1, 205.4, 194.6, 311.3), radius=4.0)
-        page.insert_image(pymupdf.Rect(103.1, 205.4, 194.6, 311.3),
+                           V2_PHOTO_BOX, radius=4.0)
+        page.insert_image(pymupdf.Rect(V2_PHOTO_BOX),
                           filename=ph, keep_proportion=False)
         if ph != photo:
             try:
@@ -413,7 +428,7 @@ def make_v2(nid, pin, voter, area, serial, name_bn, name_en, dob, father,
     qr_txt = ("%s %s %s" % (name_en, nid, dob)).strip()
     qp = os.path.join(os.path.dirname(out_pdf), "_qr.png")
     make_qr(qr_txt, qp)
-    page.insert_image(pymupdf.Rect(118.2, 344.5, 182.5, 408.8), filename=qp)
+    page.insert_image(pymupdf.Rect(V2_QR_BOX), filename=qp)
     try:
         os.remove(qp)
     except OSError:
