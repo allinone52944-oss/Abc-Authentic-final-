@@ -76,6 +76,12 @@ async function lookupBdxTin({ tin, apiKey }, fetchImpl = globalThis.fetch) {
   if (returnedTin !== tin || !name) return { ...unavailable, charged };
   const record = { tin, name };
   for (const field of fields) record[field] = clean(data[field], field.endsWith('Address') ? 600 : 180);
+  // The certificate QR carries the date of birth (sample QR line 2).
+  // The provider may name it dob / dateOfBirth / birthDate; pick it up
+  // when present so the QR matches the sample, otherwise omit the line.
+  const dob = clean(data?.dob) || clean(data?.dateOfBirth) || clean(data?.birthDate) ||
+    clean(data?.date_of_birth);
+  if (dob) record.dateOfBirth = dob;
   return { record, charged };
 }
 

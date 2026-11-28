@@ -10,7 +10,7 @@ const { buildAutoTinReportPdf } = require('../lib/autoNidReportPdf');
 const { storageKey, tinFingerprint, encryptReport } = require('../lib/autoNidReportStore');
 
 const router = express.Router();
-const filename = 'tin-verification-report.pdf';
+const filename = 'tin-certificate.pdf';
 const requestIdPattern = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const providerKey = () => process.env.BDX_TIN_API_KEY?.trim() || process.env.BDX_NID_API_KEY?.trim();
 const reject = (status, error) => ({ status, body: { error } });

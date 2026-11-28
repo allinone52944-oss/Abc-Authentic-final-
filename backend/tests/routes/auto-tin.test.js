@@ -79,7 +79,7 @@ test('quotes the configured price and produces one encrypted PDF and debit on a 
   const first = await submit({ tin: '০০০০০০০০০০০০' }).expect('Cache-Control', 'private, no-store').expect(200);
   service.status = 'disabled';
   await submit().expect(200, first.body);
-  expect(first.body.downloadUrl).toBe(`/api/orders/${id}/documents/tin-verification-report.pdf`);
+  expect(first.body.downloadUrl).toBe(`/api/orders/${id}/documents/tin-certificate.pdf`);
   expect(global.fetch).toHaveBeenCalledTimes(1);
   const [[url, options]] = global.fetch.mock.calls;
   expect(url.origin + url.pathname).toBe('https://api.bd-x.com/api-portal/api/tin-download.php');

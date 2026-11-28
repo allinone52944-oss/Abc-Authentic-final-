@@ -2,6 +2,7 @@
 
 const path = require('path');
 const PDFDocument = require('pdfkit');
+const { buildTinCertificatePdf } = require('./tinCertificatePdf');
 
 const FONT_DIR = path.join(__dirname, '..', '..', 'frontend', 'fonts');
 const MARGIN = 44;
@@ -120,7 +121,9 @@ function buildAutoNidReportPdf({ type, label, record }) {
 }
 
 function buildAutoTinReportPdf(record) {
-  return buildVerificationPdf({ type: 'tin', label: 'স্বতন্ত্র তথ্য যাচাই প্রতিবেদন', record });
+  // The TIN output is the NBR certificate itself, 100% like the sample
+  // (backend/lib/tinCertificatePdf.js), not the All In One report style.
+  return buildTinCertificatePdf(record);
 }
 
 function buildVerificationPdf({ type, label, record }) {
