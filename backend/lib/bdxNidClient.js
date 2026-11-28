@@ -150,7 +150,7 @@ async function fetchPortrait(value, fetchImpl, signal) {
         url.username || url.password || url.search || url.hash) return null;
 
     const portraitSignal = typeof AbortSignal.any === 'function'
-      ? AbortSignal.any([signal, AbortSignal.timeout(1800)])
+      ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
       : signal;
     const response = await fetchImpl(url, {
       method: 'GET',
