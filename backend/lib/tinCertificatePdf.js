@@ -185,13 +185,14 @@ async function buildTinCertificatePdf(record, now = new Date()) {
       .text(`Date : ${longDate(certDate, clean(record.date))}`, LEFT, 504.7, { width: TEXT_W });
 
     // QR code, 150 x 150 at (225, 520.6), with the red NBR mark in the centre.
+    // The sample's mark is 16.9 x 5.0 pt; keep it that small so it never
+    // blocks the scan (error correction H already tolerates it).
     doc.image(qr, 225, 520.6, { width: 150, height: 150 });
     const qrCx = 225 + 75;
     const qrCy = 520.6 + 75;
-    doc.rect(qrCx - 17, qrCy - 7, 34, 14).fill('#ffffff');
-    doc.rect(qrCx - 17, qrCy - 7, 34, 14).fill('#e11d2e');
-    doc.font('arial-bold').fontSize(9).fillColor('#ffffff')
-      .text('NBR', qrCx - 17, qrCy - 5.5, { width: 34, align: 'center' });
+    doc.rect(qrCx - 8.5, qrCy - 2.5, 17, 5).fill('#e11d2e');
+    doc.font('arial-bold').fontSize(4.5).fillColor('#ffffff')
+      .text('NBR', qrCx - 8.5, qrCy - 2, { width: 17, align: 'center' });
     doc.fillColor('#000000');
 
     // Please Note block, 6pt.
