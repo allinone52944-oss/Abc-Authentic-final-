@@ -47,7 +47,10 @@ describe('BD-X NID adapter', () => {
         district: 'Permanent Sample District',
       },
       photo: 'https://example.invalid/photo',
-      religion: 'Private field',
+      religion: 'Sample religion',
+      occupation: 'Sample profession',
+      birthDay: 'Monday',
+      age: '55',
     } }));
     const record = await lookupBdxNid({ ...input, type: 'premium' }, fetchImpl);
     expect(record.presentAddress).toContain('Current Sample Road, Current Sample District');
@@ -61,7 +64,10 @@ describe('BD-X NID adapter', () => {
     expect(record.presentAddress).not.toContain('Permanent Sample');
     expect(record.permanentAddress).not.toContain('Current Sample');
     expect(record).not.toHaveProperty('photo');
-    expect(record).not.toHaveProperty('religion');
+    expect(record.religion).toBe('Sample religion');
+    expect(record.profession).toBe('Sample profession');
+    expect(record).not.toHaveProperty('birthDay');
+    expect(record).not.toHaveProperty('age');
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
@@ -77,6 +83,30 @@ describe('BD-X NID adapter', () => {
     } });
     await expect(lookupBdxNid({ ...input, type: 'premium' }, fetchImpl))
       .resolves.toMatchObject({ presentAddress: addressLine });
+  });
+
+  test('downloads a documented Premium portrait without passing the API key to the media host', async () => {
+    const photo = 'https://apisheba.com/api-portal/images/sample-portrait.jpg';
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
+    const fetchImpl = jest.fn()
+      .mockResolvedValueOnce(reply({ status: 'success', data: { ...identity, photo } }))
+      .mockResolvedValueOnce(new Response(bytes, { headers: { 'Content-Type': 'image/jpeg' } }));
+    const record = await lookupBdxNid({ ...input, type: 'premium' }, fetchImpl);
+    expect(record.portrait).toEqual(Buffer.from(bytes));
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const [url, options] = fetchImpl.mock.calls[1];
+    expect(url.href).toBe(photo);
+    expect(options).toMatchObject({ redirect: 'error', headers: { Accept: 'image/jpeg' } });
+    expect(options.headers).not.toHaveProperty('Authorization');
+  });
+
+  test('a photo request failure leaves the verified Premium report data available', async () => {
+    const photo = 'https://apisheba.com/api-portal/images/sample-portrait.jpg';
+    const fetchImpl = jest.fn()
+      .mockResolvedValueOnce(reply({ status: 'success', data: { ...identity, photo } }))
+      .mockRejectedValueOnce(new Error('Optional media request failed'));
+    await expect(lookupBdxNid({ ...input, type: 'premium' }, fetchImpl))
+      .resolves.toMatchObject({ nameBn: identity.name, nationalId: identity.nationalId, dateOfBirth: identity.dateOfBirth });
   });
 
   test.each([

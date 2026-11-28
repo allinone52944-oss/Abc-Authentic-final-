@@ -7,6 +7,9 @@ const PATHS = new Map([
 const PREMIUM_FALLBACK_PATH = '/api-portal/api/sv-copy.php';
 const REQUEST_TIMEOUT_MS = 12_000;
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
+const MAX_PORTRAIT_BYTES = 1024 * 1024;
+const PORTRAIT_ORIGIN = 'https://apisheba.com';
+const PORTRAIT_PATH = /^\/api-portal\/images\/[a-z0-9_-][a-z0-9._-]{0,159}\.jpe?g$/i;
 const NID_PATTERN = /^(?:[0-9]{10}|[0-9]{13}|[0-9]{17})$/;
 const NO_RECORD_CODES = new Set(['not_found', 'record_not_found', 'no_record', 'no_data']);
 const RESPONSE_STATUS_FIELDS = new Set(['status', 'code', 'message', 'error', 'success', 'data']);
@@ -79,7 +82,7 @@ function normalizeAddress(value) {
   ].map(part => cleanText(part)).filter(Boolean).join(', ').slice(0, 600);
 }
 
-function addressText(value, limit) {
+function availableText(value, limit) {
   const text = cleanText(value, limit);
   return /^(?:[-–—./,?\s]+|n\s*\/?\s*a|null|none|unknown|not available|অপ্রযোজ্য|নেই)$/i.test(text) ? '' : text;
 }
@@ -91,18 +94,18 @@ function addressWords(value) {
 }
 
 function normalizeFullAddress(value) {
-  if (!recordObject(value)) return addressText(value, 600);
-  const addressLine = addressText(value.addressLine, 600);
+  if (!recordObject(value)) return availableText(value, 600);
+  const addressLine = availableText(value.addressLine, 600);
   const parts = [
     value.homeOrHoldingNo, value.villageOrRoad, value.mouzaMoholla, value.unionOrWard,
-    value.postOffice, value.postCode, addressText(value.upazila) || value.upozila,
+    value.postOffice, value.postCode, availableText(value.upazila) || value.upozila,
     value.district, value.region, value.division,
   ];
   const result = addressLine ? [addressLine] : [];
   const lineWords = addressWords(addressLine);
   const added = new Set();
   for (const part of parts) {
-    const text = addressText(part);
+    const text = availableText(part);
     const words = addressWords(text);
     if (!words || lineWords.includes(words) || added.has(words)) continue;
     result.push(text);
@@ -111,9 +114,9 @@ function normalizeFullAddress(value) {
   return result.join(', ').slice(0, 600);
 }
 
-async function readBoundedJson(response) {
+async function readBoundedBody(response, maxBytes) {
   if (!response.body) throw providerError();
-  if (Number(response.headers.get('content-length')) > MAX_RESPONSE_BYTES) {
+  if (Number(response.headers.get('content-length')) > maxBytes) {
     await response.body.cancel();
     throw providerError();
   }
@@ -126,7 +129,7 @@ async function readBoundedJson(response) {
       const { done, value } = await reader.read();
       if (done) break;
       received += value.byteLength;
-      if (received > MAX_RESPONSE_BYTES) {
+      if (received > maxBytes) {
         await reader.cancel();
         throw providerError();
       }
@@ -136,7 +139,36 @@ async function readBoundedJson(response) {
     reader.releaseLock();
   }
 
-  return JSON.parse(Buffer.concat(chunks, received).toString('utf8'));
+  return Buffer.concat(chunks, received);
+}
+
+async function fetchPortrait(value, fetchImpl, signal) {
+  if (typeof value !== 'string' || value.length > 256 || signal.aborted) return null;
+  try {
+    const url = new URL(value);
+    if (url.origin !== PORTRAIT_ORIGIN || !PORTRAIT_PATH.test(url.pathname) ||
+        url.username || url.password || url.search || url.hash) return null;
+
+    const portraitSignal = typeof AbortSignal.any === 'function'
+      ? AbortSignal.any([signal, AbortSignal.timeout(1800)])
+      : signal;
+    const response = await fetchImpl(url, {
+      method: 'GET',
+      headers: { Accept: 'image/jpeg', 'Cache-Control': 'no-store' },
+      redirect: 'error',
+      signal: portraitSignal,
+    });
+    const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
+    if (!response.ok || contentType !== 'image/jpeg') {
+      await response.body?.cancel();
+      return null;
+    }
+    const bytes = await readBoundedBody(response, MAX_PORTRAIT_BYTES);
+    return bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff ? bytes : null;
+  } catch {
+    // The optional media URL and bytes can contain private data.
+    return null;
+  }
 }
 
 function normalizeResult(payload, { type, nid, dob }) {
@@ -175,6 +207,11 @@ function normalizeResult(payload, { type, nid, dob }) {
   if (type === 'premium') {
     result.presentAddress = normalizeFullAddress(data.presentAddress);
     result.permanentAddress = normalizeFullAddress(data.permanentAddress);
+    result.oldNid = normalizeId(data.oldNid);
+    result.voterArea = availableText(data.voterArea);
+    result.birthPlace = availableText(data.birthPlace);
+    result.religion = availableText(data.religion);
+    result.profession = availableText(data.profession) || availableText(data.occupation);
   } else if (type === 'backup') {
     result.presentAddress = normalizeAddress(data.presentAddress);
     result.permanentAddress = normalizeAddress(data.permanentAddress);
@@ -198,7 +235,7 @@ async function lookupEndpoint(path, { type, nid, dob, apiKey }, fetchImpl, signa
       await response.body?.cancel();
       throw providerError();
     }
-    payload = await readBoundedJson(response);
+    payload = JSON.parse((await readBoundedBody(response, MAX_RESPONSE_BYTES)).toString('utf8'));
   } catch {
     // Fetch and parse exceptions can contain the request URL or provider body.
     throw providerError();
@@ -206,7 +243,13 @@ async function lookupEndpoint(path, { type, nid, dob, apiKey }, fetchImpl, signa
 
   try {
     if (!response.ok && (response.status !== 404 || payload?.http_status !== 404)) throw providerError();
-    return normalizeResult(payload, { type, nid, dob });
+    const record = normalizeResult(payload, { type, nid, dob });
+    if (type === 'premium') {
+      const data = payload.response.data ?? payload.response;
+      const portrait = await fetchPortrait(data.photo, fetchImpl, signal);
+      if (portrait) record.portrait = portrait;
+    }
+    return record;
   } catch (e) {
     const error = providerError(e.code === 'record_not_found' ? 'record_not_found' : undefined);
     if (type === 'premium') {

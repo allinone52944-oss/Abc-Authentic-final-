@@ -181,7 +181,7 @@ async function deliver(client, userId, lookup, apiKey, key) {
 
   let pdf;
   try {
-    pdf = await buildAutoNidReportPdf({ label: option.label, record });
+    pdf = await buildAutoNidReportPdf({ type: lookup.type, label: option.label, record });
   } catch (err) {
     if (!premium) throw err;
     safeLog('[nid-auto-server-copy] premium PDF creation failed after verification');

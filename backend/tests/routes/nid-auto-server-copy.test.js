@@ -149,7 +149,7 @@ test.each(products)('%s generates one private report and pays only its quoted pr
   expect(result.body).toEqual({ orderId, downloadUrl: '/api/orders/' + orderId + '/documents/' + filename });
   expect(lookupBdxNid).toHaveBeenCalledTimes(1);
   expect(lookupBdxNid).toHaveBeenCalledWith({ type, nid: lookup.nid, dob: lookup.dob, apiKey });
-  expect(buildAutoNidReportPdf).toHaveBeenCalledWith({ label, record });
+  expect(buildAutoNidReportPdf).toHaveBeenCalledWith({ type, label, record });
   const [orderInsert, [, reportParams]] = inserts();
   expect(readOrderInsert(orderInsert)).toMatchObject({
     user: userId, service: 'service-' + type, status: 'completed',
@@ -249,7 +249,7 @@ test('a matching Premium record with missing addresses still produces a paid pri
   });
   await postLookup(premiumLookup).expect(200, first.body);
   expect(buildAutoNidReportPdf).toHaveBeenCalledTimes(1);
-  expect(buildAutoNidReportPdf).toHaveBeenCalledWith({ label: 'SV Copy Premium', record });
+  expect(buildAutoNidReportPdf).toHaveBeenCalledWith({ type: 'premium', label: 'SV Copy Premium', record });
   expect(lookupBdxNid).toHaveBeenCalledTimes(1);
   expect(payForService).toHaveBeenCalledTimes(1);
   expect(payForService).toHaveBeenCalledWith(db.__client, expect.objectContaining({ amount: 85 }));
