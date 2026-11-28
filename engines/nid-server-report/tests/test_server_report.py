@@ -285,9 +285,27 @@ class TestBuildReports(unittest.TestCase):
         v2 = os.path.join(self.out, "1010101010-v2.pdf")
         import pymupdf
         with pymupdf.open(v2) as doc:
-            imgs = doc[0].get_images(full=True)
-        # photo + QR = at least 2 embedded images
-        self.assertGreaterEqual(len(imgs), 2)
+            page = doc[0]
+            inside = page.get_pixmap(clip=pymupdf.Rect(148, 250, 149, 251))
+            self.assertEqual(inside.pixel(0, 0), (120, 130, 140))
+            self.assertNotIn((480, 640), [(image["width"], image["height"])
+                                          for image in page.get_image_info()])
+
+    def test_v2_without_a_photo_has_an_empty_portrait_and_one_qr(self):
+        os.remove(os.path.join(self.work, "images", "photo.png"))
+        self.assertEqual(br.main(os.path.join(self.work, "input_data.json"), self.out), 0)
+        import pymupdf
+        with pymupdf.open(os.path.join(self.out, "1010101010-v2.pdf")) as doc:
+            page = doc[0]
+            inside = page.get_pixmap(clip=pymupdf.Rect(109, 212, 189, 304))
+            self.assertTrue(all(channel == 255 for channel in inside.samples))
+            qr_images = [image for image in page.get_image_info()
+                         if image["width"] > 1 and all(
+                             abs(actual - expected) < 0.5
+                             for actual, expected in zip(image["bbox"], br.V2_QR_BOX))]
+            self.assertEqual(len(qr_images), 1)
+            self.assertNotIn((480, 640), [(image["width"], image["height"])
+                                          for image in page.get_image_info()])
 
     def test_build_string_address_prints_verbatim(self):
         # String addresses (from the single-line review inputs) reach
