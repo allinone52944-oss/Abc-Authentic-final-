@@ -1,10 +1,9 @@
 /**
  * Regression guard — ABC.api() path prefix.
  *
- * frontend/js/app.js api() does fetch('/api' + path): callers must pass
- * paths WITHOUT the '/api' prefix (e.g. ABC.api('/services')). A page
- * that passes '/api/...' produces '/api/api/...' → 404, and the failure
- * is silent wherever the page swallows fetch errors.
+ * Keep authored paths relative to the API base (e.g. ABC.api('/services')).
+ * The helper also accepts full root-relative API paths returned by History.
+ * app.test.js covers those returned paths through token refresh.
  *
  * That exact bug shipped in qr-photo-verify.html (2026-10-21,
  * `const API = '/api/qr-verify'`): the price line never loaded and the

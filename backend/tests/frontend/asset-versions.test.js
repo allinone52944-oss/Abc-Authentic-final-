@@ -13,7 +13,7 @@ test('all pages reference the SAME version of each shared asset', () => {
   const seen = new Map(); // asset -> Map(version -> [files])
   for (const f of fs.readdirSync(FRONTEND).filter((x) => x.endsWith('.html'))) {
     const html = fs.readFileSync(path.join(FRONTEND, f), 'utf8');
-    for (const m of html.matchAll(/(?:src|href)="[^"]*\/([a-z0-9.-]+\.(?:css|js))\?v=(\d+)"/g)) {
+    for (const m of html.matchAll(/(?:src|href)="[^"]*\/([a-z0-9.-]+\.(?:css|js))\?v=([a-z0-9-]+)"/gi)) {
       const [, asset, v] = m;
       if (!seen.has(asset)) seen.set(asset, new Map());
       const byVer = seen.get(asset);

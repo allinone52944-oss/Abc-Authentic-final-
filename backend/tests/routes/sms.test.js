@@ -574,7 +574,7 @@ describe('adminSms manual match — amount fraud guard', () => {
 describe('findMatch amount+sender safety', () => {
   const fs = require('fs');
   const path = require('path');
-  const src = fs.readFileSync(path.join(__dirname, '../../routes/sms.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '../../routes/sms.js'), 'utf8').replace(/\r\n/g, '\n');
   const fuzzyStart = src.indexOf('// 2) Number-only Auto');
   const fuzzy = src.slice(fuzzyStart, src.indexOf('\n}\n', fuzzyStart) + 2);
 

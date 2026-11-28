@@ -205,7 +205,7 @@ describe('POST /api/engine-jobs/failure — record a failed verification', () =>
       .send(failBody).expect(201);
     expect(r.body).toMatchObject({ ok: true, id: 'f1', receipt: '/api/engine-jobs/f1/file' });
     expect(insertSql).toContain("'failed'");
-    expect(insertParams[4]).toMatch(/^engine-fail-.+\.pdf$/);
+    expect(insertParams[4]).toMatch(/^engine-fail-[0-9a-f]{32}\.pdf$/);
     // the stored reason is the mapped Bengali line, never raw engine text
     expect(insertParams[6]).toContain('কোনো রেকর্ড পাওয়া যায়নি');
     const fp = path.join(UPLOAD_DIR, insertParams[4]);

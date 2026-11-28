@@ -256,6 +256,8 @@
     if (typeof path !== 'string' || !path) {
       throw new TypeError('api(path): path must be a non-empty string');
     }
+    // History can return a root-relative API link for a stored original.
+    const requestPath = path.startsWith('/api/') ? path : '/api' + path;
     _retry = _retry || 0;
     // Clone opts to avoid mutating caller's object (signal/body)
     opts = Object.assign({}, opts || {});
@@ -291,7 +293,7 @@
     opts.signal = ctrl.signal;
     let r;
     try {
-      r = await fetch('/api' + path, opts);
+      r = await fetch(requestPath, opts);
     } catch (e) {
       clearTimeout(timer);
       // Network failure/timeout → retry with backoff (tunnel flakiness),
@@ -340,7 +342,7 @@
         const timer2 = setTimeout(() => ctrl2.abort(), opts.timeout || 20000);
         opts.signal = ctrl2.signal;
         try {
-          r = await fetch('/api' + path, opts);
+          r = await fetch(requestPath, opts);
         } catch (e) {
           return new Response(JSON.stringify({ error: 'NETWORK_ERROR' }), {
             status: 503,

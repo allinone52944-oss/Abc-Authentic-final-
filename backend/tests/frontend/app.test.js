@@ -229,6 +229,17 @@ describe('api() — 401 + silent refresh', () => {
     expect(global.localStorage.getItem('abc_refresh_token')).toBe('new-ref');
   });
 
+  test('a stored-original link keeps exactly one API prefix through auth refresh', async () => {
+    const ABC = loadApp();
+    ABC.setTokens('old-acc', 'good-refresh');
+    mockRefreshSuccess('new-acc');
+    const path = '/api/bdris-apply/applications/DEMO/original';
+    const r = await ABC.api(path);
+    expect(r.ok).toBe(true);
+    expect(global.fetch.mock.calls.map(([url]) => url)).toEqual([path, '/api/auth/refresh', path]);
+    expect(global.fetch.mock.calls[2][1].headers.Authorization).toBe('Bearer new-acc');
+  });
+
   test('fresh tab: no access token anywhere, refresh token in localStorage → recovers instead of bouncing to login', async () => {
     // sessionStorage is per-tab: a page opened in a NEW tab starts
     // with NO access token, while the refresh token (localStorage)

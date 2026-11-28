@@ -1,8 +1,6 @@
 // FIX-1 regression: BDRIS apply double-charge.
-// routes/bdris-apply.js builds the wallet ref from req.body.idempotency_key
-// (max 64 chars), falling back to Date.now() only when the key is absent.
-// A retried request with the same key must produce the SAME ref so the
-// wallet debit is idempotent instead of charging twice.
+// Submission accepts a general retry key. Original-PDF charges use the
+// acknowledgement of an owned application as the stable retry key.
 jest.mock('../../db', () => require('../helpers/mockDb').createDbMock());
 
 const express = require('express');
@@ -44,10 +42,9 @@ function lastWalletRef() {
   return calls.length ? calls[calls.length - 1][1][3] : null;
 }
 
-describe.each([
-  ['/charge/submit', 'bdris-apply-submit'],
-  ['/charge/pdf', 'bdris-apply-pdf'],
-])('FIX-1 idempotency_key — POST /api/bdris-apply%s', (path, kind) => {
+describe('FIX-1 idempotency_key — POST /api/bdris-apply/charge/submit', () => {
+  const path = '/charge/submit';
+  const kind = 'bdris-apply-submit';
   test('same idempotency_key → identical wallet ref on retry (no double charge)', async () => {
     db.__routeQuery(chargeHandlers());
     const key = 'client-key-abc-123';
@@ -85,4 +82,39 @@ describe.each([
     await withUser(request(app()).post('/api/bdris-apply' + path)).send({ idempotency_key: 'bbb' }).expect(200);
     expect(lastWalletRef()).not.toBe(ref1);
   });
+});
+
+describe('acknowledgement-based original PDF charge retries', () => {
+  const path = '/api/bdris-apply/charge/pdf';
+  const key = 'pdf-000123456';
+
+  test('the same owned acknowledgement debits once and returns a new receipt on retry', async () => {
+    const approved = new Set();
+    db.__routeQuery([
+      ['FROM bdris_applications', (_, params) => {
+        expect(params).toEqual(['u1', '000123456']);
+        return { rows: [{ original_pdf_available: true }] };
+      }],
+      ['SELECT 1 FROM transactions', (_, [, ref]) => ({ rows: approved.has(ref) ? [{}] : [] })],
+      ['wallet_apply', (_, [, , , ref]) => {
+        approved.add(ref);
+        return { rows: [{ new_balance: '950' }] };
+      }],
+      ...chargeHandlers(),
+    ]);
+    const first = await withUser(request(app()).post(path)).send({ idempotency_key: key }).expect(200);
+    expect(first.body).toMatchObject({ charged: 50, chargeToken: expect.any(String) });
+    const retry = await withUser(request(app()).post(path)).send({ idempotency_key: key }).expect(200);
+    expect(retry.body).toMatchObject({ charged: 0, alreadyCharged: true, chargeToken: expect.any(String) });
+    expect([...approved]).toEqual(['bdris-apply-pdf-' + key + '-u1']);
+    expect(db.__client.query.mock.calls.filter(([sql]) => /wallet_apply/.test(sql))).toHaveLength(1);
+  });
+
+  test.each([{}, { idempotency_key: 98765 }, { idempotency_key: 'k'.repeat(100) }])(
+    'rejects an invalid acknowledgement key before debiting: %j',
+    async body => {
+      await withUser(request(app()).post(path)).send(body).expect(400);
+      expect(lastWalletRef()).toBeNull();
+    }
+  );
 });

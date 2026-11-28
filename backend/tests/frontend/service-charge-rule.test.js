@@ -38,8 +38,8 @@ describe('service-detail.html — charge-rule line (audit #49)', () => {
     expect(html).toContain('না পেলে ৳০ — কোনো টাকা কাটা হবে না');
   });
 
-  test('no label without a rule or for a free service', () => {
-    expect(html).toContain("((price > 0 && s.charge_rule) ?");
+  test('charge labels require a positive price and an API rule, with separate pricing for grouped NID', () => {
+    expect(html).toMatch(/\(\(s\.engine_id !== 'nid-auto-server-copy' && price > 0 && s\.charge_rule\) \?/);
   });
 });
 

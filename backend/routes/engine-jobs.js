@@ -101,7 +101,8 @@ customerEngineJobs.post('/failure', async (req, res) => {
       });
     }
 
-    fn = 'engine-fail-' + idem.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 60) + '.pdf';
+    // Keep each write separate; a discarded retry must not remove the stored copy.
+    fn = 'engine-fail-' + crypto.randomBytes(16).toString('hex') + '.pdf';
     const pdf = await buildReceiptPdf({
       serviceLabel: SERVICE_LABELS[engineId], outcome: 'failed', reason: reasonBn,
       subjectLabel: SUBJECT_LABELS[engineId], subjectValue: refNo,
@@ -138,10 +139,11 @@ customerEngineJobs.post('/failure', async (req, res) => {
       return res.status(500).json({ error: 'FAILED' });
     }
 
+    fn = null;
     wa.notifyServiceFailed(db, req.user.id, SERVICE_LABELS[engineId], reasonBn,
       'নম্বর ও তারিখ মিলিয়ে আবার চেষ্টা করুন। সহায়তা লাগলে আমাদের সাপোর্টে যোগাযোগ করুন।').catch(() => {});
     push.notifyUser(db, req.user.id, '❌ ' + SERVICE_LABELS[engineId] + ' ব্যর্থ',
-      'আপনার ' + SERVICE_LABELS[engineId] + ' সফল হয়নি — কোনো টাকা কাটা হয়নি। ব্যর্থতার রসিদটি ইতিহাসে পাবেন।', '/history.html').catch(() => {});
+      'আপনার ' + SERVICE_LABELS[engineId] + ' সফল হয়নি — কোনো টাকা কাটা হয়নি। যাচাইয়ের ফল ইতিহাসে পাবেন।', '/history.html').catch(() => {});
     push.notifyAdmins(db, '❌ ' + SERVICE_LABELS[engineId] + ' ব্যর্থ',
       'একটি ' + SERVICE_LABELS[engineId] + ' ব্যর্থ হয়েছে — কোনো চার্জ কাটা হয়নি।', '/admin.html').catch(() => {});
     res.status(201).json({

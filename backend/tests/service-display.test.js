@@ -14,6 +14,11 @@ test('highlighted services keep the admin order', () => {
 });
 test('display endpoint never updates price or status', () => {
   const src = fs.readFileSync(path.join(__dirname, '../routes/admin.js'), 'utf8');
-  const h = src.slice(src.indexOf("'/services/:id/display'"), src.indexOf("router.put('/services/:id', async"));
-  expect(h).not.toMatch(/price|status\s*=/);
+  const start = src.indexOf("router.put('/services/:id/display'");
+  const end = src.indexOf('\nrouter.', start + 1);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  const update = src.slice(start, end).match(/UPDATE services SET[\s\S]*?WHERE id =/);
+  expect(update).not.toBeNull();
+  expect(update[0]).not.toMatch(/\b(?:price|status)\s*=/);
 });
