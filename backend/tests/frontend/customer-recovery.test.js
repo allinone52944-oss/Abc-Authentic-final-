@@ -36,3 +36,23 @@ test('history retry reads back records and retains original index downloads',asy
  await context.loadHistory();fail=false;await context.loadHistory();
  expect(context.render).toHaveBeenCalledTimes(1);expect(vm.runInNewContext('_items[0].documents[0].url',context)).toBe('/engine/file');
 });
+
+test('the service-level tracker returns to the authenticated order and service', async () => {
+  const order = { id: 'order & one', service_id: 'service-one', status: 'pending' };
+  const { context, nodes } = env(async () => ({ ok: true, json: async () => ({ order }) }));
+  context.location.search = '?flow=directory&service=wrong-service';
+  context.render = jest.fn();
+  vm.runInNewContext('const oid="order";' + extract('order-status', 'let _isFetching = false;', '\nasync function loadTimelineHistory()'), context);
+  await context.fetchAndRender();
+  for (const id of ['orderBackLink', 'orderListLink']) {
+    expect(nodes[id].href).toBe('/order-create.html?service=service-one&flow=directory&order=order+%26+one#serviceOrders');
+  }
+  expect(context.render).toHaveBeenCalledWith(order);
+});
+
+test('an unavailable notice request reports failure instead of showing an empty list', async () => {
+  const { context } = env(async () => ({ ok: false, status: 503 }));
+  vm.runInNewContext(extract('dashboard', 'async function showNotices()', '\ninit();'), context);
+  await context.showNotices();
+  expect(context.ABC.showPageMsg).toHaveBeenCalledWith(expect.any(String), 'err');
+});

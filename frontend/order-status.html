@@ -405,10 +405,10 @@
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/service-workspace.css?v=20261110-1">
-<link rel="stylesheet" href="/css/sidebar-nav.css?v=20261128-3">
+<link rel="stylesheet" href="/css/sidebar-nav.css?v=20261128-4">
 <link rel="stylesheet" href="/css/customer-sections.css?v=20261110-11">
 <script src="/js/service-navigation.js?v=20261128-3" defer></script>
-<script src="/js/sidebar-nav.js?v=20261128-2" defer></script>
+<script src="/js/sidebar-nav.js?v=20261128-3" defer></script>
 </head>
 <body class="has-tabbar flagship-app service-workspace page-order-status">
 <div class="desktop">
@@ -438,7 +438,7 @@
         <p>আপনার অর্ডারের বর্তমান অবস্থা ও সাপোর্ট আপডেট লাইভ দেখুন</p>
       </div>
       <div>
-        <button class="btn btn-secondary" onclick="location.href='/orders.html'" style="padding:8px 16px; font-size:13px;">← সব অর্ডার</button>
+        <a class="btn btn-secondary" id="orderBackLink" href="/orders.html" style="padding:8px 16px; font-size:13px;">← সব অর্ডার</a>
       </div>
     </div>
 
@@ -526,7 +526,7 @@
       <!-- Action Buttons -->
       <div style="margin-top:28px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
         <button class="btn btn-primary" onclick="location.href='/order-detail.html?id='+oid">📄 সম্পূর্ণ অর্ডার ডিটেইলস ও চ্যাট →</button>
-        <button class="btn btn-secondary" onclick="location.href='/orders.html'">সকল অর্ডার তালিকা</button>
+        <a class="btn btn-secondary" id="orderListLink" href="/orders.html">সকল অর্ডার তালিকা</a>
         <!-- Audit #48 — customer cancel, new/pending only (shown by render()) -->
         <button class="btn btn-secondary" id="cancelBtn" style="display:none;color:#b91c1c;border-color:#fecaca;background:#fef2f2;" onclick="cancelOrder()">❌ অর্ডার বাতিল করুন</button>
       </div>
@@ -712,6 +712,15 @@ async function fetchAndRender() {
       window._isOrderTerminal = true;
     }
     window._currentOrder = o;
+    if (new URLSearchParams(location.search).get('flow') === 'directory' && o.service_id) {
+      const query = new URLSearchParams({ service: o.service_id, flow: 'directory', order: o.id });
+      const back = '/order-create.html?' + query + '#serviceOrders';
+      for (const id of ['orderBackLink', 'orderListLink']) {
+        const link = document.getElementById(id);
+        link.href = back;
+        link.textContent = '← এই সেবার অর্ডারে ফিরুন';
+      }
+    }
     render(o);
   } catch (e) {
   } finally {

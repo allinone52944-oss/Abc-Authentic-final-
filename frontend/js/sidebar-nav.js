@@ -32,7 +32,15 @@
         const child = document.createElement('li');
         const link = document.createElement('a');
         link.href = window.ServiceNavigation.destination(service);
-        link.textContent = service.name_bn || service.name;
+        const name = document.createElement('span');
+        name.textContent = service.name_bn || service.name;
+        link.append(name);
+        if (service.open === false) {
+          const status = document.createElement('span');
+          status.className = 'service-sidebar-closed';
+          status.textContent = 'বন্ধ';
+          link.append(status);
+        }
         if (service.id === selected) link.setAttribute('aria-current', 'page');
         child.append(link);
         children.append(child);
@@ -87,9 +95,17 @@
       list.replaceChildren(status);
       try {
         const response = await ABC.api('/services');
+        if (response.status === 401) {
+          const login = document.createElement('a');
+          login.className = 'btn btn-secondary';
+          login.textContent = 'আবার লগইন করুন';
+          login.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search + location.hash);
+          status.replaceChildren(login);
+          return;
+        }
         if (!response.ok) throw new Error();
         const { services } = await response.json();
-        if (!Array.isArray(services)) throw new Error();
+        if (!Array.isArray(services) || services.some(service => !service?.id)) throw new Error();
         renderCategories(list, services);
         loaded = true;
       } catch (_) {

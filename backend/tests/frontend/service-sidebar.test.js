@@ -30,7 +30,7 @@ test('category disclosures contain the service links in serial order and retain 
   const nid = { category_id: 'nid', category_name_bn: 'NID সেবা', category_serial: 1, open: true };
   context.window.ServiceSidebar.renderCategories(menu, [
     { ...nid, id: 'manual', type: 'manual', name_bn: 'সংশোধন সহায়তা', serial: 2 },
-    { id: 'tin', category_id: 'tax', category_name_bn: 'কর সেবা', category_serial: 2, engine_id: 'auto-tin' },
+    { id: 'tin', category_id: 'tax', name_bn: 'টিআইএন যাচাই', category_name_bn: 'কর সেবা', category_serial: 2, engine_id: 'auto-tin', open: false },
     { ...nid, id: 'auto', engine_id: 'nid-auto-server-copy', name_bn: 'অটো সার্ভার কপি', serial: 1 },
   ]);
 
@@ -44,4 +44,7 @@ test('category disclosures contain the service links in serial order and retain 
     '/order-create.html?service=manual&flow=directory&category=nid',
   ]);
   expect(links[1].attributes['aria-current']).toBe('page');
+  const [closedService] = otherCategory.children[1].children[0].children;
+  expect(closedService.href).toBe('/service-detail.html?id=tin');
+  expect(closedService.children.map(child => child.textContent)).toEqual(['টিআইএন যাচাই', 'বন্ধ']);
 });

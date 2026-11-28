@@ -49,7 +49,7 @@
 
     const details = document.createElement('a');
     details.className = 'btn btn-secondary';
-    details.href = '/order-status.html?id=' + encodeURIComponent(order.id);
+    details.href = '/order-status.html?' + new URLSearchParams({ id: order.id, flow: 'directory' });
     details.textContent = 'সহায়তা ও অর্ডার পরিচালনা';
     header.append(info);
     row.appendChild(header);

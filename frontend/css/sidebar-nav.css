@@ -30,6 +30,11 @@ body:is(.flagship-app,.flagship-dashboard) .sidebar .side-link.side-sub .ico { d
   overflow-wrap: anywhere; text-decoration: none;
 }
 .service-sidebar-category > summary { font-weight: 700; }
+.service-sidebar-category a > span:first-child { min-width: 0; }
+.service-sidebar-closed {
+  margin-inline-start: auto; flex: none; padding: 2px 5px; border-radius: 5px;
+  background: #4f3931; color: #ffe4c7; font-size: 11px; white-space: nowrap;
+}
 .service-sidebar-category[open] > summary, .service-sidebar-category a:is(:hover, [aria-current="page"]) { background: #ffffff16; color: #fff; }
 .service-sidebar-category :is(summary, a):focus-visible { outline: 2px solid var(--pv-gold-fill, #e7b94a); outline-offset: -2px; }
 body:is(.flagship-app,.flagship-dashboard) .sidebar .service-disclosure > a:first-of-type { margin-top: 4px; }
