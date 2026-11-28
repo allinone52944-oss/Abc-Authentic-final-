@@ -14,7 +14,7 @@
     PRICE_CHANGED: 'চার্জ বদলেছে। নতুন চার্জ দেখে আবার যাচাই করুন।',
     SERVICE_UNAVAILABLE: 'সেবাটি এখন ব্যবহার করা যাচ্ছে না।',
     INSUFFICIENT_BALANCE: 'পর্যাপ্ত ব্যালেন্স নেই। রিচার্জ করে আবার চেষ্টা করুন।',
-    RECORD_NOT_FOUND: 'এই TIN নম্বরে কোনো তথ্য পাওয়া যায়নি। কোনো চার্জ কাটেনি।',
+    RECORD_NOT_FOUND: 'এই নম্বরে কোনো TIN তথ্য পাওয়া যায়নি। কোনো চার্জ কাটেনি।',
     PROVIDER_UNAVAILABLE: 'তথ্যের উৎস থেকে এখন উত্তর পাওয়া যাচ্ছে না। কিছুক্ষণ পর চেষ্টা করুন।',
     LOOKUP_BUSY: 'আগের অনুরোধ চলছে। একটু অপেক্ষা করে একই নম্বর দিয়ে চেষ্টা করুন।',
     NETWORK_ERROR: 'সংযোগে সমস্যা হয়েছে। একই নম্বর রেখে আবার যাচাই করুন।',
@@ -78,8 +78,8 @@
     event.preventDefault();
     if (submit.disabled || !authorized.checked) return;
     const tin = input.value.trim().replace(/[০-৯]/g, digit => String(digit.charCodeAt(0) - 0x09e6));
-    if (!/^\d{12}$/.test(tin)) {
-      input.setCustomValidity('১২ সংখ্যার TIN নম্বর দিন।');
+    if (!/^(?:\d{10}|\d{12})$/.test(tin)) {
+      input.setCustomValidity('১০ সংখ্যার NID বা ১২ সংখ্যার TIN দিন।');
       input.reportValidity();
       return;
     }

@@ -5,7 +5,7 @@ const db = require('../db');
 const { safeLog } = require('../security');
 const { serviceAcceptsNewWork } = require('../lib/serviceAvailability');
 const { availableFor, payForService } = require('../lib/serviceCredits');
-const { lookupBdxTin, normalizeTin } = require('../lib/bdxTinClient');
+const { lookupBdxTin, normalizeTinIdentifier } = require('../lib/bdxTinClient');
 const { buildAutoTinReportPdf } = require('../lib/autoNidReportPdf');
 const { storageKey, tinFingerprint, encryptReport } = require('../lib/autoNidReportStore');
 
@@ -124,7 +124,7 @@ router.get('/options', async (req, res) => {
 
 router.post('/lookup', async (req, res) => {
   const { tin: input, price, authorized, idempotencyKey } = req.body || {};
-  const tin = normalizeTin(input);
+  const tin = normalizeTinIdentifier(input);
   if (!tin || authorized !== true || !Number.isFinite(price) || price <= 0 ||
       typeof idempotencyKey !== 'string' || !requestIdPattern.test(idempotencyKey)) {
     return res.status(400).json({ error: 'INVALID_INPUT' });

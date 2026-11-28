@@ -49,14 +49,14 @@
           <form id="lookupForm" autocomplete="off">
             <fieldset id="inputs" aria-label="যাচাইয়ের তথ্য" disabled>
               <div class="ansc-fields">
-                <label for="tin">TIN নম্বর
-                  <input id="tin" name="tin" type="text" inputmode="numeric" maxlength="12"
-                    autocomplete="off" spellcheck="false" placeholder="১২ সংখ্যার TIN" required>
+                <label for="tin">NID বা TIN নম্বর
+                  <input id="tin" name="tin" type="text" inputmode="numeric" maxlength="32"
+                    autocomplete="off" spellcheck="false" placeholder="১০ সংখ্যার NID বা ১২ সংখ্যার TIN" required>
                 </label>
               </div>
               <label class="ansc-consent" for="authorized">
                 <input type="checkbox" id="authorized" required>
-                <span>TIN যাচাইয়ের অনুমতি আছে</span>
+                <span>নিজের বা অনুমতিপ্রাপ্ত নম্বর দিয়ে যাচাই করছি</span>
               </label>
             </fieldset>
             <p class="ansc-premium-terms" id="chargeTerms">তথ্য মিললে বা তথ্যদাতার ফি কাটা নিশ্চিত হলে দেখানো চার্জ একবার কাটবে।</p>
@@ -93,6 +93,6 @@
     <a class="m-tab" href="/profile.html">প্রোফাইল</a>
   </nav>
   <script src="/js/app.js?v=22"></script>
-  <script src="/js/auto-tin.js?v=2"></script>
+  <script src="/js/auto-tin.js?v=3"></script>
 </body>
 </html>

@@ -11,6 +11,7 @@ const request = require('supertest');
 const db = require('../../db');
 const { availableFor, payForService } = require('../../lib/serviceCredits');
 const { decryptReport, storageKey } = require('../../lib/autoNidReportStore');
+const { lookupBdxTin } = require('../../lib/bdxTinClient');
 const { requireAuth, signAccess } = require('../../auth');
 
 const app = express();
@@ -95,11 +96,42 @@ test('quotes the configured price and produces one encrypted PDF and debit on a 
 test('rejects unauthenticated, unapproved, stale and unfunded requests before the provider call', async () => {
   await request(app).post('/auto-tin/lookup').send(lookup).expect(401);
   await submit({ authorized: false }).expect(400);
+  await submit({ tin: '00000000000' }).expect(400);
+  await submit({ tin: '0000000000000' }).expect(400);
   await submit({ price: 41 }).expect(409, { error: 'PRICE_CHANGED' });
   balance = 0;
   await submit().expect(402);
   expect(global.fetch).not.toHaveBeenCalled();
   expect(payForService).not.toHaveBeenCalled();
+});
+
+test('uses the same query parameter for a 10-digit NID and builds the report for the returned TIN', async () => {
+  const nid = '2222222222';
+  const returnedTin = '333333333333';
+  const providerResponse = { requestId: 'mock-nid', data: { TIN: returnedTin, nameEn: 'Sample Taxpayer' } };
+  const mockFetch = async () => reply(providerResponse);
+  await expect(lookupBdxTin({ tin: nid, apiKey: 'test-only-key' }, mockFetch)).resolves.toMatchObject({
+    record: { tin: returnedTin }, charged: true,
+  });
+  global.fetch.mockResolvedValueOnce(reply(providerResponse));
+  const first = await submit({ tin: '২২২২২২২২২২' }).expect(200);
+  await submit({ tin: nid }).expect(200, first.body);
+  expect(global.fetch).toHaveBeenCalledTimes(1);
+  expect(global.fetch.mock.calls[0][0].searchParams.get('tin')).toBe(nid);
+  expect(payForService).toHaveBeenCalledTimes(1);
+  expect(JSON.stringify(savedOrder)).not.toContain(nid);
+  expect(decryptReport(storageKey(), id, savedPdf).subarray(0, 5).toString()).toBe('%PDF-');
+});
+
+test('rejects a different NID or a malformed TIN in the provider result', async () => {
+  const nid = '2222222222';
+  global.fetch
+    .mockResolvedValueOnce(reply({ data: { TIN: '333333333333', nationalId: '4444444444', name: 'Sample' } }, 200, false))
+    .mockResolvedValueOnce(reply({ data: { TIN: nid, name: 'Sample' } }, 200, false));
+  await submit({ tin: nid }).expect(502, { error: 'PROVIDER_UNAVAILABLE' });
+  await submit({ tin: nid }).expect(502, { error: 'PROVIDER_UNAVAILABLE' });
+  expect(payForService).not.toHaveBeenCalled();
+  expect(savedPdf).toBeUndefined();
 });
 
 test('a free miss and a mismatched result do not deliver a report or charge', async () => {

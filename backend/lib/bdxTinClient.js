@@ -3,15 +3,21 @@
 const ENDPOINT = 'https://api.bd-x.com/api-portal/api/tin-download.php';
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 const TIN_PATTERN = /^\d{12}$/;
+const SHORT_NID_PATTERN = /^\d{10}$/;
 const fields = [
   'fatherName', 'motherName', 'presentAddress', 'permanentAddress',
   'previousTIN', 'taxZone', 'taxCircle', 'status', 'date',
 ];
 
-function normalizeTin(value) {
-  if (typeof value !== 'string') return '';
-  const normalized = value.trim().replace(/[০-৯]/g, digit => String(digit.charCodeAt(0) - 0x09e6));
-  return TIN_PATTERN.test(normalized) ? normalized : '';
+function normalizeDigits(value) {
+  return typeof value === 'string'
+    ? value.trim().replace(/[০-৯]/g, digit => String(digit.charCodeAt(0) - 0x09e6))
+    : '';
+}
+
+function normalizeTinIdentifier(value) {
+  const normalized = normalizeDigits(value);
+  return TIN_PATTERN.test(normalized) || SHORT_NID_PATTERN.test(normalized) ? normalized : '';
 }
 
 function clean(value, limit = 180) {
@@ -44,7 +50,7 @@ async function readJson(response) {
 
 async function lookupBdxTin({ tin, apiKey }, fetchImpl = globalThis.fetch) {
   const unavailable = { error: 'PROVIDER_UNAVAILABLE', charged: false };
-  if (normalizeTin(tin) !== tin || !tin || !apiKey) return unavailable;
+  if (normalizeTinIdentifier(tin) !== tin || !tin || !apiKey) return unavailable;
 
   let reply, payload;
   try {
@@ -71,10 +77,16 @@ async function lookupBdxTin({ tin, apiKey }, fetchImpl = globalThis.fetch) {
   if (!reply.ok || payload.http_status !== 200) return { ...unavailable, charged };
 
   const data = payload.response?.data ?? payload.response;
-  const returnedTin = normalizeTin(data?.TIN ?? data?.tin);
+  const returnedTin = normalizeDigits(data?.TIN ?? data?.tin);
   const name = clean(data?.nameEn) || clean(data?.name);
-  if (returnedTin !== tin || !name) return { ...unavailable, charged };
-  const record = { tin, name };
+  if (!TIN_PATTERN.test(returnedTin) || !name) return { ...unavailable, charged };
+  if (SHORT_NID_PATTERN.test(tin)) {
+    const returnedNid = data.nationalId ?? data.nid ?? data.NID;
+    if (returnedNid != null && normalizeDigits(returnedNid) !== tin) return { ...unavailable, charged };
+  } else if (returnedTin !== tin) {
+    return { ...unavailable, charged };
+  }
+  const record = { tin: returnedTin, name };
   for (const field of fields) record[field] = clean(data[field], field.endsWith('Address') ? 600 : 180);
   // The certificate QR carries the date of birth (sample QR line 2).
   // The provider may name it dob / dateOfBirth / birthDate; pick it up
@@ -85,4 +97,4 @@ async function lookupBdxTin({ tin, apiKey }, fetchImpl = globalThis.fetch) {
   return { record, charged };
 }
 
-module.exports = { lookupBdxTin, normalizeTin };
+module.exports = { lookupBdxTin, normalizeTinIdentifier };
