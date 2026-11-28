@@ -123,6 +123,10 @@ function drawServerCopyReport(doc, record, qr) {
   row(498, 498, 'লিঙ্গ', value(record.gender), 'hind', 'hind');
   row(519, 519, 'ধর্ম', value(record.religion), 'hind', 'hind');
   row(541, 541, 'পেশা', value(record.profession), 'hind', 'hind');
+  // The portal background draws a fourth (empty) row under পেশা, but the
+  // record has no fourth field here — hide that empty cell so the section
+  // closes right under পেশা (the row's own bottom border at y=558 stays).
+  doc.rect(COPY.labelX, 559, COPY.tableRight - COPY.labelX, 20).fill('#ffffff');
 
   // Addresses wrap inside the template's cells (9pt, 12pt line pitch).
   function address(title, y, text) {
