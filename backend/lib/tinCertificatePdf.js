@@ -93,7 +93,9 @@ function qrPayload(record, certDate, dobDate) {
     `Zone : ${clean(record.taxZone)}`,
     `Circle : ${circleShort(record)}`,
   );
-  return lines.join('\n');
+  // The NBR certificate's own QR uses CRLF line endings and a trailing
+  // CRLF, exactly like the sample's QR payload.
+  return lines.join('\r\n') + '\r\n';
 }
 
 async function buildTinCertificatePdf(record, now = new Date()) {
@@ -101,8 +103,11 @@ async function buildTinCertificatePdf(record, now = new Date()) {
   const dobDate = parseDate(record.dateOfBirth);
   const circle = circleText(record);
   const zone = zoneText(record);
+  // Mask 6 is the sample QR's mask; using it keeps the module pattern
+  // as close to the sample's as this encoder allows.
   const qr = await QRCode.toBuffer(qrPayload(record, certDate, dobDate), {
     errorCorrectionLevel: 'H',
+    maskPattern: 6,
     margin: 0,
     width: 600,
   });
@@ -185,22 +190,23 @@ async function buildTinCertificatePdf(record, now = new Date()) {
       .text(`Date : ${longDate(certDate, clean(record.date))}`, LEFT, 504.7, { width: TEXT_W });
 
     // QR code, 150 x 150 at (225, 520.6), with the red NBR mark in the centre.
-    // The sample's mark is three separate red squares (N, B, R) with small
-    // gaps — kept deliberately small so it never blocks the scan
-    // (error correction H already tolerates it) and never reads as big.
+    // The sample's mark is three separate 5.2 x 5.0 pt red squares (N, B, R),
+    // 0.65 pt apart — the sample's exact size, not one bar. Keep it that
+    // small so it never blocks the scan (error correction H already
+    // tolerates it).
     doc.image(qr, 225, 520.6, { width: 150, height: 150 });
     const qrCx = 225 + 75;
     const qrCy = 520.6 + 75;
-    const markW = 4.4;
-    const markH = 4.3;
-    const markGap = 0.55;
+    const markW = 5.2;
+    const markH = 5.0;
+    const markGap = 0.65;
     const markTotal = markW * 3 + markGap * 2;
     let markX = qrCx - markTotal / 2;
     const markY = qrCy - markH / 2;
     for (const letter of ['N', 'B', 'R']) {
       doc.rect(markX, markY, markW, markH).fill('#e11d2e');
-      doc.font('arial-bold').fontSize(3.4).fillColor('#ffffff')
-        .text(letter, markX, markY + 0.4, { width: markW, align: 'center' });
+      doc.font('arial-bold').fontSize(4).fillColor('#ffffff')
+        .text(letter, markX, markY + 0.5, { width: markW, align: 'center' });
       markX += markW + markGap;
     }
     doc.fillColor('#000000');
