@@ -103,9 +103,11 @@ async function buildTinCertificatePdf(record, now = new Date()) {
   const dobDate = parseDate(record.dateOfBirth);
   const circle = circleText(record);
   const zone = zoneText(record);
-  // Mask 6 is the sample QR's mask; using it keeps the module pattern
-  // as close to the sample's as this encoder allows.
-  const qr = await QRCode.toBuffer(qrPayload(record, certDate, dobDate), {
+  // Mask 6 is the sample QR's mask. The payload must be one byte-mode
+  // segment — the library's auto-segmentation splits it into 6 mixed
+  // segments, which changes the module pattern; a single byte segment
+  // reproduces the sample's matrix exactly.
+  const qr = await QRCode.toBuffer([{ data: qrPayload(record, certDate, dobDate), mode: 'byte' }], {
     errorCorrectionLevel: 'H',
     maskPattern: 6,
     margin: 0,
