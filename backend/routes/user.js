@@ -216,7 +216,9 @@ router.post('/orders', async (req, res) => {
       `SELECT * FROM services WHERE id = $1 AND status = 'active'`, [service_id]);
     if (!sr.rows.length) return res.status(404).json({ error: 'SERVICE_NOT_FOUND' });
     const service = sr.rows[0];
-    if (autoNidEngineIds.includes(service.engine_id)) return res.status(400).json({ error: 'USE_ENGINE' });
+    if (autoNidEngineIds.includes(service.engine_id) || service.engine_id === 'auto-tin') {
+      return res.status(400).json({ error: 'USE_ENGINE' });
+    }
 
     if (promo_code && service.engine_id) return res.status(400).json({error:'USE_ENGINE_PROMO'});
     const eff = await effectivePrice(req.user.id, service);

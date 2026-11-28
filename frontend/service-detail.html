@@ -131,7 +131,7 @@
 </div>
 
 <script src="/js/app.js?v=22"></script>
-<script src="/js/service-navigation.js?v=20261127-2"></script>
+<script src="/js/service-navigation.js?v=20261128-1"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -271,6 +271,7 @@ async function init(){
     else if (s.engine_id === 'qr-photo-verify') engineLabel = '⚡ এখনই QR + ছবি যাচাই করুন →';
     else if (s.engine_id === 'nid-server-copy') engineLabel = '⚡ এখনই NID সার্ভার কপি নিন →';
     else if (s.engine_id === 'nid-auto-server-copy') engineLabel = 'তিনটি সার্ভার কপি থেকে বেছে নিন →';
+    else if (s.engine_id === 'auto-tin') engineLabel = 'TIN যাচাই করুন →';
     else if (s.engine_id === 'nid-server-report') { engineUrl = '/nid-server-report.html'; engineLabel = '⚡ এখনই সাইন টু সার্ভার কপি নিন →'; }
     else if (s.engine_id === 'nid-smart-card') { engineUrl = '/nid-smart-card.html'; engineLabel = '⚡ এখনই স্মার্ট কার্ড নিন →'; }
 

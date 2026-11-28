@@ -2,6 +2,7 @@
 (function () {
   'use strict';
   const enginePages = Object.freeze({
+    'auto-tin': '/auto-tin.html',
     'bdris-apply': '/bdris-apply.html',
     'birth-final': '/birth-final.html',
     'death-final': '/death-final.html',

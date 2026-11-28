@@ -8,6 +8,7 @@ describe('chargeRuleFor (audit #49)', () => {
   test('every known engine_id maps to its true rule', () => {
     expect(chargeRuleFor({ engine_id: 'bdris-apply' })).toEqual(
       { rule: 'upfront', label: 'আগে কাটবে', detail: 'জমা দেওয়ার সময়' });
+    expect(chargeRuleFor({ engine_id: 'auto-tin' }).rule).toBe('verification');
     for (const id of ['birth-final', 'death-final', 'qr-photo-verify']) {
       expect(chargeRuleFor({ engine_id: id }).rule).toBe('success');
       expect(chargeRuleFor({ engine_id: id }).detail).toBe('যাচাই সফল হলেই');
@@ -27,7 +28,7 @@ describe('chargeRuleFor (audit #49)', () => {
     // Audit #14 — land-search left the set with its route (audit #6);
     // birth/death carry their directory names now.
     expect(Object.keys(RULES).sort()).toEqual([
-      'bdris-apply', 'birth-final', 'death-final', 'land-khatian',
+      'auto-tin', 'bdris-apply', 'birth-final', 'death-final', 'land-khatian',
       'land-mouza-map', 'land-mouza-value', 'land-scan',
       'land-verify', 'nid-auto-server-copy', 'nid-replica', 'nid-server-copy', 'qr-photo-verify',
     ]);

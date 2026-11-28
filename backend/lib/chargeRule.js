@@ -34,6 +34,7 @@ const RULES = {
   'nid-replica': ['success', 'কার্ড তৈরি হলেই'],
   'nid-server-copy': ['success', 'প্রতিটি সফল ডাউনলোডে'],
   'nid-auto-server-copy': ['success', 'নির্বাচিত রিপোর্ট তৈরি হলেই'],
+  'auto-tin': ['verification', 'তথ্য মিললে বা তথ্যদাতার ফি কাটা নিশ্চিত হলে'],
   'land-scan': ['success', 'রেকর্ড পেলেই'],
   'land-verify': ['success', 'রেকর্ড পেলেই'],
   'land-mouza-value': ['success', 'রিপোর্ট তৈরি হলেই'],
@@ -45,6 +46,7 @@ const RULES = {
 const LABELS = {
   upfront: 'আগে কাটবে',
   success: 'সফল হলেই কাটবে',
+  verification: 'যাচাইয়ের চার্জ',
 };
 
 function chargeRuleFor(service) {

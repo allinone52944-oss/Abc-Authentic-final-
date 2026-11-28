@@ -3372,6 +3372,7 @@ window.AdmSvc = {
           '<option value="sanad">সনদ ও সার্টিফিকেট ইঞ্জিন</option>' +
           '<option value="nid-server-copy">এনআইডি সার্ভার কপি ইঞ্জিন (Portal Login)</option>' +
           '<option value="nid-auto-server-copy">অটো NID সার্ভার কপি (SV Backup)</option>' +
+          '<option value="auto-tin">অটো TIN যাচাই</option>' +
           '<option value="nid-auto-server-copy-premium">অটো NID সার্ভার কপি (Premium)</option>' +
           '<option value="nid-auto-server-copy-half">অটো NID সার্ভার কপি (Half)</option>' +
           '<option value="nid-server-report">সাইন টু সার্ভার কপি ইঞ্জিন (PDF Upload)</option>' +
@@ -3452,6 +3453,7 @@ window.AdmSvc = {
           '<option value="sanad"' + (s.engine_id === 'sanad' ? ' selected' : '') + '>সনদ ও সার্টিফিকেট ইঞ্জিন</option>' +
           '<option value="nid-server-copy"' + (s.engine_id === 'nid-server-copy' ? ' selected' : '') + '>এনআইডি সার্ভার কপি ইঞ্জিন (Portal Login)</option>' +
           '<option value="nid-auto-server-copy"' + (s.engine_id === 'nid-auto-server-copy' ? ' selected' : '') + '>অটো NID সার্ভার কপি (SV Backup)</option>' +
+          '<option value="auto-tin"' + (s.engine_id === 'auto-tin' ? ' selected' : '') + '>অটো TIN যাচাই</option>' +
           '<option value="nid-auto-server-copy-premium"' + (s.engine_id === 'nid-auto-server-copy-premium' ? ' selected' : '') + '>অটো NID সার্ভার কপি (Premium)</option>' +
           '<option value="nid-auto-server-copy-half"' + (s.engine_id === 'nid-auto-server-copy-half' ? ' selected' : '') + '>অটো NID সার্ভার কপি (Half)</option>' +
           '<option value="nid-server-report"' + (s.engine_id === 'nid-server-report' ? ' selected' : '') + '>সাইন টু সার্ভার কপি ইঞ্জিন (PDF Upload)</option>' +

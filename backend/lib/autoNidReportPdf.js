@@ -116,11 +116,21 @@ function drawPremiumReport(doc, label, record) {
 }
 
 function buildAutoNidReportPdf({ type, label, record }) {
+  return buildVerificationPdf({ type, label, record });
+}
+
+function buildAutoTinReportPdf(record) {
+  return buildVerificationPdf({ type: 'tin', label: 'স্বতন্ত্র তথ্য যাচাই প্রতিবেদন', record });
+}
+
+function buildVerificationPdf({ type, label, record }) {
+  const tin = type === 'tin';
+  const title = tin ? 'TIN তথ্য যাচাই প্রতিবেদন' : 'এনআইডি তথ্য যাচাই প্রতিবেদন';
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: 'A4',
       margin: 0,
-      info: { Title: 'All In One - NID Verification Report', Author: 'All In One' },
+      info: { Title: 'All In One - ' + (tin ? 'TIN' : 'NID') + ' Verification Report', Author: 'All In One' },
     });
     const chunks = [];
     doc.on('data', (chunk) => chunks.push(chunk));
@@ -150,7 +160,7 @@ function buildAutoNidReportPdf({ type, label, record }) {
       doc.font('hind-bold').fontSize(12).fillColor('#d4eee2')
         .text('All In One', MARGIN + 22, 55, { width: pageWidth - 44 });
       doc.font('hind-bold').fontSize(24).fillColor('#ffffff')
-        .text('এনআইডি তথ্য যাচাই প্রতিবেদন', MARGIN + 22, 76, { width: pageWidth - 44 });
+        .text(title, MARGIN + 22, 76, { width: pageWidth - 44 });
       doc.font('hind').fontSize(12).fillColor('#d4eee2')
         .text(label, MARGIN + 22, 112, { width: pageWidth - 44 });
 
@@ -191,7 +201,17 @@ function buildAutoNidReportPdf({ type, label, record }) {
         .moveTo(MARGIN, cursorY).lineTo(MARGIN + pageWidth, cursorY).stroke();
     }
 
-    const identity = [
+    const identity = (tin ? [
+      ['TIN নম্বর', record.tin],
+      ['নাম', record.name],
+      ['পিতার নাম', record.fatherName],
+      ['মাতার নাম', record.motherName],
+      ['পূর্বের TIN', record.previousTIN],
+      ['কর অঞ্চল', record.taxZone],
+      ['কর সার্কেল', record.taxCircle],
+      ['স্থিতি', record.status],
+      ['তারিখ', record.date],
+    ] : [
       ['এনআইডি নম্বর', record.nationalId],
       ['পিন নম্বর', record.pin !== record.nationalId ? record.pin : ''],
       ['জন্মতারিখ', record.dateOfBirth],
@@ -200,7 +220,7 @@ function buildAutoNidReportPdf({ type, label, record }) {
       ['পিতার নাম', record.fatherName],
       ['মাতার নাম', record.motherName],
       ['লিঙ্গ', record.gender],
-    ].filter(([, value]) => value);
+    ]).filter(([, value]) => value);
     const addresses = [
       ['বর্তমান ঠিকানা', record.presentAddress],
       ['স্থায়ী ঠিকানা', record.permanentAddress],
@@ -234,4 +254,4 @@ function buildAutoNidReportPdf({ type, label, record }) {
   });
 }
 
-module.exports = { buildAutoNidReportPdf };
+module.exports = { buildAutoNidReportPdf, buildAutoTinReportPdf };

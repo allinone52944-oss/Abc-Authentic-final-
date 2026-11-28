@@ -14,6 +14,12 @@ function fingerprint(key, userId, { type, nid, dob, price }) {
     .digest('hex');
 }
 
+function tinFingerprint(key, userId, { tin, price }) {
+  return crypto.createHmac('sha256', key)
+    .update(JSON.stringify(['auto-tin-request-v1', userId, tin, price]))
+    .digest('hex');
+}
+
 function encryptReport(key, orderId, pdf) {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
@@ -29,4 +35,4 @@ function decryptReport(key, orderId, encrypted) {
   return Buffer.concat([decipher.update(encrypted.subarray(28)), decipher.final()]);
 }
 
-module.exports = { storageKey, fingerprint, encryptReport, decryptReport };
+module.exports = { storageKey, fingerprint, tinFingerprint, encryptReport, decryptReport };
