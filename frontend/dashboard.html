@@ -966,54 +966,62 @@
 }
 .dashboard-coupon-link:focus-visible { outline: 2px solid #efb541; outline-offset: 2px; }
 .dashboard-orders-empty { padding: 12px 0; color: #52645b; font-size: 13px; }
-.dashboard-telegram {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  margin-block: 12px 16px;
-  padding: 14px;
-  border: 1px solid #cbded4;
-  border-radius: 15px;
-  background: #f3f8f4;
+#telegramInviteDialog {
+  width: min(calc(100% - 28px), 410px);
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid #ceded3;
+  border-radius: 22px;
+  background: #fff;
   color: #103d2e;
+  box-shadow: 0 22px 74px #062e2750;
+}
+#telegramInviteDialog[open] { animation: telegram-in .28s cubic-bezier(.2,.8,.2,1) both; }
+#telegramInviteDialog::backdrop { background: #02271ebb; }
+#telegramInviteDialog[open]::backdrop { animation: telegram-fade .24s ease-out both; }
+.dashboard-telegram {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 30px 22px 22px;
+  text-align: center;
+  background: radial-gradient(ellipse at 50% -25%, #d8f2e4, #fff 66%);
 }
 .dashboard-telegram-icon {
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  background: #0a503b;
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #168760, #064635);
   color: #fff;
-  font-size: 21px;
+  font-size: 27px;
+  box-shadow: 0 7px 18px #07543d35;
 }
-.dashboard-telegram strong { display: block; font-size: 15px; }
-.dashboard-telegram p { margin: 3px 0 0; color: #3d6053; font-size: 13px; line-height: 1.5; }
-.dashboard-telegram-actions { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
-.dashboard-telegram-join, .dashboard-telegram-dismiss {
+.dashboard-telegram h2 { margin: 0; font-size: clamp(20px, 5vw, 25px); line-height: 1.35; }
+.dashboard-telegram p { margin: 0; color: #385e51; font-size: 14px; line-height: 1.6; }
+.dashboard-telegram-actions { display: grid; gap: 4px; width: 100%; margin-top: 4px; }
+.dashboard-telegram :is(a, button) {
   display: inline-flex; align-items: center; justify-content: center; min-height: 44px;
-  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+  font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
 }
 .dashboard-telegram-join {
-  padding: 5px 12px; border-radius: 8px; background: #07543d; color: #fff; text-decoration: none;
+  border-radius: 11px; background: #07543d; color: #fff; text-decoration: none;
 }
-.dashboard-telegram-dismiss {
-  padding: 5px 3px; border: 0; background: transparent; color: #35594e;
+.dashboard-telegram-dismiss, .dashboard-telegram-close { border: 0; background: transparent; color: #35594e; }
+.dashboard-telegram .dashboard-telegram-close {
+  position: absolute; top: 6px; right: 8px; width: 44px; border-radius: 50%; font-size: 20px;
 }
 .dashboard-telegram :is(a, button):focus-visible { outline: 2px solid #ac7110; outline-offset: 2px; }
-@media (min-width: 1024px) {
-  .dashboard-telegram { grid-template-columns: 42px minmax(0, 1fr) auto; }
-  .dashboard-telegram-actions { grid-column: auto; }
+@keyframes telegram-in {
+  from { opacity: 0; transform: translateY(14px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
-@media (max-width: 420px) {
-  .dashboard-telegram-actions {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-  }
-  .dashboard-telegram-join { padding-inline: 6px; }
+@keyframes telegram-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  #telegramInviteDialog[open], #telegramInviteDialog[open]::backdrop { animation: none; }
 }
 </style>
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
@@ -1194,7 +1202,6 @@
       </div>
 
       <div class="card notices-panel">
-        <div data-telegram-invite-slot></div>
         <h3>
           <span>🔔 জরুরি নোটিশ বোর্ড</span>
           <a href="#" onclick="showNotices();return false;" style="color:#2563eb;font-weight:700;font-size:13px;text-decoration:none;">সব নোটিশ</a>
@@ -1291,8 +1298,6 @@
     <!-- Mobile Notice Alert -->
     <div id="mNotices" class="dashboard-mobile-notice" hidden></div>
 
-    <div data-telegram-invite-slot></div>
-
     <!-- Mobile Banner Strip -->
     <div class="bn-strip" id="bnStripM" style="display:none;"></div>
 
@@ -1340,19 +1345,18 @@
   <div class="m-tab" id="mAdminTab" style="display:none;" tabindex="0" role="button" onclick="location.href='/admin.html'"><div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>এডমিন</div>
 </div>
 
-<template id="telegramInviteTemplate">
-  <section class="dashboard-telegram" aria-label="All In One টেলিগ্রাম গ্রুপ">
+<dialog id="telegramInviteDialog" aria-labelledby="telegramInviteTitle" aria-describedby="telegramInviteDescription">
+  <div class="dashboard-telegram">
+    <button class="dashboard-telegram-close" type="button" aria-label="বন্ধ করুন" autofocus>×</button>
     <span class="dashboard-telegram-icon" aria-hidden="true">➤</span>
-    <div>
-      <strong>টেলিগ্রামে All In One আপডেট</strong>
-      <p>সেবার খবর ও কাজের আপডেট এক জায়গায় পাবেন।</p>
-    </div>
+    <h2 id="telegramInviteTitle">টেলিগ্রামে All In One আপডেট</h2>
+    <p id="telegramInviteDescription">নতুন সেবার খবর ও কাজের আপডেট এক জায়গায় পাবেন।</p>
     <div class="dashboard-telegram-actions">
       <a class="dashboard-telegram-join" href="https://t.me/+vT8HVTCZ2zFmNjRl" target="_blank" rel="noopener noreferrer">গ্রুপে যোগ দিন ↗</a>
       <button class="dashboard-telegram-dismiss" type="button">আর দেখাবেন না</button>
     </div>
-  </section>
-</template>
+  </div>
+</dialog>
 <script src="/js/app.js?v=26"></script>
 <script src="/banners/render.js?v=20261111-3"></script>
 <script>
@@ -1599,30 +1603,31 @@ const GreetVoice = (() => {
   return { maybePlay, isConfigured, fileForUser, play, stop, initUI, isPlaying, handleManualClick };
 })();
 
-async function loadTelegramInvite(userId) {
-  if (!userId) return;
-  const slots = [...document.querySelectorAll('[data-telegram-invite-slot]')];
-  const template = document.getElementById('telegramInviteTemplate');
-  if (!template || slots.some(slot => slot.firstElementChild)) return;
+let telegramInviteShown = false;
+function showTelegramInvite(user) {
+  const userId = user?.id;
+  const dialog = document.getElementById('telegramInviteDialog');
+  if (!userId || !dialog || typeof dialog.showModal !== 'function') return false;
   const key = 'abc_telegram_invite_hidden:' + userId;
-  try { if (localStorage.getItem(key) === '1') return; } catch (_) {}
-
   try {
-    const response = await ABC.api('/user/telegram-joined', { timeout: 4000, skip503Retry: true });
-    if (!response.ok || (await response.json()).joined !== false) return;
-  } catch (_) { return; }
+    if (sessionStorage.getItem('abc_telegram_invite_login') !== String(userId)) return false;
+    sessionStorage.removeItem('abc_telegram_invite_login');
+  } catch (_) { return false; }
+  if (user.telegram_joined === true) return false;
+  try { if (localStorage.getItem(key) === '1') return false; } catch (_) {}
+  if (document.querySelector('dialog[open], .bn-popup-overlay')) return false;
 
   function dismiss() {
     try { localStorage.setItem(key, '1'); } catch (_) {}
-    for (const slot of slots) slot.replaceChildren();
+    dialog.close();
   }
 
-  for (const slot of slots) {
-    const card = template.content.cloneNode(true);
-    card.querySelector('.dashboard-telegram-join').addEventListener('click', () => setTimeout(dismiss, 0));
-    card.querySelector('.dashboard-telegram-dismiss').addEventListener('click', dismiss);
-    slot.replaceChildren(card);
-  }
+  dialog.querySelector('.dashboard-telegram-close').addEventListener('click', () => dialog.close());
+  dialog.querySelector('.dashboard-telegram-join').addEventListener('click', () => setTimeout(dismiss, 0));
+  dialog.querySelector('.dashboard-telegram-dismiss').addEventListener('click', dismiss);
+  dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+  dialog.showModal();
+  return true;
 }
 
 let dashboardLoading = false;
@@ -1693,7 +1698,7 @@ async function init() {
   loadRecentOrders();
   loadServices();
   loadNotices();
-  loadTelegramInvite(user.id);
+  telegramInviteShown = showTelegramInvite(user);
   loadBanners();
   loadSettings();
   setupWhatsApp();
@@ -1959,7 +1964,7 @@ async function loadBanners() {
       if (ms) { ms.style.display = 'block'; BannerRender.carousel(ms, stripBanners, 6000); requestAnimationFrame(()=>ms.classList.add('show')); }
     }
     if (popupBanners.length && window.BannerRender && typeof BannerRender.showPopup === 'function') {
-      BannerRender.showPopup(popupBanners[0]);
+      if (!telegramInviteShown) BannerRender.showPopup(popupBanners[0]);
     }
   } catch (e) {
     // Audit #76 — like loadNotices: a failed banner load shows a

@@ -649,6 +649,13 @@ async function doLogin() {
     // the user dashboard as before.
     const explicitNext = new URLSearchParams(location.search).get('next');
     const next = explicitNext || (d.user && d.user.role === 'admin' ? '/admin.html' : '/dashboard.html');
+    try {
+      if (d.user?.id && d.user.role !== 'admin') {
+        sessionStorage.setItem('abc_telegram_invite_login', String(d.user.id));
+      } else {
+        sessionStorage.removeItem('abc_telegram_invite_login');
+      }
+    } catch (_) {}
     // Success path used to leave the button disabled: on browser-back /
     // BFCache restore the page came back frozen ("⏳ যাচাই করা হচ্ছে...").
     // Re-enable before navigating, and reset again on pageshow.

@@ -6,75 +6,74 @@ const vm = require('node:vm');
 
 const frontend = path.join(__dirname, '../../../frontend');
 const dashboard = fs.readFileSync(path.join(frontend, 'dashboard.html'), 'utf8');
-const app = fs.readFileSync(path.join(frontend, 'js/app.js'), 'utf8');
+const login = fs.readFileSync(path.join(frontend, 'login.html'), 'utf8');
 
-function fixture(reply = { ok: true, json: async () => ({ joined: false }) }) {
+function fixture({ joined = false, loggedIn = 'preview', overlay = false } = {}) {
   const preferences = new Map();
-  const slots = Array.from({ length: 2 }, () => ({
-    firstElementChild: null,
-    replaceChildren(card) { this.firstElementChild = card || null; },
-  }));
-  const template = {
-    content: {
-      cloneNode() {
-        const controls = {};
-        return {
-          controls,
-          querySelector(selector) {
-            return { addEventListener(name, handler) { controls[selector] = handler; } };
-          },
-        };
-      },
-    },
+  const pending = new Map([['abc_telegram_invite_login', loggedIn]]);
+  const controls = {};
+  const dialog = {
+    querySelector: selector => ({ addEventListener: (_, listener) => { controls[selector] = listener; } }),
+    addEventListener: jest.fn(),
+    showModal: jest.fn(),
+    close: jest.fn(),
   };
   const context = {
-    document: { querySelectorAll: () => slots, getElementById: () => template },
-    ABC: { api: jest.fn().mockResolvedValue(reply) },
-    localStorage: {
-      getItem: key => preferences.get(key),
-      setItem: (key, value) => preferences.set(key, value),
-    },
+    document: { getElementById: () => dialog, querySelector: () => overlay ? {} : null },
+    localStorage: { getItem: key => preferences.get(key), setItem: (key, value) => preferences.set(key, value) },
+    sessionStorage: { getItem: key => pending.get(key), removeItem: key => pending.delete(key) },
     setTimeout: callback => callback(),
   };
-  const start = dashboard.indexOf('async function loadTelegramInvite(');
+  const start = dashboard.indexOf('function showTelegramInvite(');
   const end = dashboard.indexOf('let dashboardLoading', start);
   vm.runInNewContext(dashboard.slice(start, end), context);
-  return { ...context, slots, preferences };
+  return { show: (id = 'preview') => context.showTelegramInvite({ id, telegram_joined: joined }), preferences, pending, dialog, controls };
 }
 
-test('the dashboard has a regular-flow invite with an explicit opt-out', () => {
-  expect(dashboard.match(/<div data-telegram-invite-slot>/g)).toHaveLength(2);
+test('successful customer login prepares the accessible dashboard popup', () => {
+  expect(login).toContain("sessionStorage.setItem('abc_telegram_invite_login', String(d.user.id))");
+  expect(dashboard).toContain('<dialog id="telegramInviteDialog" aria-labelledby="telegramInviteTitle"');
+  expect(dashboard).toContain('@media (prefers-reduced-motion: reduce)');
   expect(dashboard).toContain('আর দেখাবেন না');
-  expect(dashboard).toContain('target="_blank" rel="noopener noreferrer"');
-  expect(app).not.toContain('abc-telegram-banner');
+  expect(dashboard).not.toContain('data-telegram-invite-slot');
+  expect(dashboard).toContain('if (!telegramInviteShown) BannerRender.showPopup');
 });
 
-test('opening the group hides both cards without recording membership', async () => {
-  const { loadTelegramInvite, slots, ABC, preferences } = fixture();
-  await loadTelegramInvite('preview');
-  slots[0].firstElementChild.controls['.dashboard-telegram-join']();
-  expect(slots.map(slot => slot.firstElementChild)).toEqual([null, null]);
+test('the login marker is consumed once per dashboard entry', () => {
+  const { show, dialog } = fixture();
+  expect(show()).toBe(true);
+  expect(show()).toBe(false);
+  expect(dialog.showModal).toHaveBeenCalledTimes(1);
+});
+
+test('close is temporary and opening the group hides future invites without recording membership', () => {
+  const { show, dialog, controls, pending, preferences } = fixture();
+  show();
+  controls['.dashboard-telegram-close']();
+  expect(dialog.close).toHaveBeenCalledTimes(1);
+  expect(preferences.size).toBe(0);
+  pending.set('abc_telegram_invite_login', 'preview');
+  show();
+  controls['.dashboard-telegram-join']();
   expect(preferences.get('abc_telegram_invite_hidden:preview')).toBe('1');
-  expect(ABC.api).toHaveBeenCalledTimes(1);
-  expect(ABC.api).toHaveBeenCalledWith('/user/telegram-joined', expect.not.objectContaining({ method: 'POST' }));
+  expect(dashboard).not.toContain('/user/telegram-joined');
 });
 
-test('opt-out survives reloads for this account and leaves other accounts eligible', async () => {
-  const { loadTelegramInvite, slots, ABC } = fixture();
-  await loadTelegramInvite('customer-a');
-  slots[1].firstElementChild.controls['.dashboard-telegram-dismiss']();
-  await loadTelegramInvite('customer-a');
-  expect(slots.map(slot => slot.firstElementChild)).toEqual([null, null]);
-  expect(ABC.api).toHaveBeenCalledTimes(1);
-  await loadTelegramInvite('customer-b');
-  expect(slots.every(slot => slot.firstElementChild)).toBe(true);
+test('opt-out applies to the same account and leaves other accounts eligible', () => {
+  const { show, controls, dialog, pending } = fixture();
+  show();
+  controls['.dashboard-telegram-dismiss']();
+  pending.set('abc_telegram_invite_login', 'preview');
+  expect(show()).toBe(false);
+  pending.set('abc_telegram_invite_login', 'other');
+  expect(show('other')).toBe(true);
+  expect(dialog.showModal).toHaveBeenCalledTimes(2);
 });
 
-test.each([
-  { ok: true, json: async () => ({ joined: true }) },
-  { ok: false, status: 503 },
-])('keeps the invite hidden when appropriate (%p)', async reply => {
-  const { loadTelegramInvite, slots } = fixture(reply);
-  await loadTelegramInvite('preview');
-  expect(slots.map(slot => slot.firstElementChild)).toEqual([null, null]);
-});
+test.each([{ joined: true }, { loggedIn: 'other' }, { overlay: true }])(
+  'keeps the popup hidden when appropriate (%p)', settings => {
+    const { show, dialog } = fixture(settings);
+    expect(show()).toBe(false);
+    expect(dialog.showModal).not.toHaveBeenCalled();
+  }
+);
