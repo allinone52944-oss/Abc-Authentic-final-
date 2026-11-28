@@ -36,6 +36,27 @@ const asUser = (req) => req.set('Authorization', 'Bearer ' + auth.signAccess({ i
 beforeEach(() => { db.__reset(); });
 
 describe('GET /api/history — deliverable PDF only (R1 follow-up)', () => {
+  test.each([
+    ['failed', 42, false],
+    ['refunded', 0, true],
+  ])('shows %s paid TIN lookups with their charge state and no file', async (status, chargedAmount, refunded) => {
+    db.__routeQuery([
+      ['FROM orders o LEFT JOIN services', (sql, params) => {
+        expect(params[0]).toBe('u1');
+        expect(sql).toMatch(/o\.status IN \('failed', 'refunded'\)[\s\S]+o\.data->>'auto_tin_paid_failure' = 'true'/);
+        return { rows: [{
+          id: 'tin-attempt', engine_id: 'auto-tin', service_name: 'Auto TIN',
+          created_at: '2026-11-28T09:00:00Z', status, price: '42.00', documents: [], tin_paid_failure: true,
+        }] };
+      }],
+    ]);
+    const { body } = await asUser(request(app()).get('/api/history')).expect(200);
+    expect(body.items).toEqual([{
+      kind: 'engine', id: 'tin-attempt', title: 'Auto TIN', created_at: '2026-11-28T09:00:00Z',
+      documents: [], tin_failure: { chargedAmount, refunded },
+    }]);
+  });
+
   test('(a) a record with only a failure receipt shows NO PDF download link', async () => {
     db.__routeQuery([
       ['FROM engine_jobs', { rows: [

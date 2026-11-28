@@ -65,7 +65,6 @@ function mockQueries({ services = serviceFixture(), balance = 100, acquired = tr
       const row = orders.get(user + ':' + key);
       return { rows: row ? [row] : [] };
     }],
-    ['FOR KEY SHARE', (_, [id]) => ({ rows: [{ id }] })],
     ['FROM services s', typeof services === 'function' ? services : { rows: services }],
     ['SELECT balance FROM users', { rows: [{ balance }] }],
     ['INSERT INTO orders', (sql, params) => {
@@ -262,7 +261,9 @@ test('Premium locks quoted service and covered funds before calling the provider
   lookupBdxNid.mockImplementationOnce(async () => {
     const providerCall = lookupBdxNid.mock.invocationCallOrder[0];
     const queryCalls = db.__client.query.mock.calls;
-    for (const lock of [/FROM services[\s\S]+FOR KEY SHARE/, /SELECT balance FROM users[\s\S]+FOR UPDATE/]) {
+    expect(queryCalls.find(([sql]) => sql.includes('FOR SHARE OF s'))[1])
+      .toEqual([userId, ['nid-auto-server-copy', 'nid-auto-server-copy-premium']]);
+    for (const lock of [/FROM services[\s\S]+FOR SHARE OF s/, /SELECT balance FROM users[\s\S]+FOR UPDATE/]) {
       const index = queryCalls.findIndex(([sql]) => lock.test(sql));
       expect(index).toBeGreaterThanOrEqual(0);
       expect(db.__client.query.mock.invocationCallOrder[index]).toBeLessThan(providerCall);

@@ -297,7 +297,7 @@
         const amount = Number.isFinite(result.chargedAmount) && result.chargedAmount > 0
           ? money(result.chargedAmount) : 'Premium';
         const payment = result.refunded === true ? 'চার্জ ফেরত দেওয়া হয়েছে।' : amount + ' চার্জ কাটা হয়েছে।';
-        return 'রিপোর্ট পাওয়া যায়নি। ' + payment + (result.orderId ? ' অর্ডার ' + result.orderId : '');
+        return 'রিপোর্ট পাওয়া যায়নি। ' + payment + ' হিস্ট্রিতে বিস্তারিত দেখুন।';
       }
 
       function reportPath(result) {
@@ -370,6 +370,10 @@
           }
           if (!response.ok) {
             if (type === 'premium' && result?.error === 'PREMIUM_CHARGED_NO_REPORT') {
+              nidInput.value = '';
+              dobInput.value = '';
+              authorizedInput.checked = false;
+              attempt = null;
               showMessage('error', paidFailureMessage(result));
               await loadOptions();
               return;

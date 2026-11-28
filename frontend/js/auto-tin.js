@@ -100,7 +100,10 @@
         if (reply?.error === 'CHARGED_NO_REPORT') {
           const charge = reply.chargedAmount > 0
             ? money(reply.chargedAmount) + ' চার্জ কাটা হয়েছে।' : 'চার্জ ফেরত দেওয়া হয়েছে।';
-          message('error', 'রিপোর্ট তৈরি করা যায়নি। ' + charge);
+          form.reset();
+          attempt = null;
+          message('error', 'রিপোর্ট তৈরি করা যায়নি। ' + charge + ' হিস্ট্রিতে বিস্তারিত দেখুন।');
+          await load();
           return;
         }
         message('error', Object.hasOwn(errors, reply?.error) ? errors[reply.error] : ABC.httpErrBn(response.status, 'যাচাই'));
@@ -110,13 +113,13 @@
         }
         return;
       }
-      const id = reply?.orderId;
-      const path = '/orders/' + id + '/documents/tin-verification-report.pdf';
-      if (typeof id !== 'string' || !/^[a-f0-9-]{36}$/i.test(id) || reply.downloadUrl !== '/api' + path) {
+      const link = typeof reply?.downloadUrl === 'string'
+        && /^\/api(\/orders\/([a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})\/documents\/tin-[a-z0-9-]+\.pdf)$/i.exec(reply.downloadUrl);
+      if (!link || link[2] !== reply.orderId) {
         message('error', 'রিপোর্টের ডাউনলোড লিংক পাওয়া যায়নি। একই নম্বর রেখে আবার চেষ্টা করুন।');
         return;
       }
-      downloadPath = path;
+      downloadPath = link[1];
       form.reset();
       attempt = null;
       result.hidden = false;
@@ -141,7 +144,7 @@
       if (file.type !== 'application/pdf' || await file.slice(0, 5).text() !== '%PDF-') throw new Error();
       if (path !== downloadPath) return;
       const href = URL.createObjectURL(file);
-      const link = Object.assign(document.createElement('a'), { href, download: 'tin-verification-report.pdf' });
+      const link = Object.assign(document.createElement('a'), { href, download: path.split('/').pop() });
       document.body.append(link);
       link.click();
       link.remove();

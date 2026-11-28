@@ -730,20 +730,23 @@ router.get('/history', async (req, res) => {
       // new/pending/processing orders contribute no admin files.
       // C3 (2026-11-03): 'refunded' alone is NOT enough — the
       // EXISTS check proves delivery from the timeline, so a
-      // hand-refunded failed/cancelled row contributes nothing. A paid Premium
-      // lookup without a report appears as a charge record without a file.
+      // hand-refunded failed/cancelled row contributes nothing. Paid verification
+      // failures appear as charge records without files.
       db.query(
         `SELECT o.id, o.documents, o.created_at, o.status, o.price,
                 s.name AS service_name, s.name_bn AS service_name_bn,
                 s.type AS service_type, s.engine_id,
-                (s.engine_id = $2 AND o.data->>'auto_nid_paid_failure' = 'true') AS premium_paid_failure
+                (s.engine_id = $2 AND o.data->>'auto_nid_paid_failure' = 'true') AS premium_paid_failure,
+                (s.engine_id = 'auto-tin' AND o.data->>'auto_tin_paid_failure' = 'true') AS tin_paid_failure
          FROM orders o LEFT JOIN services s ON s.id = o.service_id
          WHERE o.user_id = $1 AND (o.status IN ('completed', 'delivered')
            OR (o.status = 'refunded' AND EXISTS (
              SELECT 1 FROM order_status_history h WHERE h.order_id = o.id AND
                (h.to_status IN ('completed', 'delivered')
                 OR (h.to_status = 'refunded' AND h.from_status IN ('completed', 'delivered')))))
-           OR (o.status IN ('failed', 'refunded') AND s.engine_id = $2 AND o.data->>'auto_nid_paid_failure' = 'true'))
+           OR (o.status IN ('failed', 'refunded') AND (
+                 (s.engine_id = $2 AND o.data->>'auto_nid_paid_failure' = 'true')
+                 OR (s.engine_id = 'auto-tin' AND o.data->>'auto_tin_paid_failure' = 'true'))))
          ORDER BY o.created_at DESC LIMIT 100`, [uid, autoNidProducts.premium.engineId]),
       // P2: same rule for manual submissions — admin files only
       // once the submission is completed (no delivered state here;
@@ -794,10 +797,12 @@ router.get('/history', async (req, res) => {
         kind: (String(o.engine_id || '').trim() || o.service_type === 'automated') ? 'engine' : 'order', id: o.id,
         title: o.service_name_bn || o.service_name || 'সেবা অর্ডার',
         created_at: o.created_at, documents,
-        ...(o.premium_paid_failure ? { premium_failure: {
-          chargedAmount: o.status === 'refunded' ? 0 : Number(o.price),
-          refunded: o.status === 'refunded',
-        } } : {}),
+        ...((o.premium_paid_failure || o.tin_paid_failure) ? {
+          [o.premium_paid_failure ? 'premium_failure' : 'tin_failure']: {
+            chargedAmount: o.status === 'refunded' ? 0 : Number(o.price),
+            refunded: o.status === 'refunded',
+          },
+        } : {}),
       });
     }
     for (const m of manual.rows) {

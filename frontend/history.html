@@ -164,11 +164,11 @@ function render(){
     const hasPdf = it.kind === 'bdris' && (it.documents || []).length > 0;
     const hasDocs = (it.documents || []).length > 0;
     const isFailed = (it.title || '').includes('— ব্যর্থ');
-    const premiumFailure = hasDocs ? null : it.premium_failure;
-    const statusText = premiumFailure
-      ? (premiumFailure.refunded
+    const paidFailure = hasDocs ? null : (it.tin_failure || it.premium_failure);
+    const statusText = paidFailure
+      ? (paidFailure.refunded
         ? 'রিপোর্ট পাওয়া যায়নি। চার্জ ফেরত দেওয়া হয়েছে।'
-        : 'রিপোর্ট পাওয়া যায়নি। চার্জ কাটা হয়েছে ৳' + Number(premiumFailure.chargedAmount).toLocaleString('bn-BD') + '।')
+        : 'রিপোর্ট পাওয়া যায়নি। চার্জ কাটা হয়েছে ৳' + Number(paidFailure.chargedAmount).toLocaleString('bn-BD') + '।')
       : isFailed
       ? '❌ ব্যর্থ হয়েছে — কোনো ফাইল তৈরি হয়নি। আবার চেষ্টা করুন।'
       : hasDocs

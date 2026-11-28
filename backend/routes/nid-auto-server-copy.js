@@ -36,13 +36,15 @@ function parseLookup(body) {
   };
 }
 
-async function loadOptions(client, userId, configured) {
+async function loadOptions(client, userId, configured, lockPremium = false) {
+  const ids = lockPremium ? [products.backup.engineId, products.premium.engineId] : engineIds;
   const { rows } = await client.query(
     `SELECT s.id, s.engine_id, s.type, s.status, s.schedule, u.access_enabled,
             COALESCE(u.custom_price, s.price) AS price
        FROM services s
        LEFT JOIN user_services u ON u.service_id = s.id AND u.user_id = $1
-       WHERE s.engine_id = ANY($2::text[])`, [userId, engineIds]
+       WHERE s.engine_id = ANY($2::text[])
+       ${lockPremium ? 'ORDER BY s.id FOR SHARE OF s' : ''}`, [userId, ids]
   );
   const byEngine = engineId => {
     const matches = rows.filter(row => row.engine_id === engineId);
@@ -155,16 +157,13 @@ async function deliver(client, userId, lookup, apiKey, key) {
 
   const premium = lookup.type === 'premium';
   if (premium && !lookup.acceptedPremiumTerms) return reject(409, 'PREMIUM_TERMS_CHANGED');
-  const selectOption = async () => (await loadOptions(client, userId, Boolean(apiKey)))
+  // Premium can incur an upstream fee without a PDF, so lock both service
+  // rows in the same read that accepts the reviewed price and availability.
+  const selectOption = async () => (await loadOptions(client, userId, Boolean(apiKey), premium))
     .find(option => option.type === lookup.type);
   const option = await selectOption();
   if (!option.available) return reject(403, 'SERVICE_UNAVAILABLE');
   if (option.price !== lookup.price) return reject(409, 'PRICE_CHANGED');
-  if (premium) {
-    // Keep the accepted service and funds available until the provider outcome is recorded.
-    const service = await client.query('SELECT id FROM services WHERE id = $1 FOR KEY SHARE', [option.serviceId]);
-    if (!service.rows.length) return reject(403, 'SERVICE_UNAVAILABLE');
-  }
   const balance = await walletBalance(client, userId, premium);
   const credit = premium
     ? await availableFor(client, userId, option.serviceId, { lock: true })
