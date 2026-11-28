@@ -13,9 +13,12 @@ const PAPER = '#f2f8f4';
 
 function drawPremiumReport(doc, label, record) {
   const width = doc.page.width - 2 * MARGIN;
-  const portraitWidth = 104;
-  const tableX = MARGIN + portraitWidth + 16;
-  const tableWidth = width - portraitWidth - 16;
+  const portraitX = 106.5;
+  const portraitY = 205.5;
+  const portraitWidth = 91;
+  const portraitHeight = 105;
+  const tableX = 224.5;
+  const tableWidth = 274;
   const footerY = doc.page.height - 52;
   const missing = 'NA';
   let page = 0;
@@ -32,7 +35,7 @@ function drawPremiumReport(doc, label, record) {
     doc.lineWidth(.6).strokeColor(LINE).moveTo(MARGIN, footerY).lineTo(MARGIN + width, footerY).stroke();
     doc.font('hind').fontSize(9).fillColor(MUTED).text('All In One · ব্যক্তিগত তথ্য', MARGIN, footerY + 8);
     doc.text(String(page), MARGIN, footerY + 8, { width, align: 'right' });
-    y = 126;
+    y = page === 1 ? 212 : 126;
   }
 
   function ensureRoom(height) {
@@ -42,19 +45,21 @@ function drawPremiumReport(doc, label, record) {
   }
 
   function heading(title) {
-    doc.rect(tableX, y, tableWidth, 23).fill('#e1f0ec');
+    doc.rect(tableX, y, tableWidth, 23).fill('#d2e9eb');
     doc.font('hind-bold').fontSize(12).fillColor(EMERALD)
-      .text(title, tableX + 10, y + 4, { width: tableWidth - 20 });
+      .text(title, tableX + 7, y + 4, { width: tableWidth - 14 });
     y += 23;
   }
 
   function table(title, rows) {
-    const labelWidth = 139;
-    const valueWidth = tableWidth - labelWidth - 20;
+    const labelWidth = 101;
+    const valueWidth = tableWidth - labelWidth - 14;
     const measured = rows.map(([name, value]) => {
       const text = value || missing;
       doc.font('hind').fontSize(10.5);
-      return { name, text, height: Math.max(21, doc.heightOfString(text, { width: valueWidth }) + 8) };
+      const labelHeight = doc.heightOfString(name, { width: labelWidth - 12 });
+      const valueHeight = doc.heightOfString(text, { width: valueWidth });
+      return { name, text, height: Math.max(21, Math.max(labelHeight, valueHeight) + 8) };
     });
     ensureRoom(23 + measured.reduce((sum, row) => sum + row.height, 0));
     heading(title);
@@ -62,36 +67,40 @@ function drawPremiumReport(doc, label, record) {
       doc.lineWidth(.5).strokeColor(LINE).rect(tableX, y, tableWidth, height).stroke();
       doc.moveTo(tableX + labelWidth, y).lineTo(tableX + labelWidth, y + height).stroke();
       doc.font('hind').fontSize(10.5).fillColor(MUTED)
-        .text(name, tableX + 10, y + 4, { width: labelWidth - 16 });
-      doc.fillColor(INK).text(text, tableX + labelWidth + 10, y + 4, { width: valueWidth });
+        .text(name, tableX + 7, y + 4, { width: labelWidth - 12 });
+      doc.fillColor(INK).text(text, tableX + labelWidth + 7, y + 4, { width: valueWidth });
       y += height;
     }
-    y += 10;
   }
 
   function address(title, value) {
     const text = value || missing;
-    const textOptions = { width: tableWidth - 20, lineGap: 2 };
+    const textOptions = { width: tableWidth - 14, lineGap: 2 };
     doc.font('hind').fontSize(10.5);
     const height = doc.heightOfString(text, textOptions) + 15;
     ensureRoom(23 + height);
     heading(title);
     doc.lineWidth(.5).strokeColor(LINE).rect(tableX, y, tableWidth, height).stroke();
-    doc.font('hind').fontSize(10.5).fillColor(INK).text(text, tableX + 10, y + 7, textOptions);
-    y += height + 10;
+    doc.font('hind').fontSize(10.5).fillColor(INK).text(text, tableX + 7, y + 7, textOptions);
+    y += height + 6;
   }
 
   startPage();
-  doc.roundedRect(MARGIN, y, portraitWidth, 125, 7).fillAndStroke(PAPER, LINE);
+  doc.rect(portraitX, portraitY, portraitWidth, portraitHeight).fillAndStroke(PAPER, LINE);
   if (Buffer.isBuffer(record.portrait)) {
     try {
       const image = doc.openImage(record.portrait);
       if (image.width > 0 && image.height > 0 && image.width * image.height <= 4_000_000) {
-        doc.image(image, MARGIN + 5, y + 5, { fit: [portraitWidth - 10, 115], align: 'center', valign: 'center' });
+        doc.image(image, portraitX, portraitY, { fit: [portraitWidth, portraitHeight], align: 'center', valign: 'center' });
       }
     } catch {
       // A malformed optional portrait does not prevent delivery of verified information.
     }
+  }
+  const portraitName = record.nameEn || record.nameBn;
+  if (portraitName) {
+    doc.font('hind').fontSize(9).fillColor(MUTED)
+      .text(portraitName, portraitX, portraitY + portraitHeight + 6, { width: portraitWidth, align: 'center' });
   }
   table('জাতীয় পরিচিতি তথ্য', [
     ['জাতীয় পরিচয়পত্র নম্বর', record.nationalId], ['পিন নম্বর', record.pin],
