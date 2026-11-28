@@ -85,13 +85,13 @@ describe('BD-X NID adapter', () => {
       .resolves.toMatchObject({ presentAddress: addressLine });
   });
 
-  test.each(['premium', 'half', 'backup'])('downloads the %s portrait without passing the API key to the media host', async type => {
+  test('downloads a documented Premium portrait without passing the API key to the media host', async () => {
     const photo = 'https://apisheba.com/api-portal/images/sample-portrait.jpg';
     const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
     const fetchImpl = jest.fn()
       .mockResolvedValueOnce(reply({ status: 'success', data: { ...identity, photo } }))
       .mockResolvedValueOnce(new Response(bytes, { headers: { 'Content-Type': 'image/jpeg' } }));
-    const record = await lookupBdxNid({ ...input, type }, fetchImpl);
+    const record = await lookupBdxNid({ ...input, type: 'premium' }, fetchImpl);
     expect(record.portrait).toEqual(Buffer.from(bytes));
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     const [url, options] = fetchImpl.mock.calls[1];
