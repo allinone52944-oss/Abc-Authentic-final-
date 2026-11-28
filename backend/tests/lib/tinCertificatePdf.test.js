@@ -24,7 +24,8 @@ const record = {
   dateOfBirth: '1997-01-10',
 };
 
-test('QR payload matches the sample certificate QR line for line', () => {
+test('QR payload matches the sample certificate QR byte for byte', () => {
+  // The sample QR uses CRLF line endings and a trailing CRLF.
   expect(qrPayload(record, parseDate(record.date), parseDate(record.dateOfBirth)))
     .toBe([
       "Taxpayer's Name : Test Taxpayer",
@@ -34,7 +35,7 @@ test('QR payload matches the sample certificate QR line for line', () => {
       'Date : 12/09/2020',
       'Zone : 05, Chattogram',
       'Circle : Circle-108 (Salary)',
-    ].join('\n'));
+    ].join('\r\n') + '\r\n');
 });
 
 test('QR payload omits the DOB line when the provider gives no date of birth', () => {
