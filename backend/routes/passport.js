@@ -60,6 +60,22 @@ const { renderPassportPdf } = require('../lib/passportPdf');
 const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
 const { alertMissingPrice } = require('../lib/missingPriceAlert');
+const telegramNotify = require('../lib/telegramNotify'); // group notifications (2026-11-28)
+
+// Telegram group notification for a completed passport
+// (2026-11-28). Fire-and-forget: runs after the order commits and
+// can never fail the build (all errors swallowed inside).
+async function telegramSuccessNotify(userId, serviceLabel, fee, orderId) {
+  try {
+    const u = await db.query('SELECT name, phone FROM users WHERE id = $1', [userId]);
+    const user = u.rows[0];
+    if (!user) return;
+    await telegramNotify.notifySuccess({
+      userName: user.name, userPhone: user.phone,
+      serviceLabel, fee: Number(fee) || 0, orderId: String(orderId),
+    });
+  } catch (_) { /* Telegram never fails a build */ }
+}
 
 const router = express.Router();
 const ENGINE_ID = 'passport';
@@ -208,7 +224,11 @@ router.post('/create', requireAuth, async (req, res) => {
     if (chk.serviceId) {
       orderId = await recordOrder(req, chk.serviceId, 'completed', chk.price, idem,
         { passport_no: passportNo, filename, engine: ENGINE_ID });
-      if (orderId) notifyDone(req, chk.price);
+      if (orderId) {
+        notifyDone(req, chk.price);
+        // Telegram: same event to the group (async, non-blocking).
+        telegramSuccessNotify(req.user.id, LABEL, chk.price, orderId).catch(() => {});
+      }
     }
     const u2 = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
     return res.json({

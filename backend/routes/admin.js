@@ -13,6 +13,7 @@ const { requireAuth, requireAdmin, hashPassword, verifyPassword } = require('../
 const { safeLog, orderDocUpload, safeJsonArray } = require('../security');
 const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
+const telegramNotify = require('../lib/telegramNotify'); // group notifications (2026-11-28)
 const serviceCredits = require('../lib/serviceCredits');
 const { isManualOrderService, serviceAcceptsNewWork } = require('../lib/serviceAvailability');
 const { approveRechargeTx } = require('./sms');
@@ -22,6 +23,21 @@ const { approveRechargeTx } = require('./sms');
 
 const router = express.Router();
 router.use(requireAuth, requireAdmin);
+
+// Telegram group notification for an approved recharge (2026-11-28).
+// Fire-and-forget: runs after the credit commits and can never fail
+// the approve (all errors swallowed inside).
+async function telegramRechargeNotify(tx) {
+  try {
+    const u = await db.query('SELECT name, phone FROM users WHERE id = $1', [tx.user_id]);
+    const user = u.rows[0];
+    if (!user) return;
+    await telegramNotify.notifyRecharge({
+      userName: user.name, userPhone: user.phone,
+      amount: Number(tx.amount) || 0, method: tx.method || '',
+    });
+  } catch (_) { /* Telegram never fails an approve */ }
+}
 
 // ---- activity log helper --------------------------------------
 async function logActivity(adminId, action, details) {
@@ -2215,6 +2231,10 @@ router.put('/transactions/:id/approve', async (req, res) => {
         // tx id only — never log the phone number or TrxID here.
         safeLog('[admin] approve tx ' + tx.id + ': recharge approved but WhatsApp notification FAILED (' + notify.whatsapp_error + '). Customer was not notified.');
       }
+      // Telegram: same event to the group. Deliberately NOT awaited
+      // (unlike WhatsApp/push above): a Telegram outage must never
+      // delay or fail the approve response.
+      telegramRechargeNotify(tx).catch(() => {});
     }
 
     res.json({ ok: true, notify });

@@ -14,7 +14,25 @@ const serviceCredits = require('../lib/serviceCredits');
 const { alertMissingPrice } = require('../lib/missingPriceAlert');
 const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
+const telegramNotify = require('../lib/telegramNotify'); // group notifications (2026-11-28)
 const nidAdapter = require('../../engines/nid-replica/adapter');
+
+// Telegram group notification for a completed card build
+// (2026-11-28). Fire-and-forget: runs after the order commits and
+// can never fail the build (all errors swallowed inside). This is
+// a notification call only — no engine, barcode, or output logic
+// is touched.
+async function telegramSuccessNotify(userId, serviceLabel, fee, orderId) {
+  try {
+    const u = await db.query('SELECT name, phone FROM users WHERE id = $1', [userId]);
+    const user = u.rows[0];
+    if (!user) return;
+    await telegramNotify.notifySuccess({
+      userName: user.name, userPhone: user.phone,
+      serviceLabel, fee: Number(fee) || 0, orderId: String(orderId),
+    });
+  } catch (_) { /* Telegram never fails a build */ }
+}
 
 const router = express.Router();
 
@@ -208,6 +226,8 @@ router.post('/build', requireAuth, async (req, res) => {
           'আপনার NID কার্ডটি তৈরি হয়েছে — ইতিহাস থেকে যেকোনো সময় ডাউনলোড করতে পারবেন।', '/history.html').catch(() => {});
         push.notifyAdmins(db, '✅ NID কার্ড তৈরি হয়েছে',
           `একটি NID কার্ড সফলভাবে তৈরি হয়েছে — চার্জ ৳${price}।`, '/admin.html').catch(() => {});
+        // Telegram: same event to the group (async, non-blocking).
+        telegramSuccessNotify(req.user.id, 'এনআইডি কার্ড', price, ins.rows[0].id).catch(() => {});
       }
     }
 

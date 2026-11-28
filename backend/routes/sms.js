@@ -17,6 +17,25 @@ const { safeLog } = require('../security');
 const { parseSms } = require('../utils/sms-parser');
 const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
+const telegramNotify = require('../lib/telegramNotify'); // group notifications (2026-11-28)
+
+// Telegram group notification for an approved recharge (2026-11-28).
+// Fire-and-forget: runs after the credit commits and can never fail
+// the approve (all errors swallowed inside). Called at every
+// approveRechargeTx success site in this file; the admin manual
+// approve path (admin.js) has its own call, so each approval
+// notifies exactly once.
+async function telegramRechargeNotify(tx) {
+  try {
+    const u = await db.query('SELECT name, phone FROM users WHERE id = $1', [tx.user_id]);
+    const user = u.rows[0];
+    if (!user) return;
+    await telegramNotify.notifyRecharge({
+      userName: user.name, userPhone: user.phone,
+      amount: Number(tx.amount) || 0, method: tx.method || '',
+    });
+  } catch (_) { /* Telegram never fails an approve */ }
+}
 
 const smsLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -401,6 +420,8 @@ webhook.post('/incoming', async (req, res) => {
             // so without this the admin sees only the unmatched-SMS toast
             // and then silence. Manual matches are excluded (admin actor).
             push.notifyAutoApproveRecharge(db, tx, tx.user_id).catch(() => {});
+            // Telegram: same event to the group (async, non-blocking).
+            telegramRechargeNotify(tx).catch(() => {});
             return res.json({ ok: true, matched: true, how: matchInfo.how, tx_id: tx.id });
           }
         }
@@ -558,6 +579,8 @@ adminSms.post('/:id/match', async (req, res) => {
       wa.notifyRechargeApproved(db, tx).catch(() => {});
       push.notifyUser(db, tx.user_id, '✅ রিচার্জ সফল!',
         '৳' + tx.amount + ' আপনার ওয়ালেটে যোগ হয়েছে।', '/wallet.html').catch(() => {});
+      // Telegram: same event to the group (async, non-blocking).
+      telegramRechargeNotify(tx).catch(() => {});
       res.json({ ok: true, tx_id: tx.id });
     } catch (e) {
       try { await client.query('ROLLBACK'); } catch (_) { /* noop */ }
@@ -742,6 +765,8 @@ async function tryAutoMatchRecharge(tx) {
       // Admin: same gap as the webhook path — an auto-approved recharge
       // never reaches the pending list, so the admin must be told here.
       push.notifyAutoApproveRecharge(db, approvedTx, approvedTx.user_id).catch(() => {});
+      // Telegram: same event to the group (async, non-blocking).
+      telegramRechargeNotify(approvedTx).catch(() => {});
       return approvedTx;
     }
     return null;
@@ -799,6 +824,8 @@ async function tryAutoMatchBySender(tx) {
       push.notifyUser(db, approvedTx.user_id, '✅ রিচার্জ সফল!',
         '৳' + approvedTx.amount + ' আপনার ওয়ালেটে যোগ হয়েছে।', '/wallet.html').catch(() => {});
       push.notifyAutoApproveRecharge(db, approvedTx, approvedTx.user_id).catch(() => {});
+      // Telegram: same event to the group (async, non-blocking).
+      telegramRechargeNotify(approvedTx).catch(() => {});
       return approvedTx;
     }
     return null;

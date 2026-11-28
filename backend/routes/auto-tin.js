@@ -8,6 +8,27 @@ const { availableFor, payForService } = require('../lib/serviceCredits');
 const { lookupBdxTin, normalizeTinIdentifier } = require('../lib/bdxTinClient');
 const { buildAutoTinReportPdf } = require('../lib/autoNidReportPdf');
 const { storageKey, tinFingerprint, encryptReport, decryptReport } = require('../lib/autoNidReportStore');
+const telegramNotify = require('../lib/telegramNotify'); // group notifications (2026-11-28)
+
+// Telegram group notification for a TIN lookup (2026-11-28).
+// Fire-and-forget: runs after the charge commits and can never
+// fail the lookup (all errors swallowed inside). kind 'success'
+// = certificate delivered; kind 'order' = paid but no report.
+async function telegramTinNotify(userId, fee, orderId, kind) {
+  try {
+    const u = await db.query('SELECT name, phone FROM users WHERE id = $1', [userId]);
+    const user = u.rows[0];
+    if (!user) return;
+    const s = await db.query(`SELECT name_bn FROM services WHERE engine_id = 'auto-tin' LIMIT 1`);
+    const label = (s.rows[0] && s.rows[0].name_bn) || 'TIN সার্টিফিকেট';
+    const params = {
+      userName: user.name, userPhone: user.phone,
+      serviceLabel: label, fee: Number(fee) || 0, orderId: String(orderId),
+    };
+    if (kind === 'success') await telegramNotify.notifySuccess(params);
+    else await telegramNotify.notifyOrder(params);
+  } catch (_) { /* Telegram never fails a lookup */ }
+}
 
 const router = express.Router();
 const filename = 'tin-certificate.pdf';
@@ -124,7 +145,11 @@ async function purchase(client, userId, lookup, apiKey, encryptionKey) {
   await payForService(client, {
     userId, serviceId: service.id, amount: service.price, ref: 'order-' + lookup.key + '-' + userId,
   });
-  return outcome(order, encryptionKey);
+  // Fresh charge only: a replay returns outcome(prior) above, which
+  // carries no fresh flag, so the handler never re-notifies.
+  const out = outcome(order, encryptionKey);
+  out.fresh = true;
+  return out;
 }
 
 router.get('/options', async (req, res) => {
@@ -150,6 +175,11 @@ router.post('/lookup', async (req, res) => {
   try {
     const lookup = { tin, price, key: 'auto-tin:' + idempotencyKey.toLowerCase() };
     const result = await db.withTransaction(client => purchase(client, req.user.id, lookup, providerKey(), encryptionKey));
+    // Telegram: fresh charge only (replays carry no fresh flag).
+    if (result.fresh && result.body && result.body.orderId) {
+      if (result.status === 200) telegramTinNotify(req.user.id, lookup.price, result.body.orderId, 'success').catch(() => {});
+      else if (result.status === 422) telegramTinNotify(req.user.id, lookup.price, result.body.orderId, 'order').catch(() => {});
+    }
     return res.status(result.status).json(result.body);
   } catch (err) {
     if (err.message === 'INSUFFICIENT_BALANCE') return res.status(402).json({ error: 'INSUFFICIENT_BALANCE' });

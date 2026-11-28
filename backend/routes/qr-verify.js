@@ -31,6 +31,24 @@ const wa = require('../utils/whatsapp');
 const push = require('../utils/push');
 const { buildReceiptPdf } = require('../lib/receiptPdf');
 const adapter = require('../../engines/qr-photo-verify/adapter');
+const telegramNotify = require('../lib/telegramNotify'); // group notifications (2026-11-28)
+
+// Telegram group notification for a successful QR verification
+// (2026-11-28). Fire-and-forget: runs after the order commits and
+// can never fail the verification (all errors swallowed inside).
+// This is a notification call only — the QR hold/release and
+// gateway logic below is untouched.
+async function telegramSuccessNotify(userId, serviceLabel, fee, orderId) {
+  try {
+    const u = await db.query('SELECT name, phone FROM users WHERE id = $1', [userId]);
+    const user = u.rows[0];
+    if (!user) return;
+    await telegramNotify.notifySuccess({
+      userName: user.name, userPhone: user.phone,
+      serviceLabel, fee: Number(fee) || 0, orderId: String(orderId),
+    });
+  } catch (_) { /* Telegram never fails a verification */ }
+}
 
 const router = express.Router();
 const ENGINE_ID = 'qr-photo-verify';
@@ -602,6 +620,8 @@ router.post('/verify', requireAuth, verifyUpload, multerError, async (req, res) 
         '/history.html').catch(() => {});
       push.notifyAdmins(db, '✅ QR যাচাই সফল',
         `একটি QR + ছবি যাচাই সফলভাবে সম্পন্ন হয়েছে — চার্জ ৳${price}।`, '/admin.html').catch(() => {});
+      // Telegram: same event to the group (async, non-blocking).
+      telegramSuccessNotify(req.user.id, 'QR + ছবি যাচাই', price, orderId).catch(() => {});
     }
 
     const u2 = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);

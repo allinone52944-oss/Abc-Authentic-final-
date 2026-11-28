@@ -9,6 +9,26 @@ const { lookupBdxNid } = require('../lib/bdxNidClient');
 const { buildAutoNidReportPdf } = require('../lib/autoNidReportPdf');
 const { storageKey, fingerprint, encryptReport } = require('../lib/autoNidReportStore');
 const { products, engineIds } = require('../lib/autoNidProducts');
+const telegramNotify = require('../lib/telegramNotify'); // group notifications (2026-11-28)
+
+// Telegram group notification for an NID server-copy lookup
+// (2026-11-28). Fire-and-forget: runs after the charge commits and
+// can never fail the lookup (all errors swallowed inside).
+// kind 'success' = report delivered; kind 'order' = paid but no report.
+async function telegramNidCopyNotify(userId, type, fee, orderId, kind) {
+  try {
+    const u = await db.query('SELECT name, phone FROM users WHERE id = $1', [userId]);
+    const user = u.rows[0];
+    if (!user) return;
+    const label = (products[type] && products[type].label) || 'NID Server Copy';
+    const params = {
+      userName: user.name, userPhone: user.phone,
+      serviceLabel: label, fee: Number(fee) || 0, orderId: String(orderId),
+    };
+    if (kind === 'success') await telegramNotify.notifySuccess(params);
+    else await telegramNotify.notifyOrder(params);
+  } catch (_) { /* Telegram never fails a lookup */ }
+}
 
 const router = express.Router();
 const idempotencyPattern = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
@@ -126,7 +146,12 @@ async function settlePurchase(client, userId, lookup, option, { hash, key, pdf, 
   await payForService(client, {
     userId, serviceId: option.serviceId, amount: option.price, ref: 'order-' + lookup.key + '-' + userId,
   });
-  return pdf ? accepted(order.id, filename, addressLimited) : paidFailure(order.id, option.price);
+  // Fresh charge only: the replay branch in deliver() returns
+  // accepted()/paidFailure() directly, with no fresh flag, so the
+  // handler never re-notifies.
+  const out = pdf ? accepted(order.id, filename, addressLimited) : paidFailure(order.id, option.price);
+  out.fresh = true;
+  return out;
 }
 
 async function deliver(client, userId, lookup, apiKey, key) {
@@ -203,6 +228,11 @@ router.post('/lookup', async (req, res) => {
   try {
     const apiKey = process.env.BDX_NID_API_KEY?.trim();
     const result = await db.withTransaction(client => deliver(client, req.user.id, lookup, apiKey, key));
+    // Telegram: fresh charge only (replays carry no fresh flag).
+    if (result.fresh && result.body && result.body.orderId) {
+      if (result.status === 200) telegramNidCopyNotify(req.user.id, lookup.type, lookup.price, result.body.orderId, 'success').catch(() => {});
+      else if (result.status === 422) telegramNidCopyNotify(req.user.id, lookup.type, lookup.price, result.body.orderId, 'order').catch(() => {});
+    }
     return res.status(result.status).json(result.body);
   } catch (e) {
     if (e.code === 'record_not_found') return res.status(422).json({ error: 'RECORD_NOT_FOUND' });

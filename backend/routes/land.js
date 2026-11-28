@@ -53,6 +53,22 @@ const { RATE_CARD_UNITS, buildMouzaRateCardPdf } = require('../lib/mouzaRateCard
 const client = require('../../engines/land-core/client');
 const { calcMouzaReport } = require('../../engines/land-mouza-value/calc');
 const { lookupMouzaRate, lookupMouzaCard, OFFICES } = require('../../engines/land-mouza-value/rates');
+const telegramNotify = require('../lib/telegramNotify'); // group notifications (2026-11-28)
+
+// Telegram group notification for a completed land service
+// (2026-11-28). Fire-and-forget: runs after the order commits and
+// can never fail the report (all errors swallowed inside).
+async function telegramSuccessNotify(userId, serviceLabel, fee, orderId) {
+  try {
+    const u = await db.query('SELECT name, phone FROM users WHERE id = $1', [userId]);
+    const user = u.rows[0];
+    if (!user) return;
+    await telegramNotify.notifySuccess({
+      userName: user.name, userPhone: user.phone,
+      serviceLabel, fee: Number(fee) || 0, orderId: String(orderId),
+    });
+  } catch (_) { /* Telegram never fails a report */ }
+}
 
 const router = express.Router();
 const UPLOAD_DIR = '/opt/all-in-one-abc-authentic/uploads/orders';
@@ -379,6 +395,8 @@ async function succeed(req, res, mode, chk, idem, area, payload, pdfArgs, pdfNam
     orderId = await recordOrder(req, mode, chk.serviceId, 'completed', chk.price, idem, { area, found: true, ...payload });
     if (orderId) {
       notifyDone(req, mode, chk.price, false);
+      // Telegram: same event to the group (async, non-blocking).
+      telegramSuccessNotify(req.user.id, MODES[mode].label, chk.price, orderId).catch(() => {});
       try {
         const pdf = await buildLandReportPdf({ ...pdfArgs, ref: idem, when: nowBn() });
         receiptUrl = await storePdf(orderId, pdfName, pdf, pdfName);
