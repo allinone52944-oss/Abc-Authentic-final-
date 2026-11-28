@@ -221,6 +221,7 @@
     const query = new URLSearchParams(location.search);
     const id = query.get('service');
     if (!id || query.get('flow') !== 'directory') return;
+    if (!Object.values(enginePages).some(page => page.split('?')[0] === location.pathname)) return;
     const workspace = document.querySelector('.service-workspace .main, .page-bdris-apply .wrap > main');
     if (!workspace) return;
     const entrySlot = workspace.querySelector('[data-service-entry-slot]');

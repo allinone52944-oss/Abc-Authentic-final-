@@ -130,9 +130,8 @@
 <link rel="stylesheet" href="/css/emerald-gold.css?v=20261110-1">
 <link rel="stylesheet" href="/css/flagship-layout.css?v=20261110-1">
 <link rel="stylesheet" href="/css/workspace-layout.css?v=20261110-1">
-<link rel="stylesheet" href="/css/service-journey.css?v=20261128-2">
-<link rel="stylesheet" href="/css/sidebar-nav.css?v=20261128-2">
-<script src="/js/sidebar-nav.js?v=20261128-1" defer></script>
+<link rel="stylesheet" href="/css/service-journey.css?v=20261128-3">
+<link rel="stylesheet" href="/css/sidebar-nav.css?v=20261128-3">
 </head>
 <body class="has-tabbar flagship-app page-services">
 <div class="desktop">
@@ -149,7 +148,7 @@
       <div id="desktopServiceMenu">
         <details id="serviceMenu" class="service-disclosure service-menu" open>
           <summary class="side-link on"><span class="ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></span> সকল সেবা</summary>
-          <ul class="service-menu-categories" data-directory-categories aria-label="সেবার ক্যাটাগরি"></ul>
+          <ul class="service-sidebar-groups" data-directory-categories aria-label="সেবার ক্যাটাগরি"></ul>
         </details>
       </div>
       <div class="side-link" onclick="location.href='/orders.html'"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span> অর্ডার</div>
@@ -207,7 +206,8 @@
 </div>
 
 <script src="/js/app.js?v=24"></script>
-<script src="/js/service-navigation.js?v=20261128-2"></script>
+<script src="/js/service-navigation.js?v=20261128-3"></script>
+<script src="/js/sidebar-nav.js?v=20261128-2"></script>
 <script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function bnNum(n){return Number(n||0).toLocaleString('bn-BD');}
@@ -367,57 +367,23 @@ function categoryServices(group, type){
   return group.services.filter(service => isOrderService(service) === (type === 'manual'));
 }
 
-function mountServiceCategories(){
-  const list = serviceMenu.querySelector('[data-directory-categories]');
-  list.innerHTML = GROUPS.map(group => {
-    const href = '/services.html?' + new URLSearchParams({ category: categoryKey(group) });
-    return '<li><a href="' + esc(href) + '" data-directory-category="' + esc(categoryKey(group)) +
-      '"><span class="service-category-icon" aria-hidden="true">' + esc(group.icon) + '</span>' + esc(group.name) + '</a></li>';
-  }).join('') || '<li class="service-menu-empty">কোনো ক্যাটাগরি নেই</li>';
-}
-
 function restoreDirectory(){
   const params = new URLSearchParams(location.search);
   CURRENT_FILTER = directoryFilter(params);
   CURRENT_CATEGORY = GROUPS.find(group =>
     categoryKey(group) === params.get('category') && categoryServices(group, CURRENT_FILTER).length > 0
   ) || null;
-  serviceMenu.querySelectorAll('[data-directory-category]').forEach(link => {
-    if (!link.closest('[hidden]') && CURRENT_CATEGORY && link.dataset.directoryCategory === categoryKey(CURRENT_CATEGORY)) {
-      link.setAttribute('aria-current', 'page');
-    } else {
-      link.removeAttribute('aria-current');
-    }
-  });
-
   const q = (params.get('q') || '').trim();
   document.getElementById('svcSearch').value = q;
   onSearchInput(q);
-}
-
-function openDirectory(url){
-  history.pushState(null, '', url);
-  restoreDirectory();
 }
 
 function showDirectory(){
   document.getElementById('catView').style.display = 'none';
   const view = document.getElementById('svcView');
   view.style.display = '';
-  const group = CURRENT_CATEGORY;
-  const type = DIRECTORY_TYPES[CURRENT_FILTER];
-  if (!group) {
-    const hasServices = type ? ALL_SERVICES.some(service => isOrderService(service) === (CURRENT_FILTER === 'manual')) : ALL_SERVICES.length > 0;
-    view.innerHTML = '<div class="service-directory-guide" role="status"><p>' +
-      (hasServices ? 'মেনু থেকে একটি ক্যাটাগরি বেছে নিন।' : 'এখন কোনো সেবা পাওয়া যাচ্ছে না।') + '</p></div>';
-    return;
-  }
-
-  const items = categoryServices(group, CURRENT_FILTER);
-  view.innerHTML = '<section class="directory-category-results" data-service-kind="' + CURRENT_FILTER + '" aria-labelledby="directoryCategoryTitle">' +
-    '<header class="directory-category-heading">' + (type ? '<p>' + type + '</p>' : '') + '<h3 id="directoryCategoryTitle" tabindex="-1">' + esc(group.name) +
-    '</h3><span role="status">' + bnNum(items.length) + 'টি সেবা</span></header>' +
-    '<div class="svc-grid">' + items.map(card).join('') + '</div></section>';
+  view.innerHTML = '<div class="service-directory-guide" role="status"><p>' +
+    (ALL_SERVICES.length ? 'সকল সেবা মেনু থেকে ক্যাটাগরি খুলে সেবা বেছে নিন।' : 'এখন কোনো সেবা পাওয়া যাচ্ছে না।') + '</p></div>';
 }
 
 function onSearchInput(val){
@@ -563,7 +529,7 @@ async function init(){
   if (uncat.services.length) GROUPS.push(uncat);
   GROUPS.sort((a,b)=>a.ord-b.ord);
 
-  mountServiceCategories();
+  ServiceSidebar.renderCategories(serviceMenu.querySelector('[data-directory-categories]'), services);
   directoryLoaded = true;
   restoreDirectory();
 }
@@ -578,13 +544,6 @@ function saveViewState(){
     history.replaceState(null, '', url);
   } catch (e) {}
 }
-serviceMenu.addEventListener('click', event => {
-  const link = event.target.closest('[data-directory-category]');
-  if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-  event.preventDefault();
-  if (link.href !== location.href) openDirectory(link.href);
-  if (mobileDirectory.matches) document.getElementById('directoryCategoryTitle')?.focus();
-});
 window.addEventListener('popstate', () => { if (directoryLoaded) restoreDirectory(); });
 mobileDirectory.addEventListener('change', placeServiceMenu);
 placeServiceMenu();
